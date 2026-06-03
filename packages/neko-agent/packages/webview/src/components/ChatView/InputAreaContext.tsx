@@ -44,6 +44,7 @@ export interface InputAreaContextValue {
   onPromptModeChange: (mode: PromptMode) => void;
   // Context compression
   contextTokenCount: number;
+  maxContextTokens: number;
   isCompressing: boolean;
   onCompressContext?: () => Promise<void>;
   // Media model call count (per conversation)
@@ -92,6 +93,7 @@ export function InputAreaProvider({
       promptMode: value.promptMode,
       onPromptModeChange: value.onPromptModeChange,
       contextTokenCount: value.contextTokenCount,
+      maxContextTokens: value.maxContextTokens,
       isCompressing: value.isCompressing,
       onCompressContext: value.onCompressContext,
       mediaModelCallCount: value.mediaModelCallCount,
@@ -124,6 +126,7 @@ export function InputAreaProvider({
       value.promptMode,
       value.onPromptModeChange,
       value.contextTokenCount,
+      value.maxContextTokens,
       value.isCompressing,
       value.onCompressContext,
       value.mediaModelCallCount,

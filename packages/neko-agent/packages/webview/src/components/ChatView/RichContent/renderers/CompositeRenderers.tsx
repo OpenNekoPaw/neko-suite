@@ -5,10 +5,13 @@ import type {
   CompositeMediaDiagnostic,
   CompositeMediaType,
   ResolvedCompositeMedia,
+  ResolvedCompositeSection,
   StoryboardTableRichData,
 } from '@/presenters/composite-content-presenter';
+import type { StoryboardSceneRowV1, StoryboardShotRowV1 } from '@neko/shared';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { useTranslation } from '@/i18n/I18nContext';
 import {
   projectStoryboardTableAssetBatch,
   projectStoryboardTableCutTimelinePayload,
@@ -35,12 +38,19 @@ function StoryboardTableRendererComponent({
   const cutPayload = projectStoryboardTableCutTimelinePayload(data);
   const assetBatchPayload = projectStoryboardTableAssetBatch(data);
   const plugins = data.plugins;
+  const storyboardRows = data.storyboardTable ? projectSemanticStoryboardRows(data) : [];
+  const rowCount = storyboardRows.length > 0 ? storyboardRows.length : data.sections.length;
+  const { t } = useTranslation();
 
   return (
     <div className={`agent-inline-card overflow-hidden ${className ?? ''}`}>
       <CompositeHeader
         title={data.title ?? 'Storyboard'}
-        count={`${data.sections.length} rows`}
+        count={
+          storyboardRows.length > 0
+            ? t('chat.storyboardTable.count.shots', { count: rowCount })
+            : t('chat.storyboardTable.count.rows', { count: rowCount })
+        }
         actions={
           plugins && (canvasPayload || cutPayload || assetBatchPayload) ? (
             <div className="flex items-center gap-1">
@@ -72,41 +82,241 @@ function StoryboardTableRendererComponent({
           ) : null
         }
       />
-      <div className="divide-y divide-[var(--agent-divider)]">
-        {data.sections.map((section) => (
-          <div
-            key={section.id}
-            className="grid gap-2 px-2 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(120px,180px)]"
-          >
-            <div className="min-w-0">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="rounded bg-[var(--agent-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--agent-fg-secondary)]">
-                  {String(section.index + 1).padStart(2, '0')}
-                </span>
-                {section.heading && (
-                  <span className="truncate text-[12px] font-medium text-[var(--agent-fg)]">
-                    {section.heading}
-                  </span>
-                )}
-              </div>
-              {section.content && (
-                <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-[var(--agent-fg)]">
-                  {section.content}
-                </p>
-              )}
-              <Diagnostics diagnostics={section.diagnostics} />
-            </div>
-            <div className="grid min-w-0 grid-cols-1 gap-1">
-              {section.media.map((media) => (
-                <MediaPreview key={media.id} media={media} compact />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      {storyboardRows.length > 0 ? (
+        <SemanticStoryboardTable rows={storyboardRows} />
+      ) : (
+        <LegacyStoryboardRows sections={data.sections} />
+      )}
       <Diagnostics diagnostics={data.diagnostics} aggregate />
     </div>
   );
+}
+
+interface SemanticStoryboardRow {
+  readonly id: string;
+  readonly rowIndex: number;
+  readonly scene: StoryboardSceneRowV1;
+  readonly shot: StoryboardShotRowV1;
+  readonly section?: ResolvedCompositeSection;
+}
+
+function projectSemanticStoryboardRows(
+  data: StoryboardTableRichData,
+): readonly SemanticStoryboardRow[] {
+  const rows: SemanticStoryboardRow[] = [];
+  for (const scene of data.storyboardTable?.scenes ?? []) {
+    for (const shot of scene.shots) {
+      const rowIndex = rows.length;
+      rows.push({
+        id: shot.shotId ?? `${scene.sceneId}:${shot.shotNumber}:${rowIndex}`,
+        rowIndex,
+        scene,
+        shot,
+        ...(data.sections[rowIndex] ? { section: data.sections[rowIndex] } : {}),
+      });
+    }
+  }
+  return rows;
+}
+
+function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRow[] }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-[920px] w-full border-separate border-spacing-0 text-left">
+        <thead>
+          <tr className="bg-[var(--agent-elevated)] text-[10px] uppercase text-[var(--agent-fg-secondary)]">
+            <TableHeader>{t('chat.storyboardTable.columns.shot')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.image')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.duration')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.camera')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.visualAction')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.dialogueSfx')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.stylePrompt')}</TableHeader>
+            <TableHeader>{t('chat.storyboardTable.columns.strategy')}</TableHeader>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <SemanticStoryboardTableRow key={row.id} row={row} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
+  const { t } = useTranslation();
+  const { scene, shot, section } = row;
+  const camera = compactStrings([shot.shotScale, shot.cameraAngle, shot.cameraMovement]).join(
+    ' / ',
+  );
+  const characters = formatCharacters(shot.characters);
+  const emotion = formatList(shot.emotion);
+  const tags = formatList(shot.sceneTags);
+  const vfx = formatList(shot.vfx);
+  const dialogue = compactStrings([
+    shot.dialogue ? `${t('chat.storyboardTable.labels.dialogue')}: ${shot.dialogue}` : undefined,
+    shot.voiceOver ? `${t('chat.storyboardTable.labels.voiceOver')}: ${shot.voiceOver}` : undefined,
+    shot.soundCue ? `${t('chat.storyboardTable.labels.soundCue')}: ${shot.soundCue}` : undefined,
+  ]).join('\n');
+  const style = compactStrings([
+    shot.visualStyle ? `${t('chat.storyboardTable.labels.style')}: ${shot.visualStyle}` : undefined,
+    vfx ? `${t('chat.storyboardTable.labels.vfx')}: ${vfx}` : undefined,
+    shot.generationPrompt
+      ? `${t('chat.storyboardTable.labels.prompt')}: ${shot.generationPrompt}`
+      : undefined,
+  ]).join('\n');
+
+  return (
+    <tr className="align-top text-[11px] text-[var(--agent-fg)] odd:bg-[color-mix(in_srgb,var(--agent-elevated)_40%,transparent)]">
+      <TableCell className="w-[110px]">
+        <div className="font-mono text-[11px] font-medium">{formatShotNumber(shot.shotNumber)}</div>
+        <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
+          {scene.sceneTitle}
+        </div>
+        {scene.summary && (
+          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
+            {scene.summary}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="w-[150px]">
+        {section && section.media.length > 0 ? (
+          <div className="grid gap-1">
+            {section.media.map((media) => (
+              <MediaPreview key={media.id} media={media} compact />
+            ))}
+          </div>
+        ) : (
+          <span className="text-[var(--agent-fg-secondary)]">-</span>
+        )}
+        {section && <Diagnostics diagnostics={section.diagnostics} />}
+      </TableCell>
+      <TableCell className="w-[74px] font-mono">{formatDuration(shot.duration)}</TableCell>
+      <TableCell className="w-[120px] whitespace-pre-wrap">{camera || '-'}</TableCell>
+      <TableCell className="min-w-[220px]">
+        <div className="whitespace-pre-wrap break-words">{shot.visualDescription}</div>
+        <div className="mt-1 whitespace-pre-wrap break-words text-[var(--agent-fg-secondary)]">
+          {shot.characterAction}
+        </div>
+        {characters && (
+          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
+            {t('chat.storyboardTable.labels.characters')}: {characters}
+          </div>
+        )}
+        {emotion && (
+          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
+            {t('chat.storyboardTable.labels.emotion')}: {emotion}
+          </div>
+        )}
+        {tags && (
+          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
+            {t('chat.storyboardTable.labels.tags')}: {tags}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="min-w-[140px] whitespace-pre-wrap break-words">
+        {dialogue || '-'}
+      </TableCell>
+      <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
+        {style || '-'}
+      </TableCell>
+      <TableCell className="w-[150px] whitespace-pre-wrap break-words">
+        <div className="font-medium">{shot.imageStrategy}</div>
+        {shot.decisionReason && (
+          <div className="mt-1 text-[var(--agent-fg-secondary)]">{shot.decisionReason}</div>
+        )}
+      </TableCell>
+    </tr>
+  );
+}
+
+function TableHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <th className="border-b border-[var(--agent-divider)] px-2 py-1.5 font-medium tracking-normal">
+      {children}
+    </th>
+  );
+}
+
+function TableCell({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <td className={`border-b border-[var(--agent-divider)] px-2 py-2 ${className ?? ''}`}>
+      {children}
+    </td>
+  );
+}
+
+function LegacyStoryboardRows({ sections }: { sections: readonly ResolvedCompositeSection[] }) {
+  return (
+    <div className="divide-y divide-[var(--agent-divider)]">
+      {sections.map((section) => (
+        <div
+          key={section.id}
+          className="grid gap-2 px-2 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(120px,180px)]"
+        >
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="rounded bg-[var(--agent-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+                {String(section.index + 1).padStart(2, '0')}
+              </span>
+              {section.heading && (
+                <span className="truncate text-[12px] font-medium text-[var(--agent-fg)]">
+                  {section.heading}
+                </span>
+              )}
+            </div>
+            {section.content && (
+              <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-[var(--agent-fg)]">
+                {section.content}
+              </p>
+            )}
+            <Diagnostics diagnostics={section.diagnostics} />
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-1">
+            {section.media.map((media) => (
+              <MediaPreview key={media.id} media={media} compact />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatShotNumber(shotNumber: number): string {
+  return `#${String(shotNumber).padStart(2, '0')}`;
+}
+
+function formatDuration(duration: number): string {
+  return `${Number.isFinite(duration) ? duration : 0}s`;
+}
+
+function formatCharacters(characters: StoryboardShotRowV1['characters']): string | undefined {
+  const text = (characters ?? [])
+    .map((character) =>
+      compactStrings([
+        character.name,
+        character.role ? `(${character.role})` : undefined,
+        character.action,
+        character.emotion,
+      ]).join(' '),
+    )
+    .filter((value) => value.length > 0)
+    .join(', ');
+  return text || undefined;
+}
+
+function formatList(values: readonly string[] | undefined): string | undefined {
+  const text = compactStrings(values).join(', ');
+  return text || undefined;
+}
+
+function compactStrings(values: readonly (string | undefined | null)[] | undefined): string[] {
+  return (values ?? []).filter((value): value is string => Boolean(value && value.trim()));
 }
 
 function ComparisonGridRendererComponent({

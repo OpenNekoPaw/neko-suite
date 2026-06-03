@@ -44,6 +44,7 @@ describe('config message presenter', () => {
             providerId: 'openai',
             modelId: 'gpt',
             capabilities: ['chat', 'vision'],
+            contextWindow: 200000,
           },
         ],
         defaultMediaModels: {
@@ -76,6 +77,7 @@ describe('config message presenter', () => {
             providerId: 'openai',
             modelId: 'gpt',
             capabilities: ['chat', 'vision'],
+            contextWindow: 200000,
           },
         ],
       },
@@ -277,6 +279,7 @@ describe('config message presenter', () => {
           providerId: 'openai',
           modelId: 'gpt-4.1',
           category: 'llm',
+          contextWindow: 200000,
         },
         {
           id: 'flux:pro',
@@ -300,6 +303,8 @@ describe('config message presenter', () => {
           category: 'music',
         },
       ],
+      selectedModel: 'openai:gpt-4.1',
+      fallbackContextWindow: 8192,
       sessionMode: 'agent',
       mediaModelSelection: {
         image: 'flux:pro',
@@ -322,12 +327,15 @@ describe('config message presenter', () => {
       image: { providerId: 'flux', modelId: 'pro', category: 'image' },
       video: { providerId: 'runway', modelId: 'gen-4', category: 'video' },
     });
+    expect(projection.selectedContextWindow).toBe(200000);
   });
 
   it('projects direct media mode active model and default model list fallback', () => {
     expect(
       projectChatWorkspaceModelState({
         chatModelOptions: [],
+        selectedModel: 'auto',
+        fallbackContextWindow: 4096,
         sessionMode: 'agent',
         mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
       }),
@@ -335,6 +343,7 @@ describe('config message presenter', () => {
       allModels: [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }],
       availableModels: [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }],
       availableMediaModels: [],
+      selectedContextWindow: 4096,
     });
 
     const directProjection = projectChatWorkspaceModelState({
@@ -347,12 +356,15 @@ describe('config message presenter', () => {
           category: 'video',
         },
       ],
+      selectedModel: 'missing:model',
+      fallbackContextWindow: 16384,
       sessionMode: 'video',
       mediaModelSelection: { image: 'none', video: 'runway:gen-4', audio: 'none' },
     });
 
     expect(directProjection.activeMediaModel?.id).toBe('runway:gen-4');
     expect(directProjection.agentMediaModels).toBeUndefined();
+    expect(directProjection.selectedContextWindow).toBe(16384);
   });
 
   it('projects media model selection changes from session mode transitions', () => {

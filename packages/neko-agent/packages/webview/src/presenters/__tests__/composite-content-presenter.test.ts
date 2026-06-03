@@ -73,6 +73,74 @@ describe('composite content presenter', () => {
     ]);
   });
 
+  it('backfills semantic storyboard row media from sibling image tool results when refs are omitted', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'The title page appears.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Page 1 / Shot 1',
+            content: 'The title page appears.',
+            layout: 'table-row',
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image',
+        type: 'image',
+        src: 'webview://page-1.jpg',
+        localPath: '/cache/page-1.jpg',
+        caption: 'Page 1',
+        role: 'source',
+      }),
+    ]);
+  });
+
   it('projects comparison variants from ordered media refs', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {

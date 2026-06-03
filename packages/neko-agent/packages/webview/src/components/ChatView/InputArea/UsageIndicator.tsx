@@ -9,6 +9,7 @@ import { useTranslation } from '@/i18n/I18nContext';
 import { getLogger } from '../../../utils/logger';
 
 const logger = getLogger('UsageIndicator');
+const DEFAULT_MAX_CONTEXT_TOKENS = 8192;
 
 // Pie chart geometry
 const RADIUS = 5;
@@ -35,14 +36,16 @@ function getUsageColor(percentage: number): string {
 
 export function UsageIndicator({
   tokenCount,
-  maxTokens = 100000,
+  maxTokens = DEFAULT_MAX_CONTEXT_TOKENS,
   isCompressing = false,
   onCompress,
 }: UsageIndicatorProps) {
   const { t } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const percentage = Math.min((tokenCount / maxTokens) * 100, 100);
+  const effectiveMaxTokens =
+    Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : DEFAULT_MAX_CONTEXT_TOKENS;
+  const percentage = Math.min((tokenCount / effectiveMaxTokens) * 100, 100);
   const color = getUsageColor(percentage);
   // stroke-dashoffset controls how much of the arc is "filled"
   const dashOffset = CIRCUMFERENCE * (1 - percentage / 100);
@@ -128,7 +131,8 @@ export function UsageIndicator({
       {showTooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--vscode-editorWidget-background)] border border-[var(--vscode-editorWidget-border)] rounded shadow-lg text-[11px] whitespace-nowrap z-50">
           <div className="text-[var(--vscode-foreground)]">
-            {t('chat.usage.tokens')}: {tokenCount.toLocaleString()} / {maxTokens.toLocaleString()}
+            {t('chat.usage.tokens')}: {tokenCount.toLocaleString()} /{' '}
+            {effectiveMaxTokens.toLocaleString()}
           </div>
           <div className="text-[var(--vscode-descriptionForeground)]">
             {percentage.toFixed(1)}% {t('chat.usage.used')} — {formatTokenCount(tokenCount)}

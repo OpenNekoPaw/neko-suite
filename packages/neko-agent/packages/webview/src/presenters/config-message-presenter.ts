@@ -129,6 +129,11 @@ export function projectChatWorkspaceModelState(
   const allModels = normalizeChatModelOptions(input.chatModelOptions);
   const availableModels = allModels.filter(isChatSelectableModel);
   const availableMediaModels = allModels.filter(isAgentMediaChatModelOption);
+  const selectedContextWindow = resolveSelectedContextWindow({
+    selectedModel: input.selectedModel,
+    availableModels,
+    fallbackContextWindow: input.fallbackContextWindow,
+  });
   let activeMediaModel: ChatModelOption | undefined;
   let agentMediaModels: AgentMediaModelSelections | undefined;
 
@@ -148,6 +153,7 @@ export function projectChatWorkspaceModelState(
     allModels,
     availableModels,
     availableMediaModels,
+    selectedContextWindow,
     ...(activeMediaModel ? { activeMediaModel } : {}),
     ...(agentMediaModels ? { agentMediaModels } : {}),
   };
@@ -316,6 +322,26 @@ function normalizeChatModelOptions(
   return [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
 }
 
+function resolveSelectedContextWindow(input: {
+  selectedModel: string;
+  availableModels: readonly ChatModelOption[];
+  fallbackContextWindow: number;
+}): number {
+  const fallbackContextWindow =
+    Number.isFinite(input.fallbackContextWindow) && input.fallbackContextWindow > 0
+      ? input.fallbackContextWindow
+      : 8192;
+
+  if (input.selectedModel === 'auto') {
+    return fallbackContextWindow;
+  }
+
+  const selected = input.availableModels.find((model) => model.id === input.selectedModel);
+  return selected?.contextWindow && selected.contextWindow > 0
+    ? selected.contextWindow
+    : fallbackContextWindow;
+}
+
 function isAgentMediaCategory(category: unknown): category is AgentMediaModelCategory {
   return category === 'image' || category === 'video' || category === 'audio';
 }
@@ -458,7 +484,15 @@ function isChatModelOption(value: unknown): value is ChatModelOption {
     return false;
   }
   const capabilities = record.capabilities;
-  return !Array.isArray(capabilities) || capabilities.every(isModelCapability);
+  if (Array.isArray(capabilities) && !capabilities.every(isModelCapability)) {
+    return false;
+  }
+
+  const contextWindow = record.contextWindow;
+  return (
+    contextWindow === undefined ||
+    (typeof contextWindow === 'number' && Number.isFinite(contextWindow) && contextWindow > 0)
+  );
 }
 
 function isModelCapability(value: unknown): value is ModelCapability {

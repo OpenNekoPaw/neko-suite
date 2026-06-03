@@ -210,12 +210,19 @@ export function ChatWorkspace({
   );
 
   // ---- Model lists ----
-  const { availableModels, availableMediaModels, activeMediaModel, agentMediaModels } =
-    projectChatWorkspaceModelState({
-      chatModelOptions: settings.chatModelOptions,
-      sessionMode,
-      mediaModelSelection,
-    });
+  const {
+    availableModels,
+    availableMediaModels,
+    activeMediaModel,
+    agentMediaModels,
+    selectedContextWindow,
+  } = projectChatWorkspaceModelState({
+    chatModelOptions: settings.chatModelOptions,
+    selectedModel,
+    fallbackContextWindow: settings.maxTokens,
+    sessionMode,
+    mediaModelSelection,
+  });
 
   // ---- Behavior hooks ----
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
@@ -421,6 +428,7 @@ export function ChatWorkspace({
       promptMode={settings.promptMode}
       onPromptModeChange={handlePromptModeChange}
       contextTokenCount={contextTokenCount}
+      maxContextTokens={selectedContextWindow}
       isCompressing={isCompressing}
       onCompressContext={handleCompressContext}
       mediaModelCallCount={mediaModelCallCount}

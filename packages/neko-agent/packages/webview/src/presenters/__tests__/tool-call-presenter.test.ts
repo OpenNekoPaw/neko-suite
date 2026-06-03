@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { projectToolCallDisplayState } from '../tool-call-presenter';
 
 describe('tool-call-presenter', () => {
-  it('projects ReadDocument image metadata into thumbnail view models', () => {
+  it('does not project ReadDocument image metadata into thumbnail view models', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-1',
       name: 'ReadDocument',
@@ -38,6 +38,61 @@ describe('tool-call-presenter', () => {
       },
     });
 
+    expect(projection.documentThumbnails).toEqual([]);
+    expect(projection.copyText).toContain('Document: /books/a.epub');
+    expect(projection.copyText).toContain('C2 · 1494 x 2133 · 1 KB · /tmp/page-1.jpg');
+  });
+
+  it('projects ReadDocumentImage result images into thumbnail view models', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-2',
+      name: 'ReadDocumentImage',
+      arguments: {},
+      result: {
+        success: true,
+        data: {
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          mode: 'vision',
+          analysis: 'custom',
+          images: [
+            {
+              path: '/tmp/page-1.jpg',
+              webviewUri: 'vscode-webview://page-1.jpg',
+              label: 'Page 1',
+              width: 1494,
+              height: 2133,
+              byteSize: 2048,
+              mimeType: 'image/jpeg',
+              metadata: {
+                documentIndex: 1,
+                locator: {
+                  kind: 'chapter',
+                  chapterHref: 'Page_1',
+                  spineIndex: 1,
+                },
+              },
+              documentImage: {
+                path: '/tmp/page-1.jpg',
+                locator: {
+                  kind: 'chapter',
+                  chapterHref: 'Page_1',
+                  spineIndex: 1,
+                },
+                resourceRef: {
+                  kind: 'document-entry',
+                  source: { filePath: '/books/a.epub', format: 'epub' },
+                  entryPath: 'image/Page_1.jpg',
+                  cachePath: '/tmp/page-1.jpg',
+                  versionPolicy: 'versioned-export',
+                },
+              },
+            },
+          ],
+          imageCount: 1,
+        },
+      },
+    });
+
     expect(projection.documentThumbnails).toEqual([
       expect.objectContaining({
         filePath: '/books/a.epub',
@@ -45,9 +100,9 @@ describe('tool-call-presenter', () => {
         src: 'vscode-webview://page-1.jpg',
         width: 1494,
         height: 2133,
-        byteSize: 1024,
+        byteSize: 2048,
         mimeType: 'image/jpeg',
-        label: 'C2',
+        label: 'Page 1',
         locator: {
           kind: 'chapter',
           chapterHref: 'Page_1',
@@ -62,8 +117,7 @@ describe('tool-call-presenter', () => {
         },
       }),
     ]);
-    expect(projection.copyText).toContain('Document: /books/a.epub');
-    expect(projection.copyText).toContain('C2 · 1494 x 2133 · 1 KB · /tmp/page-1.jpg');
+    expect(projection.copyText).toBeNull();
 
     const reference = JSON.parse(projection.documentThumbnails[0]!.referenceJson);
     expect(reference).toEqual({
@@ -90,7 +144,7 @@ describe('tool-call-presenter', () => {
         index: 0,
         width: 1494,
         height: 2133,
-        byteSize: 1024,
+        byteSize: 2048,
         mimeType: 'image/jpeg',
         resourceRef: {
           kind: 'document-entry',
@@ -101,6 +155,103 @@ describe('tool-call-presenter', () => {
         },
       },
     });
+  });
+
+  it('projects ReadImage argument images into thumbnails while pending', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-3',
+      name: 'ReadImage',
+      arguments: {
+        images: [
+          {
+            label: '第10页',
+            path: '/tmp/page-10.jpg',
+            webviewUri: 'vscode-webview://page-10.jpg',
+          },
+        ],
+        mode: 'vision',
+      },
+    });
+
+    expect(projection.isPending).toBe(true);
+    expect(projection.documentThumbnails).toEqual([
+      expect.objectContaining({
+        filePath: '/tmp/page-10.jpg',
+        path: '/tmp/page-10.jpg',
+        src: 'vscode-webview://page-10.jpg',
+        label: '第10页',
+      }),
+    ]);
+  });
+
+  it('projects ReadImage image_paths arguments into thumbnails when failed', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-4',
+      name: 'ReadImage',
+      arguments: {
+        image_paths: ['/tmp/page-1.jpg'],
+        imagePathWebviewUris: ['vscode-webview://page-1.jpg'],
+      },
+      result: {
+        success: false,
+        data: null,
+        error: 'Invalid JSON response',
+      },
+    });
+
+    expect(projection.isFailed).toBe(true);
+    expect(projection.documentThumbnails).toEqual([
+      expect.objectContaining({
+        filePath: '/tmp/page-1.jpg',
+        path: '/tmp/page-1.jpg',
+        src: 'vscode-webview://page-1.jpg',
+        label: '#1',
+      }),
+    ]);
+  });
+
+  it('projects ReadDocumentImage argument images into thumbnails when failed', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-5',
+      name: 'ReadDocumentImage',
+      arguments: {
+        file_path: '/books/a.epub',
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        images: [
+          {
+            label: 'Page 2',
+            path: '/tmp/page-2.jpg',
+            webviewUri: 'vscode-webview://page-2.jpg',
+            metadata: {
+              locator: {
+                kind: 'chapter',
+                chapterHref: 'Page_2',
+                spineIndex: 2,
+              },
+            },
+          },
+        ],
+      },
+      result: {
+        success: false,
+        data: null,
+        error: 'No data received for 30000ms',
+      },
+    });
+
+    expect(projection.documentThumbnails).toEqual([
+      expect.objectContaining({
+        filePath: '/books/a.epub',
+        path: '/tmp/page-2.jpg',
+        src: 'vscode-webview://page-2.jpg',
+        label: 'Page 2',
+        locator: {
+          kind: 'chapter',
+          chapterHref: 'Page_2',
+          spineIndex: 2,
+        },
+      }),
+    ]);
   });
 
   it('projects compact copy text for ReadDocument range results', () => {

@@ -1,7 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nContext';
+import { chat as enChat } from '@/i18n/locales/en/chat';
+import { chat as zhCnChat } from '@/i18n/locales/zh-cn/chat';
 import { registerDefaultRenderers, RichContentRenderer } from '@/components/ChatView/RichContent';
 import { richContentRegistry } from '../RichContentRegistry';
+import { I18nService } from '@neko/shared';
 import type {
   AssetGalleryRichData,
   ComparisonGridRichData,
@@ -20,7 +24,7 @@ describe('composite rich content renderers', () => {
   it('renders storyboard rows with media previews and diagnostics', () => {
     registerDefaultRenderers();
 
-    render(
+    renderWithI18n(
       <RichContentRenderer
         kind="storyboard-table"
         data={
@@ -66,6 +70,160 @@ describe('composite rich content renderers', () => {
     expect(screen.getByAltText('Wide')).toBeTruthy();
     expect(screen.getByText('Original')).toBeTruthy();
     expect(screen.getByText('Asset 1 is not available for call-2')).toBeTruthy();
+  });
+
+  it('renders semantic storyboard table fields instead of only fallback row content', () => {
+    registerDefaultRenderers();
+
+    renderWithI18n(
+      <RichContentRenderer
+        kind="storyboard-table"
+        data={
+          {
+            template: 'storyboard-table',
+            title: 'Semantic Opening',
+            storyboardTable: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Semantic Opening',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'INT. CAFE - DAY',
+                  summary: 'Rin finds the signal.',
+                  shots: [
+                    {
+                      shotId: 'shot-1',
+                      shotNumber: 1,
+                      duration: 4,
+                      visualDescription: 'Rin notices a blue pulse under the table.',
+                      characterAction: 'Rin kneels and reaches toward the light.',
+                      characters: [
+                        {
+                          name: 'Rin',
+                          role: 'primary',
+                          action: 'kneels',
+                          emotion: 'focused',
+                        },
+                      ],
+                      shotScale: 'CU',
+                      cameraAngle: 'low-angle',
+                      cameraMovement: 'zoom-in',
+                      emotion: ['focused', 'curious'],
+                      sceneTags: ['signal'],
+                      dialogue: '找到了。',
+                      voiceOver: '她终于看见线索。',
+                      soundCue: '嗡',
+                      visualStyle: 'noir manga',
+                      vfx: ['blue glow'],
+                      generationPrompt: 'close-up, blue pulse, manga noir',
+                      imageStrategy: 'use-as-reference',
+                      decisionReason: 'Keep the manga panel composition as reference.',
+                    },
+                  ],
+                },
+              ],
+            },
+            sections: [
+              {
+                id: 'section-0',
+                index: 0,
+                heading: 'Fallback Shot 1',
+                content: 'Fallback content',
+                media: [
+                  {
+                    id: 'media-1',
+                    toolCallId: 'read-image',
+                    assetIndex: 0,
+                    type: 'image',
+                    src: 'webview://panel.png',
+                    caption: 'Original panel',
+                    role: 'source',
+                  },
+                ],
+                diagnostics: [],
+              },
+            ],
+            diagnostics: [],
+          } satisfies StoryboardTableRichData
+        }
+      />,
+    );
+
+    expect(screen.getByText('Semantic Opening')).toBeTruthy();
+    expect(screen.getByText('1 shots')).toBeTruthy();
+    expect(screen.getByText('#01')).toBeTruthy();
+    expect(screen.getByText('INT. CAFE - DAY')).toBeTruthy();
+    expect(screen.getByText('4s')).toBeTruthy();
+    expect(screen.getByText('CU / low-angle / zoom-in')).toBeTruthy();
+    expect(screen.getByText('Rin notices a blue pulse under the table.')).toBeTruthy();
+    expect(screen.getByText('Rin kneels and reaches toward the light.')).toBeTruthy();
+    expect(screen.getByText('Characters: Rin (primary) kneels focused')).toBeTruthy();
+    expect(screen.getByText('Emotion: focused, curious')).toBeTruthy();
+    expect(screen.getByText(/Dialogue: 找到了。/)).toBeTruthy();
+    expect(screen.getByText(/VO: 她终于看见线索。/)).toBeTruthy();
+    expect(screen.getByText(/SFX: 嗡/)).toBeTruthy();
+    expect(screen.getByText(/Style: noir manga/)).toBeTruthy();
+    expect(screen.getByText(/VFX: blue glow/)).toBeTruthy();
+    expect(screen.getByText(/Prompt: close-up, blue pulse, manga noir/)).toBeTruthy();
+    expect(screen.getByText('use-as-reference')).toBeTruthy();
+    expect(screen.getByText('Keep the manga panel composition as reference.')).toBeTruthy();
+    expect(screen.getByAltText('Original panel')).toBeTruthy();
+  });
+
+  it('localizes semantic storyboard table field labels', () => {
+    registerDefaultRenderers();
+
+    renderWithI18n(
+      <RichContentRenderer
+        kind="storyboard-table"
+        data={
+          {
+            template: 'storyboard-table',
+            title: '中文分镜',
+            storyboardTable: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: '中文分镜',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: '第1页',
+                  shots: [
+                    {
+                      shotNumber: 1,
+                      duration: 2,
+                      visualDescription: '角色看向远方。',
+                      characterAction: '角色停下脚步。',
+                      characters: [{ name: '燈神', role: 'primary' }],
+                      dialogue: '開始吧。',
+                      soundCue: '沙',
+                      visualStyle: '繁中漫画',
+                      generationPrompt: '漫画分镜',
+                      imageStrategy: 'generate-new',
+                    },
+                  ],
+                },
+              ],
+            },
+            sections: [{ id: 'section-0', index: 0, media: [], diagnostics: [] }],
+            diagnostics: [],
+          } satisfies StoryboardTableRichData
+        }
+      />,
+      'zh-cn',
+    );
+
+    expect(screen.getByText('1 个镜头')).toBeTruthy();
+    expect(screen.getAllByText('镜头')).toHaveLength(2);
+    expect(screen.getByText('图片')).toBeTruthy();
+    expect(screen.getByText('时长')).toBeTruthy();
+    expect(screen.getByText('画面 / 动作')).toBeTruthy();
+    expect(screen.getByText(/角色: 燈神/)).toBeTruthy();
+    expect(screen.getByText(/对白: 開始吧。/)).toBeTruthy();
+    expect(screen.getByText(/音效: 沙/)).toBeTruthy();
+    expect(screen.getByText(/风格: 繁中漫画/)).toBeTruthy();
+    expect(screen.getByText(/提示词: 漫画分镜/)).toBeTruthy();
   });
 
   it('renders comparison variants', () => {
@@ -162,3 +320,10 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText('Open')).toBeTruthy();
   });
 });
+
+function renderWithI18n(node: React.ReactElement, locale: 'en' | 'zh-cn' = 'en') {
+  const service = new I18nService(locale);
+  service.registerBundle('chat', 'en', enChat);
+  service.registerBundle('chat', 'zh-cn', zhCnChat);
+  return render(<I18nProvider service={service}>{node}</I18nProvider>);
+}

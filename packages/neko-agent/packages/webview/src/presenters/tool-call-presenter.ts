@@ -75,10 +75,11 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
   const backgroundTaskStatus = readString(resultData, 'status');
   const shouldShowMediaPreview = !isBackgroundMode || backgroundTaskStatus === 'completed';
   const resultSuccess = toolCall.result?.success === true;
-  const documentThumbnails =
-    resultSuccess && toolCall.name === 'ReadDocument'
-      ? extractDocumentImageThumbnails(toolCall.result?.data)
-      : [];
+  const documentThumbnails = extractToolDocumentThumbnails(
+    toolCall.name,
+    toolCall.arguments,
+    resultSuccess ? toolCall.result?.data : undefined,
+  );
   const copyText = resultSuccess ? extractToolCopyText(toolCall.name, toolCall.result?.data) : null;
 
   return {
@@ -170,6 +171,201 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
   }
 
   return thumbnails;
+}
+
+export function extractReadDocumentImageThumbnails(
+  data: unknown,
+): DocumentImageThumbnailProjection[] {
+  const result = asRecord(data);
+  if (!result) return [];
+
+  const filePath = extractDocumentFilePath(result);
+  if (!filePath) return [];
+
+  const source = parseDocumentSourceRef(result.source);
+  const images = Array.isArray(result.images) ? result.images : [];
+
+  return images.flatMap((value, index) => {
+    const image = asRecord(value);
+    if (!image) return [];
+
+    const documentImage = asRecord(image.documentImage);
+    const metadata = asRecord(image.metadata);
+    const path = readString(image, 'path') ?? readString(documentImage, 'path');
+    const src = readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri');
+    if (!path || !src) return [];
+
+    const locator =
+      parseDocumentLocator(metadata?.locator) ?? parseDocumentLocator(documentImage?.locator);
+    const width = readFiniteNumber(image, 'width') ?? readFiniteNumber(documentImage, 'width');
+    const height = readFiniteNumber(image, 'height') ?? readFiniteNumber(documentImage, 'height');
+    const byteSize =
+      readFiniteNumber(image, 'byteSize') ?? readFiniteNumber(documentImage, 'byteSize');
+    const mimeType = readString(image, 'mimeType') ?? readString(documentImage, 'mimeType');
+    const resourceRef =
+      parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
+      parseDocumentArchiveResourceRef(image.resourceRef);
+    const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
+
+    return [
+      {
+        id: `${path}:${index}`,
+        index,
+        filePath,
+        ...(source ? { source } : {}),
+        path,
+        src,
+        ...(width !== undefined ? { width } : {}),
+        ...(height !== undefined ? { height } : {}),
+        ...(byteSize !== undefined ? { byteSize } : {}),
+        ...(mimeType ? { mimeType } : {}),
+        ...(locator ? { locator } : {}),
+        ...(resourceRef ? { resourceRef } : {}),
+        label,
+        referenceJson: formatDocumentImageReferenceJson({
+          filePath,
+          source,
+          path,
+          src,
+          index,
+          width,
+          height,
+          byteSize,
+          mimeType,
+          locator,
+          resourceRef,
+        }),
+      },
+    ];
+  });
+}
+
+function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjection[] {
+  const result = asRecord(data);
+  if (!result) return [];
+
+  const filePath = extractDocumentFilePath(result);
+  const source = parseDocumentSourceRef(result.source);
+  const imagePathWebviewUris = readStringArray(result, 'imagePathWebviewUris');
+  const snakeCaseImagePaths = readStringArray(result, 'image_paths');
+  const imagePaths =
+    snakeCaseImagePaths.length > 0 ? snakeCaseImagePaths : readStringArray(result, 'imagePaths');
+  const locators = Array.isArray(result.locators) ? result.locators : [];
+  const images = Array.isArray(result.images) ? result.images : [];
+
+  if (images.length > 0) {
+    return images.flatMap((value, index) => {
+      const image = asRecord(value);
+      if (!image) return [];
+
+      const documentImage = asRecord(image.documentImage);
+      const metadata = asRecord(image.metadata);
+      const path =
+        readString(image, 'path') ??
+        readString(documentImage, 'path') ??
+        readStringFromArray(imagePaths, index);
+      const src =
+        readString(image, 'webviewUri') ??
+        readString(documentImage, 'webviewUri') ??
+        readStringFromArray(imagePathWebviewUris, index) ??
+        readRenderableImageSrc(path);
+      if (!path || !src) return [];
+
+      const locator =
+        parseDocumentLocator(metadata?.locator) ??
+        parseDocumentLocator(documentImage?.locator) ??
+        parseDocumentLocator(locators[index]);
+      const width = readFiniteNumber(image, 'width') ?? readFiniteNumber(documentImage, 'width');
+      const height = readFiniteNumber(image, 'height') ?? readFiniteNumber(documentImage, 'height');
+      const byteSize =
+        readFiniteNumber(image, 'byteSize') ?? readFiniteNumber(documentImage, 'byteSize');
+      const mimeType = readString(image, 'mimeType') ?? readString(documentImage, 'mimeType');
+      const resourceRef =
+        parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
+        parseDocumentArchiveResourceRef(image.resourceRef);
+      const thumbnailFilePath = filePath ?? path;
+      const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
+
+      return [
+        {
+          id: `${path}:${index}`,
+          index,
+          filePath: thumbnailFilePath,
+          ...(source ? { source } : {}),
+          path,
+          src,
+          ...(width !== undefined ? { width } : {}),
+          ...(height !== undefined ? { height } : {}),
+          ...(byteSize !== undefined ? { byteSize } : {}),
+          ...(mimeType ? { mimeType } : {}),
+          ...(locator ? { locator } : {}),
+          ...(resourceRef ? { resourceRef } : {}),
+          label,
+          referenceJson: formatDocumentImageReferenceJson({
+            filePath: thumbnailFilePath,
+            source,
+            path,
+            src,
+            index,
+            width,
+            height,
+            byteSize,
+            mimeType,
+            locator,
+            resourceRef,
+          }),
+        },
+      ];
+    });
+  }
+
+  return imagePaths.flatMap((path, index) => {
+    const src = readStringFromArray(imagePathWebviewUris, index) ?? readRenderableImageSrc(path);
+    if (!src) return [];
+
+    const locator = parseDocumentLocator(locators[index]);
+    const thumbnailFilePath = filePath ?? path;
+    const label = formatDocumentThumbnailLabel(locator, index);
+
+    return [
+      {
+        id: `${path}:${index}`,
+        index,
+        filePath: thumbnailFilePath,
+        ...(source ? { source } : {}),
+        path,
+        src,
+        ...(locator ? { locator } : {}),
+        label,
+        referenceJson: formatDocumentImageReferenceJson({
+          filePath: thumbnailFilePath,
+          source,
+          path,
+          src,
+          index,
+          locator,
+        }),
+      },
+    ];
+  });
+}
+
+function extractToolDocumentThumbnails(
+  toolName: string,
+  args: unknown,
+  resultData: unknown,
+): DocumentImageThumbnailProjection[] {
+  if (toolName === 'ReadDocumentImage') {
+    const resultThumbnails = resultData ? extractReadDocumentImageThumbnails(resultData) : [];
+    return resultThumbnails.length > 0 ? resultThumbnails : extractReadImageThumbnails(args);
+  }
+
+  if (toolName === 'ReadImage') {
+    const resultThumbnails = resultData ? extractReadImageThumbnails(resultData) : [];
+    return resultThumbnails.length > 0 ? resultThumbnails : extractReadImageThumbnails(args);
+  }
+
+  return [];
 }
 
 function formatDocumentImageReferenceJson(input: {
@@ -410,9 +606,19 @@ function readString(obj: Record<string, unknown> | undefined, key: string): stri
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function readStringArray(obj: Record<string, unknown> | undefined, key: string): string[] {
+  const value = obj?.[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
 function readStringFromArray(values: unknown[], index: number): string | undefined {
   const value = values[index];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readRenderableImageSrc(value: string | undefined): string | undefined {
+  return value && isValidImageUrl(value) && !isAbsolutePath(value) ? value : undefined;
 }
 
 function readFiniteNumber(
@@ -429,7 +635,13 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function extractDocumentFilePath(result: Record<string, unknown>): string | null {
   const source = asRecord(result.source);
-  return readString(result, 'filePath') ?? readString(source, 'filePath') ?? null;
+  return (
+    readString(result, 'filePath') ??
+    readString(result, 'file_path') ??
+    readString(source, 'filePath') ??
+    readString(source, 'file_path') ??
+    null
+  );
 }
 
 function formatDocumentThumbnailLabel(locator: DocumentLocator | undefined, index: number): string {

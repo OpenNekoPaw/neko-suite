@@ -68,6 +68,7 @@ export function InputArea({
     executionMode,
     onExecutionModeChange,
     contextTokenCount,
+    maxContextTokens,
     isCompressing,
     onCompressContext,
     mediaModelCallCount,
@@ -637,6 +638,7 @@ export function InputArea({
             {/* Token usage pie */}
             <UsageIndicator
               tokenCount={contextTokenCount}
+              maxTokens={maxContextTokens}
               isCompressing={isCompressing}
               onCompress={onCompressContext}
             />
