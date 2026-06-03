@@ -13,7 +13,7 @@ export type BuiltinSlashCommandName =
   | 'clear'
   | 'exit'
   | 'as'
-  | 'exit-role'
+  | 'exit-as'
   | 'new'
   | 'resume'
   | 'config'
@@ -84,15 +84,15 @@ export const BUILTIN_SLASH_COMMANDS: readonly BuiltinSlashCommandDefinition[] = 
   },
   {
     name: 'as',
-    description: 'Start an isolated NPC character test session',
+    description: 'Start an isolated Character Dialogue session',
     usage: '@character [--consult] [--enrichment=ask|skip|auto|manual]',
     category: 'session',
     availableInCli: false,
     availableInExtension: true,
   },
   {
-    name: 'exit-role',
-    description: 'Exit the active NPC character test session',
+    name: 'exit-as',
+    description: 'Exit the active Character Dialogue session',
     category: 'session',
     availableInCli: false,
     availableInExtension: true,

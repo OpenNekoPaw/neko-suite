@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-  NEKO_AGENT_TEST_NPC_COMMAND,
-  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  CHARACTER_ROLE_TEST_ARTIFACT_DIR,
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
   NPC_TEST_BENCH_AS_SLASH_COMMAND,
-  NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND,
+  NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND,
   NPC_TRANSCRIPT_ARTIFACT_VERSION,
   isNpcAgentWorkflowRequest,
   isNpcEvaluationReport,
@@ -153,14 +152,13 @@ const artifact: NpcTranscriptArtifact = {
   sessionId: 'npc-session-1',
 };
 
-describe('npc test bench contracts', () => {
+describe('character role workflow contracts', () => {
   it('declares shared command constants', () => {
     expect(NPC_TEST_BENCH_AS_SLASH_COMMAND).toBe('/as');
-    expect(NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND).toBe('/exit-role');
-    expect(NEKO_AGENT_TEST_NPC_COMMAND).toBe('neko.agent.testNpc');
-    expect(NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND).toBe('neko.agent.characterPerspective');
-    expect(NEKO_AGENT_VALIDATE_CHARACTER_COMMAND).toBe('neko.agent.validateCharacter');
-    expect(NEKO_AGENT_IMPROVE_CHARACTER_COMMAND).toBe('neko.agent.improveCharacter');
+    expect(NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND).toBe('/exit-as');
+    expect(NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND).toBe('neko.agent.characterDialogue');
+    expect(NEKO_AGENT_EMBODY_CHARACTER_COMMAND).toBe('neko.agent.embodyCharacter');
+    expect(CHARACTER_ROLE_TEST_ARTIFACT_DIR).toBe('.neko/character-tests');
   });
 
   it('validates launch requests from slash command and Dashboard sources', () => {
@@ -186,7 +184,7 @@ describe('npc test bench contracts', () => {
 
   it('validates Agent NPC workflow requests from Dashboard actions', () => {
     const request: NpcAgentWorkflowRequest = {
-      workflow: 'validate-character',
+      workflow: 'embody-character',
       entityRef,
       dashboardRef: {
         source: 'neko-entity',
@@ -209,6 +207,8 @@ describe('npc test bench contracts', () => {
 
     expect(isNpcAgentWorkflowRequest(request)).toBe(true);
     expect(isNpcAgentWorkflowRequest({ ...request, workflow: 'test-npc' })).toBe(false);
+    expect(isNpcAgentWorkflowRequest({ ...request, workflow: 'validate-character' })).toBe(false);
+    expect(isNpcAgentWorkflowRequest({ ...request, workflow: 'improve-character' })).toBe(false);
     expect(isNpcAgentWorkflowRequest({ ...request, source: 'slash-command' })).toBe(false);
     expect(
       isNpcAgentWorkflowRequest({

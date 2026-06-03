@@ -7,21 +7,18 @@ import type {
   EntityAssetBinding,
   EntityAssetBindingRole,
   EntityAssetRequirement,
-  MissingRepresentationAction,
   RepresentationKind,
   VisualIdentityDraft,
 } from '@neko/shared';
 import {
   isNpcTestMode,
-  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-  NEKO_AGENT_TEST_NPC_COMMAND,
-  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
   type NpcAgentWorkflowRequest,
   type NpcTestBenchLaunchRequest,
 } from '@neko/shared';
 import type {
-  DashboardCharacterNpcWorkflowAction,
+  DashboardCharacterRoleWorkflowAction,
   DashboardCreativeEntityAction,
   DashboardCreativeEntityActionDescriptor,
   DashboardCreativeEntityActionRequest,
@@ -40,7 +37,7 @@ import type {
 } from '@neko/shared/types/dashboard-creative-entity';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
-  isDashboardCharacterNpcWorkflowScopeRef,
+  isDashboardCharacterRoleWorkflowScopeRef,
   isSafeDashboardAssetRef,
   isSafeDashboardEntityRef,
   normalizeDashboardEntityLocalRef,
@@ -120,10 +117,8 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       'show-representation-package',
       'apply-sync-suggestion',
       'ignore-sync-suggestion',
-      'test-npc',
-      'character-perspective',
-      'validate-character',
-      'improve-character',
+      'character-dialogue',
+      'embody-character',
       'refresh',
     ],
   } satisfies DashboardCreativeEntitySource['capabilities'];
@@ -194,12 +189,8 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     const action = request.action;
 
     if (action === 'open-source') return this.executeOpenSourceAction(request);
-    if (action === 'test-npc') return this.executeNpcTestAction(request);
-    if (
-      action === 'character-perspective' ||
-      action === 'validate-character' ||
-      action === 'improve-character'
-    ) {
+    if (action === 'character-dialogue') return this.executeNpcTestAction(request);
+    if (action === 'embody-character') {
       return this.executeNpcWorkflowAction(action, entityId, request);
     }
     if (action === 'refresh') return { ok: true, refresh: true, ref: request.ref };
@@ -568,12 +559,12 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       ...(mode ? { mode } : {}),
     };
 
-    await executeCommand(NEKO_AGENT_TEST_NPC_COMMAND, launchRequest);
+    await executeCommand(NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND, launchRequest);
     return { ok: true, refresh: false, ref: request.ref };
   }
 
   private async executeNpcWorkflowAction(
-    action: DashboardCharacterNpcWorkflowAction,
+    action: DashboardCharacterRoleWorkflowAction,
     entityId: string | undefined,
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
@@ -583,7 +574,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: '只有角色实体支持 NPC Agent 工作流。',
+        message: '只有角色实体支持角色工作流。',
         ref: request.ref,
       };
     }
@@ -622,7 +613,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       ok: true,
       refresh: false,
       ref: request.ref,
-      npcWorkflow: { kind: 'delegated-command', command },
+      characterRoleWorkflow: { kind: 'delegated-command', command },
     };
   }
 
@@ -837,8 +828,8 @@ function entityActions(
   return kind === 'character'
     ? [
         actions[0],
-        { id: 'test-npc', label: 'Test NPC' },
-        ...(surface === 'detail' ? npcWorkflowActions() : []),
+        { id: 'character-dialogue', label: 'Character Dialogue' },
+        ...(surface === 'detail' ? characterRoleWorkflowActions() : []),
         ...actions.slice(1),
       ].filter((action): action is DashboardCreativeEntityActionDescriptor => action !== undefined)
     : actions;
@@ -847,8 +838,8 @@ function entityActions(
 function candidateActions(): DashboardCreativeEntityRow['actions'] {
   return [
     { id: 'show-detail', label: 'Show detail' },
-    { id: 'test-npc', label: 'Test NPC' },
-    ...npcWorkflowActions(),
+    { id: 'character-dialogue', label: 'Character Dialogue' },
+    ...characterRoleWorkflowActions(),
     {
       id: 'confirm-candidate',
       label: 'Confirm candidate',
@@ -860,22 +851,14 @@ function candidateActions(): DashboardCreativeEntityRow['actions'] {
   ];
 }
 
-function npcWorkflowActions(disabledReason?: string): DashboardCreativeEntityRow['actions'] {
+function characterRoleWorkflowActions(
+  disabledReason?: string,
+): DashboardCreativeEntityRow['actions'] {
   const disabled = disabledReason !== undefined;
   return [
     {
-      id: 'character-perspective',
-      label: 'Character perspective',
-      ...(disabled ? { disabled, reason: disabledReason } : {}),
-    },
-    {
-      id: 'validate-character',
-      label: 'Validate character',
-      ...(disabled ? { disabled, reason: disabledReason } : {}),
-    },
-    {
-      id: 'improve-character',
-      label: 'Improve character',
+      id: 'embody-character',
+      label: 'Embody Character',
       ...(disabled ? { disabled, reason: disabledReason } : {}),
     },
   ];
@@ -908,7 +891,9 @@ function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {
 
 function readNpcWorkflowScopes(payload: DashboardCreativeEntityActionRequest['payload']) {
   const scopes = payload?.['scopes'];
-  return Array.isArray(scopes) ? scopes.filter(isDashboardCharacterNpcWorkflowScopeRef) : undefined;
+  return Array.isArray(scopes)
+    ? scopes.filter(isDashboardCharacterRoleWorkflowScopeRef)
+    : undefined;
 }
 
 function readNpcWorkflowPrompt(payload: DashboardCreativeEntityActionRequest['payload']) {
@@ -916,14 +901,10 @@ function readNpcWorkflowPrompt(payload: DashboardCreativeEntityActionRequest['pa
   return typeof prompt === 'string' ? prompt : undefined;
 }
 
-function commandForNpcWorkflow(action: DashboardCharacterNpcWorkflowAction): string {
+function commandForNpcWorkflow(action: DashboardCharacterRoleWorkflowAction): string {
   switch (action) {
-    case 'character-perspective':
-      return NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND;
-    case 'validate-character':
-      return NEKO_AGENT_VALIDATE_CHARACTER_COMMAND;
-    case 'improve-character':
-      return NEKO_AGENT_IMPROVE_CHARACTER_COMMAND;
+    case 'embody-character':
+      return NEKO_AGENT_EMBODY_CHARACTER_COMMAND;
   }
 }
 

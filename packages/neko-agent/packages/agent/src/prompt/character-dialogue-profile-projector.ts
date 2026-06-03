@@ -1,12 +1,12 @@
 import type { NpcProfileFact, NpcProfileSource, NpcTestMode } from '@neko/shared';
 
-export interface NpcProfilePromptOptions {
+export interface CharacterDialogueProfilePromptOptions {
   readonly mode?: NpcTestMode;
 }
 
-export function projectNpcSystemPrompt(
+export function projectCharacterDialogueSystemPrompt(
   source: NpcProfileSource,
-  options: NpcProfilePromptOptions = {},
+  options: CharacterDialogueProfilePromptOptions = {},
 ): string {
   const mode = options.mode ?? 'roleplay';
   const confirmedFacts = source.facts.filter((fact) => fact.authority === 'confirmed');

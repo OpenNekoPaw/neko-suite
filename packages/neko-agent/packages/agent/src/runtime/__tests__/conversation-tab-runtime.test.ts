@@ -76,10 +76,10 @@ describe('conversation-tab-runtime', () => {
     expect(effects.switchConversation).not.toHaveBeenCalled();
   });
 
-  it('recognizes active NPC tabs without switching ordinary conversations', () => {
+  it('recognizes active Character Dialogue tabs without switching ordinary conversations', () => {
     const effects = createEffects({
       hasConversation: () => false,
-      hasNpcSession: (sessionId) => sessionId === 'npc-session-1',
+      hasCharacterDialogueSession: (sessionId) => sessionId === 'npc-session-1',
     });
 
     expect(
@@ -91,7 +91,7 @@ describe('conversation-tab-runtime', () => {
                 id: 'tab-npc',
                 title: 'NPC: Xiaoju',
                 conversationId: 'npc-session-1',
-                kind: 'npc-test',
+                kind: 'character-dialogue',
               },
             ],
             activeTabId: 'tab-npc',
@@ -99,7 +99,34 @@ describe('conversation-tab-runtime', () => {
         },
         effects,
       ),
-    ).toEqual({ kind: 'npc-active', sessionId: 'npc-session-1' });
+    ).toEqual({ kind: 'character-dialogue-active', sessionId: 'npc-session-1' });
+    expect(effects.switchConversation).not.toHaveBeenCalled();
+  });
+
+  it('recognizes active Embody Character tabs without switching ordinary conversations', () => {
+    const effects = createEffects({
+      hasConversation: () => false,
+      hasEmbodyCharacterSession: (sessionId) => sessionId === 'embody-session-1',
+    });
+
+    expect(
+      syncActiveConversationFromTabState(
+        {
+          tabState: {
+            openTabs: [
+              {
+                id: 'tab-embody',
+                title: 'Embody: Xiaoju',
+                conversationId: 'embody-session-1',
+                kind: 'embody-character',
+              },
+            ],
+            activeTabId: 'tab-embody',
+          },
+        },
+        effects,
+      ),
+    ).toEqual({ kind: 'embody-character-active', sessionId: 'embody-session-1' });
     expect(effects.switchConversation).not.toHaveBeenCalled();
   });
 

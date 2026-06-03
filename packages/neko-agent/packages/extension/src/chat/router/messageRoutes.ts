@@ -10,8 +10,12 @@ export function tryHandleMessageRoute(
 
   switch (message.type) {
     case 'sendMessage':
-      if (deps.npcTestBench?.hasSession(message.conversationId)) {
-        void deps.npcTestBench.routeUserMessage(message.conversationId, message.message);
+      if (deps.characterDialogue?.hasSession(message.conversationId)) {
+        void deps.characterDialogue.routeUserMessage(message.conversationId, message.message);
+        return true;
+      }
+      if (deps.embodyCharacter?.hasSession(message.conversationId)) {
+        void deps.embodyCharacter.routeUserMessage(message.conversationId, message.message);
         return true;
       }
       deps.messages?.handleUserMessage(webview, {

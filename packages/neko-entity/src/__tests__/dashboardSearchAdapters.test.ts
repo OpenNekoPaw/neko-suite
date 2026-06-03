@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 import {
-  NEKO_AGENT_TEST_NPC_COMMAND,
-  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
 } from '@neko/shared/types/npc-test-bench';
 import { CreativeEntityService } from '../core/CreativeEntityService';
 import { EntityDashboardCreativeEntitySource } from '../dashboard/source';
@@ -38,18 +38,20 @@ describe('neko-entity dashboard and search adapters', () => {
     expect(snapshot.source).toBe('neko-entity');
     expect(snapshot.rows.map((row) => row.label)).toEqual(['阿灰', '天台', '小橘']);
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
+      expect.arrayContaining([expect.objectContaining({ id: 'character-dialogue' })]),
     );
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'validate-character' })]),
     );
     expect(snapshot.rows.find((row) => row.label === '天台')?.actions).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'test-npc', disabled: true })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'character-dialogue', disabled: true }),
+      ]),
     );
     expect(snapshot.rows.find((row) => row.label === '阿灰')?.actions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'test-npc' }),
-        expect.objectContaining({ id: 'validate-character' }),
+        expect.objectContaining({ id: 'character-dialogue' }),
+        expect.objectContaining({ id: 'embody-character' }),
       ]),
     );
     const detail = await source.getDetail({
@@ -59,8 +61,10 @@ describe('neko-entity dashboard and search adapters', () => {
       entityKind: 'character',
     });
     expect(detail?.actions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'embody-character' })]),
+    );
+    expect(detail?.actions).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'character-perspective' }),
         expect.objectContaining({ id: 'validate-character' }),
         expect.objectContaining({ id: 'improve-character' }),
       ]),
@@ -79,7 +83,7 @@ describe('neko-entity dashboard and search adapters', () => {
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: true }));
   });
 
-  it('delegates neutral Dashboard NPC tests to the Agent command', async () => {
+  it('delegates neutral Dashboard Character Dialogue to the Agent command', async () => {
     const service = createService();
     await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
     const executeCommand = vi.fn(async () => undefined);
@@ -100,13 +104,13 @@ describe('neko-entity dashboard and search adapters', () => {
       source.executeAction({
         source: 'neko-entity',
         ref,
-        action: 'test-npc',
+        action: 'character-dialogue',
         payload: { mode: 'consult' },
       }),
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref }));
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_TEST_NPC_COMMAND,
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
       expect.objectContaining({
         entityRef: {
           entityId: 'char_xiaoju',
@@ -123,7 +127,7 @@ describe('neko-entity dashboard and search adapters', () => {
     );
   });
 
-  it('delegates neutral Dashboard NPC Agent workflows with stable character refs', async () => {
+  it('delegates neutral Dashboard Embody Character workflows with stable character refs', async () => {
     const service = createService();
     await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
     const executeCommand = vi.fn(async () => undefined);
@@ -144,7 +148,7 @@ describe('neko-entity dashboard and search adapters', () => {
       source.executeAction({
         source: 'neko-entity',
         ref,
-        action: 'validate-character',
+        action: 'embody-character',
         payload: {
           scopes: [{ kind: 'project', source: 'neko-entity', ref: 'project://current' }],
           prompt: 'Check if the role knows too much.',
@@ -154,14 +158,17 @@ describe('neko-entity dashboard and search adapters', () => {
       expect.objectContaining({
         ok: true,
         refresh: false,
-        npcWorkflow: { kind: 'delegated-command', command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND },
+        characterRoleWorkflow: {
+          kind: 'delegated-command',
+          command: NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+        },
       }),
     );
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
       expect.objectContaining({
-        workflow: 'validate-character',
+        workflow: 'embody-character',
         entityRef: {
           entityId: 'char_xiaoju',
           entityKind: 'character',
@@ -177,7 +184,7 @@ describe('neko-entity dashboard and search adapters', () => {
     );
   });
 
-  it('delegates neutral Dashboard NPC Agent workflows for character candidates', async () => {
+  it('delegates neutral Dashboard Embody Character workflows for character candidates', async () => {
     const service = createService();
     const candidate = await service.proposeCandidate({
       kind: 'character',
@@ -202,14 +209,14 @@ describe('neko-entity dashboard and search adapters', () => {
       source.executeAction({
         source: 'neko-entity',
         ref,
-        action: 'validate-character',
+        action: 'embody-character',
       }),
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref }));
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
       expect.objectContaining({
-        workflow: 'validate-character',
+        workflow: 'embody-character',
         entityRef: {
           entityId: candidate.id,
           entityKind: 'character',

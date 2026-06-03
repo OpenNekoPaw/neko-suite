@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
-  DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS,
+  DASHBOARD_CHARACTER_ROLE_WORKFLOW_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
-  isDashboardCharacterNpcWorkflowAction,
-  isDashboardCharacterNpcWorkflowActionPayload,
-  isDashboardCharacterNpcWorkflowActionResult,
+  isDashboardCharacterRoleWorkflowAction,
+  isDashboardCharacterRoleWorkflowActionPayload,
+  isDashboardCharacterRoleWorkflowActionResult,
   isDashboardCreativeEntityAction,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityBindingSummary,
@@ -199,15 +199,16 @@ describe('dashboard creative entity contracts', () => {
   });
 
   it('validates action requests', () => {
-    expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('test-npc');
-    expect(DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS).toEqual([
-      'character-perspective',
-      'validate-character',
-      'improve-character',
-    ]);
-    expect(isDashboardCreativeEntityAction('test-npc')).toBe(true);
-    expect(isDashboardCreativeEntityAction('character-perspective')).toBe(true);
-    expect(isDashboardCharacterNpcWorkflowAction('validate-character')).toBe(true);
+    expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('character-dialogue');
+    expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('embody-character');
+    expect(DASHBOARD_CHARACTER_ROLE_WORKFLOW_ACTIONS).toEqual(['embody-character']);
+    expect(isDashboardCreativeEntityAction('character-dialogue')).toBe(true);
+    expect(isDashboardCreativeEntityAction('embody-character')).toBe(true);
+    expect(isDashboardCharacterRoleWorkflowAction('embody-character')).toBe(true);
+    expect(isDashboardCreativeEntityAction('test-npc')).toBe(false);
+    expect(isDashboardCreativeEntityAction('character-perspective')).toBe(false);
+    expect(isDashboardCreativeEntityAction('validate-character')).toBe(false);
+    expect(isDashboardCreativeEntityAction('improve-character')).toBe(false);
     expect(
       isDashboardCreativeEntitySourceRequest({
         projectRoot: '/workspace/neko-test',
@@ -219,7 +220,7 @@ describe('dashboard creative entity contracts', () => {
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',
         ref,
-        action: 'test-npc',
+        action: 'character-dialogue',
         payload: { mode: 'roleplay' },
       }),
     ).toBe(true);
@@ -227,7 +228,7 @@ describe('dashboard creative entity contracts', () => {
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',
         ref,
-        action: 'validate-character',
+        action: 'embody-character',
         payload: {
           entityRef: ref,
           scopes: [
@@ -243,22 +244,22 @@ describe('dashboard creative entity contracts', () => {
       }),
     ).toBe(true);
     expect(
-      isDashboardCharacterNpcWorkflowActionPayload({
+      isDashboardCharacterRoleWorkflowActionPayload({
         entityRef: ref,
         scopes: [{ kind: 'story-document', source: 'neko-story', ref: 'cases/test.fountain' }],
       }),
     ).toBe(true);
     expect(
-      isDashboardCharacterNpcWorkflowActionResult({
+      isDashboardCharacterRoleWorkflowActionResult({
         kind: 'delegated-command',
-        command: 'neko.agent.validateCharacter',
+        command: 'neko.agent.embodyCharacter',
       }),
     ).toBe(true);
     expect(
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',
         ref,
-        action: 'validate-character',
+        action: 'embody-character',
         payload: {
           scopes: [{ kind: 'occurrence', source: 'neko-story', ref: '/tmp/test.fountain' }],
         },

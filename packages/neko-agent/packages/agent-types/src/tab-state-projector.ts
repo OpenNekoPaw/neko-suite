@@ -3,7 +3,8 @@ import type { OpenTab, TabState } from './ui';
 export interface ResolveActiveTabConversationIdInput {
   readonly tabState: TabState;
   readonly hasConversation: (conversationId: string) => boolean;
-  readonly hasNpcSession?: (sessionId: string) => boolean;
+  readonly hasCharacterDialogueSession?: (sessionId: string) => boolean;
+  readonly hasEmbodyCharacterSession?: (sessionId: string) => boolean;
 }
 
 export interface ProjectTabStateUpdateInput {
@@ -44,8 +45,15 @@ export function resolveActiveTabConversationId(
     : undefined;
 
   if (!activeTab) return null;
-  if (activeTab.kind === 'npc-test') {
-    return input.hasNpcSession?.(activeTab.conversationId) ? activeTab.conversationId : null;
+  if (activeTab.kind === 'character-dialogue') {
+    return input.hasCharacterDialogueSession?.(activeTab.conversationId)
+      ? activeTab.conversationId
+      : null;
+  }
+  if (activeTab.kind === 'embody-character') {
+    return input.hasEmbodyCharacterSession?.(activeTab.conversationId)
+      ? activeTab.conversationId
+      : null;
   }
   return input.hasConversation(activeTab.conversationId) ? activeTab.conversationId : null;
 }
@@ -57,7 +65,10 @@ function isOpenTab(value: unknown): value is OpenTab {
     typeof record.id === 'string' &&
     typeof record.title === 'string' &&
     typeof record.conversationId === 'string' &&
-    (record.kind === undefined || record.kind === 'chat' || record.kind === 'npc-test')
+    (record.kind === undefined ||
+      record.kind === 'chat' ||
+      record.kind === 'character-dialogue' ||
+      record.kind === 'embody-character')
   );
 }
 
@@ -67,7 +78,10 @@ function cloneOpenTab(tab: OpenTab): OpenTab {
     title: tab.title,
     conversationId: tab.conversationId,
     ...(tab.kind ? { kind: tab.kind } : {}),
-    ...(tab.npcSession ? { npcSession: tab.npcSession } : {}),
+    ...(tab.characterDialogueSession
+      ? { characterDialogueSession: tab.characterDialogueSession }
+      : {}),
+    ...(tab.embodyCharacterSession ? { embodyCharacterSession: tab.embodyCharacterSession } : {}),
   };
 }
 

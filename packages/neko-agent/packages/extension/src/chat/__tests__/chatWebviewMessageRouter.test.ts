@@ -40,7 +40,13 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleUserMessage: vi.fn(),
       searchProjectFiles: vi.fn(),
     } as any,
-    npcTestBench: {
+    characterDialogue: {
+      hasSession: vi.fn(() => false),
+      routeUserMessage: vi.fn(),
+      cancel: vi.fn(() => false),
+      exit: vi.fn(),
+    } as any,
+    embodyCharacter: {
       hasSession: vi.fn(() => false),
       routeUserMessage: vi.fn(),
       cancel: vi.fn(() => false),
@@ -164,9 +170,9 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.taskHandler.sendTasks).not.toHaveBeenCalled();
   });
 
-  it('routes NPC sendMessage to the NPC controller without ordinary conversation persistence', () => {
+  it('routes Character Dialogue sendMessage to the Character Dialogue controller without ordinary conversation persistence', () => {
     const deps = createDeps();
-    vi.mocked(deps.npcTestBench!.hasSession).mockReturnValue(true);
+    vi.mocked(deps.characterDialogue!.hasSession).mockReturnValue(true);
 
     handleChatWebviewMessage(
       {
@@ -178,16 +184,51 @@ describe('handleChatWebviewMessage', () => {
       deps,
     );
 
-    expect(deps.npcTestBench?.routeUserMessage).toHaveBeenCalledWith('npc-session-1', 'hello');
+    expect(deps.characterDialogue?.routeUserMessage).toHaveBeenCalledWith('npc-session-1', 'hello');
     expect(deps.messages?.handleUserMessage).not.toHaveBeenCalled();
   });
 
-  it('routes NPC exit events to the NPC controller', () => {
+  it('routes Embody Character sendMessage to the Embody controller without ordinary conversation persistence', () => {
+    const deps = createDeps();
+    vi.mocked(deps.embodyCharacter!.hasSession).mockReturnValue(true);
+
+    handleChatWebviewMessage(
+      {
+        type: 'sendMessage',
+        conversationId: 'embody-session-1',
+        message: '记录今天的日记',
+        sessionMode: 'agent',
+      },
+      deps,
+    );
+
+    expect(deps.embodyCharacter?.routeUserMessage).toHaveBeenCalledWith(
+      'embody-session-1',
+      '记录今天的日记',
+    );
+    expect(deps.messages?.handleUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes Character Dialogue exit events to the Character Dialogue controller', () => {
     const deps = createDeps();
 
-    handleChatWebviewMessage({ type: 'exitNpcSession', sessionId: 'npc-session-1' }, deps);
+    handleChatWebviewMessage(
+      { type: 'exitCharacterDialogueSession', sessionId: 'npc-session-1' },
+      deps,
+    );
 
-    expect(deps.npcTestBench?.exit).toHaveBeenCalledWith('npc-session-1');
+    expect(deps.characterDialogue?.exit).toHaveBeenCalledWith('npc-session-1');
+  });
+
+  it('routes Embody Character exit events to the Embody controller', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      { type: 'exitEmbodyCharacterSession', sessionId: 'embody-session-1' },
+      deps,
+    );
+
+    expect(deps.embodyCharacter?.exit).toHaveBeenCalledWith('embody-session-1');
   });
 
   it('rejects task actions without an explicit conversationId', () => {

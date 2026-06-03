@@ -26,11 +26,11 @@ import type { TaskHandler } from './taskHandler';
 import type { ContextHandler } from './contextHandler';
 import type { PlanModeHandler } from './planModeHandler';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
-import type { NpcTestBenchController } from '../npcTestBenchController';
+import type { CharacterDialogueController } from '../characterDialogueController';
 import { getLogger } from '../../base';
 import {
   NPC_TEST_BENCH_AS_SLASH_COMMAND_NAME,
-  NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND_NAME,
+  NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND_NAME,
 } from '@neko/shared';
 
 function normalizeNpcSlashCommandName(command: string): string {
@@ -54,7 +54,7 @@ export interface SlashCommandHandlerDeps {
   taskHandler: TaskHandler;
   contextHandler: ContextHandler;
   planModeHandler: PlanModeHandler;
-  npcTestBench?: NpcTestBenchController;
+  characterDialogue?: CharacterDialogueController;
   /** Callback to send conversation list to webview */
   sendConversationList: () => void;
   /** Callback to send active conversation to webview */
@@ -98,25 +98,25 @@ export class SlashCommandHandler {
     try {
       const normalizedCommand = normalizeNpcSlashCommandName(command);
       if (normalizedCommand === NPC_TEST_BENCH_AS_SLASH_COMMAND_NAME) {
-        await this.deps.npcTestBench?.launchFromSlash({ args, conversationId });
+        await this.deps.characterDialogue?.launchFromSlash({ args, conversationId });
         logger.debug('neko.agent.command.slash.result', {
           command,
           conversationId,
           durationMs: Date.now() - startTime,
-          handled: Boolean(this.deps.npcTestBench),
-          source: 'npc-test-bench',
+          handled: Boolean(this.deps.characterDialogue),
+          source: 'character-dialogue',
         });
         return;
       }
 
-      if (normalizedCommand === NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND_NAME) {
-        await this.deps.npcTestBench?.exitActive(conversationId);
+      if (normalizedCommand === NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND_NAME) {
+        await this.deps.characterDialogue?.exitActive(conversationId);
         logger.debug('neko.agent.command.slash.result', {
           command,
           conversationId,
           durationMs: Date.now() - startTime,
-          handled: Boolean(this.deps.npcTestBench),
-          source: 'npc-test-bench',
+          handled: Boolean(this.deps.characterDialogue),
+          source: 'character-dialogue',
         });
         return;
       }

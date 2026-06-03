@@ -7,13 +7,16 @@
  */
 
 export { PromptManager, createPromptManager } from './prompt-manager';
-export { projectNpcSystemPrompt, type NpcProfilePromptOptions } from './npc-profile-projector';
 export {
-  parseNpcEvaluationReportOutput,
-  projectNpcEvaluationPrompt,
-  type NpcEvaluationReportParseResult,
-  type NpcEvaluationPromptProjection,
-} from './npc-evaluator-projector';
+  projectCharacterDialogueSystemPrompt,
+  type CharacterDialogueProfilePromptOptions,
+} from './character-dialogue-profile-projector';
+export {
+  parseCharacterRoleEvaluationReportOutput,
+  projectCharacterRoleEvaluationPrompt,
+  type CharacterRoleEvaluationReportParseResult,
+  type CharacterRoleEvaluationPromptProjection,
+} from './character-role-evaluator-projector';
 
 // System Prompt Builder
 export {

@@ -24,9 +24,13 @@ import type {
   NpcTestMode,
   NpcTranscriptArtifact,
   NpcTranscriptMessage,
+  ChatMessage,
+  IService,
+  ServiceOptions,
   ServiceResponse,
 } from '@neko/shared';
 import {
+  CHARACTER_ROLE_TEST_ARTIFACT_DIR,
   NPC_TRANSCRIPT_ARTIFACT_VERSION,
   isCreativeEntityRef,
   isNpcSerializableValue,
@@ -39,11 +43,20 @@ import {
   type DashboardCreativeEntitySourceRequest,
 } from '@neko/shared/types/dashboard-creative-entity';
 import {
-  NpcConversationSession,
-  projectNpcTranscriptToChatMessages,
-  type NpcConversationResponder,
+  CharacterDialogueSession,
+  projectCharacterDialogueTranscriptToChatMessages,
+  type CharacterDialogueResponder,
 } from '@neko/agent/runtime';
-import { parseNpcEvaluationReportOutput, projectNpcEvaluationPrompt } from '@neko/agent';
+import type {
+  CharacterEvidenceBundle,
+  CharacterEvidenceBudget,
+  CharacterEvidenceLoader,
+  CharacterEvidenceRequest,
+} from '@neko/agent/runtime';
+import {
+  parseCharacterRoleEvaluationReportOutput,
+  projectCharacterRoleEvaluationPrompt,
+} from '@neko/agent';
 import type {
   AssembleNpcProfileInput,
   NpcProfileAssemblerReaders,
@@ -52,25 +65,27 @@ import type {
 import { NpcProfileAssembler } from '@neko/entity/projections';
 import { createVSCodeEntityServices } from '@neko/entity/host-vscode';
 import {
+  buildCharacterDialogueSessionExitedMessage,
+  buildCharacterDialogueSessionStartedMessage,
   buildErrorMessage,
-  buildNpcSessionExitedMessage,
-  buildNpcSessionStartedMessage,
   buildStreamCompleteMessage,
   buildStreamTextMessage,
   buildThinkingMessage,
+  type CharacterDialogueSessionProjection,
   type ModelRef,
-  type NpcSessionProjection,
   type OpenTab,
 } from '@neko-agent/types';
 import { getLogger } from '../base';
+import { createDefaultCharacterEvidenceLoader } from '../evidence/characterEvidenceLoader';
 
-export interface NpcTestBenchControllerDeps {
+export interface CharacterDialogueControllerDeps {
   readonly getWebview: () => vscode.Webview | undefined;
   readonly getProjectRoot: () => string | undefined;
-  readonly createAssembler?: (projectRoot: string) => NpcProfileAssemblerPort;
+  readonly createAssembler?: (projectRoot: string) => CharacterProfileAssemblerPort;
+  readonly createEvidenceLoader?: (projectRoot: string) => CharacterEvidenceLoader;
   readonly createResponder?: (
-    input: NpcConversationResponderFactoryInput,
-  ) => NpcConversationResponder;
+    input: CharacterDialogueResponderFactoryInput,
+  ) => CharacterDialogueResponder;
   readonly getPlatform?: () => Platform | undefined;
   readonly getSelectedChatModel?: () => ModelRef<'llm'> | undefined;
   readonly updateTabState: (openTabs: OpenTab[], activeTabId: string | null) => void;
@@ -106,13 +121,13 @@ export interface NpcTestBenchControllerDeps {
   readonly logger?: Pick<ReturnType<typeof getLogger>, 'warn' | 'debug'>;
 }
 
-export interface NpcConversationResponderFactoryInput {
+export interface CharacterDialogueResponderFactoryInput {
   readonly platform: Platform | undefined;
   readonly chatModel?: ModelRef<'llm'>;
   readonly now: () => string;
 }
 
-export interface NpcProfileAssemblerPort {
+export interface CharacterProfileAssemblerPort {
   assembleProfile(input: AssembleNpcProfileInput): Promise<NpcProfileAssemblyResult>;
 }
 
@@ -186,13 +201,46 @@ export interface NpcSuggestionApplyResult {
 
 export type NpcSessionExitReason = 'user' | 'cancelled' | 'disposed';
 
-export interface NpcSessionLaunchResult {
-  readonly sessionId: string;
-  readonly tab: OpenTab;
-  readonly session: NpcSessionProjection;
+export interface CharacterRoleEvidenceSnapshot {
+  readonly relationships: readonly CreativeEntityRelationshipProjection[];
+  readonly occurrences: readonly CreativeEntityOccurrenceProjection[];
+  readonly representationHints: readonly CreativeEntityRepresentationHint[];
+  readonly scriptContextFacts: readonly NpcProfileFact[];
 }
 
-export interface NpcSessionExitResult {
+export interface CharacterDialogueHeadlessProbeInput {
+  readonly entityRef: CreativeEntityRef;
+  readonly profile: NpcProfileSource;
+  readonly messages: readonly string[];
+  readonly mode?: NpcTestMode;
+  readonly projectRoot?: string;
+}
+
+export interface CharacterRoleSkillPrimitivePorts {
+  assembleProfile(input: AssembleNpcProfileInput): Promise<NpcProfileAssemblyResult>;
+  collectEvidence(entityRef: CreativeEntityRef): Promise<CharacterRoleEvidenceSnapshot>;
+  loadEvidence(
+    request: Omit<CharacterEvidenceRequest, 'projectRoot'> & { readonly projectRoot?: string },
+  ): Promise<CharacterEvidenceBundle>;
+  runHeadlessDialogueProbe(
+    input: CharacterDialogueHeadlessProbeInput,
+  ): Promise<NpcTranscriptArtifact>;
+  evaluateTranscript(input: NpcEvaluationInput): Promise<NpcEvaluationReport>;
+  saveArtifact(
+    input: NpcTranscriptArtifactSaveInput,
+  ): Promise<NpcTranscriptArtifactSaveResult | null>;
+  applySuggestionWithConfirmation(
+    input: NpcSuggestionApplyInput,
+  ): Promise<NpcSuggestionApplyResult>;
+}
+
+export interface CharacterDialogueLaunchResult {
+  readonly sessionId: string;
+  readonly tab: OpenTab;
+  readonly session: CharacterDialogueSessionProjection;
+}
+
+export interface CharacterDialogueExitResult {
   readonly sessionId: string;
   readonly artifact: NpcTranscriptArtifact;
   readonly savedPath?: string;
@@ -203,13 +251,14 @@ interface NpcEntityQuickPickItem extends vscode.QuickPickItem {
   readonly aliases?: readonly string[];
 }
 
-const logger = getLogger('NpcTestBenchController');
+const logger = getLogger('CharacterDialogueController');
 
-export class NpcTestBenchController implements vscode.Disposable {
-  private readonly sessions = new Map<string, NpcConversationSession>();
-  private readonly deps: NpcTestBenchControllerDeps;
+export class CharacterDialogueController implements vscode.Disposable {
+  private readonly sessions = new Map<string, CharacterDialogueSession>();
+  private readonly sessionProjectRoots = new Map<string, string>();
+  private readonly deps: CharacterDialogueControllerDeps;
 
-  constructor(deps: NpcTestBenchControllerDeps) {
+  constructor(deps: CharacterDialogueControllerDeps) {
     this.deps = deps;
   }
 
@@ -217,16 +266,17 @@ export class NpcTestBenchController implements vscode.Disposable {
     return this.sessions.has(sessionId);
   }
 
-  async launch(request: NpcTestBenchLaunchRequest): Promise<NpcSessionLaunchResult | null> {
+  async launch(request: NpcTestBenchLaunchRequest): Promise<CharacterDialogueLaunchResult | null> {
     const projectRoot = this.resolveProjectRoot(request);
     if (!projectRoot) {
-      this.postGlobalError('Open a workspace before starting an NPC test session.');
+      this.postGlobalError('Open a workspace before starting a Character Dialogue session.');
       return null;
     }
 
     const entityRef = this.normalizeEntityRef(request.entityRef, projectRoot);
     const assembler =
-      this.deps.createAssembler?.(projectRoot) ?? createDefaultNpcProfileAssembler(projectRoot);
+      this.deps.createAssembler?.(projectRoot) ??
+      createDefaultCharacterProfileAssembler(projectRoot);
     const assembly = await assembler.assembleProfile({
       entityRef,
       ...(request.userSupplements ? { userSupplements: request.userSupplements } : {}),
@@ -244,8 +294,9 @@ export class NpcTestBenchController implements vscode.Disposable {
     if (!profile) return null;
 
     const mode = request.mode ?? 'roleplay';
-    const sessionId = this.deps.createSessionId?.(entityRef) ?? createNpcSessionId(entityRef);
-    const session = new NpcConversationSession({
+    const sessionId =
+      this.deps.createSessionId?.(entityRef) ?? createCharacterDialogueSessionId(entityRef);
+    const session = new CharacterDialogueSession({
       id: sessionId,
       entityRef,
       profileSnapshot: profile,
@@ -255,20 +306,24 @@ export class NpcTestBenchController implements vscode.Disposable {
       ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
     });
     this.sessions.set(sessionId, session);
+    this.sessionProjectRoots.set(sessionId, projectRoot);
 
-    const projection = projectNpcSession(session, { projectRoot, startedAt: this.now() });
+    const projection = projectCharacterDialogueSession(session, {
+      projectRoot,
+      startedAt: this.now(),
+    });
     const tab: OpenTab = {
       id: `tab-${sessionId}`,
-      title: `NPC: ${projection.displayName}`,
+      title: `Character Dialogue: ${projection.displayName}`,
       conversationId: sessionId,
-      kind: 'npc-test',
-      npcSession: projection,
+      kind: 'character-dialogue',
+      characterDialogueSession: projection,
     };
-    const openTabs = upsertNpcTab(this.deps.getTabState().openTabs, tab);
+    const openTabs = upsertCharacterRoleTab(this.deps.getTabState().openTabs, tab);
     this.deps.updateTabState(openTabs, tab.id);
     this.deps
       .getWebview()
-      ?.postMessage(buildNpcSessionStartedMessage({ tab, session: projection }));
+      ?.postMessage(buildCharacterDialogueSessionStartedMessage({ tab, session: projection }));
     this.deps.sendTabState();
 
     if (request.initialUserMessage?.trim()) {
@@ -293,7 +348,14 @@ export class NpcTestBenchController implements vscode.Disposable {
     webview?.postMessage(buildThinkingMessage(sessionId));
 
     try {
-      const turn = await session.sendUserMessage(trimmed);
+      const turnEvidence = await this.loadTurnEvidence({
+        session,
+        query: trimmed,
+        mode: 'character-dialogue',
+      });
+      const turn = await session.sendUserMessage(trimmed, {
+        ...(turnEvidence ? { turnEvidence } : {}),
+      });
       webview?.postMessage(
         buildStreamTextMessage({
           conversationId: sessionId,
@@ -329,7 +391,7 @@ export class NpcTestBenchController implements vscode.Disposable {
   async exit(
     sessionId: string,
     reason: NpcSessionExitReason = 'user',
-  ): Promise<NpcSessionExitResult | null> {
+  ): Promise<CharacterDialogueExitResult | null> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       return null;
@@ -350,9 +412,10 @@ export class NpcTestBenchController implements vscode.Disposable {
       : null;
     session.dispose();
     this.sessions.delete(sessionId);
+    this.sessionProjectRoots.delete(sessionId);
     this.markTabExited(sessionId);
     this.deps.getWebview()?.postMessage(
-      buildNpcSessionExitedMessage({
+      buildCharacterDialogueSessionExitedMessage({
         sessionId,
         artifact,
         ...(saved?.path ? { savedPath: saved.path } : {}),
@@ -365,19 +428,19 @@ export class NpcTestBenchController implements vscode.Disposable {
     };
   }
 
-  async exitActive(fallbackConversationId?: string): Promise<NpcSessionExitResult | null> {
+  async exitActive(fallbackConversationId?: string): Promise<CharacterDialogueExitResult | null> {
     const tabState = this.deps.getTabState();
     const activeTab = tabState.activeTabId
       ? tabState.openTabs.find((tab) => tab.id === tabState.activeTabId)
       : undefined;
     const sessionId =
-      activeTab?.kind === 'npc-test'
+      activeTab?.kind === 'character-dialogue'
         ? activeTab.conversationId
         : fallbackConversationId && this.hasSession(fallbackConversationId)
           ? fallbackConversationId
           : undefined;
     if (!sessionId) {
-      this.postGlobalError('No active NPC session to exit.');
+      this.postGlobalError('No active Character Dialogue session to exit.');
       return null;
     }
     return this.exit(sessionId);
@@ -394,7 +457,7 @@ export class NpcTestBenchController implements vscode.Disposable {
         : undefined);
     const resolvedProjectRoot = projectRoot ?? this.deps.getProjectRoot();
     if (!resolvedProjectRoot) {
-      return { applied: false, message: 'Open a workspace before applying NPC suggestions.' };
+      return { applied: false, message: 'Open a workspace before applying character suggestions.' };
     }
 
     const confirmed =
@@ -403,7 +466,7 @@ export class NpcTestBenchController implements vscode.Disposable {
         projectRoot: resolvedProjectRoot,
       })) ?? false;
     if (!confirmed) {
-      return { applied: false, message: 'NPC suggestion was not confirmed.' };
+      return { applied: false, message: 'Character suggestion was not confirmed.' };
     }
 
     return (
@@ -411,31 +474,134 @@ export class NpcTestBenchController implements vscode.Disposable {
         suggestion: input.suggestion,
         projectRoot: resolvedProjectRoot,
       }) ??
-      defaultApplyNpcSuggestion({
+      defaultApplyCharacterSuggestion({
         suggestion: input.suggestion,
         projectRoot: resolvedProjectRoot,
       })
     );
   }
 
+  createSkillPrimitivePorts(
+    input: {
+      readonly projectRoot?: string;
+    } = {},
+  ): CharacterRoleSkillPrimitivePorts {
+    const resolveProjectRoot = (entityRef?: CreativeEntityRef): string => {
+      const projectRoot = input.projectRoot ?? entityRef?.projectRoot ?? this.deps.getProjectRoot();
+      if (!projectRoot) {
+        throw new Error('Open a workspace before running character role Skill primitives.');
+      }
+      return projectRoot;
+    };
+
+    return {
+      assembleProfile: async (assemblyInput) => {
+        const projectRoot = resolveProjectRoot(assemblyInput.entityRef);
+        const assembler =
+          this.deps.createAssembler?.(projectRoot) ??
+          createDefaultCharacterProfileAssembler(projectRoot);
+        return assembler.assembleProfile({
+          ...assemblyInput,
+          entityRef: this.normalizeEntityRef(assemblyInput.entityRef, projectRoot),
+        });
+      },
+      collectEvidence: async (entityRef) => {
+        const projectRoot = resolveProjectRoot(entityRef);
+        const normalizedRef = this.normalizeEntityRef(entityRef, projectRoot);
+        const reader = createDashboardCharacterProfileEvidenceReader(projectRoot);
+        const [relationships, occurrences, representationHints, scriptContextFacts] =
+          await Promise.all([
+            reader.listRelationships(normalizedRef),
+            reader.listOccurrences(normalizedRef),
+            reader.listRepresentationHints(normalizedRef),
+            reader.listScriptContextFacts(normalizedRef),
+          ]);
+        return {
+          relationships,
+          occurrences,
+          representationHints,
+          scriptContextFacts,
+        };
+      },
+      loadEvidence: async (evidenceRequest) => {
+        const projectRoot =
+          evidenceRequest.projectRoot ?? resolveProjectRoot(evidenceRequest.entityRef);
+        const normalizedRef = this.normalizeEntityRef(evidenceRequest.entityRef, projectRoot);
+        return this.getEvidenceLoader(projectRoot).loadEvidence({
+          ...evidenceRequest,
+          entityRef: normalizedRef,
+          projectRoot,
+        });
+      },
+      runHeadlessDialogueProbe: async (probeInput) => {
+        const projectRoot = resolveProjectRoot(probeInput.entityRef);
+        const entityRef = this.normalizeEntityRef(probeInput.entityRef, projectRoot);
+        const session = new CharacterDialogueSession({
+          id: this.deps.createSessionId?.(entityRef) ?? createCharacterDialogueSessionId(entityRef),
+          entityRef,
+          profileSnapshot: probeInput.profile,
+          mode: probeInput.mode ?? 'roleplay',
+          responder: this.createResponder(),
+          now: this.now,
+          ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
+        });
+        try {
+          for (const message of probeInput.messages) {
+            const turnEvidence = await this.safeLoadEvidence({
+              entityRef,
+              mode: 'character-validation',
+              query: message,
+              projectRoot,
+              budget: defaultCharacterEvidenceBudgetForMode('character-validation'),
+              transcript: session.getTranscript(),
+            });
+            await session.sendUserMessage(message, {
+              ...(turnEvidence ? { turnEvidence } : {}),
+            });
+          }
+          return session.toArtifact();
+        } finally {
+          session.dispose();
+        }
+      },
+      evaluateTranscript: async (evaluationInput) => {
+        const artifact = await this.evaluateArtifact(
+          evaluationInput.artifact,
+          evaluationInput.projectRoot,
+        );
+        return (
+          artifact.evaluation ?? createFallbackCharacterRoleEvaluationReport(artifact, this.now())
+        );
+      },
+      saveArtifact: async (saveInput) => {
+        const save =
+          this.deps.saveTranscriptArtifact ??
+          ((artifactInput) => defaultSaveTranscriptArtifact(artifactInput));
+        return save(saveInput);
+      },
+      applySuggestionWithConfirmation: (suggestionInput) =>
+        this.applyEvaluationSuggestion(suggestionInput),
+    };
+  }
+
   async launchFromSlash(input: {
     readonly args?: string;
     readonly conversationId?: string;
-  }): Promise<NpcSessionLaunchResult | null> {
+  }): Promise<CharacterDialogueLaunchResult | null> {
     const projectRoot = this.deps.getProjectRoot();
     if (!projectRoot) {
-      this.postGlobalError('请先打开工作区，再开始 NPC 测试。');
+      this.postGlobalError('请先打开工作区，再开始角色对话。');
       return null;
     }
 
-    const parsed = parseNpcSlashArgs(input.args);
+    const parsed = parseCharacterDialogueSlashArgs(input.args);
     const entityRef =
       parsed.entityRef ??
       (parsed.entityToken
         ? await this.resolveEntityRef(parsed.entityToken, projectRoot)
         : await this.pickEntityRef(projectRoot));
     if (!entityRef) {
-      this.postGlobalError('请先选择一个项目角色，再开始 NPC 测试。');
+      this.postGlobalError('请先选择一个项目角色，再开始角色对话。');
       return null;
     }
 
@@ -475,7 +641,7 @@ export class NpcTestBenchController implements vscode.Disposable {
       profile: input.profile,
     });
     if (supplement === undefined) {
-      this.postGlobalError('NPC 测试已取消：未补充角色资料。');
+      this.postGlobalError('角色对话已取消：未补充角色资料。');
       return null;
     }
     return appendUserSupplement(input.profile, supplement);
@@ -519,7 +685,7 @@ export class NpcTestBenchController implements vscode.Disposable {
     const platform = this.deps.getPlatform?.();
     if (platform) {
       try {
-        const prompts = projectNpcEvaluationPrompt(artifact);
+        const prompts = projectCharacterRoleEvaluationPrompt(artifact);
         const service = toSharedService(platform.createService());
         const response = await service.chat(
           [
@@ -533,27 +699,30 @@ export class NpcTestBenchController implements vscode.Disposable {
             maxTokens: 2000,
           },
         );
-        const parsed = parseNpcEvaluationReportOutput(extractResponseText(response));
+        const parsed = parseCharacterRoleEvaluationReportOutput(extractResponseText(response));
         if (parsed.status === 'parsed') {
           return parsed.report;
         }
-        (this.deps.logger ?? logger).warn('NPC evaluator output was invalid', {
+        (this.deps.logger ?? logger).warn('Character role evaluator output was invalid', {
           reason: parsed.reason,
         });
       } catch (error) {
-        (this.deps.logger ?? logger).warn('NPC evaluator failed; using fallback report', {
-          error,
-        });
+        (this.deps.logger ?? logger).warn(
+          'Character role evaluator failed; using fallback report',
+          {
+            error,
+          },
+        );
       }
     }
 
-    return createFallbackNpcEvaluationReport(artifact, this.now());
+    return createFallbackCharacterRoleEvaluationReport(artifact, this.now());
   }
 
   private async createDefaultProfileEnrichment(
     input: NpcProfileEnrichmentInput,
   ): Promise<NpcProfileEnrichmentResult> {
-    return defaultEnrichNpcProfile({
+    return defaultEnrichCharacterProfile({
       ...input,
       platform: this.deps.getPlatform?.(),
       chatModel: this.deps.getSelectedChatModel?.(),
@@ -585,17 +754,59 @@ export class NpcTestBenchController implements vscode.Disposable {
     }
   }
 
-  private createResponder(): NpcConversationResponder {
+  private createResponder(): CharacterDialogueResponder {
     return (
       this.deps.createResponder?.({
         platform: this.deps.getPlatform?.(),
         chatModel: this.deps.getSelectedChatModel?.(),
         now: this.now,
       }) ??
-      createPlatformNpcResponder({
+      createPlatformCharacterDialogueResponder({
         platform: this.deps.getPlatform?.(),
         chatModel: this.deps.getSelectedChatModel?.(),
       })
+    );
+  }
+
+  private async loadTurnEvidence(input: {
+    readonly session: CharacterDialogueSession;
+    readonly query: string;
+    readonly mode: 'character-dialogue' | 'character-validation';
+  }): Promise<CharacterEvidenceBundle | undefined> {
+    const projectRoot =
+      this.sessionProjectRoots.get(input.session.id) ??
+      input.session.entityRef.projectRoot ??
+      this.deps.getProjectRoot();
+    if (!projectRoot) return undefined;
+    return this.safeLoadEvidence({
+      entityRef: this.normalizeEntityRef(input.session.entityRef, projectRoot),
+      mode: input.mode,
+      query: input.query,
+      projectRoot,
+      budget: defaultCharacterEvidenceBudgetForMode(input.mode),
+      transcript: input.session.getTranscript(),
+    });
+  }
+
+  private async safeLoadEvidence(
+    request: CharacterEvidenceRequest,
+  ): Promise<CharacterEvidenceBundle | undefined> {
+    try {
+      return await this.getEvidenceLoader(request.projectRoot).loadEvidence(request);
+    } catch (error) {
+      (this.deps.logger ?? logger).warn('Character evidence loading failed; continuing turn', {
+        entityId: request.entityRef.entityId,
+        mode: request.mode,
+        error,
+      });
+      return undefined;
+    }
+  }
+
+  private getEvidenceLoader(projectRoot: string): CharacterEvidenceLoader {
+    return (
+      this.deps.createEvidenceLoader?.(projectRoot) ??
+      createDefaultCharacterEvidenceLoader(projectRoot)
     );
   }
 
@@ -690,7 +901,7 @@ export class NpcTestBenchController implements vscode.Disposable {
     const dashboardItems = await loadDashboardNpcEntityPickerItems(projectRoot);
     const items = dedupeNpcEntityPickerItems([...localItems, ...dashboardItems]);
     const picked = await vscode.window.showQuickPick(items, {
-      placeHolder: '选择要测试的项目角色',
+      placeHolder: '选择要对话测试的项目角色',
       matchOnDescription: true,
     });
     return picked?.ref ?? null;
@@ -699,11 +910,11 @@ export class NpcTestBenchController implements vscode.Disposable {
   private markTabExited(sessionId: string): void {
     const tabState = this.deps.getTabState();
     const openTabs = tabState.openTabs.map((tab) =>
-      tab.conversationId === sessionId && tab.npcSession
+      tab.conversationId === sessionId && tab.characterDialogueSession
         ? {
             ...tab,
-            npcSession: {
-              ...tab.npcSession,
+            characterDialogueSession: {
+              ...tab.characterDialogueSession,
               status: 'exited' as const,
             },
           }
@@ -715,17 +926,19 @@ export class NpcTestBenchController implements vscode.Disposable {
 
   private postGlobalError(message: string): void {
     this.deps.getWebview()?.postMessage({ type: 'globalError', message });
-    (this.deps.logger ?? logger).warn('NPC test bench launch failed', { message });
+    (this.deps.logger ?? logger).warn('Character Dialogue launch failed', { message });
   }
 
   private readonly now = (): string => this.deps.now?.() ?? new Date().toISOString();
 }
 
-export function createDefaultNpcProfileAssembler(projectRoot: string): NpcProfileAssemblerPort {
+export function createDefaultCharacterProfileAssembler(
+  projectRoot: string,
+): CharacterProfileAssemblerPort {
   return {
     async assembleProfile(input): Promise<NpcProfileAssemblyResult> {
       const services = createVSCodeEntityServices({ projectRoot, logger });
-      const evidenceReader = createDashboardNpcProfileEvidenceReader(projectRoot);
+      const evidenceReader = createDashboardCharacterProfileEvidenceReader(projectRoot);
       const dashboardEntityReader = createDashboardNpcEntityReader(projectRoot);
       const readers: NpcProfileAssemblerReaders = {
         getEntity: async (entityId) =>
@@ -756,7 +969,7 @@ export function createDefaultNpcProfileAssembler(projectRoot: string): NpcProfil
   };
 }
 
-export interface NpcProfileEvidenceReader {
+export interface CharacterProfileEvidenceReader {
   listRelationships(
     entityRef: CreativeEntityRef,
   ): Promise<readonly CreativeEntityRelationshipProjection[]>;
@@ -769,16 +982,16 @@ export interface NpcProfileEvidenceReader {
   listScriptContextFacts(entityRef: CreativeEntityRef): Promise<readonly NpcProfileFact[]>;
 }
 
-export interface DefaultNpcProfileEnrichmentInput extends NpcProfileEnrichmentInput {
+export interface DefaultCharacterProfileEnrichmentInput extends NpcProfileEnrichmentInput {
   readonly platform?: Platform;
   readonly chatModel?: ModelRef<'llm'>;
   readonly now: () => string;
   readonly logger?: Pick<ReturnType<typeof getLogger>, 'warn' | 'debug'>;
 }
 
-export function createDashboardNpcProfileEvidenceReader(
+export function createDashboardCharacterProfileEvidenceReader(
   projectRoot: string,
-): NpcProfileEvidenceReader {
+): CharacterProfileEvidenceReader {
   const loadDetails = createDashboardCreativeEntityDetailLoader(projectRoot);
   return {
     async listRelationships(entityRef) {
@@ -818,14 +1031,15 @@ export function createDashboardNpcProfileEvidenceReader(
         providerId: snippet.source,
         metadata: {
           occurrenceLabel: snippet.label,
+          ...(snippet.metadata ?? {}),
         },
       }));
     },
   };
 }
 
-export async function defaultEnrichNpcProfile(
-  input: DefaultNpcProfileEnrichmentInput,
+export async function defaultEnrichCharacterProfile(
+  input: DefaultCharacterProfileEnrichmentInput,
 ): Promise<NpcProfileEnrichmentResult> {
   const deterministicFacts = collectProjectEvidenceEnrichmentFacts(input.profile, input.now());
   const inferredFacts = await inferNpcProfileFactsFromProjectEvidence(input);
@@ -907,7 +1121,7 @@ function serializeCreativeEntityRef(ref: CreativeEntityRef): NpcSerializableValu
 }
 
 async function inferNpcProfileFactsFromProjectEvidence(
-  input: DefaultNpcProfileEnrichmentInput,
+  input: DefaultCharacterProfileEnrichmentInput,
 ): Promise<readonly NpcProfileFact[]> {
   const platform = input.platform;
   if (!platform || !hasProjectEvidenceForInference(input.profile)) {
@@ -921,7 +1135,7 @@ async function inferNpcProfileFactsFromProjectEvidence(
         {
           role: 'system',
           content: [
-            'Extract tentative NPC profile facts from project-scoped evidence.',
+            'Extract tentative character profile facts from project-scoped evidence.',
             'Return JSON only: an array of objects with key, value, confidence, and optional label.',
             'Only infer personality, speechPattern, catchphrase, goals, or relationshipNotes when directly supported by the evidence.',
             'Do not invent biography, hidden story context, project files, tools, or global memory.',
@@ -953,7 +1167,7 @@ async function inferNpcProfileFactsFromProjectEvidence(
     );
     return parseNpcProfileEnrichmentFacts(extractResponseText(response), input.now());
   } catch (error) {
-    input.logger?.warn('NPC profile enrichment failed; using deterministic evidence only', {
+    input.logger?.warn('Character profile enrichment failed; using deterministic evidence only', {
       error,
     });
     return [];
@@ -1066,40 +1280,67 @@ interface NpcScriptContextSnippet {
   readonly location: string;
   readonly label: string;
   readonly source: string;
+  readonly metadata?: Readonly<Record<string, NpcSerializableValue>>;
 }
 
-const NPC_SCRIPT_CONTEXT_MAX_SNIPPETS = 6;
-const NPC_SCRIPT_CONTEXT_RADIUS_LINES = 4;
-const NPC_SCRIPT_CONTEXT_MAX_CHARS = 1200;
+const NPC_SCRIPT_CONTEXT_CHUNK_MAX_CHARS = 8000;
 
 async function loadNpcScriptContextSnippets(
   projectRoot: string,
   details: readonly DashboardCreativeEntityDetail[],
 ): Promise<readonly NpcScriptContextSnippet[]> {
   const snippets: NpcScriptContextSnippet[] = [];
-  const seen = new Set<string>();
+  const fileContexts = new Map<string, NpcScriptContextFileContext>();
 
   for (const detail of details) {
     for (const occurrence of detail.occurrences) {
-      if (snippets.length >= NPC_SCRIPT_CONTEXT_MAX_SNIPPETS) return snippets;
       if (occurrence.source !== 'script') continue;
 
       const location = parseNpcScriptLocation(projectRoot, occurrence.location);
       if (!location) continue;
 
-      const key = `${location.filePath}\u0000${location.line}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const existing = fileContexts.get(location.filePath);
+      if (existing) {
+        existing.occurrences.push({
+          line: location.line,
+          location: occurrence.location,
+          label: occurrence.label,
+        });
+        continue;
+      }
 
-      const text = await readNpcScriptContextSnippet(location);
-      if (!text) continue;
+      fileContexts.set(location.filePath, {
+        filePath: location.filePath,
+        relativePath: location.relativePath,
+        source: detail.ref.source,
+        occurrences: [
+          {
+            line: location.line,
+            location: occurrence.location,
+            label: occurrence.label,
+          },
+        ],
+      });
+    }
+  }
 
+  for (const context of fileContexts.values()) {
+    const chunks = await readNpcScriptFileContext(context);
+    for (const chunk of chunks) {
       snippets.push({
         index: snippets.length + 1,
-        text,
-        location: occurrence.location,
-        label: occurrence.label,
-        source: detail.ref.source,
+        text: chunk.text,
+        location: chunk.location,
+        label: context.occurrences[0]?.label ?? '',
+        source: context.source,
+        metadata: {
+          scriptFile: context.relativePath,
+          lineRange: `${chunk.startLine}-${chunk.endLine}`,
+          occurrenceLines: uniqueNumbers(context.occurrences.map((occurrence) => occurrence.line)),
+          occurrenceLabels: uniqueStrings(
+            context.occurrences.map((occurrence) => occurrence.label),
+          ),
+        },
       });
     }
   }
@@ -1109,6 +1350,7 @@ async function loadNpcScriptContextSnippets(
 
 interface ParsedNpcScriptLocation {
   readonly filePath: string;
+  readonly relativePath: string;
   readonly line: number;
 }
 
@@ -1127,36 +1369,99 @@ function parseNpcScriptLocation(
 
   const filePath = path.normalize(path.join(projectRoot, relativePath));
   if (!isPathInsideProject(projectRoot, filePath)) return null;
-  return { filePath, line };
+  return { filePath, relativePath: path.normalize(relativePath), line };
 }
 
-async function readNpcScriptContextSnippet(
-  location: ParsedNpcScriptLocation,
-): Promise<string | undefined> {
+interface NpcScriptContextOccurrence {
+  readonly line: number;
+  readonly location: string;
+  readonly label: string;
+}
+
+interface NpcScriptContextFileContext {
+  readonly filePath: string;
+  readonly relativePath: string;
+  readonly source: string;
+  readonly occurrences: NpcScriptContextOccurrence[];
+}
+
+interface NpcScriptContextChunk {
+  readonly text: string;
+  readonly location: string;
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+async function readNpcScriptFileContext(
+  context: NpcScriptContextFileContext,
+): Promise<readonly NpcScriptContextChunk[]> {
   try {
-    const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(location.filePath));
+    const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(context.filePath));
     const text = Buffer.from(raw).toString('utf8');
     const lines = text.split(/\r?\n/);
-    const zeroBasedLine = Math.max(0, location.line - 1);
-    if (zeroBasedLine >= lines.length) return undefined;
-
-    const start = Math.max(0, zeroBasedLine - NPC_SCRIPT_CONTEXT_RADIUS_LINES);
-    const end = Math.min(lines.length, zeroBasedLine + NPC_SCRIPT_CONTEXT_RADIUS_LINES + 1);
-    const snippet = lines
-      .slice(start, end)
-      .map((line, index) => `${start + index + 1}: ${line}`)
-      .join('\n')
-      .trim();
-    return snippet.length > NPC_SCRIPT_CONTEXT_MAX_CHARS
-      ? `${snippet.slice(0, NPC_SCRIPT_CONTEXT_MAX_CHARS).trimEnd()}\n...`
-      : snippet;
+    if (lines.length === 0) return [];
+    return chunkNpcScriptFileContext(context, lines);
   } catch (error) {
-    logger.debug('NPC script context snippet unavailable', {
-      filePath: location.filePath,
+    logger.debug('NPC script context unavailable', {
+      filePath: context.filePath,
       error: error instanceof Error ? error.message : String(error),
     });
-    return undefined;
+    return [];
   }
+}
+
+function chunkNpcScriptFileContext(
+  context: NpcScriptContextFileContext,
+  lines: readonly string[],
+): readonly NpcScriptContextChunk[] {
+  const chunks: NpcScriptContextChunk[] = [];
+  const occurrenceLines = uniqueNumbers(context.occurrences.map((occurrence) => occurrence.line));
+  let currentLines: string[] = [];
+  let currentStartLine = 1;
+  let currentLength = 0;
+
+  const flush = () => {
+    if (currentLines.length === 0) return;
+    const startLine = currentStartLine;
+    const endLine = startLine + currentLines.length - 1;
+    const header = [
+      `Script file: ${context.relativePath}`,
+      `Lines: ${startLine}-${endLine}`,
+      `Character occurrence lines in this file: ${occurrenceLines.join(', ') || 'none'}`,
+      'Full script context:',
+    ].join('\n');
+    const body = currentLines.join('\n').trimEnd();
+    chunks.push({
+      text: `${header}\n${body}`.trim(),
+      location:
+        chunks.length === 0 && context.occurrences.length === 1
+          ? context.occurrences[0]!.location
+          : `${context.relativePath}:${startLine}-${endLine}`,
+      startLine,
+      endLine,
+    });
+    currentLines = [];
+    currentStartLine = endLine + 1;
+    currentLength = 0;
+  };
+
+  lines.forEach((line, index) => {
+    const numberedLine = `${index + 1}: ${line}`;
+    if (
+      currentLines.length > 0 &&
+      currentLength + numberedLine.length + 1 > NPC_SCRIPT_CONTEXT_CHUNK_MAX_CHARS
+    ) {
+      flush();
+    }
+    if (currentLines.length === 0) {
+      currentStartLine = index + 1;
+    }
+    currentLines.push(numberedLine);
+    currentLength += numberedLine.length + 1;
+  });
+  flush();
+
+  return chunks;
 }
 
 function isSupportedNpcScriptContextFile(filePath: string): boolean {
@@ -1258,7 +1563,7 @@ async function loadDashboardCreativeEntitySources(
         sources.push(candidate);
       }
     } catch (error) {
-      logger.debug('NPC profile evidence source unavailable', {
+      logger.debug('Character profile evidence source unavailable', {
         command,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1299,7 +1604,7 @@ async function loadDashboardCreativeEntityDetailFromSource(
         return detail;
       }
     } catch (error) {
-      logger.debug('NPC profile evidence detail unavailable', {
+      logger.debug('Character profile evidence detail unavailable', {
         source: source.source,
         entityId: entityRef.entityId,
         error: error instanceof Error ? error.message : String(error),
@@ -1408,6 +1713,34 @@ function dashboardSourceKind(source: string): CreativeEntitySourceKind {
   return 'agent';
 }
 
+export function defaultCharacterEvidenceBudgetForMode(
+  mode: 'character-dialogue' | 'embody-character' | 'character-validation',
+): CharacterEvidenceBudget {
+  switch (mode) {
+    case 'character-validation':
+      return {
+        maxChunks: 12,
+        maxCharacters: 18000,
+        perChunkMaxCharacters: 3000,
+        maxTokens: 4500,
+      };
+    case 'embody-character':
+      return {
+        maxChunks: 8,
+        maxCharacters: 12000,
+        perChunkMaxCharacters: 2500,
+        maxTokens: 3000,
+      };
+    case 'character-dialogue':
+      return {
+        maxChunks: 8,
+        maxCharacters: 12000,
+        perChunkMaxCharacters: 2500,
+        maxTokens: 3000,
+      };
+  }
+}
+
 function relationshipProjectionKey(relationship: CreativeEntityRelationshipProjection): string {
   return [
     relationship.from.entityId,
@@ -1449,7 +1782,9 @@ function dashboardRowToNpcEntityRef(
   projectRoot: string,
 ): CreativeEntityRef | null {
   if (row.kind !== 'character') return null;
-  if (row.actions.some((action) => action.id === 'test-npc' && action.disabled)) return null;
+  if (row.actions.some((action) => action.id === 'character-dialogue' && action.disabled)) {
+    return null;
+  }
 
   return {
     entityId: dashboardRefEntityId(row.ref),
@@ -1521,19 +1856,29 @@ function dedupeByKey<T>(items: readonly T[], getKey: (item: T) => string): reado
   return deduped;
 }
 
-export function createPlatformNpcResponder(input: {
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
+function uniqueNumbers(values: readonly number[]): readonly number[] {
+  return Array.from(new Set(values.filter((value) => Number.isFinite(value)))).sort(
+    (left, right) => left - right,
+  );
+}
+
+export function createPlatformCharacterDialogueResponder(input: {
   readonly platform?: Platform;
   readonly chatModel?: ModelRef<'llm'>;
-}): NpcConversationResponder {
+}): CharacterDialogueResponder {
   return async ({ systemPrompt, transcript, config, signal }) => {
     const platform = input.platform;
     if (!platform) {
-      throw new Error('No AI platform is available for NPC test sessions.');
+      throw new Error('No AI platform is available for Character Dialogue sessions.');
     }
 
     const service = toSharedService(platform.createService());
-    const messages = projectNpcTranscriptToChatMessages({ systemPrompt, transcript });
-    const response = await service.chat(messages, {
+    const messages = projectCharacterDialogueTranscriptToChatMessages({ systemPrompt, transcript });
+    const response = await runNoToolCharacterRoleChat(service, messages, {
       modelId: input.chatModel?.modelId,
       tools: [],
       toolChoice: 'none',
@@ -1551,28 +1896,102 @@ export function createPlatformNpcResponder(input: {
   };
 }
 
-export function projectNpcSession(
-  session: Pick<NpcConversationSession, 'id' | 'entityRef' | 'profileSnapshot' | 'mode' | 'status'>,
+export async function runNoToolCharacterRoleChat(
+  service: Pick<IService, 'chat' | 'chatStream'>,
+  messages: ChatMessage[],
+  options: ServiceOptions,
+): Promise<ServiceResponse> {
+  try {
+    const streamedContent = await collectCharacterRoleStream(service, messages, options);
+    return {
+      id: `character-role-stream-${Date.now()}`,
+      model: options.modelId ?? 'unknown',
+      message: { role: 'assistant', content: streamedContent },
+      finishReason: 'stop',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    };
+  } catch (streamError) {
+    try {
+      return await service.chat(messages, options);
+    } catch (chatError) {
+      throw createCharacterRoleChatError(chatError, streamError);
+    }
+  }
+}
+
+async function collectCharacterRoleStream(
+  service: Pick<IService, 'chatStream'>,
+  messages: ChatMessage[],
+  options: ServiceOptions,
+): Promise<string> {
+  let content = '';
+  for await (const chunk of service.chatStream(messages, options)) {
+    if (chunk.type === 'content' && chunk.content) {
+      content += chunk.content;
+    }
+  }
+  return content;
+}
+
+function createCharacterRoleChatError(chatError: unknown, streamError: unknown): Error {
+  const chatMessage = formatCharacterRoleModelError(chatError);
+  const streamMessage = streamError instanceof Error ? streamError.message : String(streamError);
+  const error = new Error(
+    [
+      'Character role model request failed.',
+      chatMessage,
+      'The provider returned a response that could not be consumed as either a stream or a JSON chat completion.',
+      `Stream fallback error: ${streamMessage}`,
+    ].join(' '),
+  );
+  error.cause = chatError;
+  return error;
+}
+
+function formatCharacterRoleModelError(error: unknown): string {
+  if (!isRecord(error)) {
+    return String(error);
+  }
+
+  const message = typeof error.message === 'string' ? error.message : String(error);
+  const statusCode =
+    typeof error.statusCode === 'number' ? `status ${error.statusCode}` : undefined;
+  const url = typeof error.url === 'string' ? error.url : undefined;
+  const responseBody =
+    typeof error.responseBody === 'string' && error.responseBody.trim()
+      ? `response body starts with "${error.responseBody.trim().slice(0, 160)}"`
+      : undefined;
+
+  return [message, statusCode, url, responseBody]
+    .filter((part): part is string => Boolean(part))
+    .join('; ');
+}
+
+export function projectCharacterDialogueSession(
+  session: Pick<
+    CharacterDialogueSession,
+    'id' | 'entityRef' | 'profileSnapshot' | 'mode' | 'status'
+  >,
   input: { readonly projectRoot?: string; readonly startedAt: string },
-): NpcSessionProjection {
+): CharacterDialogueSessionProjection {
   return {
     sessionId: session.id,
     entityId: session.entityRef.entityId,
     displayName: session.profileSnapshot.displayName,
     mode: session.mode,
     profile: session.profileSnapshot,
-    summary: summarizeNpcProfile(session.profileSnapshot),
+    summary: summarizeCharacterProfile(session.profileSnapshot),
     startedAt: input.startedAt,
     ...(input.projectRoot ? { projectRoot: input.projectRoot } : {}),
     status: session.status === 'disposed' ? 'exited' : 'active',
   };
 }
 
-export function resolveNpcEntityRefFromSlashArgs(input: {
+export function resolveCharacterDialogueEntityRefFromSlashArgs(input: {
   readonly args?: string;
   readonly projectRoot?: string;
 }): CreativeEntityRef | null {
-  const parsed = parseNpcSlashArgs(input.args);
+  const parsed = parseCharacterDialogueSlashArgs(input.args);
   if (parsed.entityRef) {
     return parsed.entityRef;
   }
@@ -1587,7 +2006,7 @@ export function resolveNpcEntityRefFromSlashArgs(input: {
   };
 }
 
-export interface ParsedNpcSlashArgs {
+export interface ParsedCharacterDialogueSlashArgs {
   readonly entityToken?: string;
   readonly entityRef?: CreativeEntityRef;
   readonly mode: NpcTestMode;
@@ -1595,7 +2014,9 @@ export interface ParsedNpcSlashArgs {
   readonly initialUserMessage?: string;
 }
 
-export function parseNpcSlashArgs(args: string | undefined): ParsedNpcSlashArgs {
+export function parseCharacterDialogueSlashArgs(
+  args: string | undefined,
+): ParsedCharacterDialogueSlashArgs {
   const tokens = tokenizeSlashArgs(args ?? '');
   let entityToken: string | undefined;
   let entityRef: CreativeEntityRef | undefined;
@@ -1664,7 +2085,7 @@ export function parseNpcSlashArgs(args: string | undefined): ParsedNpcSlashArgs 
   };
 }
 
-function upsertNpcTab(openTabs: readonly OpenTab[], tab: OpenTab): OpenTab[] {
+export function upsertCharacterRoleTab(openTabs: readonly OpenTab[], tab: OpenTab): OpenTab[] {
   return [...openTabs.filter((candidate) => candidate.id !== tab.id), tab];
 }
 
@@ -1721,7 +2142,7 @@ function appendUserSupplement(profile: NpcProfileSource, supplement: string): Np
   };
 }
 
-function createFallbackNpcEvaluationReport(
+function createFallbackCharacterRoleEvaluationReport(
   artifact: NpcTranscriptArtifact,
   createdAt: string,
 ): NpcEvaluationReport {
@@ -1732,13 +2153,13 @@ function createFallbackNpcEvaluationReport(
     createdAt,
     entityRef: artifact.entityRef,
     summary: hasNpcReply
-      ? 'NPC transcript captured for project-scoped validation.'
-      : 'NPC transcript has no NPC response to evaluate yet.',
+      ? 'Character Dialogue transcript captured for project-scoped validation.'
+      : 'Character Dialogue transcript has no character response to evaluate yet.',
     scores: [
       {
         dimension: 'persona-consistency',
         score: hasNpcReply ? 0.5 : 0,
-        summary: hasNpcReply ? 'Manual review required.' : 'No NPC response was captured.',
+        summary: hasNpcReply ? 'Manual review required.' : 'No character response was captured.',
       },
       {
         dimension: 'dialogue-voice-fit',
@@ -1763,7 +2184,7 @@ async function defaultChooseTranscriptSavePolicy(
     return 'never';
   }
   const picked = await vscode.window.showInformationMessage(
-    `Save NPC test evidence for ${input.artifact.profileSnapshot.displayName}?`,
+    `Save Character Dialogue evidence for ${input.artifact.profileSnapshot.displayName}?`,
     'Save',
     'Discard',
   );
@@ -1787,10 +2208,10 @@ async function defaultSaveTranscriptArtifact(
 function buildNpcTranscriptArtifactRelativePath(artifact: NpcTranscriptArtifact): string {
   const timestamp = artifact.createdAt.replace(/[:.]/g, '-');
   const entityId = artifact.entityRef.entityId.replace(/[^a-zA-Z0-9_.-]+/g, '-');
-  return path.posix.join('.neko', 'npc-tests', `${entityId}-${timestamp}.json`);
+  return path.posix.join(CHARACTER_ROLE_TEST_ARTIFACT_DIR, `${entityId}-${timestamp}.json`);
 }
 
-async function defaultApplyNpcSuggestion(
+async function defaultApplyCharacterSuggestion(
   input: NpcSuggestionApplyInput,
 ): Promise<NpcSuggestionApplyResult> {
   const { suggestion, projectRoot } = input;
@@ -1819,7 +2240,7 @@ async function defaultApplyNpcSuggestion(
   };
 }
 
-function summarizeNpcProfile(profile: NpcProfileSource): string {
+export function summarizeCharacterProfile(profile: NpcProfileSource): string {
   const facts = new Map(profile.facts.map((fact) => [fact.key, String(fact.value)]));
   return [
     facts.get('metadata.role'),
@@ -1830,12 +2251,12 @@ function summarizeNpcProfile(profile: NpcProfileSource): string {
     .join(' · ');
 }
 
-function createNpcSessionId(entityRef: CreativeEntityRef): string {
+export function createCharacterDialogueSessionId(entityRef: CreativeEntityRef): string {
   const suffix = Date.now().toString(36);
   return `npc-${entityRef.entityId}-${suffix}`;
 }
 
-function extractResponseText(response: ServiceResponse): string {
+export function extractResponseText(response: ServiceResponse): string {
   const content = response.message.content;
   if (typeof content === 'string') {
     return content;

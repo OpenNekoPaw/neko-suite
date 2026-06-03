@@ -20,13 +20,18 @@ export function tryHandleConversationRoute(
     case 'cancelMessage': {
       const conversationId = resolveRequiredConversationId(webview, message, 'cancel message');
       if (!conversationId) return true;
-      if (deps.npcTestBench?.cancel(conversationId)) return true;
+      if (deps.characterDialogue?.cancel(conversationId)) return true;
+      if (deps.embodyCharacter?.cancel(conversationId)) return true;
       deps.conversationMessageHandler.handleCancelMessage(webview, conversationId);
       return true;
     }
 
-    case 'exitNpcSession':
-      void deps.npcTestBench?.exit(message.sessionId);
+    case 'exitCharacterDialogueSession':
+      void deps.characterDialogue?.exit(message.sessionId);
+      return true;
+
+    case 'exitEmbodyCharacterSession':
+      void deps.embodyCharacter?.exit(message.sessionId);
       return true;
 
     case 'newConversation':

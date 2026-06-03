@@ -2,7 +2,8 @@ import type * as vscode from 'vscode';
 import type { OpenTab } from '@neko-agent/types';
 import type { DragDropBroker } from '../../services/DragDropBroker';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
-import type { NpcTestBenchController } from '../npcTestBenchController';
+import type { CharacterDialogueController } from '../characterDialogueController';
+import type { EmbodyCharacterController } from '../embodyCharacterController';
 import type {
   ContextHandler,
   ConversationMessageHandler,
@@ -17,7 +18,8 @@ import type {
 export interface ChatWebviewMessageRouterDeps {
   readonly webview: vscode.Webview;
   readonly messages?: AgentMessageTurnHandler;
-  readonly npcTestBench?: NpcTestBenchController;
+  readonly characterDialogue?: CharacterDialogueController;
+  readonly embodyCharacter?: EmbodyCharacterController;
   readonly taskHandler: TaskHandler;
   readonly skillHandler: SkillHandler;
   readonly fileOperationHandler: FileOperationHandler;

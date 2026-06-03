@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as vscode from 'vscode';
 import type {
+  CharacterEvidenceBundle,
+  CharacterEvidenceRequest,
   CreativeEntityRef,
   DashboardCreativeEntityDetail,
   DashboardCreativeEntityRow,
@@ -14,12 +16,12 @@ import type {
 } from '@neko/shared';
 import type { OpenTab } from '@neko-agent/types';
 import {
-  createDefaultNpcProfileAssembler,
-  createPlatformNpcResponder,
-  defaultEnrichNpcProfile,
-  NpcTestBenchController,
-  parseNpcSlashArgs,
-} from '../npcTestBenchController';
+  CharacterDialogueController,
+  createDefaultCharacterProfileAssembler,
+  createPlatformCharacterDialogueResponder,
+  defaultEnrichCharacterProfile,
+  parseCharacterDialogueSlashArgs,
+} from '../characterDialogueController';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
@@ -114,7 +116,7 @@ const evaluation: NpcEvaluationReport = {
 };
 
 function createHarness(
-  overrides: Partial<ConstructorParameters<typeof NpcTestBenchController>[0]> = {},
+  overrides: Partial<ConstructorParameters<typeof CharacterDialogueController>[0]> = {},
 ) {
   let tabState: { openTabs: readonly OpenTab[]; activeTabId: string | null } = {
     openTabs: [],
@@ -125,16 +127,22 @@ function createHarness(
     content: `NPC:${userMessage.content}`,
     metadata: { runtime: 'test' },
   }));
+  const evidenceLoader = {
+    loadEvidence: vi.fn(async (request: CharacterEvidenceRequest) =>
+      createEvidenceBundle(request, []),
+    ),
+  };
   const assembler = {
     assembleProfile: vi.fn(async () => ({ status: 'assembled' as const, profile })),
   };
   const updateTabState = vi.fn((openTabs: OpenTab[], activeTabId: string | null) => {
     tabState = { openTabs, activeTabId };
   });
-  const controller = new NpcTestBenchController({
+  const controller = new CharacterDialogueController({
     getWebview: () => webview as never,
     getProjectRoot: () => '/workspace/project-a',
     createAssembler: vi.fn(() => assembler),
+    createEvidenceLoader: vi.fn(() => evidenceLoader),
     createResponder: vi.fn(() => responder),
     getTabState: () => tabState,
     updateTabState,
@@ -146,7 +154,30 @@ function createHarness(
     ...overrides,
   });
 
-  return { assembler, controller, responder, tabState: () => tabState, updateTabState, webview };
+  return {
+    assembler,
+    controller,
+    evidenceLoader,
+    responder,
+    tabState: () => tabState,
+    updateTabState,
+    webview,
+  };
+}
+
+function createEvidenceBundle(
+  request: CharacterEvidenceRequest,
+  chunks: CharacterEvidenceBundle['chunks'],
+): CharacterEvidenceBundle {
+  return {
+    entityRef: request.entityRef,
+    mode: request.mode,
+    query: request.query,
+    chunks,
+    omitted: [],
+    freshness: 'fresh',
+    budget: request.budget,
+  };
 }
 
 function createDashboardSource(
@@ -183,8 +214,8 @@ function createDashboardSource(
   };
 }
 
-describe('NpcTestBenchController', () => {
-  it('launches a project-scoped NPC session with a deterministic profile projection', async () => {
+describe('CharacterDialogueController', () => {
+  it('launches a project-scoped Character Dialogue session with a deterministic profile projection', async () => {
     const harness = createHarness();
 
     const result = await harness.controller.launch({ entityRef, source: 'dashboard' });
@@ -204,13 +235,13 @@ describe('NpcTestBenchController', () => {
     expect(harness.tabState().openTabs).toEqual([
       expect.objectContaining({
         conversationId: 'npc-session-1',
-        kind: 'npc-test',
-        npcSession: expect.objectContaining({ profile }),
+        kind: 'character-dialogue',
+        characterDialogueSession: expect.objectContaining({ profile }),
       }),
     ]);
     expect(harness.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'npcSessionStarted',
+        type: 'characterDialogueSessionStarted',
         session: expect.objectContaining({ sessionId: 'npc-session-1' }),
       }),
     );
@@ -266,7 +297,71 @@ describe('NpcTestBenchController', () => {
     });
   });
 
-  it('extracts transcript on exit and marks the NPC tab as exited', async () => {
+  it('loads turn-scoped character evidence without granting tools or polluting transcript', async () => {
+    const evidenceText = 'Script file: cases/late.fountain\n220: 小橘只知道公开线索。';
+    const evidenceLoader = {
+      loadEvidence: vi.fn(async (request: CharacterEvidenceRequest) =>
+        createEvidenceBundle(request, [
+          {
+            id: 'evidence-1',
+            text: evidenceText,
+            sourceRefs: [
+              {
+                id: 'source-1',
+                kind: 'dashboard-detail',
+                projectRelativePath: 'cases/late.fountain',
+                lineStart: 220,
+                lineEnd: 220,
+                freshness: 'fresh',
+              },
+            ],
+            authority: 'confirmed',
+            relevance: { score: 12, signals: [] },
+            freshness: 'fresh',
+          },
+        ]),
+      ),
+    };
+    const responder = vi.fn(async ({ systemPrompt, userMessage }) => ({
+      content: systemPrompt.includes(evidenceText)
+        ? `NPC:evidence:${userMessage.content}`
+        : 'NPC:no-evidence',
+    }));
+    const harness = createHarness({
+      createEvidenceLoader: vi.fn(() => evidenceLoader),
+      createResponder: vi.fn(() => responder),
+      chooseSavePolicy: vi.fn(async () => 'never'),
+      evaluateTranscript: vi.fn(async () => evaluation),
+    });
+    await harness.controller.launch({ entityRef });
+
+    await harness.controller.routeUserMessage('npc-session-1', '我知道什么？');
+    const result = await harness.controller.exit('npc-session-1');
+
+    expect(evidenceLoader.loadEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityRef,
+        mode: 'character-dialogue',
+        query: '我知道什么？',
+        projectRoot: '/workspace/project-a',
+      }),
+    );
+    expect(responder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ toolPolicy: { kind: 'none' } }),
+        turnEvidence: expect.objectContaining({
+          chunks: [expect.objectContaining({ text: evidenceText })],
+        }),
+        systemPrompt: expect.stringContaining(evidenceText),
+      }),
+    );
+    expect(result?.artifact.transcript.map((message) => message.content)).toEqual([
+      '我知道什么？',
+      'NPC:evidence:我知道什么？',
+    ]);
+  });
+
+  it('extracts transcript on exit and marks the Character Dialogue tab as exited', async () => {
     const harness = createHarness();
     await harness.controller.launch({ entityRef });
     await harness.controller.routeUserMessage('npc-session-1', 'hello');
@@ -285,20 +380,20 @@ describe('NpcTestBenchController', () => {
       }),
     );
     expect(harness.controller.hasSession('npc-session-1')).toBe(false);
-    expect(harness.tabState().openTabs[0]?.npcSession?.status).toBe('exited');
+    expect(harness.tabState().openTabs[0]?.characterDialogueSession?.status).toBe('exited');
     expect(harness.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'npcSessionExited',
+        type: 'characterDialogueSessionExited',
         sessionId: 'npc-session-1',
         artifact: expect.objectContaining({ sessionId: 'npc-session-1' }),
       }),
     );
   });
 
-  it('evaluates and saves NPC artifacts under the project-local npc-tests folder', async () => {
+  it('evaluates and saves character role artifacts under the project-local character-tests folder', async () => {
     const evaluateTranscript = vi.fn(async () => evaluation);
     const saveTranscriptArtifact = vi.fn(async ({ artifact }) => ({
-      path: `.neko/npc-tests/${artifact.entityRef.entityId}-2026-06-01T00-00-00-000Z.json`,
+      path: `.neko/character-tests/${artifact.entityRef.entityId}-2026-06-01T00-00-00-000Z.json`,
     }));
     const harness = createHarness({
       evaluateTranscript,
@@ -323,11 +418,13 @@ describe('NpcTestBenchController', () => {
       projectRoot: '/workspace/project-a',
     });
     expect(result?.artifact.evaluation).toEqual(evaluation);
-    expect(result?.savedPath).toBe('.neko/npc-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json');
+    expect(result?.savedPath).toBe(
+      '.neko/character-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
+    );
     expect(harness.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'npcSessionExited',
-        savedPath: '.neko/npc-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
+        type: 'characterDialogueSessionExited',
+        savedPath: '.neko/character-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
       }),
     );
   });
@@ -342,16 +439,19 @@ describe('NpcTestBenchController', () => {
 
     expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
-        fsPath: '/workspace/project-a/.neko/npc-tests',
+        fsPath: '/workspace/project-a/.neko/character-tests',
       }),
     );
     expect(vscode.workspace.fs.writeFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        fsPath: '/workspace/project-a/.neko/npc-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
+        fsPath:
+          '/workspace/project-a/.neko/character-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
       }),
       expect.any(Buffer),
     );
-    expect(result?.savedPath).toBe('.neko/npc-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json');
+    expect(result?.savedPath).toBe(
+      '.neko/character-tests/char-xiaoju-2026-06-01T00-00-00-000Z.json',
+    );
   });
 
   it('handles thin profiles with project enrichment and manual supplement before launch', async () => {
@@ -537,7 +637,7 @@ describe('NpcTestBenchController', () => {
       },
     }));
 
-    const result = await defaultEnrichNpcProfile({
+    const result = await defaultEnrichCharacterProfile({
       projectRoot: '/workspace/project-a',
       profile: thinProfileWithEvidence,
       request: { entityRef, enrichment: 'auto' },
@@ -568,7 +668,7 @@ describe('NpcTestBenchController', () => {
     );
   });
 
-  it('requires explicit confirmation before applying NPC evaluation suggestions', async () => {
+  it('requires explicit confirmation before applying character evaluation suggestions', async () => {
     const suggestion: NpcEvaluationSuggestion = {
       id: 'suggestion-1',
       kind: 'entity-metadata',
@@ -592,7 +692,7 @@ describe('NpcTestBenchController', () => {
 
     await expect(harness.controller.applyEvaluationSuggestion({ suggestion })).resolves.toEqual({
       applied: false,
-      message: 'NPC suggestion was not confirmed.',
+      message: 'Character suggestion was not confirmed.',
     });
     expect(applySuggestion).not.toHaveBeenCalled();
 
@@ -609,7 +709,7 @@ describe('NpcTestBenchController', () => {
     });
   });
 
-  it('cancels active NPC sessions without touching ordinary conversations', async () => {
+  it('cancels active Character Dialogue sessions without touching ordinary conversations', async () => {
     const harness = createHarness({
       createResponder:
         () =>
@@ -689,7 +789,7 @@ describe('NpcTestBenchController', () => {
       visualDrafts: [],
       syncSuggestions: [],
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
     };
     const storyRow: DashboardCreativeEntityRow = {
       ref: storyDetail.ref,
@@ -701,7 +801,7 @@ describe('NpcTestBenchController', () => {
       summary: 'Script character candidate',
       occurrenceCount: 1,
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
       searchText: '小橘 Xiaoju character candidate',
     };
     const storySource = createDashboardSource('neko-story', storyDetail, [storyRow]);
@@ -745,7 +845,7 @@ describe('NpcTestBenchController', () => {
       visualDrafts: [],
       syncSuggestions: [],
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
     };
     const storyRow: DashboardCreativeEntityRow = {
       ref: storyDetail.ref,
@@ -755,7 +855,7 @@ describe('NpcTestBenchController', () => {
       sourceKind: 'script',
       summary: 'Script character candidate',
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
       searchText: '小橘 character candidate',
     };
     const storySource = createDashboardSource('neko-story', storyDetail, [storyRow]);
@@ -778,7 +878,7 @@ describe('NpcTestBenchController', () => {
         }),
       ]),
       expect.objectContaining({
-        placeHolder: '选择要测试的项目角色',
+        placeHolder: '选择要对话测试的项目角色',
       }),
     );
     expect(harness.assembler.assembleProfile).toHaveBeenCalledWith({
@@ -791,7 +891,7 @@ describe('NpcTestBenchController', () => {
     });
   });
 
-  it('feeds project evidence from Dashboard sources into the default NPC profile assembler', async () => {
+  it('feeds project evidence from Dashboard sources into the default character profile assembler', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-profile-'));
     const storyDetail: DashboardCreativeEntityDetail = {
       ref: {
@@ -886,7 +986,7 @@ describe('NpcTestBenchController', () => {
       'utf8',
     );
     try {
-      const assembler = createDefaultNpcProfileAssembler(projectRoot);
+      const assembler = createDefaultCharacterProfileAssembler(projectRoot);
       const result = await assembler.assembleProfile({
         entityRef: { ...entityRef, projectRoot },
       });
@@ -915,7 +1015,7 @@ describe('NpcTestBenchController', () => {
     }
   });
 
-  it('assembles a default NPC profile from Dashboard detail when registry is missing', async () => {
+  it('assembles a default character profile from Dashboard detail when registry is missing', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-dashboard-profile-'));
     const storyDetail: DashboardCreativeEntityDetail = {
       ref: {
@@ -947,7 +1047,7 @@ describe('NpcTestBenchController', () => {
       visualDrafts: [],
       syncSuggestions: [],
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
     };
     const storySource = createDashboardSource('neko-story', storyDetail);
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
@@ -955,7 +1055,7 @@ describe('NpcTestBenchController', () => {
     );
 
     try {
-      const assembler = createDefaultNpcProfileAssembler(projectRoot);
+      const assembler = createDefaultCharacterProfileAssembler(projectRoot);
       const result = await assembler.assembleProfile({
         entityRef: {
           entityId: '小橘',
@@ -981,7 +1081,7 @@ describe('NpcTestBenchController', () => {
     }
   });
 
-  it('adds script context snippets to the default NPC profile before conversation starts', async () => {
+  it('adds full script file context to the default character profile before conversation starts', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-script-context-'));
     const storyDetail: DashboardCreativeEntityDetail = {
       ref: {
@@ -1012,7 +1112,7 @@ describe('NpcTestBenchController', () => {
       visualDrafts: [],
       syncSuggestions: [],
       freshness: 'fresh',
-      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
     };
     const storySource = createDashboardSource('neko-story', storyDetail);
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
@@ -1037,7 +1137,7 @@ describe('NpcTestBenchController', () => {
     );
 
     try {
-      const assembler = createDefaultNpcProfileAssembler(projectRoot);
+      const assembler = createDefaultCharacterProfileAssembler(projectRoot);
       const result = await assembler.assembleProfile({
         entityRef: {
           entityId: '小橘',
@@ -1049,6 +1149,10 @@ describe('NpcTestBenchController', () => {
 
       expect(result).toEqual(expect.objectContaining({ status: 'assembled' }));
       if (result.status !== 'assembled') return;
+      const scriptContextFact = result.profile.facts.find(
+        (fact) => fact.key === 'script.context.1',
+      );
+      expect(scriptContextFact?.value).toContain('INT. 教室 - DAY');
       expect(result.profile.facts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -1057,6 +1161,12 @@ describe('NpcTestBenchController', () => {
             source: 'script-extraction',
             authority: 'confirmed',
             sourceRef: 'cases/test.fountain:8',
+            metadata: expect.objectContaining({
+              scriptFile: 'cases/test.fountain',
+              lineRange: '1-10',
+              occurrenceLines: [8],
+              occurrenceLabels: ['小橘'],
+            }),
           }),
         ]),
       );
@@ -1065,8 +1175,88 @@ describe('NpcTestBenchController', () => {
     }
   });
 
-  it('parses slash args without treating allowed tools as an NPC capability', () => {
-    expect(parseNpcSlashArgs('@小橘 --consult --manual hi there')).toEqual({
+  it('keeps later script knowledge when a character has more than six occurrences', async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-long-script-context-'));
+    const occurrenceLines = [8, 20, 40, 80, 120, 160, 220] as const;
+    const storyDetail: DashboardCreativeEntityDetail = {
+      ref: {
+        source: 'neko-story',
+        sourceEntityId: 'candidate:character:小橘',
+        entityId: '小橘',
+        entityKind: 'character',
+        workspaceFolder: 'project-a',
+      },
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: [],
+      relationships: [],
+      occurrences: occurrenceLines.map((line) => ({
+        source: 'script' as const,
+        role: 'reference' as const,
+        label: '小橘',
+        location: `cases/long.fountain:${line}`,
+        detail: `小橘 occurrence ${line}`,
+      })),
+      bindings: [],
+      defaults: [],
+      requirements: [],
+      visualDrafts: [],
+      syncSuggestions: [],
+      freshness: 'fresh',
+      actions: [{ id: 'character-dialogue', label: 'Character Dialogue' }],
+    };
+    const storySource = createDashboardSource('neko-story', storyDetail);
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
+      command === 'neko.story.getDashboardCreativeEntitySource' ? storySource : undefined,
+    );
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async () => {
+      const lines = Array.from({ length: 230 }, (_, index) => {
+        const line = index + 1;
+        if (line === 220) return '小橘在最后一幕确认自己不会离开阿灰。';
+        return `Line ${line}`;
+      });
+      return Buffer.from(lines.join('\n'), 'utf8');
+    });
+
+    try {
+      const assembler = createDefaultCharacterProfileAssembler(projectRoot);
+      const result = await assembler.assembleProfile({
+        entityRef: {
+          entityId: '小橘',
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-story',
+        },
+      });
+
+      expect(result).toEqual(expect.objectContaining({ status: 'assembled' }));
+      if (result.status !== 'assembled') return;
+
+      const scriptFacts = result.profile.facts.filter((fact) =>
+        fact.key.startsWith('script.context.'),
+      );
+      expect(scriptFacts.length).toBeGreaterThan(0);
+      expect(scriptFacts.map((fact) => String(fact.value)).join('\n')).toContain(
+        '220: 小橘在最后一幕确认自己不会离开阿灰。',
+      );
+      expect(scriptFacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              occurrenceLines: [8, 20, 40, 80, 120, 160, 220],
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('parses slash args without treating allowed tools as a Character Dialogue capability', () => {
+    expect(parseCharacterDialogueSlashArgs('@小橘 --consult --manual hi there')).toEqual({
       entityToken: '@小橘',
       mode: 'consult',
       enrichment: 'manual',
@@ -1074,14 +1264,31 @@ describe('NpcTestBenchController', () => {
     });
   });
 
-  it('creates platform responder requests with an explicit no-tool runtime policy', async () => {
+  it('creates streaming platform responder requests with an explicit no-tool runtime policy', async () => {
     const chat = vi.fn(async () => ({
       model: 'model-a',
       message: { role: 'assistant' as const, content: 'hello' },
     }));
-    const responder = createPlatformNpcResponder({
+    async function* streamChunks() {
+      yield { id: 'stream-1', model: 'model-a', delta: { content: 'he' } };
+      yield { id: 'stream-1', model: 'model-a', delta: { content: 'llo' } };
+      yield { id: 'stream-1', model: 'model-a', delta: {}, finishReason: 'stop' as const };
+    }
+    const chatStreamSpy = vi.fn(() => ({
+      stream: streamChunks(),
+      response: Promise.resolve({
+        id: 'stream-1',
+        model: 'model-a',
+        message: { role: 'assistant' as const, content: 'hello' },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        routing: { modelId: 'model-a', providerId: 'provider-a', attempts: 1 },
+        timing: { startTime: 1, endTime: 2, duration: 1 },
+      }),
+    }));
+    const responder = createPlatformCharacterDialogueResponder({
       platform: {
-        createService: () => ({ chat }),
+        createService: () => ({ chat, chatStream: chatStreamSpy }),
       } as never,
       chatModel: { providerId: 'provider-a', modelId: 'model-a', category: 'llm' },
     });
@@ -1105,6 +1312,57 @@ describe('NpcTestBenchController', () => {
       }),
     ).resolves.toEqual({
       content: 'hello',
+      metadata: { model: 'model-a', toolPolicy: 'none' },
+    });
+    expect(chat).not.toHaveBeenCalled();
+    expect(chatStreamSpy).toHaveBeenCalledWith(
+      [{ role: 'system', content: 'system' }],
+      expect.objectContaining({
+        modelId: 'model-a',
+        tools: [],
+        toolChoice: 'none',
+      }),
+    );
+  });
+
+  it('falls back to non-streaming chat when the stream path fails', async () => {
+    const chat = vi.fn(async () => ({
+      model: 'model-a',
+      message: { role: 'assistant' as const, content: 'fallback hello' },
+    }));
+    const chatStream = vi.fn(() => ({
+      stream: (async function* () {
+        yield* [];
+        throw new Error('stream unavailable');
+      })(),
+      response: Promise.reject(new Error('stream unavailable')),
+    }));
+    const responder = createPlatformCharacterDialogueResponder({
+      platform: {
+        createService: () => ({ chat, chatStream }),
+      } as never,
+      chatModel: { providerId: 'provider-a', modelId: 'model-a', category: 'llm' },
+    });
+
+    await expect(
+      responder({
+        sessionId: 'npc-session-1',
+        entityRef,
+        profileSnapshot: profile,
+        mode: 'roleplay',
+        systemPrompt: 'system',
+        transcript: [],
+        userMessage: {
+          id: 'msg-user',
+          role: 'user',
+          content: 'hello',
+          createdAt: '2026-06-01T00:00:00.000Z',
+        },
+        config: { toolPolicy: { kind: 'none' }, modelTier: 'balanced', maxIterations: 12 },
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toEqual({
+      content: 'fallback hello',
       metadata: { model: 'model-a', toolPolicy: 'none' },
     });
     expect(chat).toHaveBeenCalledWith(

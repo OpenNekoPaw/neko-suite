@@ -23,7 +23,8 @@ export interface OpenTab {
   title: string;
   conversationId: string;
   kind?: ConversationKind;
-  npcSession?: NpcSessionProjection;
+  characterDialogueSession?: CharacterDialogueSessionProjection;
+  embodyCharacterSession?: EmbodyCharacterSessionProjection;
 }
 
 export interface TabState {
@@ -32,9 +33,9 @@ export interface TabState {
 }
 
 export type TabType = 'chat';
-export type ConversationKind = 'chat' | 'npc-test';
+export type ConversationKind = 'chat' | 'character-dialogue' | 'embody-character';
 
-export interface NpcSessionProjection {
+export interface CharacterDialogueSessionProjection {
   readonly sessionId: string;
   readonly entityId: string;
   readonly displayName: string;
@@ -43,6 +44,20 @@ export interface NpcSessionProjection {
   readonly summary: string;
   readonly startedAt: string;
   readonly projectRoot?: string;
+  readonly status: 'active' | 'exited';
+}
+
+export interface EmbodyCharacterSessionProjection {
+  readonly sessionId: string;
+  readonly entityId: string;
+  readonly displayName: string;
+  readonly profile: NpcProfileSource;
+  readonly source?: string;
+  readonly projectRoot?: string;
+  readonly scopeSummary: readonly string[];
+  readonly prompt?: string;
+  readonly summary: string;
+  readonly startedAt: string;
   readonly status: 'active' | 'exited';
 }
 

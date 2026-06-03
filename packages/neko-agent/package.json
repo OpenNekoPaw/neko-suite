@@ -34,6 +34,8 @@
   ],
   "activationEvents": [
     "onCommand:neko.agent.getDashboardTaskSource",
+    "onCommand:neko.agent.characterDialogue",
+    "onCommand:neko.agent.embodyCharacter",
     "onCommand:neko.agent.registerCapabilities",
     "onCommand:neko.agent.registerSlashCommands",
     "onCommand:neko.agent.sendContext",

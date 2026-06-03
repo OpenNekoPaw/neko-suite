@@ -30,7 +30,11 @@ export type ConversationTabSyncResult =
       conversationId: string;
     }
   | {
-      kind: 'npc-active';
+      kind: 'character-dialogue-active';
+      sessionId: string;
+    }
+  | {
+      kind: 'embody-character-active';
       sessionId: string;
     }
   | {
@@ -41,7 +45,8 @@ export type ConversationTabSyncResult =
 
 export interface ConversationTabRuntimeEffects {
   hasConversation(conversationId: string): boolean;
-  hasNpcSession?(sessionId: string): boolean;
+  hasCharacterDialogueSession?(sessionId: string): boolean;
+  hasEmbodyCharacterSession?(sessionId: string): boolean;
   getActiveConversationId(): string | null;
   switchConversation(conversationId: string): boolean;
   onConversationSwitched?(conversationId: string): void;
@@ -89,7 +94,8 @@ export function syncActiveConversationFromTabState(
   const conversationId = resolveActiveTabConversationId({
     tabState: input.tabState,
     hasConversation: effects.hasConversation,
-    hasNpcSession: effects.hasNpcSession,
+    hasCharacterDialogueSession: effects.hasCharacterDialogueSession,
+    hasEmbodyCharacterSession: effects.hasEmbodyCharacterSession,
   });
 
   if (!conversationId) {
@@ -99,8 +105,11 @@ export function syncActiveConversationFromTabState(
   const activeTab = input.tabState.activeTabId
     ? input.tabState.openTabs.find((tab) => tab.id === input.tabState.activeTabId)
     : undefined;
-  if (activeTab?.kind === 'npc-test') {
-    return { kind: 'npc-active', sessionId: conversationId };
+  if (activeTab?.kind === 'character-dialogue') {
+    return { kind: 'character-dialogue-active', sessionId: conversationId };
+  }
+  if (activeTab?.kind === 'embody-character') {
+    return { kind: 'embody-character-active', sessionId: conversationId };
   }
 
   if (effects.getActiveConversationId() === conversationId) {

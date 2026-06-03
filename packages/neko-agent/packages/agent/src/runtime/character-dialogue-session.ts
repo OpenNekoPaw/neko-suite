@@ -7,82 +7,88 @@ import type {
   NpcTranscriptMessage,
 } from '@neko/shared';
 import { NPC_TRANSCRIPT_ARTIFACT_VERSION } from '@neko/shared';
-import { projectNpcSystemPrompt } from '../prompt/npc-profile-projector';
+import { projectCharacterDialogueSystemPrompt } from '../prompt/character-dialogue-profile-projector';
 import type { AgentToolPolicy, ModelTier } from '../subagent/types';
+import { renderCharacterEvidenceBundle, type CharacterEvidenceBundle } from './character-evidence';
 
-export interface NpcConversationSessionConfig {
+export interface CharacterDialogueSessionConfig {
   readonly toolPolicy: AgentToolPolicy;
   readonly modelTier: ModelTier;
   readonly maxIterations: number;
 }
 
-export interface NpcConversationResponderInput {
+export interface CharacterDialogueResponderInput {
   readonly sessionId: string;
   readonly entityRef: CreativeEntityRef;
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
   readonly systemPrompt: string;
+  readonly turnEvidence?: CharacterEvidenceBundle;
   readonly transcript: readonly NpcTranscriptMessage[];
   readonly userMessage: NpcTranscriptMessage;
-  readonly config: NpcConversationSessionConfig;
+  readonly config: CharacterDialogueSessionConfig;
   readonly signal: AbortSignal;
 }
 
-export interface NpcConversationResponderResult {
+export interface CharacterDialogueResponderResult {
   readonly content: string;
   readonly metadata?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-export type NpcConversationResponder = (
-  input: NpcConversationResponderInput,
-) => Promise<NpcConversationResponderResult>;
+export type CharacterDialogueResponder = (
+  input: CharacterDialogueResponderInput,
+) => Promise<CharacterDialogueResponderResult>;
 
-export interface NpcConversationSessionOptions {
+export interface CharacterDialogueSessionOptions {
   readonly id: string;
   readonly entityRef: CreativeEntityRef;
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
-  readonly responder: NpcConversationResponder;
+  readonly responder: CharacterDialogueResponder;
   readonly systemPrompt?: string;
-  readonly config?: Partial<NpcConversationSessionConfig>;
+  readonly config?: Partial<CharacterDialogueSessionConfig>;
   readonly now?: () => string;
   readonly createMessageId?: (role: NpcTranscriptMessage['role'], turnIndex: number) => string;
   readonly seedTranscript?: readonly NpcTranscriptMessage[];
 }
 
-export interface NpcConversationTurn {
+export interface CharacterDialogueSendUserMessageOptions {
+  readonly turnEvidence?: CharacterEvidenceBundle;
+}
+
+export interface CharacterDialogueTurn {
   readonly sessionId: string;
   readonly userMessage: NpcTranscriptMessage;
   readonly npcMessage: NpcTranscriptMessage;
   readonly transcript: readonly NpcTranscriptMessage[];
 }
 
-export interface NpcConversationSessionSnapshot {
+export interface CharacterDialogueSessionSnapshot {
   readonly id: string;
   readonly entityRef: CreativeEntityRef;
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
   readonly systemPrompt: string;
-  readonly config: NpcConversationSessionConfig;
+  readonly config: CharacterDialogueSessionConfig;
   readonly transcript: readonly NpcTranscriptMessage[];
   readonly status: 'active' | 'disposed';
 }
 
-export const NPC_CONVERSATION_DEFAULT_CONFIG: NpcConversationSessionConfig = {
+export const CHARACTER_DIALOGUE_DEFAULT_CONFIG: CharacterDialogueSessionConfig = {
   toolPolicy: { kind: 'none' },
   modelTier: 'balanced',
   maxIterations: 12,
 };
 
-export class NpcConversationSession {
+export class CharacterDialogueSession {
   readonly id: string;
   readonly entityRef: CreativeEntityRef;
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
   readonly systemPrompt: string;
-  readonly config: NpcConversationSessionConfig;
+  readonly config: CharacterDialogueSessionConfig;
 
-  private readonly responder: NpcConversationResponder;
+  private readonly responder: CharacterDialogueResponder;
   private readonly now: () => string;
   private readonly createMessageId: (
     role: NpcTranscriptMessage['role'],
@@ -93,23 +99,24 @@ export class NpcConversationSession {
   private turnIndex = 0;
   private disposed = false;
 
-  constructor(options: NpcConversationSessionOptions) {
+  constructor(options: CharacterDialogueSessionOptions) {
     this.id = options.id;
     this.entityRef = options.entityRef;
     this.profileSnapshot = options.profileSnapshot;
     this.mode = options.mode;
     this.systemPrompt =
       options.systemPrompt ??
-      projectNpcSystemPrompt(options.profileSnapshot, { mode: options.mode });
+      projectCharacterDialogueSystemPrompt(options.profileSnapshot, { mode: options.mode });
     this.config = {
-      ...NPC_CONVERSATION_DEFAULT_CONFIG,
+      ...CHARACTER_DIALOGUE_DEFAULT_CONFIG,
       ...(options.config ?? {}),
-      toolPolicy: options.config?.toolPolicy ?? NPC_CONVERSATION_DEFAULT_CONFIG.toolPolicy,
+      toolPolicy: options.config?.toolPolicy ?? CHARACTER_DIALOGUE_DEFAULT_CONFIG.toolPolicy,
     };
     this.responder = options.responder;
     this.now = options.now ?? (() => new Date().toISOString());
     this.createMessageId =
-      options.createMessageId ?? ((role, turnIndex) => `npc-msg-${this.id}-${turnIndex}-${role}`);
+      options.createMessageId ??
+      ((role, turnIndex) => `character-dialogue-msg-${this.id}-${turnIndex}-${role}`);
     if (options.seedTranscript) {
       this.transcript.push(...options.seedTranscript);
       this.turnIndex = Math.max(
@@ -123,15 +130,18 @@ export class NpcConversationSession {
     return this.disposed ? 'disposed' : 'active';
   }
 
-  async sendUserMessage(content: string): Promise<NpcConversationTurn> {
+  async sendUserMessage(
+    content: string,
+    options: CharacterDialogueSendUserMessageOptions = {},
+  ): Promise<CharacterDialogueTurn> {
     this.assertActive();
     if (this.activeTurn) {
-      throw new Error(`NPC session is already responding: ${this.id}`);
+      throw new Error(`Character Dialogue session is already responding: ${this.id}`);
     }
 
     const trimmed = content.trim();
     if (!trimmed) {
-      throw new Error('NPC user message cannot be empty.');
+      throw new Error('Character Dialogue user message cannot be empty.');
     }
 
     const turnIndex = ++this.turnIndex;
@@ -153,7 +163,11 @@ export class NpcConversationSession {
         entityRef: this.entityRef,
         profileSnapshot: this.profileSnapshot,
         mode: this.mode,
-        systemPrompt: this.systemPrompt,
+        systemPrompt: buildCharacterDialogueTurnSystemPrompt({
+          baseSystemPrompt: this.systemPrompt,
+          turnEvidence: options.turnEvidence,
+        }),
+        ...(options.turnEvidence ? { turnEvidence: options.turnEvidence } : {}),
         transcript: this.getTranscript(),
         userMessage,
         config: this.config,
@@ -208,7 +222,7 @@ export class NpcConversationSession {
     };
   }
 
-  snapshot(): NpcConversationSessionSnapshot {
+  snapshot(): CharacterDialogueSessionSnapshot {
     return {
       id: this.id,
       entityRef: this.entityRef,
@@ -233,12 +247,12 @@ export class NpcConversationSession {
 
   private assertActive(): void {
     if (this.disposed) {
-      throw new Error(`NPC session has been disposed: ${this.id}`);
+      throw new Error(`Character Dialogue session has been disposed: ${this.id}`);
     }
   }
 }
 
-export function projectNpcTranscriptToChatMessages(input: {
+export function projectCharacterDialogueTranscriptToChatMessages(input: {
   readonly systemPrompt: string;
   readonly transcript: readonly NpcTranscriptMessage[];
 }): ChatMessage[] {
@@ -254,4 +268,18 @@ export function projectNpcTranscriptToChatMessages(input: {
   }
 
   return messages;
+}
+
+export function buildCharacterDialogueTurnSystemPrompt(input: {
+  readonly baseSystemPrompt: string;
+  readonly turnEvidence?: CharacterEvidenceBundle;
+}): string {
+  if (!input.turnEvidence) return input.baseSystemPrompt;
+  return [
+    input.baseSystemPrompt,
+    '',
+    renderCharacterEvidenceBundle(input.turnEvidence),
+    '',
+    'Use this evidence only for the current role-session turn. Do not claim access to project files, tools, global memory, or omitted evidence.',
+  ].join('\n');
 }

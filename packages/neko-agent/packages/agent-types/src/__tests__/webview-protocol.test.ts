@@ -180,6 +180,84 @@ describe('webview protocol parser', () => {
       }),
     ).toBeNull();
   });
+
+  it('accepts Embody Character tabs only with session projections', () => {
+    const openTabs = [
+      {
+        id: 'tab-embody',
+        title: 'Embody: 小橘',
+        conversationId: 'embody-session-1',
+        kind: 'embody-character' as const,
+        embodyCharacterSession: {
+          sessionId: 'embody-session-1',
+          entityId: 'char-xiaoju',
+          displayName: '小橘',
+          profile: {
+            entityRef: {
+              entityId: 'char-xiaoju',
+              entityKind: 'character' as const,
+              projectRoot: '/workspace',
+              source: 'neko-entity',
+            },
+            displayName: '小橘',
+            aliases: [],
+            facts: [],
+            sparsity: 'thin' as const,
+          },
+          scopeSummary: ['project: current project'],
+          summary: 'User embodies 小橘.',
+          startedAt: '2026-06-02T00:00:00.000Z',
+          status: 'active' as const,
+        },
+      },
+    ];
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'updateTabState',
+        openTabs,
+        activeTabId: 'tab-embody',
+      }),
+    ).toEqual({
+      type: 'updateTabState',
+      openTabs: [
+        expect.objectContaining({
+          kind: 'embody-character',
+          embodyCharacterSession: expect.objectContaining({ sessionId: 'embody-session-1' }),
+        }),
+      ],
+      activeTabId: 'tab-embody',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'updateTabState',
+        openTabs: [
+          {
+            id: 'tab-embody',
+            title: 'Embody: 小橘',
+            conversationId: 'embody-session-1',
+            kind: 'embody-character',
+            embodyCharacterContext: {
+              contextId: 'legacy-hidden-context',
+            },
+          },
+        ],
+        activeTabId: 'tab-embody',
+      }),
+    ).toEqual({
+      type: 'updateTabState',
+      openTabs: [
+        {
+          id: 'tab-embody',
+          title: 'Embody: 小橘',
+          conversationId: 'embody-session-1',
+          kind: 'embody-character',
+        },
+      ],
+      activeTabId: 'tab-embody',
+    });
+  });
 });
 
 describe('webview protocol projectors', () => {

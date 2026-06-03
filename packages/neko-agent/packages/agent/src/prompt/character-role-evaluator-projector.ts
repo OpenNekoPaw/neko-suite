@@ -1,17 +1,17 @@
 import { isNpcEvaluationReport } from '@neko/shared';
 import type { NpcEvaluationReport, NpcTranscriptArtifact } from '@neko/shared';
 
-export interface NpcEvaluationPromptProjection {
+export interface CharacterRoleEvaluationPromptProjection {
   readonly systemPrompt: string;
   readonly userPrompt: string;
 }
 
-export function projectNpcEvaluationPrompt(
+export function projectCharacterRoleEvaluationPrompt(
   artifact: NpcTranscriptArtifact,
-): NpcEvaluationPromptProjection {
+): CharacterRoleEvaluationPromptProjection {
   return {
     systemPrompt: [
-      'You evaluate NPC validation transcripts against the supplied profile snapshot.',
+      'You evaluate character role transcripts against the supplied profile snapshot.',
       'Return JSON only, shaped as NpcEvaluationReport.',
       'Flag persona consistency issues, dialogue voice fit, knowledge leakage, relationship gaps, and profile improvement suggestions.',
       'Suggestions must remain suggested and require explicit user confirmation before any entity mutation.',
@@ -72,7 +72,7 @@ export function projectNpcEvaluationPrompt(
   };
 }
 
-export type NpcEvaluationReportParseResult =
+export type CharacterRoleEvaluationReportParseResult =
   | {
       readonly status: 'parsed';
       readonly report: NpcEvaluationReport;
@@ -82,7 +82,9 @@ export type NpcEvaluationReportParseResult =
       readonly reason: string;
     };
 
-export function parseNpcEvaluationReportOutput(output: string): NpcEvaluationReportParseResult {
+export function parseCharacterRoleEvaluationReportOutput(
+  output: string,
+): CharacterRoleEvaluationReportParseResult {
   const json = extractJsonPayload(output);
   if (!json) {
     return { status: 'invalid', reason: 'Evaluator output did not contain JSON.' };

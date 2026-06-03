@@ -28,7 +28,8 @@ import type { Plan } from './plan';
 import type { ConfiguredProvider } from './provider';
 import type {
   ConversationSummary,
-  NpcSessionProjection,
+  CharacterDialogueSessionProjection,
+  EmbodyCharacterSessionProjection,
   OpenTab,
   PromptMode,
   SessionMode,
@@ -246,8 +247,13 @@ export interface InvokePluginSlashCommandWebviewMessage {
   args?: string;
 }
 
-export interface ExitNpcSessionWebviewMessage {
-  type: 'exitNpcSession';
+export interface ExitCharacterDialogueSessionWebviewMessage {
+  type: 'exitCharacterDialogueSession';
+  sessionId: string;
+}
+
+export interface ExitEmbodyCharacterSessionWebviewMessage {
+  type: 'exitEmbodyCharacterSession';
   sessionId: string;
 }
 
@@ -296,7 +302,8 @@ export type WebviewToExtensionMessage =
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
-  | ExitNpcSessionWebviewMessage
+  | ExitCharacterDialogueSessionWebviewMessage
+  | ExitEmbodyCharacterSessionWebviewMessage
   | SsoLoginWebviewMessage
   | RevealContextSourceWebviewMessage
   | WebviewKeyboardFocusWebviewMessage
@@ -634,14 +641,27 @@ export interface SlashCommandResultMessage {
   data?: Record<string, unknown>;
 }
 
-export interface NpcSessionStartedMessage {
-  type: 'npcSessionStarted';
+export interface CharacterDialogueSessionStartedMessage {
+  type: 'characterDialogueSessionStarted';
   tab: OpenTab;
-  session: NpcSessionProjection;
+  session: CharacterDialogueSessionProjection;
 }
 
-export interface NpcSessionExitedMessage {
-  type: 'npcSessionExited';
+export interface CharacterDialogueSessionExitedMessage {
+  type: 'characterDialogueSessionExited';
+  sessionId: string;
+  artifact?: NpcTranscriptArtifact;
+  savedPath?: string;
+}
+
+export interface EmbodyCharacterSessionStartedMessage {
+  type: 'embodyCharacterSessionStarted';
+  tab: OpenTab;
+  session: EmbodyCharacterSessionProjection;
+}
+
+export interface EmbodyCharacterSessionExitedMessage {
+  type: 'embodyCharacterSessionExited';
   sessionId: string;
   artifact?: NpcTranscriptArtifact;
   savedPath?: string;
@@ -761,8 +781,10 @@ export type ExtensionToWebviewMessage =
   | SubAgentEventMessage
   | TabStateMessage
   | SlashCommandResultMessage
-  | NpcSessionStartedMessage
-  | NpcSessionExitedMessage
+  | CharacterDialogueSessionStartedMessage
+  | CharacterDialogueSessionExitedMessage
+  | EmbodyCharacterSessionStartedMessage
+  | EmbodyCharacterSessionExitedMessage
   | SkillsListMessage
   | SkillInjectionMessage
   | ContextTokenCountMessage
@@ -853,7 +875,8 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'downloadSvg',
   'invokeSlashCommand',
   'invokePluginSlashCommand',
-  'exitNpcSession',
+  'exitCharacterDialogueSession',
+  'exitEmbodyCharacterSession',
   'ssoLogin',
   'revealContextSource',
   'webviewKeyboardFocus',
@@ -1185,8 +1208,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeSlashCommandMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
-    case 'exitNpcSession':
-      return parseExitNpcSessionMessage(raw);
+    case 'exitCharacterDialogueSession':
+      return parseExitCharacterDialogueSessionMessage(raw);
+    case 'exitEmbodyCharacterSession':
+      return parseExitEmbodyCharacterSessionMessage(raw);
     case 'ssoLogin':
       return parseSsoLoginMessage(raw);
     case 'revealContextSource':
@@ -1952,12 +1977,20 @@ function parseInvokePluginSlashCommandMessage(
   };
 }
 
-function parseExitNpcSessionMessage(
+function parseExitCharacterDialogueSessionMessage(
   raw: Record<string, unknown>,
-): ExitNpcSessionWebviewMessage | null {
+): ExitCharacterDialogueSessionWebviewMessage | null {
   const sessionId = requiredString(raw.sessionId);
   if (!sessionId) return null;
-  return { type: 'exitNpcSession', sessionId };
+  return { type: 'exitCharacterDialogueSession', sessionId };
+}
+
+function parseExitEmbodyCharacterSessionMessage(
+  raw: Record<string, unknown>,
+): ExitEmbodyCharacterSessionWebviewMessage | null {
+  const sessionId = requiredString(raw.sessionId);
+  if (!sessionId) return null;
+  return { type: 'exitEmbodyCharacterSession', sessionId };
 }
 
 export function buildPluginSlashCommandInvocation(
@@ -1971,20 +2004,40 @@ export function buildPluginSlashCommandInvocation(
   };
 }
 
-export function buildNpcSessionStartedMessage(input: {
+export function buildCharacterDialogueSessionStartedMessage(input: {
   readonly tab: OpenTab;
-  readonly session: NpcSessionProjection;
-}): NpcSessionStartedMessage {
-  return { type: 'npcSessionStarted', tab: input.tab, session: input.session };
+  readonly session: CharacterDialogueSessionProjection;
+}): CharacterDialogueSessionStartedMessage {
+  return { type: 'characterDialogueSessionStarted', tab: input.tab, session: input.session };
 }
 
-export function buildNpcSessionExitedMessage(input: {
+export function buildCharacterDialogueSessionExitedMessage(input: {
   readonly sessionId: string;
   readonly artifact?: NpcTranscriptArtifact;
   readonly savedPath?: string;
-}): NpcSessionExitedMessage {
+}): CharacterDialogueSessionExitedMessage {
   return {
-    type: 'npcSessionExited',
+    type: 'characterDialogueSessionExited',
+    sessionId: input.sessionId,
+    ...(input.artifact ? { artifact: input.artifact } : {}),
+    ...(input.savedPath ? { savedPath: input.savedPath } : {}),
+  };
+}
+
+export function buildEmbodyCharacterSessionStartedMessage(input: {
+  readonly tab: OpenTab;
+  readonly session: EmbodyCharacterSessionProjection;
+}): EmbodyCharacterSessionStartedMessage {
+  return { type: 'embodyCharacterSessionStarted', tab: input.tab, session: input.session };
+}
+
+export function buildEmbodyCharacterSessionExitedMessage(input: {
+  readonly sessionId: string;
+  readonly artifact?: NpcTranscriptArtifact;
+  readonly savedPath?: string;
+}): EmbodyCharacterSessionExitedMessage {
+  return {
+    type: 'embodyCharacterSessionExited',
     sessionId: input.sessionId,
     ...(input.artifact ? { artifact: input.artifact } : {}),
     ...(input.savedPath ? { savedPath: input.savedPath } : {}),
@@ -2082,15 +2135,29 @@ function parseOpenTabs(value: unknown): OpenTab[] | null {
     const title = typeof item.title === 'string' ? item.title : null;
     const conversationId = requiredString(item.conversationId);
     if (!id || title === null || !conversationId) return null;
-    const kind = item.kind === 'npc-test' ? 'npc-test' : item.kind === 'chat' ? 'chat' : undefined;
+    const kind =
+      item.kind === 'character-dialogue'
+        ? 'character-dialogue'
+        : item.kind === 'embody-character'
+          ? 'embody-character'
+          : item.kind === 'chat'
+            ? 'chat'
+            : undefined;
     if (item.kind !== undefined && kind === undefined) return null;
-    const npcSession = item.npcSession;
+    const characterDialogueSession = item.characterDialogueSession;
+    const embodyCharacterSession = item.embodyCharacterSession;
     tabs.push({
       id,
       title,
       conversationId,
       ...(kind ? { kind } : {}),
-      ...(kind === 'npc-test' && isNpcSessionProjection(npcSession) ? { npcSession } : {}),
+      ...(kind === 'character-dialogue' &&
+      isCharacterDialogueSessionProjection(characterDialogueSession)
+        ? { characterDialogueSession }
+        : {}),
+      ...(kind === 'embody-character' && isEmbodyCharacterSessionProjection(embodyCharacterSession)
+        ? { embodyCharacterSession }
+        : {}),
     });
   }
   return tabs;
@@ -2144,7 +2211,9 @@ function isDragMediaType(value: unknown): value is DragStartWebviewMessage['asse
   return typeof value === 'string' && includesString(DRAG_MEDIA_TYPES, value);
 }
 
-function isNpcSessionProjection(value: unknown): value is NpcSessionProjection {
+function isCharacterDialogueSessionProjection(
+  value: unknown,
+): value is CharacterDialogueSessionProjection {
   const record = isRecord(value) ? value : null;
   if (!record) return false;
   return (
@@ -2156,6 +2225,27 @@ function isNpcSessionProjection(value: unknown): value is NpcSessionProjection {
     isNonEmptyString(record.summary) &&
     isNonEmptyString(record.startedAt) &&
     (record.projectRoot === undefined || isNonEmptyString(record.projectRoot)) &&
+    (record.status === 'active' || record.status === 'exited')
+  );
+}
+
+function isEmbodyCharacterSessionProjection(
+  value: unknown,
+): value is EmbodyCharacterSessionProjection {
+  const record = isRecord(value) ? value : null;
+  if (!record) return false;
+  return (
+    isNonEmptyString(record.sessionId) &&
+    isNonEmptyString(record.entityId) &&
+    isNonEmptyString(record.displayName) &&
+    isRecord(record.profile) &&
+    (record.source === undefined || isNonEmptyString(record.source)) &&
+    (record.projectRoot === undefined || isNonEmptyString(record.projectRoot)) &&
+    Array.isArray(record.scopeSummary) &&
+    record.scopeSummary.every((item) => typeof item === 'string') &&
+    (record.prompt === undefined || typeof record.prompt === 'string') &&
+    isNonEmptyString(record.summary) &&
+    isNonEmptyString(record.startedAt) &&
     (record.status === 'active' || record.status === 'exited')
   );
 }

@@ -59,7 +59,8 @@ import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
 import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
-import { NpcTestBenchController } from './npcTestBenchController';
+import { CharacterDialogueController } from './characterDialogueController';
+import { EmbodyCharacterController } from './embodyCharacterController';
 import {
   createAgentLocalResourceAccess,
   type AgentLocalResourceAccess,
@@ -78,6 +79,7 @@ import {
   type OpenTab,
   type TabState,
 } from '@neko-agent/types';
+import type { NpcAgentWorkflowRequest } from '@neko/shared';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 
 const logger = getLogger('ChatProvider');
@@ -124,7 +126,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
   private readonly _conversationMessageHandler: ConversationMessageHandler;
-  private readonly _npcTestBench: NpcTestBenchController;
+  private readonly _characterDialogue: CharacterDialogueController;
+  private readonly _embodyCharacter: EmbodyCharacterController;
 
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
@@ -176,9 +179,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       this._localResourceAccess,
     );
 
-    // Load persisted tab state
-    this._loadTabState();
-
     this._taskDeliveryBridge = new TaskDeliveryBridge({
       projectionSource: this._dashboardWorkItems.projectionSource,
       cursorStorage: new StateTaskDeliveryCursorStorage(
@@ -204,7 +204,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
-    this._npcTestBench = new NpcTestBenchController({
+    this._characterDialogue = new CharacterDialogueController({
       getWebview: () => this._view?.webview,
       getProjectRoot: () => getCurrentWorkspaceRoot(),
       getPlatform: () => this._platform,
@@ -214,6 +214,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
       sendTabState: () => this._sendTabState(),
     });
+    this._embodyCharacter = new EmbodyCharacterController({
+      getWebview: () => this._view?.webview,
+      getProjectRoot: () => getCurrentWorkspaceRoot(),
+      getPlatform: () => this._platform,
+      getSelectedChatModel: () => this._getSelectedChatModelRef(),
+      getTabState: () => this._tabState,
+      updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
+      sendTabState: () => this._sendTabState(),
+    });
+
+    // Load persisted tab state after role-session controllers exist because
+    // restore filtering checks whether persisted role-session tabs are live.
+    this._loadTabState();
+
     this._context.subscriptions.push(
       this._dashboardWorkItems,
       vscode.commands.registerCommand(
@@ -229,7 +243,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       taskHandler: this._taskHandler,
       contextHandler: this._contextHandler,
       planModeHandler: this._planModeHandler,
-      npcTestBench: this._npcTestBench,
+      characterDialogue: this._characterDialogue,
       sendConversationList: () => this._conversationMessageHandler.sendConversationList(),
       sendActiveConversation: () => this._conversationMessageHandler.sendActiveConversation(),
     });
@@ -578,7 +592,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         handleChatWebviewMessage(message, {
           webview,
           messages: this._messages,
-          npcTestBench: this._npcTestBench,
+          characterDialogue: this._characterDialogue,
+          embodyCharacter: this._embodyCharacter,
           taskHandler: this._taskHandler,
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
@@ -666,7 +681,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     // activeConversationId is null, locking the input area into the
     // "switching" state forever.
     const liveTabs = restored.openTabs.filter((tab) =>
-      Boolean(this._conversations.get(tab.conversationId)),
+      tab.kind === 'character-dialogue'
+        ? this._characterDialogue.hasSession(tab.conversationId)
+        : tab.kind === 'embody-character'
+          ? this._embodyCharacter.hasSession(tab.conversationId)
+          : Boolean(this._conversations.get(tab.conversationId)),
     );
     const liveActiveTabId =
       restored.activeTabId && liveTabs.some((tab) => tab.id === restored.activeTabId)
@@ -687,7 +706,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       { tabState: this._tabState },
       {
         hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
-        hasNpcSession: (sessionId) => this._npcTestBench.hasSession(sessionId),
+        hasCharacterDialogueSession: (sessionId) => this._characterDialogue.hasSession(sessionId),
+        hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
       },
@@ -752,7 +772,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       { openTabs, activeTabId },
       {
         hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
-        hasNpcSession: (sessionId) => this._npcTestBench.hasSession(sessionId),
+        hasCharacterDialogueSession: (sessionId) => this._characterDialogue.hasSession(sessionId),
+        hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
         onConversationSwitched: () => this._syncCanvasAmbientScopeFromActiveConversation(),
@@ -762,25 +783,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._saveTabState();
   }
 
-  public async startNpcTestBench(
+  public async startCharacterDialogue(
     request: import('@neko/shared').NpcTestBenchLaunchRequest,
-  ): Promise<import('./npcTestBenchController').NpcSessionLaunchResult | null> {
+  ): Promise<import('./characterDialogueController').CharacterDialogueLaunchResult | null> {
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
-    return this._npcTestBench.launch(request);
+    return this._characterDialogue.launch(request);
   }
 
-  public async startNpcTestBenchFromSlash(args?: string): Promise<void> {
+  public async startCharacterDialogueFromSlash(args?: string): Promise<void> {
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
-    await this._npcTestBench.launchFromSlash({
+    await this._characterDialogue.launchFromSlash({
       args,
       conversationId: this._conversations.getActiveId() ?? undefined,
     });
   }
 
-  public exitNpcTestBench(
+  public exitCharacterDialogue(
     sessionId?: string,
-  ): Promise<import('./npcTestBenchController').NpcSessionExitResult | null> {
-    return sessionId ? this._npcTestBench.exit(sessionId) : this._npcTestBench.exitActive();
+  ): Promise<import('./characterDialogueController').CharacterDialogueExitResult | null> {
+    return sessionId
+      ? this._characterDialogue.exit(sessionId)
+      : this._characterDialogue.exitActive();
+  }
+
+  public async startEmbodyCharacter(request: NpcAgentWorkflowRequest): Promise<{
+    readonly ok: true;
+    readonly sessionId: string;
+  }> {
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+    const result = await this._embodyCharacter.launch(request);
+    return { ok: true, sessionId: result?.sessionId ?? '' };
   }
 
   private _getSelectedChatModelRef(): import('@neko-agent/types').ModelRef<'llm'> | undefined {
@@ -826,7 +858,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   dispose(): void {
     this._disposeWebviewBindings();
     this._messages?.dispose();
-    this._npcTestBench.dispose();
+    this._characterDialogue.dispose();
+    this._embodyCharacter.dispose();
     this._conversations.dispose();
     this._localResourceAccess.dispose();
     this._configBridge?.dispose();

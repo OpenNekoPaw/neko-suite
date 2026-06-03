@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { buildAgentPromptCommandMessage } from '@neko/agent/runtime';
 import {
-  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-  NEKO_AGENT_TEST_NPC_COMMAND,
-  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
 } from '@neko/shared';
 import { registerAgentCoreCommands } from '../agentCoreCommands';
 
@@ -27,7 +26,8 @@ describe('agentCoreCommands bridge', () => {
     const chatViewProvider = {
       sendMessageToAssistant: vi.fn(),
       sendContextPayload: vi.fn(),
-      startNpcTestBench: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn(),
       dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
       setPluginCommandsGetter: vi.fn(),
       sendPluginSlashCommands: vi.fn(),
@@ -55,12 +55,13 @@ describe('agentCoreCommands bridge', () => {
     );
   });
 
-  it('registers the NPC test command through the Agent-owned launch path', async () => {
+  it('registers the Character Dialogue command through the Agent-owned launch path', async () => {
     const context = { subscriptions: [] as Array<{ dispose(): void }> };
     const chatViewProvider = {
       sendMessageToAssistant: vi.fn(),
       sendContextPayload: vi.fn(),
-      startNpcTestBench: vi.fn().mockResolvedValue({ sessionId: 'npc-session-1' }),
+      startCharacterDialogue: vi.fn().mockResolvedValue({ sessionId: 'npc-session-1' }),
+      startEmbodyCharacter: vi.fn(),
       dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
       setPluginCommandsGetter: vi.fn(),
       sendPluginSlashCommands: vi.fn(),
@@ -71,7 +72,7 @@ describe('agentCoreCommands bridge', () => {
 
     const registration = vi
       .mocked(vscode.commands.registerCommand)
-      .mock.calls.find(([command]) => command === NEKO_AGENT_TEST_NPC_COMMAND);
+      .mock.calls.find(([command]) => command === NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND);
     const callback = registration?.[1];
     expect(callback).toBeDefined();
 
@@ -82,15 +83,16 @@ describe('agentCoreCommands bridge', () => {
     await callback?.(request);
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.aiAssistant.focus');
-    expect(chatViewProvider.startNpcTestBench).toHaveBeenCalledWith(request);
+    expect(chatViewProvider.startCharacterDialogue).toHaveBeenCalledWith(request);
   });
 
-  it('rejects invalid NPC launch command payloads', async () => {
+  it('rejects invalid Character Dialogue launch command payloads', async () => {
     const context = { subscriptions: [] as Array<{ dispose(): void }> };
     const chatViewProvider = {
       sendMessageToAssistant: vi.fn(),
       sendContextPayload: vi.fn(),
-      startNpcTestBench: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn(),
       dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
       setPluginCommandsGetter: vi.fn(),
       sendPluginSlashCommands: vi.fn(),
@@ -104,21 +106,23 @@ describe('agentCoreCommands bridge', () => {
 
     const callback = vi
       .mocked(vscode.commands.registerCommand)
-      .mock.calls.find(([command]) => command === NEKO_AGENT_TEST_NPC_COMMAND)?.[1];
+      .mock.calls.find(([command]) => command === NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND)?.[1];
     await callback?.({ source: 'dashboard' });
 
-    expect(chatViewProvider.startNpcTestBench).not.toHaveBeenCalled();
-    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-      '无法启动 NPC 测试：启动请求无效。',
-    );
+    expect(chatViewProvider.startCharacterDialogue).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('无法启动角色对话：启动请求无效。');
   });
 
-  it('registers NPC Agent workflow commands as ordinary Agent messages', async () => {
+  it('registers Embody Character as an Agent-owned context switch', async () => {
     const context = { subscriptions: [] as Array<{ dispose(): void }> };
     const chatViewProvider = {
       sendMessageToAssistant: vi.fn(),
       sendContextPayload: vi.fn(),
-      startNpcTestBench: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn().mockResolvedValue({
+        ok: true,
+        conversationId: 'conv-embody-xiaoju',
+      }),
       dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
       setPluginCommandsGetter: vi.fn(),
       sendPluginSlashCommands: vi.fn(),
@@ -130,64 +134,66 @@ describe('agentCoreCommands bridge', () => {
       { get: vi.fn() } as never,
     );
 
-    const workflows = [
-      {
-        command: NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-        workflow: 'character-perspective',
-        label: '角色视角',
-      },
-      {
-        command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
-        workflow: 'validate-character',
-        label: '验证角色',
-      },
-      {
-        command: NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-        workflow: 'improve-character',
-        label: '完善设定',
-      },
-    ] as const;
+    const callback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(
+        ([registeredCommand]) => registeredCommand === NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+      )?.[1];
+    expect(callback).toBeDefined();
 
-    for (const { command, workflow } of workflows) {
-      const callback = vi
-        .mocked(vscode.commands.registerCommand)
-        .mock.calls.find(([registeredCommand]) => registeredCommand === command)?.[1];
-      expect(callback, command).toBeDefined();
-
-      await callback?.({
-        workflow,
-        entityRef: {
-          entityId: 'char-xiaoju',
-          entityKind: 'character',
-          source: 'neko-entity',
-          projectRoot: '/workspace',
-        },
-        dashboardRef: {
-          source: 'neko-entity',
-          sourceEntityId: 'entity:char-xiaoju',
-          entityId: 'char-xiaoju',
-          entityKind: 'character',
-        },
-        scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
-        prompt: 'Check future knowledge leakage.',
-        source: 'dashboard',
+    await callback?.({
+      workflow: 'embody-character',
+      entityRef: {
+        entityId: 'char-xiaoju',
+        entityKind: 'character',
+        source: 'neko-entity',
         projectRoot: '/workspace',
-      });
-    }
+      },
+      dashboardRef: {
+        source: 'neko-entity',
+        sourceEntityId: 'entity:char-xiaoju',
+        entityId: 'char-xiaoju',
+        entityKind: 'character',
+      },
+      scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
+      prompt: 'Check future knowledge leakage.',
+      source: 'dashboard',
+      projectRoot: '/workspace',
+    });
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.aiAssistant.focus');
-    expect(chatViewProvider.startNpcTestBench).not.toHaveBeenCalled();
-    for (const { label } of workflows) {
-      expect(chatViewProvider.sendMessageToAssistant).toHaveBeenCalledWith(
-        expect.stringContaining(`请执行 NPC 角色工作流：${label}`),
-        true,
-      );
-    }
-    for (const [message] of chatViewProvider.sendMessageToAssistant.mock.calls) {
-      expect(message).toContain('这是普通 Agent 分析工作流');
-      expect(message).toContain('不要启动或模拟 /as 角色扮演会话');
-      expect(message).toContain('可以读取项目内实体、剧本出现位置和关系上下文来形成证据');
-      expect(message).toContain('不要自动修改角色设定');
-    }
+    expect(chatViewProvider.startCharacterDialogue).not.toHaveBeenCalled();
+    expect(chatViewProvider.sendMessageToAssistant).not.toHaveBeenCalled();
+    expect(chatViewProvider.startEmbodyCharacter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow: 'embody-character',
+        entityRef: expect.objectContaining({ entityId: 'char-xiaoju' }),
+      }),
+    );
+    expect(
+      vi
+        .mocked(vscode.commands.registerCommand)
+        .mock.calls.some(
+          ([registeredCommand]) => registeredCommand === 'neko.agent.validateCharacter',
+        ),
+    ).toBe(false);
+    expect(
+      vi
+        .mocked(vscode.commands.registerCommand)
+        .mock.calls.some(
+          ([registeredCommand]) => registeredCommand === 'neko.agent.improveCharacter',
+        ),
+    ).toBe(false);
+  });
+
+  it('declares activation events for character role commands before the Agent panel opens', () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL('../../../../../package.json', import.meta.url), 'utf8'),
+    ) as { readonly activationEvents?: readonly string[] };
+
+    expect(manifest.activationEvents).toContain(
+      `onCommand:${NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND}`,
+    );
+    expect(manifest.activationEvents).toContain(`onCommand:${NEKO_AGENT_EMBODY_CHARACTER_COMMAND}`);
   });
 });

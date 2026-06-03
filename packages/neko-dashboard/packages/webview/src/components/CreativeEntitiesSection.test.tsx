@@ -119,10 +119,8 @@ const detail: DashboardCreativeEntityDetail = {
   ],
   freshness: 'fresh',
   actions: [
-    { id: 'test-npc', label: 'Test NPC' },
-    { id: 'character-perspective', label: 'Character perspective' },
-    { id: 'validate-character', label: 'Validate character' },
-    { id: 'improve-character', label: 'Improve character' },
+    { id: 'character-dialogue', label: 'Character Dialogue' },
+    { id: 'embody-character', label: 'Embody Character' },
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'review-drafts', label: 'Review drafts', disabled: false },
     { id: 'confirm-candidate', label: 'Confirm candidate', disabled: true },
@@ -160,12 +158,14 @@ describe('CreativeEntitiesSection', () => {
     expect(html).toContain('刷新');
     expect(html).toContain('小橘');
     expect(html).toContain('Live2D');
-    expect(html).toContain('测试 NPC');
-    expect(html).toContain('角色视角');
-    expect(html).toContain('验证角色');
-    expect(html).toContain('完善设定');
+    expect(html).toContain('角色对话');
+    expect(html).toContain('代入角色');
     expect(html).toContain('绑定素材');
     expect(html).not.toContain('Bind asset');
+    expect(html).not.toContain('测试 NPC');
+    expect(html).not.toContain('角色视角');
+    expect(html).not.toContain('验证角色');
+    expect(html).not.toContain('完善设定');
     expect(html).toContain('project://assets/xiaoju');
     expect(html).toContain('Asset tags may be stale');
     expect(html).toContain('disabled=""');
@@ -202,7 +202,7 @@ describe('CreativeEntitiesSection', () => {
     expect(html).not.toContain('.neko/.cache');
   });
 
-  it('delegates Dashboard-first NPC operations through shared action requests', () => {
+  it('delegates Dashboard character role operations through shared action requests', () => {
     const onAction = vi.fn();
     const { host } = renderInteractive(
       <CreativeEntitiesSection
@@ -218,7 +218,7 @@ describe('CreativeEntitiesSection', () => {
       />,
     );
 
-    for (const label of ['测试 NPC', '角色视角', '验证角色', '完善设定']) {
+    for (const label of ['角色对话', '代入角色']) {
       const button = findButtonByText(host, label);
       expect(button, label).not.toBeNull();
       act(() => {
@@ -226,26 +226,16 @@ describe('CreativeEntitiesSection', () => {
       });
     }
 
-    expect(onAction).toHaveBeenCalledTimes(4);
+    expect(onAction).toHaveBeenCalledTimes(2);
     expect(onAction).toHaveBeenNthCalledWith(1, {
       source: row.ref.source,
       ref: row.ref,
-      action: 'test-npc',
+      action: 'character-dialogue',
     });
     expect(onAction).toHaveBeenNthCalledWith(2, {
       source: row.ref.source,
       ref: row.ref,
-      action: 'character-perspective',
-    });
-    expect(onAction).toHaveBeenNthCalledWith(3, {
-      source: row.ref.source,
-      ref: row.ref,
-      action: 'validate-character',
-    });
-    expect(onAction).toHaveBeenNthCalledWith(4, {
-      source: row.ref.source,
-      ref: row.ref,
-      action: 'improve-character',
+      action: 'embody-character',
     });
   });
 

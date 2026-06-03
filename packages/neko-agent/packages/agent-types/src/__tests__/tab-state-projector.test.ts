@@ -36,6 +36,69 @@ describe('tab state projector', () => {
     expect(projected.openTabs[0]).not.toBe(tab);
   });
 
+  it('preserves Embody Character session metadata', () => {
+    const embodyTab = {
+      id: 'tab-embody',
+      title: 'Embody: 小橘',
+      conversationId: 'conv-embody',
+      kind: 'embody-character' as const,
+      embodyCharacterSession: {
+        sessionId: 'embody-neko-story-char-xiaoju',
+        entityId: 'char-xiaoju',
+        displayName: '小橘',
+        profile: {
+          entityRef: {
+            entityId: 'char-xiaoju',
+            entityKind: 'character' as const,
+            projectRoot: '/workspace',
+            source: 'neko-story',
+          },
+          displayName: '小橘',
+          aliases: [],
+          facts: [],
+          sparsity: 'thin' as const,
+        },
+        source: 'neko-story',
+        scopeSummary: ['project: current project'],
+        summary: 'User embodies 小橘.',
+        startedAt: '2026-06-02T00:00:00.000Z',
+        status: 'active' as const,
+      },
+    };
+
+    expect(
+      normalizeTabState({
+        openTabs: [embodyTab],
+        activeTabId: 'tab-embody',
+      }),
+    ).toEqual({
+      openTabs: [embodyTab],
+      activeTabId: 'tab-embody',
+    });
+  });
+
+  it('resolves active Embody Character sessions without ordinary conversation switching', () => {
+    const tabState = {
+      openTabs: [
+        {
+          id: 'tab-embody',
+          title: 'Embody: 小橘',
+          conversationId: 'embody-session-1',
+          kind: 'embody-character' as const,
+        },
+      ],
+      activeTabId: 'tab-embody',
+    };
+
+    expect(
+      resolveActiveTabConversationId({
+        tabState,
+        hasConversation: () => false,
+        hasEmbodyCharacterSession: (sessionId) => sessionId === 'embody-session-1',
+      }),
+    ).toBe('embody-session-1');
+  });
+
   it('resolves the active conversation only when the tab and conversation exist', () => {
     const tabState = {
       openTabs: [{ id: 'tab-1', title: 'Chat', conversationId: 'conv-1' }],

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import { NEKO_AGENT_TEST_NPC_COMMAND, NEKO_AGENT_VALIDATE_CHARACTER_COMMAND } from '@neko/shared';
+import {
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+} from '@neko/shared';
 import type {
   CreativeEntity,
   CreativeEntityRegistry,
@@ -110,7 +113,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
         missingRepresentationKinds: ['live2d'],
         visualDraftCount: 1,
         syncSuggestionCount: 4,
-        actions: expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
+        actions: expect.arrayContaining([expect.objectContaining({ id: 'character-dialogue' })]),
       }),
     );
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).not.toEqual(
@@ -123,14 +126,11 @@ describe('StoryDashboardCreativeEntitySource', () => {
         sourceKind: 'script',
         missingRepresentationKinds: ['portrait', 'reference'],
         actions: expect.arrayContaining([
-          expect.objectContaining({ id: 'test-npc' }),
-          expect.objectContaining({ id: 'validate-character' }),
+          expect.objectContaining({ id: 'character-dialogue' }),
+          expect.objectContaining({ id: 'embody-character' }),
         ]),
       }),
     );
-    expect(
-      candidateRow?.actions.find((action) => action.id === 'validate-character')?.disabled,
-    ).not.toBe(true);
 
     const detail = await source.getDetail({
       source: 'neko-story',
@@ -158,12 +158,14 @@ describe('StoryDashboardCreativeEntitySource', () => {
           expect.objectContaining({ targetRef: 'project://assets/xiaoju-portrait' }),
           expect.objectContaining({ targetRef: 'market://pack/xiaoju-ref', readonlyTarget: true }),
         ]),
-        actions: expect.arrayContaining([
-          expect.objectContaining({ id: 'character-perspective' }),
-          expect.objectContaining({ id: 'validate-character' }),
-          expect.objectContaining({ id: 'improve-character' }),
-        ]),
+        actions: expect.arrayContaining([expect.objectContaining({ id: 'embody-character' })]),
       }),
+    );
+    expect(detail?.actions).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'validate-character' }),
+        expect.objectContaining({ id: 'improve-character' }),
+      ]),
     );
     expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
 
@@ -181,7 +183,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
     });
   });
 
-  it('delegates Dashboard NPC Agent workflows to Agent-owned commands', async () => {
+  it('delegates Dashboard Embody Character workflows to Agent-owned commands', async () => {
     const executeCommand = vi.fn(async () => undefined);
     const source = createSource({
       executeCommand,
@@ -199,7 +201,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
       source.executeAction({
         source: 'neko-story',
         ref: detail?.ref,
-        action: 'validate-character',
+        action: 'embody-character',
         payload: {
           scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
           prompt: 'Check branching dialogue.',
@@ -209,14 +211,17 @@ describe('StoryDashboardCreativeEntitySource', () => {
       expect.objectContaining({
         ok: true,
         refresh: false,
-        npcWorkflow: { kind: 'delegated-command', command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND },
+        characterRoleWorkflow: {
+          kind: 'delegated-command',
+          command: NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+        },
       }),
     );
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
       expect.objectContaining({
-        workflow: 'validate-character',
+        workflow: 'embody-character',
         entityRef: {
           entityId: 'char_xiaoju',
           entityKind: 'character',
@@ -230,6 +235,11 @@ describe('StoryDashboardCreativeEntitySource', () => {
         projectRoot: workspaceRoot,
       }),
     );
+    expect(executeCommand).not.toHaveBeenCalledWith(
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+      expect.anything(),
+    );
+    expect(executeCommand).not.toHaveBeenCalledWith('neko.agent.testNpc', expect.anything());
 
     executeCommand.mockClear();
     const candidateRef = {
@@ -244,14 +254,14 @@ describe('StoryDashboardCreativeEntitySource', () => {
       source.executeAction({
         source: 'neko-story',
         ref: candidateRef,
-        action: 'validate-character',
+        action: 'embody-character',
       }),
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: candidateRef }));
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
       expect.objectContaining({
-        workflow: 'validate-character',
+        workflow: 'embody-character',
         entityRef: {
           entityId: '阿灰',
           entityKind: 'character',
@@ -263,9 +273,13 @@ describe('StoryDashboardCreativeEntitySource', () => {
         projectRoot: workspaceRoot,
       }),
     );
+    expect(executeCommand).not.toHaveBeenCalledWith(
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+      expect.anything(),
+    );
   });
 
-  it('delegates Dashboard NPC tests to the Agent-owned launch command', async () => {
+  it('delegates Dashboard Character Dialogue to the Agent-owned launch command', async () => {
     const executeCommand = vi.fn(async () => undefined);
     const source = createSource({
       executeCommand,
@@ -283,13 +297,13 @@ describe('StoryDashboardCreativeEntitySource', () => {
       source.executeAction({
         source: 'neko-story',
         ref: detail?.ref,
-        action: 'test-npc',
+        action: 'character-dialogue',
         payload: { mode: 'consult' },
       }),
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: detail?.ref }));
 
     expect(executeCommand).toHaveBeenCalledWith(
-      NEKO_AGENT_TEST_NPC_COMMAND,
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
       expect.objectContaining({
         entityRef: {
           entityId: 'char_xiaoju',
@@ -316,12 +330,12 @@ describe('StoryDashboardCreativeEntitySource', () => {
       source.executeAction({
         source: 'neko-story',
         ref: candidateRef,
-        action: 'test-npc',
+        action: 'character-dialogue',
       }),
     ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: candidateRef }));
 
     expect(executeCommand).toHaveBeenLastCalledWith(
-      NEKO_AGENT_TEST_NPC_COMMAND,
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
       expect.objectContaining({
         entityRef: expect.objectContaining({ entityId: '阿灰', entityKind: 'character' }),
         dashboardRef: candidateRef,

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { NpcProfileSource, NpcTranscriptArtifact } from '@neko/shared';
 import { NPC_TRANSCRIPT_ARTIFACT_VERSION } from '@neko/shared';
 import {
-  parseNpcEvaluationReportOutput,
-  projectNpcEvaluationPrompt,
-} from '../npc-evaluator-projector';
-import { projectNpcSystemPrompt } from '../npc-profile-projector';
+  parseCharacterRoleEvaluationReportOutput,
+  projectCharacterRoleEvaluationPrompt,
+} from '../character-role-evaluator-projector';
+import { projectCharacterDialogueSystemPrompt } from '../character-dialogue-profile-projector';
 
 const entityRef = {
   entityId: 'char_xiaoju',
@@ -56,9 +56,9 @@ const richProfile: NpcProfileSource = {
   ],
 };
 
-describe('NPC prompt projectors', () => {
+describe('character role prompt projectors', () => {
   it('renders roleplay mode with confirmed and suggested facts separated', () => {
-    const prompt = projectNpcSystemPrompt(richProfile, { mode: 'roleplay' });
+    const prompt = projectCharacterDialogueSystemPrompt(richProfile, { mode: 'roleplay' });
 
     expect(prompt).toContain('Roleplay mode');
     expect(prompt).toContain('## Confirmed Facts');
@@ -70,7 +70,7 @@ describe('NPC prompt projectors', () => {
   });
 
   it('renders consult mode as in-character advice without pretending uncertainty is confirmed', () => {
-    const prompt = projectNpcSystemPrompt(richProfile, { mode: 'consult' });
+    const prompt = projectCharacterDialogueSystemPrompt(richProfile, { mode: 'consult' });
 
     expect(prompt).toContain('Consult mode');
     expect(prompt).toContain(
@@ -79,7 +79,7 @@ describe('NPC prompt projectors', () => {
   });
 
   it('renders thin profiles with explicit missing context boundaries', () => {
-    const prompt = projectNpcSystemPrompt(
+    const prompt = projectCharacterDialogueSystemPrompt(
       {
         entityRef,
         displayName: '小橘',
@@ -120,7 +120,7 @@ describe('NPC prompt projectors', () => {
       ],
     };
 
-    const prompt = projectNpcEvaluationPrompt(artifact);
+    const prompt = projectCharacterRoleEvaluationPrompt(artifact);
 
     expect(prompt.systemPrompt).toContain('Return JSON only');
     expect(prompt.systemPrompt).toContain('require explicit user confirmation');
@@ -140,14 +140,14 @@ describe('NPC prompt projectors', () => {
       suggestions: [],
     };
 
-    expect(parseNpcEvaluationReportOutput(`\`\`\`json\n${JSON.stringify(report)}\n\`\`\``)).toEqual(
-      {
-        status: 'parsed',
-        report,
-      },
-    );
     expect(
-      parseNpcEvaluationReportOutput(JSON.stringify({ ...report, suggestions: [{}] })),
+      parseCharacterRoleEvaluationReportOutput(`\`\`\`json\n${JSON.stringify(report)}\n\`\`\``),
+    ).toEqual({
+      status: 'parsed',
+      report,
+    });
+    expect(
+      parseCharacterRoleEvaluationReportOutput(JSON.stringify({ ...report, suggestions: [{}] })),
     ).toEqual({
       status: 'invalid',
       reason: 'Evaluator JSON did not match NpcEvaluationReport.',

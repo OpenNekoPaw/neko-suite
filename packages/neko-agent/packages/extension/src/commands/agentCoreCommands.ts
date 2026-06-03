@@ -2,10 +2,8 @@ import * as vscode from 'vscode';
 import {
   isNpcAgentWorkflowRequest,
   isNpcTestBenchLaunchRequest,
-  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-  NEKO_AGENT_TEST_NPC_COMMAND,
-  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+  NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
   type NpcAgentWorkflowRequest,
 } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
@@ -80,33 +78,24 @@ export function registerAgentCoreCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand(NEKO_AGENT_TEST_NPC_COMMAND, async (request: unknown) => {
-      await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
-      if (!isNpcTestBenchLaunchRequest(request)) {
-        await vscode.window.showErrorMessage('无法启动 NPC 测试：启动请求无效。');
-        return null;
-      }
-      return chatViewProvider.startNpcTestBench(request);
-    }),
+    vscode.commands.registerCommand(
+      NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
+      async (request: unknown) => {
+        await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+        if (!isNpcTestBenchLaunchRequest(request)) {
+          await vscode.window.showErrorMessage('无法启动角色对话：启动请求无效。');
+          return null;
+        }
+        return chatViewProvider.startCharacterDialogue(request);
+      },
+    ),
   );
 
-  registerNpcAgentWorkflowCommand(
+  registerCharacterRoleWorkflowCommand(
     context,
     chatViewProvider,
-    NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
-    'character-perspective',
-  );
-  registerNpcAgentWorkflowCommand(
-    context,
-    chatViewProvider,
-    NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
-    'validate-character',
-  );
-  registerNpcAgentWorkflowCommand(
-    context,
-    chatViewProvider,
-    NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
-    'improve-character',
+    NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+    'embody-character',
   );
 
   context.subscriptions.push(
@@ -202,7 +191,7 @@ function registerScriptCommands(
   );
 }
 
-function registerNpcAgentWorkflowCommand(
+function registerCharacterRoleWorkflowCommand(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
   command: string,
@@ -212,50 +201,13 @@ function registerNpcAgentWorkflowCommand(
     vscode.commands.registerCommand(command, async (request: unknown) => {
       await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
       if (!isNpcAgentWorkflowRequest(request) || request.workflow !== workflow) {
-        await vscode.window.showErrorMessage('无法启动 NPC Agent 工作流：请求无效。');
+        await vscode.window.showErrorMessage('无法启动角色工作流：请求无效。');
         return null;
       }
-      await chatViewProvider.sendMessageToAssistant(buildNpcAgentWorkflowMessage(request), true);
+      await chatViewProvider.startEmbodyCharacter(request);
       return { ok: true, workflow: request.workflow };
     }),
   );
-}
-
-function buildNpcAgentWorkflowMessage(request: NpcAgentWorkflowRequest): string {
-  const name = request.dashboardRef?.entityId ?? request.entityRef.entityId;
-  const scopeLines = request.scopes?.length
-    ? request.scopes
-        .map((scope) => `- ${scope.kind}: ${scope.label ? `${scope.label} ` : ''}${scope.ref}`)
-        .join('\n')
-    : '- project: current project';
-  const userPrompt = request.prompt?.trim();
-  const base = [
-    `请执行 NPC 角色工作流：${formatNpcAgentWorkflowName(request.workflow)}。`,
-    `角色实体：${name}`,
-    `实体来源：${request.entityRef.source ?? 'unknown'}`,
-    `作用域：\n${scopeLines}`,
-    '',
-    '要求：',
-    '- 这是普通 Agent 分析工作流，不要启动或模拟 /as 角色扮演会话。',
-    '- 可以读取项目内实体、剧本出现位置和关系上下文来形成证据。',
-    '- 输出结构化结论，区分 confirmed、inferred、unknown、out-of-scope。',
-    '- 不要自动修改角色设定；如需改动，只给出待用户确认的建议。',
-  ];
-  if (userPrompt) {
-    base.push('', `用户补充要求：${userPrompt}`);
-  }
-  return base.join('\n');
-}
-
-function formatNpcAgentWorkflowName(workflow: NpcAgentWorkflowRequest['workflow']): string {
-  switch (workflow) {
-    case 'character-perspective':
-      return '角色视角';
-    case 'validate-character':
-      return '验证角色';
-    case 'improve-character':
-      return '完善设定';
-  }
 }
 
 function registerServiceCommands(

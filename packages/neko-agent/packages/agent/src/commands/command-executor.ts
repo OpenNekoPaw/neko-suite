@@ -6,7 +6,7 @@
 
 import type { BuiltinCommandName, CommandContext, CommandResult, CommandHandler } from './types';
 import { resolveCommandName } from './types';
-import { getBuiltinCommand, isBuiltinCommand } from './builtin-commands';
+import { isBuiltinCommand } from './builtin-commands';
 import {
   coerceSlashCommandSkills,
   resolveSlashCommandCatalogEntry,
@@ -52,7 +52,7 @@ const COMMAND_HANDLERS: Record<BuiltinCommandName, CommandHandler> = {
   exit: handleExit,
   // Session
   as: handleHostOnlyCommand,
-  'exit-role': handleHostOnlyCommand,
+  'exit-as': handleHostOnlyCommand,
   new: handleNew,
   resume: handleResume,
   // Configuration

@@ -14,6 +14,71 @@ describe('chatProvider', () => {
     vi.clearAllMocks();
   });
 
+  it('restores persisted character role tabs only after role controllers are initialized', () => {
+    const context = createMockContext({
+      'neko.tabState': {
+        openTabs: [
+          {
+            id: 'tab-character-dialogue',
+            title: 'Character Dialogue: 小橘',
+            conversationId: 'character-dialogue-session-1',
+            kind: 'character-dialogue',
+            characterDialogueSession: {
+              sessionId: 'character-dialogue-session-1',
+              entityId: 'char-xiaoju',
+              displayName: '小橘',
+              mode: 'roleplay',
+              profile: {
+                entityRef: { entityId: 'char-xiaoju', entityKind: 'character' },
+                displayName: '小橘',
+                aliases: [],
+                facts: [],
+                sparsity: 'thin',
+              },
+              summary: 'thin profile',
+              startedAt: '2026-06-02T00:00:00.000Z',
+              status: 'active',
+            },
+          },
+          {
+            id: 'tab-embody-character',
+            title: 'Embody: 小橘',
+            conversationId: 'embody-character-session-1',
+            kind: 'embody-character',
+            embodyCharacterSession: {
+              sessionId: 'embody-character-session-1',
+              entityId: 'char-xiaoju',
+              displayName: '小橘',
+              profile: {
+                entityRef: { entityId: 'char-xiaoju', entityKind: 'character' },
+                displayName: '小橘',
+                aliases: [],
+                facts: [],
+                sparsity: 'thin',
+              },
+              scopeSummary: ['project: current project'],
+              summary: 'thin profile',
+              startedAt: '2026-06-02T00:00:00.000Z',
+              status: 'active',
+            },
+          },
+        ],
+        activeTabId: 'tab-embody-character',
+      },
+    });
+
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    expect(context.workspaceState.update).toHaveBeenCalledWith('neko.tabState', {
+      openTabs: [],
+      activeTabId: null,
+    });
+
+    provider.dispose();
+  });
+
   it('configures unified chat roots for extension assets, caches, workspace, and media libraries', async () => {
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
       id: 'neko.neko-assets',
@@ -372,8 +437,10 @@ describe('chatProvider', () => {
   });
 });
 
-function createMockContext(): vscode.ExtensionContext {
-  const store = new Map<string, unknown>();
+function createMockContext(
+  initialWorkspaceState: Readonly<Record<string, unknown>> = {},
+): vscode.ExtensionContext {
+  const store = new Map<string, unknown>(Object.entries(initialWorkspaceState));
   const memento = {
     get: vi.fn(
       <T>(key: string, defaultValue?: T): T | undefined => (store.get(key) as T) ?? defaultValue,

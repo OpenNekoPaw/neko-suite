@@ -5,23 +5,22 @@ import {
   type CreativeEntityRef,
 } from './creative-entity-asset-composition';
 import {
-  isDashboardCharacterNpcWorkflowAction,
-  isDashboardCharacterNpcWorkflowScopeRef,
+  isDashboardCharacterRoleWorkflowAction,
+  isDashboardCharacterRoleWorkflowScopeRef,
   isDashboardCreativeEntityRef,
-  type DashboardCharacterNpcWorkflowAction,
-  type DashboardCharacterNpcWorkflowScopeRef,
+  type DashboardCharacterRoleWorkflowAction,
+  type DashboardCharacterRoleWorkflowScopeRef,
   type DashboardCreativeEntityRef,
 } from './dashboard-creative-entity';
 
 export const NPC_TEST_BENCH_AS_SLASH_COMMAND_NAME = 'as';
 export const NPC_TEST_BENCH_AS_SLASH_COMMAND = '/as';
-export const NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND_NAME = 'exit-role';
-export const NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND = '/exit-role';
-export const NEKO_AGENT_TEST_NPC_COMMAND = 'neko.agent.testNpc';
-export const NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND = 'neko.agent.characterPerspective';
-export const NEKO_AGENT_VALIDATE_CHARACTER_COMMAND = 'neko.agent.validateCharacter';
-export const NEKO_AGENT_IMPROVE_CHARACTER_COMMAND = 'neko.agent.improveCharacter';
+export const NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND_NAME = 'exit-as';
+export const NPC_TEST_BENCH_EXIT_AS_SLASH_COMMAND = '/exit-as';
+export const NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND = 'neko.agent.characterDialogue';
+export const NEKO_AGENT_EMBODY_CHARACTER_COMMAND = 'neko.agent.embodyCharacter';
 export const NPC_TRANSCRIPT_ARTIFACT_VERSION = 1;
+export const CHARACTER_ROLE_TEST_ARTIFACT_DIR = '.neko/character-tests';
 
 export type NpcTestMode = 'roleplay' | 'consult';
 export type NpcProfileSparsity = 'thin' | 'partial' | 'rich';
@@ -127,10 +126,10 @@ export interface NpcTestBenchLaunchRequest {
 }
 
 export interface NpcAgentWorkflowRequest {
-  readonly workflow: DashboardCharacterNpcWorkflowAction;
+  readonly workflow: DashboardCharacterRoleWorkflowAction;
   readonly entityRef: CreativeEntityRef;
   readonly dashboardRef?: DashboardCreativeEntityRef;
-  readonly scopes?: readonly DashboardCharacterNpcWorkflowScopeRef[];
+  readonly scopes?: readonly DashboardCharacterRoleWorkflowScopeRef[];
   readonly prompt?: string;
   readonly source?: NpcAgentWorkflowLaunchSource;
   readonly projectRoot?: string;
@@ -438,12 +437,12 @@ export function isNpcTestBenchLaunchRequest(value: unknown): value is NpcTestBen
 export function isNpcAgentWorkflowRequest(value: unknown): value is NpcAgentWorkflowRequest {
   if (!isRecord(value)) return false;
   return (
-    isDashboardCharacterNpcWorkflowAction(value['workflow']) &&
+    isDashboardCharacterRoleWorkflowAction(value['workflow']) &&
     isCreativeEntityRef(value['entityRef']) &&
     (value['dashboardRef'] === undefined || isDashboardCreativeEntityRef(value['dashboardRef'])) &&
     (value['scopes'] === undefined ||
       (Array.isArray(value['scopes']) &&
-        value['scopes'].every(isDashboardCharacterNpcWorkflowScopeRef))) &&
+        value['scopes'].every(isDashboardCharacterRoleWorkflowScopeRef))) &&
     (value['prompt'] === undefined || typeof value['prompt'] === 'string') &&
     (value['source'] === undefined || isNpcAgentWorkflowLaunchSource(value['source'])) &&
     (value['projectRoot'] === undefined || isNonEmptyString(value['projectRoot']))
