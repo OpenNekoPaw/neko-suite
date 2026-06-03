@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import { createTool, TOOL_NAMES_SYSTEM, type Tool, type ToolResult } from '@neko/shared';
 import { probeImageMetadata, type ImageMetadata } from '@neko/platform/document';
+import type { ChatMessage, ServiceResponse } from '@neko/platform';
 import {
   DEFAULT_VISION_PREPROCESS_POLICY,
   planVisionImagePreprocess,
@@ -19,6 +20,8 @@ export const MIN_READ_IMAGE_LONG_EDGE = 256;
 export const MAX_READ_IMAGE_LONG_EDGE = 4096;
 export const MIN_READ_IMAGE_JPEG_QUALITY = 40;
 export const MAX_READ_IMAGE_JPEG_QUALITY = 95;
+export const READ_IMAGE_VISION_SYSTEM_PROMPT =
+  'You are a stateless vision-analysis tool. Analyze only the image inputs and the explicit user instruction in this tool call. Ignore prior chat history, active skills, story/script/character workflows, canvas selections, and project context unless they are provided in this tool call. Do not invent unreadable text.';
 
 export interface ReadImageToolDeps {
   readonly platform?: Platform;
@@ -86,7 +89,8 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
     name: TOOL_NAMES_SYSTEM.READ_IMAGE,
     description:
       'Read local image metadata, or analyze selected images with the current vision-capable chat model. ' +
-      'Use this for image files from documents, media libraries, generated assets, screenshots, and attachments. ' +
+      'Use this for image files from ReadDocument imagePaths, media libraries, generated assets, screenshots, and attachments. ' +
+      'When ReadDocument already returned image_paths/imagePaths, use this tool directly instead of ReadDocumentImage. ' +
       'Default mode="metadata" returns dimensions/MIME/size only; mode="vision" performs visual analysis/OCR/panel description.',
     category: 'analysis',
     isReadOnly: true,
@@ -204,7 +208,11 @@ export async function executeReadImage(
         loaded.map((image) => prepareVisionImage(deps, image, preprocessOptions)),
       );
 
-      const response = await service.chat([
+      const response = await readVisionWithService(service, [
+        {
+          role: 'system',
+          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+        },
         {
           role: 'user',
           content: [
@@ -457,6 +465,31 @@ function formatVisionImageLabel(image: LoadedImage, index: number): string {
 function toDataUrl(mimeType: string | undefined, filePath: string, bytes: Uint8Array): string {
   const mime = mimeType ?? resolveVisionImageAttachmentMediaType(filePath);
   return `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
+}
+
+async function readVisionWithService(
+  service: {
+    readonly chat?: (messages: ChatMessage[]) => Promise<ServiceResponse>;
+    readonly chatStream?: (messages: ChatMessage[]) => {
+      readonly stream: AsyncIterable<unknown>;
+      readonly response: Promise<ServiceResponse>;
+    };
+  },
+  messages: ChatMessage[],
+): Promise<ServiceResponse> {
+  if (service.chatStream) {
+    const streamResult = service.chatStream(messages);
+    for await (const _chunk of streamResult.stream) {
+      // Drain the stream so the service collector can resolve the final response.
+    }
+    return streamResult.response;
+  }
+
+  if (service.chat) {
+    return service.chat(messages);
+  }
+
+  throw new Error('ReadImage vision mode requires a chat-capable AI platform service.');
 }
 
 function normalizeServiceResponseText(content: unknown): string {

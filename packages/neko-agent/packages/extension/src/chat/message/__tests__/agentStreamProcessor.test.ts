@@ -245,6 +245,57 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('projects ReadImage arguments to webview URIs when the tool call starts', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
+      const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-read-image',
+            name: 'ReadImage',
+            arguments: {
+              image_paths: ['/tmp/page-1.jpg'],
+              images: [{ label: 'Page 1', path: '/tmp/page-1.jpg' }],
+            },
+          },
+        },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(result.collectedToolCalls[0]!.arguments).toEqual({
+        image_paths: ['/tmp/page-1.jpg'],
+        images: [{ label: 'Page 1', path: '/tmp/page-1.jpg' }],
+      });
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        '/tmp/page-1.jpg',
+        'neko-agent.stream-tool-result',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolCall',
+          toolCallId: 'tc-read-image',
+          arguments: {
+            image_paths: ['/tmp/page-1.jpg'],
+            imagePathWebviewUris: ['webview-uri:/tmp/page-1.jpg'],
+            images: [
+              {
+                label: 'Page 1',
+                path: '/tmp/page-1.jpg',
+                webviewUri: 'webview-uri:/tmp/page-1.jpg',
+              },
+            ],
+          },
+        }),
+      );
+    });
+
     it('leaves unauthorized document image paths unresolved when unified access rejects them', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn(() => undefined),
@@ -341,7 +392,7 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('should handle done event with usage', async () => {
+    it('should handle done event without treating usage as context tokens', async () => {
       const events = toAsyncIterable([
         { type: 'text', content: 'Done!' },
         { type: 'done', usage: { totalTokens: 1500 } },
@@ -352,10 +403,29 @@ describe('AgentStreamProcessor', () => {
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'streamComplete' }),
       );
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'contextTokenCount', tokenCount: 1500 }),
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'contextTokenCount' }),
       );
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('idle', undefined);
+    });
+
+    it('should refresh context token count from the session after stream completion', async () => {
+      processor = new AgentStreamProcessor({
+        getContextTokenCount: vi.fn().mockReturnValue(2400),
+      });
+      const events = toAsyncIterable([
+        { type: 'text', content: 'Done!' },
+        { type: 'done', usage: { totalTokens: 1500 } },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'contextTokenCount', tokenCount: 2400 }),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'contextTokenCount', tokenCount: 1500 }),
+      );
     });
 
     it('should handle done event without usage', async () => {

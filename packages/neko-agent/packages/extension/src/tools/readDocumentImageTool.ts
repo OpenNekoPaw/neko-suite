@@ -38,8 +38,9 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
     name: TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     description:
       'Resolve selected image pages from a document and read or visually analyze them. ' +
-      'Use after ReadDocument when the user asks to inspect page images by page index, locator, or returned image path. ' +
-      'This is a document-page adapter over ReadImage; use ReadImage directly for generic standalone images.',
+      'Use this when you have document locators or page indexes and still need to resolve them to image files. ' +
+      'If ReadDocument already returned image_paths/imagePaths, call ReadImage directly instead of this tool. ' +
+      'This is a document-page adapter over ReadImage; never call both ReadImage and ReadDocumentImage for the same image batch.',
     category: 'document',
     isReadOnly: true,
     isConcurrencySafe: true,
@@ -57,7 +58,7 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
         image_paths: {
           type: 'array',
           description:
-            'Optional specific image paths returned by ReadDocument. When present, these are used directly.',
+            'Optional specific image paths returned by ReadDocument. Prefer passing these to ReadImage directly; this compatibility path does not re-read the document.',
           items: { type: 'string' },
         },
         page_indexes: {

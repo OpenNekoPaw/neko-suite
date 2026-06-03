@@ -108,6 +108,7 @@ export class AgentMessageTurnHandler {
       now: () => Date.now(),
     });
 
+    const agentManager = this._agentManager;
     this._streamProcessor = new AgentStreamProcessor({
       platform: this._platform,
       conversations: this._conversations,
@@ -116,6 +117,12 @@ export class AgentMessageTurnHandler {
       mediaDeliveryHost: this._mediaDeliveryHost,
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
+      ...(agentManager
+        ? {
+            getContextTokenCount: (conversationId) =>
+              agentManager.getContextTokenCount(conversationId),
+          }
+        : {}),
     });
     this._agentTurnBridge = new AgentTurnBridge({
       settings: this._settings,

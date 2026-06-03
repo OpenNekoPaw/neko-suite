@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
-import { createReadImageTool } from '../readImageTool';
+import { READ_IMAGE_VISION_SYSTEM_PROMPT, createReadImageTool } from '../readImageTool';
 
 const PNG_1X1 = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -12,6 +12,8 @@ const JPEG_1X1 = new Uint8Array([
   0x01, 0x03, 0x01, 0x11, 0x00, 0xff, 0xd9,
 ]);
 
+async function* emptyStream(): AsyncIterable<never> {}
+
 describe('createReadImageTool', () => {
   it('creates a read-only image tool', () => {
     const tool = createReadImageTool();
@@ -20,6 +22,8 @@ describe('createReadImageTool', () => {
     expect(tool.category).toBe('analysis');
     expect(tool.isReadOnly).toBe(true);
     expect(tool.isConcurrencySafe).toBe(true);
+    expect(tool.description).toContain('ReadDocument imagePaths');
+    expect(tool.description).toContain('use this tool directly instead of ReadDocumentImage');
     expect(tool.parameters).not.toHaveProperty('anyOf');
     expect(tool.parameters).not.toHaveProperty('oneOf');
     expect(tool.parameters).not.toHaveProperty('allOf');
@@ -58,7 +62,14 @@ describe('createReadImageTool', () => {
       metadata: vi.fn(async () => ({ width: 1, height: 1 })),
       toJpeg: vi.fn(async () => JPEG_1X1),
     };
+    const response = Promise.resolve({
+      message: { role: 'assistant', content: 'one tiny image' },
+    });
     const service = {
+      chatStream: vi.fn(() => ({
+        stream: emptyStream(),
+        response,
+      })),
       chat: vi.fn(async () => ({
         message: { role: 'assistant', content: 'one tiny image' },
       })),
@@ -81,7 +92,11 @@ describe('createReadImageTool', () => {
       buffer: PNG_1X1,
       jpegQuality: 80,
     });
-    expect(service.chat).toHaveBeenCalledWith([
+    expect(service.chatStream).toHaveBeenCalledWith([
+      {
+        role: 'system',
+        content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+      },
       expect.objectContaining({
         role: 'user',
         content: expect.arrayContaining([
@@ -93,6 +108,7 @@ describe('createReadImageTool', () => {
         ]),
       }),
     ]);
+    expect(service.chat).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
         mode: 'vision',
@@ -121,6 +137,12 @@ describe('createReadImageTool', () => {
       toJpeg: vi.fn(async () => JPEG_1X1),
     };
     const service = {
+      chatStream: vi.fn(() => ({
+        stream: emptyStream(),
+        response: Promise.resolve({
+          message: { role: 'assistant', content: 'original image' },
+        }),
+      })),
       chat: vi.fn(async () => ({
         message: { role: 'assistant', content: 'original image' },
       })),
@@ -138,7 +160,11 @@ describe('createReadImageTool', () => {
 
     expect(result.success).toBe(true);
     expect(imageProcessor.toJpeg).not.toHaveBeenCalled();
-    expect(service.chat).toHaveBeenCalledWith([
+    expect(service.chatStream).toHaveBeenCalledWith([
+      {
+        role: 'system',
+        content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+      },
       expect.objectContaining({
         content: expect.arrayContaining([
           expect.objectContaining({
@@ -148,6 +174,7 @@ describe('createReadImageTool', () => {
         ]),
       }),
     ]);
+    expect(service.chat).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
         images: [
@@ -160,6 +187,36 @@ describe('createReadImageTool', () => {
             }),
           }),
         ],
+      }),
+    );
+  });
+
+  it('falls back to non-streaming chat when a legacy service has no chatStream', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const imageProcessor = {
+      metadata: vi.fn(async () => ({ width: 1, height: 1 })),
+      toJpeg: vi.fn(async () => JPEG_1X1),
+    };
+    const service = {
+      chat: vi.fn(async () => ({
+        message: { role: 'assistant', content: 'legacy image' },
+      })),
+    };
+    const platform = {
+      createService: vi.fn(() => service),
+    };
+    const tool = createReadImageTool({ readFile, imageProcessor, platform: platform as never });
+
+    const result = (await tool.execute({
+      image_paths: ['/images/page.png'],
+      mode: 'vision',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(service.chat).toHaveBeenCalledOnce();
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [expect.objectContaining({ analysis: 'legacy image' })],
       }),
     );
   });

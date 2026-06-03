@@ -13,6 +13,8 @@ const JPEG_1X1 = new Uint8Array([
   0x01, 0x03, 0x01, 0x11, 0x00, 0xff, 0xd9,
 ]);
 
+async function* emptyStream(): AsyncIterable<never> {}
+
 function createReader(overrides: Partial<IDocumentReaderService> = {}): IDocumentReaderService {
   return {
     supports: vi.fn(() => true),
@@ -88,6 +90,9 @@ describe('createReadDocumentImageTool', () => {
     expect(tool.name).toBe(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
     expect(tool.category).toBe('document');
     expect(tool.isReadOnly).toBe(true);
+    expect(tool.description).toContain('document locators or page indexes');
+    expect(tool.description).toContain('call ReadImage directly instead of this tool');
+    expect(tool.description).toContain('never call both ReadImage and ReadDocumentImage');
   });
 
   it('resolves a document page image and delegates to ReadImage metadata flow', async () => {
@@ -145,8 +150,11 @@ describe('createReadDocumentImageTool', () => {
       toJpeg: vi.fn(async () => JPEG_1X1),
     };
     const service = {
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant', content: 'page analysis' },
+      chatStream: vi.fn(() => ({
+        stream: emptyStream(),
+        response: Promise.resolve({
+          message: { role: 'assistant', content: 'page analysis' },
+        }),
       })),
     };
     const platform = {

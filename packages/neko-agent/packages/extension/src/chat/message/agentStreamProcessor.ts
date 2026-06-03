@@ -82,6 +82,8 @@ export interface AgentStreamProcessorDeps {
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   /** Unified local resource access for Webview URI projection. */
   localResourceAccess?: AgentLocalResourceAccess;
+  /** Reads the current estimated conversation context tokens after stream completion. */
+  getContextTokenCount?: (conversationId: string) => number;
 }
 
 /**
@@ -114,19 +116,20 @@ export class AgentStreamProcessor {
     callbacks: StreamCallbacks,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
+    const postProjectedMessage = (message: AgentEventStreamRuntimeMessage) => {
+      const projectedMessage = projectStreamMessageResourcesForWebview(
+        webview,
+        message,
+        this.deps.localResourceAccess,
+      );
+      this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
+      void webview.postMessage(projectedMessage);
+    };
 
-    return this.streamRuntime.process({
+    const result = await this.streamRuntime.process({
       conversationId,
       events,
-      postMessage: (message) => {
-        const projectedMessage = projectStreamMessageResourcesForWebview(
-          webview,
-          message,
-          this.deps.localResourceAccess,
-        );
-        this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
-        void webview.postMessage(projectedMessage);
-      },
+      postMessage: postProjectedMessage,
       onPhaseChange: callbacks.onPhaseChange,
       backgroundTasks: {
         ...(media
@@ -216,6 +219,23 @@ export class AgentStreamProcessor {
         },
       },
     });
+
+    if (this.deps.getContextTokenCount) {
+      try {
+        const tokenCount = this.deps.getContextTokenCount(conversationId);
+        if (Number.isFinite(tokenCount) && tokenCount >= 0) {
+          postProjectedMessage({
+            type: 'contextTokenCount',
+            conversationId,
+            tokenCount,
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to refresh context token count after stream completion', error);
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -299,6 +319,14 @@ function projectStreamMessageResourcesForWebview(
 ): AgentEventStreamRuntimeMessage {
   const resolveLocalMediaPath = (filePath: string): string | undefined =>
     localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
+
+  if (message.type === 'toolCall' && message.arguments !== undefined) {
+    const projectedArguments = projectResourceValue(message.arguments, { resolveLocalMediaPath });
+    return {
+      ...message,
+      arguments: isRecord(projectedArguments) ? projectedArguments : message.arguments,
+    };
+  }
 
   if (message.type === 'toolResult' && message.data !== undefined) {
     return {
