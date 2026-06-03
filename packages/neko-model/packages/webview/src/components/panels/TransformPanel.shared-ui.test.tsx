@@ -9,7 +9,14 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 vi.mock('../../i18n/I18nContext', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) => {
+      const messages: Record<string, string> = {
+        'transform.translate': 'Translate',
+        'controlAvailability.state.degraded': 'Degraded',
+        'controlAvailability.reason.runtime-rejected': 'Runtime rejected',
+      };
+      return messages[key] ?? key;
+    },
   }),
 }));
 
@@ -68,6 +75,29 @@ describe('Model TransformPanel shared UI migration', () => {
     expect(onTransformCommit.mock.calls[0]?.[0]).toBe('node-1');
     expect(onTransformCommit.mock.calls[0]?.[1].position.x).toBe(4.25);
   });
+
+  it('shows runtime rejection as a local degraded reason without removing the selected node', () => {
+    act(() => {
+      root.render(
+        <TransformPanel
+          node={createNode()}
+          availability={{
+            state: 'degraded',
+            reason: 'runtime-rejected',
+            retryable: true,
+            diagnostic: { code: 'scene-command.rejected', message: 'Rejected by Engine' },
+          }}
+          onTransformCommit={vi.fn()}
+          onTransformModeChange={vi.fn()}
+          transformMode="translate"
+        />,
+      );
+    });
+
+    expect(host.textContent).toContain('Node 1');
+    expect(host.querySelector('[data-availability-reason="runtime-rejected"]')).not.toBeNull();
+    expect(buttonByText('Translate').title).toBe('Translate - Degraded: Runtime rejected');
+  });
 });
 
 function createNode(): SceneNodeSnapshot {
@@ -91,4 +121,12 @@ function setInputValue(input: HTMLInputElement | null, value: string): void {
     input,
     value,
   );
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent === text,
+  );
+  if (!button) throw new Error(`Button not found: ${text}`);
+  return button;
 }

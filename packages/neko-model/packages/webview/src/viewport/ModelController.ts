@@ -34,7 +34,6 @@ import {
   isCompatibleViewportQueryResult,
 } from '../components/InteractionLayer';
 import type { EditableNodeTransform } from '../scene/SceneEditingTypes';
-import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from './streamInteractionPolicy';
 
 type ModelViewportAction =
   | 'viewport:select'
@@ -779,10 +778,8 @@ export class ModelController implements ISceneController {
       position,
       target,
       resolution: readViewportResolution(command.payload['resolution']),
-      streamProfile: 'interactive',
-      profileTtlMs: VIEWPORT_INTERACTION_PROFILE_TTL_MS,
     });
-    socket.requestKeyframe(command.viewportId);
+    socket.requestKeyframe(command.viewportId, command.sceneId);
     const revision = command.baseRevision;
     return viewportEventFromPayload(
       command,

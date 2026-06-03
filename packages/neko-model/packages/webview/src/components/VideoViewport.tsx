@@ -26,6 +26,10 @@ import { useModelStore } from '../stores/modelStore';
 import { handleModelMenuAction, ModelController } from '../viewport/ModelController';
 import { sampleViewportMemory } from '../viewport/viewportMemoryProbe';
 import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from '../viewport/streamInteractionPolicy';
+import {
+  createViewportStreamSize,
+  type ViewportStreamQualityPreset,
+} from '../viewport/viewportStreamQuality';
 import { modelErrorMessage, toError, webviewErrorHandler } from '../platform/errors';
 
 export interface VideoViewportProps {
@@ -40,6 +44,7 @@ export interface VideoViewportProps {
   predictions?: LocalPredictionSnapshot[];
   topologyWarning?: string | null;
   hudVisible?: boolean;
+  streamQuality?: ViewportStreamQualityPreset;
   interactionSignal?: number;
   onSelectNode: (nodeId: string | null) => void;
   onSceneControlError: (message: string) => void;
@@ -47,18 +52,12 @@ export interface VideoViewportProps {
 }
 
 const MAIN_VIEWPORT_ID = 'main';
-const TARGET_VIEWPORT_STREAM_HEIGHT = 1080;
-const MAX_VIEWPORT_STREAM_WIDTH = 3840;
-const MAX_VIEWPORT_STREAM_HEIGHT = 2160;
-const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2;
-const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
 const VIEWPORT_STREAM_FPS = 60;
+const VIEWPORT_H264_GOP_SIZE = 1;
 const VIEWPORT_RESIZE_COMMIT_DELAY_MS = 160;
 const VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33;
 const VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS = 250;
-const LOOKDEV_PENDING_DELAY_MS = 250;
-const LOOKDEV_RETRY_DELAY_MS = 1500;
 const RENDER_FRAME_META_STORE_INTERVAL_MS = 250;
 const VIEWPORT_MEMORY_SAMPLE_INTERVAL_MS = 1000;
 const RAF_PRESENTATION_LIMIT_INTERVAL_MS = 40;
@@ -71,6 +70,9 @@ const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
   dropDeltaFramesWhenBacklogged: true,
   preserveKeyframes: true,
   latestOnly: true,
+  dropStaleDecodedOutput: true,
+  staleOutputDropLagFrames: 6,
+  maxConsecutiveStaleDecodedOutputDrops: 4,
   keyframeRequestDropThreshold: 12,
 };
 const INTERACTIVE_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
@@ -78,6 +80,9 @@ const INTERACTIVE_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
   dropDeltaFramesWhenBacklogged: true,
   preserveKeyframes: false,
   latestOnly: true,
+  dropStaleDecodedOutput: true,
+  staleOutputDropLagFrames: 3,
+  maxConsecutiveStaleDecodedOutputDrops: 8,
   keyframeRequestDropThreshold: 6,
 };
 
@@ -94,50 +99,6 @@ interface PendingPresentationFrame {
 
 type ViewportH264Settings = NonNullable<ViewportDescriptor['h264']>;
 
-function bucketStreamDimension(value: number, maxValue?: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return VIEWPORT_DIMENSION_BUCKET;
-  }
-  const bucketed = Math.max(
-    VIEWPORT_DIMENSION_BUCKET,
-    Math.round(value / VIEWPORT_DIMENSION_BUCKET) * VIEWPORT_DIMENSION_BUCKET,
-  );
-  const clamped = maxValue === undefined ? bucketed : Math.min(bucketed, maxValue);
-  return clamped % 2 === 0 ? clamped : clamped + 1;
-}
-
-function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
-  const cssWidth = Math.max(0, rect.width);
-  const cssHeight = Math.max(0, rect.height);
-  if (cssWidth < MIN_VISIBLE_VIEWPORT_DIMENSION || cssHeight < MIN_VISIBLE_VIEWPORT_DIMENSION) {
-    return {
-      width: 0,
-      height: 0,
-      pixelRatio: 1,
-    };
-  }
-  const pixelRatio = Math.min(
-    Math.max(window.devicePixelRatio || 1, 1),
-    MAX_VIEWPORT_DEVICE_PIXEL_RATIO,
-  );
-
-  const targetPhysicalWidth = cssWidth * pixelRatio;
-  const targetPhysicalHeight = Math.max(cssHeight * pixelRatio, TARGET_VIEWPORT_STREAM_HEIGHT);
-  const aspectRatio = targetPhysicalWidth / targetPhysicalHeight;
-  let height = Math.min(targetPhysicalHeight, MAX_VIEWPORT_STREAM_HEIGHT);
-  let width = height * aspectRatio;
-  if (width > MAX_VIEWPORT_STREAM_WIDTH) {
-    width = MAX_VIEWPORT_STREAM_WIDTH;
-    height = width / aspectRatio;
-  }
-
-  return {
-    width: bucketStreamDimension(width, MAX_VIEWPORT_STREAM_WIDTH),
-    height: bucketStreamDimension(height, MAX_VIEWPORT_STREAM_HEIGHT),
-    pixelRatio,
-  };
-}
-
 function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
   try {
     const raw = window.localStorage?.getItem(H264_DEBUG_SETTINGS_STORAGE_KEY);
@@ -146,9 +107,6 @@ function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
     if (typeof parsed !== 'object' || parsed === null) return undefined;
     const record = parsed as Record<string, unknown>;
     const h264: ViewportH264Settings = {};
-    if (typeof record.gopSize === 'number' && Number.isFinite(record.gopSize)) {
-      h264.gopSize = Math.max(1, Math.floor(record.gopSize));
-    }
     if (
       record.decoderPreference === 'prefer-hardware' ||
       record.decoderPreference === 'prefer-software' ||
@@ -156,10 +114,17 @@ function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
     ) {
       h264.decoderPreference = record.decoderPreference;
     }
-    return h264.gopSize !== undefined || h264.decoderPreference !== undefined ? h264 : undefined;
+    return h264.decoderPreference !== undefined ? h264 : undefined;
   } catch {
     return undefined;
   }
+}
+
+function createViewportH264Settings(): ViewportH264Settings {
+  return {
+    ...readViewportH264DebugSettings(),
+    gopSize: VIEWPORT_H264_GOP_SIZE,
+  };
 }
 
 function backpressureForStreamProfile(profile: ViewportStreamProfile): H264BackpressurePolicy {
@@ -236,7 +201,7 @@ function createViewportDescriptor(
       helperPassesEnabled,
       showGrid: helperPassesEnabled,
     },
-    h264: readViewportH264DebugSettings(),
+    h264: createViewportH264Settings(),
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',
@@ -261,6 +226,7 @@ export function VideoViewport({
   predictions = [],
   topologyWarning = null,
   hudVisible = true,
+  streamQuality = 'quarter',
   interactionSignal = 0,
   onSelectNode,
   onSceneControlError,
@@ -309,9 +275,11 @@ export function VideoViewport({
         .map((node) => node.nodeId),
     [sceneNodes],
   );
-  const requestedLookDevMode = useModelStore((state) => state.lookDev.requestedMode);
   const appliedLookDevMode = useModelStore((state) => state.lookDev.appliedMode);
-  const selectedRenderMode = requestedLookDevMode ?? appliedLookDevMode;
+  const streamRenderModeRef = useRef<ViewportRenderMode>(appliedLookDevMode);
+  useEffect(() => {
+    streamRenderModeRef.current = appliedLookDevMode;
+  }, [appliedLookDevMode]);
   const setStreamProfile = React.useCallback((profile: ViewportStreamProfile) => {
     if (streamProfileRef.current === profile) {
       return;
@@ -392,7 +360,7 @@ export function VideoViewport({
     };
 
     const updateSize = (rect: DOMRectReadOnly, commitImmediately: boolean) => {
-      const next = createViewportStreamSize(rect);
+      const next = createViewportStreamSize(rect, window.devicePixelRatio || 1, streamQuality);
       if (commitImmediately) {
         commitSize(next);
       } else {
@@ -401,10 +369,18 @@ export function VideoViewport({
     };
 
     const firstRect = element.getBoundingClientRect();
-    latestResizeSizeRef.current = createViewportStreamSize(firstRect);
+    latestResizeSizeRef.current = createViewportStreamSize(
+      firstRect,
+      window.devicePixelRatio || 1,
+      streamQuality,
+    );
     pendingInitialSizeFrameRef.current = window.requestAnimationFrame(() => {
       pendingInitialSizeFrameRef.current = null;
-      const next = createViewportStreamSize(element.getBoundingClientRect());
+      const next = createViewportStreamSize(
+        element.getBoundingClientRect(),
+        window.devicePixelRatio || 1,
+        streamQuality,
+      );
       const pending = latestResizeSizeRef.current;
       latestResizeSizeRef.current = next;
       commitSize(pending && areViewportStreamSizesEqual(pending, next) ? pending : next);
@@ -436,7 +412,7 @@ export function VideoViewport({
         pendingResizeCommitRef.current = null;
       }
     };
-  }, []);
+  }, [streamQuality]);
 
   const sendViewportCamera = React.useCallback(() => {
     if (!sceneControlSocket?.isOpen()) {
@@ -447,7 +423,6 @@ export function VideoViewport({
       const store = useModelStore.getState();
       const position = store.getCameraPosition();
       const target = store.cameraTarget;
-      const streamProfile = streamProfileRef.current;
       sceneControlSocket.sendViewportCameraLatest({
         sceneId,
         sceneRevision,
@@ -455,16 +430,10 @@ export function VideoViewport({
         position,
         target,
         resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
-        ...(streamProfile === 'interactive'
-          ? {
-              streamProfile,
-              profileTtlMs: VIEWPORT_INTERACTION_PROFILE_TTL_MS,
-            }
-          : {}),
       });
       const now = performance.now();
       if (now - lastCameraKeyframeRequestRef.current >= VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS) {
-        sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
+        sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID, sceneId);
         lastCameraKeyframeRequestRef.current = now;
       }
     } catch (error) {
@@ -525,8 +494,6 @@ export function VideoViewport({
 
   useEffect(() => {
     let disposed = false;
-    let pendingTimer: number | null = null;
-    let retryTimer: number | null = null;
     const engineClient = new EngineClient(enginePort);
     setRouteAUnavailable(false);
     setRouteAUnavailableReason(null);
@@ -537,17 +504,6 @@ export function VideoViewport({
     presentationSchedulerModeRef.current = 'raf';
     rafPresentationLimitStrikeRef.current = 0;
     decodedDroppedBeforePresentRef.current = 0;
-
-    const clearLookDevTimers = () => {
-      if (pendingTimer !== null) {
-        window.clearTimeout(pendingTimer);
-        pendingTimer = null;
-      }
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-        retryTimer = null;
-      }
-    };
 
     const closePendingPresentation = () => {
       const pending = pendingPresentationRef.current;
@@ -592,28 +548,12 @@ export function VideoViewport({
 
       try {
         const store = useModelStore.getState();
-        const requestedMode = store.lookDev.requestedMode;
-        const shouldReconcileLookDev = requestedMode === selectedRenderMode;
-        if (shouldReconcileLookDev) {
-          pendingTimer = window.setTimeout(() => {
-            const current = useModelStore.getState().lookDev;
-            if (current.requestedMode === selectedRenderMode) {
-              useModelStore.getState().markLookDevPending(selectedRenderMode);
-            }
-          }, LOOKDEV_PENDING_DELAY_MS);
-          retryTimer = window.setTimeout(() => {
-            const current = useModelStore.getState().lookDev;
-            if (current.requestedMode === selectedRenderMode && current.status !== 'applied') {
-              useModelStore
-                .getState()
-                .timeoutLookDevMode(modelErrorMessage('error.engineStreamUnavailable'));
-            }
-          }, LOOKDEV_RETRY_DELAY_MS);
-        }
+        const streamRenderMode = store.lookDev.appliedMode;
+        streamRenderModeRef.current = streamRenderMode;
         const stream = await engineClient.startSceneRenderStream(
           createViewportDescriptor(
             sceneId,
-            selectedRenderMode,
+            streamRenderMode,
             store.getCameraPosition(),
             store.cameraTarget,
             viewportSize,
@@ -628,17 +568,10 @@ export function VideoViewport({
         streamIdRef.current = stream.descriptor.streamId;
         postMessage({ type: 'streamStarted', streamId: stream.descriptor.streamId });
         const confirmedMode = renderModeFromStreamDescriptor(stream.descriptor);
-        if (shouldReconcileLookDev && confirmedMode) {
-          if (confirmedMode === selectedRenderMode) {
-            clearLookDevTimers();
+        if (confirmedMode) {
+          streamRenderModeRef.current = confirmedMode;
+          if (useModelStore.getState().lookDev.requestedMode === null) {
             useModelStore.getState().applyLookDevMode(confirmedMode);
-          } else {
-            clearLookDevTimers();
-            useModelStore
-              .getState()
-              .rejectLookDevMode(
-                `Engine applied ${confirmedMode} instead of ${selectedRenderMode}`,
-              );
           }
         }
 
@@ -748,8 +681,10 @@ export function VideoViewport({
                 store.recordRenderFrameMetricsSample(drawnMeta);
               }
               const frameMode = renderModeFromFrameMeta(drawnMeta);
-              if (frameMode === selectedRenderMode) {
-                clearLookDevTimers();
+              if (
+                frameMode !== null &&
+                frameMode === useModelStore.getState().lookDev.requestedMode
+              ) {
                 store.applyLookDevMode(frameMode);
               }
               if (hasNewAppliedSeq) {
@@ -827,11 +762,6 @@ export function VideoViewport({
           });
           setRouteAUnavailable(true);
           setRouteAUnavailableReason(modelErrorMessage('error.engineStreamUnavailable'));
-          if (useModelStore.getState().lookDev.requestedMode === selectedRenderMode) {
-            useModelStore
-              .getState()
-              .rejectLookDevMode(modelErrorMessage('error.engineStreamUnavailable'));
-          }
         }
       }
     };
@@ -840,7 +770,6 @@ export function VideoViewport({
 
     return () => {
       disposed = true;
-      clearLookDevTimers();
       cancelPendingPresentation();
       streamClientRef.current?.dispose();
       streamClientRef.current = null;
@@ -854,15 +783,7 @@ export function VideoViewport({
         );
       }
     };
-  }, [
-    enginePort,
-    retryToken,
-    sceneId,
-    viewportSize,
-    helperPassesEnabled,
-    visible,
-    selectedRenderMode,
-  ]);
+  }, [enginePort, retryToken, sceneId, viewportSize, visible]);
 
   const overlayFrameMeta = React.useMemo<RenderFrameMeta | null>(() => {
     const streamId = streamIdRef.current;
@@ -925,11 +846,17 @@ export function VideoViewport({
           showToUser: false,
           severity: 'warning',
         });
-        onSceneControlError(modelErrorMessage('error.hitTestFailed'));
       }
     },
-    [modelController, sceneId, sceneRevision, viewportSize, onSceneControlError],
+    [modelController, sceneId, sceneRevision, viewportSize],
   );
+
+  const handleViewportQueryError = React.useCallback((error: Error) => {
+    void webviewErrorHandler.handleError(error, {
+      showToUser: false,
+      severity: 'warning',
+    });
+  }, []);
 
   return (
     <div ref={viewportRef} className="model-viewport-frame relative h-full w-full overflow-hidden">
@@ -963,7 +890,7 @@ export function VideoViewport({
               lightNodeIds={lightNodeIds}
               socket={sceneControlSocket}
               onSelectNode={onSelectNode}
-              onQueryError={(error) => onSceneControlError(error.message)}
+              onQueryError={handleViewportQueryError}
             />
             <OverlayCanvas
               viewportId={MAIN_VIEWPORT_ID}

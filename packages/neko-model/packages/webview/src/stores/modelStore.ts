@@ -40,6 +40,12 @@ import {
   type LocalPredictionInput,
   type LocalPredictionSnapshot,
 } from '../scene/LocalPredictionLayer';
+import {
+  DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET,
+  nextViewportStreamQualityPreset,
+  normalizeViewportStreamQualityPreset,
+  type ViewportStreamQualityPreset,
+} from '../viewport/viewportStreamQuality';
 
 type TransformPatch = NonNullable<SceneDelta['updatedTransforms']>[number];
 type VisibilityPatch = NonNullable<SceneDelta['updatedVisibility']>[number];
@@ -140,6 +146,7 @@ export interface ModelState {
   authoringMetricsSnapshot: AuthoringMetricsSnapshot;
   showViewportGrid: boolean;
   isPerformanceMetricsVisible: boolean;
+  viewportStreamQuality: ViewportStreamQualityPreset;
   characterPreview: CharacterPreviewUiState;
   lookDev: LookDevUiState;
   lookDevCapabilities: ModelLookDevSceneControlCapabilities;
@@ -295,6 +302,8 @@ export interface ModelState {
   toggleViewportGrid: () => void;
   setPerformanceMetricsVisible: (visible: boolean) => void;
   togglePerformanceMetrics: () => void;
+  setViewportStreamQuality: (quality: ViewportStreamQualityPreset) => void;
+  cycleViewportStreamQuality: () => void;
   frameSceneCamera: (snapshot: SceneSnapshot) => boolean;
   markSceneCameraFramed: (snapshot: SceneSnapshot) => void;
   getCameraPosition: () => Vec3;
@@ -325,6 +334,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
   showViewportGrid: true,
   isPerformanceMetricsVisible: false,
+  viewportStreamQuality: DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET,
   characterPreview: {
     requestedMode: null,
     appliedMode: null,
@@ -980,6 +990,14 @@ export const useModelStore = create<ModelState>((set, get) => ({
   togglePerformanceMetrics: () =>
     set((state) => ({ isPerformanceMetricsVisible: !state.isPerformanceMetricsVisible })),
 
+  setViewportStreamQuality: (quality) =>
+    set({ viewportStreamQuality: normalizeViewportStreamQualityPreset(quality) }),
+
+  cycleViewportStreamQuality: () =>
+    set((state) => ({
+      viewportStreamQuality: nextViewportStreamQualityPreset(state.viewportStreamQuality),
+    })),
+
   frameSceneCamera: (snapshot) => {
     const signature = sceneFrameSignature(snapshot);
     if (!signature || signature === get().lastAutoFramedSceneSignature) {
@@ -1037,6 +1055,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraTarget: s.cameraTarget,
       showViewportGrid: s.showViewportGrid,
       isPerformanceMetricsVisible: s.isPerformanceMetricsVisible,
+      viewportStreamQuality: s.viewportStreamQuality,
     };
   },
 
@@ -1071,6 +1090,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
         typeof state['isPerformanceMetricsVisible'] === 'boolean'
           ? state['isPerformanceMetricsVisible']
           : false,
+      viewportStreamQuality: normalizeViewportStreamQualityPreset(state['viewportStreamQuality']),
     }),
 }));
 
@@ -1080,6 +1100,10 @@ function cloneLookDevCapabilities(
   return {
     ...capabilities,
     renderModes: [...capabilities.renderModes],
+    capabilityStates: {
+      ...capabilities.capabilityStates,
+      renderModes: { ...capabilities.capabilityStates.renderModes },
+    },
   };
 }
 

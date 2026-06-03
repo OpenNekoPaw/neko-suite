@@ -8,6 +8,18 @@ import { LightInspectorPanel } from './LightInspectorPanel';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+vi.mock('../../i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const messages: Record<string, string> = {
+        'controlAvailability.state.disabled': 'Unavailable',
+        'controlAvailability.reason.capability-unsupported': 'Capability unsupported',
+      };
+      return messages[key] ?? key;
+    },
+  }),
+}));
+
 let host: HTMLDivElement;
 let root: Root;
 
@@ -99,6 +111,50 @@ describe('Light and Environment panels', () => {
     expect(onPickPanorama).toHaveBeenCalledTimes(1);
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces disabled reasons for light and environment controls', () => {
+    render(
+      <LightInspectorPanel
+        node={null}
+        disabled={true}
+        availability={{ state: 'disabled', reason: 'capability-unsupported' }}
+        onAddLight={vi.fn()}
+        onDeleteLight={vi.fn()}
+        onSetVisible={vi.fn()}
+        onLightUpdate={vi.fn()}
+      />,
+    );
+
+    expect(
+      host.querySelector('[data-availability-reason="capability-unsupported"]'),
+    ).not.toBeNull();
+    expect(buttonByText('point').title).toBe(
+      'Add point light - Unavailable: Capability unsupported',
+    );
+
+    act(() => {
+      root.render(
+        <EnvironmentPanel
+          environment={null}
+          diagnostics={[]}
+          disabled={true}
+          availability={{ state: 'disabled', reason: 'capability-unsupported' }}
+          onSet={vi.fn()}
+          onUpdate={vi.fn()}
+          onClear={vi.fn()}
+          onRetry={vi.fn()}
+          onPickPanorama={vi.fn()}
+        />,
+      );
+    });
+
+    expect(
+      host.querySelector('[data-availability-reason="capability-unsupported"]'),
+    ).not.toBeNull();
+    expect(buttonByText('Panorama').title).toBe(
+      'Choose LDR panorama - Unavailable: Capability unsupported',
+    );
   });
 });
 

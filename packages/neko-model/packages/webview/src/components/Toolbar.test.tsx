@@ -50,6 +50,7 @@ describe('Model Toolbar', () => {
     useModelStore.setState({
       showViewportGrid: true,
       isPerformanceMetricsVisible: false,
+      viewportStreamQuality: 'quarter',
     });
   });
 
@@ -161,6 +162,9 @@ describe('Model Toolbar', () => {
     expect(buttonByLabel(host, 'toolbar.boneExpression')).not.toBeNull();
     expect(buttonByLabel(host, 'viewport.grid')).not.toBeNull();
     expect(buttonByLabel(host, 'toolbar.showPerformanceMetrics')).not.toBeNull();
+    expect(
+      buttonByLabel(host, 'toolbar.viewportQuality')?.getAttribute('data-model-toolbar-action'),
+    ).toBe('cycle-viewport-quality');
     expect(buttonByLabel(host, 'viewport.resetCamera')).not.toBeNull();
     expect(
       buttonByLabel(host, 'toolbar.faceEditor')?.getAttribute('data-model-toolbar-action'),
@@ -254,6 +258,23 @@ describe('Model Toolbar', () => {
 
     expect(useModelStore.getState().isPerformanceMetricsVisible).toBe(true);
     expect(buttonByLabel(host, 'toolbar.hidePerformanceMetrics')).not.toBeNull();
+  });
+
+  it('cycles explicit viewport stream quality presets from the left toolbar', () => {
+    act(() => {
+      root.render(<ModelSideToolbar width={48} />);
+    });
+
+    const toggle = buttonByLabel(host, 'toolbar.viewportQuality');
+
+    expect(toggle).not.toBeNull();
+    expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
   });
 });
 

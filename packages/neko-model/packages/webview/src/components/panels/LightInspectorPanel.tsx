@@ -2,10 +2,18 @@ import React from 'react';
 import type { LightPatch } from '@neko/shared';
 import type { SceneNodeSnapshot } from '../../types';
 import { PlusIcon, TrashIcon } from '@neko/ui/icons';
+import {
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../../baseline/controlAvailability';
+import { useTranslation } from '../../i18n/I18nContext';
 
 export interface LightInspectorPanelProps {
   node: SceneNodeSnapshot | null;
   disabled?: boolean;
+  availability?: ModelControlAvailability;
   onAddLight: (kind: LightPatch['kind']) => void;
   onDeleteLight: (nodeId: string) => void;
   onSetVisible: (nodeId: string, visible: boolean) => void;
@@ -25,14 +33,22 @@ const DEFAULT_LIGHT: Omit<LightPatch, 'nodeId'> = {
 export function LightInspectorPanel({
   node,
   disabled = false,
+  availability,
   onAddLight,
   onDeleteLight,
   onSetVisible,
   onLightUpdate,
 }: LightInspectorPanelProps): React.JSX.Element {
+  const { t } = useTranslation();
   const light = toEditableLight(node?.light);
   const selectedLight = node?.kind === 'light' ? node : null;
-  const canEdit = Boolean(selectedLight) && !disabled;
+  const effectiveAvailability =
+    availability ?? (disabled ? disabledControl('capability-unsupported') : null);
+  const controlsDisabled =
+    disabled || (effectiveAvailability ? isControlDisabled(effectiveAvailability) : false);
+  const canEdit = Boolean(selectedLight) && !controlsDisabled;
+  const availabilityTitle = (baseTitle: string) =>
+    formatControlAvailabilityTitle(effectiveAvailability ?? { state: 'available' }, t, baseTitle);
 
   const commit = (patch: Partial<Omit<LightPatch, 'nodeId'>>) => {
     if (!selectedLight) return;
@@ -49,8 +65,8 @@ export function LightInspectorPanel({
               key={kind}
               type="button"
               className="model-btn-secondary flex-1 gap-1 px-2 py-1 text-[10px]"
-              disabled={disabled}
-              title={`Add ${kind} light`}
+              disabled={controlsDisabled}
+              title={availabilityTitle(`Add ${kind} light`)}
               onClick={() => onAddLight(kind)}
             >
               <PlusIcon size={12} />
@@ -72,7 +88,7 @@ export function LightInspectorPanel({
               <input
                 type="checkbox"
                 checked={selectedLight.visible}
-                disabled={disabled}
+                disabled={controlsDisabled}
                 onChange={(event) =>
                   onSetVisible(selectedLight.nodeId, event.currentTarget.checked)
                 }
@@ -161,7 +177,7 @@ export function LightInspectorPanel({
               type="button"
               className="model-btn-secondary gap-1"
               disabled={!canEdit}
-              title="Delete selected light"
+              title={availabilityTitle('Delete selected light')}
               onClick={() => onDeleteLight(selectedLight.nodeId)}
             >
               <TrashIcon size={12} />
@@ -170,8 +186,17 @@ export function LightInspectorPanel({
           </div>
         </>
       ) : (
-        <div className="model-panel-section text-[var(--model-fg-secondary)]">
+        <div
+          className="model-panel-section text-[var(--model-fg-secondary)]"
+          data-availability-state={effectiveAvailability?.state ?? 'available'}
+          data-availability-reason={
+            effectiveAvailability?.state === 'available' ? undefined : effectiveAvailability?.reason
+          }
+        >
           Select a light node or add one above.
+          {effectiveAvailability && effectiveAvailability.state !== 'available' ? (
+            <div className="mt-1">{formatControlAvailabilityTitle(effectiveAvailability, t)}</div>
+          ) : null}
         </div>
       )}
     </div>

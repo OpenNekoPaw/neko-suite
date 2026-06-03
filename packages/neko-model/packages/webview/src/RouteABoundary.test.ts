@@ -182,6 +182,7 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/<section className="model-viewport-area">/);
     expect(app).not.toMatch(/<ModelViewportControls/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-grid"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="cycle-viewport-quality"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-performance-metrics"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="reset-camera"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-hud"/);
@@ -191,6 +192,7 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/data-model-toolbar-action=\{`toggle-\$\{item.key\}`\}/);
     expect(app).toMatch(/<div id="model-viewport-hud">/);
     expect(app).toMatch(/hudVisible=\{isViewportHudVisible\}/);
+    expect(app).toMatch(/<ViewportQualityControls\b/);
     expect(app).toMatch(/<ViewportPerformanceOverlay \/>/);
     expect(app).toMatch(/\{isBottomPanelVisible \? \(\s*<TimelineDock/);
     expect(app).toMatch(/id="model-timeline-controls"/);
@@ -201,6 +203,7 @@ describe('Route A webview boundaries', () => {
     expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: column;/);
     expect(css).not.toMatch(/\.model-viewport-controls\s*\{/);
     expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*grid-template-areas:/);
+    expect(css).toMatch(/\.model-viewport-quality-controls\s*\{/);
     expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*pointer-events: none;/);
     expect(css).toMatch(/\.model-lookdev-controls\s*\{[\s\S]*grid-area: lookdev;/);
     expect(css).toMatch(/\.model-selection-mode-controls\s*\{[\s\S]*grid-area: selection;/);
@@ -356,16 +359,34 @@ describe('Route A webview boundaries', () => {
 
   it('sizes Route A stream from the actual webview viewport instead of a fixed canvas', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
+    const qualityPolicy = readSource('viewport/viewportStreamQuality.ts');
+    const app = readSource('App.tsx');
     const css = readSource('index.css');
 
     expect(videoViewport).toMatch(/new ResizeObserver/);
     expect(videoViewport).toMatch(/createViewportStreamSize/);
-    expect(videoViewport).toMatch(/TARGET_VIEWPORT_STREAM_HEIGHT = 1080/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_WIDTH = 3840/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_HEIGHT = 2160/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2/);
-    expect(videoViewport).toMatch(/targetPhysicalWidth = cssWidth \* pixelRatio/);
-    expect(videoViewport).toMatch(/targetPhysicalHeight = Math\.max\(cssHeight \* pixelRatio/);
+    expect(app).toMatch(
+      /const viewportStreamQuality = useModelStore\(\(s\) => s\.viewportStreamQuality\)/,
+    );
+    expect(app).toMatch(/streamQuality=\{viewportStreamQuality\}/);
+    expect(qualityPolicy).toMatch(
+      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'quarter'/,
+    );
+    expect(qualityPolicy).toMatch(/UHD_4K_PIXEL_COUNT = 3840 \* 2160/);
+    expect(qualityPolicy).toMatch(/quarter:[\s\S]*pixelFraction: 0\.25/);
+    expect(qualityPolicy).toMatch(/half:[\s\S]*pixelFraction: 0\.5/);
+    expect(qualityPolicy).toMatch(/native:[\s\S]*pixelFraction: 1/);
+    expect(qualityPolicy).toMatch(/maxWidth: 4096/);
+    expect(qualityPolicy).toMatch(/maxHeight: 4096/);
+    expect(qualityPolicy).toMatch(/physicalHeight = cssHeight \* pixelRatio/);
+    expect(qualityPolicy).toMatch(/physicalPixels = physicalWidth \* physicalHeight/);
+    expect(qualityPolicy).toMatch(
+      /Math\.max\(physicalPixels, UHD_4K_PIXEL_COUNT\) \* config\.pixelFraction/,
+    );
+    expect(qualityPolicy).toMatch(/Math\.ceil\(value \/ VIEWPORT_DIMENSION_BUCKET\)/);
+    expect(qualityPolicy).toMatch(/clamped % 2 === 0/);
+    expect(videoViewport).not.toMatch(/targetPhysicalWidth = cssWidth \* pixelRatio/);
+    expect(videoViewport).not.toMatch(/targetPhysicalHeight = Math\.max\(cssHeight \* pixelRatio/);
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
     expect(videoViewport).toMatch(/H264_DEBUG_SETTINGS_STORAGE_KEY = 'neko\.model\.h264'/);
     expect(videoViewport).toMatch(/allowFpsDegrade: false/);
@@ -374,7 +395,6 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/pendingInitialSizeFrameRef/);
     expect(videoViewport).toMatch(/window\.requestAnimationFrame/);
     expect(videoViewport).toMatch(/window\.setTimeout/);
-    expect(videoViewport).toMatch(/clamped % 2 === 0/);
     expect(videoViewport).toMatch(/ctx\.imageSmoothingQuality = 'high'/);
     expect(videoViewport).toMatch(/model-viewport-video-canvas/);
     expect(videoViewport).toMatch(/canvas\.getBoundingClientRect\(\)/);
@@ -428,9 +448,153 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/streamProfileRef/);
     expect(videoViewport).not.toMatch(/useState<ViewportStreamProfile>/);
     expect(videoViewport).not.toMatch(/h264SettingsForStreamProfile/);
-    expect(videoViewport).not.toMatch(/gopSize: 1/);
+    expect(videoViewport).toMatch(/VIEWPORT_H264_GOP_SIZE = 1/);
+    expect(videoViewport).toMatch(/gopSize: VIEWPORT_H264_GOP_SIZE/);
+    expect(videoViewport).not.toMatch(/record\.gopSize/);
     expect(videoViewport).not.toMatch(/startSceneRenderStream\([\s\S]*streamProfile,/);
-    expect(videoViewport).not.toMatch(/streamProfile,\s*\n\s*\]\);/);
+    expect(videoViewport).not.toMatch(/streamProfile === 'interactive'/);
+    expect(videoViewport).not.toMatch(/profileTtlMs:/);
+    expect(readSource('components/LookDevControls.tsx')).not.toMatch(/lookdev\.live\.restart/);
+    expect(readSource('i18n/locales/zh-cn.ts')).not.toMatch(/重启流/);
+  });
+
+  it('keeps LookDev switching on scene-control commands instead of stream restart', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const streamEffectDependencies =
+      videoViewport.match(
+        /void start\(\);[\s\S]*?return \(\) => \{[\s\S]*?\};\s*\}, \[([\s\S]*?)\]\);/,
+      )?.[1] ?? '';
+    const globalAckHandler =
+      app.match(/onAck: \(ack\) => \{[\s\S]*?\n {12}\},\n {12}onCharacterPreviewState/)?.[0] ?? '';
+
+    expect(app).toMatch(/store\.requestLookDevMode\(mode\)/);
+    expect(app).toMatch(/store\.markLookDevPending\(mode\)/);
+    expect(app).toMatch(/const sendViewportSettingsCommand = useCallback/);
+    expect(app).toMatch(/void sendViewportSettingsCommand\(mode, helperPassesEnabled\)/);
+    expect(app).toMatch(/liveViewportSettingsSeqsRef/);
+    expect(globalAckHandler).toMatch(/liveViewportSettingsSeqsRef\.current\.has\(ack\.seq\)/);
+    expect(globalAckHandler).toMatch(/rejectLookDevMode/);
+    expect(app).toMatch(/type: 'viewport-settings-update'/);
+    expect(app).toMatch(/createLookDevSettings\(mode, helperEnabled\)/);
+    expect(app).not.toMatch(/startSceneRenderStream/);
+    const liveSettingsSender =
+      app.match(
+        /const sendViewportSettingsCommand = useCallback\([\s\S]*?\n {2}\);\n\n {2}const handleTransformCommit/,
+      )?.[0] ?? '';
+    expect(liveSettingsSender).toMatch(/socket\.sendCommand\(envelope\)/);
+    expect(liveSettingsSender).toMatch(/liveViewportSettingsSeqsRef\.current\.add\(seq\)/);
+    expect(liveSettingsSender).toMatch(/liveViewportSettingsSeqsRef\.current\.delete\(seq\)/);
+    expect(liveSettingsSender).toMatch(/rejectLookDevMode/);
+    expect(liveSettingsSender).not.toMatch(/setSceneControlStatus\('error'|socket\.resync/);
+    expect(videoViewport).toMatch(/const streamRenderMode = store\.lookDev\.appliedMode/);
+    expect(videoViewport).toMatch(/renderModeFromFrameMeta\(drawnMeta\)/);
+    expect(videoViewport).toMatch(/store\.applyLookDevMode\(frameMode\)/);
+    expect(videoViewport).not.toMatch(/requestedMode \?\? appliedMode|selectedRenderMode/);
+    expect(streamEffectDependencies).not.toMatch(
+      /requestedLookDevMode|requestedMode|lookDev\.requestedMode/,
+    );
+    expect(streamEffectDependencies).not.toMatch(/appliedLookDevMode|lookDev\.appliedMode/);
+    expect(streamEffectDependencies).not.toMatch(/helperPassesEnabled|showViewportGrid/);
+  });
+
+  it('keeps helper and grid toggles on live viewport settings without render-time TDZ drift', () => {
+    const app = readSource('App.tsx');
+    const routeAReadyIndex = app.indexOf('const routeAReady = enginePort !== null');
+    const helperLiveEffectIndex = app.indexOf('const lastSentHelperPassesRef');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const streamEffectDependencies =
+      videoViewport.match(
+        /void start\(\);[\s\S]*?return \(\) => \{[\s\S]*?\};\s*\}, \[([\s\S]*?)\]\);/,
+      )?.[1] ?? '';
+
+    expect(routeAReadyIndex).toBeGreaterThan(-1);
+    expect(helperLiveEffectIndex).toBeGreaterThan(-1);
+    expect(routeAReadyIndex).toBeLessThan(helperLiveEffectIndex);
+    expect(app).toMatch(/lastSentHelperPassesRef\.current === helperPassesEnabled/);
+    expect(app).toMatch(/type: 'viewport-settings-update'/);
+    expect(app).toMatch(/sendViewportSettingsCommand\(mode, helperPassesEnabled\)/);
+    expect(app).toMatch(/showGrid: helperPassesEnabled/);
+    expect(streamEffectDependencies).not.toMatch(/helperPassesEnabled|showViewportGrid/);
+  });
+
+  it('keeps optional viewport query failures from breaking the global interaction flow', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const app = readSource('App.tsx');
+
+    expect(app).toMatch(
+      /onSceneControlError=\{\(message\) => setSceneControlStatus\('error', message\)\}/,
+    );
+    expect(videoViewport).toMatch(/const handleViewportQueryError = React\.useCallback/);
+    expect(videoViewport).toMatch(/onQueryError=\{handleViewportQueryError\}/);
+    expect(videoViewport).toMatch(/sendViewportCommand\('viewport:select', payload\)/);
+    expect(videoViewport).not.toMatch(
+      /catch \(error\) \{[\s\S]*onSceneControlError\(modelErrorMessage\('error\.hitTestFailed'\)\)/,
+    );
+    expect(videoViewport).not.toMatch(/onQueryError=\{\(error\) => onSceneControlError/);
+  });
+
+  it('keeps ordinary Object and Inspect fallback off semantic picking and stream lifecycle paths', () => {
+    const app = readSource('App.tsx');
+    const selectionControls = readSource('components/SelectionModeControls.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+
+    expect(selectionControls).toMatch(/workflow === 'object' \|\| workflow === 'export-inspect'/);
+    expect(selectionControls).toMatch(/return availableControl\(\)/);
+    expect(app).toMatch(/const handleOutlinerSelectNode = useCallback/);
+    expect(app).toMatch(/setIsRightDockVisible\(true\)/);
+    expect(app).toMatch(/<SelectionTargetInspector target=\{inspectorRoute\.target\} \/>/);
+    expect(modelController).toMatch(
+      /case 'export-inspect':\s*\n\s*return \['node', 'materialSlot', 'submesh', 'primitive', 'environment'\]/,
+    );
+    expect(app).not.toMatch(/GLTFLoader|VRMLoader|parseGltf|parseVRM/);
+    expect(`${app}\n${selectionControls}`).not.toMatch(
+      /startSceneRenderStream|streamProfile|profileTtlMs/,
+    );
+  });
+
+  it('keeps baseline editing from trading interaction latency for GPU or stream degradation', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const h264Client = readFileSync(
+      resolve(srcRoot, '../../../../neko-client/src/H264StreamClient.ts'),
+      'utf8',
+    );
+    const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
+
+    expect(readSource('viewport/viewportStreamQuality.ts')).toMatch(
+      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'quarter'/,
+    );
+    expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
+    expect(videoViewport).toMatch(/allowFpsDegrade: false/);
+    expect(videoViewport).toMatch(/allowQualityDegrade: false/);
+    expect(videoViewport).not.toMatch(/getImageData|readPixels|toDataURL|toBlob/);
+    expect(videoViewport).not.toMatch(/OffscreenCanvas|ImageBitmapRenderingContext/);
+    expect(videoViewport).not.toMatch(/cpuReadback|readback|gpuToCpu|fallbackRenderer/);
+    expect(h264Client).toMatch(/hardwareAcceleration: normalizeHardwareAccelerationPreference/);
+    expect(h264Client).toMatch(/return 'prefer-hardware'/);
+    expect(h264Client).not.toMatch(/hardwareAcceleration:\s*'prefer-software'/);
+    expect(`${videoViewport}\n${packageJson}`).not.toMatch(
+      /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
+    );
+  });
+
+  it('keeps render quality modes and presentation quality from being silently downgraded', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const lookDev = readSource('components/LookDevControls.tsx');
+    const i18nEn = readSource('i18n/locales/en.ts');
+    const i18nZh = readSource('i18n/locales/zh-cn.ts');
+
+    for (const mode of ['pbr', 'clay', 'wireframe', 'normal', 'depth']) {
+      expect(lookDev, mode).toMatch(new RegExp(`'${mode}'`));
+      expect(i18nEn, mode).toMatch(new RegExp(`lookdev\\.mode\\.${mode}`));
+      expect(i18nZh, mode).toMatch(new RegExp(`lookdev\\.mode\\.${mode}`));
+    }
+    expect(videoViewport).toMatch(/ctx\.imageSmoothingEnabled = true/);
+    expect(videoViewport).toMatch(/ctx\.imageSmoothingQuality = 'high'/);
+    expect(videoViewport).toMatch(/renderModeFromStreamDescriptor/);
+    expect(videoViewport).toMatch(/renderModeFromFrameMeta/);
+    expect(videoViewport).not.toMatch(/imageSmoothingEnabled = false/);
+    expect(videoViewport).not.toMatch(/qualityTier:\s*'low'|renderMode:\s*'unlit'/);
   });
 
   it('routes viewport camera controls through scene-control websocket only', () => {
@@ -442,7 +606,9 @@ describe('Route A webview boundaries', () => {
 
     expect(videoViewport).toMatch(/!sceneControlSocket\?\.isOpen\(\)/);
     expect(videoViewport).toMatch(/sceneControlSocket\.sendViewportCameraLatest/);
-    expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
+    expect(videoViewport).toMatch(
+      /sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID, sceneId\)/,
+    );
     expect(videoViewport).not.toMatch(/await sceneControlSocket\.updateViewportCamera/);
     expect(videoViewport).not.toMatch(/cameraUpdateInFlightRef/);
     expect(videoViewport).not.toMatch(/pendingCameraUpdateRef/);
@@ -450,17 +616,19 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/scheduleViewportCamera/);
     expect(videoViewport).toMatch(/pendingCameraFlushTimerRef/);
     expect(videoViewport).toMatch(/VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS/);
-    expect(videoViewport).toMatch(/streamProfile === 'interactive'/);
+    expect(videoViewport).toMatch(/setStreamProfile\('interactive'\)/);
+    expect(videoViewport).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
+    expect(videoViewport).not.toMatch(/streamProfile === 'interactive'/);
+    expect(videoViewport).not.toMatch(/profileTtlMs:/);
+    expect(videoViewport).not.toMatch(/startSceneRenderStream\([\s\S]*streamProfile,/);
     expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
     expect(app).toMatch(/!socket\?\.isOpen\(\)/);
     expect(app).toMatch(/socket\.sendViewportCameraLatest/);
     expect(app).toMatch(/options\?: \{ interactive\?: boolean \}/);
     expect(app).toMatch(/options\?\.interactive === true/);
     expect(app).toMatch(/sendEditorCameraToEngine\(\{ interactive: true \}\)/);
-    expect(app).toMatch(/streamProfile: 'interactive'/);
-    expect(app).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
-    expect(videoViewport).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
-    expect(modelController).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
+    expect(app).not.toMatch(/streamProfile: 'interactive'|profileTtlMs/);
+    expect(modelController).not.toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
     expect(app).not.toMatch(/socket\s*\n\s*\.updateViewportCamera/);
     expect(app).not.toMatch(/updateEditorCamera/);
     expect(videoViewport).not.toMatch(/modelController\s*\n\s*\.updateCamera\(\)/);
@@ -469,7 +637,7 @@ describe('Route A webview boundaries', () => {
     expect(modelController).toMatch(/target: vec3ToTuple\(store\.cameraTarget\)/);
     expect(modelController).toMatch(/kind: 'camera'/);
     expect(modelController).toMatch(/socket\.sendViewportCameraLatest/);
-    expect(modelController).toMatch(/streamProfile: 'interactive'/);
+    expect(modelController).not.toMatch(/streamProfile: 'interactive'|profileTtlMs/);
     expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 33/);
     expect(orbitControls).toMatch(
       /onInteractionActivity\?: \(options\?: \{ readonly immediate\?: boolean \}\) => void/,
@@ -502,15 +670,57 @@ describe('Route A webview boundaries', () => {
     expect(`${app}\n${videoViewport}\n${modelController}`).toMatch(/sendViewportCameraLatest/);
   });
 
-  it('enables character preview controls for a selected or single previewable scene node', () => {
+  it('keeps all high-frequency editing controls on local intent before ack', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const orbitControls = readSource('components/ViewportOrbitControls.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+    const transformPanel = readSource('components/panels/TransformPanel.tsx');
+    const faceSlider = readSource('components/face/FaceParameterSlider.tsx');
+    const lightPanel = readSource('components/panels/LightInspectorPanel.tsx');
+    const hotControlSources = [
+      orbitControls,
+      modelController,
+      transformPanel,
+      faceSlider,
+      lightPanel,
+    ].join('\n');
+
+    expect(orbitControls).toMatch(/useModelStore\.getState\(\)\.orbitCamera/);
+    expect(orbitControls).toMatch(/panCamera\(dx \* scale, dy \* scale\)/);
+    expect(orbitControls).toMatch(/zoomCamera\(/);
+    expect(orbitControls).toMatch(/onInteractionActivity\?\.\(\{ immediate: true \}\)/);
+    expect(videoViewport).toMatch(
+      /markInteractiveStreamActivity\(\);\s*\n\s*scheduleViewportCamera\(options\)/,
+    );
+    expect(modelController).toMatch(/this\.upsertTransformPrediction\(seq, nodeId, transform/);
+    expect(modelController).toMatch(/this\.scheduleDragPrediction\(\)/);
+    expect(modelController).toMatch(/const transform = node\?\.transform/);
+    expect(modelController).not.toMatch(/node\.kind === 'mesh'[\s\S]*tryBeginTransformDrag/);
+    expect(transformPanel).toMatch(/setDraftTransform\(nextTransform\)/);
+    expect(transformPanel).toMatch(/void onTransformCommit\?\.\(node\.nodeId, nextTransform\)/);
+    expect(faceSlider).toMatch(/onPreviewChange\?: \(value: number\) => void/);
+    expect(faceSlider).toMatch(/onCommit\?: \(value: number\) => void/);
+    expect(lightPanel).toMatch(/const \[draft, setDraft\] = React\.useState/);
+    expect(lightPanel).toMatch(/onBlur=\{\(\) => \{/);
+    expect(hotControlSources).not.toMatch(
+      /await\s+.*(onPreviewChange|setDraftTransform|orbitCamera|panCamera|zoomCamera)/,
+    );
+    expect(hotControlSources).not.toMatch(/startSceneRenderStream|streamProfile|profileTtlMs/);
+    expect(hotControlSources).not.toMatch(
+      /viewportCameraAck|cameraUpdateInFlightRef|pendingCameraUpdateRef/,
+    );
+  });
+
+  it('separates previewable mesh targets from character-authoring targets', () => {
     const app = readSource('App.tsx');
     const selector = readSource('components/CharacterPreviewModeSelector.tsx');
 
     expect(app).toMatch(/const characterPreviewTarget = resolveCharacterPreviewTarget/);
-    expect(app).toMatch(/const selectedCharacterId = characterPreviewTarget\.characterId/);
-    expect(app).toMatch(
-      /const isCharacterPreviewDisabled = !routeAReady \|\| !selectedCharacterId/,
-    );
+    expect(app).toMatch(/const selectedCharacterId = resolveSelectedCharacterId/);
+    expect(app).toMatch(/const previewCharacterId = characterPreviewTarget\.characterId/);
+    expect(app).toMatch(/const isCharacterPreviewDisabled = !routeAReady \|\| !previewCharacterId/);
+    expect(app).toMatch(/function resolveSelectedCharacterId/);
+    expect(app).toMatch(/!selected \|\| !isCharacterSceneNode\(selected\)/);
     expect(app).toMatch(/sceneNodes\.filter\(isPreviewableSceneNode\)/);
     expect(app).toMatch(/node\.kind === 'mesh' \|\| node\.mesh !== undefined/);
     expect(app).toMatch(/statusLabel=\{characterPreviewStatusLabel\}/);
@@ -537,14 +747,23 @@ describe('Route A webview boundaries', () => {
   it('routes model transform commits through scene-control websocket command envelopes', () => {
     const app = readSource('App.tsx');
     const modelController = readSource('viewport/ModelController.ts');
+    const transformPanel = readSource('components/panels/TransformPanel.tsx');
 
     expect(app).toMatch(/const applied = await sendRouteACommand\(\{/);
     expect(app).toMatch(/coalesceKey: `transform:\$\{nodeId\}`/);
     expect(app).toMatch(/type: 'transform'/);
     expect(app).not.toMatch(/new ModelController\(\{\s*enginePort: port/);
+    expect(modelController).toMatch(/const envelope: SceneCommandEnvelope = \{/);
+    expect(modelController).toMatch(/baseRevision: command\.baseRevision/);
     expect(modelController).toMatch(/socket\.sendCommand\(envelope\)/);
     expect(modelController).toMatch(/sceneControlSocket === null/);
     expect(modelController).toMatch(/scene control websocket is disconnected/);
+    expect(`${app}\n${modelController}\n${transformPanel}`).not.toMatch(
+      /postMessage\(\{\s*type: 'updateTransform'|type: 'updateTransform'/,
+    );
+    expect(modelController).toMatch(
+      /case 'viewport:transform':\s*\n\s*return this\.dispatchTransformOverSocket\(socket, command\)/,
+    );
   });
 
   it('treats viewport grid as an Engine helper pass instead of a Webview overlay', () => {
@@ -561,11 +780,14 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/helperPassesEnabled/);
     expect(videoViewport).toMatch(/useModelStore\(\(state\) => state\.showViewportGrid\)/);
     expect(videoViewport).not.toMatch(/<ViewportGuideOverlay visible=\{showViewportGrid\}/);
+    expect(videoViewport).not.toMatch(
+      /void start\(\);[\s\S]*?return \(\) => \{[\s\S]*?\};\s*\}, \[[\s\S]*helperPassesEnabled[\s\S]*\]\);/,
+    );
     expect(engineClient).toMatch(/helperPassesEnabled: viewport\.helperPassesEnabled/);
     expect(sceneTypes).toMatch(/helperPassesEnabled\?: boolean/);
   });
 
-  it('pauses Route A streaming when the VS Code tab is hidden', () => {
+  it('keeps Route A stream visibility ownership in the Extension Host', () => {
     const app = readSource('App.tsx');
     const videoViewport = readSource('components/VideoViewport.tsx');
     const modelEditorProvider = readFileSync(
@@ -579,10 +801,26 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/webviewVisible/);
     expect(app).toMatch(/case 'webviewVisibility'/);
     expect(app).toMatch(/visibilitychange/);
+    expect(app).toMatch(/handleDocumentLifecycleSignal/);
+    expect(app).toMatch(/document\.visibilityState === 'hidden' \|\| !webviewVisibleRef\.current/);
+    expect(app).not.toMatch(/const initialWebviewVisible = document\.visibilityState !== 'hidden'/);
+    expect(app).not.toMatch(/const visible = document\.visibilityState !== 'hidden'/);
+    expect(app).not.toMatch(/applyWebviewVisibility\(visible\)/);
     expect(app).toMatch(/visible=\{webviewVisible\}/);
     expect(videoViewport).toMatch(/visible: boolean/);
     expect(videoViewport).toMatch(/MIN_VISIBLE_VIEWPORT_DIMENSION = 64/);
     expect(videoViewport).toMatch(/!visible \|\| !isViewportStreamSizeReady\(viewportSize\)/);
+  });
+
+  it('treats duplicate stream destroy as idempotent lifecycle cleanup', () => {
+    const streamController = readFileSync(
+      resolve(srcRoot, '../../../../neko-engine/packages/host-api/src/controllers/stream.rs'),
+      'utf8',
+    );
+
+    expect(streamController).toMatch(/Err\(StreamStateError::NotFound\(_\)\) => true/);
+    expect(streamController).toMatch(/"alreadyDestroyed": already_destroyed/);
+    expect(streamController).toMatch(/test_destroy_stream_is_idempotent/);
   });
 
   it('routes scene tree visibility toggles through Route A scene control', () => {
@@ -674,6 +912,7 @@ describe('Route A webview boundaries', () => {
     const lightPanel = readSource('components/panels/LightInspectorPanel.tsx');
     const environmentPanel = readSource('components/panels/EnvironmentPanel.tsx');
     const selectionControls = readSource('components/SelectionModeControls.tsx');
+    const qualityControls = readSource('components/ViewportQualityControls.tsx');
     const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
     const combined = [
       app,
@@ -683,6 +922,7 @@ describe('Route A webview boundaries', () => {
       lightPanel,
       environmentPanel,
       selectionControls,
+      qualityControls,
       packageJson,
     ].join('\n');
 
@@ -690,6 +930,7 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/<LightInspectorPanel\b/);
     expect(app).toMatch(/<EnvironmentPanel\b/);
     expect(app).toMatch(/<SelectionModeControls\b/);
+    expect(app).toMatch(/<ViewportQualityControls\b/);
     expect(videoViewport).toMatch(/renderMode: ViewportRenderMode/);
     expect(videoViewport).toMatch(/lookdev:/);
     expect(modelController).toMatch(/selectionQuery/);

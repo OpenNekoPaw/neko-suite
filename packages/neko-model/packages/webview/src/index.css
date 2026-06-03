@@ -705,6 +705,7 @@
     grid-template-columns: minmax(260px, 1fr) minmax(220px, auto);
     grid-template-areas:
       'lookdev selection'
+      'quality selection'
       'preview selection';
     align-items: start;
     gap: 8px;
@@ -745,6 +746,37 @@
     box-shadow: var(--model-left-toolbar-shadow);
     padding: 6px;
     backdrop-filter: blur(10px);
+  }
+
+  .model-viewport-quality-controls {
+    pointer-events: auto;
+    grid-area: quality;
+    display: flex;
+    width: min(360px, 100%);
+    max-width: min(360px, 100%);
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--model-left-toolbar-border);
+    border-radius: 6px;
+    background: var(--model-left-toolbar-bg);
+    box-shadow: var(--model-left-toolbar-shadow);
+    padding: 6px;
+    backdrop-filter: blur(10px);
+  }
+
+  .model-viewport-quality-label {
+    flex: 0 0 auto;
+    color: var(--model-fg-muted);
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .model-viewport-quality-segments {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: repeat(3, minmax(48px, 1fr));
+    gap: 3px;
+    min-width: 0;
   }
 
   .model-lookdev-segments {
@@ -835,7 +867,8 @@
     backdrop-filter: blur(10px);
   }
 
-  .model-selection-mode-controls button {
+  .model-selection-mode-controls button,
+  .model-viewport-quality-segments button {
     min-width: 0;
     min-height: 28px;
     overflow: hidden;
@@ -850,7 +883,9 @@
   }
 
   .model-selection-mode-controls button:hover:not(:disabled),
-  .model-selection-mode-controls button.active {
+  .model-selection-mode-controls button.active,
+  .model-viewport-quality-segments button:hover,
+  .model-viewport-quality-segments button.active {
     background: color-mix(in srgb, var(--model-accent) 20%, transparent);
     color: var(--model-fg);
   }
@@ -1034,6 +1069,7 @@
       grid-template-columns: 1fr;
       grid-template-areas:
         'lookdev'
+        'quality'
         'selection'
         'preview';
       align-items: start;
@@ -1043,6 +1079,7 @@
     }
 
     .model-lookdev-controls,
+    .model-viewport-quality-controls,
     .model-selection-mode-controls,
     .model-character-preview-modes {
       width: 100%;

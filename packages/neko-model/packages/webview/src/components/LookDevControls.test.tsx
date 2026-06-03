@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ViewportRenderMode } from '@neko/shared';
+import { defaultModelLookDevSceneControlCapabilities } from '@neko/neko-client';
 import { LookDevControls } from './LookDevControls';
 import type { LookDevUiState } from '../stores/modelStore';
 
@@ -22,13 +23,18 @@ vi.mock('../i18n/I18nContext', () => ({
         'lookdev.mode.unlit': '无光照',
         'lookdev.mode.shadowAtlas': '阴影',
         'lookdev.title.clay': '白模检查视图',
+        'lookdev.title.normal': '法线检查视图',
+        'lookdev.title.depth': '深度检查视图',
         'lookdev.status.pending': '切换中',
         'lookdev.status.applied': '已应用',
         'lookdev.helpers.enabled': '辅助',
         'lookdev.helpers.disabled': '干净',
         'lookdev.live.enabled': '实时',
-        'lookdev.live.restart': '重启流',
+        'lookdev.live.pending': '待实时应用',
         'lookdev.retry': '重试 LookDev 切换',
+        'controlAvailability.state.disabled': '不可用',
+        'controlAvailability.reason.capability-unsupported': '引擎不支持该能力',
+        'controlAvailability.reason.capability-unknown': '引擎能力状态未知',
       };
       return messages[key] ?? key;
     },
@@ -67,7 +73,8 @@ describe('LookDevControls', () => {
     });
 
     expect(onModeChange).toHaveBeenCalledWith('clay');
-    expect(host.textContent).toContain('重启流');
+    expect(host.textContent).toContain('待实时应用');
+    expect(host.textContent).not.toContain('重启流');
   });
 
   it('disables unsupported Clay and shows pending diagnostic state', () => {
@@ -79,6 +86,7 @@ describe('LookDevControls', () => {
         diagnostic: 'waiting for Engine descriptor',
       },
       capabilities: {
+        ...defaultModelLookDevSceneControlCapabilities(),
         renderModes: ['pbr', 'wireframe'],
         liveViewportSettings: true,
         clay: false,
@@ -86,6 +94,14 @@ describe('LookDevControls', () => {
         environment: false,
         typedPicking: false,
         characterRegions: false,
+        capabilityStates: {
+          ...defaultModelLookDevSceneControlCapabilities().capabilityStates,
+          clay: 'unsupported',
+          renderModes: {
+            ...defaultModelLookDevSceneControlCapabilities().capabilityStates.renderModes,
+            clay: 'unsupported',
+          },
+        },
       },
     });
 
@@ -94,11 +110,42 @@ describe('LookDevControls', () => {
     expect(host.textContent).toContain('waiting for Engine descriptor');
     expect(host.textContent).toContain('实时');
   });
+
+  it('keeps baseline LookDev buttons visible and explains unknown capability state', () => {
+    renderControls({
+      capabilities: {
+        ...defaultModelLookDevSceneControlCapabilities(),
+        renderModes: ['pbr'],
+        liveViewportSettings: false,
+        clay: false,
+        authoredLights: false,
+        environment: false,
+        typedPicking: false,
+        characterRegions: false,
+        capabilityStates: {
+          ...defaultModelLookDevSceneControlCapabilities().capabilityStates,
+          clay: 'unknown',
+          renderModes: {
+            ...defaultModelLookDevSceneControlCapabilities().capabilityStates.renderModes,
+            clay: 'unknown',
+            normal: 'unknown',
+            depth: 'unsupported',
+          },
+        },
+      },
+    });
+
+    expect(buttonByText('白模').dataset.availabilityReason).toBe('capability-unknown');
+    expect(buttonByText('白模').title).toBe('白模检查视图 - 不可用: 引擎能力状态未知');
+    expect(buttonByText('法线').dataset.availabilityReason).toBe('capability-unknown');
+    expect(buttonByText('深度').dataset.availabilityReason).toBe('capability-unsupported');
+  });
 });
 
 function renderControls({
   state = appliedState('pbr'),
   capabilities = {
+    ...defaultModelLookDevSceneControlCapabilities(),
     renderModes: ['pbr', 'clay', 'wireframe', 'normal', 'depth', 'lightComplexity'],
     liveViewportSettings: false,
     clay: true,
@@ -106,6 +153,17 @@ function renderControls({
     environment: true,
     typedPicking: true,
     characterRegions: true,
+    capabilityStates: {
+      ...defaultModelLookDevSceneControlCapabilities().capabilityStates,
+      authoredLights: 'supported',
+      environment: 'supported',
+      typedPicking: 'supported',
+      characterRegions: 'supported',
+      renderModes: {
+        ...defaultModelLookDevSceneControlCapabilities().capabilityStates.renderModes,
+        shadowAtlas: 'unsupported',
+      },
+    },
   },
   routeAReady = true,
   onModeChange = vi.fn(),

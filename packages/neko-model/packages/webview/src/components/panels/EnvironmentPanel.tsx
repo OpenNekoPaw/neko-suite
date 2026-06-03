@@ -1,11 +1,19 @@
 import React from 'react';
 import type { EnvironmentDiagnostic, EnvironmentPatch } from '@neko/shared';
 import { RefreshIcon, TrashIcon, UploadIcon } from '@neko/ui/icons';
+import {
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../../baseline/controlAvailability';
+import { useTranslation } from '../../i18n/I18nContext';
 
 export interface EnvironmentPanelProps {
   environment: EnvironmentPatch | null;
   diagnostics: readonly EnvironmentDiagnostic[];
   disabled?: boolean;
+  availability?: ModelControlAvailability;
   onSet: (patch: Omit<EnvironmentPatch, 'environmentId'>) => void;
   onUpdate: (patch: Omit<EnvironmentPatch, 'environmentId'>) => void;
   onClear: () => void;
@@ -26,13 +34,21 @@ export function EnvironmentPanel({
   environment,
   diagnostics,
   disabled = false,
+  availability,
   onSet,
   onUpdate,
   onClear,
   onRetry,
   onPickPanorama,
 }: EnvironmentPanelProps): React.JSX.Element {
+  const { t } = useTranslation();
   const current = toEditableEnvironment(environment);
+  const effectiveAvailability =
+    availability ?? (disabled ? disabledControl('capability-unsupported') : null);
+  const controlsDisabled =
+    disabled || (effectiveAvailability ? isControlDisabled(effectiveAvailability) : false);
+  const availabilityTitle = (baseTitle: string) =>
+    formatControlAvailabilityTitle(effectiveAvailability ?? { state: 'available' }, t, baseTitle);
   const commit = (patch: Partial<Omit<EnvironmentPatch, 'environmentId'>>) => {
     if (environment) {
       onUpdate({ ...current, ...patch });
@@ -54,8 +70,8 @@ export function EnvironmentPanel({
         <button
           type="button"
           className="model-btn-secondary w-full gap-1"
-          disabled={disabled}
-          title="Choose LDR panorama"
+          disabled={controlsDisabled}
+          title={availabilityTitle('Choose LDR panorama')}
           onClick={onPickPanorama}
         >
           <UploadIcon size={12} />
@@ -64,14 +80,14 @@ export function EnvironmentPanel({
         <ColorQuad
           label="Background"
           value={current.backgroundColor ?? DEFAULT_ENVIRONMENT.backgroundColor!}
-          disabled={disabled}
+          disabled={controlsDisabled}
           onCommit={(backgroundColor) => commit({ backgroundColor })}
         />
         <label className="model-field-column">
           <span>Mode</span>
           <select
             value={current.mode}
-            disabled={disabled}
+            disabled={controlsDisabled}
             onChange={(event) =>
               commit({ mode: event.currentTarget.value as EnvironmentPatch['mode'] })
             }
@@ -86,7 +102,7 @@ export function EnvironmentPanel({
           <input
             type="checkbox"
             checked={current.visibleAsBackground}
-            disabled={disabled}
+            disabled={controlsDisabled}
             onChange={(event) => commit({ visibleAsBackground: event.currentTarget.checked })}
           />
         </label>
@@ -97,7 +113,7 @@ export function EnvironmentPanel({
           label="Rotation"
           value={current.rotationDeg}
           step={1}
-          disabled={disabled}
+          disabled={controlsDisabled}
           onCommit={(rotationDeg) => commit({ rotationDeg })}
         />
         <NumberField
@@ -105,14 +121,14 @@ export function EnvironmentPanel({
           value={current.intensity}
           min={0}
           step={0.05}
-          disabled={disabled}
+          disabled={controlsDisabled}
           onCommit={(intensity) => commit({ intensity })}
         />
         <NumberField
           label="Exposure"
           value={current.exposure}
           step={0.05}
-          disabled={disabled}
+          disabled={controlsDisabled}
           onCommit={(exposure) => commit({ exposure })}
         />
       </div>
@@ -132,8 +148,8 @@ export function EnvironmentPanel({
         <button
           type="button"
           className="model-btn-secondary gap-1"
-          disabled={disabled}
-          title="Retry environment loading"
+          disabled={controlsDisabled}
+          title={availabilityTitle('Retry environment loading')}
           onClick={onRetry}
         >
           <RefreshIcon size={12} />
@@ -142,14 +158,23 @@ export function EnvironmentPanel({
         <button
           type="button"
           className="model-btn-secondary gap-1"
-          disabled={disabled || !environment}
-          title="Clear environment"
+          disabled={controlsDisabled || !environment}
+          title={availabilityTitle('Clear environment')}
           onClick={onClear}
         >
           <TrashIcon size={12} />
           Clear
         </button>
       </div>
+      {effectiveAvailability && effectiveAvailability.state !== 'available' ? (
+        <div
+          className="model-panel-footer text-[10px] text-[var(--model-fg-secondary)]"
+          data-availability-state={effectiveAvailability.state}
+          data-availability-reason={effectiveAvailability.reason}
+        >
+          {formatControlAvailabilityTitle(effectiveAvailability, t)}
+        </div>
+      ) : null}
     </div>
   );
 }

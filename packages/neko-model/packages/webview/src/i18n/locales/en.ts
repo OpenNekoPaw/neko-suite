@@ -20,6 +20,7 @@ export const en = {
   'toolbar.hideViewportHud': 'Hide viewport HUD',
   'toolbar.showPerformanceMetrics': 'Show performance metrics',
   'toolbar.hidePerformanceMetrics': 'Hide performance metrics',
+  'toolbar.viewportQuality': 'Viewport quality: {current}. Click for {next}',
   'toolbar.showBottomPanel': 'Show bottom panel',
   'toolbar.hideBottomPanel': 'Hide bottom panel',
   'toolbar.showRightDock': 'Show right panels',
@@ -32,6 +33,17 @@ export const en = {
   // Viewport controls
   'viewport.grid': 'Show Engine 3D grid',
   'viewport.resetCamera': 'Reset camera',
+  'viewport.quality.quarter': '1/4 pixels',
+  'viewport.quality.half': '1/2 pixels',
+  'viewport.quality.native': 'Native 1:1',
+  'viewport.quality.aria': 'Viewport stream quality',
+  'viewport.quality.label': 'Quality',
+  'viewport.quality.quarterShort': '1/4',
+  'viewport.quality.halfShort': '1/2',
+  'viewport.quality.nativeShort': '1:1',
+  'viewport.qualityTitle.quarter': 'Quarter physical pixels, with at least 1440p output',
+  'viewport.qualityTitle.half': 'Half physical pixels, with at least 1440p output',
+  'viewport.qualityTitle.native': 'Match the viewport physical pixel size',
 
   // Viewport HUD
   'lookdev.aria.renderModes': 'Model LookDev render modes',
@@ -60,7 +72,7 @@ export const en = {
   'lookdev.helpers.enabled': 'Helpers',
   'lookdev.helpers.disabled': 'Clean',
   'lookdev.live.enabled': 'Live',
-  'lookdev.live.restart': 'Restart',
+  'lookdev.live.pending': 'Live pending',
   'lookdev.retry': 'Retry LookDev switch',
   'selection.aria.workflowModes': 'Selection workflow modes',
   'selection.workflow.object': 'Object',
@@ -108,9 +120,31 @@ export const en = {
   'characterPreview.playbackTitle.pause': 'Pause preview playback',
   'characterPreview.playbackTitle.stop': 'Stop preview playback',
 
+  // Control availability
+  'controlAvailability.state.pending': 'Pending',
+  'controlAvailability.state.disabled': 'Unavailable',
+  'controlAvailability.state.degraded': 'Degraded',
+  'controlAvailability.reason.engine-not-ready': 'Engine is not ready',
+  'controlAvailability.reason.scene-control-disconnected': 'Scene control is disconnected',
+  'controlAvailability.reason.capability-unsupported': 'Engine capability is not supported',
+  'controlAvailability.reason.capability-unknown': 'Engine capability is still unknown',
+  'controlAvailability.reason.no-selection': 'Select a target first',
+  'controlAvailability.reason.asset-not-character': 'Selected asset is not a compatible character',
+  'controlAvailability.reason.missing-character-regions':
+    'Selected asset has no character region metadata',
+  'controlAvailability.reason.missing-morph-data': 'Selected asset has no morph data',
+  'controlAvailability.reason.missing-bone-data': 'Selected asset has no editable bone data',
+  'controlAvailability.reason.missing-animation-clips': 'Selected asset has no animation clips',
+  'controlAvailability.reason.hit-test-unavailable':
+    'Viewport hit-test is unavailable; use the Outliner',
+  'controlAvailability.reason.runtime-rejected': 'Engine rejected the last request',
+  'controlAvailability.reason.stream-fallback': 'Viewport stream is using a fallback path',
+  'controlAvailability.reason.metadata-stale': 'Waiting for fresh Engine metadata',
+
   // Performance overlay
   'performance.aria.metrics': 'Viewport performance metrics',
   'performance.title': 'Performance',
+  'performance.metric.baselineTarget': '1080p60 baseline',
   'performance.metric.streamFps': 'Stream FPS',
   'performance.metric.presentFps': 'Present FPS 1s avg',
   'performance.metric.frameP95': 'Frame 1s P95',
@@ -133,6 +167,7 @@ export const en = {
   'performance.metric.decodeOutputBurst': 'Output burst',
   'performance.metric.preDecodeDrops': 'Pre-decode drops 1s max',
   'performance.metric.prePresentDrops': 'Pre-present drops 1s max',
+  'performance.metric.staleOutputDrops': 'Stale output drops 1s max',
   'performance.metric.decodeLag': 'Decode lag frames 1s max',
   'performance.metric.ackP95': 'ACK 1s P95',
   'performance.metric.patchBandwidth': 'Patch bandwidth 1s',
@@ -171,6 +206,8 @@ export const en = {
   'performance.value.disabled': 'Disabled',
   'performance.value.frameRevision': '#{frame} / r{revision}',
   'performance.value.hostLimited': '{fps} fps host-limited',
+  'performance.value.baselineMatched': '{effective}',
+  'performance.value.baselineFallback': '{effective} fallback',
 
   // Workbench
   'workbench.vscodePanel': 'VSCode Webview panel',

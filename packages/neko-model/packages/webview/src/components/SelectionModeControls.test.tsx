@@ -19,6 +19,12 @@ vi.mock('../i18n/I18nContext', () => ({
         'selection.workflow.animation': '动画',
         'selection.workflow.exportInspect': '检查',
         'selection.workflowTitle.light': '已创建灯光选择',
+        'selection.workflowTitle.object': '对象选择',
+        'selection.workflowTitle.faceRegion': '角色区域选择',
+        'selection.workflowTitle.exportInspect': '只读检查',
+        'controlAvailability.state.disabled': '不可用',
+        'controlAvailability.reason.missing-character-regions': '当前资产没有角色区域元数据',
+        'controlAvailability.reason.capability-unsupported': '引擎不支持该能力',
       };
       return messages[key] ?? key;
     },
@@ -61,7 +67,20 @@ describe('SelectionModeControls', () => {
     renderControls({ characterRegionsAvailable: false });
 
     expect(buttonByText('面部').disabled).toBe(true);
+    expect(buttonByText('面部').dataset.availabilityReason).toBe('missing-character-regions');
+    expect(buttonByText('面部').title).toBe('角色区域选择 - 不可用: 当前资产没有角色区域元数据');
     expect(buttonByText('骨骼').disabled).toBe(false);
+  });
+
+  it('keeps Object and Inspect available when semantic typed picking is unavailable', () => {
+    renderControls({ typedPickingAvailable: false, characterRegionsAvailable: false });
+
+    expect(buttonByText('对象').disabled).toBe(false);
+    expect(buttonByText('对象').dataset.availabilityState).toBe('available');
+    expect(buttonByText('检查').disabled).toBe(false);
+    expect(buttonByText('检查').dataset.availabilityState).toBe('available');
+    expect(buttonByText('骨骼').disabled).toBe(true);
+    expect(buttonByText('骨骼').dataset.availabilityReason).toBe('capability-unsupported');
   });
 });
 

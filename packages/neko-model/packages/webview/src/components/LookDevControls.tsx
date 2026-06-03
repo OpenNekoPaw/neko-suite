@@ -1,14 +1,25 @@
 import React from 'react';
 import type { ViewportRenderMode } from '@neko/shared';
-import type { ModelLookDevSceneControlCapabilities } from '@neko/neko-client';
+import type {
+  ModelLookDevSceneControlCapabilities,
+  ModelSceneControlCapabilityState,
+} from '@neko/neko-client';
 import type { LookDevUiState } from '../stores/modelStore';
 import { RefreshIcon } from '@neko/ui/icons';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  availableControl,
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../baseline/controlAvailability';
 
 export interface LookDevControlsProps {
   state: LookDevUiState;
   capabilities: ModelLookDevSceneControlCapabilities;
   routeAReady: boolean;
+  availability?: ModelControlAvailability;
   helperPassesEnabled: boolean;
   onModeChange: (mode: ViewportRenderMode) => void;
 }
@@ -40,21 +51,25 @@ export function LookDevControls({
   state,
   capabilities,
   routeAReady,
+  availability,
   helperPassesEnabled,
   onModeChange,
 }: LookDevControlsProps): React.JSX.Element {
   const { t } = useTranslation();
   const activeMode = state.requestedMode ?? state.appliedMode;
-  const visibleModes = LOOKDEV_MODES.filter(
-    (item) => item.mode === 'pbr' || capabilities.renderModes.includes(item.mode),
-  );
   const canRetry = state.status === 'timeout' && state.requestedMode !== null && routeAReady;
 
   return (
     <div className="model-lookdev-controls" aria-label={t('lookdev.aria.renderModes')}>
       <div className="model-lookdev-segments" role="tablist">
-        {visibleModes.map((item) => {
-          const supported = isModeSupported(capabilities, item.mode);
+        {LOOKDEV_MODES.map((item) => {
+          const modeAvailability = lookDevModeAvailability({
+            capabilities,
+            mode: item.mode,
+            routeAReady,
+            baseAvailability: availability,
+          });
+          const disabled = isControlDisabled(modeAvailability);
           return (
             <button
               key={item.mode}
@@ -62,8 +77,12 @@ export function LookDevControls({
               role="tab"
               aria-selected={activeMode === item.mode}
               className={activeMode === item.mode ? 'active' : undefined}
-              disabled={!routeAReady || !supported}
-              title={t(item.titleKey)}
+              data-availability-state={modeAvailability.state}
+              data-availability-reason={
+                modeAvailability.state === 'available' ? undefined : modeAvailability.reason
+              }
+              disabled={disabled}
+              title={formatControlAvailabilityTitle(modeAvailability, t, t(item.titleKey))}
               onClick={() => onModeChange(item.mode)}
             >
               {t(item.labelKey)}
@@ -79,7 +98,7 @@ export function LookDevControls({
         <span>
           {capabilities.liveViewportSettings
             ? t('lookdev.live.enabled')
-            : t('lookdev.live.restart')}
+            : t('lookdev.live.pending')}
         </span>
         {canRetry ? (
           <button
@@ -101,11 +120,44 @@ export function LookDevControls({
   );
 }
 
-function isModeSupported(
+function lookDevModeAvailability({
+  capabilities,
+  mode,
+  routeAReady,
+  baseAvailability,
+}: {
+  readonly capabilities: ModelLookDevSceneControlCapabilities;
+  readonly mode: ViewportRenderMode;
+  readonly routeAReady: boolean;
+  readonly baseAvailability?: ModelControlAvailability;
+}): ModelControlAvailability {
+  if (!routeAReady) {
+    return disabledControl('scene-control-disconnected');
+  }
+  const modeState = lookDevModeCapabilityState(capabilities, mode);
+  if (modeState === 'unsupported') {
+    return disabledControl('capability-unsupported');
+  }
+  if (modeState === 'unknown') {
+    return disabledControl('capability-unknown');
+  }
+  return baseAvailability ?? availableControl();
+}
+
+function lookDevModeCapabilityState(
   capabilities: ModelLookDevSceneControlCapabilities,
   mode: ViewportRenderMode,
-): boolean {
-  return capabilities.renderModes.includes(mode) && (mode !== 'clay' || capabilities.clay);
+): ModelSceneControlCapabilityState {
+  const renderModeState =
+    capabilities.capabilityStates.renderModes[mode] ??
+    (capabilities.renderModes.includes(mode) ? 'supported' : 'unsupported');
+  if (renderModeState !== 'supported') {
+    return renderModeState;
+  }
+  if (mode === 'clay') {
+    return capabilities.capabilityStates.clay;
+  }
+  return renderModeState;
 }
 
 function statusLabel(

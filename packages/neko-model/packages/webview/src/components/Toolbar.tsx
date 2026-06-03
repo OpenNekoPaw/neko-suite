@@ -11,6 +11,7 @@ import {
   PackageIcon,
   RightPanelIcon,
   RightPanelOffIcon,
+  SettingsIcon,
 } from '@neko/ui/icons';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
@@ -18,6 +19,10 @@ import { CreativeLeftRail } from '@neko/ui/workbench';
 import { useTranslation } from '../i18n/I18nContext';
 import { postMessage } from '@neko/shared/vscode';
 import { useModelStore, type ModelState } from '../stores/modelStore';
+import {
+  nextViewportStreamQualityPreset,
+  type ViewportStreamQualityPreset,
+} from '../viewport/viewportStreamQuality';
 
 interface ModelSideToolbarProps {
   readonly className?: string;
@@ -37,6 +42,7 @@ type ToggleToolKey = 'face' | 'bone' | 'shape' | 'text' | 'csg' | 'sculpt' | 'ke
 interface ViewportToolbarStoreState {
   readonly showViewportGrid: boolean;
   readonly isPerformanceMetricsVisible: boolean;
+  readonly viewportStreamQuality: ViewportStreamQualityPreset;
   readonly isFaceEditorOpen: boolean;
   readonly isBoneExpressionOpen: boolean;
   readonly isShapeCreatorOpen: boolean;
@@ -46,6 +52,7 @@ interface ViewportToolbarStoreState {
   readonly isKeyframeEditorOpen: boolean;
   readonly toggleViewportGrid: () => void;
   readonly togglePerformanceMetrics: () => void;
+  readonly cycleViewportStreamQuality: () => void;
   readonly resetCamera: () => void;
   readonly toggleFaceEditor: () => void;
   readonly toggleBoneExpression: () => void;
@@ -194,6 +201,21 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
         <ToolbarSeparator />
 
         <ToolbarButton
+          data-creative-left-rail-action="cycle-viewport-quality"
+          data-creative-left-rail-kind="common-action"
+          data-model-toolbar-action="cycle-viewport-quality"
+          icon={<SettingsIcon size={16} />}
+          title={t('toolbar.viewportQuality', {
+            current: t(viewportQualityLabelKey(toolbarState.viewportStreamQuality)),
+            next: t(
+              viewportQualityLabelKey(
+                nextViewportStreamQualityPreset(toolbarState.viewportStreamQuality),
+              ),
+            ),
+          })}
+          onClick={toolbarState.cycleViewportStreamQuality}
+        />
+        <ToolbarButton
           data-creative-left-rail-action="toggle-viewport-grid"
           data-creative-left-rail-kind="common-action"
           data-model-toolbar-action="toggle-viewport-grid"
@@ -292,6 +314,7 @@ function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStor
   return {
     showViewportGrid: state.showViewportGrid,
     isPerformanceMetricsVisible: state.isPerformanceMetricsVisible,
+    viewportStreamQuality: state.viewportStreamQuality,
     isFaceEditorOpen: state.isFaceEditorOpen,
     isBoneExpressionOpen: state.isBoneExpressionOpen,
     isShapeCreatorOpen: state.isShapeCreatorOpen,
@@ -301,6 +324,7 @@ function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStor
     isKeyframeEditorOpen: state.isKeyframeEditorOpen,
     toggleViewportGrid: state.toggleViewportGrid,
     togglePerformanceMetrics: state.togglePerformanceMetrics,
+    cycleViewportStreamQuality: state.cycleViewportStreamQuality,
     resetCamera: state.resetCamera,
     toggleFaceEditor: state.toggleFaceEditor,
     toggleBoneExpression: state.toggleBoneExpression,
@@ -319,6 +343,7 @@ function areToolbarStatesEqual(
   return (
     left.showViewportGrid === right.showViewportGrid &&
     left.isPerformanceMetricsVisible === right.isPerformanceMetricsVisible &&
+    left.viewportStreamQuality === right.viewportStreamQuality &&
     left.isFaceEditorOpen === right.isFaceEditorOpen &&
     left.isBoneExpressionOpen === right.isBoneExpressionOpen &&
     left.isShapeCreatorOpen === right.isShapeCreatorOpen &&
@@ -328,6 +353,7 @@ function areToolbarStatesEqual(
     left.isKeyframeEditorOpen === right.isKeyframeEditorOpen &&
     left.toggleViewportGrid === right.toggleViewportGrid &&
     left.togglePerformanceMetrics === right.togglePerformanceMetrics &&
+    left.cycleViewportStreamQuality === right.cycleViewportStreamQuality &&
     left.resetCamera === right.resetCamera &&
     left.toggleFaceEditor === right.toggleFaceEditor &&
     left.toggleBoneExpression === right.toggleBoneExpression &&
@@ -337,6 +363,17 @@ function areToolbarStatesEqual(
     left.toggleSculptBrush === right.toggleSculptBrush &&
     left.toggleKeyframeEditor === right.toggleKeyframeEditor
   );
+}
+
+function viewportQualityLabelKey(quality: ViewportStreamQualityPreset): string {
+  switch (quality) {
+    case 'quarter':
+      return 'viewport.quality.quarter';
+    case 'half':
+      return 'viewport.quality.half';
+    case 'native':
+      return 'viewport.quality.native';
+  }
 }
 
 function viewportToggleTool(

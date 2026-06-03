@@ -53,6 +53,7 @@ export interface RenderDiagnosticsWindowSnapshot {
   decodeOutputLagFrames: PerformanceWindowStats;
   droppedBeforeDecode: PerformanceWindowStats;
   decodedDroppedBeforePresent: PerformanceWindowStats;
+  staleDecodedOutputsDropped: PerformanceWindowStats;
   droppedFramesSinceLast: PerformanceWindowStats;
   skippedIntervals: PerformanceWindowStats;
   iosurfaceCreations: PerformanceWindowStats;
@@ -238,6 +239,7 @@ function renderDiagnosticsWindow(
     decodeOutputLagFrames: statsFor(diagnostics, 'decodeOutputLagFrames'),
     droppedBeforeDecode: statsFor(diagnostics, 'droppedBeforeDecode'),
     decodedDroppedBeforePresent: statsFor(diagnostics, 'decodedDroppedBeforePresent'),
+    staleDecodedOutputsDropped: statsFor(diagnostics, 'staleDecodedOutputsDropped'),
     droppedFramesSinceLast: statsFor(diagnostics, 'droppedFramesSinceLast'),
     skippedIntervals: statsFor(diagnostics, 'skippedIntervals'),
     iosurfaceCreations: statsFor(diagnostics, 'iosurfaceCreations'),

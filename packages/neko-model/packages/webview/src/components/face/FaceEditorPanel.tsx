@@ -9,12 +9,18 @@ import {
   getDefaultFaceParams,
   type FaceCategory,
 } from '../../types/faceParameters';
+import {
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../../baseline/controlAvailability';
 
 const logger = getLogger('FaceEditorPanel');
 
 interface FaceEditorPanelProps {
   characterId: string | null;
   disabled?: boolean;
+  availability?: ModelControlAvailability;
   onSetMorph: (morphId: string, weight: number) => void;
 }
 
@@ -30,6 +36,7 @@ interface FaceEditorPanelProps {
 export function FaceEditorPanel({
   characterId,
   disabled = false,
+  availability,
   onSetMorph,
 }: FaceEditorPanelProps): React.JSX.Element {
   const faceParams = useModelStore((s) => s.faceParams);
@@ -74,8 +81,16 @@ export function FaceEditorPanel({
     setFaceParam(name, value);
     onSetMorph(name, value);
   };
-  const controlsDisabled = disabled || !characterId;
+  const effectiveAvailability =
+    availability ??
+    (!characterId ? ({ state: 'disabled', reason: 'asset-not-character' } as const) : null);
+  const controlsDisabled =
+    disabled ||
+    !characterId ||
+    (effectiveAvailability ? isControlDisabled(effectiveAvailability) : false);
   const { t } = useTranslation();
+  const controlTitle = (baseTitle: string) =>
+    formatControlAvailabilityTitle(effectiveAvailability ?? { state: 'available' }, t, baseTitle);
 
   return (
     <div className="model-side-panel h-full w-64">
@@ -87,6 +102,7 @@ export function FaceEditorPanel({
         <button
           onClick={handleRandomize}
           disabled={controlsDisabled}
+          title={controlTitle(t('face.random'))}
           className="model-btn-primary flex-1"
         >
           {t('face.random')}
@@ -94,6 +110,7 @@ export function FaceEditorPanel({
         <button
           onClick={handleReset}
           disabled={controlsDisabled}
+          title={controlTitle(t('face.reset'))}
           className="model-btn-secondary flex-1"
         >
           {t('face.reset')}
@@ -123,6 +140,15 @@ export function FaceEditorPanel({
 
       <div className="model-panel-footer text-xs">
         {t('face.paramCount', { count: FACE_PARAMETERS.length })}
+        {effectiveAvailability && effectiveAvailability.state !== 'available' ? (
+          <div
+            className="mt-1 text-[10px] text-[var(--model-fg-secondary)]"
+            data-availability-state={effectiveAvailability.state}
+            data-availability-reason={effectiveAvailability.reason}
+          >
+            {controlTitle('')}
+          </div>
+        ) : null}
       </div>
     </div>
   );

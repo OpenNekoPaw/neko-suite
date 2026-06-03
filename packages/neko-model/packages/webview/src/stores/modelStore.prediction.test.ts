@@ -37,6 +37,7 @@ describe('modelStore transform prediction layer', () => {
       cameraTarget: [0, 0.9, 0],
       showViewportGrid: true,
       isPerformanceMetricsVisible: false,
+      viewportStreamQuality: 'quarter',
       lookDev: {
         requestedMode: null,
         appliedMode: 'pbr',
@@ -422,6 +423,7 @@ describe('modelStore transform prediction layer', () => {
 
   it('gates LookDev requests with discovered Engine capabilities', () => {
     useModelStore.getState().setLookDevCapabilities({
+      ...defaultModelLookDevSceneControlCapabilities(),
       renderModes: ['pbr', 'wireframe'],
       liveViewportSettings: false,
       clay: false,
@@ -429,6 +431,19 @@ describe('modelStore transform prediction layer', () => {
       environment: false,
       typedPicking: false,
       characterRegions: false,
+      capabilityStates: {
+        ...defaultModelLookDevSceneControlCapabilities().capabilityStates,
+        clay: 'unsupported',
+        authoredLights: 'unsupported',
+        environment: 'unsupported',
+        typedPicking: 'unsupported',
+        characterRegions: 'unsupported',
+        renderModes: {
+          ...defaultModelLookDevSceneControlCapabilities().capabilityStates.renderModes,
+          clay: 'unsupported',
+          wireframe: 'supported',
+        },
+      },
     });
 
     useModelStore.getState().requestLookDevMode('clay');
@@ -452,6 +467,7 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().lookDev.status).toBe('pending');
 
     useModelStore.getState().setLookDevCapabilities({
+      ...defaultModelLookDevSceneControlCapabilities(),
       renderModes: ['pbr'],
       liveViewportSettings: false,
       clay: false,
@@ -459,6 +475,19 @@ describe('modelStore transform prediction layer', () => {
       environment: false,
       typedPicking: false,
       characterRegions: false,
+      capabilityStates: {
+        ...defaultModelLookDevSceneControlCapabilities().capabilityStates,
+        clay: 'unsupported',
+        authoredLights: 'unsupported',
+        environment: 'unsupported',
+        typedPicking: 'unsupported',
+        characterRegions: 'unsupported',
+        renderModes: {
+          ...defaultModelLookDevSceneControlCapabilities().capabilityStates.renderModes,
+          clay: 'unsupported',
+          wireframe: 'unsupported',
+        },
+      },
     });
 
     expect(useModelStore.getState().lookDev).toMatchObject({
@@ -572,5 +601,28 @@ describe('modelStore transform prediction layer', () => {
     });
 
     expect(useModelStore.getState().showViewportGrid).toBe(true);
+  });
+
+  it('persists and normalizes the explicit viewport stream quality preset', () => {
+    useModelStore.getState().setViewportStreamQuality('native');
+
+    const editorState = useModelStore.getState().getEditorState();
+    expect(editorState['viewportStreamQuality']).toBe('native');
+
+    useModelStore.getState().restoreEditorState({
+      ...editorState,
+      viewportStreamQuality: 'half',
+    });
+    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
+
+    useModelStore.getState().restoreEditorState({
+      viewportStreamQuality: 'responsive',
+    });
+    expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
+
+    useModelStore.getState().restoreEditorState({
+      viewportStreamQuality: 'invalid',
+    });
+    expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
   });
 });

@@ -1,6 +1,13 @@
 import React from 'react';
 import type { ModelSelectionWorkflow } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  availableControl,
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../baseline/controlAvailability';
 
 export interface SelectionModeControlsProps {
   workflow: ModelSelectionWorkflow;
@@ -57,16 +64,23 @@ export function SelectionModeControls({
   return (
     <div className="model-selection-mode-controls" aria-label={t('selection.aria.workflowModes')}>
       {WORKFLOWS.map((item) => {
-        const disabled =
-          !typedPickingAvailable || (item.workflow === 'face-region' && !characterRegionsAvailable);
+        const availability = selectionWorkflowAvailability(
+          item.workflow,
+          typedPickingAvailable,
+          characterRegionsAvailable,
+        );
         return (
           <button
             key={item.workflow}
             type="button"
             className={workflow === item.workflow ? 'active' : undefined}
             aria-pressed={workflow === item.workflow}
-            disabled={disabled}
-            title={t(item.titleKey)}
+            data-availability-state={availability.state}
+            data-availability-reason={
+              availability.state === 'available' ? undefined : availability.reason
+            }
+            disabled={isControlDisabled(availability)}
+            title={formatControlAvailabilityTitle(availability, t, t(item.titleKey))}
             onClick={() => onWorkflowChange(item.workflow)}
           >
             {t(item.labelKey)}
@@ -75,4 +89,21 @@ export function SelectionModeControls({
       })}
     </div>
   );
+}
+
+function selectionWorkflowAvailability(
+  workflow: ModelSelectionWorkflow,
+  typedPickingAvailable: boolean,
+  characterRegionsAvailable: boolean,
+): ModelControlAvailability {
+  if (workflow === 'object' || workflow === 'export-inspect') {
+    return availableControl();
+  }
+  if (workflow === 'face-region') {
+    if (!characterRegionsAvailable) {
+      return disabledControl('missing-character-regions');
+    }
+    return typedPickingAvailable ? availableControl() : disabledControl('capability-unsupported');
+  }
+  return typedPickingAvailable ? availableControl() : disabledControl('capability-unsupported');
 }

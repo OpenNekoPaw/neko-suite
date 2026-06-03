@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ViewportEvent } from '@neko/shared';
+import type { SceneCommandAck, ViewportEvent } from '@neko/shared';
 import {
   ModelController,
   handleModelMenuAction,
@@ -372,6 +372,103 @@ describe('ModelController', () => {
     expect(useModelStore.getState().localPredictions).toHaveLength(0);
   });
 
+  it('updates mesh and light drag predictions before transform command acknowledgement', async () => {
+    for (const nodeKind of ['mesh', 'light'] as const) {
+      useModelStore.setState({
+        selectedNodeId: `${nodeKind}-node`,
+        nextSceneCommandSeq: nodeKind === 'mesh' ? 20 : 30,
+        pendingTransformPredictions: [],
+        localPredictionLayer: new LocalPredictionLayer(),
+        localPredictions: [],
+        sceneNodes: [
+          {
+            nodeId: `${nodeKind}-node`,
+            name: `${nodeKind} node`,
+            kind: nodeKind,
+            children: [],
+            visible: true,
+            ...(nodeKind === 'light'
+              ? { light: { nodeId: `${nodeKind}-node`, kind: 'point', intensity: 1, range: 10 } }
+              : {}),
+            transform: {
+              position: { x: 0, y: 0, z: 0 },
+              rotation: { x: 0, y: 0, z: 0, w: 1 },
+              scale: { x: 1, y: 1, z: 1 },
+            },
+          },
+        ],
+        viewportOverlay: {
+          viewportId: 'main',
+          revision: 3,
+          selectedNodeIds: [`${nodeKind}-node`],
+          gizmoAnchors: [
+            {
+              nodeId: `${nodeKind}-node`,
+              screenPosition: { x: 0.5, y: 0.5 },
+            },
+          ],
+        },
+      });
+
+      let resolveAck: (value: SceneCommandAck) => void = () => undefined;
+      const ackPromise = new Promise<SceneCommandAck>((resolve) => {
+        resolveAck = resolve;
+      });
+      const socket = {
+        sendCommand: vi.fn(() => ackPromise),
+      };
+      const onInteractiveStreamActivity = vi.fn();
+      const controller = new ModelController(
+        {
+          enginePort: 1234,
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          sceneRevision: 3,
+          sceneControlSocket: socket as never,
+          onInteractiveStreamActivity,
+          getViewportRect: () => ({ width: 200, height: 100 }),
+        },
+        { dispatchViewportCommand: vi.fn() } as never,
+      );
+
+      await controller.onPointerDown(pointerInput([100, 50]));
+      expect(onInteractiveStreamActivity).toHaveBeenCalledTimes(1);
+      expect(socket.sendCommand).not.toHaveBeenCalled();
+      expect(useModelStore.getState().pendingTransformPredictions[0]?.position).toEqual({
+        x: 0,
+        y: 0,
+        z: 0,
+      });
+
+      controller.onPointerMove(pointerInput([140, 20]));
+      flushAnimationFrames();
+
+      expect(onInteractiveStreamActivity).toHaveBeenCalledTimes(2);
+      expect(socket.sendCommand).not.toHaveBeenCalled();
+      expect(useModelStore.getState().pendingTransformPredictions[0]?.position).toEqual({
+        x: 0.4,
+        y: 0.3,
+        z: 0,
+      });
+      expect(useModelStore.getState().localPredictions).toHaveLength(1);
+
+      const pointerUp = controller.onPointerUp(pointerInput([140, 20]));
+      expect(socket.sendCommand).toHaveBeenCalledOnce();
+      expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(1);
+
+      resolveAck({
+        seq: nodeKind === 'mesh' ? 20 : 30,
+        appliedSeq: nodeKind === 'mesh' ? 20 : 30,
+        baseRevision: 3,
+        revision: 4,
+        status: 'applied',
+      });
+      await pointerUp;
+      expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(0);
+      expect(useModelStore.getState().localPredictions).toHaveLength(0);
+    }
+  });
+
   it('rolls back viewport gizmo drag predictions when transform ack is rejected', async () => {
     useModelStore.setState({
       selectedNodeId: 'node-1',
@@ -531,11 +628,14 @@ describe('ModelController', () => {
         viewportId: 'main',
         position: expect.any(Array),
         target: expect.any(Array),
-        streamProfile: 'interactive',
-        profileTtlMs: 2000,
       }),
     );
-    expect(socket.requestKeyframe).toHaveBeenCalledWith('main');
+    const cameraPayload = vi.mocked(socket.sendViewportCameraLatest).mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(cameraPayload).not.toHaveProperty('streamProfile');
+    expect(cameraPayload).not.toHaveProperty('profileTtlMs');
+    expect(socket.requestKeyframe).toHaveBeenCalledWith('main', 'scene-a');
     expect(client.dispatchViewportCommand).not.toHaveBeenCalled();
     expect(useModelStore.getState().localPredictions).toHaveLength(0);
   });

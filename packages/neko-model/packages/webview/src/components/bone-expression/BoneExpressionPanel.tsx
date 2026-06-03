@@ -3,6 +3,12 @@ import { PHONEME_ROTATIONS, type Phoneme } from '../../types/boneExpression';
 import type { SceneNodeSnapshot } from '../../types';
 import type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
 import { useTranslation } from '../../i18n/I18nContext';
+import {
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../../baseline/controlAvailability';
 
 const PHONEMES: Phoneme[] = ['A', 'I', 'U', 'E', 'O', 'silent'];
 const HUMANOID_JOINT_TERMS = [
@@ -54,6 +60,7 @@ interface BoneExpressionPanelProps {
   sceneNodes: readonly SceneNodeSnapshot[];
   selectedNodeId: string | null;
   disabled?: boolean;
+  availability?: ModelControlAvailability;
   onSetBonePose: (boneId: string, rotation: QuatTuple) => void;
   onSetJointTransform: (nodeId: string, transform: EditableNodeTransform) => void | Promise<void>;
   onSelectJoint?: (nodeId: string) => void;
@@ -67,6 +74,7 @@ export function BoneExpressionPanel({
   sceneNodes,
   selectedNodeId,
   disabled = false,
+  availability,
   onSetBonePose,
   onSetJointTransform,
   onSelectJoint,
@@ -85,8 +93,14 @@ export function BoneExpressionPanel({
   const jointCandidates = useMemo(() => buildJointCandidates(sceneNodes), [sceneNodes]);
   const selectedJoint =
     jointCandidates.find((candidate) => candidate.nodeId === selectedJointId) ?? null;
-  const characterCommandDisabled = disabled || !characterId;
-  const jointControlsDisabled = disabled || !selectedJoint;
+  const effectiveAvailability =
+    availability ?? (!characterId ? disabledControl('asset-not-character') : null);
+  const controlsDisabled =
+    disabled || (effectiveAvailability ? isControlDisabled(effectiveAvailability) : false);
+  const characterCommandDisabled = controlsDisabled || !characterId;
+  const jointControlsDisabled = controlsDisabled || !selectedJoint;
+  const availabilityTitle = (baseTitle: string) =>
+    formatControlAvailabilityTitle(effectiveAvailability ?? { state: 'available' }, t, baseTitle);
 
   useEffect(() => {
     const nextJointId = chooseInitialJointId(jointCandidates, selectedNodeId);
@@ -251,7 +265,8 @@ export function BoneExpressionPanel({
             <select
               className="model-input mt-1 w-full px-2 py-1 text-xs"
               value={selectedJoint?.nodeId ?? ''}
-              disabled={disabled || jointCandidates.length === 0}
+              disabled={controlsDisabled || jointCandidates.length === 0}
+              title={availabilityTitle(t('bone.jointNode'))}
               onChange={(event) => handleJointSelect(event.currentTarget.value)}
             >
               {jointCandidates.length === 0 ? (
@@ -285,7 +300,8 @@ export function BoneExpressionPanel({
               <button
                 key={phoneme}
                 onClick={() => handlePhonemeClick(phoneme)}
-                disabled={disabled}
+                disabled={controlsDisabled}
+                title={availabilityTitle(phoneme === 'silent' ? t('bone.lipSync') : phoneme)}
                 className={`${activePhoneme === phoneme ? 'model-btn-primary' : 'model-btn-secondary'} px-2 py-1.5 text-xs ${
                   activePhoneme === phoneme ? '' : ''
                 }`}
@@ -302,8 +318,9 @@ export function BoneExpressionPanel({
             ref={eyeTrackRef}
             onMouseMove={handleEyeTrack}
             className={`relative mx-auto h-32 w-32 rounded-lg border border-[var(--model-input-border)] bg-[var(--model-input-bg)] ${
-              disabled ? 'cursor-not-allowed opacity-60' : 'cursor-crosshair'
+              controlsDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-crosshair'
             }`}
+            title={availabilityTitle(t('bone.eyeTracking'))}
           >
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="h-px w-full bg-[var(--model-fg-muted)] opacity-60" />
@@ -325,19 +342,19 @@ export function BoneExpressionPanel({
             label={t('bone.raise')}
             value={eyebrowRaise}
             onChange={(value) => handleEyebrowChange('raise', value)}
-            disabled={disabled}
+            disabled={controlsDisabled}
           />
           <EyebrowSlider
             label={t('bone.lower')}
             value={eyebrowLower}
             onChange={(value) => handleEyebrowChange('lower', value)}
-            disabled={disabled}
+            disabled={controlsDisabled}
           />
           <EyebrowSlider
             label={t('bone.furrow')}
             value={eyebrowFurrow}
             onChange={(value) => handleEyebrowChange('furrow', value)}
-            disabled={disabled}
+            disabled={controlsDisabled}
           />
         </div>
 
@@ -372,12 +389,22 @@ export function BoneExpressionPanel({
           <button
             className="model-btn-primary mt-2 w-full px-2 py-1 text-xs"
             disabled={characterCommandDisabled || manualBoneId.trim().length === 0}
+            title={availabilityTitle(t('bone.applyPose'))}
             onClick={() => onSetBonePose(manualBoneId.trim(), normalizeQuaternion(manualRotation))}
           >
             {t('bone.applyPose')}
           </button>
         </div>
       </div>
+      {effectiveAvailability && effectiveAvailability.state !== 'available' ? (
+        <div
+          className="model-panel-footer text-[10px] text-[var(--model-fg-secondary)]"
+          data-availability-state={effectiveAvailability.state}
+          data-availability-reason={effectiveAvailability.reason}
+        >
+          {formatControlAvailabilityTitle(effectiveAvailability, t)}
+        </div>
+      ) : null}
     </div>
   );
 }

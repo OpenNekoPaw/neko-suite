@@ -31,6 +31,8 @@ vi.mock('../i18n/I18nContext', () => ({
         'characterPreview.resetTitle': '重置预览相机',
         'characterPreview.playbackTitle.pause': '暂停预览',
         'characterPreview.playbackTitle.stop': '停止预览',
+        'controlAvailability.state.disabled': '不可用',
+        'controlAvailability.reason.asset-not-character': '当前资产不是兼容角色',
       };
       return messages[key] ?? key;
     },
@@ -108,6 +110,18 @@ describe('CharacterPreviewModeSelector', () => {
     expect(host.querySelector('[aria-label="预览播放控制"]')).toBeNull();
   });
 
+  it('surfaces asset compatibility reason for ordinary non-character assets', () => {
+    renderSelector({
+      state: appliedState('face'),
+      availability: { state: 'disabled', reason: 'asset-not-character' },
+    });
+
+    expect(buttonByText('面部').disabled).toBe(true);
+    expect(buttonByText('面部').dataset.availabilityReason).toBe('asset-not-character');
+    expect(buttonByText('面部').title).toBe('面部近景预览 - 不可用: 当前资产不是兼容角色');
+    expect(buttonByText('重置').disabled).toBe(true);
+  });
+
   it('shows playback controls only when engine reports compatible playback', () => {
     const onPlaybackControl = vi.fn();
     renderSelector({
@@ -134,12 +148,14 @@ describe('CharacterPreviewModeSelector', () => {
 function renderSelector({
   state,
   disabled = false,
+  availability,
   onModeChange = vi.fn(),
   onResetCamera = vi.fn(),
   onPlaybackControl = vi.fn(),
 }: {
   state: CharacterPreviewUiState;
   disabled?: boolean;
+  availability?: React.ComponentProps<typeof CharacterPreviewModeSelector>['availability'];
   onModeChange?: (modeId: CharacterPreviewModeId) => void;
   onResetCamera?: () => void;
   onPlaybackControl?: (action: 'play' | 'pause' | 'stop') => void;
@@ -149,6 +165,7 @@ function renderSelector({
       <CharacterPreviewModeSelector
         state={state}
         disabled={disabled}
+        availability={availability}
         onModeChange={onModeChange}
         onResetCamera={onResetCamera}
         onPlaybackControl={onPlaybackControl}

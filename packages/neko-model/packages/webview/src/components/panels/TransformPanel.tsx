@@ -5,6 +5,12 @@ import type { SceneNodeSnapshot, TransformMode } from '../../types';
 import type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
 import { useTranslation } from '../../i18n/I18nContext';
 import { mapModelTransformToProperties } from '../adapters/sharedModelUiAdapter';
+import {
+  disabledControl,
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../../baseline/controlAvailability';
 
 const MODE_I18N_KEY: Record<TransformMode, string> = {
   translate: 'transform.translate',
@@ -23,6 +29,7 @@ interface TransformPanelProps {
   onTransformModeChange: (mode: TransformMode) => void;
   onTransformCommit?: (nodeId: string, transform: EditableNodeTransform) => void | Promise<void>;
   disabled?: boolean;
+  availability?: ModelControlAvailability;
 }
 
 /**
@@ -34,6 +41,7 @@ export function TransformPanel({
   onTransformModeChange,
   onTransformCommit,
   disabled = false,
+  availability,
 }: TransformPanelProps): React.JSX.Element {
   const { t } = useTranslation();
   const [draftTransform, setDraftTransform] = React.useState<EditableNodeTransform>(() =>
@@ -55,6 +63,16 @@ export function TransformPanel({
       </div>
     );
   }
+  const effectiveAvailability =
+    availability ?? (disabled ? disabledControl('scene-control-disconnected') : null);
+  const controlsDisabled =
+    disabled || (effectiveAvailability ? isControlDisabled(effectiveAvailability) : false);
+  const modeTitle = (mode: TransformMode) =>
+    formatControlAvailabilityTitle(
+      effectiveAvailability ?? { state: 'available' },
+      t,
+      t(MODE_I18N_KEY[mode]),
+    );
 
   const commitValue = (section: TransformSection, axis: TransformAxis, value: number) => {
     const nextTransform = {
@@ -115,6 +133,8 @@ export function TransformPanel({
               className={`${transformMode === mode ? 'model-btn-primary' : 'model-btn-secondary'} flex-1 px-2 py-1 text-[10px] ${
                 transformMode === mode ? '' : ''
               }`}
+              disabled={controlsDisabled}
+              title={modeTitle(mode)}
               onClick={() => onTransformModeChange(mode)}
             >
               {t(MODE_I18N_KEY[mode])}
@@ -128,17 +148,31 @@ export function TransformPanel({
           groups={sharedTransform.groups}
           onCommit={handleSharedCommit}
           onPreviewChange={handleSharedPreview}
-          properties={sharedTransform.properties.map((property) => ({ ...property, disabled }))}
+          properties={sharedTransform.properties.map((property) => ({
+            ...property,
+            disabled: controlsDisabled,
+          }))}
         />
       </div>
 
-      <div className="model-panel-footer text-[10px]">
+      <div
+        className="model-panel-footer text-[10px]"
+        data-availability-state={effectiveAvailability?.state ?? 'available'}
+        data-availability-reason={
+          effectiveAvailability?.state === 'available' ? undefined : effectiveAvailability?.reason
+        }
+      >
         <div className="flex flex-wrap gap-2">
           {(node.kind === 'mesh' || node.mesh) && <span>{t('transform.mesh')}</span>}
           {node.kind === 'light' && <span>{t('transform.light')}</span>}
           {node.kind === 'camera' && <span>{t('transform.camera')}</span>}
           {node.kind === 'skeleton' && <span>{t('transform.skeleton')}</span>}
         </div>
+        {effectiveAvailability && effectiveAvailability.state !== 'available' ? (
+          <div className="mt-1 text-[var(--model-fg-secondary)]">
+            {formatControlAvailabilityTitle(effectiveAvailability, t)}
+          </div>
+        ) : null}
       </div>
     </div>
   );

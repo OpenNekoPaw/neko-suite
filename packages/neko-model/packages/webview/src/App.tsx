@@ -12,6 +12,7 @@ import type {
   EnvironmentPatch,
   LightPatch,
   SelectionTarget,
+  ViewportLookDevSettings,
   ViewportRenderMode,
 } from '@neko/shared';
 import { ModelSideToolbar } from './components/Toolbar';
@@ -33,6 +34,7 @@ import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { CharacterPreviewModeSelector } from './components/CharacterPreviewModeSelector';
 import { LookDevControls } from './components/LookDevControls';
 import { SelectionModeControls } from './components/SelectionModeControls';
+import { ViewportQualityControls } from './components/ViewportQualityControls';
 import { ViewportPerformanceOverlay } from './components/ViewportPerformanceOverlay';
 import { useModelStore } from './stores/modelStore';
 import type { ModelSelectionWorkflow } from './stores/modelStore';
@@ -65,7 +67,12 @@ import {
   useModelKeyboardController,
   type ModelKeyboardState,
 } from './hooks/useModelKeyboardController';
-import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from './viewport/streamInteractionPolicy';
+import {
+  deriveModelControlAvailability,
+  disabledControl,
+  type ModelControlReason,
+  type ModelControlAvailability,
+} from './baseline/controlAvailability';
 
 const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
   renderModes: ['pbr'],
@@ -75,6 +82,24 @@ const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities 
   environment: false,
   typedPicking: false,
   characterRegions: false,
+  capabilityStates: {
+    renderModes: {
+      pbr: 'supported',
+      clay: 'unknown',
+      wireframe: 'unknown',
+      unlit: 'unknown',
+      normal: 'unknown',
+      depth: 'unknown',
+      lightComplexity: 'unknown',
+      shadowAtlas: 'unknown',
+    },
+    liveViewportSettings: 'unknown',
+    clay: 'unknown',
+    authoredLights: 'unknown',
+    environment: 'unknown',
+    typedPicking: 'unknown',
+    characterRegions: 'unknown',
+  },
 };
 type SceneCommandType = NonNullable<SceneCommandEnvelope['command']>['type'];
 
@@ -97,7 +122,8 @@ export function App(): React.JSX.Element {
   useReportWebviewKeyboardEditable({ postMessage });
   const latestRevisionRef = useRef(0);
   const enginePortRef = useRef<number | null>(null);
-  const initialWebviewVisible = document.visibilityState !== 'hidden';
+  const liveViewportSettingsSeqsRef = useRef(new Set<number>());
+  const initialWebviewVisible = true;
   const webviewVisibleRef = useRef(initialWebviewVisible);
   const [enginePort, setEnginePort] = useState<number | null>(null);
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
@@ -138,6 +164,7 @@ export function App(): React.JSX.Element {
   const lookDevCapabilities = useModelStore((s) => s.lookDevCapabilities);
   const helperPassesEnabled = useModelStore((s) => s.showViewportGrid);
   const isPerformanceMetricsVisible = useModelStore((s) => s.isPerformanceMetricsVisible);
+  const viewportStreamQuality = useModelStore((s) => s.viewportStreamQuality);
   const environmentState = useModelStore((s) => s.environmentState);
   const environmentDiagnostics = useModelStore((s) => s.environmentDiagnostics);
   const selectedTargets = useModelStore((s) => s.selectedTargets);
@@ -163,6 +190,8 @@ export function App(): React.JSX.Element {
   const pause = useModelStore((s) => s.pause);
   const stop = useModelStore((s) => s.stop);
   const setTransformMode = useModelStore((s) => s.setTransformMode);
+  const setViewportStreamQuality = useModelStore((s) => s.setViewportStreamQuality);
+  const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
 
   useEffect(() => {
     latestRevisionRef.current = sceneRevision;
@@ -199,18 +228,12 @@ export function App(): React.JSX.Element {
           viewportId: 'main',
           position,
           target,
-          ...(options?.interactive === true
-            ? {
-                streamProfile: 'interactive',
-                profileTtlMs: VIEWPORT_INTERACTION_PROFILE_TTL_MS,
-              }
-            : {}),
         };
         socket.sendViewportCameraLatest({
           ...update,
         });
         if (options?.interactive === true) {
-          socket.requestKeyframe('main');
+          socket.requestKeyframe('main', store.sceneId);
         }
       } catch (error) {
         void webviewErrorHandler.handleError(toError(error), {
@@ -374,6 +397,18 @@ export function App(): React.JSX.Element {
               useModelStore.getState().applySceneDelta(delta);
             },
             onAck: (ack) => {
+              if (liveViewportSettingsSeqsRef.current.has(ack.seq)) {
+                if (ack.status === 'rejected') {
+                  useModelStore
+                    .getState()
+                    .rejectLookDevMode(
+                      ack.error ?? modelErrorMessage('error.sceneCommandRejected'),
+                    );
+                  return;
+                }
+                latestRevisionRef.current = Math.max(latestRevisionRef.current, ack.revision);
+                return;
+              }
               if (ack.status === 'rejected') {
                 setSceneControlStatus(
                   'error',
@@ -540,11 +575,10 @@ export function App(): React.JSX.Element {
   ]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      const visible = document.visibilityState !== 'hidden';
-      applyWebviewVisibility(visible);
-      if (!visible) return;
-
+    const handleDocumentLifecycleSignal = () => {
+      if (document.visibilityState === 'hidden' || !webviewVisibleRef.current) {
+        return;
+      }
       const currentEnginePort = enginePortRef.current;
       if (currentEnginePort === null || sceneControlRef.current === null) {
         postMessage({ type: 'requestEnginePort' });
@@ -553,15 +587,15 @@ export function App(): React.JSX.Element {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-    window.addEventListener('pageshow', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleDocumentLifecycleSignal);
+    window.addEventListener('focus', handleDocumentLifecycleSignal);
+    window.addEventListener('pageshow', handleDocumentLifecycleSignal);
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
-      window.removeEventListener('pageshow', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleDocumentLifecycleSignal);
+      window.removeEventListener('focus', handleDocumentLifecycleSignal);
+      window.removeEventListener('pageshow', handleDocumentLifecycleSignal);
     };
-  }, [applyWebviewVisibility, sendEditorCameraToEngine]);
+  }, [sendEditorCameraToEngine]);
 
   const selectedNode = sceneNodes.find((n) => n.nodeId === selectedNodeId) ?? null;
   const selectedNodeName = selectedNode?.name ?? null;
@@ -587,7 +621,8 @@ export function App(): React.JSX.Element {
   ]);
 
   const characterPreviewTarget = resolveCharacterPreviewTarget(selectedNodeId, sceneNodes);
-  const selectedCharacterId = characterPreviewTarget.characterId;
+  const selectedCharacterId = resolveSelectedCharacterId(selectedNodeId, sceneNodes);
+  const previewCharacterId = characterPreviewTarget.characterId;
   const selectedTopologyVersion = selectedCharacterId
     ? (characterTopologyVersions[selectedCharacterId] ?? 0)
     : 0;
@@ -636,6 +671,63 @@ export function App(): React.JSX.Element {
       setQualityPreview,
       setSceneControlStatus,
     ],
+  );
+
+  const sendViewportSettingsCommand = useCallback(
+    async (mode: ViewportRenderMode, helperEnabled: boolean): Promise<boolean> => {
+      const socket = sceneControlRef.current;
+      if (!socket) {
+        useModelStore
+          .getState()
+          .rejectLookDevMode(modelErrorMessage('error.sceneControlDisconnected'));
+        return false;
+      }
+
+      const store = useModelStore.getState();
+      const seq = store.allocateSceneCommandSeq();
+      liveViewportSettingsSeqsRef.current.add(seq);
+      const envelope: SceneCommandEnvelope = {
+        seq,
+        baseRevision: latestRevisionRef.current,
+        coalesceKey: 'viewport-settings:main',
+        command: {
+          type: 'viewport-settings-update',
+          payloadJson: JSON.stringify({
+            sceneId,
+            viewportId: 'main',
+            settings: createLookDevSettings(mode, helperEnabled),
+          }),
+        },
+      };
+
+      try {
+        const startedAt = performance.now();
+        const ack = await socket.sendCommand(envelope);
+        useModelStore.getState().recordAckLatency(performance.now() - startedAt);
+        if (ack.status !== 'applied') {
+          useModelStore
+            .getState()
+            .rejectLookDevMode(
+              ack.error ?? modelErrorMessage('error.sceneCommandStatus', { status: ack.status }),
+            );
+          return false;
+        }
+        latestRevisionRef.current = Math.max(latestRevisionRef.current, ack.revision);
+        return true;
+      } catch (error) {
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'warning',
+        });
+        useModelStore
+          .getState()
+          .rejectLookDevMode(error instanceof Error ? error.message : String(error));
+        return false;
+      } finally {
+        liveViewportSettingsSeqsRef.current.delete(seq);
+      }
+    },
+    [sceneId],
   );
 
   const handleTransformCommit = useCallback(
@@ -979,14 +1071,14 @@ export function App(): React.JSX.Element {
 
   const handleCharacterPreviewModeChange = useCallback(
     (modeId: CharacterPreviewModeId) => {
-      if (!selectedCharacterId) {
+      if (!previewCharacterId) {
         setSceneControlStatus('error', modelErrorMessage('error.noEngineCharacterSelected'));
         return;
       }
       const socket = sceneControlRef.current;
       if (!socket || enginePort === null) {
         useModelStore.getState().applyCharacterPreviewState({
-          characterId: selectedCharacterId,
+          characterId: previewCharacterId,
           modeId,
           viewportId: 'main',
           status: 'unavailable',
@@ -1016,19 +1108,45 @@ export function App(): React.JSX.Element {
         onInteractiveStreamActivity: markViewportInteraction,
         onError: (message) => setSceneControlStatus('error', message),
       });
-      void controller.setCharacterPreviewMode(selectedCharacterId, modeId).catch((error) => {
+      void controller.setCharacterPreviewMode(previewCharacterId, modeId).catch((error) => {
         void webviewErrorHandler.handleError(toError(error), {
           showToUser: false,
           severity: 'warning',
         });
       });
     },
-    [enginePort, markViewportInteraction, sceneId, selectedCharacterId, setSceneControlStatus],
+    [enginePort, markViewportInteraction, previewCharacterId, sceneId, setSceneControlStatus],
   );
 
-  const handleLookDevModeChange = useCallback((mode: ViewportRenderMode) => {
-    useModelStore.getState().requestLookDevMode(mode);
-  }, []);
+  const handleLookDevModeChange = useCallback(
+    (mode: ViewportRenderMode) => {
+      const store = useModelStore.getState();
+      store.requestLookDevMode(mode);
+      if (!isLookDevModeAvailable(store.lookDevCapabilities, mode)) {
+        return;
+      }
+      store.markLookDevPending(mode);
+      void sendViewportSettingsCommand(mode, helperPassesEnabled);
+    },
+    [helperPassesEnabled, sendViewportSettingsCommand],
+  );
+
+  const lastSentHelperPassesRef = useRef(helperPassesEnabled);
+  useEffect(() => {
+    if (lastSentHelperPassesRef.current === helperPassesEnabled) {
+      return;
+    }
+    if (!routeAReady || sceneControlStatus !== 'ready') {
+      return;
+    }
+    const store = useModelStore.getState();
+    const mode = store.lookDev.requestedMode ?? store.lookDev.appliedMode;
+    if (!isLookDevModeAvailable(store.lookDevCapabilities, mode)) {
+      return;
+    }
+    lastSentHelperPassesRef.current = helperPassesEnabled;
+    void sendViewportSettingsCommand(mode, helperPassesEnabled);
+  }, [helperPassesEnabled, routeAReady, sceneControlStatus, sendViewportSettingsCommand]);
 
   const handleSelectionWorkflowChange = useCallback(
     (workflow: ModelSelectionWorkflow) => {
@@ -1037,9 +1155,17 @@ export function App(): React.JSX.Element {
     [setSelectionWorkflow],
   );
 
+  const handleOutlinerSelectNode = useCallback(
+    (nodeId: string) => {
+      selectNode(nodeId);
+      setIsRightDockVisible(true);
+    },
+    [selectNode],
+  );
+
   const handleCharacterPreviewCameraReset = useCallback(() => {
     const modeId = characterPreview.requestedMode ?? characterPreview.appliedMode;
-    if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
+    if (!previewCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
     const controller = new ModelController({
       enginePort,
       sceneId,
@@ -1049,7 +1175,7 @@ export function App(): React.JSX.Element {
       onInteractiveStreamActivity: markViewportInteraction,
       onError: (message) => setSceneControlStatus('error', message),
     });
-    void controller.resetCharacterPreviewCamera(selectedCharacterId, modeId).catch((error) => {
+    void controller.resetCharacterPreviewCamera(previewCharacterId, modeId).catch((error) => {
       void webviewErrorHandler.handleError(toError(error), {
         showToUser: false,
         severity: 'warning',
@@ -1060,16 +1186,15 @@ export function App(): React.JSX.Element {
     characterPreview.requestedMode,
     enginePort,
     markViewportInteraction,
+    previewCharacterId,
     sceneId,
-    selectedCharacterId,
     setSceneControlStatus,
   ]);
 
   const handleCharacterPreviewPlaybackControl = useCallback(
     (action: 'play' | 'pause' | 'stop') => {
       const modeId = characterPreview.appliedMode;
-      if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null)
-        return;
+      if (!previewCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
       const controller = new ModelController({
         enginePort,
         sceneId,
@@ -1080,7 +1205,7 @@ export function App(): React.JSX.Element {
         onError: (message) => setSceneControlStatus('error', message),
       });
       void controller
-        .controlCharacterPreviewPlayback(selectedCharacterId, modeId, action)
+        .controlCharacterPreviewPlayback(previewCharacterId, modeId, action)
         .catch((error) => {
           void webviewErrorHandler.handleError(toError(error), {
             showToUser: false,
@@ -1092,8 +1217,8 @@ export function App(): React.JSX.Element {
       characterPreview.appliedMode,
       enginePort,
       markViewportInteraction,
+      previewCharacterId,
       sceneId,
-      selectedCharacterId,
       setSceneControlStatus,
     ],
   );
@@ -1174,9 +1299,46 @@ export function App(): React.JSX.Element {
   );
 
   const shouldRenderEngineViewport = enginePort !== null;
-  const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
-  const isCharacterPreviewDisabled = !routeAReady || !selectedCharacterId;
+  const sceneCommandAvailability = deriveModelControlAvailability({
+    engineReady: enginePort !== null,
+    sceneControlStatus,
+  });
+  const transformAvailability = selectedNode
+    ? sceneCommandAvailability
+    : disabledControl('no-selection');
+  const lightAvailability = deriveModelControlAvailability({
+    engineReady: enginePort !== null,
+    sceneControlStatus,
+    capability: lookDevCapabilities.capabilityStates.authoredLights,
+  });
+  const environmentAvailability = deriveModelControlAvailability({
+    engineReady: enginePort !== null,
+    sceneControlStatus,
+    capability: lookDevCapabilities.capabilityStates.environment,
+  });
+  const faceAvailability = deriveCharacterToolAvailability({
+    baseAvailability: sceneCommandAvailability,
+    selectedCharacterId,
+    selectedNode,
+    capability: selectedCharacterId ? 'supported' : 'unsupported',
+    missingReason: 'missing-morph-data',
+  });
+  const boneAvailability = deriveCharacterToolAvailability({
+    baseAvailability: sceneCommandAvailability,
+    selectedCharacterId,
+    selectedNode,
+    capability: hasLikelyEditableBones(sceneNodes) ? 'supported' : 'unsupported',
+    missingReason: 'missing-bone-data',
+  });
+  const characterPreviewAvailability = deriveCharacterToolAvailability({
+    baseAvailability: sceneCommandAvailability,
+    selectedCharacterId: previewCharacterId,
+    selectedNode,
+    capability: previewCharacterId ? 'supported' : 'unsupported',
+    missingReason: 'asset-not-character',
+  });
+  const isCharacterPreviewDisabled = !routeAReady || !previewCharacterId;
   const characterPreviewStatusLabel = characterPreviewStatusText({
     routeAReady,
     status: characterPreview.status,
@@ -1210,7 +1372,8 @@ export function App(): React.JSX.Element {
   ) : isFaceEditorOpen ? (
     <FaceEditorPanel
       characterId={selectedCharacterId}
-      disabled={panelCommandDisabled}
+      disabled={panelCommandDisabled || faceAvailability.state !== 'available'}
+      availability={faceAvailability}
       onSetMorph={handleSetMorph}
     />
   ) : isBoneExpressionOpen ? (
@@ -1218,7 +1381,8 @@ export function App(): React.JSX.Element {
       characterId={selectedCharacterId}
       sceneNodes={sceneNodes}
       selectedNodeId={selectedNodeId}
-      disabled={panelCommandDisabled}
+      disabled={panelCommandDisabled || boneAvailability.state !== 'available'}
+      availability={boneAvailability}
       onSetBonePose={handleSetBonePose}
       onSetJointTransform={handleTransformCommit}
       onSelectJoint={selectNode}
@@ -1251,6 +1415,7 @@ export function App(): React.JSX.Element {
     <LightInspectorPanel
       node={selectedNode}
       disabled={panelCommandDisabled || !lookDevCapabilities.authoredLights}
+      availability={lightAvailability}
       onAddLight={handleAddLight}
       onDeleteLight={handleDeleteLight}
       onSetVisible={handleSetNodeVisible}
@@ -1261,6 +1426,7 @@ export function App(): React.JSX.Element {
       environment={environmentState}
       diagnostics={environmentDiagnostics}
       disabled={panelCommandDisabled || !lookDevCapabilities.environment}
+      availability={environmentAvailability}
       onSet={handleEnvironmentSet}
       onUpdate={handleEnvironmentUpdate}
       onClear={handleEnvironmentClear}
@@ -1276,6 +1442,7 @@ export function App(): React.JSX.Element {
       onTransformModeChange={setTransformMode}
       onTransformCommit={handleTransformCommit}
       disabled={sceneControlStatus !== 'ready'}
+      availability={transformAvailability}
     />
   );
 
@@ -1331,6 +1498,7 @@ export function App(): React.JSX.Element {
                     predictions={localPredictions}
                     topologyWarning={topologyWarning}
                     hudVisible={isViewportHudVisible}
+                    streamQuality={viewportStreamQuality}
                     interactionSignal={viewportInteractionSignal}
                     onSelectNode={selectNode}
                     onSceneControlError={(message) => setSceneControlStatus('error', message)}
@@ -1353,6 +1521,7 @@ export function App(): React.JSX.Element {
                       state={lookDev}
                       capabilities={lookDevCapabilities}
                       routeAReady={routeAReady}
+                      availability={sceneCommandAvailability}
                       helperPassesEnabled={helperPassesEnabled}
                       onModeChange={handleLookDevModeChange}
                     />
@@ -1362,9 +1531,14 @@ export function App(): React.JSX.Element {
                       characterRegionsAvailable={lookDevCapabilities.characterRegions}
                       onWorkflowChange={handleSelectionWorkflowChange}
                     />
+                    <ViewportQualityControls
+                      quality={viewportStreamQuality}
+                      onQualityChange={setViewportStreamQuality}
+                    />
                     <CharacterPreviewModeSelector
                       state={characterPreview}
                       disabled={isCharacterPreviewDisabled}
+                      availability={characterPreviewAvailability}
                       statusLabel={characterPreviewStatusLabel}
                       onModeChange={handleCharacterPreviewModeChange}
                       onResetCamera={handleCharacterPreviewCameraReset}
@@ -1418,7 +1592,7 @@ export function App(): React.JSX.Element {
                 <SceneTree
                   nodes={sceneNodes}
                   selectedNodeId={selectedNodeId}
-                  onSelectNode={selectNode}
+                  onSelectNode={handleOutlinerSelectNode}
                   onSetNodeVisible={handleSetNodeVisible}
                   visibilityDisabled={panelCommandDisabled}
                   showHeader={false}
@@ -1633,6 +1807,33 @@ function previewRenderPreset(modeId: CharacterPreviewModeId) {
   }
 }
 
+function createLookDevSettings(
+  mode: ViewportRenderMode,
+  helperPassesEnabled: boolean,
+): ViewportLookDevSettings {
+  return {
+    renderMode: mode,
+    helperPassesEnabled,
+    showGrid: helperPassesEnabled,
+  };
+}
+
+function isLookDevModeAvailable(
+  capabilities: ModelLookDevSceneControlCapabilities,
+  mode: ViewportRenderMode,
+): boolean {
+  const renderModeState =
+    capabilities.capabilityStates.renderModes[mode] ??
+    (capabilities.renderModes.includes(mode) ? 'supported' : 'unsupported');
+  if (renderModeState !== 'supported') {
+    return false;
+  }
+  if (mode === 'clay') {
+    return capabilities.capabilityStates.clay === 'supported';
+  }
+  return true;
+}
+
 interface CharacterPreviewTarget {
   readonly characterId: string | null;
   readonly reason:
@@ -1673,12 +1874,61 @@ function resolveCharacterPreviewTarget(
   };
 }
 
+function resolveSelectedCharacterId(
+  selectedNodeId: string | null,
+  sceneNodes: readonly SceneNodeSnapshot[],
+): string | null {
+  if (!selectedNodeId) {
+    return null;
+  }
+  const selected = sceneNodes.find((node) => node.nodeId === selectedNodeId);
+  if (!selected || !isCharacterSceneNode(selected)) {
+    return null;
+  }
+  return selected.characterId ?? selected.nodeId;
+}
+
 function isCharacterSceneNode(node: SceneNodeSnapshot): boolean {
   return node.kind === 'character' || node.kind === 'character-instance';
 }
 
 function isPreviewableSceneNode(node: SceneNodeSnapshot): boolean {
   return isCharacterSceneNode(node) || node.kind === 'mesh' || node.mesh !== undefined;
+}
+
+function deriveCharacterToolAvailability({
+  baseAvailability,
+  selectedCharacterId,
+  selectedNode,
+  capability,
+  missingReason,
+}: {
+  readonly baseAvailability: ModelControlAvailability;
+  readonly selectedCharacterId: string | null;
+  readonly selectedNode: SceneNodeSnapshot | null;
+  readonly capability: 'supported' | 'unsupported' | 'unknown';
+  readonly missingReason: ModelControlReason;
+}): ModelControlAvailability {
+  if (baseAvailability.state !== 'available') {
+    return baseAvailability;
+  }
+  if (!selectedCharacterId) {
+    return disabledControl(selectedNode ? 'asset-not-character' : 'no-selection');
+  }
+  if (capability !== 'supported') {
+    return disabledControl(missingReason);
+  }
+  return { state: 'available' };
+}
+
+function hasLikelyEditableBones(sceneNodes: readonly SceneNodeSnapshot[]): boolean {
+  return sceneNodes.some((node) => {
+    if (node.kind === 'skeleton') return true;
+    const name = `${node.name ?? ''} ${node.nodeId}`.toLowerCase();
+    return ['bone', 'joint', 'hips', 'spine', 'neck', 'head', 'arm', 'leg'].some((term) =>
+      name.includes(term),
+    );
+  });
 }
 
 type InspectorRoute =

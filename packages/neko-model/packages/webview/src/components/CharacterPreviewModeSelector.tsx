@@ -3,10 +3,16 @@ import type { CharacterPreviewModeId, CharacterPreviewPlaybackState } from '@nek
 import { DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS } from '@neko/shared';
 import type { CharacterPreviewUiState } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  formatControlAvailabilityTitle,
+  isControlDisabled,
+  type ModelControlAvailability,
+} from '../baseline/controlAvailability';
 
 export interface CharacterPreviewModeSelectorProps {
   state: CharacterPreviewUiState;
   disabled: boolean;
+  availability?: ModelControlAvailability;
   statusLabel?: string;
   onModeChange: (modeId: CharacterPreviewModeId) => void;
   onResetCamera: () => void;
@@ -16,6 +22,7 @@ export interface CharacterPreviewModeSelectorProps {
 export function CharacterPreviewModeSelector({
   state,
   disabled,
+  availability,
   statusLabel,
   onModeChange,
   onResetCamera,
@@ -25,16 +32,17 @@ export function CharacterPreviewModeSelector({
   const activeMode = state.requestedMode ?? state.appliedMode ?? 'face';
   const diagnostic = state.diagnostics[0]?.message ?? null;
   const playbackState = state.state?.playback.state;
+  const controlDisabled = disabled || (availability ? isControlDisabled(availability) : false);
   const displayStatus = statusLabel ?? characterPreviewStatusLabel(state.status, playbackState, t);
   const canControlPlayback =
-    !disabled &&
+    !controlDisabled &&
     (state.appliedMode === 'motion' || state.appliedMode === 'voice-pack') &&
     (playbackState === 'playing' ||
       playbackState === 'paused' ||
       playbackState === 'stopped' ||
       playbackState === 'idle' ||
       playbackState === 'failed');
-  const canResetCamera = !disabled && Boolean(state.appliedMode ?? state.requestedMode);
+  const canResetCamera = !controlDisabled && Boolean(state.appliedMode ?? state.requestedMode);
   const primaryPlaybackAction = playbackState === 'playing' ? 'pause' : 'play';
 
   return (
@@ -46,9 +54,17 @@ export function CharacterPreviewModeSelector({
             type="button"
             role="tab"
             aria-selected={activeMode === mode.id}
-            disabled={disabled}
+            data-availability-state={availability?.state ?? 'available'}
+            data-availability-reason={
+              availability?.state === 'available' ? undefined : availability?.reason
+            }
+            disabled={controlDisabled}
             className={activeMode === mode.id ? 'active' : undefined}
-            title={t(`characterPreview.modeTitle.${mode.id}`)}
+            title={formatControlAvailabilityTitle(
+              availability ?? { state: 'available' },
+              t,
+              t(`characterPreview.modeTitle.${mode.id}`),
+            )}
             onClick={() => onModeChange(mode.id)}
           >
             {t(`characterPreview.mode.${mode.id}`)}
@@ -86,7 +102,11 @@ export function CharacterPreviewModeSelector({
           type="button"
           className="model-character-preview-reset"
           disabled={!canResetCamera}
-          title={t('characterPreview.resetTitle')}
+          title={formatControlAvailabilityTitle(
+            availability ?? { state: 'available' },
+            t,
+            t('characterPreview.resetTitle'),
+          )}
           onClick={onResetCamera}
         >
           {t('characterPreview.reset')}

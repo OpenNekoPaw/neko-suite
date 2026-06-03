@@ -69,6 +69,12 @@ function buildPerformanceRows(
 
   return [
     {
+      id: 'baseline-target',
+      label: t('performance.metric.baselineTarget'),
+      value: formatBaselineTarget(window, t),
+      tone: toneForBaselineTarget(window),
+    },
+    {
       id: 'stream-fps',
       label: t('performance.metric.streamFps'),
       value: formatFps(frameMeta),
@@ -200,6 +206,12 @@ function buildPerformanceRows(
       label: t('performance.metric.prePresentDrops'),
       value: formatCountStat(window.decodedDroppedBeforePresent, 'max'),
       tone: window.decodedDroppedBeforePresent.max > 0 ? 'warning' : undefined,
+    },
+    {
+      id: 'stale-output-drops',
+      label: t('performance.metric.staleOutputDrops'),
+      value: formatCountStat(window.staleDecodedOutputsDropped, 'max'),
+      tone: window.staleDecodedOutputsDropped.max > 0 ? 'warning' : undefined,
     },
     {
       id: 'decode-lag',
@@ -552,6 +564,32 @@ function formatViewportFootprint(window: RenderDiagnosticsWindowSnapshot): strin
   const canvasBytes = window.canvasPhysicalWidth.max * window.canvasPhysicalHeight.max * 4;
   const footprintBytes = Math.max(decodedFrameBytes, canvasBytes);
   return formatBytes(footprintBytes);
+}
+
+function formatBaselineTarget(window: RenderDiagnosticsWindowSnapshot, t: Translate): string {
+  const effectiveSize = formatSizeStat(window.streamWidth, window.streamHeight);
+  const scheduledFps = formatFpsStat(window.scheduledFps, 'max');
+  if (effectiveSize === '-' && scheduledFps === '-') {
+    return t('performance.value.none');
+  }
+  const effective = `${effectiveSize} @ ${scheduledFps}`;
+  return toneForBaselineTarget(window) === 'warning'
+    ? t('performance.value.baselineFallback', { effective })
+    : t('performance.value.baselineMatched', { effective });
+}
+
+function toneForBaselineTarget(
+  window: RenderDiagnosticsWindowSnapshot,
+): PerformanceMetricRow['tone'] {
+  const hasStreamSize = window.streamWidth.samples > 0 && window.streamHeight.samples > 0;
+  const hasScheduledFps = window.scheduledFps.samples > 0;
+  if (!hasStreamSize && !hasScheduledFps) {
+    return 'muted';
+  }
+  const streamBelow1080 =
+    hasStreamSize && Math.min(window.streamWidth.max, window.streamHeight.max) < 1080;
+  const fpsBelow60 = hasScheduledFps && window.scheduledFps.max < 59.5;
+  return streamBelow1080 || fpsBelow60 ? 'warning' : undefined;
 }
 
 function toneForFrameBudget(value: number | undefined): PerformanceMetricRow['tone'] {

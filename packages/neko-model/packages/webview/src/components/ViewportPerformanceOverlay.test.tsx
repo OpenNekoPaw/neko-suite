@@ -14,6 +14,12 @@ vi.mock('../i18n/I18nContext', () => ({
       if (key === 'performance.value.hostLimited') {
         return `${params?.fps ?? '-'} fps host-limited`;
       }
+      if (key === 'performance.value.baselineMatched') {
+        return `${params?.effective ?? '-'} matched`;
+      }
+      if (key === 'performance.value.baselineFallback') {
+        return `${params?.effective ?? '-'} fallback`;
+      }
       if (!params) return key;
       return Object.entries(params).reduce(
         (message, [name, value]) => message.replace(`{${name}}`, String(value)),
@@ -179,6 +185,7 @@ describe('ViewportPerformanceOverlay', () => {
     expect(overlay?.getAttribute('aria-label')).toBe('performance.aria.metrics');
     expect(overlay?.getAttribute('data-quality-tier')).toBe('main-fps-reduced');
     expect(host.textContent).toContain('performance.title');
+    expect(host.textContent).toContain('1488x1080 @ 60.0 fps matched');
     expect(host.textContent).toContain('60.0 fps');
     expect(host.textContent).toContain('17.4 ms');
     expect(host.textContent).toContain('12.3 ms');
@@ -241,5 +248,50 @@ describe('ViewportPerformanceOverlay', () => {
     });
 
     expect(host.textContent).toContain('30.1 fps host-limited');
+  });
+
+  it('surfaces explicit stream fallback when effective resolution or FPS misses 1080p60', () => {
+    const metrics = new AuthoringPerformanceMetrics();
+    metrics.recordRenderDiagnostics(
+      {
+        streamWidth: 1280,
+        streamHeight: 720,
+        scheduledWidth: 1280,
+        scheduledHeight: 720,
+        scheduledFps: 30,
+        presentFps: 30,
+      },
+      2_000,
+    );
+    useModelStore.setState({
+      authoringMetrics: metrics,
+      authoringMetricsSnapshot: metrics.snapshot(2_000),
+      lastRenderFrameMeta: {
+        streamId: 'stream-main',
+        viewportId: 'main',
+        frameId: 43,
+        ptsUs: 0,
+        durationUs: 33_333,
+        isKeyframe: true,
+        sceneRevision: 7,
+        appliedSeq: 3,
+        frameTimestamp: 0,
+        viewTransform: [1, 0, 0, 1, 0, 0],
+        diagnostics: {
+          streamWidth: 1280,
+          streamHeight: 720,
+          scheduledWidth: 1280,
+          scheduledHeight: 720,
+          scheduledFps: 30,
+          presentFps: 30,
+        },
+      },
+    });
+
+    act(() => {
+      root.render(<ViewportPerformanceOverlay />);
+    });
+
+    expect(host.textContent).toContain('1280x720 @ 30.0 fps fallback');
   });
 });
