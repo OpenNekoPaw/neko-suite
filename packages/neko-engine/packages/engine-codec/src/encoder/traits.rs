@@ -173,6 +173,14 @@ pub trait Encoder {
         ))
     }
 
+    /// Encode a GPU frame while requesting this frame to be independently decodable.
+    ///
+    /// Encoders that cannot force an IDR frame without reopening the hardware session
+    /// may fall back to `encode_frame_gpu`.
+    fn encode_keyframe_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
+        self.encode_frame_gpu(gpu_handle, pts)
+    }
+
     /// Check if this encoder supports zero-copy GPU input
     fn supports_gpu_input(&self) -> bool {
         false

@@ -62,9 +62,10 @@ pub use render_world::{
 pub use vertex::PbrVertex;
 pub use viewport::{
     build_viewport_render_graph, SceneColorSpace, SceneToneMapping, ViewportDebugView,
-    ViewportDescriptor, ViewportH264Settings, ViewportLookDevSettings, ViewportMaterialOverride,
-    ViewportMaterialOverrideKind, ViewportPostProcess, ViewportRenderGraphOutput,
-    ViewportRenderGraphPlan, ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
+    ViewportDescriptor, ViewportH264Settings, ViewportLiveSettings, ViewportLookDevSettings,
+    ViewportMaterialOverride, ViewportMaterialOverrideKind, ViewportPostProcess,
+    ViewportRenderGraphOutput, ViewportRenderGraphPlan, ViewportRenderGraphVariant,
+    ViewportRenderMode, ViewportWorkMode,
 };
 
 use neko_engine_gpu::{GpuLayer, Transform2D};

@@ -129,6 +129,8 @@ pub struct RenderFrameDiagnostics {
     pub post_process_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub helper_passes_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render_mode: Option<String>,
 }
 
 /// Sideband metadata for realtime render frames.
@@ -392,6 +394,8 @@ pub struct VideoGpuFrame {
     pub width: u32,
     /// Output height.
     pub height: u32,
+    /// Request this frame to be independently decodable in realtime streams.
+    pub force_keyframe: bool,
     /// Optional producer-side diagnostics for realtime streams.
     pub diagnostics: Option<RenderFrameDiagnostics>,
     /// Optional producer-side frame metadata for authoritative render streams.

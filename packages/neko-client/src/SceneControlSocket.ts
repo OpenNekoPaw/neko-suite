@@ -447,8 +447,8 @@ export class SceneControlSocket {
     this.send({ type: 'resync', sceneId });
   }
 
-  requestKeyframe(viewportId?: string): void {
-    this.send({ type: 'requestKeyframe', viewportId });
+  requestKeyframe(viewportId?: string, sceneId = this.config.sceneId): void {
+    this.send({ type: 'requestKeyframe', sceneId, viewportId });
   }
 
   sendViewportCommand(command: ViewportCommand): Promise<ViewportEvent> {

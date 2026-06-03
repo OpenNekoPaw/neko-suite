@@ -143,6 +143,7 @@ impl PanoramicRenderOutput {
             frame_index,
             width: self.width,
             height: self.height,
+            force_keyframe: false,
             diagnostics: None,
             meta: None,
         })

@@ -161,6 +161,10 @@ export function readRenderFrameDiagnostics(
   if (decodedDroppedBeforePresent !== undefined) {
     diagnostics.decodedDroppedBeforePresent = decodedDroppedBeforePresent;
   }
+  const staleDecodedOutputsDropped = readFiniteNumber(value.staleDecodedOutputsDropped);
+  if (staleDecodedOutputsDropped !== undefined) {
+    diagnostics.staleDecodedOutputsDropped = staleDecodedOutputsDropped;
+  }
   const packetToPresentedMs = readFiniteNumber(value.packetToPresentedMs);
   if (packetToPresentedMs !== undefined) diagnostics.packetToPresentedMs = packetToPresentedMs;
   const presentIntervalMs = readFiniteNumber(value.presentIntervalMs);
@@ -233,8 +237,28 @@ export function readRenderFrameDiagnostics(
   if (typeof value.helperPassesEnabled === 'boolean') {
     diagnostics.helperPassesEnabled = value.helperPassesEnabled;
   }
+  const renderMode = readViewportRenderMode(value.renderMode);
+  if (renderMode !== undefined) {
+    diagnostics.renderMode = renderMode;
+  }
 
   return Object.keys(diagnostics).length > 0 ? diagnostics : undefined;
+}
+
+function readViewportRenderMode(value: unknown): EngineRenderFrameDiagnostics['renderMode'] {
+  switch (value) {
+    case 'pbr':
+    case 'clay':
+    case 'wireframe':
+    case 'unlit':
+    case 'normal':
+    case 'depth':
+    case 'lightComplexity':
+    case 'shadowAtlas':
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 export function readViewTransform(value: unknown): number[] | undefined {

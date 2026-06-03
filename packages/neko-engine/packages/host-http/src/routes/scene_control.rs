@@ -318,10 +318,16 @@ async fn handle_client_message(
                 true
             }
         }
-        SceneControlClientMessage::RequestKeyframe { viewport_id } => {
-            let scene_id = "default".to_string();
+        SceneControlClientMessage::RequestKeyframe {
+            scene_id,
+            viewport_id,
+        } => {
+            let scene_id = scene_id.unwrap_or_else(|| "default".to_string());
             let viewport_id = viewport_id.unwrap_or_else(|| "main".to_string());
             let revision = current_revision(engine);
+            if let Some(service) = engine.scene_service() {
+                service.request_viewport_keyframe(&scene_id, &viewport_id);
+            }
             if !send_json(
                 socket,
                 json!({
@@ -339,6 +345,7 @@ async fn handle_client_message(
                     "type": "ready",
                     "protocol": PROTOCOL,
                     "request": "requestKeyframe",
+                    "sceneId": scene_id,
                     "viewportId": viewport_id
                 }),
             )
@@ -2323,6 +2330,8 @@ enum SceneControlClientMessage {
         profile_ttl_ms: Option<u64>,
     },
     RequestKeyframe {
+        #[serde(default, rename = "sceneId")]
+        scene_id: Option<String>,
         #[serde(default, rename = "viewportId")]
         viewport_id: Option<String>,
     },
@@ -2490,6 +2499,19 @@ impl ControlSceneCommand {
                     environment_id: payload.environment_id,
                 })
             }
+            "viewport-settings-update" => {
+                let payload: ViewportSettingsCommandPayload =
+                    serde_json::from_str(&self.payload_json).map_err(|error| {
+                        format!("invalid viewport-settings-update command payload: {error}")
+                    })?;
+                Ok(SceneCommandEvent::UpdateViewportSettings {
+                    scene_id: payload.scene_id,
+                    viewport_id: payload.viewport_id,
+                    settings_json: serde_json::to_string(&payload.settings).map_err(|error| {
+                        format!("invalid viewport-settings-update command payload: {error}")
+                    })?,
+                })
+            }
             "animation-play" => {
                 let payload: AnimationPlaybackPayload = serde_json::from_str(&self.payload_json)
                     .map_err(|error| format!("invalid animation play command payload: {error}"))?;
@@ -2569,6 +2591,15 @@ struct TransformCommandPayload {
     position: Vec3Payload,
     rotation: QuatPayload,
     scale: Vec3Payload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewportSettingsCommandPayload {
+    #[serde(default)]
+    scene_id: Option<String>,
+    viewport_id: String,
+    settings: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3409,6 +3440,35 @@ mod tests {
                         assert_eq!(environment_id.as_deref(), Some("scene-environment"));
                     }
                     _ => panic!("expected environment clear event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[test]
+    fn parses_viewport_settings_update_command() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":17,"baseRevision":7,"command":{"type":"viewport-settings-update","payloadJson":"{\"sceneId\":\"scene-a\",\"viewportId\":\"main\",\"settings\":{\"renderMode\":\"clay\",\"helperPassesEnabled\":false,\"showGrid\":false}}"}}}"#,
+        )
+        .unwrap();
+
+        match message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::UpdateViewportSettings {
+                        scene_id,
+                        viewport_id,
+                        settings_json,
+                    } => {
+                        assert_eq!(scene_id.as_deref(), Some("scene-a"));
+                        assert_eq!(viewport_id, "main");
+                        let settings: Value = serde_json::from_str(&settings_json).unwrap();
+                        assert_eq!(settings["renderMode"], "clay");
+                        assert_eq!(settings["helperPassesEnabled"], false);
+                        assert_eq!(settings["showGrid"], false);
+                    }
+                    _ => panic!("expected viewport settings update event"),
                 }
             }
             _ => panic!("expected command message"),

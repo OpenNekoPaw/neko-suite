@@ -99,6 +99,14 @@ pub struct ViewportLookDevSettings {
     pub show_normals: Option<bool>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ViewportLiveSettings {
+    pub render_mode: Option<ViewportRenderMode>,
+    pub lookdev: Option<ViewportLookDevSettings>,
+    pub helper_passes_enabled: Option<bool>,
+    pub show_grid: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewportH264Settings {
     pub gop_size: Option<u32>,

@@ -54,8 +54,8 @@ pub mod gpu {
         CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
         DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
         SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportH264Settings,
-        ViewportLookDevSettings, ViewportMaterialOverride, ViewportMaterialOverrideKind,
-        ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
+        ViewportLiveSettings, ViewportLookDevSettings, ViewportMaterialOverride,
+        ViewportMaterialOverrideKind, ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
     };
 }
 

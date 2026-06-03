@@ -22,7 +22,7 @@
 use crate::controllers::utils::handle_stream_control;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use crate::registry::StreamRegistry;
+use crate::registry::{StreamRegistry, StreamStateError};
 use neko_engine_kernel::contracts::domain::EditOperationEnvelope;
 use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig, Timeline};
 use neko_engine_kernel::contracts::jvi::JviLoader;
@@ -246,14 +246,16 @@ impl Controller for StreamController {
                 // (e.g. already stopped via EOF timeout), which is not an error for destroy.
                 let _ = self.timeline_service.stop_stream(&sid).await;
 
-                self.stream_registry
-                    .destroy(&sid)
-                    .await
-                    .map_err(|e| ApiError::StreamError(e.to_string()))?;
+                let already_destroyed = match self.stream_registry.destroy(&sid).await {
+                    Ok(()) => false,
+                    Err(StreamStateError::NotFound(_)) => true,
+                    Err(error) => return Err(ApiError::StreamError(error.to_string())),
+                };
 
                 let response = serde_json::json!({
                     "streamId": stream_id,
                     "state": "destroyed",
+                    "alreadyDestroyed": already_destroyed,
                 });
 
                 Ok(ActionResponse::ok("", response))
@@ -530,6 +532,39 @@ mod tests {
         assert!(result.is_ok());
         let data = result.unwrap().data.unwrap();
         assert_eq!(data["state"], "destroyed");
+        assert_eq!(data["alreadyDestroyed"], false);
+    }
+
+    #[tokio::test]
+    async fn test_destroy_stream_is_idempotent() {
+        let controller = create_test_controller();
+
+        let options = serde_json::json!({
+            "sessionId": "test-session",
+            "resourceId": "vid_abc123",
+        });
+        let result = controller
+            .handle("create", None, options, None)
+            .await
+            .unwrap();
+        let stream_id = result.data.as_ref().unwrap()["streamId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        controller
+            .handle("destroy", Some(&stream_id), Value::Null, None)
+            .await
+            .unwrap();
+        let second_destroy = controller
+            .handle("destroy", Some(&stream_id), Value::Null, None)
+            .await
+            .unwrap();
+
+        assert!(second_destroy.is_ok());
+        let data = second_destroy.data.unwrap();
+        assert_eq!(data["state"], "destroyed");
+        assert_eq!(data["alreadyDestroyed"], true);
     }
 
     #[tokio::test]

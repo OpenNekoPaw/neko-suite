@@ -91,6 +91,21 @@ export interface ModelLookDevSceneControlCapabilities {
   readonly environment: boolean;
   readonly typedPicking: boolean;
   readonly characterRegions: boolean;
+  readonly capabilityStates: ModelLookDevSceneControlCapabilityStates;
+}
+
+export type ModelSceneControlCapabilityState = 'supported' | 'unsupported' | 'unknown';
+
+export interface ModelLookDevSceneControlCapabilityStates {
+  readonly renderModes: Readonly<
+    Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>
+  >;
+  readonly liveViewportSettings: ModelSceneControlCapabilityState;
+  readonly clay: ModelSceneControlCapabilityState;
+  readonly authoredLights: ModelSceneControlCapabilityState;
+  readonly environment: ModelSceneControlCapabilityState;
+  readonly typedPicking: ModelSceneControlCapabilityState;
+  readonly characterRegions: ModelSceneControlCapabilityState;
 }
 
 /** A timestamped segment from Whisper transcription. */
@@ -279,7 +294,36 @@ const DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES: ModelLookDevSceneControl
   environment: false,
   typedPicking: false,
   characterRegions: false,
+  capabilityStates: {
+    renderModes: {
+      pbr: 'supported',
+      clay: 'supported',
+      wireframe: 'supported',
+      unlit: 'supported',
+      normal: 'supported',
+      depth: 'supported',
+      lightComplexity: 'supported',
+      shadowAtlas: 'supported',
+    },
+    liveViewportSettings: 'unsupported',
+    clay: 'supported',
+    authoredLights: 'unsupported',
+    environment: 'unsupported',
+    typedPicking: 'unsupported',
+    characterRegions: 'unsupported',
+  },
 };
+
+const ALL_VIEWPORT_RENDER_MODES: readonly ViewportDescriptor['renderMode'][] = [
+  'pbr',
+  'clay',
+  'wireframe',
+  'unlit',
+  'normal',
+  'depth',
+  'lightComplexity',
+  'shadowAtlas',
+];
 
 function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -845,6 +889,18 @@ export function defaultModelLookDevSceneControlCapabilities(): ModelLookDevScene
   return {
     ...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES,
     renderModes: [...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.renderModes],
+    capabilityStates: cloneModelLookDevCapabilityStates(
+      DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.capabilityStates,
+    ),
+  };
+}
+
+function cloneModelLookDevCapabilityStates(
+  states: ModelLookDevSceneControlCapabilityStates,
+): ModelLookDevSceneControlCapabilityStates {
+  return {
+    ...states,
+    renderModes: { ...states.renderModes },
   };
 }
 
@@ -855,20 +911,143 @@ function normalizeModelLookDevSceneControlCapabilities(
     return defaultModelLookDevSceneControlCapabilities();
   }
   const defaults = defaultModelLookDevSceneControlCapabilities();
-  const renderModes = Array.isArray(value.renderModes)
-    ? value.renderModes.filter(
-        (mode): mode is ViewportDescriptor['renderMode'] => normalizeRenderMode(mode) !== undefined,
-      )
-    : defaults.renderModes;
+  const rawRenderModes = Array.isArray(value.renderModes)
+    ? value.renderModes
+        .map(normalizeRenderMode)
+        .filter((mode): mode is ViewportDescriptor['renderMode'] => mode !== undefined)
+    : undefined;
+  const capabilityStateSource = isRecord(value.capabilityStates) ? value.capabilityStates : value;
+  const renderModeStateSource = isRecord(capabilityStateSource.renderModes)
+    ? capabilityStateSource.renderModes
+    : isRecord(value.renderModeStates)
+      ? value.renderModeStates
+      : undefined;
+  const renderModeStates = normalizeRenderModeCapabilityStates(
+    renderModeStateSource,
+    rawRenderModes,
+    defaults.capabilityStates.renderModes,
+  );
+  const renderModes =
+    rawRenderModes ??
+    ALL_VIEWPORT_RENDER_MODES.filter((mode) => renderModeStates[mode] === 'supported');
+  const liveViewportSettings = normalizeCapabilityState(
+    capabilityStateSource.liveViewportSettings,
+    value.liveViewportSettings,
+  );
+  const clay = normalizeCapabilityState(capabilityStateSource.clay, value.clay);
+  const authoredLights = normalizeCapabilityState(
+    capabilityStateSource.authoredLights,
+    value.authoredLights,
+  );
+  const environment = normalizeCapabilityState(
+    capabilityStateSource.environment,
+    value.environment,
+  );
+  const typedPicking = normalizeCapabilityState(
+    capabilityStateSource.typedPicking,
+    value.typedPicking,
+  );
+  const characterRegions = normalizeCapabilityState(
+    capabilityStateSource.characterRegions,
+    value.characterRegions,
+  );
   return {
     renderModes,
-    liveViewportSettings: getBoolean(value.liveViewportSettings, defaults.liveViewportSettings),
-    clay: getBoolean(value.clay, defaults.clay),
-    authoredLights: getBoolean(value.authoredLights, defaults.authoredLights),
-    environment: getBoolean(value.environment, defaults.environment),
-    typedPicking: getBoolean(value.typedPicking, defaults.typedPicking),
-    characterRegions: getBoolean(value.characterRegions, defaults.characterRegions),
+    liveViewportSettings: capabilityStateToBoolean(
+      liveViewportSettings,
+      defaults.liveViewportSettings,
+    ),
+    clay: capabilityStateToBoolean(clay, defaults.clay),
+    authoredLights: capabilityStateToBoolean(authoredLights, defaults.authoredLights),
+    environment: capabilityStateToBoolean(environment, defaults.environment),
+    typedPicking: capabilityStateToBoolean(typedPicking, defaults.typedPicking),
+    characterRegions: capabilityStateToBoolean(characterRegions, defaults.characterRegions),
+    capabilityStates: {
+      renderModes: renderModeStates,
+      liveViewportSettings,
+      clay,
+      authoredLights,
+      environment,
+      typedPicking,
+      characterRegions,
+    },
   };
+}
+
+function normalizeCapabilityState(
+  stateValue: unknown,
+  legacyValue: unknown,
+): ModelSceneControlCapabilityState {
+  if (stateValue === 'supported' || stateValue === 'unsupported' || stateValue === 'unknown') {
+    return stateValue;
+  }
+  if (typeof stateValue === 'boolean') {
+    return stateValue ? 'supported' : 'unsupported';
+  }
+  if (isRecord(stateValue)) {
+    return normalizeCapabilityState(stateValue.state ?? stateValue.supported, undefined);
+  }
+  if (typeof legacyValue === 'boolean') {
+    return legacyValue ? 'supported' : 'unsupported';
+  }
+  return 'unknown';
+}
+
+function capabilityStateToBoolean(
+  state: ModelSceneControlCapabilityState,
+  fallback: boolean,
+): boolean {
+  if (state === 'supported') return true;
+  if (state === 'unsupported') return false;
+  return fallback;
+}
+
+function normalizeRenderModeCapabilityStates(
+  stateSource: Record<string, unknown> | undefined,
+  renderModes: readonly ViewportDescriptor['renderMode'][] | undefined,
+  fallback: Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>>,
+): Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>> {
+  const renderModeSet = renderModes ? new Set(renderModes) : null;
+  return {
+    pbr: normalizeRenderModeCapabilityState('pbr', stateSource, renderModeSet, fallback),
+    clay: normalizeRenderModeCapabilityState('clay', stateSource, renderModeSet, fallback),
+    wireframe: normalizeRenderModeCapabilityState(
+      'wireframe',
+      stateSource,
+      renderModeSet,
+      fallback,
+    ),
+    unlit: normalizeRenderModeCapabilityState('unlit', stateSource, renderModeSet, fallback),
+    normal: normalizeRenderModeCapabilityState('normal', stateSource, renderModeSet, fallback),
+    depth: normalizeRenderModeCapabilityState('depth', stateSource, renderModeSet, fallback),
+    lightComplexity: normalizeRenderModeCapabilityState(
+      'lightComplexity',
+      stateSource,
+      renderModeSet,
+      fallback,
+    ),
+    shadowAtlas: normalizeRenderModeCapabilityState(
+      'shadowAtlas',
+      stateSource,
+      renderModeSet,
+      fallback,
+    ),
+  };
+}
+
+function normalizeRenderModeCapabilityState(
+  mode: ViewportDescriptor['renderMode'],
+  stateSource: Record<string, unknown> | undefined,
+  renderModes: ReadonlySet<ViewportDescriptor['renderMode']> | null,
+  fallback: Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>>,
+): ModelSceneControlCapabilityState {
+  if (stateSource && Object.prototype.hasOwnProperty.call(stateSource, mode)) {
+    return normalizeCapabilityState(stateSource[mode], undefined);
+  }
+  if (renderModes) {
+    return renderModes.has(mode) ? 'supported' : 'unsupported';
+  }
+  return fallback[mode];
 }
 
 export class EngineClient {

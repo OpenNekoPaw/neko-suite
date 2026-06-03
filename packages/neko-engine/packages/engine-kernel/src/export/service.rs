@@ -621,6 +621,7 @@ impl ExportService {
                     frame_index: frame_idx,
                     width: output_width,
                     height: output_height,
+                    force_keyframe: false,
                     diagnostics: None,
                     meta: None,
                 },

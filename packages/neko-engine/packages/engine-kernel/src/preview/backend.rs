@@ -279,6 +279,7 @@ mod tests {
                 frame_index: self.frame_index,
                 width: 2,
                 height: 2,
+                force_keyframe: false,
                 diagnostics: None,
                 meta: None,
             };

@@ -59,6 +59,8 @@ function captureDecoderConfig(config: VideoDecoderConfig): CapturedVideoDecoderC
 }
 
 class FakeVideoDecoder {
+  static closeCalls = 0;
+  static resetCalls = 0;
   get decodeQueueSize(): number {
     return fakeDecodeQueueSize;
   }
@@ -78,6 +80,7 @@ class FakeVideoDecoder {
   }
 
   close(): void {
+    FakeVideoDecoder.closeCalls++;
     this.state = 'closed';
   }
 
@@ -102,6 +105,7 @@ class FakeVideoDecoder {
   }
 
   reset(): void {
+    FakeVideoDecoder.resetCalls++;
     this.state = 'unconfigured';
   }
 
@@ -180,6 +184,8 @@ describe('stream descriptor clients', () => {
     pendingFakeDecoderOutputs.length = 0;
     fakeDecoderAutoOutput = true;
     fakeDecodeQueueSize = 0;
+    FakeVideoDecoder.closeCalls = 0;
+    FakeVideoDecoder.resetCalls = 0;
     vi.stubGlobal('VideoDecoder', FakeVideoDecoder);
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('EncodedVideoChunk', FakeEncodedVideoChunk);
@@ -747,6 +753,268 @@ describe('stream descriptor clients', () => {
 
     expect(fakeWebSockets).toHaveLength(1);
     expect(frames).toEqual([66_666, 83_332]);
+
+    client.dispose();
+  });
+
+  it('does not suppress frames already submitted to WebCodecs when latest-only is enabled', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+      },
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    expect(pendingFakeDecoderOutputs).toHaveLength(2);
+
+    client.updateBackpressurePolicy({
+      maxDecodeQueueDepth: 1,
+      dropDeltaFramesWhenBacklogged: true,
+      preserveKeyframes: false,
+      latestOnly: true,
+    });
+    fakeDecodeQueueSize = 2;
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(116_664, 16_666, true) });
+
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(2);
+    expect(pendingFakeDecoderOutputs).toHaveLength(2);
+    pendingFakeDecoderOutputs.splice(0).forEach((output) => output());
+
+    expect(frames).toEqual([66_666, 83_332]);
+    expect(client.getStats().framesDecoded).toBe(2);
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(FakeVideoDecoder.resetCalls).toBe(0);
+    expect(FakeVideoDecoder.closeCalls).toBe(0);
+
+    client.dispose();
+  });
+
+  it('keeps the first and newest delayed decoded outputs visible while catching up', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const metas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+        latestOnly: true,
+        dropStaleDecodedOutput: true,
+        staleOutputDropLagFrames: 3,
+      },
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrameMeta: (meta) => metas.push(meta),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    const now = vi.spyOn(performance, 'now');
+    let time = 100;
+    now.mockImplementation(() => time);
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    time = 116;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    time = 132;
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+
+    time = 300;
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+
+    expect(frames).toEqual([66_666, 99_998]);
+    expect(client.getStats().framesDropped).toBe(1);
+    expect(diagnostics).toContain('decode-output-stale');
+    expect(metas[0]?.diagnostics?.staleDecodedOutputsDropped).toBe(0);
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(FakeVideoDecoder.resetCalls).toBe(0);
+    expect(FakeVideoDecoder.closeCalls).toBe(0);
+
+    now.mockRestore();
+    client.dispose();
+  });
+
+  it('drops stale out-of-order decoded output after a newer frame has been presented', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const metas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+        latestOnly: true,
+        dropStaleDecodedOutput: true,
+        staleOutputDropLagFrames: 3,
+      },
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrameMeta: (meta) => metas.push(meta),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    const now = vi.spyOn(performance, 'now');
+    let time = 100;
+    now.mockImplementation(() => time);
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    time = 116;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    time = 132;
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+
+    const outputs = pendingFakeDecoderOutputs.splice(0);
+    time = 300;
+    outputs[2]?.();
+    outputs[0]?.();
+    outputs[1]?.();
+
+    expect(frames).toEqual([99_998]);
+    expect(client.getStats().framesDropped).toBe(2);
+    expect(diagnostics).toContain('decode-output-stale');
+    expect(metas[0]?.diagnostics?.staleDecodedOutputsDropped).toBe(0);
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(FakeVideoDecoder.resetCalls).toBe(0);
+    expect(FakeVideoDecoder.closeCalls).toBe(0);
+
+    now.mockRestore();
+    client.dispose();
+  });
+
+  it('catches up from hidden WebCodecs output latency without starving presentation', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+        latestOnly: true,
+        dropStaleDecodedOutput: true,
+        staleOutputDropLagFrames: 3,
+        maxConsecutiveStaleDecodedOutputDrops: 2,
+      },
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    const now = vi.spyOn(performance, 'now');
+    let time = 100;
+    now.mockImplementation(() => time);
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    time = 116;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    time = 132;
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+    time = 148;
+    socket?.onmessage?.({ data: createH264Packet(116_664, 16_666, false) });
+    time = 164;
+    socket?.onmessage?.({ data: createH264Packet(133_330, 16_666, false) });
+
+    time = 300;
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+    pendingFakeDecoderOutputs.shift()?.();
+
+    expect(frames).toEqual([66_666, 116_664, 133_330]);
+    expect(client.getStats().framesDropped).toBe(2);
+    expect(diagnostics).toContain('decode-output-stale');
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(FakeVideoDecoder.resetCalls).toBe(0);
+    expect(FakeVideoDecoder.closeCalls).toBe(0);
+
+    now.mockRestore();
+    client.dispose();
+  });
+
+  it('keeps interactive backpressure changes off the decoder and hardware path', async () => {
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: {
+        ...renderDescriptor,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        h264: {
+          decoderPreference: 'prefer-hardware',
+          gopSize: 60,
+        },
+      },
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+      },
+    });
+
+    await client.connect();
+    const initialConfigCount = configuredDecoderConfigs.length;
+    const initialSupportConfigCount = supportDecoderConfigs.length;
+
+    client.updateBackpressurePolicy({
+      maxDecodeQueueDepth: 1,
+      dropDeltaFramesWhenBacklogged: true,
+      preserveKeyframes: false,
+      latestOnly: true,
+    });
+
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(configuredDecoderConfigs).toHaveLength(initialConfigCount);
+    expect(supportDecoderConfigs).toHaveLength(initialSupportConfigCount);
+    expect(FakeVideoDecoder.resetCalls).toBe(0);
+    expect(FakeVideoDecoder.closeCalls).toBe(0);
+    expect(configuredDecoderConfigs[0]).toMatchObject({
+      codedWidth: 1920,
+      codedHeight: 1080,
+      hardwareAcceleration: 'prefer-hardware',
+      optimizeForLatency: true,
+      latencyMode: 'realtime',
+    });
 
     client.dispose();
   });

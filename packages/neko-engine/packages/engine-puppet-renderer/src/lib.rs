@@ -171,6 +171,7 @@ impl PuppetRenderOutput {
             frame_index: self.frame_index,
             width: self.width,
             height: self.height,
+            force_keyframe: false,
             diagnostics: None,
             meta: None,
         })
@@ -521,6 +522,7 @@ mod tests {
             frame_index: 1,
             width: 640,
             height: 480,
+            force_keyframe: false,
             diagnostics: None,
             meta: None,
         });

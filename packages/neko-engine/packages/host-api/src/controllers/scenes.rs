@@ -10,8 +10,8 @@ use neko_engine_kernel::contracts::gpu::{
     CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
     DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
     SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportH264Settings,
-    ViewportLookDevSettings, ViewportMaterialOverride, ViewportMaterialOverrideKind,
-    ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
+    ViewportLiveSettings, ViewportLookDevSettings, ViewportMaterialOverride,
+    ViewportMaterialOverrideKind, ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
 use neko_engine_kernel::contracts::services::{
@@ -276,6 +276,7 @@ fn h264_settings_to_json(gop_size: u32, decoder_preference: Option<&str>) -> Val
 fn attach_scene_stream_runtime_diagnostics(
     diagnostics: &mut RenderFrameDiagnostics,
     settings: SceneStreamRuntimeSettings,
+    viewport: &ViewportDescriptor,
     codec_string: Option<&str>,
     codec_profile: Option<&str>,
     codec_level: Option<&str>,
@@ -293,7 +294,8 @@ fn attach_scene_stream_runtime_diagnostics(
     diagnostics.codec_level = codec_level.map(str::to_string);
     diagnostics.latency_mode = Some("realtime".to_string());
     diagnostics.post_process_enabled = Some(settings.post_process_enabled);
-    diagnostics.helper_passes_enabled = Some(settings.helper_passes_enabled);
+    diagnostics.helper_passes_enabled = Some(viewport.helper_passes);
+    diagnostics.render_mode = Some(render_mode_to_str(viewport.render_mode).to_string());
     diagnostics.quality_tier = Some(settings.quality_tier.as_str().to_string());
 }
 
@@ -522,6 +524,16 @@ impl SceneStreamRuntimeScheduler {
         viewport
     }
 
+    fn viewport_descriptor_for_live_settings(
+        &self,
+        settings: SceneStreamRuntimeSettings,
+        live_settings: Option<&ViewportLiveSettings>,
+    ) -> ViewportDescriptor {
+        let mut viewport = self.viewport_descriptor_for_settings(settings);
+        apply_live_viewport_settings(&mut viewport, live_settings);
+        viewport
+    }
+
     fn base_sink_settings(&self) -> SceneStreamRuntimeSettings {
         SceneStreamRuntimeSettings {
             width: self.base_width,
@@ -547,6 +559,52 @@ impl SceneStreamRuntimeScheduler {
     fn base_post_process_enabled(&self) -> bool {
         self.base_decision.work_mode != ViewportWorkMode::EditFree
             && self.base_viewport.post_process.any_enabled()
+    }
+}
+
+fn apply_live_viewport_settings(
+    viewport: &mut ViewportDescriptor,
+    live_settings: Option<&ViewportLiveSettings>,
+) {
+    let Some(settings) = live_settings else {
+        return;
+    };
+    if let Some(render_mode) = settings.render_mode {
+        viewport.render_mode = render_mode;
+    }
+    if let Some(lookdev) = settings.lookdev.clone() {
+        viewport.render_mode = lookdev.render_mode;
+        if let Some(debug_view) = lookdev.debug_view {
+            viewport.debug_view = Some(debug_view);
+        }
+        if let Some(helper_passes_enabled) = lookdev.helper_passes_enabled {
+            viewport.helper_passes = helper_passes_enabled;
+        }
+        if let Some(show_grid) = lookdev.show_grid {
+            viewport.helper_passes = show_grid;
+        }
+        viewport.lookdev = Some(lookdev);
+    }
+    if let Some(helper_passes_enabled) = settings.helper_passes_enabled {
+        viewport.helper_passes = helper_passes_enabled;
+    }
+    if let Some(show_grid) = settings.show_grid {
+        viewport.helper_passes = show_grid;
+    }
+    if viewport
+        .lookdev
+        .as_ref()
+        .is_none_or(|lookdev| lookdev.render_mode != viewport.render_mode)
+    {
+        viewport.lookdev = Some(ViewportLookDevSettings {
+            render_mode: viewport.render_mode,
+            debug_view: viewport.debug_view,
+            material_override: None,
+            helper_passes_enabled: Some(viewport.helper_passes),
+            show_grid: Some(viewport.helper_passes),
+            show_skeleton: None,
+            show_normals: None,
+        });
     }
 }
 
@@ -925,7 +983,16 @@ fn spawn_scene_stream_producer(
                     let output_size = (settings.width, settings.height);
                     let duration_us = stream_duration_us;
                     let quality = settings.h264_quality;
-                    let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
+                    let live_settings = service.viewport_live_settings(
+                        &config.viewport.scene_id,
+                        &config.viewport.viewport_id,
+                    );
+                    let force_keyframe = service.consume_viewport_keyframe_request(
+                        &config.viewport.scene_id,
+                        &config.viewport.viewport_id,
+                    );
+                    let viewport = runtime_scheduler
+                        .viewport_descriptor_for_live_settings(settings, live_settings.as_ref());
                     let codec_level_idc =
                         h264_level_idc(settings.width, settings.height, settings.fps);
                     let codec_level = h264_level_string(codec_level_idc);
@@ -957,6 +1024,7 @@ fn spawn_scene_stream_producer(
                         attach_scene_stream_runtime_diagnostics(
                             diagnostics,
                             settings,
+                            &viewport,
                             Some(codec_string.as_str()),
                             Some(H264_REALTIME_PROFILE),
                             Some(codec_level.as_str()),
@@ -1016,6 +1084,7 @@ fn spawn_scene_stream_producer(
                                     neko_engine_types::VideoOutput::GpuFrame(frame),
                                 ) = &mut output
                                 {
+                                    frame.force_keyframe = force_keyframe;
                                     if let Some(diagnostics) = frame.diagnostics.as_mut() {
                                         diagnostics.schedule_lag_ms =
                                             schedule_lag.as_secs_f32() * 1000.0;
@@ -1024,6 +1093,7 @@ fn spawn_scene_stream_producer(
                                         attach_scene_stream_runtime_diagnostics(
                                             diagnostics,
                                             settings,
+                                            &viewport,
                                             Some(codec_string.as_str()),
                                             Some(H264_REALTIME_PROFILE),
                                             Some(codec_level.as_str()),
@@ -1206,10 +1276,8 @@ fn spawn_scene_stream_producer(
                             &config.viewport.scene_id,
                             &config.viewport.viewport_id,
                         );
-                    let proposed_settings = apply_viewport_stream_interaction_profile(
-                        proposed_settings,
-                        interaction_profile,
-                    );
+                    let proposed_settings =
+                        apply_viewport_stream_interaction_profile(proposed_settings, interaction_profile);
                     let next_settings =
                         settings_stabilizer.stabilize(proposed_settings, Instant::now());
                     if next_settings.quality_tier != settings.quality_tier {
@@ -1265,7 +1333,12 @@ fn spawn_scene_raw_nv12_stream_producer(
                     let frame_started = Instant::now();
                     let service = Arc::clone(&scene_service);
                     let camera = service.get_editor_camera();
-                    let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
+                    let live_settings = service.viewport_live_settings(
+                        &config.viewport.scene_id,
+                        &config.viewport.viewport_id,
+                    );
+                    let viewport = runtime_scheduler
+                        .viewport_descriptor_for_live_settings(settings, live_settings.as_ref());
                     let preview_camera = model_preview_controller
                         .as_ref()
                         .and_then(|controller| {
@@ -1301,6 +1374,7 @@ fn spawn_scene_raw_nv12_stream_producer(
                             attach_scene_stream_runtime_diagnostics(
                                 diagnostics,
                                 settings,
+                                &viewport,
                                 None,
                                 None,
                                 None,
@@ -1401,12 +1475,9 @@ fn scene_stream_encoder_config_changes(
 }
 
 fn apply_viewport_stream_interaction_profile(
-    mut settings: SceneStreamRuntimeSettings,
-    profile: ViewportStreamInteractionProfile,
+    settings: SceneStreamRuntimeSettings,
+    _profile: ViewportStreamInteractionProfile,
 ) -> SceneStreamRuntimeSettings {
-    if profile == ViewportStreamInteractionProfile::Interactive {
-        settings.h264_gop_size = 1;
-    }
     settings
 }
 
@@ -1789,9 +1860,15 @@ impl Controller for ScenesController {
                     codec: StreamCodec::H264,
                     initial_paused: false,
                 };
+                let cancel_token = CancellationToken::new();
 
                 let (stream_id, _rx) = stream_registry
-                    .create_stream(&session_id, &resource_id, stream_config)
+                    .create_stream_replacing_resource(
+                        &session_id,
+                        &resource_id,
+                        stream_config,
+                        cancel_token.clone(),
+                    )
                     .await;
                 stream_registry.activate(&stream_id).await.map_err(|e| {
                     ApiError::ServiceError(format!(
@@ -1800,11 +1877,6 @@ impl Controller for ScenesController {
                         e
                     ))
                 })?;
-
-                let cancel_token = CancellationToken::new();
-                stream_registry
-                    .set_cancel_token(&stream_id, cancel_token.clone())
-                    .await;
 
                 if let Some(scene_service) = self.scene_service.clone() {
                     if let Some(camera) = parse_camera_ref_to_params(opts.camera_ref.as_ref()) {
@@ -2483,7 +2555,7 @@ impl Controller for ScenesController {
                         "lightComplexity",
                         "shadowAtlas"
                     ],
-                    "liveViewportSettings": false,
+                    "liveViewportSettings": true,
                     "clay": true,
                     "authoredLights": false,
                     "environment": false,
@@ -2661,7 +2733,7 @@ mod tests {
         let data = response.data.as_ref().unwrap();
 
         assert_eq!(data["clay"], true);
-        assert_eq!(data["liveViewportSettings"], false);
+        assert_eq!(data["liveViewportSettings"], true);
         assert!(data["renderModes"]
             .as_array()
             .unwrap()
@@ -2951,6 +3023,50 @@ mod tests {
         let _ = registry
             .destroy(&StreamId::from_string(second_stream_id))
             .await;
+    }
+
+    #[tokio::test]
+    async fn test_scene_stream_replaces_existing_stream_for_same_viewport() {
+        let (controller, registry) = create_stream_test_controller();
+        let first = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "resolution": { "width": 1280, "height": 720, "pixelRatio": 1.0 }
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+        let second = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "resolution": { "width": 1280, "height": 720, "pixelRatio": 1.0 }
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let first_data = first.data.as_ref().unwrap().as_object().unwrap();
+        let second_data = second.data.as_ref().unwrap().as_object().unwrap();
+        let first_stream_id = StreamId::from_string(first_data["streamId"].as_str().unwrap());
+        let second_stream_id = StreamId::from_string(second_data["streamId"].as_str().unwrap());
+        assert_ne!(first_stream_id, second_stream_id);
+        assert!(!registry.exists(&first_stream_id).await);
+        assert!(registry.exists(&second_stream_id).await);
+        let resource_streams = registry
+            .get_resource_streams(&scene_stream_resource_id("scene-a", "main"))
+            .await;
+        assert_eq!(resource_streams, vec![second_stream_id.clone()]);
+        let _ = registry.destroy(&second_stream_id).await;
     }
 
     #[tokio::test]
@@ -3472,7 +3588,7 @@ mod tests {
     }
 
     #[test]
-    fn scene_stream_interactive_profile_switches_to_all_intra_without_full_cooldown() {
+    fn scene_stream_interactive_profile_does_not_change_encoder_contract() {
         let config = SceneStreamProducerConfig {
             session_id: "scene-scene-a".to_string(),
             viewport: ViewportDescriptor {
@@ -3509,20 +3625,20 @@ mod tests {
             full,
             ViewportStreamInteractionProfile::Interactive,
         );
-        assert_eq!(interactive.h264_gop_size, 1);
+        assert_eq!(interactive.h264_gop_size, full.h264_gop_size);
+        assert_eq!(
+            scene_stream_sink_config(interactive).unwrap(),
+            scene_stream_sink_config(full).unwrap()
+        );
 
         let now = Instant::now();
         let mut stabilizer = SceneStreamSettingsStabilizer::new(full, now);
         assert_eq!(
             stabilizer.stabilize(interactive, now + Duration::from_millis(1)),
-            interactive
+            full
         );
         assert_eq!(
             stabilizer.stabilize(full, now + Duration::from_millis(100)),
-            interactive
-        );
-        assert_eq!(
-            stabilizer.stabilize(full, now + Duration::from_millis(260)),
             full
         );
     }
@@ -3542,10 +3658,26 @@ mod tests {
             preserve_control_ack: true,
         };
         let mut diagnostics = RenderFrameDiagnostics::default();
+        let viewport = ViewportDescriptor {
+            viewport_id: "main".to_string(),
+            scene_id: "scene-a".to_string(),
+            render_mode: ViewportRenderMode::Normal,
+            debug_view: None,
+            fps: 60,
+            color_space: SceneColorSpace::Srgb,
+            tone_mapping: SceneToneMapping::Aces,
+            post_process: ViewportPostProcess::default(),
+            layer_mask: None,
+            work_mode: ViewportWorkMode::EditParametric,
+            helper_passes: true,
+            lookdev: None,
+            h264: None,
+        };
 
         attach_scene_stream_runtime_diagnostics(
             &mut diagnostics,
             settings,
+            &viewport,
             Some("avc1.42e02a"),
             Some(H264_REALTIME_PROFILE),
             Some("4.2"),
@@ -3567,7 +3699,8 @@ mod tests {
         assert_eq!(diagnostics.codec_level.as_deref(), Some("4.2"));
         assert_eq!(diagnostics.latency_mode.as_deref(), Some("realtime"));
         assert_eq!(diagnostics.post_process_enabled, Some(true));
-        assert_eq!(diagnostics.helper_passes_enabled, Some(false));
+        assert_eq!(diagnostics.helper_passes_enabled, Some(true));
+        assert_eq!(diagnostics.render_mode.as_deref(), Some("normal"));
         assert_eq!(diagnostics.quality_tier.as_deref(), Some("full"));
     }
 

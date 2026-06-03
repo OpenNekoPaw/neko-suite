@@ -6,6 +6,7 @@ use crate::domain::FrameData;
 use crate::services::pipeline_sink::PipelineOutput;
 use neko_engine_scene_renderer::{
     CameraParams, ControlAckHealthSample, SceneRenderOutput, ViewportDescriptor,
+    ViewportLiveSettings,
 };
 use neko_engine_types::easing::EasingType;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
@@ -159,6 +160,27 @@ pub trait ISceneService: Send + Sync {
         scene_id: &str,
         viewport_id: &str,
     ) -> ViewportStreamInteractionProfile;
+
+    /// Request the next realtime stream frame for a viewport to be independently decodable.
+    fn request_viewport_keyframe(&self, scene_id: &str, viewport_id: &str);
+
+    /// Consume a pending realtime stream keyframe request for a viewport.
+    fn consume_viewport_keyframe_request(&self, scene_id: &str, viewport_id: &str) -> bool;
+
+    /// Update live render-only settings for a viewport without changing the stream descriptor.
+    fn update_viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        settings: ViewportLiveSettings,
+    ) -> crate::error::Result<()>;
+
+    /// Get live render-only settings for a viewport.
+    fn viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> Option<ViewportLiveSettings>;
 
     /// Report control acknowledgement health for adaptive scene streaming.
     fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample;

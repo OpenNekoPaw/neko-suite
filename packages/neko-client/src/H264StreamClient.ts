@@ -41,6 +41,8 @@ const DEFAULT_H264_BACKPRESSURE_POLICY: H264BackpressurePolicy = {
   preserveKeyframes: true,
   keyframeRequestDropThreshold: 30,
 };
+const DEFAULT_STALE_OUTPUT_DROP_LAG_FRAMES = 3;
+const DEFAULT_MAX_CONSECUTIVE_STALE_OUTPUT_DROPS = 6;
 
 interface ParsedH264Packet {
   pts: number;
@@ -199,6 +201,14 @@ export interface H264BackpressurePolicy {
   readonly preserveKeyframes: boolean;
   readonly keyframeRequestDropThreshold?: number;
   readonly latestOnly?: boolean;
+  /**
+   * Drop decoded output that spent too long inside the browser/hardware decoder.
+   * This protects realtime authoring from VideoToolbox/WebCodecs internal queues
+   * that are not reflected by VideoDecoder.decodeQueueSize.
+   */
+  readonly dropStaleDecodedOutput?: boolean;
+  readonly staleOutputDropLagFrames?: number;
+  readonly maxConsecutiveStaleDecodedOutputDrops?: number;
 }
 
 interface PendingFrameMetaExpectation extends H264FrameMetaExpectation {
@@ -289,6 +299,8 @@ export class H264StreamClient {
   private decodeTimeSamples: number[] = [];
   private latencySamples: number[] = [];
   private droppedBeforeDecodeSinceLastFrame = 0;
+  private droppedStaleDecodedOutputSinceLastFrame = 0;
+  private consecutiveDroppedStaleDecodedOutputs = 0;
   private consecutiveDroppedDeltaFrames = 0;
   private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
   private pendingFrameMeta: Map<number, RenderFrameMeta> = new Map();
@@ -299,6 +311,7 @@ export class H264StreamClient {
   private packetByteSamples: PacketByteSample[] = [];
   private decodedFrameTimestamps: Map<number, number> = new Map();
   private lastDecodeOutputAt: number | undefined;
+  private latestPacketPtsReceived: number | undefined;
   private currentDecodeOutputBurstStartedAt: number | undefined;
   private currentDecodeOutputBurstCount = 0;
   private latestFrameMeta: RenderFrameMeta | undefined;
@@ -394,11 +407,14 @@ export class H264StreamClient {
     this.pendingPacketReceivedAt.clear();
     this.packetByteSamples = [];
     this.decodedFrameTimestamps.clear();
+    this.latestPacketPtsReceived = undefined;
     this.latestFrameMeta = undefined;
     this.pendingFrameMetaExpectations.clear();
     this.decodeTimeSamples = [];
     this.latencySamples = [];
     this.droppedBeforeDecodeSinceLastFrame = 0;
+    this.droppedStaleDecodedOutputSinceLastFrame = 0;
+    this.consecutiveDroppedStaleDecodedOutputs = 0;
     this.consecutiveDroppedDeltaFrames = 0;
     this.stats.isConnected = false;
     this.stats.isDecoderReady = false;
@@ -604,6 +620,10 @@ export class H264StreamClient {
 
     const packet = parseH264Packet(data);
     if (!packet) return;
+    this.latestPacketPtsReceived =
+      this.latestPacketPtsReceived === undefined
+        ? packet.pts
+        : Math.max(this.latestPacketPtsReceived, packet.pts);
     this.pendingPacketReceivedAt.set(packet.pts, receiveTime);
     const meta = this.createFrameMeta(packet);
     if (meta) {
@@ -669,6 +689,14 @@ export class H264StreamClient {
 
     const meta = this.pendingFrameMeta.get(frame.timestamp);
     if (meta) {
+      const decodeOutputLagFrames = frameLatencyToFrames(
+        decodeTiming.packetToDecodeOutputMs,
+        meta.durationUs,
+      );
+      if (this.shouldDropDecodedOutput(meta, decodeOutputLagFrames)) {
+        this.dropDecodedOutput(frame, meta, frameDecodedAt, decodeOutputLagFrames);
+        return;
+      }
       this.pendingFrameMeta.delete(frame.timestamp);
       const diagnostics = this.pendingFrameDiagnostics.get(frame.timestamp);
       this.pendingFrameDiagnostics.delete(frame.timestamp);
@@ -708,16 +736,14 @@ export class H264StreamClient {
         decodeTimeMs: decodeTiming.decodeSubmitToOutputMs,
         packetToDecodeSubmitMs: decodeTiming.packetToDecodeSubmitMs,
         packetToDecodeOutputMs: decodeTiming.packetToDecodeOutputMs,
-        decodeOutputLagFrames: frameLatencyToFrames(
-          decodeTiming.packetToDecodeOutputMs,
-          meta.durationUs,
-        ),
+        decodeOutputLagFrames,
         queueDepth: this.stats.decodeQueueDepth,
         webcodecsDecodeQueueSize: this.decoder?.decodeQueueSize ?? 0,
         pendingDecodeFrames: this.decodeStartTimes.size,
         decodeOutputIntervalMs,
         decodeOutputBurst,
         droppedBeforeDecode: this.consumeDroppedBeforeDecodeSinceLastFrame(),
+        staleDecodedOutputsDropped: this.consumeDroppedStaleDecodedOutputSinceLastFrame(),
       });
       this.latestFrameMeta = enrichedMeta;
       this.reconcileFrameMetaExpectations(enrichedMeta, frameDecodedAt);
@@ -753,6 +779,83 @@ export class H264StreamClient {
       this.pendingFrameDiagnostics.delete(oldest);
     }
     trimOldestMapEntry(this.pendingPacketReceivedAt, 100);
+  }
+
+  private shouldDropDecodedOutput(
+    meta: RenderFrameMeta,
+    decodeOutputLagFrames: number | undefined,
+  ): boolean {
+    const policy = this.config.backpressure;
+    if (policy.latestOnly !== true) {
+      return false;
+    }
+    if (this.latestFrameMeta !== undefined && meta.ptsUs <= this.latestFrameMeta.ptsUs) {
+      return true;
+    }
+    if (policy.dropStaleDecodedOutput !== true) {
+      return false;
+    }
+    if (
+      decodeOutputLagFrames === undefined ||
+      decodeOutputLagFrames <
+        (policy.staleOutputDropLagFrames ?? DEFAULT_STALE_OUTPUT_DROP_LAG_FRAMES)
+    ) {
+      this.consecutiveDroppedStaleDecodedOutputs = 0;
+      return false;
+    }
+    if (this.latestFrameMeta === undefined) {
+      this.consecutiveDroppedStaleDecodedOutputs = 0;
+      return false;
+    }
+    if (this.latestPacketPtsReceived === undefined || meta.ptsUs >= this.latestPacketPtsReceived) {
+      this.consecutiveDroppedStaleDecodedOutputs = 0;
+      return false;
+    }
+    const maxConsecutiveDrops =
+      policy.maxConsecutiveStaleDecodedOutputDrops ?? DEFAULT_MAX_CONSECUTIVE_STALE_OUTPUT_DROPS;
+    if (this.consecutiveDroppedStaleDecodedOutputs >= maxConsecutiveDrops) {
+      this.consecutiveDroppedStaleDecodedOutputs = 0;
+      return false;
+    }
+    return true;
+  }
+
+  private dropDecodedOutput(
+    frame: VideoFrame,
+    meta: RenderFrameMeta,
+    frameDecodedAt: number,
+    decodeOutputLagFrames: number | undefined,
+  ): void {
+    this.stats.framesDropped++;
+    this.droppedStaleDecodedOutputSinceLastFrame++;
+    this.consecutiveDroppedStaleDecodedOutputs++;
+    this.pendingFrameMeta.delete(frame.timestamp);
+    this.pendingFrameDiagnostics.delete(frame.timestamp);
+    this.pendingPacketReceivedAt.delete(frame.timestamp);
+    this.pendingSidebandFrameMeta.delete(frame.timestamp);
+    this.pendingSidebandFrameMetaReceivedAt.delete(frame.timestamp);
+    frame.close();
+    this.reportControlFlowDiagnostic({
+      kind: 'metadata',
+      severity: 'warning',
+      code: 'decode-output-stale',
+      message: 'Dropped a stale decoded video output to keep the realtime viewport latest-only.',
+      sceneId: meta.sceneId,
+      streamId: meta.streamId,
+      viewportId: meta.viewportId,
+      revision: meta.sceneRevision,
+      appliedSeq: meta.appliedSeq,
+      metadataState: 'stale',
+      degradedReason: 'video-backpressure',
+      timestamp: frameDecodedAt,
+      details: finiteDetails({
+        frameId: meta.frameId,
+        ptsUs: meta.ptsUs,
+        decodeOutputLagFrames,
+        pendingDecodeFrames: this.decodeStartTimes.size,
+        webcodecsDecodeQueueSize: this.decoder?.decodeQueueSize ?? 0,
+      }),
+    });
   }
 
   private consumeDecodeFrameTiming(
@@ -982,6 +1085,12 @@ export class H264StreamClient {
     return dropped;
   }
 
+  private consumeDroppedStaleDecodedOutputSinceLastFrame(): number {
+    const dropped = this.droppedStaleDecodedOutputSinceLastFrame;
+    this.droppedStaleDecodedOutputSinceLastFrame = 0;
+    return dropped;
+  }
+
   private handleTextMessage(data: string): void {
     const message = parseJsonObject(data);
     if (!message) {
@@ -1152,6 +1261,17 @@ function normalizeBackpressurePolicy(
         ? Math.max(1, Math.floor(policy.keyframeRequestDropThreshold))
         : undefined,
     latestOnly: policy.latestOnly === true,
+    dropStaleDecodedOutput: policy.dropStaleDecodedOutput === true,
+    staleOutputDropLagFrames:
+      typeof policy.staleOutputDropLagFrames === 'number' &&
+      Number.isFinite(policy.staleOutputDropLagFrames)
+        ? Math.max(1, Math.floor(policy.staleOutputDropLagFrames))
+        : undefined,
+    maxConsecutiveStaleDecodedOutputDrops:
+      typeof policy.maxConsecutiveStaleDecodedOutputDrops === 'number' &&
+      Number.isFinite(policy.maxConsecutiveStaleDecodedOutputDrops)
+        ? Math.max(1, Math.floor(policy.maxConsecutiveStaleDecodedOutputDrops))
+        : undefined,
   };
 }
 

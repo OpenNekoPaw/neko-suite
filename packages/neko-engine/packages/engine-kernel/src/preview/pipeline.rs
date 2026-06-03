@@ -353,6 +353,7 @@ impl PreviewPipeline {
             frame_index: self.frame_count,
             width: gpu_result.width,
             height: gpu_result.height,
+            force_keyframe: false,
             diagnostics: None,
             meta: None,
         };

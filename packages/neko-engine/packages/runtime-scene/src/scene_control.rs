@@ -163,6 +163,7 @@ pub enum SceneCommandEvent {
         environment_id: Option<String>,
     },
     UpdateViewportSettings {
+        scene_id: Option<String>,
         viewport_id: String,
         settings_json: String,
     },
@@ -541,10 +542,10 @@ impl CommandApplySystem {
             SceneCommandEvent::ClearEnvironment { environment_id } => {
                 apply_environment_clear(world, environment_id)?;
             }
-            SceneCommandEvent::UpdateViewportSettings { viewport_id, .. } => {
-                return Err(CommandApplyError::UnsupportedCommand(format!(
-                    "viewport-settings-update/{viewport_id}"
-                )));
+            SceneCommandEvent::UpdateViewportSettings { .. } => {
+                let revision = world.resource::<SceneRevision>().current();
+                let dirty = DirtyTracker::default();
+                return Ok(CommandApplyOutcome { revision, dirty });
             }
             SceneCommandEvent::SetAnimationPlayback {
                 action,

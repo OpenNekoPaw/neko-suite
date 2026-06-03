@@ -79,6 +79,7 @@ fn panoramic_stream_video_output(
         frame_index,
         width: output.width,
         height: output.height,
+        force_keyframe: false,
         diagnostics: None,
         meta: None,
     }))

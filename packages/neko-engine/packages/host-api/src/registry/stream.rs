@@ -116,6 +116,77 @@ impl StreamRegistry {
         (stream_id, rx)
     }
 
+    /// Create a stream while replacing any existing streams for the same resource.
+    ///
+    /// This is intended for singleton resources such as an Engine-rendered viewport:
+    /// concurrent starts for the same scene/viewport must not leave multiple
+    /// producers alive. The replacement and the new cancellation token are
+    /// committed while holding the registry indices, closing the race between
+    /// resource cleanup and stream creation.
+    pub async fn create_stream_replacing_resource(
+        &self,
+        session_id: &str,
+        resource_id: &str,
+        config: StreamConfig,
+        cancel_token: CancellationToken,
+    ) -> (StreamId, broadcast::Receiver<FrameData>) {
+        let (entry, rx) = StreamEntry::new(session_id, resource_id, config);
+        let stream_id = entry.id.clone();
+        let id_str = stream_id.as_str().to_string();
+        let replaced_ids: Vec<String>;
+
+        {
+            let mut tokens = self.cancel_tokens.write().await;
+            let mut streams = self.streams.write().await;
+            let mut session_map = self.session_streams.write().await;
+            let mut resource_map = self.resource_streams.write().await;
+
+            replaced_ids = resource_map.remove(resource_id).unwrap_or_default();
+            for replaced_id in &replaced_ids {
+                if let Some(token) = tokens.remove(replaced_id) {
+                    token.cancel();
+                }
+                if let Some(mut replaced_entry) = streams.remove(replaced_id) {
+                    let _ = replaced_entry.transition(StreamState::Destroyed);
+                    if let Some(stream_ids) = session_map.get_mut(&replaced_entry.session_id) {
+                        stream_ids.retain(|id| id != replaced_id);
+                        if stream_ids.is_empty() {
+                            session_map.remove(&replaced_entry.session_id);
+                        }
+                    }
+                }
+            }
+
+            streams.insert(id_str.clone(), entry);
+            session_map
+                .entry(session_id.to_string())
+                .or_default()
+                .push(id_str.clone());
+            resource_map
+                .entry(resource_id.to_string())
+                .or_default()
+                .push(id_str.clone());
+            tokens.insert(id_str.clone(), cancel_token);
+        }
+
+        if !replaced_ids.is_empty() {
+            tracing::debug!(
+                "Created stream {} for session {}, replacing {} stream(s) for resource {}",
+                stream_id.as_str(),
+                session_id,
+                replaced_ids.len(),
+                resource_id
+            );
+        } else {
+            tracing::debug!(
+                "Created stream {} for session {}",
+                stream_id.as_str(),
+                session_id
+            );
+        }
+        (stream_id, rx)
+    }
+
     /// Associate a CancellationToken with a stream
     ///
     /// When the stream is destroyed (including session cascade), the token
@@ -634,6 +705,34 @@ mod tests {
         registry.destroy(&stream_id).await.unwrap();
 
         assert_eq!(registry.get_resource_streams("vid_abc").await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_stream_replacing_resource_is_singleton() {
+        let registry = StreamRegistry::new();
+        let first_token = CancellationToken::new();
+        let first_token_clone = first_token.clone();
+        let (first_id, _) = registry
+            .create_stream_replacing_resource("session1", "vid_abc", test_config(), first_token)
+            .await;
+        registry.activate(&first_id).await.unwrap();
+
+        let second_token = CancellationToken::new();
+        let second_token_clone = second_token.clone();
+        let (second_id, _) = registry
+            .create_stream_replacing_resource("session1", "vid_abc", test_config(), second_token)
+            .await;
+
+        assert_ne!(first_id, second_id);
+        assert!(first_token_clone.is_cancelled());
+        assert!(!second_token_clone.is_cancelled());
+        assert!(!registry.exists(&first_id).await);
+        assert!(registry.exists(&second_id).await);
+        assert_eq!(
+            registry.get_resource_streams("vid_abc").await,
+            vec![second_id]
+        );
+        assert_eq!(registry.get_session_streams("session1").await.len(), 1);
     }
 
     #[tokio::test]

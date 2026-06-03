@@ -20,7 +20,8 @@ use neko_engine_gpu::RgbaToNv12TextureConverter;
 use neko_engine_scene_renderer::{
     extract_render_world, CameraParams, ControlAckHealthSample, EnvironmentBackground,
     EnvironmentBackgroundSettings, RenderExtractStats, RenderWorld, SceneRenderOutput,
-    ViewportDescriptor, ViewportRenderGraphOutput,
+    ViewportDebugView, ViewportDescriptor, ViewportLiveSettings, ViewportLookDevSettings,
+    ViewportRenderGraphOutput, ViewportRenderMode,
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
@@ -47,8 +48,8 @@ use neko_runtime_scene::{
     BrushPatchApplyOutcome, ModelingSession, ModelingSessionStateDelta, TopologyChangeEvent,
     TopologyOperation, VertexBrushPatchMetadata,
 };
-use neko_runtime_scene::{SceneCommandAck, SceneCommandEnvelope};
-use std::collections::{HashMap, VecDeque};
+use neko_runtime_scene::{SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU32, Ordering},
@@ -260,6 +261,10 @@ pub struct SceneService {
     editor_camera: RwLock<Option<CameraParams>>,
     /// Short-lived latency profile for viewport streams during direct manipulation.
     viewport_stream_profiles: Mutex<HashMap<(String, String), ViewportStreamProfileState>>,
+    /// One-shot keyframe requests for realtime viewport streams.
+    viewport_keyframe_requests: Mutex<HashSet<(String, String)>>,
+    /// Render-only viewport settings that can change without restarting the stream.
+    viewport_live_settings: RwLock<HashMap<(String, String), ViewportLiveSettings>>,
     /// Latest Engine-owned environment state used by stream/capture defaults.
     environment: RwLock<Option<EnvironmentPatch>>,
     /// Resolved Engine file tokens for environment sources. Runtime scene state
@@ -302,6 +307,8 @@ impl SceneService {
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
             viewport_stream_profiles: Mutex::new(HashMap::new()),
+            viewport_keyframe_requests: Mutex::new(HashSet::new()),
+            viewport_live_settings: RwLock::new(HashMap::new()),
             environment: RwLock::new(None),
             environment_file_tokens: RwLock::new(HashMap::new()),
             environment_background: Mutex::new(None),
@@ -345,6 +352,8 @@ impl SceneService {
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
             viewport_stream_profiles: Mutex::new(HashMap::new()),
+            viewport_keyframe_requests: Mutex::new(HashSet::new()),
+            viewport_live_settings: RwLock::new(HashMap::new()),
             environment: RwLock::new(None),
             environment_file_tokens: RwLock::new(HashMap::new()),
             environment_background: Mutex::new(None),
@@ -414,6 +423,48 @@ impl SceneService {
         }
     }
 
+    pub fn request_viewport_keyframe(&self, scene_id: &str, viewport_id: &str) {
+        let Ok(mut guard) = self.viewport_keyframe_requests.lock() else {
+            return;
+        };
+        guard.insert((scene_id.to_string(), viewport_id.to_string()));
+    }
+
+    pub fn consume_viewport_keyframe_request(&self, scene_id: &str, viewport_id: &str) -> bool {
+        let Ok(mut guard) = self.viewport_keyframe_requests.lock() else {
+            return false;
+        };
+        guard.remove(&(scene_id.to_string(), viewport_id.to_string()))
+    }
+
+    pub fn update_viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        settings: ViewportLiveSettings,
+    ) -> Result<()> {
+        let mut guard = self
+            .viewport_live_settings
+            .write()
+            .map_err(|e| Error::Other(format!("Viewport live settings lock poisoned: {}", e)))?;
+        guard.insert((scene_id.to_string(), viewport_id.to_string()), settings);
+        Ok(())
+    }
+
+    pub fn viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> Option<ViewportLiveSettings> {
+        let guard = self.viewport_live_settings.read().ok()?;
+        if let Some(settings) = guard.get(&(scene_id.to_string(), viewport_id.to_string())) {
+            return Some(settings.clone());
+        }
+        guard
+            .get(&("*".to_string(), viewport_id.to_string()))
+            .cloned()
+    }
+
     pub fn current_revision(&self) -> Result<u64> {
         self.computation.current_revision()
     }
@@ -460,7 +511,32 @@ impl SceneService {
         envelope: SceneCommandEnvelope,
     ) -> Result<(Vec<SceneCommandAck>, Option<SceneDelta>)> {
         let _ack_sample = self.control_ack_metrics.start_sample();
+        let viewport_settings_update = match &envelope.event {
+            neko_runtime_scene::SceneCommandEvent::UpdateViewportSettings {
+                scene_id,
+                viewport_id,
+                settings_json,
+            } => Some((
+                scene_id.clone(),
+                viewport_id.clone(),
+                parse_viewport_live_settings(settings_json)?,
+            )),
+            _ => None,
+        };
         let (acks, delta) = self.computation.apply_scene_command_with_delta(envelope)?;
+        if let Some((scene_id, viewport_id, settings)) = viewport_settings_update {
+            if acks
+                .iter()
+                .any(|ack| ack.status == SceneCommandAckStatus::Applied)
+            {
+                self.update_viewport_live_settings(
+                    scene_id.as_deref().unwrap_or("*"),
+                    &viewport_id,
+                    settings,
+                )?;
+            }
+            return Ok((acks, None));
+        }
         if let Some(delta) = &delta {
             if delta.environment.is_some() {
                 self.update_environment_from_delta(delta)?;
@@ -1197,6 +1273,7 @@ impl SceneService {
             frame_index,
             width: output.width,
             height: output.height,
+            force_keyframe: false,
             diagnostics: Some(RenderFrameDiagnostics {
                 render_path: GpuRenderPath::GpuZeroCopy,
                 iosurface_creations: convert_stats.iosurface_creations,
@@ -1312,6 +1389,90 @@ fn prune_scene_stream_encoder_bridges(
         .or_else(|| bridges.keys().next().cloned());
     if let Some(key) = stale_key {
         bridges.remove(&key);
+    }
+}
+
+fn parse_viewport_live_settings(settings_json: &str) -> Result<ViewportLiveSettings> {
+    let value: serde_json::Value = serde_json::from_str(settings_json)
+        .map_err(|error| Error::InvalidParameter(format!("Invalid viewport settings: {error}")))?;
+    let render_mode = value
+        .get("renderMode")
+        .and_then(serde_json::Value::as_str)
+        .map(parse_viewport_render_mode)
+        .transpose()?;
+    let helper_passes_enabled = optional_bool(&value, "helperPassesEnabled")?;
+    let show_grid = optional_bool(&value, "showGrid")?;
+    let lookdev = value
+        .get("lookdev")
+        .map(parse_viewport_lookdev_settings)
+        .transpose()?;
+    Ok(ViewportLiveSettings {
+        render_mode,
+        lookdev,
+        helper_passes_enabled,
+        show_grid,
+    })
+}
+
+fn parse_viewport_lookdev_settings(value: &serde_json::Value) -> Result<ViewportLookDevSettings> {
+    let render_mode = value
+        .get("renderMode")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| Error::InvalidParameter("viewport lookdev renderMode required".to_string()))
+        .and_then(parse_viewport_render_mode)?;
+    let debug_view = value
+        .get("debugView")
+        .and_then(serde_json::Value::as_str)
+        .map(parse_viewport_debug_view)
+        .transpose()?;
+    Ok(ViewportLookDevSettings {
+        render_mode,
+        debug_view,
+        material_override: None,
+        helper_passes_enabled: optional_bool(value, "helperPassesEnabled")?,
+        show_grid: optional_bool(value, "showGrid")?,
+        show_skeleton: optional_bool(value, "showSkeleton")?,
+        show_normals: optional_bool(value, "showNormals")?,
+    })
+}
+
+fn parse_viewport_render_mode(value: &str) -> Result<ViewportRenderMode> {
+    match value {
+        "pbr" => Ok(ViewportRenderMode::Pbr),
+        "clay" => Ok(ViewportRenderMode::Clay),
+        "wireframe" => Ok(ViewportRenderMode::Wireframe),
+        "unlit" => Ok(ViewportRenderMode::Unlit),
+        "normal" => Ok(ViewportRenderMode::Normal),
+        "depth" => Ok(ViewportRenderMode::Depth),
+        "lightComplexity" | "light-complexity" => Ok(ViewportRenderMode::LightComplexity),
+        "shadowAtlas" | "shadow-atlas" => Ok(ViewportRenderMode::ShadowAtlas),
+        other => Err(Error::UnsupportedCapability(format!(
+            "unsupported viewport renderMode: {other}"
+        ))),
+    }
+}
+
+fn parse_viewport_debug_view(value: &str) -> Result<ViewportDebugView> {
+    match value {
+        "albedo" => Ok(ViewportDebugView::Albedo),
+        "roughness" => Ok(ViewportDebugView::Roughness),
+        "metallic" => Ok(ViewportDebugView::Metallic),
+        "ao" => Ok(ViewportDebugView::Ao),
+        "uv" => Ok(ViewportDebugView::Uv),
+        "overdraw" => Ok(ViewportDebugView::Overdraw),
+        other => Err(Error::UnsupportedCapability(format!(
+            "unsupported viewport debugView: {other}"
+        ))),
+    }
+}
+
+fn optional_bool(value: &serde_json::Value, key: &str) -> Result<Option<bool>> {
+    match value.get(key) {
+        Some(serde_json::Value::Bool(flag)) => Ok(Some(*flag)),
+        Some(_) => Err(Error::InvalidParameter(format!(
+            "viewport setting {key} must be a boolean"
+        ))),
+        None => Ok(None),
     }
 }
 
@@ -1829,6 +1990,31 @@ impl ISceneService for SceneService {
         SceneService::viewport_stream_interaction_profile(self, scene_id, viewport_id)
     }
 
+    fn request_viewport_keyframe(&self, scene_id: &str, viewport_id: &str) {
+        SceneService::request_viewport_keyframe(self, scene_id, viewport_id);
+    }
+
+    fn consume_viewport_keyframe_request(&self, scene_id: &str, viewport_id: &str) -> bool {
+        SceneService::consume_viewport_keyframe_request(self, scene_id, viewport_id)
+    }
+
+    fn update_viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        settings: ViewportLiveSettings,
+    ) -> Result<()> {
+        SceneService::update_viewport_live_settings(self, scene_id, viewport_id, settings)
+    }
+
+    fn viewport_live_settings(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> Option<ViewportLiveSettings> {
+        SceneService::viewport_live_settings(self, scene_id, viewport_id)
+    }
+
     fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample {
         SceneService::control_ack_health_sample(self, render_backlog_frames)
     }
@@ -2305,6 +2491,51 @@ mod tests {
             service.viewport_stream_interaction_profile("scene-a", "main"),
             ViewportStreamInteractionProfile::Default
         );
+    }
+
+    #[test]
+    fn viewport_keyframe_request_is_consumed_once() {
+        let service = SceneService::new();
+        assert!(!service.consume_viewport_keyframe_request("scene-a", "main"));
+
+        service.request_viewport_keyframe("scene-a", "main");
+
+        assert!(service.consume_viewport_keyframe_request("scene-a", "main"));
+        assert!(!service.consume_viewport_keyframe_request("scene-a", "main"));
+        assert!(!service.consume_viewport_keyframe_request("scene-a", "aux"));
+    }
+
+    #[test]
+    fn viewport_settings_update_applies_live_state_without_scene_delta() {
+        let service = SceneService::new();
+        let revision = service.current_revision().unwrap();
+        let envelope = SceneCommandEnvelope {
+            seq: 1,
+            base_revision: revision,
+            transaction_id: None,
+            phase: None,
+            coalesce_key: Some("viewport-settings:main".to_string()),
+            event: SceneCommandEvent::UpdateViewportSettings {
+                scene_id: Some("scene-a".to_string()),
+                viewport_id: "main".to_string(),
+                settings_json: r#"{"renderMode":"clay","helperPassesEnabled":false,"showGrid":false}"#
+                    .to_string(),
+            },
+        };
+
+        let (acks, delta) = service.apply_scene_command_with_delta(envelope).unwrap();
+
+        assert_eq!(acks.len(), 1);
+        assert_eq!(acks[0].status, SceneCommandAckStatus::Applied);
+        assert_eq!(acks[0].revision, revision);
+        assert!(delta.is_none());
+        assert_eq!(service.current_revision().unwrap(), revision);
+        let settings = service
+            .viewport_live_settings("scene-a", "main")
+            .expect("live viewport settings should be stored");
+        assert_eq!(settings.render_mode, Some(ViewportRenderMode::Clay));
+        assert_eq!(settings.helper_passes_enabled, Some(false));
+        assert_eq!(settings.show_grid, Some(false));
     }
 
     #[test]

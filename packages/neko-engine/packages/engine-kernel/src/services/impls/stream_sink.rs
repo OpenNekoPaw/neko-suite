@@ -154,7 +154,11 @@ impl StreamSink {
         }
 
         let encode_started = Instant::now();
-        let packets = encoder.encode_frame_gpu(gpu_handle, frame.pts)?;
+        let packets = if frame.force_keyframe {
+            encoder.encode_keyframe_gpu(gpu_handle, frame.pts)?
+        } else {
+            encoder.encode_frame_gpu(gpu_handle, frame.pts)?
+        };
         let encode_time_ms = encode_started.elapsed().as_secs_f32() * 1000.0;
         for mut packet in packets {
             packet.pts = frame.pts;
@@ -346,6 +350,7 @@ mod tests {
             frame_index: 0,
             width: 1920,
             height: 1080,
+            force_keyframe: false,
             diagnostics: None,
             meta: None,
         }))

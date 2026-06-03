@@ -22,6 +22,7 @@ use ffmpeg_next as ffmpeg;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::util::color::Range as ColorRange;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
+use ffmpeg_next::util::picture;
 use ffmpeg_next::{Dictionary, Rational};
 
 use crate::init_ffmpeg;
@@ -460,6 +461,231 @@ impl HwAccelEncoder {
             }
         }
     }
+
+    #[cfg(target_os = "macos")]
+    fn encode_frame_gpu_with_keyframe_request(
+        &mut self,
+        gpu_handle: usize,
+        pts: i64,
+        force_keyframe: bool,
+    ) -> Result<Vec<EncodedPacket>> {
+        use objc::runtime::Object;
+        use std::ptr;
+
+        type IOSurfaceRef = *mut Object;
+        type CVPixelBufferRef = *mut Object;
+
+        #[link(name = "IOSurface", kind = "framework")]
+        extern "C" {
+            fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
+            fn IOSurfaceUnlock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
+            fn IOSurfaceGetBaseAddressOfPlane(surface: IOSurfaceRef, plane: usize) -> *mut u8;
+            fn IOSurfaceGetBytesPerRowOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
+        }
+
+        #[link(name = "CoreVideo", kind = "framework")]
+        extern "C" {
+            fn CVPixelBufferCreateWithIOSurface(
+                allocator: *const Object,
+                surface: IOSurfaceRef,
+                pixel_buffer_attributes: *const Object,
+                pixel_buffer_out: *mut CVPixelBufferRef,
+            ) -> i32;
+            fn CVPixelBufferGetPixelFormatType(pixel_buffer: CVPixelBufferRef) -> u32;
+            fn CVPixelBufferGetWidth(pixel_buffer: CVPixelBufferRef) -> usize;
+            fn CVPixelBufferGetHeight(pixel_buffer: CVPixelBufferRef) -> usize;
+        }
+
+        #[link(name = "CoreFoundation", kind = "framework")]
+        extern "C" {
+            fn CFRelease(cf: *const Object);
+        }
+
+        const K_IO_SURFACE_LOCK_READ_ONLY: u32 = 1;
+
+        let config = self
+            .config
+            .as_ref()
+            .ok_or(Error::EncoderNotInitialized)?
+            .clone();
+        let io_surface = gpu_handle as IOSurfaceRef;
+
+        if self.zero_copy_active {
+            let mut cv_pixel_buffer: CVPixelBufferRef = ptr::null_mut();
+            let cv_result = unsafe {
+                CVPixelBufferCreateWithIOSurface(
+                    ptr::null(),
+                    io_surface,
+                    ptr::null(),
+                    &mut cv_pixel_buffer,
+                )
+            };
+
+            if cv_result != 0 || cv_pixel_buffer.is_null() {
+                return Err(Error::Other(format!(
+                    "CVPixelBufferCreateWithIOSurface failed: {}",
+                    cv_result
+                )));
+            }
+
+            let cv_format = unsafe { CVPixelBufferGetPixelFormatType(cv_pixel_buffer) };
+            let cv_width = unsafe { CVPixelBufferGetWidth(cv_pixel_buffer) };
+            let cv_height = unsafe { CVPixelBufferGetHeight(cv_pixel_buffer) };
+            tracing::debug!(
+                "CVPixelBuffer: format=0x{:08x} ({}), size={}x{}",
+                cv_format,
+                match cv_format {
+                    0x34323076 => "420v/NV12",
+                    0x34323066 => "420f/NV12-full",
+                    0x42475241 => "BGRA",
+                    _ => "unknown",
+                },
+                cv_width,
+                cv_height
+            );
+
+            let mut frame = VideoFrame::empty();
+            frame.set_pts(Some(pts));
+            if force_keyframe {
+                frame.set_kind(picture::Type::I);
+            }
+            frame.set_color_range(ColorRange::MPEG);
+
+            unsafe {
+                let frame_ptr = frame.as_mut_ptr();
+                let vt_format: ffmpeg::ffi::AVPixelFormat = Pixel::VIDEOTOOLBOX.into();
+                (*frame_ptr).format = vt_format as i32;
+                (*frame_ptr).width = config.width as i32;
+                (*frame_ptr).height = config.height as i32;
+                (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
+
+                extern "C" fn release_cv_pixel_buffer(
+                    opaque: *mut std::ffi::c_void,
+                    _data: *mut u8,
+                ) {
+                    if !opaque.is_null() {
+                        #[link(name = "CoreFoundation", kind = "framework")]
+                        extern "C" {
+                            fn CFRelease(cf: *const objc::runtime::Object);
+                        }
+                        unsafe {
+                            CFRelease(opaque as *const objc::runtime::Object);
+                        }
+                    }
+                }
+
+                (*frame_ptr).buf[0] = ffmpeg::ffi::av_buffer_create(
+                    ptr::null_mut(),
+                    0,
+                    Some(release_cv_pixel_buffer),
+                    cv_pixel_buffer as *mut std::ffi::c_void,
+                    0,
+                );
+
+                if (*frame_ptr).buf[0].is_null() {
+                    CFRelease(cv_pixel_buffer as *const Object);
+                    return Err(Error::Other(
+                        "Failed to create AVBufferRef for CVPixelBuffer".into(),
+                    ));
+                }
+            }
+
+            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+            unsafe {
+                let frame_ptr = frame.as_ptr();
+                let encoder_ptr = encoder.as_ptr();
+                tracing::debug!(
+                    "AVFrame: format={}, size={}x{}, data[3]={:?}, buf[0]={:?}",
+                    (*frame_ptr).format,
+                    (*frame_ptr).width,
+                    (*frame_ptr).height,
+                    (*frame_ptr).data[3],
+                    (*frame_ptr).buf[0]
+                );
+                tracing::debug!(
+                    "Encoder: pix_fmt={}, size={}x{}",
+                    (*encoder_ptr).pix_fmt as i32,
+                    (*encoder_ptr).width,
+                    (*encoder_ptr).height
+                );
+            }
+
+            if let Err(e) = encoder.send_frame(&frame) {
+                return Err(Error::EncodeFailed(format!(
+                    "Frame {} send failed (zero-copy): {}",
+                    pts, e
+                )));
+            }
+
+            self.frame_count += 1;
+            self.receive_packets()
+        } else {
+            let lock_result =
+                unsafe { IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut()) };
+            if lock_result != 0 {
+                return Err(Error::Other(format!(
+                    "Failed to lock IOSurface: {}",
+                    lock_result
+                )));
+            }
+
+            let (y_ptr, y_stride, uv_ptr, uv_stride) = unsafe {
+                let y_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 0);
+                let y_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
+                let uv_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 1);
+                let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
+                (y_ptr, y_stride, uv_ptr, uv_stride)
+            };
+
+            if pts < 3 {
+                let height = config.height as usize;
+                let plane_size = y_stride * height;
+                let y_data =
+                    unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
+                let non_zero = y_data.iter().filter(|&&b| b != 0).count();
+                tracing::debug!(
+                    "encode_frame_gpu: pts={} y_ptr={:?} y_stride={} first_16={:02x?} non_zero_in_256={}",
+                    pts, y_ptr, y_stride, &y_data[..16.min(y_data.len())], non_zero
+                );
+            }
+
+            let mut frame = VideoFrame::empty();
+            frame.set_pts(Some(pts));
+            if force_keyframe {
+                frame.set_kind(picture::Type::I);
+            }
+            frame.set_color_range(ColorRange::MPEG);
+
+            unsafe {
+                let frame_ptr = frame.as_mut_ptr();
+                let nv12_format: ffmpeg::ffi::AVPixelFormat = Pixel::NV12.into();
+                (*frame_ptr).format = nv12_format as i32;
+                (*frame_ptr).width = config.width as i32;
+                (*frame_ptr).height = config.height as i32;
+                (*frame_ptr).data[0] = y_ptr;
+                (*frame_ptr).data[1] = uv_ptr;
+                (*frame_ptr).linesize[0] = y_stride as i32;
+                (*frame_ptr).linesize[1] = uv_stride as i32;
+            }
+
+            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
+            let send_result = encoder.send_frame(&frame);
+
+            unsafe {
+                IOSurfaceUnlock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut());
+            }
+
+            if let Err(e) = send_result {
+                return Err(Error::EncodeFailed(format!(
+                    "Frame {} send failed: {}",
+                    pts, e
+                )));
+            }
+
+            self.frame_count += 1;
+            self.receive_packets()
+        }
+    }
 }
 
 fn build_hw_encoder_options(config: &EncoderConfig, hw_type: HwEncoderType) -> Dictionary<'static> {
@@ -473,6 +699,8 @@ fn build_hw_encoder_options(config: &EncoderConfig, hw_type: HwEncoderType) -> D
                     opts.set("realtime", "1");
                     opts.set("prio_speed", "1");
                     opts.set("power_efficient", "0");
+                    opts.set("frames_before", "0");
+                    opts.set("frames_after", "0");
                     if config.codec == VideoCodec::H264 {
                         opts.set("coder", "vlc");
                     }
@@ -656,254 +884,12 @@ impl Encoder for HwAccelEncoder {
     /// Without zero_copy_active, it maps IOSurface memory directly to AVFrame (partial zero-copy).
     #[cfg(target_os = "macos")]
     fn encode_frame_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
-        use objc::runtime::Object;
-        use std::ptr;
+        self.encode_frame_gpu_with_keyframe_request(gpu_handle, pts, false)
+    }
 
-        type IOSurfaceRef = *mut Object;
-        type CVPixelBufferRef = *mut Object;
-
-        #[link(name = "IOSurface", kind = "framework")]
-        extern "C" {
-            fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-            fn IOSurfaceUnlock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-            fn IOSurfaceGetBaseAddressOfPlane(surface: IOSurfaceRef, plane: usize) -> *mut u8;
-            fn IOSurfaceGetBytesPerRowOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
-        }
-
-        #[link(name = "CoreVideo", kind = "framework")]
-        extern "C" {
-            fn CVPixelBufferCreateWithIOSurface(
-                allocator: *const Object,
-                surface: IOSurfaceRef,
-                pixel_buffer_attributes: *const Object,
-                pixel_buffer_out: *mut CVPixelBufferRef,
-            ) -> i32;
-            fn CVPixelBufferGetPixelFormatType(pixel_buffer: CVPixelBufferRef) -> u32;
-            fn CVPixelBufferGetWidth(pixel_buffer: CVPixelBufferRef) -> usize;
-            fn CVPixelBufferGetHeight(pixel_buffer: CVPixelBufferRef) -> usize;
-        }
-
-        #[link(name = "CoreFoundation", kind = "framework")]
-        extern "C" {
-            fn CFRelease(cf: *const Object);
-        }
-
-        const K_IO_SURFACE_LOCK_READ_ONLY: u32 = 1;
-
-        let config = self
-            .config
-            .as_ref()
-            .ok_or(Error::EncoderNotInitialized)?
-            .clone();
-        let io_surface = gpu_handle as IOSurfaceRef;
-
-        // Check if zero-copy mode is active
-        if self.zero_copy_active {
-            // ================================================================
-            // TRUE ZERO-COPY PATH: CVPixelBuffer → VideoToolbox (GPU only)
-            // ================================================================
-
-            // Create CVPixelBuffer from IOSurface (no data copy, just wrapping)
-            let mut cv_pixel_buffer: CVPixelBufferRef = ptr::null_mut();
-            let cv_result = unsafe {
-                CVPixelBufferCreateWithIOSurface(
-                    ptr::null(),
-                    io_surface,
-                    ptr::null(),
-                    &mut cv_pixel_buffer,
-                )
-            };
-
-            if cv_result != 0 || cv_pixel_buffer.is_null() {
-                return Err(Error::Other(format!(
-                    "CVPixelBufferCreateWithIOSurface failed: {}",
-                    cv_result
-                )));
-            }
-
-            // Debug: Log CVPixelBuffer properties
-            let cv_format = unsafe { CVPixelBufferGetPixelFormatType(cv_pixel_buffer) };
-            let cv_width = unsafe { CVPixelBufferGetWidth(cv_pixel_buffer) };
-            let cv_height = unsafe { CVPixelBufferGetHeight(cv_pixel_buffer) };
-
-            // 420v = 0x34323076 = 875704438 (NV12)
-            // 420f = 0x34323066 = 875704422 (NV12 full range)
-            tracing::debug!(
-                "CVPixelBuffer: format=0x{:08x} ({}), size={}x{}",
-                cv_format,
-                match cv_format {
-                    0x34323076 => "420v/NV12",
-                    0x34323066 => "420f/NV12-full",
-                    0x42475241 => "BGRA",
-                    _ => "unknown",
-                },
-                cv_width,
-                cv_height
-            );
-
-            // Create AVFrame with VIDEOTOOLBOX format
-            // VideoToolbox encoder reads CVPixelBuffer from data[3]
-            let mut frame = VideoFrame::empty();
-            frame.set_pts(Some(pts));
-            frame.set_color_range(ColorRange::MPEG);
-
-            unsafe {
-                let frame_ptr = frame.as_mut_ptr();
-
-                // CRITICAL: Use VIDEOTOOLBOX format - encoder reads CVPixelBuffer from data[3]
-                let vt_format: ffmpeg::ffi::AVPixelFormat = Pixel::VIDEOTOOLBOX.into();
-                (*frame_ptr).format = vt_format as i32;
-                (*frame_ptr).width = config.width as i32;
-                (*frame_ptr).height = config.height as i32;
-
-                // CRITICAL: Pass CVPixelBuffer via data[3] (not data[0]!)
-                (*frame_ptr).data[3] = cv_pixel_buffer as *mut u8;
-
-                // Create AVBufferRef to manage CVPixelBuffer lifetime
-                // This prevents FFmpeg from trying to free the frame data
-                extern "C" fn release_cv_pixel_buffer(
-                    opaque: *mut std::ffi::c_void,
-                    _data: *mut u8,
-                ) {
-                    if !opaque.is_null() {
-                        #[link(name = "CoreFoundation", kind = "framework")]
-                        extern "C" {
-                            fn CFRelease(cf: *const objc::runtime::Object);
-                        }
-                        unsafe {
-                            CFRelease(opaque as *const objc::runtime::Object);
-                        }
-                    }
-                }
-
-                // buf[0] manages the CVPixelBuffer lifetime
-                (*frame_ptr).buf[0] = ffmpeg::ffi::av_buffer_create(
-                    ptr::null_mut(), // data pointer not used
-                    0,               // size not used for opaque buffers
-                    Some(release_cv_pixel_buffer),
-                    cv_pixel_buffer as *mut std::ffi::c_void,
-                    0,
-                );
-
-                if (*frame_ptr).buf[0].is_null() {
-                    // Failed to create buffer, manually release CVPixelBuffer
-                    CFRelease(cv_pixel_buffer as *const Object);
-                    return Err(Error::Other(
-                        "Failed to create AVBufferRef for CVPixelBuffer".into(),
-                    ));
-                }
-            }
-
-            // Send frame to encoder
-            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
-
-            // Debug: Log AVFrame and encoder properties before sending
-            unsafe {
-                let frame_ptr = frame.as_ptr();
-                let encoder_ptr = encoder.as_ptr();
-                tracing::debug!(
-                    "AVFrame: format={}, size={}x{}, data[3]={:?}, buf[0]={:?}",
-                    (*frame_ptr).format,
-                    (*frame_ptr).width,
-                    (*frame_ptr).height,
-                    (*frame_ptr).data[3],
-                    (*frame_ptr).buf[0]
-                );
-                tracing::debug!(
-                    "Encoder: pix_fmt={}, size={}x{}",
-                    (*encoder_ptr).pix_fmt as i32,
-                    (*encoder_ptr).width,
-                    (*encoder_ptr).height
-                );
-            }
-
-            let send_result = encoder.send_frame(&frame);
-
-            // Handle send errors (AVFrame destructor will release CVPixelBuffer via buf[0])
-            if let Err(e) = send_result {
-                return Err(Error::EncodeFailed(format!(
-                    "Frame {} send failed (zero-copy): {}",
-                    pts, e
-                )));
-            }
-
-            self.frame_count += 1;
-            self.receive_packets()
-        } else {
-            // ================================================================
-            // PARTIAL ZERO-COPY PATH: IOSurface memory → NV12 AVFrame
-            // ================================================================
-
-            // Lock IOSurface for CPU read
-            let lock_result =
-                unsafe { IOSurfaceLock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut()) };
-            if lock_result != 0 {
-                return Err(Error::Other(format!(
-                    "Failed to lock IOSurface: {}",
-                    lock_result
-                )));
-            }
-
-            // Get IOSurface plane addresses and strides
-            let (y_ptr, y_stride, uv_ptr, uv_stride) = unsafe {
-                let y_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 0);
-                let y_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
-                let uv_ptr = IOSurfaceGetBaseAddressOfPlane(io_surface, 1);
-                let uv_stride = IOSurfaceGetBytesPerRowOfPlane(io_surface, 1);
-                (y_ptr, y_stride, uv_ptr, uv_stride)
-            };
-
-            // Diagnostic: verify VideoToolbox wrote NV12 data to IOSurface (first 3 frames only)
-            if pts < 3 {
-                let height = config.height as usize;
-                let plane_size = y_stride * height;
-                let y_data =
-                    unsafe { std::slice::from_raw_parts(y_ptr, std::cmp::min(plane_size, 256)) };
-                let non_zero = y_data.iter().filter(|&&b| b != 0).count();
-                tracing::debug!(
-                    "encode_frame_gpu: pts={} y_ptr={:?} y_stride={} first_16={:02x?} non_zero_in_256={}",
-                    pts, y_ptr, y_stride, &y_data[..16.min(y_data.len())], non_zero
-                );
-            }
-
-            // Create empty frame and point data directly to IOSurface memory
-            let mut frame = VideoFrame::empty();
-            frame.set_pts(Some(pts));
-            frame.set_color_range(ColorRange::MPEG);
-
-            unsafe {
-                let frame_ptr = frame.as_mut_ptr();
-                let nv12_format: ffmpeg::ffi::AVPixelFormat = Pixel::NV12.into();
-                (*frame_ptr).format = nv12_format as i32;
-                (*frame_ptr).width = config.width as i32;
-                (*frame_ptr).height = config.height as i32;
-                // Point to IOSurface memory directly
-                (*frame_ptr).data[0] = y_ptr;
-                (*frame_ptr).data[1] = uv_ptr;
-                (*frame_ptr).linesize[0] = y_stride as i32;
-                (*frame_ptr).linesize[1] = uv_stride as i32;
-            }
-
-            // Send frame to encoder
-            let encoder = self.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
-            let send_result = encoder.send_frame(&frame);
-
-            // Unlock IOSurface after encoder has read the data
-            unsafe {
-                IOSurfaceUnlock(io_surface, K_IO_SURFACE_LOCK_READ_ONLY, ptr::null_mut());
-            }
-
-            // Handle send errors
-            if let Err(e) = send_result {
-                return Err(Error::EncodeFailed(format!(
-                    "Frame {} send failed: {}",
-                    pts, e
-                )));
-            }
-
-            self.frame_count += 1;
-            self.receive_packets()
-        }
+    #[cfg(target_os = "macos")]
+    fn encode_keyframe_gpu(&mut self, gpu_handle: usize, pts: i64) -> Result<Vec<EncodedPacket>> {
+        self.encode_frame_gpu_with_keyframe_request(gpu_handle, pts, true)
     }
 
     #[cfg(not(target_os = "macos"))]

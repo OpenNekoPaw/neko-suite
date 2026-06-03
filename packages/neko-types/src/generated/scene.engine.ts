@@ -923,6 +923,7 @@ export interface EngineRenderFrameDiagnostics {
   decodeSubmitToOutputMs?: number;
   droppedBeforeDecode?: number;
   decodedDroppedBeforePresent?: number;
+  staleDecodedOutputsDropped?: number;
   packetToPresentedMs?: number;
   presentIntervalMs?: number;
   presentFps?: number;
@@ -954,6 +955,7 @@ export interface EngineRenderFrameDiagnostics {
   latencyMode?: string;
   postProcessEnabled?: boolean;
   helperPassesEnabled?: boolean;
+  renderMode?: EngineViewportRenderMode;
 }
 
 export interface EngineRenderFrameMeta {

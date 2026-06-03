@@ -259,6 +259,24 @@ describe('EngineClient scene operations', () => {
       environment: true,
       typedPicking: true,
       characterRegions: false,
+      capabilityStates: {
+        renderModes: {
+          pbr: 'supported',
+          clay: 'supported',
+          wireframe: 'supported',
+          unlit: 'unsupported',
+          normal: 'unsupported',
+          depth: 'unsupported',
+          lightComplexity: 'unsupported',
+          shadowAtlas: 'unsupported',
+        },
+        liveViewportSettings: 'supported',
+        clay: 'supported',
+        authoredLights: 'supported',
+        environment: 'supported',
+        typedPicking: 'supported',
+        characterRegions: 'unsupported',
+      },
     });
     expect(lastDispatchBody()).toEqual(
       expect.objectContaining({
@@ -266,6 +284,55 @@ describe('EngineClient scene operations', () => {
         action: 'capabilities',
       }),
     );
+  });
+
+  it('normalizes scene capability discovery into explicit supported unsupported unknown states', async () => {
+    mockDispatchResponse({
+      renderModes: ['pbr', 'normal'],
+      capabilityStates: {
+        liveViewportSettings: 'unknown',
+        clay: 'unknown',
+        authoredLights: 'supported',
+        environment: 'unsupported',
+        typedPicking: 'unknown',
+        characterRegions: 'unsupported',
+        renderModes: {
+          pbr: 'supported',
+          clay: 'unknown',
+          normal: 'supported',
+          depth: 'unsupported',
+        },
+      },
+    });
+    const client = new EngineClient(7788);
+
+    await expect(client.getModelLookDevSceneControlCapabilities()).resolves.toMatchObject({
+      renderModes: ['pbr', 'normal'],
+      liveViewportSettings: false,
+      clay: true,
+      authoredLights: true,
+      environment: false,
+      typedPicking: false,
+      characterRegions: false,
+      capabilityStates: {
+        liveViewportSettings: 'unknown',
+        clay: 'unknown',
+        authoredLights: 'supported',
+        environment: 'unsupported',
+        typedPicking: 'unknown',
+        characterRegions: 'unsupported',
+        renderModes: {
+          pbr: 'supported',
+          clay: 'unknown',
+          wireframe: 'unsupported',
+          unlit: 'unsupported',
+          normal: 'supported',
+          depth: 'unsupported',
+          lightComplexity: 'unsupported',
+          shadowAtlas: 'unsupported',
+        },
+      },
+    });
   });
 
   it('rejects scene LookDev capability discovery errors from Engine', async () => {
