@@ -28,6 +28,14 @@
       "problemMatcher": ["$tsc"],
       "detail": "Build Audio Pack: core + audio (turbo cached + parallel)"
     },
+    {
+      "label": "build:pack-model",
+      "type": "shell",
+      "command": "pnpm turbo compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-model",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "detail": "Build Model Pack: engine native + tools + preview + model (keeps debug host small)"
+    },
 
     // =========================================================================
     // Release / Dev full builds

@@ -5,6 +5,19 @@
     // Scene Pack configurations (recommended for daily development)
     // =========================================================================
     {
+      "name": "Debug Model Pack",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model"
+      ],
+      "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],
+      "preLaunchTask": "build:pack-model"
+    },
+    {
       "name": "Debug Video Pack",
       "type": "extensionHost",
       "request": "launch",

@@ -28,9 +28,21 @@ Proposed (2026-06-01; revised 2026-06-02)
 
 1. Webview 先更新本地意图、overlay 或短生命周期 prediction，再发送 Engine hot update。
 2. 高频 camera orbit、pan、wheel、keyboard camera action、transform drag、灯光位置拖拽和连续 slider 使用 latest-only scene-control hot update，不等待 `viewportCameraAck` 或普通 SceneCommand ACK。
-3. `streamProfile: 'interactive'`、`GOP=1`、latest-only 和 backpressure 是当前 stream 的 runtime policy；不得成为 `startSceneRenderStream()` effect 依赖，也不得触发 stream destroy/start。
-4. WebCodecs/VideoToolbox 已接管的输出帧不得在 JS 侧 reset、suppress 或 close/recreate decoder 来“追低延迟”；这会造成等待新 keyframe 的输出空窗。
-5. 视频帧、frame metadata、SceneDelta 和 snapshot 只负责最终一致对齐；用户可见交互反馈不得被它们闸住。
+3. latest-only 和 backpressure 是当前 stream/client 的 runtime policy；不得成为 `startSceneRenderStream()` effect 依赖，也不得触发 stream destroy/start。相机/拖拽热路径不得自动发送 `streamProfile/profileTtlMs` 或触发 Engine `GOP=1`/默认 GOP reconfigure。
+4. LookDev PBR/白模/线框/法线/深度切换不得通过重启视频流实现；Webview 只能发送当前 viewport 的 `viewport-settings-update`，并用 Engine ack 与当前流 frame metadata 确认最终有效模式。
+5. WebCodecs/VideoToolbox 已接管的输出帧不得在 JS 侧 reset、suppress 或 close/recreate decoder 来“追低延迟”；这会造成等待新 keyframe 的输出空窗。
+6. 视频帧、frame metadata、SceneDelta 和 snapshot 只负责最终一致对齐；用户可见交互反馈不得被它们闸住。
+7. 交互期不得新增第二条或第三条模型视频流，也不得引入 `/scene-video` 等并行兼容流作为实时视口路径；`GOP=1` / All-Intra 只允许作为显式实验或非热路径配置，不能通过相机/拖拽自动 profile 更新或重新申请 stream descriptor 实现。
+
+### 硬约束：禁止交互、性能、画质回退
+
+下一轮实现必须把当前已恢复的稳定路径作为不可变基线。本 ADR 下的任何 PR 都不得通过“改慢、改糊、改少”的方式换取功能接入。
+
+1. **禁止修改交互路径**：camera orbit、pan、wheel、keyboard camera action、transform drag、灯光位置拖拽和连续 slider 的既有即时反馈路径不得被替换、绕行或重排到可靠 ACK/查询/诊断/LookDev 状态之后。新功能只能旁路观察、补充诊断或在 commit 阶段做最终一致，不得接管热路径。
+2. **禁止降低 GPU 性能**：不得引入热路径 CPU readback、GPU->CPU->Webview 逐帧传输、额外全屏 pass、同步等待、关闭 zero-copy/hardware encoder、降低 stream 分辨率/DPR/FPS/码率作为默认策略，或把 Engine GPU 渲染替换成 Webview 渲染 fallback。
+3. **禁止降低渲染效果**：不得通过关闭或降级 PBR、法线/切线、sRGB/tone mapping、阴影、AO、抗锯齿、纹理采样、材质精度、helper pass 合成质量或 1080p 默认清晰度来掩盖性能/控制流问题。
+4. **禁止用重启流或重开编码器修复交互或 LookDev**：高频交互、LookDev 模式切换、latest-only backpressure、相机/灯光/transform 拖拽和连续 slider 不得调用 `startSceneRenderStream()`、销毁当前 H.264 client、重建 WebSocket、reset/close/recreate decoder、新增并行模型视频流，或自动触发 Engine GOP/码率 reconfigure。
+5. 任何必要 fallback 必须是显式能力降级：要有 Engine descriptor、stream diagnostic 或 UI reason，且不得伪装成默认 1080p/60fps 与完整 LookDev 质量。
 
 ## 背景
 
@@ -48,12 +60,14 @@ Proposed (2026-06-01; revised 2026-06-02)
 - UI 按钮禁用必须有可见原因，并走 i18n 文案，不允许静默灰态。
 - 普通 mesh、rigged mesh、角色资产按能力逐级降级，不伪装成完整可编辑角色。
 - 默认实时视口目标是 1080p/60fps 级别即时反馈；720p 或更低只允许作为显式 fallback，并必须显示原因。
+- 禁止为了接入基础编辑能力而修改既有即时交互路径、降低 Engine GPU 性能或降低渲染效果。
 
 ## 非目标
 
 - 不在 Webview 引入 Three.js/R3F 或 glTF 解析。
 - 不在本 ADR 内实现 Headshot 照片转 3D、AI provider、纹理投射或 VLM 验证闭环。
 - 不要求普通 GLB 自动具备面部 region、morph target 或标准骨骼语义。
+- 不接受以降低分辨率、关闭抗锯齿/阴影/AO/PBR 质量、关闭 zero-copy/hardware encode 或改变交互热路径作为默认修复方案。
 
 ---
 
@@ -142,6 +156,14 @@ Engine capability discovery 用于决定默认 UI 启用状态，但 Webview 不
 
 高频相机、拖拽和连续调参不是普通 authoring command。它们必须走 local intent / overlay prediction -> latest-only Engine hot update -> SceneDelta/snapshot/frame metadata reconcile 的闭环。禁止把 `viewportCameraAck`、SceneCommand ACK、stream restart、WebCodecs reset 或已提交硬解帧 suppress 放在用户可见反馈热路径上。
 
+### D9: 交互路径是不可变兼容边界
+
+本 ADR 的实现不得重写、替换或重新排序已恢复稳定的相机/拖拽/连续 slider 路径。选择查询、控制可用性诊断、LookDev 状态和 scene-control 错误只能影响对应控制的降级或最终一致状态，不能成为高频输入的前置条件。若未来确实需要改变交互架构，必须另起 ADR/OpenSpec change，并先给出对照性能和用户可感知延迟证据。
+
+### D10: GPU 性能和渲染效果不得作为回退成本
+
+基础编辑能力必须建立在现有 Engine GPU 渲染和 1080p/60fps 目标之上。不得通过 CPU readback、禁用 zero-copy/hardware encode、降低默认 stream 参数、关闭抗锯齿/阴影/AO/tone mapping/PBR 材质质量或模糊/降采样画面来换取控制流接入。性能问题必须沿 Engine render graph、runtime stream policy、backpressure 和异步最终一致路径解决。
+
 ---
 
 ## 性能与画质基线
@@ -152,6 +174,9 @@ Engine capability discovery 用于决定默认 UI 启用状态，但 Webview 不
 4. VSCode/Electron Webview 或显示器刷新率可能限制 presentation FPS；这类宿主约束不能被误判为 Engine GPU 不足。
 5. 画质问题沿 Engine render graph、stream 分辨率、后处理、编码 profile/码率解决；不得用 Webview mesh renderer、glTF parser 或 Three.js/R3F fallback 修复锯齿/模糊。
 6. 诊断 overlay 不得影响 pointer capture 和热路径；性能面板可以选中文本，非面板 overlay 区域不得抢占高频输入。
+7. GPU 性能基线必须用固定 fixture 对照变更前后：render/frame time、encode time、GPU/VideoToolbox 路径、coded size、DPR、presentation scale 和 dropped/backpressure 指标不得因本 ADR 实现退化。
+8. 渲染效果基线必须用固定 fixture 做视觉对照：PBR/白模/线框、材质、法线、阴影/AO、抗锯齿、背景/环境和 1080p 边缘清晰度不得低于变更前稳定版本。
+9. 性能验证必须同时记录 active stream 数量和 stream id；除合法的低频文档/可见性生命周期外，交互期间 active model stream 数不得增加，不能出现多条 scene stream 同时为同一 viewport 反复重配 GOP。
 
 ---
 
@@ -204,6 +229,8 @@ E2 的 `raycast node fallback` 不是 Webview 自行解析 mesh。若 Engine 当
 | 已有 LookDev 代码与产品验收不一致 | 合同测试通过但用户仍看不到效果 | 先审计 B2 可见性与 SceneDelta 回显；不满足时按本 ADR 修复，不重写已通过路径 |
 | 灰态原因过多导致 UI 噪音 | 控制面拥挤 | 默认 tooltip/状态行展示短原因，详细 diagnostic 进入 inspector/status panel |
 | 高频交互重新被慢路径接管 | camera/drag 可见反馈延迟 2-3s 或更久 | Route A boundary/review checklist 必须检查无 ACK gating、无 stream restart、无 decoder reset、无硬解输出 suppress |
+| GPU 性能被新控制流拖低 | 1080p/60fps 不稳定、render/encode 时间升高 | 禁止热路径 CPU readback、额外同步 pass、关闭 zero-copy/hardware encode 或默认降分辨率；必须用固定 fixture 对照指标 |
+| 渲染效果被性能 workaround 降级 | 人物边缘更糊、锯齿更明显、LookDev 失真 | 禁止默认关闭 AA/阴影/AO/tone mapping/PBR/纹理质量；任何 fallback 必须显式诊断并可恢复 |
 
 ## 验收标准
 
@@ -242,6 +269,15 @@ E2 的 `raycast node fallback` 不是 Webview 自行解析 mesh。若 Engine 当
 - 不触发 stream destroy/start；
 - 不 reset/close/recreate WebCodecs decoder；
 - 不 suppress 已提交硬解输出帧。
+
+### A6: GPU 性能与渲染效果不回归
+
+固定 GLB fixture 和本地 `../neko-test/test.glb` 手工验证必须证明：
+
+- 默认仍以 1080p/60fps 为目标，不能静默降到 720p 或低 DPR；
+- Engine GPU render/frame time、encode time、zero-copy/hardware encode 路径、decode/presentation 指标不因本 ADR 实现退化；
+- PBR、白模、线框、法线/深度、阴影/AO、抗锯齿、tone mapping、纹理采样和背景/环境效果不低于变更前稳定版本；
+- 若环境无法满足目标，只能显示 explicit fallback reason，不能把 fallback 当作默认成功状态。
 
 ---
 

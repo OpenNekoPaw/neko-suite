@@ -6,9 +6,9 @@ Accepted (2026-05-30)
 
 实施备注：2026-05-30 已落地 E0-E4 / P0-P4 主要切片，包括 Engine render mode 合同、Clay/Debug LookDev 控制、authored light CRUD、Engine-owned environment、typed selection query、Webview Route A 控制面、Extension `neko.model.useEnvironment` Engine-backed 路由，以及 `.nkm` authored light/environment 持久化闭环。P3.5 HDRI prefilter/cubemap cache 与 P4.5 更完整的 `.nkc` semantic region authoring 仍按本文后续阶段演进。
 
-实施复盘：2026-06-02 修复 `neko-model` 相机/拖拽交互反馈卡顿。问题不是 GPU 渲染吞吐不足，而是 LookDev/场景控制实现曾把高频相机控制、H.264 stream profile、SceneControl ack 和 WebCodecs backpressure 混在同一慢路径里，导致用户拖拽后需要 2-3s 才看到最终画面。已通过 `0545643c fix(engine): apply viewport interaction stream profile` 和 `ae7027b4 fix(model): keep camera interaction on latest-only hot path` 修复：高频相机交互 fire-and-forget 发送 latest-only scene-control 更新，不等待 `viewportCameraAck`，不重启 H.264 stream；Engine 侧用短生命周期 `ViewportStreamInteractionProfile::Interactive` 将当前 stream runtime settings 切到 `GOP=1`，TTL 过期后恢复默认 GOP/码率；前端只在现有 `H264StreamClient` 上切换 backpressure 策略，并保留 WebCodecs 已接管的输出帧，避免硬解输出链路被“旧帧丢弃”饿死。
+实施复盘：2026-06-02 修复 `neko-model` 相机/拖拽交互反馈卡顿。问题不是 GPU 渲染吞吐不足，而是 LookDev/场景控制实现曾把高频相机控制、H.264 stream reconfigure、SceneControl ack 和 WebCodecs backpressure 混在同一慢路径里，导致用户拖拽后需要 2-3s 甚至 10s+ 才看到最终画面。最终修复方向：高频相机交互 fire-and-forget 发送 latest-only scene-control 更新，不等待 `viewportCameraAck`，不重启 H.264 stream，不触发 Engine GOP/码率 reconfigure；前端只在现有 `H264StreamClient` 上切换 backpressure/latest-only 策略，并保留 WebCodecs 已接管的输出帧，避免硬解输出链路被“旧帧丢弃”饿死。
 
-追加实测结论：强制 reset WebCodecs/VideoToolbox 队列会造成等待新 keyframe 的输出空窗，不作为优化方向。最终采用交互起点预热：pointerdown、wheel、keyboard camera action 立即发送当前 camera + `streamProfile: 'interactive'`，并将共享 `profileTtlMs` 调整为 2000ms，减少连续相机/灯光/slider 微调期间 `GOP=1` 与默认 GOP 往返重配。
+追加实测结论：强制 reset WebCodecs/VideoToolbox 队列会造成等待新 keyframe 的输出空窗，不作为优化方向。相机交互自动切 `GOP=1` / 恢复默认 GOP 会重开 VideoToolbox encoder，也不作为默认低延迟路径。`GOP=1` / All-Intra 只允许作为显式实验或非热路径配置；默认交互只切前端 latest-only/backpressure，并复用当前 active stream。
 
 画质复盘：2026-06-02 修复 `neko-model` 1080p 下人物边缘锯齿与 Retina/Webview 画面发糊问题。根因分为两类：Webview 过去按 CSS 尺寸请求 stream，DPR>1 时会把低于物理像素的 H.264 帧拉伸显示；Engine PBR forward 仍是 single-sample render target，人物外轮廓和高对比纹理边缘会产生几何锯齿。修复原则保持 Route A：Webview 只按物理像素请求/诊断 stream，不解析或重绘 mesh；Engine RenderGraph 在 realtime PBR/Clay 且 post-process 开启时对 1080p 级输出启用受控 1.5x SSAA，再在 post-process pass 下采样回最终 stream 尺寸。高 DPR/接近 4K 的输出只使用真实物理分辨率，不再叠加 SSAA，避免为清晰度牺牲 60fps 预算。
 
@@ -154,11 +154,11 @@ P0 的 stream restart 只适用于低频 LookDev 模式切换，不适用于相�
 1. Webview 先更新本地意图、overlay 或预测状态，并调用 `SceneControlSocket.sendViewportCameraLatest()` 或等价 latest-only hot update。
 2. 高频相机更新默认不携带 `requestId`，Engine 应应用最新 camera，但不回发逐帧 `viewportCameraAck`。
 3. 交互开始时 Webview 只调用 `H264StreamClient.updateBackpressurePolicy()` 切换前端 backpressure/latest-only 策略，不把 `streamProfile` 写入 React state，也不让 `startSceneRenderStream()` effect 重新执行。
-4. Engine scene-control 可接收 `streamProfile: 'interactive'` 与 `profileTtlMs`，将当前 viewport stream profile 记入 Engine scene service；producer 每帧读取该 profile，并把 `interactive` 映射为 `h264_gop_size = 1`。
-5. `GOP=1` 是交互期编码策略，不是 stream descriptor 生命周期策略；切换 GOP 允许短冷却，但不得等待常规 5s encoder reconfigure cooldown 才进入交互态。
-6. 交互起点必须预热 Engine runtime profile：pointerdown、wheel 与 keyboard camera action 在真实 camera delta 前也要发送当前 camera + `streamProfile: 'interactive'`，避免等待第一批 move 后才切低延迟。
+4. 相机/拖拽热路径不得自动发送 `streamProfile/profileTtlMs`，Engine 即使兼容接收该字段，也不得将相机交互映射为 `h264_gop_size = 1` 或其他会重开 encoder 的配置。
+5. `GOP=1` / All-Intra 只允许作为显式实验或非热路径配置；不得由相机 orbit、viewport drag、transform gizmo drag、灯光位置拖拽或连续 slider 自动触发。
+6. 交互起点必须预热前端 runtime policy：pointerdown、wheel 与 keyboard camera action 在真实 camera delta 前也要切换现有 `H264StreamClient` backpressure/latest-only 策略，避免等待第一批 move 后才进入低延迟链路。
 7. WebCodecs/VideoToolbox 已接收的旧帧不得在 JS 侧强行 suppress，也不得用 decoder reset/close/recreate 作为交互低延迟策略。latest-only 只影响后续 backpressure 和呈现层选择，避免固定硬解 output latency 被误判为可取消队列而造成输出饥饿。
-8. 静止后由 TTL/idle timer 恢复默认 GOP/码率策略；恢复可以被短冷却平滑处理，但不能阻塞下一次交互进入 `interactive`。当前 `neko-model` 使用 2000ms shared TTL，减少连续微调期间的 encoder reconfigure 抖动。
+8. 静止后由 idle timer 恢复前端默认 backpressure 策略；恢复不得触发 Engine encoder reconfigure，也不能阻塞下一次交互进入 latest-only。
 
 此次问题的禁止回归项：
 
@@ -166,7 +166,7 @@ P0 的 stream restart 只适用于低频 LookDev 模式切换，不适用于相�
 - 相机/拖拽热路径不得 `await sceneControlSocket.updateViewportCamera()`，不得用 `cameraUpdateInFlightRef` / `pendingCameraUpdateRef` 串行等待 ACK。
 - 高频交互不得触发 `destroy/startSceneRenderStream`。
 - `H264StreamClient` 的 latest-only 模式不得删除已送入 WebCodecs 的 `decodeStartTimes` 并 suppress 后续 decoded frame，也不得在交互切入时 reset/close decoder。
-- `ViewportOrbitControls` 的 pointerdown、wheel、keyboard camera action 必须触发 immediate interaction activity，用于预热 Engine runtime profile。
+- `ViewportOrbitControls` 的 pointerdown、wheel、keyboard camera action 必须触发 immediate interaction activity，用于预热前端 latest-only/backpressure 策略，但不得发送会触发 Engine GOP reconfigure 的 profile payload。
 
 ### 2. Light 合同
 
@@ -544,9 +544,9 @@ Viewport overlay：
 ### Engine / Rust
 
 - `host-http` parser tests：`node-add(kind=light)`、`light-update`、`node-remove`、`environment-set/update/clear`。
-- `host-http` parser tests：`viewportCamera` 可解析 `streamProfile` / `profileTtlMs`，无 `requestId` 时应用相机但不发送 ACK。
+- `host-http` parser tests：`viewportCamera` 兼容解析 `streamProfile` / `profileTtlMs`，但 `neko-model` 热路径不得发送这些字段；无 `requestId` 时应用相机但不发送 ACK。
 - `host-api` stream tests：`clay` render mode parse、descriptor response、quality scheduler 保留 render mode。
-- `host-api` stream tests：`ViewportStreamInteractionProfile::Interactive` 将 runtime settings 映射到 `h264_gop_size = 1`，并绕过常规 5s reconfigure cooldown 进入交互态。
+- `host-api` stream tests：`ViewportStreamInteractionProfile::Interactive` 不改变 encoder contract；相机交互不得导致 `GOP=1`/默认 GOP 往返 reconfigure。
 - `runtime-scene` tests：light CRUD、environment state、revision、SceneDelta。
 - `engine-kernel` service tests：viewport interaction profile TTL 过期后恢复 `Default`。
 - `engine-scene-renderer` tests：render graph variant selection、clay material override、debug view fallback。

@@ -24,7 +24,7 @@ The Neko Model Webview SHALL keep Object and Inspect workflows available when se
 - **THEN** Webview does not parse the source GLB/VRM file to create authoritative Inspector facts
 
 ### Requirement: High-frequency Controls Stay On The Hot Path
-The Neko Model Webview SHALL keep high-frequency viewport controls off slow authoring acknowledgement paths. Camera, drag, light-position, transform drag, wheel, keyboard camera, and continuous slider controls MUST update local intent immediately, send latest-only Engine hot updates, and reconcile from Engine state asynchronously.
+The Neko Model Webview SHALL keep high-frequency viewport controls on the restored immediate hot path and off slow authoring acknowledgement paths. Camera, drag, light-position, transform drag, wheel, keyboard camera, and continuous slider controls MUST update local intent immediately, send latest-only Engine hot updates, and reconcile from Engine state asynchronously. Webview MUST NOT gate this path behind selection query results, capability diagnostics, LookDev readiness, static availability derivation, scene-command ACKs, or global scene-control error state while the stream remains alive.
 
 #### Scenario: Camera update does not wait for ack
 - **WHEN** the user changes the camera through orbit, pan, wheel, or keyboard navigation
@@ -36,10 +36,47 @@ The Neko Model Webview SHALL keep high-frequency viewport controls off slow auth
 - **THEN** Webview does not call `startSceneRenderStream()` again for that interaction
 - **THEN** Webview does not destroy and recreate the H.264 stream
 
+#### Scenario: LookDev switch does not restart stream
+- **WHEN** the user switches PBR, Clay, Wireframe, Normal, or Depth in the active model viewport
+- **THEN** Webview sends a `viewport-settings-update` command for the active viewport when the mode is supported
+- **THEN** Webview does not allocate a new stream descriptor, reconnect the stream WebSocket, reset the decoder, or destroy and recreate the H.264 stream
+- **THEN** Webview marks the requested mode applied only after Engine acknowledgement plus current-stream descriptor/frame metadata confirms the effective mode
+
 #### Scenario: WebCodecs output chain remains continuous
 - **WHEN** interaction starts or ends
 - **THEN** Webview does not reset, close, or recreate the decoder
 - **THEN** Webview does not suppress frames already submitted to WebCodecs/VideoToolbox
+
+#### Scenario: Control diagnostic does not disable active interaction
+- **WHEN** an optional hit-test, selection query, LookDev command, or capability refresh fails
+- **THEN** Webview shows a diagnostic for that control or query
+- **THEN** Webview keeps the active camera/drag/slider interaction loop available while the render stream is alive
+
+### Requirement: Webview Does Not Lower GPU Performance
+The Neko Model Webview SHALL NOT reduce Engine GPU performance as a default response to baseline editing control gaps. Webview MUST NOT add hot-path CPU readback, GPU-to-CPU-to-Webview frame transfer, Webview-side 3D rendering fallback, lower default stream resolution/DPR/FPS/bitrate, disable zero-copy/hardware encode, or add blocking render/encode waits to make controls appear responsive.
+
+#### Scenario: Webview keeps Engine stream as visual path
+- **WHEN** baseline editing controls are enabled
+- **THEN** the visible 3D viewport remains the Engine H.264 stream
+- **THEN** Webview does not introduce a Three.js/R3F/glTF-rendered fallback or per-frame CPU image transport for the visible model
+
+#### Scenario: Performance fallback is displayed
+- **WHEN** Engine reports a lower stream, encode, or GPU path
+- **THEN** Webview displays the fallback reason and effective values
+- **THEN** Webview does not relabel the fallback as the normal 1080p/60fps baseline
+
+### Requirement: Webview Does Not Lower Render Quality
+The Neko Model Webview SHALL NOT silently reduce perceived render quality as a default response to interaction latency or control gaps. Webview MUST NOT hide blur, jaggies, lower DPR, disabled render passes, degraded LookDev modes, or lower material quality behind successful control states.
+
+#### Scenario: Quality diagnostics are surfaced
+- **WHEN** Engine reports a lower-quality render path or unsupported LookDev mode
+- **THEN** Webview surfaces the effective mode or fallback reason
+- **THEN** Webview keeps the last confirmed quality state visible instead of pretending the requested quality was applied
+
+#### Scenario: Overlay does not degrade viewport
+- **WHEN** performance or diagnostic overlays are visible
+- **THEN** selectable overlay panels remain interactive
+- **THEN** non-panel overlay regions do not steal pointer capture or add heavy composition effects over the hot viewport surface
 
 ### Requirement: Model Control Availability Reconciles With Engine Responses
 The Neko Model Webview SHALL update pending, applied, rejected, unavailable, and degraded states from Engine acknowledgements, rejections, query results, stream descriptors, render frame metadata, and diagnostics. Runtime Engine responses MUST take precedence over stale static capability assumptions.

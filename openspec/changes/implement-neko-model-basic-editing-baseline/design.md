@@ -9,7 +9,7 @@
 
 The current symptom is visible gray UI: LookDev often only exposes PBR; Object/Inspect can be disabled by missing semantic picking; Face/Bone tools are shown without enough character metadata; and controls do not consistently explain whether the block is Engine readiness, capability, selection context, or asset compatibility.
 
-The first implementation attempt also exposed a separate performance bug: added control-flow paths can accidentally couple camera/drag feedback to SceneControl ACKs, H.264 stream restarts, or WebCodecs queue manipulation. This design therefore treats immediate local feedback and latest-only Engine hot updates as a hard constraint, not an optimization.
+The first implementation attempt also exposed a separate performance bug: added control-flow paths can accidentally couple camera/drag feedback to SceneControl ACKs, H.264 stream restarts, or WebCodecs queue manipulation. This design therefore treats immediate local feedback and latest-only Engine hot updates as a hard constraint, not an optimization. The pre-change camera/orbit/drag/slider implementation is the compatibility baseline; new diagnostics and editing features must be layered around it, not inserted into it.
 
 This design implements `docs/architecture/adr-neko-model-basic-editing-baseline.md`. It is a prerequisite for Headshot/AI asset conversion because generated assets are not useful if the user cannot inspect or edit them in the model editor.
 
@@ -33,6 +33,21 @@ The baseline editor has three independent loops that must not be collapsed into 
 
 The previous regression came from mixing these loops: camera hot interaction was effectively coupled to ACK/reconfigure/decode behavior. This design makes the separation explicit.
 
+### Legacy Hot Path Compatibility Contract
+
+The old viewport interaction path, Engine GPU performance, and render quality are product contracts for this change. Any implementation that touches camera orbit, pointer drag, wheel zoom, keyboard camera, transform drag preview, light drag preview, continuous sliders, stream policy, render graph, or LookDev output must keep these invariants:
+
+- local intent/prediction updates before any Engine response is awaited;
+- in-flight query, command, capability, LookDev, or SceneControl failures do not set a global state that disables the active viewport interaction loop;
+- selection hit-test failure only degrades viewport click selection, while Outliner selection, camera controls, and the active stream remain usable;
+- interactive stream profile changes update runtime policy on the existing stream/client and do not create a new stream descriptor;
+- the existing H.264/WebCodecs decode chain is not reset, closed, recreated, or flushed to chase lower latency;
+- the Engine GPU/zero-copy/hardware-encode path remains active unless the host reports an explicit fallback diagnostic;
+- render quality is not lowered by disabling PBR material fidelity, Clay lighting, normals/tangents, sRGB/tone mapping, shadows, AO, antialiasing, texture sampling, helper pass composition, or 1080p edge clarity;
+- any code path that cannot prove those properties must stay behind an explicit opt-in or be rolled back.
+
+In practical terms, SceneControl is authoritative for final authoring state, but it is not allowed to be the clock for high-frequency feedback. A SceneControl error may disable the specific authoring command that failed; it must not be used as a broad viewport liveness signal while the video stream and local controls are still active.
+
 ### Control Flow
 
 Hot interaction path:
@@ -41,9 +56,9 @@ Hot interaction path:
 pointer/wheel/key input
   -> Viewport controller updates local intent immediately
   -> send latest-only scene-control hot update
-       { viewportId, camera/drag/slider state, streamProfile: 'interactive', profileTtlMs }
-  -> existing H264StreamClient updates backpressure policy only
-  -> Engine applies latest hot state and active stream runtime profile
+       { viewportId, camera/drag/slider state }
+  -> existing H264StreamClient updates backpressure/latest-only policy only
+  -> Engine applies latest hot state without GOP/encoder reconfigure
   -> SceneDelta/snapshot/frame metadata later reconciles final state
 ```
 
@@ -55,6 +70,16 @@ commit command
   -> Engine ack/reject
   -> SceneDelta/snapshot/frame metadata confirms applied revision
   -> Webview marks pending/applied/rejected and clears prediction
+```
+
+Failure isolation path:
+
+```text
+query/command/capability failure
+  -> classify the failing control or query
+  -> degrade that control with localized diagnostic
+  -> keep camera/orbit/drag/slider local loop active
+  -> keep current render stream alive unless the stream itself fails
 ```
 
 ## State Model
@@ -91,7 +116,8 @@ The exact type names may differ, but the implementation must keep these properti
 - reasons are structured, not plain display strings;
 - reasons map to Chinese and English strings;
 - runtime Engine diagnostics can override stale static capability assumptions;
-- a higher-level character downgrade must not disable Object, Inspect, Transform, LookDev, light, or background controls.
+- a higher-level character downgrade must not disable Object, Inspect, Transform, LookDev, light, or background controls;
+- runtime diagnostics for one control must not be stored as global viewport failure unless the underlying stream or scene-control transport is actually unavailable.
 
 ### Capability Reconciliation
 
@@ -113,6 +139,7 @@ Static capability is never the final truth. It seeds the UI, then runtime respon
 - Webview requests stream dimensions from CSS viewport size multiplied by `devicePixelRatio`, subject to Engine/device caps.
 - Effective coded size, target FPS, DPR, canvas CSS size, canvas physical size, presentation scale, codec, GOP, bitrate, decode lag, presentation FPS, and fallback reason are exposed in diagnostics.
 - Camera orbit/pan/zoom is handled as hot interaction. It must not call `startSceneRenderStream()` after the initial descriptor is active.
+- Camera orbit/pan/zoom must keep the pre-change local feedback path. It must not be gated by hit-test, LookDev state, control availability derivation, scene command ACKs, or optional selection query diagnostics.
 - If the host presentation cadence is below 60Hz, diagnostics should identify presentation/host cadence separately from Engine render or encode time.
 
 ### B1: Object And Inspect
@@ -127,7 +154,11 @@ Static capability is never the final truth. It seeds the UI, then runtime respon
 
 - Transform numeric commit is a reliable SceneCommand with `seq`, `correlationId`, and `baseRevision`.
 - Transform drag preview is a hot update; final drop/commit reconciles through reliable command or Engine-applied revision.
-- LookDev mode switching can use descriptor restart only for low-frequency mode changes; it must keep the last frame and pending/timeout/rollback UI.
+- LookDev mode switching must not use descriptor restart as the default path. It sends a
+  `viewport-settings-update` scene-control command for the active viewport and waits for Engine
+  acknowledgement plus current-stream frame metadata to confirm the effective mode. If Engine does
+  not support live viewport settings, Webview keeps the last confirmed mode and surfaces a
+  localized pending/rejected diagnostic instead of destroying or recreating the H.264 stream.
 - Light add/delete/update/background/environment edits must produce SceneDelta/snapshot or equivalent confirmation and visible Engine output change.
 - Light position dragging follows the same hot-preview/final-commit split as transform.
 
@@ -151,6 +182,14 @@ The performance overlay itself must not become part of the problem:
 - non-panel overlay regions must not steal pointer capture from viewport controls;
 - avoid continuous heavy composition effects such as `backdrop-filter` on the hot viewport surface.
 
+Hard performance and quality constraints:
+
+- no hot-path CPU readback, GPU-to-CPU-to-Webview frame transfer, or Webview-side 3D render fallback;
+- no default downgrade of stream resolution, DPR, FPS target, bitrate, codec profile, GOP policy, zero-copy path, or hardware encoder path to hide control-flow latency;
+- no extra synchronous render pass, blocking query, readback, flush, or encode wait on camera/drag/slider paths;
+- no default downgrade of PBR, Clay, Wireframe, Normal, Depth, antialiasing, shadows, AO, tone mapping, texture sampling, material precision, environment/background, or helper pass composition;
+- any unavoidable host/device fallback must be explicit in descriptor/diagnostics and must be reversible when capability returns.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -170,6 +209,7 @@ The performance overlay itself must not become part of the problem:
 - Do not introduce a Webview-side Three.js/R3F model renderer as visual truth.
 - Do not redesign the Workbench Shell or revive a generic top viewport toolbar.
 - Do not use WebCodecs reset/close/recreate or suppression of already submitted hardware decode frames as a latency strategy.
+- Do not lower GPU performance or render quality as a default fix for interaction latency, capability gaps, or incomplete control wiring.
 
 ## Decisions
 
@@ -221,13 +261,25 @@ Camera orbit, viewport drag, light drag, transform drag, wheel, keyboard camera 
 
 Alternative considered: treat every interaction as a reliable scene command with ACK before visible feedback. Rejected because it caused seconds of perceived latency and split control-flow truth from video output timing.
 
-### Decision 9: Fixture documentation is not fixture completion
+### Decision 9: Do not trade GPU performance for control wiring
+
+Baseline editing implementation must preserve the existing Engine GPU path. It must not use CPU readback, frame copies through Webview memory, disabled zero-copy/hardware encode, forced lower resolution/DPR/FPS/bitrate, or extra synchronous passes as a default response to latency.
+
+Alternative considered: reduce stream or render cost while the control surface is being completed. Rejected because it masks the real control-flow issue and directly regresses the 1080p/60fps editing promise.
+
+### Decision 10: Do not trade render quality for responsiveness
+
+PBR, Clay, Wireframe, Normal, Depth, lighting, shadows/AO, tone mapping, antialiasing, texture sampling, material precision, background/environment, and 1080p edge clarity are part of the baseline. They can be capability-gated or explicitly downgraded by host/device fallback, but not silently reduced by this change.
+
+Alternative considered: temporarily lower LookDev/render quality to keep frame cadence stable. Rejected because the reported user issue includes visible blur and jaggies; reducing quality would make the baseline editor less trustworthy.
+
+### Decision 11: Fixture documentation is not fixture completion
 
 The restored `test-fixtures/model/README.md` only defines fixture requirements. It does not close the fixture implementation task. The implementation must still add either a redistributable binary GLB or a deterministic generator usable by CI.
 
 Alternative considered: mark the fixture task complete because the requirement is documented. Rejected because smoke tests need an actual file or generator.
 
-### Decision 10: Visual verification is required for B2
+### Decision 12: Visual verification is required for B2
 
 LookDev, light, and background commands are not considered complete if tests only prove acknowledgements or state mutation. At least one smoke path must verify visible Engine output changes for the repository fixture.
 
@@ -241,7 +293,9 @@ Alternative considered: rely on contract tests and frame metadata only. Rejected
 - [Risk] 1080p/60fps is unstable on some hosts. -> Mitigation: make fallback explicit, surface the reason, and keep visual editing usable at 720p.
 - [Risk] Existing LookDev code passes contract tests but does not visually affect the model. -> Mitigation: add smoke tests and manual debugger checks that verify visible render/light/background changes.
 - [Risk] Adding a binary GLB fixture increases repo size. -> Mitigation: use a minimal generated fixture with permissive license and keep it small.
-- [Risk] Hot-path code regresses into ACK-gated or stream-restart behavior. -> Mitigation: add Route A boundary tests and checklist items for no ACK gating, no stream restart, no decoder reset, and no submitted-frame suppression.
+- [Risk] Hot-path code regresses into ACK-gated or stream-restart behavior. -> Mitigation: keep the pre-change path as the baseline, add Route A boundary tests and checklist items for no ACK gating, no global control-error gating, no stream restart, no decoder reset, and no submitted-frame suppression.
+- [Risk] GPU performance regresses while adding diagnostics/control wiring. -> Mitigation: fixed-fixture perf checks for render/frame time, encode time, coded size, DPR, zero-copy/hardware encode path, dropped/backpressure counters, and no CPU readback.
+- [Risk] Render quality regresses to hide latency. -> Mitigation: fixed-fixture visual checks for PBR/Clay/Wireframe/Normal/Depth, shadows/AO, antialiasing, tone mapping, material appearance, background/environment, and 1080p edge clarity.
 
 ## Migration Plan
 
@@ -254,15 +308,15 @@ Alternative considered: rely on contract tests and frame metadata only. Rejected
 7. Fix B2 command visibility: Transform, LookDev, light CRUD, and background/environment visible changes.
 8. Gate B3 character tools with explicit asset compatibility reasons.
 
-Rollback strategy: all UI enablement remains capability- and context-gated. If a subfeature fails, Webview can degrade that control with a diagnostic while keeping the PBR Engine stream and Outliner selection available. If hot-path latency regresses, rollback the new control-flow path before rolling back unrelated B0-B2 diagnostics.
+Rollback strategy: all UI enablement remains capability- and context-gated. If a subfeature fails, Webview can degrade that control with a diagnostic while keeping the PBR Engine stream and Outliner selection available. If hot-path latency regresses, rollback the new control-flow path first and restore the old immediate interaction path before rolling back unrelated B0-B2 diagnostics. If GPU performance or render quality regresses, rollback the new integration before accepting lower resolution, lower DPR, lower bitrate, disabled render passes, CPU readback, or Webview render fallback as the default.
 
 ## Validation Plan
 
 - Webview unit: availability derivation, i18n reason mapping, Object/Inspect without semantic picking, character downgrade independence, hot-path no ACK-gating state.
-- Webview boundary: no Three.js/R3F/glTF parser, no Extension Host high-frequency route, no stream lifecycle dependency on `streamProfile`.
+- Webview boundary: no Three.js/R3F/glTF parser, no Extension Host high-frequency route, no stream lifecycle dependency on `streamProfile`, no global scene-control error path from selection hit-test/query failure into camera/orbit/drag disablement.
 - Client unit: capability normalizers, scene-control runtime diagnostic precedence, `H264StreamClient` policy update without decoder reset.
 - Engine/Rust: effective descriptor diagnostics, runtime interaction profile TTL, render mode capability, light/background command diagnostics, SceneDelta/snapshot reconciliation.
-- Smoke/manual: repository fixture and local `../neko-test/test.glb` in VSCode extension debugger; frequent camera/drag operations; visible LookDev/light/background changes; performance overlay confirms delay category.
+- Smoke/manual: repository fixture and local `../neko-test/test.glb` in VSCode extension debugger; frequent camera/drag operations; visible LookDev/light/background changes; performance overlay confirms delay category, GPU path health, and no render-quality regression.
 
 ## Open Questions
 

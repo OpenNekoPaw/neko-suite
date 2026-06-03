@@ -4,9 +4,9 @@
 
 Accepted (2026-05-23)
 
-实施备注：2026-06-02，`neko-model` 相机/拖拽卡顿复盘补充。性能指标显示 GPU render/encode 正常，但 Webview 交互仍有 2-3s 可见延迟。根因是高频 camera hot path 被错误耦合到 SceneControl ACK、H.264 stream profile restart 和 WebCodecs latest-only 丢帧逻辑：控制流已发送，视频流仍在输出旧帧，前端又 suppress 已提交给硬解的帧，导致用户感知为“控制流和视频输出流割裂”。修复后，高频相机更新走 no-ack latest-only scene-control message，Engine 用短 TTL interaction profile 将当前 stream 切到 `GOP=1`，Webview 只切换现有 decoder backpressure，不重启 stream，也不取消硬解已接管帧。
+实施备注：2026-06-02，`neko-model` 相机/拖拽卡顿复盘补充。性能指标显示 GPU render/encode 正常，但 Webview 交互仍有 2-3s 可见延迟。根因是高频 camera hot path 被错误耦合到 SceneControl ACK、H.264 stream reconfigure 和 WebCodecs latest-only 丢帧逻辑：控制流已发送，视频流仍在输出旧帧，前端又 suppress 已提交给硬解的帧，导致用户感知为“控制流和视频输出流割裂”。修复后，高频相机更新走 no-ack latest-only scene-control message，Webview 只切换现有 `H264StreamClient` backpressure/latest-only 策略，不重启 stream，也不取消硬解已接管帧。
 
-追加测试结论：Chrome DevTools 实测显示，交互时强制 `VideoDecoder.reset()` 或清空 WebCodecs/VideoToolbox 已提交队列会把“旧帧拖尾”变成“等待新 keyframe 的输出空窗”，对硬解低延迟是负优化。因此最终策略是保留硬解输出链路连续性，在 pointerdown、wheel、keyboard camera 起点立即发送当前 camera + `streamProfile: 'interactive'` 作为预热，并用 2000ms shared `profileTtlMs` 延迟恢复默认 GOP，减少连续微调时的 `GOP=1`/`GOP=30` 往返重配。
+追加测试结论：Chrome DevTools 实测显示，交互时强制 `VideoDecoder.reset()` 或清空 WebCodecs/VideoToolbox 已提交队列会把“旧帧拖尾”变成“等待新 keyframe 的输出空窗”，对硬解低延迟是负优化。后续进一步确认，相机交互触发 Engine `GOP=1`/默认 GOP 往返 reconfigure 会重开 VideoToolbox encoder，是 10s 级卡顿风险来源。因此最终策略是保留硬解输出链路连续性：相机/拖拽热路径只更新当前 scene-control camera state 和前端 backpressure/latest-only 策略；不得自动发送会触发 Engine GOP reconfigure 的 `streamProfile/profileTtlMs`。`GOP=1` / All-Intra 只允许作为显式实验或非热路径配置，不作为默认相机交互策略。
 
 ## 背景
 
@@ -124,10 +124,10 @@ Puppet 与 model 都需要“画面内编辑”闭环；live 需要“场景控�
 
 1. Webview 必须先更新本地意图，再发送 Engine hot update；不得等待 ACK 才改变用户可见反馈。
 2. 高频相机类 hot update 应支持 `requestId` 省略；服务端无 `requestId` 时应用最新状态但不回 `viewportCameraAck`。
-3. `streamProfile` / `profileTtlMs` 是 Engine runtime stream policy 输入，不是 React stream lifecycle state；不得作为 `startSceneRenderStream()` effect 依赖。
-4. 交互期编码策略可切 `GOP=1` / All-Intra 与 latest-only backpressure，但默认 H.264 stream 连接保持不变。
-5. 交互起点必须预热 runtime profile：pointerdown、wheel 和 keyboard camera action 在真实 camera delta 前也要发送 latest-only hot update，避免等待第一批 move 事件后才进入低延迟链路。
-6. 恢复默认 GOP/码率由 idle timer 或 Engine TTL 完成；恢复可以延迟，进入交互必须尽快。当前 `neko-model` 使用 2000ms shared TTL，降低连续操作期间的 encoder reconfigure 抖动。
+3. 相机/拖拽热路径不得自动发送 `streamProfile/profileTtlMs`，不得触发 Engine GOP/码率 reconfigure；`streamProfile` 若作为兼容字段存在，也不能成为 React stream lifecycle state 或 `startSceneRenderStream()` effect 依赖。
+4. 交互期默认只允许 latest-only backpressure / 呈现策略更新；`GOP=1` / All-Intra 只能作为显式实验或用户可见配置，不能由相机/拖拽自动切换。
+5. 交互起点必须预热前端 latest-only/backpressure 策略：pointerdown、wheel 和 keyboard camera action 在真实 camera delta 前也要更新当前客户端策略，避免等待第一批 move 事件后才进入低延迟链路。
+6. Engine 不得因交互开始/结束重开 VideoToolbox encoder；恢复默认策略只能影响前端 backpressure 或不会改变 encoder contract 的 runtime state。
 7. WebCodecs/硬解已有输出队列不可由 JS 假定可取消。latest-only 不得 suppress 已提交硬解的旧帧，也不得用 decoder reset 作为交互低延迟策略；只能限制后续入队或在呈现层保留最新帧。
 8. 控制流 ACK 健康、GPU 帧时间、encode 时间、decode output lag、pending decode frames 必须分开计量；不能把宿主呈现节奏或硬解固定 output latency 误判为 GPU 性能不足。
 

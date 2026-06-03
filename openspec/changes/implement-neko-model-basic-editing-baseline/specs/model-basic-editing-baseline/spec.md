@@ -14,7 +14,7 @@ The Neko Model editor SHALL allow ordinary GLB, GLTF, and VRM assets to complete
 - **THEN** Object, Inspect, Transform, LookDev, light, and background controls remain available when their own prerequisites are met
 
 ### Requirement: High-frequency Editing Uses The Immediate Hot Path
-The Neko Model editor SHALL keep high-frequency camera, drag, light-position, transform, wheel, keyboard camera, and continuous slider interactions on an immediate hot path. User-visible feedback MUST start from local intent or overlay prediction and MUST NOT wait for SceneControl acknowledgement, H.264 stream restart, Extension Host forwarding, or WebCodecs decoder reset.
+The Neko Model editor SHALL keep high-frequency camera, drag, light-position, transform, wheel, keyboard camera, and continuous slider interactions on the restored immediate hot path. User-visible feedback MUST start from local intent or overlay prediction and MUST NOT wait for SceneControl acknowledgement, H.264 stream restart, Extension Host forwarding, WebCodecs decoder reset, capability diagnostics, LookDev readiness, selection query results, or static control availability derivation.
 
 #### Scenario: Camera orbit is immediate
 - **WHEN** the user starts camera orbit, wheel zoom, or keyboard camera navigation
@@ -23,10 +23,41 @@ The Neko Model editor SHALL keep high-frequency camera, drag, light-position, tr
 - **THEN** the current H.264 stream remains alive
 
 #### Scenario: Decoder is not reset for interaction
-- **WHEN** an interaction profile switches to latest-only or `GOP=1`
+- **WHEN** an interaction switches to latest-only/backpressure mode
 - **THEN** Webview updates the existing `H264StreamClient` backpressure policy
 - **THEN** Webview does not reset, close, or recreate the WebCodecs decoder
 - **THEN** Webview does not suppress frames already submitted to hardware decode
+- **THEN** Webview does not automatically request Engine `GOP=1` or default GOP reconfigure for camera or drag interaction
+
+#### Scenario: Optional query failure does not break interaction
+- **WHEN** a hit-test, selection query, LookDev command, or capability refresh fails while the viewport stream is alive
+- **THEN** Webview degrades only the affected control or query
+- **THEN** camera orbit, drag, wheel, keyboard camera, light drag, transform drag, and continuous sliders keep using the immediate hot path
+
+### Requirement: Baseline GPU Performance Does Not Regress
+The Neko Model editor SHALL preserve the restored Engine GPU performance baseline while implementing basic editing. Implementations MUST NOT introduce hot-path CPU readback, GPU-to-CPU-to-Webview frame transfer, disabled zero-copy or hardware encoder paths, extra synchronous render/encode waits, or default stream resolution, DPR, FPS, codec, bitrate, or GOP downgrades to hide control latency.
+
+#### Scenario: GPU path remains active
+- **WHEN** baseline editing controls are enabled for a supported model viewport
+- **THEN** the Engine stream continues to use the expected GPU render path and zero-copy/hardware encode path when the host supports them
+- **THEN** Webview does not introduce per-frame CPU readback or Webview-side frame transport for the visible 3D viewport
+
+#### Scenario: Performance fallback is explicit
+- **WHEN** host, device, codec, or Engine capability forces a lower GPU/stream path
+- **THEN** the fallback is reported through descriptor data, diagnostics, or UI state
+- **THEN** the fallback is not treated as the default successful 1080p/60fps baseline
+
+### Requirement: Baseline Render Quality Does Not Regress
+The Neko Model editor SHALL preserve restored render quality while implementing basic editing. Implementations MUST NOT silently lower PBR, Clay lighting, Wireframe, Normal, Depth, normals/tangents, sRGB or tone mapping, shadows, AO, antialiasing, texture sampling, material precision, helper pass composition, environment/background rendering, or 1080p edge clarity to make control wiring appear responsive.
+
+#### Scenario: LookDev quality remains intact
+- **WHEN** the repository GLB fixture is rendered before and after baseline editing controls are enabled
+- **THEN** PBR, Clay, Wireframe, Normal, Depth, material appearance, shadows or AO where supported, tone mapping, and antialiasing remain visually equivalent within the accepted fixture tolerance
+
+#### Scenario: Quality fallback is explicit
+- **WHEN** Engine or host capability requires a lower-quality render path
+- **THEN** Webview exposes a clear fallback reason
+- **THEN** the fallback does not silently replace the default render-quality baseline
 
 ### Requirement: Baseline Resolution Targets Are Explicit
 The Neko Model editor SHALL target 1080p/60fps for the default Engine viewport stream. If the Engine, device, display, VSCode/Electron host, or codec falls back to 720p, lower frame rate, or lower presentation cadence, the fallback MUST be explicit in stream diagnostics or UI state and MUST NOT be reported as the 1080p target.
