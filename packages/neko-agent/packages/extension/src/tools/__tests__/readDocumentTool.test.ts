@@ -151,7 +151,19 @@ describe('createReadDocumentTool', () => {
         pageCount: 3,
         imagePaths: ['/tmp/1.png', '/tmp/2.png', '/tmp/3.png'],
         imageInfo: [
-          { path: '/tmp/1.png', width: 100, height: 200, mimeType: 'image/png', byteSize: 10 },
+          {
+            path: '/tmp/1.png',
+            width: 100,
+            height: 200,
+            mimeType: 'image/png',
+            byteSize: 10,
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/tmp/comic.cbz', format: 'cbz' },
+              entryPath: '1.png',
+              cachePath: '/tmp/1.png',
+            },
+          },
           { path: '/tmp/2.png', width: 110, height: 210, mimeType: 'image/png', byteSize: 11 },
           { path: '/tmp/3.png', width: 120, height: 220, mimeType: 'image/png', byteSize: 12 },
         ],
@@ -169,11 +181,69 @@ describe('createReadDocumentTool', () => {
       expect.objectContaining({
         imagePaths: ['/tmp/1.png', '/tmp/2.png'],
         imageInfo: [
-          { path: '/tmp/1.png', width: 100, height: 200, mimeType: 'image/png', byteSize: 10 },
+          expect.objectContaining({
+            path: '/tmp/1.png',
+            width: 100,
+            height: 200,
+            mimeType: 'image/png',
+            byteSize: 10,
+            cacheResourceRef: expect.objectContaining({
+              provider: 'document-archive',
+              kind: 'document',
+              locator: expect.objectContaining({ entryPath: '1.png' }),
+            }),
+          }),
           { path: '/tmp/2.png', width: 110, height: 210, mimeType: 'image/png', byteSize: 11 },
         ],
         imagePathCount: 3,
         imagePathsTruncated: true,
+      }),
+    );
+  });
+
+  it('marks no-workspace document image refs as extension-private and non-portable', async () => {
+    const reader = createReader({
+      read: vi.fn(async () => ({
+        text: 'Comic archive',
+        imagePaths: ['/tmp/1.png'],
+        imageInfo: [
+          {
+            path: '/tmp/1.png',
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/tmp/comic.cbz', format: 'cbz' },
+              entryPath: '1.png',
+              cachePath: '/tmp/1.png',
+            },
+          },
+        ],
+      })),
+    });
+    const tool = createReadDocumentTool({
+      reader,
+      resolveResourceScope: () => 'extension-private',
+    });
+
+    const result = (await tool.execute({
+      file_path: '/tmp/comic.cbz',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        imageInfo: [
+          expect.objectContaining({
+            cacheResourceRef: expect.objectContaining({
+              scope: 'extension-private',
+              source: expect.objectContaining({
+                metadata: expect.objectContaining({
+                  nonPortable: true,
+                  nonPortableReason: 'no-workspace-or-extension-private-scratch',
+                }),
+              }),
+            }),
+          }),
+        ],
       }),
     );
   });

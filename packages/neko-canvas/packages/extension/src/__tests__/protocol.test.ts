@@ -18,6 +18,7 @@
  *   NKV-009: composable Agent node operations use payload wrappers
  *   NKV-010: projected Canvas write-back routes through projection adapters
  *   NKV-012: canvas toolbar export intent routes through a whitelisted command
+ *   NKV-013: resource cache providers own thumbnail/preview/generated materialization
  */
 
 import { describe, it, expect } from 'vitest';
@@ -218,6 +219,21 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
+  describe('NKV-013: unified resource cache provider integration', () => {
+    it('registers provider adapters instead of guessing package cache roots', () => {
+      expect(providerSource).toContain('new ThumbnailResourceCacheProvider');
+      expect(providerSource).toContain('new PreviewVariantResourceCacheProvider');
+      expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider');
+      expect(providerSource).toContain('new LegacyResourceCacheProvider');
+    });
+
+    it('preview variant resolution prefers ResourceRef over legacy cache paths', () => {
+      expect(providerSource).toContain('const resourceRef = isResourceRef(message.resourceRef)');
+      expect(providerSource).toContain('this.projectResourceCacheVariant(');
+      expect(providerSource).toContain("case 'preview:resolveVariant'");
+    });
+  });
+
   describe('NKV-010: projected Canvas contracts', () => {
     it('exposes projection adapter registration and write-back through the extension API', () => {
       const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
@@ -292,6 +308,10 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-013: document resource preview variants', () => {
     it('projects document resource refs directly instead of routing them through preview engine variants', () => {
+      expect(providerSource).toContain('VSCodeResourceCacheService');
+      expect(providerSource).toContain('LegacyResourceCacheProvider');
+      expect(providerSource).toContain('projectResourceCacheVariant(');
+      expect(providerSource).toContain('resourceRef = isResourceRef(message.resourceRef)');
       expect(providerSource).toContain('const documentResourceRef = isDocumentArchiveResourceRef');
       expect(providerSource).toContain("'neko-canvas.document-resource-variant'");
       expect(providerSource).toContain('if (documentResourceRef) {');

@@ -2,6 +2,13 @@
 // Project Cache/Search Contracts
 // =============================================================================
 
+import {
+  isResourceCacheStatus,
+  isResourceVariantRef,
+  type ResourceCacheStatus,
+  type ResourceVariantRef,
+} from './resource-cache';
+
 export type ProjectSearchItemKind =
   | 'story-scene'
   | 'story-section'
@@ -107,6 +114,13 @@ export interface ProjectSearchScoreHints {
   readonly recentlyUsed?: boolean;
 }
 
+export interface ProjectSearchVisualResource {
+  readonly resource?: ResourceVariantRef;
+  readonly projectedUri?: string;
+  readonly status?: ResourceCacheStatus;
+  readonly alt?: string;
+}
+
 export interface ProjectSearchItem {
   readonly id: string;
   readonly kind: ProjectSearchItemKind;
@@ -122,6 +136,7 @@ export interface ProjectSearchItem {
   readonly scoreHints?: ProjectSearchScoreHints;
   readonly navigationData?: Record<string, unknown>;
   readonly thumbnailUri?: string;
+  readonly visualResource?: ProjectSearchVisualResource;
   readonly freshness: ProjectIndexFreshness;
   readonly metadata?: Record<string, unknown>;
 }
@@ -382,7 +397,8 @@ export function isProjectSearchItem(value: unknown): value is ProjectSearchItem 
     isProjectSearchPartitionKind(value['source']['partition']) &&
     typeof value['projectRoot'] === 'string' &&
     typeof value['searchText'] === 'string' &&
-    isProjectIndexFreshness(value['freshness'])
+    isProjectIndexFreshness(value['freshness']) &&
+    optionalProjectSearchVisualResource(value['visualResource'])
   );
 }
 
@@ -449,6 +465,17 @@ function optionalProjectSearchScopes(value: unknown): boolean {
 
 function optionalProjectSearchProviderCapabilities(value: unknown): boolean {
   return value === undefined || isProjectSearchProviderCapabilities(value);
+}
+
+function optionalProjectSearchVisualResource(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value['resource'] === undefined || isResourceVariantRef(value['resource'])) &&
+    optionalString(value['projectedUri']) &&
+    (value['status'] === undefined || isResourceCacheStatus(value['status'])) &&
+    optionalString(value['alt'])
+  );
 }
 
 function optionalProjectSemanticProviderMetadata(value: unknown): boolean {

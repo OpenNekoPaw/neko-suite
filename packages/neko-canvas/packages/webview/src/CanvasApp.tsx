@@ -444,6 +444,7 @@ export function CanvasApp() {
     onImportGeneratedAsset: (asset) => {
       addMediaAt(getViewportCenter(), asset.mediaType, asset.path, asset.name, {
         ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
+        ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),
         ...(asset.documentResourceRef ? { runtimeAssetPath: asset.path } : {}),
       });
     },

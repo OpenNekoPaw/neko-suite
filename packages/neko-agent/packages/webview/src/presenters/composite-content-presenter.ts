@@ -10,9 +10,10 @@ import type {
   StoryboardMediaRefV1,
   StoryboardValidationDiagnosticV1,
   DocumentArchiveResourceRef,
+  ResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
-import { parseDocumentArchiveResourceRef } from '@neko/shared';
+import { isResourceRef, parseDocumentArchiveResourceRef } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
@@ -41,6 +42,7 @@ export interface ResolvedCompositeMedia {
   readonly stableUri?: string;
   readonly localPath?: string;
   readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
   readonly mimeType?: string;
   readonly caption?: string;
   readonly role?: string;
@@ -108,6 +110,7 @@ interface MediaCandidate {
   readonly stableUri?: string;
   readonly localPath?: string;
   readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
   readonly mimeType?: string;
   readonly label?: string;
   readonly pageNumber?: number;
@@ -502,6 +505,7 @@ function resolveCompositeMediaRef(
       ...(candidate.stableUri ? { stableUri: candidate.stableUri } : {}),
       ...(candidate.localPath ? { localPath: candidate.localPath } : {}),
       ...(candidate.resourceRef ? { resourceRef: candidate.resourceRef } : {}),
+      ...(candidate.cacheResourceRef ? { cacheResourceRef: candidate.cacheResourceRef } : {}),
       ...(candidate.mimeType ? { mimeType: candidate.mimeType } : {}),
       ...(mediaRef.caption || candidate.label
         ? { caption: mediaRef.caption ?? candidate.label }
@@ -613,9 +617,19 @@ function collectReadImageCandidates(
 ): readonly MediaCandidate[] {
   return readRecordArray(data, 'images').flatMap((image, index) => {
     const documentImage = asRecord(image['documentImage']);
+    const info = {
+      ...(documentImage ?? {}),
+      ...image,
+      ...(documentImage?.['cacheResourceRef'] !== undefined
+        ? { cacheResourceRef: documentImage['cacheResourceRef'] }
+        : {}),
+      ...(documentImage?.['resourceRef'] !== undefined
+        ? { resourceRef: documentImage['resourceRef'] }
+        : {}),
+    };
     const candidate = projectDocumentImageCandidate({
       index,
-      info: image,
+      info,
       path: readString(image, 'path') ?? readString(documentImage, 'path'),
       webviewUri:
         readRenderableUri(image) ??
@@ -638,6 +652,9 @@ function projectDocumentImageCandidate(input: {
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
   const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
   const resourceRef = parseDocumentArchiveResourceRef(input.info?.['resourceRef']);
+  const cacheResourceRef = isResourceRef(input.info?.['cacheResourceRef'])
+    ? input.info.cacheResourceRef
+    : undefined;
   const pageNumber = readDocumentImagePageNumber(input.info) ?? readPageNumberFromText(input.label);
   return {
     assetIndex: input.index,
@@ -645,6 +662,7 @@ function projectDocumentImageCandidate(input: {
     ...(src ? { src } : {}),
     ...(readAbsolutePath(input.path) ? { localPath: readAbsolutePath(input.path) } : {}),
     ...(resourceRef ? { resourceRef } : {}),
+    ...(cacheResourceRef ? { cacheResourceRef } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(input.label ? { label: input.label } : {}),
     ...(pageNumber !== undefined ? { pageNumber } : {}),

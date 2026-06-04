@@ -45,6 +45,8 @@ export function registerExtensionTools(
   context?: vscode.ExtensionContext,
 ): void {
   const documentReader = createDocumentReaderService(getEngineClientProvider(), context);
+  const resolveDocumentResourceScope = () =>
+    vscode.workspace.workspaceFolders?.[0] ? ('project' as const) : ('extension-private' as const);
   const tools = createPluginSkillDiscoveryTools(
     createVSCodePluginSkillCatalogueSource(),
     getRootLogger().child('PluginSkillDiscovery'),
@@ -52,6 +54,7 @@ export function registerExtensionTools(
   tools.push(
     createReadDocumentTool({
       reader: documentReader,
+      resolveResourceScope: resolveDocumentResourceScope,
     }),
     createReadImageTool({
       platform: _platform,
@@ -59,6 +62,7 @@ export function registerExtensionTools(
     createReadDocumentImageTool({
       reader: documentReader,
       platform: _platform,
+      resolveResourceScope: resolveDocumentResourceScope,
     }),
   );
   for (const tool of tools) {

@@ -4,6 +4,8 @@ import {
   CANVAS_AGENT_CHILD_PRESETS,
   CANVAS_AGENT_CONTAINER_PRESETS,
   CANVAS_AGENT_NODE_PRESETS,
+  createResourceFingerprint,
+  createResourceRef,
   getBuiltInCanvasNodePresetMetadata,
   getDefaultCanvasNodePresetName,
 } from '@neko/shared';
@@ -365,6 +367,22 @@ describe('nodeFactory composable presets', () => {
       cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
       versionPolicy: 'versioned-export' as const,
     };
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:image/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
 
     const media = hydrateCanvasNodePreview({
       ...buildCanvasNode({
@@ -375,6 +393,7 @@ describe('nodeFactory composable presets', () => {
         data: {
           assetPath: '',
           documentResourceRef,
+          resourceRef,
           runtimeAssetPath:
             'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
           mediaType: 'image',
@@ -386,6 +405,7 @@ describe('nodeFactory composable presets', () => {
     expect(media.data).toMatchObject({
       assetPath: '',
       documentResourceRef,
+      resourceRef,
       runtimeAssetPath:
         'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
     });

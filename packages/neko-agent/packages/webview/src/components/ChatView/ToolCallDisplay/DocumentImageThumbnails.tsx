@@ -100,6 +100,9 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                         ...(thumbnail.resourceRef
                           ? { documentResourceRef: thumbnail.resourceRef }
                           : {}),
+                        ...(thumbnail.cacheResourceRef
+                          ? { resourceRef: thumbnail.cacheResourceRef }
+                          : {}),
                       },
                       target: projectCanvasContentTransferTarget({
                         ambientNodes,
@@ -112,6 +115,9 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                           ? {
                               metadata: {
                                 documentResourceRef: thumbnail.resourceRef,
+                                ...(thumbnail.cacheResourceRef
+                                  ? { resourceRef: thumbnail.cacheResourceRef }
+                                  : {}),
                               },
                             }
                           : {}),

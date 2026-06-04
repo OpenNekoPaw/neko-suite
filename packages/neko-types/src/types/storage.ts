@@ -53,6 +53,9 @@ export interface ICacheLayout {
   readonly root: string;
   readonly mediaMetadata: string;
   readonly thumbnails: string;
+  readonly resources: string;
+  readonly resourceManifest: string;
+  readonly database: string;
   readonly proxies: string;
   readonly proxyManifest: string;
   readonly generated: string;
@@ -140,6 +143,9 @@ export function resolveStorageLayout(workspaceRoot: string, homedir: string): IS
     root: cacheRoot,
     mediaMetadata: join(cacheRoot, 'media-metadata.json'),
     thumbnails: join(cacheRoot, 'thumbnails'),
+    resources: join(cacheRoot, 'resources'),
+    resourceManifest: join(cacheRoot, 'resources', 'manifest.json'),
+    database: join(cacheRoot, 'neko-cache.db'),
     proxies: join(cacheRoot, 'proxies'),
     proxyManifest: join(cacheRoot, 'proxies', 'manifest.json'),
     generated: join(cacheRoot, 'generated'),

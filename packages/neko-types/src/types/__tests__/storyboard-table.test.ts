@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '../resource-cache';
 import type {
   StoryboardTableProfileV1,
   StoryboardTableV1,
@@ -649,6 +650,22 @@ describe('storyboard table contract', () => {
       cachePath: '/tmp/neko-cache/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
+    const cacheResourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:OPS/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
 
     expect(
       projectStoryboardTableV1ToCanvasPayload(table, {
@@ -656,10 +673,13 @@ describe('storyboard table contract', () => {
           shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
         resolveFallbackImageResourceRef: ({ shot }) =>
           shot.shotNumber === 1 ? resourceRef : undefined,
+        resolveFallbackImageUnifiedResourceRef: ({ shot }) =>
+          shot.shotNumber === 1 ? cacheResourceRef : undefined,
       }).scenes[0]?.shotPlans[0],
     ).toMatchObject({
       referenceImagePath: '/tmp/neko-cache/page-1.jpg',
       referenceImageResourceRef: resourceRef,
+      referenceResourceRef: cacheResourceRef,
     });
   });
 

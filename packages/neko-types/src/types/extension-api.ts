@@ -53,6 +53,8 @@ import type {
 } from './sketch-ai';
 import type { NekoModelAPI } from './model-agent-api';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type { ProjectSearchVisualResource } from './project-cache-search';
+import type { ResourceRef, ResourceVariantRequest } from './resource-cache';
 
 export interface NekoDisposableLike {
   dispose(): void;
@@ -767,6 +769,23 @@ export interface NekoAssetsAPI {
 
   /** Get the thumbnail file path for a given asset file path. */
   getThumbnailPath(filePath: string): Promise<string | undefined>;
+
+  /** Create a stable resource ref for a media thumbnail without exposing package-local cache paths. */
+  createThumbnailResourceRef?(
+    filePath: string,
+    options?: {
+      readonly width?: number;
+      readonly height?: number;
+      readonly mediaLibraryId?: string;
+      readonly projectRelativePath?: string;
+    },
+  ): Promise<ResourceRef | undefined>;
+
+  /** Return a host-projected or resource-ref-backed visual for search and mention consumers. */
+  getThumbnailVisual?(
+    filePath: string,
+    variant?: ResourceVariantRequest,
+  ): Promise<ProjectSearchVisualResource | undefined>;
 
   /** Get resolved, enabled, and accessible media library roots for Webview authorization. */
   getMediaLibraryRoots(): Promise<string[]>;

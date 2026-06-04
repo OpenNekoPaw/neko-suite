@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   normalizeImportedGeneratedAsset,
   normalizeImportedMediaType,
@@ -40,6 +41,22 @@ describe('imported generated asset normalization', () => {
       cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
       versionPolicy: 'versioned-export',
     };
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:image/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
 
     expect(
       normalizeImportedGeneratedAsset({
@@ -47,6 +64,7 @@ describe('imported generated asset normalization', () => {
         originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
         type: 'image',
         documentResourceRef,
+        resourceRef,
       }),
     ).toEqual({
       path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
@@ -54,6 +72,7 @@ describe('imported generated asset normalization', () => {
       mediaType: 'image',
       name: '0001_page-1.jpg',
       documentResourceRef,
+      resourceRef,
     });
   });
 

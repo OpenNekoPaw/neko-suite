@@ -14,6 +14,7 @@ import {
   type ProjectSearchItem,
   type ProjectSearchQuery,
 } from '../project-cache-search';
+import { createResourceFingerprint, createResourceRef } from '../resource-cache';
 
 describe('project cache/search contracts', () => {
   it('validates enum-like project search fields', () => {
@@ -52,6 +53,14 @@ describe('project cache/search contracts', () => {
   });
 
   it('represents normalized search items with source and freshness metadata', () => {
+    const resource = createResourceRef({
+      scope: 'project',
+      provider: 'media-thumbnail',
+      kind: 'media',
+      source: { kind: 'file', filePath: '/workspace/assets/hero.png' },
+      locator: { kind: 'file', path: '/workspace/assets/hero.png' },
+      fingerprint: createResourceFingerprint({ strategy: 'provider', value: 'hero.png' }),
+    });
     const item: ProjectSearchItem = {
       id: 'script-role:/workspace/cases/test.fountain:小橘',
       kind: 'script-role',
@@ -67,11 +76,29 @@ describe('project cache/search contracts', () => {
       canonicalName: '小橘',
       aliases: [],
       searchText: '小橘 Script role /workspace/cases/test.fountain',
+      visualResource: {
+        resource: {
+          resource,
+          role: 'thumbnail',
+          mimeType: 'image/png',
+          width: 256,
+          height: 256,
+        },
+        status: 'ready',
+        alt: '小橘',
+      },
       freshness: 'fresh',
     };
 
     expect(isProjectSearchItem(item)).toBe(true);
     expect(isProjectSearchItem({ ...item, freshness: 'old' })).toBe(false);
+    expect(
+      isProjectSearchItem({
+        ...item,
+        visualResource: { resource: { provider: 'bad' }, status: 'ready' },
+      }),
+    ).toBe(false);
+    expect(isProjectSearchItem({ ...item, visualResource: { status: 'pending' } })).toBe(false);
   });
 
   it('validates cache manifests with partition generation metadata', () => {

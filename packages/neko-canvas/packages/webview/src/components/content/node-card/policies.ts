@@ -17,6 +17,8 @@ import {
   readDocumentResourceStatus,
   readPersistentAssetPath,
   readReferenceImageResourceRef,
+  readReferenceResourceRef,
+  readResourceRef,
   readNumber,
   readRecord,
   readString,
@@ -66,6 +68,7 @@ export const mediaCardPolicy: NodeCardPolicy = {
     const title = resolveMediaTitle(node);
     const role: CanvasPreviewRole = mediaType === 'video' ? 'video-poster' : 'image';
     const documentResourceRef = readDocumentResourceRef(node);
+    const resourceRef = readResourceRef(node);
     const stableRuntimePath =
       mediaType === 'image' && documentResourceRef && sourcePath && isSafeWebviewUrl(sourcePath)
         ? sourcePath
@@ -78,7 +81,13 @@ export const mediaCardPolicy: NodeCardPolicy = {
         stableRuntimePath ?? readString(data, 'thumbnailPath') ?? readPersistentAssetPath(node),
       mediaType,
       title,
-      metadata: documentResourceRef ? { documentResourceRef } : undefined,
+      metadata:
+        documentResourceRef || resourceRef
+          ? {
+              ...(documentResourceRef ? { documentResourceRef } : {}),
+              ...(resourceRef ? { resourceRef } : {}),
+            }
+          : undefined,
     });
 
     if (mediaType === 'video') {
@@ -117,12 +126,17 @@ export const shotCardPolicy: NodeCardPolicy = {
       selected || generatedImage ? 'generation-candidate' : 'image';
     const referenceImageResourceRef =
       selected || generatedImage ? undefined : readReferenceImageResourceRef(node);
+    const referenceResourceRef =
+      selected || generatedImage ? undefined : readReferenceResourceRef(node);
     const sourcePath =
       selected?.dataUrl ??
       generatedImage ??
       runtimeReferenceImagePath ??
       (referenceImageResourceRef ? undefined : referenceImagePath);
-    const resolverPath = referenceImageResourceRef ? undefined : (sourcePath ?? referenceImagePath);
+    const resolverPath =
+      referenceImageResourceRef || referenceResourceRef
+        ? undefined
+        : (sourcePath ?? referenceImagePath);
     const directVariantPath =
       sourcePath && (selected || generatedImage || isSafeWebviewUrl(sourcePath))
         ? sourcePath
@@ -145,11 +159,17 @@ export const shotCardPolicy: NodeCardPolicy = {
         id: `node-card:${node.id}:shot`,
         role: sourceRole,
         path: directVariantPath ? undefined : resolverPath,
-        mediaType: referenceImageResourceRef ? 'image' : undefined,
+        mediaType: referenceImageResourceRef || referenceResourceRef ? 'image' : undefined,
         title: resolveShotTitle(node),
-        metadata: referenceImageResourceRef
-          ? { documentResourceRef: referenceImageResourceRef }
-          : undefined,
+        metadata:
+          referenceImageResourceRef || referenceResourceRef
+            ? {
+                ...(referenceImageResourceRef
+                  ? { documentResourceRef: referenceImageResourceRef }
+                  : {}),
+                ...(referenceResourceRef ? { resourceRef: referenceResourceRef } : {}),
+              }
+            : undefined,
         variants,
       }),
     };

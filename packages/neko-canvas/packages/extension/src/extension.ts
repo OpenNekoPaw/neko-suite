@@ -15,8 +15,9 @@ import {
   type CanvasStoryboardExecutionSummaryRequest,
   type CanvasStoryboardPayload,
   type CreatedCanvasStoryboard,
+  type DocumentArchiveResourceRef,
+  type ResourceRef,
 } from '@neko/shared';
-import type { DocumentArchiveResourceRef } from '@neko/shared';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
@@ -474,6 +475,7 @@ function registerCommands(
         type?: string;
         name?: string;
         documentResourceRef?: DocumentArchiveResourceRef;
+        resourceRef?: ResourceRef;
       }) => {
         if (!asset?.path) {
           void handleError(new Error('neko.canvas.importAsset: missing asset path'), {

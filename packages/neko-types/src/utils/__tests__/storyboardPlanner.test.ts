@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyStoryboardPayloadToCanvas, createStoryboardPayload } from '../storyboardPlanner';
+import { createResourceFingerprint, createResourceRef } from '../../types/resource-cache';
 import type { NekoCanvasAPI, NekoStoryScriptIndex } from '../../types/extension-api';
 import type { StoryScenePlan } from '../../types/storyboard-planner';
 
@@ -89,6 +90,22 @@ describe('storyboardPlanner', () => {
   });
 
   it('applies a storyboard payload to canvas via unified helper', async () => {
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '/books/demo.epub', format: 'epub' },
+        filePath: '/books/demo.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'demo:OPS/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
     const createComposite = vi
       .fn<NekoCanvasAPI['nodes']['createComposite']>()
       .mockResolvedValueOnce({
@@ -97,6 +114,7 @@ describe('storyboardPlanner', () => {
       });
     const createConnection = vi.fn<NekoCanvasAPI['nodes']['createConnection']>();
 
+    const payload = createStoryboardPayload(scriptIndex, { scenesLimit: 1 });
     const result = await applyStoryboardPayloadToCanvas(
       {
         nodes: {
@@ -104,7 +122,21 @@ describe('storyboardPlanner', () => {
           createConnection,
         },
       } as Pick<NekoCanvasAPI, 'nodes'>,
-      createStoryboardPayload(scriptIndex, { scenesLimit: 1 }),
+      {
+        ...payload,
+        scenes: [
+          {
+            ...payload.scenes[0]!,
+            shotPlans: [
+              {
+                ...payload.scenes[0]!.shotPlans[0]!,
+                referenceResourceRef: resourceRef,
+              },
+              ...payload.scenes[0]!.shotPlans.slice(1),
+            ],
+          },
+        ],
+      },
     );
 
     expect(result).toMatchObject({
@@ -133,6 +165,7 @@ describe('storyboardPlanner', () => {
     });
     expect(request?.children).toHaveLength(2);
     expect(request?.children.every((child) => child.type === 'shot')).toBe(true);
+    expect(request?.children[0]?.data).toMatchObject({ referenceResourceRef: resourceRef });
     expect(createConnection).not.toHaveBeenCalled();
   });
 

@@ -6,6 +6,7 @@ import type {
 } from './canvas-layered';
 import type { NkProjectType } from './canvas-drop';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type { ResourceRef } from './resource-cache';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -235,6 +236,8 @@ export interface MediaCanvasNode extends CanvasNodeBase {
     assetPath: string;
     /** Stable reference to a document/archive entry when the media is linked from a container. */
     documentResourceRef?: DocumentArchiveResourceRef;
+    /** Stable unified cache resource identity. Preferred over documentResourceRef for new payloads. */
+    resourceRef?: ResourceRef;
     /** Runtime-only document cache status. Not persisted. */
     documentResourceStatus?: DocumentResourceStatus;
     /** Runtime-only preview URI/path materialized from documentResourceRef. Not persisted. */
@@ -463,6 +466,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     referenceImagePath?: string;
     /** Runtime-safe document resource backing the reference image, when imported from a document. */
     referenceImageResourceRef?: DocumentArchiveResourceRef;
+    /** Stable unified cache resource identity for the reference image. */
+    referenceResourceRef?: ResourceRef;
     /** Runtime-only webview URI/path materialized from referenceImageResourceRef. Not persisted. */
     runtimeReferenceImagePath?: string;
     /** Visual effects cues */

@@ -34,6 +34,7 @@ import {
   resolveStorageLayout,
   migrateStorageLayout,
   parseEntityUri,
+  type ResourceVariantRequest,
 } from '@neko/shared';
 import type { ImportedAssetDescriptor } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
@@ -52,6 +53,7 @@ import {
 import { VscodeGitService } from './services/VscodeGitService';
 import {
   createVSCodeLogger,
+  createFileThumbnailResourceRef,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
@@ -427,6 +429,47 @@ export async function activate(
     getThumbnailPath: async (filePath) => {
       if (!thumbnailService) return undefined;
       return (await thumbnailService.getCached(filePath)) ?? undefined;
+    },
+    createThumbnailResourceRef: async (filePath, options = {}) => {
+      if (!workspaceRoot) return undefined;
+      return createFileThumbnailResourceRef({
+        filePath,
+        scope: 'project',
+        ...(options.mediaLibraryId ? { mediaLibraryId: options.mediaLibraryId } : {}),
+        ...(options.projectRelativePath
+          ? { projectRelativePath: options.projectRelativePath }
+          : {}),
+      });
+    },
+    getThumbnailVisual: async (
+      filePath,
+      variant: ResourceVariantRequest = { role: 'thumbnail', width: 256, height: 256 },
+    ) => {
+      if (!thumbnailService || !workspaceRoot) return undefined;
+      const generated = await thumbnailService.generate(filePath, {
+        maxWidth: variant.width,
+        maxHeight: variant.height,
+      });
+      const resource = createFileThumbnailResourceRef({
+        filePath,
+        scope: 'project',
+      });
+      return {
+        resource: {
+          resource,
+          role: variant.role,
+          ...(variant.format ? { format: variant.format } : {}),
+          ...(variant.mimeType ? { mimeType: variant.mimeType } : {}),
+          ...((generated?.width ?? variant.width)
+            ? { width: generated?.width ?? variant.width }
+            : {}),
+          ...((generated?.height ?? variant.height)
+            ? { height: generated?.height ?? variant.height }
+            : {}),
+        },
+        status: generated?.path ? 'ready' : 'missing',
+        alt: path.basename(filePath),
+      };
     },
     getMediaLibraryRoots: async () =>
       mediaSettingsService ? mediaSettingsService.getWebviewResourceRoots() : [],

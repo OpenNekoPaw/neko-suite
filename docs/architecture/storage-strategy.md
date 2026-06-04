@@ -128,10 +128,16 @@ Media Diff: old.mp4 → new.mp4
 
 <project>/.neko/.cache/               # L2: 项目级缓存（不提交，可重建）
 ├── media-metadata.json               #   媒体元数据缓存
-├── asset-graph.json                  #   资产关系图
-├── vectors/                          #   向量持久化
-│   ├── scripts.json
-│   └── assets.json
+├── neko-cache.db                     #   结构化缓存索引（见 adr-structured-data-persistence）
+├── resources/                        #   统一资源缓存（跨 Agent/Canvas/Preview/Assets）
+│   ├── manifest.json                 #   可重建映射与状态，不是项目事实
+│   ├── documents/                    #   文档/归档解包图片与页面图
+│   ├── thumbnails/                   #   媒体、文档、生成资产缩略图
+│   ├── previews/                     #   Preview 变体、proxy、fov crop
+│   ├── generated/                    #   生成资产预览/缩略图副本
+│   └── media/                        #   未来媒体派生辅助文件
+├── asset-graph.json                  #   兼容路径；具体实现已由 SQLite 缓存层 ADR 接管
+├── vectors/                          #   兼容路径；向量索引实现已由 SQLite 缓存层 ADR 接管
 ├── proxies/                          #   代理视频
 │   ├── manifest.json
 │   └── <hash>_proxy.mp4
@@ -159,6 +165,7 @@ interface IStorageLayout {
   };
   cache: {
     root: string; mediaMetadata: string; assetGraph: string;
+    resources: string; resourceManifest: string; database: string;
     vectors: string; proxies: string; proxyManifest: string;
     generated: string; generatedIndex: string; thumbnails: string;
   };
@@ -180,6 +187,9 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
       memory: path.join(projectRoot, 'memory.md') },
     cache: { root: cacheRoot,
       mediaMetadata: path.join(cacheRoot, 'media-metadata.json'),
+      resources: path.join(cacheRoot, 'resources'),
+      resourceManifest: path.join(cacheRoot, 'resources', 'manifest.json'),
+      database: path.join(cacheRoot, 'neko-cache.db'),
       assetGraph: path.join(cacheRoot, 'asset-graph.json'),
       vectors: path.join(cacheRoot, 'vectors'),
       proxies: path.join(cacheRoot, 'proxies'),
@@ -201,7 +211,42 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
 
 ---
 
-## 三、资产库跨项目策略
+## 三、统一资源缓存
+
+统一资源缓存回答的是“这个派生资源是谁、来自哪里、哪个变体、能否重建、是否可投影”，而不是“Webview 能不能读某个本地文件”。默认项目级位置是：
+
+```
+<project>/.neko/.cache/resources/
+  manifest.json
+  documents/
+  thumbnails/
+  previews/
+  generated/
+  media/
+```
+
+跨包传递应使用 `ResourceRef` / `ResourceVariantRef`：
+
+- Agent 文档图片、分镜参考图、Canvas 节点缩略图优先写 `resourceRef`。
+- 旧 `cachePath` 只作为迁移 metadata，不作为 durable identity。
+- Webview 不读取 `manifest.json`，也不读取 package-local cache 目录；Extension Host 通过 `ResourceCacheService.ensure/resolve/project` 物化并投影。
+- 无 workspace 或仅存在于 `globalStorageUri` 的 scratch 图像标记为 `extension-private` / `non-portable`，可在所属 Agent Webview 显示，但不能承诺跨 Canvas/Preview 便携。
+
+缓存状态必须显式表达：
+
+| 状态 | 含义 | 用户修复路径 |
+|------|------|--------------|
+| `missing` | manifest 有记录但文件缺失 | 重新打开/读取源文档或重新生成资源 |
+| `stale` | 源 fingerprint 变化 | 刷新缓存或重新导入源素材 |
+| `unsupported` | 没有 provider 能物化 | 安装/启用对应扩展，或改用支持的格式 |
+| `unauthorized` | 文件不在 Webview 授权根 | 添加媒体库、移动到 workspace，或通过 Host 投影 |
+| `non-portable` | extension-private/no-workspace scratch | 在当前 Agent 中查看，或重新导入到项目缓存后再发送 |
+
+`ResourceCacheService.stats()` 按 scope/provider/status/role 汇总大小与数量。`gc()` 只删除受管缓存根内、可重建、未 pin、非 session-active 的变体，绝不删除 `neko/` 项目事实、媒体库源文件、原始素材或用户手选文件。
+
+---
+
+## 四、资产库跨项目策略
 
 ### 四个独立资产域
 
@@ -245,7 +290,9 @@ AssetRegistry.query(filter)
 
 ---
 
-## 四、资产关系图（Asset Graph）
+## 五、资产关系图（Asset Graph）
+
+> **已被取代**：以下接口形态保留为领域语义参考；具体 JSON 实现与升级路径已由 [adr-structured-data-persistence.md](./adr-structured-data-persistence.md) 接管。AssetGraph 应迁入结构化缓存/SQLite 层，而不是在本文重复实施。
 
 ### 设计
 
@@ -272,7 +319,9 @@ interface IAssetGraph {
 
 ---
 
-## 五、向量持久化
+## 六、向量持久化
+
+> **已被取代**：以下接口形态保留为领域语义参考；JSON 向量实现、50K 阈值和 SQLite/vec 迁移由 [adr-structured-data-persistence.md](./adr-structured-data-persistence.md) 与后续缓存索引实现统一管理。
 
 ### 决策：不引入向量数据库，IVectorStore + JSON 持久化
 
@@ -291,7 +340,7 @@ interface IVectorStore {
 
 ---
 
-## 六、远程存储与代理文件
+## 七、远程存储与代理文件
 
 ### 存储后端：S3 兼容对象存储（MinIO）
 
@@ -382,7 +431,7 @@ neko://entityId/varId/fileId Asset Library 间接引用      Phase 6.6
 
 ---
 
-## 七、多用户协作策略
+## 八、多用户协作策略
 
 ### 协作场景
 
@@ -398,7 +447,7 @@ git lfs unlock assets/hero.png
 
 ---
 
-## 八、缩略图 Tooltip（VSCode 原生 TreeView）
+## 九、缩略图 Tooltip（VSCode 原生 TreeView）
 
 **策略：缓存预热 + 同步读取**。tooltip 只检查缓存文件是否存在，有则 `<img>`，没有则纯文本，零异步零闪烁。
 
@@ -415,14 +464,15 @@ item.tooltip = md;
 
 ---
 
-## 九、实施优先级
+## 十、实施优先级
 
 | 优先级 | 任务 |
 |--------|------|
 | **P0** | `IStorageLayout` + `resolveStorageLayout()` + 旧路径迁移 |
 | **P1** | `LibraryDescriptor` + 共享库加载 + AssetRegistry 多源合并 |
-| **P1** | `IAssetGraph` 接口 + JSON 实现 + 各服务被动写入 |
-| **P1** | `IVectorStore` + JSON 实现 + ScriptEmbeddingIndex 适配 |
+| **P1** | `ResourceCacheService` + provider 注册 + 统一资源缓存投影 |
+| **P1** | `IAssetGraph` 语义接口；实现对齐结构化缓存 ADR |
+| **P1** | `IVectorStore` 语义接口；实现对齐结构化缓存 ADR |
 | **P1** | IFileTransport + S3Transport + ProxyService 远程扩展 |
 | **P2** | `.gitignore` + `.gitattributes` 模板自动生成 |
 | **P2** | `neko-diff` CLI（Git diff driver）+ pHash 感知哈希 |

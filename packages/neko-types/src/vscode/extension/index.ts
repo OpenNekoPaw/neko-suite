@@ -55,6 +55,64 @@ export type {
   MediaLibraryLocalResourceRootProviderOptions,
 } from './local-resource-access';
 
+// Resource cache identity, materialization, manifest, and projection orchestration.
+export {
+  JsonResourceCacheManifestStore,
+  VSCodeResourceCacheService,
+  computeStats,
+  resolveResourceCacheQuotaPolicy,
+} from './resource-cache-service';
+export type {
+  JsonResourceCacheManifestStoreOptions,
+  ResourceCacheFsOps,
+  ResourceCacheGcResult,
+  ResourceCacheLogger,
+  ResourceCacheManifestStore,
+  ResourceCacheOperationOptions,
+  ResourceCacheOperationResult,
+  ResourceCacheProjectOptions,
+  ResourceCacheProjectResult,
+  ResourceCacheProvider,
+  ResourceCacheService,
+  ResourceEnsureInput,
+  ResourceEnsureResult,
+  ResourceProbeResult,
+  VSCodeResourceCacheServiceOptions,
+} from './resource-cache-service';
+export {
+  GENERATED_RESOURCE_CACHE_PROVIDER_ID,
+  GeneratedAssetResourceCacheProvider,
+  PREVIEW_RESOURCE_CACHE_PROVIDER_ID,
+  PreviewVariantResourceCacheProvider,
+  THUMBNAIL_RESOURCE_CACHE_PROVIDER_ID,
+  ThumbnailResourceCacheProvider,
+  createFileThumbnailResourceRef,
+  createGeneratedAssetResourceRef,
+  createPreviewAssetResourceRef,
+} from './resource-cache-providers';
+export type {
+  CreateFileThumbnailResourceRefInput,
+  CreateGeneratedAssetResourceRefInput,
+  CreatePreviewAssetResourceRefInput,
+  GeneratedAssetResourceCacheProviderOptions,
+  GeneratedAssetResourceResolverResult,
+  PreviewVariantResourceApi,
+  PreviewVariantResourceCacheProviderOptions,
+  ResourceCacheFileOps,
+  ThumbnailResourceCacheProviderOptions,
+  ThumbnailResourceGenerator,
+  ThumbnailResourceGeneratorResult,
+} from './resource-cache-providers';
+export {
+  LEGACY_RESOURCE_CACHE_PROVIDER_ID,
+  LegacyResourceCacheProvider,
+  readLegacyCachePath,
+} from './legacy-resource-cache-provider';
+export type {
+  LegacyResourceCacheFsOps,
+  LegacyResourceCacheProviderOptions,
+} from './legacy-resource-cache-provider';
+
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {
   CharacterRegistryService,

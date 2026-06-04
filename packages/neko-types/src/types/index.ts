@@ -243,6 +243,9 @@ export * from './document-reading';
 // Project cache/search contracts (Project facts/cache ↔ Agent/Webview search)
 export * from './project-cache-search';
 
+// Resource cache contracts (stable refs, variants, manifests, quota)
+export * from './resource-cache';
+
 // Loading tier types (tiered lazy loading for tools, skills, commands)
 export * from './loading-tier';
 

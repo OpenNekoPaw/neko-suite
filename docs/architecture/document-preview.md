@@ -182,12 +182,20 @@ packages/neko-preview/packages/extension/src/providers/
 ```
 Extension Host
   └─ DocumentPreviewService.generateThumbnail(uri)
-       ├─ 检查缓存（.neko/thumbnails/<hash>.png）
-       ├─ 命中 → 直接返回
-       └─ 未命中 → 调用对应 Provider 渲染首页 → 写入缓存
+       ├─ 构造 ResourceRef(DocumentSourceRef + DocumentLocator)
+       ├─ ResourceCacheService.ensure(ref, { role: 'thumbnail' })
+       ├─ 命中 → ResourceCacheService.project(...) 返回 Webview URI
+       └─ 未命中 → Provider 渲染首页 → 写入 .neko/.cache/resources/documents/
 ```
 
-neko-assets 资产卡片通过 `neko.assets.getThumbnail` 命令获取缩略图，与媒体文件缩略图走同一路径。
+neko-assets 资产卡片和项目搜索结果通过 `visualResource.resource` 或 Host 投影 URI 暴露缩略图；Webview 不直接读取 `.neko/.cache/resources/manifest.json`，也不依赖 Agent/Preview 的私有缓存目录。
+
+文档图片和页面图必须保留结构化定位：
+
+- `DocumentSourceRef`：源文件、格式、文件 identity。
+- `DocumentLocator` / `entryPath`：PDF 页、EPUB 章节、CBZ entry、DOCX text range 等。
+- `ResourceRef`：provider、scope、fingerprint、locator。
+- legacy `cachePath`：仅迁移 metadata，不作为 Canvas/Preview 的主身份。
 
 ---
 
@@ -408,6 +416,8 @@ ReadDocument({ file_path, mode: "manifest" })
 ReadDocument({ file_path, mode: "range", range: { locator } })
 ReadDocument({ file_path, mode: "next", cursor })
 ```
+
+若 Preview/Agent 需要把文档页图、归档 entry 图或缩略图发送到 Canvas，应发送 `ResourceRef` / `ResourceVariantRef`。Canvas 调用 `ResourceCacheService.ensure/project` 后显示；缺失文件可由 document/archive provider 根据 source+locator 重建。没有 workspace 的 Agent scratch 图像只能标记为 `extension-private` / `non-portable`，不能作为跨包稳定缩略图。
 
 格式定位规则：
 
@@ -677,7 +687,7 @@ explorer/context 右键
 
 **LibreOffice 依赖**：PPTX 策略 C 需用户本地安装 LibreOffice；未安装时降级显示「需安装 LibreOffice 以预览 PPTX」。
 
-**缩略图缓存路径**：`.neko/thumbnails/` 目录，按 `<文件路径哈希>_<修改时间>.png` 命名。
+**缩略图缓存路径**：旧实现使用 `.neko/thumbnails/`；新实现应写入 `.neko/.cache/resources/thumbnails/` 或 `.neko/.cache/resources/documents/`，并通过 `ResourceRef` / Host 投影暴露。
 
 **策略 D 提示去重**：同一会话内用户已选「取消」的格式，不再重复弹出通知（`Set<string>` 内存标记）。
 

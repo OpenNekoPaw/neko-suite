@@ -1,5 +1,6 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
 
 export const STORYBOARD_TABLE_V1_SCHEMA_VERSION = 1 as const;
@@ -266,12 +267,18 @@ export interface ProjectStoryboardTableV1ToCanvasOptions {
   readonly resolveImageResourceRef?: (
     context: StoryboardMediaResolverContextV1,
   ) => DocumentArchiveResourceRef | undefined;
+  readonly resolveImageUnifiedResourceRef?: (
+    context: StoryboardMediaResolverContextV1,
+  ) => ResourceRef | undefined;
   readonly resolveFallbackImagePath?: (
     context: StoryboardShotResolverContextV1,
   ) => string | undefined;
   readonly resolveFallbackImageResourceRef?: (
     context: StoryboardShotResolverContextV1,
   ) => DocumentArchiveResourceRef | undefined;
+  readonly resolveFallbackImageUnifiedResourceRef?: (
+    context: StoryboardShotResolverContextV1,
+  ) => ResourceRef | undefined;
 }
 
 export interface StoryboardCutStoryboardShotBaseV1 {
@@ -547,6 +554,7 @@ function resolveCanvasStoryboardReferenceImagePath(
   options: ProjectStoryboardTableV1ToCanvasOptions,
 ): {
   readonly referenceImagePath?: string;
+  readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
 } {
   const mediaRef = selectStoryboardShotImageRef(shot);
@@ -555,10 +563,14 @@ function resolveCanvasStoryboardReferenceImagePath(
   const referenceImageResourceRef = mediaContext
     ? options.resolveImageResourceRef?.(mediaContext)
     : options.resolveFallbackImageResourceRef?.(shotContext);
+  const referenceResourceRef = mediaContext
+    ? options.resolveImageUnifiedResourceRef?.(mediaContext)
+    : options.resolveFallbackImageUnifiedResourceRef?.(shotContext);
 
   if (shot.referenceImagePath) {
     return {
       referenceImagePath: shot.referenceImagePath,
+      ...(referenceResourceRef ? { referenceResourceRef } : {}),
       ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
     };
   }
@@ -569,6 +581,7 @@ function resolveCanvasStoryboardReferenceImagePath(
     options.resolveFallbackImagePath?.(shotContext);
   return {
     ...(imagePath ? { referenceImagePath: imagePath } : {}),
+    ...(referenceResourceRef ? { referenceResourceRef } : {}),
     ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
   };
 }

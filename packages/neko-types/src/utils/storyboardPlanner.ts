@@ -119,6 +119,7 @@ export async function applyStoryboardPayloadToCanvas(
               generationPrompt: shot.generationPrompt,
               visualStyle: shot.visualStyle,
               referenceImagePath: shot.referenceImagePath,
+              referenceResourceRef: shot.referenceResourceRef,
               referenceImageResourceRef: shot.referenceImageResourceRef,
               vfx: shot.vfx ? [...shot.vfx] : undefined,
               // Phase 6.3 — stamp plan provenance when orchestrated
@@ -258,6 +259,7 @@ function normalizeShotPlan(
     generationPrompt: shotPlan.generationPrompt,
     visualStyle: shotPlan.visualStyle,
     referenceImagePath: shotPlan.referenceImagePath,
+    referenceResourceRef: shotPlan.referenceResourceRef,
     referenceImageResourceRef: shotPlan.referenceImageResourceRef,
     vfx: shotPlan.vfx ? [...shotPlan.vfx] : undefined,
   };

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
@@ -23,6 +24,23 @@ import {
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
 } from '../webview-protocol';
+
+const cacheResourceRef = createResourceRef({
+  scope: 'project',
+  provider: 'document-archive',
+  kind: 'document',
+  source: {
+    kind: 'document',
+    document: { filePath: '/books/a.epub', format: 'epub' },
+    filePath: '/books/a.epub',
+  },
+  locator: { kind: 'document', entryPath: 'models/character.glb' },
+  fingerprint: createResourceFingerprint({
+    strategy: 'provider',
+    value: 'book-a:character',
+    providerId: 'document-archive',
+  }),
+});
 
 describe('webview protocol parser', () => {
   it('accepts agent-mode multimedia model selections as explicit model refs', () => {
@@ -630,6 +648,7 @@ describe('webview protocol projectors', () => {
               cachePath: '/tmp/character.glb',
               versionPolicy: 'versioned-export',
             },
+            resourceRef: cacheResourceRef,
           },
         },
       }),
@@ -649,6 +668,7 @@ describe('webview protocol projectors', () => {
             cachePath: '/tmp/character.glb',
             versionPolicy: 'versioned-export',
           },
+          resourceRef: cacheResourceRef,
         },
       },
     });
@@ -741,6 +761,21 @@ describe('webview protocol projectors', () => {
         payload: {
           kind: 'assetBatch',
           assets: [{ path: '/repo/a.bin', mediaType: 'unknown' }],
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            path: '/repo/frame.png',
+            mediaType: 'image',
+            resourceRef: { provider: 'document-archive' },
+          },
         },
       }),
     ).toBeNull();

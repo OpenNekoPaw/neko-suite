@@ -4,11 +4,13 @@ import {
   type DocumentImageInfo,
   type DocumentLocator,
   type DocumentSourceRef,
+  type ResourceRef,
   type Tool,
   type ToolResult,
 } from '@neko/shared';
 import type { Platform } from '@neko/platform';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
+import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
 import {
   MAX_READ_IMAGE_JPEG_QUALITY,
   MAX_READ_IMAGE_LONG_EDGE,
@@ -26,12 +28,17 @@ export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 16;
 export interface ReadDocumentImageToolDeps extends ReadImageToolDeps {
   readonly reader: IDocumentReaderService;
   readonly platform?: Platform;
+  readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
 
 interface SelectedDocumentImage {
   readonly info: DocumentImageInfo;
   readonly index: number;
 }
+
+type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
+  readonly cacheResourceRef?: ResourceRef;
+};
 
 export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): Tool {
   return createTool({
@@ -192,10 +199,18 @@ export async function executeReadDocumentImage(
         source: typeof source === 'string' ? { filePath: source } : source,
         mode,
         analysis,
-        images: extractImagesFromReadImageData(readImageResult.data).map((image, index) => ({
-          ...image,
-          documentImage: selected[index]?.info,
-        })),
+        images: extractImagesFromReadImageData(readImageResult.data).map((image, index) => {
+          const documentImage = selected[index]?.info
+            ? withCacheResourceRef(selected[index].info, deps.resolveResourceScope)
+            : undefined;
+          return {
+            ...image,
+            ...(documentImage ? { documentImage } : {}),
+            ...(documentImage?.cacheResourceRef
+              ? { cacheResourceRef: documentImage.cacheResourceRef }
+              : {}),
+          };
+        }),
         imageCount: selected.length,
       },
     };
@@ -258,6 +273,26 @@ async function selectImagesFromDocument(
 
 function extractImagesFromReadImageData(data: unknown): readonly Record<string, unknown>[] {
   return isRecord(data) && Array.isArray(data['images']) ? data['images'].filter(isRecord) : [];
+}
+
+function withCacheResourceRef(
+  image: DocumentImageInfo,
+  resolveResourceScope: (() => ResourceRef['scope']) | undefined,
+): DocumentImageInfoWithCacheResourceRef {
+  if (!image.resourceRef) return image;
+  const legacyRef = {
+    ...image.resourceRef,
+    ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
+    ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
+  };
+  return {
+    ...image,
+    resourceRef: legacyRef,
+    cacheResourceRef: createDocumentResourceRefFromArchiveRef(
+      legacyRef,
+      resolveResourceScope?.() ?? 'project',
+    ),
+  };
 }
 
 function readDocumentSource(value: unknown): DocumentSourceRef | null {

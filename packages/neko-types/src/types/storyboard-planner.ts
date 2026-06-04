@@ -1,6 +1,7 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { NekoStoryScriptIndex } from './extension-api';
+import type { ResourceRef } from './resource-cache';
 
 export type StoryboardImportMode = 'mechanical' | 'semantic';
 
@@ -21,6 +22,7 @@ export interface StoryShotPlan {
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
+  readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
   readonly vfx?: readonly string[];
 }
@@ -50,6 +52,7 @@ export interface CanvasStoryboardShotPlan {
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
+  readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
   readonly vfx?: readonly string[];
 }

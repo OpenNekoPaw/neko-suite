@@ -1,4 +1,9 @@
-import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from '@neko/shared';
+import {
+  isDocumentArchiveResourceRef,
+  isResourceRef,
+  type DocumentArchiveResourceRef,
+  type ResourceRef,
+} from '@neko/shared';
 
 export interface ImportedGeneratedAssetPayload {
   path: string;
@@ -6,6 +11,7 @@ export interface ImportedGeneratedAssetPayload {
   name: string;
   originalPath?: string;
   documentResourceRef?: DocumentArchiveResourceRef;
+  resourceRef?: ResourceRef;
 }
 
 export function normalizeImportedGeneratedAsset(
@@ -34,6 +40,7 @@ export function normalizeImportedGeneratedAsset(
     ...(isDocumentArchiveResourceRef(asset.documentResourceRef)
       ? { documentResourceRef: asset.documentResourceRef }
       : {}),
+    ...(isResourceRef(asset.resourceRef) ? { resourceRef: asset.resourceRef } : {}),
   };
 }
 

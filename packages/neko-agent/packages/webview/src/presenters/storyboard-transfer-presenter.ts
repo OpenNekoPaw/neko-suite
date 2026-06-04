@@ -4,6 +4,7 @@ import {
   projectStoryboardTableV1ToCutPayload,
   type CanvasStoryboardPayload,
   type DocumentArchiveResourceRef,
+  type ResourceRef,
   type ShotScale,
   type StoryboardMediaRefV1,
   type StoryboardImportMode,
@@ -155,6 +156,8 @@ export function projectStoryboardTableTransferPayload(
         resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
         resolveImageResourceRef: ({ mediaRef }) =>
           resolveStoryboardMediaResourceRef(data, mediaRef),
+        resolveImageUnifiedResourceRef: ({ mediaRef }) =>
+          resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
       }),
     };
   }
@@ -203,6 +206,13 @@ function resolveStoryboardMediaResourceRef(
   mediaRef: StoryboardMediaRefV1,
 ): DocumentArchiveResourceRef | undefined {
   return resolveStoryboardMedia(data, mediaRef)?.resourceRef;
+}
+
+function resolveStoryboardMediaUnifiedResourceRef(
+  data: StoryboardTableRichData,
+  mediaRef: StoryboardMediaRefV1,
+): ResourceRef | undefined {
+  return resolveStoryboardMedia(data, mediaRef)?.cacheResourceRef;
 }
 
 function resolveStoryboardMedia(
@@ -316,6 +326,7 @@ function projectStoryboardTableToCanvasPayload(
         sceneTags: compactStrings([media?.caption, media?.role]),
         ...(referenceImagePath ? { referenceImagePath } : {}),
         ...(media?.resourceRef ? { referenceImageResourceRef: media.resourceRef } : {}),
+        ...(media?.cacheResourceRef ? { referenceResourceRef: media.cacheResourceRef } : {}),
       };
     });
 
@@ -669,6 +680,8 @@ function projectCompositeMediaAssetRef(
       media.label ??
       section.heading ??
       `section-${section.index + 1}-asset-${mediaIndex + 1}`,
+    ...(media.resourceRef ? { documentResourceRef: media.resourceRef } : {}),
+    ...(media.cacheResourceRef ? { resourceRef: media.cacheResourceRef } : {}),
   };
 }
 

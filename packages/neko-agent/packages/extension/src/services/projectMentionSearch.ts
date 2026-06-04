@@ -63,6 +63,7 @@ function projectSearchItemToMentionCandidate(
   const type = mentionTypeForProjectItem(item);
   const source = mentionSourceForProjectItem(item);
   const mediaType = readMentionMediaType(item.metadata?.['mediaType']);
+  const thumbnailUri = item.visualResource?.projectedUri ?? item.thumbnailUri;
   const entityType =
     readString(item.source.metadata?.['entityKind']) ??
     readString(item.metadata?.['entityType']) ??
@@ -79,7 +80,7 @@ function projectSearchItemToMentionCandidate(
     ...(item.filePath ? { filePath: item.filePath } : {}),
     ...(mediaType ? { mediaType } : {}),
     ...(entityType ? { entityType } : {}),
-    ...(item.thumbnailUri ? { thumbnailUri: item.thumbnailUri } : {}),
+    ...(thumbnailUri ? { thumbnailUri } : {}),
     navigationData: stringifyNavigationData({
       ...item.navigationData,
       ...(type === 'asset' ? { assetId: assetIdForProjectItem(item) } : {}),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   projectStoryboardScenesAssetBatch,
   projectStoryboardScenesCutTimelinePayload,
@@ -10,6 +11,26 @@ import {
   projectStoryboardTableTransferPayload,
 } from '../storyboard-transfer-presenter';
 import type { StoryboardTableRichData } from '../composite-content-presenter';
+
+const cacheResourceRef = createResourceRef({
+  scope: 'project',
+  provider: 'document-archive',
+  kind: 'document',
+  source: {
+    kind: 'document',
+    document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+    filePath: '${BOOKS}/comic.epub',
+  },
+  locator: {
+    kind: 'document',
+    entryPath: 'image/panel-1.jpg',
+  },
+  fingerprint: createResourceFingerprint({
+    strategy: 'provider',
+    value: 'comic:panel-1',
+    providerId: 'document-archive',
+  }),
+});
 
 describe('storyboard transfer presenter', () => {
   it('projects scene-grouped storyboard content to a canvas storyboard payload', () => {
@@ -317,6 +338,7 @@ describe('storyboard transfer presenter', () => {
                 cachePath: '/cache/panel-1.jpg',
                 versionPolicy: 'versioned-export',
               },
+              cacheResourceRef,
             },
           ],
           diagnostics: [],
@@ -340,11 +362,26 @@ describe('storyboard transfer presenter', () => {
                   cachePath: '/cache/panel-1.jpg',
                   versionPolicy: 'versioned-export',
                 },
+                referenceResourceRef: cacheResourceRef,
               },
             ],
           },
         ],
       },
+    });
+
+    expect(projectStoryboardTableAssetBatch(data)).toMatchObject({
+      kind: 'assetBatch',
+      assets: [
+        {
+          path: '/cache/panel-1.jpg',
+          documentResourceRef: {
+            kind: 'document-entry',
+            entryPath: 'image/panel-1.jpg',
+          },
+          resourceRef: cacheResourceRef,
+        },
+      ],
     });
   });
 

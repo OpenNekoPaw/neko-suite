@@ -6,8 +6,10 @@ import {
   type ToolResult,
 } from '@neko/shared';
 import { isDocumentUrl } from '@neko/platform/document';
+import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
 import type {
   DocumentBatchCursor,
+  DocumentArchiveResourceRef,
   DocumentImageInfo,
   DocumentLocator,
   DocumentManifest,
@@ -15,6 +17,7 @@ import type {
   DocumentReadResult,
   DocumentRegion,
   DocumentSourceRef,
+  ResourceRef,
 } from '@neko/shared';
 import type { DocumentContent, IDocumentReaderService } from '../services/DocumentReaderService';
 
@@ -25,6 +28,7 @@ export const MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT = 500;
 
 export interface ReadDocumentToolDeps {
   readonly reader: IDocumentReaderService;
+  readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
 
 interface ReadDocumentToolData {
@@ -40,6 +44,10 @@ interface ReadDocumentToolData {
   readonly imagePathCount?: number;
   readonly imagePathsTruncated?: boolean;
 }
+
+type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
+  readonly cacheResourceRef?: import('@neko/shared').ResourceRef;
+};
 
 type ReadDocumentMode = 'content' | 'manifest' | 'range' | 'next';
 
@@ -116,13 +124,14 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
       },
       required: ['file_path'],
     },
-    execute: async (args) => executeReadDocument(deps.reader, args),
+    execute: async (args) => executeReadDocument(deps.reader, args, deps.resolveResourceScope),
   });
 }
 
 async function executeReadDocument(
   reader: IDocumentReaderService,
   args: Record<string, unknown>,
+  resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<ToolResult> {
   const filePath = readNonEmptyString(args['file_path']);
   if (!filePath) {
@@ -190,6 +199,7 @@ async function executeReadDocument(
             includeManifest,
             includeImagePaths,
             imagePathLimit,
+            resolveResourceScope,
           },
         ),
       };
@@ -207,6 +217,7 @@ async function executeReadDocument(
           includeManifest,
           includeImagePaths,
           imagePathLimit,
+          resolveResourceScope,
         }),
       };
     }
@@ -221,6 +232,7 @@ async function executeReadDocument(
         includeMetadata,
         includeImagePaths,
         imagePathLimit,
+        resolveResourceScope,
       }),
     };
   } catch (error) {
@@ -238,6 +250,7 @@ function formatDocumentReadResult(
     readonly includeManifest: boolean;
     readonly includeImagePaths: boolean;
     readonly imagePathLimit: number;
+    readonly resolveResourceScope?: () => ResourceRef['scope'];
   },
 ): DocumentReadResult {
   const imagePaths = result.imagePaths ?? [];
@@ -248,6 +261,7 @@ function formatDocumentReadResult(
     result.imageInfo,
     visibleImagePaths,
     options.imagePathLimit,
+    options.resolveResourceScope,
   );
 
   const metadata =
@@ -287,15 +301,45 @@ function filterImageInfoByVisiblePaths(
   imageInfo: readonly DocumentImageInfo[] | undefined,
   visibleImagePaths: readonly string[],
   imagePathLimit: number,
-): readonly DocumentImageInfo[] {
+  resolveResourceScope: (() => ResourceRef['scope']) | undefined,
+): readonly DocumentImageInfoWithCacheResourceRef[] {
   if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
     return [];
   }
   const visiblePathSet = new Set(visibleImagePaths);
   const byPath = imageInfo.filter((image) => visiblePathSet.has(image.path));
-  return byPath.length > 0
-    ? byPath.slice(0, visibleImagePaths.length)
-    : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
+  const visible =
+    byPath.length > 0
+      ? byPath.slice(0, visibleImagePaths.length)
+      : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
+  return visible.map((image) => withCacheResourceRef(image, resolveResourceScope));
+}
+
+function withCacheResourceRef(
+  image: DocumentImageInfo,
+  resolveResourceScope: (() => ResourceRef['scope']) | undefined,
+): DocumentImageInfoWithCacheResourceRef {
+  const legacyRef = normalizeLegacyResourceRef(image);
+  if (!legacyRef) return image;
+  return {
+    ...image,
+    resourceRef: legacyRef,
+    cacheResourceRef: createDocumentResourceRefFromArchiveRef(
+      legacyRef,
+      resolveResourceScope?.() ?? 'project',
+    ),
+  };
+}
+
+function normalizeLegacyResourceRef(
+  image: DocumentImageInfo,
+): DocumentArchiveResourceRef | undefined {
+  if (!image.resourceRef) return undefined;
+  return {
+    ...image.resourceRef,
+    ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
+    ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
+  };
 }
 
 function createDefaultRangeFromManifest(
@@ -354,6 +398,7 @@ function formatReadDocumentData(input: {
   readonly includeMetadata: boolean;
   readonly includeImagePaths: boolean;
   readonly imagePathLimit: number;
+  readonly resolveResourceScope?: () => ResourceRef['scope'];
 }): ReadDocumentToolData {
   const text = input.content.text ?? '';
   const truncatedText = truncateText(text, input.maxChars);
@@ -366,6 +411,7 @@ function formatReadDocumentData(input: {
     input.content.imageInfo,
     visibleImagePaths,
     input.imagePathLimit,
+    input.resolveResourceScope,
   );
 
   return {

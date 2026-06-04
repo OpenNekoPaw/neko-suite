@@ -48,6 +48,11 @@ describe('projectMentionSearch', () => {
           searchText: '橘猫参考图 小橘',
           freshness: 'fresh',
           metadata: { mediaType: 'image', entityType: 'character' },
+          visualResource: {
+            projectedUri: 'webview:/workspace/.neko/.cache/resources/thumbnails/asset-1.jpg',
+            status: 'ready',
+            alt: '橘猫参考图',
+          },
         },
         {
           id: 'entity-requirement:req-1',
@@ -114,6 +119,7 @@ describe('projectMentionSearch', () => {
           label: '橘猫参考图',
           source: 'asset-library',
           mediaType: 'image',
+          thumbnailUri: 'webview:/workspace/.neko/.cache/resources/thumbnails/asset-1.jpg',
           entityType: 'character',
           navigationData: expect.objectContaining({
             assetId: 'asset-1',

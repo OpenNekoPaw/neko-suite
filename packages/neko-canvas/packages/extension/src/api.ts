@@ -32,6 +32,7 @@ import type {
   ProjectionWriteBackResult,
   ProjectedCanvasData,
   ProjectedCanvasSource,
+  ResourceRef,
 } from '@neko/shared';
 
 // Types
@@ -118,6 +119,7 @@ export interface NekoCanvasAPI {
     type?: 'image' | 'video' | 'audio' | 'model';
     name?: string;
     documentResourceRef?: DocumentArchiveResourceRef;
+    resourceRef?: ResourceRef;
   }): Promise<boolean>;
 
   /**

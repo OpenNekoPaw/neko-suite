@@ -1,6 +1,12 @@
 import type { ToolCall } from '@/components/types';
-import type { DocumentArchiveResourceRef, DocumentLocator, DocumentSourceRef } from '@neko/shared';
+import type {
+  DocumentArchiveResourceRef,
+  DocumentLocator,
+  DocumentSourceRef,
+  ResourceRef,
+} from '@neko/shared';
 import {
+  isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
   parseDocumentSourceRef,
@@ -37,6 +43,7 @@ export interface DocumentImageThumbnailProjection {
   mimeType?: string;
   locator?: DocumentLocator;
   resourceRef?: DocumentArchiveResourceRef;
+  cacheResourceRef?: ResourceRef;
   label: string;
   referenceJson: string;
 }
@@ -140,6 +147,9 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
     const byteSize = readFiniteNumber(info, 'byteSize');
     const mimeType = readString(info, 'mimeType');
     const resourceRef = parseDocumentArchiveResourceRef(info?.resourceRef);
+    const cacheResourceRef = isResourceRef(info?.cacheResourceRef)
+      ? info.cacheResourceRef
+      : undefined;
     thumbnails.push({
       id: `${path}:${index}`,
       index,
@@ -153,6 +163,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
       ...(mimeType ? { mimeType } : {}),
       ...(locator ? { locator } : {}),
       ...(resourceRef ? { resourceRef } : {}),
+      ...(cacheResourceRef ? { cacheResourceRef } : {}),
       label: formatDocumentThumbnailLabel(locator, index),
       referenceJson: formatDocumentImageReferenceJson({
         filePath,
@@ -166,6 +177,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
         mimeType,
         locator,
         resourceRef,
+        cacheResourceRef,
       }),
     });
   }
@@ -205,6 +217,11 @@ export function extractReadDocumentImageThumbnails(
     const resourceRef =
       parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
       parseDocumentArchiveResourceRef(image.resourceRef);
+    const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
+      ? documentImage.cacheResourceRef
+      : isResourceRef(image.cacheResourceRef)
+        ? image.cacheResourceRef
+        : undefined;
     const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
 
     return [
@@ -221,6 +238,7 @@ export function extractReadDocumentImageThumbnails(
         ...(mimeType ? { mimeType } : {}),
         ...(locator ? { locator } : {}),
         ...(resourceRef ? { resourceRef } : {}),
+        ...(cacheResourceRef ? { cacheResourceRef } : {}),
         label,
         referenceJson: formatDocumentImageReferenceJson({
           filePath,
@@ -234,6 +252,7 @@ export function extractReadDocumentImageThumbnails(
           mimeType,
           locator,
           resourceRef,
+          cacheResourceRef,
         }),
       },
     ];
@@ -283,6 +302,11 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
       const resourceRef =
         parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
         parseDocumentArchiveResourceRef(image.resourceRef);
+      const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
+        ? documentImage.cacheResourceRef
+        : isResourceRef(image.cacheResourceRef)
+          ? image.cacheResourceRef
+          : undefined;
       const thumbnailFilePath = filePath ?? path;
       const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
 
@@ -300,6 +324,7 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
           ...(mimeType ? { mimeType } : {}),
           ...(locator ? { locator } : {}),
           ...(resourceRef ? { resourceRef } : {}),
+          ...(cacheResourceRef ? { cacheResourceRef } : {}),
           label,
           referenceJson: formatDocumentImageReferenceJson({
             filePath: thumbnailFilePath,
@@ -313,6 +338,7 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
             mimeType,
             locator,
             resourceRef,
+            cacheResourceRef,
           }),
         },
       ];
@@ -380,6 +406,7 @@ function formatDocumentImageReferenceJson(input: {
   readonly mimeType?: string;
   readonly locator?: DocumentLocator;
   readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
 }): string {
   return JSON.stringify(
     {
@@ -389,6 +416,7 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.source ? { source: input.source } : {}),
         ...(input.locator ? { locator: input.locator } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
+        ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
       },
       image: {
         path: input.path,
@@ -399,6 +427,7 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
+        ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
       },
     },
     null,

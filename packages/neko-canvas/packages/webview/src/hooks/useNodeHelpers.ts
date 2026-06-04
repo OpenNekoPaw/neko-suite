@@ -13,6 +13,7 @@ import type {
   ContainerChildPlacement,
   DocumentArchiveResourceRef,
   NkProjectType,
+  ResourceRef,
 } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
 import { t } from '../i18n';
@@ -39,6 +40,7 @@ export interface UseNodeHelpersReturn {
     name?: string,
     options?: {
       documentResourceRef?: DocumentArchiveResourceRef;
+      resourceRef?: ResourceRef;
       runtimeAssetPath?: string;
     },
   ) => void;
@@ -100,10 +102,12 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
       name?: string,
       options?: {
         documentResourceRef?: DocumentArchiveResourceRef;
+        resourceRef?: ResourceRef;
         runtimeAssetPath?: string;
       },
     ) => {
       const linkedDocumentResource = options?.documentResourceRef;
+      const linkedResource = options?.resourceRef;
       const runtimePath = options?.runtimeAssetPath ?? (linkedDocumentResource ? uri : undefined);
       addNode(
         buildCanvasNode({
@@ -113,6 +117,7 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
           data: {
             assetPath: linkedDocumentResource ? '' : uri || '',
             ...(linkedDocumentResource ? { documentResourceRef: linkedDocumentResource } : {}),
+            ...(linkedResource ? { resourceRef: linkedResource } : {}),
             ...(runtimePath ? { runtimeAssetPath: runtimePath } : {}),
             mediaType,
             thumbnailPath: undefined,

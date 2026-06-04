@@ -110,7 +110,7 @@ agent 是整个 neko-suite 里**最可能单独安装**的插件（core 包含 a
 只安装 neko-agent：
   ✅ 读 .fountain → 解析场景 → 批量生图
   ✅ Chat 内分场景展示分镜缩略图
-  ✅ 保存到 .neko/generated/ 目录
+  ✅ 保存到 .neko/.cache/generated/ 目录，并通过 ResourceRef 暴露可移植派生资源身份
   ✅ 完整闭环，不依赖其他插件
 
 同时安装 canvas / cut / audio：
@@ -207,7 +207,7 @@ type GeneratedAssetType =
 interface BaseGeneratedAsset {
   type:        GeneratedAssetType
   id:          string        // nanoid，全局唯一
-  path:        string        // 绝对路径：/workspace/.neko/generated/...
+  path:        string        // 兼容路径：历史上可能是 /workspace/.neko/generated/...；新实现优先 .neko/.cache/generated/...
   mimeType:    string
   generatedAt: string        // ISO 8601
   prompt?:     string
@@ -263,7 +263,18 @@ type GeneratedAsset =
 ```
 <workspaceRoot>/
   .neko/
-    generated/
+    .cache/
+      generated/
+        image/
+        audio/
+        video/
+        storyboard/
+      resources/
+        manifest.json
+        generated/
+        thumbnails/
+        previews/
+    generated/             ← legacy 兼容读取路径；新实现优先写 .neko/.cache/generated/
       storyboard/
         scene-01/
           shot-001.png
@@ -277,6 +288,23 @@ type GeneratedAsset =
       index.json            ← GeneratedAsset[] 目录，neko-assets 可接管
 ```
 
+### 资源缓存修订（2026-06）
+
+跨插件传递不能只依赖 `GeneratedAsset.path` 或文档图片的绝对 `cachePath`。这些路径可以在所属 extension 的 Webview 中显示，但对 Canvas/Preview 来说可能是另一个扩展的 private cache，无法授权，也无法知道缺失时如何重建。
+
+新增统一规则：
+
+- Agent 生成/读取的项目绑定图片应同时携带 `ResourceRef` 或 `ResourceVariantRef`。
+- 文档图片使用 `DocumentSourceRef + DocumentLocator/entryPath` 生成 `document-archive` resource ref；Canvas 根据 ref 调 `ResourceCacheService.ensure/project`。
+- 分镜 shot 的参考图字段使用 `referenceResourceRef`；同一图片可被多个 shot 重复引用，但每个 shot 都显式绑定 ref，不按顺序猜图。
+- `GeneratedAsset` 可通过 `generated-asset` provider 映射到 resource ref，用于缩略图、预览和 Canvas 导入。
+- 没有 workspace 时，Agent 的 `globalStorageUri/document-image-cache` 图像标记为 `extension-private` / `non-portable`，仍可在 Agent Chat 显示，但发送到 Canvas 时必须重新导入/复制/重建到项目资源缓存。
+
+这条规则解决两个常见问题：
+
+1. “分镜表连续使用同一张图”：重复引用同一个 ref 是合法的，不再按图片数组顺序错绑。
+2. “有的分镜没有图”：没有 ref 的 shot 不自动沿用上一张图，Canvas 显示 missing/unresolved 状态。
+
 ### 数据流
 
 ```
@@ -284,7 +312,7 @@ platform.media.generateImage()
   → AI 服务返回二进制
   → fs.writeFile(localPath, binary)       ← 唯一写盘点
   → 构造 GeneratedImage JSON
-  → 追加到 .neko/generated/index.json
+  → 追加到 .neko/.cache/generated/index.json
   → return GeneratedImage                 ← 只返回 JSON，不含二进制
        │
        ├─ Agent Chat 展示
@@ -293,12 +321,12 @@ platform.media.generateImage()
        │    webview: <img src={webviewUri} />
        │
        ├─ Canvas ShotNode
-       │    canvasApi.nodes.update(id, { generatedAsset: GeneratedImage })
-       │    canvas extension: path → asWebviewUri
+       │    canvasApi.nodes.update(id, { generatedAsset, resourceRef })
+       │    canvas extension: ResourceCacheService.project(resourceRef)
        │    webview: <img src={webviewUri} />
        │
        └─ neko-cut / neko-engine 导出
-            直接使用 asset.path（原始文件，无 base64 转换）
+            直接使用 asset.path（原始文件，无 base64 转换；导出 intent 不从 preview 代理反推身份）
 ```
 
 ### Webview 访问约束
@@ -363,6 +391,8 @@ GeneratedAsset 已存磁盘，用户可从 VS Code 文件资源管理器拖入�
 ```
 
 传递的是 `GeneratedAsset` JSON，不是二进制。接收方从 `path` 加载文件。
+
+若 payload 含 `resourceRef`，接收方优先使用 `ResourceCacheService` 物化/投影；`path` 只作为兼容与导出原始文件线索。
 
 ### 路径 3：Extension Host 代理 DnD（可选增强）
 
@@ -506,7 +536,7 @@ Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
 ```
 AI 生成音视频
   ↓
-media-file-downloader 下载到 .neko/generated/（ADR-4）
+media-file-downloader 下载到 .neko/.cache/generated/（ADR-4）
   ↓
 extension host 调用 EngineClient（通过 neko-preview API 或直接 dispatch）：
   ├─ probe(filePath)             → 时长、分辨率、编解码信息
@@ -519,7 +549,7 @@ extension host 构造元数据 JSON：
     duration: 12.5,
     resolution: { width: 1920, height: 1080 },
     waveformPeaks: Float32Array,
-    localPath: "/workspace/.neko/generated/video/scene-03.mp4"
+    localPath: "/workspace/.neko/.cache/generated/video/scene-03.mp4"
   }
   ↓
 postMessage 传给 webview（纯 JSON，无二进制）
@@ -846,7 +876,7 @@ neko-story webview:  消费 DataTableData → ScriptTableView 格式兼容
 ```
 agent extension host:
   1. AI 生成分镜 → 构造 StoryboardData JSON
-  2. 写入 .neko/generated/index.json（ADR-4）
+  2. 写入 .neko/.cache/generated/index.json（ADR-4）
   3. postMessage → agent chat webview 渲染 StoryboardMessage
 
 用户点击 [在 Canvas 中编辑 ↗]:
@@ -1115,7 +1145,7 @@ RichContentRegistry.get(kind).component 渲染
 - ADR-5 P1: Extension Host DragDropBroker 代理拖拽（~100 行）
 - ADR-4: agentStreamProcessor 构造 GeneratedAsset JSON 并写入 index.json
 - ADR-6 §6.2: RichContentBlock 注册表模式（kind 扩展点）
-- 磁盘空间管理：`.neko/generated/` 清理策略（TTL / LRU / 手动）
+- 磁盘空间管理：`.neko/.cache/generated/` 与 `.neko/.cache/resources/` 清理策略（TTL / LRU / 手动）
 
 ---
 

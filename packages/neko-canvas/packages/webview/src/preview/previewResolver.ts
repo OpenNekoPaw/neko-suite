@@ -32,7 +32,8 @@ export class WebviewPreviewResolver implements PreviewResolver {
 
     const sourcePath = request.source.asset?.path ?? request.source.asset?.uri;
     const documentResourceRef = request.source.metadata?.['documentResourceRef'];
-    if (!sourcePath && !documentResourceRef) {
+    const resourceRef = request.source.metadata?.['resourceRef'];
+    if (!sourcePath && !documentResourceRef && !resourceRef) {
       return createFallbackVariant(request, 'No preview source');
     }
 
@@ -42,6 +43,7 @@ export class WebviewPreviewResolver implements PreviewResolver {
       role: request.role ?? request.source.role,
       mediaType: request.source.asset?.mediaType,
       documentResourceRef,
+      resourceRef,
     });
 
     return {
@@ -102,6 +104,7 @@ interface RuntimeVariantInput {
   role: CanvasPreviewRole;
   mediaType?: string;
   documentResourceRef?: unknown;
+  resourceRef?: unknown;
 }
 
 interface RuntimeVariantRequest {
@@ -110,7 +113,7 @@ interface RuntimeVariantRequest {
 }
 
 function createRuntimeVariantRequest(
-  { sourceId, assetPath, role, mediaType, documentResourceRef }: RuntimeVariantInput,
+  { sourceId, assetPath, role, mediaType, documentResourceRef, resourceRef }: RuntimeVariantInput,
   onSettled: () => void,
 ): RuntimeVariantRequest {
   const vscode = getGlobalVSCodeApi();
@@ -163,6 +166,7 @@ function createRuntimeVariantRequest(
         mediaType,
         ...(assetPath ? { assetPath } : {}),
         ...(documentResourceRef ? { documentResourceRef } : {}),
+        ...(resourceRef ? { resourceRef } : {}),
       });
     } catch {
       settle(undefined);

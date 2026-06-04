@@ -18,6 +18,7 @@ import type {
   SkillSummary,
 } from '@neko/shared';
 import {
+  isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
   parseDocumentSourceRef,
@@ -1613,6 +1614,7 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
     value.documentResourceRef === undefined
       ? undefined
       : parseDocumentArchiveResourceRef(value.documentResourceRef);
+  const resourceRef = value.resourceRef === undefined ? undefined : value.resourceRef;
   const target = parseOptionalPluginTransferTargetRef(value.target);
   const provenance = parseOptionalPluginTransferProvenance(value.provenance);
   if (
@@ -1620,6 +1622,7 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
     mediaType === null ||
     name === null ||
     (value.documentResourceRef !== undefined && documentResourceRef === undefined) ||
+    (value.resourceRef !== undefined && !isResourceRef(resourceRef)) ||
     target === null ||
     provenance === null
   ) {
@@ -1627,6 +1630,7 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   }
   const suffix = {
     ...(documentResourceRef !== undefined ? { documentResourceRef } : {}),
+    ...(isResourceRef(resourceRef) ? { resourceRef } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(provenance !== undefined ? { provenance } : {}),
   };

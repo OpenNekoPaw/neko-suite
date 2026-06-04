@@ -17,6 +17,7 @@ import {
   getBuiltInCanvasNodePresetMetadata,
   getDefaultCanvasNodePresetName,
   isDocumentArchiveResourceRef,
+  isResourceRef,
   parseDocumentResourceStatus,
 } from '@neko/shared';
 import {
@@ -176,6 +177,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             documentResourceRef: isDocumentArchiveResourceRef(data.documentResourceRef)
               ? data.documentResourceRef
               : undefined,
+            resourceRef: isResourceRef(data.resourceRef) ? data.resourceRef : undefined,
             documentResourceStatus: parseDocumentResourceStatus(data.documentResourceStatus),
             runtimeAssetPath: asString(data.runtimeAssetPath) || undefined,
             thumbnailPath: asString(data.thumbnailPath) || undefined,
@@ -312,6 +314,9 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             referenceImagePath: asString(data.referenceImagePath) || undefined,
             referenceImageResourceRef: isDocumentArchiveResourceRef(data.referenceImageResourceRef)
               ? data.referenceImageResourceRef
+              : undefined,
+            referenceResourceRef: isResourceRef(data.referenceResourceRef)
+              ? data.referenceResourceRef
               : undefined,
             runtimeReferenceImagePath: asString(data.runtimeReferenceImagePath) || undefined,
             generatedImage: asString(data.generatedImage) || undefined,

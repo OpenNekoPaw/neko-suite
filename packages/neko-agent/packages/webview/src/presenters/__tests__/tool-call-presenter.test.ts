@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import { projectToolCallDisplayState } from '../tool-call-presenter';
+
+const cacheResourceRef = createResourceRef({
+  scope: 'project',
+  provider: 'document-archive',
+  kind: 'document',
+  source: {
+    kind: 'document',
+    document: { filePath: '/books/a.epub', format: 'epub' },
+    filePath: '/books/a.epub',
+  },
+  locator: {
+    kind: 'document',
+    locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+    entryPath: 'image/Page_1.jpg',
+  },
+  fingerprint: createResourceFingerprint({
+    strategy: 'provider',
+    value: 'book-a:Page_1',
+    providerId: 'document-archive',
+  }),
+});
 
 describe('tool-call-presenter', () => {
   it('does not project ReadDocument image metadata into thumbnail view models', () => {
@@ -85,6 +107,7 @@ describe('tool-call-presenter', () => {
                   cachePath: '/tmp/page-1.jpg',
                   versionPolicy: 'versioned-export',
                 },
+                cacheResourceRef,
               },
             },
           ],
@@ -115,6 +138,7 @@ describe('tool-call-presenter', () => {
           cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
+        cacheResourceRef,
       }),
     ]);
     expect(projection.copyText).toBeNull();
@@ -137,6 +161,7 @@ describe('tool-call-presenter', () => {
           cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
+        cacheResourceRef,
       },
       image: {
         path: '/tmp/page-1.jpg',
@@ -153,6 +178,7 @@ describe('tool-call-presenter', () => {
           cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
+        cacheResourceRef,
       },
     });
   });

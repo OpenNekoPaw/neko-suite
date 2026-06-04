@@ -3,6 +3,7 @@ import type {
   CanvasAgentTargetRef,
   CanvasStoryboardPayload,
   DocumentArchiveResourceRef,
+  ResourceRef,
 } from '@neko/shared';
 
 export const NEKO_PLUGIN_EXTENSION_IDS = {
@@ -45,6 +46,7 @@ export interface PluginTransferAssetRef {
    * but consumers should prefer this top-level asset field when present.
    */
   readonly documentResourceRef?: DocumentArchiveResourceRef;
+  readonly resourceRef?: ResourceRef;
   readonly target?: PluginTransferTargetRef;
   readonly provenance?: PluginTransferProvenance;
 }
@@ -128,6 +130,7 @@ export interface PluginTransferCanvasImportAssetPayload {
   readonly type?: PluginTransferMediaType;
   readonly name?: string;
   readonly documentResourceRef?: DocumentArchiveResourceRef;
+  readonly resourceRef?: ResourceRef;
   readonly target?: PluginTransferTargetRef;
   readonly provenance?: PluginTransferProvenance;
 }

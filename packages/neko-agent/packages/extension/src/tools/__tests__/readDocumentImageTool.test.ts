@@ -56,6 +56,12 @@ function createReader(overrides: Partial<IDocumentReaderService> = {}): IDocumen
           mimeType: 'image/png',
           byteSize: PNG_1X1.byteLength,
           locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+            entryPath: 'OPS/page-1.png',
+            cachePath: '/cache/page-1.png',
+          },
         },
         {
           path: '/cache/page-2.png',
@@ -64,6 +70,12 @@ function createReader(overrides: Partial<IDocumentReaderService> = {}): IDocumen
           mimeType: 'image/png',
           byteSize: PNG_1X1.byteLength,
           locator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+            entryPath: 'OPS/page-2.png',
+            cachePath: '/cache/page-2.png',
+          },
         },
       ],
       returnedTextChars: 0,
@@ -120,6 +132,46 @@ describe('createReadDocumentImageTool', () => {
             path: '/cache/page-2.png',
             documentImage: expect.objectContaining({
               locator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
+              cacheResourceRef: expect.objectContaining({
+                provider: 'document-archive',
+                kind: 'document',
+                locator: expect.objectContaining({ entryPath: 'OPS/page-2.png' }),
+              }),
+            }),
+            cacheResourceRef: expect.objectContaining({
+              provider: 'document-archive',
+              kind: 'document',
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('marks no-workspace document image analysis refs as extension-private', async () => {
+    const reader = createReader();
+    const tool = createReadDocumentImageTool({
+      reader,
+      readFile: vi.fn(async () => PNG_1X1),
+      resolveResourceScope: () => 'extension-private',
+    });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      page_indexes: [0],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [
+          expect.objectContaining({
+            cacheResourceRef: expect.objectContaining({
+              scope: 'extension-private',
+              source: expect.objectContaining({
+                metadata: expect.objectContaining({ nonPortable: true }),
+              }),
             }),
           }),
         ],

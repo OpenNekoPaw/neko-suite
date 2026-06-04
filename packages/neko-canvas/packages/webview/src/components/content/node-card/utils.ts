@@ -3,8 +3,13 @@ import type {
   CanvasPreviewRole,
   DocumentArchiveResourceRef,
   DocumentResourceStatus,
+  ResourceRef,
 } from '@neko/shared';
-import { parseDocumentArchiveResourceRef, parseDocumentResourceStatus } from '@neko/shared';
+import {
+  isResourceRef,
+  parseDocumentArchiveResourceRef,
+  parseDocumentResourceStatus,
+} from '@neko/shared';
 import { isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../../preview';
 import type {
   ActionCondition,
@@ -192,6 +197,16 @@ export function readReferenceImageResourceRef(
 ): DocumentArchiveResourceRef | undefined {
   const data = readRecord(node.data);
   return parseDocumentArchiveResourceRef(data['referenceImageResourceRef']);
+}
+
+export function readResourceRef(node: CanvasNode): ResourceRef | undefined {
+  const data = readRecord(node.data);
+  return isResourceRef(data['resourceRef']) ? data['resourceRef'] : undefined;
+}
+
+export function readReferenceResourceRef(node: CanvasNode): ResourceRef | undefined {
+  const data = readRecord(node.data);
+  return isResourceRef(data['referenceResourceRef']) ? data['referenceResourceRef'] : undefined;
 }
 
 export function readDocumentResourceStatus(node: CanvasNode): DocumentResourceStatus | undefined {
