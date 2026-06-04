@@ -20,7 +20,12 @@ import type {
 } from '@neko/shared';
 import { Badge, Button, IconButton } from '@neko/ui/primitives';
 import { SendIcon, MoreHorizontalIcon } from '@neko/ui/icons';
-import type { StorySceneAction, StorySceneState } from '../types';
+import type {
+  StorySceneAction,
+  StorySceneState,
+  StoryTableAction,
+  StoryTableActionScope,
+} from '../types';
 import { formatDurationShort } from '../utils/sceneBreakdown';
 import { useTranslation } from '../i18n/I18nContext';
 
@@ -33,6 +38,7 @@ interface ScriptTableViewProps {
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
+  onTableAction?: (action: StoryTableAction, scope?: StoryTableActionScope) => void;
   onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
   onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
 }
@@ -554,10 +560,12 @@ interface SceneRowProps {
   scene: NekoStoryScriptIndex['scenes'][number];
   sceneIndex: number;
   isOdd: boolean;
+  selected: boolean;
   state: StorySceneState;
   readiness?: StorySceneVideoReadiness;
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
+  onToggleSelected?: (sceneId: string, selected: boolean) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
   onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
   onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
@@ -568,10 +576,12 @@ const SceneRow = memo(function SceneRow({
   scene,
   sceneIndex,
   isOdd,
+  selected,
   state,
   readiness,
   characterThumbnails,
   onNavigate,
+  onToggleSelected,
   onSceneAction,
   onCharacterSendToAgent,
   onCharacterNavigate,
@@ -601,7 +611,11 @@ const SceneRow = memo(function SceneRow({
   const visibleFallbackChars = fallbackCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
   const overflowCount = characterCount - MAX_VISIBLE_CHARACTERS;
 
-  const rowBg = isOdd ? 'var(--vscode-list-hoverBackground)' : 'transparent';
+  const rowBg = selected
+    ? 'var(--vscode-list-activeSelectionBackground)'
+    : isOdd
+      ? 'var(--vscode-list-hoverBackground)'
+      : 'transparent';
 
   const fire = useCallback(
     (action: StorySceneAction) => onSceneAction?.(scene.sceneId, action),
@@ -706,6 +720,17 @@ const SceneRow = memo(function SceneRow({
         (e.currentTarget as HTMLTableRowElement).style.opacity = isSkipped ? '0.45' : '1';
       }}
     >
+      {/* Select */}
+      <td style={{ ...CELL_STYLE, textAlign: 'center', width: 32 }}>
+        <input
+          type="checkbox"
+          aria-label={t('table.selection.row', { scene: displayNumber })}
+          checked={selected}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onToggleSelected?.(scene.sceneId, event.currentTarget.checked)}
+        />
+      </td>
+
       {/* # */}
       <td style={{ ...CELL_STYLE, textAlign: 'center', width: 52 }}>
         <span
@@ -909,10 +934,12 @@ export function ScriptTableView({
   characterThumbnails,
   onNavigate,
   onSceneAction,
+  onTableAction,
   onCharacterSendToAgent,
   onCharacterNavigate,
 }: ScriptTableViewProps) {
   const { t } = useTranslation();
+  const [selectedSceneIds, setSelectedSceneIds] = useState<readonly string[]>([]);
   const readinessByScene = useMemo(() => {
     const rows = new Map<string, StorySceneVideoReadiness>();
     for (const row of readinessRows ?? []) {
@@ -937,15 +964,72 @@ export function ScriptTableView({
     return { totalDuration: duration, doneCount: done, hasCharacters: chars };
   }, [scriptIndex, sceneStates, readinessByScene]);
 
-  const handleBatchStart = useCallback(() => {
-    if (!scriptIndex || !onSceneAction) return;
-    for (const scene of scriptIndex.scenes) {
+  const pendingSceneIds = useMemo(() => {
+    if (!scriptIndex) return [];
+    return scriptIndex.scenes.flatMap((scene) => {
       const st = sceneStates[scene.sceneId];
       if (!st || deriveCreatorStatus(st) === 'pending') {
-        onSceneAction(scene.sceneId, 'startVideoCreation');
+        return [scene.sceneId];
       }
+      return [];
+    });
+  }, [scriptIndex, sceneStates]);
+
+  useEffect(() => {
+    if (!scriptIndex) {
+      setSelectedSceneIds([]);
+      return;
     }
-  }, [scriptIndex, sceneStates, onSceneAction]);
+    const validSceneIds = new Set(scriptIndex.scenes.map((scene) => scene.sceneId));
+    setSelectedSceneIds((current) => current.filter((sceneId) => validSceneIds.has(sceneId)));
+  }, [scriptIndex]);
+
+  const allSceneIds = useMemo(
+    () => scriptIndex?.scenes.map((scene) => scene.sceneId) ?? [],
+    [scriptIndex],
+  );
+  const selectedSceneIdSet = useMemo(() => new Set(selectedSceneIds), [selectedSceneIds]);
+  const actionSceneIds = selectedSceneIds.length > 0 ? selectedSceneIds : allSceneIds;
+  const selectedPendingSceneIds = pendingSceneIds.filter((sceneId) =>
+    selectedSceneIdSet.has(sceneId),
+  );
+  const startSceneIds = selectedSceneIds.length > 0 ? selectedPendingSceneIds : pendingSceneIds;
+  const allSelected = allSceneIds.length > 0 && selectedSceneIds.length === allSceneIds.length;
+  const partiallySelected = selectedSceneIds.length > 0 && !allSelected;
+
+  const handleToggleSceneSelected = useCallback((sceneId: string, selected: boolean) => {
+    setSelectedSceneIds((current) => {
+      if (selected) {
+        return current.includes(sceneId) ? current : [...current, sceneId];
+      }
+      return current.filter((candidate) => candidate !== sceneId);
+    });
+  }, []);
+
+  const handleToggleAllSelected = useCallback(
+    (selected: boolean) => {
+      setSelectedSceneIds(selected ? allSceneIds : []);
+    },
+    [allSceneIds],
+  );
+
+  const handleBatchStart = useCallback(() => {
+    if (!scriptIndex || !onTableAction) return;
+    if (startSceneIds.length === 0) return;
+    onTableAction('startVideoCreationAll', {
+      sceneIds: startSceneIds,
+    });
+  }, [scriptIndex, startSceneIds, onTableAction]);
+
+  const handleSendTableToAgent = useCallback(() => {
+    if (!scriptIndex || !onTableAction) return;
+    onTableAction('sendToAgentAll', { sceneIds: actionSceneIds });
+  }, [scriptIndex, actionSceneIds, onTableAction]);
+
+  const handleSendTableToCanvas = useCallback(() => {
+    if (!scriptIndex || !onTableAction) return;
+    onTableAction('sendToCanvasAll', { sceneIds: actionSceneIds });
+  }, [scriptIndex, actionSceneIds, onTableAction]);
 
   if (!scriptIndex) {
     return (
@@ -970,6 +1054,10 @@ export function ScriptTableView({
   }
 
   const total = scriptIndex.scenes.length;
+  const actionScopeLabel =
+    selectedSceneIds.length > 0
+      ? t('table.selection.selected', { count: selectedSceneIds.length })
+      : t('table.selection.all');
 
   return (
     <div
@@ -996,8 +1084,32 @@ export function ScriptTableView({
           status={doneCount === total ? 'done' : doneCount > 0 ? 'processing' : 'pending'}
           label={t('table.summary.progress', { done: doneCount, total })}
         />
-        <div style={{ marginLeft: 'auto' }}>
-          <SecondaryActionButton label={t('table.batch.startAll')} onClick={handleBatchStart} />
+        <span>{actionScopeLabel}</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <SecondaryActionButton
+            label={
+              selectedSceneIds.length > 0
+                ? t('table.batch.sendSelectedToAgent')
+                : t('table.batch.sendToAgent')
+            }
+            onClick={handleSendTableToAgent}
+          />
+          <SecondaryActionButton
+            label={
+              selectedSceneIds.length > 0
+                ? t('table.batch.sendSelectedToCanvas')
+                : t('table.batch.sendToCanvas')
+            }
+            onClick={handleSendTableToCanvas}
+          />
+          <SecondaryActionButton
+            label={
+              selectedSceneIds.length > 0
+                ? t('table.batch.startSelected')
+                : t('table.batch.startAll')
+            }
+            onClick={handleBatchStart}
+          />
         </div>
       </div>
 
@@ -1005,6 +1117,19 @@ export function ScriptTableView({
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
+            <Th width="32px">
+              <input
+                type="checkbox"
+                aria-label={t('table.selection.allRows')}
+                checked={allSelected}
+                ref={(input) => {
+                  if (input) {
+                    input.indeterminate = partiallySelected;
+                  }
+                }}
+                onChange={(event) => handleToggleAllSelected(event.currentTarget.checked)}
+              />
+            </Th>
             <Th width="52px">#</Th>
             <Th>{t('table.header.scene')}</Th>
             <Th width="64px">{t('table.header.duration')}</Th>
@@ -1019,6 +1144,7 @@ export function ScriptTableView({
               scene={scene}
               sceneIndex={i + 1}
               isOdd={i % 2 === 1}
+              selected={selectedSceneIdSet.has(scene.sceneId)}
               state={
                 sceneStates[scene.sceneId] ?? {
                   sceneId: scene.sceneId,
@@ -1028,6 +1154,7 @@ export function ScriptTableView({
               readiness={readinessByScene.get(scene.sceneId)}
               characterThumbnails={characterThumbnails}
               onNavigate={onNavigate}
+              onToggleSelected={handleToggleSceneSelected}
               onSceneAction={onSceneAction}
               onCharacterSendToAgent={onCharacterSendToAgent}
               onCharacterNavigate={onCharacterNavigate}

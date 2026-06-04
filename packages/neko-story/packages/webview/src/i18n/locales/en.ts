@@ -79,5 +79,14 @@ export const en = {
 
   // Summary bar
   'table.summary.progress': '{done}/{total} done',
+  'table.selection.all': 'All scenes',
+  'table.selection.selected': '{count} selected',
+  'table.selection.allRows': 'Select all scenes',
+  'table.selection.row': 'Select {scene}',
   'table.batch.startAll': 'Start All',
+  'table.batch.startSelected': 'Start Selected',
+  'table.batch.sendToAgent': 'Send All to Agent',
+  'table.batch.sendToCanvas': 'Send All to Canvas',
+  'table.batch.sendSelectedToAgent': 'Send Selected to Agent',
+  'table.batch.sendSelectedToCanvas': 'Send Selected to Canvas',
 } satisfies MessageBundle;

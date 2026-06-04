@@ -174,6 +174,13 @@ export type StorySceneAction =
   | 'generateCurrentScene'
   | 'retryFailed';
 
+export type StoryTableAction = 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll';
+
+export interface StoryTableActionScope {
+  readonly sceneIds?: readonly string[];
+  readonly includeSkipped?: boolean;
+}
+
 // Message types for VSCode communication
 export type StoryViewMode = 'screenplay' | 'table';
 
@@ -194,5 +201,6 @@ export type MessageToExtension =
   | { type: 'navigate'; line: number; character: number }
   | { type: 'scroll'; line: number }
   | { type: 'sceneAction'; sceneId: string; action: StorySceneAction }
+  | { type: 'tableAction'; action: StoryTableAction; scope?: StoryTableActionScope }
   | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
   | { type: 'characterNavigate'; name: string; sceneId?: string; characterId?: string };

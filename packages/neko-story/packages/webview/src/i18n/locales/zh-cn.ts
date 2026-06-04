@@ -76,5 +76,14 @@ export const zhCN = {
 
   // Summary bar
   'table.summary.progress': '{done}/{total} 已完成',
+  'table.selection.all': '全部场景',
+  'table.selection.selected': '已选 {count} 个',
+  'table.selection.allRows': '选择全部场景',
+  'table.selection.row': '选择 {scene}',
   'table.batch.startAll': '全部开始',
+  'table.batch.startSelected': '开始所选',
+  'table.batch.sendToAgent': '全部发送到 Agent',
+  'table.batch.sendToCanvas': '全部发送到 Canvas',
+  'table.batch.sendSelectedToAgent': '所选发送到 Agent',
+  'table.batch.sendSelectedToCanvas': '所选发送到 Canvas',
 } satisfies MessageBundle;

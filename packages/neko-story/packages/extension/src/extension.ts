@@ -48,6 +48,7 @@ import { registerCreativeEntityCommands } from './commands/creativeEntityCommand
 import { CreativeEntityManagementService } from './services/CreativeEntityManagementService';
 import { StoryDashboardCreativeEntitySource } from './services/DashboardCreativeEntitySource';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
+import { buildStoryTableAgentPayload } from './services/storyAgentPayload';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
   StorySceneStateStore,
@@ -343,18 +344,22 @@ export function activate(context: vscode.ExtensionContext) {
             return;
           }
 
-          const allScenesPayload: AgentContextPayload = {
-            type: 'story-selection',
-            id: `story:${scriptPath}:all`,
-            label: firstScene.sceneTitle,
-            summary: `All scenes (${targetSceneIds.length}) from ${scriptPath}`,
-            data: {
-              scriptPath,
-              sceneIds: targetSceneIds,
-            },
+          const allScenesPayload = buildStoryTableAgentPayload({
+            scriptPath,
+            sourceScriptUri: editor.document.uri.toString(),
+            scriptIndex,
+            sceneIds: targetSceneIds,
+            workflowIntent: 'full-video-creation',
             intent:
               '请基于剧本中的所有场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
-          };
+          });
+          if (!allScenesPayload) {
+            void handleError(new Error('没有可派发的场景'), {
+              showToUser: true,
+              severity: 'warning',
+            });
+            return;
+          }
           try {
             await vscode.commands.executeCommand('neko.agent.sendContext', allScenesPayload);
           } catch {

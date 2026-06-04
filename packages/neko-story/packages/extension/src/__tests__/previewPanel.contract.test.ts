@@ -7,8 +7,23 @@ const panelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), '
 describe('PreviewPanel canvas handoff contracts', () => {
   it('routes sendToCanvas through storyboard payload import', () => {
     expect(panelSource).toContain('await this.sendSceneToCanvas(scriptIndex, scene);');
-    expect(panelSource).toContain('createStoryboardPayload(sceneIndex, {');
+    expect(panelSource).toContain('const scopedIndex: NekoStoryScriptIndex = {');
     expect(panelSource).toContain("'neko.canvas.importStoryboard'");
+  });
+
+  it('routes table actions through table-scoped Agent and Canvas handoffs', () => {
+    expect(panelSource).toContain("type: 'tableAction'");
+    expect(panelSource).toContain('void this.handleTableAction(message.action, message.scope);');
+    expect(panelSource).toContain(
+      "await vscode.commands.executeCommand('neko.story.startVideoCreation', { sceneIds });",
+    );
+    expect(panelSource).toContain(
+      "await this.sendTableToAgent(scriptIndex, sceneIds, 'storyboard-only');",
+    );
+    expect(panelSource).toContain(
+      'const imported = await this.sendScenesToCanvas(scriptIndex, sceneIds);',
+    );
+    expect(panelSource).toContain('buildStoryTableAgentPayload({');
   });
 
   it('shows a dedicated warning when no canvas editor is open', () => {

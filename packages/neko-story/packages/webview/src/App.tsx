@@ -8,6 +8,8 @@ import type {
   MessageToWebview,
   StorySceneAction,
   StorySceneState,
+  StoryTableAction,
+  StoryTableActionScope,
   StoryViewMode,
 } from './types';
 import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
@@ -98,6 +100,13 @@ export function App() {
     [postMessage],
   );
 
+  const handleTableAction = useCallback(
+    (action: StoryTableAction, scope?: StoryTableActionScope) => {
+      postMessage({ type: 'tableAction', action, scope });
+    },
+    [postMessage],
+  );
+
   const handleCharacterSendToAgent = useCallback(
     (name: string, sceneId?: string, characterId?: string) => {
       postMessage({ type: 'characterSendToAgent', name, sceneId, characterId });
@@ -129,6 +138,7 @@ export function App() {
             characterThumbnails={characterThumbnails}
             onNavigate={handleNavigate}
             onSceneAction={handleSceneAction}
+            onTableAction={handleTableAction}
             onCharacterSendToAgent={handleCharacterSendToAgent}
             onCharacterNavigate={handleCharacterNavigate}
           />

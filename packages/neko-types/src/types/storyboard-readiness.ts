@@ -163,6 +163,16 @@ export interface StorySceneAgentContextData {
   readonly canvasSummary?: CanvasSceneExecutionSummary;
 }
 
+export interface StoryTableAgentContextData {
+  readonly scriptPath?: string | null;
+  readonly sourceScriptUri?: string;
+  readonly sceneIds: readonly string[];
+  readonly scriptIndex?: unknown;
+  readonly readinessRows?: readonly StorySceneVideoReadiness[];
+  readonly selectedText?: string;
+  readonly workflowIntent?: 'storyboard-only' | 'full-video-creation' | 'canvas-handoff';
+}
+
 export interface StoryCharacterAgentContextData {
   readonly characterName: string;
   readonly scriptPath?: string | null;

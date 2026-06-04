@@ -29,6 +29,30 @@ const scriptIndex: NekoStoryScriptIndex = {
   characters: [{ name: 'ALICE', first_line: 3, scene_ids: ['scene_abc123'] }],
 };
 
+const multiSceneIndex: NekoStoryScriptIndex = {
+  ...scriptIndex,
+  total_lines: 24,
+  scenes: [
+    scriptIndex.scenes[0]!,
+    {
+      id: 'scene_def456',
+      sceneId: 'scene_def456',
+      heading: 'EXT. SCHOOL - DAY',
+      sceneTitle: 'EXT. SCHOOL - DAY',
+      intExt: 'EXT',
+      location: 'SCHOOL',
+      timeOfDay: 'DAY',
+      time: 'DAY',
+      sceneNumber: '2',
+      sceneCharacters: ['BOB'],
+      actionSummary: 'Bob waits at the school gate.',
+      estimatedDuration: 12,
+      line_start: 6,
+      line_end: 11,
+    },
+  ],
+};
+
 describe('ScriptTableView', () => {
   it('renders 3-column layout with scene info and characters inline', () => {
     const states: Record<string, StorySceneState> = {
@@ -118,7 +142,7 @@ describe('ScriptTableView', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '···' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Storyboard' }));
     expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'generateStoryboard');
   });
@@ -158,6 +182,94 @@ describe('ScriptTableView', () => {
 
     expect(screen.getByText('0/1 done')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start All' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send All to Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send All to Canvas' })).toBeInTheDocument();
+    expect(screen.getByText('All scenes')).toBeInTheDocument();
+  });
+
+  it('dispatches table-level batch actions instead of per-scene loops', () => {
+    const onSceneAction = vi.fn();
+    const onTableAction = vi.fn();
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+    };
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        onSceneAction={onSceneAction}
+        onTableAction={onTableAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start All' }));
+    expect(onTableAction).toHaveBeenCalledWith('startVideoCreationAll', {
+      sceneIds: ['scene_abc123'],
+    });
+    expect(onSceneAction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send All to Agent' }));
+    expect(onTableAction).toHaveBeenCalledWith('sendToAgentAll', {
+      sceneIds: ['scene_abc123'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send All to Canvas' }));
+    expect(onTableAction).toHaveBeenCalledWith('sendToCanvasAll', {
+      sceneIds: ['scene_abc123'],
+    });
+  });
+
+  it('supports selecting multiple scenes before table-level handoff', () => {
+    const onTableAction = vi.fn();
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+      scene_def456: {
+        sceneId: 'scene_def456',
+        agentStatus: 'sent',
+        canvasStatus: 'opened',
+      },
+    };
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={multiSceneIndex}
+        sceneStates={states}
+        onTableAction={onTableAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select #2' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send Selected to Agent' }));
+    expect(onTableAction).toHaveBeenCalledWith('sendToAgentAll', {
+      sceneIds: ['scene_def456'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send Selected to Canvas' }));
+    expect(onTableAction).toHaveBeenCalledWith('sendToCanvasAll', {
+      sceneIds: ['scene_def456'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Selected' }));
+    expect(onTableAction).not.toHaveBeenCalledWith('startVideoCreationAll', {
+      sceneIds: ['scene_def456'],
+    });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select #1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Selected' }));
+    expect(onTableAction).toHaveBeenCalledWith('startVideoCreationAll', {
+      sceneIds: ['scene_abc123'],
+    });
   });
 
   it('renders readiness character visual states and missing input indicators', () => {

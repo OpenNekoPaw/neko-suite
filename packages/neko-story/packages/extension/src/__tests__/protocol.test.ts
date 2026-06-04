@@ -159,12 +159,12 @@ describe('neko-story protocol', () => {
       expect(extensionSource).toContain('sceneStateStore.handleCanvasEvent(event);');
     });
 
-    it('registers a standard video creation command on top of the same story pipeline', () => {
+    it('registers a standard video creation command as structured story-table handoff', () => {
       expect(extensionSource).toContain("'neko.story.startVideoCreation'");
-      expect(extensionSource).toContain('createStoryPipelineParams(payload, {');
-      expect(extensionSource).toContain("flowId: 'flowF'");
-      expect(extensionSource).toContain("eventCommand: 'neko.story.handlePipelineEvent'");
-      expect(extensionSource).toContain('sceneIds: [data.sceneId]');
+      expect(extensionSource).toContain('buildStoryTableAgentPayload({');
+      expect(extensionSource).toContain("workflowIntent: 'full-video-creation'");
+      expect(extensionSource).toContain("'neko.agent.sendContext'");
+      expect(extensionSource).toContain('sceneIds: targetSceneIds');
     });
 
     it('registers ScenePlan and ShotPlan agent tools in story capability provider', () => {

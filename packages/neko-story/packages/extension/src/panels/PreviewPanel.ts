@@ -17,11 +17,13 @@ import type {
   NekoStoryScriptIndex,
   StoryCharacterAgentContextData,
   StorySceneAgentContextData,
+  StoryTableAgentContextData,
   StorySceneVideoReadiness,
 } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
 import { buildStorySceneVideoReadinessRows } from '../services/storyVideoReadinessService';
+import { buildStoryTableAgentPayload } from '../services/storyAgentPayload';
 import { handleError } from '../utils/errorHandler';
 
 type MessageToWebview =
@@ -52,6 +54,11 @@ type MessageFromWebview =
         | 'startVideoCreation'
         | 'generateCurrentScene'
         | 'retryFailed';
+    }
+  | {
+      type: 'tableAction';
+      action: 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll';
+      scope?: { sceneIds?: readonly string[]; includeSkipped?: boolean };
     }
   | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
   | { type: 'characterNavigate'; name: string; sceneId?: string; characterId?: string };
@@ -191,6 +198,9 @@ export class PreviewPanel implements vscode.Disposable {
         break;
       case 'sceneAction':
         void this.handleSceneAction(message.sceneId, message.action);
+        break;
+      case 'tableAction':
+        void this.handleTableAction(message.action, message.scope);
         break;
       case 'characterSendToAgent':
         void this.handleCharacterSendToAgent(message.name, message.sceneId, message.characterId);
@@ -496,6 +506,60 @@ export class PreviewPanel implements vscode.Disposable {
     }
   }
 
+  private async handleTableAction(
+    action: 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll',
+    scope?: { sceneIds?: readonly string[]; includeSkipped?: boolean },
+  ): Promise<void> {
+    const editor = this.activeEditor;
+    if (!editor || !this.isStoryDocument(editor.document)) {
+      return;
+    }
+
+    const document = parse(editor.document.getText());
+    const scriptIndex = buildScriptIndex(editor.document.uri, document);
+    const sceneStates = this.sceneStateStore.getSceneStates(editor.document.uri, scriptIndex);
+    const sceneIds = this.resolveTableSceneIds(scriptIndex, sceneStates, scope);
+    if (sceneIds.length === 0) {
+      void handleError(new Error('没有可派发的场景'), {
+        showToUser: true,
+        severity: 'warning',
+      });
+      return;
+    }
+
+    if (action === 'startVideoCreationAll') {
+      await vscode.commands.executeCommand('neko.story.startVideoCreation', { sceneIds });
+      return;
+    }
+
+    if (action === 'sendToAgentAll') {
+      await this.sendTableToAgent(scriptIndex, sceneIds, 'storyboard-only');
+      return;
+    }
+
+    if (action === 'sendToCanvasAll') {
+      const canvasFileUri = findActiveCanvasFileUri();
+      const imported = await this.sendScenesToCanvas(scriptIndex, sceneIds);
+      if (imported) {
+        for (const importedScene of imported) {
+          this.sceneStateStore.recordCanvasImport(
+            editor.document.uri,
+            scriptIndex,
+            importedScene,
+            {},
+            canvasFileUri,
+          );
+        }
+      } else {
+        for (const sceneId of sceneIds) {
+          this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
+            canvasStatus: 'sent',
+          });
+        }
+      }
+    }
+  }
+
   /** Walk elements and inject resolvedUri for notes with assetRef */
   private resolveAssets(doc: FountainDocument): FountainDocument {
     if (!this.activeEditor) return doc;
@@ -583,17 +647,28 @@ export class PreviewPanel implements vscode.Disposable {
     scriptIndex: NekoStoryScriptIndex,
     scene: NekoStoryScriptIndex['scenes'][number],
   ): Promise<CreatedCanvasStoryboardScene | undefined> {
+    const created = await this.sendScenesToCanvas(scriptIndex, [scene.sceneId]);
+    return created?.find((createdScene) => createdScene.sourceSceneId === scene.sceneId);
+  }
+
+  private async sendScenesToCanvas(
+    scriptIndex: NekoStoryScriptIndex,
+    sceneIds: readonly string[],
+  ): Promise<readonly CreatedCanvasStoryboardScene[] | undefined> {
+    const selectedScenes = scriptIndex.scenes.filter((scene) => sceneIds.includes(scene.sceneId));
+    if (selectedScenes.length === 0) {
+      return [];
+    }
     const characterBindings = await this.resolveCharacterBindings(
-      scene.sceneCharacters,
+      Array.from(new Set(selectedScenes.flatMap((scene) => scene.sceneCharacters))),
       scriptIndex.uri,
     );
-    const sceneIndex: NekoStoryScriptIndex = {
+    const scopedIndex: NekoStoryScriptIndex = {
       ...scriptIndex,
-      scenes: [scene],
+      scenes: selectedScenes,
     };
-    const payload = createStoryboardPayload(sceneIndex, {
+    const payload = createStoryboardPayload(scopedIndex, {
       mode: 'mechanical',
-      scenesLimit: 1,
       characterBindings,
     });
 
@@ -601,8 +676,8 @@ export class PreviewPanel implements vscode.Disposable {
       const created = await vscode.commands.executeCommand<{
         scenes?: CreatedCanvasStoryboardScene[];
       }>('neko.canvas.importStoryboard', payload);
-      vscode.window.showInformationMessage(`已发送场景到 Canvas：${scene.sceneTitle}`);
-      return created?.scenes?.find((createdScene) => createdScene.sourceSceneId === scene.sceneId);
+      vscode.window.showInformationMessage(`已发送 ${selectedScenes.length} 个场景到 Canvas`);
+      return created?.scenes ?? [];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('No active canvas editor')) {
@@ -615,6 +690,55 @@ export class PreviewPanel implements vscode.Disposable {
       void handleError(error instanceof Error ? error : new Error(message), { showToUser: true });
       return undefined;
     }
+  }
+
+  private async sendTableToAgent(
+    scriptIndex: NekoStoryScriptIndex,
+    sceneIds: readonly string[],
+    workflowIntent: 'storyboard-only' | 'full-video-creation' | 'canvas-handoff',
+  ): Promise<void> {
+    if (!this.activeEditor) return;
+
+    const payload = buildStoryTableAgentPayload({
+      scriptPath: this.activeEditor.document.uri.fsPath,
+      sourceScriptUri: this.activeEditor.document.uri.toString(),
+      scriptIndex,
+      sceneIds,
+      readinessRows: [...this.readinessRowsByScene.values()],
+      workflowIntent,
+      intent:
+        workflowIntent === 'full-video-creation'
+          ? '请基于整张分镜表启动标准视频创作流程。'
+          : '请基于整张分镜表生成 storyboard 计划，并准备发送到 Canvas。',
+    });
+    if (!payload) return;
+
+    try {
+      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+    } catch {
+      // neko-agent not installed or not active
+    }
+  }
+
+  private resolveTableSceneIds(
+    scriptIndex: NekoStoryScriptIndex,
+    sceneStates: Record<string, StorySceneState>,
+    scope?: { sceneIds?: readonly string[]; includeSkipped?: boolean },
+  ): readonly string[] {
+    const requested = new Set(scope?.sceneIds ?? scriptIndex.scenes.map((scene) => scene.sceneId));
+    const includeSkipped = scope?.includeSkipped === true;
+    return scriptIndex.scenes.flatMap((scene) => {
+      if (!requested.has(scene.sceneId)) {
+        return [];
+      }
+      const readiness = this.findSceneReadiness(scene.sceneId);
+      const state = sceneStates[scene.sceneId];
+      const skipped =
+        readiness?.creatorStatus === 'skipped' ||
+        state?.agentStatus === 'skipped' ||
+        state?.canvasStatus === 'skipped';
+      return skipped && !includeSkipped ? [] : [scene.sceneId];
+    });
   }
 
   public postMessage(message: MessageToWebview) {
