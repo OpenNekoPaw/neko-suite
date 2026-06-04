@@ -95,19 +95,46 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(isKeyboardFocusedRef.current).toBe(false);
     expect(action).not.toHaveBeenCalled();
   });
+
+  it('acknowledges canvas data readiness after applying an update message', () => {
+    const vscode = createVSCodeApi();
+    const setCanvasData = vi.fn();
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{
+            vscode,
+            setCanvasData,
+          }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({ type: 'update', data: DEFAULT_CANVAS_DATA });
+    });
+
+    expect(setCanvasData).toHaveBeenCalledWith(DEFAULT_CANVAS_DATA);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
+  });
 });
 
 function VSCodeMessageHarness({
   action,
   isComposingRef,
   isKeyboardFocusedRef,
+  options,
 }: {
   readonly action: (value: string) => void;
   readonly isComposingRef: React.MutableRefObject<boolean>;
   readonly isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+  readonly options?: Partial<UseVSCodeMessagesOptions>;
 }): React.ReactElement | null {
   const { keyboardActionRef } = useVSCodeMessages(
-    createOptions(isComposingRef, isKeyboardFocusedRef),
+    createOptions(isComposingRef, isKeyboardFocusedRef, options),
   );
   keyboardActionRef.current = action;
   return null;
@@ -116,6 +143,7 @@ function VSCodeMessageHarness({
 function createOptions(
   isComposingRef: React.MutableRefObject<boolean>,
   isKeyboardFocusedRef?: React.MutableRefObject<boolean>,
+  options: Partial<UseVSCodeMessagesOptions> = {},
 ): UseVSCodeMessagesOptions {
   return {
     vscode: createVSCodeApi(),
@@ -125,6 +153,7 @@ function createOptions(
     onDropAssets: vi.fn(),
     isComposingRef,
     isKeyboardFocusedRef,
+    ...options,
   };
 }
 

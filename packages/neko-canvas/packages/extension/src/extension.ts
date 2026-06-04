@@ -43,6 +43,9 @@ let canvasStatusBar: CanvasStatusBar;
 /** Cached assets API reference (resolved once, reused across calls). */
 let assetsAPI: NekoAssetsAPI | undefined;
 
+const CANVAS_EDITOR_READY_TIMEOUT_MS = 5000;
+const CANVAS_EDITOR_READY_POLL_MS = 50;
+
 function parseCanvasDocumentUri(documentUri: string | undefined): vscode.Uri | undefined {
   return documentUri ? vscode.Uri.parse(documentUri) : undefined;
 }
@@ -479,6 +482,8 @@ function registerCommands(
           return;
         }
 
+        await ensureCanvasEditorForAssetImport(asset);
+
         // Forward to the active canvas editor via a public method
         const accepted = await canvasEditorProvider.postImportAsset(asset);
         if (!accepted) {
@@ -698,7 +703,88 @@ async function importStoryboardToCanvas(
   payload: CanvasStoryboardPayload,
   options?: ApplyCanvasStoryboardOptions,
 ): Promise<CreatedCanvasStoryboard> {
+  await ensureCanvasEditorForStoryboardImport(payload);
   return applyStoryboardPayloadToCanvas(api, payload, options);
+}
+
+async function ensureCanvasEditorForStoryboardImport(
+  payload: CanvasStoryboardPayload,
+): Promise<void> {
+  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
+    return;
+  }
+  if (canvasEditorProvider.revealAnyCanvasEditor()) {
+    await waitForActiveCanvasEditorReady();
+    return;
+  }
+
+  const title = createStoryboardCanvasName(payload);
+  const canvasFile = await createCanvas({
+    name: title,
+    width: 1600,
+    height: 1000,
+  });
+  await vscode.commands.executeCommand(
+    'vscode.openWith',
+    vscode.Uri.file(canvasFile),
+    CanvasEditorProvider.viewType,
+  );
+  await waitForActiveCanvasEditorReady();
+}
+
+async function ensureCanvasEditorForAssetImport(asset: {
+  readonly path?: string;
+  readonly name?: string;
+}): Promise<void> {
+  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
+    return;
+  }
+  if (canvasEditorProvider.revealAnyCanvasEditor()) {
+    await waitForActiveCanvasEditorReady();
+    return;
+  }
+
+  const title = createAssetCanvasName(asset);
+  const canvasFile = await createCanvas({
+    name: title,
+    width: 1200,
+    height: 800,
+  });
+  await vscode.commands.executeCommand(
+    'vscode.openWith',
+    vscode.Uri.file(canvasFile),
+    CanvasEditorProvider.viewType,
+  );
+  await waitForActiveCanvasEditorReady();
+}
+
+async function waitForActiveCanvasEditorReady(): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < CANVAS_EDITOR_READY_TIMEOUT_MS) {
+    if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, CANVAS_EDITOR_READY_POLL_MS));
+  }
+  throw new Error('Canvas editor did not become ready before import.');
+}
+
+function createStoryboardCanvasName(payload: CanvasStoryboardPayload): string {
+  const firstSceneTitle = payload.scenes[0]?.sceneTitle;
+  const sourceTitle = firstSceneTitle?.trim() || 'Agent Storyboard';
+  return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Storyboard';
+}
+
+function createAssetCanvasName(asset: { readonly path?: string; readonly name?: string }): string {
+  const sourceTitle = asset.name?.trim() || (asset.path ? path.parse(asset.path).name : '');
+  return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Canvas';
+}
+
+function sanitizeCanvasFileName(value: string): string {
+  return value
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -710,10 +796,24 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
     throw new Error('No workspace folder open');
   }
 
-  const canvasFile = path.join(folders[0].uri.fsPath, `${config.name}.nkc`);
+  const canvasFile = await createAvailableCanvasFilePath(folders[0].uri.fsPath, config.name);
   const content = getCanvasTemplate(config.name);
   await vscode.workspace.fs.writeFile(vscode.Uri.file(canvasFile), Buffer.from(content, 'utf-8'));
   return canvasFile;
+}
+
+async function createAvailableCanvasFilePath(folderPath: string, name: string): Promise<string> {
+  const baseName = sanitizeCanvasFileName(name) || 'Canvas';
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? '' : ` ${index + 1}`;
+    const candidate = path.join(folderPath, `${baseName}${suffix}.nkc`);
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.file(candidate));
+    } catch {
+      return candidate;
+    }
+  }
+  return path.join(folderPath, `${baseName}-${Date.now()}.nkc`);
 }
 
 /**

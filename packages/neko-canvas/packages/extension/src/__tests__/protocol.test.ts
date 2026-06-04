@@ -174,6 +174,13 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-009: Agent composite operation contracts', () => {
+    it('waits for canvas data readiness before Agent composite operations', () => {
+      expect(providerSource).toContain("case 'canvasDataReady'");
+      expect(providerSource).toContain('canvasDataReadyDocumentUris.add(documentUri)');
+      expect(providerSource).toContain('hasActiveCanvasEditorReady()');
+      expect(webviewSource).toContain("vscode.postMessage({ type: 'canvasDataReady' })");
+    });
+
     it('extension sends new node operation payload wrappers', () => {
       expect(providerSource).toContain("sendRequest<CanvasDeriveNodeResult>('nodes.derive'");
       expect(providerSource).toContain(

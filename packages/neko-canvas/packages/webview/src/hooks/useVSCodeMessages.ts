@@ -272,6 +272,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             }
             setCanvasData(canvasData);
             setIsReady(true);
+            vscode.postMessage({ type: 'canvasDataReady' });
             break;
           }
           case 'keyboardAction':

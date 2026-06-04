@@ -24,6 +24,21 @@ describe('canvas storyboard import contracts', () => {
     );
   });
 
+  it('opens or creates a canvas before importing storyboard payloads', () => {
+    expect(extensionSource).toContain('await ensureCanvasEditorForStoryboardImport(payload);');
+    expect(extensionSource).toContain('waitForActiveCanvasEditorReady');
+    expect(extensionSource).toContain('canvasEditorProvider.hasActiveCanvasEditorReady()');
+    expect(extensionSource).toContain('vscode.openWith');
+    expect(extensionSource).toContain('CanvasEditorProvider.viewType');
+  });
+
+  it('opens or creates a canvas before importing generated assets', () => {
+    expect(extensionSource).toContain('await ensureCanvasEditorForAssetImport(asset);');
+    expect(extensionSource).toContain(
+      'const accepted = await canvasEditorProvider.postImportAsset(asset);',
+    );
+  });
+
   it('routes agent storyboard import through the canvas storyboard API', () => {
     expect(capabilitySource).toContain('api.storyboard.import(payload, { startX, startY })');
   });

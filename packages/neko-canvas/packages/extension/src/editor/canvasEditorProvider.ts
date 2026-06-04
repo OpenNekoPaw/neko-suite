@@ -390,6 +390,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private activeDocument: vscode.CustomDocument | undefined;
   private readonly webviewPanelsByDocumentUri = new Map<string, vscode.WebviewPanel>();
   private readonly canvasSnapshotsByDocumentUri = new Map<string, Record<string, unknown>>();
+  private readonly canvasDataReadyDocumentUris = new Set<string>();
 
   // External providers for VSCode integration
   private outlineProvider: CanvasOutlineProvider | undefined;
@@ -494,6 +495,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return this.webviewPanelsByDocumentUri.get(document.uri.toString());
   }
 
+  hasActiveCanvasEditorReady(): boolean {
+    const documentUri = this.activeDocument?.uri.toString();
+    return documentUri !== undefined && this.canvasDataReadyDocumentUris.has(documentUri);
+  }
+
+  revealAnyCanvasEditor(): boolean {
+    const nextPanel = this.webviewPanelsByDocumentUri.values().next();
+    if (nextPanel.done) {
+      return false;
+    }
+    nextPanel.value.reveal();
+    return true;
+  }
+
   private async setGlobalKeyboardEditable(documentUri: string, editable: boolean): Promise<void> {
     try {
       await updateWebviewKeyboardEditableOwner(
@@ -551,6 +566,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     const documentUri = document.uri.toString();
     this.webviewPanelsByDocumentUri.set(documentUri, webviewPanel);
+    this.canvasDataReadyDocumentUris.delete(documentUri);
     const focusedRegistration = this.focusedWebviews.register({
       id: documentUri,
       viewType: CanvasEditorProvider.viewType,
@@ -568,13 +584,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       extraRoots,
     });
 
-    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
-
     webviewPanel.webview.onDidReceiveMessage(
       (message) => this.handleWebviewMessage(message, webviewPanel, document),
       undefined,
       this.context.subscriptions,
     );
+
+    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
     if (webviewPanel.active) {
       this.setActiveCanvasEditor(webviewPanel, document);
@@ -607,6 +623,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       await this.setGlobalKeyboardEditable(documentUri, false);
       this.webviewPanelsByDocumentUri.delete(documentUri);
       this.canvasSnapshotsByDocumentUri.delete(documentUri);
+      this.canvasDataReadyDocumentUris.delete(documentUri);
       const panelStreams = this._activeStreams.get(webviewPanel);
       if (panelStreams && panelStreams.size > 0) {
         const playback = await this.getMediaPlayback();
@@ -1233,6 +1250,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     switch (message.type) {
       case 'ready': {
         this.focusedWebviews.syncFocus(document.uri.toString());
+        this.canvasDataReadyDocumentUris.delete(document.uri.toString());
         // Read file content and send to webview
         try {
           const fileData = await vscode.workspace.fs.readFile(document.uri);
@@ -1271,6 +1289,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           // File is empty or invalid JSON — send null to use defaults
           webviewPanel.webview.postMessage({ type: 'update', data: null });
           this.reportCanvasReady(document.uri, null);
+        }
+        break;
+      }
+      case 'canvasDataReady': {
+        const documentUri = document.uri.toString();
+        this.canvasDataReadyDocumentUris.add(documentUri);
+        if (webviewPanel.active) {
+          this.setActiveCanvasEditor(webviewPanel, document);
         }
         break;
       }
