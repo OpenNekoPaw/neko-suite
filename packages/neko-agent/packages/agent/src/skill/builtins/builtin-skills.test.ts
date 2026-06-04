@@ -85,7 +85,11 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
       expect(comicToStoryboardSkill.content).toContain('imageStrategy');
       expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
-      expect(comicToStoryboardSkill.content).toContain('only reference images from actual');
+      expect(comicToStoryboardSkill.content).toContain('build an image index and panel mapping');
+      expect(comicToStoryboardSkill.content).toContain('sourceMediaRefs');
+      expect(comicToStoryboardSkill.content).toContain(
+        'only reference images from the image index',
+      );
       expect(comicToStoryboardSkill.content).toContain('Do not invent image ids');
       expect(comicToStoryboardSkill.content).toContain(
         'Do not ask the user to copy or edit the JSON',
@@ -227,6 +231,8 @@ describe('Builtin Skills', () => {
 
       expect(zhComic?.content).toContain('漫画分析');
       expect(zhComic?.content).toContain('StoryboardTableV1');
+      expect(zhComic?.content).toContain('图片索引和分格映射');
+      expect(zhComic?.content).toContain('sourceMediaRefs');
       expect(zhComic?.content).toContain('不要对同一张图先 ReadImage 再 ReadDocumentImage');
       expect(zhComic?.content).toContain('不要在表格中嵌入 base64');
       expect(zhMedia?.content).toContain('媒体转视频协调器');

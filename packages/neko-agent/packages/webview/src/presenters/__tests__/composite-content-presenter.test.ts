@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ToolCall } from '@neko-agent/types';
 import { projectCompositeBlockRichContent } from '../composite-content-presenter';
+import { projectStoryboardTableTransferPayload } from '../storyboard-transfer-presenter';
 
 describe('composite content presenter', () => {
   it('projects storyboard rows from backfilled tool result assets', () => {
@@ -73,7 +74,7 @@ describe('composite content presenter', () => {
     ]);
   });
 
-  it('backfills semantic storyboard row media from sibling image tool results when refs are omitted', () => {
+  it('embeds omitted semantic storyboard row media refs from sibling image tool results', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'storyboard-table',
@@ -93,6 +94,334 @@ describe('composite content presenter', () => {
                   visualDescription: 'The title page appears.',
                   characterAction: 'Static title card.',
                   imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Page 1 / Shot 1',
+            content: 'The title page appears.',
+            layout: 'table-row',
+            mediaRefs: [
+              {
+                toolCallId: 'ReadImage-vision-pages-1-10',
+                assetIndex: 0,
+                caption: 'Page 1',
+              },
+            ],
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      {
+        refId: 'tool-result:read-image:0',
+        role: 'source',
+        locator: {
+          type: 'tool-result',
+          toolCallId: 'read-image',
+          assetIndex: 0,
+        },
+        label: 'Page 1',
+        mimeType: 'image/jpeg',
+      },
+    ]);
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image',
+        type: 'image',
+        src: 'webview://page-1.jpg',
+        localPath: '/cache/page-1.jpg',
+        caption: 'Page 1',
+        role: 'source',
+      }),
+    ]);
+
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    expect(payload).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              {
+                referenceImagePath: '/cache/page-1.jpg',
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('replaces unresolved model-authored storyboard media refs with inferred tool result refs', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'The title page appears.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'source-page-1',
+                      role: 'source',
+                      locator: {
+                        type: 'tool-result',
+                        toolCallId: 'ReadImage-vision-pages-1-10',
+                        assetIndex: 0,
+                      },
+                      label: 'Page 1',
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Page 1 / Shot 1',
+            content: 'The title page appears.',
+            layout: 'table-row',
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      {
+        refId: 'tool-result:read-image:0',
+        role: 'source',
+        locator: {
+          type: 'tool-result',
+          toolCallId: 'read-image',
+          assetIndex: 0,
+        },
+        label: 'Page 1',
+        mimeType: 'image/jpeg',
+      },
+    ]);
+    expect(projection.data.sections[0]?.diagnostics).toEqual([]);
+    expect(projection.data.diagnostics).toEqual([]);
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image',
+        src: 'webview://page-1.jpg',
+        localPath: '/cache/page-1.jpg',
+      }),
+    ]);
+  });
+
+  it('uses page labels to infer repeated storyboard media refs from real image results', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 3',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Page 3 upper panel: the character looks out.',
+                  characterAction: 'The character pauses at the window.',
+                  imageStrategy: 'use-as-reference',
+                },
+                {
+                  shotNumber: 2,
+                  duration: 2,
+                  visualDescription: 'Page 3 lower panel: the character turns back.',
+                  characterAction: 'The character turns back.',
+                  imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Page 3 上半 / Shot 1',
+            content: 'The character looks out.',
+            layout: 'table-row',
+          },
+          {
+            heading: 'Page 3 下半 / Shot 2',
+            content: 'The character turns back.',
+            layout: 'table-row',
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'page', pageNumber: 1 },
+                },
+                {
+                  path: '/cache/page-2.jpg',
+                  webviewUri: 'webview://page-2.jpg',
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'page', pageNumber: 2 },
+                },
+                {
+                  path: '/cache/page-3.jpg',
+                  webviewUri: 'webview://page-3.jpg',
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'page', pageNumber: 3 },
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(
+      projection.data.storyboardTable?.scenes[0]?.shots.map(
+        (shot) => shot.sourceMediaRefs?.[0]?.locator,
+      ),
+    ).toEqual([
+      { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 2 },
+      { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 2 },
+    ]);
+    expect(projection.data.sections.map((section) => section.media[0]?.localPath)).toEqual([
+      '/cache/page-3.jpg',
+      '/cache/page-3.jpg',
+    ]);
+
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    expect(payload).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              { referenceImagePath: '/cache/page-3.jpg' },
+              { referenceImagePath: '/cache/page-3.jpg' },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('resolves semantic storyboard row media from explicit shot media refs', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'The title page appears.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'page-1',
+                      role: 'source',
+                      locator: {
+                        type: 'tool-result',
+                        toolCallId: 'read-image',
+                        assetIndex: 0,
+                      },
+                      label: 'Page 1',
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
                 },
               ],
             },

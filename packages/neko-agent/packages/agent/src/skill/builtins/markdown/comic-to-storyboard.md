@@ -19,7 +19,12 @@ This skill stops at analysis and storyboard planning. It does not generate image
    - Identify reading order: left-to-right, right-to-left, or vertical webtoon.
    - Detect panel boundaries and composition.
    - Count panels.
-3. Extract visible content per panel:
+3. Before structuring the storyboard, build an image index and panel mapping:
+   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label.
+   - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
+   - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.
+   - Multiple shots may explicitly reference the same page image, but explain the panel/page mapping in `label`, `decisionReason`, or `extensions["neko.mangaToVideo"]`; include panel/crop/bbox when crop information is available.
+4. Extract visible content per panel:
    - Setting, characters, actions, expressions, poses.
    - Speech bubble text and OCR.
    - Sound effects.
@@ -43,7 +48,9 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
 - Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
 - Only write plan fields. Do not claim images have already been generated until a runtime/tool result exists.
-- For image embedding, only reference images from actual tool results in the current conversation. Use `locator.type: "tool-result"` with the exact tool call id and asset index.
+- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the exact tool call id and asset index.
+- If a shot comes from a page/panel image, write that image into `sourceMediaRefs`; do not only describe the image in human-readable notes.
+- When `imageStrategy` is `reuse-original`, `use-as-reference`, or `transform-original`, provide `sourceMediaRefs`. Only text/script expansion with no image source may omit image refs.
 - Do not invent image ids, do not copy local cache paths into `referenceImagePath`, and do not convert images to base64 yourself.
 - Do not embed base64 image data, blob URLs, localhost URLs, absolute local paths, or invented tool call ids in the table.
 - Do not ask the user to copy or edit the JSON; the UI consumes the payload directly.

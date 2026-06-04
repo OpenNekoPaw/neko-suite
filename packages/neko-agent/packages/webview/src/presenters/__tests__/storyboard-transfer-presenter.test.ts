@@ -445,7 +445,74 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
-  it('backfills semantic storyboard canvas reference images from rendered row media', () => {
+  it('does not send agent-only blob preview URLs as Canvas reference image paths', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        scenes: [
+          {
+            sceneId: 'scene-page-1',
+            sceneTitle: 'Page 1',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'A panel from the page.',
+                characterAction: 'The character turns.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'page-1-panel',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-1',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Shot 1',
+          media: [
+            {
+              id: 'read-image-1:0:blob-preview',
+              toolCallId: 'read-image-1',
+              assetIndex: 0,
+              type: 'image',
+              src: 'blob:vscode-webview://preview-only',
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    const payload = projectStoryboardTableTransferPayload(data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+
+    const shotPlan = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shotPlan).not.toHaveProperty('referenceImagePath');
+    expect(shotPlan).not.toHaveProperty('referenceImageResourceRef');
+  });
+
+  it('does not infer semantic storyboard canvas reference images from rendered row media', () => {
     const resourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
@@ -501,24 +568,17 @@ describe('storyboard transfer presenter', () => {
       diagnostics: [],
     };
 
-    expect(projectStoryboardTableTransferPayload(data)).toMatchObject({
-      kind: 'canvasStoryboard',
-      storyboard: {
-        scenes: [
-          {
-            shotPlans: [
-              {
-                referenceImagePath: '/tmp/neko-cache/page-2.jpg',
-                referenceImageResourceRef: resourceRef,
-              },
-            ],
-          },
-        ],
-      },
-    });
+    const payload = projectStoryboardTableTransferPayload(data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+
+    const shotPlan = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shotPlan).not.toHaveProperty('referenceImagePath');
+    expect(shotPlan).not.toHaveProperty('referenceImageResourceRef');
   });
 
-  it('keeps fallback row media aligned when shot numbers repeat across scenes', () => {
+  it('keeps explicit media refs aligned when shot numbers repeat across scenes', () => {
     const firstResourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
@@ -551,6 +611,18 @@ describe('storyboard transfer presenter', () => {
                 visualDescription: 'First page.',
                 characterAction: 'The character enters.',
                 imageStrategy: 'generate-new',
+                sourceMediaRefs: [
+                  {
+                    refId: 'page-1',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-1',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
               },
             ],
           },
@@ -564,6 +636,18 @@ describe('storyboard transfer presenter', () => {
                 visualDescription: 'Second page.',
                 characterAction: 'The character reacts.',
                 imageStrategy: 'generate-new',
+                sourceMediaRefs: [
+                  {
+                    refId: 'page-2',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-2',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
               },
             ],
           },

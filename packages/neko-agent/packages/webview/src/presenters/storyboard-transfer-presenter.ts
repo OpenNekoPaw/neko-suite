@@ -6,7 +6,6 @@ import {
   type DocumentArchiveResourceRef,
   type ShotScale,
   type StoryboardMediaRefV1,
-  type StoryboardShotRowV1,
   type StoryboardImportMode,
 } from '@neko/shared';
 import type {
@@ -149,25 +148,13 @@ export function projectStoryboardTableTransferPayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
   if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
-    const fallbackImages = createSemanticStoryboardImageFallbacks(data);
     return {
       kind: 'canvasStoryboard',
       storyboard: projectStoryboardTableV1ToCanvasPayload(data.storyboardTable, {
         sourceScriptUri: 'agent://rich-content/storyboard-table',
-        resolveImagePath: ({ shot, mediaRef }) =>
-          resolveStoryboardMediaPath(data, mediaRef) ??
-          resolveSemanticStoryboardFallbackImagePath(fallbackImages, shot) ??
-          resolveStoryboardShotImagePathByOrder(data, shot),
-        resolveImageResourceRef: ({ shot, mediaRef }) =>
-          resolveStoryboardMediaResourceRef(data, mediaRef) ??
-          resolveSemanticStoryboardFallbackImageResourceRef(fallbackImages, shot) ??
-          resolveStoryboardShotImageResourceRefByOrder(data, shot),
-        resolveFallbackImagePath: ({ shot }) =>
-          resolveSemanticStoryboardFallbackImagePath(fallbackImages, shot) ??
-          resolveStoryboardShotImagePathByOrder(data, shot),
-        resolveFallbackImageResourceRef: ({ shot }) =>
-          resolveSemanticStoryboardFallbackImageResourceRef(fallbackImages, shot) ??
-          resolveStoryboardShotImageResourceRefByOrder(data, shot),
+        resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
+        resolveImageResourceRef: ({ mediaRef }) =>
+          resolveStoryboardMediaResourceRef(data, mediaRef),
       }),
     };
   }
@@ -218,57 +205,6 @@ function resolveStoryboardMediaResourceRef(
   return resolveStoryboardMedia(data, mediaRef)?.resourceRef;
 }
 
-function createSemanticStoryboardImageFallbacks(
-  data: StoryboardTableRichData,
-): ReadonlyMap<StoryboardShotRowV1, ResolvedCompositeMedia> {
-  const fallbacks = new Map<StoryboardShotRowV1, ResolvedCompositeMedia>();
-  let rowIndex = 0;
-  for (const scene of data.storyboardTable?.scenes ?? []) {
-    for (const shot of scene.shots) {
-      if (!hasStoryboardImageReference(shot)) {
-        const media = findSectionImageMediaByRow(data, rowIndex);
-        if (media) {
-          fallbacks.set(shot, media);
-        }
-      }
-      rowIndex += 1;
-    }
-  }
-  return fallbacks;
-}
-
-function hasStoryboardImageReference(
-  shot: NonNullable<StoryboardTableRichData['storyboardTable']>['scenes'][number]['shots'][number],
-): boolean {
-  return Boolean(
-    shot.referenceImagePath ||
-    (shot.sourceMediaRefs?.length ?? 0) > 0 ||
-    (shot.generatedMediaRefs?.length ?? 0) > 0 ||
-    (shot.mediaRefs?.length ?? 0) > 0,
-  );
-}
-
-function findSectionImageMediaByRow(
-  data: StoryboardTableRichData,
-  rowIndex: number,
-): ResolvedCompositeMedia | undefined {
-  return data.sections[rowIndex]?.media.find((media) => media.type === 'image');
-}
-
-function resolveSemanticStoryboardFallbackImagePath(
-  fallbacks: ReadonlyMap<StoryboardShotRowV1, ResolvedCompositeMedia>,
-  shot: StoryboardShotRowV1,
-): string | undefined {
-  return getCanvasImageMediaPath(fallbacks.get(shot));
-}
-
-function resolveSemanticStoryboardFallbackImageResourceRef(
-  fallbacks: ReadonlyMap<StoryboardShotRowV1, ResolvedCompositeMedia>,
-  shot: StoryboardShotRowV1,
-): DocumentArchiveResourceRef | undefined {
-  return fallbacks.get(shot)?.resourceRef;
-}
-
 function resolveStoryboardMedia(
   data: StoryboardTableRichData,
   mediaRef: StoryboardMediaRefV1,
@@ -311,46 +247,21 @@ function doesStoryboardMediaMatchRef(
   );
 }
 
-function resolveStoryboardShotImagePathByOrder(
-  data: StoryboardTableRichData,
-  shot: { readonly shotNumber: number },
-): string | undefined {
-  const shotIndex = Math.max(0, shot.shotNumber - 1);
-  return getCanvasImageMediaPath(flattenStoryboardImageMedia(data)[shotIndex]);
-}
-
-function resolveStoryboardShotImageResourceRefByOrder(
-  data: StoryboardTableRichData,
-  shot: { readonly shotNumber: number },
-): DocumentArchiveResourceRef | undefined {
-  const shotIndex = Math.max(0, shot.shotNumber - 1);
-  return flattenStoryboardImageMedia(data)[shotIndex]?.resourceRef;
-}
-
-function flattenStoryboardImageMedia(data: StoryboardTableRichData): ResolvedCompositeMedia[] {
-  return data.sections.flatMap((section) =>
-    section.media.filter((media) => media.type === 'image'),
-  );
-}
-
 function getCanvasImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
-  if (media?.src && isCanvasPreviewUrl(media.src)) {
-    return media.src;
-  }
-  return media?.localPath ?? media?.stableUri ?? media?.src;
+  return (
+    media?.resourceRef?.cachePath ??
+    media?.localPath ??
+    media?.stableUri ??
+    (media?.src && isCanvasPortableImageUrl(media.src) ? media.src : undefined)
+  );
 }
 
 function getLocalImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
   return media?.localPath ?? media?.stableUri ?? media?.src;
 }
 
-function isCanvasPreviewUrl(value: string): boolean {
-  return (
-    value.startsWith('data:') ||
-    value.startsWith('blob:') ||
-    value.startsWith('http://') ||
-    value.startsWith('https://')
-  );
+function isCanvasPortableImageUrl(value: string): boolean {
+  return value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://');
 }
 
 function projectStoryboardScenesToCanvasPayload(

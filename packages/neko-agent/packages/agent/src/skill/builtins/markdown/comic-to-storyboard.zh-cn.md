@@ -19,7 +19,12 @@
    - 判断阅读方向：从左到右、从右到左或竖向 webtoon。
    - 识别分格边界和构图。
    - 统计分格数量。
-3. 逐格提取可见内容：
+3. 在分镜结构化前，先建立图片索引和分格映射：
+   - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签。
+   - 为每个页面按阅读顺序标注 panel index；如果工具只返回整页图，也要记录“page image -> panels”的映射，不要假装已有独立分格图。
+   - 后续每个 shot 必须引用这个索引中的真实图片；不要在生成分镜后再凭顺序补图片。
+   - 多个 shot 可以显式引用同一页图，但必须在 `label`、`decisionReason` 或 `extensions["neko.mangaToVideo"]` 中说明 panel/page 对应关系；有裁切信息时记录 panel/crop/bbox。
+4. 逐格提取可见内容：
    - 场景、角色、动作、表情和姿态。
    - 气泡文字和 OCR。
    - 音效字。
@@ -43,7 +48,9 @@
 - 不要默认给源图上色。黑白漫画需要彩色动画时，把原图保留在 `sourceMediaRefs`，使用 `imageStrategy: "transform-original"`，并在 `generationPrompt` 或 `extensions["neko.mangaToVideo"].colorization` 中说明。
 - 只有工具真实生成后，才能把彩色图或生成结果写入 `generatedMediaRefs`。
 - 只填写计划字段。运行时/工具返回前，不要声称图片已经生成。
-- 嵌入图片时，只能引用当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写精确 tool call id 和 asset index。
+- 嵌入图片时，只能引用图片索引中的当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写精确 tool call id 和 asset index。
+- 如果当前 shot 来自某个页面/分格，必须把对应图片写入 `sourceMediaRefs`；不要只在可读说明里描述图片。
+- 当 `imageStrategy` 是 `reuse-original`、`use-as-reference` 或 `transform-original` 时，必须提供 `sourceMediaRefs`。只有纯文本/脚本扩写且没有图片来源时，才允许没有图片引用。
 - 不要编造图片 id，不要把本地缓存路径复制到 `referenceImagePath`，不要自行转换 base64。
 - 不要在表格中嵌入 base64 图片数据、blob URL、localhost URL、绝对本地路径或编造的 tool call id。
 - 不要要求用户复制或编辑 JSON；UI 会直接消费该 payload。
