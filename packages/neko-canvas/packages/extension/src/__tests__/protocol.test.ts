@@ -290,6 +290,22 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
+  describe('NKV-013: document resource preview variants', () => {
+    it('projects document resource refs directly instead of routing them through preview engine variants', () => {
+      expect(providerSource).toContain('const documentResourceRef = isDocumentArchiveResourceRef');
+      expect(providerSource).toContain("'neko-canvas.document-resource-variant'");
+      expect(providerSource).toContain('if (documentResourceRef) {');
+      expect(providerSource).toContain("type: 'preview:variantResolved'");
+
+      const documentResourceBranch = providerSource.slice(
+        providerSource.indexOf('if (documentResourceRef) {'),
+        providerSource.indexOf('const variantApi = await this.getPreviewVariantApi();'),
+      );
+      expect(documentResourceBranch).toContain('this.projectLocalResource(');
+      expect(documentResourceBranch).not.toContain('registerPreviewAsset');
+    });
+  });
+
   describe('source file existence', () => {
     it('canvasEditorProvider.ts is non-empty', () => {
       expect(providerSource.length).toBeGreaterThan(100);

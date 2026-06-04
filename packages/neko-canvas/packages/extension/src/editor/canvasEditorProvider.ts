@@ -1473,14 +1473,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'preview:resolveVariant': {
         const requestId = message.requestId as string | undefined;
-        await this.authorizeDocumentResourceRoot(webviewPanel.webview, {
-          documentResourceRef: isDocumentArchiveResourceRef(message.documentResourceRef)
-            ? message.documentResourceRef
-            : undefined,
-        });
+        const documentResourceRef = isDocumentArchiveResourceRef(message.documentResourceRef)
+          ? message.documentResourceRef
+          : undefined;
+        await this.authorizeDocumentResourceRoot(webviewPanel.webview, { documentResourceRef });
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
-          message.documentResourceRef,
+          documentResourceRef,
         );
         const role = message.role as 'thumbnail' | 'proxy' | 'fov-crop' | undefined;
         const mediaTypeHint = message.mediaType as string | undefined;
@@ -1488,6 +1487,25 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         try {
           const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          if (documentResourceRef) {
+            const uri = this.projectLocalResource(
+              webviewPanel.webview,
+              fsPath,
+              'neko-canvas.document-resource-variant',
+            );
+            if (!uri) {
+              throw new Error(
+                'Document cache path is outside authorized Webview roots. Reopen the source document to regenerate the preview.',
+              );
+            }
+            webviewPanel.webview.postMessage({
+              type: 'preview:variantResolved',
+              requestId,
+              url: uri,
+            });
+            break;
+          }
+
           const variantApi = await this.getPreviewVariantApi();
           if (variantApi) {
             const panoramicRoute = getPanoramicPreviewRoute({
