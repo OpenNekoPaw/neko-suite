@@ -187,8 +187,12 @@ recommendedStages: [plan, apply]   # optional 软提示
 | `requiredSubpackages`      | DSL     | DSL                         | CapabilityDiscovery 消费            |
 | `compliance.approvalRules` | DSL     | DSL                         | ApprovalEngine 消费                 |
 | `recommendedStages`        | DSL     | DSL（optional 软提示）      | SkillService.match() 优化           |
+| `referencedSkills`         | DSL     | DSL                         | GetContext / SkillService 发现协作 Skill |
+| `mediaWorkflow`            | DSL     | DSL（非编排提示）          | 媒体 Skill 发现、过滤、校验和 UI 投影 |
 | **`phases`**               | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI                     |
 | **`pipelines`**            | **DSL** | **❌ 退化为 markdown 章节** | 唯一消费者是 AI                     |
+
+`mediaWorkflow` 是本 ADR 的一个重要边界案例。它可以被程序消费，但只能表达“这个 Skill 适合哪些输入、可能产出哪些结构化 artifact、成本/风险大概如何、send-to 前需要哪些 validator”。它不能表达“先做 A 再做 B”的流程。换句话说，它属于 discovery / validation metadata，不属于 orchestration metadata。
 
 ### 3. Stage 信息由 Artifact 状态自然推断
 
@@ -290,9 +294,80 @@ AI 在 think 阶段判断条件并自主调用 Task 工具——这是 §11.5 �
 | 把 `allowedTools` 写到 body 里             | ToolInjectionManager 是程序消费，不能依赖 AI 解析 markdown 中的字符串 |
 | 把 `compliance.approvalRules` 写成自然语言 | ApprovalEngine 是确定性程序，需要严格 schema                          |
 | 把 `requiredSubpackages` 写成 body 提示    | Capability Discovery 期校验需要结构化字段                             |
+| 把 `referencedSkills` 写成 body 唯一来源   | GetContext 需要在完整加载 Skill body 前提示候选协作 Skill             |
+| 把 `mediaWorkflow` 提示写成 body 唯一来源  | 媒体 Skill 过滤、artifact validator、send-to 启用状态需要确定性元数据 |
 | 把 `trustLevel` 写成形容词                 | 安全分级必须严格 enum，AI 解析有概率性误判                            |
 
 **判断标准**：**AI 解析有概率性，安全边界需要确定性**——这是 DSL 与 prompt-chains 的硬分界线。
+
+### 9. 媒体 Skill 的 manifest 写作约定
+
+媒体工作流 Skill 仍遵守 prompt-chain 原则：正文描述怎么工作，manifest 只提供运行时必须提前知道的提示。典型文件结构：
+
+```text
+media-to-video/
+  SKILL.md        # prompt-chain body: 工作流程、关键决策点、失败处理、与其他 Skill 协作
+  manifest.json   # deterministic metadata: discovery, permission, validation hints
+```
+
+`manifest.json` 示例：
+
+```json
+{
+  "version": "1.0.0",
+  "domain": "media",
+  "referencedSkills": [
+    { "id": "comic-to-storyboard", "relationship": "delegator" },
+    { "id": "storyboard-to-animation-plan", "relationship": "delegator" }
+  ],
+  "mediaWorkflow": {
+    "acceptedModalities": ["comic", "image", "storyboard"],
+    "inputArtifacts": ["storyboard-table"],
+    "producedArtifacts": ["storyboard-table", "animation-plan"],
+    "tags": ["media-to-video", "storyboard"],
+    "costLevel": "medium",
+    "riskLevel": "medium",
+    "validationRequirements": ["StoryboardTableV1"],
+    "optionalTools": ["ReadImage", "ReadDocumentImage"]
+  }
+}
+```
+
+`SKILL.md` 正文应该说明：
+
+- 输入检查：先判断是漫画文档、独立图片、已有分镜表还是已生成媒体。
+- 子 Skill 选择：漫画证据交给 `comic-to-storyboard`，已有分镜交给 `storyboard-to-animation-plan`，需要 Cut payload 时交给 `animation-plan-to-cut`。
+- 工具使用：真实读图、OCR、生成、Canvas、Cut、export 必须通过工具结果，不能凭空声称完成。
+- 结构化输出：分镜、动画计划、Canvas/Cut payload、执行摘要以 validated structured artifact 为准，markdown 只做说明。
+- 媒体引用：只引用真实 tool-result 或 generated asset，不写 base64、绝对缓存路径、blob URL 或编造 id。
+- 审批边界：批量生成、上色、破坏性时间线替换、长时间导出必须先确认，除非用户明确要求自动执行且策略允许。
+
+禁止在 `mediaWorkflow` 中出现这些字段：
+
+```json
+{
+  "mediaWorkflow": {
+    "steps": ["inspect", "storyboard", "generate"],
+    "routes": [{ "from": "comic", "to": "video" }],
+    "workflow": { "start": "comic-to-storyboard" },
+    "dag": { "nodes": [], "edges": [] },
+    "stages": ["draft", "apply"],
+    "priority": 10
+  }
+}
+```
+
+这些字段会把 Skill 重新变成固定流程 DSL。正确写法是把“通常先做什么、什么条件下切换哪个 Skill、哪些步骤可以跳过”写进 `SKILL.md` 的 prompt-chain 章节，让 Agent 在 IDC 和工具反馈中自行调整。
+
+### 10. 新媒体工作流的回归要求
+
+新增媒体流程的默认验收方式是“只加 Skill 文件，发现能力变化”。例如新增 `audio-to-music-video` 时，应先提供：
+
+- `audio-to-music-video/SKILL.md`
+- `audio-to-music-video/manifest.json`，声明 `acceptedModalities`、`producedArtifacts`、`referencedSkills`
+- registry / loader fixture，证明 GetContext 能看到新 Skill 和 `mediaWorkflow`
+
+只有当现有 Skill runtime 无法发现、懒加载、注入工具、校验 artifact 或投影 send-to action 时，才允许修改 Agent 运行时代码。不得为了新流程新增 `MediaToVideoRouter`、`route catalog`、`flow executor`、`workflow DAG` 或类似固定编排模块。
 
 ## 明确不做的事
 

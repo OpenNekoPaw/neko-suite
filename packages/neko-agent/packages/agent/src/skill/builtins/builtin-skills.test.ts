@@ -20,6 +20,14 @@ import {
   videoEditingSkill,
   qualityAssessmentSkill,
 } from '../index';
+import {
+  animationPlanToCutSkill,
+  exportVideoPackageSkill,
+  generatedShotAssemblySkill,
+  imageToShotSkill,
+  mediaToVideoSkill,
+  storyboardToAnimationPlanSkill,
+} from './media-to-video';
 
 describe('Builtin Skills', () => {
   describe('builtinSkills array', () => {
@@ -85,7 +93,7 @@ describe('Builtin Skills', () => {
       );
       expect(comicToStoryboardSkill.content).toContain('Do not embed base64 image data');
       expect(comicToStoryboardSkill.content).toContain(
-        'only report Canvas success after the tool result succeeds',
+        'report Canvas success from this skill unless an actual Canvas tool result exists',
       );
       expect(comicToStoryboardSkill.content).toContain('script-breakdown');
       expect(comicToStoryboardSkill.content).toContain('manga-to-video');
@@ -119,23 +127,34 @@ describe('Builtin Skills', () => {
     });
 
     it('should have required tools', () => {
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
     });
 
-    it('should allow Canvas tools for storyboard delivery', () => {
-      expect(comicToStoryboardSkill.allowedTools).toContain(
-        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
-      );
-      expect(comicToStoryboardSkill.allowedTools).toContain(
+    it('should not own generation, Canvas delivery, or Cut timeline assembly', () => {
+      expect(comicToStoryboardSkill.allowedTools).not.toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
+      expect(comicToStoryboardSkill.allowedTools).not.toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
+      expect(comicToStoryboardSkill.allowedTools).not.toContain(
         TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
       );
-      expect(comicToStoryboardSkill.allowedTools).toContain(
-        TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+      expect(comicToStoryboardSkill.allowedTools).not.toContain(
+        TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
       );
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_GET_NODE);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE);
+    });
+
+    it('should expose media workflow metadata and related skills', () => {
+      expect(comicToStoryboardSkill.mediaWorkflow).toMatchObject({
+        acceptedModalities: ['comic', 'document', 'image-sequence'],
+        producedArtifacts: ['storyboard-table'],
+        validationRequirements: ['StoryboardTableV1'],
+      });
+      expect(comicToStoryboardSkill.referencedSkills).toEqual(
+        expect.arrayContaining([
+          { id: 'media-to-video', relationship: 'collaborator' },
+          { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
+        ]),
+      );
     });
 
     it('should have comic icon', () => {
@@ -144,6 +163,38 @@ describe('Builtin Skills', () => {
 
     it('should be enabled', () => {
       expect(comicToStoryboardSkill.enabled).toBe(true);
+    });
+  });
+
+  describe('media workflow builtin skills', () => {
+    it('registers the top-level coordinator and focused sub-skills', () => {
+      for (const skill of [
+        mediaToVideoSkill,
+        imageToShotSkill,
+        storyboardToAnimationPlanSkill,
+        animationPlanToCutSkill,
+        generatedShotAssemblySkill,
+        exportVideoPackageSkill,
+      ]) {
+        expect(builtinSkills.find((item) => item.name === skill.name)).toBe(skill);
+        expect(skill.domain).toBe('media');
+        expect(skill.mediaWorkflow).toBeDefined();
+        expect(skill.content).toContain('Structured Artifact Rules');
+      }
+    });
+
+    it('lets the top-level media skill reference focused sub-skills without fixed routes', () => {
+      expect(mediaToVideoSkill.referencedSkills).toEqual(
+        expect.arrayContaining([
+          { id: 'comic-to-storyboard', relationship: 'delegator' },
+          { id: 'image-to-shot', relationship: 'delegator' },
+          { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
+          { id: 'animation-plan-to-cut', relationship: 'delegator' },
+          { id: 'generated-shot-assembly', relationship: 'delegator' },
+          { id: 'export-video-package', relationship: 'delegator' },
+        ]),
+      );
+      expect(mediaToVideoSkill.content).not.toContain('pipeline to start');
     });
   });
 

@@ -1,28 +1,25 @@
 /**
- * Comic to Storyboard Skill - Convert manga/comic pages to video storyboards
+ * Comic to Storyboard Skill - Convert manga/comic pages to structured storyboards
  *
- * Provides comic panel analysis, OCR, character tracking, and storyboard generation.
- * Triggered when user mentions: comic to video, manga animation, comic adaptation
+ * Provides comic panel analysis, OCR, character tracking, and StoryboardTableV1 output.
+ * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
  */
 
 import type { Skill } from '@neko/shared';
-import {
-  TOOL_NAMES_CANVAS,
-  TOOL_NAMES_SYSTEM,
-  TOOL_NAMES_MEDIA,
-  TOOL_NAMES_TIMELINE,
-} from '@neko/shared';
+import { TOOL_NAMES_SYSTEM } from '@neko/shared';
 
 /**
  * Comic to Storyboard skill content
  */
 const comicToStoryboardContent = `# Comic to Storyboard Converter
 
-You are a comic-to-animation specialist. Help users convert manga/comic pages into video storyboards.
+You are a comic reading and storyboard-structure specialist. Help users convert manga/comic pages into a structured StoryboardTableV1.
+
+This skill stops at analysis and structured storyboard planning. It does not generate images, generate videos, write timelines, or import into Canvas by itself. If the user wants animation planning, generation, Canvas delivery, Cut assembly, or export, activate a related skill such as media-to-video, storyboard-to-animation-plan, animation-plan-to-cut, generated-shot-assembly, or export-video-package.
 
 ## Workflow
 
-### Phase 1: Comic Analysis
+### Comic Analysis
 
 1. **Request comic images** from the user (drag & drop or @ reference)
    - For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
@@ -58,7 +55,7 @@ Panel 1: { description, dialogue, characters, mood, camera }
 Panel 2: ...
 \`\`\`
 
-### Phase 2: Storyboard Generation
+### Storyboard Structuring
 
 5. **Generate video prompts** for each panel:
    - Match the prompt language to the user's content language. If the
@@ -161,10 +158,9 @@ Panel 2: ...
      \`\`\`
    - Do not embed base64 image data, blob URLs, localhost URLs, absolute
      local paths, or invented tool call ids in the table.
-   - If the user asks to send the storyboard to Canvas, or the task clearly
-     includes Canvas delivery, call the Canvas tools after the structured plan
-     is ready. Use Canvas context/query tools first when a target is needed,
-     and only report Canvas success after the tool result succeeds.
+   - If the user asks to send the storyboard to Canvas, activate a Canvas or
+     media-to-video related skill after the structured plan is ready. Do not
+     report Canvas success from this skill unless an actual Canvas tool result exists.
    - Profile field templates:
      - \`script-breakdown\`: emphasize \`dialogue\`, \`shotScale\`,
        \`cameraMovement\`, \`cameraAngle\`, \`duration\`, and scene continuity.
@@ -183,37 +179,6 @@ Panel 2: ...
      - \`character-design\`: emphasize \`characters[]\`, role, expression,
        costume/continuity notes, reference refs, and sheet metadata under
        \`extensions["neko.characterDesign"]\`.
-
-### Phase 3: Video Generation (direct atomic-tool composition)
-
-Once the storyboard plan is approved, compose the generation yourself —
-there is no pipeline to start. The loop per panel:
-
-8. **Pick a generation strategy** per panel:
-   - **Option A** — image-to-video (preserve original art): pass the
-     comic panel as reference and add motion cues
-     ("subtle animation, slight movement").
-   - **Option B** — text-to-video (recreate in new style):
-     "anime style matching [original description]".
-   - **Option C** — hybrid: key frames from original + interpolated
-     generated frames.
-
-9. **Emit GenerateVideo** with the chosen strategy. Parallelize where
-   independent; otherwise sequence to preserve character consistency.
-   Track the returned GeneratedAsset for each panel.
-
-10. **Assemble the timeline** using the atomic editing tools:
-    - GetTimelineInfo + AddTrack (if no video / audio / subtitle track yet)
-    - AddTimelineElement for each GeneratedAsset, in reading order
-    - GenerateTTS for spoken dialogue; AddTimelineElement onto the
-      audio track
-    - GenerateMusic (sfx mode) for sound effects
-    - SetTransition between panels for comic-style wipes / page turns
-    - Walk the Task checklist, flipping status as each panel lands
-
-Throughout this phase you are execution-persona — stay terse, emit
-step records, lean on the 5-level autoheal chain for transient failures.
-
 ## Comic Format Detection
 
 | Format | Reading Order | Panel Layout |
@@ -284,20 +249,21 @@ After analysis, present:
 3. Scene breakdown (table format)
 4. Estimated total video duration
 5. Character list with reference panels
-6. Proceed to generation? (Yes/No)
+6. A validated StoryboardTableV1 payload
+7. Suggested next skill only if the user wants animation, Canvas, Cut, or export
 `;
 
 /**
- * Comic to Storyboard skill - Convert manga/comic pages to animated videos
+ * Comic to Storyboard skill - Convert manga/comic pages to structured storyboards
  *
- * Triggered when user mentions: comic to video, manga animation, comic adaptation
+ * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
  */
 export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
-    'Convert manga/comic pages into animated video storyboards. ' +
-    'Use when user mentions: comic to video, manga animation, manga to anime, ' +
-    'comic adaptation, animate comic, webtoon to video, 漫画转视频, 漫改动画.',
+    'Convert manga/comic pages into structured StoryboardTableV1 storyboards. ' +
+    'Use when user mentions: comic storyboard, manga analysis, panel OCR, ' +
+    'comic adaptation planning, webtoon storyboard, 漫画分镜, 漫画分析.',
   content: comicToStoryboardContent,
   allowedTools: [
     // Vision analysis (LLM with image input)
@@ -307,32 +273,24 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
-    // Canvas delivery
-    TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
-    TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
-    TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
-    TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
-    TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
-    TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE,
-    // Media generation
-    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
-    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
-    // Agent orchestrates media generation + timeline updates directly.
-    // Timeline operations — Agent composes these atomic tools instead of
-    // calling a pipeline. See agent-unified-workflow.md §5.3.
-    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-    TOOL_NAMES_TIMELINE.ADD_TRACK,
-    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.SET_TRANSITION,
-    // Audio for dialogue
-    TOOL_NAMES_MEDIA.GENERATE_TTS,
-    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
-    // TODO(P1): implement when tools are available:
-    // GenerateCharacter
   ],
   icon: '📚',
   source: 'builtin',
   enabled: true,
+  version: '1.0.0',
+  domain: 'media',
+  referencedSkills: [
+    { id: 'media-to-video', relationship: 'collaborator' },
+    { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
+    { id: 'animation-plan-to-cut', relationship: 'delegator' },
+  ],
+  mediaWorkflow: {
+    acceptedModalities: ['comic', 'document', 'image-sequence'],
+    producedArtifacts: ['storyboard-table'],
+    tags: ['comic', 'manga', 'storyboard'],
+    costLevel: 'low',
+    riskLevel: 'low',
+    validationRequirements: ['StoryboardTableV1'],
+    optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE],
+  },
 };

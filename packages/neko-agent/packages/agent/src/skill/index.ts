@@ -72,6 +72,12 @@ export {
   scriptGenerationSkill,
   scriptToTimelineSkill,
   comicToStoryboardSkill,
+  mediaToVideoSkill,
+  imageToShotSkill,
+  storyboardToAnimationPlanSkill,
+  animationPlanToCutSkill,
+  generatedShotAssemblySkill,
+  exportVideoPackageSkill,
   qualityAssessmentSkill,
   // IDC stage persona skills
   creationPersonaSkill,

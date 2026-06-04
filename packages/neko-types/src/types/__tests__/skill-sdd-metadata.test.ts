@@ -3,7 +3,7 @@
  *
  * Covers agent-unified-workflow.md §5.2.1 manifest fields:
  *   version, domain, requiredSubpackages, autoInvoke,
- *   referencedAssets, referencedSkills, compliance.
+ *   referencedAssets, referencedSkills, mediaWorkflow, compliance.
  *
  * The SDD manifest lives in a sibling `manifest.json` — separate from
  * SKILL.md frontmatter — so configuration that only the runtime cares
@@ -353,6 +353,15 @@ describe('validateSkillManifest — standalone manifest pass', () => {
         { uri: 'asset://styles/cinematic-lut', required: false, purpose: 'default LUT' },
       ],
       referencedSkills: [{ id: 'audio-expert', relationship: 'collaborator' }],
+      mediaWorkflow: {
+        acceptedModalities: ['comic', 'image-sequence'],
+        producedArtifacts: ['storyboard-table'],
+        tags: ['comic', 'storyboard'],
+        costLevel: 'low',
+        riskLevel: 'low',
+        validationRequirements: ['StoryboardTableV1'],
+        optionalTools: ['ReadImage'],
+      },
       compliance: {
         framework: 'creator-standard',
         auditRequired: false,
@@ -360,5 +369,69 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     });
     expect(r.valid).toBe(true);
     expect(r.errors).toEqual([]);
+  });
+
+  it('accepts media workflow hints without requiring them on manifest-less skills', () => {
+    const skill = baseSkill({
+      mediaWorkflow: {
+        acceptedModalities: ['image'],
+        producedArtifacts: ['storyboard-table', 'animation-plan'],
+        inputArtifacts: ['generated-media-ref'],
+        tags: ['media-to-video'],
+        costLevel: 'medium',
+        riskLevel: 'medium',
+        validationRequirements: ['StoryboardTableV1'],
+      },
+    });
+
+    const withHints = validateSkill(skill);
+    const withoutHints = validateSkill(baseSkill({ mediaWorkflow: undefined }));
+
+    expect(withHints.valid).toBe(true);
+    expect(withHints.errors).toEqual([]);
+    expect(withoutHints.valid).toBe(true);
+    expect(withoutHints.errors).toEqual([]);
+  });
+
+  it('rejects workflow-order DSL fields in media workflow hints', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        mediaWorkflow: {
+          acceptedModalities: ['comic'],
+          producedArtifacts: ['storyboard-table'],
+          steps: ['inspect', 'structure'],
+          routes: [{ from: 'comic', to: 'video' }],
+        } as unknown as SkillManifest['mediaWorkflow'],
+      }),
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('mediaWorkflow.steps is not allowed'),
+        expect.stringContaining('mediaWorkflow.routes is not allowed'),
+      ]),
+    );
+  });
+
+  it('rejects malformed media workflow hint fields', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        mediaWorkflow: {
+          acceptedModalities: ['comic', ''],
+          costLevel: 'expensive',
+          riskLevel: 'unsafe',
+        } as unknown as SkillManifest['mediaWorkflow'],
+      }),
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors).toEqual(
+      expect.arrayContaining([
+        'mediaWorkflow.acceptedModalities[1] must be a non-empty string',
+        'mediaWorkflow.costLevel must be "free", "low", "medium", or "high"',
+        'mediaWorkflow.riskLevel must be "low", "medium", "high", or "destructive"',
+      ]),
+    );
   });
 });

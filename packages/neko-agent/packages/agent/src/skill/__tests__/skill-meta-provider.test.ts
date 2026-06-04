@@ -5,14 +5,32 @@ import type { SkillService } from '../skill-service';
 
 describe('createConversationSkillProvider', () => {
   it('lists enabled skills through the meta-tool provider shape', async () => {
-    const skill = createSkill({ name: 'review', description: 'Review code' });
+    const skill = createSkill({
+      name: 'review',
+      description: 'Review code',
+      domain: 'media',
+      referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+      mediaWorkflow: {
+        acceptedModalities: ['comic'],
+        producedArtifacts: ['storyboard-table'],
+      },
+    });
     const provider = createConversationSkillProvider({
       skillService: createSkillServiceMock({ skills: [skill] }),
       effects: createEffects(),
     });
 
     await expect(Promise.resolve(provider.listSkills())).resolves.toEqual([
-      { name: 'review', description: 'Review code' },
+      {
+        name: 'review',
+        description: 'Review code',
+        domain: 'media',
+        relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+        mediaWorkflow: {
+          acceptedModalities: ['comic'],
+          producedArtifacts: ['storyboard-table'],
+        },
+      },
     ]);
   });
 
@@ -36,6 +54,37 @@ describe('createConversationSkillProvider', () => {
     expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('commit');
     expect(skillService.apply).toHaveBeenCalledWith(skill);
     expect(effects.applySkillInjection).toHaveBeenCalledWith(injection, skill);
+  });
+
+  it('activates a related focused skill through the same lazy loading path without inheriting parent tools', async () => {
+    const parent = createSkill({
+      name: 'media-to-video',
+      allowedTools: ['ReadDocument', 'GenerateVideo'],
+      referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+    });
+    const child = createSkill({
+      name: 'comic-to-storyboard',
+      allowedTools: ['ReadDocument', 'ReadImage'],
+    });
+    const injection: SkillInjection = {
+      name: 'comic-to-storyboard',
+      type: 'skill',
+      systemPrompt: 'Comic storyboard instructions',
+      allowedTools: ['ReadDocument', 'ReadImage'],
+    };
+    const effects = createEffects();
+    const skillService = createSkillServiceMock({ skills: [parent, child], injection });
+    const provider = createConversationSkillProvider({ skillService, effects });
+
+    await expect(provider.activateSkill('comic-to-storyboard')).resolves.toEqual({
+      success: true,
+      message: 'Activated skill "comic-to-storyboard"',
+      allowedTools: ['ReadDocument', 'ReadImage'],
+    });
+
+    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('comic-to-storyboard');
+    expect(effects.applySkillInjection).toHaveBeenCalledWith(injection, child);
+    expect(injection.allowedTools).not.toContain('GenerateVideo');
   });
 
   it('returns a failure when the requested skill cannot be loaded', async () => {
@@ -100,6 +149,9 @@ function createSkill(overrides: Partial<Skill>): Skill {
     enabled: overrides.enabled ?? true,
     source: overrides.source ?? 'builtin',
     allowedTools: overrides.allowedTools,
+    domain: overrides.domain,
+    referencedSkills: overrides.referencedSkills,
+    mediaWorkflow: overrides.mediaWorkflow,
   };
 }
 

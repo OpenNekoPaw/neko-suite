@@ -139,6 +139,32 @@ export interface RelatedSkill {
 }
 
 /**
+ * Media workflow hints for Skill discovery and validation.
+ *
+ * This is intentionally not a workflow DSL: the runtime may use it for
+ * filtering, permission diagnostics, artifact validation, and UI projection,
+ * but the actual order and decision points stay in SKILL.md prompt-chains.
+ */
+export interface SkillMediaWorkflowHint {
+  /** Source modalities this Skill can reason about. */
+  acceptedModalities?: string[];
+  /** Structured artifact kinds this Skill may produce. */
+  producedArtifacts?: string[];
+  /** Structured artifact kinds this Skill expects as input. */
+  inputArtifacts?: string[];
+  /** Free-form tags for discovery and catalogue filtering. */
+  tags?: string[];
+  /** Relative cost hint used for planning and approval copy. */
+  costLevel?: 'free' | 'low' | 'medium' | 'high';
+  /** Relative risk hint used for planning and approval copy. */
+  riskLevel?: 'low' | 'medium' | 'high' | 'destructive';
+  /** Artifact validators that must pass before rendering or send-to actions. */
+  validationRequirements?: string[];
+  /** Optional tools this Skill can use when available. */
+  optionalTools?: string[];
+}
+
+/**
  * Compliance metadata (ADR §5.2.1 / §9.6 `compliance:`).
  *
  * Purely declarative. Audit tooling reads this block to decide
@@ -343,6 +369,9 @@ export interface Skill {
    * crosses domain boundaries, or delegators the Skill hands off to.
    */
   referencedSkills?: RelatedSkill[];
+
+  /** Media workflow discovery hints. Not an executable workflow definition. */
+  mediaWorkflow?: SkillMediaWorkflowHint;
 
   /**
    * Compliance metadata. Consumed by audit tooling; does not change
@@ -734,6 +763,9 @@ export interface SkillManifest {
   /** Cross-Skill relationships surfaced by the runtime. */
   referencedSkills?: RelatedSkill[];
 
+  /** Media workflow discovery hints. Not an executable workflow definition. */
+  mediaWorkflow?: SkillMediaWorkflowHint;
+
   /** Compliance metadata consumed by audit tooling. */
   compliance?: SkillCompliance;
 }
@@ -990,6 +1022,32 @@ const SEMVER_RE =
 const SKILL_NAME_RE = /^[a-z0-9-]+$/;
 const MAX_SKILL_NAME_LENGTH = 64;
 const MAX_SKILL_DESCRIPTION_LENGTH = 2048;
+const MEDIA_WORKFLOW_DSL_FIELD_NAMES = [
+  'branch',
+  'branches',
+  'condition',
+  'conditions',
+  'dag',
+  'edge',
+  'edges',
+  'flow',
+  'flows',
+  'node',
+  'nodes',
+  'phase',
+  'phases',
+  'pipeline',
+  'pipelines',
+  'priority',
+  'route',
+  'routes',
+  'stage',
+  'stages',
+  'step',
+  'steps',
+  'workflow',
+  'workflows',
+] as const;
 
 export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
   const errors: string[] = [];
@@ -1119,6 +1177,8 @@ export function validateSkillManifest(
     }
   }
 
+  validateSkillMediaWorkflowHint(manifest.mediaWorkflow, errors);
+
   // compliance: light shape check; semantics are caller-defined.
   if (manifest.compliance !== undefined) {
     if (typeof manifest.compliance !== 'object' || Array.isArray(manifest.compliance)) {
@@ -1141,6 +1201,79 @@ export function validateSkillManifest(
   }
 
   return { valid: errors.length === 0, errors, warnings };
+}
+
+function validateSkillMediaWorkflowHint(
+  hint: SkillMediaWorkflowHint | undefined,
+  errors: string[],
+): void {
+  if (hint === undefined) return;
+  if (typeof hint !== 'object' || Array.isArray(hint)) {
+    errors.push('Field "mediaWorkflow" must be an object');
+    return;
+  }
+
+  for (const key of Object.keys(hint)) {
+    if (isForbiddenMediaWorkflowDslField(key)) {
+      errors.push(
+        `mediaWorkflow.${key} is not allowed; workflow order belongs in SKILL.md prompt-chain text`,
+      );
+    }
+  }
+
+  validateStringArrayField(hint.acceptedModalities, 'mediaWorkflow.acceptedModalities', errors);
+  validateStringArrayField(hint.producedArtifacts, 'mediaWorkflow.producedArtifacts', errors);
+  validateStringArrayField(hint.inputArtifacts, 'mediaWorkflow.inputArtifacts', errors);
+  validateStringArrayField(hint.tags, 'mediaWorkflow.tags', errors);
+  validateStringArrayField(
+    hint.validationRequirements,
+    'mediaWorkflow.validationRequirements',
+    errors,
+  );
+  validateStringArrayField(hint.optionalTools, 'mediaWorkflow.optionalTools', errors);
+
+  if (
+    hint.costLevel !== undefined &&
+    hint.costLevel !== 'free' &&
+    hint.costLevel !== 'low' &&
+    hint.costLevel !== 'medium' &&
+    hint.costLevel !== 'high'
+  ) {
+    errors.push('mediaWorkflow.costLevel must be "free", "low", "medium", or "high"');
+  }
+
+  if (
+    hint.riskLevel !== undefined &&
+    hint.riskLevel !== 'low' &&
+    hint.riskLevel !== 'medium' &&
+    hint.riskLevel !== 'high' &&
+    hint.riskLevel !== 'destructive'
+  ) {
+    errors.push('mediaWorkflow.riskLevel must be "low", "medium", "high", or "destructive"');
+  }
+}
+
+function validateStringArrayField(
+  value: readonly string[] | undefined,
+  fieldName: string,
+  errors: string[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    errors.push(`${fieldName} must be an array of strings`);
+    return;
+  }
+  for (let idx = 0; idx < value.length; idx++) {
+    if (typeof value[idx] !== 'string' || value[idx].trim().length === 0) {
+      errors.push(`${fieldName}[${idx}] must be a non-empty string`);
+    }
+  }
+}
+
+function isForbiddenMediaWorkflowDslField(fieldName: string): boolean {
+  return MEDIA_WORKFLOW_DSL_FIELD_NAMES.some(
+    (dslField) => dslField.toLowerCase() === fieldName.toLowerCase(),
+  );
 }
 
 /**
@@ -1216,6 +1349,7 @@ export function createSkill(
     autoInvoke: manifest?.autoInvoke,
     referencedAssets: manifest?.referencedAssets,
     referencedSkills: manifest?.referencedSkills,
+    mediaWorkflow: manifest?.mediaWorkflow,
     compliance: manifest?.compliance,
   };
 }

@@ -103,6 +103,14 @@ export class SkillRegistry implements ISkillRegistry {
       enabled: true,
       icon: lazySkill.icon,
       directoryPath: lazySkill.directoryPath,
+      version: lazySkill.manifest?.version,
+      domain: lazySkill.manifest?.domain,
+      requiredSubpackages: lazySkill.manifest?.requiredSubpackages,
+      autoInvoke: lazySkill.manifest?.autoInvoke,
+      referencedAssets: lazySkill.manifest?.referencedAssets,
+      referencedSkills: lazySkill.manifest?.referencedSkills,
+      mediaWorkflow: lazySkill.manifest?.mediaWorkflow,
+      compliance: lazySkill.manifest?.compliance,
     });
   }
 

@@ -34,12 +34,14 @@ import type {
   ToolsFileFrontmatter,
   SkillReference,
   SkillScript,
+  SkillManifest,
 } from '@neko/shared';
 import {
   createSkill,
   createCommand,
   validateSkill,
   validateCommand,
+  validateSkillManifest,
   extractSupportFileRefs,
 } from '@neko/shared';
 import { MarkdownParser, type IMarkdownParser } from './markdown-parser';
@@ -247,6 +249,7 @@ export class SkillLoader {
         });
       }
     }
+    const manifest = await this.loadSkillManifest(directoryPath);
 
     const skill = createSkill(
       frontmatter,
@@ -255,6 +258,7 @@ export class SkillLoader {
       directoryPath,
       validRefs.length > 0 ? validRefs : undefined,
       toolDefinitions,
+      manifest,
     );
 
     // Validate
@@ -271,6 +275,39 @@ export class SkillLoader {
     }
 
     return skill;
+  }
+
+  async loadSkillManifest(directoryPath: string): Promise<SkillManifest | undefined> {
+    const manifestPath = `${directoryPath}/manifest.json`;
+    const exists = await this.fs.exists(manifestPath);
+    if (!exists) {
+      return undefined;
+    }
+
+    const raw = await this.fs.readFile(manifestPath);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse skill manifest.json: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const manifest = parsed as SkillManifest;
+    const validation = validateSkillManifest(manifest);
+    if (!validation.valid) {
+      throw new Error(`Invalid skill manifest.json: ${validation.errors.join(', ')}`);
+    }
+    if (validation.warnings.length > 0) {
+      logger.warn('Skill manifest validation warnings', {
+        path: manifestPath,
+        warnings: validation.warnings.join(', '),
+      });
+    }
+    return manifest;
   }
 
   /**

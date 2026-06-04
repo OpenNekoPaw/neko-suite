@@ -8,6 +8,14 @@ import type { Skill, ISkillRegistry } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill } from './comic-to-storyboard';
+import {
+  animationPlanToCutSkill,
+  exportVideoPackageSkill,
+  generatedShotAssemblySkill,
+  imageToShotSkill,
+  mediaToVideoSkill,
+  storyboardToAnimationPlanSkill,
+} from './media-to-video';
 import { scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
 import { creationPersonaSkill } from './creation-persona';
@@ -19,6 +27,14 @@ export { aiGenerateSkill, aiGenerateToolDefinitions };
 
 // Re-export new skills
 export { comicToStoryboardSkill } from './comic-to-storyboard';
+export {
+  animationPlanToCutSkill,
+  exportVideoPackageSkill,
+  generatedShotAssemblySkill,
+  imageToShotSkill,
+  mediaToVideoSkill,
+  storyboardToAnimationPlanSkill,
+} from './media-to-video';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 
@@ -540,7 +556,13 @@ export const builtinSkills: Skill[] = [
   scriptGenerationSkill,
   scriptToTimelineSkill,
   // Multi-modal adaptation
+  mediaToVideoSkill,
   comicToStoryboardSkill,
+  imageToShotSkill,
+  storyboardToAnimationPlanSkill,
+  animationPlanToCutSkill,
+  generatedShotAssemblySkill,
+  exportVideoPackageSkill,
   // Quality Assessment
   qualityAssessmentSkill,
 ];

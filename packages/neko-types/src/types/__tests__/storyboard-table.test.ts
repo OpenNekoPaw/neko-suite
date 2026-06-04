@@ -278,6 +278,55 @@ describe('storyboard table contract', () => {
     );
   });
 
+  it('rejects unsafe media references in structured storyboard payloads', () => {
+    const result = validateStoryboardTableV1({
+      schemaVersion: 1,
+      kind: 'storyboard-table',
+      title: 'Unsafe refs',
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          sceneTitle: 'Scene',
+          shots: [
+            {
+              shotNumber: 1,
+              duration: 3,
+              visualDescription: 'Panel.',
+              characterAction: 'Character waits.',
+              imageStrategy: 'reuse-original',
+              sourceMediaRefs: [
+                {
+                  refId: 'abs-path',
+                  role: 'source',
+                  locator: { type: 'workspace-path', path: '/tmp/cache/page.jpg' },
+                },
+                {
+                  refId: 'asset-localhost',
+                  role: 'reference',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'asset-1',
+                    uri: 'http://localhost:3000/image.png',
+                  },
+                },
+                {
+                  refId: 'data-url',
+                  role: 'thumbnail',
+                  locator: { type: 'workspace-path', path: 'data:image/png;base64,abc' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      result.diagnostics.filter((item) => item.code === 'unsafe-media-ref').length,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
   it('blocks generation when confirmation policy is pending', () => {
     const result = interpretStoryboardImageStrategiesV1({
       table: storyboardTable({ imageStrategy: 'generate-new', generationPrompt: 'frame' }),

@@ -54,7 +54,17 @@ describe('SkillRegistry — lazy loading', () => {
   // -------------------------------------------------------------------------
   describe('registerLazySkill()', () => {
     it('registers a lightweight placeholder in the skills map', () => {
-      const lazy = makeLazySkill();
+      const lazy = makeLazySkill({
+        manifest: {
+          version: '1.0.0',
+          domain: 'media',
+          referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+          mediaWorkflow: {
+            acceptedModalities: ['comic'],
+            producedArtifacts: ['storyboard-table'],
+          },
+        },
+      });
       registry.registerLazySkill(lazy);
 
       const skill = registry.getSkill('test-skill');
@@ -62,6 +72,13 @@ describe('SkillRegistry — lazy loading', () => {
       expect(skill?.name).toBe('test-skill');
       expect(skill?.description).toBe('A test skill');
       expect(skill?.content).toBe(''); // placeholder
+      expect(skill?.referencedSkills).toEqual([
+        { id: 'comic-to-storyboard', relationship: 'delegator' },
+      ]);
+      expect(skill?.mediaWorkflow).toEqual({
+        acceptedModalities: ['comic'],
+        producedArtifacts: ['storyboard-table'],
+      });
     });
 
     it('lazy skill is discoverable via listSkills()', () => {

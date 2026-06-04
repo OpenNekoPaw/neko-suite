@@ -15,6 +15,8 @@ import type {
   IToolCategoryRegistry,
   IToolGroupRegistry,
   IToolInjectionManager,
+  RelatedSkill,
+  SkillMediaWorkflowHint,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
@@ -22,15 +24,23 @@ import { BuiltinTool } from '@neko/shared';
 // Skill Provider Interface
 // =============================================================================
 
+export interface SkillContextSummary {
+  readonly name: string;
+  readonly description: string;
+  readonly domain?: string;
+  readonly relatedSkills?: readonly RelatedSkill[];
+  readonly mediaWorkflow?: SkillMediaWorkflowHint;
+}
+
 /**
  * Interface for providing skill information to meta tools.
  * Set by the extension layer after initialization.
  */
 export interface ISkillProvider {
   /** List all registered skills (name + description) */
-  listSkills(): SkillProviderMaybePromise<Array<{ name: string; description: string }>>;
+  listSkills(): SkillProviderMaybePromise<SkillContextSummary[]>;
   /** Get active skill info */
-  getActiveSkill(): SkillProviderMaybePromise<{ name: string; description: string } | null>;
+  getActiveSkill(): SkillProviderMaybePromise<SkillContextSummary | null>;
   /** Activate a skill by name. Returns injection result or error. */
   activateSkill(
     name: string,

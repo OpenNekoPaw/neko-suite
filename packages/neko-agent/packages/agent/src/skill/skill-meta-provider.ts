@@ -1,5 +1,5 @@
 import type { Skill, SkillInjection } from '@neko/shared';
-import type { ISkillProvider } from '../tools/core/meta-tools';
+import type { ISkillProvider, SkillContextSummary } from '../tools/core/meta-tools';
 import type { SkillService } from './skill-service';
 
 export interface ConversationSkillProviderEffects {
@@ -27,11 +27,11 @@ export function createConversationSkillProvider(
       skillService.registry
         .listSkills()
         .filter((skill) => skill.enabled !== false)
-        .map((skill) => ({ name: skill.name, description: skill.description || '' })),
+        .map(projectSkillContextSummary),
 
     getActiveSkill: () => {
       const skill = effects.getActiveSkill();
-      return skill ? { name: skill.name, description: skill.description || '' } : null;
+      return skill ? projectSkillContextSummary(skill) : null;
     },
 
     activateSkill: async (name) => {
@@ -62,5 +62,17 @@ export function createConversationSkillProvider(
       await effects.clearActiveSkill();
       return { success: true, message: 'Skill deactivated' };
     },
+  };
+}
+
+function projectSkillContextSummary(skill: Skill): SkillContextSummary {
+  return {
+    name: skill.name,
+    description: skill.description || '',
+    ...(skill.domain ? { domain: skill.domain } : {}),
+    ...(skill.referencedSkills && skill.referencedSkills.length > 0
+      ? { relatedSkills: skill.referencedSkills }
+      : {}),
+    ...(skill.mediaWorkflow ? { mediaWorkflow: skill.mediaWorkflow } : {}),
   };
 }

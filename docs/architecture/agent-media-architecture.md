@@ -1298,3 +1298,93 @@ Agent-facing tools must declare enough safety metadata for planning:
 | `neko-audio` | Basic query/destructive metadata exists; several mutations still rely on fail-closed defaults | Add explicit safety classes for import/effect/mix operations |
 | `neko-puppet` | Provider exists but parameter mutations currently lack explicit safety metadata | Mark query/mutation split before adding automatic execution policy |
 | `neko-engine` | Effect/transcribe/analysis tools have read-only/concurrency metadata | Add confirmation metadata to custom shader registration |
+
+---
+
+## 9. Skill-Driven Media-To-Video Composition
+
+**状态**: 2026-06-04 adopted by `design-skill-driven-media-to-video`
+
+Media-to-video 不再由 Agent 代码中的 route catalog、router、DAG 或固定 flow executor 拥有。它是一个顶层 Skill prompt-chain：`media-to-video` 负责在自然语言正文里说明如何检查输入、选择子 Skill、产生结构化 artifact、请求审批、调用工具和降级。漫画、图片、分镜、动画计划、Cut、导出等细分能力是普通 Skill，不是另一套媒体工作流注册表。
+
+### 9.1 职责边界
+
+| 层 | 职责 | 不做什么 |
+|----|------|----------|
+| `SKILL.md` | 描述典型先后关系、判断点、失败恢复、何时切换子 Skill | 不被运行时解析为 route / stage / DAG |
+| `manifest.json` / `SkillManifest` | 暴露 `referencedSkills`、`mediaWorkflow` 等可发现性与校验提示 | 不声明 `steps`、`routes`、`workflow`、`dag` 等编排字段 |
+| Agent runtime | 发现 Skill、懒加载 `SkillRegistry.ensureLoaded()`、注入 allowed tools、返回缺失 Skill 诊断 | 不拥有 media-to-video 专用 orchestrator |
+| Tools / providers | 执行 ReadDocument、ReadImage、OCR、生成、Canvas、Cut、export 等真实操作 | 不从 Skill 文本里模拟执行结果 |
+| Agent webview | 展示 active skill、tool calls、approval、diagnostics 和 validated structured artifacts | 不解析 markdown 表格生成分镜，不推断工作流 |
+| Target plugins | 接收 typed payload 并在自身服务路径里导入或编辑 | 不接收未校验 artifact 或绝对缓存路径 |
+
+### 9.2 顶层 Skill 与子 Skill
+
+内置媒体 Skill 的关系如下：
+
+| Skill | 主要职责 | 典型输入 | 典型输出 |
+|-------|----------|----------|----------|
+| `media-to-video` | 顶层协调；选择最小相关子 Skill，管理审批和降级 | comic / document / image / storyboard / generated media | planning summary 或下一步 structured artifact |
+| `comic-to-storyboard` | 漫画页面读取、OCR、分格证据、分镜表 | EPUB / PDF / CBZ / CBR 页面或图片 | `StoryboardTableV1` |
+| `image-to-shot` | 静图或图像序列转镜头计划 | image / image sequence | storyboard rows / animation plan |
+| `storyboard-to-animation-plan` | 分镜表转运动、镜头、生成提示和连续性计划 | `StoryboardTableV1` | animation plan |
+| `animation-plan-to-cut` | 动画计划转 Cut 可导入 timeline payload | animation plan / storyboard | Cut storyboard payload |
+| `generated-shot-assembly` | 聚合已生成的图片、视频、音频、字幕引用 | generated media refs | execution summary |
+| `export-video-package` | 导出前检查、交付摘要和剩余步骤 | Cut payload / execution summary | export-oriented summary |
+
+“子 Skill”只是被顶层 Skill 在正文和 `referencedSkills` 中引用的普通 Skill。它需要 Agent 的通用 Skill 激活能力支持：GetContext 看到候选，ActivateSkill 懒加载详细正文，ToolInjection 只授予该 Skill 声明的工具。它不需要媒体专用 Agent 编排器。
+
+### 9.3 `mediaWorkflow` 只是提示，不是流程
+
+`SkillManifest.mediaWorkflow` 只允许描述运行时必须在完整读取正文前知道的轻量信息：
+
+- `acceptedModalities`: 可处理的输入模态，例如 `comic`、`image`、`storyboard`
+- `inputArtifacts` / `producedArtifacts`: 结构化 artifact kind，例如 `storyboard-table`、`animation-plan`
+- `tags`: 搜索和 UI 过滤标签
+- `costLevel` / `riskLevel`: 计划和审批文案使用的相对提示
+- `validationRequirements`: send-to 前必须通过的 validator 名称
+- `optionalTools`: 有则增强、无则降级的工具
+
+禁止字段包括 `steps`、`stages`、`routes`、`branches`、`priority`、`workflow`、`dag`、`nodes`、`edges` 等。它们会把 Skill 重新变成代码可执行流程，违反 [adr-skill-as-prompt-chains.md](./adr-skill-as-prompt-chains.md) 的边界。
+
+### 9.4 漫画到动画的典型执行形态
+
+```text
+用户请求 comic EPUB -> video/storyboard
+  -> 激活 media-to-video
+  -> GetContext 查看 comic-to-storyboard 等 related skills
+  -> 需要漫画证据时激活 comic-to-storyboard
+  -> ReadDocument 读取 EPUB 目录/图片引用
+  -> 已拿到 image paths 时用 ReadImage 分析对应页面
+     （不要对同一批页面再调用 ReadDocumentImage）
+  -> 输出 validated StoryboardTableV1 + safe media refs
+  -> 用户要继续动画化时激活 storyboard-to-animation-plan
+  -> 涉及批量生成、上色、替换时间线、长导出时先审批
+  -> Canvas/Cut/export 只接收验证通过的 typed payload
+```
+
+这个顺序是 Skill prompt-chain 对 Agent 的领域指导，不是运行时硬编码路线。Agent 可以按任务复杂度合并、跳过或回退；例如用户只要求“分析前 3 页漫画”时，流程止于 `comic-to-storyboard` 的证据和 `StoryboardTableV1`，不会自动进入生成或 Cut。
+
+### 9.5 结构化 artifact 和媒体引用
+
+Markdown 只负责展示解释。分镜表、动画计划、Canvas payload、Cut payload、generated media ref、execution summary 必须以 `neko-composite` / rich content / shared schema 的结构化 payload 为准，并在渲染或 send-to 前校验。
+
+媒体引用必须来自真实工具结果或 generated asset 记录，例如 tool-call asset locator、asset index、generated asset id。禁止把以下内容写进结构化 artifact：
+
+- `/Users/.../globalStorage/...` 这类绝对缓存路径
+- `file://`、`blob:`、`localhost` URL
+- base64 图片/音视频
+- Agent 自己编造的 tool call id、asset id 或 page id
+
+图片是否能在 Canvas 显示，取决于目标插件是否能通过安全资源路径解析该引用。Agent 发送的是 typed ref；Canvas 负责用自己的 import service 转为节点、缩略图和连线，不能要求 Agent 直接拼 Canvas 内部节点 patch。
+
+### 9.6 回归约束
+
+新增媒体工作流应通过新增或安装 Skill 文件改变可发现能力，而不是修改 Agent 媒体 route 代码。当前回归覆盖包括：
+
+- `packages/neko-agent/packages/agent/src/skill/__tests__/skill-loader-manifest.test.ts`: 只添加 `SKILL.md` + sibling `manifest.json` 即可暴露 `referencedSkills` 和 `mediaWorkflow`，并拒绝 workflow DSL 字段。
+- `packages/neko-agent/packages/agent/src/skill/__tests__/skill-registry-lazy.test.ts`: lazy placeholder 在完整加载正文前已能被发现和投影媒体元数据。
+- `packages/neko-agent/packages/agent/src/skill/__tests__/skill-meta-provider.test.ts`: ActivateSkill 通过现有 lazy loading path 激活相关子 Skill，且不继承父 Skill 未声明的工具。
+- `packages/neko-agent/packages/agent/src/tools/core/__tests__/meta-tools.test.ts`: GetContext 输出 active skill、related skills 和 media workflow hints，供 Agent 自主选择。
+
+若未来加入 `gameplay-to-trailer`、`audio-to-music-video`、`model-turntable-to-video` 等流程，应优先提交新的 Skill 包和 manifest fixture；只有 discovery、权限、artifact validator 或目标插件 typed payload 缺能力时，才修改运行时代码。

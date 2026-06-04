@@ -13,7 +13,9 @@ import type {
   CommandFrontmatter,
   SkillLoadError,
   ISkillFileSystem,
+  SkillManifest,
 } from '@neko/shared';
+import { validateSkillManifest } from '@neko/shared';
 import type { IMarkdownParser } from './markdown-parser';
 import { getLogger } from '../utils/logger';
 
@@ -38,6 +40,8 @@ export interface LazySkill {
   source: SkillSource;
   /** Directory path */
   directoryPath: string;
+  /** Program-facing metadata loaded from manifest.json without loading SKILL.md body */
+  manifest?: SkillManifest;
   /** Whether content has been loaded */
   isLoaded: boolean;
   /** Load full skill content with support files */
@@ -251,6 +255,7 @@ export class LazyLoader implements ILazyLoader {
     if (!skillFrontmatter.name || !skillFrontmatter.description) {
       return null;
     }
+    const manifest = await this.loadSkillManifest(directoryPath);
 
     // Create lazy skill with deferred content loading
     let cachedSkill: Skill | null = null;
@@ -261,6 +266,7 @@ export class LazyLoader implements ILazyLoader {
       icon: skillFrontmatter.icon,
       source,
       directoryPath,
+      manifest,
       isLoaded: false,
 
       async loadContent(): Promise<Skill> {
@@ -281,6 +287,31 @@ export class LazyLoader implements ILazyLoader {
     };
 
     return lazySkill;
+  }
+
+  private async loadSkillManifest(directoryPath: string): Promise<SkillManifest | undefined> {
+    const manifestPath = `${directoryPath}/manifest.json`;
+    const exists = await this.fs.exists(manifestPath);
+    if (!exists) return undefined;
+
+    const raw = await this.fs.readFile(manifestPath);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse skill manifest.json: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const manifest = parsed as SkillManifest;
+    const validation = validateSkillManifest(manifest);
+    if (!validation.valid) {
+      throw new Error(`Invalid skill manifest.json: ${validation.errors.join(', ')}`);
+    }
+    return manifest;
   }
 
   /**
