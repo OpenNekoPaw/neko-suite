@@ -120,6 +120,49 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(setCanvasData).toHaveBeenCalledWith(DEFAULT_CANVAS_DATA);
     expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
   });
+
+  it('creates canvas connections from host node operation requests', () => {
+    const vscode = createVSCodeApi();
+    const createConnection = vi.fn(() => ({
+      connectionId: 'connection-1',
+    }));
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{
+            vscode,
+            createConnection,
+          }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({
+        type: 'nodes.createConnection',
+        _requestId: 7,
+        payload: {
+          sourceId: 'scene-1',
+          targetId: 'scene-2',
+          type: 'sequence',
+        },
+      });
+    });
+
+    expect(createConnection).toHaveBeenCalledWith({
+      sourceId: 'scene-1',
+      targetId: 'scene-2',
+      type: 'sequence',
+    });
+    expect(vscode.postMessage).toHaveBeenCalledWith({
+      type: '_response',
+      _requestId: 7,
+      connectionId: 'connection-1',
+    });
+  });
 });
 
 function VSCodeMessageHarness({

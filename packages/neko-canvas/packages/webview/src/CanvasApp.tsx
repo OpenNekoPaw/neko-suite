@@ -631,6 +631,27 @@ export function CanvasApp() {
       return useCanvasStore.getState().addNode(node);
     },
     deriveNode: (request) => useCanvasStore.getState().deriveNode(request),
+    createConnection: (request) => {
+      if (!request.sourceId || !request.targetId) {
+        throw new Error('Connection sourceId and targetId are required');
+      }
+      const connectionId = useCanvasStore.getState().addConnection({
+        sourceId: request.sourceId,
+        sourceAnchor: request.sourceAnchor ?? 'right',
+        targetId: request.targetId,
+        targetAnchor: request.targetAnchor ?? 'left',
+        ...(request.type ? { type: request.type } : {}),
+        ...(request.label ? { label: request.label } : {}),
+        ...(request.priority !== undefined ? { priority: request.priority } : {}),
+        ...(request.extension ? { extension: request.extension } : {}),
+        sourceEndpoint: { nodeId: request.sourceId, scope: 'node' },
+        targetEndpoint: { nodeId: request.targetId, scope: 'node' },
+      });
+      const connection = useCanvasStore
+        .getState()
+        .canvasData?.connections.find((item) => item.id === connectionId);
+      return { connectionId, connection };
+    },
     createComposite: (request) => useCanvasStore.getState().createComposite(request),
     updateBlock: (request) => useCanvasStore.getState().updateBlock(request),
     extractStructuredContent: (request) =>

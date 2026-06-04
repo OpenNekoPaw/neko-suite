@@ -36,6 +36,22 @@ export interface CanvasDeriveNodeResult {
   node?: CanvasNode;
 }
 
+export interface CanvasCreateConnectionRequest {
+  sourceId: string;
+  targetId: string;
+  sourceAnchor?: CanvasConnection['sourceAnchor'];
+  targetAnchor?: CanvasConnection['targetAnchor'];
+  type?: CanvasConnection['type'];
+  label?: string;
+  priority?: number;
+  extension?: CanvasConnection['extension'];
+}
+
+export interface CanvasCreateConnectionResult {
+  connectionId: string;
+  connection?: CanvasConnection;
+}
+
 export interface CanvasCompositeChildSpec extends CanvasNodeCreateSpec {
   id?: string;
 }

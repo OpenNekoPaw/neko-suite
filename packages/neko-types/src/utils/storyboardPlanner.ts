@@ -10,7 +10,10 @@ import type {
   StoryShotPlan,
 } from '../types/storyboard-planner';
 import type { ShotCharacter } from '../types/canvas';
-import type { CanvasCompositeConnectionSpec } from '../types/canvas-agent-operations';
+import type {
+  CanvasCompositeConnectionSpec,
+  CanvasCreateConnectionRequest,
+} from '../types/canvas-agent-operations';
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -69,6 +72,8 @@ export async function applyStoryboardPayloadToCanvas(
   const startY = options.startY ?? DEFAULT_START_Y;
   const createdScenes: Array<{ sourceSceneId: string; sceneNodeId: string; shotIds: string[] }> =
     [];
+  let previousSceneNodeId: string | undefined;
+  let nextSceneConnectionPriority = 0;
 
   for (let sceneIndex = 0; sceneIndex < payload.scenes.length; sceneIndex++) {
     const scene = payload.scenes[sceneIndex];
@@ -133,6 +138,18 @@ export async function applyStoryboardPayloadToCanvas(
       sceneNodeId: composite.containerId,
       shotIds: composite.childIds,
     });
+
+    if (previousSceneNodeId) {
+      await api.nodes.createConnection(
+        createStoryboardSceneSequenceConnection(
+          previousSceneNodeId,
+          composite.containerId,
+          nextSceneConnectionPriority,
+        ),
+      );
+      nextSceneConnectionPriority += 1;
+    }
+    previousSceneNodeId = composite.containerId;
   }
 
   return {
@@ -140,6 +157,22 @@ export async function applyStoryboardPayloadToCanvas(
     scenesCreated: createdScenes.length,
     totalShots: createdScenes.reduce((total, scene) => total + scene.shotIds.length, 0),
     scenes: createdScenes,
+  };
+}
+
+function createStoryboardSceneSequenceConnection(
+  sourceSceneNodeId: string,
+  targetSceneNodeId: string,
+  priority: number,
+): CanvasCreateConnectionRequest {
+  return {
+    sourceId: sourceSceneNodeId,
+    sourceAnchor: 'right',
+    targetId: targetSceneNodeId,
+    targetAnchor: 'left',
+    type: 'sequence',
+    label: STORYBOARD_SEQUENCE_CONNECTION_LABEL,
+    priority,
   };
 }
 

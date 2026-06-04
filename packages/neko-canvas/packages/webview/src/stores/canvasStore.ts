@@ -1018,6 +1018,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   addConnection: (connection) => {
     const { canvasData } = get();
     if (!canvasData) return '';
+    const hasSource = canvasData.nodes.some((node) => node.id === connection.sourceId);
+    const hasTarget = canvasData.nodes.some((node) => node.id === connection.targetId);
+    if (!hasSource || !hasTarget) {
+      throw new Error('Connection source and target nodes must exist');
+    }
 
     recordHistory(canvasData);
 

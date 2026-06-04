@@ -183,6 +183,8 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('extension sends new node operation payload wrappers', () => {
       expect(providerSource).toContain("sendRequest<CanvasDeriveNodeResult>('nodes.derive'");
+      expect(providerSource).toContain('sendRequest<CanvasCreateConnectionResult>');
+      expect(providerSource).toContain("'nodes.createConnection'");
       expect(providerSource).toContain(
         "sendRequest<CanvasCreateCompositeResult>('nodes.createComposite'",
       );
@@ -194,6 +196,7 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('webview consumes new node operation requests', () => {
       expect(webviewSource).toContain("case 'nodes.derive'");
+      expect(webviewSource).toContain("case 'nodes.createConnection'");
       expect(webviewSource).toContain("case 'nodes.createComposite'");
       expect(webviewSource).toContain("case 'nodes.updateBlock'");
       expect(webviewSource).toContain("case 'nodes.extractStructuredContent'");

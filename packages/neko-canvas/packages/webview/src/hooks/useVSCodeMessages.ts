@@ -16,6 +16,7 @@ import type {
   CanvasTimelineSyncPayload,
   OperationSource,
   CanvasCreateCompositeRequest,
+  CanvasCreateConnectionRequest,
   CanvasDeriveNodeRequest,
   CanvasExtractStructuredContentRequest,
   CanvasAgentActiveContextRequest,
@@ -85,6 +86,7 @@ export interface UseVSCodeMessagesOptions {
     preset?: string;
   }) => string;
   deriveNode?: (request: CanvasDeriveNodeRequest) => unknown;
+  createConnection?: (request: CanvasCreateConnectionRequest) => unknown;
   createComposite?: (request: CanvasCreateCompositeRequest) => unknown;
   updateBlock?: (request: CanvasUpdateBlockRequest) => unknown;
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
@@ -178,6 +180,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     updateNode,
     createNode,
     deriveNode,
+    createConnection,
     createComposite,
     updateBlock,
     extractStructuredContent,
@@ -221,6 +224,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   createNodeRef.current = createNode;
   const deriveNodeRef = useRef(deriveNode);
   deriveNodeRef.current = deriveNode;
+  const createConnectionRef = useRef(createConnection);
+  createConnectionRef.current = createConnection;
   const createCompositeRef = useRef(createComposite);
   createCompositeRef.current = createComposite;
   const updateBlockRef = useRef(updateBlock);
@@ -470,6 +475,31 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               );
               if (!isRecord(result)) {
                 throw new Error('Derive operation failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.createConnection': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                createConnectionRef.current?.(
+                  (message.payload as CanvasCreateConnectionRequest | undefined) ?? {
+                    sourceId: '',
+                    targetId: '',
+                  },
+                ),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Connection creation failed');
               }
               vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
             } catch (error) {

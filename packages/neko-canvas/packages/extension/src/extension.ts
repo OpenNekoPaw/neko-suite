@@ -269,6 +269,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       create: (type, position, data, preset) =>
         canvasEditorProvider.createNode(type, position, data, preset),
       derive: (request) => canvasEditorProvider.deriveNode(request),
+      createConnection: (request) => canvasEditorProvider.createConnection(request),
       createComposite: (request) => canvasEditorProvider.createComposite(request),
       updateBlock: (request) => canvasEditorProvider.updateBlock(request),
       extractStructuredContent: (request) => canvasEditorProvider.extractStructuredContent(request),

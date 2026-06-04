@@ -10,6 +10,8 @@ import type {
   CanvasAgentContentPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
+  CanvasCreateConnectionRequest,
+  CanvasCreateConnectionResult,
   CanvasDeriveNodeRequest,
   CanvasDeriveNodeResult,
   CanvasExtractStructuredContentRequest,
@@ -184,6 +186,8 @@ export interface NekoCanvasAPI {
     ): Promise<string>;
     /** Derive a successor node through registered preset rules */
     derive(request: CanvasDeriveNodeRequest): Promise<CanvasDeriveNodeResult>;
+    /** Create a directed connection between existing Canvas nodes */
+    createConnection(request: CanvasCreateConnectionRequest): Promise<CanvasCreateConnectionResult>;
     /** Create a container and child nodes as one logical mutation */
     createComposite(request: CanvasCreateCompositeRequest): Promise<CanvasCreateCompositeResult>;
     /** Update a composable block binding or explicit JSON Pointer path */

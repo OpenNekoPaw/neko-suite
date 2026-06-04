@@ -40,6 +40,8 @@ import {
 import type {
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
+  CanvasCreateConnectionRequest,
+  CanvasCreateConnectionResult,
   CanvasDroppedAsset,
   CanvasDeriveNodeRequest,
   CanvasDeriveNodeResult,
@@ -870,6 +872,23 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       entityType: 'node',
       reason: 'compositeCreated',
       operationType: 'nodes.createComposite',
+    });
+    return result;
+  }
+
+  async createConnection(
+    request: CanvasCreateConnectionRequest,
+  ): Promise<CanvasCreateConnectionResult> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<CanvasCreateConnectionResult>('nodes.createConnection', {
+      payload: request,
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'add',
+      nodeId: request.sourceId,
+      entityType: 'connection',
+      reason: 'connectionCreated',
+      operationType: 'nodes.createConnection',
     });
     return result;
   }

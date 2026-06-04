@@ -95,11 +95,13 @@ describe('storyboardPlanner', () => {
         containerId: 'scene-node-1',
         childIds: ['shot-node-1', 'shot-node-2'],
       });
+    const createConnection = vi.fn<NekoCanvasAPI['nodes']['createConnection']>();
 
     const result = await applyStoryboardPayloadToCanvas(
       {
         nodes: {
           createComposite,
+          createConnection,
         },
       } as Pick<NekoCanvasAPI, 'nodes'>,
       createStoryboardPayload(scriptIndex, { scenesLimit: 1 }),
@@ -131,5 +133,80 @@ describe('storyboardPlanner', () => {
     });
     expect(request?.children).toHaveLength(2);
     expect(request?.children.every((child) => child.type === 'shot')).toBe(true);
+    expect(createConnection).not.toHaveBeenCalled();
+  });
+
+  it('creates scene sequence connections between imported storyboard scenes', async () => {
+    const createComposite = vi
+      .fn<NekoCanvasAPI['nodes']['createComposite']>()
+      .mockResolvedValueOnce({
+        containerId: 'scene-node-1',
+        childIds: ['shot-node-1'],
+      })
+      .mockResolvedValueOnce({
+        containerId: 'scene-node-2',
+        childIds: ['shot-node-2'],
+      });
+    const createConnection = vi.fn<NekoCanvasAPI['nodes']['createConnection']>();
+
+    await applyStoryboardPayloadToCanvas(
+      {
+        nodes: {
+          createComposite,
+          createConnection,
+        },
+      } as Pick<NekoCanvasAPI, 'nodes'>,
+      {
+        mode: 'semantic',
+        sourceScriptUri: 'agent://storyboard',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Page 1',
+            sceneNumber: 1,
+            shotPlans: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'First page',
+                characters: [],
+                shotScale: 'MS',
+                characterAction: 'Enter',
+                emotion: [],
+                sceneTags: [],
+              },
+            ],
+          },
+          {
+            sceneId: 'scene-2',
+            sceneTitle: 'Page 2',
+            sceneNumber: 2,
+            shotPlans: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Second page',
+                characters: [],
+                shotScale: 'MS',
+                characterAction: 'React',
+                emotion: [],
+                sceneTags: [],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(createConnection).toHaveBeenCalledTimes(1);
+    expect(createConnection).toHaveBeenCalledWith({
+      sourceId: 'scene-node-1',
+      sourceAnchor: 'right',
+      targetId: 'scene-node-2',
+      targetAnchor: 'left',
+      type: 'sequence',
+      label: 'next',
+      priority: 0,
+    });
   });
 });
