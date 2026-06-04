@@ -266,6 +266,12 @@ export interface ProjectStoryboardTableV1ToCanvasOptions {
   readonly resolveImageResourceRef?: (
     context: StoryboardMediaResolverContextV1,
   ) => DocumentArchiveResourceRef | undefined;
+  readonly resolveFallbackImagePath?: (
+    context: StoryboardShotResolverContextV1,
+  ) => string | undefined;
+  readonly resolveFallbackImageResourceRef?: (
+    context: StoryboardShotResolverContextV1,
+  ) => DocumentArchiveResourceRef | undefined;
 }
 
 export interface StoryboardCutStoryboardShotBaseV1 {
@@ -298,6 +304,12 @@ export interface StoryboardMediaResolverContextV1 {
   readonly scene: StoryboardSceneRowV1;
   readonly shot: StoryboardShotRowV1;
   readonly mediaRef: StoryboardMediaRefV1;
+}
+
+export interface StoryboardShotResolverContextV1 {
+  readonly table: StoryboardTableV1;
+  readonly scene: StoryboardSceneRowV1;
+  readonly shot: StoryboardShotRowV1;
 }
 
 export interface ProjectStoryboardTableV1ToCutOptions {
@@ -538,10 +550,11 @@ function resolveCanvasStoryboardReferenceImagePath(
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
 } {
   const mediaRef = selectStoryboardShotImageRef(shot);
-  const context = mediaRef ? { table, scene, shot, mediaRef } : undefined;
-  const referenceImageResourceRef = context
-    ? options.resolveImageResourceRef?.(context)
-    : undefined;
+  const shotContext = { table, scene, shot };
+  const mediaContext = mediaRef ? { ...shotContext, mediaRef } : undefined;
+  const referenceImageResourceRef = mediaContext
+    ? options.resolveImageResourceRef?.(mediaContext)
+    : options.resolveFallbackImageResourceRef?.(shotContext);
 
   if (shot.referenceImagePath) {
     return {
@@ -550,13 +563,10 @@ function resolveCanvasStoryboardReferenceImagePath(
     };
   }
 
-  if (!mediaRef) {
-    return {};
-  }
-
   const imagePath =
-    (context ? options.resolveImagePath?.(context) : undefined) ??
-    resolveStoryboardWorkspacePath(mediaRef);
+    (mediaContext ? options.resolveImagePath?.(mediaContext) : undefined) ??
+    (mediaRef ? resolveStoryboardWorkspacePath(mediaRef) : undefined) ??
+    options.resolveFallbackImagePath?.(shotContext);
   return {
     ...(imagePath ? { referenceImagePath: imagePath } : {}),
     ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),

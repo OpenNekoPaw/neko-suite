@@ -445,6 +445,198 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
+  it('backfills semantic storyboard canvas reference images from rendered row media', () => {
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-2.jpg',
+      cachePath: '/tmp/neko-cache/page-2.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        profile: 'manga-to-video',
+        scenes: [
+          {
+            sceneId: 'scene-page-2',
+            sceneTitle: 'Page 2',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'First panel.',
+                characterAction: 'The character looks up.',
+                imageStrategy: 'generate-new',
+                generationPrompt: 'animated keyframe from panel',
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Shot 1',
+          media: [
+            {
+              id: 'read-image-2:0:/tmp/neko-cache/page-2.jpg',
+              toolCallId: 'read-image-2',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://page-2.jpg',
+              localPath: '/tmp/neko-cache/page-2.jpg',
+              resourceRef,
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    expect(projectStoryboardTableTransferPayload(data)).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              {
+                referenceImagePath: '/tmp/neko-cache/page-2.jpg',
+                referenceImageResourceRef: resourceRef,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('keeps fallback row media aligned when shot numbers repeat across scenes', () => {
+    const firstResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/tmp/neko-cache/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const secondResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-2.jpg',
+      cachePath: '/tmp/neko-cache/page-2.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        scenes: [
+          {
+            sceneId: 'scene-page-1',
+            sceneTitle: 'Page 1',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'First page.',
+                characterAction: 'The character enters.',
+                imageStrategy: 'generate-new',
+              },
+            ],
+          },
+          {
+            sceneId: 'scene-page-2',
+            sceneTitle: 'Page 2',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Second page.',
+                characterAction: 'The character reacts.',
+                imageStrategy: 'generate-new',
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Page 1 Shot 1',
+          media: [
+            {
+              id: 'read-image-1:0:/tmp/neko-cache/page-1.jpg',
+              toolCallId: 'read-image-1',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://page-1.jpg',
+              localPath: '/tmp/neko-cache/page-1.jpg',
+              resourceRef: firstResourceRef,
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+        {
+          id: 'section-1',
+          index: 1,
+          heading: 'Page 2 Shot 1',
+          media: [
+            {
+              id: 'read-image-2:0:/tmp/neko-cache/page-2.jpg',
+              toolCallId: 'read-image-2',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://page-2.jpg',
+              localPath: '/tmp/neko-cache/page-2.jpg',
+              resourceRef: secondResourceRef,
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    const payload = projectStoryboardTableTransferPayload(data);
+
+    expect(payload).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              {
+                referenceImagePath: '/tmp/neko-cache/page-1.jpg',
+                referenceImageResourceRef: firstResourceRef,
+              },
+            ],
+          },
+          {
+            shotPlans: [
+              {
+                referenceImagePath: '/tmp/neko-cache/page-2.jpg',
+                referenceImageResourceRef: secondResourceRef,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it('disables storyboard semantic transfer payloads when validation has errors', () => {
     const data: StoryboardTableRichData = {
       template: 'storyboard-table',

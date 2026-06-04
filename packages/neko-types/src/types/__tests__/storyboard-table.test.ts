@@ -571,6 +571,49 @@ describe('storyboard table contract', () => {
     });
   });
 
+  it('uses canvas fallback image resolvers when a semantic shot has no media refs', () => {
+    const table: StoryboardTableV1 = {
+      schemaVersion: 1,
+      kind: 'storyboard-table',
+      title: 'Projection',
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          sceneTitle: 'Scene',
+          shots: [
+            {
+              shotNumber: 1,
+              duration: 4,
+              visualDescription: 'Rin looks up.',
+              characterAction: 'Rin looks up.',
+              imageStrategy: 'generate-new',
+              generationPrompt: 'close-up anime frame',
+            },
+          ],
+        },
+      ],
+    };
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/tmp/neko-cache/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+
+    expect(
+      projectStoryboardTableV1ToCanvasPayload(table, {
+        resolveFallbackImagePath: ({ shot }) =>
+          shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
+        resolveFallbackImageResourceRef: ({ shot }) =>
+          shot.shotNumber === 1 ? resourceRef : undefined,
+      }).scenes[0]?.shotPlans[0],
+    ).toMatchObject({
+      referenceImagePath: '/tmp/neko-cache/page-1.jpg',
+      referenceImageResourceRef: resourceRef,
+    });
+  });
+
   it('interprets image strategies without scheduling generation for reuse-original', () => {
     const table = storyboardTable({
       imageStrategy: 'reuse-original',
