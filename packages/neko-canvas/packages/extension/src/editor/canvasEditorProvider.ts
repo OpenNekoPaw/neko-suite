@@ -86,6 +86,7 @@ import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
 const CANVAS_KEYBOARD_OWNER_PREFIX = 'neko.canvasEditor:';
+const DOCUMENT_RESOURCE_CACHE_DIR_NAME = 'document-image-cache';
 
 const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'deleteSelected',
@@ -124,6 +125,10 @@ function isPathInsideRoot(filePath: string, rootPath: string): boolean {
     path.normalize(resolvedFilePath),
   );
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function isPathInsideNamedDirectory(filePath: string, directoryName: string): boolean {
+  return path.normalize(filePath).split(path.sep).filter(Boolean).includes(directoryName);
 }
 
 function realpathIfExists(filePath: string): string {
@@ -862,8 +867,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     for (const child of request.children) {
       assertCanvasNodeType(child.type);
     }
+    const payload = await this.materializeCompositeRequestRuntimePaths(request);
     const result = await this.sendRequest<CanvasCreateCompositeResult>('nodes.createComposite', {
-      payload: request,
+      payload,
     });
     this._onDidChangeCanvas.fire({
       type: 'add',
@@ -2815,6 +2821,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       : undefined;
   }
 
+  private async materializeCompositeRequestRuntimePaths(
+    request: CanvasCreateCompositeRequest,
+  ): Promise<CanvasCreateCompositeRequest> {
+    const webview = this.activeWebviewPanel?.webview;
+    if (!webview) return request;
+
+    const children = await Promise.all(
+      request.children.map(async (child) => {
+        if (child.type !== 'shot' || !child.data) {
+          return child;
+        }
+        const data = { ...child.data };
+        await this.materializeShotReferencePreview(data, webview);
+        return { ...child, data };
+      }),
+    );
+
+    return {
+      ...request,
+      children,
+    };
+  }
+
   /** Convert stored asset paths to webview URIs so the webview can display them */
   private async normalizeCanvasPathsForLoad(
     data: Record<string, unknown>,
@@ -2825,9 +2854,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (!nodes) return;
 
     for (const node of nodes) {
-      if (node['type'] !== 'media') continue;
       const nodeData = node['data'] as Record<string, unknown> | undefined;
       if (!nodeData) continue;
+
+      if (node['type'] === 'shot') {
+        await this.materializeShotReferencePreview(nodeData, webview);
+        continue;
+      }
+
+      if (node['type'] !== 'media') continue;
 
       for (const key of ['assetPath', 'thumbnailPath'] as const) {
         const value = nodeData[key];
@@ -2864,7 +2899,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (!cachePath) {
       return;
     }
-    const root = this.resolveDocumentResourceCacheRoot(cachePath);
+    const root =
+      this.resolveDocumentResourceCacheRoot(cachePath) ??
+      this.resolveExistingDocumentResourceRoot(cachePath);
     if (root) {
       await this.addFeatureRoot(webview, root.fsPath);
     }
@@ -2910,12 +2947,68 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
+  private async materializeShotReferencePreview(
+    nodeData: Record<string, unknown>,
+    webview: vscode.Webview,
+  ): Promise<void> {
+    const resourceRef = nodeData['referenceImageResourceRef'];
+    delete nodeData['runtimeReferenceImagePath'];
+    delete nodeData['documentResourceStatus'];
+
+    if (!isDocumentArchiveResourceRef(resourceRef) || !resourceRef.cachePath) {
+      return;
+    }
+
+    const root =
+      this.resolveDocumentResourceCacheRoot(resourceRef.cachePath) ??
+      this.resolveExistingDocumentResourceRoot(resourceRef.cachePath);
+    if (!root) {
+      this.markDocumentResourceUnavailable(nodeData, 'unauthorized-cache-root');
+      return;
+    }
+
+    const localSourcePath = normalizeLocalFilePath(resourceRef.cachePath);
+    if (!localSourcePath || !fs.existsSync(localSourcePath)) {
+      this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
+      return;
+    }
+
+    await this.addFeatureRoot(webview, root.fsPath);
+    const runtimePath = this.projectLocalResource(
+      webview,
+      localSourcePath,
+      'neko-canvas.shot-reference-preview',
+    );
+    if (runtimePath) {
+      nodeData['runtimeReferenceImagePath'] = runtimePath;
+      delete nodeData['documentResourceStatus'];
+    } else {
+      this.markDocumentResourceUnavailable(nodeData, 'projection-failed');
+    }
+  }
+
   private resolveDocumentResourceCacheRoot(cachePath: string): vscode.Uri | undefined {
     const localPath = normalizeLocalFilePath(cachePath);
     if (!localPath) {
       return undefined;
     }
     return this.documentResourceCacheRoots.find((root) => isPathInsideRoot(localPath, root.fsPath));
+  }
+
+  private resolveExistingDocumentResourceRoot(filePath: string): vscode.Uri | undefined {
+    const localPath = normalizeLocalFilePath(filePath);
+    if (!localPath || !isPathInsideNamedDirectory(localPath, DOCUMENT_RESOURCE_CACHE_DIR_NAME)) {
+      return undefined;
+    }
+    if (!fs.existsSync(localPath)) {
+      return undefined;
+    }
+    try {
+      const stat = fs.statSync(localPath);
+      return vscode.Uri.file(stat.isDirectory() ? localPath : path.dirname(localPath));
+    } catch {
+      return undefined;
+    }
   }
 
   private markDocumentResourceUnavailable(
@@ -2927,6 +3020,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
     delete nodeData['runtimeAssetPath'];
     delete nodeData['runtimeThumbnailPath'];
+    delete nodeData['runtimeReferenceImagePath'];
     nodeData['documentResourceStatus'] = {
       state: 'unavailable',
       reason,
@@ -2946,9 +3040,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (!nodes) return;
 
     for (const node of nodes) {
-      if (node['type'] !== 'media') continue;
       const nodeData = node['data'] as Record<string, unknown> | undefined;
       if (!nodeData) continue;
+
+      if (node['type'] === 'shot') {
+        delete nodeData['runtimeReferenceImagePath'];
+        delete nodeData['documentResourceStatus'];
+        continue;
+      }
+
+      if (node['type'] !== 'media') continue;
 
       delete nodeData['runtimeAssetPath'];
       delete nodeData['runtimeThumbnailPath'];

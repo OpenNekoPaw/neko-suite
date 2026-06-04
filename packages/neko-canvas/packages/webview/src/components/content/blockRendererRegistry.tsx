@@ -326,13 +326,19 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
     return value;
   }
 
+  const hasDocumentResourceRef = Boolean(
+    resolvePreviewSourceMetadata(context)?.documentResourceRef,
+  );
   for (const path of getStringArrayMetadata(context.block, 'fallbackAssetPaths')) {
     if (!isJsonPointerPath(path)) continue;
     const { value: fallbackValue } = readNodeBinding(context.node, {
       path,
       valueType: 'asset',
     });
-    if (isPresentAssetValue(fallbackValue)) {
+    if (
+      isPresentAssetValue(fallbackValue) &&
+      (!hasDocumentResourceRef || path.includes('runtime') || fallbackValue.startsWith('data:'))
+    ) {
       return fallbackValue;
     }
   }
@@ -340,7 +346,7 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
   return value;
 }
 
-function isPresentAssetValue(value: unknown): boolean {
+function isPresentAssetValue(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 

@@ -313,6 +313,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             referenceImageResourceRef: isDocumentArchiveResourceRef(data.referenceImageResourceRef)
               ? data.referenceImageResourceRef
               : undefined,
+            runtimeReferenceImagePath: asString(data.runtimeReferenceImagePath) || undefined,
             generatedImage: asString(data.generatedImage) || undefined,
             generatedVideo: asString(data.generatedVideo) || undefined,
             generationStatus:

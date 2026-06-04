@@ -242,9 +242,51 @@ describe('node card policies', () => {
       throw new Error('expected asset preview');
     }
     expect(source.source.role).toBe('image');
-    expect(source.source.asset?.path).toBe(resourceRef.cachePath);
+    expect(source.source.asset).toBeUndefined();
     expect(source.source.metadata).toEqual({ documentResourceRef: resourceRef });
     expect(source.source.variants).toBeUndefined();
+    expect(JSON.stringify(source.source.asset) ?? '').not.toContain(resourceRef.cachePath);
+    expect(JSON.stringify(source.source.variants) ?? '').not.toContain(resourceRef.cachePath);
+  });
+
+  it('uses a materialized shot reference image as a safe runtime variant', () => {
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/Users/feng/Library/Application Support/Code/User/globalStorage/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const runtimeReferenceImagePath =
+      'https://file+.vscode-resource.vscode-cdn.net/Users/feng/Library/Application%20Support/Code/User/globalStorage/page-1.jpg';
+    const node = createShotNode({
+      id: 'shot-runtime-reference',
+      data: {
+        shotNumber: 10,
+        visualDescription: 'Imported document panel',
+        referenceImagePath: resourceRef.cachePath,
+        referenceImageResourceRef: resourceRef,
+        runtimeReferenceImagePath,
+      },
+    });
+
+    const source = shotCardPolicy.resolvePreviewSource(node);
+
+    expect(source.renderForm).toBe('asset-thumbnail');
+    if (source.renderForm !== 'asset-thumbnail') {
+      throw new Error('expected asset preview');
+    }
+    expect(source.source.asset).toBeUndefined();
+    expect(source.source.metadata).toEqual({ documentResourceRef: resourceRef });
+    expect(source.source.variants).toEqual([
+      {
+        id: 'reference-image',
+        role: 'image',
+        sourcePath: runtimeReferenceImagePath,
+        selected: true,
+      },
+    ]);
+    expect(getStableSafeVariantUrl(source.source)).toBe(runtimeReferenceImagePath);
   });
 
   it('builds text card previews from bounded excerpts', () => {

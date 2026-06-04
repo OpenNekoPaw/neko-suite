@@ -463,6 +463,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     referenceImagePath?: string;
     /** Runtime-safe document resource backing the reference image, when imported from a document. */
     referenceImageResourceRef?: DocumentArchiveResourceRef;
+    /** Runtime-only webview URI/path materialized from referenceImageResourceRef. Not persisted. */
+    runtimeReferenceImagePath?: string;
     /** Visual effects cues */
     vfx?: string[];
     /** Last successful storyboard import into neko-cut timeline */

@@ -157,6 +157,45 @@ describe('WebviewPreviewResolver', () => {
     });
     await expect(promise).resolves.toMatchObject({ sourcePath: 'image/page-1.jpg' });
   });
+
+  it('requests runtime previews from document resource refs without an asset path', async () => {
+    vi.useFakeTimers();
+    installFakeWindow();
+    const postMessage = vi.fn();
+    setGlobalVSCodeApi({
+      postMessage,
+      getState: () => undefined,
+      setState: () => {},
+    });
+    const resolver = new WebviewPreviewResolver();
+    const documentResourceRef = {
+      kind: 'document-entry',
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/cache/page-1.jpg',
+      versionPolicy: 'versioned-export',
+    };
+
+    const promise = resolver.resolve({
+      source: {
+        id: 'node:shot-reference',
+        role: 'image',
+        metadata: { documentResourceRef },
+      },
+    });
+    const request = postMessage.mock.calls[0]?.[0] as Record<string, unknown>;
+    resolver.dispose();
+
+    expect(request).toMatchObject({
+      type: 'preview:resolveVariant',
+      documentResourceRef,
+    });
+    expect(request).not.toHaveProperty('assetPath');
+    await expect(promise).resolves.toMatchObject({
+      sourcePath: undefined,
+      runtimeUrl: undefined,
+    });
+  });
 });
 
 function installFakeWindow(): {

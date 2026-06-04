@@ -106,7 +106,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
               label: 'preset.shot.image',
               binding: { path: '/generatedImage', valueType: 'asset' },
               metadata: {
-                fallbackAssetPaths: ['/referenceImagePath'],
+                fallbackAssetPaths: ['/runtimeReferenceImagePath', '/referenceImagePath'],
                 fallbackResourceRefPaths: ['/referenceImageResourceRef'],
               },
               capabilities: [

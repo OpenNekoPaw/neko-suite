@@ -111,12 +111,18 @@ export const shotCardPolicy: NodeCardPolicy = {
   resolvePreviewSource: (node) => {
     const selected = findSelectedGenerationCandidate(node);
     const generatedImage = readString(node.data, 'generatedImage');
+    const runtimeReferenceImagePath = readString(node.data, 'runtimeReferenceImagePath');
     const referenceImagePath = readString(node.data, 'referenceImagePath');
-    const sourcePath = selected?.dataUrl ?? generatedImage ?? referenceImagePath;
     const sourceRole: CanvasPreviewRole =
       selected || generatedImage ? 'generation-candidate' : 'image';
     const referenceImageResourceRef =
       selected || generatedImage ? undefined : readReferenceImageResourceRef(node);
+    const sourcePath =
+      selected?.dataUrl ??
+      generatedImage ??
+      runtimeReferenceImagePath ??
+      (referenceImageResourceRef ? undefined : referenceImagePath);
+    const resolverPath = referenceImageResourceRef ? undefined : (sourcePath ?? referenceImagePath);
     const directVariantPath =
       sourcePath && (selected || generatedImage || isSafeWebviewUrl(sourcePath))
         ? sourcePath
@@ -138,7 +144,7 @@ export const shotCardPolicy: NodeCardPolicy = {
       source: createAssetPreviewDescriptor({
         id: `node-card:${node.id}:shot`,
         role: sourceRole,
-        path: directVariantPath ? undefined : sourcePath,
+        path: directVariantPath ? undefined : resolverPath,
         mediaType: referenceImageResourceRef ? 'image' : undefined,
         title: resolveShotTitle(node),
         metadata: referenceImageResourceRef

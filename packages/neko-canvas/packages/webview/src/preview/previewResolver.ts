@@ -31,7 +31,8 @@ export class WebviewPreviewResolver implements PreviewResolver {
     }
 
     const sourcePath = request.source.asset?.path ?? request.source.asset?.uri;
-    if (!sourcePath) {
+    const documentResourceRef = request.source.metadata?.['documentResourceRef'];
+    if (!sourcePath && !documentResourceRef) {
       return createFallbackVariant(request, 'No preview source');
     }
 
@@ -40,7 +41,7 @@ export class WebviewPreviewResolver implements PreviewResolver {
       assetPath: sourcePath,
       role: request.role ?? request.source.role,
       mediaType: request.source.asset?.mediaType,
-      documentResourceRef: request.source.metadata?.['documentResourceRef'],
+      documentResourceRef,
     });
 
     return {
@@ -97,7 +98,7 @@ function createFallbackVariant(
 
 interface RuntimeVariantInput {
   sourceId: string;
-  assetPath: string;
+  assetPath?: string;
   role: CanvasPreviewRole;
   mediaType?: string;
   documentResourceRef?: unknown;
@@ -158,9 +159,9 @@ function createRuntimeVariantRequest(
         type: 'preview:resolveVariant',
         requestId,
         sourceId,
-        assetPath,
         role: engineRole,
         mediaType,
+        ...(assetPath ? { assetPath } : {}),
         ...(documentResourceRef ? { documentResourceRef } : {}),
       });
     } catch {

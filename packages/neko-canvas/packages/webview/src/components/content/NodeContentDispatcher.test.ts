@@ -212,6 +212,44 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Legacy path');
   });
 
+  it('renders migrated shot preview from a materialized document reference image', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 5,
+          visualDescription: 'Imported comic panel',
+          referenceImagePath: '/cache/page-1.jpg',
+          referenceImageResourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+            entryPath: 'OPS/page-1.jpg',
+            cachePath: '/cache/page-1.jpg',
+            versionPolicy: 'read-only-source',
+          },
+          runtimeReferenceImagePath:
+            'https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg',
+        },
+      }),
+      id: 'shot-runtime-reference',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg');
+    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).not.toContain('src="/cache/page-1.jpg"');
+    expect(markup).not.toContain('Legacy path');
+  });
+
   it('keeps composable node content visible when the node is not selected', () => {
     const node = {
       ...buildCanvasNode({
