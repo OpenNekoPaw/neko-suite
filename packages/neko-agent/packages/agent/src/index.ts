@@ -612,6 +612,9 @@ export {
   // Builtins
   registerBuiltins,
   builtinSkills,
+  getBuiltinSkills,
+  normalizeBuiltinSkillLocale,
+  selectBuiltinSkillContent,
   builtinToolGroups,
   registerBuiltinToolGroups,
   // ToolGroup Registry
@@ -641,6 +644,9 @@ export {
   type LazySkillRegistryScanResult,
   type ConfirmSkillCallback as ConfirmSkillCallbackFn,
   type SkillServiceConfig,
+  type BuiltinSkillLocale,
+  type BuiltinSkillOptions,
+  type LocalizedBuiltinSkillContent,
   type LazySkill,
   type LazyCommand,
   type LazySkillLoadResult,

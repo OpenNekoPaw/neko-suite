@@ -15,14 +15,18 @@ import {
 import {
   builtinSkills,
   comicToStoryboardSkill,
+  getBuiltinSkills,
+  getComicToStoryboardSkill,
   scriptGenerationSkill,
   aiGenerateSkill,
   videoEditingSkill,
   qualityAssessmentSkill,
+  normalizeBuiltinSkillLocale,
 } from '../index';
 import {
   animationPlanToCutSkill,
   exportVideoPackageSkill,
+  getMediaToVideoSkill,
   generatedShotAssemblySkill,
   imageToShotSkill,
   mediaToVideoSkill,
@@ -76,24 +80,22 @@ describe('Builtin Skills', () => {
 
     it('should request StoryboardTableV1 semantic output without fake media claims', () => {
       expect(comicToStoryboardSkill.content).toContain('StoryboardTableV1');
-      expect(comicToStoryboardSkill.content).toContain('internal structured');
+      expect(comicToStoryboardSkill.content).toContain('structured payload');
       expect(comicToStoryboardSkill.content).toContain('"schemaVersion": 1');
       expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
       expect(comicToStoryboardSkill.content).toContain('imageStrategy');
       expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
+      expect(comicToStoryboardSkill.content).toContain('only reference images from actual');
+      expect(comicToStoryboardSkill.content).toContain('Do not invent image ids');
       expect(comicToStoryboardSkill.content).toContain(
-        'only reference images that came from actual',
-      );
-      expect(comicToStoryboardSkill.content).toContain('Do not invent');
-      expect(comicToStoryboardSkill.content).toContain(
-        'do not ask the user to copy or edit the JSON',
+        'Do not ask the user to copy or edit the JSON',
       );
       expect(comicToStoryboardSkill.content).toContain(
         'Do not claim images have already been generated',
       );
       expect(comicToStoryboardSkill.content).toContain('Do not embed base64 image data');
       expect(comicToStoryboardSkill.content).toContain(
-        'report Canvas success from this skill unless an actual Canvas tool result exists',
+        'Do not report Canvas success from this skill unless an actual Canvas tool result exists',
       );
       expect(comicToStoryboardSkill.content).toContain('script-breakdown');
       expect(comicToStoryboardSkill.content).toContain('manga-to-video');
@@ -107,7 +109,7 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('Scene/shot granularity is important');
       expect(comicToStoryboardSkill.content).toContain('Do not create one scene per shot');
       expect(comicToStoryboardSkill.content).toContain('group multiple panels');
-      expect(comicToStoryboardSkill.content).toContain('from the same page');
+      expect(comicToStoryboardSkill.content).toContain('from the same page or continuous action');
       expect(comicToStoryboardSkill.content).toContain('shotNumber');
     });
 
@@ -180,6 +182,7 @@ describe('Builtin Skills', () => {
         expect(skill.domain).toBe('media');
         expect(skill.mediaWorkflow).toBeDefined();
         expect(skill.content).toContain('Structured Artifact Rules');
+        expect(skill.content).not.toContain('${structuredArtifactRules}');
       }
     });
 
@@ -195,6 +198,56 @@ describe('Builtin Skills', () => {
         ]),
       );
       expect(mediaToVideoSkill.content).not.toContain('pipeline to start');
+    });
+  });
+
+  describe('localized builtin skill content', () => {
+    it('normalizes supported builtin skill locales', () => {
+      expect(normalizeBuiltinSkillLocale()).toBe('en');
+      expect(normalizeBuiltinSkillLocale('en-US')).toBe('en');
+      expect(normalizeBuiltinSkillLocale('zh-CN')).toBe('zh-cn');
+      expect(normalizeBuiltinSkillLocale('zh_Hans')).toBe('zh-cn');
+      expect(normalizeBuiltinSkillLocale('zh-SG')).toBe('zh-cn');
+    });
+
+    it('keeps default builtin skills in English for compatibility', () => {
+      const defaultComicSkill = getComicToStoryboardSkill();
+      const defaultMediaSkill = getMediaToVideoSkill();
+
+      expect(defaultComicSkill).toBe(comicToStoryboardSkill);
+      expect(defaultComicSkill.content).toContain('Comic Analysis');
+      expect(defaultMediaSkill).toBe(mediaToVideoSkill);
+      expect(defaultMediaSkill.content).toContain('Media to Video Coordinator');
+    });
+
+    it('selects Chinese Markdown bodies for media workflow skills', () => {
+      const zhSkills = getBuiltinSkills({ locale: 'zh-CN' });
+      const zhComic = zhSkills.find((skill) => skill.name === 'comic-to-storyboard');
+      const zhMedia = zhSkills.find((skill) => skill.name === 'media-to-video');
+
+      expect(zhComic?.content).toContain('漫画分析');
+      expect(zhComic?.content).toContain('StoryboardTableV1');
+      expect(zhComic?.content).toContain('不要对同一张图先 ReadImage 再 ReadDocumentImage');
+      expect(zhComic?.content).toContain('不要在表格中嵌入 base64');
+      expect(zhMedia?.content).toContain('媒体转视频协调器');
+      expect(zhMedia?.content).toContain('结构化产物规则');
+      expect(zhMedia?.content).toContain('不要嵌入 base64');
+    });
+
+    it('keeps machine-facing skill contracts stable across locales', () => {
+      const enSkills = getBuiltinSkills({ locale: 'en' });
+      const zhSkills = getBuiltinSkills({ locale: 'zh-CN' });
+
+      expect(zhSkills.map((skill) => skill.name)).toEqual(enSkills.map((skill) => skill.name));
+
+      for (const enSkill of enSkills) {
+        const zhSkill = zhSkills.find((skill) => skill.name === enSkill.name);
+        expect(zhSkill).toBeDefined();
+        expect(zhSkill?.description).toBe(enSkill.description);
+        expect(zhSkill?.allowedTools).toEqual(enSkill.allowedTools);
+        expect(zhSkill?.referencedSkills).toEqual(enSkill.referencedSkills);
+        expect(zhSkill?.mediaWorkflow).toEqual(enSkill.mediaWorkflow);
+      }
     });
   });
 

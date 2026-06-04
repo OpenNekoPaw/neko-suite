@@ -69,14 +69,17 @@ describe('skill runtime bootstrap', () => {
     const summary = populateLazyRuntimeSkillRegistry({
       skillService: { registry },
       populator: new SkillRegistryPopulator(),
+      builtinSkills: [makeSkill('localized-builtin', true)],
       scanResult: {
         personal: { skills: [makeLazySkill('personal-skill')], commands: [] },
         project: { skills: [makeLazySkill('project-skill')], commands: [] },
       },
     });
 
+    expect(summary.builtin).toBe(1);
     expect(summary.personal).toBe(1);
     expect(summary.project).toBe(1);
+    expect(registry.getSkill('localized-builtin')?.content).toBe('localized-builtin content');
     expect(registry.isLazy('personal-skill')).toBe(true);
     expect(registry.isLazy('project-skill')).toBe(true);
   });
@@ -110,6 +113,30 @@ describe('skill runtime bootstrap', () => {
     expect(prompt.prompt).toContain('- **storyboard**: storyboard description');
     expect(summary.personal).toBe(1);
     expect(registry.isLazy('personal-skill')).toBe(true);
+  });
+
+  it('uses caller-provided builtin skills during lazy population', () => {
+    const registry = new SkillRegistry();
+    const localizedBuiltin = makeSkill('comic-to-storyboard');
+    const bootstrap = createRuntimeSkillBootstrap({
+      registry,
+      builtinSkills: [
+        {
+          ...localizedBuiltin,
+          content: '中文 Markdown Skill body',
+          source: 'builtin',
+        },
+      ],
+    });
+
+    const summary = bootstrap.populateLazy({
+      personal: { skills: [], commands: [] },
+      project: { skills: [], commands: [] },
+    });
+
+    expect(summary.builtin).toBe(1);
+    expect(registry.getSkill('comic-to-storyboard')?.content).toBe('中文 Markdown Skill body');
+    expect(registry.getSkill('comic-to-storyboard')?.source).toBe('builtin');
   });
 
   it('creates conversation-scoped skill providers without host orchestration', async () => {

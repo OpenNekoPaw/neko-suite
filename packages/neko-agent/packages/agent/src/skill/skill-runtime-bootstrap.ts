@@ -29,6 +29,7 @@ export interface PopulateLazyRuntimeSkillRegistryInput {
   readonly skillService: Pick<SkillService, 'registry'>;
   readonly populator: SkillRegistryPopulator;
   readonly scanResult: LazySkillRegistryScanResult;
+  readonly builtinSkills?: readonly Skill[];
 }
 
 export interface RuntimeSkillLazySyncLogger {
@@ -61,6 +62,7 @@ export interface RuntimeSkillBootstrapOptions {
   readonly registry?: ISkillRegistry;
   readonly toolRegistry?: IToolRegistry;
   readonly subpackageResolver?: ISubpackageResolver;
+  readonly builtinSkills?: readonly Skill[];
   readonly skillService?: SkillService;
   readonly populator?: SkillRegistryPopulator;
   readonly logger?: RuntimeSkillBootstrapLogger;
@@ -110,6 +112,7 @@ export function populateLazyRuntimeSkillRegistry(
   return input.populator.populateLazy({
     registry: asMutableSkillRegistry(input.skillService.registry),
     scanResult: input.scanResult,
+    builtinSkills: input.builtinSkills,
   });
 }
 
@@ -160,6 +163,7 @@ class DefaultRuntimeSkillLazySync implements RuntimeSkillLazySync {
 class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
   readonly skillService: SkillService;
   private readonly populator: SkillRegistryPopulator;
+  private readonly builtinSkills: readonly Skill[] | undefined;
   private readonly logger: RuntimeSkillBootstrapLogger | undefined;
 
   constructor(options: RuntimeSkillBootstrapOptions) {
@@ -171,6 +175,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
         subpackageResolver: options.subpackageResolver,
       });
     this.populator = options.populator ?? new SkillRegistryPopulator();
+    this.builtinSkills = options.builtinSkills;
     this.logger = options.logger;
   }
 
@@ -189,6 +194,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
       skillService: this.skillService,
       populator: this.populator,
       scanResult,
+      builtinSkills: this.builtinSkills,
     });
 
     this.logger?.info(`Skill registry populated (lazy): ${summary.total} skills`, {

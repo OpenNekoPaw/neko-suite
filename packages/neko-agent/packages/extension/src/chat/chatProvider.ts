@@ -51,6 +51,7 @@ import {
 import {
   createRuntimeSkillBootstrap,
   createRuntimeSkillLazySync,
+  getBuiltinSkills,
   SkillRegistry,
   type IRuntimeTaskManager,
   type ISubpackageResolver,
@@ -303,6 +304,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           registry: capabilityRuntime.skillRegistry ?? new SkillRegistry(),
           toolRegistry: toolRegistry ?? undefined,
           subpackageResolver,
+          builtinSkills: getBuiltinSkills({ locale: vscode.env.language }),
           logger,
         });
         const { skillService } = skillRuntimeBootstrap;

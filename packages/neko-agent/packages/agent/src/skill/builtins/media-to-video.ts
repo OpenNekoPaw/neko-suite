@@ -5,49 +5,55 @@ import {
   TOOL_NAMES_SYSTEM,
   TOOL_NAMES_TIMELINE,
 } from '@neko/shared';
+import { localizeBuiltinSkill } from './builtin-skill-content';
+import animationPlanToCutContent from './markdown/animation-plan-to-cut.md?raw';
+import animationPlanToCutZhCnContent from './markdown/animation-plan-to-cut.zh-cn.md?raw';
+import exportVideoPackageContent from './markdown/export-video-package.md?raw';
+import exportVideoPackageZhCnContent from './markdown/export-video-package.zh-cn.md?raw';
+import generatedShotAssemblyContent from './markdown/generated-shot-assembly.md?raw';
+import generatedShotAssemblyZhCnContent from './markdown/generated-shot-assembly.zh-cn.md?raw';
+import imageToShotContent from './markdown/image-to-shot.md?raw';
+import imageToShotZhCnContent from './markdown/image-to-shot.zh-cn.md?raw';
+import mediaToVideoContent from './markdown/media-to-video.md?raw';
+import mediaToVideoZhCnContent from './markdown/media-to-video.zh-cn.md?raw';
+import storyboardToAnimationPlanContent from './markdown/storyboard-to-animation-plan.md?raw';
+import storyboardToAnimationPlanZhCnContent from './markdown/storyboard-to-animation-plan.zh-cn.md?raw';
 
-const structuredArtifactRules = `## Structured Artifact Rules
+const localizedMediaToVideoContent = {
+  default: mediaToVideoContent,
+  localized: { 'zh-cn': mediaToVideoZhCnContent },
+};
 
-- Markdown is presentation only. For storyboard, animation, Canvas, Cut, generated media, or execution summaries, emit validated structured payloads.
-- Use actual tool-result or generated-asset references for media. Do not invent ids.
-- Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.
-- Ask for approval before bulk generation, colorization, destructive timeline replacement, or long export unless the user explicitly requested automatic execution and policy allows it.
-`;
+const localizedImageToShotContent = {
+  default: imageToShotContent,
+  localized: { 'zh-cn': imageToShotZhCnContent },
+};
+
+const localizedStoryboardToAnimationPlanContent = {
+  default: storyboardToAnimationPlanContent,
+  localized: { 'zh-cn': storyboardToAnimationPlanZhCnContent },
+};
+
+const localizedAnimationPlanToCutContent = {
+  default: animationPlanToCutContent,
+  localized: { 'zh-cn': animationPlanToCutZhCnContent },
+};
+
+const localizedGeneratedShotAssemblyContent = {
+  default: generatedShotAssemblyContent,
+  localized: { 'zh-cn': generatedShotAssemblyZhCnContent },
+};
+
+const localizedExportVideoPackageContent = {
+  default: exportVideoPackageContent,
+  localized: { 'zh-cn': exportVideoPackageZhCnContent },
+};
 
 export const mediaToVideoSkill: Skill = {
   name: 'media-to-video',
   description:
     'Coordinate media-to-video work by choosing focused media skills, reading source evidence, producing structured artifacts, and handing off to generation, Canvas, Cut, or export when appropriate.',
-  content: `# Media to Video Coordinator
-
-You coordinate media-to-video work through focused skills and existing tools. You are not a fixed pipeline. Choose the smallest relevant sub-skill, load it only when needed, and keep the user-facing result grounded in tool evidence.
-
-## Workflow Guidance
-
-1. Inspect the user's input and determine the source modality: comic/document/image sequence/storyboard/animation plan/generated media.
-2. Use GetContext to inspect available related skills. Activate a focused skill when its detailed guidance is needed.
-3. For comic EPUB/PDF/CBZ/CBR pages, prefer comic-to-storyboard first.
-4. For still images or image sequences, prefer image-to-shot.
-5. For an existing StoryboardTableV1, prefer storyboard-to-animation-plan before generation or Cut.
-6. For an existing animation plan and a Cut target, prefer animation-plan-to-cut.
-7. For already generated shots, prefer generated-shot-assembly and export-video-package as needed.
-8. Stop after planning when generation providers, target plugins, approvals, or safe media refs are unavailable.
-
-${structuredArtifactRules}
-
-## Related Skill Selection
-
-- comic-to-storyboard: comic page reading, panel/OCR evidence, StoryboardTableV1 output.
-- image-to-shot: still image references to shot/storyboard plans.
-- storyboard-to-animation-plan: storyboard rows to motion/camera/generation plans.
-- animation-plan-to-cut: animation plans to Cut timeline payloads.
-- generated-shot-assembly: generated media refs to assembly summaries.
-- export-video-package: export-oriented packaging and delivery.
-
-## Tool Use
-
-Use ReadDocument, ReadImage, or ReadDocumentImage for evidence. Use generation tools only after approval. Use Canvas/Cut tools only after the structured payload validates and the target capability exists.
-`,
+  content: mediaToVideoContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
@@ -103,19 +109,7 @@ export const imageToShotSkill: Skill = {
   name: 'image-to-shot',
   description:
     'Turn still images or image sequences into structured shot plans and storyboard rows with safe source media references.',
-  content: `# Image to Shot
-
-Convert one or more still images into video-ready shot planning artifacts. Inspect the images with ReadImage, describe visible evidence, and emit structured storyboard or animation-plan payloads.
-
-${structuredArtifactRules}
-
-## Guidance
-
-- Keep original images in sourceMediaRefs using actual tool-result locators.
-- Use imageStrategy "use-as-reference" unless the user asks to reuse, transform, or generate.
-- Do not claim generated images or videos exist until a generation tool returns them.
-- If multiple images are supplied, preserve their order unless the user asks for reordering.
-`,
+  content: imageToShotContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_IMAGE,
@@ -147,18 +141,7 @@ export const storyboardToAnimationPlanSkill: Skill = {
   name: 'storyboard-to-animation-plan',
   description:
     'Convert StoryboardTableV1 rows into animation shot plans with motion, camera, generation, and continuity guidance.',
-  content: `# Storyboard to Animation Plan
-
-Transform a validated StoryboardTableV1 into an animation plan. Preserve scene and shot ids, source media refs, durations, dialogue, sound cues, and continuity notes.
-
-${structuredArtifactRules}
-
-## Guidance
-
-- Do not regenerate or rewrite the storyboard unless validation fails.
-- Add motionPrompt, cameraPrompt, generationPrompt, requiresGeneration, and approval notes per shot.
-- Mark source shots that need colorization, upscale, inpaint, or image-to-video as planned transformations only until tools run.
-`,
+  content: storyboardToAnimationPlanContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
@@ -189,18 +172,7 @@ export const animationPlanToCutSkill: Skill = {
   name: 'animation-plan-to-cut',
   description:
     'Project a validated animation plan or storyboard into Cut-ready timeline payloads without owning generation.',
-  content: `# Animation Plan to Cut
-
-Convert animation plans into Cut-ready timeline payloads. Query timeline context first, preserve shot order, and avoid destructive replacement unless approved.
-
-${structuredArtifactRules}
-
-## Guidance
-
-- Use existing generated media refs when available.
-- If media is missing, produce a Cut payload draft and mark missing assets clearly.
-- Ask before replacing an existing timeline or adding many elements.
-`,
+  content: animationPlanToCutContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
@@ -230,12 +202,7 @@ export const generatedShotAssemblySkill: Skill = {
   name: 'generated-shot-assembly',
   description:
     'Assemble generated image, video, audio, and subtitle refs into a coherent media-to-video execution summary.',
-  content: `# Generated Shot Assembly
-
-Gather generated media refs, validate provenance, and summarize what can be assembled. Use timeline or Canvas tools only when the target is available and the user wants delivery.
-
-${structuredArtifactRules}
-`,
+  content: generatedShotAssemblyContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
@@ -266,17 +233,7 @@ export const exportVideoPackageSkill: Skill = {
   name: 'export-video-package',
   description:
     'Prepare final media-to-video artifacts for export, delivery, or packaging with validation diagnostics.',
-  content: `# Export Video Package
-
-Prepare export-oriented summaries and target handoff instructions. Confirm target duration, aspect ratio, media availability, and user approval before long-running export.
-
-${structuredArtifactRules}
-
-## Guidance
-
-- Do not claim an export exists until an export tool returns a completed result.
-- If no export tool is available, return a workflow-execution-summary with remaining manual steps.
-`,
+  content: exportVideoPackageContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
@@ -297,3 +254,46 @@ ${structuredArtifactRules}
     riskLevel: 'medium',
   },
 };
+
+export function getMediaToVideoSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(mediaToVideoSkill, localizedMediaToVideoContent, locale);
+}
+
+export function getImageToShotSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(imageToShotSkill, localizedImageToShotContent, locale);
+}
+
+export function getStoryboardToAnimationPlanSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(
+    storyboardToAnimationPlanSkill,
+    localizedStoryboardToAnimationPlanContent,
+    locale,
+  );
+}
+
+export function getAnimationPlanToCutSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(animationPlanToCutSkill, localizedAnimationPlanToCutContent, locale);
+}
+
+export function getGeneratedShotAssemblySkill(locale?: string): Skill {
+  return localizeBuiltinSkill(
+    generatedShotAssemblySkill,
+    localizedGeneratedShotAssemblyContent,
+    locale,
+  );
+}
+
+export function getExportVideoPackageSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(exportVideoPackageSkill, localizedExportVideoPackageContent, locale);
+}
+
+export function getMediaWorkflowBuiltinSkills(locale?: string): Skill[] {
+  return [
+    getMediaToVideoSkill(locale),
+    getImageToShotSkill(locale),
+    getStoryboardToAnimationPlanSkill(locale),
+    getAnimationPlanToCutSkill(locale),
+    getGeneratedShotAssemblySkill(locale),
+    getExportVideoPackageSkill(locale),
+  ];
+}

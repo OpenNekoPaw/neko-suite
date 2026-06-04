@@ -7,10 +7,16 @@
 import type { Skill, ISkillRegistry } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
-import { comicToStoryboardSkill } from './comic-to-storyboard';
+import { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 import {
   animationPlanToCutSkill,
   exportVideoPackageSkill,
+  getAnimationPlanToCutSkill,
+  getExportVideoPackageSkill,
+  getGeneratedShotAssemblySkill,
+  getImageToShotSkill,
+  getMediaToVideoSkill,
+  getStoryboardToAnimationPlanSkill,
   generatedShotAssemblySkill,
   imageToShotSkill,
   mediaToVideoSkill,
@@ -21,20 +27,35 @@ import { qualityAssessmentSkill } from './quality-assessment';
 import { creationPersonaSkill } from './creation-persona';
 import { executionPersonaSkill } from './execution-persona';
 import { iterationPersonaSkill } from './iteration-persona';
+import type { BuiltinSkillOptions } from './builtin-skill-content';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
 
 // Re-export new skills
-export { comicToStoryboardSkill } from './comic-to-storyboard';
+export { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 export {
   animationPlanToCutSkill,
   exportVideoPackageSkill,
+  getAnimationPlanToCutSkill,
+  getExportVideoPackageSkill,
+  getGeneratedShotAssemblySkill,
+  getImageToShotSkill,
+  getMediaToVideoSkill,
+  getMediaWorkflowBuiltinSkills,
+  getStoryboardToAnimationPlanSkill,
   generatedShotAssemblySkill,
   imageToShotSkill,
   mediaToVideoSkill,
   storyboardToAnimationPlanSkill,
 } from './media-to-video';
+export {
+  normalizeBuiltinSkillLocale,
+  selectBuiltinSkillContent,
+  type BuiltinSkillLocale,
+  type BuiltinSkillOptions,
+  type LocalizedBuiltinSkillContent,
+} from './builtin-skill-content';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 
@@ -567,11 +588,44 @@ export const builtinSkills: Skill[] = [
   qualityAssessmentSkill,
 ];
 
+export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
+  return [
+    // IDC stage personas (Specify / Implement / Iteration)
+    creationPersonaSkill,
+    executionPersonaSkill,
+    iterationPersonaSkill,
+    // AI Generation
+    aiGenerateSkill,
+    sceneToMusicSkill,
+    // Video Editing
+    videoEditingSkill,
+    colorGradingSkill,
+    audioMixingSkill,
+    subtitleSkill,
+    // Script Creation
+    scriptGenerationSkill,
+    scriptToTimelineSkill,
+    // Multi-modal adaptation
+    getMediaToVideoSkill(options.locale),
+    getComicToStoryboardSkill(options.locale),
+    getImageToShotSkill(options.locale),
+    getStoryboardToAnimationPlanSkill(options.locale),
+    getAnimationPlanToCutSkill(options.locale),
+    getGeneratedShotAssemblySkill(options.locale),
+    getExportVideoPackageSkill(options.locale),
+    // Quality Assessment
+    qualityAssessmentSkill,
+  ];
+}
+
 /**
  * Register all builtin skills to a registry
  */
-export function registerBuiltins(registry: ISkillRegistry): void {
-  for (const skill of builtinSkills) {
+export function registerBuiltins(
+  registry: ISkillRegistry,
+  options: BuiltinSkillOptions = {},
+): void {
+  for (const skill of getBuiltinSkills(options)) {
     registry.registerSkill(skill);
   }
 }
