@@ -135,11 +135,11 @@ describe('resource cache service', () => {
     const writeCount = fsOps.writeCalls.length;
     const updated = await store.update((manifest) => manifest);
 
-    expect(updated).toBe(current);
+    expect(updated).toStrictEqual(current);
     expect(fsOps.writeCalls).toHaveLength(writeCount);
   });
 
-  it('keeps cached manifests until refresh or invalidation is requested', async () => {
+  it('refreshes cached manifests when another process updates the manifest file', async () => {
     const manifestPath = '/workspace/.neko/.cache/resources/manifest.json';
     const store = new JsonResourceCacheManifestStore({
       manifestPath,
@@ -147,7 +147,7 @@ describe('resource cache service', () => {
       fsOps,
       now: () => '2026-06-05T00:00:00.000Z',
     });
-    fsOps.files.set(
+    fsOps.writeExternalFile(
       manifestPath,
       JSON.stringify({
         version: 1,
@@ -161,7 +161,7 @@ describe('resource cache service', () => {
     await expect(store.load()).resolves.toMatchObject({
       updatedAt: '2026-06-05T00:00:00.000Z',
     });
-    fsOps.files.set(
+    fsOps.writeExternalFile(
       manifestPath,
       JSON.stringify({
         version: 1,
@@ -173,13 +173,13 @@ describe('resource cache service', () => {
     );
 
     await expect(store.load()).resolves.toMatchObject({
-      updatedAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:02.000Z',
     });
     await expect(store.load({ refresh: true })).resolves.toMatchObject({
       updatedAt: '2026-06-05T00:00:02.000Z',
     });
 
-    fsOps.files.set(
+    fsOps.writeExternalFile(
       manifestPath,
       JSON.stringify({
         version: 1,
@@ -831,12 +831,14 @@ function createLocalResourceAccess(
 
 class FakeFsOps implements ResourceCacheFsOps {
   readonly files = new Map<string, string>();
+  readonly mtimes = new Map<string, number>();
   readonly mkdirCalls: string[] = [];
   readonly readCalls: string[] = [];
   readonly writeCalls: Array<{ path: string; content: string }> = [];
   readonly renameCalls: Array<{ oldPath: string; newPath: string }> = [];
   readonly rmCalls: string[] = [];
   failNextRename = false;
+  private nextMtimeMs = 1;
 
   async readFile(filePath: string): Promise<string> {
     this.readCalls.push(filePath);
@@ -849,7 +851,7 @@ class FakeFsOps implements ResourceCacheFsOps {
 
   async writeFile(filePath: string, content: string): Promise<void> {
     this.writeCalls.push({ path: filePath, content });
-    this.files.set(filePath, content);
+    this.writeExternalFile(filePath, content);
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
@@ -863,23 +865,31 @@ class FakeFsOps implements ResourceCacheFsOps {
       throw new Error(`ENOENT: ${oldPath}`);
     }
     this.files.delete(oldPath);
-    this.files.set(newPath, value);
+    this.mtimes.delete(oldPath);
+    this.writeExternalFile(newPath, value);
   }
 
   async mkdir(filePath: string): Promise<void> {
     this.mkdirCalls.push(filePath);
   }
 
-  async stat(filePath: string): Promise<{ readonly size: number }> {
+  async stat(filePath: string): Promise<{ readonly size: number; readonly mtimeMs: number }> {
     const value = this.files.get(filePath);
     if (value === undefined) {
       throw new Error(`ENOENT: ${filePath}`);
     }
-    return { size: value.length };
+    return { size: value.length, mtimeMs: this.mtimes.get(filePath) ?? 0 };
   }
 
   async rm(filePath: string): Promise<void> {
     this.rmCalls.push(filePath);
     this.files.delete(filePath);
+    this.mtimes.delete(filePath);
+  }
+
+  writeExternalFile(filePath: string, content: string): void {
+    this.files.set(filePath, content);
+    this.mtimes.set(filePath, this.nextMtimeMs);
+    this.nextMtimeMs += 1;
   }
 }

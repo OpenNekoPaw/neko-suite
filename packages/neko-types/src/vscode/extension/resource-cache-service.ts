@@ -34,7 +34,7 @@ export interface ResourceCacheFsOps {
   writeFile(filePath: string, content: string, encoding: 'utf-8'): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
   mkdir(filePath: string, options: { recursive: boolean }): Promise<void>;
-  stat(filePath: string): Promise<{ readonly size: number }>;
+  stat(filePath: string): Promise<{ readonly size: number; readonly mtimeMs?: number }>;
   rm(filePath: string, options: { force: boolean }): Promise<void>;
 }
 
@@ -179,6 +179,7 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
   private readonly now: () => string;
   private writeChain: Promise<void> = Promise.resolve();
   private cachedManifest: ResourceCacheManifest | undefined;
+  private cachedManifestMtimeMs: number | undefined;
 
   constructor(options: JsonResourceCacheManifestStoreOptions) {
     this.manifestPath = options.manifestPath;
@@ -192,7 +193,7 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
       this.invalidateCache();
     }
 
-    if (this.cachedManifest) {
+    if (this.cachedManifest && (await this.isCachedManifestCurrent())) {
       return this.cachedManifest;
     }
 
@@ -201,6 +202,7 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
       const parsed: unknown = JSON.parse(raw);
       if (isResourceCacheManifest(parsed)) {
         this.cachedManifest = parsed;
+        this.cachedManifestMtimeMs = await this.readManifestMtimeMs();
         return parsed;
       }
     } catch {
@@ -249,6 +251,7 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
 
   invalidateCache(): void {
     this.cachedManifest = undefined;
+    this.cachedManifestMtimeMs = undefined;
   }
 
   private async saveUnlocked(manifest: ResourceCacheManifest): Promise<void> {
@@ -257,6 +260,22 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
     await this.fsOps.writeFile(tmpPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
     await this.fsOps.rename(tmpPath, this.manifestPath);
     this.cachedManifest = manifest;
+    this.cachedManifestMtimeMs = await this.readManifestMtimeMs();
+  }
+
+  private async isCachedManifestCurrent(): Promise<boolean> {
+    if (this.cachedManifestMtimeMs === undefined) {
+      return false;
+    }
+    return (await this.readManifestMtimeMs()) === this.cachedManifestMtimeMs;
+  }
+
+  private async readManifestMtimeMs(): Promise<number | undefined> {
+    try {
+      return (await this.fsOps.stat(this.manifestPath)).mtimeMs;
+    } catch {
+      return undefined;
+    }
   }
 }
 
@@ -1013,7 +1032,7 @@ const nodeFsOps: ResourceCacheFsOps = {
   mkdir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
   stat: async (filePath) => {
     const stat = await fs.stat(filePath);
-    return { size: stat.size };
+    return { size: stat.size, mtimeMs: stat.mtimeMs };
   },
   rm: (filePath, options) => fs.rm(filePath, options),
 };
