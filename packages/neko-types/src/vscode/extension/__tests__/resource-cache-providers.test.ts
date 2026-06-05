@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PathResolver } from '../../../path';
 import type { PreviewVariantRequest } from '../../../types';
 import {
   createFileThumbnailResourceRef,
@@ -148,6 +149,31 @@ describe('resource cache provider adapters', () => {
       source: '/workspace/.neko/generated/image/shot.png',
       target: expect.stringContaining('/workspace/.neko/.cache/resources/generated/'),
     });
+  });
+
+  it('expands generated asset variable paths before materializing previews', async () => {
+    const fsOps = new FakeFileOps({
+      '/workspace/.neko/generated/image/shot.png': 'generated',
+    });
+    const ref = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: '${WORKSPACE}/.neko/generated/image/shot.png',
+      mimeType: 'image/png',
+    });
+    const provider = new GeneratedAssetResourceCacheProvider({
+      fsOps,
+      pathResolver: new PathResolver(new Map([['WORKSPACE', '/workspace']])),
+      projectRoot: '/workspace',
+    });
+
+    const result = await provider.ensure({
+      ref,
+      variant: { role: 'preview', mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/.neko/generated/image/shot.png');
   });
 });
 

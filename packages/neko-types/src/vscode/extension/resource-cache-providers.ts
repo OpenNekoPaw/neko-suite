@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { PathResolver } from '../../path';
 import {
   createResourceFingerprint,
   createResourceRef,
@@ -77,6 +78,8 @@ export interface GeneratedAssetResourceCacheProviderOptions {
     ref: ResourceRef,
   ) => Promise<GeneratedAssetResourceResolverResult | undefined>;
   readonly fsOps?: ResourceCacheFileOps;
+  readonly pathResolver?: PathResolver;
+  readonly projectRoot?: string;
 }
 
 export interface CreateFileThumbnailResourceRefInput {
@@ -211,10 +214,14 @@ export class GeneratedAssetResourceCacheProvider implements ResourceCacheProvide
 
   private readonly resolveAsset?: GeneratedAssetResourceCacheProviderOptions['resolveAsset'];
   private readonly fsOps: ResourceCacheFileOps;
+  private readonly pathResolver?: PathResolver;
+  private readonly projectRoot?: string;
 
   constructor(options: GeneratedAssetResourceCacheProviderOptions = {}) {
     this.resolveAsset = options.resolveAsset;
     this.fsOps = options.fsOps ?? nodeFileOps;
+    this.pathResolver = options.pathResolver;
+    this.projectRoot = options.projectRoot;
   }
 
   supports(ref: ResourceRef, variant: ResourceVariantRequest): boolean {
@@ -231,7 +238,9 @@ export class GeneratedAssetResourceCacheProvider implements ResourceCacheProvide
       return unsupported(input, 'Generated asset provider does not support this variant.');
     }
 
-    const resolved = (await this.resolveAsset?.(input.ref)) ?? readGeneratedAssetFromRef(input.ref);
+    const resolved =
+      (await this.resolveAsset?.(input.ref)) ??
+      readGeneratedAssetFromRef(input.ref, this.pathResolver, this.projectRoot);
     if (!resolved?.path) {
       return unsupported(
         input,
@@ -426,8 +435,14 @@ function readLocalSourcePath(ref: ResourceRef): string | undefined {
 
 function readGeneratedAssetFromRef(
   ref: ResourceRef,
+  pathResolver?: PathResolver,
+  projectRoot?: string,
 ): GeneratedAssetResourceResolverResult | undefined {
-  const filePath = readLocalSourcePath(ref);
+  const filePath = resolveGeneratedAssetLocalPath(
+    readLocalSourcePath(ref),
+    pathResolver,
+    projectRoot,
+  );
   if (!filePath) return undefined;
   return {
     path: filePath,
@@ -435,6 +450,17 @@ function readGeneratedAssetFromRef(
       ? { mimeType: readString(ref.source.metadata?.['mimeType']) }
       : {}),
   };
+}
+
+function resolveGeneratedAssetLocalPath(
+  filePath: string | undefined,
+  pathResolver?: PathResolver,
+  projectRoot?: string,
+): string | undefined {
+  if (!filePath || !pathResolver || !projectRoot) return filePath;
+  const resolved = pathResolver.resolveSource(filePath, projectRoot);
+  if (resolved.type !== 'local' || pathResolver.hasVariable(resolved.path)) return filePath;
+  return resolved.path;
 }
 
 function readLocalVariantPath(variant: PreviewVariant): string | undefined {

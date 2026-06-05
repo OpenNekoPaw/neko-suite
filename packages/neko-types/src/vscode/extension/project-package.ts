@@ -1,6 +1,9 @@
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as vscode from 'vscode';
+import type { ContentAccessService } from './content-access-service';
+import { HostContentAccessService } from './content-access-service';
+import { SourceFileContentAccessProvider } from './content-access-providers';
 
 export interface ProjectPackageRequest {
   readonly packageId: string;
@@ -8,6 +11,7 @@ export interface ProjectPackageRequest {
   readonly sourceUri: vscode.Uri;
   readonly sourceBytes?: Uint8Array;
   readonly metadata?: Record<string, unknown>;
+  readonly contentAccess?: ContentAccessService;
 }
 
 export interface ProjectPackageResult {
@@ -172,6 +176,9 @@ export async function createProjectSnapshotPackage(
     sourceBytes,
     sourcePath: request.sourceUri.fsPath,
     sourceDir: path.dirname(request.sourceUri.fsPath),
+    contentAccess:
+      request.contentAccess ??
+      createDefaultPackageContentAccessService(path.dirname(request.sourceUri.fsPath)),
   });
 
   const manifest = {
@@ -220,7 +227,7 @@ interface PackageAssetManifestEntry {
 interface PackageMissingReference {
   readonly fileName?: string;
   readonly source: PackageReferenceManifestSource;
-  readonly reason: 'missing' | 'unsupported-reference' | 'read-failed';
+  readonly reason: 'missing' | 'unsupported-reference' | 'read-failed' | 'runtime-only';
 }
 
 type PackageReferenceManifestSource =
@@ -245,6 +252,7 @@ interface PendingReference {
   readonly raw: string;
   readonly baseDir: string;
   readonly depth: number;
+  readonly runtimeOnly?: boolean;
 }
 
 interface ResolvedReference {
@@ -312,6 +320,7 @@ async function collectPackageAssets(options: {
   readonly sourceBytes: Uint8Array;
   readonly sourcePath: string;
   readonly sourceDir: string;
+  readonly contentAccess: ContentAccessService;
 }): Promise<PackageAssetCollection> {
   const entries: ZipEntryInput[] = [];
   const assets: PackageAssetManifestEntry[] = [];
@@ -324,6 +333,16 @@ async function collectPackageAssets(options: {
   while (pending.length > 0 && includedFiles.size < MAX_REFERENCE_COUNT) {
     const reference = pending.shift();
     if (!reference) break;
+
+    if (reference.runtimeOnly) {
+      reportMissingReference(
+        missingReferences,
+        reportedMissing,
+        sourceFromReference(reference.raw),
+        'runtime-only',
+      );
+      continue;
+    }
 
     const resolved = await resolveReference(reference.raw, reference.baseDir);
     if (!resolved) continue;
@@ -338,10 +357,8 @@ async function collectPackageAssets(options: {
       continue;
     }
 
-    let bytes: Uint8Array;
-    try {
-      bytes = await vscode.workspace.fs.readFile(resolved.uri);
-    } catch {
+    const bytes = await readPackageReferenceBytes(options.contentAccess, resolved.filePath);
+    if (!bytes) {
       reportMissingReference(missingReferences, reportedMissing, resolved.source, 'read-failed');
       continue;
     }
@@ -393,7 +410,12 @@ function discoverReferences(bytes: Uint8Array, baseDir: string, depth: number): 
         const key = `${baseDir}\u0000${reference}`;
         if (!seen.has(key)) {
           seen.add(key);
-          refs.push({ raw: reference, baseDir, depth });
+          refs.push({
+            raw: reference,
+            baseDir,
+            depth,
+            ...(isRuntimeOnlyReferenceContext(keyPath) ? { runtimeOnly: true } : {}),
+          });
         }
       }
       return;
@@ -411,6 +433,32 @@ function discoverReferences(bytes: Uint8Array, baseDir: string, depth: number): 
 
   visit(parsed, []);
   return refs;
+}
+
+async function readPackageReferenceBytes(
+  contentAccess: ContentAccessService,
+  filePath: string,
+): Promise<Uint8Array | undefined> {
+  const result = await contentAccess.resolve({
+    ref: { kind: 'file', path: filePath },
+    intent: 'package',
+    target: 'bytes',
+    caller: 'neko.project-package',
+  });
+  return result.status === 'ready' ? result.bytes : undefined;
+}
+
+function createDefaultPackageContentAccessService(projectRoot: string): ContentAccessService {
+  return new HostContentAccessService({
+    providers: [
+      new SourceFileContentAccessProvider({
+        projectRoot,
+        fileOps: {
+          readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
+        },
+      }),
+    ],
+  });
 }
 
 function normalizeReferenceCandidate(value: string): string | undefined {
@@ -442,6 +490,35 @@ function isArchiveEntryReferenceContext(keyPath: readonly string[]): boolean {
   return keyPath.some((key) =>
     /(?:archive|bundle|documentResourceRef|locator|resourceRef)/i.test(key),
   );
+}
+
+function isRuntimeOnlyReferenceContext(keyPath: readonly string[]): boolean {
+  const lastKey = keyPath[keyPath.length - 1] ?? '';
+  if (
+    /^(?:cachePath|thumbnailPath|previewPath|previewUri|previewUrl|runtimeAssetPath|runtimeReferenceImagePath|webviewUri|proxyPath|posterPath|previewToken|engineToken)$/i.test(
+      lastKey,
+    )
+  ) {
+    return true;
+  }
+  return (
+    /(?:cache|thumbnail|preview|proxy|runtime|webview|engineToken|streamId)/i.test(lastKey) &&
+    /(?:path|uri|url|token|id)$/i.test(lastKey)
+  );
+}
+
+function sourceFromReference(reference: string): PackageReferenceManifestSource {
+  const clean = stripQueryAndFragment(reference);
+  if (hasPathVariableReference(clean)) {
+    return { kind: 'variable', reference: clean };
+  }
+  if (/^file:/i.test(clean)) {
+    return { kind: 'file-uri', fileName: path.basename(clean) };
+  }
+  if (isAbsoluteFsPath(clean)) {
+    return { kind: 'absolute', fileName: path.basename(clean) };
+  }
+  return { kind: 'relative', reference: toZipPath(clean) };
 }
 
 async function resolveReference(

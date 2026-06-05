@@ -67,6 +67,7 @@ export type {
   ResourceCacheFsOps,
   ResourceCacheGcResult,
   ResourceCacheLogger,
+  ResourceCacheManifestLoadOptions,
   ResourceCacheManifestStore,
   ResourceCacheOperationOptions,
   ResourceCacheOperationResult,
@@ -112,6 +113,40 @@ export type {
   LegacyResourceCacheFsOps,
   LegacyResourceCacheProviderOptions,
 } from './legacy-resource-cache-provider';
+
+// Intent-aware content read/write orchestration.
+export { HostContentAccessService, HostContentIngestService } from './content-access-service';
+export type {
+  ContentAccessLogger,
+  ContentAccessService,
+  ContentAccessServiceOptions,
+  ContentIngestGuardOptions,
+  ContentIngestService,
+  ContentIngestServiceOptions,
+} from './content-access-service';
+export {
+  CacheArtifactContentIngestProvider,
+  DocumentEntryContentAccessProvider,
+  ExportStagingContentIngestProvider,
+  GeneratedOutputContentIngestProvider,
+  ImportSourceContentIngestProvider,
+  PreviewVariantContentAccessProvider,
+  RegisterExistingSourceContentIngestProvider,
+  ResourceCacheContentAccessProvider,
+  SourceFileContentAccessProvider,
+  VideoProxyContentAccessProvider,
+} from './content-access-providers';
+export type {
+  CacheArtifactContentIngestProviderOptions,
+  ContentAccessFileOps,
+  ContentAccessWebviewResolver,
+  ContentIngestFileProviderOptions,
+  DocumentEntryContentAccessProviderOptions,
+  PreviewVariantContentAccessProviderOptions,
+  ResourceCacheContentAccessProviderOptions,
+  SourceFileContentAccessProviderOptions,
+  VideoProxyContentAccessProviderOptions,
+} from './content-access-providers';
 
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {

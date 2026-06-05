@@ -246,6 +246,9 @@ export * from './project-cache-search';
 // Resource cache contracts (stable refs, variants, manifests, quota)
 export * from './resource-cache';
 
+// Intent-aware content access and ingest contracts
+export * from './content-access';
+
 // Loading tier types (tiered lazy loading for tools, skills, commands)
 export * from './loading-tier';
 

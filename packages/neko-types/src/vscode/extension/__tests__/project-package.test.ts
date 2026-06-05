@@ -126,6 +126,8 @@ describe('createProjectSnapshotPackage', () => {
             data: {
               assetPath: 'assets/ref.png',
               thumbnailPath: './thumbs/ref-thumb.jpg',
+              cachePath: '/workspace/.neko/.cache/resources/ref-cache.jpg',
+              runtimeAssetPath: 'https://file+.vscode-resource.vscode-cdn.net/workspace/ref.png',
               ignoredDataUrl: 'data:image/png;base64,AAAA',
               ignoredRemote: 'https://example.test/ref.png',
             },
@@ -145,6 +147,7 @@ describe('createProjectSnapshotPackage', () => {
     );
     mocks.reads.set('/workspace/assets/ref.png', new Uint8Array([10]));
     mocks.reads.set('/workspace/thumbs/ref-thumb.jpg', new Uint8Array([11]));
+    mocks.reads.set('/workspace/.neko/.cache/resources/ref-cache.jpg', new Uint8Array([15]));
     mocks.reads.set('/external/hero.glb', new Uint8Array([12]));
     mocks.reads.set(
       '/workspace/configs/hero.gltf',
@@ -169,7 +172,8 @@ describe('createProjectSnapshotPackage', () => {
     const zipEntries = readStoredZipEntries(archive!);
 
     expect(zipEntries.get('assets/ref.png')).toEqual(new Uint8Array([10]));
-    expect(zipEntries.get('thumbs/ref-thumb.jpg')).toEqual(new Uint8Array([11]));
+    expect(zipEntries.has('thumbs/ref-thumb.jpg')).toBe(false);
+    expect(zipEntries.has('.neko/.cache/resources/ref-cache.jpg')).toBe(false);
     expect(zipEntries.get('configs/hero.gltf')).toEqual(
       encodeJson({ images: [{ uri: '../textures/hero.png' }] }),
     );
@@ -196,7 +200,6 @@ describe('createProjectSnapshotPackage', () => {
     };
     expect(manifest.assets.map((asset) => asset.packagePath)).toEqual([
       'assets/ref.png',
-      'thumbs/ref-thumb.jpg',
       externalEntryName,
       'configs/hero.gltf',
       variableEntryName,
@@ -214,13 +217,20 @@ describe('createProjectSnapshotPackage', () => {
           reason: 'unsupported-reference',
           source: { kind: 'variable', reference: '${MISSING_ROOT}/lost.wav' },
         }),
+        expect.objectContaining({
+          reason: 'runtime-only',
+          source: { kind: 'relative', reference: './thumbs/ref-thumb.jpg' },
+        }),
+        expect.objectContaining({
+          reason: 'runtime-only',
+          source: { kind: 'absolute', fileName: 'ref-cache.jpg' },
+        }),
       ]),
     );
     expect(result?.entries).toEqual([
       'package-manifest.json',
       'story.nkc',
       'assets/ref.png',
-      'thumbs/ref-thumb.jpg',
       externalEntryName,
       'configs/hero.gltf',
       variableEntryName,

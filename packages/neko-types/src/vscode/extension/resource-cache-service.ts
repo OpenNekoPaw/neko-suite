@@ -39,13 +39,18 @@ export interface ResourceCacheFsOps {
 }
 
 export interface ResourceCacheManifestStore {
-  load(): Promise<ResourceCacheManifest>;
+  load(options?: ResourceCacheManifestLoadOptions): Promise<ResourceCacheManifest>;
   save(manifest: ResourceCacheManifest): Promise<void>;
   update(
     operation: (
       manifest: ResourceCacheManifest,
     ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
   ): Promise<ResourceCacheManifest>;
+  invalidateCache(): void;
+}
+
+export interface ResourceCacheManifestLoadOptions {
+  readonly refresh?: boolean;
 }
 
 export interface ResourceEnsureInput {
@@ -104,6 +109,7 @@ export interface ResourceCacheService {
     options?: ResourceCacheProjectOptions,
   ): Promise<ResourceCacheProjectResult>;
   invalidate(ref: ResourceRef): Promise<void>;
+  invalidateManifestCache(): void;
   stats(): Promise<ResourceCacheStats>;
   gc(policy: ResourceCacheQuotaPolicy): Promise<ResourceCacheGcResult>;
 }
@@ -160,6 +166,7 @@ export interface VSCodeResourceCacheServiceOptions {
   readonly logger?: ResourceCacheLogger;
   readonly maxConcurrentEnsures?: number;
   readonly touchFlushIntervalMs?: number;
+  readonly clockMs?: () => number;
 }
 
 const DEFAULT_MAX_CONCURRENT_ENSURES = 4;
@@ -180,7 +187,11 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
-  async load(): Promise<ResourceCacheManifest> {
+  async load(options: ResourceCacheManifestLoadOptions = {}): Promise<ResourceCacheManifest> {
+    if (options.refresh) {
+      this.invalidateCache();
+    }
+
     if (this.cachedManifest) {
       return this.cachedManifest;
     }
@@ -219,6 +230,10 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
     const updateOperation = async () => {
       const current = await this.load();
       const next = await operation(current);
+      if (next === current) {
+        updated = current;
+        return;
+      }
       await this.saveUnlocked(next);
       updated = next;
     };
@@ -230,6 +245,10 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
     );
     await next;
     return updated ?? this.load();
+  }
+
+  invalidateCache(): void {
+    this.cachedManifest = undefined;
   }
 
   private async saveUnlocked(manifest: ResourceCacheManifest): Promise<void> {
@@ -254,13 +273,14 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   private readonly logger?: ResourceCacheLogger;
   private readonly maxConcurrentEnsures: number;
   private readonly touchFlushIntervalMs: number;
+  private readonly clockMs: () => number;
   private readonly inFlightEnsures = new Map<string, Promise<ResourceCacheOperationResult>>();
   private readonly pendingTouches = new Map<
     string,
     { readonly resourceId: string; readonly variantKey: string }
   >();
   private readonly ensureQueue: Array<() => void> = [];
-  private lastTouchFlushMs = Date.now();
+  private lastTouchFlushMs: number;
   private activeEnsures = 0;
 
   constructor(options: VSCodeResourceCacheServiceOptions) {
@@ -274,6 +294,8 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     this.logger = options.logger;
     this.maxConcurrentEnsures = options.maxConcurrentEnsures ?? DEFAULT_MAX_CONCURRENT_ENSURES;
     this.touchFlushIntervalMs = options.touchFlushIntervalMs ?? DEFAULT_TOUCH_FLUSH_INTERVAL_MS;
+    this.clockMs = options.clockMs ?? (() => Date.now());
+    this.lastTouchFlushMs = this.clockMs();
     this.store = new JsonResourceCacheManifestStore({
       manifestPath: options.manifestPath,
       projectRoot: options.projectRoot,
@@ -459,6 +481,10 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         },
       };
     });
+  }
+
+  invalidateManifestCache(): void {
+    this.store.invalidateCache();
   }
 
   async stats(): Promise<ResourceCacheStats> {
@@ -705,7 +731,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
 
   private async touch(resourceId: string, variantKey: string): Promise<void> {
     this.pendingTouches.set(`${resourceId}:${variantKey}`, { resourceId, variantKey });
-    const nowMs = Date.now();
+    const nowMs = this.clockMs();
     if (
       this.touchFlushIntervalMs <= 0 ||
       nowMs - this.lastTouchFlushMs >= this.touchFlushIntervalMs
@@ -721,7 +747,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
 
     const touches = [...this.pendingTouches.values()];
     this.pendingTouches.clear();
-    this.lastTouchFlushMs = Date.now();
+    this.lastTouchFlushMs = this.clockMs();
     const now = this.now();
     try {
       await this.store.update((manifest) => {

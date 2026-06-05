@@ -106,6 +106,95 @@ describe('resource cache service', () => {
     });
   });
 
+  it('rejects the current update when manifest persistence fails', async () => {
+    const store = new JsonResourceCacheManifestStore({
+      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
+      projectRoot: '/workspace',
+      fsOps,
+      now: () => '2026-06-05T00:00:00.000Z',
+    });
+    fsOps.failNextRename = true;
+
+    await expect(
+      store.update((manifest) => ({
+        ...manifest,
+        updatedAt: '2026-06-05T00:00:01.000Z',
+      })),
+    ).rejects.toThrow('rename failed');
+  });
+
+  it('skips manifest writes when an update returns the current object', async () => {
+    const store = new JsonResourceCacheManifestStore({
+      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
+      projectRoot: '/workspace',
+      fsOps,
+      now: () => '2026-06-05T00:00:00.000Z',
+    });
+
+    const current = await store.load();
+    const writeCount = fsOps.writeCalls.length;
+    const updated = await store.update((manifest) => manifest);
+
+    expect(updated).toBe(current);
+    expect(fsOps.writeCalls).toHaveLength(writeCount);
+  });
+
+  it('keeps cached manifests until refresh or invalidation is requested', async () => {
+    const manifestPath = '/workspace/.neko/.cache/resources/manifest.json';
+    const store = new JsonResourceCacheManifestStore({
+      manifestPath,
+      projectRoot: '/workspace',
+      fsOps,
+      now: () => '2026-06-05T00:00:00.000Z',
+    });
+    fsOps.files.set(
+      manifestPath,
+      JSON.stringify({
+        version: 1,
+        projectRoot: '/workspace',
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+        entries: {},
+      }),
+    );
+
+    await expect(store.load()).resolves.toMatchObject({
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    fsOps.files.set(
+      manifestPath,
+      JSON.stringify({
+        version: 1,
+        projectRoot: '/workspace',
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:02.000Z',
+        entries: {},
+      }),
+    );
+
+    await expect(store.load()).resolves.toMatchObject({
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    await expect(store.load({ refresh: true })).resolves.toMatchObject({
+      updatedAt: '2026-06-05T00:00:02.000Z',
+    });
+
+    fsOps.files.set(
+      manifestPath,
+      JSON.stringify({
+        version: 1,
+        projectRoot: '/workspace',
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:03.000Z',
+        entries: {},
+      }),
+    );
+    store.invalidateCache();
+    await expect(store.load()).resolves.toMatchObject({
+      updatedAt: '2026-06-05T00:00:03.000Z',
+    });
+  });
+
   it('materializes missing variants through a provider and records stats', async () => {
     const provider = createProvider(async (input) => {
       const absolutePath = `${input.cacheRoot}/documents/page-1.jpg`;
@@ -259,6 +348,7 @@ describe('resource cache service', () => {
 
   it('caches manifest reads and batches access-time touches', async () => {
     let now = '2026-06-05T00:00:00.000Z';
+    let clockMs = 0;
     const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
     const provider = createProvider(async (input) => {
       fsOps.files.set(absolutePath, 'image-bytes');
@@ -273,6 +363,7 @@ describe('resource cache service', () => {
     const service = createService({
       providers: [provider],
       now: () => now,
+      clockMs: () => clockMs,
       touchFlushIntervalMs: 60_000,
     });
 
@@ -282,6 +373,7 @@ describe('resource cache service', () => {
 
     now = '2026-06-05T00:00:01.000Z';
     await service.resolve(ref, variant);
+    clockMs = 1_000;
     now = '2026-06-05T00:00:02.000Z';
     await service.resolve(ref, variant);
 
@@ -299,6 +391,84 @@ describe('resource cache service', () => {
     expect(manifest.entries[ref.id].variants[0]).toMatchObject({
       lastAccessedAt: '2026-06-05T00:00:03.000Z',
     });
+  });
+
+  it('uses the injected clock for touch flush interval decisions', async () => {
+    let now = '2026-06-05T00:00:00.000Z';
+    let clockMs = 0;
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService({
+      providers: [provider],
+      now: () => now,
+      clockMs: () => clockMs,
+      touchFlushIntervalMs: 100,
+    });
+
+    await service.ensure(ref, variant);
+    const writeCountAfterEnsure = fsOps.writeCalls.length;
+
+    now = '2026-06-05T00:00:01.000Z';
+    clockMs = 99;
+    await service.resolve(ref, variant);
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+
+    now = '2026-06-05T00:00:02.000Z';
+    clockMs = 100;
+    await service.resolve(ref, variant);
+
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure + 1);
+    const manifest = JSON.parse(
+      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
+    );
+    expect(manifest.entries[ref.id].variants[0]).toMatchObject({
+      lastAccessedAt: '2026-06-05T00:00:02.000Z',
+    });
+  });
+
+  it('does not write the manifest when queued touches no longer match entries', async () => {
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService({
+      providers: [provider],
+      touchFlushIntervalMs: 60_000,
+    });
+
+    await service.ensure(ref, variant);
+    await service.resolve(ref, variant);
+    const writeCountAfterResolve = fsOps.writeCalls.length;
+    service.invalidateManifestCache();
+    fsOps.files.set(
+      '/workspace/.neko/.cache/resources/manifest.json',
+      JSON.stringify({
+        version: 1,
+        projectRoot: '/workspace',
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+        entries: {},
+      }),
+    );
+
+    await expect(service.stats()).resolves.toMatchObject({ entryCount: 0 });
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterResolve);
   });
 
   it('invalidates entries and garbage collects rebuildable variants by quota', async () => {
@@ -549,6 +719,7 @@ describe('resource cache service', () => {
           readonly logger?: { warn: ReturnType<typeof vi.fn> };
           readonly now?: () => string;
           readonly touchFlushIntervalMs?: number;
+          readonly clockMs?: () => number;
         },
     logger?: { warn: ReturnType<typeof vi.fn> },
     now: () => string = () => '2026-06-05T00:00:00.000Z',
@@ -560,6 +731,7 @@ describe('resource cache service', () => {
           logger: input.logger,
           now: input.now ?? (() => '2026-06-05T00:00:00.000Z'),
           touchFlushIntervalMs: input.touchFlushIntervalMs,
+          clockMs: input.clockMs,
         };
     return new VSCodeResourceCacheService({
       cacheRoot: '/workspace/.neko/.cache/resources',
@@ -577,6 +749,7 @@ describe('resource cache service', () => {
       ...(options.touchFlushIntervalMs !== undefined
         ? { touchFlushIntervalMs: options.touchFlushIntervalMs }
         : {}),
+      ...(options.clockMs ? { clockMs: options.clockMs } : {}),
     });
   }
 });
@@ -626,6 +799,7 @@ class FakeFsOps implements ResourceCacheFsOps {
   readonly writeCalls: Array<{ path: string; content: string }> = [];
   readonly renameCalls: Array<{ oldPath: string; newPath: string }> = [];
   readonly rmCalls: string[] = [];
+  failNextRename = false;
 
   async readFile(filePath: string): Promise<string> {
     this.readCalls.push(filePath);
@@ -642,6 +816,10 @@ class FakeFsOps implements ResourceCacheFsOps {
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
+    if (this.failNextRename) {
+      this.failNextRename = false;
+      throw new Error('rename failed');
+    }
     this.renameCalls.push({ oldPath, newPath });
     const value = this.files.get(oldPath);
     if (value === undefined) {
