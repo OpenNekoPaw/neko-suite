@@ -9,7 +9,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import type { EngineClient } from '@neko/neko-client';
-import type { LocalResourceAccessService } from '@neko/shared/vscode/extension';
+import {
+  HostContentAccessService,
+  SourceFileContentAccessProvider,
+  type ContentAccessService,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import { VideoEditorModel } from './videoEditorModel';
 import {
   MessageFromWebview,
@@ -40,6 +45,9 @@ export class MessageHandler {
     private readonly _context: vscode.ExtensionContext,
     private readonly engineClient: EngineClient | null = null,
     private readonly localResourceAccess?: LocalResourceAccessService,
+    private readonly contentAccess: ContentAccessService = createFileRangeContentAccessService(
+      path.dirname(model.uri.fsPath),
+    ),
   ) {}
 
   /**
@@ -218,6 +226,20 @@ export class MessageHandler {
     return resolveMediaPath(filePath, jviDir);
   }
 
+  private async resolveEngineFileAccessPath(filePath: string): Promise<string> {
+    const absolutePath = await this.resolveStoredMediaPath(filePath);
+    const result = await this.contentAccess.resolve({
+      ref: { kind: 'file', path: absolutePath },
+      intent: 'verify',
+      target: 'local-path',
+      caller: 'neko-cut.file-range',
+    });
+    if (result.status !== 'ready' || !result.localPath) {
+      throw new Error(result.error ?? `Unable to resolve source file for range read: ${filePath}`);
+    }
+    return result.localPath;
+  }
+
   /**
    * Handle file request from WebView
    * Uses webview URI for all media types (video, audio, image)
@@ -226,7 +248,7 @@ export class MessageHandler {
   private async handleRequestFile(filePath: string): Promise<void> {
     try {
       // Resolve path relative to .nkv file
-      const absolutePath = await this.resolveStoredMediaPath(filePath);
+      const absolutePath = await this.resolveEngineFileAccessPath(filePath);
       const fileUri = vscode.Uri.file(absolutePath);
 
       try {
@@ -780,4 +802,10 @@ export class MessageHandler {
       });
     }
   }
+}
+
+function createFileRangeContentAccessService(projectRoot: string): ContentAccessService {
+  return new HostContentAccessService({
+    providers: [new SourceFileContentAccessProvider({ projectRoot })],
+  });
 }

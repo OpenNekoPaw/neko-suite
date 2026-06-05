@@ -19,6 +19,14 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type { ProjectData } from '@neko/shared';
+import {
+  HostContentAccessService,
+  HostContentIngestService,
+  SourceFileContentAccessProvider,
+  type ContentAccessService,
+  type ContentIngestService,
+  ExportStagingContentIngestProvider,
+} from '@neko/shared/vscode/extension';
 import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import { getLogger } from '../base';
 
@@ -41,6 +49,13 @@ export interface ExportConfig {
   videoCodec?: string;
   /** Explicit audio codec — if omitted, default for format is used */
   audioCodec?: string;
+  /** Explicitly allow proxy or derived media for low-fidelity draft exports. */
+  qualityMode?: 'source' | 'draft-proxy';
+}
+
+export interface ExportServiceOptions {
+  readonly contentAccess?: ContentAccessService;
+  readonly contentIngest?: ContentIngestService;
 }
 
 /** Per-job info tracked by the service */
@@ -162,6 +177,7 @@ export class ExportService implements vscode.Disposable {
   constructor(
     private readonly client: EngineClient,
     private readonly documentDir: string,
+    private readonly options: ExportServiceOptions = {},
   ) {}
 
   // =========================================================================
@@ -381,6 +397,7 @@ export class ExportService implements vscode.Disposable {
         this._onDidQueueChange.fire(this.buildQueueStatus());
 
         if (progress.state === 'completed') {
+          await this.stageExportOutput(completedJob?.config.outputPath);
           this._onDidComplete.fire({
             success: true,
             outputPath: completedJob?.config?.outputPath,
@@ -438,7 +455,7 @@ export class ExportService implements vscode.Disposable {
     const videoBitrate = Math.round(qualityPreset.baseBitrate * pixelRatio);
 
     // Build timeline from project data, resolving relative paths
-    const timeline = await this.buildTimeline(project, duration);
+    const timeline = await this.buildTimeline(project, duration, config);
 
     return {
       jobId,
@@ -472,6 +489,7 @@ export class ExportService implements vscode.Disposable {
   private async buildTimeline(
     project: ProjectData,
     duration: number,
+    config: ExportConfig,
   ): Promise<Record<string, unknown>> {
     const tracks = await Promise.all(
       project.tracks.map(async (track) => ({
@@ -479,7 +497,9 @@ export class ExportService implements vscode.Disposable {
         name: track.name ?? '',
         type: track.type,
         elements: await Promise.all(
-          track.elements.map((el) => this.convertElement(el as unknown as Record<string, unknown>)),
+          track.elements.map((el) =>
+            this.convertElement(el as unknown as Record<string, unknown>, config),
+          ),
         ),
         muted: track.muted ?? false,
         locked: track.locked ?? false,
@@ -501,7 +521,10 @@ export class ExportService implements vscode.Disposable {
    * Convert a project element to domain-compatible format.
    * Handles field name mapping and value sanitization.
    */
-  private async convertElement(element: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async convertElement(
+    element: Record<string, unknown>,
+    config: ExportConfig,
+  ): Promise<Record<string, unknown>> {
     const el = element as Record<string, unknown>;
 
     // Base element fields (shared by all element types)
@@ -540,7 +563,7 @@ export class ExportService implements vscode.Disposable {
     switch (el.type) {
       case 'media': {
         const src = el.src as string | undefined;
-        result.src = src ? await this.resolveMediaPath(src) : '';
+        result.src = src ? await this.resolveMediaPath(src, config) : '';
         if (el.resourceId) result.resourceId = el.resourceId;
         if (el.mediaType) result.mediaType = el.mediaType;
         if (el.linkedAudioId) result.linkedAudioId = el.linkedAudioId;
@@ -549,7 +572,7 @@ export class ExportService implements vscode.Disposable {
       }
       case 'audio': {
         const src = el.src as string | undefined;
-        result.src = src ? await this.resolveMediaPath(src) : '';
+        result.src = src ? await this.resolveMediaPath(src, config) : '';
         if (el.resourceId) result.resourceId = el.resourceId;
         if (el.linkedVideoId) result.linkedVideoId = el.linkedVideoId;
         if (el.audio) result.audio = this.sanitizeAudioProps(el.audio as Record<string, unknown>);
@@ -937,8 +960,40 @@ export class ExportService implements vscode.Disposable {
   /**
    * Resolve a media path to absolute (relative to .nkv document dir)
    */
-  private async resolveMediaPath(mediaPath: string): Promise<string> {
-    return resolveMediaPathHelper(mediaPath, this.documentDir);
+  private async resolveMediaPath(mediaPath: string, config: ExportConfig): Promise<string> {
+    const resolvedPath = await resolveMediaPathHelper(mediaPath, this.documentDir);
+    const contentAccess =
+      this.options.contentAccess ?? createExportContentAccessService(this.documentDir);
+    const result = await contentAccess.resolve({
+      ref: { kind: 'file', path: resolvedPath },
+      intent: 'final-export',
+      target: 'local-path',
+      ...(config.qualityMode === 'draft-proxy' ? { qualityMode: 'draft-proxy' } : {}),
+      caller: 'neko-cut.export',
+    });
+    if (result.status !== 'ready' || !result.localPath) {
+      throw new Error(result.error ?? `Unable to resolve export media source: ${mediaPath}`);
+    }
+    return result.localPath;
+  }
+
+  private async stageExportOutput(outputPath: string | undefined): Promise<void> {
+    if (!outputPath) return;
+    const contentIngest =
+      this.options.contentIngest ?? createExportContentIngestService(this.documentDir);
+    const result = await contentIngest.ingest({
+      mode: 'stage-export',
+      destination: {
+        kind: 'export-output',
+        directory: path.dirname(outputPath),
+        allowAbsolutePath: true,
+      },
+      fileName: path.basename(outputPath),
+      caller: 'neko-cut.export',
+    });
+    if (result.status !== 'ready') {
+      logger.warn('Failed to stage export output', { outputPath, status: result.status });
+    }
   }
 
   /**
@@ -1013,4 +1068,16 @@ export class ExportService implements vscode.Disposable {
     this._onDidCancel.dispose();
     this._onDidQueueChange.dispose();
   }
+}
+
+function createExportContentAccessService(projectRoot: string): ContentAccessService {
+  return new HostContentAccessService({
+    providers: [new SourceFileContentAccessProvider({ projectRoot })],
+  });
+}
+
+function createExportContentIngestService(projectRoot: string): ContentIngestService {
+  return new HostContentIngestService({
+    providers: [new ExportStagingContentIngestProvider({ projectRoot })],
+  });
 }

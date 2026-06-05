@@ -161,6 +161,7 @@ export function buildRuntimePluginTransferPlan(
         ...(payload.asset.mediaType ? { type: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
         ...(documentResourceRef ? { documentResourceRef } : {}),
+        ...(payload.asset.resourceRef ? { resourceRef: payload.asset.resourceRef } : {}),
         ...((payload.target ?? payload.asset.target)
           ? { target: payload.target ?? payload.asset.target }
           : {}),

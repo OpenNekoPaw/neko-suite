@@ -108,14 +108,15 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     ) => {
       const linkedDocumentResource = options?.documentResourceRef;
       const linkedResource = options?.resourceRef;
-      const runtimePath = options?.runtimeAssetPath ?? (linkedDocumentResource ? uri : undefined);
+      const hasLinkedResource = Boolean(linkedDocumentResource || linkedResource);
+      const runtimePath = options?.runtimeAssetPath ?? (hasLinkedResource ? uri : undefined);
       addNode(
         buildCanvasNode({
           type: 'media',
           position: pos,
           zIndex: nodeCount,
           data: {
-            assetPath: linkedDocumentResource ? '' : uri || '',
+            assetPath: hasLinkedResource ? '' : uri || '',
             ...(linkedDocumentResource ? { documentResourceRef: linkedDocumentResource } : {}),
             ...(linkedResource ? { resourceRef: linkedResource } : {}),
             ...(runtimePath ? { runtimeAssetPath: runtimePath } : {}),

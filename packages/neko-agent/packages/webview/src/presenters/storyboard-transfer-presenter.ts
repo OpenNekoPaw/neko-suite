@@ -258,8 +258,8 @@ function doesStoryboardMediaMatchRef(
 }
 
 function getCanvasImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
+  if (media?.resourceRef || media?.cacheResourceRef) return undefined;
   return (
-    media?.resourceRef?.cachePath ??
     media?.localPath ??
     media?.stableUri ??
     (media?.src && isCanvasPortableImageUrl(media.src) ? media.src : undefined)

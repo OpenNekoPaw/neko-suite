@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
+  getImportedGeneratedAssetNodeInput,
   normalizeImportedGeneratedAsset,
   normalizeImportedMediaType,
 } from './importedGeneratedAsset';
@@ -73,6 +74,53 @@ describe('imported generated asset normalization', () => {
       name: '0001_page-1.jpg',
       documentResourceRef,
       resourceRef,
+    });
+  });
+
+  it('separates durable refs from runtime preview paths for linked imports', () => {
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:image/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
+    const asset = normalizeImportedGeneratedAsset({
+      path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+      originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      type: 'image',
+      resourceRef,
+    });
+
+    if (!asset) throw new Error('expected normalized asset');
+
+    expect(getImportedGeneratedAssetNodeInput(asset)).toEqual({
+      assetPath: '',
+      runtimeAssetPath:
+        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+      resourceRef,
+    });
+  });
+
+  it('keeps plain imports as durable asset paths when no resource ref is present', () => {
+    const asset = normalizeImportedGeneratedAsset({
+      path: '/repo/neko/generated/image/out.png',
+      type: 'image',
+    });
+
+    if (!asset) throw new Error('expected normalized asset');
+
+    expect(getImportedGeneratedAssetNodeInput(asset)).toEqual({
+      assetPath: '/repo/neko/generated/image/out.png',
     });
   });
 

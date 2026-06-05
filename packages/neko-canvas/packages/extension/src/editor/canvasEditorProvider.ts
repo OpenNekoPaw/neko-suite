@@ -12,8 +12,10 @@ import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
   GeneratedAssetResourceCacheProvider,
+  HostContentAccessService,
   LegacyResourceCacheProvider,
   PreviewVariantResourceCacheProvider,
+  ResourceCacheContentAccessProvider,
   ThumbnailResourceCacheProvider,
   createProjectSnapshotPackage,
   hasWebviewKeyboardEditableOwner,
@@ -22,6 +24,7 @@ import {
   updateWebviewKeyboardEditableOwner,
   VSCodeResourceCacheService,
   type IFocusedWebviewRegistry,
+  type ContentAccessService,
   type LocalResourceAccessService,
   type PreviewVariantResourceApi,
   type ResourceCacheService,
@@ -45,6 +48,7 @@ import {
   loadNkc,
   createProjectionAdapterRegistry,
   NEKO_EXTENSION_IDS,
+  PathResolver,
   summarizeCanvasSubsystems,
   resolveStorageLayout,
 } from '@neko/shared';
@@ -122,6 +126,15 @@ function isCanvasEditorLevelKeyboardAction(action: string): boolean {
 
 function readPlaybackMediaType(value: unknown): PlaybackMediaType {
   return value === 'video' || value === 'audio' ? value : 'auto';
+}
+
+function createWorkspacePathResolver(workspaceRoot: string): PathResolver {
+  return new PathResolver(
+    new Map([
+      ['WORKSPACE', workspaceRoot],
+      ['PROJECT', workspaceRoot],
+    ]),
+  );
 }
 
 function assertCanvasNodeType(type: CanvasNodeType | undefined): void {
@@ -431,6 +444,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly resourceCache: ResourceCacheService | undefined;
+  private readonly contentAccess: ContentAccessService | undefined;
   private readonly documentResourceCacheRoots: readonly vscode.Uri[];
   private readonly projectionAdapters: ProjectionAdapterRegistry =
     createProjectionAdapterRegistry();
@@ -448,6 +462,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       logger,
     });
     this.resourceCache = this.createProjectResourceCacheService();
+    this.contentAccess = this.createContentAccessService();
     this.documentResourceCacheRoots = [
       context.globalStorageUri,
       vscode.Uri.joinPath(context.globalStorageUri, 'document-image-cache'),
@@ -470,7 +485,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       localResourceAccess: this.localResourceAccess,
       providers: [
         new LegacyResourceCacheProvider(),
-        new GeneratedAssetResourceCacheProvider(),
+        new GeneratedAssetResourceCacheProvider({
+          pathResolver: createWorkspacePathResolver(workspaceRoot),
+          projectRoot: workspaceRoot,
+        }),
         new ThumbnailResourceCacheProvider({
           generator: {
             generate: async (filePath, options) => {
@@ -498,6 +516,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }),
         new PreviewVariantResourceCacheProvider({
           preview: this.createLazyPreviewVariantResourceApi(),
+        }),
+      ],
+      logger,
+    });
+  }
+
+  private createContentAccessService(): ContentAccessService | undefined {
+    if (!this.resourceCache) {
+      return undefined;
+    }
+    return new HostContentAccessService({
+      providers: [
+        new ResourceCacheContentAccessProvider({
+          resourceCache: this.resourceCache,
+          webviewResolver: () => this.activeWebviewPanel?.webview,
         }),
       ],
       logger,
@@ -3164,30 +3197,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private async projectResourceCacheVariant(
-    webview: vscode.Webview,
+    _webview: vscode.Webview,
     resourceRef: unknown,
     caller: string,
   ): Promise<string | undefined> {
-    if (!this.resourceCache || !isResourceRef(resourceRef)) {
+    if (!this.contentAccess || !isResourceRef(resourceRef)) {
       return undefined;
     }
-    const result = await this.resourceCache.project(
-      webview,
-      resourceRef,
-      { role: 'document-entry' },
-      {
-        materializeIfMissing: true,
-        projection: { caller },
-      },
-    );
+    const result = await this.contentAccess.resolve({
+      ref: resourceRef,
+      intent: 'interactive-preview',
+      target: 'webview-uri',
+      variant: { role: 'document-entry' },
+      materialization: 'if-missing',
+      caller,
+    });
     if (result.status === 'ready' && result.uri) {
       return result.uri;
     }
-    if (result.status === 'missing' || result.status === 'stale') {
+    if (result.status === 'missing-cache' || result.status === 'stale-source') {
       return undefined;
     }
     if (result.status === 'unauthorized') {
-      logger.warn('Resource cache projection was unauthorized', {
+      logger.warn('Content access projection was unauthorized', {
         resourceId: resourceRef.id,
         caller,
         error: result.error,
@@ -3255,6 +3287,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       if (node['type'] === 'shot') {
         delete nodeData['runtimeReferenceImagePath'];
         delete nodeData['documentResourceStatus'];
+        if (
+          isResourceRef(nodeData['referenceResourceRef']) ||
+          isDocumentArchiveResourceRef(nodeData['referenceImageResourceRef'])
+        ) {
+          delete nodeData['referenceImagePath'];
+        }
         continue;
       }
 

@@ -47,6 +47,7 @@ import {
   type NodeLibraryPickerMessageType,
 } from './utils/nodeLibraryPolicy';
 import { appendSelectedGenerationCandidate } from './utils/generationHistory';
+import { getImportedGeneratedAssetNodeInput } from './utils/importedGeneratedAsset';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
 import type { FloatingPanelDefinition, PlaybackControllerDefinition } from './subsystems';
@@ -442,10 +443,13 @@ export function CanvasApp() {
     setCanvasData,
     onAddMediaFromExtension: handleAddMediaFromExtension,
     onImportGeneratedAsset: (asset) => {
-      addMediaAt(getViewportCenter(), asset.mediaType, asset.path, asset.name, {
-        ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
-        ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),
-        ...(asset.documentResourceRef ? { runtimeAssetPath: asset.path } : {}),
+      const nodeInput = getImportedGeneratedAssetNodeInput(asset);
+      addMediaAt(getViewportCenter(), asset.mediaType, nodeInput.assetPath, asset.name, {
+        ...(nodeInput.documentResourceRef
+          ? { documentResourceRef: nodeInput.documentResourceRef }
+          : {}),
+        ...(nodeInput.resourceRef ? { resourceRef: nodeInput.resourceRef } : {}),
+        ...(nodeInput.runtimeAssetPath ? { runtimeAssetPath: nodeInput.runtimeAssetPath } : {}),
       });
     },
     onDropAssets: (assets: CanvasDroppedAsset[]) => {

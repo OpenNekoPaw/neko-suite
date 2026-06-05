@@ -7,6 +7,8 @@
  * - AIActionHandler posting aiActionStatus via webview.postMessage
  */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const cmdState = vi.hoisted(() => {
@@ -61,6 +63,12 @@ vi.mock('../bootstrap/toolsBootstrap', () => ({}));
 import { isAssetMessage, handleAssetMessage } from '../handlers/assetHandlers';
 import { AIActionHandler } from '../services/AIActionHandler';
 import { registerTimelineCommands } from '../commands/timeline-commands';
+
+const messageHandlerSource = readFileSync(
+  join(__dirname, '../editor/video/messageHandler.ts'),
+  'utf-8',
+);
+const exportServiceSource = readFileSync(join(__dirname, '../services/ExportService.ts'), 'utf-8');
 
 describe('neko-cut protocol', () => {
   describe('isAssetMessage', () => {
@@ -220,5 +228,20 @@ describe('timeline command registration (NKC-010)', () => {
     for (const sub of mockContext.subscriptions) {
       expect(sub).toHaveProperty('dispose');
     }
+  });
+});
+
+describe('intent-aware engine and export boundaries', () => {
+  it('routes engine file range registration through source-intent content access', () => {
+    expect(messageHandlerSource).toContain('resolveEngineFileAccessPath');
+    expect(messageHandlerSource).toContain("intent: 'verify'");
+    expect(messageHandlerSource).toContain("target: 'local-path'");
+    expect(messageHandlerSource).toContain('this.engineClient.registerFile({');
+  });
+
+  it('keeps export source resolution and output staging behind content services', () => {
+    expect(exportServiceSource).toContain("intent: 'final-export'");
+    expect(exportServiceSource).toContain("mode: 'stage-export'");
+    expect(exportServiceSource).toContain('ExportStagingContentIngestProvider');
   });
 });

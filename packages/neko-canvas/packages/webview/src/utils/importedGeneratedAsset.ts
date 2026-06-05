@@ -14,6 +14,13 @@ export interface ImportedGeneratedAssetPayload {
   resourceRef?: ResourceRef;
 }
 
+export interface ImportedGeneratedAssetNodeInput {
+  readonly assetPath: string;
+  readonly runtimeAssetPath?: string;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
+  readonly resourceRef?: ResourceRef;
+}
+
 export function normalizeImportedGeneratedAsset(
   value: unknown,
 ): ImportedGeneratedAssetPayload | null {
@@ -41,6 +48,18 @@ export function normalizeImportedGeneratedAsset(
       ? { documentResourceRef: asset.documentResourceRef }
       : {}),
     ...(isResourceRef(asset.resourceRef) ? { resourceRef: asset.resourceRef } : {}),
+  };
+}
+
+export function getImportedGeneratedAssetNodeInput(
+  asset: ImportedGeneratedAssetPayload,
+): ImportedGeneratedAssetNodeInput {
+  const hasLinkedResource = Boolean(asset.documentResourceRef || asset.resourceRef);
+  return {
+    assetPath: hasLinkedResource ? '' : asset.path,
+    ...(hasLinkedResource ? { runtimeAssetPath: asset.path } : {}),
+    ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
+    ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),
   };
 }
 

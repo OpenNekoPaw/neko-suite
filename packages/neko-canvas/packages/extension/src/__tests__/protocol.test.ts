@@ -19,6 +19,7 @@
  *   NKV-010: projected Canvas write-back routes through projection adapters
  *   NKV-012: canvas toolbar export intent routes through a whitelisted command
  *   NKV-013: resource cache providers own thumbnail/preview/generated materialization
+ *   NKV-014: intent-aware content access owns Canvas resource preview projection
  */
 
 import { describe, it, expect } from 'vitest';
@@ -231,6 +232,32 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('const resourceRef = isResourceRef(message.resourceRef)');
       expect(providerSource).toContain('this.projectResourceCacheVariant(');
       expect(providerSource).toContain("case 'preview:resolveVariant'");
+    });
+  });
+
+  describe('NKV-014: intent-aware content access boundaries', () => {
+    it('routes resource preview projection through ContentAccessService', () => {
+      expect(providerSource).toContain('HostContentAccessService');
+      expect(providerSource).toContain('ResourceCacheContentAccessProvider');
+      expect(providerSource).toContain("intent: 'interactive-preview'");
+      expect(providerSource).toContain("target: 'webview-uri'");
+      expect(providerSource).toContain("materialization: 'if-missing'");
+    });
+
+    it('does not persist referenceImagePath when a shot has stable resource refs', () => {
+      expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
+      expect(providerSource).toContain("isResourceRef(nodeData['referenceResourceRef'])");
+      expect(providerSource).toContain(
+        "isDocumentArchiveResourceRef(nodeData['referenceImageResourceRef'])",
+      );
+      expect(providerSource).toContain("delete nodeData['referenceImagePath'];");
+    });
+
+    it('resolves generated asset resource refs with workspace path variables', () => {
+      expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider({');
+      expect(providerSource).toContain('pathResolver: createWorkspacePathResolver(workspaceRoot)');
+      expect(providerSource).toContain("['WORKSPACE', workspaceRoot]");
+      expect(providerSource).toContain("['PROJECT', workspaceRoot]");
     });
   });
 

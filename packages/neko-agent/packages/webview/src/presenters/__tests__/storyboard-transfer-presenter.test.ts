@@ -354,7 +354,6 @@ describe('storyboard transfer presenter', () => {
           {
             shotPlans: [
               {
-                referenceImagePath: '/cache/panel-1.jpg',
                 referenceImageResourceRef: {
                   kind: 'document-entry',
                   source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
@@ -472,7 +471,6 @@ describe('storyboard transfer presenter', () => {
                 characterAction: 'The character turns.',
                 emotion: [],
                 sceneTags: [],
-                referenceImagePath: '/tmp/neko-cache/page-1.jpg',
                 referenceImageResourceRef: resourceRef,
               },
             ],
@@ -740,7 +738,6 @@ describe('storyboard transfer presenter', () => {
           {
             shotPlans: [
               {
-                referenceImagePath: '/tmp/neko-cache/page-1.jpg',
                 referenceImageResourceRef: firstResourceRef,
               },
             ],
@@ -748,7 +745,6 @@ describe('storyboard transfer presenter', () => {
           {
             shotPlans: [
               {
-                referenceImagePath: '/tmp/neko-cache/page-2.jpg',
                 referenceImageResourceRef: secondResourceRef,
               },
             ],
@@ -756,6 +752,154 @@ describe('storyboard transfer presenter', () => {
         ],
       },
     });
+  });
+
+  it('binds multiple selected shot media refs to distinct Canvas preview resources', () => {
+    const firstDocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/panel-a.jpg',
+      cachePath: '/tmp/neko-cache/panel-a.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const secondDocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/panel-b.jpg',
+      cachePath: '/tmp/neko-cache/panel-b.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const firstCacheRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/panel-a.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:panel-a',
+        providerId: 'document-archive',
+      }),
+    });
+    const secondCacheRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/panel-b.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:panel-b',
+        providerId: 'document-archive',
+      }),
+    });
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        scenes: [
+          {
+            sceneId: 'scene-page',
+            sceneTitle: 'Page',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                characterAction: 'The first selected panel anchors the shot.',
+                visualDescription: 'First selected panel.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'selected-panel-a',
+                    role: 'source',
+                    locator: { type: 'tool-result', toolCallId: 'read-image', assetIndex: 0 },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+              {
+                shotNumber: 1,
+                duration: 3,
+                characterAction: 'The second selected panel anchors the shot.',
+                visualDescription: 'Second selected panel.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'selected-panel-b',
+                    role: 'source',
+                    locator: { type: 'tool-result', toolCallId: 'read-image', assetIndex: 1 },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Selected panels',
+          media: [
+            {
+              id: 'read-image:0:/tmp/neko-cache/panel-a.jpg',
+              toolCallId: 'read-image',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://panel-a.jpg',
+              localPath: '/tmp/neko-cache/panel-a.jpg',
+              resourceRef: firstDocumentRef,
+              cacheResourceRef: firstCacheRef,
+              mimeType: 'image/jpeg',
+            },
+            {
+              id: 'read-image:1:/tmp/neko-cache/panel-b.jpg',
+              toolCallId: 'read-image',
+              assetIndex: 1,
+              type: 'image',
+              src: 'webview://panel-b.jpg',
+              localPath: '/tmp/neko-cache/panel-b.jpg',
+              resourceRef: secondDocumentRef,
+              cacheResourceRef: secondCacheRef,
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    const payload = projectStoryboardTableTransferPayload(data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+
+    const shotPlans = payload.storyboard.scenes[0]?.shotPlans ?? [];
+    expect(shotPlans).toHaveLength(2);
+    expect(shotPlans[0]).toMatchObject({
+      referenceImageResourceRef: firstDocumentRef,
+      referenceResourceRef: firstCacheRef,
+    });
+    expect(shotPlans[1]).toMatchObject({
+      referenceImageResourceRef: secondDocumentRef,
+      referenceResourceRef: secondCacheRef,
+    });
+    expect(shotPlans[0]?.referenceResourceRef?.id).not.toBe(shotPlans[1]?.referenceResourceRef?.id);
+    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+    expect(shotPlans[1]).not.toHaveProperty('referenceImagePath');
   });
 
   it('disables storyboard semantic transfer payloads when validation has errors', () => {
