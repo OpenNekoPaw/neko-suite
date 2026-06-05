@@ -43,18 +43,18 @@
 
 ### 职责边界
 
-| 组件 | 决策 | 理由 |
-|------|------|------|
-| `ScriptTableView` | ✅ 保留 | 纯文字元数据（INT/EXT、地点、角色、时长），是 Fountain 解析的自然延伸 |
-| `CreativeGridView`（含生成入口）| ❌ 移除/降级 | 图片生成是 canvas 核心能力，story 里是残缺版竞争 |
-| 「在 Canvas 中创建分镜 ↗」按钮 | ✅ 新增 | story 唯一需要的桥接入口 |
+| 组件                             | 决策         | 理由                                                                  |
+| -------------------------------- | ------------ | --------------------------------------------------------------------- |
+| `ScriptTableView`                | ✅ 保留      | 纯文字元数据（INT/EXT、地点、角色、时长），是 Fountain 解析的自然延伸 |
+| `CreativeGridView`（含生成入口） | ❌ 移除/降级 | 图片生成是 canvas 核心能力，story 里是残缺版竞争                      |
+| 「在 Canvas 中创建分镜 ↗」按钮   | ✅ 新增      | story 唯一需要的桥接入口                                              |
 
 ### 现有死代码
 
 ```typescript
 // CreativeGridView.tsx — 应清理
 interface Props {
-  generatedImages?: Record<number, string>  // 从未被传入，永远是占位符
+  generatedImages?: Record<number, string>; // 从未被传入，永远是占位符
 }
 ```
 
@@ -128,16 +128,16 @@ agent 是整个 neko-suite 里**最可能单独安装**的插件（core 包含 a
 
 ### 能力矩阵
 
-| 能力 | 应有 | 理由 |
-|------|------|------|
-| 图片 inline 展示 | ✅ 必须 | 生图结果的最小可用展示 |
-| 分镜网格（场景分组）| ✅ 必须 | agent 独立完成分镜任务的前提 |
-| 音频播放 | ✅ 必须 | AI 配乐/TTS/音效的基础反馈 |
-| 视频 inline 播放 | ✅ 必须 | AI 生成视频的基础反馈 |
-| 多图对比视图 | ✅ 应有 | 同一镜头多候选版本的选择场景 |
-| 时间线编辑 | ❌ 不该有 | neko-cut 的职责 |
-| 音频混音台 | ❌ 不该有 | neko-audio 的职责 |
-| 空间画布排布 | ❌ 不该有 | neko-canvas 的职责 |
+| 能力                 | 应有      | 理由                         |
+| -------------------- | --------- | ---------------------------- |
+| 图片 inline 展示     | ✅ 必须   | 生图结果的最小可用展示       |
+| 分镜网格（场景分组） | ✅ 必须   | agent 独立完成分镜任务的前提 |
+| 音频播放             | ✅ 必须   | AI 配乐/TTS/音效的基础反馈   |
+| 视频 inline 播放     | ✅ 必须   | AI 生成视频的基础反馈        |
+| 多图对比视图         | ✅ 应有   | 同一镜头多候选版本的选择场景 |
+| 时间线编辑           | ❌ 不该有 | neko-cut 的职责              |
+| 音频混音台           | ❌ 不该有 | neko-audio 的职责            |
+| 空间画布排布         | ❌ 不该有 | neko-canvas 的职责           |
 
 ### Chat 消息组件
 
@@ -189,8 +189,8 @@ Chat 历史是**创作决策的时间线**，其他插件给不了：
 
 ```typescript
 // 现状：base64 在内存/消息里反复传递
-ShotNode.generatedImage = "data:image/png;base64,iVBORw0KGgo..."  // ~1.3MB 字符串
-postMessage({ dataUrl: "data:image/..." })  // 跨进程传大对象
+ShotNode.generatedImage = 'data:image/png;base64,iVBORw0KGgo...'; // ~1.3MB 字符串
+postMessage({ dataUrl: 'data:image/...' }); // 跨进程传大对象
 ```
 
 ### GeneratedAsset Schema
@@ -202,60 +202,56 @@ type GeneratedAssetType =
   | 'generated-image'
   | 'generated-audio'
   | 'generated-video'
-  | 'generated-storyboard'
+  | 'generated-storyboard';
 
 interface BaseGeneratedAsset {
-  type:        GeneratedAssetType
-  id:          string        // nanoid，全局唯一
-  path:        string        // 兼容路径：历史上可能是 /workspace/.neko/generated/...；新实现优先 .neko/.cache/generated/...
-  mimeType:    string
-  generatedAt: string        // ISO 8601
-  prompt?:     string
-  model?:      string        // fal.ai / dashscope / kling / ...
+  type: GeneratedAssetType;
+  id: string; // nanoid，全局唯一
+  path: string; // 兼容路径：历史上可能是 /workspace/.neko/generated/...；新实现优先 .neko/.cache/generated/...
+  mimeType: string;
+  generatedAt: string; // ISO 8601
+  prompt?: string;
+  model?: string; // fal.ai / dashscope / kling / ...
 }
 
 interface GeneratedImage extends BaseGeneratedAsset {
-  type:    'generated-image'
-  width:   number
-  height:  number
-  ratio:   string            // '16:9' | '1:1' | ...
+  type: 'generated-image';
+  width: number;
+  height: number;
+  ratio: string; // '16:9' | '1:1' | ...
   shotMeta?: {
-    sceneIndex:      number
-    shotIndex:       number
-    shotScale?:      ShotScale
-    cameraMovement?: CameraMovement
-  }
+    sceneIndex: number;
+    shotIndex: number;
+    shotScale?: ShotScale;
+    cameraMovement?: CameraMovement;
+  };
 }
 
 interface GeneratedAudio extends BaseGeneratedAsset {
-  type:       'generated-audio'
-  duration:   number         // 秒
-  sampleRate: number
-  channels:   number
+  type: 'generated-audio';
+  duration: number; // 秒
+  sampleRate: number;
+  channels: number;
 }
 
 interface GeneratedVideo extends BaseGeneratedAsset {
-  type:     'generated-video'
-  duration: number
-  width:    number
-  height:   number
-  fps:      number
+  type: 'generated-video';
+  duration: number;
+  width: number;
+  height: number;
+  fps: number;
 }
 
 interface GeneratedStoryboard extends BaseGeneratedAsset {
-  type:   'generated-storyboard'
+  type: 'generated-storyboard';
   scenes: Array<{
-    sceneIndex: number
-    heading:    string
-    shots:      GeneratedImage[]
-  }>
+    sceneIndex: number;
+    heading: string;
+    shots: GeneratedImage[];
+  }>;
 }
 
-type GeneratedAsset =
-  | GeneratedImage
-  | GeneratedAudio
-  | GeneratedVideo
-  | GeneratedStoryboard
+type GeneratedAsset = GeneratedImage | GeneratedAudio | GeneratedVideo | GeneratedStoryboard;
 ```
 
 ### 磁盘存储结构
@@ -292,18 +288,22 @@ type GeneratedAsset =
 
 跨插件传递不能只依赖 `GeneratedAsset.path` 或文档图片的绝对 `cachePath`。这些路径可以在所属 extension 的 Webview 中显示，但对 Canvas/Preview 来说可能是另一个扩展的 private cache，无法授权，也无法知道缺失时如何重建。
 
+读写边界遵循 [intent-aware-content-access.md](./intent-aware-content-access.md)：Agent Webview 展示使用 `agent-context` / `interactive-preview`；发送到 Canvas、导出或打包前，生成媒体必须通过 `ContentIngestService` 的 `generated-output` 提升为 stable source ref；离线操作使用 `final-export` / `package` / `verify` 回到 source-first。
+
 新增统一规则：
 
 - Agent 生成/读取的项目绑定图片应同时携带 `ResourceRef` 或 `ResourceVariantRef`。
 - 文档图片使用 `DocumentSourceRef + DocumentLocator/entryPath` 生成 `document-archive` resource ref；Canvas 根据 ref 调 `ResourceCacheService.ensure/project`。
 - 分镜 shot 的参考图字段使用 `referenceResourceRef`；同一图片可被多个 shot 重复引用，但每个 shot 都显式绑定 ref，不按顺序猜图。
-- `GeneratedAsset` 可通过 `generated-asset` provider 映射到 resource ref，用于缩略图、预览和 Canvas 导入。
+- `GeneratedAsset` 可通过 `generated-asset` provider 映射到 resource ref，用于缩略图、预览和 Canvas 导入；跨包发送前应返回 promoted `ContentGeneratedAssetSourceRef`，而不是 Agent 私有 cache path。
 - 没有 workspace 时，Agent 的 `globalStorageUri/document-image-cache` 图像标记为 `extension-private` / `non-portable`，仍可在 Agent Chat 显示，但发送到 Canvas 时必须重新导入/复制/重建到项目资源缓存。
 
 这条规则解决两个常见问题：
 
 1. “分镜表连续使用同一张图”：重复引用同一个 ref 是合法的，不再按图片数组顺序错绑。
 2. “有的分镜没有图”：没有 ref 的 shot 不自动沿用上一张图，Canvas 显示 missing/unresolved 状态。
+
+Agent 不能仅根据自然语言提示词在发送阶段可靠地“猜测”图片绑定。更可靠的方案是在读取/分析图片时就确定顺序、locator 与镜头对应关系，输出 `StoryboardTableV1` 时为每个 shot 写入明确 `referenceResourceRef` 或空值。后续发送到 Canvas 只传稳定 ref 和 preview role，不再按图片数组顺序重新分配。
 
 ### 数据流
 
@@ -316,17 +316,17 @@ platform.media.generateImage()
   → return GeneratedImage                 ← 只返回 JSON，不含二进制
        │
        ├─ Agent Chat 展示
-       │    extension: path → asWebviewUri(path)
+       │    extension: path/resourceRef → ContentAccessService(agent-context/interactive-preview)
        │    postMessage({ asset: { ...json, webviewUri } })
        │    webview: <img src={webviewUri} />
        │
        ├─ Canvas ShotNode
-       │    canvasApi.nodes.update(id, { generatedAsset, resourceRef })
-       │    canvas extension: ResourceCacheService.project(resourceRef)
+       │    canvasApi.nodes.update(id, { generatedAsset, resourceRef/sourceRef })
+       │    canvas extension: ContentAccessService(interactive-preview, webview-uri)
        │    webview: <img src={webviewUri} />
        │
        └─ neko-cut / neko-engine 导出
-            直接使用 asset.path（原始文件，无 base64 转换；导出 intent 不从 preview 代理反推身份）
+            ContentAccessService(final-export/package/verify)，导出 intent 不从 preview 代理反推身份
 ```
 
 ### Webview 访问约束
@@ -349,12 +349,12 @@ function toWebviewAsset<T extends BaseGeneratedAsset>(
 
 ### 需要修改的存量代码
 
-| 位置 | 修改内容 |
-|------|---------|
-| `platform/src/media.ts` | `generateImage()` 返回 `GeneratedImage`（写盘 + 返回 JSON），不返回 `dataUrl` |
-| `neko-agent` generateForNode 命令 | `return { dataUrl }` → `return GeneratedImage` |
-| `ShotNode` 类型定义 | `generatedImage?: string` → `generatedAsset?: GeneratedImage` |
-| neko-cut 导出管线 | base64 解码 → 直接读 `asset.path` |
+| 位置                              | 修改内容                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `platform/src/media.ts`           | `generateImage()` 返回 `GeneratedImage`（写盘 + 返回 JSON），不返回 `dataUrl` |
+| `neko-agent` generateForNode 命令 | `return { dataUrl }` → `return GeneratedImage`                                |
+| `ShotNode` 类型定义               | `generatedImage?: string` → `generatedAsset?: GeneratedImage`                 |
+| neko-cut 导出管线                 | base64 解码 → 直接读 `asset.path`                                             |
 
 ---
 
@@ -392,7 +392,7 @@ GeneratedAsset 已存磁盘，用户可从 VS Code 文件资源管理器拖入�
 
 传递的是 `GeneratedAsset` JSON，不是二进制。接收方从 `path` 加载文件。
 
-若 payload 含 `resourceRef`，接收方优先使用 `ResourceCacheService` 物化/投影；`path` 只作为兼容与导出原始文件线索。
+若 payload 含 `resourceRef` 或 promoted generated source ref，接收方优先使用 `ContentAccessService` 以明确 intent 物化、投影或读取原始 source；`path` 只作为 legacy 兼容输入，不作为跨包 durable identity。
 
 ### 路径 3：Extension Host 代理 DnD（可选增强）
 
@@ -414,28 +414,25 @@ agent webview                Extension Host（DragDropBroker）      目标 webv
 ```typescript
 // @neko/shared/drag-drop-broker.ts
 class DragDropBroker {
-  private payload: GeneratedAsset | null = null
+  private payload: GeneratedAsset | null = null;
 
   register(webview: vscode.Webview, targetExtension: string) {
-    webview.onDidReceiveMessage(msg => {
+    webview.onDidReceiveMessage((msg) => {
       switch (msg.type) {
         case 'dnd:start':
-          this.payload = msg.asset
-          break
+          this.payload = msg.asset;
+          break;
         case 'dnd:query':
-          webview.postMessage({ type: 'dnd:payload', asset: this.payload })
-          break
+          webview.postMessage({ type: 'dnd:payload', asset: this.payload });
+          break;
         case 'dnd:drop':
           if (this.payload) {
-            vscode.commands.executeCommand(
-              `neko.${targetExtension}.importAsset`,
-              this.payload
-            )
-            this.payload = null
+            vscode.commands.executeCommand(`neko.${targetExtension}.importAsset`, this.payload);
+            this.payload = null;
           }
-          break
+          break;
       }
-    })
+    });
   }
 }
 ```
@@ -443,23 +440,23 @@ class DragDropBroker {
 各 webview drop zone（约 20 行，统一实现）：
 
 ```typescript
-window.addEventListener('dragover', e => {
-  e.preventDefault()
-  vscode.postMessage({ type: 'dnd:query' })
-})
-window.addEventListener('drop', e => {
-  e.preventDefault()
-  vscode.postMessage({ type: 'dnd:drop', position: { x: e.clientX, y: e.clientY } })
-})
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  vscode.postMessage({ type: 'dnd:query' });
+});
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  vscode.postMessage({ type: 'dnd:drop', position: { x: e.clientX, y: e.clientY } });
+});
 ```
 
 ### 实施顺序
 
-| 优先级 | 路径 | 工程量 |
-|--------|------|--------|
-| P0 | 「发送到」按钮 | ~30 行，立即解决跨插件传递 |
-| P1 | Extension Host 代理 DnD | ~100 行，DragDropBroker 通用基础设施 |
-| P2 | 「在资源管理器显示」按钮 | ~5 行，高级用户备用路径 |
+| 优先级 | 路径                     | 工程量                               |
+| ------ | ------------------------ | ------------------------------------ |
+| P0     | 「发送到」按钮           | ~30 行，立即解决跨插件传递           |
+| P1     | Extension Host 代理 DnD  | ~100 行，DragDropBroker 通用基础设施 |
+| P2     | 「在资源管理器显示」按钮 | ~5 行，高级用户备用路径              |
 
 ---
 
@@ -510,6 +507,7 @@ Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
 ```
 
 职责分离而非隔离：
+
 - 两个 webview 是独立 Vite 构建（不同 bundle entry），React 组件不跨包共享
 - 但流客户端（`@neko/neko-client`）是纯 TS 库（零 vscode 依赖），可被任意 webview 安全引入
 - Layer 2 只做 play/stop 确认或全景轻量卡片；专业功能（seek / scrub / PiP / 字幕 / 频谱 / 球面全景交互）属于 Layer 1
@@ -519,12 +517,14 @@ Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
 **关键约束**：VSCode webview 沙箱对 DOM `<audio>`/`<video>` 元素的编解码能力有限（Electron 不一定内置所有编解码器）。因此 **禁止使用 DOM `<video>`/`<audio>` 元素**——包括用 `<video>` 取 poster、用 `<audio controls>` 播放。
 
 **允许的播放路径**：通过 `@neko/neko-client` 的 WebCodecs + Web Audio API 路径，该路径完全绕过 DOM 元素的编解码限制：
+
 - H264StreamClient：WebSocket 接收 NAL 单元 → WebCodecs `VideoDecoder`（硬件加速 H.264 解码）→ `VideoFrame` → Canvas 2D `drawImage`
 - AudioStreamClient：WebSocket 接收 PCM f32le → Web Audio API `AudioBuffer`（无编解码步骤）
 
 此路径已在 neko-canvas（InlineMediaPlayer）、neko-model（SceneControlSocket）、neko-preview（VideoPlayer/AudioPlayer）中验证。
 
 **影响**：
+
 - Layer 2 **不能**使用 DOM `<video>` 取 poster、不能用 `<audio controls>` 播放
 - Layer 2 **可以**通过 neko-client WebCodecs + PCM 路径实现内联播放（play/stop 确认，无 seek/scrub）
 - Layer 2 的 Idle 态元数据（poster 帧、波形、时长、分辨率）全部由 extension host 侧通过 EngineClient 获取
@@ -598,12 +598,12 @@ neko-preview 独立面板：完整播放控制（seek / scrub / PiP / 字幕 / �
 
 #### 组件显示模式（修正后）
 
-| 组件 | 展开模式（默认） | inline 模式（TaskCard 内用） |
-|------|-----------------|------------------------------|
-| `ImagePreview` | 折叠卡片 + `<img>` | 纯 `<img>` |
-| `VideoCard` | 折叠卡片 + poster + 时长/分辨率 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 紧凑 poster + 点击 ▶ 内联播放 |
-| `AudioCard` | 折叠卡片 + 波形占位 + 时长 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 波形图标 + 时长 + 点击 ▶ 内联播放 |
-| `PanoramicCard` | 折叠卡片 + engine thumbnail/FOV crop + 360 badge；点击 → neko-preview | 紧凑 `<img>` + 360 badge；点击 → neko-preview |
+| 组件            | 展开模式（默认）                                                                                 | inline 模式（TaskCard 内用）                  |
+| --------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `ImagePreview`  | 折叠卡片 + `<img>`                                                                               | 纯 `<img>`                                    |
+| `VideoCard`     | 折叠卡片 + poster + 时长/分辨率 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 紧凑 poster + 点击 ▶ 内联播放                 |
+| `AudioCard`     | 折叠卡片 + 波形占位 + 时长 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview      | 波形图标 + 时长 + 点击 ▶ 内联播放             |
+| `PanoramicCard` | 折叠卡片 + engine thumbnail/FOV crop + 360 badge；点击 → neko-preview                            | 紧凑 `<img>` + 360 badge；点击 → neko-preview |
 
 三个组件的 inline/展开模式**行为一致**：Idle 态静态展示，Active 态 neko-client 内联播放（play/stop），专业查看委托 neko-preview。消除了原来 AudioCard inline 使用 `<audio controls>` 的不一致。
 
@@ -636,6 +636,7 @@ type ContentBlockType = 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan'
 ```
 
 每新增一种展示组件（分镜、表单、对比...）就要修改联合类型 + switch 分支 + 新组件，导致：
+
 - 消息协议持续膨胀
 - ContentBlock 接口的可选字段爆炸（`storyboard?: ...`, `form?: ...`, ...）
 - Skill 无法引入自定义渲染器
@@ -652,20 +653,20 @@ type ContentBlockType = 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan'
 // === 核心协议类型（Layer 0，零依赖） ===
 
 interface RichContentBlock {
-  type: 'rich_content'
-  kind: string                    // 'storyboard' | 'media_card' | 'comparison' | 'form' | ...
-  data: Record<string, unknown>   // 结构化数据，schema 由 kind 决定
-  actions?: RichContentAction[]   // 底部操作按钮
+  type: 'rich_content';
+  kind: string; // 'storyboard' | 'media_card' | 'comparison' | 'form' | ...
+  data: Record<string, unknown>; // 结构化数据，schema 由 kind 决定
+  actions?: RichContentAction[]; // 底部操作按钮
 }
 
 interface RichContentAction {
-  id: string
-  label: string
-  icon?: string                   // codicon 名称
-  command?: string                // vscode command ID（点击时 postMessage 到 extension host 执行）
-  commandArgs?: unknown[]         // 命令参数
-  disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost'
+  id: string;
+  label: string;
+  icon?: string; // codicon 名称
+  command?: string; // vscode command ID（点击时 postMessage 到 extension host 执行）
+  commandArgs?: unknown[]; // 命令参数
+  disabled?: boolean;
+  variant?: 'primary' | 'secondary' | 'ghost';
 }
 ```
 
@@ -677,15 +678,15 @@ interface RichContentAction {
 // === 注册表（webview 侧） ===
 
 interface RichContentRendererEntry<T = unknown> {
-  kind: string
-  validate: (data: unknown) => data is T    // 运行时类型校验
-  component: React.ComponentType<RichContentProps<T>>
+  kind: string;
+  validate: (data: unknown) => data is T; // 运行时类型校验
+  component: React.ComponentType<RichContentProps<T>>;
 }
 
 interface RichContentProps<T = unknown> {
-  data: T
-  actions?: RichContentAction[]
-  onAction: (actionId: string) => void      // 统一操作回调
+  data: T;
+  actions?: RichContentAction[];
+  onAction: (actionId: string) => void; // 统一操作回调
 }
 
 class RichContentRegistry {
@@ -724,15 +725,19 @@ case 'rich_content': {
 ```typescript
 // agent-types/src/message.ts
 export type ContentBlockType =
-  | 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan'
-  | 'rich_content';    // 新增
+  | 'thinking'
+  | 'text'
+  | 'tool_call'
+  | 'code_diff'
+  | 'plan'
+  | 'rich_content'; // 新增
 
 export interface ContentBlock {
   id: string;
   type: ContentBlockType;
   timestamp: number;
   // ... 现有字段 ...
-  richContent?: RichContentBlock;   // 新增，type === 'rich_content' 时使用
+  richContent?: RichContentBlock; // 新增，type === 'rich_content' 时使用
 }
 ```
 
@@ -743,19 +748,19 @@ export interface ContentBlock {
 ```typescript
 // @neko/shared/types/rich-content-kinds/storyboard.ts
 interface StoryboardData {
-  title?: string
-  scriptPath?: string                 // .fountain 源文件路径
+  title?: string;
+  scriptPath?: string; // .fountain 源文件路径
   scenes: Array<{
-    sceneIndex: number
-    heading: string                   // "INT. 咖啡馆 - 日"
+    sceneIndex: number;
+    heading: string; // "INT. 咖啡馆 - 日"
     shots: Array<{
-      shotIndex: number
-      shotScale?: string              // '全景' | '中景' | '特写'
-      imageUri?: string               // webviewUri（已生成）
-      prompt?: string                 // 生图提示词
-      status: 'pending' | 'generating' | 'completed' | 'failed'
-    }>
-  }>
+      shotIndex: number;
+      shotScale?: string; // '全景' | '中景' | '特写'
+      imageUri?: string; // webviewUri（已生成）
+      prompt?: string; // 生图提示词
+      status: 'pending' | 'generating' | 'completed' | 'failed';
+    }>;
+  }>;
 }
 ```
 
@@ -776,16 +781,16 @@ interface StoryboardData {
 ```typescript
 // @neko/shared/types/rich-content-kinds/media-card.ts
 interface MediaCardData {
-  mediaType: 'video' | 'audio'
-  localPath: string                   // 本地文件绝对路径
-  posterUri?: string                  // webviewUri（视频 poster，engine captureFrame）
-  waveformPeaks?: number[]            // 波形数据（音频，engine waveform）
-  duration?: number                   // 秒
-  resolution?: { width: number; height: number }
-  codec?: string
-  mimeType?: string
-  model?: string                      // 生成模型
-  prompt?: string                     // 生成提示词
+  mediaType: 'video' | 'audio';
+  localPath: string; // 本地文件绝对路径
+  posterUri?: string; // webviewUri（视频 poster，engine captureFrame）
+  waveformPeaks?: number[]; // 波形数据（音频，engine waveform）
+  duration?: number; // 秒
+  resolution?: { width: number; height: number };
+  codec?: string;
+  mimeType?: string;
+  model?: string; // 生成模型
+  prompt?: string; // 生成提示词
 }
 ```
 
@@ -794,15 +799,15 @@ interface MediaCardData {
 ```typescript
 // @neko/shared/types/rich-content-kinds/comparison.ts
 interface ComparisonData {
-  title?: string
+  title?: string;
   candidates: Array<{
-    label: string                     // "版本 A - 暖色调"
-    imageUri: string
-    prompt?: string
-    metadata?: Record<string, string>
-  }>
-  layout: 'side-by-side' | 'grid'    // 并排 | 网格
-  selectedIndex?: number              // 用户选中项
+    label: string; // "版本 A - 暖色调"
+    imageUri: string;
+    prompt?: string;
+    metadata?: Record<string, string>;
+  }>;
+  layout: 'side-by-side' | 'grid'; // 并排 | 网格
+  selectedIndex?: number; // 用户选中项
 }
 ```
 
@@ -811,19 +816,19 @@ interface ComparisonData {
 ```typescript
 // @neko/shared/types/rich-content-kinds/form.ts
 interface FormData {
-  title: string
-  description?: string
+  title: string;
+  description?: string;
   fields: Array<{
-    key: string
-    label: string
-    type: 'text' | 'select' | 'number' | 'toggle' | 'slider'
-    value: unknown
-    options?: Array<{ label: string; value: unknown }>
-    required?: boolean
-    validation?: { min?: number; max?: number; pattern?: string }
-  }>
-  submitAction: string                // action ID
-  cancelAction?: string
+    key: string;
+    label: string;
+    type: 'text' | 'select' | 'number' | 'toggle' | 'slider';
+    value: unknown;
+    options?: Array<{ label: string; value: unknown }>;
+    required?: boolean;
+    validation?: { min?: number; max?: number; pattern?: string };
+  }>;
+  submitAction: string; // action ID
+  cancelAction?: string;
 }
 ```
 
@@ -832,16 +837,16 @@ interface FormData {
 ```typescript
 // @neko/shared/types/rich-content-kinds/data-table.ts
 interface DataTableData {
-  title?: string
+  title?: string;
   columns: Array<{
-    key: string
-    label: string
-    width?: number
-    align?: 'left' | 'center' | 'right'
-  }>
-  rows: Array<Record<string, unknown>>
-  highlightRows?: number[]
-  sortable?: boolean
+    key: string;
+    label: string;
+    width?: number;
+    align?: 'left' | 'center' | 'right';
+  }>;
+  rows: Array<Record<string, unknown>>;
+  highlightRows?: number[];
+  sortable?: boolean;
 }
 ```
 
@@ -890,24 +895,24 @@ agent extension host:
 
 #### 各包角色
 
-| 包 | 消费的 kind | 做什么 |
-|----|------------|--------|
-| neko-agent | 所有 kind | 渲染展示组件，触发操作 |
-| neko-canvas | storyboard, media_card | 接收数据创建画布节点 |
-| neko-cut | media_card | 接收数据导入时间线 |
-| neko-story | data_table | 格式兼容 ScriptTableView |
-| neko-audio | media_card (audio) | 接收音频导入混音台 |
+| 包          | 消费的 kind            | 做什么                   |
+| ----------- | ---------------------- | ------------------------ |
+| neko-agent  | 所有 kind              | 渲染展示组件，触发操作   |
+| neko-canvas | storyboard, media_card | 接收数据创建画布节点     |
+| neko-cut    | media_card             | 接收数据导入时间线       |
+| neko-story  | data_table             | 格式兼容 ScriptTableView |
+| neko-audio  | media_card (audio)     | 接收音频导入混音台       |
 
 各包**只依赖 `@neko/shared` 的类型定义**，不依赖 neko-agent 的渲染组件。接收方通过 `vscode.commands.registerCommand` 注册导入命令，发送方通过 `vscode.commands.executeCommand` 调用，零直接依赖。
 
 #### 为什么不共享业务渲染组件
 
-| 因素 | 说明 |
-|------|------|
-| 独立 Vite bundle | 每个 webview 是独立构建入口，无法 import 其他 webview 的 React 组件 |
-| 渲染需求不同 | 同一份 StoryboardData，agent 渲染为只读网格卡片，canvas 渲染为可拖拽节点 |
-| 沙箱隔离 | 各 webview iframe 隔离，共享组件会引入复杂的依赖管理 |
-| 数据已解耦 | kind schema 在 @neko/shared 是纯类型，无运行时依赖 |
+| 因素             | 说明                                                                     |
+| ---------------- | ------------------------------------------------------------------------ |
+| 独立 Vite bundle | 每个 webview 是独立构建入口，无法 import 其他 webview 的 React 组件      |
+| 渲染需求不同     | 同一份 StoryboardData，agent 渲染为只读网格卡片，canvas 渲染为可拖拽节点 |
+| 沙箱隔离         | 各 webview iframe 隔离，共享组件会引入复杂的依赖管理                     |
+| 数据已解耦       | kind schema 在 @neko/shared 是纯类型，无运行时依赖                       |
 
 #### 跨包渲染一致性保障
 
@@ -962,17 +967,19 @@ import { Badge, MediaThumbnail, ActionBar, StatusIndicator } from '@neko/shared/
 function StoryboardMessage({ data, actions, onAction }: RichContentProps<StoryboardData>) {
   return (
     <div className="flex flex-col gap-4">
-      {data.scenes.map(scene => (
+      {data.scenes.map((scene) => (
         <div key={scene.sceneIndex}>
           <div className="flex gap-2 mb-2">
             <Badge variant="info">{scene.heading}</Badge>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {scene.shots.map(shot => (
+            {scene.shots.map((shot) => (
               <MediaThumbnail key={shot.shotIndex} ratio="16:9">
                 {shot.status === 'completed' && <img src={shot.imageUri} />}
                 {shot.status === 'generating' && <StatusIndicator status="loading" />}
-                {shot.shotScale && <Badge className="absolute top-1 left-1">{shot.shotScale}</Badge>}
+                {shot.shotScale && (
+                  <Badge className="absolute top-1 left-1">{shot.shotScale}</Badge>
+                )}
               </MediaThumbnail>
             ))}
           </div>
@@ -1006,7 +1013,9 @@ function ShotNode({ data }: CanvasNodeProps<ShotCanvasNode>) {
 ```typescript
 // @neko/shared/types/rich-content-kinds/storyboard.ts
 
-interface StoryboardData { /* ... */ }
+interface StoryboardData {
+  /* ... */
+}
 
 /**
  * ## Storyboard Rendering Spec
@@ -1064,17 +1073,17 @@ RichContentRegistry.get(kind).component 渲染
 
 ### 6.6 实施优先级
 
-| 优先级 | 任务 | 工程量 | 依赖 |
-|--------|------|--------|------|
-| P0 | 重命名 VideoPlayer→VideoCard, AudioPlayer→AudioCard | ~30 min | 无 |
-| P0 | 定义 `RichContentBlock` 类型 + `RichContentRegistry` + JsonFallbackView | ~200 行 | 无 |
-| P0 | `ContentBlockType` 新增 `rich_content` + `ContentBlockItem` 新增 case | ~30 行 | 上一步 |
-| P0 | 共享 UI 原子：Badge + MediaThumbnail + ActionBar + StatusIndicator | ~300 行 | 无 |
-| P1 | `media_card` kind：VideoCard/AudioCard 统一为注册表条目，元数据从 engine 获取 | ~200 行 | ADR-4 GeneratedAsset |
-| P1 | `storyboard` kind：分镜网格组件 | ~300 行 | ADR-2 parse_script_to_shots |
-| P2 | `comparison` kind：多候选对比 | ~150 行 | 无 |
-| P2 | `form` kind：结构化表单 | ~200 行 | 无 |
-| P3 | `data_table` kind：结构化数据表 | ~100 行 | 无 |
+| 优先级 | 任务                                                                          | 工程量  | 依赖                        |
+| ------ | ----------------------------------------------------------------------------- | ------- | --------------------------- |
+| P0     | 重命名 VideoPlayer→VideoCard, AudioPlayer→AudioCard                           | ~30 min | 无                          |
+| P0     | 定义 `RichContentBlock` 类型 + `RichContentRegistry` + JsonFallbackView       | ~200 行 | 无                          |
+| P0     | `ContentBlockType` 新增 `rich_content` + `ContentBlockItem` 新增 case         | ~30 行  | 上一步                      |
+| P0     | 共享 UI 原子：Badge + MediaThumbnail + ActionBar + StatusIndicator            | ~300 行 | 无                          |
+| P1     | `media_card` kind：VideoCard/AudioCard 统一为注册表条目，元数据从 engine 获取 | ~200 行 | ADR-4 GeneratedAsset        |
+| P1     | `storyboard` kind：分镜网格组件                                               | ~300 行 | ADR-2 parse_script_to_shots |
+| P2     | `comparison` kind：多候选对比                                                 | ~150 行 | 无                          |
+| P2     | `form` kind：结构化表单                                                       | ~200 行 | 无                          |
+| P3     | `data_table` kind：结构化数据表                                               | ~100 行 | 无                          |
 
 ---
 
@@ -1126,13 +1135,13 @@ RichContentRegistry.get(kind).component 渲染
 
 ### 已实施（Phase 1-5）
 
-| Phase | ADR | 交付物 | 关键文件 |
-|-------|-----|--------|---------|
-| 1 | ADR-4 | GeneratedAsset 类型层次 + GeneratedAssetIndex + toWebviewAsset + ShotNode 双写 | `@neko/shared/types/generated-asset.ts`, `generatedAssetIndex.ts`, `webview-asset.ts`, `canvas.ts` |
-| 2 | ADR-6 | VideoPlayer→VideoCard / AudioPlayer→AudioCard 重命名 + AudioCard inline 修正 | `VideoCard.tsx`, `AudioCard.tsx`, `index.ts` |
-| 3 | ADR-3+5 | ImageGridCard 多图网格 + SendToMenu 跨插件按钮 + TaskCard 集成 + pluginsAvailable 检测 | `ImageGridCard.tsx`, `SendToMenu.tsx`, `TaskCard.tsx`, `chatProvider.ts` |
-| 4 | ADR-4 | `neko.canvas.importAsset` 命令 + postImportAsset + saveGeneratedImage 迁移 | `extension.ts`, `canvasEditorProvider.ts` |
-| 5 | ADR-3 | StoryboardMessage 场景分组组件 | `StoryboardMessage.tsx` |
+| Phase | ADR     | 交付物                                                                                 | 关键文件                                                                                           |
+| ----- | ------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1     | ADR-4   | GeneratedAsset 类型层次 + GeneratedAssetIndex + toWebviewAsset + ShotNode 双写         | `@neko/shared/types/generated-asset.ts`, `generatedAssetIndex.ts`, `webview-asset.ts`, `canvas.ts` |
+| 2     | ADR-6   | VideoPlayer→VideoCard / AudioPlayer→AudioCard 重命名 + AudioCard inline 修正           | `VideoCard.tsx`, `AudioCard.tsx`, `index.ts`                                                       |
+| 3     | ADR-3+5 | ImageGridCard 多图网格 + SendToMenu 跨插件按钮 + TaskCard 集成 + pluginsAvailable 检测 | `ImageGridCard.tsx`, `SendToMenu.tsx`, `TaskCard.tsx`, `chatProvider.ts`                           |
+| 4     | ADR-4   | `neko.canvas.importAsset` 命令 + postImportAsset + saveGeneratedImage 迁移             | `extension.ts`, `canvasEditorProvider.ts`                                                          |
+| 5     | ADR-3   | StoryboardMessage 场景分组组件                                                         | `StoryboardMessage.tsx`                                                                            |
 
 ### 向下兼容策略
 
@@ -1157,6 +1166,7 @@ RichContentRegistry.get(kind).component 渲染
 ### 问题
 
 发送内容到 agent 存在 4 条路径（A/B/C/D），机制各异：
+
 - A (Preview ⌅ / FAB): 走 context chip，但 `data` 在 InputArea 拼接时被丢弃，LLM 只收到 summary 摘要
 - B (Explorer 右键 Summarize/Chat): DocumentReaderService 读全文注入 prompt
 - C (Explorer 右键 Add to Agent): 走 chip，只有路径字符串
@@ -1168,10 +1178,10 @@ RichContentRegistry.get(kind).component 渲染
 
 **统一为两种模式：文件级 + 内容级。零 base64 跨进程传输。**
 
-| 模式 | 语义 | 发送什么 | LLM 收到 | 入口 |
-|------|------|---------|----------|------|
-| **文件级** | "这个文件给你参考" | filePath + 定位元数据 | `[File: label]\nfilePath` | Explorer 右键全部命令 |
-| **内容级** | "分析这段内容" | selectedText + 定位信息 | `[Content: label]\n完整文本` | Preview ⌅ / 选中文本 FAB |
+| 模式       | 语义               | 发送什么                | LLM 收到                     | 入口                     |
+| ---------- | ------------------ | ----------------------- | ---------------------------- | ------------------------ |
+| **文件级** | "这个文件给你参考" | filePath + 定位元数据   | `[File: label]\nfilePath`    | Explorer 右键全部命令    |
+| **内容级** | "分析这段内容"     | selectedText + 定位信息 | `[Content: label]\n完整文本` | Preview ⌅ / 选中文本 FAB |
 
 ### 7.1 Context Chip 消费修复
 
@@ -1179,28 +1189,28 @@ RichContentRegistry.get(kind).component 渲染
 
 ```typescript
 // 修复前：丢弃 data，只用 label + summary
-chips.map(c => `[Context: ${c.label}]\n${c.summary}`)
+chips.map((c) => `[Context: ${c.label}]\n${c.summary}`);
 
 // 修复后：按模式区分
-chips.map(c => {
+chips.map((c) => {
   const d = c.data as Record<string, unknown>;
-  if (d?.selectedText) return `[Content: ${c.label}]\n${d.selectedText}`;  // 内容级
-  if (d?.filePath ?? d?.path) return `[File: ${c.label}]\n${d.filePath}`;  // 文件级
-  return `[Context: ${c.label}]\n${c.summary}`;                            // 其他
-})
+  if (d?.selectedText) return `[Content: ${c.label}]\n${d.selectedText}`; // 内容级
+  if (d?.filePath ?? d?.path) return `[File: ${c.label}]\n${d.filePath}`; // 文件级
+  return `[Context: ${c.label}]\n${c.summary}`; // 其他
+});
 ```
 
 ### 7.2 二进制数据处理：源文件路径 + 定位元数据
 
 **Webview 不再发送 base64。** 所有二进制引用转为路径 + 元数据，agent 通过 engine/DocumentReaderService 按需提取。
 
-| 场景 | payload.data 结构 | agent 处理方式 |
-|------|-------------------|---------------|
-| CBZ 整页 | `{ filePath, pageNumber }` | readCbz → imagePaths[page] |
-| CBZ 框选 | `{ filePath, pageNumber, region: {x,y,w,h} }` | 解压 → engine 裁剪 |
-| EPUB 文本 | `{ filePath, selectedText, chapterTitle }` | 直接分析文本 |
-| neko-cut clip | `{ filePath, segment: {in, out} }` | engine 抽帧 |
-| 独立图片/视频 | `{ filePath }` | MediaPreprocessor 自动处理 |
+| 场景          | payload.data 结构                             | agent 处理方式             |
+| ------------- | --------------------------------------------- | -------------------------- |
+| CBZ 整页      | `{ filePath, pageNumber }`                    | readCbz → imagePaths[page] |
+| CBZ 框选      | `{ filePath, pageNumber, region: {x,y,w,h} }` | 解压 → engine 裁剪         |
+| EPUB 文本     | `{ filePath, selectedText, chapterTitle }`    | 直接分析文本               |
+| neko-cut clip | `{ filePath, segment: {in, out} }`            | engine 抽帧                |
+| 独立图片/视频 | `{ filePath }`                                | MediaPreprocessor 自动处理 |
 
 ### 7.3 媒体预处理（自动判断）
 
@@ -1220,12 +1230,14 @@ messageHandler 解析 `[File:]` 引用后，自动判断是否需要预处理：
 ```
 
 **常量**:
+
 - `VISION_MAX_LONG_EDGE = 1568`（Claude 最佳 vision 尺寸）
 - `VISION_MAX_BYTES = 4MB`（API 限制 5MB 的安全边界）
 - `VIDEO_SAMPLE_FRAMES = 4`（默认抽帧数）
 - `VIDEO_KEYFRAME_MAX = 8`（关键帧上限）
 
 **依赖**:
+
 - 图片缩放：`sharp`（monorepo 已有，新增到 @neko-agent/extension）
 - 视频抽帧：`EngineClient.extractFrame(width, height)` + `getKeyframes()`
 - 降级：engine 不可用时图片仍可用 sharp 处理，视频返回 unsupported
@@ -1255,29 +1267,29 @@ async function sendFileChip(uri, intent, typeOverride?) {
 }
 ```
 
-| 命令 | 修改前 | 修改后 |
-|------|--------|--------|
-| Summarize Document | DocumentReaderService 读全文 → sendMessageToAssistant | sendFileChip + intent |
-| Chat with Document | 同上 | sendFileChip + intent |
-| Analyze Image | sendMessageToAssistant(路径字符串) | sendFileChip(type: image) |
-| Analyze Video | sendMessageToAssistant(路径字符串) | sendFileChip(type: file) |
-| Generate Subtitles | sendMessageToAssistant(路径字符串) | sendFileChip + intent |
+| 命令               | 修改前                                                | 修改后                    |
+| ------------------ | ----------------------------------------------------- | ------------------------- |
+| Summarize Document | DocumentReaderService 读全文 → sendMessageToAssistant | sendFileChip + intent     |
+| Chat with Document | 同上                                                  | sendFileChip + intent     |
+| Analyze Image      | sendMessageToAssistant(路径字符串)                    | sendFileChip(type: image) |
+| Analyze Video      | sendMessageToAssistant(路径字符串)                    | sendFileChip(type: file)  |
+| Generate Subtitles | sendMessageToAssistant(路径字符串)                    | sendFileChip + intent     |
 
 ### 关键文件
 
-| 文件 | 改动 |
-|------|------|
-| `neko-agent/.../InputArea.tsx` | chip 消费区分文件级/内容级 |
-| `neko-agent/.../index.ts` | sendFileChip 统一；删除 sendDocumentPrompt/truncateDocText |
-| `neko-agent/.../mediaPreprocessor.ts` | 新建：图片缩放 + 视频抽帧 |
-| `neko-agent/.../messageHandler.ts` | 解析 [File:] 引用 → MediaPreprocessor |
-| `neko-agent/.../attachmentProcessor.ts` | readFileAsBase64 条件缩放 |
-| `neko-client/src/EngineClient.ts` | extractFrame +width/height；新增 getKeyframes |
-| `neko-preview/.../documentProviderHelper.ts` | 移除 base64 传递 |
-| `neko-preview/.../document-messages.ts` | 移除 CapturedImagePayload；新增 DocumentRegion |
-| `neko-preview/.../CbzViewer.tsx` | base64 → pageNumber + region |
-| `neko-preview/.../EpubViewer.tsx` | 移除 inline 图片采集 + 新增双栏模式 |
-| `neko-preview/.../useDocumentSelection.ts` | sendImageToAi → sendRegionToAi + sendPageRefToAi |
+| 文件                                         | 改动                                                       |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `neko-agent/.../InputArea.tsx`               | chip 消费区分文件级/内容级                                 |
+| `neko-agent/.../index.ts`                    | sendFileChip 统一；删除 sendDocumentPrompt/truncateDocText |
+| `neko-agent/.../mediaPreprocessor.ts`        | 新建：图片缩放 + 视频抽帧                                  |
+| `neko-agent/.../messageHandler.ts`           | 解析 [File:] 引用 → MediaPreprocessor                      |
+| `neko-agent/.../attachmentProcessor.ts`      | readFileAsBase64 条件缩放                                  |
+| `neko-client/src/EngineClient.ts`            | extractFrame +width/height；新增 getKeyframes              |
+| `neko-preview/.../documentProviderHelper.ts` | 移除 base64 传递                                           |
+| `neko-preview/.../document-messages.ts`      | 移除 CapturedImagePayload；新增 DocumentRegion             |
+| `neko-preview/.../CbzViewer.tsx`             | base64 → pageNumber + region                               |
+| `neko-preview/.../EpubViewer.tsx`            | 移除 inline 图片采集 + 新增双栏模式                        |
+| `neko-preview/.../useDocumentSelection.ts`   | sendImageToAi → sendRegionToAi + sendPageRefToAi           |
 
 ---
 
@@ -1285,7 +1297,7 @@ async function sendFileChip(uri, intent, typeOverride?) {
 
 **状态**: 2026-05-19 targeted transfer change
 
-Agent 输出可以直接发送到 Canvas，但发送路径必须保持“typed intent”，不能让 Agent 或 Agent Webview 拼 Canvas patch。实际目标解析、字段校验、容器策略、变更事件由目标插件负责。
+Agent 输出可以直接发送到 Canvas，但发送路径必须保持“typed intent”，不能让 Agent 或 Agent Webview 拼 Canvas patch。实际目标解析、字段校验、容器策略、变更事件由目标插件负责。图片/媒体 payload 必须先通过 content ingest/access 边界变成 stable ref；`cachePath`、Webview URI、blob URL、object URL、engine token 和 preview token 都不能作为 Canvas source。
 
 ### 8.1 Query-first, evidence-second
 
@@ -1317,17 +1329,17 @@ flowchart LR
 
 Agent-facing tools must declare enough safety metadata for planning:
 
-| Provider | Current state | Follow-up |
-|----------|---------------|-----------|
+| Provider      | Current state                                                                                                                               | Follow-up                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `neko-canvas` | Query tools include `isReadOnly`, `isConcurrencySafe`, `safetyKind`; content mutation includes `targetRequirements` and `queryBeforeMutate` | Continue migrating older create/update tools to explicit `safetyKind` as they are touched |
-| `neko-assets` | `ListAssets` / `GetAsset` are read-only queries; `ImportAsset` is confirmation-gated and requires `filePath` | Add richer asset search filters only through `NekoAssetsAPI` |
-| `neko-model` | Has `neko.model.importAsset`; no stable `NekoModelAPI` / scene snapshot provider yet | Defer Agent provider until scene snapshot query + model asset import API are typed |
-| `neko-cut` | Timeline query/delete metadata exists for core tools | Add `safetyKind` / `queryBeforeMutate` during next timeline tool pass |
-| `neko-story` | Script index and search are read-only; generation plan tools are read-only projections | Mark apply/suggestion mutations with confirmation metadata when expanded |
-| `neko-sketch` | AI tools have concurrency metadata for generation/selection | Add target requirements for inpaint/style/layer tools where selection masks are required |
-| `neko-audio` | Basic query/destructive metadata exists; several mutations still rely on fail-closed defaults | Add explicit safety classes for import/effect/mix operations |
-| `neko-puppet` | Provider exists but parameter mutations currently lack explicit safety metadata | Mark query/mutation split before adding automatic execution policy |
-| `neko-engine` | Effect/transcribe/analysis tools have read-only/concurrency metadata | Add confirmation metadata to custom shader registration |
+| `neko-assets` | `ListAssets` / `GetAsset` are read-only queries; `ImportAsset` is confirmation-gated and requires `filePath`                                | Add richer asset search filters only through `NekoAssetsAPI`                              |
+| `neko-model`  | Has `neko.model.importAsset`; no stable `NekoModelAPI` / scene snapshot provider yet                                                        | Defer Agent provider until scene snapshot query + model asset import API are typed        |
+| `neko-cut`    | Timeline query/delete metadata exists for core tools                                                                                        | Add `safetyKind` / `queryBeforeMutate` during next timeline tool pass                     |
+| `neko-story`  | Script index and search are read-only; generation plan tools are read-only projections                                                      | Mark apply/suggestion mutations with confirmation metadata when expanded                  |
+| `neko-sketch` | AI tools have concurrency metadata for generation/selection                                                                                 | Add target requirements for inpaint/style/layer tools where selection masks are required  |
+| `neko-audio`  | Basic query/destructive metadata exists; several mutations still rely on fail-closed defaults                                               | Add explicit safety classes for import/effect/mix operations                              |
+| `neko-puppet` | Provider exists but parameter mutations currently lack explicit safety metadata                                                             | Mark query/mutation split before adding automatic execution policy                        |
+| `neko-engine` | Effect/transcribe/analysis tools have read-only/concurrency metadata                                                                        | Add confirmation metadata to custom shader registration                                   |
 
 ---
 
@@ -1339,28 +1351,28 @@ Media-to-video 不再由 Agent 代码中的 route catalog、router、DAG 或固�
 
 ### 9.1 职责边界
 
-| 层 | 职责 | 不做什么 |
-|----|------|----------|
-| `SKILL.md` | 描述典型先后关系、判断点、失败恢复、何时切换子 Skill | 不被运行时解析为 route / stage / DAG |
-| `manifest.json` / `SkillManifest` | 暴露 `referencedSkills`、`mediaWorkflow` 等可发现性与校验提示 | 不声明 `steps`、`routes`、`workflow`、`dag` 等编排字段 |
-| Agent runtime | 发现 Skill、懒加载 `SkillRegistry.ensureLoaded()`、注入 allowed tools、返回缺失 Skill 诊断 | 不拥有 media-to-video 专用 orchestrator |
-| Tools / providers | 执行 ReadDocument、ReadImage、OCR、生成、Canvas、Cut、export 等真实操作 | 不从 Skill 文本里模拟执行结果 |
-| Agent webview | 展示 active skill、tool calls、approval、diagnostics 和 validated structured artifacts | 不解析 markdown 表格生成分镜，不推断工作流 |
-| Target plugins | 接收 typed payload 并在自身服务路径里导入或编辑 | 不接收未校验 artifact 或绝对缓存路径 |
+| 层                                | 职责                                                                                       | 不做什么                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `SKILL.md`                        | 描述典型先后关系、判断点、失败恢复、何时切换子 Skill                                       | 不被运行时解析为 route / stage / DAG                   |
+| `manifest.json` / `SkillManifest` | 暴露 `referencedSkills`、`mediaWorkflow` 等可发现性与校验提示                              | 不声明 `steps`、`routes`、`workflow`、`dag` 等编排字段 |
+| Agent runtime                     | 发现 Skill、懒加载 `SkillRegistry.ensureLoaded()`、注入 allowed tools、返回缺失 Skill 诊断 | 不拥有 media-to-video 专用 orchestrator                |
+| Tools / providers                 | 执行 ReadDocument、ReadImage、OCR、生成、Canvas、Cut、export 等真实操作                    | 不从 Skill 文本里模拟执行结果                          |
+| Agent webview                     | 展示 active skill、tool calls、approval、diagnostics 和 validated structured artifacts     | 不解析 markdown 表格生成分镜，不推断工作流             |
+| Target plugins                    | 接收 typed payload 并在自身服务路径里导入或编辑                                            | 不接收未校验 artifact 或绝对缓存路径                   |
 
 ### 9.2 顶层 Skill 与子 Skill
 
 内置媒体 Skill 的关系如下：
 
-| Skill | 主要职责 | 典型输入 | 典型输出 |
-|-------|----------|----------|----------|
-| `media-to-video` | 顶层协调；选择最小相关子 Skill，管理审批和降级 | comic / document / image / storyboard / generated media | planning summary 或下一步 structured artifact |
-| `comic-to-storyboard` | 漫画页面读取、OCR、分格证据、分镜表 | EPUB / PDF / CBZ / CBR 页面或图片 | `StoryboardTableV1` |
-| `image-to-shot` | 静图或图像序列转镜头计划 | image / image sequence | storyboard rows / animation plan |
-| `storyboard-to-animation-plan` | 分镜表转运动、镜头、生成提示和连续性计划 | `StoryboardTableV1` | animation plan |
-| `animation-plan-to-cut` | 动画计划转 Cut 可导入 timeline payload | animation plan / storyboard | Cut storyboard payload |
-| `generated-shot-assembly` | 聚合已生成的图片、视频、音频、字幕引用 | generated media refs | execution summary |
-| `export-video-package` | 导出前检查、交付摘要和剩余步骤 | Cut payload / execution summary | export-oriented summary |
+| Skill                          | 主要职责                                       | 典型输入                                                | 典型输出                                      |
+| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------- | --------------------------------------------- |
+| `media-to-video`               | 顶层协调；选择最小相关子 Skill，管理审批和降级 | comic / document / image / storyboard / generated media | planning summary 或下一步 structured artifact |
+| `comic-to-storyboard`          | 漫画页面读取、OCR、分格证据、分镜表            | EPUB / PDF / CBZ / CBR 页面或图片                       | `StoryboardTableV1`                           |
+| `image-to-shot`                | 静图或图像序列转镜头计划                       | image / image sequence                                  | storyboard rows / animation plan              |
+| `storyboard-to-animation-plan` | 分镜表转运动、镜头、生成提示和连续性计划       | `StoryboardTableV1`                                     | animation plan                                |
+| `animation-plan-to-cut`        | 动画计划转 Cut 可导入 timeline payload         | animation plan / storyboard                             | Cut storyboard payload                        |
+| `generated-shot-assembly`      | 聚合已生成的图片、视频、音频、字幕引用         | generated media refs                                    | execution summary                             |
+| `export-video-package`         | 导出前检查、交付摘要和剩余步骤                 | Cut payload / execution summary                         | export-oriented summary                       |
 
 “子 Skill”只是被顶层 Skill 在正文和 `referencedSkills` 中引用的普通 Skill。它需要 Agent 的通用 Skill 激活能力支持：GetContext 看到候选，ActivateSkill 懒加载详细正文，ToolInjection 只授予该 Skill 声明的工具。它不需要媒体专用 Agent 编排器。
 

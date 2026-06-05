@@ -10,15 +10,15 @@ neko-assets 已支持 Word、EPUB、PPTX 等 9 种文档格式的**分类与元�
 
 **已支持的文档格式**（`@neko/shared` `detectMediaType()`）：
 
-| 格式 | 扩展名 | 分类 |
-|------|--------|------|
-| PDF | `.pdf` | document |
-| Word | `.doc` / `.docx` | document |
+| 格式       | 扩展名           | 分类     |
+| ---------- | ---------------- | -------- |
+| PDF        | `.pdf`           | document |
+| Word       | `.doc` / `.docx` | document |
 | PowerPoint | `.ppt` / `.pptx` | document |
-| Excel | `.xls` / `.xlsx` | document |
-| eBook | `.epub` | document |
-| Comic | `.cbz` | document |
-| Script | `.fdx` | document |
+| Excel      | `.xls` / `.xlsx` | document |
+| eBook      | `.epub`          | document |
+| Comic      | `.cbz`           | document |
+| Script     | `.fdx`           | document |
 
 ---
 
@@ -69,13 +69,13 @@ Webview: React 18 + Vite SPA
 
 ### 2.4 综合对比
 
-| 格式 | 覆盖扩展 | 渲染库 | 离线 |
-|------|---------|--------|------|
-| PDF | Book Reader / Office Viewer | pdfjs-dist / pdf-lib | ✅ |
-| EPUB / MOBI / AZW3 / CBZ | Book Reader | epub.js / vue-book-reader | ✅ |
-| DOCX | Office Viewer | **docx-preview** | ✅ |
-| XLSX | Office Viewer | **x-data-spreadsheet + xlsx** | ✅ |
-| PPTX | 无 | — | — |
+| 格式                     | 覆盖扩展                    | 渲染库                        | 离线 |
+| ------------------------ | --------------------------- | ----------------------------- | ---- |
+| PDF                      | Book Reader / Office Viewer | pdfjs-dist / pdf-lib          | ✅   |
+| EPUB / MOBI / AZW3 / CBZ | Book Reader                 | epub.js / vue-book-reader     | ✅   |
+| DOCX                     | Office Viewer               | **docx-preview**              | ✅   |
+| XLSX                     | Office Viewer               | **x-data-spreadsheet + xlsx** | ✅   |
+| PPTX                     | 无                          | —                             | —    |
 
 ---
 
@@ -83,17 +83,18 @@ Webview: React 18 + Vite SPA
 
 采用**分格式差异化策略**，按使用频率和自建收益决定是自建还是委托：
 
-| 格式 | 渲染库 | 策略 | 理由 |
-|------|--------|------|------|
-| **PDF** | `pdfjs-dist` | B：自建 | 使用频率最高，不应依赖第三方 |
-| **DOCX** | `docx-preview` | B：自建 | 资产库常见，Office Viewer 已验证可行 |
-| **EPUB** | `epub.js` | B：自建 | neko-story 剧本场景强需求 |
-| **XLSX** | `x-data-spreadsheet` + `xlsx` | B：自建 | 表格数据在资产库中常见 |
-| **MOBI / AZW3 / CBZ** | vue-book-reader | D：提示安装 Book Reader | 小众格式，自建收益低 |
-| **PPTX** | LibreOffice headless | C：Rust 引擎转 PDF | 无现有扩展，复杂布局需系统级渲染 |
-| **FDX** | 自建 XML 解析 | A：自建 | Final Draft XML 结构简单 |
+| 格式                  | 渲染库                        | 策略                    | 理由                                 |
+| --------------------- | ----------------------------- | ----------------------- | ------------------------------------ |
+| **PDF**               | `pdfjs-dist`                  | B：自建                 | 使用频率最高，不应依赖第三方         |
+| **DOCX**              | `docx-preview`                | B：自建                 | 资产库常见，Office Viewer 已验证可行 |
+| **EPUB**              | `epub.js`                     | B：自建                 | neko-story 剧本场景强需求            |
+| **XLSX**              | `x-data-spreadsheet` + `xlsx` | B：自建                 | 表格数据在资产库中常见               |
+| **MOBI / AZW3 / CBZ** | vue-book-reader               | D：提示安装 Book Reader | 小众格式，自建收益低                 |
+| **PPTX**              | LibreOffice headless          | C：Rust 引擎转 PDF      | 无现有扩展，复杂布局需系统级渲染     |
+| **FDX**               | 自建 XML 解析                 | A：自建                 | Final Draft XML 结构简单             |
 
 **策略说明**：
+
 - **A**（自建简单格式）：格式结构简单，直接在 Webview 中实现，无需引入库
 - **B**（JS 库本地渲染）：成熟库，Webview 沙箱内运行，零外部依赖，零网络
 - **C**（Rust 引擎转换）：复杂布局依赖系统级工具，通过 neko-engine sidecar 调用
@@ -118,12 +119,11 @@ async function openWithFallback(uri: vscode.Uri, extId: string, extName: string)
     // 未安装：提示
     const action = await vscode.window.showInformationMessage(
       `预览 ${path.extname(uri.fsPath).toUpperCase()} 文件需要 ${extName} 扩展`,
-      '安装', '取消'
+      '安装',
+      '取消',
     );
     if (action === '安装') {
-      await vscode.commands.executeCommand(
-        'workbench.extensions.installExtension', extId
-      );
+      await vscode.commands.executeCommand('workbench.extensions.installExtension', extId);
     }
   }
 }
@@ -134,6 +134,7 @@ openWithFallback(uri, 'lindacong.vscode-book-reader', 'Book Reader');
 ```
 
 **何时不提示**：
+
 - 用户在同一会话中已选择「取消」→ 本次会话不再重复提示（内存标记）
 - 格式对应的自建 Provider 已实现时 → 直接使用自建，不触发提示流程
 
@@ -154,7 +155,7 @@ interface DocumentMetadata {
   pageCount?: number;
   wordCount?: number;
   slideCount?: number;
-  sheetNames?: string[];   // XLSX
+  sheetNames?: string[]; // XLSX
   title?: string;
   author?: string;
 }
@@ -190,12 +191,16 @@ Extension Host
 
 neko-assets 资产卡片和项目搜索结果通过 `visualResource.resource` 或 Host 投影 URI 暴露缩略图；Webview 不直接读取 `.neko/.cache/resources/manifest.json`，也不依赖 Agent/Preview 的私有缓存目录。
 
+文档预览、Agent 上下文、Canvas 缩略图与导出/打包共享同一套内容访问规则，详见 [intent-aware-content-access.md](./intent-aware-content-access.md)。Preview 类请求使用 `interactive-preview` 或 `agent-context`，可从 `ResourceCacheService` 读取页面图、解包图片或缩略图；`package`、`final-export`、`verify` 请求必须回到原始文档 source 或原始 container entry。
+
 文档图片和页面图必须保留结构化定位：
 
 - `DocumentSourceRef`：源文件、格式、文件 identity。
 - `DocumentLocator` / `entryPath`：PDF 页、EPUB 章节、CBZ entry、DOCX text range 等。
 - `ResourceRef`：provider、scope、fingerprint、locator。
 - legacy `cachePath`：仅迁移 metadata，不作为 Canvas/Preview 的主身份。
+
+`cachePath` 不足以证明原始 entry 身份。若 legacy 记录只有提取图路径而没有 `DocumentSourceRef` 与 locator/entryPath，离线操作应返回 `missing-source` / `unrecoverable`，不能把提取图打包成原始文档图片。
 
 ---
 
@@ -215,10 +220,15 @@ neko-assets 资产卡片和项目搜索结果通过 `visualResource.resource` �
 
 ```typescript
 export type AgentContextType =
-  | 'canvas-node' | 'cut-clip' | 'story-selection'
-  | 'sketch-layer' | 'model-scene' | 'audio-clip'
-  | 'file' | 'image'
-  | 'document-selection';  // NEW
+  | 'canvas-node'
+  | 'cut-clip'
+  | 'story-selection'
+  | 'sketch-layer'
+  | 'model-scene'
+  | 'audio-clip'
+  | 'file'
+  | 'image'
+  | 'document-selection'; // NEW
 ```
 
 #### 文档消息协议
@@ -230,25 +240,28 @@ export type AgentContextType =
 interface DocumentDataMessage {
   type: 'document:data';
   payload: {
-    data?: string;    // base64 (legacy fallback)
-    url?: string;     // Engine file URL, e.g. /v1/files/:token
+    data?: string; // base64 (legacy fallback)
+    url?: string; // Engine file URL, e.g. /v1/files/:token
     fileName: string;
     fileSize: number;
   };
 }
 
 // Webview → Extension
-interface DocumentReadyMessage { type: 'ready' }
+interface DocumentReadyMessage {
+  type: 'ready';
+}
 interface DocumentSendToAiMessage {
   type: 'document:sendToAi';
   payload: {
-    text?: string;              // 选中文本（直接发送）
-    imageData?: string;         // 图片 base64（直接发送）
+    text?: string; // 选中文本（直接发送）
+    imageData?: string; // 图片 base64（直接发送）
     contentKind: 'text' | 'image' | 'mixed';
-    context?: {                 // 文档内位置
+    context?: {
+      // 文档内位置
       page?: number;
       chapter?: string;
-      region?: DocumentRegion;  // CBZ 区域坐标
+      region?: DocumentRegion; // CBZ 区域坐标
     };
   };
 }
@@ -256,10 +269,10 @@ interface DocumentSendToAiMessage {
 
 **两种发送方式**（按场景自动选择）：
 
-| 方式 | 右键菜单 | 场景 | Agent 处理 |
-|------|---------|------|-----------|
+| 方式         | 右键菜单         | 场景                   | Agent 处理        |
+| ------------ | ---------------- | ---------------------- | ----------------- |
 | 直接发送内容 | 发送内容到 Agent | 选中文本/右键图片/混合 | 内联到 LLM prompt |
-| 发送定位引用 | 发送文件到 Agent | 整页/大文件 | Agent 按需读取 |
+| 发送定位引用 | 发送文件到 Agent | 整页/大文件            | Agent 按需读取    |
 
 文本和图片可同时发送（`contentKind: 'mixed'`），Agent 端分别处理文本注入和图片附件。
 
@@ -295,12 +308,12 @@ Webview 侧交互：
 
 #### 构建配置变更
 
-| 文件 | 变更 |
-|------|------|
-| `packages/neko-preview/packages/webview/vite.config.ts` | 新增 4 个入口：`pdf.html`, `cbz.html`, `epub.html`, `docx.html` + pdfjs Worker 复制插件 |
-| `packages/neko-preview/packages/webview/tailwind.config.js` | content 添加 4 个 HTML 文件 |
-| `packages/neko-preview/packages/extension/src/utils/html.ts` | entry 类型扩展 + PDF 入口 `worker-src blob:` CSP |
-| `packages/neko-preview/packages/extension/src/extension.ts` | 注册 4 个 Provider（不依赖 PreviewService） |
+| 文件                                                         | 变更                                                                                    |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `packages/neko-preview/packages/webview/vite.config.ts`      | 新增 4 个入口：`pdf.html`, `cbz.html`, `epub.html`, `docx.html` + pdfjs Worker 复制插件 |
+| `packages/neko-preview/packages/webview/tailwind.config.js`  | content 添加 4 个 HTML 文件                                                             |
+| `packages/neko-preview/packages/extension/src/utils/html.ts` | entry 类型扩展 + PDF 入口 `worker-src blob:` CSP                                        |
+| `packages/neko-preview/packages/extension/src/extension.ts`  | 注册 4 个 Provider（不依赖 PreviewService）                                             |
 
 #### Webview 新增依赖
 
@@ -317,12 +330,12 @@ Webview 侧交互：
 
 `packages/neko-preview/package.json` 添加（`"priority": "option"` 不抢占默认打开方式）：
 
-| viewType | filenamePattern | displayName |
-|----------|----------------|-------------|
-| `neko.pdfPreview` | `*.pdf` | Neko PDF Preview |
-| `neko.cbzPreview` | `*.cbz` | Neko CBZ Preview |
-| `neko.epubPreview` | `*.epub` | Neko EPUB Preview |
-| `neko.docxPreview` | `*.{docx,doc}` | Neko DOCX Preview |
+| viewType           | filenamePattern | displayName       |
+| ------------------ | --------------- | ----------------- |
+| `neko.pdfPreview`  | `*.pdf`         | Neko PDF Preview  |
+| `neko.cbzPreview`  | `*.cbz`         | Neko CBZ Preview  |
+| `neko.epubPreview` | `*.epub`        | Neko EPUB Preview |
+| `neko.docxPreview` | `*.{docx,doc}`  | Neko DOCX Preview |
 
 同步添加 4 个 `neko.preview.open*` 命令。
 
@@ -330,11 +343,11 @@ Webview 侧交互：
 
 新建 `packages/neko-preview/packages/webview/src/shared/`：
 
-| 文件 | 职责 |
-|------|------|
-| `useDocumentSelection.ts` | Hook：监听 selectionchange，防抖，捕获文本选区 |
+| 文件                       | 职责                                                    |
+| -------------------------- | ------------------------------------------------------- |
+| `useDocumentSelection.ts`  | Hook：监听 selectionchange，防抖，捕获文本选区          |
 | `DocumentSelectionFab.tsx` | 浮动按钮：靠近选区显示 "Send to AI"，点击发 postMessage |
-| `DocumentToolbar.tsx` | 通用工具栏：页码、缩放、适应宽度等通用控件 |
+| `DocumentToolbar.tsx`      | 通用工具栏：页码、缩放、适应宽度等通用控件              |
 
 ### 5.3 PDF 预览（P0）
 
@@ -417,7 +430,9 @@ ReadDocument({ file_path, mode: "range", range: { locator } })
 ReadDocument({ file_path, mode: "next", cursor })
 ```
 
-若 Preview/Agent 需要把文档页图、归档 entry 图或缩略图发送到 Canvas，应发送 `ResourceRef` / `ResourceVariantRef`。Canvas 调用 `ResourceCacheService.ensure/project` 后显示；缺失文件可由 document/archive provider 根据 source+locator 重建。没有 workspace 的 Agent scratch 图像只能标记为 `extension-private` / `non-portable`，不能作为跨包稳定缩略图。
+若 Preview/Agent 需要把文档页图、归档 entry 图或缩略图发送到 Canvas，应发送 `ResourceRef` / `ResourceVariantRef`。Canvas 通过 `ContentAccessService.resolve({ intent: 'interactive-preview', target: 'webview-uri' })` 显示；缺失文件可由 document/archive provider 根据 source+locator 重建。没有 workspace 的 Agent scratch 图像只能标记为 `extension-private` / `non-portable`，不能作为跨包稳定缩略图。
+
+导出、打包、依赖校验和 hash 不读取上述 Webview URI 或 cache image。它们应请求 `package` / `final-export` / `verify`，并由 document provider 使用原始文档 token、原始归档 entry bytes 或原始文档渲染结果。
 
 格式定位规则：
 
@@ -600,23 +615,24 @@ pnpm check    # Knip + dependency-cruiser
 
 ### 5.9 TODO：未来格式
 
-| 格式 | 策略 | 渲染库 | 备注 |
-|------|------|--------|------|
-| **XLSX** | B: 自建 | x-data-spreadsheet + xlsx（短期）/ Univer（长期） | x-data-spreadsheet 已 3 年停维，长期需迁移 |
-| **PPTX** | C: 引擎转换 | neko-engine → LibreOffice headless → PDF → pdfjs | 需用户安装 LibreOffice；无可靠纯 JS 方案 |
-| **FDX** | A: 自建 | fast-xml-parser → styled HTML | Final Draft XML 结构简单，neko-story 场景 |
-| **MOBI/AZW3** | D: 委托 | 提示安装 Book Reader 扩展 | 小众格式，自建 ROI 低 |
-| **CBR** | D: 委托 | Node 端 node-unrar-js 已支持 AI 提取 | RAR WASM 解压复杂度高，Webview 端不自建 |
-| **LaTeX** | 不支持 | LaTeX Workshop（6M+ 下载）已覆盖 | AI 分析可直接读 .tex 源码（纯文本） |
+| 格式          | 策略        | 渲染库                                            | 备注                                       |
+| ------------- | ----------- | ------------------------------------------------- | ------------------------------------------ |
+| **XLSX**      | B: 自建     | x-data-spreadsheet + xlsx（短期）/ Univer（长期） | x-data-spreadsheet 已 3 年停维，长期需迁移 |
+| **PPTX**      | C: 引擎转换 | neko-engine → LibreOffice headless → PDF → pdfjs  | 需用户安装 LibreOffice；无可靠纯 JS 方案   |
+| **FDX**       | A: 自建     | fast-xml-parser → styled HTML                     | Final Draft XML 结构简单，neko-story 场景  |
+| **MOBI/AZW3** | D: 委托     | 提示安装 Book Reader 扩展                         | 小众格式，自建 ROI 低                      |
+| **CBR**       | D: 委托     | Node 端 node-unrar-js 已支持 AI 提取              | RAR WASM 解压复杂度高，Webview 端不自建    |
+| **LaTeX**     | 不支持      | LaTeX Workshop（6M+ 下载）已覆盖                  | AI 分析可直接读 .tex 源码（纯文本）        |
 
 ### 5.10 风险与缓解
 
-| 风险 | 影响 | 缓解 |
-|------|------|------|
-| pdfjs Worker CSP 被阻止 | PDF 无法渲染 | workerSrc 指向 asWebviewUri 路径，已有扩展验证可行 |
-| epub.js 嵌套 iframe 限制 | EPUB 渲染失败 | Book Reader 已验证可行；CSP 添加 frame-src blob: |
-| 大文件内存溢出 | Webview 崩溃 | PDF 分页渲染（虚拟滚动），CBZ 懒加载（IntersectionObserver） |
-| legacy base64 fallback 传输大文件慢 | 打开卡顿 | 主路径使用 Engine File Access token URL；base64 仅保留兼容兜底 |
+| 风险                                | 影响               | 缓解                                                                       |
+| ----------------------------------- | ------------------ | -------------------------------------------------------------------------- |
+| pdfjs Worker CSP 被阻止             | PDF 无法渲染       | workerSrc 指向 asWebviewUri 路径，已有扩展验证可行                         |
+| epub.js 嵌套 iframe 限制            | EPUB 渲染失败      | Book Reader 已验证可行；CSP 添加 frame-src blob:                           |
+| 大文件内存溢出                      | Webview 崩溃       | PDF 分页渲染（虚拟滚动），CBZ 懒加载（IntersectionObserver）               |
+| legacy base64 fallback 传输大文件慢 | 打开卡顿           | 主路径使用 Engine File Access token URL；base64 仅保留兼容兜底             |
+| cache image 被误用为原始 entry      | 打包内容降质或错绑 | package/export 走 intent-aware source-first；legacy `cachePath` input-only |
 
 ---
 
@@ -628,11 +644,11 @@ pnpm check    # Knip + dependency-cruiser
 
 可行方案对比：
 
-| 方案 | 入口 | 限制 |
-|------|------|------|
-| `explorer/context` | 文件树右键 | 需文件未打开也可触发，最通用 |
-| `editor/title` | 编辑器标题栏按钮 | 需文件已打开 |
-| `webview/context` | 仅限自建 Webview | 无法注入第三方 Webview |
+| 方案               | 入口             | 限制                         |
+| ------------------ | ---------------- | ---------------------------- |
+| `explorer/context` | 文件树右键       | 需文件未打开也可触发，最通用 |
+| `editor/title`     | 编辑器标题栏按钮 | 需文件已打开                 |
+| `webview/context`  | 仅限自建 Webview | 无法注入第三方 Webview       |
 
 **决策（2026-03-29）**：优先实现 `explorer/context`，对文档、图片、视频按类型分组挂载 AI 操作。
 
@@ -640,15 +656,15 @@ pnpm check    # Knip + dependency-cruiser
 
 neko-agent 在 `explorer/context` 按媒体类型分组注册以下命令：
 
-| 文件类型 | 命令 | 说明 |
-|----------|------|------|
-| 文档（PDF/DOCX/EPUB/XLSX 等）| `neko.ai.summarizeDocument` | 提取文本 → AI 摘要 → 发送到 Chat |
-| 文档 | `neko.ai.chatWithDocument` | 提取文本 → 注入 Agent 上下文 → 打开对话 |
-| 文档 | `neko.pipeline.startFromFile` | 生成视频创意流水线（已有） |
-| 图片（PNG/JPG/WEBP 等）| `neko.ai.analyzeImage` | 文件路径 → Agent 工具分析 |
-| 图片 | `neko.ai.extractImageText` | OCR 提取图片文字 |
-| 视频（MP4/MOV/MKV 等）| `neko.ai.analyzeVideo` | 文件路径 → Agent 工具分析 |
-| 视频 | `neko.ai.generateSubtitles` | 生成字幕 → 发送到 Agent |
+| 文件类型                      | 命令                          | 说明                                    |
+| ----------------------------- | ----------------------------- | --------------------------------------- |
+| 文档（PDF/DOCX/EPUB/XLSX 等） | `neko.ai.summarizeDocument`   | 提取文本 → AI 摘要 → 发送到 Chat        |
+| 文档                          | `neko.ai.chatWithDocument`    | 提取文本 → 注入 Agent 上下文 → 打开对话 |
+| 文档                          | `neko.pipeline.startFromFile` | 生成视频创意流水线（已有）              |
+| 图片（PNG/JPG/WEBP 等）       | `neko.ai.analyzeImage`        | 文件路径 → Agent 工具分析               |
+| 图片                          | `neko.ai.extractImageText`    | OCR 提取图片文字                        |
+| 视频（MP4/MOV/MKV 等）        | `neko.ai.analyzeVideo`        | 文件路径 → Agent 工具分析               |
+| 视频                          | `neko.ai.generateSubtitles`   | 生成字幕 → 发送到 Agent                 |
 
 ### 6.3 文档文本提取流程
 
@@ -681,7 +697,7 @@ explorer/context 右键
   "viewType": "neko.pdfPreview",
   "displayName": "Neko PDF Preview",
   "selector": [{ "filenamePattern": "*.pdf" }],
-  "priority": "option"
+  "priority": "option",
 }
 ```
 
@@ -699,13 +715,14 @@ explorer/context 右键
 
 仅对有后台播放的媒体类型（Video / Audio）自动 Pin 编辑器 Tab，文档类（PDF / EPUB / CBZ / DOCX）不 Pin，遵循 VSCode 默认的 preview mode（单击预览可替换，双击固定）。
 
-| 类型 | 自动 Pin | 理由 |
-|------|---------|------|
-| Video | Yes | H.264 流连接昂贵，误关断流 |
-| Audio | Yes | 用户期望后台播放不中断 |
-| PDF / EPUB / CBZ / DOCX | No | 无后台任务，Pin 导致 Tab 栏拥挤 |
+| 类型                    | 自动 Pin | 理由                            |
+| ----------------------- | -------- | ------------------------------- |
+| Video                   | Yes      | H.264 流连接昂贵，误关断流      |
+| Audio                   | Yes      | 用户期望后台播放不中断          |
+| PDF / EPUB / CBZ / DOCX | No       | 无后台任务，Pin 导致 Tab 栏拥挤 |
 
 实现位置：
+
 - Video: `VideoPreviewProvider.resolveCustomEditor()` 内调用 `workbench.action.pinEditor`
 - Audio: `AudioPreviewProvider.resolveCustomEditor()` 内调用 `workbench.action.pinEditor`
 - 文档类: `documentProviderHelper.setupDocumentWebview()` 不再调用 Pin
@@ -734,14 +751,15 @@ Tab 打开 → resolveCustomEditor()
 
 **各文档持久化字段**：
 
-| 类型 | 持久化字段 | viewMode 值 | 恢复行为 |
-|------|-----------|------------|---------|
-| PDF | `currentPage`, `scale`, `viewMode` | `'scroll'` \| `'single'` | 加载后滚动到保存页码 |
-| EPUB | `currentChapter`, `viewMode` | `'waterfall'` \| `'paginated'` | 加载后导航到保存章节 |
-| CBZ | `currentPage`, `viewMode` | `'scroll'` \| `'single'` | 加载后滚动到保存页码 |
-| DOCX | 无 | — | 快速预览场景，不持久化 |
+| 类型 | 持久化字段                         | viewMode 值                    | 恢复行为               |
+| ---- | ---------------------------------- | ------------------------------ | ---------------------- |
+| PDF  | `currentPage`, `scale`, `viewMode` | `'scroll'` \| `'single'`       | 加载后滚动到保存页码   |
+| EPUB | `currentChapter`, `viewMode`       | `'waterfall'` \| `'paginated'` | 加载后导航到保存章节   |
+| CBZ  | `currentPage`, `viewMode`          | `'scroll'` \| `'single'`       | 加载后滚动到保存页码   |
+| DOCX | 无                                 | —                              | 快速预览场景，不持久化 |
 
 **共享基础设施**：
+
 - `vscodeApi.ts` — `acquireVsCodeApi()` 单例，`useVscodeMessage` 和 `usePersistedState` 共享
 - `usePersistedState.ts` — 支持直接值和 updater 函数（`setScale(prev => prev + 0.25)`）
 - `documentProviderHelper.ts` — 统一处理 `document:saveState` / `document:restoreState`，各 Provider 只需传入 `context`

@@ -74,6 +74,7 @@ Extension Host
 ```
 
 **架构要点**：
+
 - **统一端口**：所有扩展共享一个 neko-engine Sidecar 进程和统一端口
 - **端口发现**：`vscode.commands.executeCommand('neko.engine.ensureFrameServer')` → `{ port }`
 - **EngineClient 位置**：`@neko/neko-client`（非 neko-engine 子包），零 vscode 依赖
@@ -101,6 +102,18 @@ Engine Action
 兼容别名（`/v1/preview/file/:token`, `/v1/preview/epub/:token/*path`, `source: string`）仍保留，但新增代码应优先使用 `sourceRef` 与 `EngineClient` 的 file access helper。
 
 允许 Extension 继续读取：项目 JSON CustomDocument（`.nkv/.nkm/.nkp/.nka/.nks`）、workspace settings、preferences、sidecar text、lyrics、测试 fixture 和用户选择的生成/导出写入。禁止 Extension/Webview 重新实现媒体/模型/木偶/文档/字幕源二进制读取或 base64 转发。
+
+### 2.2 意图感知内容访问：预览走缓存，离线走源文件
+
+跨 Agent、Canvas、Preview、Assets、Cut 的内容读取必须先声明操作意图，再由 Extension Host 的 `ContentAccessService` 选择读取 material：
+
+```
+interactive-preview / agent-context → ResourceCacheService / Preview variant / Webview 投影
+edit-playback                      → 代理文件或 runtime stream
+final-export / package / verify     → 原始 source、原始 container entry 或 engine source token
+```
+
+导入外部文件、注册已有 source、Agent/tool 生成媒体提升、导出输出记录统一走 `ContentIngestService`。持久数据保存 `ResourceRef`、`DocumentSourceRef + locator/entryPath`、`${VAR}/path` 或 workspace-relative source ref；不保存 `cachePath`、Webview URI、blob/object URL、preview token、engine token 或 stream id。详见 [intent-aware-content-access.md](./docs/architecture/intent-aware-content-access.md)。
 
 ### 3. Webview ↔ Rust Engine：WebSocket 直连（流媒体）
 
@@ -222,20 +235,21 @@ neko-canvas
 ```
 
 **共享分镜工具** (`@neko/shared/utils/storyboardPlanner.ts`):
+
 - `createStoryboardPayload()` — 从 `ScriptIndex` 构建 `CanvasStoryboardPayload`（机械式或语义式）
 - `applyStoryboardPayloadToCanvas()` — 将 payload 应用到 canvas API，创建场景/镜头节点
 
 **Canvas 节点类型全览**（@neko/shared `types/canvas.ts`）：
 
-| 节点类型 | 用途 |
-|---------|------|
-| `shot` | 分镜帧（ShotScale + GeneratedImageVersion[] + 候选导航）|
-| `scene` | 场景横向容器（SceneGroupNode，按场景聚合 ShotNode）|
-| `gallery` | 多视图画廊（5 种 layout + costumeLabel + @引用 + 批量生图）|
-| `script` | 剧本节点（TOC 目录 + getScriptIndex → 点击跳转 SceneGroupNode）|
-| `document` | 文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open）|
-| `model` | AI 模型节点（reference/workflow 双模式 + checkModelInstalled）|
-| `canvas-embed` | 嵌套画布引用（P3 规划中，.nkc 缩略图 + 双击打开）|
+| 节点类型       | 用途                                                              |
+| -------------- | ----------------------------------------------------------------- |
+| `shot`         | 分镜帧（ShotScale + GeneratedImageVersion[] + 候选导航）          |
+| `scene`        | 场景横向容器（SceneGroupNode，按场景聚合 ShotNode）               |
+| `gallery`      | 多视图画廊（5 种 layout + costumeLabel + @引用 + 批量生图）       |
+| `script`       | 剧本节点（TOC 目录 + getScriptIndex → 点击跳转 SceneGroupNode）   |
+| `document`     | 文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open） |
+| `model`        | AI 模型节点（reference/workflow 双模式 + checkModelInstalled）    |
+| `canvas-embed` | 嵌套画布引用（P3 规划中，.nkc 缩略图 + 双击打开）                 |
 
 ### AI Agent 工作流
 
@@ -272,11 +286,11 @@ Extension Host
 
 **三套注入机制对比**（重要，勿混淆）：
 
-| 机制 | 实现位置 | 注入时机 | 是否可撤销 | 上下文感知 |
-|------|---------|---------|-----------|-----------|
-| **① Skill 系统提示词** | `applySkillInjection()` 追加到 `_history[0]` | Session 级一次性写入 | ❌ 无删除路径 | ❌ 不受 token 预算管控 |
-| **② ToolSet 工具列表** | `getToolsForTurn()` 每次重算 | 每 turn 动态计算 | ✅ 实时激活/停用 | ✅ always/dynamic 双层 token 预算 |
-| **③ ContextItem** | `ContextManager`（MemoryHooks 使用） | 每 turn 注入为独立消息 | ✅ LRU 淘汰 | ✅ 三层 size budget（turn/session/persistent）|
+| 机制                   | 实现位置                                     | 注入时机               | 是否可撤销       | 上下文感知                                     |
+| ---------------------- | -------------------------------------------- | ---------------------- | ---------------- | ---------------------------------------------- |
+| **① Skill 系统提示词** | `applySkillInjection()` 追加到 `_history[0]` | Session 级一次性写入   | ❌ 无删除路径    | ❌ 不受 token 预算管控                         |
+| **② ToolSet 工具列表** | `getToolsForTurn()` 每次重算                 | 每 turn 动态计算       | ✅ 实时激活/停用 | ✅ always/dynamic 双层 token 预算              |
+| **③ ContextItem**      | `ContextManager`（MemoryHooks 使用）         | 每 turn 注入为独立消息 | ✅ LRU 淘汰      | ✅ 三层 size budget（turn/session/persistent） |
 
 > **注①**：`applySkillInjection()` 直接 mutate `_history[0].content`，多次调用（多个 slash command）会累积追加，无上限。`compressContext()` 不压缩 `_history[0]`，系统提示词可能随会话线性增长。唯一重置路径：`configure({ systemPrompt })` 整体替换。
 >
@@ -284,13 +298,14 @@ Extension Host
 
 **neko-agent 内部三子系统**：
 
-| 子系统 | 组件 | 职责 |
-|--------|------|------|
-| **Tool** | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry | 工具注册/执行/分层注入/集合管理 |
-| **Skill** | SkillRegistry, SkillService, SkillMatcher, SkillInjector, ToolGuard | 技能发现/应用/提示词注入/工具守卫 |
-| **Hook** | PermissionHooks, MemoryHooks, ValidationHooks, SettingsHookLoader | TS 进程内拦截 + Shell 外部钩子串联 |
+| 子系统    | 组件                                                                        | 职责                               |
+| --------- | --------------------------------------------------------------------------- | ---------------------------------- |
+| **Tool**  | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry | 工具注册/执行/分层注入/集合管理    |
+| **Skill** | SkillRegistry, SkillService, SkillMatcher, SkillInjector, ToolGuard         | 技能发现/应用/提示词注入/工具守卫  |
+| **Hook**  | PermissionHooks, MemoryHooks, ValidationHooks, SettingsHookLoader           | TS 进程内拦截 + Shell 外部钩子串联 |
 
 **概念职责边界**：
+
 - `Tool` = 原子能力（执行函数）
 - `ToolSet` = 工具可见性模块（按需激活，减少 token）
 - `Skill` = 行为模式（system prompt + 可选工具守卫 + 关联 ToolSets）
@@ -301,32 +316,32 @@ Extension Host
 
 ## 关键架构决策（ADR）
 
-| 领域 | 文档 | 核心决策 |
-|------|------|---------|
-| 统一引擎架构 | [adr-unified-engine.md](./docs/adr-unified-engine.md) | EngineClient HTTP dispatch 统一所有 Engine 调用，端口从 3 降为 1 |
-| 横切关注点 | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md) | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离 |
-| AI Agent 架构 | [plans/2026-03-10-neko-agent-skill-tool-refactor-design.md](./docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md) | ToolSet/Skill/Hook 三子系统职责划分；Shell hooks 桥接到 PermissionHooks；Skill 联动激活 ToolSets |
-| 媒体流传输 | [diff.md §4.1](./docs/diff.md) | H.264 + PCM 流式传输，非逐帧提取 |
-| Diff 并行化 | [diff.md §六](./docs/diff.md) | SSIM‖PSNR 并行 + 早期波形 + 消息队列去阻塞 |
-| 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |
-| 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
-| 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | [architecture/adr-model-lookdev-scene-editing.md](./docs/architecture/adr-model-lookdev-scene-editing.md) | bevy_ecs 独立 crate + runtime-scene + Engine-streamed Route A 视口；LookDev Clay/Debug 模式、authored lights、Engine-owned environment、typed picking；Webview 不引入可见 R3F/Three.js 渲染器 |
-| 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（`.nkp` v2 native Bone2D + BlendShape 骨骼动画，独立子插件）；runtime-puppet（bevy_ecs native 2D puppet runtime + MOC3/Live2D 导入转换兼容）；`.nkentity` v2 `puppet-bone` 绑定；Agent/资产/导出首版；WS 实时流供 neko-live |
-| Live Compositor | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md) | neko-live 通过 `ViewportShell` 消费引擎 Live Compositor H.264 合成流；设备只暴露授权 `sourceRef`，本地 R3F/Puppet/canvas 路径仅作为 non-authoritative fallback |
-| 角色编辑 | *已内化* | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑 |
-| 面板放置策略 | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突 |
-| 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |
-| Engine 插件化（RFC） | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md) | 能力插件化而非内核插件化；优先开放 shader/model/format/device/exporter/connector 等受控扩展点；市场负责分发，Engine Host 负责激活 |
-| Engine Runtime 分层 | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | runtime 按包拆分、默认共用一个 Host 应用；Video/2D/3D/Docs/Device/ML 维持单宿主；Game/Sim/XR 未来按需要升格独立 sidecar |
-| 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
-| 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
-| 代码审查与质量门禁 | [architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md) | 统一 Review 基线 + 风险分级 + 子包专项清单；覆盖功能、UX、性能、专业软件对标、本地检查与 CI 门禁 |
-| Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧 |
-| Story-Agent-Canvas 职责 | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md) | Agent-first 架构下的职责收敛：story 负责剧本事实与审阅入口，agent 负责编排，canvas 负责正式分镜工作台；定义轻量分镜表的目标、字段和非目标 |
-| 统一文件访问 | [architecture/engine-file-access.md](./docs/architecture/engine-file-access.md) | FileAccessRegistry + `/v1/files/*` + `sourceRef`，二进制源文件由 Engine 读取，Extension 仅保留项目 JSON/设置/sidecar 等文本语义 |
-| 文档预览 | [architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ/DOCX 自建预览器；瀑布流虚拟滚动 + 双栏模式；Webview 直连 neko-engine HTTP（无 postMessage 中继）；epub.js fetchForEpub 替代 XHR |
-| 路径体系 | *已内化* | 项目文件只存相对路径 + `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；Rust ProjectContext(resolve/validate)；EngineClient/PreviewFileServer 自动展开变量；变量来源: neko/settings.json（Git 跟踪）+ .neko/settings.local.json（gitignore）|
+| 领域                    | 文档                                                                                                                          | 核心决策                                                                                                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 统一引擎架构            | [adr-unified-engine.md](./docs/adr-unified-engine.md)                                                                         | EngineClient HTTP dispatch 统一所有 Engine 调用，端口从 3 降为 1                                                                                                                                                                                             |
+| 横切关注点              | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md)                               | Logger/i18n/Theme/Error 统一在 @neko/shared，三层隔离                                                                                                                                                                                                        |
+| AI Agent 架构           | [plans/2026-03-10-neko-agent-skill-tool-refactor-design.md](./docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md) | ToolSet/Skill/Hook 三子系统职责划分；Shell hooks 桥接到 PermissionHooks；Skill 联动激活 ToolSets                                                                                                                                                             |
+| 媒体流传输              | [diff.md §4.1](./docs/diff.md)                                                                                                | H.264 + PCM 流式传输，非逐帧提取                                                                                                                                                                                                                             |
+| Diff 并行化             | [diff.md §六](./docs/diff.md)                                                                                                 | SSIM‖PSNR 并行 + 早期波形 + 消息队列去阻塞                                                                                                                                                                                                                   |
+| 跨语言架构              | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md)                             | Rust 引擎为数据模型权威，TS 仅负责 UI                                                                                                                                                                                                                        |
+| 共享包设计              | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md)                                       | @neko/shared 通过子路径分层导出                                                                                                                                                                                                                              |
+| 资产管理                | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md)                                     | 统一 AssetManifest + Handler 注册表模式                                                                                                                                                                                                                      |
+| 3D 能力                 | [architecture/adr-model-lookdev-scene-editing.md](./docs/architecture/adr-model-lookdev-scene-editing.md)                     | bevy_ecs 独立 crate + runtime-scene + Engine-streamed Route A 视口；LookDev Clay/Debug 模式、authored lights、Engine-owned environment、typed picking；Webview 不引入可见 R3F/Three.js 渲染器                                                                |
+| 2D 能力                 | _已内化_                                                                                                                      | neko-sketch（绘画）+ neko-puppet（`.nkp` v2 native Bone2D + BlendShape 骨骼动画，独立子插件）；runtime-puppet（bevy_ecs native 2D puppet runtime + MOC3/Live2D 导入转换兼容）；`.nkentity` v2 `puppet-bone` 绑定；Agent/资产/导出首版；WS 实时流供 neko-live |
+| Live Compositor         | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md)                         | neko-live 通过 `ViewportShell` 消费引擎 Live Compositor H.264 合成流；设备只暴露授权 `sourceRef`，本地 R3F/Puppet/canvas 路径仅作为 non-authoritative fallback                                                                                               |
+| 角色编辑                | _已内化_                                                                                                                      | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑                                                                                                                      |
+| 面板放置策略            | [architecture/panel-placement.md](./docs/architecture/panel-placement.md)                                                     | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突                                                                                                                                                                                 |
+| 外部设备访问            | [architecture/device-access.md](./docs/architecture/device-access.md)                                                         | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs）                                                                                                                                                              |
+| Engine 插件化（RFC）    | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md)                                                 | 能力插件化而非内核插件化；优先开放 shader/model/format/device/exporter/connector 等受控扩展点；市场负责分发，Engine Host 负责激活                                                                                                                            |
+| Engine Runtime 分层     | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md)                                     | runtime 按包拆分、默认共用一个 Host 应用；Video/2D/3D/Docs/Device/ML 维持单宿主；Game/Sim/XR 未来按需要升格独立 sidecar                                                                                                                                      |
+| 创作上下文压缩          | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md)                           | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要                                                                                                                                                                 |
+| 消融实验框架            | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md)                         | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统                                                                                                                                                                          |
+| 代码审查与质量门禁      | [architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md)                         | 统一 Review 基线 + 风险分级 + 子包专项清单；覆盖功能、UX、性能、专业软件对标、本地检查与 CI 门禁                                                                                                                                                             |
+| Agent 媒体架构          | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md)                                   | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧                                                                        |
+| Story-Agent-Canvas 职责 | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md)                             | Agent-first 架构下的职责收敛：story 负责剧本事实与审阅入口，agent 负责编排，canvas 负责正式分镜工作台；定义轻量分镜表的目标、字段和非目标                                                                                                                    |
+| 统一文件访问            | [architecture/engine-file-access.md](./docs/architecture/engine-file-access.md)                                               | FileAccessRegistry + `/v1/files/*` + `sourceRef`，二进制源文件由 Engine 读取，Extension 仅保留项目 JSON/设置/sidecar 等文本语义                                                                                                                              |
+| 文档预览                | [architecture/document-preview.md](./docs/architecture/document-preview.md)                                                   | PDF/EPUB/CBZ/DOCX 自建预览器；瀑布流虚拟滚动 + 双栏模式；Webview 直连 neko-engine HTTP（无 postMessage 中继）；epub.js fetchForEpub 替代 XHR                                                                                                                 |
+| 路径体系                | _已内化_                                                                                                                      | 项目文件只存相对路径 + `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；Rust ProjectContext(resolve/validate)；EngineClient/PreviewFileServer 自动展开变量；变量来源: neko/settings.json（Git 跟踪）+ .neko/settings.local.json（gitignore）           |
 
 ---
 
@@ -351,12 +366,12 @@ Extension Host
 
 **操作域覆盖**：
 
-| 编辑器 | 操作前缀 | 接入方式 |
-|--------|---------|---------|
-| neko-cut | `track.*` / `element.*` | editorStore 内置 dispatch |
-| neko-audio | `audio.effect.*` / `audio.marker.*` | audioProjectStore（dispatch + undo/redo） |
-| neko-canvas | `canvas.node.*` / `canvas.connection.*` | canvasOperationStore 桥接层 |
-| neko-sketch | `sketch.layer.*` / `sketch.stroke.*` | sketchOperationStore 桥接层 |
+| 编辑器      | 操作前缀                                | 接入方式                                  |
+| ----------- | --------------------------------------- | ----------------------------------------- |
+| neko-cut    | `track.*` / `element.*`                 | editorStore 内置 dispatch                 |
+| neko-audio  | `audio.effect.*` / `audio.marker.*`     | audioProjectStore（dispatch + undo/redo） |
+| neko-canvas | `canvas.node.*` / `canvas.connection.*` | canvasOperationStore 桥接层               |
+| neko-sketch | `sketch.layer.*` / `sketch.stroke.*`    | sketchOperationStore 桥接层               |
 
 ---
 
@@ -365,6 +380,7 @@ Extension Host
 **SOLID 驱动**：每个模块单一职责，面向接口编程，通过依赖注入解耦。
 
 **权威来源单一**：
+
 - 类型契约：`@neko/proto`（.proto IDL）
 - 共享基础设施：`@neko/shared`（Logger/i18n/Theme/Errors，三层隔离）
 - 引擎通信：`@neko/neko-client`（EngineClient + 流媒体客户端，零 vscode 依赖）
@@ -400,15 +416,15 @@ Layer 1: 引擎（neko-engine，SSOT，宿主无关）
 
 ### 红线清单（违反即阻断 PR）
 
-| # | 红线 | 反例 | 正例 |
-|---|------|------|------|
-| **R1** | 引擎不感知宿主 | `fn render_for_vscode_webview()` | `fn render(output: OutputFormat, color_pipeline: ColorPipeline)` |
-| **R2** | `@neko/neko-client` 不依赖 vscode/electron/tauri | `import * as vscode from 'vscode'` | 通过参数注入端口/能力 |
-| **R3** | 引擎能力不为宿主限制阉割 | 因 VSCode 不显示 HDR 就删掉 HEVC Main10 编码 | 引擎保留全格式，宿主按 capabilities 选择 |
-| **R4** | 显示路径与导出路径解耦 | 预览精度限制导出精度 | VSCode 预览 SDR + 导出 HEVC Main10 母版 |
-| **R5** | Webview 组件不直接调用 `vscode.*` | `acquireVsCodeApi().postMessage(...)` 散落各处 | 封装 `HostBridge` 适配层，组件用抽象接口 |
-| **R6** | 文件路径走 PathResolver | `vscode.workspace.fs.readFile()` 跨层使用 | `PathResolver`（@neko/shared L0）+ 适配层翻译 |
-| **R7** | 显示能力走 `HostCapabilities` 抽象 | 组件 `if (isVSCode)` 硬编码 | `if (capabilities.display.colorSpaces.includes('rec2100-pq'))` |
+| #      | 红线                                             | 反例                                           | 正例                                                             |
+| ------ | ------------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| **R1** | 引擎不感知宿主                                   | `fn render_for_vscode_webview()`               | `fn render(output: OutputFormat, color_pipeline: ColorPipeline)` |
+| **R2** | `@neko/neko-client` 不依赖 vscode/electron/tauri | `import * as vscode from 'vscode'`             | 通过参数注入端口/能力                                            |
+| **R3** | 引擎能力不为宿主限制阉割                         | 因 VSCode 不显示 HDR 就删掉 HEVC Main10 编码   | 引擎保留全格式，宿主按 capabilities 选择                         |
+| **R4** | 显示路径与导出路径解耦                           | 预览精度限制导出精度                           | VSCode 预览 SDR + 导出 HEVC Main10 母版                          |
+| **R5** | Webview 组件不直接调用 `vscode.*`                | `acquireVsCodeApi().postMessage(...)` 散落各处 | 封装 `HostBridge` 适配层，组件用抽象接口                         |
+| **R6** | 文件路径走 PathResolver                          | `vscode.workspace.fs.readFile()` 跨层使用      | `PathResolver`（@neko/shared L0）+ 适配层翻译                    |
+| **R7** | 显示能力走 `HostCapabilities` 抽象               | 组件 `if (isVSCode)` 硬编码                    | `if (capabilities.display.colorSpaces.includes('rec2100-pq'))`   |
 
 ### HostCapabilities 契约（关键抽象）
 
@@ -420,18 +436,22 @@ interface HostCapabilities {
   readonly display: {
     colorSpaces: ('srgb' | 'display-p3' | 'rec2100-pq' | 'rec2100-hlg')[];
     bitDepth: 8 | 10 | 16;
-    maxLuminance: number;  // nits
+    maxLuminance: number; // nits
   };
   readonly codec: {
-    h264: boolean; h265Main10: boolean;
-    av1_8bit: boolean; av1_10bit: boolean;
+    h264: boolean;
+    h265Main10: boolean;
+    av1_8bit: boolean;
+    av1_10bit: boolean;
   };
   readonly windowing: {
-    nativeOverlay: boolean; multiViewport: boolean; openXR: boolean;
+    nativeOverlay: boolean;
+    multiViewport: boolean;
+    openXR: boolean;
   };
   readonly fileIO: {
-    streamingRead: boolean;       // VSCode 必须走 engine HTTP
-    largeFileLimit: number;       // VSCode webview 全量加载限制
+    streamingRead: boolean; // VSCode 必须走 engine HTTP
+    largeFileLimit: number; // VSCode webview 全量加载限制
   };
 }
 ```
@@ -440,22 +460,22 @@ VSCode Webview 与未来 Studio 的能力差异通过**不同 `HostCapabilities`
 
 ### 三契约（显示 / 数据 / 导出）
 
-| 契约 | 边界 | VSCode 当前 | 未来 Studio |
-|------|------|------------|------------|
-| **显示契约** | webview 显示端 | 8bit sRGB / display-p3 | + 10bit HDR (rec2100-pq/hlg) |
-| **数据契约** | 引擎内部 + 项目文件 | `Rgba16Float` 全保留 | 同 |
-| **导出契约** | 用户导出路径 | 全格式（HEVC Main10 / EXR / ProRes） | 同 |
+| 契约         | 边界                | VSCode 当前                          | 未来 Studio                  |
+| ------------ | ------------------- | ------------------------------------ | ---------------------------- |
+| **显示契约** | webview 显示端      | 8bit sRGB / display-p3               | + 10bit HDR (rec2100-pq/hlg) |
+| **数据契约** | 引擎内部 + 项目文件 | `Rgba16Float` 全保留                 | 同                           |
+| **导出契约** | 用户导出路径        | 全格式（HEVC Main10 / EXR / ProRes） | 同                           |
 
 **核心原则**：显示精度限制不能传染到数据精度和导出精度。VSCode 用户在 SDR 预览下编辑 HDR 内容并导出 HDR 母版,迁移到 Studio 是**纯增量**，不丢历史项目。
 
 ### 演进路线（路线图，非承诺）
 
-| 阶段 | 时间窗 | 内容 | 触发条件 |
-|------|-------|------|---------|
-| 阶段 1 | 现在 - 6mo | VSCode 主线：H.264 SDR + P3 广色域 + tone-mapping + HostCapabilities 抽象 | — |
-| 阶段 2 | 6-12mo | 专业能力埋点：XR 桌面预览 / 高级 PBR / 调色基础 | 阶段 1 商业化验证 |
-| 阶段 3 | 12-24mo | Neko Studio 独立 IDE（Tauri/Electron）：Native HDR + 多视口 + OpenXR | 阶段 2 付费意愿验证 |
-| 阶段 4 | 可选 | Neko Cloud(Web) / iPad 版本 | 战略需要 |
+| 阶段   | 时间窗     | 内容                                                                      | 触发条件            |
+| ------ | ---------- | ------------------------------------------------------------------------- | ------------------- |
+| 阶段 1 | 现在 - 6mo | VSCode 主线：H.264 SDR + P3 广色域 + tone-mapping + HostCapabilities 抽象 | —                   |
+| 阶段 2 | 6-12mo     | 专业能力埋点：XR 桌面预览 / 高级 PBR / 调色基础                           | 阶段 1 商业化验证   |
+| 阶段 3 | 12-24mo    | Neko Studio 独立 IDE（Tauri/Electron）：Native HDR + 多视口 + OpenXR      | 阶段 2 付费意愿验证 |
+| 阶段 4 | 可选       | Neko Cloud(Web) / iPad 版本                                               | 战略需要            |
 
 **关键不变量**：阶段 3 的 Studio 与 VSCode 共用同一个 Rust engine、同一个 EngineClient，**只是新的 Layer 3 实现**。
 
@@ -463,16 +483,16 @@ VSCode Webview 与未来 Studio 的能力差异通过**不同 `HostCapabilities`
 
 ## 技术栈一览
 
-| 层级 | 技术选型 | 理由 |
-|------|---------|------|
-| Frontend | React 18 + Zustand + Tailwind + Vite | 生态成熟，Slice 模式便于测试 |
-| Extension | VS Code Extension API + TypeScript + esbuild | 平台要求 |
-| Media Engine | Rust + wgpu + FFmpeg + axum + tokio | 零 GC、跨平台 GPU、成熟编解码 |
-| AI | Vercel AI SDK + Claude/OpenAI + MCP | 多模型抽象，流式响应 |
-| Protocol | Protobuf IDL（手动维护） | 跨语言类型契约 |
-| Streaming | H.264 + PCM over WebSocket | 低延迟，浏览器原生支持（WebCodecs） |
-| Build | pnpm 10 + Turborepo 2 | Monorepo 并行构建 |
-| Testing | Vitest v4.0.18 + cargo test | 覆盖 TS 和 Rust 两端，统一覆盖率阈值 |
+| 层级         | 技术选型                                     | 理由                                 |
+| ------------ | -------------------------------------------- | ------------------------------------ |
+| Frontend     | React 18 + Zustand + Tailwind + Vite         | 生态成熟，Slice 模式便于测试         |
+| Extension    | VS Code Extension API + TypeScript + esbuild | 平台要求                             |
+| Media Engine | Rust + wgpu + FFmpeg + axum + tokio          | 零 GC、跨平台 GPU、成熟编解码        |
+| AI           | Vercel AI SDK + Claude/OpenAI + MCP          | 多模型抽象，流式响应                 |
+| Protocol     | Protobuf IDL（手动维护）                     | 跨语言类型契约                       |
+| Streaming    | H.264 + PCM over WebSocket                   | 低延迟，浏览器原生支持（WebCodecs）  |
+| Build        | pnpm 10 + Turborepo 2                        | Monorepo 并行构建                    |
+| Testing      | Vitest v4.0.18 + cargo test                  | 覆盖 TS 和 Rust 两端，统一覆盖率阈值 |
 
 ---
 
@@ -508,30 +528,30 @@ neko-canvas / neko-cut / neko-story
 
 ### Exported API 契约（`@neko/shared/types/extension-api.ts`）
 
-| 扩展 | 导出类型 | 关键命名空间 |
-|------|---------|-------------|
-| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events` |
-| neko-cut | `NekoCutAPI & ISkillProvider` | `timeline` / `ai` |
-| neko-story | `NekoStoryAPI` | `parseScript` / `convertToTimeline` / `getScriptIndex` / `getCharacterRegistry` / `resolveCharacter` / `generateScenePlans` / `generateShotPlan` |
-| neko-auth | `NekoAuthAPI` | `getSession` / `onDidChangeSession` |
+| 扩展        | 导出类型                         | 关键命名空间                                                                                                                                     |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events`                                                                                           |
+| neko-cut    | `NekoCutAPI & ISkillProvider`    | `timeline` / `ai`                                                                                                                                |
+| neko-story  | `NekoStoryAPI`                   | `parseScript` / `convertToTimeline` / `getScriptIndex` / `getCharacterRegistry` / `resolveCharacter` / `generateScenePlans` / `generateShotPlan` |
+| neko-auth   | `NekoAuthAPI`                    | `getSession` / `onDidChangeSession`                                                                                                              |
 
 ### 跨扩展命令协议
 
 neko-agent 注册以下命令供其他扩展调用，命令未注册时静默 no-op：
 
-| 命令 | 调用方 | 功能 |
-|------|-------|------|
-| `neko.agent.generateForNode` | neko-canvas `BatchGenerationScheduler` | 触发平台媒体服务生图，返回 `{ dataUrl: string }` |
-| `neko.agent.reportGenerationProgress` | neko-canvas `BatchGenerationScheduler` | 将生成进度广播至 Agent Chat Webview |
-| `neko.agent.registerSlashCommands` | neko-canvas / neko-cut 等 | 向 Agent 聊天面板注册 `/slash` 命令 |
-| `neko.agent.internalChat` | 任意扩展 | 复用已配置的 LLM 服务进行推理 |
-| `neko.agent.sendContext` | neko-canvas / neko-story | 注入上下文 payload（AgentContextChip UI + story-selection / canvas-selection）|
-| `neko.agent.startPipeline` | neko-story | 启动流水线流程（flowF 等），传入结构化参数（source、importToCanvas、eventCommand）|
-| `neko.agent.buildPrompt` | neko-canvas `GenerationPromptPanel` | 中文场景描述 → 结构化英文 prompt（含角色/景别/情绪）|
-| `neko.story.applyInlineDiff` | neko-agent | 对剧本文件应用 WorkspaceEdit（接受/拒绝确认）|
-| `neko.story.startVideoCreation` | 用户 / neko-story | 从当前剧本场景启动标准视频创作流程（flowF）|
-| `neko.story.handlePipelineEvent` | neko-agent pipeline | 将流水线事件回写到 StorySceneStateStore，用于状态跟踪 |
-| `neko.canvas.importStoryboard` | neko-story / neko-agent | 将 `CanvasStoryboardPayload` 导入活动画布，创建场景/镜头节点 |
+| 命令                                  | 调用方                                 | 功能                                                                               |
+| ------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `neko.agent.generateForNode`          | neko-canvas `BatchGenerationScheduler` | 触发平台媒体服务生图，返回 `{ dataUrl: string }`                                   |
+| `neko.agent.reportGenerationProgress` | neko-canvas `BatchGenerationScheduler` | 将生成进度广播至 Agent Chat Webview                                                |
+| `neko.agent.registerSlashCommands`    | neko-canvas / neko-cut 等              | 向 Agent 聊天面板注册 `/slash` 命令                                                |
+| `neko.agent.internalChat`             | 任意扩展                               | 复用已配置的 LLM 服务进行推理                                                      |
+| `neko.agent.sendContext`              | neko-canvas / neko-story               | 注入上下文 payload（AgentContextChip UI + story-selection / canvas-selection）     |
+| `neko.agent.startPipeline`            | neko-story                             | 启动流水线流程（flowF 等），传入结构化参数（source、importToCanvas、eventCommand） |
+| `neko.agent.buildPrompt`              | neko-canvas `GenerationPromptPanel`    | 中文场景描述 → 结构化英文 prompt（含角色/景别/情绪）                               |
+| `neko.story.applyInlineDiff`          | neko-agent                             | 对剧本文件应用 WorkspaceEdit（接受/拒绝确认）                                      |
+| `neko.story.startVideoCreation`       | 用户 / neko-story                      | 从当前剧本场景启动标准视频创作流程（flowF）                                        |
+| `neko.story.handlePipelineEvent`      | neko-agent pipeline                    | 将流水线事件回写到 StorySceneStateStore，用于状态跟踪                              |
+| `neko.canvas.importStoryboard`        | neko-story / neko-agent                | 将 `CanvasStoryboardPayload` 导入活动画布，创建场景/镜头节点                       |
 
 ### ISkillProvider — 技能发现接口
 
@@ -545,19 +565,19 @@ interface ISkillProvider {
 interface SkillDef {
   id: string;
   name: string;
-  description: string;       // LLM 可读的能力描述
-  icon?: string;             // VSCode codicon
-  command: string;           // 执行该能力的 VSCode 命令 ID
-  tags?: readonly string[];  // 用于过滤（'generation' | 'export' | ...）
+  description: string; // LLM 可读的能力描述
+  icon?: string; // VSCode codicon
+  command: string; // 执行该能力的 VSCode 命令 ID
+  tags?: readonly string[]; // 用于过滤（'generation' | 'export' | ...）
 }
 ```
 
 当前实现了 `ISkillProvider` 的扩展：
 
-| 扩展 | Skills |
-|------|--------|
+| 扩展        | Skills                                                       |
+| ----------- | ------------------------------------------------------------ |
 | neko-canvas | `batch-generate` / `export-storyboard` / `generate-selected` |
-| neko-cut | `generate-video-clip` / `transcribe-audio` |
+| neko-cut    | `generate-video-clip` / `transcribe-audio`                   |
 
 ### 生图数据流（Canvas → Agent → Platform）
 

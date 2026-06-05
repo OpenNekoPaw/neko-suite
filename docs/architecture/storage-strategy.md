@@ -1,6 +1,6 @@
 # 存储策略
 
-> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [marketplace.md](./marketplace.md) · [media-lsp.md](./media-lsp.md)
+> 关联：[ARCHITECTURE.md](../../ARCHITECTURE.md) · [format-strategy.md](./format-strategy.md) · [marketplace.md](./marketplace.md) · [media-lsp.md](./media-lsp.md) · [intent-aware-content-access.md](./intent-aware-content-access.md)
 >
 > **合并自**：`local-storage-strategy.md` · `remote-storage.md` · `project-data-management.md`
 
@@ -10,13 +10,13 @@
 
 ### 数据分类
 
-| 层级 | 数据类型 | 格式 | 示例 | 变更频率 |
-|------|---------|------|------|---------|
-| **L0 项目文件** | 编辑项目 | JSON 文本 | `.nkv` `.nkc` `.nks` `.nka` `.fountain` | 高 |
-| **L1 项目元数据** | 配置/字典 | JSON 文本 | `project.json` `characters.json` | 低 |
-| **L2 媒体素材** | 图片/音视频/3D | 二进制 | `.mp4` `.png` `.wav` `.gltf` | 低 |
-| **L3 AI 生成物** | 生成媒体 | 二进制 | AI 图片/视频/音频 | 中 |
-| **L4 运行时数据** | 缓存/历史 | 混合 | `.nkv-ops` `cache/` `memory.md` | 高 |
+| 层级              | 数据类型       | 格式      | 示例                                    | 变更频率 |
+| ----------------- | -------------- | --------- | --------------------------------------- | -------- |
+| **L0 项目文件**   | 编辑项目       | JSON 文本 | `.nkv` `.nkc` `.nks` `.nka` `.fountain` | 高       |
+| **L1 项目元数据** | 配置/字典      | JSON 文本 | `project.json` `characters.json`        | 低       |
+| **L2 媒体素材**   | 图片/音视频/3D | 二进制    | `.mp4` `.png` `.wav` `.gltf`            | 低       |
+| **L3 AI 生成物**  | 生成媒体       | 二进制    | AI 图片/视频/音频                       | 中       |
+| **L4 运行时数据** | 缓存/历史      | 混合      | `.nkv-ops` `cache/` `memory.md`         | 高       |
 
 ### Git 管理策略
 
@@ -156,18 +156,33 @@ Media Diff: old.mp4 → new.mp4
 
 interface IStorageLayout {
   global: {
-    root: string; config: string; agentsMd: string;
-    marketCache: string; marketInstalled: string; conversations: string;
+    root: string;
+    config: string;
+    agentsMd: string;
+    marketCache: string;
+    marketInstalled: string;
+    conversations: string;
   };
   project: {
-    root: string; settings: string; settingsLocal: string;
-    config: string; memory: string;
+    root: string;
+    settings: string;
+    settingsLocal: string;
+    config: string;
+    memory: string;
   };
   cache: {
-    root: string; mediaMetadata: string; assetGraph: string;
-    resources: string; resourceManifest: string; database: string;
-    vectors: string; proxies: string; proxyManifest: string;
-    generated: string; generatedIndex: string; thumbnails: string;
+    root: string;
+    mediaMetadata: string;
+    assetGraph: string;
+    resources: string;
+    resourceManifest: string;
+    database: string;
+    vectors: string;
+    proxies: string;
+    proxyManifest: string;
+    generated: string;
+    generatedIndex: string;
+    thumbnails: string;
   };
 }
 
@@ -176,16 +191,23 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
   const projectRoot = path.join(workspaceRoot, '.neko');
   const cacheRoot = path.join(projectRoot, '.cache');
   return {
-    global: { root: globalRoot, config: path.join(globalRoot, 'config.json'),
+    global: {
+      root: globalRoot,
+      config: path.join(globalRoot, 'config.json'),
       agentsMd: path.join(globalRoot, 'AGENTS.md'),
       marketCache: path.join(globalRoot, 'market-cache'),
       marketInstalled: path.join(globalRoot, 'market-installed.json'),
-      conversations: path.join(globalRoot, 'conversations') },
-    project: { root: projectRoot, settings: path.join(projectRoot, 'settings.json'),
+      conversations: path.join(globalRoot, 'conversations'),
+    },
+    project: {
+      root: projectRoot,
+      settings: path.join(projectRoot, 'settings.json'),
       settingsLocal: path.join(projectRoot, 'settings.local.json'),
       config: path.join(projectRoot, 'config.json'),
-      memory: path.join(projectRoot, 'memory.md') },
-    cache: { root: cacheRoot,
+      memory: path.join(projectRoot, 'memory.md'),
+    },
+    cache: {
+      root: cacheRoot,
       mediaMetadata: path.join(cacheRoot, 'media-metadata.json'),
       resources: path.join(cacheRoot, 'resources'),
       resourceManifest: path.join(cacheRoot, 'resources', 'manifest.json'),
@@ -196,17 +218,18 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
       proxyManifest: path.join(cacheRoot, 'proxies', 'manifest.json'),
       generated: path.join(cacheRoot, 'generated'),
       generatedIndex: path.join(cacheRoot, 'generated', 'index.json'),
-      thumbnails: path.join(cacheRoot, 'thumbnails') },
+      thumbnails: path.join(cacheRoot, 'thumbnails'),
+    },
   };
 }
 ```
 
 ### 旧路径迁移
 
-| 旧路径 | 新路径 |
-|--------|--------|
-| `.neko/cache/` | `.neko/.cache/` |
-| `.neko/proxies/` | `.neko/.cache/proxies/` |
+| 旧路径             | 新路径                    |
+| ------------------ | ------------------------- |
+| `.neko/cache/`     | `.neko/.cache/`           |
+| `.neko/proxies/`   | `.neko/.cache/proxies/`   |
 | `.neko/generated/` | `.neko/.cache/generated/` |
 
 ---
@@ -228,18 +251,42 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
 跨包传递应使用 `ResourceRef` / `ResourceVariantRef`：
 
 - Agent 文档图片、分镜参考图、Canvas 节点缩略图优先写 `resourceRef`。
-- 旧 `cachePath` 只作为迁移 metadata，不作为 durable identity。
+- 旧 `cachePath` 只作为迁移 metadata，不作为 durable identity；没有 source/locator 时，导出、打包、校验应返回 `missing-source` / `unrecoverable`，不能复制缓存文件。
 - Webview 不读取 `manifest.json`，也不读取 package-local cache 目录；Extension Host 通过 `ResourceCacheService.ensure/resolve/project` 物化并投影。
 - 无 workspace 或仅存在于 `globalStorageUri` 的 scratch 图像标记为 `extension-private` / `non-portable`，可在所属 Agent Webview 显示，但不能承诺跨 Canvas/Preview 便携。
 
+### 内容读取与缓存关系
+
+统一资源缓存是派生物边界，不是内容读取的唯一入口。所有跨包读取应先声明操作意图，再由 `ContentAccessService` 选择读取路径：
+
+| 操作                          | 入口                                           | 默认读取                                                                                        |
+| ----------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Canvas/Agent/Preview 实时显示 | `interactive-preview` / `agent-context`        | cache-first：thumbnail、document page image、preview variant、proxy，并由 Host 投影 Webview URI |
+| Cut 编辑回放                  | `edit-playback`                                | proxy/runtime stream allowed                                                                    |
+| 导出、打包、依赖校验、hash    | `final-export` / `package` / `verify`          | source-first：原始文件、原始 container entry、engine source token                               |
+| 缩略图/代理/文档页图预热      | `cache-materialize` 或 `cache-artifact` ingest | 委托 `ResourceCacheService`                                                                     |
+
+因此缓存可以在读取时自动补齐，但只限 preview/cache-materialize 类意图。离线操作不能因为 cache 存在就把它当作原始素材，除非请求显式设置 draft/proxy 质量模式并记录 diagnostics。
+
+### 内容写入与生成物
+
+导入、注册已有 source、Agent/tool 生成媒体提升、导出输出记录统一走 `ContentIngestService`：
+
+- `import-source` / `register-existing-source` 产出稳定 `ResourceRef`，并通过 `PathResolver` 收缩路径。
+- `generated-output` 将 Agent 私有生成物提升到项目 generated-assets scope，返回 promoted generated source ref。
+- `stage-export` 只记录导出/打包输出，不改写项目 source ref。
+- `cache-artifact` 只写统一资源缓存，不创建项目 source ref。
+
+持久数据保存稳定 source ref 和 `${VAR}/path` / workspace-relative 路径；不保存 private cache path、Webview URI、blob URL、object URL、preview token、engine token 或 stream id。
+
 缓存状态必须显式表达：
 
-| 状态 | 含义 | 用户修复路径 |
-|------|------|--------------|
-| `missing` | manifest 有记录但文件缺失 | 重新打开/读取源文档或重新生成资源 |
-| `stale` | 源 fingerprint 变化 | 刷新缓存或重新导入源素材 |
-| `unsupported` | 没有 provider 能物化 | 安装/启用对应扩展，或改用支持的格式 |
-| `unauthorized` | 文件不在 Webview 授权根 | 添加媒体库、移动到 workspace，或通过 Host 投影 |
+| 状态           | 含义                                   | 用户修复路径                                      |
+| -------------- | -------------------------------------- | ------------------------------------------------- |
+| `missing`      | manifest 有记录但文件缺失              | 重新打开/读取源文档或重新生成资源                 |
+| `stale`        | 源 fingerprint 变化                    | 刷新缓存或重新导入源素材                          |
+| `unsupported`  | 没有 provider 能物化                   | 安装/启用对应扩展，或改用支持的格式               |
+| `unauthorized` | 文件不在 Webview 授权根                | 添加媒体库、移动到 workspace，或通过 Host 投影    |
 | `non-portable` | extension-private/no-workspace scratch | 在当前 Agent 中查看，或重新导入到项目缓存后再发送 |
 
 `ResourceCacheService.stats()` 按 scope/provider/status/role 汇总大小与数量。`gc()` 只删除受管缓存根内、可重建、未 pin、非 session-active 的变体，绝不删除 `neko/` 项目事实、媒体库源文件、原始素材或用户手选文件。
@@ -250,12 +297,12 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
 
 ### 四个独立资产域
 
-| 域 | 存储位置 | 作用域 | 管理方式 |
-|---|---|---|---|
-| **AssetLibrary** | `<project>/neko/assets/library.json` | 项目 | Entity→Variant→File 层级 |
-| **MediaLibraryPaths** | `<project>/neko/settings.json` | 团队 | 路径变量（`${VARIABLE}`） |
-| **GeneratedAssets** | `<project>/.neko/.cache/generated/` | 项目 | JSON index + 二进制文件 |
-| **Marketplace** | `~/.neko/market-installed.json` | 用户 | IAssetHandler 注册 |
+| 域                    | 存储位置                             | 作用域 | 管理方式                  |
+| --------------------- | ------------------------------------ | ------ | ------------------------- |
+| **AssetLibrary**      | `<project>/neko/assets/library.json` | 项目   | Entity→Variant→File 层级  |
+| **MediaLibraryPaths** | `<project>/neko/settings.json`       | 团队   | 路径变量（`${VARIABLE}`） |
+| **GeneratedAssets**   | `<project>/.neko/.cache/generated/`  | 项目   | JSON index + 二进制文件   |
+| **Marketplace**       | `~/.neko/market-installed.json`      | 用户   | IAssetHandler 注册        |
 
 ### 决策：共享素材库描述符模式
 
@@ -266,8 +313,8 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
 ```typescript
 interface LibraryDescriptor {
   version: 1;
-  name: string;   // "Team Characters"
-  id: string;     // UUID，跨重命名稳定
+  name: string; // "Team Characters"
+  id: string; // UUID，跨重命名稳定
   entities: AssetEntity[];
 }
 ```
@@ -275,8 +322,11 @@ interface LibraryDescriptor {
 通过 `settings.json` 中已有的 `mediaLibraries` 配置引用共享目录：
 
 ```json
-{ "mediaLibraries": [{ "name": "Team Characters",
-    "path": "/Volumes/TeamNAS/characters", "variable": "TEAM_CHARS" }] }
+{
+  "mediaLibraries": [
+    { "name": "Team Characters", "path": "/Volumes/TeamNAS/characters", "variable": "TEAM_CHARS" }
+  ]
+}
 ```
 
 ### AssetRegistry 多源合并
@@ -298,8 +348,13 @@ AssetRegistry.query(filter)
 
 ```typescript
 type AssetRelation =
-  | 'uses' | 'proxy-of' | 'derived-from' | 'generated-by'
-  | 'variant-of' | 'exported-from' | 'linked-audio';
+  | 'uses'
+  | 'proxy-of'
+  | 'derived-from'
+  | 'generated-by'
+  | 'variant-of'
+  | 'exported-from'
+  | 'linked-audio';
 
 interface IAssetGraph {
   addNode(node: AssetNode): void;
@@ -344,12 +399,12 @@ interface IVectorStore {
 
 ### 存储后端：S3 兼容对象存储（MinIO）
 
-| 维度 | OSS（MinIO） | 云盘（Nextcloud 等） |
-|------|-------------|-------------------|
-| HTTP Range Seek | ✅ 原生支持 | ⚠️ WebDAV 中转 |
-| 预签名 URL | ✅ 原生支持 | ❌ 需额外开发 |
-| 私有部署 | ✅ MinIO 单二进制 | ⚠️ PHP + MySQL |
-| 流式播放 | ✅ 预签名 URL 直用 | ❌ 需整文件下载 |
+| 维度            | OSS（MinIO）       | 云盘（Nextcloud 等） |
+| --------------- | ------------------ | -------------------- |
+| HTTP Range Seek | ✅ 原生支持        | ⚠️ WebDAV 中转       |
+| 预签名 URL      | ✅ 原生支持        | ❌ 需额外开发        |
+| 私有部署        | ✅ MinIO 单二进制  | ⚠️ PHP + MySQL       |
+| 流式播放        | ✅ 预签名 URL 直用 | ❌ 需整文件下载      |
 
 Bucket 隔离：`neko-team-{teamId}/` · `neko-user-{userId}/` · `neko-project-{projId}/`
 
@@ -379,7 +434,7 @@ assets/{entityId}/
 
 ```typescript
 interface IFileTransport {
-  readonly scheme: string;  // 'file' | 's3' | 'webdav'
+  readonly scheme: string; // 'file' | 's3' | 'webdav'
   exists(uri: string): Promise<boolean>;
   pull(uri: string, localPath: string, progress?: TransferProgress): Promise<void>;
   push(localPath: string, uri: string, progress?: TransferProgress): Promise<void>;
@@ -410,24 +465,24 @@ ${FOOTAGE}/scene.mov         外部本地（PathVariable）    ✅ 已实现
 neko://entityId/varId/fileId Asset Library 间接引用      Phase 6.6
 ```
 
-`MediaResolver.resolve(src, baseDir, intent: 'preview' | 'export')` 决策：本地存在 → 直接用；preview 且无本地 → 下载代理；export → 下载原始。
+新增代码不再让 `MediaResolver` 自行决定 preview/export 路径；应通过 `ContentAccessService.resolve({ intent, target, ref })` 进入统一边界。preview 类意图可使用本地 cache 或下载代理，export/package/verify 类意图必须解析原始 source 或原始 container entry。
 
 ### 全品类代理策略
 
-| 类型 | 代理方案 | 服务端工具 |
-|------|---------|-----------|
-| 视频 | H.264 720p faststart | FFmpeg |
-| 音频 | AAC 128k + waveform | FFmpeg |
-| 高清图片（≥5MB / PSD/TIFF/RAW） | WebP 2K | libvips |
-| 图片序列 | H.264 720p（合成为视频） | FFmpeg |
-| 3D 模型 | LOD 简化 + Draco 压缩 | gltf-transform |
-| PDF（>10MB） | 逐页 WebP + 结构 JSON | poppler/mupdf |
-| PPT | LibreOffice → PDF → 逐页 WebP | LibreOffice |
-| Word | HTML + 嵌入资源 | pandoc |
-| EPUB（>20MB） | 封面 + 目录 JSON | 解压 |
-| CBZ | 缩小逐页 WebP | libvips |
-| Markdown / FDX / Shader / 小文件 | 直接下载 | — |
-| AI 模型 | 无代理（必须完整下载） | — |
+| 类型                             | 代理方案                      | 服务端工具     |
+| -------------------------------- | ----------------------------- | -------------- |
+| 视频                             | H.264 720p faststart          | FFmpeg         |
+| 音频                             | AAC 128k + waveform           | FFmpeg         |
+| 高清图片（≥5MB / PSD/TIFF/RAW）  | WebP 2K                       | libvips        |
+| 图片序列                         | H.264 720p（合成为视频）      | FFmpeg         |
+| 3D 模型                          | LOD 简化 + Draco 压缩         | gltf-transform |
+| PDF（>10MB）                     | 逐页 WebP + 结构 JSON         | poppler/mupdf  |
+| PPT                              | LibreOffice → PDF → 逐页 WebP | LibreOffice    |
+| Word                             | HTML + 嵌入资源               | pandoc         |
+| EPUB（>20MB）                    | 封面 + 目录 JSON              | 解压           |
+| CBZ                              | 缩小逐页 WebP                 | libvips        |
+| Markdown / FDX / Shader / 小文件 | 直接下载                      | —              |
+| AI 模型                          | 无代理（必须完整下载）        | —              |
 
 ---
 
@@ -438,6 +493,7 @@ neko://entityId/varId/fileId Asset Library 间接引用      Phase 6.6
 **场景 A（独立创作，当前主要）**：本地 Git，无需额外功能。
 
 **场景 B（小团队分工，2-5 人）**：按文件/模块分工，冲突概率低。Git LFS File Locking 保护二进制文件：
+
 ```bash
 git lfs lock assets/hero.png   # 阻止他人同时修改
 git lfs unlock assets/hero.png
@@ -453,7 +509,8 @@ git lfs unlock assets/hero.png
 
 ```typescript
 const md = new vscode.MarkdownString(undefined, true);
-md.isTrusted = true; md.supportHtml = true;
+md.isTrusted = true;
+md.supportHtml = true;
 md.appendMarkdown(`<img src="${vscode.Uri.file(thumbnailPath)}" width="200" />`);
 item.tooltip = md;
 ```
@@ -466,19 +523,20 @@ item.tooltip = md;
 
 ## 十、实施优先级
 
-| 优先级 | 任务 |
-|--------|------|
-| **P0** | `IStorageLayout` + `resolveStorageLayout()` + 旧路径迁移 |
-| **P1** | `LibraryDescriptor` + 共享库加载 + AssetRegistry 多源合并 |
-| **P1** | `ResourceCacheService` + provider 注册 + 统一资源缓存投影 |
-| **P1** | `IAssetGraph` 语义接口；实现对齐结构化缓存 ADR |
-| **P1** | `IVectorStore` 语义接口；实现对齐结构化缓存 ADR |
-| **P1** | IFileTransport + S3Transport + ProxyService 远程扩展 |
-| **P2** | `.gitignore` + `.gitattributes` 模板自动生成 |
-| **P2** | `neko-diff` CLI（Git diff driver）+ pHash 感知哈希 |
-| **P2** | `ICacheStats` 标准化 + 监控面板 |
-| **P2** | ThumbnailService 磁盘持久化 + tooltip 改造 |
-| **P3** | SQLite 替换（IAssetGraph / IVectorStore，按需触发） |
-| **P3** | LSP 索引缓存（大项目启动加速） |
-| **远期** | neko:// 引用协议（Phase 6.6） |
-| **远期** | OT/CRDT 实时协作 |
+| 优先级   | 任务                                                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| **P0**   | `IStorageLayout` + `resolveStorageLayout()` + 旧路径迁移                                                         |
+| **P1**   | `LibraryDescriptor` + 共享库加载 + AssetRegistry 多源合并                                                        |
+| **P1**   | `ResourceCacheService` + provider 注册 + 统一资源缓存投影                                                        |
+| **P1**   | `ContentAccessService` / `ContentIngestService` provider 注册，统一 preview/source/export/package 读取与写入边界 |
+| **P1**   | `IAssetGraph` 语义接口；实现对齐结构化缓存 ADR                                                                   |
+| **P1**   | `IVectorStore` 语义接口；实现对齐结构化缓存 ADR                                                                  |
+| **P1**   | IFileTransport + S3Transport + ProxyService 远程扩展                                                             |
+| **P2**   | `.gitignore` + `.gitattributes` 模板自动生成                                                                     |
+| **P2**   | `neko-diff` CLI（Git diff driver）+ pHash 感知哈希                                                               |
+| **P2**   | `ICacheStats` 标准化 + 监控面板                                                                                  |
+| **P2**   | ThumbnailService 磁盘持久化 + tooltip 改造                                                                       |
+| **P3**   | SQLite 替换（IAssetGraph / IVectorStore，按需触发）                                                              |
+| **P3**   | LSP 索引缓存（大项目启动加速）                                                                                   |
+| **远期** | neko:// 引用协议（Phase 6.6）                                                                                    |
+| **远期** | OT/CRDT 实时协作                                                                                                 |

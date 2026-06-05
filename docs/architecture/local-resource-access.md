@@ -6,12 +6,16 @@ VSCode Webview 只能读取 `localResourceRoots` 授权范围内的本地文件�
 
 本地资源访问的统一边界是 `@neko/shared/vscode/extension` 中的 `LocalResourceAccessService`。各扩展应通过该服务配置 Webview roots 和投影本地媒体 URI，不应在业务 provider 中手写 `localResourceRoots` 或直接 `webview.asWebviewUri(vscode.Uri.file(...))`。
 
+本服务只处理 Webview 运行时投影。跨包内容解析、缓存物化、source fallback、导出/打包读取应通过 [intent-aware-content-access.md](./intent-aware-content-access.md) 中的 `ContentAccessService`，由 Host 侧按 `interactive-preview`、`agent-context`、`final-export`、`package` 或 `verify` 等 intent 决定读取 material。
+
 它只回答两个问题：
 
 - 这个本地路径是否在当前 Webview 的授权根内？
 - 如果允许，应该返回哪个 `asWebviewUri(...)` 字符串？
 
 它不负责缓存身份、缓存物化、缺失文件重建、source fingerprint、quota 或 GC。上述职责由 `ResourceCacheService` 和 provider registry 承担。也就是说，Agent Webview 能显示 `globalStorageUri/document-image-cache` 下的图片，只代表 Agent 已授权自己的 extension-private cache；Canvas 不能把这条绝对路径当成可移植资源身份。
+
+同理，`toWebviewUri(...)` 结果、blob URL、object URL、Preview token URL、Engine stream URL 都是 runtime handle。它们可以显示当前 Webview，但不能写入 Canvas/Agent durable payload、package manifest 或 export input。
 
 ## 路径分类
 
@@ -31,8 +35,10 @@ VSCode Webview 只能读取 `localResourceRoots` 授权范围内的本地文件�
 - 不授权 filesystem root、用户 home、`os.tmpdir()` 作为根。
 - 可预览临时输出必须写入 `globalStorageUri` 或 workspace `.neko/.cache`，再由统一服务投影。
 - 跨 Agent/Canvas/Preview/Assets 的缓存-backed 视觉资源必须优先传 `ResourceRef`，由 Extension Host 调用 `ResourceCacheService.project(...)` 后再交给 Webview。
+- 跨 Agent/Canvas/Preview/Assets 的通用内容读取必须优先传稳定 source ref，并由 `ContentAccessService` 以明确 intent 解析；Webview URI 只作为返回给当前 Webview 的 runtime result。
 - Webview 不读取 `.neko/.cache/resources/manifest.json`，不扫描 package-local thumbnail/document cache。
 - `extension-private` / no-workspace scratch 可以由所属扩展显示，但跨包消费者应收到 `non-portable` 或 unresolved 状态，除非资源被复制/重建到项目资源缓存。
+- legacy `cachePath` 可作为迁移输入，但不能作为 Webview 之外的 source identity；没有 source/locator 时应提示重新导入、重新读取文档或重新生成。
 - `neko-search` 与 `neko-entity` 仍是搜索、身份、绑定和 representation 语义来源；本地资源服务只消费已经解析出的本地路径或远程 URL。
 
 ## 用户修复路径

@@ -2,6 +2,8 @@
 
 > Status: Active. This document records the unified local binary file boundary for preview,
 > media, model, puppet, subtitle, and agent attachment sources.
+>
+> Related: [intent-aware-content-access.md](./intent-aware-content-access.md)
 
 ## 目标
 
@@ -11,7 +13,9 @@
 
 ```
 Extension Host
-  └─ EngineClient.registerFile({ filePath, purpose })
+  └─ ContentAccessService.resolve({ intent, target: "engine-source" | "local-path" })
+       └─ PathResolver expands stable source refs
+       └─ EngineClient.registerFile({ filePath, purpose })
        └─ host-api FileAccessRegistry
             ├─ canonicalize path
             ├─ validate allowed roots and symlink escapes
@@ -36,6 +40,26 @@ Compatibility aliases remain:
 - legacy action `source: string`
 
 New code should prefer `files:*` actions, `/v1/files/*` HTTP routes, and `sourceRef`.
+
+## Intent-aware registration
+
+Engine file access receives already-resolved source-intent inputs. Callers must not register Webview URI, thumbnail path, preview cache path, proxy path, preview token URL, blob/object URL, or legacy `cachePath` as an export/package/verify source.
+
+| Operation                        | Required content intent                   | Engine input                                                               |
+| -------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| Final export                     | `final-export`                            | original local source path or engine source token                          |
+| Package/archive assembly         | `package`                                 | original source token, original entry bytes, or original local source path |
+| Hash/probe/dependency validation | `verify`                                  | original local source path or source token                                 |
+| Webview range reads              | `verify` or source-backed preview request | source path resolved through `PathResolver`                                |
+| Edit playback/proxy              | `edit-playback`                           | proxy/runtime stream allowed only for playback                             |
+
+Draft/proxy export is allowed only when the request explicitly sets `qualityMode: "draft-proxy"` and records diagnostics.
+
+## Runtime handle persistence
+
+Engine file tokens, stream ids, range URLs, preview token URLs and websocket URLs are runtime handles. They can be passed during one operation, but persisted project files, Canvas nodes, Agent durable payloads and package manifests must store the stable source ref instead.
+
+If a resumed operation has a runtime ref with a stable `source`, it should discard the expired token and resolve/register the source again. If it only has the token or URL, it must report `missing-source` / `unrecoverable`; it must not infer a file path from token text or nearby cache paths.
 
 ## Extension 侧允许读取
 

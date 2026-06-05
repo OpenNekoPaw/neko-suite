@@ -5,6 +5,7 @@
 - **Scope**: neko-canvas, neko-preview, neko-model, neko-agent, @neko/neko-client, neko-engine
 - **Refines**: `adr-panoramic-image-preview.md` q2 reuse decision (line 378) and NFR reusability (line 140)
 - **Related**: `adr-canvas-block-container.md`, `openspec/changes/canvas-block-container-architecture`
+- **Also Related**: `intent-aware-content-access.md`
 
 ## Context
 
@@ -22,28 +23,28 @@ neko-canvas is an **orchestration tool**, not a content creation or viewing tool
 
 #### Canvas CAN do (DOM-native)
 
-| Asset Type | Static (default) | Dynamic (hover/selected) | Implementation |
-|------------|------------------|--------------------------|----------------|
-| Video | Keyframe thumbnail | Auto-play low-res preview | `<video>` tag, engine pre-transcoded lightweight mp4 |
-| Audio | Waveform image | Play audio + waveform animation | `<audio>` + Canvas 2D waveform |
-| GIF / Animated image | First frame | Play animation | `<img>` native support |
-| Raster image | Thumbnail | - | `<img>` tag |
-| 3D Model | Static screenshot | Pre-rendered turntable video | Engine offline render → mp4 |
-| 2D Skeletal | Static pose screenshot | Pre-rendered animation clip | Engine offline render → mp4/GIF |
-| Panoramic image | Equirectangular flat projection | Pre-rendered rotation video | Engine offline render → mp4/GIF |
+| Asset Type           | Static (default)                | Dynamic (hover/selected)        | Implementation                                       |
+| -------------------- | ------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| Video                | Keyframe thumbnail              | Auto-play low-res preview       | `<video>` tag, engine pre-transcoded lightweight mp4 |
+| Audio                | Waveform image                  | Play audio + waveform animation | `<audio>` + Canvas 2D waveform                       |
+| GIF / Animated image | First frame                     | Play animation                  | `<img>` native support                               |
+| Raster image         | Thumbnail                       | -                               | `<img>` tag                                          |
+| 3D Model             | Static screenshot               | Pre-rendered turntable video    | Engine offline render → mp4                          |
+| 2D Skeletal          | Static pose screenshot          | Pre-rendered animation clip     | Engine offline render → mp4/GIF                      |
+| Panoramic image      | Equirectangular flat projection | Pre-rendered rotation video     | Engine offline render → mp4/GIF                      |
 
 **Rule**: If DOM can play it natively (`<video>`, `<audio>`, `<img>`), the canvas can show a dynamic preview. If it requires WebGL, the canvas shows a pre-rendered substitute.
 
 #### Canvas MUST NOT do
 
-| Capability | Reason | Delegate to |
-|------------|--------|-------------|
-| Real-time 3D rendering | WebGL context per node kills performance | neko-model |
-| Camera orbit / light adjustment | Editing, not orchestration | neko-model |
-| Spherical panorama interaction | Requires WebGL sphere mesh | neko-preview |
-| Video timeline scrubbing | Editing capability | neko-cut |
-| Audio mixing / effects | Editing capability | neko-cut |
-| Material / shader editing | Editing capability | neko-model |
+| Capability                      | Reason                                   | Delegate to  |
+| ------------------------------- | ---------------------------------------- | ------------ |
+| Real-time 3D rendering          | WebGL context per node kills performance | neko-model   |
+| Camera orbit / light adjustment | Editing, not orchestration               | neko-model   |
+| Spherical panorama interaction  | Requires WebGL sphere mesh               | neko-preview |
+| Video timeline scrubbing        | Editing capability                       | neko-cut     |
+| Audio mixing / effects          | Editing capability                       | neko-cut     |
+| Material / shader editing       | Editing capability                       | neko-model   |
 
 #### Interaction: Double-click to Delegate
 
@@ -57,14 +58,14 @@ All canvas nodes follow the same interaction pattern:
 
 ### Plugin Responsibility Matrix
 
-| Plugin | Role | Panoramic/HDR | 3D Model | 2D Skeletal | Video/Audio |
-|--------|------|---------------|----------|-------------|-------------|
-| **neko-canvas** | Orchestration | Flat equirectangular thumbnail | Static screenshot | Static pose | DOM `<video>`/`<audio>` |
-| **neko-agent** | AI assistant | Center-crop 90° FOV thumbnail | Static screenshot | Static pose | Poster/waveform (idle) or neko-client inline playback (active) |
-| **neko-preview** | Professional viewing | Spherical WebGL viewer + HDR tone mapping | - | - | Streaming playback |
-| **neko-model** | 3D editing | IBL environment map (skybox) | R3F 3D viewport | - | - |
-| **neko-puppet** | 2D skeletal editing | - | - | Full skeletal animation editor | - |
-| **neko-cut** | Video editing | - | - | - | Timeline + effects |
+| Plugin           | Role                 | Panoramic/HDR                             | 3D Model          | 2D Skeletal                    | Video/Audio                                                    |
+| ---------------- | -------------------- | ----------------------------------------- | ----------------- | ------------------------------ | -------------------------------------------------------------- |
+| **neko-canvas**  | Orchestration        | Flat equirectangular thumbnail            | Static screenshot | Static pose                    | DOM `<video>`/`<audio>`                                        |
+| **neko-agent**   | AI assistant         | Center-crop 90° FOV thumbnail             | Static screenshot | Static pose                    | Poster/waveform (idle) or neko-client inline playback (active) |
+| **neko-preview** | Professional viewing | Spherical WebGL viewer + HDR tone mapping | -                 | -                              | Streaming playback                                             |
+| **neko-model**   | 3D editing           | IBL environment map (skybox)              | R3F 3D viewport   | -                              | -                                                              |
+| **neko-puppet**  | 2D skeletal editing  | -                                         | -                 | Full skeletal animation editor | -                                                              |
+| **neko-cut**     | Video editing        | -                                         | -                 | -                              | Timeline + effects                                             |
 
 ### Cross-Plugin Data Flow
 
@@ -89,15 +90,16 @@ Direction is always **canvas/agent → specialized plugin**. No specialized plug
 
 Cross-plugin delegation must not introduce import-level dependencies. The only permitted mechanisms are:
 
-| Mechanism | When to use | Example |
-|-----------|-------------|---------|
-| `vscode.commands.executeCommand(id, ...args)` | Fire-and-forget actions, opening editors | `neko.preview.openPanoramicImage`, `neko.preview.openPanoramicVideo`, `neko.preview.openBestPanoramic`, `neko.model.useEnvironment` |
-| `vscode.commands.executeCommand('vscode.openWith', uri, viewType)` | Open a file in a specific custom editor | Open `.hdr` in `neko.preview.panoramicImage`; open trusted 360 video in `neko.preview.panoramicVideo` |
-| `vscode.extensions.getExtension<API>(id)?.exports` | Query capabilities or call methods with return values; `API` must be a local minimal interface or a shared contract | `PreviewPlaybackAPI.probeMedia(path)` |
-| Shared types in `@neko/shared` | Type contracts consumed by multiple extensions | `ImageProbeInfo`, `MediaInfo`, `projectionType` |
-| Shared protobuf in `@neko/proto` | Engine communication contracts | Proto DTOs for engine actions |
+| Mechanism                                                          | When to use                                                                                                         | Example                                                                                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `vscode.commands.executeCommand(id, ...args)`                      | Fire-and-forget actions, opening editors                                                                            | `neko.preview.openPanoramicImage`, `neko.preview.openPanoramicVideo`, `neko.preview.openBestPanoramic`, `neko.model.useEnvironment` |
+| `vscode.commands.executeCommand('vscode.openWith', uri, viewType)` | Open a file in a specific custom editor                                                                             | Open `.hdr` in `neko.preview.panoramicImage`; open trusted 360 video in `neko.preview.panoramicVideo`                               |
+| `vscode.extensions.getExtension<API>(id)?.exports`                 | Query capabilities or call methods with return values; `API` must be a local minimal interface or a shared contract | `PreviewPlaybackAPI.probeMedia(path)`                                                                                               |
+| Shared types in `@neko/shared`                                     | Type contracts consumed by multiple extensions                                                                      | `ImageProbeInfo`, `MediaInfo`, `projectionType`                                                                                     |
+| Shared protobuf in `@neko/proto`                                   | Engine communication contracts                                                                                      | Proto DTOs for engine actions                                                                                                       |
 
 **Prohibited**:
+
 - Direct `import` from another extension's package (violates `no-cross-extension-deps`)
 - Importing another extension's exported API type from its package; consumers must declare the minimal shape locally or use a contract moved to `@neko/shared`
 - Passing live objects (class instances, callbacks) across extension boundaries — use serializable data only
@@ -105,13 +107,13 @@ Cross-plugin delegation must not introduce import-level dependencies. The only p
 
 Final panoramic routing names:
 
-| Route | Value |
-|-------|-------|
-| Panoramic image viewType | `neko.preview.panoramicImage` |
-| Panoramic video viewType | `neko.preview.panoramicVideo` |
-| Explicit image command | `neko.preview.openPanoramicImage` |
-| Explicit video command | `neko.preview.openPanoramicVideo` |
-| Best-effort route command | `neko.preview.openBestPanoramic` |
+| Route                     | Value                             |
+| ------------------------- | --------------------------------- |
+| Panoramic image viewType  | `neko.preview.panoramicImage`     |
+| Panoramic video viewType  | `neko.preview.panoramicVideo`     |
+| Explicit image command    | `neko.preview.openPanoramicImage` |
+| Explicit video command    | `neko.preview.openPanoramicVideo` |
+| Best-effort route command | `neko.preview.openBestPanoramic`  |
 
 ### neko-agent Preview Boundary
 
@@ -135,16 +137,16 @@ Only **one** playback-capable card can be Active at a time (same constraint as c
 
 #### Agent CAN do
 
-| Asset Type | Idle state | Active state (click to play) | Implementation |
-|------------|------------|------------------------------|----------------|
-| Raster image | Thumbnail (ImagePreview) | — (click opens in VSCode) | `<img>` tag |
-| GIF / Animated image | Animated thumbnail | — (click opens in VSCode) | `<img>` native |
-| Video | Engine-provided poster + duration badge | **Inline H.264 playback** via neko-client | `<img>` idle → `<canvas>` + H264StreamClient active |
-| Audio | Engine-provided waveform + duration badge | **Inline PCM playback** via neko-client | `<img>` idle → AudioStreamClient + waveform animation active |
-| Panoramic image | Center-crop 90° FOV thumbnail | — (click opens spherical preview in neko-preview) | Engine `fov-crop` → `<img>`; delegate to `neko.preview.panoramicImage` |
-| 3D Model | Static screenshot | Engine pre-rendered turntable GIF | Engine offline render → `<img src="*.gif">` |
-| 2D Skeletal | Static pose screenshot | Engine pre-rendered animation GIF | Engine offline render → `<img src="*.gif">` |
-| 360° Video | Engine-provided poster + duration badge | — (click opens spherical preview in neko-preview) | Engine `thumbnail` → `<img>`; delegate to `neko.preview.panoramicVideo` |
+| Asset Type           | Idle state                                | Active state (click to play)                      | Implementation                                                          |
+| -------------------- | ----------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
+| Raster image         | Thumbnail (ImagePreview)                  | — (click opens in VSCode)                         | `<img>` tag                                                             |
+| GIF / Animated image | Animated thumbnail                        | — (click opens in VSCode)                         | `<img>` native                                                          |
+| Video                | Engine-provided poster + duration badge   | **Inline H.264 playback** via neko-client         | `<img>` idle → `<canvas>` + H264StreamClient active                     |
+| Audio                | Engine-provided waveform + duration badge | **Inline PCM playback** via neko-client           | `<img>` idle → AudioStreamClient + waveform animation active            |
+| Panoramic image      | Center-crop 90° FOV thumbnail             | — (click opens spherical preview in neko-preview) | Engine `fov-crop` → `<img>`; delegate to `neko.preview.panoramicImage`  |
+| 3D Model             | Static screenshot                         | Engine pre-rendered turntable GIF                 | Engine offline render → `<img src="*.gif">`                             |
+| 2D Skeletal          | Static pose screenshot                    | Engine pre-rendered animation GIF                 | Engine offline render → `<img src="*.gif">`                             |
+| 360° Video           | Engine-provided poster + duration badge   | — (click opens spherical preview in neko-preview) | Engine `thumbnail` → `<img>`; delegate to `neko.preview.panoramicVideo` |
 
 **Constraint**: DOM `<video>` / `<audio>` elements remain prohibited — VSCode webview sandbox has limited codec support. All playback uses neko-client's WebCodecs (H.264 hardware decode → VideoFrame → Canvas 2D `drawImage`) and Web Audio API (PCM f32le → AudioBuffer), which bypass native codec limitations entirely.
 
@@ -152,13 +154,13 @@ Only **one** playback-capable card can be Active at a time (same constraint as c
 
 #### Agent MUST NOT do
 
-| Capability | Reason | Delegate to |
-|------------|--------|-------------|
-| DOM `<video>` / `<audio>` elements | VSCode webview sandbox codec limitations; use neko-client WebCodecs + PCM instead | — |
-| WebGL sphere rendering | Heavyweight, out of scope for chat | neko-preview |
-| HDR tone mapping controls | Editing, not confirmation | neko-preview |
-| Video timeline scrubbing / seek | Editing capability; inline playback is play/stop only | neko-preview |
-| Image zoom/pan viewer | Chat cards are compact; open in VSCode for detail | VSCode image viewer |
+| Capability                         | Reason                                                                            | Delegate to         |
+| ---------------------------------- | --------------------------------------------------------------------------------- | ------------------- |
+| DOM `<video>` / `<audio>` elements | VSCode webview sandbox codec limitations; use neko-client WebCodecs + PCM instead | —                   |
+| WebGL sphere rendering             | Heavyweight, out of scope for chat                                                | neko-preview        |
+| HDR tone mapping controls          | Editing, not confirmation                                                         | neko-preview        |
+| Video timeline scrubbing / seek    | Editing capability; inline playback is play/stop only                             | neko-preview        |
+| Image zoom/pan viewer              | Chat cards are compact; open in VSCode for detail                                 | VSCode image viewer |
 
 #### Inline playback data flow
 
@@ -250,6 +252,19 @@ directly instead of paying a failed video probe first. Canvas Webview components
 they request playback through Extension Host messages, while the host resolves paths, calls
 `MediaPlaybackService`, and owns stream cleanup.
 
+Implementation note (2026-06-05): Canvas preview materialization is now intent-aware. Node cards,
+storyboard shots, imported generated assets and document images request
+`ContentAccessService.resolve({ intent: 'interactive-preview', target: 'webview-uri' })` for
+display. Saved `.nkc` data stores stable source/resource refs and preview descriptors only.
+Runtime preview URLs, `cachePath`, Webview URI, blob/object URL, engine token, stream id,
+preview token, and sequential thumbnail fallback state must not be serialized.
+
+Canvas export/package flows request `final-export` or `package` content from the host. They must
+not reuse card preview URLs, thumbnails, document extracted cache images, or proxy media as source
+inputs unless the operation explicitly selects draft/proxy quality mode. If a legacy shot has only
+`cachePath` and no source/locator, Canvas shows an unresolved preview/export state rather than
+guessing the previous or next image.
+
 ### Refinement: Panoramic Viewer Reuse Scope
 
 `adr-panoramic-image-preview.md` states (line 140, 378, 392):
@@ -260,26 +275,26 @@ they request playback through Extension Host messages, while the host resolves p
 
 This ADR **refines** that decision. "Reuse" means reusing the **protocol, preview assets, and command entry points** — not embedding the WebGL sphere renderer into canvas or agent webviews:
 
-| Reuse type | Allowed | Example |
-|------------|---------|---------|
-| **Command entry point** | Yes | `vscode.commands.executeCommand('neko.preview.openPanoramicImage', uri)` or `vscode.openWith(uri, 'neko.preview.panoramicVideo')` |
-| **Pre-rendered assets** | Yes | Engine-generated turntable mp4, center-crop thumbnails |
-| **Shared types / contracts** | Yes | `ImageProbeInfo`, `projectionType` in `@neko/shared` |
-| **`@neko/panorama-viewer` as iframe / webview panel** | Yes (neko-model only) | neko-model embeds the viewer as an environment map picker panel |
-| **`@neko/panorama-viewer` WebGL component in canvas/agent** | No | Violates lightweight preview boundary |
+| Reuse type                                                  | Allowed               | Example                                                                                                                           |
+| ----------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Command entry point**                                     | Yes                   | `vscode.commands.executeCommand('neko.preview.openPanoramicImage', uri)` or `vscode.openWith(uri, 'neko.preview.panoramicVideo')` |
+| **Pre-rendered assets**                                     | Yes                   | Engine-generated turntable mp4, center-crop thumbnails                                                                            |
+| **Shared types / contracts**                                | Yes                   | `ImageProbeInfo`, `projectionType` in `@neko/shared`                                                                              |
+| **`@neko/panorama-viewer` as iframe / webview panel**       | Yes (neko-model only) | neko-model embeds the viewer as an environment map picker panel                                                                   |
+| **`@neko/panorama-viewer` WebGL component in canvas/agent** | No                    | Violates lightweight preview boundary                                                                                             |
 
 neko-model may embed the sphere viewer for environment map editing (its WebGL context is already justified by R3F). Canvas and agent must not — they consume pre-rendered substitutes and delegate interactive viewing to neko-preview.
 
 ### neko-preview vs neko-model for Panoramic Content
 
-| Dimension | neko-preview | neko-model |
-|-----------|-------------|------------|
-| **Purpose** | "What does this panorama look like?" | "How does this environment light my scene?" |
-| **User intent** | Browse, inspect asset quality | Create, adjust 3D scene |
-| **Panorama role** | Primary content, full-screen viewing | Background environment, providing IBL |
-| **Interaction** | Drag to look around, zoom, tone mapping | Orbit camera, adjust exposure, rotate env map |
-| **Output** | Read-only (no modification) | Scene file (.nkm) with skybox reference |
-| **Startup cost** | Lightweight WebGL sphere renderer | Full R3F + ECS scene, heavy |
+| Dimension         | neko-preview                            | neko-model                                    |
+| ----------------- | --------------------------------------- | --------------------------------------------- |
+| **Purpose**       | "What does this panorama look like?"    | "How does this environment light my scene?"   |
+| **User intent**   | Browse, inspect asset quality           | Create, adjust 3D scene                       |
+| **Panorama role** | Primary content, full-screen viewing    | Background environment, providing IBL         |
+| **Interaction**   | Drag to look around, zoom, tone mapping | Orbit camera, adjust exposure, rotate env map |
+| **Output**        | Read-only (no modification)             | Scene file (.nkm) with skybox reference       |
+| **Startup cost**  | Lightweight WebGL sphere renderer       | Full R3F + ECS scene, heavy                   |
 
 **Conclusion**: Panoramic preview belongs in neko-preview. neko-model consumes panoramic images as environment maps but is not a panorama viewer.
 
