@@ -108,6 +108,7 @@ describe('chatProvider', () => {
       '/mock/workspace',
       '/external/media-library',
       '/global/neko-agent',
+      '/mock/workspace/.neko/.cache/document-image-cache',
       '/global/neko-agent/document-image-cache',
       '/mock/workspace/.neko/.cache',
     ]);
@@ -140,6 +141,32 @@ describe('chatProvider', () => {
       '/ext/neko-agent/dist/webview',
       '/global/neko-agent',
       '/global/neko-agent/document-image-cache',
+    ]);
+
+    access.dispose();
+  });
+
+  it('re-authorizes workspace resource cache paths when a restored webview has stale roots', async () => {
+    const extensionUri = vscode.Uri.file('/ext/neko-agent');
+    const context = {
+      globalStorageUri: vscode.Uri.file('/global/neko-agent'),
+    } as vscode.ExtensionContext;
+    const webview = vscode.createMockWebview();
+    webview.options = {
+      localResourceRoots: [vscode.Uri.file('/ext/neko-agent/dist/webview')],
+    };
+
+    const access = createChatLocalResourceAccess(extensionUri, context);
+    const uri = access.toWebviewUri(
+      webview as any,
+      '/mock/workspace/.neko/.cache/resources/documents/res_1/page.jpg',
+      'test',
+    );
+
+    expect(uri).toBe('file:///mock/workspace/.neko/.cache/resources/documents/res_1/page.jpg');
+    expect(webview.options.localResourceRoots?.map((root) => root.fsPath)).toEqual([
+      '/ext/neko-agent/dist/webview',
+      '/mock/workspace/.neko/.cache',
     ]);
 
     access.dispose();

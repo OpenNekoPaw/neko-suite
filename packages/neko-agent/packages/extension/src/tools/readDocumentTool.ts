@@ -51,6 +51,11 @@ type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
   readonly cacheResourceRef?: import('@neko/shared').ResourceRef;
 };
 
+interface ProjectedDocumentImages {
+  readonly imagePaths: readonly string[];
+  readonly imageInfo: readonly DocumentImageInfoWithCacheResourceRef[];
+}
+
 type ReadDocumentMode = 'content' | 'manifest' | 'range' | 'next';
 
 export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
@@ -263,7 +268,7 @@ async function formatDocumentReadResult(
   const visibleImagePaths = options.includeImagePaths
     ? imagePaths.slice(0, options.imagePathLimit)
     : [];
-  const visibleImageInfo = await filterImageInfoByVisiblePaths(
+  const visibleImages = await projectVisibleDocumentImages(
     result.imageInfo,
     visibleImagePaths,
     options.imagePathLimit,
@@ -296,23 +301,23 @@ async function formatDocumentReadResult(
 
   return stripUndefinedProperties({
     ...result,
-    imagePaths: imagePaths.length > 0 ? visibleImagePaths : undefined,
-    imageInfo: imagePaths.length > 0 ? visibleImageInfo : undefined,
+    imagePaths: imagePaths.length > 0 ? visibleImages.imagePaths : undefined,
+    imageInfo: imagePaths.length > 0 ? visibleImages.imageInfo : undefined,
     excerpt,
     metadata,
     manifest: options.includeManifest ? result.manifest : undefined,
   });
 }
 
-async function filterImageInfoByVisiblePaths(
+async function projectVisibleDocumentImages(
   imageInfo: readonly DocumentImageInfo[] | undefined,
   visibleImagePaths: readonly string[],
   imagePathLimit: number,
   resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): Promise<readonly DocumentImageInfoWithCacheResourceRef[]> {
+): Promise<ProjectedDocumentImages> {
   if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
-    return [];
+    return { imagePaths: visibleImagePaths, imageInfo: [] };
   }
   const visiblePathSet = new Set(visibleImagePaths);
   const byPath = imageInfo.filter((image) => visiblePathSet.has(image.path));
@@ -320,9 +325,13 @@ async function filterImageInfoByVisiblePaths(
     byPath.length > 0
       ? byPath.slice(0, visibleImagePaths.length)
       : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
-  return Promise.all(
+  const projectedInfo = await Promise.all(
     visible.map((image) => withCacheResourceRef(image, resourceCache, resolveResourceScope)),
   );
+  return {
+    imagePaths: mergeProjectedImagePaths(visibleImagePaths, visible, projectedInfo),
+    imageInfo: projectedInfo,
+  };
 }
 
 async function withCacheResourceRef(
@@ -336,11 +345,25 @@ async function withCacheResourceRef(
     legacyRef,
     resolveResourceScope?.() ?? 'project',
   );
-  await materializeDocumentResource(resourceCache, cacheResourceRef, image);
+  const materializedPath = await materializeDocumentResource(
+    resourceCache,
+    cacheResourceRef,
+    image,
+  );
+  const nextPath = materializedPath ?? image.path;
+  const resourceRef = {
+    ...legacyRef,
+    ...(nextPath ? { cachePath: nextPath } : {}),
+  };
+  const nextCacheResourceRef =
+    nextPath === image.path
+      ? cacheResourceRef
+      : createDocumentResourceRefFromArchiveRef(resourceRef, cacheResourceRef.scope);
   return {
     ...image,
-    resourceRef: legacyRef,
-    cacheResourceRef,
+    path: nextPath,
+    resourceRef,
+    cacheResourceRef: nextCacheResourceRef,
   };
 }
 
@@ -348,19 +371,21 @@ async function materializeDocumentResource(
   resourceCache: ResourceCacheService | undefined,
   resourceRef: ResourceRef,
   image: DocumentImageInfo,
-): Promise<void> {
+): Promise<string | undefined> {
   if (!resourceCache || resourceRef.scope !== 'project') {
-    return;
+    return undefined;
   }
   try {
-    await resourceCache.ensure(resourceRef, {
+    const result = await resourceCache.ensure(resourceRef, {
       role: 'document-entry',
       ...(image.mimeType ? { mimeType: image.mimeType } : {}),
       ...(image.width !== undefined ? { width: image.width } : {}),
       ...(image.height !== undefined ? { height: image.height } : {}),
     });
+    return result.status === 'ready' ? result.absolutePath : undefined;
   } catch {
     // The document result still carries the stable ref; Canvas can materialize through legacy metadata.
+    return undefined;
   }
 }
 
@@ -441,7 +466,7 @@ async function formatReadDocumentData(input: {
     input.includeImagePaths && imagePaths.length > 0
       ? imagePaths.slice(0, input.imagePathLimit)
       : [];
-  const visibleImageInfo = await filterImageInfoByVisiblePaths(
+  const visibleImages = await projectVisibleDocumentImages(
     input.content.imageInfo,
     visibleImagePaths,
     input.imagePathLimit,
@@ -461,13 +486,34 @@ async function formatReadDocumentData(input: {
       : {}),
     ...(imagePaths.length > 0
       ? {
-          imagePaths: visibleImagePaths,
-          ...(visibleImageInfo.length > 0 ? { imageInfo: visibleImageInfo } : {}),
+          imagePaths: visibleImages.imagePaths,
+          ...(visibleImages.imageInfo.length > 0 ? { imageInfo: visibleImages.imageInfo } : {}),
           imagePathCount: imagePaths.length,
           imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
         }
       : {}),
   };
+}
+
+function mergeProjectedImagePaths(
+  visibleImagePaths: readonly string[],
+  originalInfo: readonly DocumentImageInfo[],
+  projectedInfo: readonly DocumentImageInfo[],
+): readonly string[] {
+  if (projectedInfo.length === 0) {
+    return visibleImagePaths;
+  }
+  const byOriginalPath = new Map<string, string>();
+  for (let index = 0; index < originalInfo.length; index += 1) {
+    const originalPath = originalInfo[index]?.path;
+    const projectedPath = projectedInfo[index]?.path;
+    if (originalPath && projectedPath) {
+      byOriginalPath.set(originalPath, projectedPath);
+    }
+  }
+  return visibleImagePaths.map((imagePath, index) => {
+    return byOriginalPath.get(imagePath) ?? projectedInfo[index]?.path ?? imagePath;
+  });
 }
 
 function truncateText(text: string, maxChars: number): { text: string; truncated: boolean } {

@@ -238,6 +238,27 @@ describe('createReadDocumentTool', () => {
       }),
       { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
     );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/page.png'],
+        imageInfo: [
+          expect.objectContaining({
+            path: '/workspace/.neko/.cache/resources/documents/page.png',
+            resourceRef: expect.objectContaining({
+              cachePath: '/workspace/.neko/.cache/resources/documents/page.png',
+            }),
+            cacheResourceRef: expect.objectContaining({
+              provider: 'document-archive',
+              source: expect.objectContaining({
+                metadata: expect.objectContaining({
+                  legacyCachePath: '/workspace/.neko/.cache/resources/documents/page.png',
+                }),
+              }),
+            }),
+          }),
+        ],
+      }),
+    );
   });
 
   it('marks no-workspace document image refs as extension-private and non-portable', async () => {

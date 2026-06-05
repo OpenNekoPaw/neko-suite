@@ -32,6 +32,15 @@ describe('DocumentResourceCacheProvider', () => {
       format: 'epub',
       legacyCachePath: '/tmp/page-1.jpg',
     });
+    expect(ref.id).toBe(
+      createDocumentResourceRefFromArchiveRef({
+        kind: 'document-entry',
+        source,
+        entryPath: 'OPS/page-1.jpg',
+        locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml', spineIndex: 0 },
+        cachePath: '/tmp/other-run/page-1.jpg',
+      }).id,
+    );
     expect(ref.locator).toMatchObject({
       kind: 'document',
       entryPath: 'OPS/page-1.jpg',

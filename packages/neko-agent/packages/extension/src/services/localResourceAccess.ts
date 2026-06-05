@@ -17,7 +17,11 @@ import {
   type LocalResourceRootProvider,
 } from '@neko/shared/vscode/extension';
 import { getLogger } from '../base';
-import { getDocumentImageCacheUri } from './documentCachePaths';
+import {
+  getDocumentImageCacheUri,
+  getLegacyDocumentImageCacheUri,
+  getWorkspaceCacheUri,
+} from './documentCachePaths';
 
 const logger = getLogger('AgentLocalResourceAccess');
 
@@ -53,7 +57,14 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
 
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
     const documentImageCacheUri = getDocumentImageCacheUri(context);
-    this.requiredCacheRoots = [context.globalStorageUri, documentImageCacheUri];
+    const legacyDocumentImageCacheUri = getLegacyDocumentImageCacheUri(context);
+    const workspaceCacheUri = getWorkspaceCacheUri();
+    this.requiredCacheRoots = [
+      context.globalStorageUri,
+      ...(workspaceCacheUri ? [workspaceCacheUri] : []),
+      documentImageCacheUri,
+      legacyDocumentImageCacheUri,
+    ];
     this.service = new VSCodeLocalResourceAccessService({
       logger,
       rootProviders: [
@@ -61,9 +72,9 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
         createWorkspaceLocalResourceRootProvider(),
         this.mediaLibraryRoots,
         createExtensionCacheLocalResourceRootProvider(context),
-        createExtensionCacheLocalResourceRootProvider(context, 'document-image-cache'),
         createStaticLocalResourceRootProvider('agent-document-image-cache', 'extension-cache', [
           documentImageCacheUri,
+          legacyDocumentImageCacheUri,
         ]),
         createWorkspaceCacheLocalResourceRootProvider(),
       ],

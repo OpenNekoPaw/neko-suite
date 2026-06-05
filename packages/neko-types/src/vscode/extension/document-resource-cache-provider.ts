@@ -165,6 +165,19 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
       ...(input.cachePath ? { legacyCachePath: input.cachePath } : {}),
     },
   };
+  const stableSource: ResourceSourceRef = {
+    ...source,
+    metadata: {
+      format: input.source.format,
+      ...(input.scope === 'extension-private'
+        ? {
+            cacheScope: 'extension-private',
+            nonPortable: true,
+            nonPortableReason: 'no-workspace-or-extension-private-scratch',
+          }
+        : {}),
+    },
+  };
   const fingerprint = createResourceFingerprint({
     strategy: input.source.identity ? 'identity' : input.source.fileId ? 'identity' : 'provider',
     value:
@@ -180,11 +193,11 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
     providerId: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
   });
 
-  return createResourceRef({
+  const ref = createResourceRef({
     scope: input.scope ?? 'project',
     provider: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
     kind: 'document',
-    source,
+    source: stableSource,
     locator:
       input.locator || input.entryPath
         ? {
@@ -195,6 +208,13 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
         : undefined,
     fingerprint,
   });
+
+  return input.cachePath
+    ? {
+        ...ref,
+        source,
+      }
+    : ref;
 }
 
 export function createDocumentResourceRefFromArchiveRef(

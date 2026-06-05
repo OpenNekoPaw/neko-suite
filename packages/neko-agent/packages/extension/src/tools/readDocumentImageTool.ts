@@ -210,8 +210,10 @@ export async function executeReadDocumentImage(
                   deps.resolveResourceScope,
                 )
               : undefined;
+            const nextPath = documentImage?.path;
             return {
               ...image,
+              ...(nextPath ? { path: nextPath } : {}),
               ...(documentImage ? { documentImage } : {}),
               ...(documentImage?.cacheResourceRef
                 ? { cacheResourceRef: documentImage.cacheResourceRef }
@@ -298,11 +300,25 @@ async function withCacheResourceRef(
     legacyRef,
     resolveResourceScope?.() ?? 'project',
   );
-  await materializeDocumentResource(resourceCache, cacheResourceRef, image);
+  const materializedPath = await materializeDocumentResource(
+    resourceCache,
+    cacheResourceRef,
+    image,
+  );
+  const nextPath = materializedPath ?? image.path;
+  const resourceRef = {
+    ...legacyRef,
+    ...(nextPath ? { cachePath: nextPath } : {}),
+  };
+  const nextCacheResourceRef =
+    nextPath === image.path
+      ? cacheResourceRef
+      : createDocumentResourceRefFromArchiveRef(resourceRef, cacheResourceRef.scope);
   return {
     ...image,
-    resourceRef: legacyRef,
-    cacheResourceRef,
+    path: nextPath,
+    resourceRef,
+    cacheResourceRef: nextCacheResourceRef,
   };
 }
 
@@ -310,19 +326,21 @@ async function materializeDocumentResource(
   resourceCache: ResourceCacheService | undefined,
   resourceRef: ResourceRef,
   image: DocumentImageInfo,
-): Promise<void> {
+): Promise<string | undefined> {
   if (!resourceCache || resourceRef.scope !== 'project') {
-    return;
+    return undefined;
   }
   try {
-    await resourceCache.ensure(resourceRef, {
+    const result = await resourceCache.ensure(resourceRef, {
       role: 'document-entry',
       ...(image.mimeType ? { mimeType: image.mimeType } : {}),
       ...(image.width !== undefined ? { width: image.width } : {}),
       ...(image.height !== undefined ? { height: image.height } : {}),
     });
+    return result.status === 'ready' ? result.absolutePath : undefined;
   } catch {
     // Keep the stable ref in the tool result even when prewarming the shared cache fails.
+    return undefined;
   }
 }
 
