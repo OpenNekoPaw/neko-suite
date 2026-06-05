@@ -257,6 +257,50 @@ describe('resource cache service', () => {
     });
   });
 
+  it('caches manifest reads and batches access-time touches', async () => {
+    let now = '2026-06-05T00:00:00.000Z';
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService({
+      providers: [provider],
+      now: () => now,
+      touchFlushIntervalMs: 60_000,
+    });
+
+    await service.ensure(ref, variant);
+    const readCountAfterEnsure = fsOps.readCalls.length;
+    const writeCountAfterEnsure = fsOps.writeCalls.length;
+
+    now = '2026-06-05T00:00:01.000Z';
+    await service.resolve(ref, variant);
+    now = '2026-06-05T00:00:02.000Z';
+    await service.resolve(ref, variant);
+
+    expect(fsOps.readCalls).toHaveLength(readCountAfterEnsure);
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+
+    now = '2026-06-05T00:00:03.000Z';
+    const stats = await service.stats();
+    expect(stats.lastAccessedAt).toBe('2026-06-05T00:00:03.000Z');
+    expect(fsOps.writeCalls.length).toBe(writeCountAfterEnsure + 1);
+
+    const manifest = JSON.parse(
+      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
+    );
+    expect(manifest.entries[ref.id].variants[0]).toMatchObject({
+      lastAccessedAt: '2026-06-05T00:00:03.000Z',
+    });
+  });
+
   it('invalidates entries and garbage collects rebuildable variants by quota', async () => {
     const oldNow = '2026-06-05T00:00:00.000Z';
     const newNow = '2026-06-05T00:00:01.000Z';
@@ -392,6 +436,37 @@ describe('resource cache service', () => {
     expect(fsOps.files.has('/workspace/.neko/.cache/resources/active.jpg')).toBe(true);
   });
 
+  it('does not evict at exact quota and evicts once the quota is lower than usage', async () => {
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService({ providers: [provider] });
+
+    await service.ensure(ref, variant);
+
+    await expect(service.gc({ projectMaxBytes: 128 })).resolves.toEqual({
+      removedCount: 0,
+      removedBytes: 0,
+      skippedCount: 0,
+      skippedReasons: {},
+    });
+    expect(fsOps.files.has(absolutePath)).toBe(true);
+
+    await expect(service.gc({ projectMaxBytes: 127 })).resolves.toMatchObject({
+      removedCount: 1,
+      removedBytes: 128,
+    });
+    expect(fsOps.files.has(absolutePath)).toBe(false);
+  });
+
   it('reports extension-private refs as non-portable through shared resolution', async () => {
     const service = createService([]);
     const scratchRef: ResourceRef = { ...ref, scope: 'extension-private' };
@@ -467,10 +542,25 @@ describe('resource cache service', () => {
   });
 
   function createService(
-    providers: readonly ResourceCacheProvider[],
+    input:
+      | readonly ResourceCacheProvider[]
+      | {
+          readonly providers: readonly ResourceCacheProvider[];
+          readonly logger?: { warn: ReturnType<typeof vi.fn> };
+          readonly now?: () => string;
+          readonly touchFlushIntervalMs?: number;
+        },
     logger?: { warn: ReturnType<typeof vi.fn> },
     now: () => string = () => '2026-06-05T00:00:00.000Z',
   ): VSCodeResourceCacheService {
+    const options = Array.isArray(input)
+      ? { providers: input, logger, now }
+      : {
+          providers: input.providers,
+          logger: input.logger,
+          now: input.now ?? (() => '2026-06-05T00:00:00.000Z'),
+          touchFlushIntervalMs: input.touchFlushIntervalMs,
+        };
     return new VSCodeResourceCacheService({
       cacheRoot: '/workspace/.neko/.cache/resources',
       manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
@@ -479,11 +569,14 @@ describe('resource cache service', () => {
       extensionPrivateRoot:
         '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent',
       localResourceAccess,
-      providers,
+      providers: options.providers,
       fsOps,
-      now,
-      logger,
+      now: options.now,
+      logger: options.logger,
       maxConcurrentEnsures: 1,
+      ...(options.touchFlushIntervalMs !== undefined
+        ? { touchFlushIntervalMs: options.touchFlushIntervalMs }
+        : {}),
     });
   }
 });
@@ -529,11 +622,13 @@ function createLocalResourceAccess(
 class FakeFsOps implements ResourceCacheFsOps {
   readonly files = new Map<string, string>();
   readonly mkdirCalls: string[] = [];
+  readonly readCalls: string[] = [];
   readonly writeCalls: Array<{ path: string; content: string }> = [];
   readonly renameCalls: Array<{ oldPath: string; newPath: string }> = [];
   readonly rmCalls: string[] = [];
 
   async readFile(filePath: string): Promise<string> {
+    this.readCalls.push(filePath);
     const value = this.files.get(filePath);
     if (value === undefined) {
       throw new Error(`ENOENT: ${filePath}`);

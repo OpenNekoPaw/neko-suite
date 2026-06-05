@@ -310,6 +310,8 @@ describe('canvasEditorProvider message contracts', () => {
     it('projects document resource refs directly instead of routing them through preview engine variants', () => {
       expect(providerSource).toContain('VSCodeResourceCacheService');
       expect(providerSource).toContain('LegacyResourceCacheProvider');
+      expect(providerSource).toContain('os.homedir() || workspaceRoot');
+      expect(providerSource).not.toContain('process.env.HOME');
       expect(providerSource).toContain('projectResourceCacheVariant(');
       expect(providerSource).toContain('resourceRef = isResourceRef(message.resourceRef)');
       expect(providerSource).toContain('const documentResourceRef = isDocumentArchiveResourceRef');

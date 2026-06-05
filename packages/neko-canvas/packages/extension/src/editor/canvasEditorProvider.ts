@@ -6,6 +6,7 @@
  */
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
@@ -461,7 +462,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (!workspaceRoot) {
       return undefined;
     }
-    const layout = resolveStorageLayout(workspaceRoot, process.env.HOME ?? workspaceRoot);
+    const layout = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot);
     return new VSCodeResourceCacheService({
       cacheRoot: layout.project.local.cache.resources,
       manifestPath: layout.project.local.cache.resourceManifest,

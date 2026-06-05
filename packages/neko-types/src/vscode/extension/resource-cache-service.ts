@@ -159,9 +159,11 @@ export interface VSCodeResourceCacheServiceOptions {
   readonly now?: () => string;
   readonly logger?: ResourceCacheLogger;
   readonly maxConcurrentEnsures?: number;
+  readonly touchFlushIntervalMs?: number;
 }
 
 const DEFAULT_MAX_CONCURRENT_ENSURES = 4;
+const DEFAULT_TOUCH_FLUSH_INTERVAL_MS = 60_000;
 
 export class JsonResourceCacheManifestStore implements ResourceCacheManifestStore {
   private readonly manifestPath: string;
@@ -169,6 +171,7 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
   private readonly fsOps: ResourceCacheFsOps;
   private readonly now: () => string;
   private writeChain: Promise<void> = Promise.resolve();
+  private cachedManifest: ResourceCacheManifest | undefined;
 
   constructor(options: JsonResourceCacheManifestStoreOptions) {
     this.manifestPath = options.manifestPath;
@@ -178,28 +181,28 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
   }
 
   async load(): Promise<ResourceCacheManifest> {
+    if (this.cachedManifest) {
+      return this.cachedManifest;
+    }
+
     try {
       const raw = await this.fsOps.readFile(this.manifestPath, 'utf-8');
       const parsed: unknown = JSON.parse(raw);
       if (isResourceCacheManifest(parsed)) {
+        this.cachedManifest = parsed;
         return parsed;
       }
     } catch {
       // Missing or invalid manifests are rebuildable cache misses.
     }
 
-    return createEmptyManifest(this.now(), this.projectRoot);
+    const manifest = createEmptyManifest(this.now(), this.projectRoot);
+    this.cachedManifest = manifest;
+    return manifest;
   }
 
   async save(manifest: ResourceCacheManifest): Promise<void> {
-    const operation = async () => {
-      await this.fsOps.mkdir(path.dirname(this.manifestPath), { recursive: true });
-      const tmpPath = `${this.manifestPath}.tmp`;
-      await this.fsOps.writeFile(tmpPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
-      await this.fsOps.rename(tmpPath, this.manifestPath);
-    };
-
-    const next = this.writeChain.catch(() => undefined).then(operation);
+    const next = this.writeChain.catch(() => undefined).then(() => this.saveUnlocked(manifest));
     this.writeChain = next.then(
       () => undefined,
       () => undefined,
@@ -212,10 +215,29 @@ export class JsonResourceCacheManifestStore implements ResourceCacheManifestStor
       manifest: ResourceCacheManifest,
     ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
   ): Promise<ResourceCacheManifest> {
-    const current = await this.load();
-    const next = await operation(current);
-    await this.save(next);
-    return next;
+    let updated: ResourceCacheManifest | undefined;
+    const updateOperation = async () => {
+      const current = await this.load();
+      const next = await operation(current);
+      await this.saveUnlocked(next);
+      updated = next;
+    };
+
+    const next = this.writeChain.catch(() => undefined).then(updateOperation);
+    this.writeChain = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    await next;
+    return updated ?? this.load();
+  }
+
+  private async saveUnlocked(manifest: ResourceCacheManifest): Promise<void> {
+    await this.fsOps.mkdir(path.dirname(this.manifestPath), { recursive: true });
+    const tmpPath = `${this.manifestPath}.tmp`;
+    await this.fsOps.writeFile(tmpPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+    await this.fsOps.rename(tmpPath, this.manifestPath);
+    this.cachedManifest = manifest;
   }
 }
 
@@ -231,8 +253,14 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   private readonly now: () => string;
   private readonly logger?: ResourceCacheLogger;
   private readonly maxConcurrentEnsures: number;
+  private readonly touchFlushIntervalMs: number;
   private readonly inFlightEnsures = new Map<string, Promise<ResourceCacheOperationResult>>();
+  private readonly pendingTouches = new Map<
+    string,
+    { readonly resourceId: string; readonly variantKey: string }
+  >();
   private readonly ensureQueue: Array<() => void> = [];
+  private lastTouchFlushMs = Date.now();
   private activeEnsures = 0;
 
   constructor(options: VSCodeResourceCacheServiceOptions) {
@@ -245,6 +273,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     this.now = options.now ?? (() => new Date().toISOString());
     this.logger = options.logger;
     this.maxConcurrentEnsures = options.maxConcurrentEnsures ?? DEFAULT_MAX_CONCURRENT_ENSURES;
+    this.touchFlushIntervalMs = options.touchFlushIntervalMs ?? DEFAULT_TOUCH_FLUSH_INTERVAL_MS;
     this.store = new JsonResourceCacheManifestStore({
       manifestPath: options.manifestPath,
       projectRoot: options.projectRoot,
@@ -406,6 +435,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   async invalidate(ref: ResourceRef): Promise<void> {
     const provider = this.providers.get(ref.provider);
     await provider?.invalidate?.(ref);
+    await this.flushTouches();
 
     await this.store.update((manifest) => {
       const entry = manifest.entries[ref.id];
@@ -432,10 +462,12 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   }
 
   async stats(): Promise<ResourceCacheStats> {
+    await this.flushTouches();
     return computeStats(await this.store.load());
   }
 
   async gc(policy: ResourceCacheQuotaPolicy): Promise<ResourceCacheGcResult> {
+    await this.flushTouches();
     const manifest = await this.store.load();
     const maxBytes = policy.projectMaxBytes ?? policy.globalMaxBytes;
     if (maxBytes === undefined) {
@@ -672,27 +704,62 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   }
 
   private async touch(resourceId: string, variantKey: string): Promise<void> {
+    this.pendingTouches.set(`${resourceId}:${variantKey}`, { resourceId, variantKey });
+    const nowMs = Date.now();
+    if (
+      this.touchFlushIntervalMs <= 0 ||
+      nowMs - this.lastTouchFlushMs >= this.touchFlushIntervalMs
+    ) {
+      await this.flushTouches();
+    }
+  }
+
+  private async flushTouches(): Promise<void> {
+    if (this.pendingTouches.size === 0) {
+      return;
+    }
+
+    const touches = [...this.pendingTouches.values()];
+    this.pendingTouches.clear();
+    this.lastTouchFlushMs = Date.now();
     const now = this.now();
-    await this.store.update((manifest) => {
-      const entry = manifest.entries[resourceId];
-      if (!entry) return manifest;
-      const entries = {
-        ...manifest.entries,
-        [resourceId]: {
-          ...entry,
-          lastAccessedAt: now,
-          variants: entry.variants.map((variant) =>
-            variant.key === variantKey ? { ...variant, lastAccessedAt: now } : variant,
-          ),
-        },
-      };
-      return {
-        ...manifest,
-        updatedAt: now,
-        entries,
-        stats: computeStats({ ...manifest, entries }),
-      };
-    });
+    try {
+      await this.store.update((manifest) => {
+        let changed = false;
+        const entries = { ...manifest.entries };
+        for (const touch of touches) {
+          const entry = entries[touch.resourceId];
+          if (!entry) continue;
+          let entryChanged = false;
+          const variants = entry.variants.map((variant) => {
+            if (variant.key !== touch.variantKey) {
+              return variant;
+            }
+            entryChanged = true;
+            return { ...variant, lastAccessedAt: now };
+          });
+          if (!entryChanged) continue;
+          changed = true;
+          entries[touch.resourceId] = {
+            ...entry,
+            lastAccessedAt: now,
+            variants,
+          };
+        }
+        if (!changed) return manifest;
+        return {
+          ...manifest,
+          updatedAt: now,
+          entries,
+          stats: computeStats({ ...manifest, entries }),
+        };
+      });
+    } catch (error) {
+      for (const touch of touches) {
+        this.pendingTouches.set(`${touch.resourceId}:${touch.variantKey}`, touch);
+      }
+      throw error;
+    }
   }
 
   private resolveVariantPath(variant: ResourceCacheVariantEntry): string | undefined {
