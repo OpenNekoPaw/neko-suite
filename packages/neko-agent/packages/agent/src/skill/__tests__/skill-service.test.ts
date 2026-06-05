@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillService, createSkillService } from '../skill-service';
 import { SkillInjector } from '../skill-injector';
+import { KeywordSkillMatcher } from '../skill-matcher';
 import type {
   Skill,
   SkillMatch,
@@ -358,5 +359,56 @@ describe('SkillService', () => {
 
       expect(result).toBeNull();
     });
+  });
+});
+
+describe('KeywordSkillMatcher', () => {
+  it('matches Chinese storyboard-table requests through produced artifacts', () => {
+    const matcher = new KeywordSkillMatcher();
+    const storyboardSkill = makeSkill({
+      name: 'comic-to-storyboard',
+      description: 'Convert manga/comic pages into structured StoryboardTableV1 storyboards.',
+      mediaWorkflow: {
+        producedArtifacts: ['storyboard-table'],
+        tags: ['comic', 'manga', 'storyboard'],
+      },
+    });
+
+    const matches = matcher.match('生成分镜表', [storyboardSkill]);
+
+    expect(matches[0]).toEqual(
+      expect.objectContaining({
+        skill: storyboardSkill,
+        relevance: 0.95,
+        reason: expect.stringContaining("Matched artifact 'storyboard-table'"),
+      }),
+    );
+  });
+
+  it('prioritizes focused storyboard producers over broad media orchestrators', () => {
+    const matcher = new KeywordSkillMatcher();
+    const broadSkill = makeSkill({
+      name: 'media-to-video',
+      description: 'Coordinate media-to-video workflows.',
+      mediaWorkflow: {
+        producedArtifacts: ['storyboard-table', 'animation-plan', 'cut-storyboard-payload'],
+        tags: ['media-to-video', 'orchestration', 'storyboard'],
+      },
+    });
+    const focusedSkill = makeSkill({
+      name: 'comic-to-storyboard',
+      description: 'Convert manga/comic pages into structured StoryboardTableV1 storyboards.',
+      mediaWorkflow: {
+        producedArtifacts: ['storyboard-table'],
+        tags: ['comic', 'manga', 'storyboard'],
+      },
+    });
+
+    const matches = matcher.match('生成分镜表', [broadSkill, focusedSkill]);
+
+    expect(matches.map((match) => match.skill.name)).toEqual([
+      'comic-to-storyboard',
+      'media-to-video',
+    ]);
   });
 });

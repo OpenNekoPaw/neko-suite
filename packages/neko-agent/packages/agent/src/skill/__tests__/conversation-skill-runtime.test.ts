@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Skill, SkillInjection } from '@neko/shared';
+import type { Skill, SkillDiscoveryResult, SkillInjection } from '@neko/shared';
 import { ConversationSkillRuntime } from '../conversation-skill-runtime';
 
 function createSkill(name: string, command?: string): Skill {
@@ -13,7 +13,14 @@ function createSkill(name: string, command?: string): Skill {
   };
 }
 
-function createSkillService(skills: readonly Skill[]) {
+function createSkillService(
+  skills: readonly Skill[],
+  discoverResult: SkillDiscoveryResult = {
+    found: false,
+    matches: [],
+    requiresConfirmation: false,
+  },
+) {
   return {
     registry: {
       listSkills: vi.fn(() => skills),
@@ -21,6 +28,7 @@ function createSkillService(skills: readonly Skill[]) {
       getSkillByCommand: vi.fn((command: string) =>
         skills.find((skill) => skill.command === command),
       ),
+      ensureLoaded: vi.fn(async (name: string) => skills.find((skill) => skill.name === name)),
     },
     apply: vi.fn(
       async (skill: Skill, args?: string): Promise<SkillInjection> => ({
@@ -30,7 +38,7 @@ function createSkillService(skills: readonly Skill[]) {
         allowedTools: ['read'],
       }),
     ),
-    discover: vi.fn(() => ({ found: false, matches: [], requiresConfirmation: false })),
+    discover: vi.fn(() => discoverResult),
   };
 }
 
@@ -109,5 +117,62 @@ describe('ConversationSkillRuntime', () => {
       systemPrompt: 'review instructions',
       allowedTools: ['read'],
     });
+  });
+
+  it('auto-activates high-confidence discovered skills for a conversation', async () => {
+    const storyboard = createSkill('comic-to-storyboard');
+    const skillService = createSkillService([storyboard], {
+      found: true,
+      matches: [{ skill: storyboard, relevance: 0.95, reason: 'artifact match' }],
+      topMatch: { skill: storyboard, relevance: 0.95, reason: 'artifact match' },
+      requiresConfirmation: false,
+    });
+    const bridge = {
+      applySkillInjection: vi.fn(),
+      clearActiveSkill: vi.fn(),
+    };
+    const runtime = new ConversationSkillRuntime({
+      skillService: skillService as any,
+      agentBridge: bridge,
+      now: () => 99,
+    });
+
+    const result = await runtime.autoActivateSkill({
+      conversationId: 'conv-1',
+      userInput: '生成分镜表',
+    });
+
+    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('comic-to-storyboard');
+    expect(result).toEqual(expect.objectContaining({ applied: true, skill: storyboard }));
+    expect(runtime.getActiveSkill('conv-1')).toEqual({
+      skill: storyboard,
+      injection: expect.objectContaining({ name: 'comic-to-storyboard' }),
+      appliedAt: 99,
+    });
+    expect(bridge.applySkillInjection).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ name: 'comic-to-storyboard' }),
+      storyboard,
+    );
+  });
+
+  it('does not auto-activate matches that require confirmation', async () => {
+    const storyboard = createSkill('comic-to-storyboard');
+    const skillService = createSkillService([storyboard], {
+      found: true,
+      matches: [{ skill: storyboard, relevance: 0.5, reason: 'weak match' }],
+      topMatch: { skill: storyboard, relevance: 0.5, reason: 'weak match' },
+      requiresConfirmation: true,
+    });
+    const runtime = new ConversationSkillRuntime({ skillService: skillService as any });
+
+    const result = await runtime.autoActivateSkill({
+      conversationId: 'conv-1',
+      userInput: 'maybe storyboard',
+    });
+
+    expect(result).toBeNull();
+    expect(skillService.registry.ensureLoaded).not.toHaveBeenCalled();
+    expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
   });
 });

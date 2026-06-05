@@ -41,6 +41,28 @@ export class KeywordSkillMatcher extends SkillMatcher {
     document: ['document', 'docs', 'documentation', 'explain', 'comment'],
   };
 
+  private artifactKeywords: Record<string, string[]> = {
+    'storyboard-table': [
+      'storyboard',
+      'storyboard table',
+      'shot list',
+      'shot breakdown',
+      'comic storyboard',
+      'manga storyboard',
+      '分镜',
+      '分镜表',
+      '故事板',
+      '镜头表',
+      '镜头拆解',
+      '漫画分镜',
+      '生成分镜表',
+      '制作分镜表',
+      '输出分镜表',
+    ],
+    'animation-plan': ['animation plan', 'motion plan', '动画计划', '运镜计划', '动态漫画计划'],
+    'cut-storyboard-payload': ['cut assembly', 'timeline assembly', '剪辑装配', '时间线装配'],
+  };
+
   /**
    * Find skills that match the user's request
    */
@@ -64,8 +86,12 @@ export class KeywordSkillMatcher extends SkillMatcher {
       }
     }
 
-    // Sort by relevance (highest first)
-    matches.sort((a, b) => b.relevance - a.relevance);
+    // Sort by relevance first, then prefer focused artifact producers over broad orchestrators.
+    matches.sort(
+      (a, b) =>
+        b.relevance - a.relevance ||
+        this.getSkillSpecificityScore(b.skill) - this.getSkillSpecificityScore(a.skill),
+    );
 
     return matches;
   }
@@ -87,8 +113,10 @@ export class KeywordSkillMatcher extends SkillMatcher {
       reasons.push(`Matched skill name '${skill.name}'`);
     }
 
+    const skillText = this.buildSkillSearchText(skill);
+
     // 2. Description keyword matching (Skills no longer have slash commands)
-    const descriptionLower = skill.description.toLowerCase();
+    const descriptionLower = skillText.toLowerCase();
     const descriptionWords = this.tokenize(descriptionLower);
 
     // Count matching words
@@ -115,6 +143,24 @@ export class KeywordSkillMatcher extends SkillMatcher {
       }
     }
 
+    for (const [artifact, keywords] of Object.entries(this.artifactKeywords)) {
+      if (!this.skillProducesArtifact(skill, artifact)) {
+        continue;
+      }
+
+      const matchedKeyword = keywords.find((keyword) => requestLower.includes(keyword));
+      if (!matchedKeyword) {
+        continue;
+      }
+
+      const artifactRelevance = this.getArtifactMatchRelevance(skill, artifact);
+      relevance += artifactRelevance;
+      reasons.push(
+        `Matched artifact '${artifact}' via '${matchedKeyword}' (${artifactRelevance.toFixed(2)})`,
+      );
+      break;
+    }
+
     // Only return if relevance is above threshold
     if (relevance > 0.1) {
       return {
@@ -135,6 +181,37 @@ export class KeywordSkillMatcher extends SkillMatcher {
       .split(/[\s.,!?;:'"()[\]{}]+/)
       .map((w) => w.trim())
       .filter((w) => w.length > 0);
+  }
+
+  private buildSkillSearchText(skill: Skill): string {
+    return [
+      skill.name,
+      skill.description,
+      skill.domain,
+      ...(skill.mediaWorkflow?.producedArtifacts ?? []),
+      ...(skill.mediaWorkflow?.inputArtifacts ?? []),
+      ...(skill.mediaWorkflow?.tags ?? []),
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join(' ');
+  }
+
+  private skillProducesArtifact(skill: Skill, artifact: string): boolean {
+    return (skill.mediaWorkflow?.producedArtifacts ?? []).includes(artifact);
+  }
+
+  private getArtifactMatchRelevance(skill: Skill, artifact: string): number {
+    const producedArtifacts = skill.mediaWorkflow?.producedArtifacts ?? [];
+    if (!producedArtifacts.includes(artifact)) {
+      return 0;
+    }
+
+    return producedArtifacts.length === 1 ? 0.95 : 0.85;
+  }
+
+  private getSkillSpecificityScore(skill: Skill): number {
+    const producedArtifacts = skill.mediaWorkflow?.producedArtifacts ?? [];
+    return producedArtifacts.length > 0 ? 1 / producedArtifacts.length : 0;
   }
 }
 

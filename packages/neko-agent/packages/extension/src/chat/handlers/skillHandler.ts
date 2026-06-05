@@ -116,6 +116,20 @@ export class SkillHandler {
     return this._runtime.discoverSkills(userInput);
   }
 
+  async autoActivateSkill(
+    webview: vscode.Webview,
+    input: {
+      readonly conversationId: string;
+      readonly userInput: string;
+    },
+  ): Promise<SkillApplicationResult | null> {
+    const result = await this._runtime.autoActivateSkill(input);
+    if (result?.applied) {
+      this._sendSkillInjection(webview, result, input.conversationId);
+    }
+    return result;
+  }
+
   // ===========================================================================
   // Tool Guard (Runtime Enforcement)
   // ===========================================================================

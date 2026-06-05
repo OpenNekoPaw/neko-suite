@@ -268,6 +268,9 @@ function buildHandler(
       toWebviewUri: ReturnType<typeof vi.fn>;
       toWebviewAsset?: ReturnType<typeof vi.fn>;
     };
+    skillAutoActivation?: {
+      activate: ReturnType<typeof vi.fn>;
+    };
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
@@ -292,6 +295,9 @@ function buildHandler(
     undefined,
     undefined,
     overrides.localResourceAccess as any,
+    overrides.skillAutoActivation
+      ? { skillAutoActivation: overrides.skillAutoActivation as any }
+      : undefined,
   );
 }
 
@@ -350,6 +356,57 @@ describe('AgentMessageTurnHandler', () => {
 
       expect(agentStreamProcessorInstances).toHaveLength(1);
       expect(agentStreamProcessorInstances[0]!.deps.localResourceAccess).toBe(localResourceAccess);
+    });
+  });
+
+  describe('skill auto activation', () => {
+    it('auto-activates matching skills before dispatching an agent turn', async () => {
+      const webview = createMockWebview();
+      const skillAutoActivation = {
+        activate: vi.fn().mockResolvedValue({ applied: true }),
+      };
+      const agentManager = createMockAgentManager();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+        skillAutoActivation,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('生成分镜表', { conversationId: 'conv-1' }),
+      );
+
+      expect(skillAutoActivation.activate).toHaveBeenCalledWith({
+        webview,
+        conversationId: 'conv-1',
+        userInput: '生成分镜表',
+      });
+      expect(agentManager.getOrCreate().execute).toHaveBeenCalled();
+    });
+
+    it('does not auto-activate skills for direct media turns', async () => {
+      const skillAutoActivation = {
+        activate: vi.fn().mockResolvedValue({ applied: true }),
+      };
+      const platform = {
+        ...createMockPlatform(),
+        media: {},
+      };
+      const handler = buildHandler({
+        platform,
+        skillAutoActivation,
+      });
+
+      await handler.handleUserMessage(
+        createMockWebview() as any,
+        createMessageRequest('生成图片', {
+          sessionMode: 'image',
+          mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+        }),
+      );
+
+      expect(skillAutoActivation.activate).not.toHaveBeenCalled();
     });
   });
 

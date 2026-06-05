@@ -46,6 +46,11 @@ export interface ExecuteSkillInput {
   readonly conversationId: string;
 }
 
+export interface AutoActivateSkillInput {
+  readonly userInput: string;
+  readonly conversationId: string;
+}
+
 /**
  * Owns per-conversation skill activation state without depending on VSCode.
  *
@@ -121,6 +126,32 @@ export class ConversationSkillRuntime {
 
   discoverSkills(userInput: string): SkillDiscoveryResult | null {
     return this._deps.skillService?.discover(userInput) ?? null;
+  }
+
+  async autoActivateSkill(input: AutoActivateSkillInput): Promise<SkillApplicationResult | null> {
+    const skillService = this._deps.skillService;
+    if (!skillService || !input.conversationId) {
+      return null;
+    }
+
+    const discovery = skillService.discover(input.userInput);
+    const topMatch = discovery.topMatch;
+    if (
+      !discovery.found ||
+      !topMatch ||
+      discovery.requiresConfirmation ||
+      topMatch.skill.autoInvoke === false
+    ) {
+      return null;
+    }
+
+    const loadedSkill = await skillService.registry.ensureLoaded(topMatch.skill.name);
+    const skill = loadedSkill ?? topMatch.skill;
+    if (skill.autoInvoke === false) {
+      return null;
+    }
+
+    return this._applySkill(input.conversationId, skill);
   }
 
   isToolAllowed(toolName: string, conversationId: string): boolean {

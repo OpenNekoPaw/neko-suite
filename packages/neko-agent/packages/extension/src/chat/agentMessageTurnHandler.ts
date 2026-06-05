@@ -53,6 +53,18 @@ import { AgentTurnBridge } from './message/agentTurnBridge';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
+export interface AgentMessageSkillAutoActivation {
+  activate(input: {
+    readonly webview: vscode.Webview;
+    readonly conversationId: string;
+    readonly userInput: string;
+  }): Promise<unknown>;
+}
+
+export interface AgentMessageTurnHandlerOptions {
+  readonly skillAutoActivation?: AgentMessageSkillAutoActivation;
+}
+
 export class AgentMessageTurnHandler {
   private readonly _agentStateRuntime: AgentStateRuntime = createAgentStateRuntime();
   private readonly _subAgentEventRuntime: SubAgentEventRuntime = createSubAgentEventRuntime();
@@ -89,6 +101,7 @@ export class AgentMessageTurnHandler {
     private readonly _engineClientProvider: IEngineClientProvider = getEngineClientProvider(),
     private readonly _dashboardWorkItems?: AgentDashboardWorkItemSource,
     private readonly _localResourceAccess?: AgentLocalResourceAccess,
+    private readonly _options: AgentMessageTurnHandlerOptions = {},
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
 
@@ -176,6 +189,7 @@ export class AgentMessageTurnHandler {
     webview: vscode.Webview,
     request: AgentMessageRuntimeRequest,
   ): Promise<void> {
+    await this._autoActivateSkillForRequest(webview, request);
     await runAgentMessageTurnRuntime({
       request,
       inputProcessor: this._getInputProcessor(),
@@ -243,6 +257,30 @@ export class AgentMessageTurnHandler {
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
     });
+  }
+
+  private async _autoActivateSkillForRequest(
+    webview: vscode.Webview,
+    request: AgentMessageRuntimeRequest,
+  ): Promise<void> {
+    if (request.sessionMode !== 'agent' || !request.conversationId) {
+      return;
+    }
+
+    const activation = this._options.skillAutoActivation;
+    if (!activation) {
+      return;
+    }
+
+    try {
+      await activation.activate({
+        webview,
+        conversationId: request.conversationId,
+        userInput: request.messageText,
+      });
+    } catch (error) {
+      logger.warn('Failed to auto-activate matching skill', error);
+    }
   }
 
   private _updateAgentState(

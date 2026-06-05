@@ -308,6 +308,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           logger,
         });
         const { skillService } = skillRuntimeBootstrap;
+        skillRuntimeBootstrap.populateLazy({
+          personal: { skills: [], commands: [] },
+          project: { skills: [], commands: [] },
+        });
         setCapabilityRuntimeSkillService(skillService);
 
         this._providers = new ProviderManager(this._platform);
@@ -327,6 +331,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           undefined,
           this._dashboardWorkItems,
           this._localResourceAccess,
+          {
+            skillAutoActivation: {
+              activate: ({ webview, conversationId, userInput }) =>
+                this._skillHandler.autoActivateSkill(webview, {
+                  conversationId,
+                  userInput,
+                }),
+            },
+          },
         );
         this._dashboardWorkItems.updateDeps({
           platform: this._platform,
