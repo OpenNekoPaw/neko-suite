@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
+  createDocumentResourceRefFromArchiveRef,
   createFocusedWebviewRegistry,
   GeneratedAssetResourceCacheProvider,
   HostContentAccessService,
@@ -1649,10 +1650,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'preview:resolveVariant': {
         const requestId = message.requestId as string | undefined;
-        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const documentResourceRef = isDocumentArchiveResourceRef(message.documentResourceRef)
           ? message.documentResourceRef
           : undefined;
+        const resourceRef = this.resolvePreviewResourceRef(
+          message.resourceRef,
+          documentResourceRef,
+        );
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           documentResourceRef,
@@ -1684,27 +1688,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
 
           if (!assetPath) break;
-          await this.authorizeDocumentResourceRoot(webviewPanel.webview, { documentResourceRef });
           const fsPath = await this.resolveAssetPath(assetPath, document.uri);
-          if (documentResourceRef) {
-            const uri = this.projectLocalResource(
-              webviewPanel.webview,
-              fsPath,
-              'neko-canvas.document-resource-variant',
-            );
-            if (!uri) {
-              throw new Error(
-                'Document cache path is outside authorized Webview roots. Reopen the source document to regenerate the preview.',
-              );
-            }
-            webviewPanel.webview.postMessage({
-              type: 'preview:variantResolved',
-              requestId,
-              url: uri,
-            });
-            break;
-          }
-
           const variantApi = await this.getPreviewVariantApi();
           if (variantApi) {
             const panoramicRoute = getPanoramicPreviewRoute({
@@ -3060,6 +3044,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       : undefined;
   }
 
+  private resolvePreviewResourceRef(
+    resourceRef: unknown,
+    documentResourceRef?: DocumentArchiveResourceRef,
+  ): ResourceRef | undefined {
+    if (isResourceRef(resourceRef)) {
+      return resourceRef;
+    }
+    return documentResourceRef
+      ? createDocumentResourceRefFromArchiveRef(documentResourceRef, 'project')
+      : undefined;
+  }
+
   private async materializeCompositeRequestRuntimePaths(
     request: CanvasCreateCompositeRequest,
   ): Promise<CanvasCreateCompositeRequest> {
@@ -3157,7 +3153,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     nodeData: Record<string, unknown>,
     webview: vscode.Webview,
   ): Promise<void> {
-    const unifiedResourceRef = nodeData['resourceRef'];
+    const documentResourceRef = isDocumentArchiveResourceRef(nodeData['documentResourceRef'])
+      ? nodeData['documentResourceRef']
+      : undefined;
+    const unifiedResourceRef = this.resolvePreviewResourceRef(
+      nodeData['resourceRef'],
+      documentResourceRef,
+    );
     const projected = await this.projectResourceCacheVariant(
       webview,
       unifiedResourceRef,
@@ -3173,8 +3175,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    const resourceRef = nodeData['documentResourceRef'];
-    if (!isDocumentArchiveResourceRef(resourceRef) || !resourceRef.cachePath) {
+    const resourceRef = documentResourceRef;
+    if (!resourceRef?.cachePath) {
       return;
     }
 
@@ -3206,7 +3208,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     nodeData: Record<string, unknown>,
     webview: vscode.Webview,
   ): Promise<void> {
-    const unifiedResourceRef = nodeData['referenceResourceRef'];
+    const referenceImageResourceRef = isDocumentArchiveResourceRef(
+      nodeData['referenceImageResourceRef'],
+    )
+      ? nodeData['referenceImageResourceRef']
+      : undefined;
+    const unifiedResourceRef = this.resolvePreviewResourceRef(
+      nodeData['referenceResourceRef'],
+      referenceImageResourceRef,
+    );
     delete nodeData['runtimeReferenceImagePath'];
     delete nodeData['documentResourceStatus'];
 
@@ -3225,8 +3235,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    const resourceRef = nodeData['referenceImageResourceRef'];
-    if (!isDocumentArchiveResourceRef(resourceRef) || !resourceRef.cachePath) {
+    const resourceRef = referenceImageResourceRef;
+    if (!resourceRef?.cachePath) {
       return;
     }
 

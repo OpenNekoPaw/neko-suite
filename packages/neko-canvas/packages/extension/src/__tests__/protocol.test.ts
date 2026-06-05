@@ -362,10 +362,13 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('os.homedir() || workspaceRoot');
       expect(providerSource).not.toContain('process.env.HOME');
       expect(providerSource).toContain('projectResourceCacheVariant(');
-      expect(providerSource).toContain('resourceRef = isResourceRef(message.resourceRef)');
+      expect(providerSource).toContain('createDocumentResourceRefFromArchiveRef');
+      expect(providerSource).toContain('resolvePreviewResourceRef(');
+      expect(providerSource).toContain(
+        'const resourceRef = this.resolvePreviewResourceRef(message.resourceRef, documentResourceRef)',
+      );
       expect(providerSource).toContain('const documentResourceRef = isDocumentArchiveResourceRef');
       expect(providerSource).toContain("'neko-canvas.document-resource-variant'");
-      expect(providerSource).toContain('if (documentResourceRef) {');
       expect(providerSource).toContain("type: 'preview:variantResolved'");
       expect(providerSource).toContain(
         'Resource cache variant could not be materialized for this document reference.',
@@ -375,12 +378,13 @@ describe('canvasEditorProvider message contracts', () => {
       );
       expect(providerSource).not.toContain("fallback: 'documentResourceRef'");
 
-      const documentResourceBranch = providerSource.slice(
-        providerSource.indexOf('if (documentResourceRef) {'),
+      const previewResolveBranch = providerSource.slice(
+        providerSource.indexOf("case 'preview:resolveVariant':"),
         providerSource.indexOf('const variantApi = await this.getPreviewVariantApi();'),
       );
-      expect(documentResourceBranch).toContain('this.projectLocalResource(');
-      expect(documentResourceBranch).not.toContain('registerPreviewAsset');
+      expect(previewResolveBranch).toContain('this.projectResourceCacheVariant(');
+      expect(previewResolveBranch).not.toContain('this.projectLocalResource(');
+      expect(previewResolveBranch).not.toContain('registerPreviewAsset');
     });
   });
 
