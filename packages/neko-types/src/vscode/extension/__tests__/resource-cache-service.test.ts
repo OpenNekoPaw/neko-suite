@@ -225,6 +225,34 @@ describe('resource cache service', () => {
     });
   });
 
+  it('selects the first registered provider that supports a resource ref', async () => {
+    const fallbackProvider = createNamedProvider('legacy-cache-path', async (input) => {
+      const absolutePath = `${input.cacheRoot}/legacy/page-1.jpg`;
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const primaryProvider = createNamedProvider('document-archive', async (input) => ({
+      status: 'unsupported',
+      ref: input.ref,
+      variant: input.variant,
+      error: 'Primary provider cannot rebuild this entry.',
+    }));
+    const service = createService({ providers: [fallbackProvider, primaryProvider] });
+
+    await expect(service.ensure(ref, variant)).resolves.toMatchObject({
+      status: 'ready',
+      absolutePath: '/workspace/.neko/.cache/resources/legacy/page-1.jpg',
+    });
+    expect(fallbackProvider.ensure).toHaveBeenCalledTimes(1);
+    expect(primaryProvider.ensure).not.toHaveBeenCalled();
+  });
+
   it('coalesces duplicate ensure calls for the same variant', async () => {
     let calls = 0;
     let release: (() => void) | undefined;
@@ -759,11 +787,20 @@ function createProvider(
     input: ResourceEnsureInput,
   ) => Promise<ReturnType<ResourceCacheProvider['ensure']> extends Promise<infer T> ? T : never>,
 ): ResourceCacheProvider {
+  return createNamedProvider('document-archive', ensure);
+}
+
+function createNamedProvider(
+  id: string,
+  ensure: (
+    input: ResourceEnsureInput,
+  ) => Promise<ReturnType<ResourceCacheProvider['ensure']> extends Promise<infer T> ? T : never>,
+): ResourceCacheProvider {
   return {
-    id: 'document-archive',
+    id,
     supports: (resource, request) =>
       resource.provider === 'document-archive' && request.role === 'thumbnail',
-    ensure,
+    ensure: vi.fn(ensure),
   };
 }
 

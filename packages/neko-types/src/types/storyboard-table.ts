@@ -422,6 +422,7 @@ export interface NormalizeStoryboardTableV1Result {
 const MAX_STORYBOARD_DIAGNOSTICS = 64;
 const MAX_LEGACY_SECTIONS = 200;
 const MAX_LEGACY_MEDIA_REFS = 12;
+const STORYBOARD_IMAGE_ALIAS_EXTENSION = 'neko.storyboardImageAlias' as const;
 
 export function validateStoryboardTableV1(value: unknown): StoryboardValidationResultV1 {
   const normalized = normalizeStoryboardTableV1({ value });
@@ -925,6 +926,7 @@ function normalizeShotRow(
     diagnostics,
   );
   const mediaRefs = normalizeMediaRefs(record['mediaRefs'], [...path, 'mediaRefs'], diagnostics);
+  const inferredImageAlias = normalizeStoryboardImageAlias(record);
   const splitRefs =
     sourceMediaRefs.length === 0 && generatedMediaRefs.length === 0 && mediaRefs.length > 0
       ? splitStoryboardMediaRefsByRoleV1(mediaRefs, [...path, 'mediaRefs'])
@@ -954,6 +956,7 @@ function normalizeShotRow(
     [...path, 'extensions'],
     diagnostics,
   );
+  const normalizedExtensions = mergeStoryboardImageAliasExtension(extensions, inferredImageAlias);
   const shotScale = normalizeShotScale(record['shotScale']);
   const cameraMovement = normalizeCameraMovement(record['cameraMovement']);
   const cameraAngle = normalizeCameraAngle(record['cameraAngle']);
@@ -1028,7 +1031,70 @@ function normalizeShotRow(
     ...(normalizedGeneratedRefs.length > 0 ? { generatedMediaRefs: normalizedGeneratedRefs } : {}),
     ...(normalizedMediaRefs.length > 0 ? { mediaRefs: normalizedMediaRefs } : {}),
     ...(decisionReason ? { decisionReason } : {}),
-    ...(extensions ? { extensions } : {}),
+    ...(normalizedExtensions ? { extensions: normalizedExtensions } : {}),
+  };
+}
+
+function normalizeStoryboardImageAlias(
+  record: Record<string, unknown>,
+): StoryboardSerializableRecordV1 | undefined {
+  const aliases = Object.entries(record).flatMap(([key, value]) => {
+    const locator = parseStoryboardImageAliasKey(key);
+    if (!locator || !isEnabledStoryboardImageAliasValue(value)) return [];
+    return [
+      {
+        kind: locator.kind,
+        number: locator.number,
+        key,
+      },
+    ];
+  });
+  if (aliases.length === 0) return undefined;
+  const preferred = aliases[0];
+  if (!preferred) return undefined;
+  return {
+    kind: preferred.kind,
+    number: preferred.number,
+    key: preferred.key,
+    aliases,
+  };
+}
+
+function parseStoryboardImageAliasKey(
+  key: string,
+): { readonly kind: 'page' | 'image' | 'panel'; readonly number: number } | undefined {
+  const match = /^(page|image|panel)[_-]?(\d{1,4})$/i.exec(key.trim());
+  if (!match) return undefined;
+  const kind = normalizeStoryboardImageAliasKind(match[1]);
+  const number = parsePositiveInteger(match[2]);
+  return kind && number !== undefined ? { kind, number } : undefined;
+}
+
+function normalizeStoryboardImageAliasKind(
+  value: string | undefined,
+): 'page' | 'image' | 'panel' | undefined {
+  const normalized = value?.toLowerCase();
+  return normalized === 'page' || normalized === 'image' || normalized === 'panel'
+    ? normalized
+    : undefined;
+}
+
+function isEnabledStoryboardImageAliasValue(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === 'number') return Number.isFinite(value) && value !== 0;
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && !['false', 'no', 'off', '0', 'none', 'null'].includes(normalized);
+}
+
+function mergeStoryboardImageAliasExtension(
+  extensions: StoryboardExtensionMapV1 | undefined,
+  alias: StoryboardSerializableRecordV1 | undefined,
+): StoryboardExtensionMapV1 | undefined {
+  if (!alias) return extensions;
+  return {
+    ...(extensions ?? {}),
+    [STORYBOARD_IMAGE_ALIAS_EXTENSION]: alias,
   };
 }
 
@@ -1980,6 +2046,12 @@ function readTrimmedString(value: unknown): string | undefined {
 
 function readOptionalPositiveNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function readNonNegativeInteger(value: unknown): number | undefined {

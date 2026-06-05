@@ -13,7 +13,11 @@ import type {
   ResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
-import { isResourceRef, parseDocumentArchiveResourceRef } from '@neko/shared';
+import {
+  isResourceRef,
+  normalizeStoryboardTableV1,
+  parseDocumentArchiveResourceRef,
+} from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
@@ -131,8 +135,9 @@ export function projectCompositeBlockRichContent(
 ): CompositeRichContentProjection {
   const toolCalls = collectToolCalls(input.siblingBlocks, input.toolCalls);
   const diagnostics: CompositeMediaDiagnostic[] = [];
+  const normalizedStoryboard = normalizeCompositeStoryboardTable(input.composite.storyboardTable);
   const storyboardTable = maybeAttachInferredStoryboardMediaRefs(
-    input.composite.storyboardTable,
+    normalizedStoryboard,
     toolCalls,
     input.composite.sections,
   );
@@ -175,6 +180,13 @@ export function projectCompositeBlockRichContent(
     case 'report':
       return { kind: 'asset-gallery', data: { ...base, template: input.composite.template } };
   }
+}
+
+function normalizeCompositeStoryboardTable(
+  storyboardTable: StoryboardTableV1 | undefined,
+): StoryboardTableV1 | undefined {
+  if (!storyboardTable) return undefined;
+  return normalizeStoryboardTableV1({ value: storyboardTable }).table ?? storyboardTable;
 }
 
 function maybeAttachInferredStoryboardMediaRefs(
@@ -290,6 +302,9 @@ function inferStoryboardShotPageNumber(
   shot: StoryboardTableV1['scenes'][number]['shots'][number],
   section: CompositeSection | undefined,
 ): number | undefined {
+  const imageAliasNumber = readStoryboardImageAliasNumber(shot.extensions);
+  if (imageAliasNumber !== undefined) return imageAliasNumber;
+
   const mediaRefTexts = [
     ...(shot.sourceMediaRefs ?? []),
     ...(shot.generatedMediaRefs ?? []),
@@ -315,6 +330,13 @@ function inferStoryboardShotPageNumber(
     if (pageNumber !== undefined) return pageNumber;
   }
   return undefined;
+}
+
+function readStoryboardImageAliasNumber(
+  extensions: StoryboardTableV1['scenes'][number]['shots'][number]['extensions'] | undefined,
+): number | undefined {
+  const alias = asRecord(extensions?.['neko.storyboardImageAlias']);
+  return readPositiveInteger(alias, 'number');
 }
 
 function isStoryboardImageSourceTool(toolName: string): boolean {
@@ -846,6 +868,8 @@ function readDocumentImagePageNumber(
 function readPageNumberFromText(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const patterns = [
+    /\b(?:page|image|panel)[_-](\d{1,4})\b/i,
+    /\b(?:image|panel)\s*[:#-]?\s*(\d{1,4})\b/i,
     /\bpage\s*[:#-]?\s*(\d{1,4})\b/i,
     /\bp\s*[:#-]?\s*(\d{1,4})\b/i,
     /第\s*(\d{1,4})\s*页/,

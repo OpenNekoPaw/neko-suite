@@ -90,6 +90,7 @@ import type {
   NekoStoryAPI,
   NekoStoryScriptIndex,
   ResourceRef,
+  ResourceVariantRole,
   ScriptScene,
 } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
@@ -141,6 +142,34 @@ function assertCanvasNodeType(type: CanvasNodeType | undefined): void {
   if (type !== undefined && !isCanvasNodeType(type)) {
     throw new Error(`Unsupported Canvas node type "${type}"`);
   }
+}
+
+function resolveCanvasPreviewVariantRole(
+  resourceRef: ResourceRef,
+  preferredRole: ResourceVariantRole | undefined,
+): ResourceVariantRole {
+  if (resourceRef.kind === 'document' || resourceRef.source.kind === 'document') {
+    return 'document-entry';
+  }
+  if (resourceRef.kind === 'generated' || resourceRef.source.kind === 'generated-asset') {
+    return preferredRole === 'thumbnail' || preferredRole === 'preview' ? preferredRole : 'preview';
+  }
+  if (resourceRef.kind === 'media') {
+    return preferredRole === 'thumbnail' ||
+      preferredRole === 'proxy' ||
+      preferredRole === 'fov-crop'
+      ? preferredRole
+      : 'thumbnail';
+  }
+  if (resourceRef.kind === 'preview') {
+    return preferredRole === 'thumbnail' ||
+      preferredRole === 'preview' ||
+      preferredRole === 'proxy' ||
+      preferredRole === 'fov-crop'
+      ? preferredRole
+      : 'preview';
+  }
+  return preferredRole ?? 'thumbnail';
 }
 
 function isWebviewOrRemoteUri(value: string): boolean {
@@ -484,7 +513,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       projectRoot: workspaceRoot,
       localResourceAccess: this.localResourceAccess,
       providers: [
-        new LegacyResourceCacheProvider(),
         new GeneratedAssetResourceCacheProvider({
           pathResolver: createWorkspacePathResolver(workspaceRoot),
           projectRoot: workspaceRoot,
@@ -517,6 +545,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         new PreviewVariantResourceCacheProvider({
           preview: this.createLazyPreviewVariantResourceApi(),
         }),
+        new LegacyResourceCacheProvider(),
       ],
       logger,
     });
@@ -1627,23 +1656,35 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!requestId || (!assetPath && !resourceRef)) break;
 
         try {
+          let resourceProjectionFailed = false;
           if (resourceRef) {
             const uri = await this.projectResourceCacheVariant(
               webviewPanel.webview,
               resourceRef,
               'neko-canvas.document-resource-variant',
+              role,
             );
-            if (!uri) {
+            if (uri) {
+              webviewPanel.webview.postMessage({
+                type: 'preview:variantResolved',
+                requestId,
+                url: uri,
+              });
+              break;
+            }
+            resourceProjectionFailed = true;
+            if (!assetPath) {
               throw new Error(
                 'Resource cache variant could not be materialized for this document reference.',
               );
             }
-            webviewPanel.webview.postMessage({
-              type: 'preview:variantResolved',
-              requestId,
-              url: uri,
-            });
-            break;
+            logger.warn(
+              'ResourceRef preview materialization failed; falling back to document path',
+              {
+                resourceId: resourceRef.id,
+                documentEntryPath: documentResourceRef?.entryPath,
+              },
+            );
           }
 
           if (!assetPath) break;
@@ -1664,6 +1705,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               type: 'preview:variantResolved',
               requestId,
               url: uri,
+              ...(resourceProjectionFailed ? { fallback: 'documentResourceRef' } : {}),
             });
             break;
           }
@@ -2999,7 +3041,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
     if (isResourceRef(resourceRef)) {
       const value = resourceRef.source.metadata?.['legacyCachePath'];
-      return typeof value === 'string' ? value : undefined;
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
     }
     return isDocumentArchiveResourceRef(documentResourceRef)
       ? documentResourceRef.cachePath
@@ -3200,15 +3244,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     _webview: vscode.Webview,
     resourceRef: unknown,
     caller: string,
+    preferredRole?: ResourceVariantRole,
   ): Promise<string | undefined> {
     if (!this.contentAccess || !isResourceRef(resourceRef)) {
       return undefined;
     }
+    const role = resolveCanvasPreviewVariantRole(resourceRef, preferredRole);
     const result = await this.contentAccess.resolve({
       ref: resourceRef,
       intent: 'interactive-preview',
       target: 'webview-uri',
-      variant: { role: 'document-entry' },
+      variant: { role },
       materialization: 'if-missing',
       caller,
     });

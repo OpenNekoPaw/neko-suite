@@ -226,12 +226,18 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('new PreviewVariantResourceCacheProvider');
       expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider');
       expect(providerSource).toContain('new LegacyResourceCacheProvider');
+      expect(providerSource.indexOf('new LegacyResourceCacheProvider')).toBeGreaterThan(
+        providerSource.indexOf('new PreviewVariantResourceCacheProvider'),
+      );
     });
 
     it('preview variant resolution prefers ResourceRef over legacy cache paths', () => {
       expect(providerSource).toContain('const resourceRef = isResourceRef(message.resourceRef)');
       expect(providerSource).toContain('this.projectResourceCacheVariant(');
       expect(providerSource).toContain("case 'preview:resolveVariant'");
+      expect(providerSource).toContain(
+        'resolveCanvasPreviewVariantRole(resourceRef, preferredRole)',
+      );
     });
   });
 

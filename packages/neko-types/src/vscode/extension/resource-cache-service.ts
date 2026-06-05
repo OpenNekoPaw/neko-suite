@@ -268,6 +268,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly store: ResourceCacheManifestStore;
   private readonly providers = new Map<string, ResourceCacheProvider>();
+  private readonly providerOrder: ResourceCacheProvider[] = [];
   private readonly fsOps: ResourceCacheFsOps;
   private readonly now: () => string;
   private readonly logger?: ResourceCacheLogger;
@@ -309,6 +310,12 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   }
 
   registerProvider(provider: ResourceCacheProvider): void {
+    const existingIndex = this.providerOrder.findIndex((candidate) => candidate.id === provider.id);
+    if (existingIndex >= 0) {
+      this.providerOrder[existingIndex] = provider;
+    } else {
+      this.providerOrder.push(provider);
+    }
     this.providers.set(provider.id, provider);
   }
 
@@ -590,8 +597,8 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
       return this.createResult(ref, variant, 'failed', { error: 'Operation aborted.' });
     }
 
-    const provider = this.providers.get(ref.provider);
-    if (!provider || !provider.supports(ref, variant)) {
+    const provider = this.selectProvider(ref, variant);
+    if (!provider) {
       await this.markVariantStatus(
         ref,
         variant,
@@ -625,6 +632,13 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
       await this.markVariantStatus(ref, variant, 'failed', message);
       return this.createResult(ref, variant, 'failed', { error: message });
     }
+  }
+
+  private selectProvider(
+    ref: ResourceRef,
+    variant: ResourceVariantRequest,
+  ): ResourceCacheProvider | undefined {
+    return this.providerOrder.find((provider) => provider.supports(ref, variant));
   }
 
   private async recordEnsureResult(result: ResourceEnsureResult): Promise<void> {

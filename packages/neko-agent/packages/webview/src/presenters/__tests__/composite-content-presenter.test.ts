@@ -389,6 +389,100 @@ describe('composite content presenter', () => {
     });
   });
 
+  it('uses model-authored page alias fields to infer storyboard media refs', () => {
+    const compositeInput = {
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Scene',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use page 2 as the reference frame.',
+                  characterAction: 'The character turns back.',
+                  imageStrategy: 'use-as-reference',
+                  page_2: true,
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Shot 1',
+            content: 'Use the second page.',
+            layout: 'table-row',
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'page', pageNumber: 1 },
+                },
+                {
+                  path: '/cache/page-2.jpg',
+                  webviewUri: 'webview://page-2.jpg',
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'page', pageNumber: 2 },
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    };
+    const decodedInput = JSON.parse(JSON.stringify(compositeInput)) as Parameters<
+      typeof projectCompositeBlockRichContent
+    >[0];
+    const projection = projectCompositeBlockRichContent(decodedInput);
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]).toMatchObject({
+      sourceMediaRefs: [
+        {
+          locator: { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 1 },
+          label: 'page 2',
+          mimeType: 'image/jpeg',
+        },
+      ],
+      extensions: {
+        'neko.storyboardImageAlias': {
+          kind: 'page',
+          number: 2,
+          key: 'page_2',
+        },
+      },
+    });
+    expect(projection.data.sections[0]?.media[0]).toMatchObject({
+      toolCallId: 'read-doc',
+      assetIndex: 1,
+      localPath: '/cache/page-2.jpg',
+      src: 'webview://page-2.jpg',
+    });
+  });
+
   it('resolves semantic storyboard row media from explicit shot media refs', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {

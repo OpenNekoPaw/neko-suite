@@ -483,6 +483,46 @@ describe('storyboard table contract', () => {
     ]);
   });
 
+  it('preserves model-authored image alias fields as extension metadata', () => {
+    const result = normalizeStoryboardTableV1({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Alias',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Use the first page.',
+                characterAction: 'The character looks up.',
+                imageStrategy: 'use-as-reference',
+                page_1: true,
+                panel2: 'selected',
+                image_3: false,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.table?.scenes[0]?.shots[0]?.extensions).toMatchObject({
+      'neko.storyboardImageAlias': {
+        kind: 'page',
+        number: 1,
+        key: 'page_1',
+        aliases: [
+          { kind: 'page', number: 1, key: 'page_1' },
+          { kind: 'panel', number: 2, key: 'panel2' },
+        ],
+      },
+    });
+  });
+
   it('rejects non-serializable or un-namespaced extensions', () => {
     const result = validateStoryboardTableV1({
       schemaVersion: 1,
