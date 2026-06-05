@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, type ResourceRef, type ToolResult } from '@neko/shared';
+import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { createReadDocumentTool } from '../readDocumentTool';
 import type { IDocumentReaderService } from '../../services/DocumentReaderService';
 
@@ -201,6 +202,44 @@ describe('createReadDocumentTool', () => {
     );
   });
 
+  it('prewarms project document image refs in the unified resource cache', async () => {
+    const reader = createReader({
+      read: vi.fn(async () => ({
+        text: 'Comic archive',
+        imagePaths: ['/tmp/1.png'],
+        imageInfo: [
+          {
+            path: '/tmp/1.png',
+            width: 100,
+            height: 200,
+            mimeType: 'image/png',
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/tmp/comic.cbz', format: 'cbz' },
+              entryPath: '1.png',
+              cachePath: '/tmp/1.png',
+            },
+          },
+        ],
+      })),
+    });
+    const resourceCache = createResourceCache();
+    const tool = createReadDocumentTool({ reader, resourceCache });
+
+    const result = (await tool.execute({ file_path: '/tmp/comic.cbz' })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(resourceCache.ensure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'project',
+        provider: 'document-archive',
+        kind: 'document',
+        locator: expect.objectContaining({ entryPath: '1.png' }),
+      }),
+      { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
+    );
+  });
+
   it('marks no-workspace document image refs as extension-private and non-portable', async () => {
     const reader = createReader({
       read: vi.fn(async () => ({
@@ -219,8 +258,10 @@ describe('createReadDocumentTool', () => {
         ],
       })),
     });
+    const resourceCache = createResourceCache();
     const tool = createReadDocumentTool({
       reader,
+      resourceCache,
       resolveResourceScope: () => 'extension-private',
     });
 
@@ -246,6 +287,7 @@ describe('createReadDocumentTool', () => {
         ],
       }),
     );
+    expect(resourceCache.ensure).not.toHaveBeenCalled();
   });
 
   it('returns document manifests without full content reads', async () => {
@@ -689,3 +731,43 @@ describe('createReadDocumentTool', () => {
     expect(result.data).not.toHaveProperty('manifest');
   });
 });
+
+function createResourceCache(): ResourceCacheService {
+  return {
+    registerProvider: vi.fn(),
+    ensure: vi.fn(async (ref: ResourceRef, variant) => ({
+      status: 'ready',
+      ref,
+      variant: { resource: ref, ...variant },
+      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
+    })),
+    resolve: vi.fn(async (ref: ResourceRef, variant) => ({
+      status: 'missing',
+      ref,
+      variant: { resource: ref, ...variant },
+    })),
+    project: vi.fn(async (_webview, ref: ResourceRef, variant) => ({
+      status: 'missing',
+      ref,
+      variant: { resource: ref, ...variant },
+    })),
+    invalidate: vi.fn(async () => undefined),
+    invalidateManifestCache: vi.fn(),
+    stats: vi.fn(async () => ({
+      totalSizeBytes: 0,
+      entryCount: 0,
+      variantCount: 0,
+      staleCount: 0,
+      missingCount: 0,
+      scopeCounts: {},
+      providerCounts: {},
+      providerBytes: {},
+    })),
+    gc: vi.fn(async () => ({
+      removedCount: 0,
+      removedBytes: 0,
+      skippedCount: 0,
+      skippedReasons: {},
+    })),
+  };
+}

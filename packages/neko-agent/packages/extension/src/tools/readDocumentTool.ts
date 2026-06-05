@@ -19,6 +19,7 @@ import type {
   DocumentSourceRef,
   ResourceRef,
 } from '@neko/shared';
+import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import type { DocumentContent, IDocumentReaderService } from '../services/DocumentReaderService';
 
 export const DEFAULT_READ_DOCUMENT_MAX_CHARS = 20000;
@@ -28,6 +29,7 @@ export const MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT = 500;
 
 export interface ReadDocumentToolDeps {
   readonly reader: IDocumentReaderService;
+  readonly resourceCache?: ResourceCacheService;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
 
@@ -124,15 +126,15 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
       },
       required: ['file_path'],
     },
-    execute: async (args) => executeReadDocument(deps.reader, args, deps.resolveResourceScope),
+    execute: async (args) => executeReadDocument(deps, args),
   });
 }
 
 async function executeReadDocument(
-  reader: IDocumentReaderService,
+  deps: ReadDocumentToolDeps,
   args: Record<string, unknown>,
-  resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<ToolResult> {
+  const { reader, resolveResourceScope } = deps;
   const filePath = readNonEmptyString(args['file_path']);
   if (!filePath) {
     return { success: false, error: 'Missing required field: file_path' };
@@ -185,7 +187,7 @@ async function executeReadDocument(
       }
       return {
         success: true,
-        data: formatDocumentReadResult(
+        data: await formatDocumentReadResult(
           await reader.readRange(source, {
             ...range,
             limit: {
@@ -199,6 +201,7 @@ async function executeReadDocument(
             includeManifest,
             includeImagePaths,
             imagePathLimit,
+            resourceCache: deps.resourceCache,
             resolveResourceScope,
           },
         ),
@@ -212,11 +215,12 @@ async function executeReadDocument(
       }
       return {
         success: true,
-        data: formatDocumentReadResult(await reader.readNext(cursor), {
+        data: await formatDocumentReadResult(await reader.readNext(cursor), {
           includeMetadata,
           includeManifest,
           includeImagePaths,
           imagePathLimit,
+          resourceCache: deps.resourceCache,
           resolveResourceScope,
         }),
       };
@@ -225,13 +229,14 @@ async function executeReadDocument(
     const content = await reader.read(filePath);
     return {
       success: true,
-      data: formatReadDocumentData({
+      data: await formatReadDocumentData({
         content,
         filePath,
         maxChars,
         includeMetadata,
         includeImagePaths,
         imagePathLimit,
+        resourceCache: deps.resourceCache,
         resolveResourceScope,
       }),
     };
@@ -243,24 +248,26 @@ async function executeReadDocument(
   }
 }
 
-function formatDocumentReadResult(
+async function formatDocumentReadResult(
   result: DocumentReadResult,
   options: {
     readonly includeMetadata: boolean;
     readonly includeManifest: boolean;
     readonly includeImagePaths: boolean;
     readonly imagePathLimit: number;
+    readonly resourceCache?: ResourceCacheService;
     readonly resolveResourceScope?: () => ResourceRef['scope'];
   },
-): DocumentReadResult {
+): Promise<DocumentReadResult> {
   const imagePaths = result.imagePaths ?? [];
   const visibleImagePaths = options.includeImagePaths
     ? imagePaths.slice(0, options.imagePathLimit)
     : [];
-  const visibleImageInfo = filterImageInfoByVisiblePaths(
+  const visibleImageInfo = await filterImageInfoByVisiblePaths(
     result.imageInfo,
     visibleImagePaths,
     options.imagePathLimit,
+    options.resourceCache,
     options.resolveResourceScope,
   );
 
@@ -297,12 +304,13 @@ function formatDocumentReadResult(
   });
 }
 
-function filterImageInfoByVisiblePaths(
+async function filterImageInfoByVisiblePaths(
   imageInfo: readonly DocumentImageInfo[] | undefined,
   visibleImagePaths: readonly string[],
   imagePathLimit: number,
+  resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): readonly DocumentImageInfoWithCacheResourceRef[] {
+): Promise<readonly DocumentImageInfoWithCacheResourceRef[]> {
   if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
     return [];
   }
@@ -312,23 +320,48 @@ function filterImageInfoByVisiblePaths(
     byPath.length > 0
       ? byPath.slice(0, visibleImagePaths.length)
       : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
-  return visible.map((image) => withCacheResourceRef(image, resolveResourceScope));
+  return Promise.all(
+    visible.map((image) => withCacheResourceRef(image, resourceCache, resolveResourceScope)),
+  );
 }
 
-function withCacheResourceRef(
+async function withCacheResourceRef(
   image: DocumentImageInfo,
+  resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): DocumentImageInfoWithCacheResourceRef {
+): Promise<DocumentImageInfoWithCacheResourceRef> {
   const legacyRef = normalizeLegacyResourceRef(image);
   if (!legacyRef) return image;
+  const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
+    legacyRef,
+    resolveResourceScope?.() ?? 'project',
+  );
+  await materializeDocumentResource(resourceCache, cacheResourceRef, image);
   return {
     ...image,
     resourceRef: legacyRef,
-    cacheResourceRef: createDocumentResourceRefFromArchiveRef(
-      legacyRef,
-      resolveResourceScope?.() ?? 'project',
-    ),
+    cacheResourceRef,
   };
+}
+
+async function materializeDocumentResource(
+  resourceCache: ResourceCacheService | undefined,
+  resourceRef: ResourceRef,
+  image: DocumentImageInfo,
+): Promise<void> {
+  if (!resourceCache || resourceRef.scope !== 'project') {
+    return;
+  }
+  try {
+    await resourceCache.ensure(resourceRef, {
+      role: 'document-entry',
+      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+      ...(image.width !== undefined ? { width: image.width } : {}),
+      ...(image.height !== undefined ? { height: image.height } : {}),
+    });
+  } catch {
+    // The document result still carries the stable ref; Canvas can materialize through legacy metadata.
+  }
 }
 
 function normalizeLegacyResourceRef(
@@ -391,15 +424,16 @@ function sameDocumentLocator(left: DocumentLocator, right: DocumentLocator): boo
   return false;
 }
 
-function formatReadDocumentData(input: {
+async function formatReadDocumentData(input: {
   readonly content: DocumentContent;
   readonly filePath: string;
   readonly maxChars: number;
   readonly includeMetadata: boolean;
   readonly includeImagePaths: boolean;
   readonly imagePathLimit: number;
+  readonly resourceCache?: ResourceCacheService;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
-}): ReadDocumentToolData {
+}): Promise<ReadDocumentToolData> {
   const text = input.content.text ?? '';
   const truncatedText = truncateText(text, input.maxChars);
   const imagePaths = input.content.imagePaths ?? [];
@@ -407,10 +441,11 @@ function formatReadDocumentData(input: {
     input.includeImagePaths && imagePaths.length > 0
       ? imagePaths.slice(0, input.imagePathLimit)
       : [];
-  const visibleImageInfo = filterImageInfoByVisiblePaths(
+  const visibleImageInfo = await filterImageInfoByVisiblePaths(
     input.content.imageInfo,
     visibleImagePaths,
     input.imagePathLimit,
+    input.resourceCache,
     input.resolveResourceScope,
   );
 

@@ -351,6 +351,13 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("'neko-canvas.document-resource-variant'");
       expect(providerSource).toContain('if (documentResourceRef) {');
       expect(providerSource).toContain("type: 'preview:variantResolved'");
+      expect(providerSource).toContain(
+        'Resource cache variant could not be materialized for this document reference.',
+      );
+      expect(providerSource).not.toContain(
+        'ResourceRef preview materialization failed; falling back to document path',
+      );
+      expect(providerSource).not.toContain("fallback: 'documentResourceRef'");
 
       const documentResourceBranch = providerSource.slice(
         providerSource.indexOf('if (documentResourceRef) {'),

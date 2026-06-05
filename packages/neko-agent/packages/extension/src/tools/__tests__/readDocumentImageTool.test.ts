@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, type ResourceRef, type ToolResult } from '@neko/shared';
+import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { createReadDocumentImageTool } from '../readDocumentImageTool';
 import type { IDocumentReaderService } from '../../services/DocumentReaderService';
 
@@ -109,9 +110,11 @@ describe('createReadDocumentImageTool', () => {
 
   it('resolves a document page image and delegates to ReadImage metadata flow', async () => {
     const reader = createReader();
+    const resourceCache = createResourceCache();
     const tool = createReadDocumentImageTool({
       reader,
       readFile: vi.fn(async () => PNG_1X1),
+      resourceCache,
     });
 
     const result = (await tool.execute({
@@ -146,13 +149,24 @@ describe('createReadDocumentImageTool', () => {
         ],
       }),
     );
+    expect(resourceCache.ensure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'project',
+        provider: 'document-archive',
+        kind: 'document',
+        locator: expect.objectContaining({ entryPath: 'OPS/page-2.png' }),
+      }),
+      { role: 'document-entry', mimeType: 'image/png', width: 1, height: 1 },
+    );
   });
 
   it('marks no-workspace document image analysis refs as extension-private', async () => {
     const reader = createReader();
+    const resourceCache = createResourceCache();
     const tool = createReadDocumentImageTool({
       reader,
       readFile: vi.fn(async () => PNG_1X1),
+      resourceCache,
       resolveResourceScope: () => 'extension-private',
     });
 
@@ -177,6 +191,7 @@ describe('createReadDocumentImageTool', () => {
         ],
       }),
     );
+    expect(resourceCache.ensure).not.toHaveBeenCalled();
   });
 
   it('uses provided image_paths directly when ReadDocument already returned them', async () => {
@@ -251,3 +266,43 @@ describe('createReadDocumentImageTool', () => {
     );
   });
 });
+
+function createResourceCache(): ResourceCacheService {
+  return {
+    registerProvider: vi.fn(),
+    ensure: vi.fn(async (ref: ResourceRef, variant) => ({
+      status: 'ready',
+      ref,
+      variant: { resource: ref, ...variant },
+      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
+    })),
+    resolve: vi.fn(async (ref: ResourceRef, variant) => ({
+      status: 'missing',
+      ref,
+      variant: { resource: ref, ...variant },
+    })),
+    project: vi.fn(async (_webview, ref: ResourceRef, variant) => ({
+      status: 'missing',
+      ref,
+      variant: { resource: ref, ...variant },
+    })),
+    invalidate: vi.fn(async () => undefined),
+    invalidateManifestCache: vi.fn(),
+    stats: vi.fn(async () => ({
+      totalSizeBytes: 0,
+      entryCount: 0,
+      variantCount: 0,
+      staleCount: 0,
+      missingCount: 0,
+      scopeCounts: {},
+      providerCounts: {},
+      providerBytes: {},
+    })),
+    gc: vi.fn(async () => ({
+      removedCount: 0,
+      removedBytes: 0,
+      skippedCount: 0,
+      skippedReasons: {},
+    })),
+  };
+}

@@ -1656,7 +1656,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!requestId || (!assetPath && !resourceRef)) break;
 
         try {
-          let resourceProjectionFailed = false;
           if (resourceRef) {
             const uri = await this.projectResourceCacheVariant(
               webviewPanel.webview,
@@ -1672,18 +1671,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               });
               break;
             }
-            resourceProjectionFailed = true;
-            if (!assetPath) {
-              throw new Error(
-                'Resource cache variant could not be materialized for this document reference.',
-              );
-            }
-            logger.warn(
-              'ResourceRef preview materialization failed; falling back to document path',
-              {
-                resourceId: resourceRef.id,
-                documentEntryPath: documentResourceRef?.entryPath,
-              },
+            throw new Error(
+              'Resource cache variant could not be materialized for this document reference.',
             );
           }
 
@@ -1705,7 +1694,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               type: 'preview:variantResolved',
               requestId,
               url: uri,
-              ...(resourceProjectionFailed ? { fallback: 'documentResourceRef' } : {}),
             });
             break;
           }
@@ -3158,6 +3146,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       delete nodeData['documentResourceStatus'];
       return;
     }
+    if (isResourceRef(unifiedResourceRef)) {
+      this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
+      return;
+    }
 
     const resourceRef = nodeData['documentResourceRef'];
     if (!isDocumentArchiveResourceRef(resourceRef) || !resourceRef.cachePath) {
@@ -3204,6 +3196,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (projected) {
       nodeData['runtimeReferenceImagePath'] = projected;
       delete nodeData['documentResourceStatus'];
+      return;
+    }
+    if (isResourceRef(unifiedResourceRef)) {
+      this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
       return;
     }
 

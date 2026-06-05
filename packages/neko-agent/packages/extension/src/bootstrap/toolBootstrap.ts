@@ -30,6 +30,7 @@ import type { Platform } from '@neko/platform';
 import type { IToolGroupRegistry, Tool } from '@neko/shared';
 import { getRootLogger } from '../base';
 import { createDocumentReaderService } from '../services/DocumentReaderService';
+import { createDocumentResourceCacheService } from '../services/documentResourceCacheService';
 import { getEngineClientProvider } from '../services/engineClientProvider';
 import { createReadDocumentTool } from '../tools/readDocumentTool';
 import { createReadDocumentImageTool } from '../tools/readDocumentImageTool';
@@ -45,6 +46,9 @@ export function registerExtensionTools(
   context?: vscode.ExtensionContext,
 ): void {
   const documentReader = createDocumentReaderService(getEngineClientProvider(), context);
+  const documentResourceCache = context
+    ? createDocumentResourceCacheService({ reader: documentReader, context })
+    : undefined;
   const resolveDocumentResourceScope = () =>
     vscode.workspace.workspaceFolders?.[0] ? ('project' as const) : ('extension-private' as const);
   const tools = createPluginSkillDiscoveryTools(
@@ -54,6 +58,7 @@ export function registerExtensionTools(
   tools.push(
     createReadDocumentTool({
       reader: documentReader,
+      resourceCache: documentResourceCache,
       resolveResourceScope: resolveDocumentResourceScope,
     }),
     createReadImageTool({
@@ -62,6 +67,7 @@ export function registerExtensionTools(
     createReadDocumentImageTool({
       reader: documentReader,
       platform: _platform,
+      resourceCache: documentResourceCache,
       resolveResourceScope: resolveDocumentResourceScope,
     }),
   );

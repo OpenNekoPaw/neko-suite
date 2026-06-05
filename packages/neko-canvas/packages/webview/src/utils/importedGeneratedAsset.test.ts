@@ -111,6 +111,73 @@ describe('imported generated asset normalization', () => {
     });
   });
 
+  it('does not treat unprojected legacy paths as runtime preview paths for linked imports', () => {
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+        metadata: {
+          legacyCachePath:
+            '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page.jpg',
+        },
+      },
+      locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:image/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
+    const asset = normalizeImportedGeneratedAsset({
+      path: '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page.jpg',
+      type: 'image',
+      resourceRef,
+    });
+
+    if (!asset) throw new Error('expected normalized asset');
+
+    expect(getImportedGeneratedAssetNodeInput(asset)).toEqual({
+      assetPath: '',
+      resourceRef,
+    });
+  });
+
+  it('accepts linked resource imports without a private cache path', () => {
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:image/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
+
+    expect(
+      normalizeImportedGeneratedAsset({
+        type: 'image',
+        name: 'page-1.jpg',
+        resourceRef,
+      }),
+    ).toEqual({
+      path: '',
+      mediaType: 'image',
+      name: 'page-1.jpg',
+      resourceRef,
+    });
+  });
+
   it('keeps plain imports as durable asset paths when no resource ref is present', () => {
     const asset = normalizeImportedGeneratedAsset({
       path: '/repo/neko/generated/image/out.png',

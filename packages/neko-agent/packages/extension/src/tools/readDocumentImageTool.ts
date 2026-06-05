@@ -8,6 +8,7 @@ import {
   type Tool,
   type ToolResult,
 } from '@neko/shared';
+import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import type { Platform } from '@neko/platform';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
@@ -28,6 +29,7 @@ export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 16;
 export interface ReadDocumentImageToolDeps extends ReadImageToolDeps {
   readonly reader: IDocumentReaderService;
   readonly platform?: Platform;
+  readonly resourceCache?: ResourceCacheService;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
 
@@ -199,18 +201,24 @@ export async function executeReadDocumentImage(
         source: typeof source === 'string' ? { filePath: source } : source,
         mode,
         analysis,
-        images: extractImagesFromReadImageData(readImageResult.data).map((image, index) => {
-          const documentImage = selected[index]?.info
-            ? withCacheResourceRef(selected[index].info, deps.resolveResourceScope)
-            : undefined;
-          return {
-            ...image,
-            ...(documentImage ? { documentImage } : {}),
-            ...(documentImage?.cacheResourceRef
-              ? { cacheResourceRef: documentImage.cacheResourceRef }
-              : {}),
-          };
-        }),
+        images: await Promise.all(
+          extractImagesFromReadImageData(readImageResult.data).map(async (image, index) => {
+            const documentImage = selected[index]?.info
+              ? await withCacheResourceRef(
+                  selected[index].info,
+                  deps.resourceCache,
+                  deps.resolveResourceScope,
+                )
+              : undefined;
+            return {
+              ...image,
+              ...(documentImage ? { documentImage } : {}),
+              ...(documentImage?.cacheResourceRef
+                ? { cacheResourceRef: documentImage.cacheResourceRef }
+                : {}),
+            };
+          }),
+        ),
         imageCount: selected.length,
       },
     };
@@ -275,24 +283,47 @@ function extractImagesFromReadImageData(data: unknown): readonly Record<string, 
   return isRecord(data) && Array.isArray(data['images']) ? data['images'].filter(isRecord) : [];
 }
 
-function withCacheResourceRef(
+async function withCacheResourceRef(
   image: DocumentImageInfo,
+  resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): DocumentImageInfoWithCacheResourceRef {
+): Promise<DocumentImageInfoWithCacheResourceRef> {
   if (!image.resourceRef) return image;
   const legacyRef = {
     ...image.resourceRef,
     ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
   };
+  const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
+    legacyRef,
+    resolveResourceScope?.() ?? 'project',
+  );
+  await materializeDocumentResource(resourceCache, cacheResourceRef, image);
   return {
     ...image,
     resourceRef: legacyRef,
-    cacheResourceRef: createDocumentResourceRefFromArchiveRef(
-      legacyRef,
-      resolveResourceScope?.() ?? 'project',
-    ),
+    cacheResourceRef,
   };
+}
+
+async function materializeDocumentResource(
+  resourceCache: ResourceCacheService | undefined,
+  resourceRef: ResourceRef,
+  image: DocumentImageInfo,
+): Promise<void> {
+  if (!resourceCache || resourceRef.scope !== 'project') {
+    return;
+  }
+  try {
+    await resourceCache.ensure(resourceRef, {
+      role: 'document-entry',
+      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+      ...(image.width !== undefined ? { width: image.width } : {}),
+      ...(image.height !== undefined ? { height: image.height } : {}),
+    });
+  } catch {
+    // Keep the stable ref in the tool result even when prewarming the shared cache fails.
+  }
 }
 
 function readDocumentSource(value: unknown): DocumentSourceRef | null {

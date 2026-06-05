@@ -27,14 +27,21 @@ export function normalizeImportedGeneratedAsset(
   if (typeof value !== 'object' || value === null) return null;
   const asset = value as Record<string, unknown>;
   const path = typeof asset.path === 'string' ? asset.path : '';
-  if (!path) return null;
+  const documentResourceRef = isDocumentArchiveResourceRef(asset.documentResourceRef)
+    ? asset.documentResourceRef
+    : undefined;
+  const resourceRef = isResourceRef(asset.resourceRef) ? asset.resourceRef : undefined;
+  if (!path && !documentResourceRef && !resourceRef) return null;
 
-  const mediaType = normalizeImportedMediaType(asset.type ?? asset.mediaType, path);
+  const linkedPath = readLinkedResourcePath(documentResourceRef, resourceRef);
+  const mediaType = normalizeImportedMediaType(asset.type ?? asset.mediaType, path || linkedPath);
   const name =
     typeof asset.name === 'string' && asset.name
       ? asset.name
       : getImportedAssetFileName(
-          typeof asset.originalPath === 'string' && asset.originalPath ? asset.originalPath : path,
+          typeof asset.originalPath === 'string' && asset.originalPath
+            ? asset.originalPath
+            : path || linkedPath || 'document-resource',
         );
 
   return {
@@ -44,10 +51,8 @@ export function normalizeImportedGeneratedAsset(
     ...(typeof asset.originalPath === 'string' && asset.originalPath
       ? { originalPath: asset.originalPath }
       : {}),
-    ...(isDocumentArchiveResourceRef(asset.documentResourceRef)
-      ? { documentResourceRef: asset.documentResourceRef }
-      : {}),
-    ...(isResourceRef(asset.resourceRef) ? { resourceRef: asset.resourceRef } : {}),
+    ...(documentResourceRef ? { documentResourceRef } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
   };
 }
 
@@ -55,9 +60,10 @@ export function getImportedGeneratedAssetNodeInput(
   asset: ImportedGeneratedAssetPayload,
 ): ImportedGeneratedAssetNodeInput {
   const hasLinkedResource = Boolean(asset.documentResourceRef || asset.resourceRef);
+  const runtimeAssetPath = hasLinkedResource ? readSafeRuntimeImportPath(asset.path) : undefined;
   return {
     assetPath: hasLinkedResource ? '' : asset.path,
-    ...(hasLinkedResource ? { runtimeAssetPath: asset.path } : {}),
+    ...(runtimeAssetPath ? { runtimeAssetPath } : {}),
     ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
     ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),
   };
@@ -88,4 +94,21 @@ function getImportedAssetFileName(assetPath: string): string {
   } catch {
     return assetPath.split(/[\\/]/).pop() || 'generated-asset';
   }
+}
+
+function readSafeRuntimeImportPath(value: string): string | undefined {
+  return /^(data:|blob:|https?:)/.test(value) ? value : undefined;
+}
+
+function readLinkedResourcePath(
+  documentResourceRef: DocumentArchiveResourceRef | undefined,
+  resourceRef: ResourceRef | undefined,
+): string {
+  return (
+    documentResourceRef?.entryPath ??
+    (resourceRef?.locator?.kind === 'document' ? resourceRef.locator.entryPath : undefined) ??
+    resourceRef?.source.filePath ??
+    resourceRef?.id ??
+    ''
+  );
 }
