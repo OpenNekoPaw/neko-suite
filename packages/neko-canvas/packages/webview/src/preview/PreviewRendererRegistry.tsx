@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DelegateAction } from '@neko/shared';
+import { isResourceRef, type DelegateAction, type ResourceRef } from '@neko/shared';
 import { dispatchPreviewDelegate } from './previewDelegates';
 import { isSafeWebviewUrl, WebviewPreviewResolver } from './previewResolver';
 import { PreviewRuntime } from './previewRuntime';
@@ -71,7 +71,11 @@ function useResolvedVariant(source: PreviewSourceDescriptor): RuntimePreviewVari
   return variant;
 }
 
-function useCaptureFrame(assetPath: string | undefined, nodeId: string): string | null {
+function useCaptureFrame(
+  assetPath: string | undefined,
+  nodeId: string,
+  resourceRef: ResourceRef | undefined,
+): string | null {
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const requestedRef = useRef(false);
 
@@ -97,11 +101,12 @@ function useCaptureFrame(assetPath: string | undefined, nodeId: string): string 
       type: 'media:captureFrame',
       nodeId,
       assetPath,
+      ...(resourceRef ? { resourceRef } : {}),
       time: 1,
     });
 
     return () => window.removeEventListener('message', handleMessage);
-  }, [assetPath, nodeId]);
+  }, [assetPath, nodeId, resourceRef]);
 
   return frameUrl;
 }
@@ -137,6 +142,7 @@ function useMediaStream(
   assetPath: string | undefined,
   mediaType: 'video' | 'audio',
   surfaceKind: PlaybackSurfaceKind,
+  resourceRef: ResourceRef | undefined,
 ) {
   const [surfaceId] = useState(() => createPlaybackSurfaceId(mediaType));
   const [stream, setStream] = useState<MediaStreamState | null>(null);
@@ -200,6 +206,7 @@ function useMediaStream(
             type: 'media:play',
             nodeId: surfaceId,
             assetPath,
+            ...(resourceRef ? { resourceRef } : {}),
             mediaInfo,
             mediaType,
             startTime,
@@ -242,10 +249,11 @@ function useMediaStream(
         type: 'media:probe',
         nodeId: surfaceId,
         assetPath,
+        ...(resourceRef ? { resourceRef } : {}),
         mediaType,
       });
     },
-    [assetPath, mediaType, savedStartTime, surfaceId, surfaceKind],
+    [assetPath, mediaType, resourceRef, savedStartTime, surfaceId, surfaceKind],
   );
 
   const pausePlayback = useCallback(
@@ -522,7 +530,8 @@ function renderVideoPreview({
   const variant = useResolvedVariant(source);
   const thumbnailUrl = variant?.runtimeUrl ?? getStableSafeUrl(source);
   const assetPath = source.asset?.path;
-  const capturedFrame = useCaptureFrame(assetPath, source.id);
+  const resourceRef = readPreviewSourceResourceRef(source);
+  const capturedFrame = useCaptureFrame(assetPath, source.id, resourceRef);
   const {
     stream,
     probing,
@@ -533,7 +542,7 @@ function renderVideoPreview({
     seekPlayback,
     updatePlaybackProgress,
     stopPlayback,
-  } = useMediaStream(assetPath, 'video', surfaceKind);
+  } = useMediaStream(assetPath, 'video', surfaceKind, resourceRef);
 
   const posterUrl = capturedFrame ?? thumbnailUrl;
 
@@ -589,6 +598,7 @@ function renderAudioPreview({
   surfaceKind = 'inline',
 }: PreviewRendererProps): React.ReactNode {
   const assetPath = source.asset?.path;
+  const resourceRef = readPreviewSourceResourceRef(source);
   const {
     stream,
     probing,
@@ -599,7 +609,7 @@ function renderAudioPreview({
     seekPlayback,
     updatePlaybackProgress,
     stopPlayback,
-  } = useMediaStream(assetPath, 'audio', surfaceKind);
+  } = useMediaStream(assetPath, 'audio', surfaceKind, resourceRef);
 
   if (stream && stream.audioStreamUrl) {
     return (
@@ -661,6 +671,11 @@ function renderAudioPreview({
       </div>
     </div>
   );
+}
+
+function readPreviewSourceResourceRef(source: PreviewSourceDescriptor): ResourceRef | undefined {
+  const ref = source.metadata?.['resourceRef'];
+  return isResourceRef(ref) ? ref : undefined;
 }
 
 function useProjectThumbnail(assetPath: string | undefined, nodeId: string): string | null {

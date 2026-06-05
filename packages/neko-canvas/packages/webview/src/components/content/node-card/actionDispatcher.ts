@@ -9,6 +9,7 @@ import {
   readDocumentResourceRef,
   readRecord,
   readRenderableAssetPath,
+  readResourceRef,
   readString,
 } from './utils';
 
@@ -31,12 +32,14 @@ export const NODE_CARD_ACTION_DISPATCHER: NodeCardActionDispatcher = {
       return;
     }
     const documentResourceRef = readDocumentResourceRef(ctx.node);
+    const resourceRef = readResourceRef(ctx.node);
 
     ctx.postMessage({
       type: 'openMediaPreview',
       assetPath,
       mediaType: readString(ctx.node.data, 'mediaType'),
       ...(documentResourceRef ? { documentResourceRef } : {}),
+      ...(resourceRef ? { resourceRef } : {}),
     });
   },
 

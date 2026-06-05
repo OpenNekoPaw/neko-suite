@@ -71,6 +71,7 @@ export {
   readNumber,
   readRenderableAssetPath,
   readRecord,
+  readResourceRef,
   readString,
   resolvePlacementTitle,
 } from './utils';

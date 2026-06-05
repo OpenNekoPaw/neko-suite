@@ -239,6 +239,22 @@ describe('canvasEditorProvider message contracts', () => {
         'resolveCanvasPreviewVariantRole(resourceRef, preferredRole)',
       );
     });
+
+    it('open media preview resolves ResourceRef through content access before legacy cache paths', () => {
+      expect(providerSource).toContain("case 'openMediaPreview'");
+      expect(providerSource).toContain('this.resolveResourceRefLocalPreviewPath(');
+      expect(providerSource).toContain("'neko-canvas.open-media-preview'");
+      expect(providerSource).toContain("target: 'local-path'");
+    });
+
+    it('media playback actions resolve ResourceRef through content access', () => {
+      expect(providerSource).toContain("case 'media:probe'");
+      expect(providerSource).toContain("'neko-canvas.media-probe'");
+      expect(providerSource).toContain("case 'media:play'");
+      expect(providerSource).toContain("'neko-canvas.media-play'");
+      expect(providerSource).toContain("case 'media:captureFrame'");
+      expect(providerSource).toContain("'neko-canvas.media-capture-frame'");
+    });
   });
 
   describe('NKV-014: intent-aware content access boundaries', () => {

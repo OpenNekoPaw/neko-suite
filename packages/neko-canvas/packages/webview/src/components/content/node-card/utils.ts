@@ -79,7 +79,8 @@ export function hasPreviewDescriptorContent(source: PreviewSourceDescriptor): bo
   return Boolean(
     (source.asset?.path ?? source.asset?.uri) ||
     source.variants?.some((variant) => variant.sourcePath) ||
-    parseDocumentArchiveResourceRef(source.metadata?.['documentResourceRef']),
+    parseDocumentArchiveResourceRef(source.metadata?.['documentResourceRef']) ||
+    isResourceRef(source.metadata?.['resourceRef']),
   );
 }
 

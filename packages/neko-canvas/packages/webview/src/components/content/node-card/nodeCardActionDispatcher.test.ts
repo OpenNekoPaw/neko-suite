@@ -78,6 +78,47 @@ describe('node card action dispatcher', () => {
     });
   });
 
+  it('passes unified resource refs when opening resource-linked media', () => {
+    const postMessage = vi.fn();
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/cache/page-1.jpg',
+      versionPolicy: 'versioned-export' as const,
+    };
+    const resourceRef = {
+      id: 'res_page_1',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: { kind: 'document' as const, filePath: '${BOOKS}/comic.epub' },
+      locator: { kind: 'document' as const, entryPath: 'image/page-1.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'page-1' },
+    };
+
+    NODE_CARD_ACTION_DISPATCHER['open-media-preview'](
+      createNodeActionContext({
+        node: createNode('media-doc', 'media', {
+          assetPath: '',
+          runtimeAssetPath: 'https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg',
+          mediaType: 'image',
+          documentResourceRef,
+          resourceRef,
+        }),
+        postMessage,
+      }),
+    );
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'openMediaPreview',
+      assetPath: 'https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg',
+      mediaType: 'image',
+      documentResourceRef,
+      resourceRef,
+    });
+  });
+
   it('duplicates by using clipboard, history, canvas data write, and selection flow', () => {
     const source = createNode('shot-1', 'shot');
     const duplicate = createNode('shot-2', 'shot');

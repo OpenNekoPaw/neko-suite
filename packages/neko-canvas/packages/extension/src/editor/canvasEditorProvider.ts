@@ -1599,19 +1599,26 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'openMediaPreview': {
         // Open media in neko-preview's customEditor.
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           message.documentResourceRef,
+          resourceRef,
         );
         const mediaTypeHint = message.mediaType as string | undefined;
-        if (!assetPath) break;
+        if (!assetPath && !resourceRef) break;
 
         try {
           // Resolve to filesystem path (handles webview URIs, absolute, and relative paths)
-          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          const fsPath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(
+                resourceRef,
+                'neko-canvas.open-media-preview',
+              )
+            : await this.resolveAssetPath(assetPath!, document.uri);
           const fileUri = vscode.Uri.file(fsPath);
 
-          const ext = assetPath.split('.').pop()?.toLowerCase() ?? '';
+          const ext = fsPath.split('.').pop()?.toLowerCase() ?? '';
           const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'ts', 'flv', 'wmv'];
           const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
           const panoramicRoute = getPanoramicPreviewRoute({
@@ -2192,14 +2199,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       // =================================================================
 
       case 'media:probe': {
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           message.documentResourceRef,
+          resourceRef,
         );
         const mediaType = readPlaybackMediaType(message.mediaType);
-        if (!assetPath) break;
+        if (!assetPath && !resourceRef) break;
         try {
-          const filePath = await this.resolveAssetPath(assetPath, document.uri);
+          const filePath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-probe')
+            : await this.resolveAssetPath(assetPath!, document.uri);
           const playback = await this.getMediaPlayback();
           if (!playback) {
             webviewPanel.webview.postMessage({
@@ -2228,17 +2239,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'media:play': {
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           message.documentResourceRef,
+          resourceRef,
         );
         const mediaInfo = message.mediaInfo as Record<string, unknown>;
         const startTime = (message.startTime as number) ?? 0;
         const speed = (message.speed as number) ?? 1.0;
         const mediaType = readPlaybackMediaType(message.mediaType);
-        if (!assetPath || !mediaInfo) break;
+        if ((!assetPath && !resourceRef) || !mediaInfo) break;
         try {
-          const filePath = await this.resolveAssetPath(assetPath, document.uri);
+          const filePath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-play')
+            : await this.resolveAssetPath(assetPath!, document.uri);
           const playback = await this.getMediaPlayback();
           if (!playback) {
             webviewPanel.webview.postMessage({
@@ -2327,14 +2342,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'media:captureFrame': {
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           message.documentResourceRef,
+          resourceRef,
         );
         const time = (message.time as number) ?? 0;
-        if (!assetPath) break;
+        if (!assetPath && !resourceRef) break;
         try {
-          const filePath = await this.resolveAssetPath(assetPath, document.uri);
+          const filePath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(
+                resourceRef,
+                'neko-canvas.media-capture-frame',
+              )
+            : await this.resolveAssetPath(assetPath!, document.uri);
           const playback = await this.getMediaPlayback();
           if (!playback) {
             webviewPanel.webview.postMessage({
@@ -3268,6 +3290,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       });
     }
     return undefined;
+  }
+
+  private async resolveResourceRefLocalPreviewPath(
+    resourceRef: ResourceRef,
+    caller: string,
+    preferredRole?: ResourceVariantRole,
+  ): Promise<string> {
+    if (!this.contentAccess) {
+      throw new Error('Resource cache is unavailable for this workspace.');
+    }
+    const role = resolveCanvasPreviewVariantRole(resourceRef, preferredRole);
+    const result = await this.contentAccess.resolve({
+      ref: resourceRef,
+      intent: 'interactive-preview',
+      target: 'local-path',
+      variant: { role },
+      materialization: 'if-missing',
+      caller,
+    });
+    if (result.status === 'ready' && result.localPath) {
+      return result.localPath;
+    }
+    throw new Error(
+      result.error ??
+        'Resource cache variant could not be materialized for this document reference.',
+    );
   }
 
   private resolveDocumentResourceCacheRoot(cachePath: string): vscode.Uri | undefined {
