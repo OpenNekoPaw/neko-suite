@@ -18,10 +18,6 @@ export function getDocumentImageCacheUri(context: vscode.ExtensionContext): vsco
   return vscode.Uri.file(getDocumentImageCacheFsPath(context));
 }
 
-export function getLegacyDocumentImageCacheUri(context: vscode.ExtensionContext): vscode.Uri {
-  return vscode.Uri.file(path.join(context.globalStorageUri.fsPath, DOCUMENT_IMAGE_CACHE_DIR));
-}
-
 export function getWorkspaceCacheUri(): vscode.Uri | undefined {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
@@ -29,4 +25,12 @@ export function getWorkspaceCacheUri(): vscode.Uri | undefined {
   }
   const layout = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot);
   return vscode.Uri.file(layout.project.local.cache.root);
+}
+
+export function isDocumentImageCachePath(value: string): boolean {
+  const normalized = value.replace(/\\/g, '/').replace(/%20/g, ' ');
+  return (
+    normalized.includes(`/${DOCUMENT_IMAGE_CACHE_DIR}/`) ||
+    normalized.endsWith(`/${DOCUMENT_IMAGE_CACHE_DIR}`)
+  );
 }

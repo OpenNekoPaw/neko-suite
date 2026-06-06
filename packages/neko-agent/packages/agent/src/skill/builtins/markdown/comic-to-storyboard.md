@@ -21,6 +21,7 @@ This skill stops at analysis and storyboard planning. It does not generate image
    - Count panels.
 3. Before structuring the storyboard, build an image index and panel mapping:
    - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label.
+   - Record the alias scope for each batch (`toolCallId`, source document id, or `aliasScope`). Aliases such as `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
    - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
    - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.
    - Multiple shots may explicitly reference the same page image, but explain the panel/page mapping in `label`, `decisionReason`, or `extensions["neko.mangaToVideo"]`; include panel/crop/bbox when crop information is available.
@@ -48,11 +49,13 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
 - Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
 - Only write plan fields. Do not claim images have already been generated until a runtime/tool result exists.
-- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the exact tool call id and asset index.
+- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the exact tool call id and asset index. The tool call id is the runtime id from the tool result, not a tool name, alias, or invented label such as `ReadImage.front10pages`.
+- Every shot that comes from a document page or image sequence must name its source page/image. Prefer a readable field such as `sourcePage: "P6"` or `sourceImage: "page_6"`; the structured payload normalizer records it as `extensions["neko.storyboardSourceImage"]`. When one page becomes multiple shots, those shots must point to the same source page instead of advancing to the next image by row order.
+- If multiple tool calls or batches contain the same alias, such as two different `page_1` images, disambiguate with `sourceMediaRefs[].locator.toolCallId` and `assetIndex`. Do not rely on row order in multi-batch contexts.
 - If a shot comes from a page/panel image, write that image into `sourceMediaRefs`; do not only describe the image in human-readable notes.
 - When `imageStrategy` is `reuse-original`, `use-as-reference`, or `transform-original`, provide `sourceMediaRefs`. Only text/script expansion with no image source may omit image refs.
 - Do not invent image ids, do not copy local cache paths into `referenceImagePath`, and do not convert images to base64 yourself.
-- Do not embed base64 image data, blob URLs, localhost URLs, absolute local paths, or invented tool call ids in the table.
+- Do not embed base64 image data, blob URLs, localhost URLs, Webview URIs, `.neko/.cache/document-image-cache`, `globalStorageUri/document-image-cache`, absolute local paths, old `cachePath` values, or invented tool call ids in the table.
 - Do not ask the user to copy or edit the JSON; the UI consumes the payload directly.
 - If the user asks to send the storyboard to Canvas, activate a Canvas or media-to-video related skill after the structured plan is ready. Do not report Canvas success from this skill unless an actual Canvas tool result exists.
 
@@ -72,6 +75,7 @@ This skill stops at analysis and storyboard planning. It does not generate image
           "shotId": "scene-1-shot-1",
           "shotNumber": 1,
           "duration": 3,
+          "sourcePage": "P1",
           "visualDescription": "Panel action and composition",
           "characterAction": "Character action",
           "dialogue": "OCR dialogue if present",

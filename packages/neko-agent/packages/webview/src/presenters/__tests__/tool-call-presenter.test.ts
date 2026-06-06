@@ -210,6 +210,57 @@ describe('tool-call-presenter', () => {
     ]);
   });
 
+  it('keeps ReadImage stable refs even when no webview URI is available', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-3b',
+      name: 'ReadImage',
+      arguments: {},
+      result: {
+        success: true,
+        data: {
+          images: [
+            {
+              path: '/mock/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg',
+              label: 'Page 1',
+              width: 1494,
+              height: 2133,
+              mimeType: 'image/jpeg',
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/Page_1.jpg',
+                versionPolicy: 'versioned-export',
+              },
+              cacheResourceRef,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(projection.documentThumbnails).toEqual([
+      expect.objectContaining({
+        filePath: '/books/a.epub',
+        path: '/mock/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg',
+        src: undefined,
+        width: 1494,
+        height: 2133,
+        mimeType: 'image/jpeg',
+        label: 'Page 1',
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'image/Page_1.jpg',
+          versionPolicy: 'versioned-export',
+        },
+        cacheResourceRef,
+      }),
+    ]);
+    expect(JSON.parse(projection.documentThumbnails[0]!.referenceJson).image).not.toHaveProperty(
+      'webviewUri',
+    );
+  });
+
   it('projects ReadImage image_paths arguments into thumbnails when failed', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-4',

@@ -50,13 +50,19 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                 }
               >
                 <div className="relative h-28 w-full bg-[var(--agent-bg)]">
-                  <img
-                    src={thumbnail.src}
-                    alt={thumbnail.label}
-                    loading="lazy"
-                    draggable={false}
-                    className="h-full w-full object-cover"
-                  />
+                  {thumbnail.src ? (
+                    <img
+                      src={thumbnail.src}
+                      alt={thumbnail.label}
+                      loading="lazy"
+                      draggable={false}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[var(--agent-fg-secondary)]">
+                      <FileIcon className="h-5 w-5" />
+                    </div>
+                  )}
                   <span className="absolute left-1 top-1 rounded bg-black/65 px-1 py-0.5 text-[9px] font-medium leading-none text-white">
                     {thumbnail.label}
                   </span>
@@ -94,7 +100,9 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                     payload={{
                       kind: 'singleAsset',
                       asset: {
-                        path: thumbnail.path,
+                        ...(thumbnail.resourceRef || thumbnail.cacheResourceRef
+                          ? {}
+                          : { path: thumbnail.path }),
                         mediaType: 'image',
                         name: getFileName(thumbnail.path),
                         ...(thumbnail.resourceRef
@@ -118,6 +126,7 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                                 ...(thumbnail.cacheResourceRef
                                   ? { resourceRef: thumbnail.cacheResourceRef }
                                   : {}),
+                                runtimePath: thumbnail.path,
                               },
                             }
                           : {}),

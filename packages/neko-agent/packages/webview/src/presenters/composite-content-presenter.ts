@@ -24,7 +24,11 @@ export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 
 
 export type CompositeMediaType = 'image' | 'video' | 'audio' | 'model' | 'unknown';
 
-export type CompositeMediaDiagnosticCode = 'missing-tool-result' | 'missing-asset' | 'missing-uri';
+export type CompositeMediaDiagnosticCode =
+  | 'missing-tool-result'
+  | 'missing-asset'
+  | 'missing-uri'
+  | 'ambiguous-media-alias';
 
 export interface CompositeMediaDiagnostic {
   readonly code: CompositeMediaDiagnosticCode;
@@ -117,6 +121,10 @@ interface MediaCandidate {
   readonly cacheResourceRef?: ResourceRef;
   readonly mimeType?: string;
   readonly label?: string;
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
   readonly pageNumber?: number;
 }
 
@@ -124,8 +132,23 @@ interface InferredStoryboardImageRef {
   readonly toolCallId: string;
   readonly assetIndex: number;
   readonly label?: string;
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
+  readonly batchKey: string;
   readonly mimeType?: string;
   readonly pageNumber?: number;
+  readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
+}
+
+interface StoryboardImageAliasIndex {
+  readonly refs: readonly InferredStoryboardImageRef[];
+  readonly batches: ReadonlyMap<string, readonly InferredStoryboardImageRef[]>;
+  readonly aliases: ReadonlyMap<string, readonly InferredStoryboardImageRef[]>;
+  readonly scopedAliases: ReadonlyMap<string, readonly InferredStoryboardImageRef[]>;
+  readonly sourceLocators: ReadonlyMap<string, readonly InferredStoryboardImageRef[]>;
 }
 
 const MAX_COMPOSITE_MEDIA_DIAGNOSTICS = 8;
@@ -140,6 +163,7 @@ export function projectCompositeBlockRichContent(
     normalizedStoryboard,
     toolCalls,
     input.composite.sections,
+    diagnostics,
   );
   const sectionInputs = maybeAlignStoryboardSectionMediaRefs(
     input.composite.sections,
@@ -164,9 +188,7 @@ export function projectCompositeBlockRichContent(
     ...(input.composite.title ? { title: input.composite.title } : {}),
     ...(input.plugins ? { plugins: input.plugins } : {}),
     ...(storyboardTable ? { storyboardTable } : {}),
-    ...(input.composite.storyboardDiagnostics
-      ? { storyboardDiagnostics: input.composite.storyboardDiagnostics }
-      : {}),
+    ...mergeStoryboardDiagnostics(input.composite.storyboardDiagnostics, diagnostics),
     sections,
     diagnostics,
   };
@@ -189,14 +211,79 @@ function normalizeCompositeStoryboardTable(
   return normalizeStoryboardTableV1({ value: storyboardTable }).table ?? storyboardTable;
 }
 
+function mergeStoryboardDiagnostics(
+  existing: readonly CompositeStoryboardDiagnostic[] | undefined,
+  mediaDiagnostics: readonly CompositeMediaDiagnostic[],
+): { readonly storyboardDiagnostics?: readonly CompositeStoryboardDiagnostic[] } {
+  const projected = mediaDiagnostics.flatMap(projectMediaDiagnosticToStoryboardDiagnostic);
+  const merged = dedupeStoryboardDiagnostics([...(existing ?? []), ...projected]);
+  return merged.length > 0 ? { storyboardDiagnostics: merged } : {};
+}
+
+function dedupeStoryboardDiagnostics(
+  diagnostics: readonly CompositeStoryboardDiagnostic[],
+): readonly CompositeStoryboardDiagnostic[] {
+  const seen = new Set<string>();
+  const result: CompositeStoryboardDiagnostic[] = [];
+  for (const diagnostic of diagnostics) {
+    const key = [
+      diagnostic.code,
+      diagnostic.path.join('.'),
+      JSON.stringify(diagnostic.actual ?? ''),
+      JSON.stringify(diagnostic.details ?? {}),
+    ].join(':');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(diagnostic);
+  }
+  return result;
+}
+
+function projectMediaDiagnosticToStoryboardDiagnostic(
+  diagnostic: CompositeMediaDiagnostic,
+): readonly CompositeStoryboardDiagnostic[] {
+  switch (diagnostic.code) {
+    case 'ambiguous-media-alias':
+      return [
+        {
+          severity: 'error',
+          code: 'ambiguous-media-alias',
+          path: ['sourceMediaRefs'],
+          message: diagnostic.message,
+          details: {
+            toolCallId: diagnostic.toolCallId,
+            ...(diagnostic.assetIndex !== undefined ? { assetIndex: diagnostic.assetIndex } : {}),
+          },
+        },
+      ];
+    case 'missing-tool-result':
+      return [
+        {
+          severity: 'error',
+          code: 'unresolved-tool-result',
+          path: ['sourceMediaRefs'],
+          message: diagnostic.message,
+          actual: diagnostic.toolCallId,
+          details: {
+            toolCallId: diagnostic.toolCallId,
+            ...(diagnostic.assetIndex !== undefined ? { assetIndex: diagnostic.assetIndex } : {}),
+          },
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
 function maybeAttachInferredStoryboardMediaRefs(
   storyboardTable: StoryboardTableV1 | undefined,
   toolCalls: ReadonlyMap<string, ToolCall>,
   sections: readonly CompositeSection[],
+  diagnostics: CompositeMediaDiagnostic[],
 ): StoryboardTableV1 | undefined {
   if (!storyboardTable) return undefined;
-  const inferredRefs = collectSequentialStoryboardImageRefs(toolCalls);
-  if (inferredRefs.length === 0) return storyboardTable;
+  const imageIndex = createStoryboardImageAliasIndex(toolCalls);
+  if (imageIndex.refs.length === 0) return storyboardTable;
 
   let rowIndex = 0;
   let changed = false;
@@ -208,7 +295,8 @@ function maybeAttachInferredStoryboardMediaRefs(
         shot,
         section: sections[rowIndex],
         rowIndex,
-        inferredRefs,
+        imageIndex,
+        diagnostics,
       });
       rowIndex += 1;
       if (!inferredRef || hasResolvedStoryboardShotImageReference(shot, toolCalls)) {
@@ -233,17 +321,31 @@ function selectInferredStoryboardImageRefForShot(input: {
   readonly shot: StoryboardTableV1['scenes'][number]['shots'][number];
   readonly section?: CompositeSection;
   readonly rowIndex: number;
-  readonly inferredRefs: readonly InferredStoryboardImageRef[];
+  readonly imageIndex: StoryboardImageAliasIndex;
+  readonly diagnostics: CompositeMediaDiagnostic[];
 }): InferredStoryboardImageRef | undefined {
+  const explicit = selectExplicitStoryboardImageRef(input.shot, input.imageIndex);
+  if (explicit) return explicit;
+  const hasExplicitRefs =
+    (input.shot.sourceMediaRefs ?? []).length > 0 || (input.shot.mediaRefs ?? []).length > 0;
+
   const pageNumber = inferStoryboardShotPageNumber(input.scene, input.shot, input.section);
   if (pageNumber !== undefined) {
-    return (
-      input.inferredRefs.find((ref) => ref.pageNumber === pageNumber) ??
-      input.inferredRefs[pageNumber - 1] ??
-      input.inferredRefs[input.rowIndex]
-    );
+    const aliasMatches = selectUniqueAliasRef(input.imageIndex, `page_${pageNumber}`);
+    if (aliasMatches.status === 'unique') return aliasMatches.ref;
+    if (aliasMatches.status === 'ambiguous') {
+      pushDiagnostic(input.diagnostics, {
+        code: 'ambiguous-media-alias',
+        toolCallId: 'storyboard-alias',
+        message: `Storyboard alias page_${pageNumber} resolves to multiple image batches.`,
+      });
+      return undefined;
+    }
   }
-  return input.inferredRefs[input.rowIndex];
+
+  if (hasExplicitRefs) return undefined;
+  const batchRefs = selectSingleEligibleImageBatch(input.imageIndex);
+  return batchRefs?.[input.rowIndex];
 }
 
 function hasResolvedStoryboardShotImageReference(
@@ -257,6 +359,40 @@ function hasResolvedStoryboardShotImageReference(
   });
 }
 
+function selectExplicitStoryboardImageRef(
+  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+  imageIndex: StoryboardImageAliasIndex,
+): InferredStoryboardImageRef | undefined {
+  for (const mediaRef of [...(shot.sourceMediaRefs ?? []), ...(shot.mediaRefs ?? [])]) {
+    const locator = mediaRef.locator;
+    if (locator.type === 'tool-result') {
+      const exact = imageIndex.refs.find(
+        (ref) => ref.toolCallId === locator.toolCallId && ref.assetIndex === locator.assetIndex,
+      );
+      if (exact) return exact;
+      const batchRefs = selectSingleEligibleImageBatch(imageIndex);
+      const batchRef = batchRefs?.[locator.assetIndex];
+      if (batchRef) return batchRef;
+      continue;
+    }
+
+    if (locator.type === 'asset' && locator.uri) {
+      const stableMatch = imageIndex.refs.find(
+        (ref) => ref.cacheResourceRef?.id === locator.assetId || ref.entryPath === locator.uri,
+      );
+      if (stableMatch) return stableMatch;
+    }
+
+    const alias =
+      normalizeStoryboardAlias(mediaRef.label) ?? normalizeStoryboardAlias(mediaRef.refId);
+    const aliasMatch = alias
+      ? selectUniqueAliasRef(imageIndex, alias)
+      : { status: 'none' as const };
+    if (aliasMatch.status === 'unique') return aliasMatch.ref;
+  }
+  return undefined;
+}
+
 function projectInferredImageRefToStoryboardMediaRef(
   imageRef: InferredStoryboardImageRef,
 ): StoryboardMediaRefV1 {
@@ -268,7 +404,7 @@ function projectInferredImageRefToStoryboardMediaRef(
       toolCallId: imageRef.toolCallId,
       assetIndex: imageRef.assetIndex,
     },
-    ...(imageRef.label ? { label: imageRef.label } : {}),
+    ...((imageRef.label ?? imageRef.alias) ? { label: imageRef.label ?? imageRef.alias } : {}),
     ...(imageRef.mimeType ? { mimeType: imageRef.mimeType } : {}),
   };
 }
@@ -283,18 +419,91 @@ function collectSequentialStoryboardImageRefs(
     }
 
     for (const candidate of collectMediaCandidates(toolCall)) {
-      if (candidate.type !== 'image' || !candidate.src) continue;
+      if (candidate.type !== 'image' || !isImageCandidateResolvable(candidate)) continue;
       const pageNumber = candidate.pageNumber ?? readPageNumberFromText(candidate.label);
+      const alias =
+        normalizeStoryboardAlias(candidate.alias) ??
+        (pageNumber !== undefined
+          ? `page_${pageNumber}`
+          : normalizeStoryboardAlias(candidate.label));
+      const sourceDocumentId =
+        candidate.sourceDocumentId ?? readDocumentResourceSourceId(candidate.resourceRef);
+      const aliasScope =
+        candidate.aliasScope ??
+        (sourceDocumentId ? `document:${sourceDocumentId}` : `tool:${toolCall.id}`);
       refs.push({
         toolCallId: toolCall.id,
         assetIndex: candidate.assetIndex,
+        batchKey: candidate.aliasScope ?? sourceDocumentId ?? toolCall.id,
         ...(candidate.label ? { label: candidate.label } : {}),
+        ...(alias ? { alias } : {}),
+        ...(aliasScope ? { aliasScope } : {}),
+        ...(sourceDocumentId ? { sourceDocumentId } : {}),
+        ...(candidate.entryPath ? { entryPath: candidate.entryPath } : {}),
         ...(candidate.mimeType ? { mimeType: candidate.mimeType } : {}),
         ...(pageNumber !== undefined ? { pageNumber } : {}),
+        ...(candidate.resourceRef ? { resourceRef: candidate.resourceRef } : {}),
+        ...(candidate.cacheResourceRef ? { cacheResourceRef: candidate.cacheResourceRef } : {}),
       });
     }
   }
   return refs;
+}
+
+function createStoryboardImageAliasIndex(
+  toolCalls: ReadonlyMap<string, ToolCall>,
+): StoryboardImageAliasIndex {
+  const refs = collectSequentialStoryboardImageRefs(toolCalls);
+  return {
+    refs,
+    batches: groupInferredStoryboardImageRefs(refs, (ref) => ref.batchKey),
+    aliases: groupInferredStoryboardImageRefs(refs, (ref) => ref.alias),
+    scopedAliases: groupInferredStoryboardImageRefs(refs, (ref) =>
+      ref.alias && ref.aliasScope ? `${ref.aliasScope}:${ref.alias}` : undefined,
+    ),
+    sourceLocators: groupInferredStoryboardImageRefs(refs, (ref) =>
+      ref.sourceDocumentId && ref.entryPath
+        ? `${ref.sourceDocumentId}:${ref.entryPath}`
+        : undefined,
+    ),
+  };
+}
+
+function groupInferredStoryboardImageRefs(
+  refs: readonly InferredStoryboardImageRef[],
+  keyOf: (ref: InferredStoryboardImageRef) => string | undefined,
+): ReadonlyMap<string, readonly InferredStoryboardImageRef[]> {
+  const grouped = new Map<string, InferredStoryboardImageRef[]>();
+  for (const ref of refs) {
+    const key = keyOf(ref);
+    if (!key) continue;
+    grouped.set(key, [...(grouped.get(key) ?? []), ref]);
+  }
+  return grouped;
+}
+
+function selectUniqueAliasRef(
+  imageIndex: StoryboardImageAliasIndex,
+  alias: string,
+):
+  | { readonly status: 'none' }
+  | { readonly status: 'unique'; readonly ref: InferredStoryboardImageRef }
+  | { readonly status: 'ambiguous' } {
+  const normalized = normalizeStoryboardAlias(alias);
+  if (!normalized) return { status: 'none' };
+  const refs = imageIndex.aliases.get(normalized) ?? [];
+  const batchKeys = new Set(refs.map((ref) => ref.batchKey));
+  if (refs.length === 0) return { status: 'none' };
+  if (batchKeys.size === 1 && refs.length === 1) return { status: 'unique', ref: refs[0] };
+  if (batchKeys.size === 1) return { status: 'unique', ref: refs[0] };
+  return { status: 'ambiguous' };
+}
+
+function selectSingleEligibleImageBatch(
+  imageIndex: StoryboardImageAliasIndex,
+): readonly InferredStoryboardImageRef[] | undefined {
+  const batches = Array.from(imageIndex.batches.values()).filter((refs) => refs.length > 0);
+  return batches.length === 1 ? batches[0] : undefined;
 }
 
 function inferStoryboardShotPageNumber(
@@ -302,6 +511,9 @@ function inferStoryboardShotPageNumber(
   shot: StoryboardTableV1['scenes'][number]['shots'][number],
   section: CompositeSection | undefined,
 ): number | undefined {
+  const sourceImageNumber = readStoryboardSourceImageNumber(shot.extensions);
+  if (sourceImageNumber !== undefined) return sourceImageNumber;
+
   const imageAliasNumber = readStoryboardImageAliasNumber(shot.extensions);
   if (imageAliasNumber !== undefined) return imageAliasNumber;
 
@@ -339,10 +551,21 @@ function readStoryboardImageAliasNumber(
   return readPositiveInteger(alias, 'number');
 }
 
+function readStoryboardSourceImageNumber(
+  extensions: StoryboardTableV1['scenes'][number]['shots'][number]['extensions'] | undefined,
+): number | undefined {
+  const sourceImage = asRecord(extensions?.['neko.storyboardSourceImage']);
+  return readPositiveInteger(sourceImage, 'number');
+}
+
 function isStoryboardImageSourceTool(toolName: string): boolean {
   return (
     toolName === 'ReadImage' || toolName === 'ReadDocumentImage' || toolName === 'ReadDocument'
   );
+}
+
+function isImageCandidateResolvable(candidate: MediaCandidate): boolean {
+  return Boolean(candidate.src || candidate.resourceRef || candidate.cacheResourceRef);
 }
 
 function maybeAlignStoryboardSectionMediaRefs(
@@ -500,7 +723,7 @@ function resolveCompositeMediaRef(
     };
   }
 
-  if (!candidate.src && candidate.type !== 'model') {
+  if (!candidate.src && candidate.type !== 'model' && !isImageCandidateResolvable(candidate)) {
     return {
       diagnostic: {
         code: 'missing-uri',
@@ -517,12 +740,19 @@ function resolveCompositeMediaRef(
       id: [
         mediaRef.toolCallId,
         assetIndex,
-        candidate.assetId ?? candidate.stableUri ?? candidate.src,
+        candidate.assetId ??
+          candidate.cacheResourceRef?.id ??
+          createDocumentResourceCandidateKey(candidate.resourceRef) ??
+          candidate.stableUri ??
+          candidate.src,
       ].join(':'),
       toolCallId: mediaRef.toolCallId,
       assetIndex,
       type: candidate.type,
-      src: candidate.src ?? candidate.localPath ?? candidate.stableUri ?? '',
+      src:
+        candidate.src ??
+        (candidate.type === 'model' ? (candidate.localPath ?? candidate.stableUri) : undefined) ??
+        '',
       ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
       ...(candidate.stableUri ? { stableUri: candidate.stableUri } : {}),
       ...(candidate.localPath ? { localPath: candidate.localPath } : {}),
@@ -560,7 +790,13 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
   const data = asRecord(toolCall.result?.data);
 
   const addCandidate = (candidate: MediaCandidate): void => {
-    const key = candidate.assetId ?? candidate.stableUri ?? candidate.src ?? candidate.localPath;
+    const key =
+      candidate.assetId ??
+      candidate.cacheResourceRef?.id ??
+      createDocumentResourceCandidateKey(candidate.resourceRef) ??
+      candidate.stableUri ??
+      candidate.src ??
+      candidate.localPath;
     if (!key || seen.has(key)) return;
     seen.add(key);
     candidates.push(candidate);
@@ -670,14 +906,18 @@ function projectDocumentImageCandidate(input: {
   readonly webviewUri?: string;
   readonly label?: string;
 }): MediaCandidate | null {
-  if (!input.path && !input.webviewUri) return null;
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
   const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
   const resourceRef = parseDocumentArchiveResourceRef(input.info?.['resourceRef']);
   const cacheResourceRef = isResourceRef(input.info?.['cacheResourceRef'])
     ? input.info.cacheResourceRef
     : undefined;
+  if (!input.path && !input.webviewUri && !resourceRef && !cacheResourceRef) return null;
   const pageNumber = readDocumentImagePageNumber(input.info) ?? readPageNumberFromText(input.label);
+  const alias = normalizeStoryboardAlias(readString(input.info, 'alias'));
+  const sourceDocumentId =
+    readString(input.info, 'sourceDocumentId') ?? readDocumentResourceSourceId(resourceRef);
+  const entryPath = readString(input.info, 'entryPath') ?? resourceRef?.entryPath;
   return {
     assetIndex: input.index,
     type: 'image',
@@ -687,8 +927,50 @@ function projectDocumentImageCandidate(input: {
     ...(cacheResourceRef ? { cacheResourceRef } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(input.label ? { label: input.label } : {}),
+    ...(alias ? { alias } : {}),
+    ...(readString(input.info, 'aliasScope')
+      ? { aliasScope: readString(input.info, 'aliasScope') }
+      : {}),
+    ...(sourceDocumentId ? { sourceDocumentId } : {}),
+    ...(entryPath ? { entryPath } : {}),
     ...(pageNumber !== undefined ? { pageNumber } : {}),
   };
+}
+
+function createDocumentResourceCandidateKey(
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): string | undefined {
+  if (!resourceRef) return undefined;
+  const sourceKey =
+    resourceRef.source.identity?.hash ??
+    resourceRef.source.identity?.fileId ??
+    resourceRef.source.fileId ??
+    resourceRef.source.filePath;
+  const entryKey =
+    resourceRef.entryPath ??
+    (resourceRef.locator?.kind === 'page' || resourceRef.locator?.kind === 'region'
+      ? resourceRef.locator.entryName
+      : undefined);
+  return sourceKey && entryKey ? `document-entry:${sourceKey}:${entryKey}` : undefined;
+}
+
+function readDocumentResourceSourceId(
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): string | undefined {
+  if (!resourceRef) return undefined;
+  return (
+    resourceRef.source.identity?.hash ??
+    resourceRef.source.identity?.fileId ??
+    resourceRef.source.fileId ??
+    resourceRef.source.filePath
+  );
+}
+
+function normalizeStoryboardAlias(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase().replace(/[\s-]+/g, '_');
 }
 
 function projectGeneratedAssetCandidate(

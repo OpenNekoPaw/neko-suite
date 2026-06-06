@@ -29,6 +29,7 @@ import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-i
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
+import { isDocumentImageCachePath } from '../../services/documentCachePaths';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -317,8 +318,12 @@ function projectStreamMessageResourcesForWebview(
   message: AgentEventStreamRuntimeMessage,
   localResourceAccess?: AgentLocalResourceAccess,
 ): AgentEventStreamRuntimeMessage {
-  const resolveLocalMediaPath = (filePath: string): string | undefined =>
-    localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
+  const resolveLocalMediaPath = (filePath: string): string | undefined => {
+    if (isDocumentImageScratchCachePath(filePath)) {
+      return undefined;
+    }
+    return localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
+  };
 
   if (message.type === 'toolCall' && message.arguments !== undefined) {
     const projectedArguments = projectResourceValue(message.arguments, { resolveLocalMediaPath });
@@ -348,6 +353,10 @@ function projectStreamMessageResourcesForWebview(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDocumentImageScratchCachePath(value: string): boolean {
+  return isDocumentImageCachePath(value);
 }
 
 function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').PerceptualAssetRef {

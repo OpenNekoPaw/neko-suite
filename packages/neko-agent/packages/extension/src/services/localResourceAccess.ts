@@ -9,19 +9,13 @@ import {
 import {
   VSCodeLocalResourceAccessService,
   createExtensionAssetLocalResourceRootProvider,
-  createExtensionCacheLocalResourceRootProvider,
-  createStaticLocalResourceRootProvider,
   createWorkspaceLocalResourceRootProvider,
   normalizeLocalFilePath,
   type LocalResourceAccessService,
   type LocalResourceRootProvider,
 } from '@neko/shared/vscode/extension';
 import { getLogger } from '../base';
-import {
-  getDocumentImageCacheUri,
-  getLegacyDocumentImageCacheUri,
-  getWorkspaceCacheUri,
-} from './documentCachePaths';
+import { getWorkspaceCacheUri, isDocumentImageCachePath } from './documentCachePaths';
 
 const logger = getLogger('AgentLocalResourceAccess');
 
@@ -56,26 +50,14 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   private readonly requiredCacheRoots: readonly vscode.Uri[];
 
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
-    const documentImageCacheUri = getDocumentImageCacheUri(context);
-    const legacyDocumentImageCacheUri = getLegacyDocumentImageCacheUri(context);
     const workspaceCacheUri = getWorkspaceCacheUri();
-    this.requiredCacheRoots = [
-      context.globalStorageUri,
-      ...(workspaceCacheUri ? [workspaceCacheUri] : []),
-      documentImageCacheUri,
-      legacyDocumentImageCacheUri,
-    ];
+    this.requiredCacheRoots = [...(workspaceCacheUri ? [workspaceCacheUri] : [])];
     this.service = new VSCodeLocalResourceAccessService({
       logger,
       rootProviders: [
         createExtensionAssetLocalResourceRootProvider(extensionUri, 'dist', 'webview'),
         createWorkspaceLocalResourceRootProvider(),
         this.mediaLibraryRoots,
-        createExtensionCacheLocalResourceRootProvider(context),
-        createStaticLocalResourceRootProvider('agent-document-image-cache', 'extension-cache', [
-          documentImageCacheUri,
-          legacyDocumentImageCacheUri,
-        ]),
         createWorkspaceCacheLocalResourceRootProvider(),
       ],
     });
@@ -114,6 +96,10 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   }
 
   toWebviewUri(webview: vscode.Webview, source: string, caller: string): string | undefined {
+    if (isDocumentImageCachePath(source)) {
+      logger.warn('Refusing to project Agent document scratch cache path', { source, caller });
+      return undefined;
+    }
     const roots = this.ensureRequiredCacheRoots(webview, source);
     const projector = this.service.createSyncProjector(webview, roots, { caller });
     this.projectors.set(webview, projector);

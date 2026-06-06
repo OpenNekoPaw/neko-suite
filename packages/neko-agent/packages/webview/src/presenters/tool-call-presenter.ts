@@ -36,7 +36,7 @@ export interface DocumentImageThumbnailProjection {
   filePath: string;
   source?: DocumentSourceRef;
   path: string;
-  src: string;
+  src?: string;
   width?: number;
   height?: number;
   byteSize?: number;
@@ -139,7 +139,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
     const info = asRecord(imageInfo[index]);
     const path = readString(info, 'path') ?? readStringFromArray(imagePaths, index);
     const src = readString(info, 'webviewUri') ?? readStringFromArray(imagePathWebviewUris, index);
-    if (!path || !src) continue;
+    if (!path) continue;
 
     const locator = parseDocumentLocator(info?.locator);
     const width = readFiniteNumber(info, 'width');
@@ -150,11 +150,13 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
     const cacheResourceRef = isResourceRef(info?.cacheResourceRef)
       ? info.cacheResourceRef
       : undefined;
+    const documentFilePath = resolveDocumentThumbnailFilePath(filePath, resourceRef);
+    const documentSource = resolveDocumentThumbnailSource(source, resourceRef);
     thumbnails.push({
       id: `${path}:${index}`,
       index,
-      filePath,
-      ...(source ? { source } : {}),
+      filePath: documentFilePath,
+      ...(documentSource ? { source: documentSource } : {}),
       path,
       src,
       ...(width !== undefined ? { width } : {}),
@@ -166,8 +168,8 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
       ...(cacheResourceRef ? { cacheResourceRef } : {}),
       label: formatDocumentThumbnailLabel(locator, index),
       referenceJson: formatDocumentImageReferenceJson({
-        filePath,
-        source,
+        filePath: documentFilePath,
+        source: documentSource,
         path,
         src,
         index,
@@ -205,7 +207,6 @@ export function extractReadDocumentImageThumbnails(
     const metadata = asRecord(image.metadata);
     const path = readString(image, 'path') ?? readString(documentImage, 'path');
     const src = readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri');
-    if (!path || !src) return [];
 
     const locator =
       parseDocumentLocator(metadata?.locator) ?? parseDocumentLocator(documentImage?.locator);
@@ -222,14 +223,18 @@ export function extractReadDocumentImageThumbnails(
       : isResourceRef(image.cacheResourceRef)
         ? image.cacheResourceRef
         : undefined;
+    if (!path || (!src && !resourceRef && !cacheResourceRef)) return [];
+
+    const documentFilePath = resolveDocumentThumbnailFilePath(filePath, resourceRef);
+    const documentSource = resolveDocumentThumbnailSource(source, resourceRef);
     const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
 
     return [
       {
         id: `${path}:${index}`,
         index,
-        filePath,
-        ...(source ? { source } : {}),
+        filePath: documentFilePath,
+        ...(documentSource ? { source: documentSource } : {}),
         path,
         src,
         ...(width !== undefined ? { width } : {}),
@@ -241,8 +246,8 @@ export function extractReadDocumentImageThumbnails(
         ...(cacheResourceRef ? { cacheResourceRef } : {}),
         label,
         referenceJson: formatDocumentImageReferenceJson({
-          filePath,
-          source,
+          filePath: documentFilePath,
+          source: documentSource,
           path,
           src,
           index,
@@ -288,7 +293,6 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
         readString(documentImage, 'webviewUri') ??
         readStringFromArray(imagePathWebviewUris, index) ??
         readRenderableImageSrc(path);
-      if (!path || !src) return [];
 
       const locator =
         parseDocumentLocator(metadata?.locator) ??
@@ -307,7 +311,10 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
         : isResourceRef(image.cacheResourceRef)
           ? image.cacheResourceRef
           : undefined;
-      const thumbnailFilePath = filePath ?? path;
+      if (!path || (!src && !resourceRef && !cacheResourceRef)) return [];
+
+      const thumbnailFilePath = resolveDocumentThumbnailFilePath(filePath ?? path, resourceRef);
+      const thumbnailSource = resolveDocumentThumbnailSource(source, resourceRef);
       const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
 
       return [
@@ -315,7 +322,7 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
           id: `${path}:${index}`,
           index,
           filePath: thumbnailFilePath,
-          ...(source ? { source } : {}),
+          ...(thumbnailSource ? { source: thumbnailSource } : {}),
           path,
           src,
           ...(width !== undefined ? { width } : {}),
@@ -328,7 +335,7 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
           label,
           referenceJson: formatDocumentImageReferenceJson({
             filePath: thumbnailFilePath,
-            source,
+            source: thumbnailSource,
             path,
             src,
             index,
@@ -398,7 +405,7 @@ function formatDocumentImageReferenceJson(input: {
   readonly filePath: string;
   readonly source?: DocumentSourceRef;
   readonly path: string;
-  readonly src: string;
+  readonly src?: string;
   readonly index: number;
   readonly width?: number;
   readonly height?: number;
@@ -420,8 +427,8 @@ function formatDocumentImageReferenceJson(input: {
       },
       image: {
         path: input.path,
-        webviewUri: input.src,
         index: input.index,
+        ...(input.src ? { webviewUri: input.src } : {}),
         ...(input.width !== undefined ? { width: input.width } : {}),
         ...(input.height !== undefined ? { height: input.height } : {}),
         ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
@@ -671,6 +678,20 @@ function extractDocumentFilePath(result: Record<string, unknown>): string | null
     readString(source, 'file_path') ??
     null
   );
+}
+
+function resolveDocumentThumbnailFilePath(
+  fallback: string,
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): string {
+  return resourceRef?.source.filePath ?? fallback;
+}
+
+function resolveDocumentThumbnailSource(
+  source: DocumentSourceRef | undefined,
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): DocumentSourceRef | undefined {
+  return resourceRef?.source ?? source;
 }
 
 function formatDocumentThumbnailLabel(locator: DocumentLocator | undefined, index: number): string {

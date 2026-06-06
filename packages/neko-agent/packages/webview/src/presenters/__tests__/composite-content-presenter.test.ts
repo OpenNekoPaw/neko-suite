@@ -181,6 +181,184 @@ describe('composite content presenter', () => {
     });
   });
 
+  it('keeps page aliases bound to stable document resources when transferring inferred storyboard refs', () => {
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/images/moe-018893.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
+    };
+    const cacheResourceRef = {
+      id: 'res_stable',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/images/moe-018893.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'comic-v1' },
+    };
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use page_1 as the reference.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'page_1', content: 'Use page_1.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  path: '/cache/page_1.jpg',
+                  webviewUri: 'webview://page_1.jpg',
+                  label: 'page_1',
+                  mimeType: 'image/jpeg',
+                  resourceRef: documentResourceRef,
+                  cacheResourceRef,
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+    const shot = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shot).toMatchObject({
+      referenceImageResourceRef: documentResourceRef,
+      referenceResourceRef: cacheResourceRef,
+    });
+    expect(shot).not.toHaveProperty('referenceImagePath');
+  });
+
+  it('infers storyboard refs from ReadDocument resource refs even without webview thumbnails', () => {
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: {
+        filePath: '/library/books/comic.epub',
+        format: 'epub' as const,
+        fileId: '/library/books/comic.epub:100:1',
+        identity: {
+          fileId: '/library/books/comic.epub:100:1',
+          sizeBytes: 100,
+          mtimeMs: 1,
+        },
+      },
+      entryPath: 'OPS/images/moe-018893.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
+    };
+    const cacheResourceRef = {
+      id: 'res_stable',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: documentResourceRef.source,
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/images/moe-018893.jpg' },
+      fingerprint: { strategy: 'identity' as const, value: '/library/books/comic.epub:100:1' },
+    };
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use page 1 as the reference.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'Page 1 / Shot 1', content: 'Use page 1.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
+                  label: 'page 1',
+                  mimeType: 'image/jpeg',
+                  resourceRef: documentResourceRef,
+                  cacheResourceRef,
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+    const shot = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shot).toMatchObject({
+      referenceImageResourceRef: documentResourceRef,
+      referenceResourceRef: cacheResourceRef,
+    });
+    expect(shot).not.toHaveProperty('referenceImagePath');
+  });
+
   it('replaces unresolved model-authored storyboard media refs with inferred tool result refs', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
@@ -278,6 +456,24 @@ describe('composite content presenter', () => {
   });
 
   it('uses page labels to infer repeated storyboard media refs from real image results', () => {
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-3.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-3.jpg',
+    };
+    const cacheResourceRef = {
+      id: 'res_page_3',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/page-3.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'comic-page-3' },
+    };
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'storyboard-table',
@@ -348,6 +544,8 @@ describe('composite content presenter', () => {
                   webviewUri: 'webview://page-3.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 3 },
+                  resourceRef: documentResourceRef,
+                  cacheResourceRef,
                 },
               ],
             },
@@ -380,13 +578,167 @@ describe('composite content presenter', () => {
         scenes: [
           {
             shotPlans: [
-              { referenceImagePath: '/cache/page-3.jpg' },
-              { referenceImagePath: '/cache/page-3.jpg' },
+              {
+                referenceImageResourceRef: documentResourceRef,
+                referenceResourceRef: cacheResourceRef,
+              },
+              {
+                referenceImageResourceRef: documentResourceRef,
+                referenceResourceRef: cacheResourceRef,
+              },
             ],
           },
         ],
       },
     });
+    const shotPlans =
+      payload?.kind === 'canvasStoryboard' ? (payload.storyboard.scenes[0]?.shotPlans ?? []) : [];
+    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+    expect(shotPlans[1]).not.toHaveProperty('referenceImagePath');
+  });
+
+  it('uses source page extension metadata before sequential image assignment', () => {
+    const page6DocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-6.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-6.jpg',
+    };
+    const page7DocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-7.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-7.jpg',
+    };
+    const page6CacheRef = {
+      id: 'res_page_6',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/page-6.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'comic-page-6' },
+    };
+    const page7CacheRef = {
+      id: 'res_page_7',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/page-7.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'comic-page-7' },
+    };
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Pages 6-7',
+              shots: [
+                {
+                  shotNumber: 10,
+                  duration: 3,
+                  visualDescription: 'Village wide shot.',
+                  characterAction: 'The village sits under the volcano.',
+                  imageStrategy: 'use-as-reference',
+                  extensions: {
+                    'neko.storyboardSourceImage': {
+                      kind: 'page',
+                      number: 6,
+                      key: 'P6',
+                    },
+                  },
+                },
+                {
+                  shotNumber: 11,
+                  duration: 3,
+                  visualDescription: 'The boy walks under the mountain.',
+                  characterAction: 'The boy leads the sheep forward.',
+                  imageStrategy: 'use-as-reference',
+                  extensions: {
+                    'neko.storyboardSourceImage': {
+                      kind: 'page',
+                      number: 7,
+                      key: 'P7',
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          { heading: 'S010 / P6', content: 'Village wide shot.', layout: 'table-row' },
+          { heading: 'S011 / P7', content: 'The boy walks.', layout: 'table-row' },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  locator: { kind: 'page', pageNumber: 1 },
+                },
+                {
+                  path: '/cache/page-6.jpg',
+                  webviewUri: 'webview://page-6.jpg',
+                  label: 'Page 6',
+                  locator: { kind: 'page', pageNumber: 6 },
+                  resourceRef: page6DocumentRef,
+                  cacheResourceRef: page6CacheRef,
+                },
+                {
+                  path: '/cache/page-7.jpg',
+                  webviewUri: 'webview://page-7.jpg',
+                  label: 'Page 7',
+                  locator: { kind: 'page', pageNumber: 7 },
+                  resourceRef: page7DocumentRef,
+                  cacheResourceRef: page7CacheRef,
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    const shotPlans =
+      payload?.kind === 'canvasStoryboard' ? payload.storyboard.scenes[0]?.shotPlans : [];
+    expect(shotPlans).toMatchObject([
+      {
+        referenceImageResourceRef: page6DocumentRef,
+        referenceResourceRef: page6CacheRef,
+      },
+      {
+        referenceImageResourceRef: page7DocumentRef,
+        referenceResourceRef: page7CacheRef,
+      },
+    ]);
   });
 
   it('uses model-authored page alias fields to infer storyboard media refs', () => {
@@ -481,6 +833,399 @@ describe('composite content presenter', () => {
       localPath: '/cache/page-2.jpg',
       src: 'webview://page-2.jpg',
     });
+  });
+
+  it('diagnoses duplicate page aliases across image batches instead of binding the first match', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use page_1 as the reference.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                  referenceImagePath: 'page_1',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'page_1', content: 'Use page_1.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc-a',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/a/page-1.jpg',
+                  webviewUri: 'webview://a/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-a',
+                  sourceDocumentId: 'comic-a',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+        toolBlock({
+          id: 'read-doc-b',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/b/page-1.jpg',
+                  webviewUri: 'webview://b/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-b',
+                  sourceDocumentId: 'comic-b',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toBeUndefined();
+    expect(projection.data.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'ambiguous-media-alias',
+        message: expect.stringContaining('page_1'),
+      }),
+    ]);
+    expect(projection.data.storyboardDiagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'ambiguous-media-alias',
+      }),
+    ]);
+    expect(projectStoryboardTableTransferPayload(projection.data)).toBeNull();
+  });
+
+  it('preserves explicit sourceMediaRefs when duplicate readable aliases exist', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use the second page_1.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'explicit-page',
+                      role: 'source',
+                      locator: { type: 'tool-result', toolCallId: 'read-doc-b', assetIndex: 0 },
+                      label: 'page_1',
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'page_1', content: 'Use page_1.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc-a',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/a/page-1.jpg',
+                  webviewUri: 'webview://a/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-a',
+                  sourceDocumentId: 'comic-a',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+        toolBlock({
+          id: 'read-doc-b',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/b/page-1.jpg',
+                  webviewUri: 'webview://b/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-b',
+                  sourceDocumentId: 'comic-b',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      {
+        refId: 'explicit-page',
+        role: 'source',
+        locator: { type: 'tool-result', toolCallId: 'read-doc-b', assetIndex: 0 },
+        label: 'page_1',
+        mimeType: 'image/jpeg',
+      },
+    ]);
+    expect(projection.data.sections[0]?.media[0]).toMatchObject({
+      toolCallId: 'read-doc-b',
+      assetIndex: 0,
+      localPath: '/cache/b/page-1.jpg',
+    });
+    expect(projection.data.diagnostics).toEqual([]);
+  });
+
+  it('reports missing explicit tool results when no scoped repair is possible', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Shot 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Missing tool result should not be replaced by sequence.',
+                  characterAction: 'Static title card.',
+                  imageStrategy: 'use-as-reference',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'missing-page',
+                      role: 'source',
+                      locator: {
+                        type: 'tool-result',
+                        toolCallId: 'ReadImage-vision-pages-1-10',
+                        assetIndex: 0,
+                      },
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'Shot 1', content: 'No page alias.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc-a',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/a/page-1.jpg',
+                  webviewUri: 'webview://a/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-a',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+        toolBlock({
+          id: 'read-doc-b',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/b/page-1.jpg',
+                  webviewUri: 'webview://b/page-1.jpg',
+                  alias: 'page_1',
+                  aliasScope: 'document:comic-b',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      expect.objectContaining({
+        locator: {
+          type: 'tool-result',
+          toolCallId: 'ReadImage-vision-pages-1-10',
+          assetIndex: 0,
+        },
+      }),
+    ]);
+    expect(projection.data.sections[0]?.media).toEqual([]);
+    expect(projection.data.storyboardDiagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'unresolved-tool-result',
+      }),
+    ]);
+    expect(projectStoryboardTableTransferPayload(projection.data)).toBeNull();
+  });
+
+  it('repairs invented explicit tool result ids through a single eligible image batch', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 2',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use the second page from the analysis batch.',
+                  characterAction: 'Static page reference.',
+                  imageStrategy: 'use-as-reference',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'invented-page',
+                      role: 'source',
+                      locator: {
+                        type: 'tool-result',
+                        toolCallId: 'ReadImage.front10pages',
+                        assetIndex: 1,
+                      },
+                      label: 'Page 2',
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        sections: [{ heading: 'Page 2 / Shot 1', content: 'Use page 2.', layout: 'table-row' }],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image-real',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  mimeType: 'image/jpeg',
+                },
+                {
+                  path: '/cache/page-2.jpg',
+                  webviewUri: 'webview://page-2.jpg',
+                  label: 'Page 2',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      {
+        refId: 'tool-result:read-image-real:1',
+        role: 'source',
+        locator: {
+          type: 'tool-result',
+          toolCallId: 'read-image-real',
+          assetIndex: 1,
+        },
+        label: 'Page 2',
+        mimeType: 'image/jpeg',
+      },
+    ]);
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image-real',
+        assetIndex: 1,
+        localPath: '/cache/page-2.jpg',
+        src: 'webview://page-2.jpg',
+      }),
+    ]);
+    expect(projection.data.diagnostics).toEqual([]);
   });
 
   it('resolves semantic storyboard row media from explicit shot media refs', () => {

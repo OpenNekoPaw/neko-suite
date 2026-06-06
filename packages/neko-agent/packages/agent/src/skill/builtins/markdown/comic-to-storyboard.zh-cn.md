@@ -21,6 +21,7 @@
    - 统计分格数量。
 3. 在分镜结构化前，先建立图片索引和分格映射：
    - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签。
+   - 记录每一批图片的 alias scope（`toolCallId`、源文档 id 或 `aliasScope`）。`page_1`、`P1`、`image_1` 这类 alias 只在该 scope 内有意义。
    - 为每个页面按阅读顺序标注 panel index；如果工具只返回整页图，也要记录“page image -> panels”的映射，不要假装已有独立分格图。
    - 后续每个 shot 必须引用这个索引中的真实图片；不要在生成分镜后再凭顺序补图片。
    - 多个 shot 可以显式引用同一页图，但必须在 `label`、`decisionReason` 或 `extensions["neko.mangaToVideo"]` 中说明 panel/page 对应关系；有裁切信息时记录 panel/crop/bbox。
@@ -48,11 +49,13 @@
 - 不要默认给源图上色。黑白漫画需要彩色动画时，把原图保留在 `sourceMediaRefs`，使用 `imageStrategy: "transform-original"`，并在 `generationPrompt` 或 `extensions["neko.mangaToVideo"].colorization` 中说明。
 - 只有工具真实生成后，才能把彩色图或生成结果写入 `generatedMediaRefs`。
 - 只填写计划字段。运行时/工具返回前，不要声称图片已经生成。
-- 嵌入图片时，只能引用图片索引中的当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写精确 tool call id 和 asset index。
+- 嵌入图片时，只能引用图片索引中的当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写精确 tool call id 和 asset index。tool call id 是工具结果里的运行时 id，不是工具名、别名或 `ReadImage.front10pages` 这类自行编造的标签。
+- 每个来自文档页/图片序列的 shot 必须写明来源页或来源图：优先填写 `sourcePage: "P6"` / `sourceImage: "page_6"` 这类可读字段；结构化 payload 会规范化为 `extensions["neko.storyboardSourceImage"]`。同一页拆成多个 shot 时，多个 shot 应指向同一个来源页，而不是顺序分配下一张图。
+- 如果多个工具调用或批次都有同名 alias，例如两个不同的 `page_1`，必须用 `sourceMediaRefs[].locator.toolCallId` 和 `assetIndex` 消歧；多批次上下文中不要依赖行号顺序。
 - 如果当前 shot 来自某个页面/分格，必须把对应图片写入 `sourceMediaRefs`；不要只在可读说明里描述图片。
 - 当 `imageStrategy` 是 `reuse-original`、`use-as-reference` 或 `transform-original` 时，必须提供 `sourceMediaRefs`。只有纯文本/脚本扩写且没有图片来源时，才允许没有图片引用。
 - 不要编造图片 id，不要把本地缓存路径复制到 `referenceImagePath`，不要自行转换 base64。
-- 不要在表格中嵌入 base64 图片数据、blob URL、localhost URL、绝对本地路径或编造的 tool call id。
+- 不要在表格中嵌入 base64 图片数据、blob URL、localhost URL、Webview URI、`.neko/.cache/document-image-cache`、`globalStorageUri/document-image-cache`、绝对本地路径、旧 `cachePath` 值或编造的 tool call id。
 - 不要要求用户复制或编辑 JSON；UI 会直接消费该 payload。
 - 如果用户要求发送到 Canvas，先完成结构化计划，再激活 Canvas 或 media-to-video 相关 Skill。除非真实 Canvas 工具返回成功，不要报告 Canvas 成功。
 
@@ -72,6 +75,7 @@
           "shotId": "scene-1-shot-1",
           "shotNumber": 1,
           "duration": 3,
+          "sourcePage": "P1",
           "visualDescription": "Panel action and composition",
           "characterAction": "Character action",
           "dialogue": "OCR dialogue if present",

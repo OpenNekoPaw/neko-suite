@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
   getDocumentImageCacheFsPath,
-  getLegacyDocumentImageCacheUri,
   getWorkspaceCacheUri,
+  isDocumentImageCachePath,
 } from '../documentCachePaths';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
@@ -27,13 +27,15 @@ describe('document cache paths', () => {
     expect(getWorkspaceCacheUri()?.fsPath).toBe('/mock/workspace/.neko/.cache');
   });
 
-  it('keeps the legacy agent document image cache addressable for old results', () => {
-    const context = {
-      globalStorageUri: vscode.Uri.file('/global/neko-agent'),
-    } as vscode.ExtensionContext;
-
-    expect(getLegacyDocumentImageCacheUri(context).fsPath).toBe(
-      '/global/neko-agent/document-image-cache',
+  it('classifies document image cache paths as scratch-only', () => {
+    expect(isDocumentImageCachePath('/mock/workspace/.neko/.cache/document-image-cache')).toBe(
+      true,
     );
+    expect(
+      isDocumentImageCachePath('/global/neko-agent/document-image-cache/neko_epub_1/page.jpg'),
+    ).toBe(true);
+    expect(
+      isDocumentImageCachePath('/mock/workspace/.neko/.cache/resources/documents/doc_1/page.jpg'),
+    ).toBe(false);
   });
 });

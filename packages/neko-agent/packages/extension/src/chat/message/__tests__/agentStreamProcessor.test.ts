@@ -341,6 +341,64 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('does not ask local access to project document scratch cache paths', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
+      const scratchPath = '/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg';
+      const managedPath = '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg';
+      const events = toAsyncIterable([
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-1',
+            success: true,
+            data: {
+              imagePaths: [scratchPath, managedPath],
+              imageInfo: [
+                { path: scratchPath, width: 1494, height: 2133 },
+                { path: managedPath, width: 1494, height: 2133 },
+              ],
+            },
+          },
+        },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalledWith(
+        webview,
+        scratchPath,
+        'neko-agent.stream-tool-result',
+      );
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        managedPath,
+        'neko-agent.stream-tool-result',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: {
+            imagePaths: [scratchPath, managedPath],
+            imagePathWebviewUris: [undefined, `webview-uri:${managedPath}`],
+            imageInfo: [
+              { path: scratchPath, width: 1494, height: 2133 },
+              {
+                path: managedPath,
+                webviewUri: `webview-uri:${managedPath}`,
+                width: 1494,
+                height: 2133,
+              },
+            ],
+          },
+        }),
+      );
+    });
+
     it('should handle tool_confirmation events', async () => {
       const events = toAsyncIterable([
         {
