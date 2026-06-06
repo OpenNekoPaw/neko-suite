@@ -4,7 +4,7 @@
 Define the shared semantic contract for Agent-generated storyboard tables, storyboard diagnostics, media references, and projection to creative surfaces.
 ## Requirements
 ### Requirement: Agent storyboard tables use a shared semantic contract
-The system SHALL define `StoryboardTable` and related scene, shot, character, media ref, profile, extension, and diagnostic contracts in `@neko/shared`. The contract MUST represent Agent-generated storyboard tables as semantic shot plans rather than Webview-only display sections.
+The system SHALL define `StoryboardTable` and related scene, shot, character, media ref, profile, extension, and diagnostic contracts in `@neko/shared`. The contract MUST represent Agent-generated storyboard tables as semantic shot plans rather than Webview-only display sections. The serialized payload MUST retain `schemaVersion` for compatibility checks.
 
 #### Scenario: Valid semantic storyboard table is accepted
 - **WHEN** Agent receives a `storyboard-table` composite block containing `schemaVersion: 1`, `kind: "storyboard-table"`, a title, scenes, and shots with stable-core fields
