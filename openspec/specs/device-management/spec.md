@@ -124,3 +124,50 @@ Live Webview SHALL distinguish compositor stream availability from scene-control
 #### Scenario: Control restored resyncs scene
 - **WHEN** scene-control reconnects after a degraded state
 - **THEN** LiveController requests or receives authoritative live scene state before re-enabling semantic controls
+
+### Requirement: Live Devices Feed Engine Compositor
+The live device/session system SHALL provide authorized camera, audio input, MIDI, gamepad, and tracking data to the engine compositor or engine-side routing layer without requiring Webview relay for high-frequency frames or device events.
+
+#### Scenario: Camera session becomes compositor source
+- **WHEN** Extension Host grants a camera device session for neko-live
+- **THEN** the live compositor can reference the authorized session as a camera source layer without the Webview constructing device control URLs independently
+
+#### Scenario: Tracking bypasses Webview roundtrip
+- **WHEN** tracking data drives live puppet, model, or overlay state
+- **THEN** the engine-side compositor path can consume or receive the data without requiring Webview `postMessage` relay for every tracking frame
+
+### Requirement: Live Output Routes Are Permission And Capability Checked
+The device/session system SHALL check permissions and host capabilities before enabling live output routes such as recording, OBS virtual camera, RTMP, or monitor preview.
+
+#### Scenario: Output route unavailable
+- **WHEN** a requested live output route requires a device, permission, or backend capability that is unavailable
+- **THEN** the system reports a typed diagnostic and leaves the route disabled
+
+#### Scenario: Recording route uses compositor authority
+- **WHEN** compositor recording is available and enabled
+- **THEN** recording captures the engine compositor output rather than a Webview-local fallback canvas
+
+### Requirement: Local Live Recording Remains Fallback Only
+The existing Webview canvas recording path SHALL remain available only as a non-authoritative fallback until engine compositor output recording is implemented and validated.
+
+#### Scenario: Canvas recording fallback is labeled
+- **WHEN** compositor output recording is unavailable and Webview canvas recording is used
+- **THEN** the UI and session diagnostics mark the recording as local fallback and exclude it from compositor parity claims
+
+### Requirement: Live Viewport Consumes Compositor Stream
+neko-live SHALL consume an engine compositor stream through ViewportShell for scene display once compositor support is available.
+
+#### Scenario: Live displays composited stream
+- **WHEN** Engine provides a compositor stream descriptor for a live scene
+- **THEN** neko-live displays that stream through ViewportShell rather than rendering persistent puppet/model scene layers locally
+
+#### Scenario: Live controls compositor layers
+- **WHEN** the user changes live scene presets or layer routing
+- **THEN** LiveController sends compositor scene commands and does not mutate local renderer-only state as the authority
+
+### Requirement: Live Local Rendering Is Non-Authoritative
+Any remaining neko-live local R3F or preview renderer SHALL be marked fallback/development-only once ViewportShell compositor display is available.
+
+#### Scenario: Compositor unavailable fallback
+- **WHEN** the engine compositor is unavailable and live fallback rendering is enabled
+- **THEN** the UI marks the fallback as non-authoritative and excludes it from output/export parity claims

@@ -101,6 +101,11 @@ The system SHALL require new or migrated control icons to come from `@neko/ui/ic
 - **WHEN** a business package adds or migrates a control with an icon
 - **THEN** it does not add a new inline SVG or Unicode glyph directly inside the business package component
 
+#### Scenario: Export and package controls use shared icons
+
+- **WHEN** a creative package adds Export or Package toolbar controls
+- **THEN** the controls use icons from `@neko/ui/icons` or a documented codicon mapping rather than adding new inline SVG icons
+
 ### Requirement: Property definition contract
 
 The system SHALL model creative property controls as per-kind discriminated union types and require exhaustive adapter mapping.
@@ -273,4 +278,51 @@ The system SHALL validate shortcut tables for duplicate structured key specs wit
 
 - **WHEN** the same structured key spec is registered by nested boundaries with different scopes
 - **THEN** the shared dispatcher resolves the shortcut by boundary containment and scope priority rather than registration order
+
+### Requirement: Creative left rail export and package controls
+
+The system SHALL render creative editor Export and Package entry points as icon buttons using shared toolbar primitives or the shared `CreativeLeftRail` action contract. These controls SHALL use stable action attributes:
+
+- Export: `data-creative-left-rail-action="open-export"`
+- Package: `data-creative-left-rail-action="open-package"`
+
+#### Scenario: Export control is added
+
+- **WHEN** a creative package adds an Export toolbar action
+- **THEN** it renders through `@neko/ui/primitives` or `@neko/ui/workbench` and exposes `data-creative-left-rail-action="open-export"`
+
+#### Scenario: Package control is added
+
+- **WHEN** a creative package adds a Package toolbar action
+- **THEN** it renders through `@neko/ui/primitives` or `@neko/ui/workbench` and exposes `data-creative-left-rail-action="open-package"`
+
+### Requirement: Creative Workbench shell primitives
+The system SHALL expose creative Workbench shell primitives or contracts from `@neko/ui` while keeping package-specific domain behavior in feature package adapters.
+
+#### Scenario: Shared shell primitive is imported
+- **WHEN** a covered creative Webview imports a shared shell, left rail, main panel control layer, or right panel shell primitive
+- **THEN** the import resolves from `@neko/ui`, `@neko/ui/primitives`, or another documented `@neko/ui` public subpath
+
+#### Scenario: Shared shell remains host-neutral
+- **WHEN** the `@neko/ui` boundary test scans creative Workbench shell primitives
+- **THEN** it fails if they import VSCode APIs, call `acquireVsCodeApi()`, import Node-only modules, or import feature packages such as Cut, Canvas, Audio, Puppet, Model, or Sketch
+
+#### Scenario: Feature package binds domain behavior
+- **WHEN** a feature package uses a shared shell primitive for creative Workbench layout
+- **THEN** command dispatch, store selection, engine messages, i18n keys, and domain-specific disabled/active state remain in the feature package adapter or component
+
+### Requirement: Shell slot accessibility
+The system SHALL provide accessible slot and control patterns for left toolbar visibility toggles, main-panel control regions, right panels, and passive status ownership.
+
+#### Scenario: Left rail toggle controls a main panel region
+- **WHEN** a shared left rail action represents a visibility toggle
+- **THEN** it supports accessible label text and forwards `aria-controls`, expanded state, and pressed or active state to the rendered control
+
+#### Scenario: Main panel control layer is hidden
+- **WHEN** a main-panel control layer is hidden through a left rail toggle
+- **THEN** the controlled region is not focusable through normal keyboard navigation while hidden
+
+#### Scenario: Right panel is collapsed
+- **WHEN** a shared shell omits or collapses its right panel slot
+- **THEN** the main panel can occupy the reclaimed space without requiring package domain code to recompute layout manually
 

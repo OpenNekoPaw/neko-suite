@@ -267,3 +267,87 @@ Extension MAY assemble host adapters and inject dependencies. Webview MUST remai
 - **WHEN** session dispose 被调用
 - **THEN** 所有由 persistence、artifact、feedback、IDC 或 prompt collaborators 注册的 subscriptions、watchers、timers 和 sinks 都被显式释放
 
+### Requirement: Agent Webview projects character dialogue as a distinct conversation kind
+The Agent Webview SHALL project Character Dialogue sessions with a `character-dialogue` conversation kind. Webview MUST NOT use `npc-test` as the active conversation kind for new role workflow sessions.
+
+#### Scenario: Character dialogue tab renders isolated session state
+- **WHEN** the Extension sends a Character Dialogue session projection to the Webview
+- **THEN** the Webview renders a `character-dialogue` tab with character identity, profile inspection, transcript messages, and exit controls
+
+#### Scenario: Character dialogue hides authoring controls
+- **WHEN** the active conversation kind is `character-dialogue`
+- **THEN** the Webview hides ordinary model selector, execution mode selector, and media generation controls for that tab
+
+### Requirement: Agent extension owns character role command dispatch
+The Agent Extension SHALL register core commands for `neko.agent.characterDialogue` and `neko.agent.embodyCharacter`. The Extension MUST NOT register `neko.agent.testNpc`, `neko.agent.characterPerspective`, `neko.agent.validateCharacter`, or `neko.agent.improveCharacter` as public core commands after this migration.
+
+#### Scenario: Character dialogue command launches isolated session
+- **WHEN** the Extension receives a valid `neko.agent.characterDialogue` request
+- **THEN** it focuses the Agent panel and delegates launch to the character dialogue controller
+
+#### Scenario: Embody command starts isolated feedback session
+- **WHEN** the Extension receives a valid `neko.agent.embodyCharacter` request
+- **THEN** it focuses the Agent panel and delegates launch to an Embody Character controller/runtime path that does not impersonate the character and does not route through ordinary creative message handling
+
+### Requirement: Skill automation composes primitive ports
+The Agent runtime and Extension SHALL expose character role primitives through narrow ports that Skills can compose. Automated validation and improvement MUST NOT be implemented as Webview-owned session kinds or Dashboard-owned runtime workflows.
+
+#### Scenario: Validation Skill uses primitive ports
+- **WHEN** the character validation Skill runs
+- **THEN** it can assemble a character profile, run no-tool headless dialogue probes, evaluate transcript evidence, and save project-scoped artifacts through Agent-owned primitive ports
+
+#### Scenario: Improvement Skill uses suggestion ports
+- **WHEN** the character improvement Skill runs
+- **THEN** it can collect project evidence and produce suggestions that route through existing user-confirmed entity mutation ports
+
+### Requirement: Character role modes enforce capability policy below Webview
+The Agent system SHALL enforce Character Dialogue and Embody Character capability policies in Extension/runtime/controller layers rather than relying on Webview presentation or prompt text alone.
+
+#### Scenario: Webview cannot grant creative tools
+- **WHEN** Webview sends a message from an `embody-character` tab
+- **THEN** Extension/runtime routing determines the isolated feedback session and blocked capabilities regardless of client-side UI state
+
+#### Scenario: Prompt-only restrictions are insufficient
+- **WHEN** a role mode forbids creative authoring or skill activation
+- **THEN** the forbidden tools and skills are removed from the responder capability surface before LLM execution rather than only described as prompt instructions
+
+### Requirement: Embody Character owns a runtime counterpart
+The Agent Extension SHALL NOT own Embody Character strategy as an ad hoc ordinary chat prompt. A host-agnostic runtime session or equivalent domain primitive SHALL define Embody Character turn semantics, transcript behavior, and capability policy.
+
+#### Scenario: Extension delegates turn semantics
+- **WHEN** Extension routes an Embody Character user message
+- **THEN** it delegates the turn to an Embody Character runtime/session primitive with injected host adapters instead of composing feedback behavior inside Webview or command glue
+
+#### Scenario: Runtime compiles without Webview
+- **WHEN** Embody Character runtime tests run in `@neko/agent`
+- **THEN** they can exercise turn behavior and capability policy without importing React, VSCode Webview code, or Dashboard implementation modules
+
+### Requirement: SubAgent tool policy is explicit
+The system SHALL support an explicit SubAgent tool policy with `none`, `all`, and `allow-list` modes. The runtime MUST interpret `none` as an empty tool registry, `all` as the full available registry, and `allow-list` as a filter over registered tool names. New isolation-sensitive sessions MUST NOT rely on `allowedTools: []` to mean no tools.
+
+#### Scenario: None policy creates empty registry
+- **WHEN** a SubAgent or Character Dialogue session is created with `toolPolicy: { kind: 'none' }`
+- **THEN** the Agent config passed to the executor contains zero tool definitions
+
+#### Scenario: Allow-list filters tools
+- **WHEN** a SubAgent is created with `toolPolicy: { kind: 'allow-list', tools: ['Read'] }`
+- **THEN** the executor receives only the registered `Read` tool definition and no other tools
+
+#### Scenario: All policy preserves unfiltered behavior
+- **WHEN** a SubAgent is created with `toolPolicy: { kind: 'all' }`
+- **THEN** the executor receives the unfiltered tool registry available to that runtime
+
+### Requirement: Character Dialogue runtime sessions preserve Agent boundaries
+The system SHALL keep Character Dialogue session orchestration in Extension host and host-agnostic Agent runtime boundaries. Webview MUST render Character Dialogue session projections only; Extension MUST manage VSCode command handling, project-root resolution, and character role artifact file writes; runtime packages MUST NOT import VSCode, React, or Webview APIs to implement character prompt or evaluator projection.
+
+#### Scenario: Webview renders Character Dialogue projection only
+- **WHEN** the Agent Webview displays a Character Dialogue tab
+- **THEN** it consumes typed Character Dialogue session projection data and does not import `@neko/agent`, `@neko/platform`, or VSCode APIs
+
+#### Scenario: Extension owns project file write
+- **WHEN** a Character Dialogue transcript or evaluation artifact is saved
+- **THEN** Extension host code resolves the current project root and writes `.neko/character-tests/*.json` through host file APIs
+
+#### Scenario: Runtime projector remains host-agnostic
+- **WHEN** Character Dialogue prompt and evaluator projector modules are type-checked
+- **THEN** they compile without VSCode, React, Webview, Story, Dashboard, or entity store implementation imports

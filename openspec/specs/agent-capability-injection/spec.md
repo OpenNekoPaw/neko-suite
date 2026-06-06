@@ -61,3 +61,89 @@ The system SHALL expose runtime introspection for registered capabilities, injec
 - **WHEN** a capability is not injected due to trust, host requirement, workflow node, or ablation policy
 - **THEN** runtime can report the skip reason in diagnostics or experiment output
 
+### Requirement: Native Puppet Agent Tools
+The Agent capability system SHALL expose native puppet tools for creation, expression control, direct component edits, driver edits, and animation generation.
+
+#### Scenario: Register native puppet tools
+- **WHEN** neko-puppet activates in a host where Agent is available
+- **THEN** it registers native puppet tools for create, set expression, set BlendShape, set bone, set ControlDriver, play animation, auto-rig, and generate animation operations
+
+#### Scenario: Preset tool uses native capabilities
+- **WHEN** Agent invokes `puppet:set_expression`
+- **THEN** the tool resolves the expression against native puppet presets and implemented BlendShapes before sending commands
+
+#### Scenario: Creation tool produces draft artifact
+- **WHEN** Agent invokes native puppet creation for PSD, PNG, or Live2D input
+- **THEN** the tool returns a draft `.nkp` or `.nkentity` reference plus diagnostics and confidence metadata rather than directly hiding generation quality concerns
+
+### Requirement: Native Puppet Tool Safety Metadata
+Native puppet Agent tools SHALL declare target requirements, safety kind, and query-before-mutate guidance.
+
+#### Scenario: Bone mutation declares target
+- **WHEN** a bone editing tool is registered
+- **THEN** it declares required target fields such as puppet id and bone id/name and points query-before-mutate guidance to a puppet capability query tool
+
+#### Scenario: Generation is marked non-trivial
+- **WHEN** an auto-rig or animation generation tool is registered
+- **THEN** it declares generation safety metadata and reports diagnostics or preview requirements before committing generated authoring state
+
+#### Scenario: Missing native capability fails safely
+- **WHEN** Agent requests a native puppet operation for a legacy-only MOC3 puppet
+- **THEN** the tool reports that native conversion or migration is required instead of mutating legacy parameter state as if it were native data
+
+### Requirement: Model Scene Capability Provider
+The Agent capability system SHALL accept `neko-model` as a domain capability provider for 3D scene query and editing tools.
+
+#### Scenario: Model provider registers tools
+- **WHEN** `neko-model` activates in a host where Agent is available
+- **THEN** it registers model scene query, node manipulation, and animation control tools through the existing capability registration flow
+
+#### Scenario: Query tool remains read-only
+- **WHEN** the model scene query tool is registered
+- **THEN** capability metadata marks it with `isReadOnly: true`, `isConcurrencySafe: true`, and `safetyKind: 'read-only-query'` so injection policy can treat it differently from editing operations
+
+#### Scenario: Editing tools respect host availability
+- **WHEN** model editing tools require VSCode Extension Host state or an active model editor
+- **THEN** injection or execution reports unavailable status when those requirements are not met
+
+#### Scenario: Mutation tools declare targets and query guidance
+- **WHEN** model editing tools are registered
+- **THEN** each mutation tool declares `targetRequirements` and `queryBeforeMutate` guidance that points to the model scene query tool before execution
+
+#### Scenario: Canvas transfer remains out of scope
+- **WHEN** Agent needs target-aware Canvas active-context query or Canvas content application
+- **THEN** those tools and contracts are provided by `targeted-agent-plugin-transfer-and-query-apis`, while this change only aligns model/asset providers to the shared metadata fields
+
+### Requirement: Agent tools declare query and mutation safety
+The system SHALL require Agent-facing tools that access editor state to declare whether they are read-only queries, non-destructive mutations, destructive mutations, or confirmation-gated operations. Runtime injection and execution policy MUST use this metadata when deciding whether a tool can be called automatically.
+
+#### Scenario: Structured query tool is injected safely
+- **WHEN** a Canvas capability provider contributes a selection query tool marked read-only and concurrency-safe
+- **THEN** runtime may inject and execute it without mutation confirmation according to normal read-only tool policy
+
+#### Scenario: Destructive mutation requires approval
+- **WHEN** a capability provider contributes a delete, replace, overwrite, or cross-container move operation
+- **THEN** runtime treats the tool as confirmation-gated and does not auto-execute it without explicit user intent or policy approval
+
+### Requirement: Capability metadata exposes target requirements
+The system SHALL allow Agent tools and transfer commands to declare target requirements such as required node ID, container ID, slot ID, field path, selection fallback, or viewport insertion fallback. Runtime MUST use these declarations to avoid invoking mutation tools with ambiguous destinations.
+
+#### Scenario: Tool requires explicit target node
+- **WHEN** Agent wants to apply an optimized prompt to an existing Canvas node and the tool declares `nodeId` as required for replace mode
+- **THEN** runtime first obtains or asks for a target node rather than calling the mutation with only natural-language context
+
+#### Scenario: Tool allows selection fallback
+- **WHEN** a tool declares that current selection is an allowed target fallback and the active editor reports exactly one selected node
+- **THEN** runtime may pass that selected node as the resolved target and records that fallback in trace metadata
+
+### Requirement: Capability introspection includes query-before-mutate guidance
+The system SHALL expose provider guidance that identifies preferred query tools for each mutation tool. Agent planning SHOULD use this introspection to gather stable IDs, summaries, and context before calling mutations.
+
+#### Scenario: Canvas prompt update advertises query dependency
+- **WHEN** Canvas registers a prompt-application mutation tool
+- **THEN** capability introspection identifies Canvas selection and node query tools as preferred preflight tools
+
+#### Scenario: Planner sees missing query tool
+- **WHEN** a mutation tool has target requirements but no provider query tool can satisfy them
+- **THEN** runtime marks the mutation as requiring user-specified target input instead of relying on OCR or screenshots
+

@@ -26,6 +26,11 @@ The engine SHALL define shared animation blend DTOs and compatibility helpers fo
 - **THEN** the repeated unit conversion and serde adapter behavior comes from `engine-types`
 - **THEN** runtime modules do not maintain independent copies of the same wrapper boilerplate
 
+#### Scenario: Future wrapper shapes are explicit
+- **WHEN** future animation features need wrapper shapes beyond the current layer/info/state/crossfade pattern
+- **THEN** the shared adapter or macro is extended deliberately with tests
+- **THEN** runtime modules do not silently fork a second copy of equivalent wrapper boilerplate
+
 ### Requirement: Animation Durations Are Explicit
 Animation blend contracts SHALL represent duration units explicitly and MUST NOT rely on ambiguous raw numeric fields across runtime boundaries.
 

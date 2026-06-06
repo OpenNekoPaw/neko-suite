@@ -104,3 +104,76 @@ The system SHALL provide testable hooks or diagnostics for metadata delay, dropp
 #### Scenario: Metadata budget breach is observable
 - **WHEN** metadata delay exceeds the configured interaction budget
 - **THEN** the Webview or diagnostic layer can surface a metadata-budget breach suitable for QA and PR review
+
+### Requirement: Render Frame Metadata Includes Preview Mode Alignment
+The system SHALL include active AI character preview mode alignment in render frame metadata when a frame reflects a preview scene state. Metadata MUST identify the preview mode id, viewport id, scene revision, applied command sequence, and playback clock data when available.
+
+#### Scenario: Frame reflects applied preview mode
+- **WHEN** Engine renders a frame after applying `voice-pack` preview mode command sequence `120`
+- **THEN** the frame metadata includes the viewport id, scene revision, applied sequence containing `120`, active preview mode `voice-pack`, and available playback clock data
+
+#### Scenario: Overlay rejects stale preview frame
+- **WHEN** Webview receives overlay or preview diagnostics for a different viewport, revision, or preview mode than the presented frame
+- **THEN** Webview treats the overlay data as stale and does not draw it as current preview truth
+
+### Requirement: Preview Mode Audio Stays On Separate Audio Stream
+The system SHALL keep voice-pack preview video and audio transport separate. Realtime viewport video MUST remain on the render stream, while preview audio uses an audio stream descriptor or explicit unavailable diagnostic.
+
+#### Scenario: Voice preview provides audio descriptor
+- **WHEN** voice-pack preview starts and realtime audio is available
+- **THEN** Engine provides or references a PCM audio stream descriptor associated with the preview session while keeping H.264 video frames on the render stream
+
+#### Scenario: Audio unavailable is diagnostic
+- **WHEN** voice-pack preview starts but no compatible audio stream can be created
+- **THEN** Engine reports an audio-unavailable diagnostic and does not embed audio payloads into the H.264 video stream
+
+### Requirement: Preview Mode Camera Presets Are Engine-applied
+The engine SHALL apply preview mode camera and framing presets before rendering authoritative preview frames. Camera preset application MUST be revision-aware and MUST emit enough frame metadata for Webview overlays and pending state reconciliation.
+
+#### Scenario: Face preset affects next authoritative frame
+- **WHEN** Engine applies `face` preview mode for a viewport
+- **THEN** the next authoritative frame for that viewport is rendered with the face preview camera/framing state and metadata that identifies the applied preview mode revision
+
+#### Scenario: Camera reset applies preset
+- **WHEN** Engine handles a reset camera override command for the active preview mode
+- **THEN** it clears the compatible override, reapplies the mode preset, and emits render metadata aligned with the reset command sequence
+
+### Requirement: Viewport Protocol Engine DTOs
+The engine SHALL define Rust DTOs corresponding to `ViewportCommand`, `ViewportEvent`, and frame metadata contracts and align them with ActionRouter envelopes.
+
+#### Scenario: Engine deserializes viewport command
+- **WHEN** the engine receives a supported viewport command envelope
+- **THEN** it deserializes protocol fields, validates `protocolVersion`, routes by domain/action, and preserves `seq` for acknowledgement
+
+#### Scenario: Engine rejects incompatible protocol version
+- **WHEN** the engine receives a viewport command with an unsupported protocol version
+- **THEN** it returns or logs a compatibility error without mutating scene state
+
+### Requirement: Viewport Controller Routing
+The engine SHALL register a shared `viewport_controller` in ActionRouter for engine-mediated viewport commands.
+
+#### Scenario: Select routes through viewport controller
+- **WHEN** Webview sends `viewport:select` with viewport id and scene id
+- **THEN** ActionRouter routes it to the viewport controller and returns hit-test or selection acknowledgement data
+
+#### Scenario: Transform routes through viewport controller
+- **WHEN** Webview sends `viewport:transform` with current base revision
+- **THEN** the viewport controller applies or rejects the transform using authoritative engine scene state
+
+### Requirement: Viewport Frame Metadata
+Engine-rendered viewport frames SHALL carry metadata that aligns video frames with viewport id, scene revision, applied command sequence, timestamp, and overlay transform data.
+
+#### Scenario: Frame metadata includes transform
+- **WHEN** Engine emits a viewport frame
+- **THEN** metadata includes a viewport identity, scene revision, frame timestamp, applied command sequence information, and a view transform or projection data usable for overlays
+
+#### Scenario: Prediction clears on matching frame
+- **WHEN** a frame metadata event indicates that command sequence `50` was applied
+- **THEN** Webview prediction for that command can be cleared even if a separate acknowledgement arrived earlier or later
+
+### Requirement: Multi-Viewport Isolation
+Viewport protocol handling SHALL preserve scene id and viewport id isolation across multiple viewports.
+
+#### Scenario: Secondary viewport selection is scoped
+- **WHEN** a user selects an object in a secondary viewport
+- **THEN** hit-test and selection results are tagged with that viewport id and do not apply to a different viewport unless explicitly synchronized

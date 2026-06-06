@@ -2,7 +2,6 @@
 
 ## Purpose
 Define the Dashboard Work Mode surface for managing project creative entities as a semantic ledger while keeping entity facts, Story workflows, Assets workflows, and file navigation owned by their source extensions.
-
 ## Requirements
 ### Requirement: Dashboard Exposes Creative Entity Management
 The Dashboard SHALL provide a Work Mode Creative Entities surface that lists project creative entities, script-derived candidates, missing material requirements, visual drafts, and default representation bindings as a project-level ledger.
@@ -187,3 +186,63 @@ Dashboard SHALL avoid duplicate confirmed entity rows when both a neutral entity
 #### Scenario: Source replacement is stable
 - **WHEN** the neutral source becomes available after Dashboard has loaded a Story compatibility source
 - **THEN** Dashboard replaces or merges duplicate confirmed rows without losing the selected entity detail when refs can be mapped
+
+### Requirement: Dashboard exposes only core character role actions
+Dashboard SHALL expose only `character-dialogue` and `embody-character` as core character role actions for character creative entities. Dashboard MUST NOT expose `test-npc`, `character-perspective`, `validate-character`, or `improve-character` as core action ids.
+
+#### Scenario: Character detail shows core role actions
+- **WHEN** Dashboard renders the detail view for a confirmed or candidate character entity whose source supports Agent role workflows
+- **THEN** the detail action list includes localized `character-dialogue` and `embody-character` actions
+
+#### Scenario: Character row remains compact
+- **WHEN** Dashboard renders a character entity row
+- **THEN** the row may include `character-dialogue` when the source can launch it and MUST NOT include validation or improvement actions as first-level row actions
+
+#### Scenario: Non-character entities do not expose role actions
+- **WHEN** Dashboard renders an entity whose kind is not `character`
+- **THEN** the source omits or disables `character-dialogue` and `embody-character` with a clear reason
+
+### Requirement: Dashboard delegates character dialogue to Agent-owned command
+Dashboard SHALL delegate `character-dialogue` through shared action contracts and host commands. Dashboard Webview MUST NOT import Agent runtime internals, assemble character prompts, create dialogue sessions, or persist character role artifacts.
+
+#### Scenario: Source maps character dialogue action
+- **WHEN** Dashboard action handling receives `character-dialogue` for a valid character ref
+- **THEN** the owning source or host adapter converts it into the Agent-owned Character Dialogue launch request and invokes `neko.agent.characterDialogue`
+
+#### Scenario: Agent panel receives focus for dialogue
+- **WHEN** `neko.agent.characterDialogue` is invoked from Dashboard
+- **THEN** the Agent panel is focused and the character dialogue controller starts or reports a validation error
+
+### Requirement: Dashboard presents character role availability explicitly
+Dashboard SHALL show Character Dialogue and Embody Character disabled states and failure reasons in a user-visible way when actions cannot run. Disabled reasons MUST come from the owning source, host capability detection, or Agent command availability checks.
+
+#### Scenario: Agent integration unavailable
+- **WHEN** the Agent character role command is unavailable
+- **THEN** Dashboard disables the affected character role action and shows a localized reason rather than sending a request that will fail silently
+
+#### Scenario: Candidate provides source-owned character ref
+- **WHEN** a script-derived character candidate can provide a source-owned character ref
+- **THEN** Dashboard may enable Character Dialogue or Embody Character without requiring candidate confirmation first
+
+#### Scenario: Candidate lacks usable character ref
+- **WHEN** a candidate cannot provide a usable character ref or the requested role action would mutate entity facts
+- **THEN** Dashboard disables that operation with a localized reason and may offer confirmation before write-back actions
+
+#### Scenario: Action failure refreshes state
+- **WHEN** a character role action request fails in the owning source or Agent host adapter
+- **THEN** Dashboard reports the failure reason and refreshes affected entity rows or details without mutating project facts
+
+### Requirement: Dashboard delegates embody character to Agent-owned feedback session
+Dashboard SHALL delegate `embody-character` to an Agent-owned Embody Character feedback session that treats the user as embodying the character and the Agent as a project-aware knowledge feedback assistant. The action MUST NOT start a Character Dialogue roleplay session and MUST NOT route through the ordinary creative Agent message pipeline.
+
+#### Scenario: Embody character starts feedback session
+- **WHEN** Dashboard action handling receives `embody-character` for a valid character ref
+- **THEN** the owning source or host adapter invokes `neko.agent.embodyCharacter` with entity ref, optional scope refs, and optional prompt so the Agent Extension starts an isolated Embody Character feedback session
+
+#### Scenario: Embody character does not create dialogue tab
+- **WHEN** the Agent command bridge handles `neko.agent.embodyCharacter`
+- **THEN** it creates an `embody-character` feedback session and does not create a `character-dialogue` roleplay tab
+
+#### Scenario: Dashboard does not own mode permissions
+- **WHEN** Dashboard delegates `embody-character`
+- **THEN** Dashboard sends only the typed action request and entity refs, while Agent Extension/runtime owns capability policy, evidence hydration, transcript lifecycle, and mode-boundary feedback

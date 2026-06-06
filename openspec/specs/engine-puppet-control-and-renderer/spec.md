@@ -131,3 +131,105 @@ Puppet preview video or delta streams SHALL not be treated as proof that editing
 - **WHEN** puppet control rejects commands but the preview stream remains connected
 - **THEN** Webview displays a control degraded or command error state
 
+### Requirement: Puppet Commands Align With ViewportProtocol
+Puppet editing commands that originate from ViewportShell SHALL use ViewportProtocol scene command envelopes.
+
+#### Scenario: Drag bone uses scene command
+- **WHEN** a puppet controller sends a bone drag command
+- **THEN** the command uses `domain: "scene"`, a `scene:puppet:*` action, sequence, correlation id, source, and base revision
+
+#### Scenario: Puppet command ack updates prediction
+- **WHEN** engine applies or rejects a puppet scene command
+- **THEN** it returns a protocol event that allows the puppet controller to commit or roll back overlay prediction
+
+### Requirement: Puppet Frames Provide Overlay Metadata
+Puppet render frames SHALL provide metadata sufficient to align skeleton, mesh, and vertex overlays with the displayed video frame.
+
+#### Scenario: Bone overlay aligns
+- **WHEN** a puppet frame is displayed with bone overlay enabled
+- **THEN** the overlay uses frame metadata transform data to draw bone handles within the configured pixel tolerance
+
+### Requirement: Native Puppet Runtime Components
+The puppet runtime SHALL provide ECS components and systems for native `Bone2D`, `Skeleton2D`, `SkinWeights2D`, `BlendShapeSet`, `BlendShapeWeights`, `ExpressionPresets`, `ControlDriverSet`, IK constraints, and spring bones.
+
+#### Scenario: Native components instantiate from project data
+- **WHEN** a `.nkp` v2 native puppet is loaded
+- **THEN** runtime-puppet instantiates the corresponding ECS components without requiring MOC3 parameter bindings
+
+#### Scenario: Runtime components do not depend on GPU
+- **WHEN** runtime-puppet evaluates native puppet systems in unit tests
+- **THEN** the systems run without importing wgpu or renderer crates
+
+### Requirement: CPU Native Deformation Path
+The puppet runtime SHALL compute native puppet deformed vertices on CPU as `ControlDriver -> BlendShape -> Skinning` and expose them through the existing deformed-vertices renderer input path.
+
+#### Scenario: CPU path renders native puppet
+- **WHEN** a native puppet has mesh vertices, BlendShape weights, and bone transforms
+- **THEN** runtime-puppet computes `DeformedVertices` that the existing SpriteBatch renderer can consume
+
+#### Scenario: CPU math is unit tested
+- **WHEN** a synthetic mesh fixture is evaluated by the CPU native path
+- **THEN** computed vertices match expected BlendShape and skinning results within configured tolerance
+
+### Requirement: GPU Native Deformation Path
+The puppet renderer SHALL support an optional GPU BlendShape+Skinning path fed by render-extract data while preserving CPU fallback.
+
+#### Scenario: GPU path matches CPU fixture
+- **WHEN** a synthetic native puppet mesh is rendered through the GPU path
+- **THEN** its transformed vertices match the CPU reference within configured tolerance
+
+#### Scenario: CPU fallback remains available
+- **WHEN** GPU native deformation is unavailable or disabled
+- **THEN** puppet rendering continues through CPU-computed deformed vertices
+
+### Requirement: Native Puppet Commands
+The puppet control service SHALL accept native puppet commands for bones, BlendShapes, expressions, ControlDrivers, and animations through sequence- and revision-aware envelopes.
+
+#### Scenario: Set BlendShape command applies
+- **WHEN** a command sets a valid native BlendShape weight with current base revision
+- **THEN** the puppet service applies the weight and returns an acknowledgement with the new revision
+
+#### Scenario: Stale native command is rejected
+- **WHEN** a native puppet command references a stale base revision that conflicts with newer edits
+- **THEN** the service rejects the command and leaves authoritative runtime state unchanged
+
+### Requirement: MOC3 Conversion Runtime Support
+The puppet runtime SHALL expose conversion APIs that reuse MOC3 parsed data to produce native puppet project data.
+
+#### Scenario: Conversion output is loadable
+- **WHEN** a MOC3 bundle is converted to native puppet data
+- **THEN** the resulting `.nkp` v2 data can be loaded by native runtime components without using MOC3 parameter evaluation as the primary runtime path
+
+#### Scenario: Legacy fallback remains available
+- **WHEN** conversion diagnostics indicate unsupported MOC3 behavior
+- **THEN** the native project can retain source metadata or fallback references that allow legacy read-only playback during migration
+
+### Requirement: MOC3 Keyform Source Parsing
+The puppet runtime SHALL resolve MOC3 keyform indirection tables used by warp deformers, rotation deformers, and art meshes before evaluating Live2D deformation.
+
+#### Scenario: Art mesh keyform positions use source table
+- **WHEN** an art mesh references keyform position sources
+- **THEN** the parser reads XY values through the keyform position source table rather than assuming flat contiguous vertex positions
+
+#### Scenario: Warp and rotation keyforms use their specific sources
+- **WHEN** warp or rotation deformers reference keyform sources
+- **THEN** warp deformers resolve control-point positions through warp position sources and rotation deformers resolve angles through rotation angle sources
+
+### Requirement: MOC3 External Texture Data Path
+The engine and puppet editor SHALL provide a runtime data path for texture PNG bytes referenced by Live2D `model3.json`.
+
+#### Scenario: Texture bytes are available for render
+- **WHEN** a MOC3 mesh references a texture index from a Live2D bundle
+- **THEN** the corresponding texture PNG bytes are decoded or uploaded through a supported renderer data path before the mesh is rendered
+
+#### Scenario: Texture index command is not upload
+- **WHEN** a client needs to upload or decode Live2D PNG image bytes
+- **THEN** it does not treat the existing `puppets:set_texture` texture-index command as an image upload API
+
+### Requirement: Bundle Auxiliary Data Loading
+The puppet runtime SHALL load Live2D bundle auxiliary JSON for expressions, motions, and physics through a supported puppet auxiliary path.
+
+#### Scenario: Load auxiliary JSON from bundle
+- **WHEN** a Live2D bundle contains expression, motion, or physics entries
+- **THEN** the puppet runtime receives those entries as validated JSON content rather than as unresolved bundle locator strings
+

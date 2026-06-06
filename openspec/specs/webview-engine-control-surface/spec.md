@@ -205,3 +205,120 @@ Webview prediction overlays SHALL remain bounded, labeled, and revertible while 
 #### Scenario: Prediction times out
 - **WHEN** compatible ack, delta, snapshot, or frame metadata does not arrive within the configured timeout
 - **THEN** the prediction rolls back and the Webview requests authoritative refresh or enters a degraded state
+
+### Requirement: Preview Mode Commands Use Direct Scene-control WebSocket
+The system SHALL route AI character preview mode requests, camera override resets, playback controls, and preview state subscriptions through the direct Webview-to-engine scene-control WebSocket path. Extension Host MUST NOT relay high-frequency preview state, playback timing, render frame metadata, or preview mode command traffic.
+
+#### Scenario: Mode request bypasses Extension Host
+- **WHEN** the user selects an AI character preview mode in the Neko Model Webview
+- **THEN** Webview sends the preview mode command to Engine through `SceneControlSocket` or the active scene-control transport without posting the command through Extension Host
+
+#### Scenario: Playback timing bypasses Extension Host
+- **WHEN** motion or voice-pack preview emits playback timing, viseme timing, or preview state updates
+- **THEN** those updates flow through engine WebSocket events and render/audio metadata rather than Extension Host `postMessage`
+
+### Requirement: Preview Mode UI Is Controller-mediated
+The system SHALL expose preview mode UI through Neko Model controller methods and shared serializable contracts. `ViewportShell` MUST remain domain-agnostic and MUST NOT import Neko Model preview mode implementation details.
+
+#### Scenario: Selector delegates to ModelController
+- **WHEN** the AI preview selector changes mode
+- **THEN** it calls a `ModelController` preview mode operation that serializes and dispatches the engine command
+
+#### Scenario: ViewportShell remains generic
+- **WHEN** preview mode support is added to Neko Model
+- **THEN** shared `ViewportShell` code does not branch on AI preview mode ids or import Neko Model Webview modules
+
+### Requirement: Preview Mode Fallbacks Are Explicit
+The system SHALL mark preview mode degraded states explicitly when scene-control, engine streaming, audio streaming, demo playback, or required character bindings are unavailable. Webview MUST NOT silently replace engine preview with a local-only R3F/HTML audio state as authoritative output.
+
+#### Scenario: Engine preview unavailable
+- **WHEN** the engine stream or scene-control channel is unavailable
+- **THEN** the preview selector is disabled or marked unavailable and does not claim that an authoritative preview mode has been applied
+
+#### Scenario: Local fallback is non-authoritative
+- **WHEN** a development fallback preview is shown while AI preview modes are unavailable
+- **THEN** the UI marks the fallback as non-authoritative and excludes it from export, WYSIWYG validation, and applied preview state semantics
+
+### Requirement: Preview Mode Pending State Reconciles With Engine Events
+The system SHALL distinguish requested, pending, applied, rejected, and resynced preview mode states. Webview MUST reconcile pending preview UI through scene-control acknowledgements, preview mode state events, and render frame metadata.
+
+#### Scenario: Pending mode becomes applied
+- **WHEN** Webview sends a preview mode request and Engine acknowledges it with an applied revision
+- **THEN** Webview marks the mode as applied only after the acknowledgement, matching preview state event, or compatible render frame metadata confirms it
+
+#### Scenario: Rejected mode rolls back UI
+- **WHEN** Engine rejects a preview mode request
+- **THEN** Webview clears the pending state, displays the diagnostic, and restores the last applied mode from engine state
+
+### Requirement: Neko Live Uses ViewportShell For Compositor Visual Truth
+neko-live SHALL use `ViewportShell` with a `LiveController` as the visual truth surface when an engine compositor stream descriptor is available.
+
+#### Scenario: Compositor stream is available
+- **WHEN** neko-live receives a valid engine compositor `RenderStreamDescriptor`
+- **THEN** it displays decoded compositor frames through `ViewportShell` and does not mount persistent local R3F or puppet renderers as competing visual truth
+
+#### Scenario: LiveController supplies controls
+- **WHEN** `ViewportToolbar` renders for a live compositor scene
+- **THEN** live scene preset, layer routing, tracking overlay, and output controls are supplied through `LiveController` toolbar descriptors or adjacent domain panels
+
+### Requirement: Neko Live Fallback Is Isolated
+Any remaining neko-live local R3F, puppet, or canvas preview SHALL be isolated behind a fallback flag and visibly marked as non-authoritative whenever compositor stream parity is unavailable.
+
+#### Scenario: Compositor unavailable
+- **WHEN** the compositor stream cannot start and local fallback rendering is enabled
+- **THEN** the UI marks the fallback as non-authoritative and does not use it for output/export parity validation
+
+#### Scenario: Fallback removal waits for parity
+- **WHEN** compositor stream parity, output route diagnostics, and latency validation have not passed
+- **THEN** persistent local renderer removal remains blocked
+
+### Requirement: Live High-Frequency Traffic Avoids Extension Host
+neko-live SHALL keep high-frequency compositor frames, decoded video frames, tracking updates, and shell-local navigation out of Extension Host `postMessage` traffic. Extension Host remains responsible for setup, permissions, resource URI conversion, lifecycle, and VSCode operations.
+
+#### Scenario: Compositor frames bypass Extension Host
+- **WHEN** a live compositor stream is active
+- **THEN** encoded frames flow through the engine stream endpoint and Webview stream client rather than Extension Host `postMessage`
+
+#### Scenario: Setup remains host-owned
+- **WHEN** neko-live needs workspace resources, device permission, or VSCode UI operations
+- **THEN** Extension Host brokers those low-frequency operations without becoming the frame or pointer-move transport
+
+### Requirement: Shared ViewportShell Is The Engine Visual Surface
+Engine-stream Webviews SHALL use ViewportShell as the shared visual truth surface for model, puppet, and live scenes once the relevant domain controller is available.
+
+#### Scenario: Model uses ViewportShell
+- **WHEN** neko-model has a valid engine stream and ModelController
+- **THEN** it renders through ViewportShell rather than mounting an independent visual truth surface for the same scene
+
+#### Scenario: Puppet uses ViewportShell
+- **WHEN** neko-puppet reaches the engine-stream integration phase
+- **THEN** it renders through ViewportShell and keeps any Canvas2D preview path explicitly marked as fallback or local prototype
+
+### Requirement: InteractionLayer Uses ViewportProtocol
+Webview interaction layers SHALL route engine-mediated viewport operations through ViewportProtocol instead of ad-hoc per-editor command formats.
+
+#### Scenario: Gizmo drag sends viewport command
+- **WHEN** a user drags a transform gizmo in a migrated editor
+- **THEN** the interaction layer sends a `ViewportCommand` with sequence, correlation id, source, and base revision where required
+
+#### Scenario: Local wheel zoom bypasses engine
+- **WHEN** a user performs shell-local wheel zoom
+- **THEN** the Webview updates local shell state without involving Extension Host or Engine per wheel event
+
+### Requirement: Prediction Layer Is Centralized
+Webview prediction behavior for transform, camera, selection, morph, IK, and overlay feedback SHALL use a central lifecycle tied to viewport command acknowledgements and frame metadata.
+
+#### Scenario: Rejected command clears prediction
+- **WHEN** a predicted viewport or scene command is rejected
+- **THEN** the prediction layer removes or rolls back the predicted overlay and triggers resync if necessary
+
+#### Scenario: Topology change invalidates prediction
+- **WHEN** a topology or scene reset event invalidates predicted overlay geometry
+- **THEN** the prediction layer discards predictions that reference the old topology or revision
+
+### Requirement: Extension Host Remains Low-Frequency
+Extension Host SHALL broker setup, resource URLs, editor lifecycle, and VSCode operations but MUST NOT relay high-frequency viewport frames, pointer move streams, or per-frame shell-local navigation.
+
+#### Scenario: Pointer move bypasses Extension Host
+- **WHEN** a user drags within ViewportShell
+- **THEN** high-frequency local prediction and engine command traffic do not pass through VSCode `postMessage` unless a domain explicitly requires a low-frequency host operation

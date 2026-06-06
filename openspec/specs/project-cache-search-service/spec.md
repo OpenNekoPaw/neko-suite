@@ -5,7 +5,6 @@ Define the shared project cache and search contract used by host-side services,
 Agent mention completion, and Webview rendering so project facts, local derived
 caches, and searchable resources stay aligned without leaking cache schemas
 across package boundaries.
-
 ## Requirements
 ### Requirement: Project Search Uses A Shared Contract
 The system SHALL expose project search results through a shared contract containing item identity, kind, label, source reference, project root, optional file path, aliases, normalized search text, navigation data, and freshness metadata.
@@ -249,3 +248,62 @@ The system SHALL include boundary tests or dependency checks that keep `neko-sea
 #### Scenario: Agent no longer owns cache schemas
 - **WHEN** dependency boundary tests scan Agent mention search code
 - **THEN** Agent mention projection does not parse project search cache manifests or read project search cache files directly
+
+### Requirement: Search Results Reference Cache-Backed Visuals Through Resource Refs
+The system SHALL expose cache-backed thumbnails, document previews, generated asset previews, and media preview visuals in search results through stable resource references or host-projected display URIs rather than package-local cache file paths.
+
+#### Scenario: Search result includes resource ref for thumbnail
+- **WHEN** a project search provider returns a media, document, generated asset, or asset-library item with a cache-backed thumbnail
+- **THEN** the returned search item includes a stable resource reference or host-projected thumbnail field without exposing package-local cache schema details
+
+#### Scenario: Webview receives projected visual
+- **WHEN** a Webview renders a project search result that has a cache-backed visual
+- **THEN** the owning Extension Host resolves or projects the visual through the resource cache service before sending display data to the Webview
+
+#### Scenario: Missing thumbnail reports status
+- **WHEN** a search result visual resource is missing from cache
+- **THEN** the search or host projection layer reports missing, stale, or materializing status instead of returning an unrelated local path
+
+### Requirement: Search Consumers Do Not Read Resource Cache Files Directly
+Search consumers SHALL use the project search service, resource cache service, or host-mediated projections to access cache-backed visuals and SHALL NOT read `.neko/.cache/resources/` manifests or package-local cache files directly.
+
+#### Scenario: Agent mention result uses host adapter
+- **WHEN** Agent mention completion displays a thumbnail or document preview for a search result
+- **THEN** Agent uses a host adapter to obtain a projected resource visual rather than reading resource cache manifest files or thumbnail directories itself
+
+#### Scenario: Dashboard search result avoids cache schema dependency
+- **WHEN** Dashboard or another Webview displays global project search results
+- **THEN** it receives search DTOs and host-projected visuals without importing resource cache manifest schemas or local filesystem paths as its data source
+
+#### Scenario: Cache implementation can change
+- **WHEN** the resource cache implementation moves from JSON manifest to SQLite cache index
+- **THEN** project search consumers continue to work because they depend on shared resource refs and host APIs rather than cache file schemas
+
+### Requirement: Asset Dimension Search Projection
+The project search service SHALL project puppet/model asset dimensions from AssetLibrary records through the `asset-library` partition.
+
+#### Scenario: Project search returns puppet model asset
+- **WHEN** AssetLibrary contains a puppet model dimension record
+- **THEN** ProjectSearch can return an `asset` item with media kind `puppet-model` and asset dimension `model`
+
+#### Scenario: Project search returns model motion asset
+- **WHEN** AssetLibrary contains a model motion dimension record
+- **THEN** ProjectSearch can return an `asset` item with media kind `model-motion` and asset dimension `motion`
+
+### Requirement: Bundle-Memory Metadata Projection
+The project search service SHALL preserve bundle-memory metadata in projected search items without treating bundle locators as local file paths.
+
+#### Scenario: Search item contains bundle metadata
+- **WHEN** AssetLibrary contains a bundle-memory file record with `bundlePath#entryPath`
+- **THEN** ProjectSearch includes the relevant storage mode and locator metadata in item metadata or navigation data
+
+#### Scenario: Search does not read ZIP bytes
+- **WHEN** ProjectSearch projects a bundle-memory asset
+- **THEN** it does not open ZIP files or parse domain bundle contents during normal query projection
+
+### Requirement: Same Partition Adapter Collision Avoidance
+The system SHALL avoid registering multiple independent `ProjectSearchAdapter` instances for the same `asset-library` partition unless the coordinator supports composite same-partition providers.
+
+#### Scenario: AssetLibrary adapter remains owner
+- **WHEN** puppet and model dimensions are made searchable
+- **THEN** they are projected through the AssetLibrary search adapter or a composite provider rather than replacing each other through duplicate partition registration
