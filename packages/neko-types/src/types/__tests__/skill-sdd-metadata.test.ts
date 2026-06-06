@@ -19,7 +19,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateSkill, validateSkillManifest } from '../skill';
+import {
+  toConfiguredSkillCatalogEntry,
+  toLazySkillCatalogEntry,
+  toSkillCatalogEntry,
+  validateSkill,
+  validateSkillManifest,
+} from '../skill';
 import type { Skill, SkillManifest } from '../skill';
 
 function baseSkill(overrides: Partial<Skill> = {}): Partial<Skill> {
@@ -355,16 +361,24 @@ describe('validateSkillManifest — standalone manifest pass', () => {
       referencedSkills: [{ id: 'audio-expert', relationship: 'collaborator' }],
       mediaWorkflow: {
         acceptedModalities: ['comic', 'image-sequence'],
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+        artifactProfiles: ['comic-shot-asset-prep'],
+        referencedCapabilities: ['canvas.importStoryboard'],
+        suggestedProjectors: ['projector:storyboard-to-canvas'],
         tags: ['comic', 'storyboard'],
         costLevel: 'low',
         riskLevel: 'low',
-        validationRequirements: ['StoryboardTableV1'],
+        validationRequirements: ['StoryboardTable'],
         optionalTools: ['ReadImage'],
       },
       compliance: {
         framework: 'creator-standard',
         auditRequired: false,
+      },
+      catalog: {
+        role: 'orchestrator',
+        visibility: 'primary',
+        actions: ['run', { id: 'fork', targetSource: 'project' }],
       },
     });
     expect(r.valid).toBe(true);
@@ -375,12 +389,15 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     const skill = baseSkill({
       mediaWorkflow: {
         acceptedModalities: ['image'],
-        producedArtifacts: ['storyboard-table', 'animation-plan'],
+        producedArtifacts: ['StoryboardTable', 'animation-plan'],
+        artifactProfiles: ['comic-shot-asset-prep'],
         inputArtifacts: ['generated-media-ref'],
+        referencedCapabilities: ['cut.importStoryboard'],
+        suggestedProjectors: ['projector:storyboard-to-cut'],
         tags: ['media-to-video'],
         costLevel: 'medium',
         riskLevel: 'medium',
-        validationRequirements: ['StoryboardTableV1'],
+        validationRequirements: ['StoryboardTable'],
       },
     });
 
@@ -398,7 +415,7 @@ describe('validateSkillManifest — standalone manifest pass', () => {
       baseManifest({
         mediaWorkflow: {
           acceptedModalities: ['comic'],
-          producedArtifacts: ['storyboard-table'],
+          producedArtifacts: ['StoryboardTable'],
           steps: ['inspect', 'structure'],
           routes: [{ from: 'comic', to: 'video' }],
         } as unknown as SkillManifest['mediaWorkflow'],
@@ -419,6 +436,9 @@ describe('validateSkillManifest — standalone manifest pass', () => {
       baseManifest({
         mediaWorkflow: {
           acceptedModalities: ['comic', ''],
+          artifactProfiles: ['comic-shot-plan', ''],
+          referencedCapabilities: ['canvas.importStoryboard', ''],
+          suggestedProjectors: ['projector:storyboard-to-canvas', ''],
           costLevel: 'expensive',
           riskLevel: 'unsafe',
         } as unknown as SkillManifest['mediaWorkflow'],
@@ -429,8 +449,125 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     expect(r.errors).toEqual(
       expect.arrayContaining([
         'mediaWorkflow.acceptedModalities[1] must be a non-empty string',
+        'mediaWorkflow.artifactProfiles[1] must be a non-empty string',
+        'mediaWorkflow.referencedCapabilities[1] must be a non-empty string',
+        'mediaWorkflow.suggestedProjectors[1] must be a non-empty string',
         'mediaWorkflow.costLevel must be "free", "low", "medium", or "high"',
         'mediaWorkflow.riskLevel must be "low", "medium", "high", or "destructive"',
+      ]),
+    );
+  });
+});
+
+describe('skill catalog projection metadata', () => {
+  it('projects old provider-like skills with runtime-safe plugin defaults', () => {
+    const entry = toSkillCatalogEntry(
+      {
+        name: 'legacy-plugin-skill',
+        description: 'Legacy plugin skill',
+      },
+      {
+        command: 'plugin.runSkill',
+        tags: ['plugin'],
+      },
+    );
+
+    expect(entry.catalog).toMatchObject({
+      role: 'standalone',
+      source: 'plugin',
+      visibility: 'primary',
+      editable: false,
+      actions: [{ id: 'run' }],
+    });
+    expect(entry.command).toBe('plugin.runSkill');
+    expect(entry.tags).toEqual(['plugin']);
+  });
+
+  it('projects manifest catalog metadata without loading full Markdown content', () => {
+    const entry = toLazySkillCatalogEntry({
+      name: 'comic-paneling',
+      description: 'Analyze comic panels.',
+      icon: 'book-open',
+      source: 'project',
+      manifest: {
+        catalog: {
+          role: 'focused-skill',
+          groupId: 'media-to-video',
+          parentSkillIds: ['media-to-video'],
+          visibility: 'advanced',
+          actions: ['run', 'edit', 'reveal'],
+        },
+      },
+    });
+
+    expect(entry.catalog).toMatchObject({
+      role: 'focused-skill',
+      source: 'project',
+      groupId: 'media-to-video',
+      parentSkillIds: ['media-to-video'],
+      visibility: 'advanced',
+      editable: true,
+      actions: [{ id: 'run' }, { id: 'edit' }, { id: 'reveal' }],
+    });
+  });
+
+  it('defaults editable file skills to edit/reveal/duplicate actions', () => {
+    const entry = toConfiguredSkillCatalogEntry({
+      ...baseSkill({ source: 'personal' }),
+      notes: 'User notes',
+      tags: ['review', 'writing'],
+    } as Skill & { notes: string; tags: string[] });
+
+    expect(entry.catalog.source).toBe('personal');
+    expect(entry.catalog.editable).toBe(true);
+    expect(entry.catalog.actions.map((action) => action.id)).toEqual([
+      'run',
+      'edit',
+      'reveal',
+      'duplicate',
+    ]);
+    expect(entry.tags).toEqual(['review', 'writing']);
+  });
+
+  it('rejects workflow-order DSL fields in catalog metadata', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        catalog: {
+          role: 'orchestrator',
+          steps: ['inspect', 'compose'],
+          routes: [{ from: 'comic', to: 'storyboard' }],
+        } as unknown as SkillManifest['catalog'],
+      }),
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('catalog.steps is not allowed'),
+        expect.stringContaining('catalog.routes is not allowed'),
+      ]),
+    );
+  });
+
+  it('rejects malformed catalog roles, visibility and actions', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        catalog: {
+          role: 'pipeline',
+          visibility: 'everyone',
+          parentSkillIds: ['media-to-video', ''],
+          actions: ['run', { id: 'edit', targetSource: 'builtin' }],
+        } as unknown as SkillManifest['catalog'],
+      }),
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('catalog.role must be one of'),
+        expect.stringContaining('catalog.visibility must be one of'),
+        'catalog.parentSkillIds[1] must be a non-empty string',
+        'catalog.actions[1].targetSource must be "project" or "personal"',
       ]),
     );
   });

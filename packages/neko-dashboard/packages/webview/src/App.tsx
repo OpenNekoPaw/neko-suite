@@ -14,6 +14,7 @@ import type {
   DashboardSkill,
   ExtensionToWebviewMessage,
 } from './types';
+import type { SkillCatalogActionId } from '@neko/shared';
 
 interface DashboardState {
   readonly data: DashboardData | null;
@@ -127,6 +128,32 @@ function handleSkillCommand(skill: DashboardSkill) {
   });
 }
 
+function handleSkillAction(
+  skill: DashboardSkill | undefined,
+  action: SkillCatalogActionId,
+  input: { readonly skillName?: string } = {},
+) {
+  postMessage({
+    type: 'skillAction',
+    request: {
+      action,
+      ...(skill
+        ? {
+            skillRef: {
+              extensionId: skill.extensionId,
+              id: skill.id,
+              source: skill.catalog.source,
+            },
+          }
+        : {}),
+      ...(input.skillName ? { skillName: input.skillName } : {}),
+      ...(action === 'create' || action === 'fork' || action === 'duplicate'
+        ? { targetSource: skill?.catalog.source === 'personal' ? 'personal' : 'project' }
+        : {}),
+    },
+  });
+}
+
 function WelcomeView({ data }: { readonly data: DashboardData }) {
   return (
     <>
@@ -136,7 +163,11 @@ function WelcomeView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} onCommand={handleSkillCommand} />
+      <SkillList
+        skills={data.skills}
+        onCommand={handleSkillCommand}
+        onSkillAction={handleSkillAction}
+      />
     </>
   );
 }
@@ -154,7 +185,11 @@ function WorkView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} onCommand={handleSkillCommand} />
+      <SkillList
+        skills={data.skills}
+        onCommand={handleSkillCommand}
+        onSkillAction={handleSkillAction}
+      />
       <CreativeEntitiesSection
         state={data.creativeEntities}
         onSelect={(ref) => postMessage({ type: 'selectCreativeEntity', ref })}

@@ -18,7 +18,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { getLogger } from '../base';
-import type { ConfiguredSkill, ConfiguredSlashCommand } from '@neko/shared';
+import type { ConfiguredSkill, ConfiguredSlashCommand, SkillManifest } from '@neko/shared';
 import {
   SKILL_FILE_WATCH_DEBOUNCE_MS,
   SKILL_PATH_TRIGGER_DEBOUNCE_MS,
@@ -202,6 +202,31 @@ export class SkillFileService implements vscode.Disposable {
       content,
       description,
     });
+  }
+
+  getSkillDirectory(skillName: string, source: 'personal' | 'project'): string | null {
+    const baseDir = source === 'personal' ? this.getUserSkillsDir() : this.getWorkspaceSkillsDir();
+    return baseDir ? path.join(baseDir, skillName) : null;
+  }
+
+  getSkillFilePath(skillName: string, source: 'personal' | 'project'): string | null {
+    const skillDir = this.getSkillDirectory(skillName, source);
+    return skillDir ? path.join(skillDir, 'SKILL.md') : null;
+  }
+
+  async writeSkillManifest(
+    skillName: string,
+    source: 'personal' | 'project',
+    manifest: SkillManifest,
+  ): Promise<string> {
+    const skillDir = this.getSkillDirectory(skillName, source);
+    if (!skillDir) {
+      throw new Error('No workspace folder open for project skills');
+    }
+    await fs.mkdir(skillDir, { recursive: true });
+    const manifestPath = path.join(skillDir, 'manifest.json');
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+    return manifestPath;
   }
 
   /**

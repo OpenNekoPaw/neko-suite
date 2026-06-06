@@ -439,6 +439,7 @@ revealInExplorer(path)         — Show in file explorer
 cancelTask(taskId)             — Delegate cancel to source extension
 retryTask(taskId)              — Delegate retry to source extension
 revealTaskOutput(taskId)       — Open generated file
+skillAction(request)           — Delegate Agent skill run/edit/reveal/fork/create/duplicate/rescan
 ```
 
 #### Extension → Webview
@@ -454,6 +455,14 @@ creativeEntityActionResult(result) — Source-owned entity action result
 `taskId` in webview messages is always the dashboard aggregation id. Extension-host code resolves it back to `DashboardTaskRef` before invoking `DashboardTaskSource.cancel()` or `retry()`.
 
 `creativeEntityAction` messages follow the same host-mediated rule: the Webview sends only a shared `DashboardCreativeEntityActionRequest`, the Extension Host validates the source/ref/action shape, and the owning source performs or delegates the domain operation. Dashboard never writes Story registries, entity binding files, requirement files, visual draft files, or Assets metadata directly. Source navigation such as `open-source` is also source-owned: the source resolves registry/script locations in Extension Host code and opens the editor there, while Webview state keeps only safe projected refs.
+
+#### Agent Skill Catalog
+
+Dashboard consumes Agent skills through a shared catalog projection rather than parsing `SKILL.md`, `manifest.json`, or prompt-chain Markdown. Each projected skill carries deterministic `catalog` metadata: source (`builtin` / `project` / `personal` / `market` / `plugin`), role (`orchestrator` / `focused-skill` / `standalone` / `quick-action` / `persona`), visibility, editability, grouping, and safe action descriptors.
+
+The Agent extension owns discovery and management for built-in skills plus project/user `.neko/skills`. Dashboard renders the projection, filters by tags, groups focused skills under orchestrators, and sends only typed `SkillCatalogActionRequest` messages. Skill entries use compact card grids, a compact tag filter dropdown, and bounded child-skill chips so the Dashboard remains an overview surface instead of a full-page skill browser. It never sends absolute file paths or arbitrary edit commands for skills. The Agent Extension Host resolves known skill refs to workspace/user directories, opens `SKILL.md`, reveals folders, creates/duplicates skills, forks built-ins into `.neko/skills`, and rejects unknown ids, unsupported sources, and path-like payloads.
+
+`.neko/commands` remain slash commands / quick actions outside the main Skill Catalog. If Dashboard later adds a command section, it should use a sibling typed projection instead of treating commands as semantic skills.
 
 ### 2.7 What Dashboard Does NOT Do
 

@@ -40,6 +40,12 @@ describe('SkillReader', () => {
       description: '生成一个视频片段。',
       locale: 'zh-cn',
       tags: ['生成', '视频'],
+      catalog: {
+        role: 'quick-action',
+        source: 'plugin',
+        visibility: 'primary',
+        editable: false,
+      },
     });
   });
 
@@ -67,6 +73,45 @@ describe('SkillReader', () => {
       description: 'Generate media.',
       locale: 'fr',
       tags: ['ai'],
+      catalog: {
+        role: 'standalone',
+        source: 'builtin',
+        visibility: 'primary',
+      },
+    });
+  });
+
+  it('preserves provider catalog metadata', async () => {
+    installExtension('neko.neko-agent', {
+      exports: {
+        getSkills: () => [
+          {
+            id: 'media-to-video',
+            name: 'Media to Video',
+            description: 'Coordinate media adaptation.',
+            command: 'neko.agent.invokeSkill',
+            catalog: {
+              role: 'orchestrator',
+              source: 'builtin',
+              visibility: 'primary',
+              editable: false,
+              groupId: 'media-to-video',
+              actions: [{ id: 'run' }, { id: 'fork', targetSource: 'project' }],
+            },
+          },
+        ],
+      },
+    });
+
+    const [skill] = await new SkillReader().read();
+
+    expect(skill?.catalog).toEqual({
+      role: 'orchestrator',
+      source: 'builtin',
+      visibility: 'primary',
+      editable: false,
+      groupId: 'media-to-video',
+      actions: [{ id: 'run' }, { id: 'fork', targetSource: 'project' }],
     });
   });
 });

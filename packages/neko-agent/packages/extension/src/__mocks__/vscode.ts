@@ -58,6 +58,7 @@ export const window = {
   showErrorMessage: vi.fn().mockResolvedValue(undefined),
   showQuickPick: vi.fn().mockResolvedValue(undefined),
   showSaveDialog: vi.fn().mockResolvedValue(undefined),
+  showTextDocument: vi.fn().mockResolvedValue(undefined),
 };
 
 // workspace mock
@@ -74,6 +75,7 @@ export const workspace = {
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),
     stat: vi.fn().mockResolvedValue({ type: 1 }),
   },
+  openTextDocument: vi.fn().mockResolvedValue({}),
   onDidChangeTextDocument: vi.fn((_listener: (event: any) => void) => ({
     dispose: vi.fn(),
   })),

@@ -112,6 +112,43 @@ describe('DashboardProvider', () => {
     provider.dispose();
   });
 
+  it('dispatches typed skill actions through the Agent host command', async () => {
+    const postMessage = vi.fn(async () => true);
+    const panel = createPanel(postMessage);
+    vscodeWindowState.createWebviewPanel.mockReturnValue(panel);
+
+    const provider = new DashboardProvider(createContext(), {
+      scanner: createScanner(),
+      statusReader: createStatusReader(),
+      skillReader: createSkillReader(),
+      taskAggregator: createTaskAggregator(),
+      creativeEntityAggregator: createCreativeEntityAggregator(),
+      activityStore: createActivityStore(),
+    });
+    await provider.show();
+
+    const receiveMessage = getRegisteredMessageListener(panel);
+    const handler = vi.fn(async () => undefined);
+    vscodeCommandState.commandHandlers.set('neko.agent.skillAction', handler);
+
+    const request = {
+      action: 'edit',
+      skillRef: {
+        extensionId: 'neko.neko-agent',
+        id: 'review',
+        source: 'project',
+      },
+    };
+
+    await receiveMessage?.({
+      type: 'skillAction',
+      request,
+    });
+
+    expect(handler).toHaveBeenCalledWith(request);
+    provider.dispose();
+  });
+
   it('refreshes entity state and delegates entity messages', async () => {
     const postMessage = vi.fn(async () => true);
     const panel = createPanel(postMessage);

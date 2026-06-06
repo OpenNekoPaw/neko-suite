@@ -65,6 +65,15 @@ export interface ToolsFileFrontmatter {
 export type SkillSource = 'builtin' | 'personal' | 'project' | 'market';
 
 /**
+ * Source values used by UI-facing skill catalog projections.
+ *
+ * `SkillSource` remains the runtime/file-skill source contract. The catalog
+ * projection adds `plugin` so older extension providers can be represented
+ * without pretending their skills came from disk or the marketplace.
+ */
+export type SkillCatalogSource = SkillSource | 'plugin';
+
+/**
  * Skill directory locations
  */
 export const SKILL_DIRECTORIES = {
@@ -150,8 +159,14 @@ export interface SkillMediaWorkflowHint {
   acceptedModalities?: string[];
   /** Structured artifact kinds this Skill may produce. */
   producedArtifacts?: string[];
+  /** Structured artifact profiles this Skill may produce or prefer. */
+  artifactProfiles?: string[];
   /** Structured artifact kinds this Skill expects as input. */
   inputArtifacts?: string[];
+  /** Capability ids this Skill may reference when the provider is available. */
+  referencedCapabilities?: string[];
+  /** Projector ids this Skill may suggest after validation and review. */
+  suggestedProjectors?: string[];
   /** Free-form tags for discovery and catalogue filtering. */
   tags?: string[];
   /** Relative cost hint used for planning and approval copy. */
@@ -180,6 +195,125 @@ export interface SkillCompliance {
   reviewedBy?: string[];
   /** ISO date of the last compliance review. */
   reviewDate?: string;
+}
+
+// =============================================================================
+// Skill Catalog Projection Types
+// =============================================================================
+
+export type SkillCatalogRole =
+  | 'orchestrator'
+  | 'focused-skill'
+  | 'standalone'
+  | 'quick-action'
+  | 'persona';
+
+export type SkillCatalogVisibility = 'primary' | 'advanced' | 'hidden';
+
+export type SkillCatalogActionId =
+  | 'run'
+  | 'edit'
+  | 'reveal'
+  | 'fork'
+  | 'create'
+  | 'duplicate'
+  | 'rescan';
+
+export type SkillCatalogEditableSource = Extract<SkillCatalogSource, 'project' | 'personal'>;
+
+export interface SkillCatalogAction {
+  /** Typed host-resolved action id. Never a VSCode command id or file path. */
+  readonly id: SkillCatalogActionId;
+  /** Optional display hint. Dashboard may localize by action id instead. */
+  readonly label?: string;
+  /** Optional destination for copy/fork/create actions. */
+  readonly targetSource?: SkillCatalogEditableSource;
+}
+
+export type SkillCatalogActionInput = SkillCatalogActionId | SkillCatalogAction;
+
+/**
+ * Non-orchestrating catalog metadata read from manifest.json.
+ *
+ * This block is display/management metadata only. Workflow ordering, branching,
+ * routes and executable stages stay in SKILL.md prompt-chain text.
+ */
+export interface SkillCatalogManifest {
+  readonly role?: SkillCatalogRole;
+  readonly groupId?: string;
+  readonly parentSkillIds?: readonly string[];
+  readonly visibility?: SkillCatalogVisibility;
+  readonly editable?: boolean;
+  readonly actions?: readonly SkillCatalogActionInput[];
+}
+
+export interface SkillCatalogMeta {
+  readonly role: SkillCatalogRole;
+  readonly source: SkillCatalogSource;
+  readonly visibility: SkillCatalogVisibility;
+  readonly editable: boolean;
+  readonly groupId?: string;
+  readonly parentSkillIds?: readonly string[];
+  readonly actions: readonly SkillCatalogAction[];
+}
+
+export interface SkillCatalogLocalizedText {
+  readonly name?: string;
+  readonly description?: string;
+  readonly tags?: readonly string[];
+}
+
+export interface SkillCatalogEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly icon?: string;
+  readonly command?: string;
+  readonly tags?: readonly string[];
+  readonly locales?: Readonly<Record<string, SkillCatalogLocalizedText>>;
+  readonly catalog: SkillCatalogMeta;
+}
+
+export interface SkillCatalogRef {
+  readonly extensionId: string;
+  readonly id: string;
+  readonly source: SkillCatalogSource;
+}
+
+export interface SkillCatalogActionRequest {
+  readonly action: SkillCatalogActionId;
+  readonly skillRef?: SkillCatalogRef;
+  readonly targetSource?: SkillCatalogEditableSource;
+  readonly skillName?: string;
+}
+
+export interface SkillCatalogProjectable {
+  readonly name: string;
+  readonly description: string;
+  readonly icon?: string;
+  readonly source?: SkillCatalogSource;
+  readonly command?: string;
+  readonly tags?: readonly string[];
+  readonly enabled?: boolean;
+  readonly mediaWorkflow?: Pick<SkillMediaWorkflowHint, 'tags'>;
+  readonly manifest?: { readonly catalog?: SkillCatalogManifest };
+  readonly catalog?: SkillCatalogManifest;
+}
+
+export interface SkillCatalogProjectionOptions {
+  readonly extensionId?: string;
+  readonly id?: string;
+  readonly displayName?: string;
+  readonly source?: SkillCatalogSource;
+  readonly command?: string;
+  readonly tags?: readonly string[];
+  readonly locales?: Readonly<Record<string, SkillCatalogLocalizedText>>;
+  readonly catalog?: SkillCatalogManifest;
+  readonly editable?: boolean;
+  readonly defaultSource?: SkillCatalogSource;
+  readonly defaultRole?: SkillCatalogRole;
+  readonly defaultVisibility?: SkillCatalogVisibility;
+  readonly defaultActions?: readonly SkillCatalogActionInput[];
 }
 
 // =============================================================================
@@ -378,6 +512,9 @@ export interface Skill {
    * runtime behaviour on its own.
    */
   compliance?: SkillCompliance;
+
+  /** UI catalog metadata. Display/management only; not workflow ordering. */
+  catalog?: SkillCatalogMeta;
 }
 
 // =============================================================================
@@ -768,6 +905,9 @@ export interface SkillManifest {
 
   /** Compliance metadata consumed by audit tooling. */
   compliance?: SkillCompliance;
+
+  /** UI catalog metadata. Display/management only; not workflow ordering. */
+  catalog?: SkillCatalogManifest;
 }
 
 /**
@@ -959,6 +1099,191 @@ export function toCommandSummary(command: SlashCommand): SkillSummary {
   };
 }
 
+export function toSkillCatalogEntry(
+  skill: SkillCatalogProjectable,
+  options: SkillCatalogProjectionOptions = {},
+): SkillCatalogEntry {
+  const tags = resolveCatalogTags(skill, options);
+  return {
+    id: options.id ?? skill.name,
+    name: options.displayName ?? skill.name,
+    description: skill.description,
+    icon: skill.icon,
+    command: options.command ?? skill.command,
+    tags,
+    locales: options.locales,
+    catalog: toSkillCatalogMeta(skill, options),
+  };
+}
+
+export function toConfiguredSkillCatalogEntry(
+  skill: ConfiguredSkill,
+  options: SkillCatalogProjectionOptions = {},
+): SkillCatalogEntry {
+  return toSkillCatalogEntry(skill, {
+    ...options,
+    tags: options.tags ?? skill.tags,
+  });
+}
+
+export function toLazySkillCatalogEntry(
+  skill: SkillCatalogProjectable,
+  options: SkillCatalogProjectionOptions = {},
+): SkillCatalogEntry {
+  return toSkillCatalogEntry(skill, options);
+}
+
+export function toSkillCatalogMeta(
+  skill: SkillCatalogProjectable,
+  options: SkillCatalogProjectionOptions = {},
+): SkillCatalogMeta {
+  const catalog = options.catalog ?? skill.catalog ?? skill.manifest?.catalog;
+  const source = options.source ?? skill.source ?? options.defaultSource ?? 'plugin';
+  const role = catalog?.role ?? options.defaultRole ?? 'standalone';
+  const visibility =
+    catalog?.visibility ??
+    options.defaultVisibility ??
+    (role === 'persona' ? 'hidden' : role === 'focused-skill' ? 'advanced' : 'primary');
+  const editable = catalog?.editable ?? options.editable ?? isEditableSkillCatalogSource(source);
+  const actions = normalizeSkillCatalogActions(
+    catalog?.actions ?? options.defaultActions ?? createDefaultCatalogActions({ source, editable }),
+  );
+
+  return removeUndefinedCatalogMetaFields({
+    role,
+    source,
+    visibility,
+    editable,
+    groupId: catalog?.groupId,
+    parentSkillIds: catalog?.parentSkillIds ? [...catalog.parentSkillIds] : undefined,
+    actions,
+  });
+}
+
+export function normalizeSkillCatalogActions(
+  actions: readonly SkillCatalogActionInput[],
+): readonly SkillCatalogAction[] {
+  const normalized: SkillCatalogAction[] = [];
+  const seen = new Set<string>();
+
+  for (const action of actions) {
+    const candidate = normalizeSkillCatalogAction(action);
+    if (!candidate) continue;
+    const key = `${candidate.id}:${candidate.targetSource ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(candidate);
+  }
+
+  return normalized;
+}
+
+export function isSkillCatalogRole(value: unknown): value is SkillCatalogRole {
+  return typeof value === 'string' && SKILL_CATALOG_ROLES.includes(value as SkillCatalogRole);
+}
+
+export function isSkillCatalogSource(value: unknown): value is SkillCatalogSource {
+  return typeof value === 'string' && SKILL_CATALOG_SOURCES.includes(value as SkillCatalogSource);
+}
+
+export function isSkillCatalogActionId(value: unknown): value is SkillCatalogActionId {
+  return (
+    typeof value === 'string' && SKILL_CATALOG_ACTION_IDS.includes(value as SkillCatalogActionId)
+  );
+}
+
+export function isEditableSkillCatalogSource(value: unknown): value is SkillCatalogEditableSource {
+  return (
+    typeof value === 'string' &&
+    EDITABLE_SKILL_CATALOG_SOURCES.includes(value as SkillCatalogEditableSource)
+  );
+}
+
+export function isSkillCatalogRef(value: unknown): value is SkillCatalogRef {
+  if (!isRecord(value)) return false;
+  for (const key of Object.keys(value)) {
+    if (key !== 'extensionId' && key !== 'id' && key !== 'source') {
+      return false;
+    }
+  }
+  return (
+    typeof value.extensionId === 'string' &&
+    typeof value.id === 'string' &&
+    isSkillCatalogSource(value.source)
+  );
+}
+
+export function isSkillCatalogActionRequest(value: unknown): value is SkillCatalogActionRequest {
+  if (!isRecord(value)) return false;
+  for (const key of Object.keys(value)) {
+    if (key !== 'action' && key !== 'skillRef' && key !== 'targetSource' && key !== 'skillName') {
+      return false;
+    }
+  }
+  if (!isSkillCatalogActionId(value.action)) return false;
+  if (value.skillRef !== undefined && !isSkillCatalogRef(value.skillRef)) return false;
+  if (value.targetSource !== undefined && !isEditableSkillCatalogSource(value.targetSource)) {
+    return false;
+  }
+  if (value.skillName !== undefined && typeof value.skillName !== 'string') return false;
+  return true;
+}
+
+function resolveCatalogTags(
+  skill: SkillCatalogProjectable,
+  options: SkillCatalogProjectionOptions,
+): readonly string[] | undefined {
+  const tags = options.tags ?? skill.tags ?? skill.mediaWorkflow?.tags;
+  return tags ? [...tags] : undefined;
+}
+
+function createDefaultCatalogActions(input: {
+  readonly source: SkillCatalogSource;
+  readonly editable: boolean;
+}): readonly SkillCatalogActionInput[] {
+  if (input.editable) {
+    return ['run', 'edit', 'reveal', 'duplicate'];
+  }
+  if (input.source === 'builtin' || input.source === 'market') {
+    return ['run', 'fork'];
+  }
+  return ['run'];
+}
+
+function normalizeSkillCatalogAction(
+  action: SkillCatalogActionInput,
+): SkillCatalogAction | undefined {
+  if (typeof action === 'string') {
+    return isSkillCatalogActionId(action) ? { id: action } : undefined;
+  }
+  if (!action || !isSkillCatalogActionId(action.id)) return undefined;
+  return removeUndefinedActionFields({
+    id: action.id,
+    label: action.label,
+    targetSource: action.targetSource,
+  });
+}
+
+function removeUndefinedActionFields(action: SkillCatalogAction): SkillCatalogAction {
+  return {
+    id: action.id,
+    ...(action.label !== undefined ? { label: action.label } : {}),
+    ...(action.targetSource !== undefined ? { targetSource: action.targetSource } : {}),
+  };
+}
+
+function removeUndefinedCatalogMetaFields(meta: SkillCatalogMeta): SkillCatalogMeta {
+  return {
+    role: meta.role,
+    source: meta.source,
+    visibility: meta.visibility,
+    editable: meta.editable,
+    ...(meta.groupId !== undefined ? { groupId: meta.groupId } : {}),
+    ...(meta.parentSkillIds !== undefined ? { parentSkillIds: meta.parentSkillIds } : {}),
+    actions: meta.actions,
+  };
+}
+
 /**
  * Parse allowed-tools string into array
  */
@@ -1048,6 +1373,43 @@ const MEDIA_WORKFLOW_DSL_FIELD_NAMES = [
   'workflow',
   'workflows',
 ] as const;
+
+const SKILL_CATALOG_ROLES = [
+  'orchestrator',
+  'focused-skill',
+  'standalone',
+  'quick-action',
+  'persona',
+] as const satisfies readonly SkillCatalogRole[];
+
+const SKILL_CATALOG_VISIBILITIES = [
+  'primary',
+  'advanced',
+  'hidden',
+] as const satisfies readonly SkillCatalogVisibility[];
+
+const SKILL_CATALOG_SOURCES = [
+  'builtin',
+  'personal',
+  'project',
+  'market',
+  'plugin',
+] as const satisfies readonly SkillCatalogSource[];
+
+const SKILL_CATALOG_ACTION_IDS = [
+  'run',
+  'edit',
+  'reveal',
+  'fork',
+  'create',
+  'duplicate',
+  'rescan',
+] as const satisfies readonly SkillCatalogActionId[];
+
+const EDITABLE_SKILL_CATALOG_SOURCES = [
+  'project',
+  'personal',
+] as const satisfies readonly SkillCatalogEditableSource[];
 
 export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
   const errors: string[] = [];
@@ -1178,6 +1540,7 @@ export function validateSkillManifest(
   }
 
   validateSkillMediaWorkflowHint(manifest.mediaWorkflow, errors);
+  validateSkillCatalogManifest(manifest.catalog, errors);
 
   // compliance: light shape check; semantics are caller-defined.
   if (manifest.compliance !== undefined) {
@@ -1203,6 +1566,88 @@ export function validateSkillManifest(
   return { valid: errors.length === 0, errors, warnings };
 }
 
+function validateSkillCatalogManifest(
+  catalog: SkillCatalogManifest | undefined,
+  errors: string[],
+): void {
+  if (catalog === undefined) return;
+  if (typeof catalog !== 'object' || Array.isArray(catalog)) {
+    errors.push('Field "catalog" must be an object');
+    return;
+  }
+
+  for (const key of Object.keys(catalog)) {
+    if (isForbiddenCatalogDslField(key)) {
+      errors.push(
+        `catalog.${key} is not allowed; workflow order belongs in SKILL.md prompt-chain text`,
+      );
+    }
+  }
+
+  if (catalog.role !== undefined && !isSkillCatalogRole(catalog.role)) {
+    errors.push(
+      `catalog.role must be one of: ${SKILL_CATALOG_ROLES.map((role) => `"${role}"`).join(', ')}`,
+    );
+  }
+
+  if (
+    catalog.visibility !== undefined &&
+    !SKILL_CATALOG_VISIBILITIES.includes(catalog.visibility)
+  ) {
+    errors.push(
+      `catalog.visibility must be one of: ${SKILL_CATALOG_VISIBILITIES.map((visibility) => `"${visibility}"`).join(', ')}`,
+    );
+  }
+
+  if (catalog.groupId !== undefined && !isNonEmptyString(catalog.groupId)) {
+    errors.push('catalog.groupId must be a non-empty string');
+  }
+
+  validateStringArrayField(catalog.parentSkillIds, 'catalog.parentSkillIds', errors);
+
+  if (catalog.editable !== undefined && typeof catalog.editable !== 'boolean') {
+    errors.push('catalog.editable must be a boolean');
+  }
+
+  if (catalog.actions !== undefined) {
+    if (!Array.isArray(catalog.actions)) {
+      errors.push('catalog.actions must be an array');
+    } else {
+      for (let idx = 0; idx < catalog.actions.length; idx++) {
+        validateSkillCatalogActionInput(catalog.actions[idx], `catalog.actions[${idx}]`, errors);
+      }
+    }
+  }
+}
+
+function validateSkillCatalogActionInput(
+  action: SkillCatalogActionInput,
+  fieldName: string,
+  errors: string[],
+): void {
+  if (typeof action === 'string') {
+    if (!isSkillCatalogActionId(action)) {
+      errors.push(`${fieldName} must be a supported catalog action id`);
+    }
+    return;
+  }
+
+  if (typeof action !== 'object' || action === null || Array.isArray(action)) {
+    errors.push(`${fieldName} must be an action id or action object`);
+    return;
+  }
+
+  if (!isSkillCatalogActionId(action.id)) {
+    errors.push(`${fieldName}.id must be a supported catalog action id`);
+  }
+  if (action.label !== undefined && typeof action.label !== 'string') {
+    errors.push(`${fieldName}.label must be a string`);
+  }
+  if (action.targetSource !== undefined && !isEditableSkillCatalogSource(action.targetSource)) {
+    errors.push(`${fieldName}.targetSource must be "project" or "personal"`);
+  }
+}
+
 function validateSkillMediaWorkflowHint(
   hint: SkillMediaWorkflowHint | undefined,
   errors: string[],
@@ -1223,7 +1668,14 @@ function validateSkillMediaWorkflowHint(
 
   validateStringArrayField(hint.acceptedModalities, 'mediaWorkflow.acceptedModalities', errors);
   validateStringArrayField(hint.producedArtifacts, 'mediaWorkflow.producedArtifacts', errors);
+  validateStringArrayField(hint.artifactProfiles, 'mediaWorkflow.artifactProfiles', errors);
   validateStringArrayField(hint.inputArtifacts, 'mediaWorkflow.inputArtifacts', errors);
+  validateStringArrayField(
+    hint.referencedCapabilities,
+    'mediaWorkflow.referencedCapabilities',
+    errors,
+  );
+  validateStringArrayField(hint.suggestedProjectors, 'mediaWorkflow.suggestedProjectors', errors);
   validateStringArrayField(hint.tags, 'mediaWorkflow.tags', errors);
   validateStringArrayField(
     hint.validationRequirements,
@@ -1274,6 +1726,20 @@ function isForbiddenMediaWorkflowDslField(fieldName: string): boolean {
   return MEDIA_WORKFLOW_DSL_FIELD_NAMES.some(
     (dslField) => dslField.toLowerCase() === fieldName.toLowerCase(),
   );
+}
+
+function isForbiddenCatalogDslField(fieldName: string): boolean {
+  return MEDIA_WORKFLOW_DSL_FIELD_NAMES.some(
+    (dslField) => dslField.toLowerCase() === fieldName.toLowerCase(),
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 /**
@@ -1351,6 +1817,16 @@ export function createSkill(
     referencedSkills: manifest?.referencedSkills,
     mediaWorkflow: manifest?.mediaWorkflow,
     compliance: manifest?.compliance,
+    catalog: toSkillCatalogMeta(
+      {
+        name: frontmatter.name,
+        description: frontmatter.description,
+        icon: frontmatter.icon,
+        source,
+        manifest,
+      },
+      { source },
+    ),
   };
 }
 

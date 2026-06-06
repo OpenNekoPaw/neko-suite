@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {
   NEKO_EXTENSION_IDS,
+  toSkillCatalogMeta,
   type ISkillProvider,
   type SkillDef,
   type SkillLocalizedText,
@@ -58,6 +59,22 @@ function toDashboardSkill(def: SkillDef, extensionId: string, locale: string): D
     icon: def.icon,
     command: def.command,
     tags: localized.tags ?? def.tags,
+    catalog:
+      def.catalog ??
+      toSkillCatalogMeta(
+        {
+          name: def.id,
+          description: def.description,
+          icon: def.icon,
+          tags: def.tags,
+        },
+        {
+          defaultSource: extensionId === NEKO_EXTENSION_IDS.NEKO_AGENT ? 'builtin' : 'plugin',
+          defaultRole:
+            extensionId === NEKO_EXTENSION_IDS.NEKO_AGENT ? 'standalone' : 'quick-action',
+          defaultVisibility: 'primary',
+        },
+      ),
   };
 }
 

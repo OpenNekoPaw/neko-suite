@@ -258,6 +258,10 @@ export class DashboardProvider implements vscode.Disposable {
         }
         return;
       }
+      case 'skillAction':
+        await vscode.commands.executeCommand('neko.agent.skillAction', message.request);
+        await this.refresh();
+        return;
       default:
         assertNever(message);
     }

@@ -53,6 +53,7 @@ import type {
 } from './sketch-ai';
 import type { NekoModelAPI } from './model-agent-api';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type { SkillCatalogMeta } from './skill';
 import type { ProjectSearchVisualResource } from './project-cache-search';
 import type { ResourceRef, ResourceVariantRequest } from './resource-cache';
 
@@ -900,6 +901,11 @@ export interface SkillDef {
    * @example ['generation', 'image']
    */
   readonly tags?: readonly string[];
+  /**
+   * Optional UI catalog projection. Older providers may omit this; consumers
+   * must project deterministic standalone/plugin defaults.
+   */
+  readonly catalog?: SkillCatalogMeta;
 }
 
 /**

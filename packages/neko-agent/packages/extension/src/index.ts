@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'node:fs/promises';
 import {
   ServiceCollection,
   setGlobalServices,
@@ -23,10 +24,10 @@ import {
 import {
   withTimeout,
   type ISkillProvider,
-  type SkillDef,
   type SkillLocalizedText,
+  migrateStorageLayout,
 } from '@neko/shared';
-import { builtinSkills } from '@neko/agent/skill';
+import { getBuiltinSkills } from '@neko/agent/skill';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
@@ -38,6 +39,7 @@ import {
   buildEmbedFn,
 } from './bootstrap/toolBootstrap';
 import { registerAgentCoreCommands } from './commands/agentCoreCommands';
+import { registerSkillCatalogActionCommands } from './commands/skillCatalogActions';
 import {
   registerCreationQuickStartCommands,
   registerDocumentContextCommands,
@@ -53,6 +55,8 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
 import { registerProjectSearchService } from '@neko/search/host-vscode';
 import { resolveDocumentPath } from './services/documentPathResolver';
 import { createAgentProjectSearchAdapters } from './services/agentProjectSearchAdapters';
+import { getSkillFileService } from './services/SkillFileService';
+import { createSkillCatalogProvider } from './services/skillCatalogProvider';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -115,9 +119,51 @@ const BUILTIN_SKILL_LOCALES: Readonly<Record<string, SkillLocaleMap>> = {
   },
   'comic-to-storyboard': {
     'zh-cn': {
-      name: '漫画转故事板',
-      description: '分析漫画或分镜页，提取画格、对白和镜头信息并转换为故事板。',
-      tags: ['AI', '漫画', '故事板'],
+      name: '漫画转分镜表',
+      description: '分析漫画或分镜页，提取画格、对白和镜头信息并转换为结构化分镜表。',
+      tags: ['AI', '漫画', '分镜'],
+    },
+  },
+  'media-to-video': {
+    'zh-cn': {
+      name: '媒体转视频',
+      description: '根据素材类型编排漫画分镜、图片转镜头、动画计划、Cut 装配和导出子技能。',
+      tags: ['AI', '视频', '编排', '分镜'],
+    },
+  },
+  'image-to-shot': {
+    'zh-cn': {
+      name: '图片转镜头',
+      description: '将静态图片或图像序列转换为结构化镜头计划与分镜表行。',
+      tags: ['AI', '图片', '镜头', '分镜'],
+    },
+  },
+  'storyboard-to-animation-plan': {
+    'zh-cn': {
+      name: '分镜转动画计划',
+      description: '把 StoryboardTable 分镜表转换为包含运动、镜头、生成和连续性建议的动画计划。',
+      tags: ['AI', '分镜', '动画', '镜头'],
+    },
+  },
+  'animation-plan-to-cut': {
+    'zh-cn': {
+      name: '动画计划转 Cut',
+      description: '将已验证的动画计划或分镜表投射为可装配到 NekoCut 时间线的载荷。',
+      tags: ['Cut', '时间线', '装配'],
+    },
+  },
+  'generated-shot-assembly': {
+    'zh-cn': {
+      name: '生成镜头装配',
+      description: '把生成的图片、视频、音频和字幕引用整理为一致的媒体转视频执行摘要。',
+      tags: ['AI', '装配', '生成素材'],
+    },
+  },
+  'export-video-package': {
+    'zh-cn': {
+      name: '视频导出打包',
+      description: '为最终视频产物准备交付、导出或打包信息，并附带验证诊断。',
+      tags: ['导出', '视频', '交付'],
     },
   },
   'quality-assessment': {
@@ -149,6 +195,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
+  await migrateLegacyWorkspaceCache(logger);
 
   // Initialize service collection
   const services = new ServiceCollection();
@@ -237,27 +284,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
 
   getRootLogger().info('Extension activated');
 
-  const PERSONA_SKILL_NAMES = new Set([
-    'creation-persona',
-    'execution-persona',
-    'iteration-persona',
-  ]);
+  const dashboardBuiltinSkills = getBuiltinSkills({ locale: vscode.env.language });
+  const skillCatalogProvider = createSkillCatalogProvider({
+    builtinSkills: dashboardBuiltinSkills,
+    locales: BUILTIN_SKILL_LOCALES,
+  });
+  const skillFileService = getSkillFileService();
+  registerSkillCatalogActionCommands({
+    context,
+    chatViewProvider,
+    skillFileService,
+    skillCatalogProvider,
+    builtinSkills: dashboardBuiltinSkills,
+  });
+  context.subscriptions.push(
+    skillFileService.onSkillsChanged((result) => {
+      skillCatalogProvider.updateScanResult(result);
+    }),
+  );
+  void skillFileService
+    .getSkills()
+    .then((result) => skillCatalogProvider.updateScanResult(result))
+    .catch((error) => {
+      getRootLogger().warn('Failed to initialize Dashboard skill catalog', { error });
+    });
 
   return {
-    getSkills(): SkillDef[] {
-      return builtinSkills
-        .filter((s) => s.enabled && !PERSONA_SKILL_NAMES.has(s.name))
-        .map((s) => ({
-          id: s.name,
-          name: formatSkillName(s.name),
-          description: s.description.split('.')[0] ?? s.description,
-          icon: s.icon,
-          command: 'neko.agent.invokeSkill',
-          tags: s.allowedTools?.length ? ['ai', ...(s.command ? ['slash-command'] : [])] : ['ai'],
-          locales: BUILTIN_SKILL_LOCALES[s.name],
-        }));
+    getSkills() {
+      return skillCatalogProvider.getSkills();
     },
   };
+}
+
+async function migrateLegacyWorkspaceCache(
+  logger: ReturnType<typeof createVSCodeLogger>,
+): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) {
+    return;
+  }
+  try {
+    const migrated = await migrateStorageLayout(workspaceRoot, {
+      exists: async (p) => {
+        try {
+          await fs.access(p);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      rename: (oldPath, newPath) => fs.rename(oldPath, newPath),
+      mkdir: (p, opts) => fs.mkdir(p, opts).then(() => undefined),
+      copy: (oldPath, newPath) => fs.cp(oldPath, newPath, { recursive: true, force: false }),
+      rm: (p, opts) => fs.rm(p, opts),
+    });
+    if (migrated.length > 0) {
+      logger.info(`Storage migration: ${migrated.join('; ')}`);
+    }
+  } catch (error) {
+    logger.warn('Storage migration failed (non-fatal):', error);
+  }
 }
 
 /**
@@ -275,11 +361,4 @@ export async function deactivate(): Promise<void> {
   await withTimeout(taskManager.dispose(), 3000).catch((error) => {
     logger.warn('Timed out while disposing task manager during deactivate', { error });
   });
-}
-
-function formatSkillName(name: string): string {
-  return name
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
 }

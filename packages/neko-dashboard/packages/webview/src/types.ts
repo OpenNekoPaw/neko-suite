@@ -1,4 +1,9 @@
-import type { DashboardTask, DashboardTaskEvent } from '@neko/shared';
+import type {
+  DashboardTask,
+  DashboardTaskEvent,
+  SkillCatalogActionRequest,
+  SkillCatalogMeta,
+} from '@neko/shared';
 import type {
   DashboardCreativeEntityActionRequest,
   DashboardCreativeEntityActionResult,
@@ -75,6 +80,7 @@ export interface DashboardSkill {
   readonly icon?: string;
   readonly command?: string;
   readonly tags?: readonly string[];
+  readonly catalog: SkillCatalogMeta;
 }
 
 export interface DashboardSkillInvocation {
@@ -124,6 +130,10 @@ export type WebviewToExtensionMessage =
       readonly command: string;
       readonly intent?: string;
       readonly skill?: DashboardSkillInvocation;
+    }
+  | {
+      readonly type: 'skillAction';
+      readonly request: SkillCatalogActionRequest;
     };
 
 export type ExtensionToWebviewMessage =
