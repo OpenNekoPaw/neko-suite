@@ -77,10 +77,10 @@ The system SHALL allow Markdown storyboard tables to infer image references only
 - **THEN** the Canvas transfer does not attach an arbitrary page 1 image
 
 ### Requirement: Storyboard composite blocks support semantic storyboard tables
-The system SHALL support `storyboard-table` composite blocks that carry validated `StoryboardTableV1` semantic data in addition to legacy section-based rich content. When semantic data is present and valid, rich rendering and downstream projection MUST prefer the semantic storyboard table while retaining legacy display compatibility during migration.
+The system SHALL support `storyboard-table` composite blocks that carry validated `StoryboardTable` semantic data in addition to legacy section-based rich content. When semantic data is present and valid, rich rendering and downstream projection MUST prefer the semantic storyboard table while retaining legacy display compatibility during migration.
 
 #### Scenario: Semantic storyboard table is extracted from composite content
-- **WHEN** an assistant response contains a `neko-composite` fenced JSON block with template `storyboard-table` and valid `StoryboardTableV1` fields
+- **WHEN** an assistant response contains a `neko-composite` fenced JSON block with template `storyboard-table` and valid `StoryboardTable` fields
 - **THEN** the message model preserves the semantic storyboard table for validation, rendering, and downstream projection
 
 #### Scenario: Invalid semantic storyboard renders diagnostics
@@ -93,7 +93,7 @@ The system SHALL support `storyboard-table` composite blocks that carry validate
 
 #### Scenario: Semantic projection takes precedence over inferred projection
 - **WHEN** a `storyboard-table` block has valid semantic scenes and shots plus legacy sections
-- **THEN** Canvas/Cut projectors use the semantic `StoryboardTableV1` data rather than inferring shots from display sections
+- **THEN** Canvas/Cut projectors use the semantic `StoryboardTable` data rather than inferring shots from display sections
 
 ### Requirement: Storyboard composite diagnostics do not leak runtime resources
 The system SHALL show storyboard validation, media resolution, and provider availability diagnostics without persisting host-only render URIs, blob URLs, inline base64, or absolute local paths in composite content.

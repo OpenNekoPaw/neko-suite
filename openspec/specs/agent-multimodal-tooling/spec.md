@@ -82,7 +82,7 @@ Agent SHALL NOT expose `document-image-cache` paths as the identity channel for 
 ### Requirement: Built-in storyboard skills require real media refs
 Built-in storyboard and manga conversion skills SHALL instruct models to reference only real tool results or stable resource refs for source images and SHALL NOT instruct models to copy cache paths into Canvas-facing fields.
 
-#### Scenario: Manga skill prepares StoryboardTableV1
+#### Scenario: Manga skill prepares StoryboardTable
 - **WHEN** the manga storyboard skill produces a structured payload from tool-read pages
 - **THEN** each image-backed shot uses `sourceMediaRefs` with a real tool-result locator
 - **THEN** readable fields such as `sourcePage` remain aliases rather than identity

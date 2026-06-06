@@ -4,11 +4,11 @@
 Define the shared semantic contract for Agent-generated storyboard tables, storyboard diagnostics, media references, and projection to creative surfaces.
 ## Requirements
 ### Requirement: Agent storyboard tables use a shared semantic contract
-The system SHALL define `StoryboardTableV1` and related scene, shot, character, media ref, profile, extension, and diagnostic contracts in `@neko/shared`. The contract MUST represent Agent-generated storyboard tables as semantic shot plans rather than Webview-only display sections.
+The system SHALL define `StoryboardTable` and related scene, shot, character, media ref, profile, extension, and diagnostic contracts in `@neko/shared`. The contract MUST represent Agent-generated storyboard tables as semantic shot plans rather than Webview-only display sections.
 
 #### Scenario: Valid semantic storyboard table is accepted
 - **WHEN** Agent receives a `storyboard-table` composite block containing `schemaVersion: 1`, `kind: "storyboard-table"`, a title, scenes, and shots with stable-core fields
-- **THEN** the system validates it as `StoryboardTableV1` and makes it available for rich rendering and downstream projection
+- **THEN** the system validates it as `StoryboardTable` and makes it available for rich rendering and downstream projection
 
 #### Scenario: Semantic contract is shared across packages
 - **WHEN** Canvas/Cut projectors consume an Agent-generated storyboard table
@@ -37,7 +37,7 @@ The system SHALL report storyboard validation diagnostics with severity `error`,
 - **THEN** validation emits a `warning` and still permits rich rendering and projection
 
 ### Requirement: Profiles and extensions preserve LLM flexibility
-The system SHALL support built-in `StoryboardTableProfileV1` values for common workflows and SHALL allow JSON-serializable `neko.*` namespaced extensions for profile-specific semantics. Unknown valid extensions MUST NOT break stable-core projection.
+The system SHALL support built-in `StoryboardTableProfile` values for common workflows and SHALL allow JSON-serializable `neko.*` namespaced extensions for profile-specific semantics. Unknown valid extensions MUST NOT break stable-core projection.
 
 #### Scenario: Manga profile carries namespaced extension data
 - **WHEN** a `manga-to-video` storyboard shot includes `extensions["neko.mangaToVideo"]` with panel and motion metadata
@@ -48,7 +48,7 @@ The system SHALL support built-in `StoryboardTableProfileV1` values for common w
 - **THEN** validation emits an `error` diagnostic because the storyboard cannot be safely transported or persisted
 
 ### Requirement: Media references use layered stable refs
-The system SHALL represent storyboard media through `StoryboardMediaRefV1` locators and role metadata. Media refs MUST NOT persist webview URIs, blob URLs, inline base64, runtime-only URLs, or absolute local paths.
+The system SHALL represent storyboard media through `StoryboardMediaRef` locators and role metadata. Media refs MUST NOT persist webview URIs, blob URLs, inline base64, runtime-only URLs, or absolute local paths.
 
 #### Scenario: Tool result media ref is valid
 - **WHEN** a media ref uses locator type `tool-result` with a `toolCallId` and `assetIndex`
@@ -107,7 +107,7 @@ The system SHALL update storyboard semantic refs only after provider/tool comple
 - **THEN** runtime leaves the storyboard plan visible, records a failure diagnostic, and does not mark the shot as having generated media
 
 ### Requirement: Storyboard tables project to Canvas and Cut from validated semantics
-The system SHALL project `StoryboardTableV1` to `CanvasStoryboardPayload` and `PluginTransferCutStoryboardPayload` using validated semantic scenes and shots. Projectors MUST preserve scene order, shot order, duration, shot text, prompt metadata, dialogue, voice-over, sound cues, and safe media references where supported.
+The system SHALL project `StoryboardTable` to `CanvasStoryboardPayload` and `PluginTransferCutStoryboardPayload` using validated semantic scenes and shots. Projectors MUST preserve scene order, shot order, duration, shot text, prompt metadata, dialogue, voice-over, sound cues, and safe media references where supported.
 
 #### Scenario: Canvas projection preserves shot semantics
 - **WHEN** a valid storyboard table is sent to Canvas

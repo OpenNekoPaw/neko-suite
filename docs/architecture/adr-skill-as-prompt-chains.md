@@ -327,7 +327,7 @@ media-to-video/
     "tags": ["media-to-video", "storyboard"],
     "costLevel": "medium",
     "riskLevel": "medium",
-    "validationRequirements": ["StoryboardTableV1"],
+    "validationRequirements": ["StoryboardTable"],
     "optionalTools": ["ReadImage", "ReadDocumentImage"]
   }
 }

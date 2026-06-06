@@ -30,13 +30,13 @@ Schema 契约 → LLM 文本计划 → Validator 校验 → Strategy 执行 → 
 
 ### 2.1 决策摘要
 
-引入 `StoryboardTableV1` 作为 Agent 生成分镜表的规范化语义契约。
+引入 `StoryboardTable` 作为 Agent 生成分镜表的规范化语义契约。
 
-- `StoryboardTableV1` 是 Agent 输出的**语义分镜计划表**，不是 `neko-story` 的 scene-level 视频准备度表。
-- `StoryboardTableV1` 必须能无损投影为现有 `CanvasStoryboardPayload` 的 semantic import 输入。
-- `neko-composite` 继续作为 Chat 富内容承载格式，但其中的 `storyboard-table` 数据应逐步升级为 `StoryboardTableV1`。
+- `StoryboardTable` 是 Agent 输出的**语义分镜计划表**，不是 `neko-story` 的 scene-level 视频准备度表。
+- `StoryboardTable` 必须能无损投影为现有 `CanvasStoryboardPayload` 的 semantic import 输入。
+- `neko-composite` 继续作为 Chat 富内容承载格式，但其中的 `storyboard-table` 数据应逐步升级为 `StoryboardTable`。
 - Agent 输出后必须经过 schema validation；失败时进入 bounded repair retry，而不是静默丢弃或把错误 JSON 展示给用户。
-- LLM 只负责输出 `StoryboardTableV1` 文本计划。是否复用原图、引用原图生成新图、纯文本生成新图或转换原图，必须通过 shot-level `imageStrategy` 明确声明，并由 Agent runtime 解释执行。
+- LLM 只负责输出 `StoryboardTable` 文本计划。是否复用原图、引用原图生成新图、纯文本生成新图或转换原图，必须通过 shot-level `imageStrategy` 明确声明，并由 Agent runtime 解释执行。
 - 图片不进入 LLM 文本本体；表格只保存 `mediaRefs` / asset refs / task refs。真实图片 URI 由 Webview 或 Extension Host 在展示时解析，生成结果通过 `toolResultBackfill` 写回对应工具结果或分镜表投影。
 - Agent runtime 的“执行”含义是解释计划、校验权限、应用用户 override、路由到 capability provider 并回填结果；不表示 Agent 内置图片、音频、视频或人物形象创作实现。
 - Canvas 仍是正式 storyboard 工作台；Story 仍是剧本事实与审阅入口；Agent 只持有当轮生成计划，不成为长期 storyboard 事实源。
@@ -49,7 +49,7 @@ Schema 契约 → LLM 文本计划 → Validator 校验 → Strategy 执行 → 
 ```text
 LLM 纯文本计划
   ↓
-StoryboardTableV1 schema validation
+StoryboardTable schema validation
   ↓
 bounded repair retry
   ↓
@@ -94,7 +94,7 @@ Canvas/Cut projection or editor handoff
 
 | 层 | 职责 | 归属 |
 |---|---|---|
-| 语义契约 | 定义 `StoryboardTableV1` / `StoryboardShotRowV1` / `StoryboardMediaRefV1` | `@neko/shared` |
+| 语义契约 | 定义 `StoryboardTable` / `StoryboardShotRow` / `StoryboardMediaRef` | `@neko/shared` |
 | 输出约束 | 指导 Agent 按 schema 生成分镜表 | Skill / Prompt / system prompt module |
 | 校验修复 | 校验 JSON，生成修复提示，限制重试次数 | `neko-agent` runtime |
 | 策略执行 | 解释 `imageStrategy`，决定复用引用或调用生成工具 | `neko-agent` runtime / Extension Host |
@@ -105,7 +105,7 @@ Canvas/Cut projection or editor handoff
 
 归属决策：
 
-- `StoryboardTableV1`、`StoryboardShotRowV1`、`StoryboardShotCharacterV1`、`StoryboardMediaRefV1`、`StoryboardShotImageStrategyV1` 统一归属 `@neko/shared`。
+- `StoryboardTable`、`StoryboardShotRow`、`StoryboardShotCharacter`、`StoryboardMediaRef`、`StoryboardShotImageStrategy` 统一归属 `@neko/shared`。
 - `@neko/agent-types` 只能提供 `CompositeBlockData` 展示适配、legacy renderer 类型或 re-export，不拥有分镜表语义 schema。
 - 原因是 Canvas/Cut projector 必须读取同一份语义契约；projector 纯函数不应反向依赖 agent-specific package。
 
@@ -115,8 +115,8 @@ Canvas/Cut projection or editor handoff
 
 ```text
 @neko/shared
-  ├─ StoryboardTableV1
-  ├─ StoryboardMediaRefV1
+  ├─ StoryboardTable
+  ├─ StoryboardMediaRef
   ├─ CanvasStoryboardPayload
   └─ pure projector contracts
 
@@ -124,7 +124,7 @@ Canvas/Cut projection or editor handoff
   └─ CompositeBlockData adapter / optional re-export
 
 neko-agent runtime
-  ├─ validates StoryboardTableV1
+  ├─ validates StoryboardTable
   ├─ repairs invalid model output
   ├─ routes capability requests
   └─ emits CompositeBlock
@@ -157,46 +157,46 @@ neko-story
 
 Provider 缺失时的降级规则：
 
-- 对应 provider 不可用时，Agent 仍应能生成、校验、修复和展示 `StoryboardTableV1`。
+- 对应 provider 不可用时，Agent 仍应能生成、校验、修复和展示 `StoryboardTable`。
 - `Send to Canvas`、`Send to Cut`、生成图片、生成音频等入口必须按 capability availability 启用或禁用。
 - 缺失能力应以可读诊断展示，并保留 validated plan 与 refs，方便用户安装/启用能力后继续执行。
 - Runtime 不得因为 provider 缺失而把计划标记为已执行，也不得生成假 `toolCallId`、假路径或假 artifact ref。
 
 ### 3.3 接口
 
-`StoryboardTableV1` 应表达“镜头级语义计划”，最小字段如下：
+`StoryboardTable` 应表达“镜头级语义计划”，最小字段如下：
 
 ```typescript
-interface StoryboardTableV1 {
+interface StoryboardTable {
   readonly schemaVersion: 1;
   readonly kind: 'storyboard-table';
-  readonly profile?: StoryboardTableProfileV1;
+  readonly profile?: StoryboardTableProfile;
   readonly source: {
     readonly type: 'story' | 'agent' | 'document' | 'image' | 'manual';
     readonly sourceUri?: string;
     readonly sourceSceneId?: string;
   };
   readonly title: string;
-  readonly scenes: readonly StoryboardSceneRowV1[];
-  readonly extensions?: StoryboardExtensionMapV1;
+  readonly scenes: readonly StoryboardSceneRow[];
+  readonly extensions?: StoryboardExtensionMap;
 }
 
-interface StoryboardSceneRowV1 {
+interface StoryboardSceneRow {
   readonly sceneId: string;
   readonly sceneTitle: string;
   readonly sceneNumber?: number;
   readonly location?: string;
   readonly timeOfDay?: string;
   readonly summary?: string;
-  readonly shots: readonly StoryboardShotRowV1[];
+  readonly shots: readonly StoryboardShotRow[];
 }
 
-interface StoryboardShotRowV1 {
+interface StoryboardShotRow {
   readonly shotId?: string;
   readonly shotNumber: number;
   readonly duration: number;
   readonly visualDescription: string;
-  readonly characters: readonly StoryboardShotCharacterV1[];
+  readonly characters: readonly StoryboardShotCharacter[];
   readonly shotScale: string;
   readonly cameraMovement?: string;
   readonly cameraAngle?: string;
@@ -210,15 +210,15 @@ interface StoryboardShotRowV1 {
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly vfx?: readonly string[];
-  readonly imageStrategy: StoryboardShotImageStrategyV1;
-  readonly sourceMediaRefs?: readonly StoryboardMediaRefV1[];
-  readonly generatedMediaRefs?: readonly StoryboardMediaRefV1[];
-  readonly mediaRefs?: readonly StoryboardMediaRefV1[];
+  readonly imageStrategy: StoryboardShotImageStrategy;
+  readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
+  readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
+  readonly mediaRefs?: readonly StoryboardMediaRef[];
   readonly decisionReason?: string;
-  readonly extensions?: StoryboardExtensionMapV1;
+  readonly extensions?: StoryboardExtensionMap;
 }
 
-type StoryboardTableProfileV1 =
+type StoryboardTableProfile =
   | 'script-breakdown'
   | 'manga-to-video'
   | 'image-sequence'
@@ -227,13 +227,13 @@ type StoryboardTableProfileV1 =
   | 'character-design'
   | 'manual';
 
-type StoryboardShotImageStrategyV1 =
+type StoryboardShotImageStrategy =
   | 'reuse-original'
   | 'use-as-reference'
   | 'generate-new'
   | 'transform-original';
 
-interface StoryboardShotCharacterV1 {
+interface StoryboardShotCharacter {
   readonly characterId?: string;
   readonly name: string;
   readonly role?: 'primary' | 'secondary' | 'background';
@@ -242,16 +242,16 @@ interface StoryboardShotCharacterV1 {
   readonly continuityNotes?: string;
 }
 
-interface StoryboardMediaRefV1 {
+interface StoryboardMediaRef {
   readonly refId: string;
-  readonly role: StoryboardMediaRoleV1;
-  readonly locator: StoryboardMediaLocatorV1;
+  readonly role: StoryboardMediaRole;
+  readonly locator: StoryboardMediaLocator;
   readonly label?: string;
   readonly mimeType?: string;
   readonly metadata?: Readonly<Record<string, string | number | boolean>>;
 }
 
-type StoryboardMediaRoleV1 =
+type StoryboardMediaRole =
   | 'source'
   | 'reference'
   | 'generated'
@@ -259,7 +259,7 @@ type StoryboardMediaRoleV1 =
   | 'thumbnail'
   | 'mask';
 
-type StoryboardMediaLocatorV1 =
+type StoryboardMediaLocator =
   | {
       readonly type: 'tool-result';
       readonly toolCallId: string;
@@ -287,22 +287,22 @@ type StoryboardMediaLocatorV1 =
       readonly frameIndex?: number;
     };
 
-type StoryboardExtensionMapV1 = Readonly<Record<`neko.${string}`, unknown>>;
+type StoryboardExtensionMap = Readonly<Record<`neko.${string}`, unknown>>;
 ```
 
 说明：
 
-- `StoryboardTableV1` 是语义 schema；`CompositeBlockData` 是 Chat 展示 envelope。
+- `StoryboardTable` 是语义 schema；`CompositeBlockData` 是 Chat 展示 envelope。
 - `profile` 表示当前分镜表采用的场景字段配置。它只影响 profile hints 和推荐字段，不改变 stable core 的基础投影能力。
 - v1 阶段 `profile` 使用内置 union，先收敛系统工作流；v1.1 可考虑支持 `custom.${string}` 形式的命名空间扩展，避免直接开放任意字符串。
 - `imageStrategy` 是纯文本计划字段，不直接执行任何工具。runtime 必须先校验该字段，再决定是否调 `GenerateImage` / 转换工具，或只复用已有引用。
-- `StoryboardShotCharacterV1` 只描述镜头内人物身份、动作和连续性提示；正式人物库或角色资产绑定可在后续版本扩展。
+- `StoryboardShotCharacter` 只描述镜头内人物身份、动作和连续性提示；正式人物库或角色资产绑定可在后续版本扩展。
 - `sourceMediaRefs` 表示输入素材引用，例如原漫画页、用户上传参考图、已存在的 Canvas 结果。
 - `generatedMediaRefs` 表示执行策略后产生的新素材引用，通常由 runtime 在工具完成后 backfill，而不是由 LLM 预先伪造。
 - `mediaRefs` 是展示层汇总引用，可由 `sourceMediaRefs + generatedMediaRefs` 规范化得到；长期不应让 LLM 手写重复的展示派生字段。
-- 分层 refs 与 `StoryboardMediaRefV1.role` 必须保持一致：`sourceMediaRefs` 只能包含 `source` / `reference` / `thumbnail` / `mask`，不能包含 `generated` / `derived`；`generatedMediaRefs` 只能包含 `generated` / `derived` / `thumbnail` / `mask`，不能包含 `source` / `reference`。
+- 分层 refs 与 `StoryboardMediaRef.role` 必须保持一致：`sourceMediaRefs` 只能包含 `source` / `reference` / `thumbnail` / `mask`，不能包含 `generated` / `derived`；`generatedMediaRefs` 只能包含 `generated` / `derived` / `thumbnail` / `mask`，不能包含 `source` / `reference`。
 - 兼容期内，如果 LLM 只输出 legacy `mediaRefs` 而未输出分层字段，normalizer 应按 `role` 分拣到 `sourceMediaRefs` 与 `generatedMediaRefs`，并保留规范化后的汇总 `mediaRefs` 供展示使用。
-- `StoryboardMediaRefV1.locator` 使用 discriminated union 表达分层引用。`tool-result` 必须携带 `toolCallId` 和 `assetIndex`；`workspace-path` 只能使用相对路径或 `${VAR}/path`，不允许绝对路径。
+- `StoryboardMediaRef.locator` 使用 discriminated union 表达分层引用。`tool-result` 必须携带 `toolCallId` 和 `assetIndex`；`workspace-path` 只能使用相对路径或 `${VAR}/path`，不允许绝对路径。
 - 所有 media refs 只能引用工具结果、稳定资产引用、workspace 相对路径、Canvas 节点或 Story 来源帧，不允许内联 base64、blob URL、临时 localhost URL。
 - `decisionReason` 是展示和调试字段，Webview 可渲染为 tooltip / 注释；validator 不读取它来推断、接受或拒绝 `imageStrategy`。
 - `extensions` 是保留给场景化语义的命名空间扩展区，必须使用 `neko.*` 前缀；validator 只检查命名空间和 JSON-serializable，不把未知 extension 当作错误。
@@ -323,15 +323,15 @@ type StoryboardExtensionMapV1 = Readonly<Record<`neko.${string}`, unknown>>;
 策略解释器输入应显式建模用户 override，而不是让解释器重新解析自由文本：
 
 ```typescript
-interface StoryboardImageStrategyInterpreterInputV1 {
-  readonly table: StoryboardTableV1;
-  readonly userOverride?: StoryboardImageStrategyOverrideV1;
-  readonly availableTools: readonly StoryboardImageToolCapabilityV1[];
+interface StoryboardImageStrategyInterpreterInput {
+  readonly table: StoryboardTable;
+  readonly userOverride?: StoryboardImageStrategyOverride;
+  readonly availableTools: readonly StoryboardImageToolCapability[];
 }
 
-interface StoryboardImageStrategyOverrideV1 {
+interface StoryboardImageStrategyOverride {
   readonly generationPolicy: 'allow' | 'deny' | 'confirm';
-  readonly allowedStrategies?: readonly StoryboardShotImageStrategyV1[];
+  readonly allowedStrategies?: readonly StoryboardShotImageStrategy[];
   readonly scope?: {
     readonly sceneIds?: readonly string[];
     readonly shotIds?: readonly string[];
@@ -340,7 +340,7 @@ interface StoryboardImageStrategyOverrideV1 {
   readonly reason?: string;
 }
 
-interface StoryboardImageToolCapabilityV1 {
+interface StoryboardImageToolCapability {
   readonly toolName: 'GenerateImage' | 'TransformImage' | 'ResolveMediaRef' | (string & {});
   readonly supportsReferences: boolean;
   readonly supportsMasks?: boolean;
@@ -360,14 +360,14 @@ interface StoryboardImageToolCapabilityV1 {
 
 用户 override 来源：
 
-- Chat 中的明确用户指令由 Agent runtime 在进入策略解释器前归一化为 `StoryboardImageStrategyOverrideV1`。
+- Chat 中的明确用户指令由 Agent runtime 在进入策略解释器前归一化为 `StoryboardImageStrategyOverride`。
 - Webview 可在执行生成/转换前提供确认对话框，确认结果同样以 override 输入策略解释器。
 - Workspace 或项目设置可提供默认 `generationPolicy`，例如“导入漫画时默认只复用原图”。
 - 策略解释器不直接读取原始 chat transcript，不把自然语言解析、权限确认和工具调度混在一个模块里。
 
 ### 3.5 契约分层与灵活性
 
-语义契约不能把 LLM 弱化成“表单填写器”。`StoryboardTableV1` 应采用分层契约：
+语义契约不能把 LLM 弱化成“表单填写器”。`StoryboardTable` 应采用分层契约：
 
 ```text
 Stable Core
@@ -462,26 +462,26 @@ Validator 应分级输出，而不是只有 pass/fail：
 - 不破坏 v1 projector。
 - 不引入 Webview-only 字段到 shared 契约。
 - 不让 Story 持有 shot-level 编辑事实。
-- `StoryboardImageToolCapabilityV1.toolName` 是可扩展 union；新增 `Img2Video`、`Upscale`、`Inpaint` 等工具时，应同步扩展该 union 与 capability registry 的工具发现/路由规则。
+- `StoryboardImageToolCapability.toolName` 是可扩展 union；新增 `Img2Video`、`Upscale`、`Inpaint` 等工具时，应同步扩展该 union 与 capability registry 的工具发现/路由规则。
 
 ### 3.7 测试
 
 最低测试面：
 
-- `StoryboardTableV1` validator 接受完整有效表。
+- `StoryboardTable` validator 接受完整有效表。
 - validator 拒绝缺失 `visualDescription`、非法 `duration`、空 scenes/shots、内联 base64 media refs、与 `imageStrategy` 不匹配的引用组合。
-- validator 校验分层 refs 与 `StoryboardMediaRefV1.role` 的一致性，例如 `sourceMediaRefs` 不允许包含 `generated`。
+- validator 校验分层 refs 与 `StoryboardMediaRef.role` 的一致性，例如 `sourceMediaRefs` 不允许包含 `generated`。
 - normalizer 能将只有 legacy `mediaRefs` 的输出按 `role` 分拣为 `sourceMediaRefs` / `generatedMediaRefs`。
 - validator 不根据 `decisionReason` 修正、接受或拒绝策略。
 - strategy interpreter 对 `reuse-original` 不调用生成工具。
 - strategy interpreter 对 `generate-new` 调用 `GenerateImage`，并在完成后 backfill `generatedMediaRefs`。
 - strategy interpreter 对 `use-as-reference` 保留原引用并追加生成引用。
-- strategy interpreter 接受 `StoryboardImageStrategyOverrideV1`，并在 `generationPolicy: 'deny'` 时拒绝生成/转换任务。
+- strategy interpreter 接受 `StoryboardImageStrategyOverride`，并在 `generationPolicy: 'deny'` 时拒绝生成/转换任务。
 - strategy interpreter 在 provider 不可用时返回缺失能力诊断，且不写入 `generatedMediaRefs`。
 - repair retry 使用模型原始输出和 validation errors 生成修复请求。
 - repair 超过次数后保留可读错误，不产生可发送 Canvas 的 payload。
-- `StoryboardTableV1 -> CanvasStoryboardPayload` 投影保持 shot 顺序和 sceneId。
-- `StoryboardTableV1 -> PluginTransferCutStoryboardPayload` 投影保持时长、提示词和媒体引用。
+- `StoryboardTable -> CanvasStoryboardPayload` 投影保持 shot 顺序和 sceneId。
+- `StoryboardTable -> PluginTransferCutStoryboardPayload` 投影保持时长、提示词和媒体引用。
 - Webview renderer 只消费已验证结构，不在 React 组件里做业务修复。
 
 ---
@@ -514,7 +514,7 @@ Agent 面向用户仍可以输出简短说明，但结构化分镜表必须放�
 }
 ```
 
-但旧结构只能作为展示格式或 legacy projector 输入。正式 Canvas/Cut 发送应优先使用 `StoryboardTableV1`。
+但旧结构只能作为展示格式或 legacy projector 输入。正式 Canvas/Cut 发送应优先使用 `StoryboardTable`。
 
 ### 4.2 校验失败处理
 
@@ -529,7 +529,7 @@ extract neko-composite block
   ↓
 parse JSON
   ↓
-validate StoryboardTableV1
+validate StoryboardTable
   ├─ success → interpret imageStrategy → optional tool calls → backfill media refs → render + transfer projectors
   └─ fail → repair prompt with validation errors
            ↓
@@ -545,7 +545,7 @@ validate StoryboardTableV1
 由于 LLM 只能输出纯文本，图片链路必须是“引用声明 + runtime 回填”：
 
 ```text
-LLM StoryboardTableV1
+LLM StoryboardTable
   ├─ sourceMediaRefs: [{ toolCallId, assetIndex, role }]
   ├─ imageStrategy: "reuse-original" | "generate-new" | ...
   └─ generationPrompt: "..."
@@ -596,10 +596,10 @@ interface CompositeBlockData {
 
 ### 5.2 `CanvasStoryboardPayload`
 
-`CanvasStoryboardPayload` 仍是 Canvas 的唯一 storyboard import sink。`StoryboardTableV1` 不直接进入 Canvas，而是经纯函数投影：
+`CanvasStoryboardPayload` 仍是 Canvas 的唯一 storyboard import sink。`StoryboardTable` 不直接进入 Canvas，而是经纯函数投影：
 
 ```text
-StoryboardTableV1
+StoryboardTable
   ↓ projectStoryboardTableToCanvasPayload()
 CanvasStoryboardPayload
   ↓ neko.canvas.importStoryboard
@@ -608,7 +608,7 @@ SceneGroupNode + ShotNode
 
 ### 5.3 `neko-story` 轻量分镜表
 
-`neko-story` 的 `ScriptTableView` 是 scene-level readiness 表，不应升级为 `StoryboardTableV1` 编辑器。
+`neko-story` 的 `ScriptTableView` 是 scene-level readiness 表，不应升级为 `StoryboardTable` 编辑器。
 
 如果 Story 需要展示 Agent 生成结果，只展示摘要状态和 “打开 Agent / 打开 Canvas” 入口，不持有 shot-level 表事实。
 
@@ -632,10 +632,10 @@ Agent lightweight summary + domain webview editing
 
 适用示例：
 
-- 音频：Agent 输出 `AudioCuePlanV1` / 配音与音效计划；`neko-audio` 或 audio provider 负责声轨、配音、混音和预览事实。
-- 视频：Agent 输出 `VideoShotPlanV1` / 剪辑意图；`neko-cut` 负责 timeline、转场、导出和可编辑状态。
-- 人物形象：Agent 输出 `CharacterDesignPlanV1` / 角色设定与引用需求；`neko-sketch`、`neko-model`、`neko-puppet` 或未来 `neko-character` 负责资产生成、绑定、变体和编辑事实。
-- 图片与分镜：Agent 输出 `StoryboardTableV1`；Canvas/Sketch/image provider 负责视觉资产执行，Canvas 负责正式分镜编辑事实。
+- 音频：Agent 输出 `AudioCuePlan` / 配音与音效计划；`neko-audio` 或 audio provider 负责声轨、配音、混音和预览事实。
+- 视频：Agent 输出 `VideoShotPlan` / 剪辑意图；`neko-cut` 负责 timeline、转场、导出和可编辑状态。
+- 人物形象：Agent 输出 `CharacterDesignPlan` / 角色设定与引用需求；`neko-sketch`、`neko-model`、`neko-puppet` 或未来 `neko-character` 负责资产生成、绑定、变体和编辑事实。
+- 图片与分镜：Agent 输出 `StoryboardTable`；Canvas/Sketch/image provider 负责视觉资产执行，Canvas 负责正式分镜编辑事实。
 
 共享契约归属规则：
 
@@ -650,13 +650,13 @@ Agent lightweight summary + domain webview editing
 
 ### Phase 1：契约与校验
 
-- 在 `@neko/shared` 新增 `StoryboardTableV1`、`StoryboardShotRowV1`、`StoryboardShotCharacterV1`、`StoryboardMediaRefV1`、`StoryboardShotImageStrategyV1` 类型。
+- 在 `@neko/shared` 新增 `StoryboardTable`、`StoryboardShotRow`、`StoryboardShotCharacter`、`StoryboardMediaRef`、`StoryboardShotImageStrategy` 类型。
 - 新增 validator / normalizer。
 - 新增 validation error DTO。
 - validator 输出分级诊断：`error` / `warning` / `suggestion` / `profileHint`。
 - validator 使用形式化 Stable Core required fields 作为 `error` 级必填字段唯一事实源。
 - validator 校验 `imageStrategy` 与 media refs 的结构一致性，但不读取 `decisionReason` 作为判定依据。
-- validator 校验 `sourceMediaRefs` / `generatedMediaRefs` 与每条 `StoryboardMediaRefV1.role` 的一致性。
+- validator 校验 `sourceMediaRefs` / `generatedMediaRefs` 与每条 `StoryboardMediaRef.role` 的一致性。
 - normalizer 在兼容期支持把 legacy `mediaRefs` 按 `role` 分拣为分层 refs。
 - normalizer 保留合法 `extensions`，但不让未知 extension 影响 stable core 投影；不可 JSON 序列化的 extension 必须作为 `error` 诊断。
 - 在 Agent composite parser 后接入 schema validation。
@@ -671,9 +671,9 @@ Agent lightweight summary + domain webview editing
 
 ### Phase 3：策略执行与回填
 
-- 新增 `StoryboardImageStrategyInterpreter`，输入 `StoryboardImageStrategyInterpreterInputV1`，输出待执行的图片任务计划和无需执行的复用引用。
+- 新增 `StoryboardImageStrategyInterpreter`，输入 `StoryboardImageStrategyInterpreterInput`，输出待执行的图片任务计划和无需执行的复用引用。
 - 固化 `reuse-original` / `use-as-reference` / `generate-new` / `transform-original` 四类策略行为。
-- 将 Chat 指令、Webview 确认和 Workspace 默认值归一化为 `StoryboardImageStrategyOverrideV1`。
+- 将 Chat 指令、Webview 确认和 Workspace 默认值归一化为 `StoryboardImageStrategyOverride`。
 - 将生成/转换动作路由为 capability request，由 provider 或专业子包执行。
 - `reuse-original` 不调用图片生成工具，只把 `sourceMediaRefs` 交给展示层解析。
 - `use-as-reference` / `generate-new` / `transform-original` 由 runtime / Extension Host 调用对应工具，LLM 不直接声称图片已经生成。
@@ -682,13 +682,13 @@ Agent lightweight summary + domain webview editing
 
 ### Phase 4：投影收敛
 
-- 将现有 `storyboard-transfer-presenter` 的 Markdown / legacy composite 投影收敛到 `StoryboardTableV1` normalizer。
+- 将现有 `storyboard-transfer-presenter` 的 Markdown / legacy composite 投影收敛到 `StoryboardTable` normalizer。
 - `Send to Canvas` 只使用 validated projector。
 - `Send to Cut` 只使用 validated projector。
 
 ### Phase 5：Skill / Prompt 固化
 
-- 更新分镜相关 Skill，要求输出 `StoryboardTableV1`。
+- 更新分镜相关 Skill，要求输出 `StoryboardTable`。
 - 明确 Skill 中的 LLM 只输出计划文本；需要新图时只输出 `imageStrategy`、`generationPrompt` 和引用关系，不描述为“已生成图片”。
 - Skill 应按 `profile` 提供字段模板，不要求所有场景填写同一套完整列。
 - 保留自然语言 prompt-chain，不重新引入 phases / pipelines DSL。
@@ -705,13 +705,13 @@ Agent lightweight summary + domain webview editing
 
 首轮实现采用“语义优先、兼容保留”的迁移方式：
 
-- `StoryboardTableV1`、Stable Core required fields、validation diagnostics、normalizer、Canvas/Cut projector、imageStrategy interpreter 均落在 `@neko/shared`，保持为纯类型/纯函数，不依赖 Agent Webview 或子包实现。
+- `StoryboardTable`、Stable Core required fields、validation diagnostics、normalizer、Canvas/Cut projector、imageStrategy interpreter 均落在 `@neko/shared`，保持为纯类型/纯函数，不依赖 Agent Webview 或子包实现。
 - `CompositeBlockData` 增加可选 `storyboardTable` 与 `storyboardDiagnostics`，但继续保留必需 `sections`。语义 v1 表会生成 fallback sections 供旧 renderer 展示；invalid v1 表不会静默丢弃，而是生成 bounded diagnostics section。
 - Webview presenter 在 `storyboardTable` 存在且无 `error` 诊断时优先使用 semantic projector；存在 `error` 时不暴露 Canvas/Cut Send-to payload。legacy sections 仍按原逻辑渲染和投影。
 - Runtime 新增 `storyboard-image-runtime` 适配层，只解释/路由/回填，不导入 Canvas/Cut/Sketch/Model Webview。provider 或 tool execution port 缺失时只产生诊断，不伪造 `generatedMediaRefs`。
 - Runtime 从 tool port 发现 `GenerateImage` / `TransformImage` / `ResolveMediaRef` 能力。`GenerateImage.supportsReferences` 由工具参数 schema 中的 reference/source/media ref 输入保守推断；只有 `has()` 命中但拿不到 schema 时，不声明引用支持。
 - `generatedMediaRefs` 只由 completed tool/media result backfill 产生稳定 `tool-result` refs；失败任务保留 validated plan 和 warning diagnostic。
-- `comic-to-storyboard` 内置 skill 已更新为请求 `StoryboardTableV1` semantic output，并明确 LLM 只能输出计划字段，不得声明未完成的媒体生成结果。
+- `comic-to-storyboard` 内置 skill 已更新为请求 `StoryboardTable` semantic output，并明确 LLM 只能输出计划字段，不得声明未完成的媒体生成结果。
 
 ---
 
@@ -734,15 +734,15 @@ Agent lightweight summary + domain webview editing
 
 长期方案完成时，应满足：
 
-1. Agent 能稳定输出一个符合 `StoryboardTableV1` 的分镜表。
+1. Agent 能稳定输出一个符合 `StoryboardTable` 的分镜表。
 2. 无效输出会触发自动修复，超过上限后给出清晰诊断。
 3. 分镜表语义类型归属 `@neko/shared`，Canvas/Cut projector 不依赖 `@neko/agent-types`。
-4. `StoryboardShotCharacterV1` 与 `StoryboardMediaRefV1` 有明确结构定义，并被 validator 覆盖。
+4. `StoryboardShotCharacter` 与 `StoryboardMediaRef` 有明确结构定义，并被 validator 覆盖。
 5. Validator 支持分级诊断，只有 `error` 阻断投影；`warning` / `suggestion` / `profileHint` 不弱化 LLM 的灵活输出。
 6. 不同 `profile` 可以拥有不同推荐字段，合法 `extensions` 会被保留且不破坏 stable core 投影。
 7. `decisionReason` 只作为展示/调试字段，不参与策略校验。
 8. `imageStrategy` 可由 runtime 解释执行：复用策略不生成新图，生成/转换策略调用工具并回填媒体引用。
-9. 用户 override 可通过 `StoryboardImageStrategyOverrideV1` 输入策略解释器，并能阻止或确认生成。
+9. 用户 override 可通过 `StoryboardImageStrategyOverride` 输入策略解释器，并能阻止或确认生成。
 10. 生成/转换动作通过 capability provider 或专业子包执行，Agent 不内置领域创作实现。
 11. Provider 缺失时，Agent 仍能展示 validated plan 和缺失能力诊断，但不会显示可执行入口或伪造结果。
 12. 用户只会在 validated storyboard table 上看到 “发送到 Canvas / Cut”。
@@ -757,7 +757,7 @@ Agent lightweight summary + domain webview editing
 
 用一句话定义：
 
-> `StoryboardTableV1` 是 Agent 当轮生成的结构化镜头计划；它可展示、可校验、可投影，但不是 Story 或 Canvas 之外的第三份 storyboard 事实源。
+> `StoryboardTable` 是 Agent 当轮生成的结构化镜头计划；它可展示、可校验、可投影，但不是 Story 或 Canvas 之外的第三份 storyboard 事实源。
 
 > LLM 只输出纯文本计划；图片引用、图片生成和结果回填是 runtime 行为，不能伪装成模型文本能力。
 

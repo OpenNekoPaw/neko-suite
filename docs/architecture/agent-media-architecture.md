@@ -303,7 +303,7 @@ type GeneratedAsset = GeneratedImage | GeneratedAudio | GeneratedVideo | Generat
 1. “分镜表连续使用同一张图”：重复引用同一个 ref 是合法的，不再按图片数组顺序错绑。
 2. “有的分镜没有图”：没有 ref 的 shot 不自动沿用上一张图，Canvas 显示 missing/unresolved 状态。
 
-Agent 不能仅根据自然语言提示词在发送阶段可靠地“猜测”图片绑定。更可靠的方案是在读取/分析图片时就确定顺序、locator 与镜头对应关系，输出 `StoryboardTableV1` 时为每个 shot 写入明确 `referenceResourceRef` 或空值。后续发送到 Canvas 只传稳定 ref 和 preview role，不再按图片数组顺序重新分配。
+Agent 不能仅根据自然语言提示词在发送阶段可靠地“猜测”图片绑定。更可靠的方案是在读取/分析图片时就确定顺序、locator 与镜头对应关系，输出 `StoryboardTable` 时为每个 shot 写入明确 `referenceResourceRef` 或空值。后续发送到 Canvas 只传稳定 ref 和 preview role，不再按图片数组顺序重新分配。
 
 ### 数据流
 
@@ -1367,9 +1367,9 @@ Media-to-video 不再由 Agent 代码中的 route catalog、router、DAG 或固�
 | Skill                          | 主要职责                                       | 典型输入                                                | 典型输出                                      |
 | ------------------------------ | ---------------------------------------------- | ------------------------------------------------------- | --------------------------------------------- |
 | `media-to-video`               | 顶层协调；选择最小相关子 Skill，管理审批和降级 | comic / document / image / storyboard / generated media | planning summary 或下一步 structured artifact |
-| `comic-to-storyboard`          | 漫画页面读取、OCR、分格证据、分镜表            | EPUB / PDF / CBZ / CBR 页面或图片                       | `StoryboardTableV1`                           |
+| `comic-to-storyboard`          | 漫画页面读取、OCR、分格证据、分镜表            | EPUB / PDF / CBZ / CBR 页面或图片                       | `StoryboardTable`                           |
 | `image-to-shot`                | 静图或图像序列转镜头计划                       | image / image sequence                                  | storyboard rows / animation plan              |
-| `storyboard-to-animation-plan` | 分镜表转运动、镜头、生成提示和连续性计划       | `StoryboardTableV1`                                     | animation plan                                |
+| `storyboard-to-animation-plan` | 分镜表转运动、镜头、生成提示和连续性计划       | `StoryboardTable`                                     | animation plan                                |
 | `animation-plan-to-cut`        | 动画计划转 Cut 可导入 timeline payload         | animation plan / storyboard                             | Cut storyboard payload                        |
 | `generated-shot-assembly`      | 聚合已生成的图片、视频、音频、字幕引用         | generated media refs                                    | execution summary                             |
 | `export-video-package`         | 导出前检查、交付摘要和剩余步骤                 | Cut payload / execution summary                         | export-oriented summary                       |
@@ -1399,13 +1399,13 @@ Media-to-video 不再由 Agent 代码中的 route catalog、router、DAG 或固�
   -> ReadDocument 读取 EPUB 目录/图片引用
   -> 已拿到 image paths 时用 ReadImage 分析对应页面
      （不要对同一批页面再调用 ReadDocumentImage）
-  -> 输出 validated StoryboardTableV1 + safe media refs
+  -> 输出 validated StoryboardTable + safe media refs
   -> 用户要继续动画化时激活 storyboard-to-animation-plan
   -> 涉及批量生成、上色、替换时间线、长导出时先审批
   -> Canvas/Cut/export 只接收验证通过的 typed payload
 ```
 
-这个顺序是 Skill prompt-chain 对 Agent 的领域指导，不是运行时硬编码路线。Agent 可以按任务复杂度合并、跳过或回退；例如用户只要求“分析前 3 页漫画”时，流程止于 `comic-to-storyboard` 的证据和 `StoryboardTableV1`，不会自动进入生成或 Cut。
+这个顺序是 Skill prompt-chain 对 Agent 的领域指导，不是运行时硬编码路线。Agent 可以按任务复杂度合并、跳过或回退；例如用户只要求“分析前 3 页漫画”时，流程止于 `comic-to-storyboard` 的证据和 `StoryboardTable`，不会自动进入生成或 Cut。
 
 ### 9.5 结构化 artifact 和媒体引用
 
