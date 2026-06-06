@@ -345,7 +345,7 @@
         "neko.agent.media.outputDir": {
           "type": "string",
           "default": "",
-          "description": "Directory to save generated media. Defaults to <workspace>/.neko/generated"
+          "description": "Directory to save generated media. Defaults to <workspace>/.neko/.cache/generated"
         },
         "neko.agent.media.showSaveNotification": {
           "type": "boolean",

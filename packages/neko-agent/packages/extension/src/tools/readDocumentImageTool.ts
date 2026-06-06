@@ -1,6 +1,7 @@
 import {
   createTool,
   TOOL_NAMES_SYSTEM,
+  type DocumentArchiveResourceRef,
   type DocumentImageInfo,
   type DocumentLocator,
   type DocumentSourceRef,
@@ -168,15 +169,35 @@ export async function executeReadDocumentImage(
           'No matching document images found. Provide image_paths, page_indexes, or locators from ReadDocument.',
       };
     }
+    const projectedSelected = await Promise.all(
+      selected.map(async (image) => ({
+        ...image,
+        info: await withCacheResourceRef(image.info, deps.resourceCache, deps.resolveResourceScope),
+      })),
+    );
 
     const readImageResult = await executeReadImage(deps, {
-      images: selected.map((image) => ({
+      images: projectedSelected.map((image) => ({
         path: image.info.path,
+        runtimePath: image.info.runtimePath ?? image.info.path,
+        runtimeKind: image.info.runtimeKind ?? 'scratch-cache',
+        alias: image.info.alias ?? formatDocumentImageAlias(image.info.locator, image.index),
+        ...(image.info.aliasScope ? { aliasScope: image.info.aliasScope } : {}),
+        ...(image.info.sourceDocumentId ? { sourceDocumentId: image.info.sourceDocumentId } : {}),
+        ...(image.info.entryPath ? { entryPath: image.info.entryPath } : {}),
+        ...(image.info.portableForTransfer !== undefined
+          ? { portableForTransfer: image.info.portableForTransfer }
+          : {}),
+        ...(image.info.nonPortableReason
+          ? { nonPortableReason: image.info.nonPortableReason }
+          : {}),
         label: formatDocumentImageLabel(image.info.locator, image.index),
         metadata: {
           documentIndex: image.index,
           ...(image.info.locator ? { locator: image.info.locator } : {}),
         },
+        ...(image.info.resourceRef ? { resourceRef: image.info.resourceRef } : {}),
+        ...(image.info.cacheResourceRef ? { cacheResourceRef: image.info.cacheResourceRef } : {}),
       })),
       mode,
       analysis,
@@ -203,13 +224,7 @@ export async function executeReadDocumentImage(
         analysis,
         images: await Promise.all(
           extractImagesFromReadImageData(readImageResult.data).map(async (image, index) => {
-            const documentImage = selected[index]?.info
-              ? await withCacheResourceRef(
-                  selected[index].info,
-                  deps.resourceCache,
-                  deps.resolveResourceScope,
-                )
-              : undefined;
+            const documentImage = projectedSelected[index]?.info;
             const nextPath = documentImage?.path;
             return {
               ...image,
@@ -317,6 +332,16 @@ async function withCacheResourceRef(
   return {
     ...image,
     path: nextPath,
+    runtimePath: image.runtimePath ?? image.path,
+    runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
+    alias: image.alias ?? formatDocumentImageAlias(image.locator),
+    aliasScope: image.aliasScope ?? formatDocumentAliasScope(legacyRef),
+    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(legacyRef.source),
+    entryPath: image.entryPath ?? legacyRef.entryPath,
+    portableForTransfer: nextCacheResourceRef.scope === 'project',
+    ...(nextCacheResourceRef.scope === 'project'
+      ? {}
+      : { nonPortableReason: 'no-workspace-or-extension-private-scratch' }),
     resourceRef,
     cacheResourceRef: nextCacheResourceRef,
   };
@@ -331,12 +356,16 @@ async function materializeDocumentResource(
     return undefined;
   }
   try {
-    const result = await resourceCache.ensure(resourceRef, {
-      role: 'document-entry',
-      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
-      ...(image.width !== undefined ? { width: image.width } : {}),
-      ...(image.height !== undefined ? { height: image.height } : {}),
-    });
+    const result = await resourceCache.resolve(
+      resourceRef,
+      {
+        role: 'document-entry',
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+        ...(image.width !== undefined ? { width: image.width } : {}),
+        ...(image.height !== undefined ? { height: image.height } : {}),
+      },
+      { materializeIfMissing: true },
+    );
     return result.status === 'ready' ? result.absolutePath : undefined;
   } catch {
     // Keep the stable ref in the tool result even when prewarming the shared cache fails.
@@ -395,6 +424,30 @@ function formatDocumentImageLabel(locator: DocumentLocator | undefined, index: n
     case 'text-range':
       return `image-${index + 1}`;
   }
+}
+
+function formatDocumentImageAlias(locator: DocumentLocator | undefined, index = 0): string {
+  if (!locator) return `image_${index + 1}`;
+  switch (locator.kind) {
+    case 'page':
+      return `page_${locator.pageNumber}`;
+    case 'chapter':
+      return locator.spineIndex === undefined ? 'image_1' : `page_${locator.spineIndex + 1}`;
+    case 'slide':
+      return `slide_${locator.slideNumber}`;
+    case 'region':
+      return `page_${locator.pageNumber}_region`;
+    case 'text-range':
+      return `image_${index + 1}`;
+  }
+}
+
+function formatDocumentAliasScope(resourceRef: DocumentArchiveResourceRef): string {
+  return `document:${formatDocumentSourceId(resourceRef.source)}`;
+}
+
+function formatDocumentSourceId(source: DocumentSourceRef): string {
+  return source.identity?.hash ?? source.identity?.fileId ?? source.fileId ?? source.filePath;
 }
 
 function readStringArray(value: unknown): string[] {

@@ -189,6 +189,9 @@ export interface MigrateFsOps {
   exists(p: string): Promise<boolean>;
   rename(oldPath: string, newPath: string): Promise<void>;
   mkdir(p: string, opts: { recursive: boolean }): Promise<void>;
+  /** Merge legacy content into an existing target without overwriting target files. */
+  copy?(oldPath: string, newPath: string): Promise<void>;
+  rm?(p: string, opts: { recursive: boolean; force: boolean }): Promise<void>;
 }
 
 /**
@@ -250,6 +253,11 @@ export async function migrateStorageLayout(
       await fsOps.mkdir(dirname(newPath), { recursive: true });
       await fsOps.rename(oldPath, newPath);
       actions.push(`migrated ${label}: ${oldPath} → ${newPath}`);
+    } else if (oldExists && newExists && fsOps.copy && fsOps.rm) {
+      await fsOps.mkdir(dirname(newPath), { recursive: true });
+      await fsOps.copy(oldPath, newPath);
+      await fsOps.rm(oldPath, { recursive: true, force: true });
+      actions.push(`merged and removed legacy ${label}: ${oldPath} → ${newPath}`);
     }
   }
 

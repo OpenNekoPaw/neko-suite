@@ -19,6 +19,7 @@ import type {
   ResourceEnsureInput,
   ResourceEnsureResult,
 } from './resource-cache-service';
+import { readLegacyCachePath } from './legacy-resource-cache-provider';
 
 export const DOCUMENT_RESOURCE_CACHE_PROVIDER_ID = 'document-archive';
 
@@ -26,13 +27,20 @@ export interface DocumentRangeReader {
   readRange(source: DocumentSourceRef | string, range: DocumentRange): Promise<DocumentReadResult>;
 }
 
+export interface DocumentEntryReader {
+  readEntry(source: DocumentSourceRef, entryPath: string): Promise<Uint8Array | null>;
+}
+
 export interface DocumentResourceCacheProviderOptions {
   readonly reader: DocumentRangeReader;
+  readonly entryReader?: DocumentEntryReader;
+  readonly enableRangeFallback?: boolean;
   readonly fsOps?: DocumentResourceCacheFsOps;
 }
 
 export interface DocumentResourceCacheFsOps {
   copyFile(source: string, target: string): Promise<void>;
+  writeFile(filePath: string, data: Uint8Array): Promise<void>;
   mkdir(filePath: string, options: { recursive: boolean }): Promise<void>;
   stat(filePath: string): Promise<{ readonly size: number }>;
 }
@@ -49,10 +57,14 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
   readonly id = DOCUMENT_RESOURCE_CACHE_PROVIDER_ID;
 
   private readonly reader: DocumentRangeReader;
+  private readonly entryReader?: DocumentEntryReader;
+  private readonly enableRangeFallback: boolean;
   private readonly fsOps: DocumentResourceCacheFsOps;
 
   constructor(options: DocumentResourceCacheProviderOptions) {
     this.reader = options.reader;
+    this.entryReader = options.entryReader;
+    this.enableRangeFallback = options.enableRangeFallback ?? true;
     this.fsOps = options.fsOps ?? nodeFsOps;
   }
 
@@ -81,7 +93,9 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
     const source = input.ref.source.document;
     const locator = input.ref.locator?.kind === 'document' ? input.ref.locator.locator : undefined;
     const entryPath =
-      input.ref.locator?.kind === 'document' ? input.ref.locator.entryPath : undefined;
+      input.ref.locator?.kind === 'document'
+        ? (input.ref.locator.entryPath ?? readLocatorEntryName(input.ref.locator.locator))
+        : undefined;
     if (!source || (!locator && !entryPath)) {
       return {
         status: 'unsupported',
@@ -98,6 +112,31 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
         ref: input.ref,
         variant: input.variant,
         error: 'Document resource ref cannot be materialized without a stable locator.',
+      };
+    }
+
+    const directEntry = entryPath
+      ? await this.materializeDirectEntry(input, source, entryPath).catch(() => undefined)
+      : undefined;
+    if (directEntry) {
+      return directEntry;
+    }
+
+    const legacyEntry = await this.materializeLegacyCachePath(input, entryPath).catch(
+      () => undefined,
+    );
+    if (legacyEntry) {
+      return legacyEntry;
+    }
+
+    if (!this.enableRangeFallback) {
+      return {
+        status: 'missing',
+        ref: input.ref,
+        variant: input.variant,
+        error: entryPath
+          ? `Document image entry could not be materialized directly: ${entryPath}`
+          : 'Document resource ref cannot be materialized without a direct entry or legacy cache path.',
       };
     }
 
@@ -136,12 +175,113 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       rebuildable: true,
     };
   }
+
+  private async materializeLegacyCachePath(
+    input: ResourceEnsureInput,
+    entryPath: string | undefined,
+  ): Promise<ResourceEnsureResult | undefined> {
+    const legacyPath = readLegacyCachePath(input.ref);
+    if (!legacyPath) {
+      return undefined;
+    }
+    const targetRelativePath = createDocumentResourceRelativePath(input.ref, legacyPath, entryPath);
+    const targetPath = path.join(input.cacheRoot, targetRelativePath);
+    await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
+    await this.fsOps.copyFile(legacyPath, targetPath);
+    const stat = await this.fsOps.stat(targetPath);
+    return {
+      status: 'ready',
+      ref: input.ref,
+      variant: input.variant,
+      absolutePath: targetPath,
+      relativePath: targetRelativePath,
+      mimeType: input.variant.mimeType ?? inferMimeType(legacyPath),
+      width: input.variant.width,
+      height: input.variant.height,
+      sizeBytes: stat.size,
+      rebuildable: true,
+    };
+  }
+
+  private async materializeDirectEntry(
+    input: ResourceEnsureInput,
+    source: DocumentSourceRef,
+    entryPath: string,
+  ): Promise<ResourceEnsureResult | undefined> {
+    if (!this.entryReader) {
+      return undefined;
+    }
+    const bytes = await this.entryReader.readEntry(source, entryPath);
+    if (!bytes) {
+      return undefined;
+    }
+    const targetRelativePath = createDocumentResourceRelativePath(input.ref, entryPath, entryPath);
+    const targetPath = path.join(input.cacheRoot, targetRelativePath);
+    await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
+    await this.fsOps.writeFile(targetPath, bytes);
+    const stat = await this.fsOps.stat(targetPath);
+    return {
+      status: 'ready',
+      ref: input.ref,
+      variant: input.variant,
+      absolutePath: targetPath,
+      relativePath: targetRelativePath,
+      mimeType: input.variant.mimeType ?? inferMimeType(entryPath),
+      width: input.variant.width,
+      height: input.variant.height,
+      sizeBytes: stat.size || bytes.byteLength,
+      rebuildable: true,
+    };
+  }
 }
 
 export function createDocumentResourceRef(input: CreateDocumentResourceRefInput): ResourceRef {
-  const source: ResourceSourceRef = {
+  const entryPath = input.entryPath ?? readLocatorEntryName(input.locator);
+  const baseSource = createDocumentResourceSource(input, false);
+  const source = createDocumentResourceSource(input, Boolean(input.cachePath));
+  const identityValue = readDocumentSourceIdentityValue(input.source);
+  const fingerprint = createResourceFingerprint({
+    strategy: identityValue ? 'identity' : 'provider',
+    value:
+      identityValue ??
+      hashStableValue({
+        filePath: input.source.filePath,
+        format: input.source.format,
+      }),
+    providerId: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
+  });
+
+  const ref = createResourceRef({
+    id: createStableDocumentResourceRefId({
+      scope: input.scope ?? 'project',
+      source: input.source,
+      entryPath,
+      locator: input.locator,
+      fingerprint,
+    }),
+    scope: input.scope ?? 'project',
+    provider: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
     kind: 'document',
-    document: input.source,
+    source: baseSource,
+    locator: createDocumentResourceLocator(entryPath, input.locator),
+    fingerprint,
+  });
+
+  return input.cachePath
+    ? {
+        ...ref,
+        source,
+      }
+    : ref;
+}
+
+function createDocumentResourceSource(
+  input: CreateDocumentResourceRefInput,
+  includeLegacyCachePath: boolean,
+): ResourceSourceRef {
+  return {
+    kind: 'document',
+    document: createStableDocumentSource(input.source),
     filePath: input.source.filePath,
     identity: input.source.identity
       ? {
@@ -162,59 +302,71 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
             nonPortableReason: 'no-workspace-or-extension-private-scratch',
           }
         : {}),
-      ...(input.cachePath ? { legacyCachePath: input.cachePath } : {}),
+      ...(includeLegacyCachePath && input.cachePath ? { legacyCachePath: input.cachePath } : {}),
     },
   };
-  const stableSource: ResourceSourceRef = {
-    ...source,
-    metadata: {
-      format: input.source.format,
-      ...(input.scope === 'extension-private'
-        ? {
-            cacheScope: 'extension-private',
-            nonPortable: true,
-            nonPortableReason: 'no-workspace-or-extension-private-scratch',
-          }
-        : {}),
-    },
-  };
-  const fingerprint = createResourceFingerprint({
-    strategy: input.source.identity ? 'identity' : input.source.fileId ? 'identity' : 'provider',
-    value:
-      input.source.identity?.hash ??
-      input.source.identity?.fileId ??
-      input.source.fileId ??
-      hashStableValue({
-        filePath: input.source.filePath,
-        format: input.source.format,
-        entryPath: input.entryPath,
-        locator: input.locator,
-      }),
-    providerId: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
-  });
+}
 
-  const ref = createResourceRef({
-    scope: input.scope ?? 'project',
+function createStableDocumentResourceRefId(input: {
+  readonly scope: ResourceRef['scope'];
+  readonly source: DocumentSourceRef;
+  readonly entryPath: string | undefined;
+  readonly locator?: DocumentLocator;
+  readonly fingerprint: ReturnType<typeof createResourceFingerprint>;
+}): string {
+  return `res_${hashStableValue({
+    scope: input.scope,
     provider: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
     kind: 'document',
-    source: stableSource,
-    locator:
-      input.locator || input.entryPath
-        ? {
-            kind: 'document',
-            ...(input.locator ? { locator: input.locator } : {}),
-            ...(input.entryPath ? { entryPath: input.entryPath } : {}),
-          }
-        : undefined,
-    fingerprint,
-  });
+    source: createDocumentSourceIdentityKey(input.source),
+    locator: createDocumentResourceIdentityLocator(input.entryPath, input.locator),
+    fingerprint: input.fingerprint,
+  })}`;
+}
 
-  return input.cachePath
+function createStableDocumentSource(source: DocumentSourceRef): DocumentSourceRef {
+  return {
+    filePath: source.filePath,
+    format: source.format,
+    ...(source.fileId ? { fileId: source.fileId } : {}),
+    ...(source.identity
+      ? {
+          identity: {
+            fileId: source.identity.fileId,
+            sizeBytes: source.identity.sizeBytes,
+            mtimeMs: source.identity.mtimeMs,
+            hash: source.identity.hash,
+          },
+        }
+      : {}),
+  };
+}
+
+function readDocumentSourceIdentityValue(source: DocumentSourceRef): string | undefined {
+  return source.identity?.hash ?? source.identity?.fileId ?? source.fileId;
+}
+
+function createDocumentResourceLocator(
+  entryPath: string | undefined,
+  locator?: DocumentLocator,
+): ResourceRef['locator'] | undefined {
+  return locator || entryPath
     ? {
-        ...ref,
-        source,
+        kind: 'document',
+        ...(locator ? { locator } : {}),
+        ...(entryPath ? { entryPath } : {}),
       }
-    : ref;
+    : undefined;
+}
+
+function createDocumentResourceIdentityLocator(
+  entryPath: string | undefined,
+  locator?: DocumentLocator,
+): ResourceRef['locator'] | undefined {
+  if (entryPath) {
+    return createDocumentResourceLocator(entryPath);
+  }
+  return createDocumentResourceLocator(undefined, locator);
 }
 
 export function createDocumentResourceRefFromArchiveRef(
@@ -253,24 +405,111 @@ function createFallbackLocator(entryPath: string | undefined): DocumentLocator |
   };
 }
 
+function readLocatorEntryName(locator: DocumentLocator | undefined): string | undefined {
+  if (!locator) return undefined;
+  if (locator.kind === 'page' || locator.kind === 'region') {
+    return locator.entryName;
+  }
+  return undefined;
+}
+
 function createDocumentResourceRelativePath(
   ref: ResourceRef,
   sourcePath: string,
   entryPath: string | undefined,
 ): string {
   const ext = path.extname(sourcePath) || path.extname(entryPath ?? '') || '.bin';
-  const basename = sanitizePathPart(
-    path.basename(entryPath ?? sourcePath, path.extname(entryPath ?? sourcePath)) || ref.id,
-  );
-  return path.join('documents', ref.id, `${basename}${ext}`);
+  const documentDirectory = createDocumentCacheDirectoryName(ref);
+  const entryRelativePath = createDocumentEntryRelativePath(ref, sourcePath, entryPath, ext);
+  return path.join('documents', documentDirectory, entryRelativePath);
+}
+
+function createDocumentCacheDirectoryName(ref: ResourceRef): string {
+  return `doc_${hashStableValue({
+    scope: ref.scope,
+    provider: ref.provider,
+    source: createResourceSourceDirectoryKey(ref.source),
+    fingerprint: ref.fingerprint,
+  })}`;
+}
+
+function createResourceSourceDirectoryKey(source: ResourceSourceRef): unknown {
+  if (source.document) {
+    return createDocumentSourceIdentityKey(source.document);
+  }
+  const identityValue = source.identity?.hash ?? source.identity?.fileId;
+  if (identityValue) {
+    return {
+      kind: source.kind,
+      identity: identityValue,
+      format: source.metadata?.format,
+    };
+  }
+  return {
+    kind: source.kind,
+    filePath: source.filePath,
+    uri: source.uri,
+    projectRelativePath: source.projectRelativePath,
+    mediaLibraryId: source.mediaLibraryId,
+    generatedAssetId: source.generatedAssetId,
+    previewAssetId: source.previewAssetId,
+    format: source.metadata?.format,
+  };
+}
+
+function createDocumentSourceIdentityKey(source: DocumentSourceRef): unknown {
+  const identityValue = readDocumentSourceIdentityValue(source);
+  return {
+    format: source.format,
+    ...(identityValue ? { identity: identityValue } : { filePath: source.filePath }),
+  };
+}
+
+function createDocumentEntryRelativePath(
+  ref: ResourceRef,
+  sourcePath: string,
+  entryPath: string | undefined,
+  ext: string,
+): string {
+  const rawPath = entryPath ?? sourcePath;
+  const parsed = path.parse(rawPath);
+  const fallbackName = path.basename(rawPath, path.extname(rawPath)) || ref.id;
+  const fileName = `${sanitizePathPart(parsed.name || fallbackName)}${ext}`;
+  if (!entryPath) {
+    return fileName;
+  }
+  const parentParts = parsed.dir
+    .split(/[\\/]+/)
+    .map(sanitizePathPart)
+    .filter((part) => part.length > 0);
+  return path.join(...parentParts, fileName);
 }
 
 function sanitizePathPart(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document-entry';
 }
 
+function inferMimeType(filePath: string): string | undefined {
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.bmp':
+      return 'image/bmp';
+    default:
+      return undefined;
+  }
+}
+
 const nodeFsOps: DocumentResourceCacheFsOps = {
   copyFile: (source, target) => fs.copyFile(source, target),
+  writeFile: (filePath, data) => fs.writeFile(filePath, data),
   mkdir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
   stat: async (filePath) => {
     const stat = await fs.stat(filePath);

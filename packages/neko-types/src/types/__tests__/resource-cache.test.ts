@@ -21,7 +21,7 @@ import {
   type ResourceRef,
   type ResourceVariantRef,
 } from '../resource-cache';
-import { resolveStorageLayout } from '../storage';
+import { migrateStorageLayout, resolveStorageLayout, type MigrateFsOps } from '../storage';
 
 describe('resource cache contracts', () => {
   const source = {
@@ -204,4 +204,98 @@ describe('resource cache contracts', () => {
     );
     expect(layout.project.cache.database).toBe('/workspace/demo/.neko/.cache/neko-cache.db');
   });
+
+  it('renames legacy cache directories into .neko/.cache and removes the old paths', async () => {
+    const fsOps = createMigrationFs(['/workspace/demo/.neko/generated']);
+
+    const actions = await migrateStorageLayout('/workspace/demo', fsOps);
+
+    expect(actions).toContain(
+      'migrated generated: /workspace/demo/.neko/generated → /workspace/demo/.neko/.cache/generated',
+    );
+    expect(fsOps.existsSync('/workspace/demo/.neko/generated')).toBe(false);
+    expect(fsOps.existsSync('/workspace/demo/.neko/.cache/generated')).toBe(true);
+    expect(fsOps.renameCalls).toEqual([
+      {
+        oldPath: '/workspace/demo/.neko/generated',
+        newPath: '/workspace/demo/.neko/.cache/generated',
+      },
+    ]);
+  });
+
+  it('force-merges missing legacy cache files and deletes old directories when the new target exists', async () => {
+    const fsOps = createMigrationFs([
+      '/workspace/demo/.neko/generated',
+      '/workspace/demo/.neko/.cache/generated',
+      '/workspace/demo/.neko/cache',
+      '/workspace/demo/.neko/.cache',
+    ]);
+
+    const actions = await migrateStorageLayout('/workspace/demo', fsOps);
+
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'merged and removed legacy generated: /workspace/demo/.neko/generated → /workspace/demo/.neko/.cache/generated',
+        'merged and removed legacy cache: /workspace/demo/.neko/cache → /workspace/demo/.neko/.cache',
+      ]),
+    );
+    expect(fsOps.existsSync('/workspace/demo/.neko/generated')).toBe(false);
+    expect(fsOps.existsSync('/workspace/demo/.neko/cache')).toBe(false);
+    expect(fsOps.existsSync('/workspace/demo/.neko/.cache/generated')).toBe(true);
+    expect(fsOps.existsSync('/workspace/demo/.neko/.cache')).toBe(true);
+    expect(fsOps.copyCalls).toEqual([
+      {
+        oldPath: '/workspace/demo/.neko/generated',
+        newPath: '/workspace/demo/.neko/.cache/generated',
+      },
+      {
+        oldPath: '/workspace/demo/.neko/cache',
+        newPath: '/workspace/demo/.neko/.cache',
+      },
+    ]);
+    expect(fsOps.rmCalls).toEqual([
+      { path: '/workspace/demo/.neko/generated', recursive: true, force: true },
+      { path: '/workspace/demo/.neko/cache', recursive: true, force: true },
+    ]);
+  });
 });
+
+function createMigrationFs(initialPaths: readonly string[]): MigrateFsOps & {
+  readonly renameCalls: Array<{ oldPath: string; newPath: string }>;
+  readonly copyCalls: Array<{ oldPath: string; newPath: string }>;
+  readonly rmCalls: Array<{ path: string; recursive: boolean; force: boolean }>;
+  existsSync(path: string): boolean;
+} {
+  const paths = new Set(initialPaths);
+  const fsOps: MigrateFsOps & {
+    readonly renameCalls: Array<{ oldPath: string; newPath: string }>;
+    readonly copyCalls: Array<{ oldPath: string; newPath: string }>;
+    readonly rmCalls: Array<{ path: string; recursive: boolean; force: boolean }>;
+    existsSync(path: string): boolean;
+  } = {
+    renameCalls: [],
+    copyCalls: [],
+    rmCalls: [],
+    existsSync: (path) => paths.has(path),
+    exists: async (path) => paths.has(path),
+    mkdir: async (path) => {
+      paths.add(path);
+    },
+    rename: async (oldPath, newPath) => {
+      paths.delete(oldPath);
+      paths.add(newPath);
+      fsOps.renameCalls.push({ oldPath, newPath });
+    },
+    copy: async (oldPath, newPath) => {
+      if (paths.has(oldPath)) {
+        paths.add(newPath);
+      }
+      fsOps.copyCalls.push({ oldPath, newPath });
+    },
+    rm: async (path, opts) => {
+      paths.delete(path);
+      fsOps.rmCalls.push({ path, recursive: opts.recursive, force: opts.force });
+    },
+  };
+  return fsOps;
+}

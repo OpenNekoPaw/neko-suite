@@ -21,7 +21,7 @@ describe('media-task-result', () => {
     const result = await finalizeCompletedMediaTaskOutputs({
       task: makeTask({ status: 'processing' }),
       taskType: 'image',
-      outputDir: '/repo/.neko/generated',
+      outputDir: '/repo/.neko/.cache/generated',
       saveOutputs: vi.fn(),
       generateAssetId: () => 'asset-1',
     });
@@ -32,33 +32,33 @@ describe('media-task-result', () => {
   });
 
   it('saves completed outputs and registers generated assets', async () => {
-    const saveOutputs = vi.fn().mockResolvedValue(['/repo/.neko/generated/image.png']);
+    const saveOutputs = vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/image.png']);
     const assetIndex = { add: vi.fn() };
 
     const result = await finalizeCompletedMediaTaskOutputs({
       task: makeTask({ status: 'completed' }),
       taskType: 'image',
-      outputDir: '/repo/.neko/generated',
+      outputDir: '/repo/.neko/.cache/generated',
       saveOutputs,
       assetIndex,
       generateAssetId: () => 'asset-1',
     });
 
-    expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/generated', {
+    expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
       transcodeFile: undefined,
     });
-    expect(result.resultUrls).toEqual(['/repo/.neko/generated/image.png']);
-    expect(result.thumbnailUrl).toBe('/repo/.neko/generated/image.png');
+    expect(result.resultUrls).toEqual(['/repo/.neko/.cache/generated/image.png']);
+    expect(result.thumbnailUrl).toBe('/repo/.neko/.cache/generated/image.png');
     expect(result.generatedAssets).toHaveLength(1);
     expect(result.generatedAssets[0]?.assetRef).toEqual({
       assetId: 'asset-1',
-      uri: '${WORKSPACE}/.neko/generated/image.png',
+      uri: '${WORKSPACE}/.neko/.cache/generated/image.png',
       mimeType: 'image/png',
     });
     expect(assetIndex.add).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'asset-1',
-        path: '/repo/.neko/generated/image.png',
+        path: '/repo/.neko/.cache/generated/image.png',
         type: 'generated-image',
       }),
     );
@@ -70,7 +70,7 @@ describe('media-task-result', () => {
     const result = await finalizeCompletedMediaTaskOutputs({
       task: makeTask({ status: 'completed' }),
       taskType: 'image',
-      outputDir: '/repo/.neko/generated',
+      outputDir: '/repo/.neko/.cache/generated',
       saveOutputs: vi.fn().mockRejectedValue(new Error('download failed')),
       generateAssetId: () => 'asset-1',
       logger: { warn },

@@ -88,10 +88,12 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
 
 export function toStableGeneratedAssetUri(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
-  const marker = '/.neko/generated/';
-  const markerIndex = normalized.lastIndexOf(marker);
-  if (markerIndex >= 0) {
-    return `\${WORKSPACE}${normalized.slice(markerIndex)}`;
+  const markers = ['/.neko/.cache/generated/', '/.neko/generated/'];
+  for (const marker of markers) {
+    const markerIndex = normalized.lastIndexOf(marker);
+    if (markerIndex >= 0) {
+      return `\${WORKSPACE}${normalized.slice(markerIndex)}`;
+    }
   }
   return `generated-assets/${path.basename(filePath)}`;
 }

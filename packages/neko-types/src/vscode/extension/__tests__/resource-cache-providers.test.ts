@@ -123,11 +123,11 @@ describe('resource cache provider adapters', () => {
 
   it('maps generated asset metadata into source, preview, or thumbnail variants', async () => {
     const fsOps = new FakeFileOps({
-      '/workspace/.neko/generated/image/shot.png': 'generated',
+      '/workspace/.neko/.cache/generated/image/shot.png': 'generated',
     });
     const ref = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
-      path: '/workspace/.neko/generated/image/shot.png',
+      path: '/workspace/.neko/.cache/generated/image/shot.png',
       mimeType: 'image/png',
     });
     const provider = new GeneratedAssetResourceCacheProvider({ fsOps });
@@ -146,18 +146,18 @@ describe('resource cache provider adapters', () => {
       height: 1024,
     });
     expect(fsOps.copyCalls[0]).toEqual({
-      source: '/workspace/.neko/generated/image/shot.png',
+      source: '/workspace/.neko/.cache/generated/image/shot.png',
       target: expect.stringContaining('/workspace/.neko/.cache/resources/generated/'),
     });
   });
 
   it('expands generated asset variable paths before materializing previews', async () => {
     const fsOps = new FakeFileOps({
-      '/workspace/.neko/generated/image/shot.png': 'generated',
+      '/workspace/.neko/.cache/generated/image/shot.png': 'generated',
     });
     const ref = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
-      path: '${WORKSPACE}/.neko/generated/image/shot.png',
+      path: '${WORKSPACE}/.neko/.cache/generated/image/shot.png',
       mimeType: 'image/png',
     });
     const provider = new GeneratedAssetResourceCacheProvider({
@@ -173,7 +173,7 @@ describe('resource cache provider adapters', () => {
     });
 
     expect(result.status).toBe('ready');
-    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/.neko/generated/image/shot.png');
+    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/.neko/.cache/generated/image/shot.png');
   });
 });
 

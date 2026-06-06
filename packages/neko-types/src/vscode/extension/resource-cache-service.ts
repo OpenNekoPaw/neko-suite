@@ -92,6 +92,7 @@ export interface ResourceCacheProvider {
 
 export interface ResourceCacheService {
   registerProvider(provider: ResourceCacheProvider): void;
+  findByLocalPath(filePath: string): Promise<ResourceCacheLookupResult | undefined>;
   ensure(
     ref: ResourceRef,
     variant: ResourceVariantRequest,
@@ -132,6 +133,14 @@ export interface ResourceCacheOperationResult {
   readonly entry?: ResourceCacheEntry;
   readonly variantEntry?: ResourceCacheVariantEntry;
   readonly error?: string;
+}
+
+export interface ResourceCacheLookupResult {
+  readonly ref: ResourceRef;
+  readonly entry: ResourceCacheEntry;
+  readonly variantEntry: ResourceCacheVariantEntry;
+  readonly absolutePath: string;
+  readonly relativePath?: string;
 }
 
 export interface ResourceCacheProjectResult extends ResourceCacheOperationResult {
@@ -336,6 +345,31 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
       this.providerOrder.push(provider);
     }
     this.providers.set(provider.id, provider);
+  }
+
+  async findByLocalPath(filePath: string): Promise<ResourceCacheLookupResult | undefined> {
+    const normalizedPath = normalizeComparablePath(filePath);
+    if (!normalizedPath) {
+      return undefined;
+    }
+
+    const manifest = await this.store.load();
+    for (const entry of Object.values(manifest.entries)) {
+      for (const variantEntry of entry.variants) {
+        if (variantEntry.status !== 'ready') continue;
+        const absolutePath = this.resolveVariantPath(variantEntry);
+        if (!absolutePath || normalizeComparablePath(absolutePath) !== normalizedPath) continue;
+        return {
+          ref: entry.resource,
+          entry,
+          variantEntry,
+          absolutePath,
+          ...(variantEntry.relativePath ? { relativePath: variantEntry.relativePath } : {}),
+        };
+      }
+    }
+
+    return undefined;
   }
 
   async ensure(
@@ -1023,6 +1057,12 @@ function matchesSourceFingerprint(
 function isPathInsideOrEqual(filePath: string, rootPath: string): boolean {
   const relativePath = path.relative(rootPath, filePath);
   return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function normalizeComparablePath(filePath: string): string | undefined {
+  const trimmed = filePath.trim();
+  if (!trimmed) return undefined;
+  return path.resolve(trimmed);
 }
 
 const nodeFsOps: ResourceCacheFsOps = {

@@ -33,7 +33,7 @@ import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
 import { toSharedService, type Platform } from '@neko/platform';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
-import type { IService } from '@neko/shared';
+import { resolveStorageLayout, type IService } from '@neko/shared';
 import type { SkillService, IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { theme } from './theme';
@@ -278,7 +278,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         );
         if (event.type === 'tool_result') {
           subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
-            onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/generated/\n`);
+            onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/.cache/generated/\n`);
           });
         }
       }
@@ -347,7 +347,7 @@ function subscribeToMediaSave(
   if (resultData?.backgroundMode !== true || typeof resultData?.taskId !== 'string') return;
 
   const taskId = resultData.taskId;
-  const outputDir = path.join(workDir, '.neko', 'generated');
+  const outputDir = resolveCliGeneratedOutputDir(workDir);
 
   const unsubscribe = platform.media.onProgress(taskId, async (task) => {
     if (task.status === 'completed' && task.outputs && task.outputs.length > 0) {
@@ -535,7 +535,7 @@ export async function runAgentWithContext(
       );
       if (event.type === 'tool_result') {
         subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
-          onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/generated/\n`);
+          onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/.cache/generated/\n`);
         });
       }
     }
@@ -565,6 +565,10 @@ export async function runAgentWithContext(
       duration: Date.now() - startTime,
     };
   }
+}
+
+function resolveCliGeneratedOutputDir(workDir: string): string {
+  return resolveStorageLayout(workDir, workDir).project.cache.generated;
 }
 
 /**

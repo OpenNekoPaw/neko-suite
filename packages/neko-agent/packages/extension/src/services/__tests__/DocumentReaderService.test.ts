@@ -214,14 +214,16 @@ describe('DocumentReaderService', () => {
       const result = await cachedService.read('/path/to/comic.cbz');
 
       expect(result.imagePaths?.[0]).toMatch(
-        /^\/agent-storage\/document-image-cache\/neko_cbz_\d+\/page-1\.jpg$/,
+        /^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
       );
       expect(fs.mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_\d+$/),
+        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+$/),
         { recursive: true },
       );
       expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_\d+\/page-1\.jpg$/),
+        expect.stringMatching(
+          /^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+        ),
         expect.any(Uint8Array),
       );
     });

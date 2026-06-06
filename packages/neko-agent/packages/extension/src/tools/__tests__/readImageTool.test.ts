@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
+import {
+  TOOL_NAMES_SYSTEM,
+  createResourceFingerprint,
+  createResourceRef,
+  type ToolResult,
+} from '@neko/shared';
 import { READ_IMAGE_VISION_SYSTEM_PROMPT, createReadImageTool } from '../readImageTool';
 
 const PNG_1X1 = new Uint8Array([
@@ -50,6 +55,159 @@ describe('createReadImageTool', () => {
             height: 1,
             mimeType: 'image/png',
             byteSize: PNG_1X1.byteLength,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('preserves document resource refs from structured image inputs', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const tool = createReadImageTool({ readFile });
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/images/moe-018893.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
+    };
+    const cacheResourceRef = {
+      id: 'res_stable',
+      scope: 'project' as const,
+      provider: 'document-archive',
+      kind: 'document' as const,
+      source: {
+        kind: 'document' as const,
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      },
+      locator: { kind: 'document' as const, entryPath: 'OPS/images/moe-018893.jpg' },
+      fingerprint: { strategy: 'provider' as const, value: 'comic-v1' },
+    };
+
+    const result = (await tool.execute({
+      images: [
+        {
+          path: '/cache/page_1.jpg',
+          label: 'page_1',
+          resourceRef,
+          cacheResourceRef,
+        },
+      ],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [
+          expect.objectContaining({
+            path: '/cache/page_1.jpg',
+            label: 'page_1',
+            resourceRef,
+            cacheResourceRef,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('restores document resource refs from unified cache image paths', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const cachePath =
+      '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg';
+    const cacheResourceRef = createResourceRef({
+      id: 'res_x',
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/images/moe-018893.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic-v1',
+        providerId: 'document-archive',
+      }),
+    });
+    const resourceCache = {
+      findByLocalPath: vi.fn(async () => ({
+        ref: cacheResourceRef,
+        entry: {
+          resource: cacheResourceRef,
+          status: 'ready' as const,
+          createdAt: '2026-06-05T00:00:00.000Z',
+          updatedAt: '2026-06-05T00:00:00.000Z',
+          variants: [],
+        },
+        variantEntry: {
+          key: 'variant',
+          role: 'document-entry' as const,
+          status: 'ready' as const,
+          absolutePath: cachePath,
+          createdAt: '2026-06-05T00:00:00.000Z',
+          updatedAt: '2026-06-05T00:00:00.000Z',
+        },
+        absolutePath: cachePath,
+      })),
+    };
+    const tool = createReadImageTool({
+      readFile,
+      resourceCache: resourceCache as never,
+    });
+
+    const result = (await tool.execute({
+      image_paths: [cachePath],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(resourceCache.findByLocalPath).toHaveBeenCalledWith(cachePath);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [
+          expect.objectContaining({
+            path: cachePath,
+            runtimePath: cachePath,
+            runtimeKind: 'managed-cache',
+            alias: 'image_1',
+            aliasScope: 'document:${BOOKS}/comic.epub',
+            sourceDocumentId: '${BOOKS}/comic.epub',
+            entryPath: 'OPS/images/moe-018893.jpg',
+            portableForTransfer: true,
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+              entryPath: 'OPS/images/moe-018893.jpg',
+              cachePath,
+              versionPolicy: 'versioned-export',
+            },
+            cacheResourceRef,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('marks plain local image paths as runtime-only for cross-package transfer', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const tool = createReadImageTool({ readFile });
+
+    const result = (await tool.execute({
+      image_paths: ['/tmp/scratch/page.png'],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [
+          expect.objectContaining({
+            path: '/tmp/scratch/page.png',
+            runtimePath: '/tmp/scratch/page.png',
+            runtimeKind: 'local-path',
+            portableForTransfer: false,
           }),
         ],
       }),

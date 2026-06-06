@@ -2475,7 +2475,7 @@ describe('AgentSession', () => {
       }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
       const artifactIndexSnapshot = parseLatestWrite<{
         entries: Array<{ kind: string; artifactId: string; runId: string }>;
-      }>(writes, '/tmp/proj/.neko/cache/artifact-index.json');
+      }>(writes, '/tmp/proj/.neko/.cache/artifact-index.json');
       expect(snapshot.run.active?.artifacts).toEqual([
         {
           kind: 'draft',
@@ -3332,7 +3332,7 @@ describe('AgentSession', () => {
       expect(
         parseLatestWrite<{
           entries: Array<{ kind: string; artifactId: string; runId: string }>;
-        }>(writes, '/tmp/proj/.neko/cache/artifact-index.json').entries,
+        }>(writes, '/tmp/proj/.neko/.cache/artifact-index.json').entries,
       ).toEqual([
         expect.objectContaining({
           kind: 'plan',

@@ -279,6 +279,35 @@ describe('resource cache service', () => {
     expect(calls).toBe(1);
   });
 
+  it('finds cached resource variants by local filesystem path', async () => {
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService([provider]);
+
+    await service.ensure(ref, variant);
+
+    await expect(service.findByLocalPath(absolutePath)).resolves.toMatchObject({
+      ref,
+      absolutePath,
+      variantEntry: expect.objectContaining({
+        role: variant.role,
+        status: 'ready',
+      }),
+    });
+    await expect(
+      service.findByLocalPath('/workspace/.neko/.cache/resources/missing.jpg'),
+    ).resolves.toBeUndefined();
+  });
+
   it('reports unsupported and failed provider states explicitly', async () => {
     const unsupported = await createService([]).ensure(ref, variant);
     expect(unsupported).toMatchObject({

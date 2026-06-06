@@ -58,17 +58,17 @@ describe('createWorkspaceArtifactService', () => {
 
     expect(dirs).toEqual([
       '/workspace/demo/.neko/drafts',
-      '/workspace/demo/.neko/cache',
+      '/workspace/demo/.neko/.cache',
       '/workspace/demo/.neko/plans',
       '/workspace/demo/.neko/tasks',
     ]);
     expect(writes.map((entry) => entry.path)).toEqual([
       '/workspace/demo/.neko/drafts/draft-run-1.md',
-      '/workspace/demo/.neko/cache/artifact-index.json',
+      '/workspace/demo/.neko/.cache/artifact-index.json',
       '/workspace/demo/.neko/plans/plan-run-1.md',
-      '/workspace/demo/.neko/cache/artifact-index.json',
+      '/workspace/demo/.neko/.cache/artifact-index.json',
       '/workspace/demo/.neko/tasks/task-run-1.md',
-      '/workspace/demo/.neko/cache/artifact-index.json',
+      '/workspace/demo/.neko/.cache/artifact-index.json',
     ]);
     expect(draftRecord.content).toContain('# Launch teaser');
     expect(planRecord.content).toContain('## Steps');
@@ -78,7 +78,7 @@ describe('createWorkspaceArtifactService', () => {
     expect(service.getByRunId('run-1', 'plan')).toEqual(planRecord);
     const cacheSnapshot = JSON.parse(
       writes
-        .filter((entry) => entry.path === '/workspace/demo/.neko/cache/artifact-index.json')
+        .filter((entry) => entry.path === '/workspace/demo/.neko/.cache/artifact-index.json')
         .at(-1)!.data,
     ) as {
       entries: Array<{ kind: string; artifactId: string }>;
@@ -148,7 +148,7 @@ describe('createWorkspaceArtifactService', () => {
     expect(record.value.referenceChain).toEqual(['asset://characters/hero']);
     expect(service.getByRunId('run-observed', 'draft')).toEqual(record);
     expect(writes.map((entry) => entry.path)).toEqual([
-      '/workspace/demo/.neko/cache/artifact-index.json',
+      '/workspace/demo/.neko/.cache/artifact-index.json',
     ]);
     expect(JSON.parse(writes[0]!.data)).toEqual(
       expect.objectContaining({
@@ -167,7 +167,7 @@ describe('createWorkspaceArtifactService', () => {
     const writes: Array<{ path: string; data: string }> = [];
     const files = new Map<string, string>([
       [
-        '/workspace/demo/.neko/cache/artifact-index.json',
+        '/workspace/demo/.neko/.cache/artifact-index.json',
         JSON.stringify({
           schemaVersion: 1,
           updatedAt: 9,
@@ -280,6 +280,84 @@ describe('createWorkspaceArtifactService', () => {
     ]);
     expect(service.listByRunId('run-restore')).toEqual(restored);
     expect(service.listRunIds()).toEqual(['run-restore']);
+    expect(writes).toEqual([]);
+  });
+
+  it('restores from the legacy .neko/cache artifact index when the new cache index is missing', async () => {
+    const writes: Array<{ path: string; data: string }> = [];
+    const files = new Map<string, string>([
+      [
+        '/workspace/demo/.neko/cache/artifact-index.json',
+        JSON.stringify({
+          schemaVersion: 1,
+          updatedAt: 9,
+          entries: [
+            {
+              kind: 'plan',
+              runId: 'run-legacy',
+              artifactId: 'plan-legacy',
+              path: '/workspace/demo/.neko/plans/plan-run-legacy.md',
+              updatedAt: 4,
+              title: 'Legacy plan',
+              status: 'ready',
+              draftId: 'draft-legacy',
+            },
+          ],
+        }),
+      ],
+      [
+        '/workspace/demo/.neko/plans/plan-run-legacy.md',
+        [
+          '---',
+          'id: plan-legacy',
+          'kind: plan',
+          'draftId: draft-legacy',
+          'title: Legacy plan',
+          'status: ready',
+          'createdAt: 2026-04-22T10:00:00.000Z',
+          'updatedAt: 2026-04-22T10:30:00.000Z',
+          '---',
+          '',
+          '# Legacy plan',
+          '',
+          '## Steps',
+          '',
+          '### 1. keep going',
+          '',
+          '- Tool: write',
+          '- Rationale: Restore old index.',
+          '- Args: {}',
+          '',
+        ].join('\n'),
+      ],
+    ]);
+    const service = createWorkspaceArtifactService({
+      workspaceRoot: '/workspace/demo',
+      fsOps: {
+        async mkdir(): Promise<void> {},
+        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
+          writes.push({ path, data });
+        },
+        async readFile(path: string): Promise<string> {
+          const match = files.get(path);
+          if (!match) {
+            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+          }
+          return match;
+        },
+      },
+    });
+
+    const restored = await service.restore?.();
+
+    expect(restored).toEqual([
+      expect.objectContaining({
+        kind: 'plan',
+        runId: 'run-legacy',
+        artifactId: 'plan-legacy',
+      }),
+    ]);
+    expect(service.listRunIds()).toEqual(['run-legacy']);
     expect(writes).toEqual([]);
   });
 });

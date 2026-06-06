@@ -161,7 +161,7 @@ export type WebviewGeneratedAsset<T extends BaseGeneratedAsset = GeneratedAsset>
 // Sub-directory constants
 // -----------------------------------------------------------------------------
 
-/** Standard sub-directory names under `.neko/generated/` */
+/** Standard sub-directory names under `.neko/.cache/generated/` */
 export const GENERATED_ASSET_DIRS = {
   image: 'image',
   audio: 'audio',

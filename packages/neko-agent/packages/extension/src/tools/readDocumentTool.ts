@@ -42,6 +42,7 @@ interface ReadDocumentToolData {
   readonly pageCount?: number;
   readonly metadata?: Record<string, unknown>;
   readonly imagePaths?: readonly string[];
+  readonly runtimeImagePaths?: readonly string[];
   readonly imageInfo?: readonly DocumentImageInfo[];
   readonly imagePathCount?: number;
   readonly imagePathsTruncated?: boolean;
@@ -53,6 +54,7 @@ type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
 
 interface ProjectedDocumentImages {
   readonly imagePaths: readonly string[];
+  readonly runtimeImagePaths: readonly string[];
   readonly imageInfo: readonly DocumentImageInfoWithCacheResourceRef[];
 }
 
@@ -302,6 +304,7 @@ async function formatDocumentReadResult(
   return stripUndefinedProperties({
     ...result,
     imagePaths: imagePaths.length > 0 ? visibleImages.imagePaths : undefined,
+    runtimeImagePaths: imagePaths.length > 0 ? visibleImages.runtimeImagePaths : undefined,
     imageInfo: imagePaths.length > 0 ? visibleImages.imageInfo : undefined,
     excerpt,
     metadata,
@@ -317,7 +320,7 @@ async function projectVisibleDocumentImages(
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<ProjectedDocumentImages> {
   if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
-    return { imagePaths: visibleImagePaths, imageInfo: [] };
+    return { imagePaths: visibleImagePaths, runtimeImagePaths: visibleImagePaths, imageInfo: [] };
   }
   const visiblePathSet = new Set(visibleImagePaths);
   const byPath = imageInfo.filter((image) => visiblePathSet.has(image.path));
@@ -326,10 +329,16 @@ async function projectVisibleDocumentImages(
       ? byPath.slice(0, visibleImagePaths.length)
       : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
   const projectedInfo = await Promise.all(
-    visible.map((image) => withCacheResourceRef(image, resourceCache, resolveResourceScope)),
+    visible.map(async (image, index) =>
+      enrichRuntimeDocumentImageInfo(
+        await withCacheResourceRef(image, resourceCache, resolveResourceScope),
+        index,
+      ),
+    ),
   );
   return {
     imagePaths: mergeProjectedImagePaths(visibleImagePaths, visible, projectedInfo),
+    runtimeImagePaths: visibleImagePaths,
     imageInfo: projectedInfo,
   };
 }
@@ -362,6 +371,16 @@ async function withCacheResourceRef(
   return {
     ...image,
     path: nextPath,
+    runtimePath: image.runtimePath ?? image.path,
+    runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
+    alias: image.alias ?? formatDocumentImageAlias(image.locator),
+    aliasScope: image.aliasScope ?? formatDocumentAliasScope(legacyRef),
+    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(legacyRef.source),
+    entryPath: image.entryPath ?? legacyRef.entryPath,
+    portableForTransfer: nextCacheResourceRef.scope === 'project',
+    ...(nextCacheResourceRef.scope === 'project'
+      ? {}
+      : { nonPortableReason: 'no-workspace-or-extension-private-scratch' }),
     resourceRef,
     cacheResourceRef: nextCacheResourceRef,
   };
@@ -376,17 +395,46 @@ async function materializeDocumentResource(
     return undefined;
   }
   try {
-    const result = await resourceCache.ensure(resourceRef, {
-      role: 'document-entry',
-      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
-      ...(image.width !== undefined ? { width: image.width } : {}),
-      ...(image.height !== undefined ? { height: image.height } : {}),
-    });
+    const result = await resourceCache.resolve(
+      resourceRef,
+      {
+        role: 'document-entry',
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+        ...(image.width !== undefined ? { width: image.width } : {}),
+        ...(image.height !== undefined ? { height: image.height } : {}),
+      },
+      { materializeIfMissing: true },
+    );
     return result.status === 'ready' ? result.absolutePath : undefined;
   } catch {
     // The document result still carries the stable ref; Canvas can materialize through legacy metadata.
     return undefined;
   }
+}
+
+function enrichRuntimeDocumentImageInfo(
+  image: DocumentImageInfoWithCacheResourceRef,
+  index: number,
+): DocumentImageInfoWithCacheResourceRef {
+  return stripUndefinedProperties({
+    ...image,
+    runtimePath: image.runtimePath ?? image.path,
+    runtimeKind: image.runtimeKind ?? inferDocumentImageRuntimeKind(image),
+    alias: image.alias ?? formatDocumentImageAlias(image.locator, index),
+    aliasScope:
+      image.aliasScope ??
+      (image.resourceRef ? formatDocumentAliasScope(image.resourceRef) : undefined),
+    sourceDocumentId:
+      image.sourceDocumentId ??
+      (image.resourceRef ? formatDocumentSourceId(image.resourceRef.source) : undefined),
+    entryPath: image.entryPath ?? image.resourceRef?.entryPath,
+    portableForTransfer: image.portableForTransfer ?? image.cacheResourceRef?.scope === 'project',
+    ...(image.nonPortableReason
+      ? { nonPortableReason: image.nonPortableReason }
+      : image.cacheResourceRef && image.cacheResourceRef.scope !== 'project'
+        ? { nonPortableReason: 'no-workspace-or-extension-private-scratch' }
+        : {}),
+  });
 }
 
 function normalizeLegacyResourceRef(
@@ -398,6 +446,37 @@ function normalizeLegacyResourceRef(
     ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
   };
+}
+
+function inferDocumentImageRuntimeKind(
+  image: DocumentImageInfoWithCacheResourceRef,
+): NonNullable<DocumentImageInfo['runtimeKind']> {
+  if (image.cacheResourceRef?.scope === 'project') return 'managed-cache';
+  return 'scratch-cache';
+}
+
+function formatDocumentImageAlias(locator: DocumentLocator | undefined, fallbackIndex = 0): string {
+  if (!locator) return `image_${fallbackIndex + 1}`;
+  switch (locator.kind) {
+    case 'page':
+      return `page_${locator.pageNumber}`;
+    case 'slide':
+      return `slide_${locator.slideNumber}`;
+    case 'chapter':
+      return locator.spineIndex === undefined ? 'image_1' : `page_${locator.spineIndex + 1}`;
+    case 'region':
+      return `page_${locator.pageNumber}_region`;
+    case 'text-range':
+      return `image_${fallbackIndex + 1}`;
+  }
+}
+
+function formatDocumentAliasScope(resourceRef: DocumentArchiveResourceRef): string {
+  return `document:${formatDocumentSourceId(resourceRef.source)}`;
+}
+
+function formatDocumentSourceId(source: DocumentSourceRef): string {
+  return source.identity?.hash ?? source.identity?.fileId ?? source.fileId ?? source.filePath;
 }
 
 function createDefaultRangeFromManifest(
@@ -487,6 +566,7 @@ async function formatReadDocumentData(input: {
     ...(imagePaths.length > 0
       ? {
           imagePaths: visibleImages.imagePaths,
+          runtimeImagePaths: visibleImages.runtimeImagePaths,
           ...(visibleImages.imageInfo.length > 0 ? { imageInfo: visibleImages.imageInfo } : {}),
           imagePathCount: imagePaths.length,
           imagePathsTruncated: visibleImagePaths.length < imagePaths.length,

@@ -321,10 +321,11 @@ describe('document-reader runtime', () => {
 
     expect(result.text).toBe('EPUB image document with 1 image pages');
     expect(result.pageCount).toBe(1);
-    expect(result.imagePaths).toEqual(['/tmp/neko_epub_1777248000000/0001_page-1.jpg']);
+    const pagePath = result.imagePaths?.[0];
+    expect(pagePath).toMatch(/^\/tmp\/neko_epub_[a-z0-9]+\/0001_page-1\.jpg$/);
     expect(result.imageInfo).toEqual([
       {
-        path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+        path: pagePath,
         width: 1494,
         height: 2133,
         mimeType: 'image/jpeg',
@@ -333,7 +334,7 @@ describe('document-reader runtime', () => {
           kind: 'document-entry',
           source: { filePath: '/doc/comic.epub', format: 'epub' },
           entryPath: 'image/page-1.jpg',
-          cachePath: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+          cachePath: pagePath,
           versionPolicy: 'versioned-export',
         },
       },
@@ -341,7 +342,7 @@ describe('document-reader runtime', () => {
     expect(result.metadata?.['imageCount']).toBe(1);
     expect(writes).toEqual([
       {
-        path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+        path: pagePath,
         data: makeJpeg(1494, 2133),
       },
     ]);
@@ -377,13 +378,13 @@ describe('document-reader runtime', () => {
     const result = await reader.read('/doc/report.docx');
 
     expect(result.text).toBe('Body');
-    expect(result.imagePaths).toEqual([
-      '/tmp/neko_docx_1777248000000/0001_image1.jpg',
-      '/tmp/neko_docx_1777248000000/0002_image2.png',
-    ]);
+    const firstPath = result.imagePaths?.[0];
+    const secondPath = result.imagePaths?.[1];
+    expect(firstPath).toMatch(/^\/tmp\/neko_docx_[a-z0-9]+\/0001_image1\.jpg$/);
+    expect(secondPath).toMatch(/^\/tmp\/neko_docx_[a-z0-9]+\/0002_image2\.png$/);
     expect(result.imageInfo).toEqual([
       {
-        path: '/tmp/neko_docx_1777248000000/0001_image1.jpg',
+        path: firstPath,
         width: 320,
         height: 240,
         mimeType: 'image/jpeg',
@@ -392,12 +393,12 @@ describe('document-reader runtime', () => {
           kind: 'document-entry',
           source: { filePath: '/doc/report.docx', format: 'docx' },
           entryPath: 'word/media/image1.jpg',
-          cachePath: '/tmp/neko_docx_1777248000000/0001_image1.jpg',
+          cachePath: firstPath,
           versionPolicy: 'versioned-export',
         },
       },
       {
-        path: '/tmp/neko_docx_1777248000000/0002_image2.png',
+        path: secondPath,
         width: 800,
         height: 600,
         mimeType: 'image/png',
@@ -406,7 +407,7 @@ describe('document-reader runtime', () => {
           kind: 'document-entry',
           source: { filePath: '/doc/report.docx', format: 'docx' },
           entryPath: 'word/media/image2.png',
-          cachePath: '/tmp/neko_docx_1777248000000/0002_image2.png',
+          cachePath: secondPath,
           versionPolicy: 'versioned-export',
         },
       },
@@ -446,9 +447,12 @@ describe('document-reader runtime', () => {
     const pptx = await reader.read('/doc/deck.pptx');
     const xlsx = await reader.read('/doc/sheet.xlsx');
 
-    expect(pptx.imagePaths).toEqual(['/tmp/neko_pptx_1777248000000/0001_image1.png']);
+    const pptxPath = pptx.imagePaths?.[0];
+    const xlsxPath = xlsx.imagePaths?.[0];
+    expect(pptxPath).toMatch(/^\/tmp\/neko_pptx_[a-z0-9]+\/0001_image1\.png$/);
+    expect(xlsxPath).toMatch(/^\/tmp\/neko_xlsx_[a-z0-9]+\/0001_image1\.png$/);
     expect(pptx.imageInfo?.[0]).toEqual({
-      path: '/tmp/neko_pptx_1777248000000/0001_image1.png',
+      path: pptxPath,
       width: 1024,
       height: 768,
       mimeType: 'image/png',
@@ -457,13 +461,12 @@ describe('document-reader runtime', () => {
         kind: 'document-entry',
         source: { filePath: '/doc/deck.pptx', format: 'pptx' },
         entryPath: 'ppt/media/image1.png',
-        cachePath: '/tmp/neko_pptx_1777248000000/0001_image1.png',
+        cachePath: pptxPath,
         versionPolicy: 'versioned-export',
       },
     });
-    expect(xlsx.imagePaths).toEqual(['/tmp/neko_xlsx_1777248000000/0001_image1.png']);
     expect(xlsx.imageInfo?.[0]).toEqual({
-      path: '/tmp/neko_xlsx_1777248000000/0001_image1.png',
+      path: xlsxPath,
       width: 1024,
       height: 768,
       mimeType: 'image/png',
@@ -472,7 +475,7 @@ describe('document-reader runtime', () => {
         kind: 'document-entry',
         source: { filePath: '/doc/sheet.xlsx', format: 'xlsx' },
         entryPath: 'xl/media/image1.png',
-        cachePath: '/tmp/neko_xlsx_1777248000000/0001_image1.png',
+        cachePath: xlsxPath,
         versionPolicy: 'versioned-export',
       },
     });
@@ -707,10 +710,11 @@ describe('document access service', () => {
     });
 
     expect(result.text).toBe('EPUB chapter range with 1 image pages');
-    expect(result.imagePaths).toEqual(['/tmp/neko_epub_1777248000000/0001_Page_1.jpg']);
+    const pagePath = result.imagePaths?.[0];
+    expect(pagePath).toMatch(/^\/tmp\/neko_epub_[a-z0-9]+\/0001_Page_1\.jpg$/);
     expect(result.imageInfo).toEqual([
       {
-        path: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+        path: pagePath,
         width: 1494,
         height: 2133,
         mimeType: 'image/jpeg',
@@ -735,7 +739,7 @@ describe('document access service', () => {
             spineIndex: 0,
             title: 'html/page-1.xhtml',
           },
-          cachePath: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+          cachePath: pagePath,
           versionPolicy: 'versioned-export',
         },
       },
@@ -743,7 +747,7 @@ describe('document access service', () => {
     expect(result.excerpt).toEqual(
       expect.objectContaining({
         contentKind: 'image',
-        imagePaths: ['/tmp/neko_epub_1777248000000/0001_Page_1.jpg'],
+        imagePaths: [pagePath],
         imageInfo: [
           expect.objectContaining({
             width: 1494,
@@ -755,7 +759,7 @@ describe('document access service', () => {
     );
     expect(writes).toEqual([
       {
-        path: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+        path: pagePath,
         data: makeJpeg(1494, 2133),
       },
     ]);
@@ -847,13 +851,13 @@ describe('document access service', () => {
     });
 
     expect(result.text).toBe('CBZ page range 1-2: 2 image pages');
-    expect(result.imagePaths).toEqual([
-      '/tmp/neko_cbz_1777248000000/0001_001.jpg',
-      '/tmp/neko_cbz_1777248000000/0002_002.jpg',
-    ]);
+    const firstPath = result.imagePaths?.[0];
+    const secondPath = result.imagePaths?.[1];
+    expect(firstPath).toMatch(/^\/tmp\/neko_cbz_[a-z0-9]+\/0001_001\.jpg$/);
+    expect(secondPath).toMatch(/^\/tmp\/neko_cbz_[a-z0-9]+\/0002_002\.jpg$/);
     expect(result.imageInfo).toEqual([
       {
-        path: '/tmp/neko_cbz_1777248000000/0001_001.jpg',
+        path: firstPath,
         width: 1001,
         height: 2001,
         mimeType: 'image/jpeg',
@@ -868,12 +872,12 @@ describe('document access service', () => {
           },
           entryPath: '001.jpg',
           locator: { kind: 'page', pageNumber: 1, pageIndex: 0, entryName: '001.jpg' },
-          cachePath: '/tmp/neko_cbz_1777248000000/0001_001.jpg',
+          cachePath: firstPath,
           versionPolicy: 'versioned-export',
         },
       },
       {
-        path: '/tmp/neko_cbz_1777248000000/0002_002.jpg',
+        path: secondPath,
         width: 1002,
         height: 2002,
         mimeType: 'image/jpeg',
@@ -888,12 +892,48 @@ describe('document access service', () => {
           },
           entryPath: '002.jpg',
           locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
-          cachePath: '/tmp/neko_cbz_1777248000000/0002_002.jpg',
+          cachePath: secondPath,
           versionPolicy: 'versioned-export',
         },
       },
     ]);
     expect(writes).toHaveLength(2);
+  });
+
+  it('reuses stable extraction paths for the same document entries', async () => {
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntry(name: string): { name: string; getData(): Uint8Array } | null {
+        return this.getEntries().find((entry) => entry.name === name) ?? null;
+      }
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [{ name: '001.jpg', getData: () => makeJpeg(1001, 2001) }];
+      }
+    }
+
+    const createService = (now: Date) => {
+      const deps = createDeps({
+        now: () => now,
+        loadModule: createModuleLoader((packageName) =>
+          packageName === 'adm-zip' ? FakeZip : null,
+        ),
+      });
+      const runtime = createDocumentReaderRuntime(deps);
+      return createDocumentAccessService({ reader: runtime, runtime: deps });
+    };
+
+    const first = await createService(new Date('2026-01-01T00:00:00.000Z')).readRange(
+      '/doc/comic.cbz',
+      { locator: { kind: 'page', pageNumber: 1, pageIndex: 0 } },
+    );
+    const second = await createService(new Date('2026-01-02T00:00:00.000Z')).readRange(
+      '/doc/comic.cbz',
+      { locator: { kind: 'page', pageNumber: 1, pageIndex: 0 } },
+    );
+
+    expect(first.imagePaths?.[0]).toBe(second.imagePaths?.[0]);
   });
 
   it('builds CBR manifests and reads one page by locator as a local temporary image', async () => {
@@ -932,10 +972,11 @@ describe('document access service', () => {
     });
 
     expect(manifest.entryCount).toBe(2);
-    expect(result.imagePaths).toEqual(['/tmp/neko_cbr_1777248000000/0001_002.jpg']);
+    const pagePath = result.imagePaths?.[0];
+    expect(pagePath).toMatch(/^\/tmp\/neko_cbr_[a-z0-9]+\/0001_002\.jpg$/);
     expect(result.imageInfo).toEqual([
       {
-        path: '/tmp/neko_cbr_1777248000000/0001_002.jpg',
+        path: pagePath,
         width: 1002,
         height: 2002,
         mimeType: 'image/jpeg',
@@ -950,7 +991,7 @@ describe('document access service', () => {
           },
           entryPath: '002.jpg',
           locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
-          cachePath: '/tmp/neko_cbr_1777248000000/0001_002.jpg',
+          cachePath: pagePath,
           versionPolicy: 'versioned-export',
         },
       },

@@ -6,8 +6,8 @@
  *
  * Output: packages/neko-agent/neko
  */
-import { renameSync } from 'fs';
-import { join, resolve } from 'path';
+import { readFileSync, renameSync } from 'fs';
+import { isAbsolute, join, resolve } from 'path';
 
 const outdir = resolve(import.meta.dir, '../../');
 const stubPath = resolve(import.meta.dir, 'src/stubs/react-devtools-core.ts');
@@ -26,6 +26,25 @@ const result = await Bun.build({
         build.onResolve({ filter: /^react-devtools-core$/ }, () => ({
           path: stubPath,
           namespace: 'file',
+        }));
+      },
+    },
+    {
+      name: 'raw-markdown-imports',
+      setup(build) {
+        build.onResolve({ filter: /\.md\?raw$/ }, (args) => {
+          const markdownPath = args.path.replace(/\?raw$/, '');
+          return {
+            path: isAbsolute(markdownPath)
+              ? markdownPath
+              : resolve(args.resolveDir, markdownPath),
+            namespace: 'raw-markdown',
+          };
+        });
+
+        build.onLoad({ filter: /\.md$/, namespace: 'raw-markdown' }, (args) => ({
+          contents: `export default ${JSON.stringify(readFileSync(args.path, 'utf8'))};`,
+          loader: 'js',
         }));
       },
     },

@@ -98,6 +98,9 @@ describe('media generated asset helpers', () => {
   });
 
   it('normalizes generated asset paths through one stable URI helper', () => {
+    expect(toStableGeneratedAssetUri('/repo/.neko/.cache/generated/image.png')).toBe(
+      '${WORKSPACE}/.neko/.cache/generated/image.png',
+    );
     expect(toStableGeneratedAssetUri('/repo/.neko/generated/image.png')).toBe(
       '${WORKSPACE}/.neko/generated/image.png',
     );

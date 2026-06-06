@@ -19,7 +19,7 @@
  *     tasks/           AI-produced task-<runId>.md
  *     sessions/        AI-produced session-<runId>.md
  *     logs/            Program-produced .jsonl (events / audits / steps)
- *     cache/           Program-produced .json (indices, derivable)
+ *     .cache/          Program-produced .json (indices, derivable)
  *     state/           Program-produced concurrency + lock files
  *     preferences.md   Project-level user preferences
  *     settings.json    Media-library variables (already used by PathResolver)
@@ -42,7 +42,7 @@ export const NEKO_SUBDIRS = {
   tasks: 'tasks',
   sessions: 'sessions',
   logs: 'logs',
-  cache: 'cache',
+  cache: '.cache',
   state: 'state',
   archives: 'archives',
 } as const;

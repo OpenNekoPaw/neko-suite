@@ -64,8 +64,8 @@ describe('NekoPaths', () => {
 
   it('cache() returns canonical cache snapshot paths', () => {
     const p = createNekoPaths('/r');
-    expect(p.cache('capabilityIndex')).toBe(`/r/.neko/cache/${NEKO_CACHE_FILES.capabilityIndex}`);
-    expect(p.cache('artifactIndex')).toBe(`/r/.neko/cache/${NEKO_CACHE_FILES.artifactIndex}`);
+    expect(p.cache('capabilityIndex')).toBe(`/r/.neko/.cache/${NEKO_CACHE_FILES.capabilityIndex}`);
+    expect(p.cache('artifactIndex')).toBe(`/r/.neko/.cache/${NEKO_CACHE_FILES.artifactIndex}`);
   });
 
   it('state() returns canonical state file paths', () => {

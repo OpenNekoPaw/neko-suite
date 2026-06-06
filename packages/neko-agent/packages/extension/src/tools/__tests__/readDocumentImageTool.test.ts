@@ -111,9 +111,10 @@ describe('createReadDocumentImageTool', () => {
   it('resolves a document page image and delegates to ReadImage metadata flow', async () => {
     const reader = createReader();
     const resourceCache = createResourceCache();
+    const readFile = vi.fn(async () => PNG_1X1);
     const tool = createReadDocumentImageTool({
       reader,
-      readFile: vi.fn(async () => PNG_1X1),
+      readFile,
       resourceCache,
     });
 
@@ -133,8 +134,22 @@ describe('createReadDocumentImageTool', () => {
         images: [
           expect.objectContaining({
             path: '/workspace/.neko/.cache/resources/documents/page.png',
+            runtimePath: '/cache/page-2.png',
+            runtimeKind: 'managed-cache',
+            alias: 'page_2',
+            aliasScope: 'document:book-1',
+            sourceDocumentId: 'book-1',
+            entryPath: 'OPS/page-2.png',
+            portableForTransfer: true,
             documentImage: expect.objectContaining({
               path: '/workspace/.neko/.cache/resources/documents/page.png',
+              runtimePath: '/cache/page-2.png',
+              runtimeKind: 'managed-cache',
+              alias: 'page_2',
+              aliasScope: 'document:book-1',
+              sourceDocumentId: 'book-1',
+              entryPath: 'OPS/page-2.png',
+              portableForTransfer: true,
               locator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
               resourceRef: expect.objectContaining({
                 cachePath: '/workspace/.neko/.cache/resources/documents/page.png',
@@ -158,7 +173,8 @@ describe('createReadDocumentImageTool', () => {
         ],
       }),
     );
-    expect(resourceCache.ensure).toHaveBeenCalledWith(
+    expect(readFile).toHaveBeenCalledWith('/workspace/.neko/.cache/resources/documents/page.png');
+    expect(resourceCache.resolve).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: 'project',
         provider: 'document-archive',
@@ -166,6 +182,7 @@ describe('createReadDocumentImageTool', () => {
         locator: expect.objectContaining({ entryPath: 'OPS/page-2.png' }),
       }),
       { role: 'document-entry', mimeType: 'image/png', width: 1, height: 1 },
+      { materializeIfMissing: true },
     );
   });
 
@@ -190,6 +207,11 @@ describe('createReadDocumentImageTool', () => {
       expect.objectContaining({
         images: [
           expect.objectContaining({
+            runtimePath: '/cache/page-1.png',
+            runtimeKind: 'scratch-cache',
+            alias: 'page_1',
+            portableForTransfer: false,
+            nonPortableReason: 'no-workspace-or-extension-private-scratch',
             cacheResourceRef: expect.objectContaining({
               scope: 'extension-private',
               source: expect.objectContaining({
@@ -200,6 +222,7 @@ describe('createReadDocumentImageTool', () => {
         ],
       }),
     );
+    expect(resourceCache.resolve).not.toHaveBeenCalled();
     expect(resourceCache.ensure).not.toHaveBeenCalled();
   });
 
@@ -279,6 +302,7 @@ describe('createReadDocumentImageTool', () => {
 function createResourceCache(): ResourceCacheService {
   return {
     registerProvider: vi.fn(),
+    findByLocalPath: vi.fn(async () => undefined),
     ensure: vi.fn(async (ref: ResourceRef, variant) => ({
       status: 'ready',
       ref,
@@ -286,9 +310,10 @@ function createResourceCache(): ResourceCacheService {
       absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
     })),
     resolve: vi.fn(async (ref: ResourceRef, variant) => ({
-      status: 'missing',
+      status: 'ready',
       ref,
       variant: { resource: ref, ...variant },
+      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
     })),
     project: vi.fn(async (_webview, ref: ResourceRef, variant) => ({
       status: 'missing',

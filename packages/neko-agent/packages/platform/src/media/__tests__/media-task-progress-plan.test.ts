@@ -12,13 +12,13 @@ describe('media-task-progress-plan', () => {
       taskType: 'video',
       workspaceRoot: '/repo',
       finalized: {
-        resultUrls: ['/repo/.neko/generated/video.mp4'],
-        thumbnailUrl: '/repo/.neko/generated/video.mp4',
+        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
+        thumbnailUrl: '/repo/.neko/.cache/generated/video.mp4',
         generatedAssets: [
           {
             id: 'asset-1',
             type: 'generated-video',
-            path: '/repo/.neko/generated/video.mp4',
+            path: '/repo/.neko/.cache/generated/video.mp4',
             mimeType: 'video/mp4',
             generatedAt: '2026-01-01T00:00:00.000Z',
             duration: 5,
@@ -32,16 +32,16 @@ describe('media-task-progress-plan', () => {
 
     expect(plan).toEqual(
       expect.objectContaining({
-        resultUrls: ['/repo/.neko/generated/video.mp4'],
-        thumbnailUrl: '/repo/.neko/generated/video.mp4',
-        localPaths: ['/repo/.neko/generated/video.mp4'],
+        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
+        thumbnailUrl: '/repo/.neko/.cache/generated/video.mp4',
+        localPaths: ['/repo/.neko/.cache/generated/video.mp4'],
         shouldPersistResultUrls: true,
         shouldUnsubscribe: true,
         notification: {
           label: 'Video',
-          filePath: '/repo/.neko/generated/video.mp4',
-          relativePath: '.neko/generated/video.mp4',
-          message: 'Video saved to .neko/generated/video.mp4',
+          filePath: '/repo/.neko/.cache/generated/video.mp4',
+          relativePath: '.neko/.cache/generated/video.mp4',
+          message: 'Video saved to .neko/.cache/generated/video.mp4',
           actionLabel: MEDIA_TASK_SAVE_NOTIFICATION_ACTION,
         },
       }),
@@ -65,12 +65,12 @@ describe('media-task-progress-plan', () => {
         ...baseInput,
         showSaveNotification: false,
         finalized: {
-          resultUrls: ['/repo/.neko/generated/image.png'],
+          resultUrls: ['/repo/.neko/.cache/generated/image.png'],
           generatedAssets: [
             {
               id: 'asset-1',
               type: 'generated-image',
-              path: '/repo/.neko/generated/image.png',
+              path: '/repo/.neko/.cache/generated/image.png',
               mimeType: 'image/png',
               generatedAt: '2026-01-01T00:00:00.000Z',
               width: 1024,

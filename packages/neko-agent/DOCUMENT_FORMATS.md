@@ -20,7 +20,7 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 ## 创作者可预期行为
 
-- 图像型 EPUB、CBZ、CBR 会返回 `imagePaths`，这些路径是 Agent 后续视觉分析可直接读取的本地临时文件；同时返回 `imageInfo`，包含路径、宽高、MIME 类型、字节大小和可用的文档 locator。
+- 图像型 EPUB、CBZ、CBR 会返回 `imagePaths`，这些路径是 Agent 后续视觉分析可直接读取的运行时句柄；同时返回 `runtimeImagePaths` 和 `imageInfo`，包含当前投影路径、原始运行时路径、宽高、MIME 类型、字节大小、文档 locator、alias/aliasScope，以及可用于跨包传递的稳定资源引用。
 - 文本型 EPUB、PDF、DOCX、FDX、Markdown 等会优先返回 `text`，并在可用时附带 `metadata`。
 - 大文档优先使用 `mode: "manifest"` 查看结构，再用 `mode: "range"` 读取指定页、章节、幻灯片或文本范围。
 - 如果 `mode: "range"` 没有传入 `range`，工具会基于 manifest 读取开头一段，图片数量受 `image_path_limit` 限制，避免创作者只想预览时误触发整本读取。
@@ -43,15 +43,25 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 ## ZIP/容器资源引用策略
 
-EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片解压到缓存路径、操作携带结构化引用”：
+EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片可解压到 scratch 或统一资源缓存、操作携带结构化引用”：
 
 - 不注册 `zip://`、`epub://` 等 VSCode 虚拟路径作为主数据通道。VSCode Webview、Canvas `<img>`、ReadImage 和文件跳转都需要可授权的实体路径或明确的 Extension Host 命令，虚拟路径容易在 Webview CSP、粘贴、调试和跨插件传递中断开。
-- `imageInfo.path` 继续表示当前可读的缓存实体文件，例如 `/tmp/neko_epub_*/0001_page.jpg`，用于预览、视觉分析、复制图片路径和发送到 Canvas。
-- `imageInfo.resourceRef` 表示稳定来源，包含 `source`、容器内 `entryPath`、可选 `locator`、当前 `cachePath` 和 `versionPolicy`。复制 JSON、粘贴上下文和发送到 Canvas 时都应保留它，避免只剩临时路径而丢失“来自哪本书/哪一页/哪个包内条目”的信息。
-- 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并为后续替换引用做准备。
+- `imageInfo.path` 和 `imagePaths` 是运行时读/预览句柄：在项目工作区内通常会优先指向 `.neko/.cache/resources/...` 的统一资源缓存；没有工作区或物化失败时可能仍是 Agent 内部 scratch 文件。它们可以给 `ReadImage` 读取，但不能作为 Canvas、Preview、导出或打包的持久身份。
+- `runtimeImagePaths` / `imageInfo.runtimePath` 表示最初从文档读取器得到的运行时文件，主要用于兼容旧工具链和调试，不应复制到项目数据。
+- `imageInfo.resourceRef` 表示原始容器来源，包含 `source`、容器内 `entryPath`、可选 `locator` 和迁移用 `cachePath`。`cachePath` 只是 legacy/migration metadata，不能作为新分镜或 Canvas 节点的 durable identity。
+- `imageInfo.cacheResourceRef` 表示统一资源缓存身份，通常带有 `scope: "project"`、`provider: "document-archive"`、文档 source 和 entry locator。发送到 Canvas、Preview、包导出前，应优先传递 `cacheResourceRef` / `resourceRef`，并保留 `resourceRef`、`source`、`locator`、`entryPath`、`alias`、`aliasScope`、`sourceDocumentId`。
+- 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef` 或 `cacheResourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并通过统一内容访问服务重新物化缺失缓存。
 - 跳转到资产库或文档索引页应使用 `navigationData` 中的 `source/filePath/entryPath`，由 Extension Host 或对应资源库命令解析；不要尝试让 Webview 直接打开容器内虚拟文件。
 
-重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径只作为本次读取的实体副本，不作为长期数据源。
+重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径只作为本次读取的实体副本或迁移线索，不作为长期数据源。
+
+## 分镜和 Canvas 传递
+
+- 分镜表、`neko-composite`、Send to Canvas 和 Canvas 节点数据应使用 `sourceMediaRefs`、`referenceResourceRef`、`referenceImageResourceRef`、`documentResourceRef` 或 `resourceRef` 表达图片身份。
+- `sourceMediaRefs[].locator.type` 应引用真实工具结果，例如 `{ "type": "tool-result", "toolCallId": "...", "assetIndex": 0 }`。`sourcePage: "P1"`、`sourceImage: "page_1"` 这类可读字段只是 scoped alias，必须能映射到同一批工具结果。
+- 多次读取不同文件时，`page_1` 不是全局唯一标识；必须结合 `toolCallId`、`aliasScope`、源文档或批次判断。不能把第一批 `page_1` 自动绑定给后续所有分镜。
+- 不要把 `.neko/.cache/document-image-cache`、`globalStorageUri/document-image-cache`、Webview URI、blob/object URL、绝对本地 scratch 路径或旧 `cachePath` 写入 `referenceImagePath` 作为新 Canvas 传递身份。
+- 实时预览可以走统一资源缓存和 Webview 投影；离线导出、打包、校验必须回到原始 source/locator 或可复建的 project resource ref，不能复制 preview/scratch 缓存文件。
 
 ## 结构化读取
 
@@ -86,7 +96,7 @@ NekoAgent 只处理 DRM-free 内容：
 - 超大文件可能带来性能压力，优先用 manifest/range 分段读取。
 - 复杂 PDF 版式可能只得到文本层结果；扫描版 PDF 没有 OCR 文本时暂不能提取正文。
 - 密码保护文件不支持。
-- 临时图片文件写入系统临时目录，例如 `os.tmpdir()/neko_epub_*`、`neko_cbz_*`、`neko_cbr_*`。
+- 文档读取器内部可能使用 scratch 目录，例如 `.neko/.cache/document-image-cache` 或无工作区时的扩展私有目录；项目绑定的跨包预览应物化到 `.neko/.cache/resources`。
 
 ## 开发者实现说明
 

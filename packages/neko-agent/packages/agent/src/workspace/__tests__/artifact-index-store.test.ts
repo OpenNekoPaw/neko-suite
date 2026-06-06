@@ -6,7 +6,7 @@ describe('ArtifactIndexStore', () => {
     const writes: Array<{ path: string; data: string; encoding: string }> = [];
     const dirs: string[] = [];
     const store = createArtifactIndexStore({
-      filePath: '/r/.neko/cache/artifact-index.json',
+      filePath: '/r/.neko/.cache/artifact-index.json',
       now: () => 42,
       fsOps: {
         async mkdir(path: string): Promise<void> {
@@ -32,11 +32,11 @@ describe('ArtifactIndexStore', () => {
     ]);
     await store.flush();
 
-    expect(dirs).toEqual(['/r/.neko/cache']);
+    expect(dirs).toEqual(['/r/.neko/.cache']);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual(
       expect.objectContaining({
-        path: '/r/.neko/cache/artifact-index.json',
+        path: '/r/.neko/.cache/artifact-index.json',
         encoding: 'utf-8',
       }),
     );
@@ -59,7 +59,7 @@ describe('ArtifactIndexStore', () => {
   it('keeps the last queued snapshot on disk order', async () => {
     const writes: string[] = [];
     const store = createArtifactIndexStore({
-      filePath: '/r/.neko/cache/artifact-index.json',
+      filePath: '/r/.neko/.cache/artifact-index.json',
       fsOps: {
         async mkdir(): Promise<void> {},
         async writeFile(_path: string, data: string, _encoding: 'utf-8'): Promise<void> {

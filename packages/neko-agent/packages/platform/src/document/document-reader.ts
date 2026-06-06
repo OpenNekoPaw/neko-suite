@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import {
   createDocumentEntryResourceRef,
+  hashStableValue,
   type DocumentFormat,
   type DocumentImageInfo,
 } from '@neko/shared';
@@ -507,10 +508,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
     }
 
     const zip = new AdmZip(filePath);
-    const tmpDir = path.join(
-      this.deps.tempDir(),
-      `neko_epub_${this.deps.now?.().getTime() ?? Date.now()}`,
-    );
+    const tmpDir = createStableExtractionDir(this.deps.tempDir(), 'epub', filePath, entryPaths);
     await this.deps.makeDir(tmpDir, { recursive: true });
 
     const images: ExtractedImage[] = [];
@@ -567,9 +565,11 @@ export class DocumentReaderRuntime implements IDocumentReader {
         return [];
       }
 
-      const tmpDir = path.join(
+      const tmpDir = createStableExtractionDir(
         this.deps.tempDir(),
-        `neko_${tmpPrefix}_${this.deps.now?.().getTime() ?? Date.now()}`,
+        tmpPrefix,
+        filePath,
+        entries.map((entry) => entry.name),
       );
       await this.deps.makeDir(tmpDir, { recursive: true });
 
@@ -622,9 +622,11 @@ export class DocumentReaderRuntime implements IDocumentReader {
         .filter((entry) => COMIC_IMAGE_PATTERN.test(entry.name))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-      const tmpDir = path.join(
+      const tmpDir = createStableExtractionDir(
         this.deps.tempDir(),
-        `neko_cbz_${this.deps.now?.().getTime() ?? Date.now()}`,
+        'cbz',
+        filePath,
+        entries.map((entry) => entry.name),
       );
       await this.deps.makeDir(tmpDir, { recursive: true });
 
@@ -679,9 +681,11 @@ export class DocumentReaderRuntime implements IDocumentReader {
         .fileHeaders.filter((file) => COMIC_IMAGE_PATTERN.test(file.name))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-      const tmpDir = path.join(
+      const tmpDir = createStableExtractionDir(
         this.deps.tempDir(),
-        `neko_cbr_${this.deps.now?.().getTime() ?? Date.now()}`,
+        'cbr',
+        filePath,
+        imageFiles.map((file) => file.name),
       );
       await this.deps.makeDir(tmpDir, { recursive: true });
 
@@ -1012,6 +1016,25 @@ function createImageInfo(
     ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
     ...(resourceRef ? { resourceRef } : {}),
   };
+}
+
+function createStableExtractionDir(
+  tempRoot: string,
+  format: string,
+  filePath: string,
+  entryPaths: readonly string[],
+): string {
+  return path.join(
+    tempRoot,
+    `neko_${sanitizeExtractionPathPart(format)}_${hashStableValue({
+      filePath,
+      entryPaths,
+    })}`,
+  );
+}
+
+function sanitizeExtractionPathPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document';
 }
 
 function normalizeLocalImageReference(resourceHref: string): string | null {

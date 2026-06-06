@@ -66,6 +66,7 @@ export type {
   JsonResourceCacheManifestStoreOptions,
   ResourceCacheFsOps,
   ResourceCacheGcResult,
+  ResourceCacheLookupResult,
   ResourceCacheLogger,
   ResourceCacheManifestLoadOptions,
   ResourceCacheManifestStore,
@@ -112,6 +113,7 @@ export {
 } from './document-resource-cache-provider';
 export type {
   CreateDocumentResourceRefInput,
+  DocumentEntryReader,
   DocumentRangeReader,
   DocumentResourceCacheFsOps,
   DocumentResourceCacheProviderOptions,

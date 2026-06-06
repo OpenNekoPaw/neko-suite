@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import {
   createDocumentEntryResourceRef,
+  hashStableValue,
   type DocumentBatchCursor,
   type DocumentFormat,
   type DocumentImageInfo,
@@ -633,7 +634,7 @@ export class DocumentAccessService implements IDocumentAccessService {
 
     const entries = await this.readCbzEntries(source.filePath);
     const selection = selectComicRangeEntries(entries, range, 'CBZ');
-    const images = await this.writeZipEntriesToTemp(selection.entries, 'cbz');
+    const images = await this.writeZipEntriesToTemp(selection.entries, 'cbz', source.filePath);
     return this.makeComicRangeResult(
       source,
       range,
@@ -883,20 +884,23 @@ export class DocumentAccessService implements IDocumentAccessService {
     const entries = entryPaths
       .map((entryPath) => zip.getEntry(entryPath))
       .filter((entry): entry is ZipEntryLike => entry !== null);
-    return this.writeZipEntriesToTemp(entries, tmpPrefix);
+    return this.writeZipEntriesToTemp(entries, tmpPrefix, filePath);
   }
 
   private async writeZipEntriesToTemp(
     entries: readonly ZipEntryLike[],
     tmpPrefix: string,
+    sourceKey: string,
   ): Promise<ExtractedImage[]> {
     if (entries.length === 0) {
       return [];
     }
 
-    const tmpDir = path.join(
+    const tmpDir = createStableExtractionDir(
       this.deps.runtime.tempDir(),
-      `neko_${tmpPrefix}_${this.deps.runtime.now?.().getTime() ?? Date.now()}`,
+      tmpPrefix,
+      sourceKey,
+      entries.map((entry) => entry.name),
     );
     await this.deps.runtime.makeDir(tmpDir, { recursive: true });
 
@@ -950,9 +954,11 @@ export class DocumentAccessService implements IDocumentAccessService {
       return [];
     }
 
-    const tmpDir = path.join(
+    const tmpDir = createStableExtractionDir(
       this.deps.runtime.tempDir(),
-      `neko_cbr_${this.deps.runtime.now?.().getTime() ?? Date.now()}`,
+      'cbr',
+      filePath,
+      entryNames,
     );
     await this.deps.runtime.makeDir(tmpDir, { recursive: true });
 
@@ -1288,6 +1294,26 @@ function createImageInfo(
     ...(resource?.locator ? { locator: resource.locator } : {}),
     ...(resourceRef ? { resourceRef } : {}),
   };
+}
+
+function createStableExtractionDir(
+  tempRoot: string,
+  format: string,
+  sourceKey: string,
+  entryPaths: readonly string[],
+): string {
+  return path.join(
+    tempRoot,
+    `neko_${sanitizeExtractionPathPart(format)}_${hashStableValue({
+      format,
+      sourceKey,
+      entryPaths,
+    })}`,
+  );
+}
+
+function sanitizeExtractionPathPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document';
 }
 
 function findManifestUnitIndex(

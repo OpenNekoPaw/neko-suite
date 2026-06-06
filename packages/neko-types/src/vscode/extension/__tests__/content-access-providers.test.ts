@@ -485,6 +485,7 @@ function createResourceCache(input: {
   }));
   return {
     registerProvider: vi.fn((_provider: ResourceCacheProvider) => undefined),
+    findByLocalPath: vi.fn(async () => undefined),
     ensure,
     resolve: vi.fn(async (ref: ResourceRef, request: ResourceVariantRequest) => ({
       status: 'ready' as const,

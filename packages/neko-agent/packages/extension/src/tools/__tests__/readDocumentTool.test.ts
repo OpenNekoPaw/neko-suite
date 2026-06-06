@@ -181,9 +181,17 @@ describe('createReadDocumentTool', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         imagePaths: ['/tmp/1.png', '/tmp/2.png'],
+        runtimeImagePaths: ['/tmp/1.png', '/tmp/2.png'],
         imageInfo: [
           expect.objectContaining({
             path: '/tmp/1.png',
+            runtimePath: '/tmp/1.png',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_1',
+            aliasScope: 'document:/tmp/comic.cbz',
+            sourceDocumentId: '/tmp/comic.cbz',
+            entryPath: '1.png',
+            portableForTransfer: true,
             width: 100,
             height: 200,
             mimeType: 'image/png',
@@ -194,7 +202,17 @@ describe('createReadDocumentTool', () => {
               locator: expect.objectContaining({ entryPath: '1.png' }),
             }),
           }),
-          { path: '/tmp/2.png', width: 110, height: 210, mimeType: 'image/png', byteSize: 11 },
+          expect.objectContaining({
+            path: '/tmp/2.png',
+            runtimePath: '/tmp/2.png',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_2',
+            portableForTransfer: false,
+            width: 110,
+            height: 210,
+            mimeType: 'image/png',
+            byteSize: 11,
+          }),
         ],
         imagePathCount: 3,
         imagePathsTruncated: true,
@@ -229,7 +247,7 @@ describe('createReadDocumentTool', () => {
     const result = (await tool.execute({ file_path: '/tmp/comic.cbz' })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(resourceCache.ensure).toHaveBeenCalledWith(
+    expect(resourceCache.resolve).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: 'project',
         provider: 'document-archive',
@@ -237,13 +255,22 @@ describe('createReadDocumentTool', () => {
         locator: expect.objectContaining({ entryPath: '1.png' }),
       }),
       { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
+      { materializeIfMissing: true },
     );
     expect(result.data).toEqual(
       expect.objectContaining({
         imagePaths: ['/workspace/.neko/.cache/resources/documents/page.png'],
+        runtimeImagePaths: ['/tmp/1.png'],
         imageInfo: [
           expect.objectContaining({
             path: '/workspace/.neko/.cache/resources/documents/page.png',
+            runtimePath: '/tmp/1.png',
+            runtimeKind: 'managed-cache',
+            alias: 'image_1',
+            aliasScope: 'document:/tmp/comic.cbz',
+            sourceDocumentId: '/tmp/comic.cbz',
+            entryPath: '1.png',
+            portableForTransfer: true,
             resourceRef: expect.objectContaining({
               cachePath: '/workspace/.neko/.cache/resources/documents/page.png',
             }),
@@ -308,6 +335,7 @@ describe('createReadDocumentTool', () => {
         ],
       }),
     );
+    expect(resourceCache.resolve).not.toHaveBeenCalled();
     expect(resourceCache.ensure).not.toHaveBeenCalled();
   });
 
@@ -407,9 +435,30 @@ describe('createReadDocumentTool', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
+        runtimeImagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
         imageInfo: [
-          { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
-          { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
+          expect.objectContaining({
+            path: '/tmp/1.jpg',
+            runtimePath: '/tmp/1.jpg',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_1',
+            portableForTransfer: false,
+            width: 100,
+            height: 200,
+            mimeType: 'image/jpeg',
+            byteSize: 10,
+          }),
+          expect.objectContaining({
+            path: '/tmp/2.jpg',
+            runtimePath: '/tmp/2.jpg',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_2',
+            portableForTransfer: false,
+            width: 110,
+            height: 210,
+            mimeType: 'image/jpeg',
+            byteSize: 11,
+          }),
         ],
         excerpt: expect.objectContaining({
           imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
@@ -508,7 +557,18 @@ describe('createReadDocumentTool', () => {
       expect.objectContaining({
         text: 'Chapter range',
         imagePaths: ['/tmp/1.jpg'],
-        imageInfo: [{ path: '/tmp/1.jpg', width: 100, height: 200 }],
+        runtimeImagePaths: ['/tmp/1.jpg'],
+        imageInfo: [
+          expect.objectContaining({
+            path: '/tmp/1.jpg',
+            runtimePath: '/tmp/1.jpg',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_1',
+            portableForTransfer: false,
+            width: 100,
+            height: 200,
+          }),
+        ],
       }),
     );
     expect(result.data).not.toHaveProperty('metadata');
@@ -740,7 +800,18 @@ describe('createReadDocumentTool', () => {
       expect.objectContaining({
         text: 'Next batch',
         imagePaths: ['/tmp/page-1.jpg'],
-        imageInfo: [{ path: '/tmp/page-1.jpg', width: 100, height: 200 }],
+        runtimeImagePaths: ['/tmp/page-1.jpg'],
+        imageInfo: [
+          expect.objectContaining({
+            path: '/tmp/page-1.jpg',
+            runtimePath: '/tmp/page-1.jpg',
+            runtimeKind: 'scratch-cache',
+            alias: 'image_1',
+            portableForTransfer: false,
+            width: 100,
+            height: 200,
+          }),
+        ],
         cursor: expect.objectContaining({ done: true }),
         metadata: expect.objectContaining({
           title: 'Book',
@@ -756,6 +827,7 @@ describe('createReadDocumentTool', () => {
 function createResourceCache(): ResourceCacheService {
   return {
     registerProvider: vi.fn(),
+    findByLocalPath: vi.fn(async () => undefined),
     ensure: vi.fn(async (ref: ResourceRef, variant) => ({
       status: 'ready',
       ref,
@@ -763,9 +835,10 @@ function createResourceCache(): ResourceCacheService {
       absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
     })),
     resolve: vi.fn(async (ref: ResourceRef, variant) => ({
-      status: 'missing',
+      status: 'ready',
       ref,
       variant: { resource: ref, ...variant },
+      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
     })),
     project: vi.fn(async (_webview, ref: ResourceRef, variant) => ({
       status: 'missing',

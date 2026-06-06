@@ -176,6 +176,8 @@ export async function activate(
           },
           rename: (o, n) => fs.rename(o, n),
           mkdir: (p, opts) => fs.mkdir(p, opts).then(() => {}),
+          copy: (o, n) => fs.cp(o, n, { recursive: true, force: false }),
+          rm: (p, opts) => fs.rm(p, opts),
         });
         if (migrated.length > 0) {
           logger.info(`Storage migration: ${migrated.join('; ')}`);

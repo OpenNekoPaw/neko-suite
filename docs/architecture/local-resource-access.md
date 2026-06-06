@@ -13,7 +13,7 @@ VSCode Webview 只能读取 `localResourceRoots` 授权范围内的本地文件�
 - 这个本地路径是否在当前 Webview 的授权根内？
 - 如果允许，应该返回哪个 `asWebviewUri(...)` 字符串？
 
-它不负责缓存身份、缓存物化、缺失文件重建、source fingerprint、quota 或 GC。上述职责由 `ResourceCacheService` 和 provider registry 承担。也就是说，Agent Webview 能显示 `globalStorageUri/document-image-cache` 下的图片，只代表 Agent 已授权自己的 extension-private cache；Canvas 不能把这条绝对路径当成可移植资源身份。
+它不负责缓存身份、缓存物化、缺失文件重建、source fingerprint、quota 或 GC。上述职责由 `ResourceCacheService` 和 provider registry 承担。也就是说，Agent 内部 scratch 即使存在实体文件，也不能自动成为跨包可投影资源；Canvas 不能把 `globalStorageUri/document-image-cache` 或 `.neko/.cache/document-image-cache` 这类路径当成可移植资源身份。
 
 同理，`toWebviewUri(...)` 结果、blob URL、object URL、Preview token URL、Engine stream URL 都是 runtime handle。它们可以显示当前 Webview，但不能写入 Canvas/Agent durable payload、package manifest 或 export input。
 
@@ -37,7 +37,7 @@ VSCode Webview 只能读取 `localResourceRoots` 授权范围内的本地文件�
 - 跨 Agent/Canvas/Preview/Assets 的缓存-backed 视觉资源必须优先传 `ResourceRef`，由 Extension Host 调用 `ResourceCacheService.project(...)` 后再交给 Webview。
 - 跨 Agent/Canvas/Preview/Assets 的通用内容读取必须优先传稳定 source ref，并由 `ContentAccessService` 以明确 intent 解析；Webview URI 只作为返回给当前 Webview 的 runtime result。
 - Webview 不读取 `.neko/.cache/resources/manifest.json`，不扫描 package-local thumbnail/document cache。
-- `extension-private` / no-workspace scratch 可以由所属扩展显示，但跨包消费者应收到 `non-portable` 或 unresolved 状态，除非资源被复制/重建到项目资源缓存。
+- `extension-private` / no-workspace scratch 仅作为所属扩展内部读句柄；跨包消费者应收到 `non-portable` 或 unresolved 状态，除非资源被复制/重建到项目资源缓存。
 - legacy `cachePath` 可作为迁移输入，但不能作为 Webview 之外的 source identity；没有 source/locator 时应提示重新导入、重新读取文档或重新生成。
 - `neko-search` 与 `neko-entity` 仍是搜索、身份、绑定和 representation 语义来源；本地资源服务只消费已经解析出的本地路径或远程 URL。
 
@@ -58,7 +58,7 @@ VSCode Webview 只能读取 `localResourceRoots` 授权范围内的本地文件�
 
 - `neko-assets` Git diff：内部 scratch，不进入 Webview。
 - `neko-tools` `TempFileService`：内部 scratch，调用方负责清理，不进入 Webview。
-- `neko-agent` `DocumentReaderService`：有 ExtensionContext 时使用 `globalStorageUri/document-image-cache`；无上下文 fallback 仅用于低层 runtime/test。
+- `neko-agent` `DocumentReaderService`：读取器可使用 `.neko/.cache/document-image-cache` 或无 workspace 时的 extension-private scratch；新 Webview/Canvas 传递必须使用 `.neko/.cache/resources` 中的统一资源缓存或稳定 source/locator。
 - `neko-cut` AI 输出：写入 workspace `.neko/.cache/cut-ai` 或扩展 storage cache。
 - `neko-live` recording：workspace 存在时写入 `.neko/recordings`，否则写入 `globalStorageUri/recordings`。
 

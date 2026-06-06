@@ -1,6 +1,6 @@
 /**
  * Artifact Index Store - replace-on-write cache projection for
- * `.neko/cache/artifact-index.json`.
+ * `.neko/.cache/artifact-index.json`.
  *
  * Markdown artifacts on disk remain the source of truth. This index exists so
  * restore/listing can avoid re-scanning every artifact file on every boot, and

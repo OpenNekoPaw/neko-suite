@@ -159,6 +159,14 @@ export interface CreateDocumentEntryResourceRefInput {
 
 export interface DocumentImageInfo {
   readonly path: string;
+  readonly runtimePath?: string;
+  readonly runtimeKind?: 'local-path' | 'webview-uri' | 'scratch-cache' | 'managed-cache';
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
+  readonly portableForTransfer?: boolean;
+  readonly nonPortableReason?: string;
   readonly width?: number;
   readonly height?: number;
   readonly mimeType?: string;

@@ -1,5 +1,16 @@
 import * as fs from 'fs/promises';
-import { createTool, TOOL_NAMES_SYSTEM, type Tool, type ToolResult } from '@neko/shared';
+import {
+  createTool,
+  isDocumentArchiveResourceRef,
+  isResourceRef,
+  parseDocumentArchiveResourceRef,
+  TOOL_NAMES_SYSTEM,
+  type DocumentArchiveResourceRef,
+  type ResourceRef,
+  type Tool,
+  type ToolResult,
+} from '@neko/shared';
+import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { probeImageMetadata, type ImageMetadata } from '@neko/platform/document';
 import type { ChatMessage, ServiceResponse } from '@neko/platform';
 import {
@@ -27,16 +38,35 @@ export interface ReadImageToolDeps {
   readonly platform?: Platform;
   readonly readFile?: (filePath: string) => Promise<Uint8Array>;
   readonly imageProcessor?: VisionImageProcessor;
+  readonly resourceCache?: ResourceCacheService;
 }
 
 export interface ReadImageInputImage {
   readonly path: string;
+  readonly runtimePath?: string;
+  readonly runtimeKind?: 'local-path' | 'webview-uri' | 'scratch-cache' | 'managed-cache';
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
+  readonly portableForTransfer?: boolean;
+  readonly nonPortableReason?: string;
   readonly label?: string;
   readonly metadata?: Record<string, unknown>;
+  readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
 }
 
 export interface ReadImageResultImage {
   readonly path: string;
+  readonly runtimePath?: string;
+  readonly runtimeKind?: 'local-path' | 'webview-uri' | 'scratch-cache' | 'managed-cache';
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
+  readonly portableForTransfer?: boolean;
+  readonly nonPortableReason?: string;
   readonly label?: string;
   readonly width?: number;
   readonly height?: number;
@@ -45,6 +75,8 @@ export interface ReadImageResultImage {
   readonly visionInput?: ReadImageVisionInputSummary;
   readonly analysis?: string;
   readonly metadata?: Record<string, unknown>;
+  readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
 }
 
 export interface ReadImageResultData {
@@ -188,12 +220,27 @@ export async function executeReadImage(
     const loaded = await Promise.all(selected.map((image) => loadImage(deps, image)));
     const results: ReadImageResultImage[] = loaded.map((image) => ({
       path: image.resolvedPath,
+      runtimePath: image.input.runtimePath ?? image.resolvedPath,
+      runtimeKind: image.input.runtimeKind ?? inferReadImageRuntimeKind(image.input),
+      ...(image.input.alias ? { alias: image.input.alias } : {}),
+      ...(image.input.aliasScope ? { aliasScope: image.input.aliasScope } : {}),
+      ...(image.input.sourceDocumentId ? { sourceDocumentId: image.input.sourceDocumentId } : {}),
+      ...(image.input.entryPath ? { entryPath: image.input.entryPath } : {}),
+      portableForTransfer:
+        image.input.portableForTransfer ?? image.input.cacheResourceRef?.scope === 'project',
+      ...(image.input.nonPortableReason
+        ? { nonPortableReason: image.input.nonPortableReason }
+        : image.input.cacheResourceRef && image.input.cacheResourceRef.scope !== 'project'
+          ? { nonPortableReason: 'no-workspace-or-extension-private-scratch' }
+          : {}),
       ...(image.input.label ? { label: image.input.label } : {}),
       ...(image.metadata.width !== undefined ? { width: image.metadata.width } : {}),
       ...(image.metadata.height !== undefined ? { height: image.metadata.height } : {}),
       ...(image.metadata.mimeType ? { mimeType: image.metadata.mimeType } : {}),
       byteSize: image.metadata.byteSize,
       ...(image.input.metadata ? { metadata: image.input.metadata } : {}),
+      ...(image.input.resourceRef ? { resourceRef: image.input.resourceRef } : {}),
+      ...(image.input.cacheResourceRef ? { cacheResourceRef: image.input.cacheResourceRef } : {}),
     }));
 
     if (mode === 'vision') {
@@ -283,7 +330,71 @@ async function loadImage(
   if (!metadata) {
     throw new Error(`Unsupported or unreadable image file: ${resolvedPath}`);
   }
-  return { input, resolvedPath, bytes, metadata };
+  return {
+    input: await restoreCacheResourceRefs(deps.resourceCache, input, resolvedPath),
+    resolvedPath,
+    bytes,
+    metadata,
+  };
+}
+
+async function restoreCacheResourceRefs(
+  resourceCache: ResourceCacheService | undefined,
+  input: ReadImageInputImage,
+  resolvedPath: string,
+): Promise<ReadImageInputImage> {
+  if (!resourceCache || input.resourceRef || input.cacheResourceRef) {
+    return input;
+  }
+
+  const match = await resourceCache.findByLocalPath(resolvedPath).catch(() => undefined);
+  const cacheResourceRef = match?.ref;
+  const documentResourceRef = cacheResourceRef
+    ? createDocumentArchiveRefFromCacheResource(cacheResourceRef, match.absolutePath)
+    : undefined;
+  if (!cacheResourceRef && !documentResourceRef) {
+    return input;
+  }
+
+  return {
+    ...input,
+    ...(documentResourceRef ? { resourceRef: documentResourceRef } : {}),
+    ...(cacheResourceRef ? { cacheResourceRef } : {}),
+    ...(documentResourceRef
+      ? { alias: input.alias ?? formatDocumentImageAlias(documentResourceRef) }
+      : {}),
+    ...(documentResourceRef
+      ? { aliasScope: input.aliasScope ?? formatDocumentAliasScope(documentResourceRef) }
+      : {}),
+    ...(documentResourceRef
+      ? { sourceDocumentId: input.sourceDocumentId ?? formatDocumentSourceId(documentResourceRef) }
+      : {}),
+    ...(documentResourceRef?.entryPath
+      ? { entryPath: input.entryPath ?? documentResourceRef.entryPath }
+      : {}),
+    runtimeKind: input.runtimeKind ?? 'managed-cache',
+    portableForTransfer: input.portableForTransfer ?? cacheResourceRef?.scope === 'project',
+  };
+}
+
+function createDocumentArchiveRefFromCacheResource(
+  ref: ResourceRef,
+  cachePath: string,
+): DocumentArchiveResourceRef | undefined {
+  if (ref.kind !== 'document' || ref.source.kind !== 'document' || !ref.source.document) {
+    return undefined;
+  }
+  const locator = ref.locator?.kind === 'document' ? ref.locator.locator : undefined;
+  const entryPath = ref.locator?.kind === 'document' ? ref.locator.entryPath : undefined;
+  const candidate = {
+    kind: 'document-entry' as const,
+    source: ref.source.document,
+    ...(entryPath ? { entryPath } : {}),
+    ...(locator ? { locator } : {}),
+    cachePath,
+    versionPolicy: 'versioned-export' as const,
+  };
+  return isDocumentArchiveResourceRef(candidate) ? candidate : undefined;
 }
 
 async function prepareVisionImage(
@@ -356,9 +467,39 @@ function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
     return structured.flatMap((item) => {
       if (!isRecord(item)) return [];
       const path = readString(item['path']);
+      const runtimePath = readString(item['runtimePath']);
+      const runtimeKind = readRuntimeKind(item['runtimeKind']);
+      const alias = readString(item['alias']);
+      const aliasScope = readString(item['aliasScope']);
+      const sourceDocumentId = readString(item['sourceDocumentId']);
+      const entryPath = readString(item['entryPath']);
+      const portableForTransfer = readBoolean(item['portableForTransfer']);
+      const nonPortableReason = readString(item['nonPortableReason']);
       const label = readString(item['label']);
       const metadata = isRecord(item['metadata']) ? item['metadata'] : undefined;
-      return path ? [{ path, ...(label ? { label } : {}), ...(metadata ? { metadata } : {}) }] : [];
+      const resourceRef = parseDocumentArchiveResourceRef(item['resourceRef']);
+      const cacheResourceRef = isResourceRef(item['cacheResourceRef'])
+        ? item['cacheResourceRef']
+        : undefined;
+      return path
+        ? [
+            {
+              path,
+              ...(runtimePath ? { runtimePath } : {}),
+              ...(runtimeKind ? { runtimeKind } : {}),
+              ...(alias ? { alias } : {}),
+              ...(aliasScope ? { aliasScope } : {}),
+              ...(sourceDocumentId ? { sourceDocumentId } : {}),
+              ...(entryPath ? { entryPath } : {}),
+              ...(portableForTransfer !== undefined ? { portableForTransfer } : {}),
+              ...(nonPortableReason ? { nonPortableReason } : {}),
+              ...(label ? { label } : {}),
+              ...(metadata ? { metadata } : {}),
+              ...(resourceRef ? { resourceRef } : {}),
+              ...(cacheResourceRef ? { cacheResourceRef } : {}),
+            },
+          ]
+        : [];
     });
   }
 
@@ -371,6 +512,33 @@ function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
 
 function readMode(value: unknown): ReadImageMode {
   return value === 'vision' ? 'vision' : 'metadata';
+}
+
+function inferReadImageRuntimeKind(
+  image: ReadImageInputImage,
+): NonNullable<ReadImageResultImage['runtimeKind']> {
+  if (image.runtimeKind) return image.runtimeKind;
+  if (image.cacheResourceRef?.scope === 'project') return 'managed-cache';
+  return 'local-path';
+}
+
+function formatDocumentImageAlias(resourceRef: DocumentArchiveResourceRef): string {
+  if (resourceRef.locator?.kind === 'page') return `page_${resourceRef.locator.pageNumber}`;
+  if (resourceRef.locator?.kind === 'slide') return `slide_${resourceRef.locator.slideNumber}`;
+  if (resourceRef.locator?.kind === 'chapter' && resourceRef.locator.spineIndex !== undefined) {
+    return `page_${resourceRef.locator.spineIndex + 1}`;
+  }
+  const entryMatch = /(?:^|[^\d])(\d{1,4})(?:[^\d]|$)/.exec(resourceRef.entryPath ?? '');
+  return entryMatch?.[1] ? `page_${Number.parseInt(entryMatch[1], 10)}` : 'image_1';
+}
+
+function formatDocumentAliasScope(resourceRef: DocumentArchiveResourceRef): string {
+  return `document:${formatDocumentSourceId(resourceRef)}`;
+}
+
+function formatDocumentSourceId(resourceRef: DocumentArchiveResourceRef): string {
+  const source = resourceRef.source;
+  return source.identity?.hash ?? source.identity?.fileId ?? source.fileId ?? source.filePath;
 }
 
 function readAnalysisKind(value: unknown): ReadImageAnalysisKind {
@@ -430,6 +598,21 @@ function readBoundedInteger(value: unknown, fallback: number, min: number, max: 
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readRuntimeKind(
+  value: unknown,
+): NonNullable<ReadImageInputImage['runtimeKind']> | undefined {
+  return value === 'local-path' ||
+    value === 'webview-uri' ||
+    value === 'scratch-cache' ||
+    value === 'managed-cache'
+    ? value
+    : undefined;
 }
 
 function buildVisionPrompt(input: {

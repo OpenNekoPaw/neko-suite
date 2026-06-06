@@ -72,7 +72,7 @@ describe('DocumentResourceCacheProvider', () => {
 
     expect(result).toMatchObject({
       status: 'ready',
-      relativePath: expect.stringMatching(/^documents\/res_.+\/page-1\.jpg$/),
+      relativePath: expect.stringMatching(/^documents\/doc_.+\/OPS\/page-1\.jpg$/),
       mimeType: 'image/jpeg',
       width: 640,
       height: 960,
@@ -129,6 +129,7 @@ describe('DocumentResourceCacheProvider', () => {
       }),
     ).resolves.toMatchObject({
       status: 'ready',
+      relativePath: expect.stringMatching(/^documents\/doc_.+\/ppt\/media\/image1\.png$/),
       mimeType: 'image/png',
       sizeBytes: 77,
     });
@@ -219,6 +220,7 @@ function createReader(
 function createFsOps() {
   return {
     copyFile: vi.fn(async () => undefined),
+    writeFile: vi.fn(async () => undefined),
     mkdir: vi.fn(async () => undefined),
     stat: vi.fn(async () => ({ size: 456 })),
   };

@@ -63,6 +63,7 @@ export function registerExtensionTools(
     }),
     createReadImageTool({
       platform: _platform,
+      resourceCache: documentResourceCache,
     }),
     createReadDocumentImageTool({
       reader: documentReader,
