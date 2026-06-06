@@ -42,6 +42,13 @@
 
 ## StoryboardTable 规则
 
+- 必须严格使用嵌套结构：`payload.scenes[]` 只能放 scene，`scene.shots[]` 才能放 shot。不要把 `shotNumber`、`duration`、`visualDescription`、`imageStrategy`、`sourceMediaRefs` 直接写在 `scenes[]` 元素上。
+- 最小合法结构：
+  - `payload.scenes[]`: Scene 数组。
+  - Scene 必填：`sceneId`、`sceneTitle`、`shots`。
+  - `scene.shots[]`: Shot 数组。
+  - Shot 必填：`shotNumber`、`duration`、`visualDescription`、`characterAction`、`imageStrategy`。
+- 错误反例：`"scenes": [{ "sceneId": "scene-1", "shotNumber": 1, "visualDescription": "..." }]`。这会缺少 `scenes.0.shots`。正确做法是把 shot 字段放入 `"shots": [{ ... }]`。
 - scene/shot 粒度很重要。scene 是连续页面、地点/时间块或叙事段落；shot 是该 scene 内的单个分格、镜头设置或视频片段。
 - 不要一镜头一个 scene。漫画通常应把同一页或同一连续动作段落的多个分格合并到一个 scene，除非页码、地点、时间或戏剧段落明显变化。
 - 使用 `shotNumber` 表示全局阅读/视频顺序。
@@ -50,7 +57,7 @@
 - 不要默认给源图上色。黑白漫画需要彩色动画时，把原图保留在 `sourceMediaRefs`，使用 `imageStrategy: "transform-original"`，并在 `generationPrompt` 或 `extensions["neko.mangaToVideo"].colorization` 中说明。
 - 只有工具真实生成后，才能把彩色图或生成结果写入 `generatedMediaRefs`。
 - 只填写计划字段。运行时/工具返回前，不要声称图片已经生成。
-- 嵌入图片时，只能引用图片索引中的当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写精确 tool call id 和 asset index。tool call id 是工具结果里的运行时 id，不是工具名、别名或 `ReadImage.front10pages` 这类自行编造的标签。
+- 嵌入图片时，只能引用图片索引中的当前对话真实工具结果。使用 `locator.type: "tool-result"`，并填写工具结果暴露的 tool call id / 批次 id 和 asset index。优先使用运行时真实 `toolCallId`；如果工具结果没有暴露独立运行时 id，但明确给出当前结果批次 id（例如 `readimage-current-result`），可原样使用这个批次 id，并用 `assetIndex` 对应真实返回顺序。不要自行编造工具名、别名或 `ReadImage.front10pages` 这类标签。
 - 每个来自文档页/图片序列的 shot 必须写明来源页或来源图：优先填写 `sourcePage: "P6"` / `sourceImage: "page_6"` 这类可读字段；结构化 payload 会规范化为 `extensions["neko.storyboardSourceImage"]`。同一页拆成多个 shot 时，多个 shot 应指向同一个来源页，而不是顺序分配下一张图。
 - 如果多个工具调用或批次都有同名 alias，例如两个不同的 `page_1`，必须用 `sourceMediaRefs[].locator.toolCallId` 和 `assetIndex` 消歧；多批次上下文中不要依赖行号顺序。
 - 如果当前 shot 来自某个页面/分格，必须把对应图片写入 `sourceMediaRefs`；不要只在可读说明里描述图片。

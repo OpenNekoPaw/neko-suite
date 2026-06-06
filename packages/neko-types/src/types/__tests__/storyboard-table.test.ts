@@ -164,6 +164,124 @@ describe('storyboard table contract', () => {
     );
   });
 
+  it('normalizes flat storyboard shot rows mistakenly placed in scenes', () => {
+    const result = normalizeStoryboardTable({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        profile: 'manga-to-video',
+        title: 'P11-P20',
+        scenes: [
+          {
+            sceneId: 'page-11',
+            sceneTitle: 'P11',
+            shotNumber: 1,
+            duration: 3,
+            sourcePage: 'P11',
+            visualDescription: 'Panel P11 establishes the street.',
+            characterAction: 'The character enters the street.',
+            imageStrategy: 'use-as-reference',
+            sourceMediaRefs: [
+              {
+                refId: 'source-p11',
+                role: 'source',
+                locator: {
+                  type: 'tool-result',
+                  toolCallId: 'readimage-current-result',
+                  assetIndex: 0,
+                },
+                mimeType: 'image/png',
+              },
+            ],
+          },
+          {
+            sceneId: 'page-11',
+            sceneTitle: 'P11',
+            shotNumber: 2,
+            duration: 2,
+            sourcePage: 'P11',
+            visualDescription: 'Panel P11 close-up reaction.',
+            characterAction: 'The character reacts.',
+            imageStrategy: 'reuse-original',
+            sourceMediaRefs: [
+              {
+                refId: 'source-p11-close',
+                role: 'source',
+                locator: {
+                  type: 'tool-result',
+                  toolCallId: 'readimage-current-result',
+                  assetIndex: 0,
+                },
+                mimeType: 'image/png',
+              },
+            ],
+          },
+          {
+            sceneId: 'page-12',
+            sceneTitle: 'P12',
+            shotNumber: 3,
+            duration: 3,
+            sourcePage: 'P12',
+            visualDescription: 'Panel P12 shows the next beat.',
+            characterAction: 'The character turns around.',
+            imageStrategy: 'use-as-reference',
+            sourceMediaRefs: [
+              {
+                refId: 'source-p12',
+                role: 'source',
+                locator: {
+                  type: 'tool-result',
+                  toolCallId: 'readimage-current-result',
+                  assetIndex: 1,
+                },
+                mimeType: 'image/png',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+    expect(result.table?.scenes).toHaveLength(2);
+    expect(result.table?.scenes[0]).toMatchObject({
+      sceneId: 'page-11',
+      sceneTitle: 'P11',
+      shots: [
+        {
+          shotNumber: 1,
+          visualDescription: 'Panel P11 establishes the street.',
+          sourceMediaRefs: [
+            {
+              locator: {
+                type: 'tool-result',
+                toolCallId: 'readimage-current-result',
+                assetIndex: 0,
+              },
+            },
+          ],
+        },
+        {
+          shotNumber: 2,
+          visualDescription: 'Panel P11 close-up reaction.',
+        },
+      ],
+    });
+    expect(result.table?.scenes[1]?.shots[0]).toMatchObject({
+      shotNumber: 3,
+      sourceMediaRefs: [
+        {
+          locator: {
+            type: 'tool-result',
+            toolCallId: 'readimage-current-result',
+            assetIndex: 1,
+          },
+        },
+      ],
+    });
+    expect(validateStoryboardTable(result.table).ok).toBe(true);
+  });
+
   it('keeps profile recommendations non-blocking', () => {
     const result = validateStoryboardTable({
       schemaVersion: 1,

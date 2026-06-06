@@ -444,6 +444,7 @@ const MAX_LEGACY_SECTIONS = 200;
 const MAX_LEGACY_MEDIA_REFS = 12;
 const STORYBOARD_IMAGE_ALIAS_EXTENSION = 'neko.storyboardImageAlias' as const;
 const STORYBOARD_SOURCE_IMAGE_EXTENSION = 'neko.storyboardSourceImage' as const;
+const FLAT_STORYBOARD_SCENE_ID = 'scene-1' as const;
 
 export function validateStoryboardTable(
   value: unknown,
@@ -932,10 +933,95 @@ function normalizeSceneRows(
 ): readonly StoryboardSceneRow[] {
   if (!Array.isArray(value)) return [];
 
+  if (value.some(isFlatStoryboardShotRecord)) {
+    const flatScenes = normalizeFlatStoryboardShotSceneRows(value, diagnostics);
+    if (flatScenes.length > 0) return flatScenes;
+  }
+
   return value.flatMap((scene, sceneIndex) => {
     const normalized = normalizeSceneRow(scene, sceneIndex, diagnostics);
     return normalized ? [normalized] : [];
   });
+}
+
+function normalizeFlatStoryboardShotSceneRows(
+  value: readonly unknown[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardSceneRow[] {
+  const groups: StoryboardSceneRow[] = [];
+  const groupIndexes = new Map<string, number>();
+  let fallbackShotIndex = 0;
+
+  for (const [rowIndex, row] of value.entries()) {
+    if (!isFlatStoryboardShotRecord(row)) continue;
+
+    const sceneId =
+      readTrimmedString(row['sceneId']) ??
+      readFlatStoryboardSceneIdFromSource(row) ??
+      FLAT_STORYBOARD_SCENE_ID;
+    const sceneTitle =
+      readTrimmedString(row['sceneTitle']) ??
+      readTrimmedString(row['sceneName']) ??
+      readTrimmedString(row['page']) ??
+      readTrimmedString(row['sourcePage']) ??
+      readTrimmedString(row['sourceImage']) ??
+      'Storyboard';
+    const groupKey = sceneId;
+    const existingIndex = groupIndexes.get(groupKey);
+    const sceneIndex = existingIndex ?? groups.length;
+    if (existingIndex === undefined) {
+      groupIndexes.set(groupKey, sceneIndex);
+      groups.push({
+        sceneId,
+        sceneTitle,
+        sceneNumber: groups.length + 1,
+        shots: [],
+      });
+    }
+
+    const shot = normalizeShotRow(row, sceneIndex, fallbackShotIndex, diagnostics, {
+      diagnosticPath: ['scenes', rowIndex],
+      fallbackShotNumber: fallbackShotIndex + 1,
+    });
+    fallbackShotIndex += 1;
+    if (!shot) continue;
+
+    const current = groups[sceneIndex];
+    if (!current) continue;
+    groups[sceneIndex] = {
+      ...current,
+      shots: [...current.shots, shot],
+    };
+  }
+
+  return groups.filter((scene) => scene.shots.length > 0);
+}
+
+function isFlatStoryboardShotRecord(value: unknown): value is Record<string, unknown> {
+  const record = readStoryboardRecord(value);
+  if (!record) return false;
+  if (Array.isArray(record['shots'])) return false;
+  return (
+    record['shotNumber'] !== undefined ||
+    record['duration'] !== undefined ||
+    record['visualDescription'] !== undefined ||
+    record['characterAction'] !== undefined ||
+    record['imageStrategy'] !== undefined ||
+    record['sourceMediaRefs'] !== undefined ||
+    record['mediaRefs'] !== undefined
+  );
+}
+
+function readFlatStoryboardSceneIdFromSource(record: Record<string, unknown>): string | undefined {
+  const source =
+    readTrimmedString(record['sourcePage']) ??
+    readTrimmedString(record['sourceImage']) ??
+    readTrimmedString(record['page']);
+  if (!source) return undefined;
+  return `scene-${source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}`;
 }
 
 function normalizeSceneRow(
@@ -1013,8 +1099,12 @@ function normalizeShotRow(
   sceneIndex: number,
   shotIndex: number,
   diagnostics: StoryboardValidationDiagnostic[],
+  options: {
+    readonly diagnosticPath?: readonly StoryboardValidationDiagnosticPathSegment[];
+    readonly fallbackShotNumber?: number;
+  } = {},
 ): StoryboardShotRow | undefined {
-  const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
+  const path = options.diagnosticPath ?? (['scenes', sceneIndex, 'shots', shotIndex] as const);
   const record = readStoryboardRecord(value);
   if (!record) {
     diagnostics.push(
@@ -1024,7 +1114,7 @@ function normalizeShotRow(
   }
 
   const shotId = readTrimmedString(record['shotId']);
-  const shotNumber = readOptionalPositiveNumber(record['shotNumber']);
+  const shotNumber = readOptionalPositiveNumber(record['shotNumber']) ?? options.fallbackShotNumber;
   const duration = readOptionalPositiveNumber(record['duration']);
   const visualDescription = readTrimmedString(record['visualDescription']);
   const characterAction = readTrimmedString(record['characterAction']);

@@ -42,6 +42,13 @@ This skill stops at analysis and storyboard planning. It does not generate image
 
 ## StoryboardTable Rules
 
+- Use the nested shape exactly: `payload.scenes[]` contains scenes only, and `scene.shots[]` contains shots. Do not put `shotNumber`, `duration`, `visualDescription`, `imageStrategy`, or `sourceMediaRefs` directly on a `scenes[]` item.
+- Minimal valid shape:
+  - `payload.scenes[]`: Scene array.
+  - Scene required fields: `sceneId`, `sceneTitle`, `shots`.
+  - `scene.shots[]`: Shot array.
+  - Shot required fields: `shotNumber`, `duration`, `visualDescription`, `characterAction`, `imageStrategy`.
+- Invalid counterexample: `"scenes": [{ "sceneId": "scene-1", "shotNumber": 1, "visualDescription": "..." }]`. This misses `scenes.0.shots`. Put shot fields inside `"shots": [{ ... }]` instead.
 - Scene/shot granularity is important. A scene is a continuous page, location/time block, or narrative beat; a shot is an individual panel, camera setup, or video clip inside that scene.
 - Do not create one scene per shot. For manga/comics, group multiple panels from the same page or continuous action beat into one scene unless page, location, time, or dramatic beat clearly changes.
 - Use `shotNumber` for reading/video order across the whole storyboard.
@@ -50,7 +57,7 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
 - Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
 - Only write plan fields. Do not claim images have already been generated until a runtime/tool result exists.
-- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the exact tool call id and asset index. The tool call id is the runtime id from the tool result, not a tool name, alias, or invented label such as `ReadImage.front10pages`.
+- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the tool-result call id / batch id and asset index exposed by the tool result. Prefer the real runtime `toolCallId`; if the tool result does not expose a separate runtime id but explicitly gives a current-result batch id such as `readimage-current-result`, use that batch id exactly and map `assetIndex` to the real returned order. Do not invent a tool name, alias, or label such as `ReadImage.front10pages`.
 - Every shot that comes from a document page or image sequence must name its source page/image. Prefer a readable field such as `sourcePage: "P6"` or `sourceImage: "page_6"`; the structured payload normalizer records it as `extensions["neko.storyboardSourceImage"]`. When one page becomes multiple shots, those shots must point to the same source page instead of advancing to the next image by row order.
 - If multiple tool calls or batches contain the same alias, such as two different `page_1` images, disambiguate with `sourceMediaRefs[].locator.toolCallId` and `assetIndex`. Do not rely on row order in multi-batch contexts.
 - If a shot comes from a page/panel image, write that image into `sourceMediaRefs`; do not only describe the image in human-readable notes.
