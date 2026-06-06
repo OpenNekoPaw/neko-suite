@@ -678,6 +678,44 @@ describe('webview protocol projectors', () => {
         type: 'sendToPlugin',
         target: 'canvas',
         payload: {
+          kind: 'singleAsset',
+          asset: {
+            mediaType: 'image',
+            name: 'page-1.jpg',
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              entryPath: 'images/page-1.jpg',
+              versionPolicy: 'versioned-export',
+            },
+            resourceRef: cacheResourceRef,
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'canvas',
+      payload: {
+        kind: 'singleAsset',
+        asset: {
+          mediaType: 'image',
+          name: 'page-1.jpg',
+          documentResourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'images/page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
+          resourceRef: cacheResourceRef,
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
           kind: 'canvasStoryboard',
           storyboard: {
             mode: 'semantic',

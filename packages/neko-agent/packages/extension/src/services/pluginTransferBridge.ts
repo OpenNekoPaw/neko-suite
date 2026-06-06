@@ -1,12 +1,18 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import {
   buildRuntimePluginTransferPlan,
   buildRuntimePluginsAvailableMessage,
   expandRuntimePluginTransferInputs,
 } from '@neko/agent/runtime';
 import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
-import { PathResolver, type ContentIngestResult, type ResourceRef } from '@neko/shared';
+import {
+  PathResolver,
+  resolveStorageLayout,
+  type ContentIngestResult,
+  type ResourceRef,
+} from '@neko/shared';
 import {
   createGeneratedAssetResourceRef,
   GeneratedOutputContentIngestProvider,
@@ -17,7 +23,6 @@ import { getLogger, handleError } from '../base';
 
 const logger = getLogger('PluginTransferBridge');
 const CANVAS_TARGET = 'canvas';
-const GENERATED_ASSETS_RELATIVE_DIR = path.join('.neko', 'generated');
 
 export interface PluginTransferBridgeResult {
   readonly success: boolean;
@@ -147,7 +152,12 @@ async function promoteCanvasAsset(
   asset: PluginTransferAssetRef,
   deps: PluginTransferBridgeDeps,
 ): Promise<PluginTransferAssetRef | undefined> {
-  if (asset.resourceRef || asset.documentResourceRef || !isPromotableLocalPath(asset.path)) {
+  if (
+    asset.resourceRef ||
+    asset.documentResourceRef ||
+    !asset.path ||
+    !isPromotableLocalPath(asset.path)
+  ) {
     return undefined;
   }
 
@@ -159,7 +169,10 @@ async function promoteCanvasAsset(
 
   const ingestService =
     deps.ingestService ?? createGeneratedOutputIngestService(workspaceRoot, deps.pathResolver);
-  const generatedDir = path.join(workspaceRoot, GENERATED_ASSETS_RELATIVE_DIR, mediaDir(asset));
+  const generatedDir = path.join(
+    resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot).project.cache.generated,
+    mediaDir(asset),
+  );
   const result = await ingestService.ingest({
     mode: 'generated-output',
     sourcePath: asset.path,
@@ -239,7 +252,7 @@ function readGeneratedAssetId(result: ContentIngestResult, asset: PluginTransfer
 }
 
 function assetIdForGeneratedAsset(asset: PluginTransferAssetRef): string {
-  const base = asset.name ?? path.basename(asset.path);
+  const base = asset.name ?? (asset.path ? path.basename(asset.path) : 'generated-asset');
   return base.replace(/\.[^.]+$/, '') || 'generated-asset';
 }
 
@@ -251,10 +264,11 @@ function mediaDir(asset: PluginTransferAssetRef): string {
 }
 
 function mimeTypeForAsset(asset: PluginTransferAssetRef): string | undefined {
-  if (asset.mediaType === 'image') return mimeTypeFromExtension(asset.path) ?? 'image/png';
-  if (asset.mediaType === 'video') return mimeTypeFromExtension(asset.path) ?? 'video/mp4';
-  if (asset.mediaType === 'audio') return mimeTypeFromExtension(asset.path) ?? 'audio/mpeg';
-  return mimeTypeFromExtension(asset.path);
+  const assetPath = asset.path ?? '';
+  if (asset.mediaType === 'image') return mimeTypeFromExtension(assetPath) ?? 'image/png';
+  if (asset.mediaType === 'video') return mimeTypeFromExtension(assetPath) ?? 'video/mp4';
+  if (asset.mediaType === 'audio') return mimeTypeFromExtension(assetPath) ?? 'audio/mpeg';
+  return mimeTypeFromExtension(assetPath);
 }
 
 function mimeTypeFromExtension(assetPath: string): string | undefined {

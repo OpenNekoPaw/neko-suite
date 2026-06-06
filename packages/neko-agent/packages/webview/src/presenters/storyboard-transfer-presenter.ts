@@ -1,5 +1,7 @@
 import {
   hasBlockingStoryboardDiagnostics,
+  isResourceRef,
+  parseDocumentArchiveResourceRef,
   projectStoryboardTableV1ToCanvasPayload,
   projectStoryboardTableV1ToCutPayload,
   type CanvasStoryboardPayload,
@@ -18,6 +20,7 @@ import type {
   PluginTransferTargetRef,
 } from '@neko-agent/types';
 import type { StoryboardScene } from '@/components/ChatView/MediaPreview';
+import type { ContentBlock, ToolCall } from '@/components/types';
 import type {
   ResolvedCompositeMedia,
   ResolvedCompositeSection,
@@ -32,6 +35,13 @@ interface MarkdownCanvasTransferInput {
   readonly content: string;
   readonly target?: PluginTransferTargetRef;
   readonly provenance?: PluginTransferProvenance;
+  readonly siblingBlocks?: readonly ContentBlock[];
+  readonly toolCalls?: readonly ToolCall[];
+}
+
+interface MarkdownStoryboardTransferOptions {
+  readonly siblingBlocks?: readonly ContentBlock[];
+  readonly toolCalls?: readonly ToolCall[];
 }
 
 interface MarkdownStoryboardTable {
@@ -52,12 +62,29 @@ interface MarkdownStoryboardRow {
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
+  readonly sourceImageNumber?: number;
 }
 
 interface MarkdownTableBlock {
   readonly title?: string;
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
+}
+
+interface MarkdownToolResultImageRef {
+  readonly toolCallId: string;
+  readonly assetIndex: number;
+  readonly path?: string;
+  readonly label?: string;
+  readonly alias?: string;
+  readonly aliasScope?: string;
+  readonly sourceDocumentId?: string;
+  readonly entryPath?: string;
+  readonly batchKey: string;
+  readonly mimeType?: string;
+  readonly pageNumber?: number;
+  readonly resourceRef?: DocumentArchiveResourceRef;
+  readonly cacheResourceRef?: ResourceRef;
 }
 
 export function projectStoryboardScenesTransferPayload(
@@ -97,18 +124,24 @@ export function projectStoryboardScenesCutTimelinePayload(
 export function projectAssistantMarkdownCanvasTransferPayload(
   input: MarkdownCanvasTransferInput,
 ): PluginTransferPayload | null {
-  const storyboard = projectMarkdownStoryboardTransferPayload(input.content);
+  const storyboard = projectMarkdownStoryboardTransferPayload(input.content, {
+    siblingBlocks: input.siblingBlocks,
+    toolCalls: input.toolCalls,
+  });
   if (storyboard) return storyboard;
   return null;
 }
 
 export function projectMarkdownStoryboardTransferPayload(
   markdown: string,
+  options: MarkdownStoryboardTransferOptions = {},
 ): PluginTransferPayload | null {
   const storyboardTables = extractMarkdownStoryboardTables(markdown);
   if (storyboardTables.length === 0) return null;
 
   let nextShotNumber = 1;
+  let nextRowIndex = 0;
+  const imageRefs = collectMarkdownToolResultImageRefs(options);
   const scenes = storyboardTables.flatMap((table, tableIndex) => {
     const groups = groupMarkdownStoryboardRowsByScene(table.rows);
     return groups.map((group, groupIndex) => ({
@@ -116,8 +149,11 @@ export function projectMarkdownStoryboardTransferPayload(
       sceneTitle: group.sceneTitle ?? table.title,
       sceneNumber: groupIndex + 1,
       shotPlans: group.rows.map((row) => {
+        const rowIndex = nextRowIndex;
+        nextRowIndex += 1;
         const shotNumber = row.shotNumber ?? nextShotNumber;
         nextShotNumber = Math.max(nextShotNumber, shotNumber + 1);
+        const referenceImage = resolveMarkdownStoryboardReferenceImage(row, imageRefs, rowIndex);
         return {
           shotNumber,
           duration: row.duration ?? DEFAULT_SHOT_DURATION_SECONDS,
@@ -132,7 +168,7 @@ export function projectMarkdownStoryboardTransferPayload(
           ...(row.soundCue ? { soundCue: row.soundCue } : {}),
           ...(row.generationPrompt ? { generationPrompt: row.generationPrompt } : {}),
           ...(row.visualStyle ? { visualStyle: row.visualStyle } : {}),
-          ...(row.referenceImagePath ? { referenceImagePath: row.referenceImagePath } : {}),
+          ...referenceImage,
         };
       }),
     }));
@@ -473,6 +509,10 @@ function projectMarkdownStoryboardRow(
     readStoryboardCell(cells, 'scene');
   if (!visualDescription) return null;
 
+  const sourceImageNumber = resolveStoryboardSourceImageNumber(
+    readStoryboardCell(cells, 'sourceImage') ?? readStoryboardCell(cells, 'reference'),
+  );
+
   return {
     visualDescription,
     ...(parseFirstInteger(readStoryboardCell(cells, 'shot')) !== undefined
@@ -509,6 +549,7 @@ function projectMarkdownStoryboardRow(
     ...(readStoryboardCell(cells, 'reference')
       ? { referenceImagePath: readStoryboardCell(cells, 'reference') }
       : {}),
+    ...(sourceImageNumber !== undefined ? { sourceImageNumber } : {}),
   };
 }
 
@@ -548,6 +589,7 @@ function createMarkdownRowLookup(
 type StoryboardColumnKind =
   | 'shot'
   | 'scene'
+  | 'sourceImage'
   | 'visual'
   | 'duration'
   | 'scale'
@@ -562,6 +604,17 @@ type StoryboardColumnKind =
 const STORYBOARD_HEADER_GROUPS: Record<StoryboardColumnKind, readonly string[]> = {
   shot: ['shot', '镜头', '分镜', '编号', '序号', '#'],
   scene: ['scene', '场景', '段落', '章节'],
+  sourceImage: [
+    'source page',
+    'source image',
+    'source',
+    'original page',
+    'page',
+    '原页',
+    '来源页',
+    '源页',
+    '参考页',
+  ],
   visual: ['visual', '画面', '描述', '内容', '构图', 'panel', '镜头内容'],
   duration: ['duration', '时长', '秒'],
   scale: ['shot scale', 'scale', '景别', '镜别'],
@@ -635,6 +688,280 @@ function sanitizeMarkdownCell(value: string): string | undefined {
   return cleaned.length > 0 && cleaned !== '-' ? cleaned : undefined;
 }
 
+function resolveMarkdownStoryboardReferenceImage(
+  row: MarkdownStoryboardRow,
+  imageRefs: readonly MarkdownToolResultImageRef[],
+  rowIndex: number,
+): {
+  readonly referenceImagePath?: string;
+  readonly referenceResourceRef?: ResourceRef;
+  readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
+} {
+  const inferredRef = selectMarkdownToolResultImageRef(row, imageRefs, rowIndex);
+  if (inferredRef?.resourceRef || inferredRef?.cacheResourceRef) {
+    return {
+      ...(inferredRef.cacheResourceRef
+        ? { referenceResourceRef: inferredRef.cacheResourceRef }
+        : {}),
+      ...(inferredRef.resourceRef ? { referenceImageResourceRef: inferredRef.resourceRef } : {}),
+    };
+  }
+
+  const inferredPath =
+    inferredRef?.path && isCanvasReferenceImagePathUsable(inferredRef.path)
+      ? inferredRef.path
+      : undefined;
+  const explicitPath =
+    row.referenceImagePath && isCanvasReferenceImagePathUsable(row.referenceImagePath)
+      ? row.referenceImagePath
+      : undefined;
+  const referenceImagePath = inferredPath ?? explicitPath;
+  return referenceImagePath ? { referenceImagePath } : {};
+}
+
+function selectMarkdownToolResultImageRef(
+  row: MarkdownStoryboardRow,
+  imageRefs: readonly MarkdownToolResultImageRef[],
+  rowIndex: number,
+): MarkdownToolResultImageRef | undefined {
+  const sourceImageNumber =
+    row.sourceImageNumber ??
+    resolveStoryboardSourceImageNumber(row.referenceImagePath) ??
+    resolveStoryboardSourceImageNumber(row.sceneTitle);
+  if (sourceImageNumber !== undefined) {
+    const pageMatches = imageRefs.filter((ref) => ref.pageNumber === sourceImageNumber);
+    const matchingBatches = new Set(pageMatches.map((ref) => ref.batchKey));
+    if (pageMatches.length > 0) {
+      return matchingBatches.size === 1 ? pageMatches[0] : undefined;
+    }
+    const singleBatch = selectSingleMarkdownImageBatch(imageRefs);
+    return singleBatch?.[sourceImageNumber - 1];
+  }
+  return selectSingleMarkdownImageBatch(imageRefs)?.[rowIndex];
+}
+
+function collectMarkdownToolResultImageRefs(
+  options: MarkdownStoryboardTransferOptions,
+): readonly MarkdownToolResultImageRef[] {
+  const refs: MarkdownToolResultImageRef[] = [];
+  for (const toolCall of collectMarkdownToolCalls(options)) {
+    if (
+      toolCall.result?.success !== true ||
+      !['ReadImage', 'ReadDocumentImage', 'ReadDocument'].includes(toolCall.name)
+    ) {
+      continue;
+    }
+    refs.push(...collectMarkdownImageRefsFromToolCall(toolCall));
+  }
+  return refs;
+}
+
+function selectSingleMarkdownImageBatch(
+  refs: readonly MarkdownToolResultImageRef[],
+): readonly MarkdownToolResultImageRef[] | undefined {
+  const batches = new Map<string, MarkdownToolResultImageRef[]>();
+  for (const ref of refs) {
+    batches.set(ref.batchKey, [...(batches.get(ref.batchKey) ?? []), ref]);
+  }
+  const values = Array.from(batches.values()).filter((batch) => batch.length > 0);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+function collectMarkdownToolCalls(options: MarkdownStoryboardTransferOptions): readonly ToolCall[] {
+  const byId = new Map<string, ToolCall>();
+  for (const block of options.siblingBlocks ?? []) {
+    if (block.type === 'tool_call' && block.toolCall) {
+      byId.set(block.toolCall.id, block.toolCall);
+    }
+  }
+  for (const toolCall of options.toolCalls ?? []) {
+    byId.set(toolCall.id, toolCall);
+  }
+  return Array.from(byId.values());
+}
+
+function collectMarkdownImageRefsFromToolCall(
+  toolCall: ToolCall,
+): readonly MarkdownToolResultImageRef[] {
+  const data = asRecord(toolCall.result?.data);
+  if (!data) return [];
+  const refs: MarkdownToolResultImageRef[] = [];
+  for (const [index, image] of readRecordArray(data, 'imageInfo').entries()) {
+    refs.push(projectMarkdownImageRef(toolCall.id, index, image));
+  }
+  for (const [index, image] of readRecordArray(data, 'images').entries()) {
+    const documentImage = asRecord(image['documentImage']);
+    refs.push(
+      projectMarkdownImageRef(toolCall.id, index, {
+        ...(documentImage ?? {}),
+        ...image,
+        ...(documentImage?.['resourceRef'] !== undefined
+          ? { resourceRef: documentImage['resourceRef'] }
+          : {}),
+        ...(documentImage?.['cacheResourceRef'] !== undefined
+          ? { cacheResourceRef: documentImage['cacheResourceRef'] }
+          : {}),
+      }),
+    );
+  }
+  if (refs.length > 0) return dedupeMarkdownImageRefs(refs);
+  return readStringArray(data, 'imagePaths').map((imagePath, index) =>
+    projectMarkdownImageRef(toolCall.id, index, { path: imagePath }),
+  );
+}
+
+function projectMarkdownImageRef(
+  toolCallId: string,
+  assetIndex: number,
+  image: Record<string, unknown>,
+): MarkdownToolResultImageRef {
+  const locator = asRecord(image['locator']);
+  const resourceRef = parseDocumentArchiveResourceRef(image['resourceRef']);
+  const cacheResourceRef = isResourceRef(image['cacheResourceRef'])
+    ? image['cacheResourceRef']
+    : undefined;
+  const label = readString(image, 'label');
+  const path = readString(image, 'path');
+  const alias = normalizeStoryboardAlias(readString(image, 'alias'));
+  const sourceDocumentId =
+    readString(image, 'sourceDocumentId') ?? readDocumentResourceSourceId(resourceRef);
+  const entryPath = readString(image, 'entryPath') ?? resourceRef?.entryPath;
+  const aliasScope =
+    readString(image, 'aliasScope') ??
+    (sourceDocumentId ? `document:${sourceDocumentId}` : `tool:${toolCallId}`);
+  const pageNumber =
+    readFinitePositiveInteger(locator?.['pageNumber']) ??
+    resolveStoryboardSourceImageNumber(alias) ??
+    resolveStoryboardSourceImageNumber(label) ??
+    readDocumentResourcePageNumber(resourceRef);
+  return {
+    toolCallId,
+    assetIndex,
+    batchKey: sourceDocumentId ?? aliasScope ?? toolCallId,
+    ...(path ? { path } : {}),
+    ...(label ? { label } : {}),
+    ...(alias ? { alias } : {}),
+    ...(aliasScope ? { aliasScope } : {}),
+    ...(sourceDocumentId ? { sourceDocumentId } : {}),
+    ...(entryPath ? { entryPath } : {}),
+    ...(readString(image, 'mimeType') ? { mimeType: readString(image, 'mimeType') } : {}),
+    ...(pageNumber !== undefined ? { pageNumber } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
+    ...(cacheResourceRef ? { cacheResourceRef } : {}),
+  };
+}
+
+function dedupeMarkdownImageRefs(
+  refs: readonly MarkdownToolResultImageRef[],
+): readonly MarkdownToolResultImageRef[] {
+  const seen = new Set<string>();
+  const deduped: MarkdownToolResultImageRef[] = [];
+  for (const ref of refs) {
+    const key =
+      ref.cacheResourceRef?.id ??
+      (ref.resourceRef
+        ? `${ref.resourceRef.source.filePath}:${ref.resourceRef.entryPath ?? JSON.stringify(ref.resourceRef.locator)}`
+        : undefined) ??
+      ref.path ??
+      `${ref.toolCallId}:${ref.assetIndex}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(ref);
+  }
+  return deduped;
+}
+
+function readDocumentResourcePageNumber(
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): number | undefined {
+  if (resourceRef?.locator?.kind === 'page' || resourceRef?.locator?.kind === 'region') {
+    return resourceRef.locator.pageNumber;
+  }
+  return resolveStoryboardSourceImageNumber(resourceRef?.entryPath);
+}
+
+function readDocumentResourceSourceId(
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): string | undefined {
+  if (!resourceRef) return undefined;
+  return (
+    resourceRef.source.identity?.hash ??
+    resourceRef.source.identity?.fileId ??
+    resourceRef.source.fileId ??
+    resourceRef.source.filePath
+  );
+}
+
+function normalizeStoryboardAlias(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function resolveStoryboardSourceImageNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const match =
+    /(?:^|[\s/:：#_.\\-])(?:p|page|pg|页|原页|来源页|source|image|img|图|图片|panel|分格)[\s_#_.:-]*(\d{1,4})(?:\b|$)/i.exec(
+      value.trim(),
+    );
+  return parsePositiveIntegerValue(match?.[1]);
+}
+
+function isCanvasReferenceImagePathUsable(value: string): boolean {
+  if (!value || value.startsWith('blob:') || value.startsWith('file:')) return false;
+  if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
+  if (/^p\d{1,4}$/i.test(value.trim())) return false;
+  const normalized = value.replace(/\\/g, '/').toLowerCase();
+  if (
+    normalized.includes('/document-image-cache/') ||
+    normalized.includes('/.neko/.cache/resources/')
+  ) {
+    return false;
+  }
+  if (value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://')) {
+    return true;
+  }
+  if (value.startsWith('${')) return true;
+  return !isAbsolutePath(value);
+}
+
+function readRecordArray(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown>[] {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function readStringArray(record: Record<string, unknown> | undefined, key: string): string[] {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+}
+
+function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readFinitePositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
+}
+
 function normalizeHeader(value: string): string {
   return value.toLowerCase().replace(/\s+/g, '').trim();
 }
@@ -644,6 +971,12 @@ function parseFirstInteger(value: string | undefined): number | undefined {
   if (!match) return undefined;
   const parsed = Number.parseInt(match[0], 10);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parsePositiveIntegerValue(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function parseDurationSeconds(value: string | undefined): number | undefined {

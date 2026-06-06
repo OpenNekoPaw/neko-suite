@@ -4,6 +4,7 @@ import { isDocumentResourceStatusReason, parseDocumentResourceStatus } from '../
 describe('canvas contracts', () => {
   it('normalizes document resource status reasons', () => {
     expect(isDocumentResourceStatusReason('cache-missing')).toBe(true);
+    expect(isDocumentResourceStatusReason('legacy-cache-fallback')).toBe(false);
     expect(isDocumentResourceStatusReason('arbitrary')).toBe(false);
     expect(
       parseDocumentResourceStatus({

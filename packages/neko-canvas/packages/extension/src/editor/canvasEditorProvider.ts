@@ -12,6 +12,7 @@ import {
   createDefaultLocalResourceAccessService,
   createDocumentResourceRefFromArchiveRef,
   createFocusedWebviewRegistry,
+  DocumentResourceCacheProvider,
   GeneratedAssetResourceCacheProvider,
   HostContentAccessService,
   LegacyResourceCacheProvider,
@@ -102,11 +103,10 @@ import type { PlaybackHandle, PlaybackMediaType } from '@neko/neko-client';
 import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
+import { createCanvasDocumentEntryReader } from '../services/documentEntryReader';
 
 const logger = getLogger('CanvasEditorProvider');
 const CANVAS_KEYBOARD_OWNER_PREFIX = 'neko.canvasEditor:';
-const DOCUMENT_RESOURCE_CACHE_DIR_NAME = 'document-image-cache';
-
 const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'deleteSelected',
   'escape',
@@ -175,28 +175,6 @@ function resolveCanvasPreviewVariantRole(
 
 function isWebviewOrRemoteUri(value: string): boolean {
   return /^(vscode-webview-resource:|vscode-resource:|webview:|https?:|data:|blob:)/i.test(value);
-}
-
-function isPathInsideRoot(filePath: string, rootPath: string): boolean {
-  const resolvedFilePath = realpathIfExists(filePath);
-  const resolvedRootPath = realpathIfExists(rootPath);
-  const relative = path.relative(
-    path.normalize(resolvedRootPath),
-    path.normalize(resolvedFilePath),
-  );
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function isPathInsideNamedDirectory(filePath: string, directoryName: string): boolean {
-  return path.normalize(filePath).split(path.sep).filter(Boolean).includes(directoryName);
-}
-
-function realpathIfExists(filePath: string): string {
-  try {
-    return fs.realpathSync(filePath);
-  } catch {
-    return path.normalize(filePath);
-  }
 }
 
 function readCanvasSubsystemSummary(
@@ -475,7 +453,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly resourceCache: ResourceCacheService | undefined;
   private readonly contentAccess: ContentAccessService | undefined;
-  private readonly documentResourceCacheRoots: readonly vscode.Uri[];
   private readonly projectionAdapters: ProjectionAdapterRegistry =
     createProjectionAdapterRegistry();
   private readonly projectionSubscriptions = new Map<string, ProjectionDisposable>();
@@ -493,13 +470,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
     this.resourceCache = this.createProjectResourceCacheService();
     this.contentAccess = this.createContentAccessService();
-    this.documentResourceCacheRoots = [
-      context.globalStorageUri,
-      vscode.Uri.joinPath(context.globalStorageUri, 'document-image-cache'),
-      ...(vscode.workspace.workspaceFolders ?? []).map((folder) =>
-        vscode.Uri.joinPath(folder.uri, '.neko', '.cache'),
-      ),
-    ];
   }
 
   private createProjectResourceCacheService(): ResourceCacheService | undefined {
@@ -545,6 +515,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         }),
         new PreviewVariantResourceCacheProvider({
           preview: this.createLazyPreviewVariantResourceApi(),
+        }),
+        new DocumentResourceCacheProvider({
+          reader: {
+            readRange: async () => {
+              throw new Error('Canvas document range reader is unavailable.');
+            },
+          },
+          entryReader: createCanvasDocumentEntryReader(workspaceRoot),
+          enableRangeFallback: false,
         }),
         new LegacyResourceCacheProvider(),
       ],
@@ -883,7 +862,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }): Promise<boolean> {
     const activePanel = this.activeWebviewPanel;
     if (!activePanel) return false;
-    await this.authorizeDocumentResourceRoot(activePanel.webview, asset);
     const webviewAsset = this.toWebviewImportAsset(activePanel.webview, asset);
     activePanel.webview.postMessage({
       type: 'importGeneratedAsset',
@@ -1345,7 +1323,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   /**
-   * Save a base64 data URL to workspace .neko/generated/image/ and return a GeneratedImage.
+   * Save a base64 data URL to workspace generated cache and return a GeneratedImage.
    * ADR-4: writes binary to disk, returns JSON reference only.
    */
   private saveGeneratedImage(
@@ -1355,7 +1333,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): { filePath: string; assetId: string } {
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
     const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
-    const dir = path.join(workspaceDir, '.neko', 'generated', 'image');
+    const dir = path.join(
+      resolveStorageLayout(workspaceDir, os.homedir() || workspaceDir).project.cache.generated,
+      'image',
+    );
     fs.mkdirSync(dir, { recursive: true });
     const assetId = crypto.randomUUID();
     const filePath = path.join(dir, `${assetId}.${ext}`);
@@ -3126,22 +3107,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     )(source);
   }
 
-  private async authorizeDocumentResourceRoot(
-    webview: vscode.Webview,
-    value: { readonly documentResourceRef?: DocumentArchiveResourceRef },
-  ): Promise<void> {
-    const cachePath = value.documentResourceRef?.cachePath;
-    if (!cachePath) {
-      return;
-    }
-    const root =
-      this.resolveDocumentResourceCacheRoot(cachePath) ??
-      this.resolveExistingDocumentResourceRoot(cachePath);
-    if (root) {
-      await this.addFeatureRoot(webview, root.fsPath);
-    }
-  }
-
   private async addFeatureRoot(webview: vscode.Webview, rootPath: string): Promise<void> {
     await this.localResourceAccess.configureWebview(webview, {
       enableScripts: true,
@@ -3175,32 +3140,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    const resourceRef = documentResourceRef;
-    if (!resourceRef?.cachePath) {
-      return;
-    }
-
-    const cacheRoot = this.resolveDocumentResourceCacheRoot(resourceRef.cachePath);
-    if (!cacheRoot) {
-      this.markDocumentResourceUnavailable(nodeData, 'unauthorized-cache-root');
-      return;
-    }
-    if (!fs.existsSync(resourceRef.cachePath)) {
+    if (documentResourceRef?.cachePath) {
       this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
-      return;
-    }
-
-    await this.addFeatureRoot(webview, cacheRoot.fsPath);
-    const runtimePath = this.projectLocalResource(
-      webview,
-      resourceRef.cachePath,
-      'neko-canvas.document-resource-preview',
-    );
-    if (runtimePath) {
-      nodeData['runtimeAssetPath'] = runtimePath;
-      delete nodeData['documentResourceStatus'];
-    } else {
-      this.markDocumentResourceUnavailable(nodeData, 'projection-failed');
     }
   }
 
@@ -3235,36 +3176,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    const resourceRef = referenceImageResourceRef;
-    if (!resourceRef?.cachePath) {
-      return;
-    }
-
-    const root =
-      this.resolveDocumentResourceCacheRoot(resourceRef.cachePath) ??
-      this.resolveExistingDocumentResourceRoot(resourceRef.cachePath);
-    if (!root) {
-      this.markDocumentResourceUnavailable(nodeData, 'unauthorized-cache-root');
-      return;
-    }
-
-    const localSourcePath = normalizeLocalFilePath(resourceRef.cachePath);
-    if (!localSourcePath || !fs.existsSync(localSourcePath)) {
+    if (referenceImageResourceRef?.cachePath) {
       this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
-      return;
-    }
-
-    await this.addFeatureRoot(webview, root.fsPath);
-    const runtimePath = this.projectLocalResource(
-      webview,
-      localSourcePath,
-      'neko-canvas.shot-reference-preview',
-    );
-    if (runtimePath) {
-      nodeData['runtimeReferenceImagePath'] = runtimePath;
-      delete nodeData['documentResourceStatus'];
-    } else {
-      this.markDocumentResourceUnavailable(nodeData, 'projection-failed');
     }
   }
 
@@ -3289,6 +3202,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     if (result.status === 'ready' && result.uri) {
       return result.uri;
     }
+    this.logResourceCacheVariantMiss(resourceRef, caller, result.status, result.error);
     if (result.status === 'missing-cache' || result.status === 'stale-source') {
       return undefined;
     }
@@ -3300,6 +3214,25 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       });
     }
     return undefined;
+  }
+
+  private logResourceCacheVariantMiss(
+    resourceRef: ResourceRef,
+    caller: string,
+    status: string,
+    error: string | undefined,
+  ): void {
+    const entryPath =
+      resourceRef.locator?.kind === 'document' ? resourceRef.locator.entryPath : undefined;
+    logger.warn('Resource cache variant resolution missed', {
+      caller,
+      status,
+      error,
+      provider: resourceRef.provider,
+      resourceId: resourceRef.id,
+      sourcePath: resourceRef.source.document?.filePath ?? resourceRef.source.filePath,
+      entryPath,
+    });
   }
 
   private async resolveResourceRefLocalPreviewPath(
@@ -3326,30 +3259,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       result.error ??
         'Resource cache variant could not be materialized for this document reference.',
     );
-  }
-
-  private resolveDocumentResourceCacheRoot(cachePath: string): vscode.Uri | undefined {
-    const localPath = normalizeLocalFilePath(cachePath);
-    if (!localPath) {
-      return undefined;
-    }
-    return this.documentResourceCacheRoots.find((root) => isPathInsideRoot(localPath, root.fsPath));
-  }
-
-  private resolveExistingDocumentResourceRoot(filePath: string): vscode.Uri | undefined {
-    const localPath = normalizeLocalFilePath(filePath);
-    if (!localPath || !isPathInsideNamedDirectory(localPath, DOCUMENT_RESOURCE_CACHE_DIR_NAME)) {
-      return undefined;
-    }
-    if (!fs.existsSync(localPath)) {
-      return undefined;
-    }
-    try {
-      const stat = fs.statSync(localPath);
-      return vscode.Uri.file(stat.isDirectory() ? localPath : path.dirname(localPath));
-    } catch {
-      return undefined;
-    }
   }
 
   private markDocumentResourceUnavailable(

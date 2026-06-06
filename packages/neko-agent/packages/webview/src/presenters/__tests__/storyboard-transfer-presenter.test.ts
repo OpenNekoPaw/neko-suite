@@ -982,6 +982,198 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
+  it('binds markdown storyboard source pages to sibling tool result resource refs', () => {
+    const page6DocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-6.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-6.jpg',
+    };
+    const page7DocumentRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-7.jpg',
+      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-7.jpg',
+    };
+    const page6CacheRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/page-6.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:page-6',
+        providerId: 'document-archive',
+      }),
+    });
+    const page7CacheRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/page-7.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:page-7',
+        providerId: 'document-archive',
+      }),
+    });
+
+    const payload = projectMarkdownStoryboardTransferPayload(
+      `
+## 前十页分镜
+
+| Shot ID | 原页 | 时长 | 景别 | 画面内容 |
+| --- | --- | --- | --- | --- |
+| S010 | P6 | 5s | 大远景 | 火山压在废墟村庄之后 |
+| S011 | P6 | 5s | 中景 | 瑞德手持牧羊杖站在废墟前 |
+| S015 | P7 | 6s | 大远景 | 瑞德带两只羊走在山坡下方 |
+`,
+      {
+        toolCalls: [
+          {
+            id: 'read-doc',
+            name: 'ReadDocument',
+            arguments: {},
+            result: {
+              success: true,
+              data: {
+                imageInfo: [
+                  {
+                    path: '/cache/page-6.jpg',
+                    label: 'Page 6',
+                    locator: { kind: 'page', pageNumber: 6 },
+                    resourceRef: page6DocumentRef,
+                    cacheResourceRef: page6CacheRef,
+                  },
+                  {
+                    path: '/cache/page-7.jpg',
+                    label: 'Page 7',
+                    locator: { kind: 'page', pageNumber: 7 },
+                    resourceRef: page7DocumentRef,
+                    cacheResourceRef: page7CacheRef,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    expect(payload).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              {
+                referenceImageResourceRef: page6DocumentRef,
+                referenceResourceRef: page6CacheRef,
+              },
+              {
+                referenceImageResourceRef: page6DocumentRef,
+                referenceResourceRef: page6CacheRef,
+              },
+              {
+                referenceImageResourceRef: page7DocumentRef,
+                referenceResourceRef: page7CacheRef,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const shotPlans =
+      payload?.kind === 'canvasStoryboard' ? (payload.storyboard.scenes[0]?.shotPlans ?? []) : [];
+    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+    expect(shotPlans[1]).not.toHaveProperty('referenceImagePath');
+    expect(shotPlans[2]).not.toHaveProperty('referenceImagePath');
+  });
+
+  it('does not attach markdown images when source page aliases are ambiguous across batches', () => {
+    const payload = projectMarkdownStoryboardTransferPayload(
+      `
+## 前十页分镜
+
+| Shot ID | 原页 | 时长 | 景别 | 画面内容 |
+| --- | --- | --- | --- | --- |
+| S001 | P1 | 5s | 大远景 | 第一页画面 |
+`,
+      {
+        toolCalls: [
+          {
+            id: 'read-doc-a',
+            name: 'ReadDocument',
+            arguments: {},
+            result: {
+              success: true,
+              data: {
+                imageInfo: [
+                  {
+                    path: '/cache/a/page-1.jpg',
+                    label: 'Page 1',
+                    alias: 'page_1',
+                    aliasScope: 'document:comic-a',
+                    sourceDocumentId: 'comic-a',
+                  },
+                ],
+              },
+            },
+          },
+          {
+            id: 'read-doc-b',
+            name: 'ReadDocument',
+            arguments: {},
+            result: {
+              success: true,
+              data: {
+                imageInfo: [
+                  {
+                    path: '/cache/b/page-1.jpg',
+                    label: 'Page 1',
+                    alias: 'page_1',
+                    aliasScope: 'document:comic-b',
+                    sourceDocumentId: 'comic-b',
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    const shotPlans =
+      payload?.kind === 'canvasStoryboard' ? (payload.storyboard.scenes[0]?.shotPlans ?? []) : [];
+    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+    expect(shotPlans[0]).not.toHaveProperty('referenceImageResourceRef');
+    expect(shotPlans[0]).not.toHaveProperty('referenceResourceRef');
+  });
+
+  it('does not use document-image-cache paths as markdown Canvas image identity', () => {
+    const payload = projectMarkdownStoryboardTransferPayload(`
+## 前十页分镜
+
+| Shot ID | 原页 | 画面内容 | 参考图 |
+| --- | --- | --- | --- |
+| S001 | P1 | 第一页画面 | /Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/page-1.jpg |
+`);
+
+    const shotPlans =
+      payload?.kind === 'canvasStoryboard' ? (payload.storyboard.scenes[0]?.shotPlans ?? []) : [];
+    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+  });
+
   it('projects only storyboard-ready assistant markdown for Canvas transfer', () => {
     expect(
       projectAssistantMarkdownCanvasTransferPayload({

@@ -162,6 +162,8 @@ function renderBlockContent(
         !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
           ? projectAssistantMarkdownCanvasTransferPayload({
               content: projection.content,
+              siblingBlocks: projection.siblingBlocks,
+              toolCalls: projection.toolCalls,
               target: projectCanvasContentTransferTarget({
                 ambientNodes: callbacks.ambientNodes,
                 contextChips: callbacks.contextChips,

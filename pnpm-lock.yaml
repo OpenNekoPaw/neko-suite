@@ -602,6 +602,9 @@ importers:
       '@neko/shared':
         specifier: workspace:*
         version: link:../../../neko-types
+      adm-zip:
+        specifier: ^0.5.16
+        version: 0.5.16
     devDependencies:
       '@types/node':
         specifier: ^20.10.0

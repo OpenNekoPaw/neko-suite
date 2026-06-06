@@ -17,8 +17,8 @@ describe('PluginTransferBridge', () => {
       createDeps({
         ingest: async (request) =>
           createGeneratedIngestResult(request, {
-            outputPath: '/workspace/.neko/generated/image/legacy-frame.png',
-            contractedPath: '${WORKSPACE}/.neko/generated/image/legacy-frame.png',
+            outputPath: '/workspace/.neko/.cache/generated/image/legacy-frame.png',
+            contractedPath: '${WORKSPACE}/.neko/.cache/generated/image/legacy-frame.png',
           }),
         executeCommand,
       }),
@@ -27,11 +27,11 @@ describe('PluginTransferBridge', () => {
     expect(executeCommand).toHaveBeenCalledWith(
       'neko.canvas.importAsset',
       expect.objectContaining({
-        path: '/workspace/.neko/generated/image/legacy-frame.png',
+        path: '/workspace/.neko/.cache/generated/image/legacy-frame.png',
         type: 'image',
         resourceRef: expect.objectContaining({
           source: expect.objectContaining({
-            filePath: '${WORKSPACE}/.neko/generated/image/legacy-frame.png',
+            filePath: '${WORKSPACE}/.neko/.cache/generated/image/legacy-frame.png',
           }),
         }),
       }),
@@ -58,8 +58,8 @@ describe('PluginTransferBridge', () => {
         ingest: async (request) => {
           ingestCalls.push(request);
           return createGeneratedIngestResult(request, {
-            outputPath: '/workspace/.neko/generated/image/shot.png',
-            contractedPath: '${WORKSPACE}/.neko/generated/image/shot.png',
+            outputPath: '/workspace/.neko/.cache/generated/image/shot.png',
+            contractedPath: '${WORKSPACE}/.neko/.cache/generated/image/shot.png',
           });
         },
         executeCommand,
@@ -73,7 +73,7 @@ describe('PluginTransferBridge', () => {
       sourcePath: '/tmp/agent-private/shot.png',
       destination: {
         kind: 'generated-assets',
-        directory: '/workspace/.neko/generated/image',
+        directory: '/workspace/.neko/.cache/generated/image',
       },
       fileName: 'shot.png',
       mimeType: 'image/png',
@@ -81,13 +81,13 @@ describe('PluginTransferBridge', () => {
     expect(executeCommand).toHaveBeenCalledWith(
       'neko.canvas.importAsset',
       expect.objectContaining({
-        path: '/workspace/.neko/generated/image/shot.png',
+        path: '/workspace/.neko/.cache/generated/image/shot.png',
         resourceRef: expect.objectContaining({
           provider: 'generated-asset',
           kind: 'generated',
           source: expect.objectContaining({
             kind: 'generated-asset',
-            filePath: '${WORKSPACE}/.neko/generated/image/shot.png',
+            filePath: '${WORKSPACE}/.neko/.cache/generated/image/shot.png',
           }),
         }),
       }),
@@ -111,11 +111,11 @@ describe('PluginTransferBridge', () => {
       },
       createDeps({
         ingest: async (request) => {
-          const outputPath = `/workspace/.neko/generated/image/${request.fileName}`;
+          const outputPath = `/workspace/.neko/.cache/generated/image/${request.fileName}`;
           promotedPaths.push(outputPath);
           return createGeneratedIngestResult(request, {
             outputPath,
-            contractedPath: `\${WORKSPACE}/.neko/generated/image/${request.fileName}`,
+            contractedPath: `\${WORKSPACE}/.neko/.cache/generated/image/${request.fileName}`,
           });
         },
         executeCommand,
@@ -123,18 +123,18 @@ describe('PluginTransferBridge', () => {
     );
 
     expect(promotedPaths).toEqual([
-      '/workspace/.neko/generated/image/shot-1.png',
-      '/workspace/.neko/generated/image/shot-2.png',
+      '/workspace/.neko/.cache/generated/image/shot-1.png',
+      '/workspace/.neko/.cache/generated/image/shot-2.png',
     ]);
     expect(executeCommand).toHaveBeenCalledTimes(2);
     expect(executeCommand).toHaveBeenNthCalledWith(
       1,
       'neko.canvas.importAsset',
       expect.objectContaining({
-        path: '/workspace/.neko/generated/image/shot-1.png',
+        path: '/workspace/.neko/.cache/generated/image/shot-1.png',
         resourceRef: expect.objectContaining({
           source: expect.objectContaining({
-            filePath: '${WORKSPACE}/.neko/generated/image/shot-1.png',
+            filePath: '${WORKSPACE}/.neko/.cache/generated/image/shot-1.png',
           }),
         }),
       }),
@@ -143,10 +143,10 @@ describe('PluginTransferBridge', () => {
       2,
       'neko.canvas.importAsset',
       expect.objectContaining({
-        path: '/workspace/.neko/generated/image/shot-2.png',
+        path: '/workspace/.neko/.cache/generated/image/shot-2.png',
         resourceRef: expect.objectContaining({
           source: expect.objectContaining({
-            filePath: '${WORKSPACE}/.neko/generated/image/shot-2.png',
+            filePath: '${WORKSPACE}/.neko/.cache/generated/image/shot-2.png',
           }),
         }),
       }),
@@ -164,7 +164,7 @@ describe('PluginTransferBridge', () => {
       source: {
         kind: 'generated-asset' as const,
         generatedAssetId: 'asset-existing',
-        filePath: '${WORKSPACE}/.neko/generated/image/existing.png',
+        filePath: '${WORKSPACE}/.neko/.cache/generated/image/existing.png',
       },
       fingerprint: {
         strategy: 'provider' as const,
@@ -179,7 +179,7 @@ describe('PluginTransferBridge', () => {
       {
         kind: 'singleAsset',
         asset: {
-          path: '/workspace/.neko/generated/image/existing.png',
+          path: '/workspace/.neko/.cache/generated/image/existing.png',
           mediaType: 'image',
           resourceRef: existingResourceRef,
         },
@@ -191,7 +191,7 @@ describe('PluginTransferBridge', () => {
     expect(executeCommand).toHaveBeenCalledWith(
       'neko.canvas.importAsset',
       expect.objectContaining({
-        path: '/workspace/.neko/generated/image/existing.png',
+        path: '/workspace/.neko/.cache/generated/image/existing.png',
         resourceRef: existingResourceRef,
       }),
     );

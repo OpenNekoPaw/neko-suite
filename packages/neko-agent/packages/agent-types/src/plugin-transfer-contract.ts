@@ -37,7 +37,7 @@ export interface PluginTransferProvenance {
 }
 
 export interface PluginTransferAssetRef {
-  readonly path: string;
+  readonly path?: string;
   readonly mediaType?: PluginTransferMediaType;
   readonly name?: string;
   /**
@@ -126,7 +126,7 @@ export type PluginTransferPayload =
     };
 
 export interface PluginTransferCanvasImportAssetPayload {
-  readonly path: string;
+  readonly path?: string;
   readonly type?: PluginTransferMediaType;
   readonly name?: string;
   readonly documentResourceRef?: DocumentArchiveResourceRef;

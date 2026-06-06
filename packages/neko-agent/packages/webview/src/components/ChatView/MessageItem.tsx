@@ -136,6 +136,8 @@ function ContentBlockRenderer({
         !projection.renderStreaming && pluginsAvailable?.canvas
           ? projectAssistantMarkdownCanvasTransferPayload({
               content: projection.content,
+              siblingBlocks: projection.siblingBlocks,
+              toolCalls: projection.toolCalls,
               target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
               provenance: { source: 'webview', label: 'assistant-storyboard-block' },
             })

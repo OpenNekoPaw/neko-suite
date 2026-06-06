@@ -39,6 +39,13 @@ describe('canvas storyboard import contracts', () => {
     );
   });
 
+  it('allows linked resource asset imports without a runtime path', () => {
+    expect(extensionSource).toContain(
+      'if (!asset?.path && !asset?.documentResourceRef && !asset?.resourceRef)',
+    );
+    expect(extensionSource).toContain('missing asset path or resource ref');
+  });
+
   it('routes agent storyboard import through the canvas storyboard API', () => {
     expect(capabilitySource).toContain('api.storyboard.import(payload, { startX, startY })');
   });

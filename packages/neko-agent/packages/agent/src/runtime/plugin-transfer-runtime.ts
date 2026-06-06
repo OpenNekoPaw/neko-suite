@@ -157,7 +157,7 @@ export function buildRuntimePluginTransferPlan(
       status: 'execute-command',
       command: 'neko.canvas.importAsset',
       payload: {
-        path: payload.asset.path,
+        ...(payload.asset.path ? { path: payload.asset.path } : {}),
         ...(payload.asset.mediaType ? { type: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
         ...(documentResourceRef ? { documentResourceRef } : {}),
@@ -169,6 +169,14 @@ export function buildRuntimePluginTransferPlan(
           ? { provenance: payload.provenance ?? payload.asset.provenance }
           : {}),
       },
+    };
+  }
+
+  if (!payload.asset.path) {
+    return {
+      status: 'unsupported',
+      target: input.target,
+      reason: 'asset-path-required',
     };
   }
 

@@ -266,6 +266,12 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("materialization: 'if-missing'");
     });
 
+    it('registers document resources so stable document refs can be materialized in Canvas', () => {
+      expect(providerSource).toContain('DocumentResourceCacheProvider');
+      expect(providerSource).toContain('createCanvasDocumentEntryReader(workspaceRoot)');
+      expect(providerSource).toContain("return 'document-entry';");
+    });
+
     it('does not persist referenceImagePath when a shot has stable resource refs', () => {
       expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
       expect(providerSource).toContain("isResourceRef(nodeData['referenceResourceRef'])");
@@ -273,6 +279,25 @@ describe('canvasEditorProvider message contracts', () => {
         "isDocumentArchiveResourceRef(nodeData['referenceImageResourceRef'])",
       );
       expect(providerSource).toContain("delete nodeData['referenceImagePath'];");
+    });
+
+    it('does not project legacy document cache paths as Canvas previews', () => {
+      expect(providerSource).not.toContain('markDocumentResourceMigrationFallback');
+      expect(providerSource).not.toContain("reason: 'legacy-cache-fallback'");
+      expect(providerSource).not.toContain('Using a legacy document cache path');
+      expect(providerSource).not.toContain('resolveExistingDocumentResourceRoot');
+      expect(providerSource).not.toContain('documentResourceCacheRoots');
+      expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
+      expect(providerSource).toContain("nodeData['documentResourceStatus'] = {");
+    });
+
+    it('clears stale runtime previews when document reference materialization fails', () => {
+      expect(providerSource).toContain("delete nodeData['runtimeAssetPath'];");
+      expect(providerSource).toContain("delete nodeData['runtimeThumbnailPath'];");
+      expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
+      expect(providerSource).toContain(
+        "this.markDocumentResourceUnavailable(nodeData, 'cache-missing')",
+      );
     });
 
     it('resolves generated asset resource refs with workspace path variables', () => {
@@ -364,9 +389,9 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('projectResourceCacheVariant(');
       expect(providerSource).toContain('createDocumentResourceRefFromArchiveRef');
       expect(providerSource).toContain('resolvePreviewResourceRef(');
-      expect(providerSource).toContain(
-        'const resourceRef = this.resolvePreviewResourceRef(message.resourceRef, documentResourceRef)',
-      );
+      expect(providerSource).toContain('const resourceRef = this.resolvePreviewResourceRef(');
+      expect(providerSource).toContain('message.resourceRef');
+      expect(providerSource).toContain('documentResourceRef');
       expect(providerSource).toContain('const documentResourceRef = isDocumentArchiveResourceRef');
       expect(providerSource).toContain("'neko-canvas.document-resource-variant'");
       expect(providerSource).toContain("type: 'preview:variantResolved'");

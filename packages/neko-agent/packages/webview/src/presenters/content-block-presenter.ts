@@ -53,6 +53,8 @@ export interface MarkdownContentBlockProjection extends ContentBlockProjectionBa
   renderKind: 'markdown';
   content: string;
   renderStreaming: boolean;
+  siblingBlocks?: readonly ContentBlock[];
+  toolCalls?: readonly ToolCall[];
 }
 
 export interface ToolContentBlockProjection extends ContentBlockProjectionBase {
@@ -172,6 +174,8 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         renderKind: 'markdown',
         content: input.block.content,
         renderStreaming: input.block.isStreaming === true || parentIsStreaming,
+        ...(input.siblingBlocks ? { siblingBlocks: input.siblingBlocks } : {}),
+        ...(input.toolCalls ? { toolCalls: input.toolCalls } : {}),
       };
     case 'tool_call':
       if (!input.block.toolCall) {

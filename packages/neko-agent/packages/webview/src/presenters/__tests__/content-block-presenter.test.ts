@@ -45,6 +45,27 @@ describe('content block presenter', () => {
 
     expect(projections.map((projection) => projection.renderKind)).toEqual(['tool', 'tool']);
   });
+
+  it('passes sibling tool calls through markdown projections for transfer binding', () => {
+    const blocks: ContentBlock[] = [
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      {
+        id: 'block-text',
+        type: 'text',
+        timestamp: 20,
+        content: '| 镜头 | 原页 | 画面 |\n| --- | --- | --- |\n| S1 | P1 | 标题页 |',
+      },
+    ];
+
+    const projections = projectContentBlocksUi(blocks, false, undefined, blocks);
+    const markdown = projections.find((projection) => projection.renderKind === 'markdown');
+
+    expect(markdown).toMatchObject({
+      renderKind: 'markdown',
+      siblingBlocks: blocks,
+    });
+    expect(markdown).not.toHaveProperty('toolCalls');
+  });
 });
 
 function toolBlock(

@@ -305,6 +305,54 @@ describe('plugin transfer runtime', () => {
     });
   });
 
+  it('allows Canvas linked-resource asset imports without cache paths', () => {
+    const documentResourceRef = {
+      kind: 'document-entry',
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+      entryPath: 'image/page-1.jpg',
+      versionPolicy: 'versioned-export',
+    };
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            mediaType: 'image',
+            name: 'page-1.jpg',
+            documentResourceRef,
+          },
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.canvas.importAsset',
+      payload: {
+        type: 'image',
+        name: 'page-1.jpg',
+        documentResourceRef,
+      },
+    });
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'sketch',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            mediaType: 'image',
+            documentResourceRef,
+          },
+        },
+      }),
+    ).toEqual({
+      status: 'unsupported',
+      target: 'sketch',
+      reason: 'asset-path-required',
+    });
+  });
+
   it('expands asset batch transfers into single-asset inputs', () => {
     expect(
       expandRuntimePluginTransferInputs({

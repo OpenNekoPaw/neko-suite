@@ -58,7 +58,6 @@ describe('DocumentImageThumbnails', () => {
       payload: {
         kind: 'singleAsset',
         asset: {
-          path: '/tmp/page-1.jpg',
           mediaType: 'image',
           name: 'page-1.jpg',
           documentResourceRef: {
@@ -84,6 +83,7 @@ describe('DocumentImageThumbnails', () => {
               cachePath: '/tmp/page-1.jpg',
               versionPolicy: 'versioned-export',
             },
+            runtimePath: '/tmp/page-1.jpg',
           },
         },
       },

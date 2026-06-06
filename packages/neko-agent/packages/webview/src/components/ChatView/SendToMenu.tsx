@@ -122,7 +122,7 @@ function buildPluginTransferPayload(input: {
 }): PluginTransferPayload | null {
   if (input.payload) return input.payload;
 
-  const assets =
+  const assets: readonly PluginTransferAssetRef[] =
     input.assets ??
     input.assetPaths?.map((path) => ({
       path,
@@ -137,12 +137,16 @@ function buildPluginTransferPayload(input: {
         ]
       : []);
 
-  const validAssets = assets.filter((asset) => asset.path);
+  const validAssets = assets.filter(hasPluginTransferAssetIdentity);
   if (validAssets.length === 0) return null;
   if (validAssets.length === 1 && validAssets[0]) {
     return { kind: 'singleAsset', asset: validAssets[0] };
   }
   return { kind: 'assetBatch', assets: validAssets };
+}
+
+function hasPluginTransferAssetIdentity(asset: PluginTransferAssetRef): boolean {
+  return Boolean(asset.path || asset.documentResourceRef || asset.resourceRef);
 }
 
 function getTargetIcon(target: SendToTarget): React.ReactNode {

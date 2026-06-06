@@ -12,6 +12,7 @@ import {
   STORYBOARD_SHOT_V1_REQUIRED_FIELDS,
   STORYBOARD_SOURCE_MEDIA_ROLES_V1,
   STORYBOARD_TABLE_V1_REQUIRED_FIELDS,
+  classifyStoryboardMediaIdentityV1,
   interpretStoryboardImageStrategiesV1,
   normalizeStoryboardTableV1,
   projectStoryboardTableV1ToCanvasPayload,
@@ -328,6 +329,204 @@ describe('storyboard table contract', () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
+  it('classifies storyboard media identity without package-specific dependencies', () => {
+    expect(
+      classifyStoryboardMediaIdentityV1(
+        {
+          refId: 'page-1',
+          role: 'source',
+          locator: { type: 'tool-result', toolCallId: 'read-document-1', assetIndex: 0 },
+          label: 'P1',
+        },
+        { knownToolCallIds: ['read-document-1'] },
+      ),
+    ).toMatchObject({ kind: 'stable', toolCallId: 'read-document-1' });
+
+    expect(
+      classifyStoryboardMediaIdentityV1(
+        {
+          refId: 'page-1',
+          role: 'source',
+          locator: { type: 'tool-result', toolCallId: 'fabricated-call', assetIndex: 0 },
+        },
+        { knownToolCallIds: ['read-document-1'] },
+      ),
+    ).toMatchObject({ kind: 'unresolved-tool-result', toolCallId: 'fabricated-call' });
+
+    expect(
+      classifyStoryboardMediaIdentityV1(
+        {
+          refId: 'page_1',
+          role: 'source',
+          locator: { type: 'tool-result', toolCallId: 'read-document-1', assetIndex: 0 },
+        },
+        { ambiguousAliases: ['P1', 'page_1'] },
+      ),
+    ).toMatchObject({ kind: 'ambiguous-alias', alias: 'page_1' });
+
+    expect(
+      classifyStoryboardMediaIdentityV1({
+        refId: 'cache-path',
+        role: 'source',
+        locator: {
+          type: 'workspace-path',
+          path: '${WORKSPACE}/.neko/.cache/resources/documents/doc_1/page.jpg',
+        },
+      }),
+    ).toMatchObject({ kind: 'unsafe-cache-path' });
+
+    expect(
+      classifyStoryboardMediaIdentityV1({
+        refId: 'runtime-uri',
+        role: 'source',
+        locator: {
+          type: 'asset',
+          assetId: 'asset-1',
+          uri: 'vscode-webview-resource://neko/page.jpg',
+        },
+      }),
+    ).toMatchObject({ kind: 'runtime-only' });
+
+    expect(
+      classifyStoryboardMediaIdentityV1({
+        refId: 'asset-stable',
+        role: 'source',
+        locator: { type: 'asset', assetId: 'asset-1', uri: '${WORKSPACE}/assets/page.jpg' },
+      }),
+    ).toMatchObject({ kind: 'stable' });
+  });
+
+  it('rejects runtime handles and fabricated tool ids as storyboard media identity', () => {
+    const result = validateStoryboardTableV1(
+      {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        profile: 'manga-to-video',
+        title: 'Runtime refs',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Panel one.',
+                characterAction: 'Character waits.',
+                imageStrategy: 'reuse-original',
+                sourceMediaRefs: [
+                  {
+                    refId: 'webview',
+                    role: 'source',
+                    locator: {
+                      type: 'asset',
+                      assetId: 'asset-webview',
+                      uri: 'vscode-webview://neko/page.jpg',
+                    },
+                  },
+                  {
+                    refId: 'blob',
+                    role: 'source',
+                    locator: { type: 'workspace-path', path: 'blob:https://neko.local/page' },
+                  },
+                  {
+                    refId: 'object',
+                    role: 'source',
+                    locator: { type: 'workspace-path', path: 'object://preview/page' },
+                  },
+                  {
+                    refId: 'fabricated',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'missing-tool-call',
+                      assetIndex: 0,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { knownToolCallIds: ['read-document-1'] },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'error',
+          code: 'runtime-only-media-ref',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 0, 'locator'],
+        }),
+        expect.objectContaining({
+          severity: 'error',
+          code: 'runtime-only-media-ref',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 1, 'locator'],
+        }),
+        expect.objectContaining({
+          severity: 'error',
+          code: 'runtime-only-media-ref',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 2, 'locator'],
+        }),
+        expect.objectContaining({
+          severity: 'error',
+          code: 'unresolved-tool-result',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 3, 'locator'],
+        }),
+      ]),
+    );
+  });
+
+  it('reports ambiguous aliases when validation receives request-scoped alias context', () => {
+    const result = validateStoryboardTableV1(
+      {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Ambiguous alias',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Panel one.',
+                characterAction: 'Character waits.',
+                imageStrategy: 'reuse-original',
+                sourceMediaRefs: [
+                  {
+                    refId: 'P1',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-document-1',
+                      assetIndex: 0,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { ambiguousAliases: ['page_1', 'p1'] },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'error',
+          code: 'ambiguous-media-alias',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 0, 'locator'],
+        }),
+      ]),
+    );
+  });
+
   it('blocks generation when confirmation policy is pending', () => {
     const result = interpretStoryboardImageStrategiesV1({
       table: storyboardTable({ imageStrategy: 'generate-new', generationPrompt: 'frame' }),
@@ -519,6 +718,41 @@ describe('storyboard table contract', () => {
           { kind: 'page', number: 1, key: 'page_1' },
           { kind: 'panel', number: 2, key: 'panel2' },
         ],
+      },
+    });
+  });
+
+  it('preserves model-authored source page fields as extension metadata', () => {
+    const result = normalizeStoryboardTableV1({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Source Page',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Use page six.',
+                characterAction: 'The character walks through the village.',
+                imageStrategy: 'use-as-reference',
+                sourcePage: 'P6',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.table?.scenes[0]?.shots[0]?.extensions).toMatchObject({
+      'neko.storyboardSourceImage': {
+        kind: 'page',
+        number: 6,
+        key: 'P6',
+        sourceField: 'sourcePage',
       },
     });
   });
@@ -717,8 +951,69 @@ describe('storyboard table contract', () => {
           shot.shotNumber === 1 ? cacheResourceRef : undefined,
       }).scenes[0]?.shotPlans[0],
     ).toMatchObject({
-      referenceImagePath: '/tmp/neko-cache/page-1.jpg',
       referenceImageResourceRef: resourceRef,
+      referenceResourceRef: cacheResourceRef,
+    });
+    expect(
+      projectStoryboardTableV1ToCanvasPayload(table, {
+        resolveFallbackImagePath: ({ shot }) =>
+          shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
+        resolveFallbackImageResourceRef: ({ shot }) =>
+          shot.shotNumber === 1 ? resourceRef : undefined,
+        resolveFallbackImageUnifiedResourceRef: ({ shot }) =>
+          shot.shotNumber === 1 ? cacheResourceRef : undefined,
+      }).scenes[0]?.shotPlans[0],
+    ).not.toHaveProperty('referenceImagePath');
+  });
+
+  it('accepts stable document and resource refs as projectable storyboard image identity', () => {
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/tmp/neko-cache/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const cacheResourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        filePath: '${BOOKS}/comic.epub',
+      },
+      locator: { kind: 'document', entryPath: 'OPS/page-1.jpg' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic:OPS/page-1.jpg',
+        providerId: 'document-archive',
+      }),
+    });
+    const table = storyboardTable({
+      imageStrategy: 'reuse-original',
+      sourceMediaRefs: [
+        {
+          refId: 'page-1',
+          role: 'source',
+          locator: { type: 'tool-result', toolCallId: 'read-document-1', assetIndex: 0 },
+          mimeType: 'image/jpeg',
+        },
+      ],
+    });
+
+    expect(validateStoryboardTableV1(table, { knownToolCallIds: ['read-document-1'] }).ok).toBe(
+      true,
+    );
+    expect(
+      projectStoryboardTableV1ToCanvasPayload(table, {
+        resolveImageResourceRef: ({ mediaRef }) =>
+          mediaRef.refId === 'page-1' ? documentResourceRef : undefined,
+        resolveImageUnifiedResourceRef: ({ mediaRef }) =>
+          mediaRef.refId === 'page-1' ? cacheResourceRef : undefined,
+      }).scenes[0]?.shotPlans[0],
+    ).toMatchObject({
+      referenceImageResourceRef: documentResourceRef,
       referenceResourceRef: cacheResourceRef,
     });
   });

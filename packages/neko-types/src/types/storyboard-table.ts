@@ -202,6 +202,26 @@ export interface StoryboardMediaRefV1 {
   readonly metadata?: StoryboardSerializableRecordV1;
 }
 
+export type StoryboardMediaIdentityKindV1 =
+  | 'stable'
+  | 'runtime-only'
+  | 'unsafe-cache-path'
+  | 'ambiguous-alias'
+  | 'unresolved-tool-result';
+
+export interface StoryboardMediaIdentityClassificationV1 {
+  readonly kind: StoryboardMediaIdentityKindV1;
+  readonly reason: string;
+  readonly toolCallId?: string;
+  readonly alias?: string;
+  readonly value?: string;
+}
+
+export interface StoryboardMediaIdentityClassificationOptionsV1 {
+  readonly knownToolCallIds?: readonly string[];
+  readonly ambiguousAliases?: readonly string[];
+}
+
 export type StoryboardTableV1RequiredField = (typeof STORYBOARD_TABLE_V1_REQUIRED_FIELDS)[number];
 
 export type StoryboardSceneV1RequiredField = (typeof STORYBOARD_SCENE_V1_REQUIRED_FIELDS)[number];
@@ -228,6 +248,9 @@ export type StoryboardValidationDiagnosticCodeV1 =
   | 'invalid-image-strategy'
   | 'invalid-media-ref'
   | 'unsafe-media-ref'
+  | 'runtime-only-media-ref'
+  | 'ambiguous-media-alias'
+  | 'unresolved-tool-result'
   | 'media-ref-role-mismatch'
   | 'ambiguous-legacy-media-ref'
   | 'invalid-extension-namespace'
@@ -258,6 +281,8 @@ export interface StoryboardValidationResultV1 {
   readonly ok: boolean;
   readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
 }
+
+export interface StoryboardValidationOptionsV1 extends StoryboardMediaIdentityClassificationOptionsV1 {}
 
 export interface ProjectStoryboardTableV1ToCanvasOptions {
   readonly mode?: StoryboardImportMode;
@@ -423,11 +448,15 @@ const MAX_STORYBOARD_DIAGNOSTICS = 64;
 const MAX_LEGACY_SECTIONS = 200;
 const MAX_LEGACY_MEDIA_REFS = 12;
 const STORYBOARD_IMAGE_ALIAS_EXTENSION = 'neko.storyboardImageAlias' as const;
+const STORYBOARD_SOURCE_IMAGE_EXTENSION = 'neko.storyboardSourceImage' as const;
 
-export function validateStoryboardTableV1(value: unknown): StoryboardValidationResultV1 {
+export function validateStoryboardTableV1(
+  value: unknown,
+  options: StoryboardValidationOptionsV1 = {},
+): StoryboardValidationResultV1 {
   const normalized = normalizeStoryboardTableV1({ value });
   const diagnostics = normalized.table
-    ? [...normalized.diagnostics, ...validateNormalizedStoryboardTableV1(normalized.table)]
+    ? [...normalized.diagnostics, ...validateNormalizedStoryboardTableV1(normalized.table, options)]
     : normalized.diagnostics;
 
   return {
@@ -468,6 +497,93 @@ export function hasBlockingStoryboardDiagnostics(
   diagnostics: readonly StoryboardValidationDiagnosticV1[],
 ): boolean {
   return diagnostics.some((diagnostic) => diagnostic.severity === 'error');
+}
+
+export function classifyStoryboardMediaIdentityV1(
+  mediaRef: StoryboardMediaRefV1,
+  options: StoryboardMediaIdentityClassificationOptionsV1 = {},
+): StoryboardMediaIdentityClassificationV1 {
+  const ambiguousAliases = new Set(
+    (options.ambiguousAliases ?? []).flatMap((value) => {
+      const normalized = normalizeStoryboardAlias(value);
+      return normalized ? [normalized] : [];
+    }),
+  );
+  const labelAlias = normalizeStoryboardAlias(mediaRef.label);
+  const refAlias = normalizeStoryboardAlias(mediaRef.refId);
+  const alias = labelAlias ?? refAlias;
+  if (alias && ambiguousAliases.has(alias)) {
+    return {
+      kind: 'ambiguous-alias',
+      reason: 'Storyboard media alias resolves to more than one source.',
+      alias,
+    };
+  }
+
+  switch (mediaRef.locator.type) {
+    case 'tool-result': {
+      const knownToolCallIds = options.knownToolCallIds;
+      if (knownToolCallIds && !knownToolCallIds.includes(mediaRef.locator.toolCallId)) {
+        return {
+          kind: 'unresolved-tool-result',
+          reason: 'Storyboard media references a tool result that is not available.',
+          toolCallId: mediaRef.locator.toolCallId,
+        };
+      }
+      return {
+        kind: 'stable',
+        reason: 'Storyboard media references a concrete tool result asset.',
+        toolCallId: mediaRef.locator.toolCallId,
+      };
+    }
+    case 'asset':
+      if (mediaRef.locator.uri && isRuntimeOnlyStoryboardMediaValue(mediaRef.locator.uri)) {
+        return {
+          kind: 'runtime-only',
+          reason: 'Asset locator URI is a runtime-only handle.',
+          value: mediaRef.locator.uri,
+        };
+      }
+      if (mediaRef.locator.uri && isUnsafeMediaUri(mediaRef.locator.uri)) {
+        return {
+          kind: 'unsafe-cache-path',
+          reason: 'Asset locator URI is not portable storyboard identity.',
+          value: mediaRef.locator.uri,
+        };
+      }
+      return {
+        kind: 'stable',
+        reason: 'Storyboard media references a stable asset id.',
+      };
+    case 'workspace-path':
+      if (isRuntimeOnlyStoryboardMediaValue(mediaRef.locator.path)) {
+        return {
+          kind: 'runtime-only',
+          reason: 'Workspace path locator is a runtime-only handle.',
+          value: mediaRef.locator.path,
+        };
+      }
+      if (
+        isManagedOrAbsoluteCachePath(mediaRef.locator.path) ||
+        isUnsafeWorkspacePath(mediaRef.locator.path)
+      ) {
+        return {
+          kind: 'unsafe-cache-path',
+          reason: 'Workspace path locator is not portable storyboard identity.',
+          value: mediaRef.locator.path,
+        };
+      }
+      return {
+        kind: 'stable',
+        reason: 'Storyboard media references a portable workspace or variable path.',
+      };
+    case 'canvas-node':
+    case 'story-source':
+      return {
+        kind: 'stable',
+        reason: 'Storyboard media references another stable project entity.',
+      };
+  }
 }
 
 export function splitStoryboardMediaRefsByRoleV1(
@@ -567,12 +683,17 @@ function resolveCanvasStoryboardReferenceImagePath(
   const referenceResourceRef = mediaContext
     ? options.resolveImageUnifiedResourceRef?.(mediaContext)
     : options.resolveFallbackImageUnifiedResourceRef?.(shotContext);
+  const stableRefs = {
+    ...(referenceResourceRef ? { referenceResourceRef } : {}),
+    ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
+  };
+  if (referenceResourceRef || referenceImageResourceRef) {
+    return stableRefs;
+  }
 
   if (shot.referenceImagePath) {
     return {
       referenceImagePath: shot.referenceImagePath,
-      ...(referenceResourceRef ? { referenceResourceRef } : {}),
-      ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
     };
   }
 
@@ -582,8 +703,6 @@ function resolveCanvasStoryboardReferenceImagePath(
     options.resolveFallbackImagePath?.(shotContext);
   return {
     ...(imagePath ? { referenceImagePath: imagePath } : {}),
-    ...(referenceResourceRef ? { referenceResourceRef } : {}),
-    ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
   };
 }
 
@@ -927,6 +1046,7 @@ function normalizeShotRow(
   );
   const mediaRefs = normalizeMediaRefs(record['mediaRefs'], [...path, 'mediaRefs'], diagnostics);
   const inferredImageAlias = normalizeStoryboardImageAlias(record);
+  const inferredSourceImage = normalizeStoryboardSourceImage(record);
   const splitRefs =
     sourceMediaRefs.length === 0 && generatedMediaRefs.length === 0 && mediaRefs.length > 0
       ? splitStoryboardMediaRefsByRoleV1(mediaRefs, [...path, 'mediaRefs'])
@@ -956,7 +1076,10 @@ function normalizeShotRow(
     [...path, 'extensions'],
     diagnostics,
   );
-  const normalizedExtensions = mergeStoryboardImageAliasExtension(extensions, inferredImageAlias);
+  const normalizedExtensions = mergeStoryboardSourceImageExtension(
+    mergeStoryboardImageAliasExtension(extensions, inferredImageAlias),
+    inferredSourceImage,
+  );
   const shotScale = normalizeShotScale(record['shotScale']);
   const cameraMovement = normalizeCameraMovement(record['cameraMovement']);
   const cameraAngle = normalizeCameraAngle(record['cameraAngle']);
@@ -1098,8 +1221,133 @@ function mergeStoryboardImageAliasExtension(
   };
 }
 
+function normalizeStoryboardSourceImage(
+  record: Record<string, unknown>,
+): StoryboardSerializableRecordV1 | undefined {
+  for (const [key, value] of Object.entries(record)) {
+    const source = parseStoryboardSourceImageValue(key, value);
+    if (source) return source;
+  }
+  return undefined;
+}
+
+function parseStoryboardSourceImageValue(
+  key: string,
+  value: unknown,
+): StoryboardSerializableRecordV1 | undefined {
+  const normalizedKey = normalizeSourceImageKey(key);
+  if (!normalizedKey) return undefined;
+
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return {
+      kind: normalizedKey.kind,
+      number: value,
+      key,
+    };
+  }
+
+  const text = readTrimmedString(value);
+  if (!text) return undefined;
+  const alias = parseStoryboardImageAliasKey(text);
+  const number = parsePositiveInteger(text);
+  const parsed =
+    (alias ? { ...alias, key: text } : undefined) ??
+    parseSourceImageText(text) ??
+    (number !== undefined ? { kind: normalizedKey.kind, number, key: text } : undefined);
+  if (!parsed) return undefined;
+  return {
+    kind: parsed.kind,
+    number: parsed.number,
+    key: parsed.key ?? text,
+    sourceField: key,
+  };
+}
+
+function parseSourceImageText(
+  value: string,
+):
+  | { readonly kind: 'page' | 'image' | 'panel'; readonly number: number; readonly key: string }
+  | undefined {
+  const match =
+    /(?:^|[\s/:：#_.\\-])(?:p|page|pg|页|原页|image|img|图|图片|panel|分格)[\s_#_.:-]*(\d{1,4})(?:\b|$)/i.exec(
+      value.trim(),
+    );
+  const number = parsePositiveInteger(match?.[1]);
+  if (number === undefined) return undefined;
+  const lower = value.toLowerCase();
+  const kind = /panel|分格/.test(lower)
+    ? 'panel'
+    : /image|img|图|图片/.test(lower)
+      ? 'image'
+      : 'page';
+  return { kind, number, key: value };
+}
+
+function normalizeSourceImageKey(
+  key: string,
+): { readonly kind: 'page' | 'image' | 'panel' } | undefined {
+  const normalized = key.toLowerCase().replace(/[\s_-]+/g, '');
+  if (
+    [
+      'sourcepage',
+      'sourcepagenumber',
+      'originalpage',
+      'originpage',
+      'page',
+      'p',
+      '原页',
+      '来源页',
+      '源页',
+    ].includes(normalized)
+  ) {
+    return { kind: 'page' };
+  }
+  if (
+    [
+      'sourceimage',
+      'sourceimagenumber',
+      'originalimage',
+      'originimage',
+      'image',
+      'img',
+      '参考图',
+      '来源图',
+      '源图',
+      '图片',
+    ].includes(normalized)
+  ) {
+    return { kind: 'image' };
+  }
+  if (
+    [
+      'sourcepanel',
+      'sourcepanelnumber',
+      'originalpanel',
+      'originpanel',
+      'panel',
+      '分格',
+      '格',
+    ].includes(normalized)
+  ) {
+    return { kind: 'panel' };
+  }
+  return undefined;
+}
+
+function mergeStoryboardSourceImageExtension(
+  extensions: StoryboardExtensionMapV1 | undefined,
+  sourceImage: StoryboardSerializableRecordV1 | undefined,
+): StoryboardExtensionMapV1 | undefined {
+  if (!sourceImage) return extensions;
+  return {
+    ...(extensions ?? {}),
+    [STORYBOARD_SOURCE_IMAGE_EXTENSION]: sourceImage,
+  };
+}
+
 function validateNormalizedStoryboardTableV1(
   table: StoryboardTableV1,
+  options: StoryboardValidationOptionsV1 = {},
 ): readonly StoryboardValidationDiagnosticV1[] {
   const diagnostics: StoryboardValidationDiagnosticV1[] = [];
   if (table.profile) {
@@ -1110,6 +1358,7 @@ function validateNormalizedStoryboardTableV1(
     for (const [shotIndex, shot] of scene.shots.entries()) {
       const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
       validateShotStrategy(shot, path, diagnostics);
+      validateProfileSourceMediaRefs(table.profile, shot, path, diagnostics, options);
       validateLayeredMediaRefs(
         shot.sourceMediaRefs,
         'source',
@@ -1122,9 +1371,14 @@ function validateNormalizedStoryboardTableV1(
         [...path, 'generatedMediaRefs'],
         diagnostics,
       );
-      validateMediaRefs(shot.sourceMediaRefs, [...path, 'sourceMediaRefs'], diagnostics);
-      validateMediaRefs(shot.generatedMediaRefs, [...path, 'generatedMediaRefs'], diagnostics);
-      validateMediaRefs(shot.mediaRefs, [...path, 'mediaRefs'], diagnostics);
+      validateMediaRefs(shot.sourceMediaRefs, [...path, 'sourceMediaRefs'], diagnostics, options);
+      validateMediaRefs(
+        shot.generatedMediaRefs,
+        [...path, 'generatedMediaRefs'],
+        diagnostics,
+        options,
+      );
+      validateMediaRefs(shot.mediaRefs, [...path, 'mediaRefs'], diagnostics, options);
     }
   }
 
@@ -1165,6 +1419,37 @@ function validateShotStrategy(
   }
 }
 
+function validateProfileSourceMediaRefs(
+  profile: StoryboardTableProfileV1 | undefined,
+  shot: StoryboardShotRowV1,
+  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
+  diagnostics: StoryboardValidationDiagnosticV1[],
+  options: StoryboardValidationOptionsV1,
+): void {
+  if (profile !== 'manga-to-video' && profile !== 'image-sequence') return;
+  if (!isSourceBackedStoryboardImageStrategy(shot.imageStrategy)) return;
+
+  const sourceRefs = shot.sourceMediaRefs ?? [];
+  if (sourceRefs.length === 0) return;
+  const hasStableSourceRef = sourceRefs.some(
+    (ref) => classifyStoryboardMediaIdentityV1(ref, options).kind === 'stable',
+  );
+  if (hasStableSourceRef) return;
+
+  diagnostics.push(
+    storyboardDiagnostic(
+      'error',
+      'image-strategy-missing-source',
+      [...path, 'sourceMediaRefs'],
+      `${profile} ${shot.imageStrategy} shots require resolvable sourceMediaRefs.`,
+      {
+        expected: 'stable sourceMediaRefs',
+        details: { profile, imageStrategy: shot.imageStrategy },
+      },
+    ),
+  );
+}
+
 function validateLayeredMediaRefs(
   refs: readonly StoryboardMediaRefV1[] | undefined,
   layer: 'source' | 'generated',
@@ -1200,9 +1485,80 @@ function validateMediaRefs(
   refs: readonly StoryboardMediaRefV1[] | undefined,
   path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
   diagnostics: StoryboardValidationDiagnosticV1[],
+  options: StoryboardValidationOptionsV1,
 ): void {
   for (const [index, ref] of (refs ?? []).entries()) {
     validateMediaLocator(ref.locator, [...path, index, 'locator'], diagnostics);
+    validateMediaIdentityClassification(ref, [...path, index, 'locator'], diagnostics, options);
+  }
+}
+
+function validateMediaIdentityClassification(
+  ref: StoryboardMediaRefV1,
+  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
+  diagnostics: StoryboardValidationDiagnosticV1[],
+  options: StoryboardValidationOptionsV1,
+): void {
+  const classification = classifyStoryboardMediaIdentityV1(ref, options);
+  switch (classification.kind) {
+    case 'stable':
+      return;
+    case 'runtime-only':
+      diagnostics.push(
+        storyboardDiagnostic(
+          'error',
+          'runtime-only-media-ref',
+          path,
+          'Storyboard media identity cannot use a runtime-only handle.',
+          {
+            actual: classification.value,
+            details: { reason: classification.reason },
+          },
+        ),
+      );
+      return;
+    case 'unsafe-cache-path':
+      diagnostics.push(
+        storyboardDiagnostic(
+          'error',
+          'unsafe-media-ref',
+          path,
+          'Storyboard media identity cannot use cache paths or unsafe local handles.',
+          {
+            actual: classification.value,
+            details: { reason: classification.reason },
+          },
+        ),
+      );
+      return;
+    case 'ambiguous-alias':
+      diagnostics.push(
+        storyboardDiagnostic(
+          'error',
+          'ambiguous-media-alias',
+          path,
+          'Storyboard media alias resolves to more than one source.',
+          {
+            actual: classification.alias,
+            details: { reason: classification.reason },
+          },
+        ),
+      );
+      return;
+    case 'unresolved-tool-result':
+      diagnostics.push(
+        storyboardDiagnostic(
+          'error',
+          'unresolved-tool-result',
+          path,
+          'Storyboard media references a tool result that is not available.',
+          {
+            actual: classification.toolCallId,
+            details: { reason: classification.reason },
+          },
+        ),
+      );
+      return;
   }
 }
 
@@ -1968,13 +2324,51 @@ function isGeneratedStoryboardMediaRole(
   return (STORYBOARD_GENERATED_MEDIA_ROLES_V1 as readonly string[]).includes(value);
 }
 
+function isSourceBackedStoryboardImageStrategy(
+  value: StoryboardShotImageStrategyV1,
+): value is 'reuse-original' | 'use-as-reference' | 'transform-original' {
+  return (
+    value === 'reuse-original' || value === 'use-as-reference' || value === 'transform-original'
+  );
+}
+
+function normalizeStoryboardAlias(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function isRuntimeOnlyStoryboardMediaValue(value: string): boolean {
+  return (
+    /^vscode-(?:webview-resource|resource):/i.test(value) ||
+    /^vscode-webview:\/\//i.test(value) ||
+    /^blob:/i.test(value) ||
+    /^object:/i.test(value)
+  );
+}
+
+function isManagedOrAbsoluteCachePath(value: string): boolean {
+  if (isAbsoluteLocalPath(value)) return true;
+  const normalized = value.replace(/\\/g, '/').toLowerCase();
+  return (
+    normalized.includes('/.neko/.cache/') ||
+    normalized.includes('/document-image-cache/') ||
+    normalized.includes('/globalstorage/') ||
+    normalized.includes('/library/application support/code/user/globalstorage/')
+  );
+}
+
 function isUnsafeMediaUri(value: string): boolean {
   return (
     value.startsWith('data:') ||
     value.startsWith('blob:') ||
+    value.startsWith('object:') ||
+    /^vscode-(?:webview-resource|resource):/i.test(value) ||
+    /^vscode-webview:\/\//i.test(value) ||
     /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(value) ||
     value.startsWith('file://') ||
-    isAbsoluteLocalPath(value)
+    isManagedOrAbsoluteCachePath(value)
   );
 }
 
@@ -1982,9 +2376,12 @@ function isUnsafeWorkspacePath(value: string): boolean {
   return (
     value.startsWith('data:') ||
     value.startsWith('blob:') ||
+    value.startsWith('object:') ||
+    /^vscode-(?:webview-resource|resource):/i.test(value) ||
+    /^vscode-webview:\/\//i.test(value) ||
     /^https?:\/\//i.test(value) ||
     value.startsWith('file://') ||
-    isAbsoluteLocalPath(value)
+    isManagedOrAbsoluteCachePath(value)
   );
 }
 

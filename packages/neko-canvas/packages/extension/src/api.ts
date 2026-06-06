@@ -115,7 +115,7 @@ export interface NekoCanvasAPI {
    * Import media into the active canvas editor.
    */
   importAsset(asset: {
-    path: string;
+    path?: string;
     type?: 'image' | 'video' | 'audio' | 'model';
     name?: string;
     documentResourceRef?: DocumentArchiveResourceRef;

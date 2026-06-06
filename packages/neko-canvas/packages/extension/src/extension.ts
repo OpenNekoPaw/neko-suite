@@ -477,11 +477,14 @@ function registerCommands(
         documentResourceRef?: DocumentArchiveResourceRef;
         resourceRef?: ResourceRef;
       }) => {
-        if (!asset?.path) {
-          void handleError(new Error('neko.canvas.importAsset: missing asset path'), {
-            showToUser: true,
-            severity: 'warning',
-          });
+        if (!asset?.path && !asset?.documentResourceRef && !asset?.resourceRef) {
+          void handleError(
+            new Error('neko.canvas.importAsset: missing asset path or resource ref'),
+            {
+              showToUser: true,
+              severity: 'warning',
+            },
+          );
           return;
         }
 
@@ -496,7 +499,9 @@ function registerCommands(
           return;
         }
 
-        getRootLogger().info(`importAsset: received ${asset.path} (${asset.type ?? 'unknown'})`);
+        getRootLogger().info(
+          `importAsset: received ${asset.path ?? asset.resourceRef?.id ?? asset.documentResourceRef?.entryPath ?? 'linked-resource'} (${asset.type ?? 'unknown'})`,
+        );
       },
     ),
   );

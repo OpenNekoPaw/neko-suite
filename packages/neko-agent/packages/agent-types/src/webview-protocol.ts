@@ -1607,7 +1607,7 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
 
 function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | null {
   if (!isRecord(value)) return null;
-  const path = requiredString(value.path);
+  const path = optionalStringStrict(value.path);
   const mediaType = optionalStringStrict(value.mediaType);
   const name = optionalStringStrict(value.name);
   const documentResourceRef =
@@ -1618,7 +1618,7 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   const target = parseOptionalPluginTransferTargetRef(value.target);
   const provenance = parseOptionalPluginTransferProvenance(value.provenance);
   if (
-    !path ||
+    path === null ||
     mediaType === null ||
     name === null ||
     (value.documentResourceRef !== undefined && documentResourceRef === undefined) ||
@@ -1628,7 +1628,11 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   ) {
     return null;
   }
+  if (!path && documentResourceRef === undefined && !isResourceRef(resourceRef)) {
+    return null;
+  }
   const suffix = {
+    ...(path !== undefined ? { path } : {}),
     ...(documentResourceRef !== undefined ? { documentResourceRef } : {}),
     ...(isResourceRef(resourceRef) ? { resourceRef } : {}),
     ...(target !== undefined ? { target } : {}),
@@ -1636,11 +1640,11 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   };
   if (mediaType !== undefined) {
     if (!isPluginTransferMediaType(mediaType)) return null;
-    if (name !== undefined) return { path, mediaType, name, ...suffix };
-    return { path, mediaType, ...suffix };
+    if (name !== undefined) return { mediaType, name, ...suffix };
+    return { mediaType, ...suffix };
   }
-  if (name !== undefined) return { path, name, ...suffix };
-  return { path, ...suffix };
+  if (name !== undefined) return { name, ...suffix };
+  return suffix;
 }
 
 function isPluginTransferMediaType(

@@ -296,7 +296,7 @@ type GeneratedAsset = GeneratedImage | GeneratedAudio | GeneratedVideo | Generat
 - 文档图片使用 `DocumentSourceRef + DocumentLocator/entryPath` 生成 `document-archive` resource ref；Canvas 根据 ref 调 `ResourceCacheService.ensure/project`。
 - 分镜 shot 的参考图字段使用 `referenceResourceRef`；同一图片可被多个 shot 重复引用，但每个 shot 都显式绑定 ref，不按顺序猜图。
 - `GeneratedAsset` 可通过 `generated-asset` provider 映射到 resource ref，用于缩略图、预览和 Canvas 导入；跨包发送前应返回 promoted `ContentGeneratedAssetSourceRef`，而不是 Agent 私有 cache path。
-- 没有 workspace 时，Agent 的 `globalStorageUri/document-image-cache` 图像标记为 `extension-private` / `non-portable`，仍可在 Agent Chat 显示，但发送到 Canvas 时必须重新导入/复制/重建到项目资源缓存。
+- 没有 workspace 时，Agent 的 `globalStorageUri/document-image-cache` 图像标记为 `extension-private` / `non-portable`，只能作为 Agent 内部读句柄；发送到 Canvas 或其它包时必须重新导入、复制或重建到项目资源缓存。
 
 这条规则解决两个常见问题：
 

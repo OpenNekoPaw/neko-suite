@@ -231,7 +231,9 @@ export function projectBackgroundTaskResultContent(
   const displayUrls =
     assets && assets.length > 0 ? assets.map((asset) => asset.webviewUri) : result?.urls;
   const displayLocalPaths =
-    assets && assets.length > 0 ? assets.map((asset) => asset.path) : result?.localPaths;
+    assets && assets.length > 0
+      ? assets.flatMap((asset) => (asset.path ? [asset.path] : []))
+      : result?.localPaths;
   const firstLocalPath = displayLocalPaths?.[0];
   const firstAsset = assets?.[0];
   const displayWidth = readNumberField(firstAsset, 'width') ?? result?.width;
