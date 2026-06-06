@@ -189,6 +189,8 @@ export * from './canvas-timeline-sync';
 export * from './storyboard-planner';
 export * from './storyboard-readiness';
 export * from './storyboard-table';
+export * from './composite-artifact';
+export * from './artifact-projection';
 
 // Sketch types (.nks document format)
 export * from './sketch';

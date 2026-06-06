@@ -442,6 +442,8 @@ export interface AgentEvent {
     perceptionCards?: import('@neko/shared').PerceptionCard[];
     /** Diagnostics captured while merging delayed result payloads. */
     backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
+    /** Structured composite artifact transfer payloads. */
+    artifacts?: import('@neko/shared').ToolResultArtifactTransfer[];
     /** Tool-level observability metadata persisted to journal consumers. */
     metadata?: Record<string, unknown>;
   };

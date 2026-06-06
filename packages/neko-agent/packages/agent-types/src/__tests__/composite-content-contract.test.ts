@@ -163,6 +163,83 @@ Done.`);
     });
   });
 
+  it('extracts storyboard domain blocks from composite artifacts', () => {
+    const result = parseCompositeContentJson(
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'composite-artifact',
+        artifactId: 'artifact-storyboard',
+        title: 'Comic artifact',
+        blocks: [
+          {
+            blockId: 'storyboard-domain',
+            kind: 'domain',
+            title: 'Storyboard Payload',
+            domainKind: 'StoryboardTable',
+            schemaVersion: 1,
+            payload: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Opening',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'Page 1',
+                  shots: [
+                    {
+                      shotNumber: 1,
+                      duration: 3,
+                      visualDescription: 'Panel action and composition.',
+                      characterAction: 'Rin enters the frame.',
+                      imageStrategy: 'use-as-reference',
+                      sourceMediaRefs: [
+                        {
+                          refId: 'source-panel-1',
+                          role: 'source',
+                          locator: {
+                            type: 'tool-result',
+                            toolCallId: 'read-doc',
+                            assetIndex: 0,
+                          },
+                          label: 'Original panel',
+                          mimeType: 'image/jpeg',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(result[0]).toMatchObject({
+      template: 'storyboard-table',
+      title: 'Storyboard Payload',
+      storyboardTable: {
+        kind: 'storyboard-table',
+        title: 'Opening',
+      },
+      sections: [
+        {
+          heading: 'Page 1 / Shot 1',
+          content: 'Panel action and composition.',
+          layout: 'table-row',
+          mediaRefs: [
+            {
+              toolCallId: 'read-doc',
+              assetIndex: 0,
+              caption: 'Original panel',
+              role: 'source',
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('keeps invalid semantic storyboard tables visible with bounded diagnostics', () => {
     const result = parseCompositeContentJson(
       JSON.stringify({

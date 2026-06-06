@@ -1,4 +1,6 @@
 import type {
+  AgentArtifactExecutionCapabilityContribution,
+  AgentArtifactFacetsContribution,
   AgentCapabilityContribution,
   AgentCapabilityDiagnostic,
   AgentCapabilityInjectionContext,
@@ -55,6 +57,11 @@ export interface AgentCapabilityInjectionRuntime {
   ): AgentCapabilityRegistryProjection;
   listRegistered(): readonly AgentCapabilityContribution[];
   getDiagnostics(phase?: 'registration' | 'injection'): readonly AgentCapabilityDiagnostic[];
+  getArtifactFacets(): AgentArtifactFacetsContribution;
+  findArtifactCapabilities(
+    actionId: string,
+    context?: AgentCapabilityInjectionContext,
+  ): readonly AgentArtifactExecutionCapabilityContribution[];
   inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet;
   projectSlashCommandCatalog(
     context: AgentCapabilityInjectionContext,
@@ -254,6 +261,7 @@ export function validateCapabilityContribution(
       );
     }
   }
+  validateArtifactFacets(contribution, diagnostics);
 
   return diagnostics;
 }
@@ -307,6 +315,17 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
     return [...this.registrationDiagnostics, ...this.injectionDiagnostics];
   }
 
+  getArtifactFacets(): AgentArtifactFacetsContribution {
+    return mergeArtifactFacets(this.contributions.values());
+  }
+
+  findArtifactCapabilities(
+    actionId: string,
+    context?: AgentCapabilityInjectionContext,
+  ): readonly AgentArtifactExecutionCapabilityContribution[] {
+    return findArtifactCapabilities(this.contributions.values(), actionId, context);
+  }
+
   inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet {
     const injected = buildInjectedCapabilitySet(this.contributions.values(), context);
     const diagnostics = [...injected.diagnostics];
@@ -352,6 +371,7 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
     return {
       contributions: this.listRegistered(),
       diagnostics: this.getDiagnostics('registration'),
+      artifactFacets: this.getArtifactFacets(),
     };
   }
 
@@ -636,6 +656,79 @@ function projectSlashCommandCatalog(
   return slashCommands;
 }
 
+function findArtifactCapabilities(
+  registeredContributions: Iterable<AgentCapabilityContribution>,
+  actionId: string,
+  context?: AgentCapabilityInjectionContext,
+): readonly AgentArtifactExecutionCapabilityContribution[] {
+  const disabledIds = new Set(context?.disabledContributionIds ?? []);
+  const trust = new Set<AgentCapabilityTrustLevel>(
+    context?.allowedTrustLevels ?? ['core', 'community'],
+  );
+  const matches: AgentArtifactExecutionCapabilityContribution[] = [];
+
+  for (const contribution of registeredContributions) {
+    if (context && getInjectionSkipReason(contribution, context, disabledIds, trust)) {
+      continue;
+    }
+    for (const capability of contribution.artifactFacets?.capabilities ?? []) {
+      if (capability.actions.includes(actionId)) {
+        matches.push(capability);
+      }
+    }
+  }
+
+  return matches;
+}
+
+function mergeArtifactFacets(
+  registeredContributions: Iterable<AgentCapabilityContribution>,
+): AgentArtifactFacetsContribution {
+  const protocols = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['protocols']>[number]
+  >();
+  const profiles = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['profiles']>[number]
+  >();
+  const renderers = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['renderers']>[number]
+  >();
+  const projectors = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['projectors']>[number]
+  >();
+  const capabilities = new Map<string, AgentArtifactExecutionCapabilityContribution>();
+
+  for (const contribution of registeredContributions) {
+    for (const protocol of contribution.artifactFacets?.protocols ?? []) {
+      protocols.set(protocol.id, protocol);
+    }
+    for (const profile of contribution.artifactFacets?.profiles ?? []) {
+      profiles.set(profile.id, profile);
+    }
+    for (const renderer of contribution.artifactFacets?.renderers ?? []) {
+      renderers.set(renderer.id, renderer);
+    }
+    for (const projector of contribution.artifactFacets?.projectors ?? []) {
+      projectors.set(projector.id, projector);
+    }
+    for (const capability of contribution.artifactFacets?.capabilities ?? []) {
+      capabilities.set(capability.capabilityId, capability);
+    }
+  }
+
+  return {
+    protocols: Array.from(protocols.values()),
+    profiles: Array.from(profiles.values()),
+    renderers: Array.from(renderers.values()),
+    projectors: Array.from(projectors.values()),
+    capabilities: Array.from(capabilities.values()),
+  };
+}
+
 function normalizeRetentionLimit(value: number | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   if (!Number.isFinite(value) || value < 0) return fallback;
@@ -710,6 +803,179 @@ function findRegistrationCollisions(
     );
   }
   return diagnostics;
+}
+
+function validateArtifactFacets(
+  contribution: AgentCapabilityContribution,
+  diagnostics: AgentCapabilityDiagnostic[],
+): void {
+  const facets = contribution.artifactFacets;
+  if (!facets) return;
+
+  for (const protocol of facets.protocols ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      protocol.id,
+      'artifactFacets.protocols.id',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      protocol.artifactKind,
+      'artifactFacets.protocols.artifactKind',
+    );
+    validateIntegerField(
+      diagnostics,
+      contribution.identity.id,
+      protocol.schemaVersion,
+      'artifactFacets.protocols.schemaVersion',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      protocol.validatorId,
+      'artifactFacets.protocols.validatorId',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      protocol.rendererIds,
+      'artifactFacets.protocols.rendererIds',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      protocol.projectorIds,
+      'artifactFacets.protocols.projectorIds',
+    );
+  }
+
+  for (const profile of facets.profiles ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      profile.id,
+      'artifactFacets.profiles.id',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      profile.profileId,
+      'artifactFacets.profiles.profileId',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      profile.protocol,
+      'artifactFacets.profiles.protocol',
+    );
+    validateIntegerField(
+      diagnostics,
+      contribution.identity.id,
+      profile.version,
+      'artifactFacets.profiles.version',
+    );
+  }
+
+  for (const renderer of facets.renderers ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      renderer.id,
+      'artifactFacets.renderers.id',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      renderer.accepts,
+      'artifactFacets.renderers.accepts',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      renderer.profiles,
+      'artifactFacets.renderers.profiles',
+    );
+  }
+
+  for (const projector of facets.projectors ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      projector.id,
+      'artifactFacets.projectors.id',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      projector.accepts,
+      'artifactFacets.projectors.accepts',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      projector.produces,
+      'artifactFacets.projectors.produces',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      projector.profiles,
+      'artifactFacets.projectors.profiles',
+    );
+  }
+
+  for (const capability of facets.capabilities ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.capabilityId,
+      'artifactFacets.capabilities.capabilityId',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.packageId,
+      'artifactFacets.capabilities.packageId',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      capability.accepts,
+      'artifactFacets.capabilities.accepts',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      capability.produces,
+      'artifactFacets.capabilities.produces',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      capability.actions,
+      'artifactFacets.capabilities.actions',
+    );
+    if (!isArtifactCapabilityRisk(capability.risk)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-artifact-risk',
+          'artifactFacets.capabilities.risk',
+        ),
+      );
+    }
+    if (typeof capability.requiresApproval !== 'boolean') {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-artifact-approval',
+          'artifactFacets.capabilities.requiresApproval',
+        ),
+      );
+    }
+  }
 }
 
 function pushNameCollisions(
@@ -866,6 +1132,7 @@ function readContributionUsedFields(contribution: AgentCapabilityContribution): 
   if (contribution.workflowFragments?.length) fields.push('workflowFragments');
   if (contribution.toolNames?.length) fields.push('toolNames');
   if (contribution.toolGroupNames?.length) fields.push('toolGroupNames');
+  if (hasArtifactFacets(contribution.artifactFacets)) fields.push('artifactFacets');
   return fields;
 }
 
@@ -977,6 +1244,54 @@ function pushMissingStringDiagnostic(
 ): void {
   if (value && value.trim().length > 0) return;
   diagnostics.push(validationDiagnostic(contributionId, 'missing-required-field', field));
+}
+
+function validateIntegerField(
+  diagnostics: AgentCapabilityDiagnostic[],
+  contributionId: string,
+  value: number,
+  field: string,
+): void {
+  if (Number.isInteger(value)) return;
+  diagnostics.push(validationDiagnostic(contributionId, 'invalid-integer-field', field));
+}
+
+function validateRequiredStringArrayField(
+  diagnostics: AgentCapabilityDiagnostic[],
+  contributionId: string,
+  value: readonly string[],
+  field: string,
+): void {
+  if (isNonEmptyStringArray(value)) return;
+  diagnostics.push(validationDiagnostic(contributionId, 'invalid-string-array-field', field));
+}
+
+function validateOptionalStringArrayField(
+  diagnostics: AgentCapabilityDiagnostic[],
+  contributionId: string,
+  value: readonly string[] | undefined,
+  field: string,
+): void {
+  if (value === undefined || isNonEmptyStringArray(value)) return;
+  diagnostics.push(validationDiagnostic(contributionId, 'invalid-string-array-field', field));
+}
+
+function isNonEmptyStringArray(value: readonly string[]): boolean {
+  return value.length > 0 && value.every((item) => item.trim().length > 0);
+}
+
+function hasArtifactFacets(facets: AgentArtifactFacetsContribution | undefined): boolean {
+  return (
+    (facets?.protocols?.length ?? 0) > 0 ||
+    (facets?.profiles?.length ?? 0) > 0 ||
+    (facets?.renderers?.length ?? 0) > 0 ||
+    (facets?.projectors?.length ?? 0) > 0 ||
+    (facets?.capabilities?.length ?? 0) > 0
+  );
+}
+
+function isArtifactCapabilityRisk(value: string): boolean {
+  return ['low', 'medium', 'high', 'destructive'].includes(value);
 }
 
 function validationDiagnostic(

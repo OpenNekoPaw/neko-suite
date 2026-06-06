@@ -90,18 +90,33 @@ export const mediaToVideoSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['comic', 'document', 'image', 'image-sequence', 'storyboard'],
-    inputArtifacts: ['storyboard-table', 'animation-plan', 'generated-media-ref'],
+    inputArtifacts: [
+      'CompositeArtifact',
+      'GenericTable',
+      'StoryboardTable',
+      'animation-plan',
+      'generated-media-ref',
+    ],
     producedArtifacts: [
-      'storyboard-table',
+      'CompositeArtifact',
+      'GenericTable',
+      'StoryboardTable',
       'animation-plan',
       'cut-storyboard-payload',
       'generated-media-ref',
       'workflow-execution-summary',
     ],
+    artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
+    referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+    suggestedProjectors: [
+      'projector:comic-shot-plan-to-storyboard',
+      'projector:storyboard-to-canvas',
+      'projector:storyboard-to-cut',
+    ],
     tags: ['media-to-video', 'orchestration', 'storyboard', 'animation'],
     costLevel: 'medium',
     riskLevel: 'medium',
-    validationRequirements: ['StoryboardTableV1'],
+    validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
   },
 };
 
@@ -129,18 +144,19 @@ export const imageToShotSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['image', 'image-sequence'],
-    producedArtifacts: ['storyboard-table', 'animation-plan'],
+    producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable', 'animation-plan'],
+    artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
     tags: ['image', 'shot', 'reference'],
     costLevel: 'medium',
     riskLevel: 'medium',
-    validationRequirements: ['StoryboardTableV1'],
+    validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
   },
 };
 
 export const storyboardToAnimationPlanSkill: Skill = {
   name: 'storyboard-to-animation-plan',
   description:
-    'Convert StoryboardTableV1 rows into animation shot plans with motion, camera, generation, and continuity guidance.',
+    'Convert CompositeArtifact storyboard domain blocks or StoryboardTable rows into animation shot plans with motion, camera, generation, and continuity guidance.',
   content: storyboardToAnimationPlanContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -159,12 +175,12 @@ export const storyboardToAnimationPlanSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['storyboard'],
-    inputArtifacts: ['storyboard-table'],
+    inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
     producedArtifacts: ['animation-plan'],
     tags: ['storyboard', 'animation-plan', 'motion'],
     costLevel: 'medium',
     riskLevel: 'medium',
-    validationRequirements: ['StoryboardTableV1'],
+    validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
   },
 };
 
@@ -190,7 +206,7 @@ export const animationPlanToCutSkill: Skill = {
   referencedSkills: [{ id: 'media-to-video', relationship: 'collaborator' }],
   mediaWorkflow: {
     acceptedModalities: ['storyboard'],
-    inputArtifacts: ['animation-plan', 'storyboard-table'],
+    inputArtifacts: ['animation-plan', 'StoryboardTable'],
     producedArtifacts: ['cut-storyboard-payload'],
     tags: ['cut', 'timeline', 'assembly'],
     costLevel: 'low',

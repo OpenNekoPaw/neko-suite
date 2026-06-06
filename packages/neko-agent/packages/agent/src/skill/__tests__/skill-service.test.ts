@@ -367,9 +367,9 @@ describe('KeywordSkillMatcher', () => {
     const matcher = new KeywordSkillMatcher();
     const storyboardSkill = makeSkill({
       name: 'comic-to-storyboard',
-      description: 'Convert manga/comic pages into structured StoryboardTableV1 storyboards.',
+      description: 'Convert manga/comic pages into structured StoryboardTable storyboards.',
       mediaWorkflow: {
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['StoryboardTable'],
         tags: ['comic', 'manga', 'storyboard'],
       },
     });
@@ -380,7 +380,7 @@ describe('KeywordSkillMatcher', () => {
       expect.objectContaining({
         skill: storyboardSkill,
         relevance: 0.95,
-        reason: expect.stringContaining("Matched artifact 'storyboard-table'"),
+        reason: expect.stringContaining("Matched artifact 'StoryboardTable'"),
       }),
     );
   });
@@ -391,15 +391,15 @@ describe('KeywordSkillMatcher', () => {
       name: 'media-to-video',
       description: 'Coordinate media-to-video workflows.',
       mediaWorkflow: {
-        producedArtifacts: ['storyboard-table', 'animation-plan', 'cut-storyboard-payload'],
+        producedArtifacts: ['StoryboardTable', 'animation-plan', 'cut-storyboard-payload'],
         tags: ['media-to-video', 'orchestration', 'storyboard'],
       },
     });
     const focusedSkill = makeSkill({
       name: 'comic-to-storyboard',
-      description: 'Convert manga/comic pages into structured StoryboardTableV1 storyboards.',
+      description: 'Convert manga/comic pages into structured StoryboardTable storyboards.',
       mediaWorkflow: {
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['StoryboardTable'],
         tags: ['comic', 'manga', 'storyboard'],
       },
     });

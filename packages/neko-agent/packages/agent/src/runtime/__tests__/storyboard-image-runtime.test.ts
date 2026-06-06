@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { StoryboardTableV1, Tool } from '@neko/shared';
+import type { StoryboardTable, Tool } from '@neko/shared';
 import {
   backfillStoryboardGeneratedMediaRefs,
   createStoryboardImageToolCapabilities,
@@ -208,8 +208,8 @@ describe('storyboard image runtime', () => {
 });
 
 function storyboardTable(
-  shot: Partial<StoryboardTableV1['scenes'][number]['shots'][number]>,
-): StoryboardTableV1 {
+  shot: Partial<StoryboardTable['scenes'][number]['shots'][number]>,
+): StoryboardTable {
   return {
     schemaVersion: 1,
     kind: 'storyboard-table',

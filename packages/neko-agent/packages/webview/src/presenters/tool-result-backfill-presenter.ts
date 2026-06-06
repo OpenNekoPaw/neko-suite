@@ -1,4 +1,9 @@
-import type { Message, ToolCall, ToolResultBackfillMessage } from '@neko-agent/types';
+import type {
+  AgentArtifactTransferPayload,
+  Message,
+  ToolCall,
+  ToolResultBackfillMessage,
+} from '@neko-agent/types';
 import type {
   PerceptionCard,
   ToolResultAttachment,
@@ -97,6 +102,9 @@ function applyBackfillToResult(
           perceptionCards: mergePerceptionCards(existing.perceptionCards, message.perceptionCards),
         }
       : {}),
+    ...(message.artifacts
+      ? { artifacts: mergeArtifacts(existing.artifacts, message.artifacts) }
+      : {}),
     ...(diagnostics.length > 0
       ? {
           backfillDiagnostics: [...(existing.backfillDiagnostics ?? []), ...diagnostics],
@@ -156,6 +164,33 @@ function mergePerceptionCards(
     byKey.set([card.assetId, card.version, card.cacheKey ?? ''].join(':'), card);
   }
   return Array.from(byKey.values()).sort((left, right) => left.createdAt - right.createdAt);
+}
+
+function mergeArtifacts(
+  existing: readonly AgentArtifactTransferPayload[] | undefined,
+  incoming: readonly AgentArtifactTransferPayload[],
+): readonly AgentArtifactTransferPayload[] {
+  const byKey = new Map<string, AgentArtifactTransferPayload>();
+  for (const artifact of existing ?? []) {
+    byKey.set(getArtifactTransferKey(artifact), artifact);
+  }
+  for (const artifact of incoming) {
+    byKey.set(getArtifactTransferKey(artifact), artifact);
+  }
+  return Array.from(byKey.values());
+}
+
+function getArtifactTransferKey(artifact: AgentArtifactTransferPayload): string {
+  switch (artifact.type) {
+    case 'artifactSnapshot':
+      return `snapshot:${artifact.artifact.artifactId}`;
+    case 'artifactBlockPage':
+      return `page:${artifact.artifactId}:${artifact.cursor ?? 'start'}`;
+    case 'artifactBackfill':
+      return `backfill:${artifact.artifact.artifactId}`;
+    case 'artifactExecutionSummary':
+      return `summary:${artifact.summary.summaryId}`;
+  }
 }
 
 function findMessageIndexByToolCallId(messages: readonly Message[], toolCallId: string): number {

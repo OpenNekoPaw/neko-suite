@@ -12,7 +12,7 @@ describe('createConversationSkillProvider', () => {
       referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
       mediaWorkflow: {
         acceptedModalities: ['comic'],
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['StoryboardTable'],
       },
     });
     const provider = createConversationSkillProvider({
@@ -28,7 +28,7 @@ describe('createConversationSkillProvider', () => {
         relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
         mediaWorkflow: {
           acceptedModalities: ['comic'],
-          producedArtifacts: ['storyboard-table'],
+          producedArtifacts: ['StoryboardTable'],
         },
       },
     ]);

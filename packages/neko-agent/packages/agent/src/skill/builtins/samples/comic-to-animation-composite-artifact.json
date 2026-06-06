@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "kind": "composite-artifact",
+  "artifactId": "sample-comic-to-animation-plan",
+  "profile": "comic-to-animation-plan",
+  "profileVersion": 1,
+  "title": "Comic to Animation Plan",
+  "blocks": [
+    {
+      "blockId": "summary",
+      "kind": "text",
+      "title": "Review",
+      "text": "Review panel evidence, shot plan rows, asset preparation, and provider availability before projecting to Canvas or Cut.",
+      "format": "plain"
+    },
+    {
+      "blockId": "source-panels",
+      "kind": "gallery",
+      "title": "Source Panels",
+      "items": [
+        {
+          "itemId": "panel-1",
+          "mediaType": "image",
+          "label": "Page 1 Panel 1",
+          "mimeType": "image/png",
+          "resourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-comic",
+            "assetIndex": 0
+          }
+        }
+      ]
+    },
+    {
+      "blockId": "shot-plan",
+      "kind": "table",
+      "title": "Shot Plan",
+      "table": {
+        "schemaVersion": 1,
+        "kind": "generic-table",
+        "tableId": "comic-shot-plan",
+        "profile": "comic-shot-asset-prep",
+        "profileVersion": 1,
+        "title": "Comic Shot Asset Prep",
+        "columns": [
+          { "columnId": "shotId", "label": "Shot", "cellType": "string", "required": true },
+          {
+            "columnId": "sourcePanel",
+            "label": "Source Panel",
+            "cellType": "media-preview",
+            "required": true,
+            "resourceMediaTypes": ["image"]
+          },
+          {
+            "columnId": "motionPlan",
+            "label": "Motion Plan",
+            "cellType": "json",
+            "required": true,
+            "schemaRef": "neko.motion-plan.v1"
+          },
+          { "columnId": "dialogue", "label": "Dialogue", "cellType": "string" },
+          { "columnId": "review", "label": "Review", "cellType": "status" }
+        ],
+        "rows": [
+          {
+            "rowId": "shot-1",
+            "status": "needs-review",
+            "cells": {
+              "shotId": { "type": "string", "value": "shot-1" },
+              "sourcePanel": {
+                "type": "media-preview",
+                "value": {
+                  "itemId": "panel-1",
+                  "mediaType": "image",
+                  "label": "Page 1 Panel 1",
+                  "resourceRef": {
+                    "kind": "tool-result",
+                    "toolCallId": "read-comic",
+                    "assetIndex": 0
+                  }
+                }
+              },
+              "motionPlan": {
+                "type": "json",
+                "schemaRef": "neko.motion-plan.v1",
+                "value": {
+                  "layer": "foreground",
+                  "durationMs": 1800,
+                  "assetRef": "panel-1",
+                  "camera": "slow push-in"
+                }
+              },
+              "dialogue": { "type": "string", "value": "We have to run." },
+              "review": { "type": "status", "value": "needs-review" }
+            },
+            "actions": [
+              {
+                "actionId": "review.shot.approve",
+                "kind": "review",
+                "label": "Approve Shot"
+              }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "projector:comic-shot-plan-to-storyboard",
+            "kind": "transform",
+            "label": "Project to StoryboardTable",
+            "projectorId": "projector:comic-shot-plan-to-storyboard"
+          }
+        ]
+      }
+    },
+    {
+      "blockId": "storyboard-domain",
+      "kind": "domain",
+      "title": "Storyboard Payload",
+      "domainKind": "StoryboardTable",
+      "schemaVersion": 1,
+      "payload": {
+        "schemaVersion": 1,
+        "kind": "storyboard-table",
+        "profile": "manga-to-video",
+        "title": "Storyboard",
+        "scenes": [
+          {
+            "sceneId": "scene-1",
+            "sceneTitle": "Page 1",
+            "shots": [
+              {
+                "shotId": "shot-1",
+                "shotNumber": 1,
+                "duration": 1.8,
+                "visualDescription": "A character looks back while running through a narrow alley.",
+                "characterAction": "The character turns, shouts, and accelerates.",
+                "dialogue": "We have to run.",
+                "imageStrategy": "use-as-reference",
+                "sourceMediaRefs": [
+                  {
+                    "refId": "panel-1",
+                    "role": "source",
+                    "locator": {
+                      "type": "tool-result",
+                      "toolCallId": "read-comic",
+                      "assetIndex": 0
+                    },
+                    "label": "Page 1 Panel 1",
+                    "mimeType": "image/png"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "blockId": "provider-diagnostics",
+      "kind": "diagnostic",
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "provider-unavailable",
+          "path": ["suggestedActions", "canvas.importStoryboard"],
+          "message": "Canvas import is review-only until a registered provider is available."
+        }
+      ]
+    }
+  ],
+  "suggestedActions": [
+    {
+      "actionId": "canvas.importStoryboard",
+      "kind": "execute",
+      "label": "Import to Canvas",
+      "capabilityId": "canvas.importStoryboard",
+      "projectorId": "projector:storyboard-to-canvas",
+      "risk": "medium",
+      "requiresApproval": true,
+      "disabled": true,
+      "disabledReason": "Provider unavailable"
+    },
+    {
+      "actionId": "cut.importStoryboard",
+      "kind": "execute",
+      "label": "Import to Cut",
+      "capabilityId": "cut.importStoryboard",
+      "projectorId": "projector:storyboard-to-cut",
+      "risk": "medium",
+      "requiresApproval": true,
+      "disabled": true,
+      "disabledReason": "Provider unavailable"
+    }
+  ],
+  "extensions": {
+    "neko.sample": {
+      "scenario": "comic-to-animation",
+      "reviewOnly": true
+    }
+  }
+}

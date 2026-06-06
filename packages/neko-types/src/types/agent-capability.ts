@@ -97,6 +97,64 @@ export interface CapabilityDeclaration {
 }
 
 // =============================================================================
+// Artifact facets (typed views over Capability Protocol)
+// =============================================================================
+
+export type AgentArtifactCapabilityRisk = 'low' | 'medium' | 'high' | 'destructive';
+
+export interface AgentArtifactProtocolContribution {
+  readonly id: string;
+  readonly artifactKind: string;
+  readonly profile?: string;
+  readonly schemaVersion: number;
+  readonly validatorId: string;
+  readonly rendererIds?: readonly string[];
+  readonly projectorIds?: readonly string[];
+}
+
+export interface AgentArtifactProfileContribution {
+  readonly id: string;
+  readonly profileId: string;
+  readonly protocol: string;
+  readonly version: number;
+  readonly descriptorRef?: string;
+}
+
+export interface AgentArtifactRendererContribution {
+  readonly id: string;
+  readonly accepts: readonly string[];
+  readonly profiles?: readonly string[];
+  readonly lazy?: boolean;
+}
+
+export interface AgentArtifactProjectorContribution {
+  readonly id: string;
+  readonly accepts: readonly string[];
+  readonly produces: readonly string[];
+  readonly profiles?: readonly string[];
+  readonly lazy?: boolean;
+}
+
+export interface AgentArtifactExecutionCapabilityContribution {
+  readonly capabilityId: string;
+  readonly packageId: string;
+  readonly accepts: readonly string[];
+  readonly produces?: readonly string[];
+  readonly actions: readonly string[];
+  readonly risk: AgentArtifactCapabilityRisk;
+  readonly requiresApproval: boolean;
+  readonly minVersion?: string;
+}
+
+export interface AgentArtifactFacetsContribution {
+  readonly protocols?: readonly AgentArtifactProtocolContribution[];
+  readonly profiles?: readonly AgentArtifactProfileContribution[];
+  readonly renderers?: readonly AgentArtifactRendererContribution[];
+  readonly projectors?: readonly AgentArtifactProjectorContribution[];
+  readonly capabilities?: readonly AgentArtifactExecutionCapabilityContribution[];
+}
+
+// =============================================================================
 // Platform service interfaces for capability providers (minimal L0 contracts)
 // =============================================================================
 
@@ -226,6 +284,13 @@ export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata
    * compatibility with existing AgentCapabilityProvider implementations.
    */
   getProviderCards?(context: AgentCapabilityContext): ProviderCard[];
+
+  /**
+   * Optional: Return artifact protocol/profile/renderer/projector/capability
+   * facets. These are registration-time metadata only; implementations remain
+   * package-owned and are resolved lazily by the relevant provider.
+   */
+  getArtifactFacets?(context: AgentCapabilityContext): AgentArtifactFacetsContribution;
 
   /**
    * Optional: Cleanup when the provider is unregistered (extension deactivated).

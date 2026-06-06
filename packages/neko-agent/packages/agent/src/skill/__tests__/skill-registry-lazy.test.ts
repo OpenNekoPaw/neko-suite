@@ -61,7 +61,7 @@ describe('SkillRegistry — lazy loading', () => {
           referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
           mediaWorkflow: {
             acceptedModalities: ['comic'],
-            producedArtifacts: ['storyboard-table'],
+            producedArtifacts: ['StoryboardTable'],
           },
         },
       });
@@ -77,7 +77,7 @@ describe('SkillRegistry — lazy loading', () => {
       ]);
       expect(skill?.mediaWorkflow).toEqual({
         acceptedModalities: ['comic'],
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['StoryboardTable'],
       });
     });
 

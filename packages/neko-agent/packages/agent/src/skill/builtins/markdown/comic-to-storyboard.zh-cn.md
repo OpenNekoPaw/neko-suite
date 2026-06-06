@@ -1,6 +1,6 @@
 # 漫画转分镜转换器
 
-你是漫画阅读和故事板结构化专家。目标是把漫画页转换成结构化的 StoryboardTableV1。
+你是漫画阅读和故事板结构化专家。目标是把漫画页转换成结构化的 CompositeArtifact，并在其中放入 StoryboardTable domain block。
 
 本 Skill 只负责分析和分镜规划，不直接生成图片、生成视频、写入时间线或导入 Canvas。如果用户需要动画计划、生成、Canvas 交付、Cut 装配或导出，应在结构化计划完成后激活 media-to-video、storyboard-to-animation-plan、animation-plan-to-cut、generated-shot-assembly 或 export-video-package。
 
@@ -37,9 +37,10 @@
    - 提示词语言跟随用户内容语言。分析、分镜或用户请求是中文时，提示词写中文，除非用户明确要求英文或目标生成工具要求英文。
    - 强调视觉一致性、角色设定、画风、色彩、镜头运动、光线、氛围和动作。
 2. 先给简洁可读的分析，再追加一个 `neko-composite` fenced JSON block 作为内部结构化 payload。
-3. 使用 `template: "storyboard-table"`，输出 StoryboardTableV1：`schemaVersion: 1`、`kind: "storyboard-table"`、`profile: "manga-to-video"`、`title`、`scenes[]` 和 `shots[]`。
+3. 外层使用 `CompositeArtifact`：`schemaVersion: 1`、`kind: "composite-artifact"`、`profile: "comic-to-animation-plan"`、`artifactId`、`title` 和 `blocks[]`。
+4. 分镜本体放在 `domain` block 中，使用 `domainKind: "StoryboardTable"`，其 `payload` 是 StoryboardTable：`schemaVersion: 1`、`kind: "storyboard-table"`、`profile: "manga-to-video"`、`title`、`scenes[]` 和 `shots[]`。
 
-## StoryboardTableV1 规则
+## StoryboardTable 规则
 
 - scene/shot 粒度很重要。scene 是连续页面、地点/时间块或叙事段落；shot 是该 scene 内的单个分格、镜头设置或视频片段。
 - 不要一镜头一个 scene。漫画通常应把同一页或同一连续动作段落的多个分格合并到一个 scene，除非页码、地点、时间或戏剧段落明显变化。
@@ -61,48 +62,89 @@
 
 ```neko-composite
 {
-  "template": "storyboard-table",
   "schemaVersion": 1,
-  "kind": "storyboard-table",
-  "profile": "manga-to-video",
-  "title": "Storyboard",
-  "scenes": [
+  "kind": "composite-artifact",
+  "artifactId": "comic-storyboard-plan",
+  "profile": "comic-to-animation-plan",
+  "title": "Comic Storyboard Plan",
+  "blocks": [
     {
-      "sceneId": "scene-1",
-      "sceneTitle": "Page 1",
-      "shots": [
+      "blockId": "summary",
+      "kind": "text",
+      "format": "plain",
+      "text": "Comic page analysis and storyboard planning summary."
+    },
+    {
+      "blockId": "storyboard-domain",
+      "kind": "domain",
+      "title": "Storyboard Payload",
+      "domainKind": "StoryboardTable",
+      "schemaVersion": 1,
+      "payload": {
+        "schemaVersion": 1,
+        "kind": "storyboard-table",
+        "profile": "manga-to-video",
+        "title": "Storyboard",
+        "scenes": [
+          {
+            "sceneId": "scene-1",
+            "sceneTitle": "Page 1",
+            "shots": [
+              {
+                "shotId": "scene-1-shot-1",
+                "shotNumber": 1,
+                "duration": 3,
+                "sourcePage": "P1",
+                "visualDescription": "Panel action and composition",
+                "characterAction": "Character action",
+                "dialogue": "OCR dialogue if present",
+                "soundCue": "SFX if present",
+                "generationPrompt": "Prompt for runtime generation if needed",
+                "imageStrategy": "use-as-reference",
+                "sourceMediaRefs": [
+                  {
+                    "refId": "source-panel-1",
+                    "role": "source",
+                    "locator": {
+                      "type": "tool-result",
+                      "toolCallId": "read-doc-call-id",
+                      "assetIndex": 0
+                    },
+                    "label": "Original panel",
+                    "mimeType": "image/jpeg"
+                  }
+                ],
+                "generatedMediaRefs": [],
+                "decisionReason": "Use the panel for composition but create a video-ready keyframe."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "blockId": "source-panels",
+      "kind": "gallery",
+      "title": "Source Panels",
+      "items": [
         {
-          "shotId": "scene-1-shot-1",
-          "shotNumber": 1,
-          "duration": 3,
-          "sourcePage": "P1",
-          "visualDescription": "Panel action and composition",
-          "characterAction": "Character action",
-          "dialogue": "OCR dialogue if present",
-          "soundCue": "SFX if present",
-          "generationPrompt": "Prompt for runtime generation if needed",
-          "imageStrategy": "use-as-reference",
-          "sourceMediaRefs": [
-            {
-              "refId": "source-panel-1",
-              "role": "source",
-              "locator": {
-                "type": "tool-result",
-                "toolCallId": "read-doc-call-id",
-                "assetIndex": 0
-              },
-              "label": "Original panel",
-              "mimeType": "image/jpeg"
-            }
-          ],
-          "generatedMediaRefs": [],
-          "decisionReason": "Use the panel for composition but create a video-ready keyframe."
+          "itemId": "source-panel-1",
+          "mediaType": "image",
+          "resourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-doc-call-id",
+            "assetIndex": 0
+          },
+          "label": "Original panel",
+          "mimeType": "image/jpeg"
         }
       ]
     }
   ]
 }
 ```
+
+旧的裸 `template: "storyboard-table"` payload 可以作为兼容输入读取，但新的输出应使用上面的 CompositeArtifact envelope。
 
 ## Profile 字段模板
 
@@ -177,5 +219,5 @@
 3. scene/shot 分解。
 4. 预计总视频时长。
 5. 角色列表及参考分格。
-6. 已校验的 StoryboardTableV1 payload。
+6. 已校验的 CompositeArtifact payload，内部包含 StoryboardTable domain block。
 7. 只有当用户需要动画、Canvas、Cut 或导出时，才建议下一步 Skill。

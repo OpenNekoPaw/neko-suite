@@ -2,13 +2,13 @@ import {
   hasBlockingStoryboardDiagnostics,
   isResourceRef,
   parseDocumentArchiveResourceRef,
-  projectStoryboardTableV1ToCanvasPayload,
-  projectStoryboardTableV1ToCutPayload,
+  projectStoryboardTableToCanvasPayload as projectSemanticStoryboardTableToCanvasPayload,
+  projectStoryboardTableToCutPayload as projectSemanticStoryboardTableToCutPayload,
   type CanvasStoryboardPayload,
   type DocumentArchiveResourceRef,
   type ResourceRef,
   type ShotScale,
-  type StoryboardMediaRefV1,
+  type StoryboardMediaRef,
   type StoryboardImportMode,
 } from '@neko/shared';
 import type {
@@ -187,7 +187,7 @@ export function projectStoryboardTableTransferPayload(
   if (data.storyboardTable) {
     return {
       kind: 'canvasStoryboard',
-      storyboard: projectStoryboardTableV1ToCanvasPayload(
+      storyboard: projectSemanticStoryboardTableToCanvasPayload(
         sanitizeStoryboardTableReferenceImagePaths(data.storyboardTable),
         {
           sourceScriptUri: 'agent://rich-content/storyboard-table',
@@ -222,7 +222,7 @@ export function projectStoryboardTableCutTimelinePayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
   if (data.storyboardTable) {
-    const storyboard = projectStoryboardTableV1ToCutPayload(data.storyboardTable, {
+    const storyboard = projectSemanticStoryboardTableToCutPayload(data.storyboardTable, {
       resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
     });
     return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
@@ -234,7 +234,7 @@ export function projectStoryboardTableCutTimelinePayload(
 
 function resolveStoryboardMediaPath(
   data: StoryboardTableRichData,
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): string | undefined {
   const media = resolveStoryboardMedia(data, mediaRef);
   return getCanvasImageMediaPath(media);
@@ -276,21 +276,21 @@ function isPortableCanvasReferenceImagePath(value: string): boolean {
 
 function resolveStoryboardMediaResourceRef(
   data: StoryboardTableRichData,
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): DocumentArchiveResourceRef | undefined {
   return resolveStoryboardMedia(data, mediaRef)?.resourceRef;
 }
 
 function resolveStoryboardMediaUnifiedResourceRef(
   data: StoryboardTableRichData,
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): ResourceRef | undefined {
   return resolveStoryboardMedia(data, mediaRef)?.cacheResourceRef;
 }
 
 function resolveStoryboardMedia(
   data: StoryboardTableRichData,
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): ResolvedCompositeMedia | undefined {
   if (mediaRef.locator.type === 'tool-result') {
     const locator = mediaRef.locator;
@@ -317,7 +317,7 @@ function findStoryboardMedia(
 
 function doesStoryboardMediaMatchRef(
   media: ResolvedCompositeMedia,
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): boolean {
   const locator = mediaRef.locator;
   return (

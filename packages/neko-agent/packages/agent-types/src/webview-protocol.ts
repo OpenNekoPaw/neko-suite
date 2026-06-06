@@ -47,6 +47,7 @@ import type {
 } from './work-item';
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentWorkflowRun } from './workflow';
+import type { AgentArtifactTransferPayload } from './artifact-transfer';
 import type {
   PluginTransferAssetRef,
   PluginTransferContentFormat,
@@ -547,6 +548,7 @@ export interface ToolResultMessage {
   attachments?: readonly import('@neko/shared').ToolResultAttachment[];
   perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
   backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
+  artifacts?: readonly AgentArtifactTransferPayload[];
 }
 
 export interface ToolResultBackfillMessage {
@@ -558,6 +560,7 @@ export interface ToolResultBackfillMessage {
   attachments?: readonly import('@neko/shared').ToolResultAttachment[];
   perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
   backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
+  artifacts?: readonly AgentArtifactTransferPayload[];
 }
 
 export interface ToolConfirmationMessage {

@@ -141,6 +141,216 @@ describe('agent-capability-injection-runtime', () => {
     });
   });
 
+  it('registers artifact facets as lightweight discoverable metadata', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    const projection = runtime.register({
+      identity: {
+        id: 'provider:canvas',
+        source: 'provider',
+        sourceId: 'neko-canvas',
+        trustLevel: 'core',
+      },
+      artifactFacets: {
+        protocols: [
+          {
+            id: 'protocol:CompositeArtifact',
+            artifactKind: 'CompositeArtifact',
+            schemaVersion: 1,
+            validatorId: 'neko.shared.validateCompositeArtifact',
+            rendererIds: ['renderer:generic-artifact'],
+          },
+        ],
+        profiles: [
+          {
+            id: 'profile:comic-shot-asset-prep',
+            profileId: 'comic-shot-asset-prep',
+            protocol: 'GenericTable',
+            version: 1,
+            descriptorRef: '${WORKSPACE}/.neko/skills/comic/profiles/asset-prep.profile.json',
+          },
+        ],
+        renderers: [
+          {
+            id: 'renderer:generic-artifact',
+            accepts: ['CompositeArtifact', 'GenericTable'],
+            profiles: ['comic-shot-asset-prep'],
+            lazy: true,
+          },
+        ],
+        projectors: [
+          {
+            id: 'projector:storyboard-to-canvas',
+            accepts: ['StoryboardTable'],
+            produces: ['CanvasStoryboardPayload'],
+            lazy: true,
+          },
+        ],
+        capabilities: [
+          {
+            capabilityId: 'canvas.importStoryboard',
+            packageId: 'neko-canvas',
+            accepts: ['CanvasStoryboardPayload'],
+            produces: ['canvas-node-ref'],
+            actions: ['canvas.importStoryboard'],
+            risk: 'medium',
+            requiresApproval: true,
+          },
+        ],
+      },
+    });
+
+    expect(projection.artifactFacets?.protocols?.map((item) => item.id)).toEqual([
+      'protocol:CompositeArtifact',
+    ]);
+    expect(runtime.getArtifactFacets().projectors?.map((item) => item.id)).toEqual([
+      'projector:storyboard-to-canvas',
+    ]);
+    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([
+      expect.objectContaining({
+        capabilityId: 'canvas.importStoryboard',
+        requiresApproval: true,
+      }),
+    ]);
+
+    const injected = runtime.inject({ host: 'vscode' });
+    expect(injected.promptFragments).toEqual([]);
+    expect(injected.allowedTools).toEqual([]);
+  });
+
+  it('filters artifact execution capabilities through host, trust, and approval policy', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+    runtime.registerMany([
+      {
+        identity: {
+          id: 'provider:canvas',
+          source: 'provider',
+          sourceId: 'neko-canvas',
+          trustLevel: 'core',
+        },
+        hostRequirements: [{ host: 'vscode' }],
+        permissionRequirements: [{ scope: 'canvas.write', mode: 'write', approvalRequired: true }],
+        artifactFacets: {
+          capabilities: [
+            {
+              capabilityId: 'canvas.importStoryboard',
+              packageId: 'neko-canvas',
+              accepts: ['CanvasStoryboardPayload'],
+              actions: ['canvas.importStoryboard'],
+              risk: 'medium',
+              requiresApproval: true,
+            },
+          ],
+        },
+      },
+      {
+        identity: {
+          id: 'provider:third-party-video',
+          source: 'plugin',
+          sourceId: 'video-plugin',
+          trustLevel: 'untrusted',
+        },
+        artifactFacets: {
+          capabilities: [
+            {
+              capabilityId: 'video.generateFromArtifact',
+              packageId: 'video-plugin',
+              accepts: ['CompositeArtifact'],
+              actions: ['video.generateFromArtifact'],
+              risk: 'high',
+              requiresApproval: true,
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(runtime.findArtifactCapabilities('canvas.importStoryboard', { host: 'cli' })).toEqual(
+      [],
+    );
+    expect(
+      runtime.findArtifactCapabilities('canvas.importStoryboard', {
+        host: 'vscode',
+        permissionPolicy: { approvedContributionIds: ['provider:canvas'] },
+      }),
+    ).toHaveLength(1);
+    expect(
+      runtime.findArtifactCapabilities('video.generateFromArtifact', {
+        host: 'vscode',
+        allowedTrustLevels: ['core', 'community'],
+      }),
+    ).toEqual([]);
+  });
+
+  it('diagnoses invalid artifact facet metadata at registration', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.register({
+      identity: {
+        id: 'provider:bad-artifact',
+        source: 'provider',
+        sourceId: 'bad-artifact',
+        trustLevel: 'core',
+      },
+      artifactFacets: {
+        protocols: [
+          {
+            id: '',
+            artifactKind: '',
+            schemaVersion: Number.NaN,
+            validatorId: '',
+          },
+        ],
+        renderers: [{ id: '', accepts: [] }],
+        projectors: [{ id: '', accepts: [], produces: [] }],
+        capabilities: [
+          {
+            capabilityId: '',
+            packageId: '',
+            accepts: [],
+            actions: [],
+            risk: 'unsafe' as never,
+            requiresApproval: 'yes' as never,
+          },
+        ],
+      },
+    });
+
+    expect(runtime.getDiagnostics('registration').map((item) => item.reason)).toEqual(
+      expect.arrayContaining([
+        'missing-required-field',
+        'invalid-integer-field',
+        'invalid-string-array-field',
+        'invalid-artifact-risk',
+        'invalid-artifact-approval',
+      ]),
+    );
+  });
+
+  it('does not turn Skill or Profile capability references into providers', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.register({
+      identity: {
+        id: 'skill:comic-to-animation',
+        source: 'market',
+        sourceId: '@neko/comic-to-animation',
+        trustLevel: 'community',
+      },
+      metadata: {
+        mediaWorkflow: {
+          producedArtifacts: ['CompositeArtifact'],
+          artifactProfiles: ['comic-shot-asset-prep'],
+          referencedCapabilities: ['canvas.importStoryboard'],
+          suggestedProjectors: ['projector:storyboard-to-canvas'],
+        },
+      },
+    });
+
+    expect(runtime.getArtifactFacets().capabilities).toEqual([]);
+    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
+  });
+
   it('reports deterministic command, tool, prompt, and workflow collisions at registration', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
 

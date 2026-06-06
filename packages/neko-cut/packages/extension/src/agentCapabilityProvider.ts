@@ -15,6 +15,7 @@
 import type {
   AgentCapabilityProvider,
   AgentCapabilityContext,
+  AgentArtifactFacetsContribution,
   Tool,
   ToolGroup,
   ToolParameters,
@@ -63,6 +64,39 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
     private readonly _api: NekoCutAPI,
     private readonly _timelineBridge: TimelineToolBridge,
   ) {}
+
+  getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {
+    return {
+      renderers: [
+        {
+          id: 'renderer:neko-cut:generic-artifact-preview',
+          accepts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+          profiles: ['comic-shot-asset-prep', 'comic-to-animation-plan', 'manga-to-video'],
+          lazy: true,
+        },
+      ],
+      projectors: [
+        {
+          id: 'projector:storyboard-to-cut',
+          accepts: ['StoryboardTable'],
+          produces: ['CutStoryboardImportPayload'],
+          profiles: ['manga-to-video'],
+          lazy: true,
+        },
+      ],
+      capabilities: [
+        {
+          capabilityId: 'cut.importStoryboard',
+          packageId: 'neko-cut',
+          accepts: ['CutStoryboardImportPayload'],
+          produces: ['timeline-element-ref'],
+          actions: ['cut.importStoryboard'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+      ],
+    };
+  }
 
   getTools(context: AgentCapabilityContext): Tool[] {
     const api = this._api;

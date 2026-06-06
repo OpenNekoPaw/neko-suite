@@ -177,6 +177,13 @@ export type {
   AgentMultimodalPacketLinkage,
   AgentToolModalityDeclaration,
 } from './multimodal-tooling';
+export type {
+  AgentArtifactTransferPayload,
+  ArtifactBackfillTransferPayload,
+  ArtifactBlockPageTransferPayload,
+  ArtifactExecutionSummaryTransferPayload,
+  ArtifactSnapshotTransferPayload,
+} from './artifact-transfer';
 export {
   backgroundTaskToWorkItem,
   isSubAgentWorkItem,

@@ -1,23 +1,20 @@
 import type {
   IToolRegistry,
-  StoryboardImageStrategyActionV1,
-  StoryboardImageStrategyBlockedActionV1,
-  StoryboardImageStrategyInterpreterInputV1,
-  StoryboardImageStrategyInterpreterResultV1,
-  StoryboardImageStrategyOverrideV1,
-  StoryboardImageToolCapabilityV1,
-  StoryboardMediaRefV1,
-  StoryboardShotRowV1,
-  StoryboardTableV1,
-  StoryboardValidationDiagnosticV1,
+  StoryboardImageStrategyAction,
+  StoryboardImageStrategyBlockedAction,
+  StoryboardImageStrategyInterpreterInput,
+  StoryboardImageStrategyInterpreterResult,
+  StoryboardImageStrategyOverride,
+  StoryboardImageToolCapability,
+  StoryboardMediaRef,
+  StoryboardShotRow,
+  StoryboardTable,
+  StoryboardValidationDiagnostic,
   Tool,
   ToolExecuteOptions,
   ToolResult,
 } from '@neko/shared';
-import {
-  interpretStoryboardImageStrategiesV1,
-  hasBlockingStoryboardDiagnostics,
-} from '@neko/shared';
+import { interpretStoryboardImageStrategies, hasBlockingStoryboardDiagnostics } from '@neko/shared';
 
 export interface StoryboardImageRuntimeToolPort {
   readonly get?: IToolRegistry['get'];
@@ -27,19 +24,19 @@ export interface StoryboardImageRuntimeToolPort {
 }
 
 export interface StoryboardImageRuntimePlanInput {
-  readonly table: StoryboardTableV1;
-  readonly userOverride?: StoryboardImageStrategyOverrideV1;
-  readonly availableTools?: readonly StoryboardImageToolCapabilityV1[];
+  readonly table: StoryboardTable;
+  readonly userOverride?: StoryboardImageStrategyOverride;
+  readonly availableTools?: readonly StoryboardImageToolCapability[];
   readonly toolPort?: StoryboardImageRuntimeToolPort;
 }
 
 export interface StoryboardImageRuntimePlan {
-  readonly table: StoryboardTableV1;
-  readonly interpretation: StoryboardImageStrategyInterpreterResultV1;
-  readonly executableActions: readonly StoryboardImageStrategyActionV1[];
-  readonly reuseActions: readonly StoryboardImageStrategyActionV1[];
-  readonly blockedActions: readonly StoryboardImageStrategyBlockedActionV1[];
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly table: StoryboardTable;
+  readonly interpretation: StoryboardImageStrategyInterpreterResult;
+  readonly executableActions: readonly StoryboardImageStrategyAction[];
+  readonly reuseActions: readonly StoryboardImageStrategyAction[];
+  readonly blockedActions: readonly StoryboardImageStrategyBlockedAction[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
 export interface ExecuteStoryboardImageRuntimeInput extends StoryboardImageRuntimePlanInput {
@@ -47,14 +44,14 @@ export interface ExecuteStoryboardImageRuntimeInput extends StoryboardImageRunti
 }
 
 export interface StoryboardImageRuntimeExecution {
-  readonly action: StoryboardImageStrategyActionV1;
+  readonly action: StoryboardImageStrategyAction;
   readonly result: ToolResult;
 }
 
 export interface ExecuteStoryboardImageRuntimeResult {
   readonly plan: StoryboardImageRuntimePlan;
   readonly executions: readonly StoryboardImageRuntimeExecution[];
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
 export interface StoryboardGeneratedMediaBackfillOutput {
@@ -75,20 +72,20 @@ export interface StoryboardGeneratedMediaBackfillCompletion {
 }
 
 export interface BackfillStoryboardGeneratedMediaRefsInput {
-  readonly table: StoryboardTableV1;
+  readonly table: StoryboardTable;
   readonly completions: readonly StoryboardGeneratedMediaBackfillCompletion[];
 }
 
 export interface BackfillStoryboardGeneratedMediaRefsResult {
-  readonly table: StoryboardTableV1;
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly table: StoryboardTable;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
 const STORYBOARD_IMAGE_TOOL_NAMES = ['GenerateImage', 'TransformImage', 'ResolveMediaRef'] as const;
 
 export function createStoryboardImageToolCapabilities(
   toolPort: StoryboardImageRuntimeToolPort | undefined,
-): readonly StoryboardImageToolCapabilityV1[] {
+): readonly StoryboardImageToolCapability[] {
   if (!toolPort) return [];
 
   const listedTools = toolPort.list?.() ?? [];
@@ -174,11 +171,11 @@ export function planStoryboardImageStrategyRuntime(
 ): StoryboardImageRuntimePlan {
   const availableTools =
     input.availableTools ?? createStoryboardImageToolCapabilities(input.toolPort);
-  const interpretation = interpretStoryboardImageStrategiesV1({
+  const interpretation = interpretStoryboardImageStrategies({
     table: input.table,
     ...(input.userOverride ? { userOverride: input.userOverride } : {}),
     availableTools,
-  } satisfies StoryboardImageStrategyInterpreterInputV1);
+  } satisfies StoryboardImageStrategyInterpreterInput);
   const executableActions = interpretation.actions.filter(
     (action) => action.kind !== 'reuse-original',
   );
@@ -199,7 +196,7 @@ export async function executeStoryboardImageStrategyRuntime(
 ): Promise<ExecuteStoryboardImageRuntimeResult> {
   const plan = planStoryboardImageStrategyRuntime(input);
   const executions: StoryboardImageRuntimeExecution[] = [];
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [...plan.diagnostics];
+  const diagnostics: StoryboardValidationDiagnostic[] = [...plan.diagnostics];
 
   if (!input.toolPort?.execute) {
     return {
@@ -256,7 +253,7 @@ export async function executeStoryboardImageStrategyRuntime(
 export function backfillStoryboardGeneratedMediaRefs(
   input: BackfillStoryboardGeneratedMediaRefsInput,
 ): BackfillStoryboardGeneratedMediaRefsResult {
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
   const scenes = input.table.scenes.map((scene) => {
     const shots = scene.shots.map((shot) => {
       const completions = input.completions.filter((completion) =>
@@ -264,7 +261,7 @@ export function backfillStoryboardGeneratedMediaRefs(
       );
       if (completions.length === 0) return shot;
 
-      const refs: StoryboardMediaRefV1[] = [...(shot.generatedMediaRefs ?? [])];
+      const refs: StoryboardMediaRef[] = [...(shot.generatedMediaRefs ?? [])];
       for (const completion of completions) {
         if (!completion.success) {
           diagnostics.push(
@@ -344,7 +341,7 @@ export function storyboardRuntimeCanExecute(plan: StoryboardImageRuntimePlan): b
 }
 
 function createStoryboardToolArguments(
-  action: StoryboardImageStrategyActionV1,
+  action: StoryboardImageStrategyAction,
 ): Record<string, unknown> {
   return {
     sceneId: action.sceneId,
@@ -359,7 +356,7 @@ function createStoryboardToolArguments(
 function completionMatchesShot(
   completion: StoryboardGeneratedMediaBackfillCompletion,
   sceneId: string,
-  shot: StoryboardShotRowV1,
+  shot: StoryboardShotRow,
 ): boolean {
   return (
     completion.sceneId === sceneId &&
@@ -368,11 +365,9 @@ function completionMatchesShot(
   );
 }
 
-function dedupeStoryboardRefs(
-  refs: readonly StoryboardMediaRefV1[],
-): readonly StoryboardMediaRefV1[] {
+function dedupeStoryboardRefs(refs: readonly StoryboardMediaRef[]): readonly StoryboardMediaRef[] {
   const seen = new Set<string>();
-  const result: StoryboardMediaRefV1[] = [];
+  const result: StoryboardMediaRef[] = [];
   for (const ref of refs) {
     if (seen.has(ref.refId)) continue;
     seen.add(ref.refId);
@@ -382,10 +377,10 @@ function dedupeStoryboardRefs(
 }
 
 function createStoryboardRuntimeDiagnostic(
-  severity: StoryboardValidationDiagnosticV1['severity'],
-  code: StoryboardValidationDiagnosticV1['code'],
-  path: StoryboardValidationDiagnosticV1['path'],
+  severity: StoryboardValidationDiagnostic['severity'],
+  code: StoryboardValidationDiagnostic['code'],
+  path: StoryboardValidationDiagnostic['path'],
   message: string,
-): StoryboardValidationDiagnosticV1 {
+): StoryboardValidationDiagnostic {
   return { severity, code, path, message };
 }

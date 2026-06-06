@@ -61,7 +61,9 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('isCanvasNodeType');
     expect(providerSource).toContain('readOptionalCanvasNodeType(args.type)');
     expect(providerSource).toContain("readOptionalCanvasNodeType(value.type, 'child node type')");
-    expect(providerSource).toContain("readOptionalCanvasNodeType(args.targetType, 'derive target type')");
+    expect(providerSource).toContain(
+      "readOptionalCanvasNodeType(args.targetType, 'derive target type')",
+    );
   });
 
   it('requests additive subsystem metadata only when callers opt in', () => {
@@ -77,6 +79,18 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('activeSubsystems');
     expect(providerSource).toContain('includeSubsystemMetadata: true');
     expect(providerSource).toContain('projection adapters');
+  });
+
+  it('registers review-only artifact facets for storyboard projection and Canvas import', () => {
+    expect(providerSource).toContain('getArtifactFacets(');
+    expect(providerSource).toContain('renderer:neko-canvas:generic-artifact-preview');
+    expect(providerSource).toContain("'CompositeArtifact', 'GenericTable', 'StoryboardTable'");
+    expect(providerSource).toContain('projector:storyboard-to-canvas');
+    expect(providerSource).toContain("accepts: ['StoryboardTable']");
+    expect(providerSource).toContain("produces: ['CanvasStoryboardPayload']");
+    expect(providerSource).toContain("capabilityId: 'canvas.importStoryboard'");
+    expect(providerSource).toContain("accepts: ['CanvasStoryboardPayload']");
+    expect(providerSource).toContain('requiresApproval: true');
   });
 
   it('registers narrative traversal as a read-only mixed Canvas tool', () => {

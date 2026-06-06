@@ -4,11 +4,11 @@
 
 ## 工作流指引
 
-1. 先判断输入来源：漫画、文档、图片、图片序列、StoryboardTableV1、动画计划或已生成媒体。
+1. 先判断输入来源：漫画、文档、图片、图片序列、包含 StoryboardTable domain block 的 CompositeArtifact、旧裸 StoryboardTable、动画计划或已生成媒体。
 2. 用 GetContext 查看可用相关 Skill，只在需要详细规则时激活聚焦子 Skill。
 3. EPUB/PDF/CBZ/CBR 漫画页优先使用 comic-to-storyboard。
 4. 静态图片或图片序列优先使用 image-to-shot。
-5. 已有 StoryboardTableV1 时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
+5. 已有包含 StoryboardTable domain block 的 CompositeArtifact，或旧裸 StoryboardTable 时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
 6. 已有动画计划且目标是 Cut 时，优先使用 animation-plan-to-cut。
 7. 已有生成素材时，根据需要使用 generated-shot-assembly 和 export-video-package。
 8. 当缺少生成提供方、目标插件、审批或安全媒体引用时，停留在计划阶段。
@@ -22,7 +22,7 @@
 
 ## 相关 Skill 选择
 
-- comic-to-storyboard：读取漫画页、分格/OCR 证据、输出 StoryboardTableV1。
+- comic-to-storyboard：读取漫画页、分格/OCR 证据、输出包含 StoryboardTable domain block 的 CompositeArtifact。
 - image-to-shot：将静态图片引用转为镜头或分镜计划。
 - storyboard-to-animation-plan：把分镜行转换为运动、镜头和生成计划。
 - animation-plan-to-cut：把动画计划转换为 Cut 时间线 payload。

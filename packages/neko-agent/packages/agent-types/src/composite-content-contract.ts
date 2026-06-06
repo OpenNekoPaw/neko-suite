@@ -1,10 +1,10 @@
 import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
 import {
   hasBlockingStoryboardDiagnostics,
-  normalizeStoryboardTableV1,
-  type StoryboardMediaRefV1,
-  type StoryboardTableV1,
-  type StoryboardValidationDiagnosticV1,
+  normalizeStoryboardTable,
+  type StoryboardMediaRef,
+  type StoryboardTable,
+  type StoryboardValidationDiagnostic,
 } from '@neko/shared';
 
 export const COMPOSITE_CONTENT_FENCE_LANGUAGES = ['neko-composite', 'neko-composite-json'] as const;
@@ -23,6 +23,8 @@ interface CompositeContentEnvelope {
 const MAX_COMPOSITE_SECTIONS = 200;
 const MAX_SECTION_MEDIA_REFS = 12;
 const MAX_STORYBOARD_DIAGNOSTIC_SECTIONS = 8;
+const STORYBOARD_DOMAIN_KIND = 'StoryboardTable';
+const LEGACY_STORYBOARD_DOMAIN_KIND = 'StoryboardTableV1';
 
 const COMPOSITE_CONTENT_FENCE_PATTERN =
   /```(?:neko-composite|neko-composite-json)\s*\n([\s\S]*?)```/g;
@@ -72,6 +74,9 @@ function readEnvelopeCandidates(envelope: CompositeContentEnvelope): readonly un
 
 function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
   if (!isRecord(value)) return null;
+  const artifactBackedStoryboard = normalizeArtifactBackedStoryboardBlock(value);
+  if (artifactBackedStoryboard) return artifactBackedStoryboard;
+
   const template = value.template;
   if (
     template !== 'storyboard-table' &&
@@ -84,7 +89,7 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
 
   const semanticStoryboard =
     template === 'storyboard-table' && (value.schemaVersion === 1 || value.scenes !== undefined)
-      ? normalizeStoryboardTableV1({ value })
+      ? normalizeStoryboardTable({ value })
       : undefined;
   const title = readString(value, 'title') ?? semanticStoryboard?.table?.title;
   const sections = normalizeCompositeSections(value.sections);
@@ -106,6 +111,46 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
   };
 }
 
+function normalizeArtifactBackedStoryboardBlock(
+  value: Record<string, unknown>,
+): CompositeBlockData | null {
+  if (value.kind !== 'composite-artifact' || value.schemaVersion !== 1) return null;
+  const blocks = Array.isArray(value.blocks) ? value.blocks : [];
+  const storyboardBlock = blocks.find(isStoryboardDomainBlock);
+  if (!storyboardBlock) return null;
+
+  const semanticStoryboard = normalizeStoryboardTable({ value: storyboardBlock.payload });
+  const title =
+    readString(storyboardBlock, 'title') ??
+    readString(value, 'title') ??
+    semanticStoryboard.table?.title;
+  const sections = createStoryboardFallbackSections(
+    semanticStoryboard.table,
+    semanticStoryboard.diagnostics,
+  );
+  if (sections.length === 0) return null;
+
+  return {
+    template: 'storyboard-table',
+    ...(title ? { title } : {}),
+    ...(semanticStoryboard.table ? { storyboardTable: semanticStoryboard.table } : {}),
+    ...(semanticStoryboard.diagnostics.length > 0
+      ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
+      : {}),
+    sections,
+  };
+}
+
+function isStoryboardDomainBlock(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    value.kind === 'domain' &&
+    (value.domainKind === STORYBOARD_DOMAIN_KIND ||
+      value.domainKind === LEGACY_STORYBOARD_DOMAIN_KIND) &&
+    value.payload !== undefined
+  );
+}
+
 function normalizeCompositeSections(value: unknown): readonly CompositeSection[] {
   if (!Array.isArray(value) || value.length === 0) return [];
   return value.slice(0, MAX_COMPOSITE_SECTIONS).flatMap((section) => {
@@ -115,8 +160,8 @@ function normalizeCompositeSections(value: unknown): readonly CompositeSection[]
 }
 
 function createStoryboardFallbackSections(
-  table: StoryboardTableV1 | undefined,
-  diagnostics: readonly StoryboardValidationDiagnosticV1[] | undefined,
+  table: StoryboardTable | undefined,
+  diagnostics: readonly StoryboardValidationDiagnostic[] | undefined,
 ): readonly CompositeSection[] {
   if (table) {
     return table.scenes.flatMap((scene) =>
@@ -147,8 +192,8 @@ function createStoryboardFallbackSections(
 }
 
 function collectStoryboardShotMediaRefs(
-  shot: StoryboardTableV1['scenes'][number]['shots'][number],
-): readonly StoryboardMediaRefV1[] | undefined {
+  shot: StoryboardTable['scenes'][number]['shots'][number],
+): readonly StoryboardMediaRef[] | undefined {
   const refs = dedupeStoryboardMediaRefs([
     ...(shot.sourceMediaRefs ?? []),
     ...(shot.generatedMediaRefs ?? []),
@@ -158,10 +203,10 @@ function collectStoryboardShotMediaRefs(
 }
 
 function dedupeStoryboardMediaRefs(
-  mediaRefs: readonly StoryboardMediaRefV1[],
-): readonly StoryboardMediaRefV1[] {
+  mediaRefs: readonly StoryboardMediaRef[],
+): readonly StoryboardMediaRef[] {
   const seen = new Set<string>();
-  const refs: StoryboardMediaRefV1[] = [];
+  const refs: StoryboardMediaRef[] = [];
   for (const mediaRef of mediaRefs) {
     const key = `${mediaRef.refId}:${JSON.stringify(mediaRef.locator)}`;
     if (seen.has(key)) continue;
@@ -172,7 +217,7 @@ function dedupeStoryboardMediaRefs(
 }
 
 function projectStoryboardMediaRefsToLegacy(
-  mediaRefs: StoryboardTableV1['scenes'][number]['shots'][number]['mediaRefs'],
+  mediaRefs: StoryboardTable['scenes'][number]['shots'][number]['mediaRefs'],
 ): readonly MediaRef[] | undefined {
   const refs = (mediaRefs ?? []).flatMap((mediaRef) => {
     if (mediaRef.locator.type !== 'tool-result') return [];

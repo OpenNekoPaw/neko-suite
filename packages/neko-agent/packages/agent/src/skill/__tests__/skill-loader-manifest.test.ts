@@ -19,7 +19,7 @@ description: Convert media inputs into video planning artifacts.
           referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
           mediaWorkflow: {
             acceptedModalities: ['comic'],
-            producedArtifacts: ['storyboard-table'],
+            producedArtifacts: ['StoryboardTable'],
             tags: ['media-to-video'],
             costLevel: 'low',
             riskLevel: 'low',
@@ -40,7 +40,7 @@ description: Convert media inputs into video planning artifacts.
       referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
       mediaWorkflow: {
         acceptedModalities: ['comic'],
-        producedArtifacts: ['storyboard-table'],
+        producedArtifacts: ['StoryboardTable'],
       },
     });
   });

@@ -42,7 +42,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
   };
 
   private artifactKeywords: Record<string, string[]> = {
-    'storyboard-table': [
+    StoryboardTable: [
       'storyboard',
       'storyboard table',
       'shot list',
@@ -197,11 +197,11 @@ export class KeywordSkillMatcher extends SkillMatcher {
   }
 
   private skillProducesArtifact(skill: Skill, artifact: string): boolean {
-    return (skill.mediaWorkflow?.producedArtifacts ?? []).includes(artifact);
+    return this.getProducedArtifactAliases(skill).includes(artifact);
   }
 
   private getArtifactMatchRelevance(skill: Skill, artifact: string): number {
-    const producedArtifacts = skill.mediaWorkflow?.producedArtifacts ?? [];
+    const producedArtifacts = this.getProducedArtifactAliases(skill);
     if (!producedArtifacts.includes(artifact)) {
       return 0;
     }
@@ -212,6 +212,12 @@ export class KeywordSkillMatcher extends SkillMatcher {
   private getSkillSpecificityScore(skill: Skill): number {
     const producedArtifacts = skill.mediaWorkflow?.producedArtifacts ?? [];
     return producedArtifacts.length > 0 ? 1 / producedArtifacts.length : 0;
+  }
+
+  private getProducedArtifactAliases(skill: Skill): readonly string[] {
+    return (skill.mediaWorkflow?.producedArtifacts ?? []).flatMap((artifact) =>
+      artifact === 'storyboard-table' ? ['StoryboardTable'] : [artifact],
+    );
   }
 }
 

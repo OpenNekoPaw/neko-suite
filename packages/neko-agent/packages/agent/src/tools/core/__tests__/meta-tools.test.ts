@@ -11,7 +11,7 @@ describe('core meta tools', () => {
   it('awaits asynchronous skill provider state for GetContext', async () => {
     const mediaWorkflow: SkillMediaWorkflowHint = {
       acceptedModalities: ['comic'],
-      producedArtifacts: ['storyboard-table'],
+      producedArtifacts: ['StoryboardTable'],
     };
     const mediaSkill: SkillContextSummary = {
       name: 'media-to-video',
@@ -38,7 +38,7 @@ describe('core meta tools', () => {
           relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
           mediaWorkflow: {
             acceptedModalities: ['comic'],
-            producedArtifacts: ['storyboard-table'],
+            producedArtifacts: ['StoryboardTable'],
           },
         },
         registeredSkills: [
@@ -49,7 +49,7 @@ describe('core meta tools', () => {
             relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
             mediaWorkflow: {
               acceptedModalities: ['comic'],
-              producedArtifacts: ['storyboard-table'],
+              producedArtifacts: ['StoryboardTable'],
             },
           },
         ],

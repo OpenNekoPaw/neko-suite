@@ -78,10 +78,16 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('OCR');
     });
 
-    it('should request StoryboardTableV1 semantic output without fake media claims', () => {
-      expect(comicToStoryboardSkill.content).toContain('StoryboardTableV1');
+    it('should request artifact-backed StoryboardTable semantic output without fake media claims', () => {
+      expect(comicToStoryboardSkill.content).toContain('CompositeArtifact');
+      expect(comicToStoryboardSkill.content).toContain('StoryboardTable');
       expect(comicToStoryboardSkill.content).toContain('structured payload');
       expect(comicToStoryboardSkill.content).toContain('"schemaVersion": 1');
+      expect(comicToStoryboardSkill.content).toContain('"kind": "composite-artifact"');
+      expect(comicToStoryboardSkill.content).toContain('"profile": "comic-to-animation-plan"');
+      expect(comicToStoryboardSkill.content).toContain('"kind": "domain"');
+      expect(comicToStoryboardSkill.content).toContain('"domainKind": "StoryboardTable"');
+      expect(comicToStoryboardSkill.content).toContain('"payload"');
       expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
       expect(comicToStoryboardSkill.content).toContain('imageStrategy');
       expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
@@ -152,8 +158,15 @@ describe('Builtin Skills', () => {
     it('should expose media workflow metadata and related skills', () => {
       expect(comicToStoryboardSkill.mediaWorkflow).toMatchObject({
         acceptedModalities: ['comic', 'document', 'image-sequence'],
-        producedArtifacts: ['storyboard-table'],
-        validationRequirements: ['StoryboardTableV1'],
+        producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+        artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
+        referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+        suggestedProjectors: [
+          'projector:comic-shot-plan-to-storyboard',
+          'projector:storyboard-to-canvas',
+          'projector:storyboard-to-cut',
+        ],
+        validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
       });
       expect(comicToStoryboardSkill.referencedSkills).toEqual(
         expect.arrayContaining([
@@ -202,6 +215,17 @@ describe('Builtin Skills', () => {
         ]),
       );
       expect(mediaToVideoSkill.content).not.toContain('pipeline to start');
+      expect(mediaToVideoSkill.mediaWorkflow).toMatchObject({
+        inputArtifacts: expect.arrayContaining(['CompositeArtifact', 'GenericTable']),
+        producedArtifacts: expect.arrayContaining(['CompositeArtifact', 'GenericTable']),
+        artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
+        referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+      });
+      expect(storyboardToAnimationPlanSkill.mediaWorkflow).toMatchObject({
+        inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
+        validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
+      });
+      expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "StoryboardTable"');
     });
   });
 
@@ -230,7 +254,10 @@ describe('Builtin Skills', () => {
       const zhMedia = zhSkills.find((skill) => skill.name === 'media-to-video');
 
       expect(zhComic?.content).toContain('漫画分析');
-      expect(zhComic?.content).toContain('StoryboardTableV1');
+      expect(zhComic?.content).toContain('CompositeArtifact');
+      expect(zhComic?.content).toContain('StoryboardTable');
+      expect(zhComic?.content).toContain('"kind": "composite-artifact"');
+      expect(zhComic?.content).toContain('"domainKind": "StoryboardTable"');
       expect(zhComic?.content).toContain('图片索引和分格映射');
       expect(zhComic?.content).toContain('sourceMediaRefs');
       expect(zhComic?.content).toContain('不要对同一张图先 ReadImage 再 ReadDocumentImage');

@@ -3,10 +3,10 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
 
-export const STORYBOARD_TABLE_V1_SCHEMA_VERSION = 1 as const;
-export const STORYBOARD_TABLE_V1_KIND = 'storyboard-table' as const;
+export const STORYBOARD_TABLE_SCHEMA_VERSION = 1 as const;
+export const STORYBOARD_TABLE_KIND = 'storyboard-table' as const;
 
-export const STORYBOARD_TABLE_V1_PROFILES = [
+export const STORYBOARD_TABLE_PROFILES = [
   'script-breakdown',
   'manga-to-video',
   'image-sequence',
@@ -16,14 +16,14 @@ export const STORYBOARD_TABLE_V1_PROFILES = [
   'manual',
 ] as const;
 
-export const STORYBOARD_SHOT_IMAGE_STRATEGIES_V1 = [
+export const STORYBOARD_SHOT_IMAGE_STRATEGIES = [
   'reuse-original',
   'use-as-reference',
   'generate-new',
   'transform-original',
 ] as const;
 
-export const STORYBOARD_MEDIA_ROLES_V1 = [
+export const STORYBOARD_MEDIA_ROLES = [
   'source',
   'reference',
   'generated',
@@ -32,106 +32,101 @@ export const STORYBOARD_MEDIA_ROLES_V1 = [
   'mask',
 ] as const;
 
-export const STORYBOARD_SOURCE_MEDIA_ROLES_V1 = [
-  'source',
-  'reference',
-  'thumbnail',
-  'mask',
-] as const;
+export const STORYBOARD_SOURCE_MEDIA_ROLES = ['source', 'reference', 'thumbnail', 'mask'] as const;
 
-export const STORYBOARD_GENERATED_MEDIA_ROLES_V1 = [
+export const STORYBOARD_GENERATED_MEDIA_ROLES = [
   'generated',
   'derived',
   'thumbnail',
   'mask',
 ] as const;
 
-export const STORYBOARD_TABLE_V1_REQUIRED_FIELDS = [
+export const STORYBOARD_TABLE_REQUIRED_FIELDS = [
   'schemaVersion',
   'kind',
   'title',
   'scenes',
-] as const satisfies readonly (keyof StoryboardTableV1)[];
+] as const satisfies readonly (keyof StoryboardTable)[];
 
-export const STORYBOARD_SCENE_V1_REQUIRED_FIELDS = [
+export const STORYBOARD_SCENE_REQUIRED_FIELDS = [
   'sceneId',
   'sceneTitle',
   'shots',
-] as const satisfies readonly (keyof StoryboardSceneRowV1)[];
+] as const satisfies readonly (keyof StoryboardSceneRow)[];
 
-export const STORYBOARD_SHOT_V1_REQUIRED_FIELDS = [
+export const STORYBOARD_SHOT_REQUIRED_FIELDS = [
   'shotNumber',
   'duration',
   'visualDescription',
   'characterAction',
   'imageStrategy',
-] as const satisfies readonly (keyof StoryboardShotRowV1)[];
+] as const satisfies readonly (keyof StoryboardShotRow)[];
 
-export type StoryboardTableProfileV1 = (typeof STORYBOARD_TABLE_V1_PROFILES)[number];
+export type StoryboardTableProfile = (typeof STORYBOARD_TABLE_PROFILES)[number];
 
-export type StoryboardShotImageStrategyV1 = (typeof STORYBOARD_SHOT_IMAGE_STRATEGIES_V1)[number];
+export type StoryboardShotImageStrategy = (typeof STORYBOARD_SHOT_IMAGE_STRATEGIES)[number];
 
-export type StoryboardMediaRoleV1 = (typeof STORYBOARD_MEDIA_ROLES_V1)[number];
+export type StoryboardMediaRole = (typeof STORYBOARD_MEDIA_ROLES)[number];
 
-export type StoryboardSourceMediaRoleV1 = (typeof STORYBOARD_SOURCE_MEDIA_ROLES_V1)[number];
+export type StoryboardSourceMediaRole = (typeof STORYBOARD_SOURCE_MEDIA_ROLES)[number];
 
-export type StoryboardGeneratedMediaRoleV1 = (typeof STORYBOARD_GENERATED_MEDIA_ROLES_V1)[number];
+export type StoryboardGeneratedMediaRole = (typeof STORYBOARD_GENERATED_MEDIA_ROLES)[number];
 
-export type StoryboardSerializableValueV1 =
+export type StoryboardSerializableValue =
   | string
   | number
   | boolean
   | null
-  | readonly StoryboardSerializableValueV1[]
-  | { readonly [key: string]: StoryboardSerializableValueV1 };
+  | readonly StoryboardSerializableValue[]
+  | { readonly [key: string]: StoryboardSerializableValue };
 
-export type StoryboardSerializableRecordV1 = {
-  readonly [key: string]: StoryboardSerializableValueV1;
+export type StoryboardSerializableRecord = {
+  readonly [key: string]: StoryboardSerializableValue;
 };
 
-export type StoryboardExtensionNamespaceV1 = `neko.${string}`;
+export type StoryboardExtensionNamespace = `neko.${string}`;
 
-export type StoryboardExtensionMapV1 = Readonly<
-  Record<StoryboardExtensionNamespaceV1, StoryboardSerializableValueV1>
+export type StoryboardExtensionMap = Readonly<
+  Record<StoryboardExtensionNamespace, StoryboardSerializableValue>
 >;
 
-export type StoryboardTableSourceTypeV1 = 'story' | 'agent' | 'document' | 'image' | 'manual';
+export type StoryboardTableSourceType = 'story' | 'agent' | 'document' | 'image' | 'manual';
 
-export interface StoryboardTableSourceV1 {
-  readonly type: StoryboardTableSourceTypeV1;
+export interface StoryboardTableSource {
+  readonly type: StoryboardTableSourceType;
   readonly sourceUri?: string;
   readonly sourceSceneId?: string;
   readonly sourceDocumentId?: string;
   readonly label?: string;
 }
 
-export interface StoryboardTableV1 {
-  readonly schemaVersion: typeof STORYBOARD_TABLE_V1_SCHEMA_VERSION;
-  readonly kind: typeof STORYBOARD_TABLE_V1_KIND;
-  readonly profile?: StoryboardTableProfileV1;
-  readonly source?: StoryboardTableSourceV1;
+export interface StoryboardTable {
+  readonly schemaVersion: typeof STORYBOARD_TABLE_SCHEMA_VERSION;
+  readonly kind: typeof STORYBOARD_TABLE_KIND;
+  readonly profile?: StoryboardTableProfile;
+  readonly source?: StoryboardTableSource;
   readonly title: string;
-  readonly scenes: readonly StoryboardSceneRowV1[];
-  readonly extensions?: StoryboardExtensionMapV1;
+  readonly scenes: readonly StoryboardSceneRow[];
+  readonly extensions?: StoryboardExtensionMap;
 }
 
-export interface StoryboardSceneRowV1 {
+export interface StoryboardSceneRow {
   readonly sceneId: string;
   readonly sceneTitle: string;
   readonly sceneNumber?: number;
   readonly location?: string;
   readonly timeOfDay?: string;
   readonly summary?: string;
-  readonly shots: readonly StoryboardShotRowV1[];
-  readonly extensions?: StoryboardExtensionMapV1;
+  readonly shots: readonly StoryboardShotRow[];
+  readonly extensions?: StoryboardExtensionMap;
 }
 
-export interface StoryboardShotRowV1 {
+export interface StoryboardShotRow {
   readonly shotId?: string;
   readonly shotNumber: number;
   readonly duration: number;
   readonly visualDescription: string;
-  readonly characters?: readonly StoryboardShotCharacterV1[];
+  readonly characters?: readonly StoryboardShotCharacter[];
   readonly shotScale?: ShotScale;
   readonly cameraMovement?: CameraMovement;
   readonly cameraAngle?: CameraAngle;
@@ -145,26 +140,26 @@ export interface StoryboardShotRowV1 {
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly vfx?: readonly string[];
-  readonly imageStrategy: StoryboardShotImageStrategyV1;
-  readonly sourceMediaRefs?: readonly StoryboardMediaRefV1[];
-  readonly generatedMediaRefs?: readonly StoryboardMediaRefV1[];
-  readonly mediaRefs?: readonly StoryboardMediaRefV1[];
+  readonly imageStrategy: StoryboardShotImageStrategy;
+  readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
+  readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
+  readonly mediaRefs?: readonly StoryboardMediaRef[];
   readonly decisionReason?: string;
-  readonly extensions?: StoryboardExtensionMapV1;
+  readonly extensions?: StoryboardExtensionMap;
 }
 
-export type StoryboardShotCharacterRoleV1 = 'primary' | 'secondary' | 'background';
+export type StoryboardShotCharacterRole = 'primary' | 'secondary' | 'background';
 
-export interface StoryboardShotCharacterV1 {
+export interface StoryboardShotCharacter {
   readonly characterId?: string;
   readonly name: string;
-  readonly role?: StoryboardShotCharacterRoleV1;
+  readonly role?: StoryboardShotCharacterRole;
   readonly action?: string;
   readonly emotion?: string;
   readonly continuityNotes?: string;
 }
 
-export type StoryboardMediaLocatorV1 =
+export type StoryboardMediaLocator =
   | {
       readonly type: 'tool-result';
       readonly toolCallId: string;
@@ -193,48 +188,48 @@ export type StoryboardMediaLocatorV1 =
       readonly frameIndex?: number;
     };
 
-export interface StoryboardMediaRefV1 {
+export interface StoryboardMediaRef {
   readonly refId: string;
-  readonly role: StoryboardMediaRoleV1;
-  readonly locator: StoryboardMediaLocatorV1;
+  readonly role: StoryboardMediaRole;
+  readonly locator: StoryboardMediaLocator;
   readonly label?: string;
   readonly mimeType?: string;
-  readonly metadata?: StoryboardSerializableRecordV1;
+  readonly metadata?: StoryboardSerializableRecord;
 }
 
-export type StoryboardMediaIdentityKindV1 =
+export type StoryboardMediaIdentityKind =
   | 'stable'
   | 'runtime-only'
   | 'unsafe-cache-path'
   | 'ambiguous-alias'
   | 'unresolved-tool-result';
 
-export interface StoryboardMediaIdentityClassificationV1 {
-  readonly kind: StoryboardMediaIdentityKindV1;
+export interface StoryboardMediaIdentityClassification {
+  readonly kind: StoryboardMediaIdentityKind;
   readonly reason: string;
   readonly toolCallId?: string;
   readonly alias?: string;
   readonly value?: string;
 }
 
-export interface StoryboardMediaIdentityClassificationOptionsV1 {
+export interface StoryboardMediaIdentityClassificationOptions {
   readonly knownToolCallIds?: readonly string[];
   readonly ambiguousAliases?: readonly string[];
 }
 
-export type StoryboardTableV1RequiredField = (typeof STORYBOARD_TABLE_V1_REQUIRED_FIELDS)[number];
+export type StoryboardTableRequiredField = (typeof STORYBOARD_TABLE_REQUIRED_FIELDS)[number];
 
-export type StoryboardSceneV1RequiredField = (typeof STORYBOARD_SCENE_V1_REQUIRED_FIELDS)[number];
+export type StoryboardSceneRequiredField = (typeof STORYBOARD_SCENE_REQUIRED_FIELDS)[number];
 
-export type StoryboardShotV1RequiredField = (typeof STORYBOARD_SHOT_V1_REQUIRED_FIELDS)[number];
+export type StoryboardShotRequiredField = (typeof STORYBOARD_SHOT_REQUIRED_FIELDS)[number];
 
-export type StoryboardValidationDiagnosticSeverityV1 =
+export type StoryboardValidationDiagnosticSeverity =
   | 'error'
   | 'warning'
   | 'suggestion'
   | 'profileHint';
 
-export type StoryboardValidationDiagnosticCodeV1 =
+export type StoryboardValidationDiagnosticCode =
   | 'invalid-root'
   | 'invalid-schema-version'
   | 'invalid-kind'
@@ -265,48 +260,48 @@ export type StoryboardValidationDiagnosticCodeV1 =
   | 'missing-backfill-output'
   | 'backfill-target-not-found';
 
-export type StoryboardValidationDiagnosticPathSegmentV1 = string | number;
+export type StoryboardValidationDiagnosticPathSegment = string | number;
 
-export interface StoryboardValidationDiagnosticV1 {
-  readonly severity: StoryboardValidationDiagnosticSeverityV1;
-  readonly code: StoryboardValidationDiagnosticCodeV1;
-  readonly path: readonly StoryboardValidationDiagnosticPathSegmentV1[];
+export interface StoryboardValidationDiagnostic {
+  readonly severity: StoryboardValidationDiagnosticSeverity;
+  readonly code: StoryboardValidationDiagnosticCode;
+  readonly path: readonly StoryboardValidationDiagnosticPathSegment[];
   readonly message: string;
   readonly expected?: string;
-  readonly actual?: StoryboardSerializableValueV1;
-  readonly details?: StoryboardSerializableRecordV1;
+  readonly actual?: StoryboardSerializableValue;
+  readonly details?: StoryboardSerializableRecord;
 }
 
-export interface StoryboardValidationResultV1 {
+export interface StoryboardValidationResult {
   readonly ok: boolean;
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
-export interface StoryboardValidationOptionsV1 extends StoryboardMediaIdentityClassificationOptionsV1 {}
+export interface StoryboardValidationOptions extends StoryboardMediaIdentityClassificationOptions {}
 
-export interface ProjectStoryboardTableV1ToCanvasOptions {
+export interface ProjectStoryboardTableToCanvasOptions {
   readonly mode?: StoryboardImportMode;
   readonly sourceScriptUri?: string;
   readonly defaultShotScale?: ShotScale;
-  readonly resolveImagePath?: (context: StoryboardMediaResolverContextV1) => string | undefined;
+  readonly resolveImagePath?: (context: StoryboardMediaResolverContext) => string | undefined;
   readonly resolveImageResourceRef?: (
-    context: StoryboardMediaResolverContextV1,
+    context: StoryboardMediaResolverContext,
   ) => DocumentArchiveResourceRef | undefined;
   readonly resolveImageUnifiedResourceRef?: (
-    context: StoryboardMediaResolverContextV1,
+    context: StoryboardMediaResolverContext,
   ) => ResourceRef | undefined;
   readonly resolveFallbackImagePath?: (
-    context: StoryboardShotResolverContextV1,
+    context: StoryboardShotResolverContext,
   ) => string | undefined;
   readonly resolveFallbackImageResourceRef?: (
-    context: StoryboardShotResolverContextV1,
+    context: StoryboardShotResolverContext,
   ) => DocumentArchiveResourceRef | undefined;
   readonly resolveFallbackImageUnifiedResourceRef?: (
-    context: StoryboardShotResolverContextV1,
+    context: StoryboardShotResolverContext,
   ) => ResourceRef | undefined;
 }
 
-export interface StoryboardCutStoryboardShotBaseV1 {
+export interface StoryboardCutStoryboardShotBase {
   readonly id: string;
   readonly shotNumber: number;
   readonly duration: number;
@@ -316,94 +311,94 @@ export interface StoryboardCutStoryboardShotBaseV1 {
   readonly label: string;
 }
 
-export type StoryboardCutStoryboardShotV1 =
-  | (StoryboardCutStoryboardShotBaseV1 & {
+export type StoryboardCutStoryboardShot =
+  | (StoryboardCutStoryboardShotBase & {
       readonly imagePath: string;
       readonly imageDataUrl?: string;
     })
-  | (StoryboardCutStoryboardShotBaseV1 & {
+  | (StoryboardCutStoryboardShotBase & {
       readonly imagePath?: string;
       readonly imageDataUrl: string;
     });
 
-export interface StoryboardCutStoryboardPayloadV1 {
+export interface StoryboardCutStoryboardPayload {
   readonly projectName: string;
-  readonly shots: readonly StoryboardCutStoryboardShotV1[];
+  readonly shots: readonly StoryboardCutStoryboardShot[];
 }
 
-export interface StoryboardMediaResolverContextV1 {
-  readonly table: StoryboardTableV1;
-  readonly scene: StoryboardSceneRowV1;
-  readonly shot: StoryboardShotRowV1;
-  readonly mediaRef: StoryboardMediaRefV1;
+export interface StoryboardMediaResolverContext {
+  readonly table: StoryboardTable;
+  readonly scene: StoryboardSceneRow;
+  readonly shot: StoryboardShotRow;
+  readonly mediaRef: StoryboardMediaRef;
 }
 
-export interface StoryboardShotResolverContextV1 {
-  readonly table: StoryboardTableV1;
-  readonly scene: StoryboardSceneRowV1;
-  readonly shot: StoryboardShotRowV1;
+export interface StoryboardShotResolverContext {
+  readonly table: StoryboardTable;
+  readonly scene: StoryboardSceneRow;
+  readonly shot: StoryboardShotRow;
 }
 
-export interface ProjectStoryboardTableV1ToCutOptions {
+export interface ProjectStoryboardTableToCutOptions {
   readonly projectName?: string;
-  readonly resolveImagePath?: (context: StoryboardMediaResolverContextV1) => string | undefined;
-  readonly resolveImageDataUrl?: (context: StoryboardMediaResolverContextV1) => string | undefined;
+  readonly resolveImagePath?: (context: StoryboardMediaResolverContext) => string | undefined;
+  readonly resolveImageDataUrl?: (context: StoryboardMediaResolverContext) => string | undefined;
 }
 
-export type StoryboardImageGenerationPolicyV1 = 'allow' | 'deny' | 'confirm';
+export type StoryboardImageGenerationPolicy = 'allow' | 'deny' | 'confirm';
 
-export interface StoryboardImageStrategyOverrideScopeV1 {
+export interface StoryboardImageStrategyOverrideScope {
   readonly sceneIds?: readonly string[];
   readonly shotIds?: readonly string[];
 }
 
-export interface StoryboardImageStrategyOverrideV1 {
-  readonly generationPolicy: StoryboardImageGenerationPolicyV1;
-  readonly allowedStrategies?: readonly StoryboardShotImageStrategyV1[];
-  readonly scope?: StoryboardImageStrategyOverrideScopeV1;
+export interface StoryboardImageStrategyOverride {
+  readonly generationPolicy: StoryboardImageGenerationPolicy;
+  readonly allowedStrategies?: readonly StoryboardShotImageStrategy[];
+  readonly scope?: StoryboardImageStrategyOverrideScope;
   readonly source: 'chat-instruction' | 'webview-confirmation' | 'workspace-setting';
   readonly reason?: string;
 }
 
-export type StoryboardImageToolNameV1 =
+export type StoryboardImageToolName =
   | 'GenerateImage'
   | 'TransformImage'
   | 'ResolveMediaRef'
   | (string & {});
 
-export interface StoryboardImageToolCapabilityV1 {
-  readonly toolName: StoryboardImageToolNameV1;
+export interface StoryboardImageToolCapability {
+  readonly toolName: StoryboardImageToolName;
   readonly supportsReferences: boolean;
   readonly supportsMasks?: boolean;
 }
 
-export interface StoryboardImageStrategyInterpreterInputV1 {
-  readonly table: StoryboardTableV1;
-  readonly userOverride?: StoryboardImageStrategyOverrideV1;
-  readonly availableTools: readonly StoryboardImageToolCapabilityV1[];
+export interface StoryboardImageStrategyInterpreterInput {
+  readonly table: StoryboardTable;
+  readonly userOverride?: StoryboardImageStrategyOverride;
+  readonly availableTools: readonly StoryboardImageToolCapability[];
 }
 
-export type StoryboardImageStrategyActionKindV1 =
+export type StoryboardImageStrategyActionKind =
   | 'reuse-original'
   | 'generate-image'
   | 'transform-image';
 
-export interface StoryboardImageStrategyActionV1 {
-  readonly kind: StoryboardImageStrategyActionKindV1;
+export interface StoryboardImageStrategyAction {
+  readonly kind: StoryboardImageStrategyActionKind;
   readonly sceneId: string;
   readonly shotId: string;
   readonly shotNumber: number;
-  readonly imageStrategy: StoryboardShotImageStrategyV1;
-  readonly toolName?: StoryboardImageToolNameV1;
+  readonly imageStrategy: StoryboardShotImageStrategy;
+  readonly toolName?: StoryboardImageToolName;
   readonly generationPrompt?: string;
-  readonly sourceMediaRefs?: readonly StoryboardMediaRefV1[];
+  readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
 }
 
-export interface StoryboardImageStrategyBlockedActionV1 {
+export interface StoryboardImageStrategyBlockedAction {
   readonly sceneId: string;
   readonly shotId: string;
   readonly shotNumber: number;
-  readonly imageStrategy: StoryboardShotImageStrategyV1;
+  readonly imageStrategy: StoryboardShotImageStrategy;
   readonly reason:
     | 'missing-source'
     | 'missing-prompt'
@@ -411,37 +406,37 @@ export interface StoryboardImageStrategyBlockedActionV1 {
     | 'generation-denied'
     | 'confirmation-required'
     | 'strategy-not-allowed';
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
-export interface StoryboardImageStrategyInterpreterResultV1 {
-  readonly actions: readonly StoryboardImageStrategyActionV1[];
-  readonly blockedActions: readonly StoryboardImageStrategyBlockedActionV1[];
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+export interface StoryboardImageStrategyInterpreterResult {
+  readonly actions: readonly StoryboardImageStrategyAction[];
+  readonly blockedActions: readonly StoryboardImageStrategyBlockedAction[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
-export interface LegacyStoryboardMediaRefV1 {
+export interface LegacyStoryboardMediaRef {
   readonly toolCallId: string;
   readonly assetIndex?: number;
   readonly caption?: string;
   readonly role?: string;
 }
 
-export interface LegacyStoryboardSectionV1 {
+export interface LegacyStoryboardSection {
   readonly heading?: string;
   readonly content?: string;
-  readonly mediaRefs?: readonly LegacyStoryboardMediaRefV1[];
+  readonly mediaRefs?: readonly LegacyStoryboardMediaRef[];
   readonly layout?: 'inline' | 'grid' | 'table-row';
 }
 
-export interface NormalizeStoryboardTableV1Input {
+export interface NormalizeStoryboardTableInput {
   readonly value: unknown;
   readonly fallbackTitle?: string;
 }
 
-export interface NormalizeStoryboardTableV1Result {
-  readonly table?: StoryboardTableV1;
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+export interface NormalizeStoryboardTableResult {
+  readonly table?: StoryboardTable;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
 const MAX_STORYBOARD_DIAGNOSTICS = 64;
@@ -450,13 +445,13 @@ const MAX_LEGACY_MEDIA_REFS = 12;
 const STORYBOARD_IMAGE_ALIAS_EXTENSION = 'neko.storyboardImageAlias' as const;
 const STORYBOARD_SOURCE_IMAGE_EXTENSION = 'neko.storyboardSourceImage' as const;
 
-export function validateStoryboardTableV1(
+export function validateStoryboardTable(
   value: unknown,
-  options: StoryboardValidationOptionsV1 = {},
-): StoryboardValidationResultV1 {
-  const normalized = normalizeStoryboardTableV1({ value });
+  options: StoryboardValidationOptions = {},
+): StoryboardValidationResult {
+  const normalized = normalizeStoryboardTable({ value });
   const diagnostics = normalized.table
-    ? [...normalized.diagnostics, ...validateNormalizedStoryboardTableV1(normalized.table, options)]
+    ? [...normalized.diagnostics, ...validateNormalizedStoryboardTable(normalized.table, options)]
     : normalized.diagnostics;
 
   return {
@@ -465,10 +460,10 @@ export function validateStoryboardTableV1(
   };
 }
 
-export function normalizeStoryboardTableV1(
-  input: NormalizeStoryboardTableV1Input,
-): NormalizeStoryboardTableV1Result {
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+export function normalizeStoryboardTable(
+  input: NormalizeStoryboardTableInput,
+): NormalizeStoryboardTableResult {
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
   const root = readStoryboardRecord(input.value);
   if (!root) {
     return {
@@ -494,15 +489,15 @@ export function normalizeStoryboardTableV1(
 }
 
 export function hasBlockingStoryboardDiagnostics(
-  diagnostics: readonly StoryboardValidationDiagnosticV1[],
+  diagnostics: readonly StoryboardValidationDiagnostic[],
 ): boolean {
   return diagnostics.some((diagnostic) => diagnostic.severity === 'error');
 }
 
-export function classifyStoryboardMediaIdentityV1(
-  mediaRef: StoryboardMediaRefV1,
-  options: StoryboardMediaIdentityClassificationOptionsV1 = {},
-): StoryboardMediaIdentityClassificationV1 {
+export function classifyStoryboardMediaIdentity(
+  mediaRef: StoryboardMediaRef,
+  options: StoryboardMediaIdentityClassificationOptions = {},
+): StoryboardMediaIdentityClassification {
   const ambiguousAliases = new Set(
     (options.ambiguousAliases ?? []).flatMap((value) => {
       const normalized = normalizeStoryboardAlias(value);
@@ -586,17 +581,17 @@ export function classifyStoryboardMediaIdentityV1(
   }
 }
 
-export function splitStoryboardMediaRefsByRoleV1(
-  mediaRefs: readonly StoryboardMediaRefV1[] | undefined,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[] = [],
+export function splitStoryboardMediaRefsByRole(
+  mediaRefs: readonly StoryboardMediaRef[] | undefined,
+  path: readonly StoryboardValidationDiagnosticPathSegment[] = [],
 ): {
-  readonly sourceMediaRefs: readonly StoryboardMediaRefV1[];
-  readonly generatedMediaRefs: readonly StoryboardMediaRefV1[];
-  readonly diagnostics: readonly StoryboardValidationDiagnosticV1[];
+  readonly sourceMediaRefs: readonly StoryboardMediaRef[];
+  readonly generatedMediaRefs: readonly StoryboardMediaRef[];
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 } {
-  const sourceMediaRefs: StoryboardMediaRefV1[] = [];
-  const generatedMediaRefs: StoryboardMediaRefV1[] = [];
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+  const sourceMediaRefs: StoryboardMediaRef[] = [];
+  const generatedMediaRefs: StoryboardMediaRef[] = [];
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
 
   for (const [index, mediaRef] of (mediaRefs ?? []).entries()) {
     const refPath = [...path, index];
@@ -625,9 +620,9 @@ export function splitStoryboardMediaRefsByRoleV1(
   return { sourceMediaRefs, generatedMediaRefs, diagnostics };
 }
 
-export function projectStoryboardTableV1ToCanvasPayload(
-  table: StoryboardTableV1,
-  options: ProjectStoryboardTableV1ToCanvasOptions = {},
+export function projectStoryboardTableToCanvasPayload(
+  table: StoryboardTable,
+  options: ProjectStoryboardTableToCanvasOptions = {},
 ): CanvasStoryboardPayload {
   return {
     mode: options.mode ?? 'semantic',
@@ -665,10 +660,10 @@ export function projectStoryboardTableV1ToCanvasPayload(
 }
 
 function resolveCanvasStoryboardReferenceImagePath(
-  table: StoryboardTableV1,
-  scene: StoryboardSceneRowV1,
-  shot: StoryboardShotRowV1,
-  options: ProjectStoryboardTableV1ToCanvasOptions,
+  table: StoryboardTable,
+  scene: StoryboardSceneRow,
+  shot: StoryboardShotRow,
+  options: ProjectStoryboardTableToCanvasOptions,
 ): {
   readonly referenceImagePath?: string;
   readonly referenceResourceRef?: ResourceRef;
@@ -706,11 +701,11 @@ function resolveCanvasStoryboardReferenceImagePath(
   };
 }
 
-export function projectStoryboardTableV1ToCutPayload(
-  table: StoryboardTableV1,
-  options: ProjectStoryboardTableV1ToCutOptions = {},
-): StoryboardCutStoryboardPayloadV1 | null {
-  const shots: StoryboardCutStoryboardShotV1[] = [];
+export function projectStoryboardTableToCutPayload(
+  table: StoryboardTable,
+  options: ProjectStoryboardTableToCutOptions = {},
+): StoryboardCutStoryboardPayload | null {
+  const shots: StoryboardCutStoryboardShot[] = [];
   for (const scene of table.scenes) {
     for (const shot of scene.shots) {
       const mediaRef = selectStoryboardShotImageRef(shot);
@@ -732,19 +727,19 @@ export function projectStoryboardTableV1ToCutPayload(
         label: `#${String(shot.shotNumber).padStart(3, '0')} ${scene.sceneTitle}`.trim(),
         ...(imagePath ? { imagePath } : {}),
         ...(imageDataUrl ? { imageDataUrl } : {}),
-      } as StoryboardCutStoryboardShotV1);
+      } as StoryboardCutStoryboardShot);
     }
   }
 
   return shots.length > 0 ? { projectName: options.projectName ?? table.title, shots } : null;
 }
 
-export function interpretStoryboardImageStrategiesV1(
-  input: StoryboardImageStrategyInterpreterInputV1,
-): StoryboardImageStrategyInterpreterResultV1 {
-  const actions: StoryboardImageStrategyActionV1[] = [];
-  const blockedActions: StoryboardImageStrategyBlockedActionV1[] = [];
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+export function interpretStoryboardImageStrategies(
+  input: StoryboardImageStrategyInterpreterInput,
+): StoryboardImageStrategyInterpreterResult {
+  const actions: StoryboardImageStrategyAction[] = [];
+  const blockedActions: StoryboardImageStrategyBlockedAction[] = [];
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
   const generationTool = findStoryboardImageTool(input.availableTools, 'GenerateImage');
   const transformTool = findStoryboardImageTool(input.availableTools, 'TransformImage');
 
@@ -870,8 +865,8 @@ export function interpretStoryboardImageStrategiesV1(
 
 function normalizeSemanticStoryboardTable(
   root: Record<string, unknown>,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardTableV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardTable | undefined {
   const schemaVersion = root['schemaVersion'];
   const kind = root['kind'];
   const title = readTrimmedString(root['title']);
@@ -933,8 +928,8 @@ function normalizeSemanticStoryboardTable(
 
 function normalizeSceneRows(
   value: unknown,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): readonly StoryboardSceneRowV1[] {
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardSceneRow[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((scene, sceneIndex) => {
@@ -946,8 +941,8 @@ function normalizeSceneRows(
 function normalizeSceneRow(
   value: unknown,
   sceneIndex: number,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardSceneRowV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardSceneRow | undefined {
   const path = ['scenes', sceneIndex] as const;
   const record = readStoryboardRecord(value);
   if (!record) {
@@ -1003,8 +998,8 @@ function normalizeSceneRow(
 function normalizeShotRows(
   value: unknown,
   sceneIndex: number,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): readonly StoryboardShotRowV1[] {
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardShotRow[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((shot, shotIndex) => {
@@ -1017,8 +1012,8 @@ function normalizeShotRow(
   value: unknown,
   sceneIndex: number,
   shotIndex: number,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardShotRowV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardShotRow | undefined {
   const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
   const record = readStoryboardRecord(value);
   if (!record) {
@@ -1049,7 +1044,7 @@ function normalizeShotRow(
   const inferredSourceImage = normalizeStoryboardSourceImage(record);
   const splitRefs =
     sourceMediaRefs.length === 0 && generatedMediaRefs.length === 0 && mediaRefs.length > 0
-      ? splitStoryboardMediaRefsByRoleV1(mediaRefs, [...path, 'mediaRefs'])
+      ? splitStoryboardMediaRefsByRole(mediaRefs, [...path, 'mediaRefs'])
       : undefined;
   if (splitRefs) {
     diagnostics.push(...splitRefs.diagnostics);
@@ -1113,7 +1108,7 @@ function normalizeShotRow(
         [...path, 'imageStrategy'],
         'Shot imageStrategy must be a supported storyboard image strategy.',
         {
-          expected: STORYBOARD_SHOT_IMAGE_STRATEGIES_V1.join(', '),
+          expected: STORYBOARD_SHOT_IMAGE_STRATEGIES.join(', '),
           actual: serializableDiagnosticValue(record['imageStrategy']),
         },
       ),
@@ -1160,7 +1155,7 @@ function normalizeShotRow(
 
 function normalizeStoryboardImageAlias(
   record: Record<string, unknown>,
-): StoryboardSerializableRecordV1 | undefined {
+): StoryboardSerializableRecord | undefined {
   const aliases = Object.entries(record).flatMap(([key, value]) => {
     const locator = parseStoryboardImageAliasKey(key);
     if (!locator || !isEnabledStoryboardImageAliasValue(value)) return [];
@@ -1211,9 +1206,9 @@ function isEnabledStoryboardImageAliasValue(value: unknown): boolean {
 }
 
 function mergeStoryboardImageAliasExtension(
-  extensions: StoryboardExtensionMapV1 | undefined,
-  alias: StoryboardSerializableRecordV1 | undefined,
-): StoryboardExtensionMapV1 | undefined {
+  extensions: StoryboardExtensionMap | undefined,
+  alias: StoryboardSerializableRecord | undefined,
+): StoryboardExtensionMap | undefined {
   if (!alias) return extensions;
   return {
     ...(extensions ?? {}),
@@ -1223,7 +1218,7 @@ function mergeStoryboardImageAliasExtension(
 
 function normalizeStoryboardSourceImage(
   record: Record<string, unknown>,
-): StoryboardSerializableRecordV1 | undefined {
+): StoryboardSerializableRecord | undefined {
   for (const [key, value] of Object.entries(record)) {
     const source = parseStoryboardSourceImageValue(key, value);
     if (source) return source;
@@ -1234,7 +1229,7 @@ function normalizeStoryboardSourceImage(
 function parseStoryboardSourceImageValue(
   key: string,
   value: unknown,
-): StoryboardSerializableRecordV1 | undefined {
+): StoryboardSerializableRecord | undefined {
   const normalizedKey = normalizeSourceImageKey(key);
   if (!normalizedKey) return undefined;
 
@@ -1335,9 +1330,9 @@ function normalizeSourceImageKey(
 }
 
 function mergeStoryboardSourceImageExtension(
-  extensions: StoryboardExtensionMapV1 | undefined,
-  sourceImage: StoryboardSerializableRecordV1 | undefined,
-): StoryboardExtensionMapV1 | undefined {
+  extensions: StoryboardExtensionMap | undefined,
+  sourceImage: StoryboardSerializableRecord | undefined,
+): StoryboardExtensionMap | undefined {
   if (!sourceImage) return extensions;
   return {
     ...(extensions ?? {}),
@@ -1345,11 +1340,11 @@ function mergeStoryboardSourceImageExtension(
   };
 }
 
-function validateNormalizedStoryboardTableV1(
-  table: StoryboardTableV1,
-  options: StoryboardValidationOptionsV1 = {},
-): readonly StoryboardValidationDiagnosticV1[] {
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+function validateNormalizedStoryboardTable(
+  table: StoryboardTable,
+  options: StoryboardValidationOptions = {},
+): readonly StoryboardValidationDiagnostic[] {
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
   if (table.profile) {
     diagnostics.push(...validateProfileHints(table));
   }
@@ -1386,9 +1381,9 @@ function validateNormalizedStoryboardTableV1(
 }
 
 function validateShotStrategy(
-  shot: StoryboardShotRowV1,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
+  shot: StoryboardShotRow,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
 ): void {
   const sourceRefs = shot.sourceMediaRefs ?? [];
   if (
@@ -1420,11 +1415,11 @@ function validateShotStrategy(
 }
 
 function validateProfileSourceMediaRefs(
-  profile: StoryboardTableProfileV1 | undefined,
-  shot: StoryboardShotRowV1,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-  options: StoryboardValidationOptionsV1,
+  profile: StoryboardTableProfile | undefined,
+  shot: StoryboardShotRow,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+  options: StoryboardValidationOptions,
 ): void {
   if (profile !== 'manga-to-video' && profile !== 'image-sequence') return;
   if (!isSourceBackedStoryboardImageStrategy(shot.imageStrategy)) return;
@@ -1432,7 +1427,7 @@ function validateProfileSourceMediaRefs(
   const sourceRefs = shot.sourceMediaRefs ?? [];
   if (sourceRefs.length === 0) return;
   const hasStableSourceRef = sourceRefs.some(
-    (ref) => classifyStoryboardMediaIdentityV1(ref, options).kind === 'stable',
+    (ref) => classifyStoryboardMediaIdentity(ref, options).kind === 'stable',
   );
   if (hasStableSourceRef) return;
 
@@ -1451,10 +1446,10 @@ function validateProfileSourceMediaRefs(
 }
 
 function validateLayeredMediaRefs(
-  refs: readonly StoryboardMediaRefV1[] | undefined,
+  refs: readonly StoryboardMediaRef[] | undefined,
   layer: 'source' | 'generated',
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
 ): void {
   for (const [index, ref] of (refs ?? []).entries()) {
     const allowed =
@@ -1471,8 +1466,8 @@ function validateLayeredMediaRefs(
           {
             expected:
               layer === 'source'
-                ? STORYBOARD_SOURCE_MEDIA_ROLES_V1.join(', ')
-                : STORYBOARD_GENERATED_MEDIA_ROLES_V1.join(', '),
+                ? STORYBOARD_SOURCE_MEDIA_ROLES.join(', ')
+                : STORYBOARD_GENERATED_MEDIA_ROLES.join(', '),
             actual: ref.role,
           },
         ),
@@ -1482,10 +1477,10 @@ function validateLayeredMediaRefs(
 }
 
 function validateMediaRefs(
-  refs: readonly StoryboardMediaRefV1[] | undefined,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-  options: StoryboardValidationOptionsV1,
+  refs: readonly StoryboardMediaRef[] | undefined,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+  options: StoryboardValidationOptions,
 ): void {
   for (const [index, ref] of (refs ?? []).entries()) {
     validateMediaLocator(ref.locator, [...path, index, 'locator'], diagnostics);
@@ -1494,12 +1489,12 @@ function validateMediaRefs(
 }
 
 function validateMediaIdentityClassification(
-  ref: StoryboardMediaRefV1,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-  options: StoryboardValidationOptionsV1,
+  ref: StoryboardMediaRef,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+  options: StoryboardValidationOptions,
 ): void {
-  const classification = classifyStoryboardMediaIdentityV1(ref, options);
+  const classification = classifyStoryboardMediaIdentity(ref, options);
   switch (classification.kind) {
     case 'stable':
       return;
@@ -1563,9 +1558,9 @@ function validateMediaIdentityClassification(
 }
 
 function validateMediaLocator(
-  locator: StoryboardMediaLocatorV1,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
+  locator: StoryboardMediaLocator,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
 ): void {
   switch (locator.type) {
     case 'tool-result':
@@ -1631,7 +1626,7 @@ function validateMediaLocator(
 }
 
 function projectStoryboardCharactersToCanvas(
-  characters: readonly StoryboardShotCharacterV1[] | undefined,
+  characters: readonly StoryboardShotCharacter[] | undefined,
 ): readonly ShotCharacter[] {
   return (characters ?? []).map((character) => ({
     ...(character.characterId ? { characterId: character.characterId } : {}),
@@ -1640,7 +1635,7 @@ function projectStoryboardCharactersToCanvas(
   }));
 }
 
-function selectStoryboardShotImageRef(shot: StoryboardShotRowV1): StoryboardMediaRefV1 | undefined {
+function selectStoryboardShotImageRef(shot: StoryboardShotRow): StoryboardMediaRef | undefined {
   const preferred = [
     ...(shot.generatedMediaRefs ?? []),
     ...(shot.sourceMediaRefs ?? []),
@@ -1651,21 +1646,21 @@ function selectStoryboardShotImageRef(shot: StoryboardShotRowV1): StoryboardMedi
   );
 }
 
-function resolveStoryboardWorkspacePath(mediaRef: StoryboardMediaRefV1): string | undefined {
+function resolveStoryboardWorkspacePath(mediaRef: StoryboardMediaRef): string | undefined {
   if (mediaRef.locator.type === 'workspace-path') return mediaRef.locator.path;
   if (mediaRef.locator.type === 'asset') return mediaRef.locator.uri;
   return undefined;
 }
 
 function findStoryboardImageTool(
-  tools: readonly StoryboardImageToolCapabilityV1[],
+  tools: readonly StoryboardImageToolCapability[],
   toolName: 'GenerateImage' | 'TransformImage',
-): StoryboardImageToolCapabilityV1 | undefined {
+): StoryboardImageToolCapability | undefined {
   return tools.find((tool) => tool.toolName === toolName);
 }
 
 function isOverrideInScope(
-  override: StoryboardImageStrategyOverrideV1 | undefined,
+  override: StoryboardImageStrategyOverride | undefined,
   sceneId: string,
   shotId: string,
 ): boolean {
@@ -1677,10 +1672,10 @@ function isOverrideInScope(
 }
 
 function validateOverrideForShot(
-  override: StoryboardImageStrategyOverrideV1 | undefined,
-  shot: StoryboardShotRowV1,
-  base: Omit<StoryboardImageStrategyBlockedActionV1, 'reason' | 'diagnostics'>,
-): StoryboardImageStrategyBlockedActionV1 | undefined {
+  override: StoryboardImageStrategyOverride | undefined,
+  shot: StoryboardShotRow,
+  base: Omit<StoryboardImageStrategyBlockedAction, 'reason' | 'diagnostics'>,
+): StoryboardImageStrategyBlockedAction | undefined {
   if (!override) return undefined;
   if (override.allowedStrategies && !override.allowedStrategies.includes(shot.imageStrategy)) {
     return createBlockedAction(base, 'strategy-not-allowed', {
@@ -1708,13 +1703,13 @@ function validateOverrideForShot(
 }
 
 function pushBlockedAction(
-  blockedActions: StoryboardImageStrategyBlockedActionV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-  base: Omit<StoryboardImageStrategyBlockedActionV1, 'reason' | 'diagnostics'>,
-  reason: StoryboardImageStrategyBlockedActionV1['reason'],
+  blockedActions: StoryboardImageStrategyBlockedAction[],
+  diagnostics: StoryboardValidationDiagnostic[],
+  base: Omit<StoryboardImageStrategyBlockedAction, 'reason' | 'diagnostics'>,
+  reason: StoryboardImageStrategyBlockedAction['reason'],
   diagnostic: {
-    readonly code: StoryboardValidationDiagnosticCodeV1;
-    readonly path: readonly StoryboardValidationDiagnosticPathSegmentV1[];
+    readonly code: StoryboardValidationDiagnosticCode;
+    readonly path: readonly StoryboardValidationDiagnosticPathSegment[];
     readonly message: string;
   },
 ): void {
@@ -1724,14 +1719,14 @@ function pushBlockedAction(
 }
 
 function createBlockedAction(
-  base: Omit<StoryboardImageStrategyBlockedActionV1, 'reason' | 'diagnostics'>,
-  reason: StoryboardImageStrategyBlockedActionV1['reason'],
+  base: Omit<StoryboardImageStrategyBlockedAction, 'reason' | 'diagnostics'>,
+  reason: StoryboardImageStrategyBlockedAction['reason'],
   diagnostic: {
-    readonly code: StoryboardValidationDiagnosticCodeV1;
-    readonly path: readonly StoryboardValidationDiagnosticPathSegmentV1[];
+    readonly code: StoryboardValidationDiagnosticCode;
+    readonly path: readonly StoryboardValidationDiagnosticPathSegment[];
     readonly message: string;
   },
-): StoryboardImageStrategyBlockedActionV1 {
+): StoryboardImageStrategyBlockedAction {
   return {
     ...base,
     reason,
@@ -1746,10 +1741,8 @@ function createBlockedAction(
   };
 }
 
-function validateProfileHints(
-  table: StoryboardTableV1,
-): readonly StoryboardValidationDiagnosticV1[] {
-  const diagnostics: StoryboardValidationDiagnosticV1[] = [];
+function validateProfileHints(table: StoryboardTable): readonly StoryboardValidationDiagnostic[] {
+  const diagnostics: StoryboardValidationDiagnostic[] = [];
   for (const [sceneIndex, scene] of table.scenes.entries()) {
     for (const [shotIndex, shot] of scene.shots.entries()) {
       const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
@@ -1781,8 +1774,8 @@ function validateProfileHints(
 function normalizeLegacyStoryboardSections(
   root: Record<string, unknown>,
   fallbackTitle: string | undefined,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardTableV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardTable | undefined {
   if (root['template'] !== 'storyboard-table' || !Array.isArray(root['sections'])) {
     diagnostics.push(
       storyboardDiagnostic(
@@ -1833,8 +1826,8 @@ function normalizeLegacyStoryboardSections(
 function normalizeLegacySectionToShot(
   value: unknown,
   index: number,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardShotRowV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardShotRow | undefined {
   const record = readStoryboardRecord(value);
   if (!record) return undefined;
   const heading = readTrimmedString(record['heading']);
@@ -1845,12 +1838,12 @@ function normalizeLegacySectionToShot(
         return normalized ? [normalized] : [];
       })
     : [];
-  const splitRefs = splitStoryboardMediaRefsByRoleV1(mediaRefs, ['sections', index, 'mediaRefs']);
+  const splitRefs = splitStoryboardMediaRefsByRole(mediaRefs, ['sections', index, 'mediaRefs']);
   diagnostics.push(...splitRefs.diagnostics);
   const visualDescription = content ?? heading;
   if (!visualDescription && mediaRefs.length === 0) return undefined;
 
-  const shot: StoryboardShotRowV1 = {
+  const shot: StoryboardShotRow = {
     shotId: `legacy-shot-${index + 1}`,
     shotNumber: index + 1,
     duration: 3,
@@ -1874,8 +1867,8 @@ function normalizeLegacyMediaRef(
   value: unknown,
   sectionIndex: number,
   mediaIndex: number,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardMediaRefV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardMediaRef | undefined {
   const record = readStoryboardRecord(value);
   const path = ['sections', sectionIndex, 'mediaRefs', mediaIndex] as const;
   if (!record) return undefined;
@@ -1909,9 +1902,9 @@ function normalizeLegacyMediaRef(
 
 function normalizeMediaRefs(
   value: unknown,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): readonly StoryboardMediaRefV1[] {
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardMediaRef[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((ref, index) => {
     const normalized = normalizeMediaRef(ref, [...path, index], diagnostics);
@@ -1921,9 +1914,9 @@ function normalizeMediaRefs(
 
 function normalizeMediaRef(
   value: unknown,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardMediaRefV1 | undefined {
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardMediaRef | undefined {
   const record = readStoryboardRecord(value);
   if (!record) {
     diagnostics.push(
@@ -1957,7 +1950,7 @@ function normalizeMediaRef(
         [...path, 'role'],
         'Media ref needs a supported role.',
         {
-          expected: STORYBOARD_MEDIA_ROLES_V1.join(', '),
+          expected: STORYBOARD_MEDIA_ROLES.join(', '),
           actual: serializableDiagnosticValue(record['role']),
         },
       ),
@@ -1988,9 +1981,9 @@ function normalizeMediaRef(
 
 function normalizeMediaLocator(
   value: unknown,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardMediaLocatorV1 | undefined {
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardMediaLocator | undefined {
   const record = readStoryboardRecord(value);
   if (!record) return undefined;
   const type = record['type'];
@@ -2066,9 +2059,9 @@ function normalizeMediaLocator(
 
 function normalizeCharacters(
   value: unknown,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): readonly StoryboardShotCharacterV1[] {
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardShotCharacter[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((character, index) => {
     const record = readStoryboardRecord(character);
@@ -2109,8 +2102,8 @@ function normalizeCharacters(
 
 function normalizeStoryboardTableSource(
   value: unknown,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardTableSourceV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardTableSource | undefined {
   const record = readStoryboardRecord(value);
   if (!record) return undefined;
   const type = record['type'];
@@ -2148,13 +2141,13 @@ function normalizeStoryboardTableSource(
 
 function normalizeExtensions(
   value: unknown,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardExtensionMapV1 | undefined {
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardExtensionMap | undefined {
   const record = readStoryboardRecord(value);
   if (!record) return undefined;
 
-  const entries: [StoryboardExtensionNamespaceV1, StoryboardSerializableValueV1][] = [];
+  const entries: [StoryboardExtensionNamespace, StoryboardSerializableValue][] = [];
   for (const [key, extensionValue] of Object.entries(record)) {
     if (!key.startsWith('neko.')) {
       diagnostics.push(
@@ -2178,26 +2171,26 @@ function normalizeExtensions(
       );
       continue;
     }
-    entries.push([key as StoryboardExtensionNamespaceV1, extensionValue]);
+    entries.push([key as StoryboardExtensionNamespace, extensionValue]);
   }
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function normalizeSerializableRecord(value: unknown): StoryboardSerializableRecordV1 | undefined {
+function normalizeSerializableRecord(value: unknown): StoryboardSerializableRecord | undefined {
   const record = readStoryboardRecord(value);
   if (!record || !isStoryboardSerializableRecord(record)) return undefined;
   return record;
 }
 
-function isStoryboardSerializableRecord(value: unknown): value is StoryboardSerializableRecordV1 {
+function isStoryboardSerializableRecord(value: unknown): value is StoryboardSerializableRecord {
   return readStoryboardRecord(value) !== undefined && isStoryboardSerializableValue(value);
 }
 
 function normalizeProfile(
   value: unknown,
-  diagnostics: StoryboardValidationDiagnosticV1[],
-): StoryboardTableProfileV1 | undefined {
+  diagnostics: StoryboardValidationDiagnostic[],
+): StoryboardTableProfile | undefined {
   if (value === undefined) return undefined;
   if (isStoryboardTableProfile(value)) return value;
   diagnostics.push(
@@ -2207,7 +2200,7 @@ function normalizeProfile(
       ['profile'],
       'Storyboard profile is not a built-in v1 profile.',
       {
-        expected: STORYBOARD_TABLE_V1_PROFILES.join(', '),
+        expected: STORYBOARD_TABLE_PROFILES.join(', '),
         actual: serializableDiagnosticValue(value),
       },
     ),
@@ -2215,15 +2208,15 @@ function normalizeProfile(
   return undefined;
 }
 
-function normalizeImageStrategy(value: unknown): StoryboardShotImageStrategyV1 | undefined {
+function normalizeImageStrategy(value: unknown): StoryboardShotImageStrategy | undefined {
   return isStoryboardImageStrategy(value) ? value : undefined;
 }
 
-function normalizeMediaRole(value: unknown): StoryboardMediaRoleV1 | undefined {
+function normalizeMediaRole(value: unknown): StoryboardMediaRole | undefined {
   return isStoryboardMediaRole(value) ? value : undefined;
 }
 
-function normalizeLegacyMediaRole(value: string | undefined): StoryboardMediaRoleV1 {
+function normalizeLegacyMediaRole(value: string | undefined): StoryboardMediaRole {
   switch (value) {
     case 'source':
     case 'original':
@@ -2249,7 +2242,7 @@ function normalizeLegacyMediaRole(value: string | undefined): StoryboardMediaRol
   }
 }
 
-function normalizeCharacterRole(value: unknown): StoryboardShotCharacterRoleV1 | undefined {
+function normalizeCharacterRole(value: unknown): StoryboardShotCharacterRole | undefined {
   return value === 'primary' || value === 'secondary' || value === 'background' ? value : undefined;
 }
 
@@ -2293,39 +2286,37 @@ function normalizeCameraAngle(value: unknown): CameraAngle | undefined {
     : undefined;
 }
 
-function isStoryboardTableProfile(value: unknown): value is StoryboardTableProfileV1 {
+function isStoryboardTableProfile(value: unknown): value is StoryboardTableProfile {
   return (
-    typeof value === 'string' && (STORYBOARD_TABLE_V1_PROFILES as readonly string[]).includes(value)
+    typeof value === 'string' && (STORYBOARD_TABLE_PROFILES as readonly string[]).includes(value)
   );
 }
 
-function isStoryboardImageStrategy(value: unknown): value is StoryboardShotImageStrategyV1 {
+function isStoryboardImageStrategy(value: unknown): value is StoryboardShotImageStrategy {
   return (
     typeof value === 'string' &&
-    (STORYBOARD_SHOT_IMAGE_STRATEGIES_V1 as readonly string[]).includes(value)
+    (STORYBOARD_SHOT_IMAGE_STRATEGIES as readonly string[]).includes(value)
   );
 }
 
-function isStoryboardMediaRole(value: unknown): value is StoryboardMediaRoleV1 {
-  return (
-    typeof value === 'string' && (STORYBOARD_MEDIA_ROLES_V1 as readonly string[]).includes(value)
-  );
+function isStoryboardMediaRole(value: unknown): value is StoryboardMediaRole {
+  return typeof value === 'string' && (STORYBOARD_MEDIA_ROLES as readonly string[]).includes(value);
 }
 
 function isSourceStoryboardMediaRole(
-  value: StoryboardMediaRoleV1,
-): value is StoryboardSourceMediaRoleV1 {
-  return (STORYBOARD_SOURCE_MEDIA_ROLES_V1 as readonly string[]).includes(value);
+  value: StoryboardMediaRole,
+): value is StoryboardSourceMediaRole {
+  return (STORYBOARD_SOURCE_MEDIA_ROLES as readonly string[]).includes(value);
 }
 
 function isGeneratedStoryboardMediaRole(
-  value: StoryboardMediaRoleV1,
-): value is StoryboardGeneratedMediaRoleV1 {
-  return (STORYBOARD_GENERATED_MEDIA_ROLES_V1 as readonly string[]).includes(value);
+  value: StoryboardMediaRole,
+): value is StoryboardGeneratedMediaRole {
+  return (STORYBOARD_GENERATED_MEDIA_ROLES as readonly string[]).includes(value);
 }
 
 function isSourceBackedStoryboardImageStrategy(
-  value: StoryboardShotImageStrategyV1,
+  value: StoryboardShotImageStrategy,
 ): value is 'reuse-original' | 'use-as-reference' | 'transform-original' {
   return (
     value === 'reuse-original' || value === 'use-as-reference' || value === 'transform-original'
@@ -2393,7 +2384,7 @@ function isStoryboardSerializableValue(
   value: unknown,
   seen: ReadonlySet<object> = new Set(),
   depth = 0,
-): value is StoryboardSerializableValueV1 {
+): value is StoryboardSerializableValue {
   if (depth > 32) return false;
   if (value === null) return true;
   if (typeof value === 'string' || typeof value === 'boolean') return true;
@@ -2419,10 +2410,10 @@ function isStoryboardSerializableValue(
 }
 
 function dedupeStoryboardMediaRefs(
-  mediaRefs: readonly StoryboardMediaRefV1[],
-): readonly StoryboardMediaRefV1[] {
+  mediaRefs: readonly StoryboardMediaRef[],
+): readonly StoryboardMediaRef[] {
   const seen = new Set<string>();
-  const result: StoryboardMediaRefV1[] = [];
+  const result: StoryboardMediaRef[] = [];
   for (const ref of mediaRefs) {
     if (seen.has(ref.refId)) continue;
     seen.add(ref.refId);
@@ -2464,9 +2455,9 @@ function normalizeStringArray(value: unknown): readonly string[] {
 }
 
 function missingRequiredDiagnostic(
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
   field: string,
-): StoryboardValidationDiagnosticV1 {
+): StoryboardValidationDiagnostic {
   return storyboardDiagnostic(
     'error',
     'missing-required-field',
@@ -2477,16 +2468,16 @@ function missingRequiredDiagnostic(
 }
 
 function storyboardDiagnostic(
-  severity: StoryboardValidationDiagnosticSeverityV1,
-  code: StoryboardValidationDiagnosticCodeV1,
-  path: readonly StoryboardValidationDiagnosticPathSegmentV1[],
+  severity: StoryboardValidationDiagnosticSeverity,
+  code: StoryboardValidationDiagnosticCode,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
   message: string,
   options: {
     readonly expected?: string;
-    readonly actual?: StoryboardSerializableValueV1;
-    readonly details?: StoryboardSerializableRecordV1;
+    readonly actual?: StoryboardSerializableValue;
+    readonly details?: StoryboardSerializableRecord;
   } = {},
-): StoryboardValidationDiagnosticV1 {
+): StoryboardValidationDiagnostic {
   return {
     severity,
     code,
@@ -2499,11 +2490,11 @@ function storyboardDiagnostic(
 }
 
 function limitStoryboardDiagnostics(
-  diagnostics: readonly StoryboardValidationDiagnosticV1[],
-): readonly StoryboardValidationDiagnosticV1[] {
+  diagnostics: readonly StoryboardValidationDiagnostic[],
+): readonly StoryboardValidationDiagnostic[] {
   return diagnostics.slice(0, MAX_STORYBOARD_DIAGNOSTICS);
 }
 
-function serializableDiagnosticValue(value: unknown): StoryboardSerializableValueV1 {
+function serializableDiagnosticValue(value: unknown): StoryboardSerializableValue {
   return isStoryboardSerializableValue(value) ? value : String(value);
 }

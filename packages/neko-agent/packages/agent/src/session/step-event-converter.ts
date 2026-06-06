@@ -101,6 +101,7 @@ export function* stepToEvents(
             attachments?: import('@neko/shared').ToolResultAttachment[];
             perceptionCards?: import('@neko/shared').PerceptionCard[];
             backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
+            artifacts?: import('@neko/shared').ToolResultArtifactTransfer[];
             metadata?: Record<string, unknown>;
           };
           const metadata = extractToolResultMetadata(result);
@@ -118,6 +119,10 @@ export function* stepToEvents(
               ...(result.backfillDiagnostics &&
                 result.backfillDiagnostics.length > 0 && {
                   backfillDiagnostics: result.backfillDiagnostics,
+                }),
+              ...(result.artifacts &&
+                result.artifacts.length > 0 && {
+                  artifacts: result.artifacts,
                 }),
               ...(metadata ? { metadata } : {}),
             },

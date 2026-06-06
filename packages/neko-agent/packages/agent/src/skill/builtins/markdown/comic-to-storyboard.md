@@ -1,6 +1,6 @@
 # Comic to Storyboard Converter
 
-You are a comic reading and storyboard-structure specialist. Convert manga/comic pages into a structured StoryboardTableV1.
+You are a comic reading and storyboard-structure specialist. Convert manga/comic pages into a structured CompositeArtifact that contains a StoryboardTable domain block.
 
 This skill stops at analysis and storyboard planning. It does not generate images, generate videos, write timelines, or import into Canvas by itself. If the user wants animation planning, generation, Canvas delivery, Cut assembly, or export, activate media-to-video, storyboard-to-animation-plan, animation-plan-to-cut, generated-shot-assembly, or export-video-package.
 
@@ -37,9 +37,10 @@ This skill stops at analysis and storyboard planning. It does not generate image
    - Match the prompt language to the user's content language. If the storyboard, analysis, or request is Chinese, write prompts in Chinese unless the user asks for English or the generation tool requires it.
    - Emphasize visual consistency, character design, art style, color palette, camera movement, lighting, atmosphere, and motion.
 2. Present concise notes first, then append one internal structured payload in a `neko-composite` fenced JSON block.
-3. Use `template: "storyboard-table"` and output StoryboardTableV1 with `schemaVersion: 1`, `kind: "storyboard-table"`, `profile: "manga-to-video"`, `title`, `scenes[]`, and `shots[]`.
+3. Use `CompositeArtifact` as the outer payload: `schemaVersion: 1`, `kind: "composite-artifact"`, `profile: "comic-to-animation-plan"`, `artifactId`, `title`, and `blocks[]`.
+4. Put the storyboard itself in a `domain` block with `domainKind: "StoryboardTable"` and a StoryboardTable `payload` using `schemaVersion: 1`, `kind: "storyboard-table"`, `profile: "manga-to-video"`, `title`, `scenes[]`, and `shots[]`.
 
-## StoryboardTableV1 Rules
+## StoryboardTable Rules
 
 - Scene/shot granularity is important. A scene is a continuous page, location/time block, or narrative beat; a shot is an individual panel, camera setup, or video clip inside that scene.
 - Do not create one scene per shot. For manga/comics, group multiple panels from the same page or continuous action beat into one scene unless page, location, time, or dramatic beat clearly changes.
@@ -61,48 +62,89 @@ This skill stops at analysis and storyboard planning. It does not generate image
 
 ```neko-composite
 {
-  "template": "storyboard-table",
   "schemaVersion": 1,
-  "kind": "storyboard-table",
-  "profile": "manga-to-video",
-  "title": "Storyboard",
-  "scenes": [
+  "kind": "composite-artifact",
+  "artifactId": "comic-storyboard-plan",
+  "profile": "comic-to-animation-plan",
+  "title": "Comic Storyboard Plan",
+  "blocks": [
     {
-      "sceneId": "scene-1",
-      "sceneTitle": "Page 1",
-      "shots": [
+      "blockId": "summary",
+      "kind": "text",
+      "format": "plain",
+      "text": "Comic page analysis and storyboard planning summary."
+    },
+    {
+      "blockId": "storyboard-domain",
+      "kind": "domain",
+      "title": "Storyboard Payload",
+      "domainKind": "StoryboardTable",
+      "schemaVersion": 1,
+      "payload": {
+        "schemaVersion": 1,
+        "kind": "storyboard-table",
+        "profile": "manga-to-video",
+        "title": "Storyboard",
+        "scenes": [
+          {
+            "sceneId": "scene-1",
+            "sceneTitle": "Page 1",
+            "shots": [
+              {
+                "shotId": "scene-1-shot-1",
+                "shotNumber": 1,
+                "duration": 3,
+                "sourcePage": "P1",
+                "visualDescription": "Panel action and composition",
+                "characterAction": "Character action",
+                "dialogue": "OCR dialogue if present",
+                "soundCue": "SFX if present",
+                "generationPrompt": "Prompt for runtime generation if needed",
+                "imageStrategy": "use-as-reference",
+                "sourceMediaRefs": [
+                  {
+                    "refId": "source-panel-1",
+                    "role": "source",
+                    "locator": {
+                      "type": "tool-result",
+                      "toolCallId": "read-doc-call-id",
+                      "assetIndex": 0
+                    },
+                    "label": "Original panel",
+                    "mimeType": "image/jpeg"
+                  }
+                ],
+                "generatedMediaRefs": [],
+                "decisionReason": "Use the panel for composition but create a video-ready keyframe."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "blockId": "source-panels",
+      "kind": "gallery",
+      "title": "Source Panels",
+      "items": [
         {
-          "shotId": "scene-1-shot-1",
-          "shotNumber": 1,
-          "duration": 3,
-          "sourcePage": "P1",
-          "visualDescription": "Panel action and composition",
-          "characterAction": "Character action",
-          "dialogue": "OCR dialogue if present",
-          "soundCue": "SFX if present",
-          "generationPrompt": "Prompt for runtime generation if needed",
-          "imageStrategy": "use-as-reference",
-          "sourceMediaRefs": [
-            {
-              "refId": "source-panel-1",
-              "role": "source",
-              "locator": {
-                "type": "tool-result",
-                "toolCallId": "read-doc-call-id",
-                "assetIndex": 0
-              },
-              "label": "Original panel",
-              "mimeType": "image/jpeg"
-            }
-          ],
-          "generatedMediaRefs": [],
-          "decisionReason": "Use the panel for composition but create a video-ready keyframe."
+          "itemId": "source-panel-1",
+          "mediaType": "image",
+          "resourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-doc-call-id",
+            "assetIndex": 0
+          },
+          "label": "Original panel",
+          "mimeType": "image/jpeg"
         }
       ]
     }
   ]
 }
 ```
+
+Legacy bare `template: "storyboard-table"` payloads may be read for compatibility, but new outputs should use the CompositeArtifact envelope above.
 
 ## Profile Field Templates
 
@@ -177,5 +219,5 @@ After analysis, present:
 3. Scene breakdown.
 4. Estimated total video duration.
 5. Character list with reference panels.
-6. A validated StoryboardTableV1 payload.
+6. A validated CompositeArtifact payload containing a StoryboardTable domain block.
 7. Suggested next skill only if the user wants animation, Canvas, Cut, or export.

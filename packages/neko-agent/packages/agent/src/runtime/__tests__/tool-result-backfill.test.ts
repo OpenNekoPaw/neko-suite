@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { PerceptionCard, ToolResultAttachment, ToolResultBackfillPayload } from '@neko/shared';
+import type {
+  PerceptionCard,
+  ToolResultArtifactTransfer,
+  ToolResultAttachment,
+  ToolResultBackfillPayload,
+} from '@neko/shared';
 import {
   applyToolResultBackfillToResult,
+  mergeToolResultArtifacts,
   mergeToolResultBackfillData,
   mergeToolResultPerceptionCards,
 } from '../tool-result-backfill';
@@ -88,6 +94,35 @@ describe('tool result backfill merge', () => {
       makeCard('asset-2', 4, 'cache-b'),
     ]);
   });
+
+  it('merges composite artifact transfer payloads by stable artifact identity', () => {
+    const original = makeArtifactSnapshot('artifact-1', 'Draft plan');
+    const replacement = makeArtifactSnapshot('artifact-1', 'Updated plan');
+    const page: ToolResultArtifactTransfer = {
+      type: 'artifactBlockPage',
+      artifactId: 'artifact-1',
+      blocks: [{ blockId: 'b2', kind: 'text', text: 'Page 2' }],
+      cursor: 'page-2',
+      complete: true,
+    };
+
+    const merged = applyToolResultBackfillToResult(
+      {
+        success: true,
+        data: { status: 'queued' },
+        artifacts: [original],
+      },
+      {
+        toolCallId: 'call-1',
+        timestamp: 2,
+        dataPatch: { status: 'completed' },
+        artifacts: [replacement, page],
+      },
+    );
+
+    expect(merged.result.artifacts).toEqual([replacement, page]);
+    expect(mergeToolResultArtifacts([original], [replacement])).toEqual([replacement]);
+  });
 });
 
 function makeCard(assetId: string, createdAt: number, cacheKey?: string): PerceptionCard {
@@ -99,5 +134,19 @@ function makeCard(assetId: string, createdAt: number, cacheKey?: string): Percep
     layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'skipped' },
     structural: { format: 'png', mimeType: 'image/png', byteSize: 1 },
     ...(cacheKey ? { cacheKey } : {}),
+  };
+}
+
+function makeArtifactSnapshot(artifactId: string, title: string): ToolResultArtifactTransfer {
+  return {
+    type: 'artifactSnapshot',
+    complete: true,
+    artifact: {
+      schemaVersion: 1,
+      kind: 'composite-artifact',
+      artifactId,
+      title,
+      blocks: [{ blockId: 'b1', kind: 'text', text: title }],
+    },
   };
 }

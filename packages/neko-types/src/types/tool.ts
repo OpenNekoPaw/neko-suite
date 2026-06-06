@@ -10,6 +10,11 @@ import type {
   ToolSafetyKind,
   ToolTargetRequirements,
 } from './tool-planning';
+import type {
+  ArtifactExecutionSummary,
+  CompositeArtifactBlock,
+  CompositeArtifact,
+} from './composite-artifact';
 
 export type {
   ToolPlanningMetadata,
@@ -80,6 +85,38 @@ export interface ToolResultAttachment {
   assetRef?: import('./perception-card').PerceptualAssetRef;
 }
 
+export interface ToolResultArtifactSnapshot {
+  readonly type: 'artifactSnapshot';
+  readonly artifact: CompositeArtifact;
+  readonly complete?: boolean;
+  readonly blockCursor?: string;
+}
+
+export interface ToolResultArtifactBlockPage {
+  readonly type: 'artifactBlockPage';
+  readonly artifactId: string;
+  readonly blocks: readonly CompositeArtifactBlock[];
+  readonly cursor?: string;
+  readonly complete: boolean;
+}
+
+export interface ToolResultArtifactBackfill {
+  readonly type: 'artifactBackfill';
+  readonly artifact: CompositeArtifact;
+  readonly mergeMode?: 'append' | 'replace';
+}
+
+export interface ToolResultArtifactExecutionSummary {
+  readonly type: 'artifactExecutionSummary';
+  readonly summary: ArtifactExecutionSummary;
+}
+
+export type ToolResultArtifactTransfer =
+  | ToolResultArtifactSnapshot
+  | ToolResultArtifactBlockPage
+  | ToolResultArtifactBackfill
+  | ToolResultArtifactExecutionSummary;
+
 /**
  * Progress update emitted during long-running tool execution.
  */
@@ -112,6 +149,8 @@ export interface ToolResult {
   perceptionCards?: import('./perception-card').PerceptionCard[];
   /** Diagnostics captured while merging delayed tool result backfill data. */
   backfillDiagnostics?: import('./perception-card').ToolResultBackfillDiagnostic[];
+  /** Structured composite artifact transfer payloads. */
+  artifacts?: ToolResultArtifactTransfer[];
 }
 
 /**

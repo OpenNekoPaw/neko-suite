@@ -1,5 +1,6 @@
 import {
   extractCompositeContentBlocks,
+  type AgentArtifactTransferPayload,
   type AgentPhase,
   type ContentBlock,
   type Plan,
@@ -77,6 +78,7 @@ export type AgentStreamWebviewMessage =
       attachments?: import('@neko/shared').ToolResultAttachment[];
       perceptionCards?: import('@neko/shared').PerceptionCard[];
       backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
+      artifacts?: readonly AgentArtifactTransferPayload[];
       plan?: Plan;
     }
   | {
@@ -88,6 +90,7 @@ export type AgentStreamWebviewMessage =
       attachments?: readonly import('@neko/shared').ToolResultAttachment[];
       perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
       backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
+      artifacts?: readonly AgentArtifactTransferPayload[];
     }
   | {
       type: 'toolConfirmation';
@@ -194,6 +197,7 @@ export function projectAgentStreamEventToWebviewMessages(
           attachments: event.toolResult?.attachments,
           perceptionCards: event.toolResult?.perceptionCards,
           backfillDiagnostics: event.toolResult?.backfillDiagnostics,
+          artifacts: event.toolResult?.artifacts,
           plan,
         },
       ];
@@ -209,6 +213,7 @@ export function projectAgentStreamEventToWebviewMessages(
               attachments: event.toolResultBackfill.attachments,
               perceptionCards: event.toolResultBackfill.perceptionCards,
               backfillDiagnostics: event.toolResultBackfill.diagnostics,
+              artifacts: event.toolResultBackfill.artifacts,
             },
           ]
         : [];
@@ -421,6 +426,7 @@ function applyToolResult(
     ...(event.toolResult.backfillDiagnostics
       ? { backfillDiagnostics: event.toolResult.backfillDiagnostics }
       : {}),
+    ...(event.toolResult.artifacts ? { artifacts: event.toolResult.artifacts } : {}),
   };
 
   const collectedToolCall = state.collectedToolCalls.find(

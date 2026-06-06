@@ -1,7 +1,7 @@
 /**
  * Comic to Storyboard Skill - Convert manga/comic pages to structured storyboards
  *
- * Provides comic panel analysis, OCR, character tracking, and StoryboardTableV1 output.
+ * Provides comic panel analysis, OCR, character tracking, and artifact-backed StoryboardTable output.
  * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
  */
 
@@ -26,7 +26,7 @@ const localizedComicToStoryboardContent = {
 export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
-    'Convert manga/comic pages into structured StoryboardTableV1 storyboards. ' +
+    'Convert manga/comic pages into CompositeArtifact storyboards with StoryboardTable domain payloads. ' +
     'Use when user mentions: comic storyboard, manga analysis, panel OCR, ' +
     'comic adaptation planning, webtoon storyboard, 漫画分镜, 漫画分析.',
   content: comicToStoryboardContent,
@@ -51,11 +51,18 @@ export const comicToStoryboardSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['comic', 'document', 'image-sequence'],
-    producedArtifacts: ['storyboard-table'],
+    producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+    artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
+    referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+    suggestedProjectors: [
+      'projector:comic-shot-plan-to-storyboard',
+      'projector:storyboard-to-canvas',
+      'projector:storyboard-to-cut',
+    ],
     tags: ['comic', 'manga', 'storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
-    validationRequirements: ['StoryboardTableV1'],
+    validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
     optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE],
   },
 };

@@ -94,6 +94,7 @@ const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessa
       data: message.data,
       error: message.error,
       plan: message.plan,
+      artifacts: message.artifacts,
     });
 
     if (!projection.updated) {

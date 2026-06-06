@@ -13,6 +13,8 @@ import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
+import type { AgentArtifactTransferPayload } from '@neko-agent/types';
+import type { CompositeArtifactBlock, GenericTable } from '@neko/shared';
 import { getTaskWorkItemById, selectRelatedSubAgentWorkItems } from '@/components/AgentWorkItem';
 import { projectToolCallDisplayState } from '@/presenters/tool-call-presenter';
 import { getLogger } from '../../../utils/logger';
@@ -322,6 +324,10 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
 
       {documentThumbnails.length > 0 && <DocumentImageThumbnails thumbnails={documentThumbnails} />}
 
+      {toolCall.result?.artifacts && toolCall.result.artifacts.length > 0 && (
+        <ArtifactTransferSummary artifacts={toolCall.result.artifacts} />
+      )}
+
       {/* Media previews — registry-driven rendering (ADR-6 §6.2) */}
       {isImageTool && imageUrls.length > 0 && (
         <div className="mt-2 space-y-2">
@@ -371,6 +377,119 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
       )}
     </div>
   );
+}
+
+function ArtifactTransferSummary({
+  artifacts,
+}: {
+  artifacts: readonly AgentArtifactTransferPayload[];
+}) {
+  return (
+    <div className="mt-2 space-y-1.5">
+      {artifacts.map((artifact) => (
+        <ArtifactTransferSummaryCard key={getArtifactTransferKey(artifact)} artifact={artifact} />
+      ))}
+    </div>
+  );
+}
+
+function ArtifactTransferSummaryCard({ artifact }: { artifact: AgentArtifactTransferPayload }) {
+  if (artifact.type === 'artifactExecutionSummary') {
+    const diagnostics = artifact.summary.diagnostics?.length ?? 0;
+    return (
+      <div className="agent-inline-card px-2 py-1.5 text-[11px] text-[var(--agent-fg)]">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-medium">Execution</span>
+          <span className="truncate text-[var(--agent-fg-secondary)]">
+            {artifact.summary.actionId}
+          </span>
+          <span className="ml-auto shrink-0 rounded bg-[var(--agent-elevated)] px-1.5 py-0.5 font-mono text-[10px]">
+            {artifact.summary.status}
+          </span>
+        </div>
+        {diagnostics > 0 && (
+          <div className="mt-1 text-[10px] text-[var(--agent-fg-secondary)]">
+            {diagnostics} diagnostics
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (artifact.type === 'artifactBlockPage') {
+    return (
+      <div className="agent-inline-card px-2 py-1.5 text-[11px] text-[var(--agent-fg)]">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-medium">Artifact Page</span>
+          <span className="truncate font-mono text-[var(--agent-fg-secondary)]">
+            {artifact.artifactId}
+          </span>
+          <span className="ml-auto shrink-0 text-[10px] text-[var(--agent-fg-secondary)]">
+            {artifact.blocks.length} blocks
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const artifactPayload = artifact.artifact;
+  const diagnosticCount = artifactPayload.diagnostics?.length ?? 0;
+  const actionCount = artifactPayload.suggestedActions?.length ?? 0;
+  const blockSummary = summarizeArtifactBlocks(artifactPayload.blocks);
+  const tableSummary = summarizeArtifactTables(artifactPayload.blocks);
+
+  return (
+    <div className="agent-inline-card px-2 py-1.5 text-[11px] text-[var(--agent-fg)]">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 font-medium">Artifact</span>
+        <span className="min-w-0 flex-1 truncate">{artifactPayload.title}</span>
+        <span className="shrink-0 rounded bg-[var(--agent-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+          {artifactPayload.kind}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[var(--agent-fg-secondary)]">
+        <span>{artifactPayload.blocks.length} blocks</span>
+        {blockSummary && <span>{blockSummary}</span>}
+        {tableSummary && <span>{tableSummary}</span>}
+        {artifactPayload.profile && <span>{artifactPayload.profile}</span>}
+        {diagnosticCount > 0 && <span>{diagnosticCount} diagnostics</span>}
+        {actionCount > 0 && <span>{actionCount} suggested actions</span>}
+      </div>
+    </div>
+  );
+}
+
+function summarizeArtifactBlocks(blocks: readonly CompositeArtifactBlock[]): string {
+  const counts = new Map<string, number>();
+  for (const block of blocks) {
+    counts.set(block.kind, (counts.get(block.kind) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([kind, count]) => (count === 1 ? kind : `${kind} x${count}`))
+    .join(', ');
+}
+
+function summarizeArtifactTables(blocks: readonly CompositeArtifactBlock[]): string | undefined {
+  const tables = blocks.flatMap((block): readonly GenericTable[] =>
+    block.kind === 'table' ? [block.table] : [],
+  );
+  if (tables.length === 0) return undefined;
+  const rows = tables.reduce((total, table) => total + table.rows.length, 0);
+  const columns = tables.reduce((total, table) => total + table.columns.length, 0);
+  return `${rows} rows / ${columns} columns`;
+}
+
+function getArtifactTransferKey(artifact: AgentArtifactTransferPayload): string {
+  switch (artifact.type) {
+    case 'artifactSnapshot':
+      return `snapshot:${artifact.artifact.artifactId}`;
+    case 'artifactBlockPage':
+      return `page:${artifact.artifactId}:${artifact.cursor ?? 'start'}`;
+    case 'artifactBackfill':
+      return `backfill:${artifact.artifact.artifactId}`;
+    case 'artifactExecutionSummary':
+      return `summary:${artifact.summary.summaryId}`;
+  }
 }
 
 export const ToolCallDisplay = memo(ToolCallDisplayComponent);

@@ -1,5 +1,6 @@
 import type {
   PerceptionCard,
+  ToolResultArtifactTransfer,
   ToolResultAttachment,
   ToolResultBackfillDiagnostic,
   ToolResultBackfillMergePolicy,
@@ -14,6 +15,7 @@ export interface BackfillableToolResult {
   readonly duration?: number;
   readonly attachments?: readonly ToolResultAttachment[];
   readonly perceptionCards?: readonly PerceptionCard[];
+  readonly artifacts?: readonly ToolResultArtifactTransfer[];
   readonly backfillDiagnostics?: readonly ToolResultBackfillDiagnostic[];
 }
 
@@ -59,6 +61,9 @@ export function applyToolResultBackfillToResult(
             ),
           }
         : {}),
+      ...(payload.artifacts
+        ? { artifacts: mergeArtifacts(existing.artifacts, payload.artifacts) }
+        : {}),
       ...(diagnostics.length > 0
         ? {
             backfillDiagnostics: mergeDiagnostics(existing.backfillDiagnostics, diagnostics),
@@ -94,6 +99,14 @@ export function mergeToolResultPerceptionCards(
 ): readonly PerceptionCard[] | undefined {
   if (!incoming) return existing;
   return mergePerceptionCards(existing, incoming);
+}
+
+export function mergeToolResultArtifacts(
+  existing: readonly ToolResultArtifactTransfer[] | undefined,
+  incoming: readonly ToolResultArtifactTransfer[] | undefined,
+): readonly ToolResultArtifactTransfer[] | undefined {
+  if (!incoming) return existing;
+  return mergeArtifacts(existing, incoming);
 }
 
 function mergeDataPatch(
@@ -161,6 +174,20 @@ function mergePerceptionCards(
   return Array.from(byKey.values()).sort((left, right) => left.createdAt - right.createdAt);
 }
 
+function mergeArtifacts(
+  existing: readonly ToolResultArtifactTransfer[] | undefined,
+  incoming: readonly ToolResultArtifactTransfer[],
+): readonly ToolResultArtifactTransfer[] {
+  const byKey = new Map<string, ToolResultArtifactTransfer>();
+  for (const artifact of existing ?? []) {
+    byKey.set(getArtifactTransferKey(artifact), artifact);
+  }
+  for (const artifact of incoming) {
+    byKey.set(getArtifactTransferKey(artifact), artifact);
+  }
+  return Array.from(byKey.values());
+}
+
 function mergeDiagnostics(
   left: readonly ToolResultBackfillDiagnostic[] | undefined,
   right: readonly ToolResultBackfillDiagnostic[] | undefined,
@@ -174,6 +201,19 @@ function getAttachmentKey(attachment: ToolResultAttachment): string {
 
 function getPerceptionCardKey(card: PerceptionCard): string {
   return [card.assetId, card.version, card.cacheKey ?? ''].join(':');
+}
+
+function getArtifactTransferKey(artifact: ToolResultArtifactTransfer): string {
+  switch (artifact.type) {
+    case 'artifactSnapshot':
+      return `snapshot:${artifact.artifact.artifactId}`;
+    case 'artifactBlockPage':
+      return `page:${artifact.artifactId}:${artifact.cursor ?? 'start'}`;
+    case 'artifactBackfill':
+      return `backfill:${artifact.artifact.artifactId}`;
+    case 'artifactExecutionSummary':
+      return `summary:${artifact.summary.summaryId}`;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

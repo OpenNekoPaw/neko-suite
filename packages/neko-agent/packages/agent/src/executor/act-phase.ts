@@ -14,6 +14,7 @@ import type {
   ExecutorHooks,
   ToolCallInfo,
   ToolResultWithMeta,
+  ToolResultArtifactTransfer,
   ToolResultAttachment,
   ToolProgress,
   AgentTraceContext,
@@ -198,7 +199,8 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
     const hasExtendedFields =
       (result.attachments?.length ?? 0) > 0 ||
       (result.perceptionCards?.length ?? 0) > 0 ||
-      (result.backfillDiagnostics?.length ?? 0) > 0;
+      (result.backfillDiagnostics?.length ?? 0) > 0 ||
+      (result.artifacts?.length ?? 0) > 0;
 
     if (!hasExtendedFields) {
       return {
@@ -217,6 +219,7 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
         attachments: result.attachments,
         perceptionCards: result.perceptionCards,
         backfillDiagnostics: result.backfillDiagnostics,
+        artifacts: result.artifacts,
       }),
       toolCallId: result.callId,
     } as ChatMessage;
@@ -228,6 +231,12 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
  */
 export function extractAttachments(result: ToolResultWithMeta): ToolResultAttachment[] | undefined {
   return result.attachments && result.attachments.length > 0 ? result.attachments : undefined;
+}
+
+export function extractArtifacts(
+  result: ToolResultWithMeta,
+): ToolResultArtifactTransfer[] | undefined {
+  return result.artifacts && result.artifacts.length > 0 ? result.artifacts : undefined;
 }
 
 // =============================================================================

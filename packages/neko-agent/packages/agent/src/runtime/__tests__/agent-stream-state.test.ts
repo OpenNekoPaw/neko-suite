@@ -309,6 +309,7 @@ describe('agent stream state reducer', () => {
             toolCallId: 'tool-1',
             timestamp: 1,
             dataPatch: { status: 'completed' },
+            artifacts: [makeArtifactSnapshot('artifact-1')],
           },
         },
       }),
@@ -322,7 +323,22 @@ describe('agent stream state reducer', () => {
         attachments: undefined,
         perceptionCards: undefined,
         backfillDiagnostics: undefined,
+        artifacts: [makeArtifactSnapshot('artifact-1')],
       },
     ]);
   });
 });
+
+function makeArtifactSnapshot(artifactId: string) {
+  return {
+    type: 'artifactSnapshot' as const,
+    complete: true,
+    artifact: {
+      schemaVersion: 1 as const,
+      kind: 'composite-artifact' as const,
+      artifactId,
+      title: 'Shot plan',
+      blocks: [{ blockId: 'summary', kind: 'text' as const, text: 'Review shots.' }],
+    },
+  };
+}

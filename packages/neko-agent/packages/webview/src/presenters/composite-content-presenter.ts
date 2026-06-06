@@ -6,16 +6,16 @@ import type {
   ToolCall,
 } from '@/components/types';
 import type {
-  StoryboardTableV1,
-  StoryboardMediaRefV1,
-  StoryboardValidationDiagnosticV1,
+  StoryboardTable,
+  StoryboardMediaRef,
+  StoryboardValidationDiagnostic,
   DocumentArchiveResourceRef,
   ResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
 import {
   isResourceRef,
-  normalizeStoryboardTableV1,
+  normalizeStoryboardTable,
   parseDocumentArchiveResourceRef,
 } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -38,7 +38,7 @@ export interface CompositeMediaDiagnostic {
   readonly message: string;
 }
 
-export type CompositeStoryboardDiagnostic = StoryboardValidationDiagnosticV1;
+export type CompositeStoryboardDiagnostic = StoryboardValidationDiagnostic;
 
 export interface ResolvedCompositeMedia {
   readonly id: string;
@@ -71,7 +71,7 @@ export interface CompositeRichContentData {
   readonly template: CompositeBlockData['template'];
   readonly title?: string;
   readonly plugins?: PluginsAvailable;
-  readonly storyboardTable?: StoryboardTableV1;
+  readonly storyboardTable?: StoryboardTable;
   readonly storyboardDiagnostics?: readonly CompositeStoryboardDiagnostic[];
   readonly sections: readonly ResolvedCompositeSection[];
   readonly diagnostics: readonly CompositeMediaDiagnostic[];
@@ -205,10 +205,10 @@ export function projectCompositeBlockRichContent(
 }
 
 function normalizeCompositeStoryboardTable(
-  storyboardTable: StoryboardTableV1 | undefined,
-): StoryboardTableV1 | undefined {
+  storyboardTable: StoryboardTable | undefined,
+): StoryboardTable | undefined {
   if (!storyboardTable) return undefined;
-  return normalizeStoryboardTableV1({ value: storyboardTable }).table ?? storyboardTable;
+  return normalizeStoryboardTable({ value: storyboardTable }).table ?? storyboardTable;
 }
 
 function mergeStoryboardDiagnostics(
@@ -276,11 +276,11 @@ function projectMediaDiagnosticToStoryboardDiagnostic(
 }
 
 function maybeAttachInferredStoryboardMediaRefs(
-  storyboardTable: StoryboardTableV1 | undefined,
+  storyboardTable: StoryboardTable | undefined,
   toolCalls: ReadonlyMap<string, ToolCall>,
   sections: readonly CompositeSection[],
   diagnostics: CompositeMediaDiagnostic[],
-): StoryboardTableV1 | undefined {
+): StoryboardTable | undefined {
   if (!storyboardTable) return undefined;
   const imageIndex = createStoryboardImageAliasIndex(toolCalls);
   if (imageIndex.refs.length === 0) return storyboardTable;
@@ -317,8 +317,8 @@ function maybeAttachInferredStoryboardMediaRefs(
 }
 
 function selectInferredStoryboardImageRefForShot(input: {
-  readonly scene: StoryboardTableV1['scenes'][number];
-  readonly shot: StoryboardTableV1['scenes'][number]['shots'][number];
+  readonly scene: StoryboardTable['scenes'][number];
+  readonly shot: StoryboardTable['scenes'][number]['shots'][number];
   readonly section?: CompositeSection;
   readonly rowIndex: number;
   readonly imageIndex: StoryboardImageAliasIndex;
@@ -349,7 +349,7 @@ function selectInferredStoryboardImageRefForShot(input: {
 }
 
 function hasResolvedStoryboardShotImageReference(
-  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+  shot: StoryboardTable['scenes'][number]['shots'][number],
   toolCalls: ReadonlyMap<string, ToolCall>,
 ): boolean {
   if (shot.referenceImagePath) return true;
@@ -360,7 +360,7 @@ function hasResolvedStoryboardShotImageReference(
 }
 
 function selectExplicitStoryboardImageRef(
-  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+  shot: StoryboardTable['scenes'][number]['shots'][number],
   imageIndex: StoryboardImageAliasIndex,
 ): InferredStoryboardImageRef | undefined {
   for (const mediaRef of [...(shot.sourceMediaRefs ?? []), ...(shot.mediaRefs ?? [])]) {
@@ -395,7 +395,7 @@ function selectExplicitStoryboardImageRef(
 
 function projectInferredImageRefToStoryboardMediaRef(
   imageRef: InferredStoryboardImageRef,
-): StoryboardMediaRefV1 {
+): StoryboardMediaRef {
   return {
     refId: `tool-result:${imageRef.toolCallId}:${imageRef.assetIndex}`,
     role: 'source',
@@ -507,8 +507,8 @@ function selectSingleEligibleImageBatch(
 }
 
 function inferStoryboardShotPageNumber(
-  scene: StoryboardTableV1['scenes'][number],
-  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+  scene: StoryboardTable['scenes'][number],
+  shot: StoryboardTable['scenes'][number]['shots'][number],
   section: CompositeSection | undefined,
 ): number | undefined {
   const sourceImageNumber = readStoryboardSourceImageNumber(shot.extensions);
@@ -545,14 +545,14 @@ function inferStoryboardShotPageNumber(
 }
 
 function readStoryboardImageAliasNumber(
-  extensions: StoryboardTableV1['scenes'][number]['shots'][number]['extensions'] | undefined,
+  extensions: StoryboardTable['scenes'][number]['shots'][number]['extensions'] | undefined,
 ): number | undefined {
   const alias = asRecord(extensions?.['neko.storyboardImageAlias']);
   return readPositiveInteger(alias, 'number');
 }
 
 function readStoryboardSourceImageNumber(
-  extensions: StoryboardTableV1['scenes'][number]['shots'][number]['extensions'] | undefined,
+  extensions: StoryboardTable['scenes'][number]['shots'][number]['extensions'] | undefined,
 ): number | undefined {
   const sourceImage = asRecord(extensions?.['neko.storyboardSourceImage']);
   return readPositiveInteger(sourceImage, 'number');
@@ -570,7 +570,7 @@ function isImageCandidateResolvable(candidate: MediaCandidate): boolean {
 
 function maybeAlignStoryboardSectionMediaRefs(
   sections: readonly CompositeSection[],
-  storyboardTable: StoryboardTableV1 | undefined,
+  storyboardTable: StoryboardTable | undefined,
 ): readonly CompositeSection[] {
   if (!storyboardTable) return sections;
 
@@ -590,7 +590,7 @@ function maybeAlignStoryboardSectionMediaRefs(
 
 function maybeBackfillStoryboardSectionMedia(
   sections: readonly ResolvedCompositeSection[],
-  storyboardTable: StoryboardTableV1 | undefined,
+  storyboardTable: StoryboardTable | undefined,
   toolCalls: ReadonlyMap<string, ToolCall>,
   diagnostics: CompositeMediaDiagnostic[],
 ): readonly ResolvedCompositeSection[] {
@@ -626,7 +626,7 @@ function maybeBackfillStoryboardSectionMedia(
 }
 
 function collectExplicitStoryboardMediaRefs(
-  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+  shot: StoryboardTable['scenes'][number]['shots'][number],
 ): readonly MediaRef[] {
   const layeredRefs = [...(shot.sourceMediaRefs ?? []), ...(shot.generatedMediaRefs ?? [])].flatMap(
     projectStoryboardMediaRefToCompositeMediaRef,
@@ -637,7 +637,7 @@ function collectExplicitStoryboardMediaRefs(
 }
 
 function projectStoryboardMediaRefToCompositeMediaRef(
-  mediaRef: StoryboardMediaRefV1,
+  mediaRef: StoryboardMediaRef,
 ): readonly MediaRef[] {
   if (mediaRef.locator.type !== 'tool-result') return [];
   return [
@@ -1166,7 +1166,7 @@ function readPageNumberFromText(value: string | undefined): number | undefined {
 }
 
 function stringifyStoryboardExtensions(
-  extensions: StoryboardTableV1['extensions'] | undefined,
+  extensions: StoryboardTable['extensions'] | undefined,
 ): string | undefined {
   if (!extensions) return undefined;
   return JSON.stringify(extensions);

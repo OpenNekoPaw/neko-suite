@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   PerceptionCard,
+  ToolResultArtifactTransfer,
   ToolResultAttachment,
   ToolResultBackfillDiagnostic,
   ToolResultBackfillPayload,
@@ -327,7 +328,8 @@ function serializeToolResultMessageContent(
   const hasExtendedFields =
     (result.attachments?.length ?? 0) > 0 ||
     (result.perceptionCards?.length ?? 0) > 0 ||
-    (result.backfillDiagnostics?.length ?? 0) > 0;
+    (result.backfillDiagnostics?.length ?? 0) > 0 ||
+    (result.artifacts?.length ?? 0) > 0;
 
   if (!result.success) {
     if (!hasExtendedFields) {
@@ -341,6 +343,7 @@ function serializeToolResultMessageContent(
       attachments: result.attachments,
       perceptionCards: result.perceptionCards,
       backfillDiagnostics: result.backfillDiagnostics,
+      artifacts: result.artifacts,
     });
   }
 
@@ -354,6 +357,7 @@ function serializeToolResultMessageContent(
     attachments: result.attachments,
     perceptionCards: result.perceptionCards,
     backfillDiagnostics: result.backfillDiagnostics,
+    artifacts: result.artifacts,
   });
 }
 
@@ -372,6 +376,7 @@ function parseToolMessageResult(message: ChatMessage): BackfillableToolResult {
         ...(parsed.attachments ? { attachments: parsed.attachments } : {}),
         ...(parsed.perceptionCards ? { perceptionCards: parsed.perceptionCards } : {}),
         ...(parsed.backfillDiagnostics ? { backfillDiagnostics: parsed.backfillDiagnostics } : {}),
+        ...(parsed.artifacts ? { artifacts: parsed.artifacts } : {}),
       };
     }
     if (
@@ -400,6 +405,7 @@ interface SerializedToolResultEnvelope {
   readonly attachments?: readonly ToolResultAttachment[];
   readonly perceptionCards?: readonly PerceptionCard[];
   readonly backfillDiagnostics?: readonly ToolResultBackfillDiagnostic[];
+  readonly artifacts?: readonly ToolResultArtifactTransfer[];
 }
 
 function isSerializedToolResultEnvelope(value: unknown): value is SerializedToolResultEnvelope {

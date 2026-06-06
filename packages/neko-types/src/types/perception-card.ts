@@ -1,5 +1,5 @@
 import type { AgentObservationModality } from './agent-observation';
-import type { ToolResultAttachment } from './tool';
+import type { ToolResultArtifactTransfer, ToolResultAttachment } from './tool';
 
 export type PerceptionLayerStatus = 'pending' | 'complete' | 'skipped' | 'failed';
 
@@ -142,6 +142,7 @@ export interface ToolResultBackfillPayload {
   readonly dataPatch: Record<string, unknown>;
   readonly attachments?: readonly ToolResultAttachment[];
   readonly perceptionCards?: readonly PerceptionCard[];
+  readonly artifacts?: readonly ToolResultArtifactTransfer[];
   readonly mergePolicy?: ToolResultBackfillMergePolicy;
   readonly diagnostics?: readonly ToolResultBackfillDiagnostic[];
 }

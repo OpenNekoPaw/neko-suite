@@ -1,5 +1,6 @@
 import {
   extractCompositeContentBlocks,
+  type AgentArtifactTransferPayload,
   type ContentBlock,
   type Message,
   type ToolCall,
@@ -45,6 +46,7 @@ export interface ToolResultMessageProjectionInput {
   data?: unknown;
   error?: string;
   plan?: Plan;
+  artifacts?: readonly AgentArtifactTransferPayload[];
   now?: () => number;
 }
 
@@ -789,6 +791,7 @@ function updateToolResultContentBlocks(
       success: input.success,
       data: input.data,
       error: input.error,
+      ...(input.artifacts ? { artifacts: input.artifacts } : {}),
     },
   });
 

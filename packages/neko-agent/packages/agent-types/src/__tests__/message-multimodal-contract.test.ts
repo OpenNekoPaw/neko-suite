@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  AgentArtifactTransferPayload,
   CompositeBlockData,
   ContentBlock,
   ExtensionToWebviewMessage,
@@ -45,6 +46,7 @@ describe('multimodal message contracts', () => {
             incoming: 'snow',
           },
         ],
+        artifacts: [makeArtifactSnapshot()],
       },
     };
 
@@ -76,12 +78,14 @@ describe('multimodal message contracts', () => {
         },
       ],
       backfillDiagnostics: [],
+      artifacts: [makeArtifactSnapshot()],
     };
 
     expect(message).toMatchObject({
       type: 'toolResultBackfill',
       toolCallId: 'call-1',
       dataPatch: { status: 'completed' },
+      artifacts: [{ type: 'artifactSnapshot' }],
     });
   });
 
@@ -111,3 +115,23 @@ describe('multimodal message contracts', () => {
     expect(JSON.parse(JSON.stringify(blocks))).toEqual(blocks);
   });
 });
+
+function makeArtifactSnapshot(): AgentArtifactTransferPayload {
+  return {
+    type: 'artifactSnapshot',
+    artifact: {
+      schemaVersion: 1,
+      kind: 'composite-artifact',
+      artifactId: 'artifact-1',
+      title: 'Shot plan',
+      blocks: [
+        {
+          blockId: 'summary',
+          kind: 'text',
+          text: 'Review shots.',
+        },
+      ],
+    },
+    complete: true,
+  };
+}

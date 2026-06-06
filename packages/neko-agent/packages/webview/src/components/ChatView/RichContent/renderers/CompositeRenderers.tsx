@@ -8,7 +8,7 @@ import type {
   ResolvedCompositeSection,
   StoryboardTableRichData,
 } from '@/presenters/composite-content-presenter';
-import type { StoryboardSceneRowV1, StoryboardShotRowV1 } from '@neko/shared';
+import type { StoryboardSceneRow, StoryboardShotRow } from '@neko/shared';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -98,8 +98,8 @@ function StoryboardTableRendererComponent({
 interface SemanticStoryboardRow {
   readonly id: string;
   readonly rowIndex: number;
-  readonly scene: StoryboardSceneRowV1;
-  readonly shot: StoryboardShotRowV1;
+  readonly scene: StoryboardSceneRow;
+  readonly shot: StoryboardShotRow;
   readonly section?: ResolvedCompositeSection;
 }
 
@@ -298,7 +298,7 @@ function formatDuration(duration: number): string {
   return `${Number.isFinite(duration) ? duration : 0}s`;
 }
 
-function formatCharacters(characters: StoryboardShotRowV1['characters']): string | undefined {
+function formatCharacters(characters: StoryboardShotRow['characters']): string | undefined {
   const text = (characters ?? [])
     .map((character) =>
       compactStrings([

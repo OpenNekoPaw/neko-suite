@@ -1,6 +1,6 @@
 # 分镜转动画计划
 
-将已校验的 StoryboardTableV1 转换为动画计划。保留 scene/shot id、sourceMediaRefs、时长、对白、音效和连续性备注。
+将已校验的、包含 StoryboardTable domain block 的 CompositeArtifact，或旧裸 StoryboardTable，转换为动画计划。保留 scene/shot id、sourceMediaRefs、时长、对白、音效和连续性备注。
 
 ## 结构化产物规则
 
@@ -11,6 +11,7 @@
 
 ## 指引
 
+- 如果输入是 CompositeArtifact，从 `domainKind: "StoryboardTable"` block 读取 StoryboardTable。
 - 除非校验失败，不要重新生成或重写分镜。
 - 为每个镜头补充 motionPrompt、cameraPrompt、generationPrompt、requiresGeneration 和审批说明。
 - 需要上色、放大、修补或图生视频的源镜头，只能标记为计划转换；工具实际运行前不要写入生成结果。

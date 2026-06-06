@@ -13,7 +13,12 @@ export type AgentCapabilityContributionKind =
   | 'toolGroup'
   | 'slashCommand'
   | 'promptFragment'
-  | 'workflowFragment';
+  | 'workflowFragment'
+  | 'artifactProtocol'
+  | 'artifactProfile'
+  | 'artifactRenderer'
+  | 'artifactProjector'
+  | 'artifactCapability';
 
 export type AgentCapabilityPermissionMode = 'read' | 'write' | 'execute' | 'irreversible';
 
@@ -50,6 +55,60 @@ export interface AgentCapabilityWorkflowFragmentContribution {
   readonly nodeIds?: readonly string[];
 }
 
+export type AgentArtifactCapabilityRisk = 'low' | 'medium' | 'high' | 'destructive';
+
+export interface AgentArtifactProtocolContribution {
+  readonly id: string;
+  readonly artifactKind: string;
+  readonly profile?: string;
+  readonly schemaVersion: number;
+  readonly validatorId: string;
+  readonly rendererIds?: readonly string[];
+  readonly projectorIds?: readonly string[];
+}
+
+export interface AgentArtifactProfileContribution {
+  readonly id: string;
+  readonly profileId: string;
+  readonly protocol: string;
+  readonly version: number;
+  readonly descriptorRef?: string;
+}
+
+export interface AgentArtifactRendererContribution {
+  readonly id: string;
+  readonly accepts: readonly string[];
+  readonly profiles?: readonly string[];
+  readonly lazy?: boolean;
+}
+
+export interface AgentArtifactProjectorContribution {
+  readonly id: string;
+  readonly accepts: readonly string[];
+  readonly produces: readonly string[];
+  readonly profiles?: readonly string[];
+  readonly lazy?: boolean;
+}
+
+export interface AgentArtifactExecutionCapabilityContribution {
+  readonly capabilityId: string;
+  readonly packageId: string;
+  readonly accepts: readonly string[];
+  readonly produces?: readonly string[];
+  readonly actions: readonly string[];
+  readonly risk: AgentArtifactCapabilityRisk;
+  readonly requiresApproval: boolean;
+  readonly minVersion?: string;
+}
+
+export interface AgentArtifactFacetsContribution {
+  readonly protocols?: readonly AgentArtifactProtocolContribution[];
+  readonly profiles?: readonly AgentArtifactProfileContribution[];
+  readonly renderers?: readonly AgentArtifactRendererContribution[];
+  readonly projectors?: readonly AgentArtifactProjectorContribution[];
+  readonly capabilities?: readonly AgentArtifactExecutionCapabilityContribution[];
+}
+
 export interface AgentCapabilityContribution {
   readonly identity: AgentCapabilityContributionIdentity;
   readonly displayName?: string;
@@ -63,6 +122,7 @@ export interface AgentCapabilityContribution {
   readonly workflowFragments?: readonly AgentCapabilityWorkflowFragmentContribution[];
   readonly toolNames?: readonly string[];
   readonly toolGroupNames?: readonly string[];
+  readonly artifactFacets?: AgentArtifactFacetsContribution;
   readonly metadata?: Record<string, unknown>;
 }
 
@@ -111,6 +171,7 @@ export interface AgentInjectedCapabilitySet {
 export interface AgentCapabilityRegistryProjection {
   readonly contributions: readonly AgentCapabilityContribution[];
   readonly diagnostics: readonly AgentCapabilityDiagnostic[];
+  readonly artifactFacets?: AgentArtifactFacetsContribution;
 }
 
 export type AgentCapabilityTelemetryReason =

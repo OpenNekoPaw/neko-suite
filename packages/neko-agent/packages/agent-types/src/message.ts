@@ -8,11 +8,12 @@ import type {
   AgentContextType,
   MessageAttachment,
   PerceptionCard,
-  StoryboardTableV1,
-  StoryboardValidationDiagnosticV1,
+  StoryboardTable,
+  StoryboardValidationDiagnostic,
   ToolResultAttachment,
   ToolResultBackfillDiagnostic,
 } from '@neko/shared';
+import type { AgentArtifactTransferPayload } from './artifact-transfer';
 import type { Plan } from './plan';
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ export interface ToolCall {
     attachments?: readonly ToolResultAttachment[];
     perceptionCards?: readonly PerceptionCard[];
     backfillDiagnostics?: readonly ToolResultBackfillDiagnostic[];
+    artifacts?: readonly AgentArtifactTransferPayload[];
   };
   /** For tool confirmation (ask mode) */
   pendingConfirmation?: boolean;
@@ -77,8 +79,8 @@ export interface CompositeSection {
 export interface CompositeBlockData {
   readonly template: CompositeTemplate;
   readonly title?: string;
-  readonly storyboardTable?: StoryboardTableV1;
-  readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnosticV1[];
+  readonly storyboardTable?: StoryboardTable;
+  readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnostic[];
   readonly sections: readonly CompositeSection[];
 }
 

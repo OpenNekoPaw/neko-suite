@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import type {
   AgentCapabilityProvider,
   AgentCapabilityContext,
+  AgentArtifactFacetsContribution,
   Tool,
   ToolGroup,
   ToolParameters,
@@ -118,7 +119,10 @@ function normalizeJsonPointerPath(value: unknown): JsonPointerPath | undefined {
   throw new Error(`Invalid JSON Pointer path "${value}"`);
 }
 
-function readOptionalCanvasNodeType(value: unknown, label = 'node type'): CanvasNodeType | undefined {
+function readOptionalCanvasNodeType(
+  value: unknown,
+  label = 'node type',
+): CanvasNodeType | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -133,6 +137,39 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly version = '1.0.0';
 
   constructor(private readonly _api: NekoCanvasAPI) {}
+
+  getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {
+    return {
+      renderers: [
+        {
+          id: 'renderer:neko-canvas:generic-artifact-preview',
+          accepts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+          profiles: ['comic-shot-asset-prep', 'comic-to-animation-plan', 'manga-to-video'],
+          lazy: true,
+        },
+      ],
+      projectors: [
+        {
+          id: 'projector:storyboard-to-canvas',
+          accepts: ['StoryboardTable'],
+          produces: ['CanvasStoryboardPayload'],
+          profiles: ['manga-to-video'],
+          lazy: true,
+        },
+      ],
+      capabilities: [
+        {
+          capabilityId: 'canvas.importStoryboard',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasStoryboardPayload'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.importStoryboard'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+      ],
+    };
+  }
 
   getPromptFragments(_context: AgentCapabilityContext): PromptFragment[] {
     return [
@@ -678,7 +715,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const nodes = await api.nodes.list();
             const context = await api.nodes.getActiveContext({ includeNodeDetails: false });
             const connections = Array.isArray((context as { connections?: unknown }).connections)
-              ? ((context as { connections: CanvasConnection[] }).connections)
+              ? (context as { connections: CanvasConnection[] }).connections
               : [];
             const data = traverseNarrativeFlow(
               nodes,

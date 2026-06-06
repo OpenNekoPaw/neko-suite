@@ -1,6 +1,6 @@
 # Storyboard to Animation Plan
 
-Transform a validated StoryboardTableV1 into an animation plan. Preserve scene and shot ids, source media refs, durations, dialogue, sound cues, and continuity notes.
+Transform a validated CompositeArtifact with a StoryboardTable domain block, or a legacy bare StoryboardTable, into an animation plan. Preserve scene and shot ids, source media refs, durations, dialogue, sound cues, and continuity notes.
 
 ## Structured Artifact Rules
 
@@ -11,6 +11,7 @@ Transform a validated StoryboardTableV1 into an animation plan. Preserve scene a
 
 ## Guidance
 
+- When the input is CompositeArtifact, read the StoryboardTable from the `domainKind: "StoryboardTable"` block.
 - Do not regenerate or rewrite the storyboard unless validation fails.
 - Add motionPrompt, cameraPrompt, generationPrompt, requiresGeneration, and approval notes per shot.
 - Mark source shots that need colorization, upscale, inpaint, or image-to-video as planned transformations only until tools run.

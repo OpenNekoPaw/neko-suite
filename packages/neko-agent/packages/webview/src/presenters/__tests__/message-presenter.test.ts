@@ -13,6 +13,7 @@ import {
   updatePlanStatusInMessages,
   updatePlanStepInMessages,
 } from '../message-presenter';
+import { projectToolResultBackfillIntoMessages } from '../tool-result-backfill-presenter';
 
 describe('message presenter', () => {
   it('creates an assistant message when projecting a tool call without a target', () => {
@@ -111,6 +112,44 @@ describe('message presenter', () => {
         subAgent: { response: 'Looks good' },
       },
     ]);
+  });
+
+  it('preserves composite artifact transfers in tool result and backfill projection', () => {
+    const artifact = makeArtifactSnapshot('artifact-1', 'Draft plan');
+    const blockPage = makeArtifactBlockPage('artifact-1', 'page-2');
+    const summary = makeArtifactExecutionSummary('artifact-1', 'canvas.importStoryboard');
+    const result = projectToolResultIntoMessages({
+      messages: createToolMessages(),
+      streamingMessageId: null,
+      toolCallId: 'tool-1',
+      success: true,
+      data: { status: 'queued' },
+      artifacts: [artifact, blockPage],
+    });
+
+    const restoredMessages = JSON.parse(JSON.stringify(result.messages)) as Message[];
+
+    const updatedArtifact = makeArtifactSnapshot('artifact-1', 'Updated plan');
+    const backfilled = projectToolResultBackfillIntoMessages({
+      messages: restoredMessages,
+      streamingMessageId: null,
+      message: {
+        type: 'toolResultBackfill',
+        conversationId: 'conv-1',
+        toolCallId: 'tool-1',
+        dataPatch: { status: 'completed' },
+        artifacts: [updatedArtifact, summary],
+      },
+    });
+
+    expect(result.messages[0]?.contentBlocks?.[0]?.toolCall?.result?.artifacts).toEqual([
+      artifact,
+      blockPage,
+    ]);
+    expect(backfilled.messages[0]?.contentBlocks?.[0]?.toolCall?.result).toMatchObject({
+      data: { status: 'completed' },
+      artifacts: [updatedArtifact, blockPage, summary],
+    });
   });
 
   it('merges task work item ids and appends plan blocks from tool results', () => {
@@ -538,4 +577,41 @@ function createToolMessages(
       ...overrides,
     },
   ];
+}
+
+function makeArtifactSnapshot(artifactId: string, title: string) {
+  return {
+    type: 'artifactSnapshot' as const,
+    complete: true,
+    artifact: {
+      schemaVersion: 1 as const,
+      kind: 'composite-artifact' as const,
+      artifactId,
+      title,
+      blocks: [{ blockId: 'summary', kind: 'text' as const, text: title }],
+    },
+  };
+}
+
+function makeArtifactBlockPage(artifactId: string, cursor: string) {
+  return {
+    type: 'artifactBlockPage' as const,
+    artifactId,
+    blocks: [{ blockId: cursor, kind: 'text' as const, text: 'Paged block' }],
+    cursor,
+    complete: false,
+  };
+}
+
+function makeArtifactExecutionSummary(artifactId: string, actionId: string) {
+  return {
+    type: 'artifactExecutionSummary' as const,
+    summary: {
+      summaryId: `summary:${artifactId}:${actionId}`,
+      artifactId,
+      actionId,
+      providerId: 'neko-canvas',
+      status: 'succeeded' as const,
+    },
+  };
 }

@@ -13,6 +13,13 @@ vi.mock('@neko/shared/vscode', () => ({
   postMessage: vi.fn(),
 }));
 
+vi.mock('@/i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string, vars?: Record<string, unknown>) =>
+      vars?.['count'] !== undefined ? `${String(vars['count'])} ${key}` : key,
+  }),
+}));
+
 describe('ContentBlockItem Canvas transfer actions', () => {
   it('renders assistant identity on the first content block avatar', () => {
     renderContentBlock(
@@ -55,6 +62,105 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     });
 
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+  });
+
+  it('renders composite artifact transfers as review-only summaries', () => {
+    renderContentBlock({
+      id: 'tool-artifact',
+      type: 'tool_call',
+      timestamp: 1,
+      toolCall: {
+        id: 'tool-1',
+        name: 'GeneratePlan',
+        arguments: {},
+        result: {
+          success: true,
+          data: { status: 'completed' },
+          artifacts: [
+            {
+              type: 'artifactSnapshot',
+              complete: true,
+              artifact: {
+                schemaVersion: 1,
+                kind: 'composite-artifact',
+                artifactId: 'artifact-1',
+                profile: 'comic-shot-asset-prep',
+                title: 'Comic shot plan',
+                blocks: [{ blockId: 'summary', kind: 'text', text: 'Review shots.' }],
+                suggestedActions: [
+                  {
+                    actionId: 'canvas.importStoryboard',
+                    kind: 'execute',
+                    disabled: true,
+                    disabledReason: 'Provider unavailable',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(screen.getByText('Artifact')).toBeTruthy();
+    expect(screen.getByText('Comic shot plan')).toBeTruthy();
+    expect(screen.getByText('text')).toBeTruthy();
+    expect(screen.getByText('comic-shot-asset-prep')).toBeTruthy();
+    expect(screen.getByText('1 suggested actions')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
+  });
+
+  it('summarizes generic artifact table blocks without exposing execute controls', () => {
+    renderContentBlock({
+      id: 'tool-table-artifact',
+      type: 'tool_call',
+      timestamp: 1,
+      toolCall: {
+        id: 'tool-1',
+        name: 'GeneratePlan',
+        arguments: {},
+        result: {
+          success: true,
+          data: { status: 'completed' },
+          artifacts: [
+            {
+              type: 'artifactSnapshot',
+              complete: true,
+              artifact: {
+                schemaVersion: 1,
+                kind: 'composite-artifact',
+                artifactId: 'artifact-1',
+                profile: 'comic-to-animation-plan',
+                title: 'Comic shot plan',
+                blocks: [
+                  {
+                    blockId: 'table',
+                    kind: 'table',
+                    table: {
+                      schemaVersion: 1,
+                      kind: 'generic-table',
+                      tableId: 'shots',
+                      title: 'Shots',
+                      columns: [{ columnId: 'shotId', cellType: 'string' }],
+                      rows: [
+                        {
+                          rowId: 'shot-1',
+                          cells: { shotId: { type: 'string', value: 'shot-1' } },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(screen.getByText('table')).toBeTruthy();
+    expect(screen.getByText('1 rows / 1 columns')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /execute|import/i })).toBeNull();
   });
 });
 

@@ -1,35 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { createResourceFingerprint, createResourceRef } from '../resource-cache';
 import type {
-  StoryboardTableProfileV1,
-  StoryboardTableV1,
-  StoryboardValidationDiagnosticV1,
+  StoryboardTableProfile,
+  StoryboardTable,
+  StoryboardValidationDiagnostic,
 } from '../storyboard-table';
 import {
-  STORYBOARD_GENERATED_MEDIA_ROLES_V1,
-  STORYBOARD_SCENE_V1_REQUIRED_FIELDS,
-  STORYBOARD_SHOT_IMAGE_STRATEGIES_V1,
-  STORYBOARD_SHOT_V1_REQUIRED_FIELDS,
-  STORYBOARD_SOURCE_MEDIA_ROLES_V1,
-  STORYBOARD_TABLE_V1_REQUIRED_FIELDS,
-  classifyStoryboardMediaIdentityV1,
-  interpretStoryboardImageStrategiesV1,
-  normalizeStoryboardTableV1,
-  projectStoryboardTableV1ToCanvasPayload,
-  projectStoryboardTableV1ToCutPayload,
-  validateStoryboardTableV1,
+  STORYBOARD_GENERATED_MEDIA_ROLES,
+  STORYBOARD_SCENE_REQUIRED_FIELDS,
+  STORYBOARD_SHOT_IMAGE_STRATEGIES,
+  STORYBOARD_SHOT_REQUIRED_FIELDS,
+  STORYBOARD_SOURCE_MEDIA_ROLES,
+  STORYBOARD_TABLE_REQUIRED_FIELDS,
+  classifyStoryboardMediaIdentity,
+  interpretStoryboardImageStrategies,
+  normalizeStoryboardTable,
+  projectStoryboardTableToCanvasPayload,
+  projectStoryboardTableToCutPayload,
+  validateStoryboardTable,
 } from '../storyboard-table';
 
 describe('storyboard table contract', () => {
   it('defines stable-core required fields as shared constants', () => {
-    expect(STORYBOARD_TABLE_V1_REQUIRED_FIELDS).toEqual([
-      'schemaVersion',
-      'kind',
-      'title',
-      'scenes',
-    ]);
-    expect(STORYBOARD_SCENE_V1_REQUIRED_FIELDS).toEqual(['sceneId', 'sceneTitle', 'shots']);
-    expect(STORYBOARD_SHOT_V1_REQUIRED_FIELDS).toEqual([
+    expect(STORYBOARD_TABLE_REQUIRED_FIELDS).toEqual(['schemaVersion', 'kind', 'title', 'scenes']);
+    expect(STORYBOARD_SCENE_REQUIRED_FIELDS).toEqual(['sceneId', 'sceneTitle', 'shots']);
+    expect(STORYBOARD_SHOT_REQUIRED_FIELDS).toEqual([
       'shotNumber',
       'duration',
       'visualDescription',
@@ -39,8 +34,8 @@ describe('storyboard table contract', () => {
   });
 
   it('accepts a strict semantic storyboard table with layered media refs', () => {
-    const profile: StoryboardTableProfileV1 = 'manga-to-video';
-    const table: StoryboardTableV1 = {
+    const profile: StoryboardTableProfile = 'manga-to-video';
+    const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
       profile,
@@ -116,18 +111,13 @@ describe('storyboard table contract', () => {
   });
 
   it('exports strategy and layered media role constants for validators', () => {
-    expect(STORYBOARD_SHOT_IMAGE_STRATEGIES_V1).toContain('transform-original');
-    expect(STORYBOARD_SOURCE_MEDIA_ROLES_V1).toEqual(['source', 'reference', 'thumbnail', 'mask']);
-    expect(STORYBOARD_GENERATED_MEDIA_ROLES_V1).toEqual([
-      'generated',
-      'derived',
-      'thumbnail',
-      'mask',
-    ]);
+    expect(STORYBOARD_SHOT_IMAGE_STRATEGIES).toContain('transform-original');
+    expect(STORYBOARD_SOURCE_MEDIA_ROLES).toEqual(['source', 'reference', 'thumbnail', 'mask']);
+    expect(STORYBOARD_GENERATED_MEDIA_ROLES).toEqual(['generated', 'derived', 'thumbnail', 'mask']);
   });
 
   it('models graded diagnostics without Agent or Webview dependencies', () => {
-    const diagnostic: StoryboardValidationDiagnosticV1 = {
+    const diagnostic: StoryboardValidationDiagnostic = {
       severity: 'profileHint',
       code: 'missing-profile-field',
       path: ['scenes', 0, 'shots', 0, 'cameraAngle'],
@@ -141,7 +131,7 @@ describe('storyboard table contract', () => {
   });
 
   it('reports stable-core required field errors as projection blockers', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Broken',
@@ -175,7 +165,7 @@ describe('storyboard table contract', () => {
   });
 
   it('keeps profile recommendations non-blocking', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       profile: 'script-breakdown',
@@ -211,7 +201,7 @@ describe('storyboard table contract', () => {
   });
 
   it('treats source-based image strategies without source refs as projection blockers', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Missing source',
@@ -246,7 +236,7 @@ describe('storyboard table contract', () => {
   });
 
   it('keeps decisionReason as display metadata, not validation input', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Reason only',
@@ -281,7 +271,7 @@ describe('storyboard table contract', () => {
   });
 
   it('rejects unsafe media references in structured storyboard payloads', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Unsafe refs',
@@ -331,7 +321,7 @@ describe('storyboard table contract', () => {
 
   it('classifies storyboard media identity without package-specific dependencies', () => {
     expect(
-      classifyStoryboardMediaIdentityV1(
+      classifyStoryboardMediaIdentity(
         {
           refId: 'page-1',
           role: 'source',
@@ -343,7 +333,7 @@ describe('storyboard table contract', () => {
     ).toMatchObject({ kind: 'stable', toolCallId: 'read-document-1' });
 
     expect(
-      classifyStoryboardMediaIdentityV1(
+      classifyStoryboardMediaIdentity(
         {
           refId: 'page-1',
           role: 'source',
@@ -354,7 +344,7 @@ describe('storyboard table contract', () => {
     ).toMatchObject({ kind: 'unresolved-tool-result', toolCallId: 'fabricated-call' });
 
     expect(
-      classifyStoryboardMediaIdentityV1(
+      classifyStoryboardMediaIdentity(
         {
           refId: 'page_1',
           role: 'source',
@@ -365,7 +355,7 @@ describe('storyboard table contract', () => {
     ).toMatchObject({ kind: 'ambiguous-alias', alias: 'page_1' });
 
     expect(
-      classifyStoryboardMediaIdentityV1({
+      classifyStoryboardMediaIdentity({
         refId: 'cache-path',
         role: 'source',
         locator: {
@@ -376,7 +366,7 @@ describe('storyboard table contract', () => {
     ).toMatchObject({ kind: 'unsafe-cache-path' });
 
     expect(
-      classifyStoryboardMediaIdentityV1({
+      classifyStoryboardMediaIdentity({
         refId: 'runtime-uri',
         role: 'source',
         locator: {
@@ -388,7 +378,7 @@ describe('storyboard table contract', () => {
     ).toMatchObject({ kind: 'runtime-only' });
 
     expect(
-      classifyStoryboardMediaIdentityV1({
+      classifyStoryboardMediaIdentity({
         refId: 'asset-stable',
         role: 'source',
         locator: { type: 'asset', assetId: 'asset-1', uri: '${WORKSPACE}/assets/page.jpg' },
@@ -397,7 +387,7 @@ describe('storyboard table contract', () => {
   });
 
   it('rejects runtime handles and fabricated tool ids as storyboard media identity', () => {
-    const result = validateStoryboardTableV1(
+    const result = validateStoryboardTable(
       {
         schemaVersion: 1,
         kind: 'storyboard-table',
@@ -480,7 +470,7 @@ describe('storyboard table contract', () => {
   });
 
   it('reports ambiguous aliases when validation receives request-scoped alias context', () => {
-    const result = validateStoryboardTableV1(
+    const result = validateStoryboardTable(
       {
         schemaVersion: 1,
         kind: 'storyboard-table',
@@ -528,7 +518,7 @@ describe('storyboard table contract', () => {
   });
 
   it('blocks generation when confirmation policy is pending', () => {
-    const result = interpretStoryboardImageStrategiesV1({
+    const result = interpretStoryboardImageStrategies({
       table: storyboardTable({ imageStrategy: 'generate-new', generationPrompt: 'frame' }),
       availableTools: [{ toolName: 'GenerateImage', supportsReferences: true }],
       userOverride: {
@@ -551,7 +541,7 @@ describe('storyboard table contract', () => {
   });
 
   it('rejects unsafe media refs and layered role drift', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Unsafe refs',
@@ -600,7 +590,7 @@ describe('storyboard table contract', () => {
   });
 
   it('normalizes legacy mediaRefs into layered refs by role', () => {
-    const result = normalizeStoryboardTableV1({
+    const result = normalizeStoryboardTable({
       value: {
         template: 'storyboard-table',
         title: 'Legacy',
@@ -639,7 +629,7 @@ describe('storyboard table contract', () => {
   });
 
   it('splits semantic legacy mediaRefs when layered refs are absent', () => {
-    const result = normalizeStoryboardTableV1({
+    const result = normalizeStoryboardTable({
       value: {
         schemaVersion: 1,
         kind: 'storyboard-table',
@@ -683,7 +673,7 @@ describe('storyboard table contract', () => {
   });
 
   it('preserves model-authored image alias fields as extension metadata', () => {
-    const result = normalizeStoryboardTableV1({
+    const result = normalizeStoryboardTable({
       value: {
         schemaVersion: 1,
         kind: 'storyboard-table',
@@ -723,7 +713,7 @@ describe('storyboard table contract', () => {
   });
 
   it('preserves model-authored source page fields as extension metadata', () => {
-    const result = normalizeStoryboardTableV1({
+    const result = normalizeStoryboardTable({
       value: {
         schemaVersion: 1,
         kind: 'storyboard-table',
@@ -758,7 +748,7 @@ describe('storyboard table contract', () => {
   });
 
   it('rejects non-serializable or un-namespaced extensions', () => {
-    const result = validateStoryboardTableV1({
+    const result = validateStoryboardTable({
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Extensions',
@@ -802,7 +792,7 @@ describe('storyboard table contract', () => {
   });
 
   it('projects valid semantic tables to Canvas and Cut payloads', () => {
-    const table: StoryboardTableV1 = {
+    const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Projection',
@@ -843,7 +833,7 @@ describe('storyboard table contract', () => {
       ],
     };
 
-    expect(projectStoryboardTableV1ToCanvasPayload(table)).toEqual({
+    expect(projectStoryboardTableToCanvasPayload(table)).toEqual({
       mode: 'semantic',
       sourceScriptUri: 'agent://storyboard-table/v1',
       scenes: [
@@ -878,7 +868,7 @@ describe('storyboard table contract', () => {
       ],
     });
 
-    expect(projectStoryboardTableV1ToCutPayload(table)).toEqual({
+    expect(projectStoryboardTableToCutPayload(table)).toEqual({
       projectName: 'Projection',
       shots: [
         {
@@ -896,7 +886,7 @@ describe('storyboard table contract', () => {
   });
 
   it('uses canvas fallback image resolvers when a semantic shot has no media refs', () => {
-    const table: StoryboardTableV1 = {
+    const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Projection',
@@ -942,7 +932,7 @@ describe('storyboard table contract', () => {
     });
 
     expect(
-      projectStoryboardTableV1ToCanvasPayload(table, {
+      projectStoryboardTableToCanvasPayload(table, {
         resolveFallbackImagePath: ({ shot }) =>
           shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
         resolveFallbackImageResourceRef: ({ shot }) =>
@@ -955,7 +945,7 @@ describe('storyboard table contract', () => {
       referenceResourceRef: cacheResourceRef,
     });
     expect(
-      projectStoryboardTableV1ToCanvasPayload(table, {
+      projectStoryboardTableToCanvasPayload(table, {
         resolveFallbackImagePath: ({ shot }) =>
           shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
         resolveFallbackImageResourceRef: ({ shot }) =>
@@ -1002,11 +992,9 @@ describe('storyboard table contract', () => {
       ],
     });
 
-    expect(validateStoryboardTableV1(table, { knownToolCallIds: ['read-document-1'] }).ok).toBe(
-      true,
-    );
+    expect(validateStoryboardTable(table, { knownToolCallIds: ['read-document-1'] }).ok).toBe(true);
     expect(
-      projectStoryboardTableV1ToCanvasPayload(table, {
+      projectStoryboardTableToCanvasPayload(table, {
         resolveImageResourceRef: ({ mediaRef }) =>
           mediaRef.refId === 'page-1' ? documentResourceRef : undefined,
         resolveImageUnifiedResourceRef: ({ mediaRef }) =>
@@ -1024,7 +1012,7 @@ describe('storyboard table contract', () => {
       sourceMediaRefs: [sourceMediaRef('source-1')],
     });
 
-    const result = interpretStoryboardImageStrategiesV1({
+    const result = interpretStoryboardImageStrategies({
       table,
       availableTools: [{ toolName: 'GenerateImage', supportsReferences: true }],
     });
@@ -1040,7 +1028,7 @@ describe('storyboard table contract', () => {
   });
 
   it('requires prompt, source refs, allowed generation, and provider capability', () => {
-    const missingPrompt = interpretStoryboardImageStrategiesV1({
+    const missingPrompt = interpretStoryboardImageStrategies({
       table: storyboardTable({ imageStrategy: 'generate-new' }),
       availableTools: [{ toolName: 'GenerateImage', supportsReferences: true }],
     });
@@ -1049,7 +1037,7 @@ describe('storyboard table contract', () => {
       imageStrategy: 'generate-new',
     });
 
-    const missingSource = interpretStoryboardImageStrategiesV1({
+    const missingSource = interpretStoryboardImageStrategies({
       table: storyboardTable({ imageStrategy: 'use-as-reference', generationPrompt: 'frame' }),
       availableTools: [{ toolName: 'GenerateImage', supportsReferences: true }],
     });
@@ -1058,7 +1046,7 @@ describe('storyboard table contract', () => {
       imageStrategy: 'use-as-reference',
     });
 
-    const missingCapability = interpretStoryboardImageStrategiesV1({
+    const missingCapability = interpretStoryboardImageStrategies({
       table: storyboardTable({ imageStrategy: 'generate-new', generationPrompt: 'frame' }),
       availableTools: [],
     });
@@ -1067,7 +1055,7 @@ describe('storyboard table contract', () => {
       imageStrategy: 'generate-new',
     });
 
-    const denied = interpretStoryboardImageStrategiesV1({
+    const denied = interpretStoryboardImageStrategies({
       table: storyboardTable({ imageStrategy: 'generate-new', generationPrompt: 'frame' }),
       availableTools: [{ toolName: 'GenerateImage', supportsReferences: true }],
       userOverride: {
@@ -1082,7 +1070,7 @@ describe('storyboard table contract', () => {
   });
 
   it('routes generate and transform strategies through available tool capabilities', () => {
-    const table: StoryboardTableV1 = {
+    const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
       title: 'Strategies',
@@ -1114,7 +1102,7 @@ describe('storyboard table contract', () => {
       ],
     };
 
-    const result = interpretStoryboardImageStrategiesV1({
+    const result = interpretStoryboardImageStrategies({
       table,
       availableTools: [
         { toolName: 'GenerateImage', supportsReferences: true },
@@ -1141,8 +1129,8 @@ describe('storyboard table contract', () => {
 });
 
 function storyboardTable(
-  shot: Partial<StoryboardTableV1['scenes'][number]['shots'][number]>,
-): StoryboardTableV1 {
+  shot: Partial<StoryboardTable['scenes'][number]['shots'][number]>,
+): StoryboardTable {
   return {
     schemaVersion: 1,
     kind: 'storyboard-table',

@@ -79,8 +79,9 @@ describe('createNekoCutCapabilityProvider', () => {
       executeAgentTool: vi.fn(async (): Promise<ToolResult> => ({ success: true })),
     } as unknown as TimelineToolBridge;
     const mediaService = {
-      generateVideo: vi.fn(),
-      waitForTask: vi.fn(),
+      generateImage: vi.fn(async () => ({ id: 'image-task' })),
+      generateVideo: vi.fn(async () => ({ id: 'video-task' })),
+      waitForTask: vi.fn(async () => ({ status: 'completed' })),
     };
 
     const provider = createNekoCutCapabilityProvider(createApi(), bridge);
@@ -89,5 +90,38 @@ describe('createNekoCutCapabilityProvider', () => {
       .map((tool) => tool.name);
 
     expect(names).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO_FOR_CLIP);
+  });
+
+  it('declares artifact facets without loading timeline implementations', () => {
+    const bridge = {
+      executeAgentTool: vi.fn(async (): Promise<ToolResult> => ({ success: true })),
+    } as unknown as TimelineToolBridge;
+    const provider = createNekoCutCapabilityProvider(createApi(), bridge);
+
+    expect(provider.getArtifactFacets?.(createContext())).toMatchObject({
+      renderers: [
+        {
+          id: 'renderer:neko-cut:generic-artifact-preview',
+          accepts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+          lazy: true,
+        },
+      ],
+      projectors: [
+        {
+          id: 'projector:storyboard-to-cut',
+          accepts: ['StoryboardTable'],
+          produces: ['CutStoryboardImportPayload'],
+          lazy: true,
+        },
+      ],
+      capabilities: [
+        {
+          capabilityId: 'cut.importStoryboard',
+          actions: ['cut.importStoryboard'],
+          requiresApproval: true,
+        },
+      ],
+    });
+    expect(bridge.executeAgentTool).not.toHaveBeenCalled();
   });
 });
