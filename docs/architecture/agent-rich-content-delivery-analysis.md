@@ -262,7 +262,7 @@ interface SendToMenuProps {
 
 ADR 定义的 `CompositeBlock`（storyboard-table / comparison / gallery / report）最初只在 agent webview 内渲染，缺少对应的 Send-to 投影器，导致一个完整分镜表格无法整体发送到 canvas。
 
-**当前状态**: `storyboard-table` 已支持投影到 `CanvasStoryboardPayload` 并发送到 Canvas，也可投影到 `cutStoryboard` 并发送到 Cut；`comparison` / `gallery` / `report` 仍保持文件级操作。
+**当前状态**: `storyboard-table` 已支持投影到 `CanvasStoryboardPayload` 并发送到 Canvas，也可投影到 `cutStoryboard` 并发送到 Cut；分镜表头部显示 Canvas / Timeline / Explorer 紧凑操作入口，窄面板可换行。若语义分镜有效但部分图片引用存在歧义或缺失，Agent 仍发送文字分镜结构到 Canvas，同时过滤不可携带的 `referenceImagePath`（如 `page_1`、Webview/blob/file URI、旧 scratch/cache 路径）并展示诊断；`comparison` / `gallery` / `report` 仍保持文件级操作。
 
 ---
 

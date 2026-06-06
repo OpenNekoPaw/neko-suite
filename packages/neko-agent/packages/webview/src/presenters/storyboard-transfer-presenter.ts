@@ -184,17 +184,20 @@ export function projectMarkdownStoryboardTransferPayload(
 export function projectStoryboardTableTransferPayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
-  if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
+  if (data.storyboardTable) {
     return {
       kind: 'canvasStoryboard',
-      storyboard: projectStoryboardTableV1ToCanvasPayload(data.storyboardTable, {
-        sourceScriptUri: 'agent://rich-content/storyboard-table',
-        resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
-        resolveImageResourceRef: ({ mediaRef }) =>
-          resolveStoryboardMediaResourceRef(data, mediaRef),
-        resolveImageUnifiedResourceRef: ({ mediaRef }) =>
-          resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
-      }),
+      storyboard: projectStoryboardTableV1ToCanvasPayload(
+        sanitizeStoryboardTableReferenceImagePaths(data.storyboardTable),
+        {
+          sourceScriptUri: 'agent://rich-content/storyboard-table',
+          resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
+          resolveImageResourceRef: ({ mediaRef }) =>
+            resolveStoryboardMediaResourceRef(data, mediaRef),
+          resolveImageUnifiedResourceRef: ({ mediaRef }) =>
+            resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
+        },
+      ),
     };
   }
   if (hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) return null;
@@ -218,7 +221,7 @@ export function projectStoryboardTableAssetBatch(
 export function projectStoryboardTableCutTimelinePayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
-  if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
+  if (data.storyboardTable) {
     const storyboard = projectStoryboardTableV1ToCutPayload(data.storyboardTable, {
       resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
     });
@@ -235,6 +238,40 @@ function resolveStoryboardMediaPath(
 ): string | undefined {
   const media = resolveStoryboardMedia(data, mediaRef);
   return getCanvasImageMediaPath(media);
+}
+
+function sanitizeStoryboardTableReferenceImagePaths(
+  table: NonNullable<StoryboardTableRichData['storyboardTable']>,
+): NonNullable<StoryboardTableRichData['storyboardTable']> {
+  let changed = false;
+  const scenes = table.scenes.map((scene) => {
+    let sceneChanged = false;
+    const shots = scene.shots.map((shot) => {
+      if (!shot.referenceImagePath || isPortableCanvasReferenceImagePath(shot.referenceImagePath)) {
+        return shot;
+      }
+      changed = true;
+      sceneChanged = true;
+      const { referenceImagePath: _referenceImagePath, ...rest } = shot;
+      return rest;
+    });
+    return sceneChanged ? { ...scene, shots } : scene;
+  });
+  return changed ? { ...table, scenes } : table;
+}
+
+function isPortableCanvasReferenceImagePath(value: string): boolean {
+  if (!value || value.startsWith('blob:') || value.startsWith('file:')) return false;
+  if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
+  if (/^p\d{1,4}$/i.test(value.trim())) return false;
+  const normalized = value.replace(/\\/g, '/').toLowerCase();
+  if (
+    normalized.includes('/document-image-cache/') ||
+    normalized.includes('/.neko/.cache/resources/')
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function resolveStoryboardMediaResourceRef(

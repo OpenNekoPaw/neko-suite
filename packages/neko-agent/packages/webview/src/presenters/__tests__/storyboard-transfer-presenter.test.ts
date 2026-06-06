@@ -931,6 +931,69 @@ describe('storyboard transfer presenter', () => {
     expect(projectStoryboardTableCutTimelinePayload(data)).toBeNull();
   });
 
+  it('keeps semantic storyboard canvas transfer available when only media refs are unresolved', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Media Ref Warning',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Media Ref Warning',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Page 1',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'The hero studies an unreadable page.',
+                characterAction: 'The hero leans closer.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'missing-page',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'missing-read-image',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      storyboardDiagnostics: [
+        {
+          severity: 'error',
+          code: 'unresolved-tool-result',
+          path: ['scenes', 0, 'shots', 0, 'sourceMediaRefs', 0],
+          message: 'Storyboard media references a tool result that is not available.',
+        },
+      ],
+      sections: [{ id: 'section-0', index: 0, heading: 'Shot 1', media: [], diagnostics: [] }],
+      diagnostics: [],
+    };
+
+    const payload = projectStoryboardTableTransferPayload(data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+
+    const shot = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shot).toMatchObject({
+      visualDescription: 'The hero studies an unreadable page.',
+      characterAction: 'The hero leans closer.',
+    });
+    expect(shot).not.toHaveProperty('referenceImagePath');
+    expect(shot).not.toHaveProperty('referenceImageResourceRef');
+    expect(projectStoryboardTableCutTimelinePayload(data)).toBeNull();
+  });
+
   it('projects markdown storyboard tables to canvas storyboard payloads', () => {
     const payload = projectMarkdownStoryboardTransferPayload(`
 ## 瑞德发现神灯

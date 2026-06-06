@@ -27,10 +27,10 @@ The system SHALL scope readable image aliases such as `page_1`, `P1`, `image_1`,
 - **THEN** the system MAY infer the image by row order
 - **THEN** the inferred binding records the selected tool call and asset index
 
-#### Scenario: Ambiguous alias blocks automatic Canvas transfer
+#### Scenario: Ambiguous alias keeps structured Canvas transfer safe
 - **WHEN** a storyboard row references an alias that maps to multiple image batches and no scope disambiguates it
-- **THEN** Send to Canvas reports a bounded diagnostic
-- **THEN** it does not silently assign a sequential image
+- **THEN** Send to Canvas can still send the semantic storyboard rows
+- **THEN** it reports a bounded diagnostic and omits the ambiguous image reference instead of silently assigning a sequential image
 
 ### Requirement: Runtime handles are separated from durable storyboard data
 The system SHALL keep local cache paths, projected Webview URIs, object URLs, blob URLs, preview tokens, and engine tokens out of durable storyboard and Canvas node data when a stable reference is available.

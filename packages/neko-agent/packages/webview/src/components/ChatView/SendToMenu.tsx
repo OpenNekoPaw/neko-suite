@@ -99,7 +99,7 @@ function SendToMenuComponent({
         <button
           key={target.id}
           onClick={() => handleSendTo(target.id)}
-          className="inline-flex h-6 items-center gap-1 rounded-md border border-[var(--agent-input-border)]
+          className="inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-[var(--agent-input-border)]
             bg-[var(--agent-surface)] px-2 text-[11px] text-[var(--agent-fg)]
             transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)]"
           title={`Open in ${target.label}`}

@@ -924,7 +924,16 @@ describe('composite content presenter', () => {
         code: 'ambiguous-media-alias',
       }),
     ]);
-    expect(projectStoryboardTableTransferPayload(projection.data)).toBeNull();
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+    const shot = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shot).toMatchObject({
+      visualDescription: 'Use page_1 as the reference.',
+    });
+    expect(shot).not.toHaveProperty('referenceImagePath');
+    expect(shot).not.toHaveProperty('referenceImageResourceRef');
   });
 
   it('preserves explicit sourceMediaRefs when duplicate readable aliases exist', () => {
@@ -1129,7 +1138,16 @@ describe('composite content presenter', () => {
         code: 'unresolved-tool-result',
       }),
     ]);
-    expect(projectStoryboardTableTransferPayload(projection.data)).toBeNull();
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    if (payload?.kind !== 'canvasStoryboard') {
+      throw new Error('expected canvas storyboard payload');
+    }
+    const shot = payload.storyboard.scenes[0]?.shotPlans[0];
+    expect(shot).toMatchObject({
+      visualDescription: 'Missing tool result should not be replaced by sequence.',
+    });
+    expect(shot).not.toHaveProperty('referenceImagePath');
+    expect(shot).not.toHaveProperty('referenceImageResourceRef');
   });
 
   it('repairs invented explicit tool result ids through a single eligible image batch', () => {

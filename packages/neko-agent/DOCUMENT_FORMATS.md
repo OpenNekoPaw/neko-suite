@@ -61,6 +61,7 @@ EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当
 - `sourceMediaRefs[].locator.type` 应引用真实工具结果，例如 `{ "type": "tool-result", "toolCallId": "...", "assetIndex": 0 }`。`sourcePage: "P1"`、`sourceImage: "page_1"` 这类可读字段只是 scoped alias，必须能映射到同一批工具结果。
 - 多次读取不同文件时，`page_1` 不是全局唯一标识；必须结合 `toolCallId`、`aliasScope`、源文档或批次判断。不能把第一批 `page_1` 自动绑定给后续所有分镜。
 - 不要把 `.neko/.cache/document-image-cache`、`globalStorageUri/document-image-cache`、Webview URI、blob/object URL、绝对本地 scratch 路径或旧 `cachePath` 写入 `referenceImagePath` 作为新 Canvas 传递身份。
+- 当语义分镜表已经有效但图片别名存在歧义或工具结果缺失时，Agent 仍可把文字分镜结构发送到 Canvas；发送前必须移除 `page_1`、旧 scratch/cache 路径、Webview/blob/file URI 等不可携带的 `referenceImagePath`，并在 Webview 展示诊断。
 - 实时预览可以走统一资源缓存和 Webview 投影；离线导出、打包、校验必须回到原始 source/locator 或可复建的 project resource ref，不能复制 preview/scratch 缓存文件。
 
 ## 结构化读取

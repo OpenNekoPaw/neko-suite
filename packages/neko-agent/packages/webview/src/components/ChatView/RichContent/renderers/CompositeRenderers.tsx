@@ -53,13 +53,14 @@ function StoryboardTableRendererComponent({
         }
         actions={
           plugins && (canvasPayload || cutPayload || assetBatchPayload) ? (
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
               {canvasPayload && (
                 <SendToMenu
                   payload={canvasPayload}
                   mediaType="image"
                   plugins={plugins}
                   allowedTargets={['canvas']}
+                  hidePrefixLabel
                 />
               )}
               {cutPayload && (
@@ -68,6 +69,7 @@ function StoryboardTableRendererComponent({
                   mediaType="image"
                   plugins={plugins}
                   allowedTargets={['cut']}
+                  hidePrefixLabel
                 />
               )}
               {assetBatchPayload && (
@@ -76,6 +78,7 @@ function StoryboardTableRendererComponent({
                   mediaType="image"
                   plugins={plugins}
                   allowedTargets={['explorer']}
+                  hidePrefixLabel
                 />
               )}
             </div>
@@ -410,11 +413,14 @@ function CompositeHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-[var(--agent-divider)] bg-[var(--agent-elevated)] px-2 py-1.5">
-      <span className="text-[12px] font-medium text-[var(--agent-fg)]">{title}</span>
-      <span className="flex-1" />
-      {actions}
-      <span className="text-[10px] text-[var(--agent-fg-secondary)]">{count}</span>
+    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--agent-divider)] bg-[var(--agent-elevated)] px-2 py-1.5">
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--agent-fg)]">
+        {title}
+      </span>
+      {actions ? (
+        <div className="flex max-w-full shrink-0 flex-wrap justify-end">{actions}</div>
+      ) : null}
+      <span className="shrink-0 text-[10px] text-[var(--agent-fg-secondary)]">{count}</span>
     </div>
   );
 }

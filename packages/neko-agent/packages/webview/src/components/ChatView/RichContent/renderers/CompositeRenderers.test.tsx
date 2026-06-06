@@ -171,6 +171,79 @@ describe('composite rich content renderers', () => {
     expect(screen.getByAltText('Original panel')).toBeTruthy();
   });
 
+  it('renders storyboard table transfer actions for available targets', () => {
+    registerDefaultRenderers();
+
+    renderWithI18n(
+      <RichContentRenderer
+        kind="storyboard-table"
+        data={
+          {
+            template: 'storyboard-table',
+            title: 'Transferable Storyboard',
+            plugins: { canvas: true, cut: true },
+            storyboardTable: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Transferable Storyboard',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'Page 1',
+                  shots: [
+                    {
+                      shotNumber: 1,
+                      duration: 3,
+                      visualDescription: 'A figure pauses at the cave entrance.',
+                      characterAction: 'The figure holds a lantern.',
+                      imageStrategy: 'reuse-original',
+                      sourceMediaRefs: [
+                        {
+                          refId: 'panel-1',
+                          role: 'source',
+                          locator: {
+                            type: 'tool-result',
+                            toolCallId: 'read-image',
+                            assetIndex: 0,
+                          },
+                          mimeType: 'image/jpeg',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            sections: [
+              {
+                id: 'section-0',
+                index: 0,
+                heading: 'Shot 1',
+                media: [
+                  {
+                    id: 'read-image:0:/repo/page-1.jpg',
+                    toolCallId: 'read-image',
+                    assetIndex: 0,
+                    type: 'image',
+                    src: 'webview://page-1.jpg',
+                    localPath: '/repo/page-1.jpg',
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+                diagnostics: [],
+              },
+            ],
+            diagnostics: [],
+          } satisfies StoryboardTableRichData
+        }
+      />,
+    );
+
+    expect(screen.getByTitle('Open in Canvas')).toBeTruthy();
+    expect(screen.getByTitle('Open in Timeline')).toBeTruthy();
+    expect(screen.getByTitle('Open in Explorer')).toBeTruthy();
+  });
+
   it('localizes semantic storyboard table field labels', () => {
     registerDefaultRenderers();
 
