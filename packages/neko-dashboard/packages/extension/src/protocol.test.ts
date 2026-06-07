@@ -35,6 +35,23 @@ describe('dashboard webview protocol guards', () => {
         },
       }),
     ).toBe(true);
+    expect(
+      isWebviewToExtensionMessage({
+        type: 'creativeEntityAction',
+        request: {
+          source: 'neko-story',
+          ref: {
+            source: 'neko-story',
+            sourceEntityId: 'entity:char_xiaoju',
+            entityId: 'char_xiaoju',
+            entityKind: 'character',
+            workspaceFolder: 'neko-test',
+          },
+          action: 'accept-memory-review',
+          memoryReviewId: 'review-obs-1',
+        },
+      }),
+    ).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'openProject', path: 'scene.nkv' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'cancelTask', taskId: 'neko-cut:1' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'createProject', projectType: 'video' })).toBe(true);

@@ -117,6 +117,24 @@ const detail: DashboardCreativeEntityDetail = {
       readonlyTarget: true,
     },
   ],
+  memoryReviews: [
+    {
+      reviewId: 'review-obs-1',
+      contributionId: 'contribution-page-1',
+      observationId: 'obs-1',
+      entityRef: row.ref,
+      sourcePackage: 'neko-agent',
+      sourceLabel: '漫画 OCR',
+      sourceKind: 'comic',
+      reviewPolicy: 'requires-user-review',
+      reviewStatus: 'needs-review',
+      dimensions: ['appearance', 'voice'],
+      summary: '小橘穿着橙色外套。',
+      evidenceText: 'P11 panel',
+      confidence: 0.82,
+      actions: ['accept-memory-review', 'reject-memory-review', 'mark-memory-conflict'],
+    },
+  ],
   freshness: 'fresh',
   actions: [
     { id: 'character-dialogue', label: 'Character Dialogue' },
@@ -167,6 +185,10 @@ describe('CreativeEntitiesSection', () => {
     expect(html).not.toContain('验证角色');
     expect(html).not.toContain('完善设定');
     expect(html).toContain('project://assets/xiaoju');
+    expect(html).toContain('记忆审阅');
+    expect(html).toContain('小橘穿着橙色外套。');
+    expect(html).toContain('待审阅');
+    expect(html).toContain('漫画 OCR');
     expect(html).toContain('Asset tags may be stale');
     expect(html).toContain('disabled=""');
   });
@@ -218,7 +240,7 @@ describe('CreativeEntitiesSection', () => {
       />,
     );
 
-    for (const label of ['角色对话', '代入角色']) {
+    for (const label of ['角色对话', '代入角色', '接受']) {
       const button = findButtonByText(host, label);
       expect(button, label).not.toBeNull();
       act(() => {
@@ -226,7 +248,7 @@ describe('CreativeEntitiesSection', () => {
       });
     }
 
-    expect(onAction).toHaveBeenCalledTimes(2);
+    expect(onAction).toHaveBeenCalledTimes(3);
     expect(onAction).toHaveBeenNthCalledWith(1, {
       source: row.ref.source,
       ref: row.ref,
@@ -236,6 +258,12 @@ describe('CreativeEntitiesSection', () => {
       source: row.ref.source,
       ref: row.ref,
       action: 'embody-character',
+    });
+    expect(onAction).toHaveBeenNthCalledWith(3, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'accept-memory-review',
+      memoryReviewId: 'review-obs-1',
     });
   });
 

@@ -1,9 +1,15 @@
 import type {
+  CharacterEvidenceLedgerStore,
+  CharacterMemoryFile,
+  CharacterMemoryReviewStatus,
+  CharacterObservation,
   CreativeEntity,
   CreativeEntityCandidate,
   DashboardCreativeEntityActionRequest,
   DashboardCreativeEntityActionResult,
   DashboardCreativeEntityDetail,
+  DashboardEntityMemoryReviewAction,
+  DashboardEntityMemoryReviewItem,
   DashboardCreativeEntityEvent,
   DashboardCreativeEntityRef,
   DashboardCreativeEntityRow,
@@ -14,6 +20,7 @@ import type {
   EntityAssetRequirement,
   VisualIdentityDraft,
 } from '@neko/shared';
+import { updateCharacterObservationReviewStatus } from '@neko/shared';
 import {
   isNpcTestMode,
   NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
@@ -51,34 +58,55 @@ export interface EntityDashboardSourceOptions {
   readonly subscribe?: (
     listener: (event: DashboardCreativeEntityEvent) => void,
   ) => EntityDisposable;
+  readonly characterMemory?: {
+    readonly path: string;
+    readonly store: CharacterEvidenceLedgerStore;
+  };
   readonly executeCommand?: (command: string, ...args: unknown[]) => Promise<unknown>;
   readonly now?: () => string;
 }
+
+type ReviewableCharacterObservation = CharacterObservation & {
+  readonly reviewStatus: Exclude<CharacterMemoryReviewStatus, 'accepted'>;
+};
 
 export class EntityDashboardCreativeEntitySource implements DashboardCreativeEntitySource {
   readonly contractVersion = DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION;
   readonly source = 'neko-entity';
   readonly sourceDisplayName = 'Neko Entity';
-  readonly capabilities = {
-    detail: true,
-    syncSuggestions: true,
-    actions: [
-      'show-detail',
-      'confirm-candidate',
-      'edit-aliases',
-      'bind-existing',
-      'review-drafts',
-      'handle-requirement',
-      'generate-material',
-      'import-material',
-      'dismiss-requirement',
-      'character-dialogue',
-      'embody-character',
-      'refresh',
-    ],
-  } satisfies DashboardCreativeEntitySource['capabilities'];
 
   constructor(private readonly options: EntityDashboardSourceOptions) {}
+
+  get capabilities(): DashboardCreativeEntitySource['capabilities'] {
+    const memoryActions: readonly DashboardEntityMemoryReviewAction[] = this.options.characterMemory
+      ? [
+          'accept-memory-review',
+          'reject-memory-review',
+          'mark-memory-conflict',
+          'supersede-memory-review',
+        ]
+      : [];
+    return {
+      detail: true,
+      syncSuggestions: true,
+      ...(this.options.characterMemory ? { memoryReviews: true } : {}),
+      actions: [
+        'show-detail',
+        'confirm-candidate',
+        'edit-aliases',
+        'bind-existing',
+        'review-drafts',
+        'handle-requirement',
+        'generate-material',
+        'import-material',
+        'dismiss-requirement',
+        'character-dialogue',
+        'embody-character',
+        ...memoryActions,
+        'refresh',
+      ],
+    };
+  }
 
   async getSnapshot(): Promise<DashboardCreativeEntitySnapshot> {
     const [entities, candidates, bindings, requirements, drafts] = await Promise.all([
@@ -129,7 +157,8 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       this.options.service.requirements.list(),
       this.options.service.drafts.list(),
     ]);
-    return projectEntityDetail(entity, bindings, requirements, drafts);
+    const memoryReviews = await this.projectMemoryReviews(entity);
+    return projectEntityDetail(entity, bindings, requirements, drafts, memoryReviews);
   }
 
   async executeAction(
@@ -152,6 +181,11 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
           return this.executeNpcTestAction(entityId, request);
         case 'embody-character':
           return this.executeNpcWorkflowAction(request.action, entityId, request);
+        case 'accept-memory-review':
+        case 'reject-memory-review':
+        case 'mark-memory-conflict':
+        case 'supersede-memory-review':
+          return this.executeMemoryReviewAction(request.action, request);
         case 'confirm-candidate':
           if (!candidateId) return { ok: false, message: 'No candidate ref is available.' };
           await this.options.service.confirmCandidate({ candidateId });
@@ -290,6 +324,67 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     return { ok: true, refresh: true, ref: request.ref };
   }
 
+  private async projectMemoryReviews(
+    entity: CreativeEntity,
+  ): Promise<readonly DashboardEntityMemoryReviewItem[] | undefined> {
+    if (!this.options.characterMemory || entity.kind !== 'character') return undefined;
+    const memory = await this.options.characterMemory.store.load(this.options.characterMemory.path);
+    if (!memory) return undefined;
+    const ref = entityRef(entity);
+    const reviews = memory.ledger.observations
+      .filter((observation) => shouldShowMemoryReview(observation, entity.id))
+      .map((observation) => projectMemoryReviewItem(observation, ref));
+    return reviews.length > 0 ? reviews : undefined;
+  }
+
+  private async executeMemoryReviewAction(
+    action: DashboardEntityMemoryReviewAction,
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    if (!this.options.characterMemory) {
+      return {
+        ok: false,
+        message: 'Character memory review is not available.',
+        ref: request.ref,
+      };
+    }
+    const reviewId = request.memoryReviewId;
+    if (!reviewId) {
+      return { ok: false, message: 'No memory review id is available.', ref: request.ref };
+    }
+    const memory = await this.options.characterMemory.store.load(this.options.characterMemory.path);
+    if (!memory) {
+      return { ok: false, message: 'Character memory file is not available.', ref: request.ref };
+    }
+    if (!memory.ledger.observations.some((observation) => observation.observationId === reviewId)) {
+      return {
+        ok: false,
+        message: `Character memory review was not found: ${reviewId}`,
+        ref: request.ref,
+      };
+    }
+
+    const updatedAt = this.now();
+    const result = updateMemoryReviewStatus(memory, reviewId, action, updatedAt);
+    if (result.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+      return {
+        ok: false,
+        message: result.diagnostics.map((diagnostic) => diagnostic.message).join('; '),
+        ref: request.ref,
+      };
+    }
+
+    await this.options.characterMemory.store.save(this.options.characterMemory.path, result.memory);
+    return {
+      ok: true,
+      refresh: true,
+      ref: request.ref,
+      ...(result.diagnostics.length > 0
+        ? { message: result.diagnostics.map((diagnostic) => diagnostic.message).join('; ') }
+        : {}),
+    };
+  }
+
   private now(): string {
     return this.options.now?.() ?? new Date().toISOString();
   }
@@ -361,6 +456,7 @@ function projectEntityDetail(
   bindings: readonly EntityAssetBinding[],
   requirements: readonly EntityAssetRequirement[],
   drafts: readonly VisualIdentityDraft[],
+  memoryReviews?: readonly DashboardEntityMemoryReviewItem[],
 ): DashboardCreativeEntityDetail {
   const ref = entityRef(entity);
   const bindingSummaries = bindings
@@ -418,6 +514,7 @@ function projectEntityDetail(
             }))
         : [],
     syncSuggestions: [],
+    ...(memoryReviews ? { memoryReviews } : {}),
     freshness: 'fresh',
     actions: entityActions(entity.kind, 'detail'),
   };
@@ -528,6 +625,103 @@ function characterRoleWorkflowActions(
       ...(disabled ? { disabled, reason: disabledReason } : {}),
     },
   ];
+}
+
+function shouldShowMemoryReview(
+  observation: CharacterObservation,
+  entityId: string,
+): observation is ReviewableCharacterObservation {
+  return (
+    observation.entityRef?.entityId === entityId &&
+    observation.reviewStatus !== 'accepted' &&
+    observation.reviewStatus !== 'superseded' &&
+    observation.reviewStatus !== 'rejected'
+  );
+}
+
+function projectMemoryReviewItem(
+  observation: ReviewableCharacterObservation,
+  entityRef: DashboardCreativeEntityRef,
+): DashboardEntityMemoryReviewItem {
+  return {
+    reviewId: observation.observationId,
+    observationId: observation.observationId,
+    entityRef,
+    sourcePackage: observation.provenance.providerId ?? observation.provenance.source,
+    ...(observation.provenance.providerId
+      ? { sourceLabel: observation.provenance.providerId }
+      : {}),
+    sourceKind: observation.provenance.source,
+    reviewPolicy: observation.reviewStatus === 'draft' ? 'draft-only' : 'requires-user-review',
+    reviewStatus: observation.reviewStatus,
+    dimensions: observation.dimensions.map((dimension) => dimension.dimension),
+    summary: summarizeObservation(observation),
+    ...(observation.notes ? { evidenceText: observation.notes } : {}),
+    ...(observation.confidence !== undefined ? { confidence: observation.confidence } : {}),
+    ...(observation.createdAt ? { createdAt: observation.createdAt } : {}),
+    actions: memoryReviewActions(observation.reviewStatus),
+  };
+}
+
+function summarizeObservation(observation: CharacterObservation): string {
+  const notes = observation.dimensions
+    .map((dimension) =>
+      dimension.note && dimension.note.trim().length > 0
+        ? dimension.note.trim()
+        : `${dimension.dimension}: ${formatMemoryValue(dimension.value)}`,
+    )
+    .filter((value) => value.length > 0);
+  return notes[0] ?? observation.notes ?? observation.observationId;
+}
+
+function formatMemoryValue(value: CharacterObservation['dimensions'][number]['value']): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null) return 'null';
+  return JSON.stringify(value);
+}
+
+function memoryReviewActions(
+  status: CharacterMemoryReviewStatus,
+): readonly DashboardEntityMemoryReviewAction[] {
+  if (status === 'accepted' || status === 'rejected' || status === 'superseded') return [];
+  return [
+    'accept-memory-review',
+    'reject-memory-review',
+    'mark-memory-conflict',
+    'supersede-memory-review',
+  ];
+}
+
+function updateMemoryReviewStatus(
+  memory: CharacterMemoryFile,
+  observationId: string,
+  action: DashboardEntityMemoryReviewAction,
+  updatedAt: string,
+): ReturnType<typeof updateCharacterObservationReviewStatus> {
+  switch (action) {
+    case 'accept-memory-review':
+      return updateCharacterObservationReviewStatus(memory, observationId, 'accepted', {
+        reviewer: 'dashboard',
+        updatedAt,
+      });
+    case 'reject-memory-review':
+      return updateCharacterObservationReviewStatus(memory, observationId, 'rejected', {
+        reviewer: 'dashboard',
+        updatedAt,
+      });
+    case 'supersede-memory-review':
+      return updateCharacterObservationReviewStatus(memory, observationId, 'superseded', {
+        reviewer: 'dashboard',
+        updatedAt,
+      });
+    case 'mark-memory-conflict':
+      return updateCharacterObservationReviewStatus(memory, observationId, 'conflict', {
+        reviewer: 'dashboard',
+        updatedAt,
+        notes: 'Marked as conflict from Dashboard review.',
+      });
+  }
 }
 
 function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {

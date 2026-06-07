@@ -4,11 +4,18 @@ import {
   NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
   NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
 } from '@neko/shared/types/npc-test-bench';
+import {
+  addCharacterObservation,
+  createEmptyCharacterMemoryFile,
+  type CharacterMemoryFile,
+  type CharacterEvidenceLedgerStore,
+} from '@neko/shared';
 import { CreativeEntityService } from '../core/CreativeEntityService';
 import { EntityDashboardCreativeEntitySource } from '../dashboard/source';
 import { createEntitySearchAdapter } from '../projections';
 import { createEntitySearchAdapter as createEntitySearchAdapterCompat } from '../search';
 import { MemoryEntityFileStore, createFixedClock } from '../testing';
+import { resolveCharacterMemoryPath } from '../core/paths';
 
 const projectRoot = '/workspace/neko-test';
 const now = '2026-05-18T00:00:00.000Z';
@@ -230,6 +237,87 @@ describe('neko-entity dashboard and search adapters', () => {
     );
   });
 
+  it('projects and accepts reviewable character memory through the neutral Dashboard source', async () => {
+    const service = createService();
+    await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
+    const memoryStore = new MemoryCharacterEvidenceLedgerStore(
+      addCharacterObservation(createEmptyCharacterMemoryFile(projectRoot), {
+        observationId: 'obs-xiaoju-coat',
+        sourceRef: {
+          kind: 'tool-result',
+          toolCallId: 'readimage-current-result',
+          assetIndex: 0,
+        },
+        provenance: {
+          source: 'comic',
+          providerId: 'neko-agent',
+          observedAt: now,
+        },
+        reviewStatus: 'needs-review',
+        entityRef: {
+          entityId: 'char_xiaoju',
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-entity',
+        },
+        dimensions: [
+          {
+            dimension: 'appearance',
+            value: 'orange coat',
+            confidence: 0.82,
+            note: '小橘穿着橙色外套。',
+          },
+        ],
+        confidence: 0.82,
+        createdAt: now,
+      }).memory,
+    );
+    const source = new EntityDashboardCreativeEntitySource({
+      projectRoot,
+      service,
+      characterMemory: {
+        path: resolveCharacterMemoryPath(projectRoot),
+        store: memoryStore,
+      },
+      now: () => now,
+    });
+    const ref = {
+      source: 'neko-entity',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character' as const,
+    };
+
+    const detail = await source.getDetail(ref);
+
+    expect(source.capabilities?.memoryReviews).toBe(true);
+    expect(detail?.memoryReviews).toEqual([
+      expect.objectContaining({
+        reviewId: 'obs-xiaoju-coat',
+        sourcePackage: 'neko-agent',
+        sourceKind: 'comic',
+        reviewStatus: 'needs-review',
+        dimensions: ['appearance'],
+        summary: '小橘穿着橙色外套。',
+        actions: expect.arrayContaining(['accept-memory-review', 'reject-memory-review']),
+      }),
+    ]);
+
+    await expect(
+      source.executeAction({
+        source: 'neko-entity',
+        ref,
+        action: 'accept-memory-review',
+        memoryReviewId: 'obs-xiaoju-coat',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: true, ref }));
+    expect(
+      memoryStore.saved?.ledger.observations.find(
+        (observation) => observation.observationId === 'obs-xiaoju-coat',
+      )?.reviewStatus,
+    ).toBe('accepted');
+  });
+
   it('exposes read-only entity projections for project search', async () => {
     const service = createService();
     await service.createEntity({
@@ -275,4 +363,22 @@ function createService(): CreativeEntityService {
       clock: createFixedClock(now),
     },
   });
+}
+
+class MemoryCharacterEvidenceLedgerStore implements CharacterEvidenceLedgerStore {
+  saved: CharacterMemoryFile | undefined;
+
+  constructor(private readonly memory: CharacterMemoryFile) {}
+
+  async load(): Promise<CharacterMemoryFile> {
+    return clone(this.saved ?? this.memory);
+  }
+
+  async save(_path: string, memory: CharacterMemoryFile): Promise<void> {
+    this.saved = clone(memory);
+  }
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }

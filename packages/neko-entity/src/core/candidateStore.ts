@@ -65,6 +65,44 @@ export class EntityCandidateStore {
   async propose(input: CreateEntityCandidateInput): Promise<CreativeEntityCandidate> {
     const now = nowFromPorts(this.options.ports);
     const id = input.id ?? `candidate:${input.kind}:${buildEntityId(input.kind, input.name)}`;
+    const existing = await this.get(id);
+    if (existing && existing.status !== 'open') {
+      return existing;
+    }
+
+    if (existing) {
+      const candidate: CreativeEntityCandidate = {
+        ...existing,
+        aliases: normalizeAliasList([...(existing.aliases ?? []), ...(input.aliases ?? [])]),
+        confidence: maxConfidence(existing.confidence, input.confidence),
+        provenance: mergeProvenance(existing.provenance, input.provenance),
+        sourceRefs:
+          input.sourceRefs && input.sourceRefs.length > 0
+            ? uniqueStrings([...existing.sourceRefs, ...input.sourceRefs])
+            : uniqueStrings([
+                ...existing.sourceRefs,
+                ...input.provenance
+                  .map((item) => item.sourceRef)
+                  .filter((sourceRef): sourceRef is string => Boolean(sourceRef)),
+              ]),
+        ...(input.suggestedRequirements
+          ? {
+              suggestedRequirements: [
+                ...(existing.suggestedRequirements ?? []),
+                ...input.suggestedRequirements,
+              ],
+            }
+          : {}),
+        metadata: {
+          ...(existing.metadata ?? {}),
+          ...(input.metadata ?? {}),
+        },
+        updatedAt: now,
+      };
+      await this.upsert(candidate);
+      return candidate;
+    }
+
     const candidate: CreativeEntityCandidate = {
       id,
       kind: input.kind,
@@ -154,4 +192,29 @@ export function createEmptyCreativeEntityCandidateFile(): CreativeEntityCandidat
 
 function compareCandidates(a: CreativeEntityCandidate, b: CreativeEntityCandidate): number {
   return a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+}
+
+function maxConfidence(left: number | undefined, right: number | undefined): number | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return Math.max(left, right);
+}
+
+function mergeProvenance(
+  left: readonly CreativeEntityCandidate['provenance'][number][],
+  right: readonly CreativeEntityCandidate['provenance'][number][],
+): readonly CreativeEntityCandidate['provenance'][number][] {
+  const seen = new Set<string>();
+  const merged: CreativeEntityCandidate['provenance'][number][] = [];
+  for (const item of [...left, ...right]) {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return Array.from(new Set(values));
 }

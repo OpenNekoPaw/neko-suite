@@ -175,6 +175,15 @@ describe('DashboardProvider', () => {
       type: 'creativeEntityAction',
       request: { source: 'neko-story', ref: entityRef, action: 'bind-existing', role: 'portrait' },
     });
+    await receiveMessage?.({
+      type: 'creativeEntityAction',
+      request: {
+        source: 'neko-story',
+        ref: entityRef,
+        action: 'accept-memory-review',
+        memoryReviewId: 'review-obs-1',
+      },
+    });
     await receiveMessage?.({ type: 'refreshCreativeEntities' });
 
     expect(creativeEntityAggregator.getDetail).toHaveBeenCalledWith(entityRef);
@@ -183,6 +192,12 @@ describe('DashboardProvider', () => {
       ref: entityRef,
       action: 'bind-existing',
       role: 'portrait',
+    });
+    expect(creativeEntityAggregator.executeAction).toHaveBeenCalledWith({
+      source: 'neko-story',
+      ref: entityRef,
+      action: 'accept-memory-review',
+      memoryReviewId: 'review-obs-1',
     });
     expect(creativeEntityAggregator.refreshSources).toHaveBeenCalledTimes(2);
     expect(postMessage).toHaveBeenCalledWith({

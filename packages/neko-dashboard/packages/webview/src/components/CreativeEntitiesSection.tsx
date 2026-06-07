@@ -7,6 +7,8 @@ import {
   type DashboardCreativeEntityDetail,
   type DashboardCreativeEntityRef,
   type DashboardCreativeEntityRow,
+  type DashboardEntityMemoryReviewAction,
+  type DashboardEntityMemoryReviewItem,
 } from '@neko/shared/types/dashboard-creative-entity';
 import {
   filterAndSortCreativeEntities,
@@ -261,6 +263,7 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
         title={t('creativeEntities.detail.visualDrafts')}
         value={formatDrafts(detail, t)}
       />
+      <MemoryReviews detail={detail} onAction={onAction} />
       <SyncSuggestions detail={detail} onAction={onAction} />
       <div className="detail-actions">
         {detail.actions.map((action) => (
@@ -268,6 +271,86 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
         ))}
       </div>
     </aside>
+  );
+}
+
+function MemoryReviews({
+  detail,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  const reviews = detail.memoryReviews ?? [];
+  if (reviews.length === 0) {
+    return (
+      <DetailBlock
+        title={t('creativeEntities.detail.memoryReviews')}
+        value={t('creativeEntities.detail.none')}
+      />
+    );
+  }
+
+  return (
+    <div className="detail-block">
+      <div className="detail-block-title">{t('creativeEntities.detail.memoryReviews')}</div>
+      <div className="detail-list">
+        {reviews.map((review) => (
+          <MemoryReviewItem
+            key={review.reviewId}
+            detail={detail}
+            review={review}
+            onAction={onAction}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MemoryReviewItem({
+  detail,
+  review,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly review: DashboardEntityMemoryReviewItem;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="detail-list-item">
+      <div>
+        <div>
+          {review.summary} · {t(`creativeEntities.memoryStatus.${review.reviewStatus}`)}
+        </div>
+        <div className="muted-line">
+          {review.sourceLabel ?? review.sourcePackage} · {review.sourceKind} ·{' '}
+          {review.dimensions.join(', ')}
+        </div>
+        {review.evidenceText ? <div className="muted-line">{review.evidenceText}</div> : null}
+      </div>
+      <div className="button-row">
+        {review.actions.map((action) => (
+          <Button
+            key={action}
+            size="xs"
+            variant={action === 'accept-memory-review' ? 'default' : 'secondary'}
+            onClick={() =>
+              onAction({
+                source: detail.ref.source,
+                ref: detail.ref,
+                action,
+                memoryReviewId: review.reviewId,
+              })
+            }
+          >
+            {memoryReviewActionLabel(action, t)}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -334,6 +417,15 @@ function SyncSuggestions({
       </div>
     </div>
   );
+}
+
+function memoryReviewActionLabel(
+  action: DashboardEntityMemoryReviewAction,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const key = `creativeEntities.memoryAction.${action}`;
+  const label = t(key);
+  return label === key ? action : label;
 }
 
 function ActionButton({

@@ -7,13 +7,23 @@ import type {
   CreativeEntityChangeEvent,
   DashboardCreativeEntityEvent,
   DashboardCreativeEntitySourceRequest,
+  EntityMemoryContribution,
 } from '@neko/shared';
-import { createEmptyCharacterRegistryFile } from '@neko/shared';
+import {
+  createCharacterEvidenceLedgerStore,
+  createEmptyCharacterRegistryFile,
+  isEntityMemoryContribution,
+} from '@neko/shared';
 import {
   isDashboardCreativeEntitySourceRequest,
   toDashboardCreativeEntityId,
 } from '@neko/shared/types/dashboard-creative-entity';
 import { CreativeEntityService } from '../core/CreativeEntityService';
+import {
+  EntityContributionAutomationService,
+  type EntityContributionAutomationOptions,
+  type EntityContributionAutomationResult,
+} from '../core/contributionAutomation';
 import {
   EntityAssetBindingService,
   EntityAssetRequirementService,
@@ -23,7 +33,7 @@ import { CreativeEntityRegistryService, ProjectEntityStore } from '../core/entit
 import type { EntityRuntimeFileStore, EntityRuntimePorts } from '../core/ports';
 import { SerialEntityRuntimeLock } from '../core/ports';
 import { EntityDashboardCreativeEntitySource } from '../dashboard/source';
-import { resolveCharacterRegistryPath } from '../core/paths';
+import { resolveCharacterMemoryPath, resolveCharacterRegistryPath } from '../core/paths';
 
 export class NodeJsonEntityFileStore implements EntityRuntimeFileStore {
   async readJson(filePath: string): Promise<unknown | undefined> {
@@ -136,6 +146,16 @@ export interface VSCodeDashboardEntitySourceCommandOptions {
   readonly logger?: VSCodeEntityRuntimeOptions['logger'];
 }
 
+export interface VSCodeEntityContributionAutomationCommandOptions extends VSCodeDashboardEntitySourceCommandOptions {
+  readonly automation?: EntityContributionAutomationOptions;
+}
+
+export interface VSCodeEntityContributionAutomationRequest {
+  readonly projectRoot?: string;
+  readonly contribution: EntityMemoryContribution;
+  readonly options?: EntityContributionAutomationOptions;
+}
+
 export function createVSCodeEntityRuntime(options: VSCodeEntityRuntimeOptions): {
   readonly service: CreativeEntityService;
   readonly ports: EntityRuntimePorts;
@@ -207,11 +227,37 @@ export function createVSCodeEntityServices(options: VSCodeEntityRuntimeOptions):
 
 export function createVSCodeDashboardEntitySource(options: VSCodeEntityRuntimeOptions) {
   const runtime = createVSCodeEntityRuntime(options);
+  const characterMemoryPath = resolveCharacterMemoryPath(options.projectRoot);
   return {
     runtime,
     source: new EntityDashboardCreativeEntitySource({
       projectRoot: options.projectRoot,
       service: runtime.service,
+      characterMemory: {
+        path: characterMemoryPath,
+        store: createCharacterEvidenceLedgerStore({
+          async readFile(filePath) {
+            return fs.readFile(filePath, 'utf8');
+          },
+          async writeFile(filePath, content) {
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
+            const tmpPath = `${filePath}.tmp`;
+            await fs.writeFile(tmpPath, content, 'utf8');
+            await fs.rename(tmpPath, filePath);
+          },
+          async exists(filePath) {
+            try {
+              await fs.access(filePath);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          async mkdir(directoryPath) {
+            await fs.mkdir(directoryPath, { recursive: true });
+          },
+        }),
+      },
       executeCommand: async (command, ...args) => vscode.commands.executeCommand(command, ...args),
       subscribe(listener) {
         const disposable = runtime.onDidChangeEntity((event) => {
@@ -279,6 +325,91 @@ export function registerDashboardEntitySourceCommand(
       cached.clear();
     },
   };
+}
+
+export function registerEntityContributionAutomationCommand(
+  options: VSCodeEntityContributionAutomationCommandOptions = {},
+) {
+  const cached = new Map<string, ReturnType<typeof createVSCodeEntityRuntime>>();
+  const command = vscode.commands.registerCommand(
+    'neko.entity.processMemoryContribution',
+    async (
+      request: VSCodeEntityContributionAutomationRequest | unknown,
+    ): Promise<EntityContributionAutomationResult | undefined> => {
+      if (!isEntityContributionAutomationRequest(request)) {
+        throw new Error('neko.entity.processMemoryContribution: invalid request');
+      }
+      const projectRoot =
+        options.projectRoot ??
+        request.projectRoot ??
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!projectRoot) {
+        return undefined;
+      }
+      const runtime =
+        cached.get(projectRoot) ??
+        createVSCodeEntityRuntime({
+          projectRoot,
+          logger: options.logger,
+        });
+      cached.set(projectRoot, runtime);
+      const automation = new EntityContributionAutomationService(runtime.service);
+      return automation.processContribution(request.contribution, {
+        ...options.automation,
+        ...request.options,
+      });
+    },
+  );
+  return {
+    dispose() {
+      command.dispose();
+      for (const runtime of cached.values()) {
+        runtime.dispose();
+      }
+      cached.clear();
+    },
+  };
+}
+
+function isEntityContributionAutomationRequest(
+  value: unknown,
+): value is VSCodeEntityContributionAutomationRequest {
+  if (!isRecord(value)) return false;
+  return (
+    (value['projectRoot'] === undefined || typeof value['projectRoot'] === 'string') &&
+    isEntityMemoryContribution(value['contribution']) &&
+    (value['options'] === undefined || isContributionAutomationOptions(value['options']))
+  );
+}
+
+function isContributionAutomationOptions(
+  value: unknown,
+): value is EntityContributionAutomationOptions {
+  if (!isRecord(value)) return false;
+  return (
+    (value['mode'] === undefined ||
+      value['mode'] === 'match-only' ||
+      value['mode'] === 'candidate' ||
+      value['mode'] === 'confirm-source-approved') &&
+    (value['defaultKind'] === undefined ||
+      value['defaultKind'] === 'character' ||
+      value['defaultKind'] === 'scene' ||
+      value['defaultKind'] === 'object' ||
+      value['defaultKind'] === 'location' ||
+      value['defaultKind'] === 'style') &&
+    (value['minimumCandidateConfidence'] === undefined ||
+      isUnitNumber(value['minimumCandidateConfidence'])) &&
+    (value['minimumAutoConfirmConfidence'] === undefined ||
+      isUnitNumber(value['minimumAutoConfirmConfidence']))
+  );
+}
+
+function isUnitNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export { toDashboardCreativeEntityId };

@@ -42,6 +42,10 @@ export function resolveEntityAssetRequirementsPath(projectRoot: string): string 
   return joinProjectPath(projectRoot, 'neko', 'entity-asset-requirements.json');
 }
 
+export function resolveCharacterMemoryPath(projectRoot: string): string {
+  return joinProjectPath(projectRoot, 'neko', 'character-memory.json');
+}
+
 export function assertGitTrackedEntityFactPath(filePath: string): void {
   const normalized = normalizePath(filePath);
   if (/(?:^|\/)\.neko\/\.cache(?:\/|$)/i.test(normalized)) {

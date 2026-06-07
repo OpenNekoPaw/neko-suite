@@ -180,12 +180,26 @@ describe('CreativeEntitySourceAggregator', () => {
         role: 'portrait',
       }),
     ).resolves.toEqual({ ok: true, refresh: false, ref });
+    await expect(
+      aggregator.executeAction({
+        source: 'neko-story',
+        ref,
+        action: 'accept-memory-review',
+        memoryReviewId: 'review-obs-1',
+      }),
+    ).resolves.toEqual({ ok: true, refresh: false, ref });
 
     expect(executeAction).toHaveBeenCalledWith({
       source: 'neko-story',
       ref,
       action: 'bind-existing',
       role: 'portrait',
+    });
+    expect(executeAction).toHaveBeenCalledWith({
+      source: 'neko-story',
+      ref,
+      action: 'accept-memory-review',
+      memoryReviewId: 'review-obs-1',
     });
     aggregator.dispose();
   });
