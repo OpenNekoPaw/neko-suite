@@ -45,6 +45,12 @@ export interface BaseGeneratedAsset {
   characterIds?: readonly string[];
   /** Source canvas node or upstream node identifier for lineage tracing */
   sourceNodeId?: string;
+  /** Source dialogue/voice cue identifier for generated audio or lip-sync lineage. */
+  sourceCueId?: string;
+  /** Speaker creative entity identifier for generated dialogue audio lineage. */
+  speakerEntityId?: string;
+  /** Voice representation or voice asset used by generated dialogue audio. */
+  voiceAssetId?: string;
 }
 
 // -----------------------------------------------------------------------------

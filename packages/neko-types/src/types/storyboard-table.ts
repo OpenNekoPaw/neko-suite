@@ -1,4 +1,5 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
+import type { CreativeEntityRef, RepresentationKind } from './creative-entity-asset-composition';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
@@ -39,6 +40,15 @@ export const STORYBOARD_GENERATED_MEDIA_ROLES = [
   'derived',
   'thumbnail',
   'mask',
+] as const;
+
+export const STORYBOARD_TEXT_CUE_KINDS = [
+  'dialogue',
+  'narration',
+  'caption',
+  'sfx',
+  'backgroundText',
+  'unknown',
 ] as const;
 
 export const STORYBOARD_TABLE_REQUIRED_FIELDS = [
@@ -136,6 +146,8 @@ export interface StoryboardShotRow {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly textCues?: readonly StoryboardTextCue[];
+  readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
@@ -152,11 +164,47 @@ export type StoryboardShotCharacterRole = 'primary' | 'secondary' | 'background'
 
 export interface StoryboardShotCharacter {
   readonly characterId?: string;
+  readonly entityRef?: CreativeEntityRef;
   readonly name: string;
   readonly role?: StoryboardShotCharacterRole;
   readonly action?: string;
   readonly emotion?: string;
   readonly continuityNotes?: string;
+  readonly appearanceNotes?: string;
+}
+
+export type StoryboardTextCueKind = (typeof STORYBOARD_TEXT_CUE_KINDS)[number];
+
+export interface StoryboardTextCue {
+  readonly cueId: string;
+  readonly kind: StoryboardTextCueKind;
+  readonly text: string;
+  readonly speakerName?: string;
+  readonly speakerCharacterId?: string;
+  readonly speakerEntityRef?: CreativeEntityRef;
+  readonly sourceRefId?: string;
+  readonly language?: string;
+  readonly confidence?: number;
+  readonly emotion?: string;
+  readonly delivery?: string;
+  readonly extensions?: StoryboardExtensionMap;
+}
+
+export type StoryboardVoiceCueKind = 'dialogue' | 'voiceOver';
+
+export interface StoryboardVoiceCue {
+  readonly cueId: string;
+  readonly kind: StoryboardVoiceCueKind;
+  readonly text: string;
+  readonly speakerName?: string;
+  readonly speakerCharacterId?: string;
+  readonly speakerEntityRef?: CreativeEntityRef;
+  readonly emotion?: string;
+  readonly delivery?: string;
+  readonly voiceAssetId?: string;
+  readonly requestedRepresentationKind?: RepresentationKind;
+  readonly sourceRefId?: string;
+  readonly extensions?: StoryboardExtensionMap;
 }
 
 export type StoryboardMediaLocator =
@@ -308,6 +356,8 @@ export interface StoryboardCutStoryboardShotBase {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly textCues?: readonly StoryboardTextCue[];
+  readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly label: string;
 }
 
@@ -651,10 +701,15 @@ export function projectStoryboardTableToCanvasPayload(
         ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
         ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
         ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
+        ...(shot.textCues ? { textCues: shot.textCues } : {}),
+        ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
         ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
         ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
         ...resolveCanvasStoryboardReferenceImagePath(table, scene, shot, options),
         ...(shot.vfx ? { vfx: shot.vfx } : {}),
+        ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
+        ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
+        ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
       })),
     })),
   };
@@ -725,6 +780,8 @@ export function projectStoryboardTableToCutPayload(
         ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
         ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
         ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
+        ...(shot.textCues ? { textCues: shot.textCues } : {}),
+        ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
         label: `#${String(shot.shotNumber).padStart(3, '0')} ${scene.sceneTitle}`.trim(),
         ...(imagePath ? { imagePath } : {}),
         ...(imageDataUrl ? { imageDataUrl } : {}),
@@ -1171,6 +1228,8 @@ function normalizeShotRow(
   const dialogue = readTrimmedString(record['dialogue']);
   const voiceOver = readTrimmedString(record['voiceOver']);
   const soundCue = readTrimmedString(record['soundCue']);
+  const textCues = normalizeTextCues(record['textCues'], [...path, 'textCues'], diagnostics);
+  const voiceCues = normalizeVoiceCues(record['voiceCues'], [...path, 'voiceCues'], diagnostics);
   const generationPrompt = readTrimmedString(record['generationPrompt']);
   const visualStyle = readTrimmedString(record['visualStyle']);
   const referenceImagePath = readTrimmedString(record['referenceImagePath']);
@@ -1230,6 +1289,8 @@ function normalizeShotRow(
     ...(dialogue ? { dialogue } : {}),
     ...(voiceOver ? { voiceOver } : {}),
     ...(soundCue ? { soundCue } : {}),
+    ...(textCues.length > 0 ? { textCues } : {}),
+    ...(voiceCues.length > 0 ? { voiceCues } : {}),
     ...(generationPrompt ? { generationPrompt } : {}),
     ...(visualStyle ? { visualStyle } : {}),
     ...(referenceImagePath ? { referenceImagePath } : {}),
@@ -1464,10 +1525,71 @@ function validateNormalizedStoryboardTable(
         options,
       );
       validateMediaRefs(shot.mediaRefs, [...path, 'mediaRefs'], diagnostics, options);
+      validateCueSpeakerBindings(shot.textCues, [...path, 'textCues'], diagnostics);
+      validateCueSpeakerBindings(shot.voiceCues, [...path, 'voiceCues'], diagnostics);
+      validateCueSpeakerEntityKinds(shot.textCues, [...path, 'textCues'], diagnostics);
+      validateCueSpeakerEntityKinds(shot.voiceCues, [...path, 'voiceCues'], diagnostics);
     }
   }
 
   return diagnostics;
+}
+
+function validateCueSpeakerBindings(
+  cues:
+    | readonly {
+        readonly speakerCharacterId?: string;
+        readonly speakerEntityRef?: CreativeEntityRef;
+      }[]
+    | undefined,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): void {
+  for (const [index, cue] of (cues ?? []).entries()) {
+    const speakerCharacterId = cue.speakerCharacterId?.trim();
+    const speakerEntityId = cue.speakerEntityRef?.entityId.trim();
+    if (!speakerCharacterId || !speakerEntityId || speakerCharacterId === speakerEntityId) {
+      continue;
+    }
+    diagnostics.push(
+      storyboardDiagnostic(
+        'warning',
+        'invalid-required-field',
+        [...path, index, 'speakerEntityRef'],
+        'Cue speakerCharacterId does not match speakerEntityRef.entityId; speakerEntityRef takes precedence downstream.',
+        {
+          expected: speakerCharacterId,
+          actual: speakerEntityId,
+        },
+      ),
+    );
+  }
+}
+
+function validateCueSpeakerEntityKinds(
+  cues:
+    | readonly {
+        readonly speakerEntityRef?: CreativeEntityRef;
+      }[]
+    | undefined,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): void {
+  for (const [index, cue] of (cues ?? []).entries()) {
+    if (!cue.speakerEntityRef || cue.speakerEntityRef.entityKind === 'character') continue;
+    diagnostics.push(
+      storyboardDiagnostic(
+        'warning',
+        'invalid-required-field',
+        [...path, index, 'speakerEntityRef', 'entityKind'],
+        'Cue speakerEntityRef should reference a character entity.',
+        {
+          expected: 'character',
+          actual: cue.speakerEntityRef.entityKind,
+        },
+      ),
+    );
+  }
 }
 
 function validateShotStrategy(
@@ -1720,8 +1842,13 @@ function projectStoryboardCharactersToCanvas(
 ): readonly ShotCharacter[] {
   return (characters ?? []).map((character) => ({
     ...(character.characterId ? { characterId: character.characterId } : {}),
+    ...(character.entityRef ? { entityRef: character.entityRef } : {}),
     characterName: character.name,
+    ...(character.role ? { role: character.role } : {}),
+    ...(character.action ? { action: character.action } : {}),
     ...(character.emotion ? { emotion: character.emotion } : {}),
+    ...(character.continuityNotes ? { continuityNotes: character.continuityNotes } : {}),
+    ...(character.appearanceNotes ? { appearanceNotes: character.appearanceNotes } : {}),
   }));
 }
 
@@ -2169,11 +2296,17 @@ function normalizeCharacters(
       return [];
     }
     const role = normalizeCharacterRole(record['role']);
+    const entityRef = normalizeCreativeEntityRef(
+      record['entityRef'],
+      [...path, index, 'entityRef'],
+      diagnostics,
+    );
     return [
       {
         ...(readTrimmedString(record['characterId'])
           ? { characterId: readTrimmedString(record['characterId']) }
           : {}),
+        ...(entityRef ? { entityRef } : {}),
         name,
         ...(role ? { role } : {}),
         ...(readTrimmedString(record['action'])
@@ -2185,9 +2318,219 @@ function normalizeCharacters(
         ...(readTrimmedString(record['continuityNotes'])
           ? { continuityNotes: readTrimmedString(record['continuityNotes']) }
           : {}),
+        ...(readTrimmedString(record['appearanceNotes'])
+          ? { appearanceNotes: readTrimmedString(record['appearanceNotes']) }
+          : {}),
       },
     ];
   });
+}
+
+function normalizeTextCues(
+  value: unknown,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardTextCue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((cue, index) => {
+    const record = readStoryboardRecord(cue);
+    const cuePath = [...path, index] as const;
+    if (!record) return [];
+
+    const cueId = readTrimmedString(record['cueId']);
+    const kind = normalizeTextCueKind(record['kind']);
+    const text = readTrimmedString(record['text']);
+    if (!cueId || !kind || !text) {
+      diagnostics.push(
+        storyboardDiagnostic(
+          'warning',
+          'invalid-required-field',
+          cuePath,
+          'Text cue needs cueId, kind, and text.',
+        ),
+      );
+      return [];
+    }
+
+    const speakerEntityRef = normalizeCreativeEntityRef(
+      record['speakerEntityRef'],
+      [...cuePath, 'speakerEntityRef'],
+      diagnostics,
+    );
+    const confidence = readOptionalConfidence(
+      record['confidence'],
+      [...cuePath, 'confidence'],
+      diagnostics,
+    );
+    const extensions = normalizeExtensions(
+      record['extensions'],
+      [...cuePath, 'extensions'],
+      diagnostics,
+    );
+
+    return [
+      {
+        cueId,
+        kind,
+        text,
+        ...(readTrimmedString(record['speakerName'])
+          ? { speakerName: readTrimmedString(record['speakerName']) }
+          : {}),
+        ...(readTrimmedString(record['speakerCharacterId'])
+          ? { speakerCharacterId: readTrimmedString(record['speakerCharacterId']) }
+          : {}),
+        ...(speakerEntityRef ? { speakerEntityRef } : {}),
+        ...(readTrimmedString(record['sourceRefId'])
+          ? { sourceRefId: readTrimmedString(record['sourceRefId']) }
+          : {}),
+        ...(readTrimmedString(record['language'])
+          ? { language: readTrimmedString(record['language']) }
+          : {}),
+        ...(confidence !== undefined ? { confidence } : {}),
+        ...(readTrimmedString(record['emotion'])
+          ? { emotion: readTrimmedString(record['emotion']) }
+          : {}),
+        ...(readTrimmedString(record['delivery'])
+          ? { delivery: readTrimmedString(record['delivery']) }
+          : {}),
+        ...(extensions ? { extensions } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeVoiceCues(
+  value: unknown,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): readonly StoryboardVoiceCue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((cue, index) => {
+    const record = readStoryboardRecord(cue);
+    const cuePath = [...path, index] as const;
+    if (!record) return [];
+
+    const cueId = readTrimmedString(record['cueId']);
+    const kind = normalizeVoiceCueKind(record['kind']);
+    const text = readTrimmedString(record['text']);
+    if (!cueId || !kind || !text) {
+      diagnostics.push(
+        storyboardDiagnostic(
+          'warning',
+          'invalid-required-field',
+          cuePath,
+          'Voice cue needs cueId, kind, and text.',
+        ),
+      );
+      return [];
+    }
+
+    const speakerEntityRef = normalizeCreativeEntityRef(
+      record['speakerEntityRef'],
+      [...cuePath, 'speakerEntityRef'],
+      diagnostics,
+    );
+    const requestedRepresentationKind = normalizeRepresentationKind(
+      record['requestedRepresentationKind'],
+    );
+    const extensions = normalizeExtensions(
+      record['extensions'],
+      [...cuePath, 'extensions'],
+      diagnostics,
+    );
+
+    return [
+      {
+        cueId,
+        kind,
+        text,
+        ...(readTrimmedString(record['speakerName'])
+          ? { speakerName: readTrimmedString(record['speakerName']) }
+          : {}),
+        ...(readTrimmedString(record['speakerCharacterId'])
+          ? { speakerCharacterId: readTrimmedString(record['speakerCharacterId']) }
+          : {}),
+        ...(speakerEntityRef ? { speakerEntityRef } : {}),
+        ...(readTrimmedString(record['emotion'])
+          ? { emotion: readTrimmedString(record['emotion']) }
+          : {}),
+        ...(readTrimmedString(record['delivery'])
+          ? { delivery: readTrimmedString(record['delivery']) }
+          : {}),
+        ...(readTrimmedString(record['voiceAssetId'])
+          ? { voiceAssetId: readTrimmedString(record['voiceAssetId']) }
+          : {}),
+        ...(requestedRepresentationKind ? { requestedRepresentationKind } : {}),
+        ...(readTrimmedString(record['sourceRefId'])
+          ? { sourceRefId: readTrimmedString(record['sourceRefId']) }
+          : {}),
+        ...(extensions ? { extensions } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeTextCueKind(value: unknown): StoryboardTextCueKind | undefined {
+  return STORYBOARD_TEXT_CUE_KINDS.includes(value as StoryboardTextCueKind)
+    ? (value as StoryboardTextCueKind)
+    : undefined;
+}
+
+function normalizeVoiceCueKind(value: unknown): StoryboardVoiceCueKind | undefined {
+  return value === 'dialogue' || value === 'voiceOver' ? value : undefined;
+}
+
+function normalizeCreativeEntityRef(
+  value: unknown,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): CreativeEntityRef | undefined {
+  const record = readStoryboardRecord(value);
+  if (!record) return undefined;
+  const entityId = readTrimmedString(record['entityId']);
+  const entityKind = normalizeCreativeEntityKind(record['entityKind']);
+  if (!entityId || !entityKind) {
+    diagnostics.push(
+      storyboardDiagnostic(
+        'warning',
+        'invalid-required-field',
+        path,
+        'Creative entity ref needs entityId and supported entityKind.',
+      ),
+    );
+    return undefined;
+  }
+  return {
+    entityId,
+    entityKind,
+    ...(readTrimmedString(record['projectRoot'])
+      ? { projectRoot: readTrimmedString(record['projectRoot']) }
+      : {}),
+    ...(readTrimmedString(record['source']) ? { source: readTrimmedString(record['source']) } : {}),
+  };
+}
+
+function normalizeCreativeEntityKind(value: unknown): CreativeEntityRef['entityKind'] | undefined {
+  return value === 'character' ||
+    value === 'scene' ||
+    value === 'object' ||
+    value === 'location' ||
+    value === 'style'
+    ? value
+    : undefined;
+}
+
+function normalizeRepresentationKind(value: unknown): RepresentationKind | undefined {
+  return value === 'portrait' ||
+    value === 'reference' ||
+    value === 'puppet-bone' ||
+    value === 'live2d' ||
+    value === 'live3d' ||
+    value === 'voice' ||
+    value === 'motion' ||
+    value === 'video'
+    ? value
+    : undefined;
 }
 
 function normalizeStoryboardTableSource(
@@ -2524,6 +2867,27 @@ function readTrimmedString(value: unknown): string | undefined {
 
 function readOptionalPositiveNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function readOptionalConfidence(
+  value: unknown,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) {
+    return value;
+  }
+  diagnostics.push(
+    storyboardDiagnostic(
+      'warning',
+      'invalid-required-field',
+      path,
+      'Confidence must be a finite number between 0 and 1.',
+      { expected: '0..1', actual: serializableDiagnosticValue(value) },
+    ),
+  );
+  return undefined;
 }
 
 function parsePositiveInteger(value: string | undefined): number | undefined {

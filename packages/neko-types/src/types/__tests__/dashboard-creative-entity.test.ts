@@ -3,6 +3,7 @@ import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
   DASHBOARD_CHARACTER_ROLE_WORKFLOW_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_ACTIONS,
+  DASHBOARD_ENTITY_MEMORY_REVIEW_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
   isDashboardCharacterRoleWorkflowAction,
@@ -12,6 +13,8 @@ import {
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityBindingSummary,
   isDashboardCreativeEntityDetail,
+  isDashboardEntityMemoryReviewAction,
+  isDashboardEntityMemoryReviewItem,
   isDashboardCreativeEntityRef,
   isDashboardCreativeEntityRow,
   isDashboardCreativeEntitySnapshot,
@@ -143,6 +146,24 @@ const detail: DashboardCreativeEntityDetail = {
       ownerSource: 'neko-story',
     },
   ],
+  memoryReviews: [
+    {
+      reviewId: 'review-obs-1',
+      contributionId: 'contribution-page-1',
+      observationId: 'obs-1',
+      entityRef: ref,
+      sourcePackage: 'neko-agent',
+      sourceLabel: 'Comic OCR',
+      sourceKind: 'comic',
+      reviewPolicy: 'requires-user-review',
+      reviewStatus: 'needs-review',
+      dimensions: ['appearance', 'voice'],
+      summary: '小橘 is wearing an orange jacket.',
+      evidenceText: 'panel P11',
+      confidence: 0.82,
+      actions: ['accept-memory-review', 'reject-memory-review', 'mark-memory-conflict'],
+    },
+  ],
   freshness: 'fresh',
   actions: [{ id: 'refresh', label: 'Refresh' }],
 };
@@ -153,6 +174,7 @@ describe('dashboard creative entity contracts', () => {
     expect(toDashboardCreativeEntityId(ref)).toBe('entity:character:char-xiaoju');
     expect(isDashboardCreativeEntityRow(row)).toBe(true);
     expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
+    expect(isDashboardEntityMemoryReviewItem(detail.memoryReviews?.[0])).toBe(true);
     expect(isDashboardCreativeEntityState({ statuses: [], rows: [row], detail })).toBe(true);
     expect(
       isDashboardCreativeEntitySnapshot({
@@ -201,9 +223,18 @@ describe('dashboard creative entity contracts', () => {
   it('validates action requests', () => {
     expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('character-dialogue');
     expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('embody-character');
+    expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('accept-memory-review');
+    expect(DASHBOARD_ENTITY_MEMORY_REVIEW_ACTIONS).toEqual([
+      'accept-memory-review',
+      'reject-memory-review',
+      'mark-memory-conflict',
+      'supersede-memory-review',
+    ]);
     expect(DASHBOARD_CHARACTER_ROLE_WORKFLOW_ACTIONS).toEqual(['embody-character']);
     expect(isDashboardCreativeEntityAction('character-dialogue')).toBe(true);
     expect(isDashboardCreativeEntityAction('embody-character')).toBe(true);
+    expect(isDashboardEntityMemoryReviewAction('accept-memory-review')).toBe(true);
+    expect(isDashboardEntityMemoryReviewAction('confirm-candidate')).toBe(false);
     expect(isDashboardCharacterRoleWorkflowAction('embody-character')).toBe(true);
     expect(isDashboardCreativeEntityAction('test-npc')).toBe(false);
     expect(isDashboardCreativeEntityAction('character-perspective')).toBe(false);
@@ -222,6 +253,14 @@ describe('dashboard creative entity contracts', () => {
         ref,
         action: 'character-dialogue',
         payload: { mode: 'roleplay' },
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardCreativeEntityActionRequest({
+        source: 'neko-story',
+        ref,
+        action: 'accept-memory-review',
+        memoryReviewId: 'review-obs-1',
       }),
     ).toBe(true);
     expect(
@@ -272,6 +311,12 @@ describe('dashboard creative entity contracts', () => {
         action: 'unknown',
       }),
     ).toBe(false);
+    expect(
+      isDashboardEntityMemoryReviewItem({
+        ...detail.memoryReviews?.[0],
+        reviewStatus: 'accepted',
+      }),
+    ).toBe(false);
   });
 
   it('accepts source contracts without vscode types', () => {
@@ -282,6 +327,7 @@ describe('dashboard creative entity contracts', () => {
       capabilities: {
         detail: true,
         syncSuggestions: true,
+        memoryReviews: true,
         actions: ['show-detail', 'bind-existing'],
       },
       async getSnapshot() {

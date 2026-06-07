@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canRunSemanticIndexingWorkOnTrigger,
+  canSemanticIndexingWorkBlockProjectOpen,
   isProjectIndexFreshness,
   isProjectSearchCacheManifest,
   isProjectSearchItem,
@@ -11,6 +13,8 @@ import {
   isProjectSearchQuery,
   isProjectSearchScopeKind,
   isProjectSemanticProviderMetadata,
+  projectCharacterObservationToSearchItem,
+  projectMediaSemanticIndexToSearchItems,
   type ProjectSearchItem,
   type ProjectSearchQuery,
 } from '../project-cache-search';
@@ -19,8 +23,12 @@ import { createResourceFingerprint, createResourceRef } from '../resource-cache'
 describe('project cache/search contracts', () => {
   it('validates enum-like project search fields', () => {
     expect(isProjectSearchItemKind('script-role')).toBe(true);
+    expect(isProjectSearchItemKind('semantic-evidence')).toBe(true);
+    expect(isProjectSearchItemKind('character-memory-evidence')).toBe(true);
     expect(isProjectSearchItemKind('file')).toBe(false);
     expect(isProjectSearchPartitionKind('asset-library')).toBe(true);
+    expect(isProjectSearchPartitionKind('semantic-evidence')).toBe(true);
+    expect(isProjectSearchPartitionKind('character-memory')).toBe(true);
     expect(isProjectSearchPartitionKind('asset-cache')).toBe(false);
     expect(isProjectSearchMode('mention')).toBe(true);
     expect(isProjectSearchMode('everything')).toBe(false);
@@ -101,6 +109,113 @@ describe('project cache/search contracts', () => {
     expect(isProjectSearchItem({ ...item, visualResource: { status: 'pending' } })).toBe(false);
   });
 
+  it('represents semantic evidence search items with source refs and confidence', () => {
+    const item: ProjectSearchItem = {
+      id: 'semantic-evidence:asset-page-1:segment-panel-1',
+      kind: 'semantic-evidence',
+      label: 'Rin: We have to go.',
+      description: 'OCR text from comic panel',
+      source: {
+        partition: 'semantic-evidence',
+        sourceKind: 'comic',
+        semanticSourceKind: 'comic',
+        textKind: 'ocr',
+        assetId: 'asset-page-1',
+        segmentId: 'segment-panel-1',
+        evidenceId: 'segment-panel-1',
+        confidence: 0.82,
+        metadata: {
+          pageId: 'page-1',
+          panelId: 'panel-1',
+        },
+      },
+      projectRoot: '/workspace',
+      searchText: 'Rin We have to go OCR comic panel',
+      freshness: 'fresh',
+    };
+
+    expect(isProjectSearchItem(item)).toBe(true);
+    expect(
+      isProjectSearchQuery({
+        text: 'Rin',
+        kinds: ['semantic-evidence', 'character-memory-evidence'],
+        partitions: ['semantic-evidence', 'character-memory'],
+      }),
+    ).toBe(true);
+  });
+
+  it('projects semantic indexes and character observations to search items', () => {
+    const [semanticItem] = projectMediaSemanticIndexToSearchItems({
+      projectRoot: '/workspace',
+      index: {
+        version: 1,
+        assetId: 'asset-page-1',
+        sourceRef: {
+          kind: 'asset',
+          assetId: 'asset-page-1',
+          sourcePath: '${WORKSPACE}/comic/page-1.png',
+        },
+        textSegments: [
+          {
+            segmentId: 'segment-panel-1',
+            kind: 'ocr',
+            text: 'Rin: We have to go.',
+            confidence: 0.82,
+            sourceRef: {
+              kind: 'tool-result',
+              toolCallId: 'tool-1',
+            },
+            provenance: {
+              providerId: 'ocr.local',
+              sourceKind: 'comic',
+            },
+          },
+        ],
+      },
+    });
+    const observationItem = projectCharacterObservationToSearchItem({
+      projectRoot: '/workspace',
+      observation: {
+        observationId: 'obs-rin-panel-1',
+        sourceRef: {
+          kind: 'tool-result',
+          toolCallId: 'tool-1',
+        },
+        provenance: {
+          source: 'comic',
+          toolCallId: 'tool-1',
+        },
+        reviewStatus: 'draft',
+        entityRef: { entityId: 'char-rin', entityKind: 'character' },
+        confidence: 0.75,
+        dimensions: [
+          {
+            dimension: 'dialogue',
+            value: 'We have to go.',
+          },
+        ],
+      },
+    });
+
+    expect(semanticItem).toMatchObject({
+      kind: 'semantic-evidence',
+      source: {
+        partition: 'semantic-evidence',
+        segmentId: 'segment-panel-1',
+        confidence: 0.82,
+      },
+    });
+    expect(isProjectSearchItem(semanticItem)).toBe(true);
+    expect(observationItem).toMatchObject({
+      kind: 'character-memory-evidence',
+      source: {
+        partition: 'character-memory',
+        observationId: 'obs-rin-panel-1',
+      },
+    });
+    expect(isProjectSearchItem(observationItem)).toBe(true);
+  });
+
   it('validates cache manifests with partition generation metadata', () => {
     expect(
       isProjectSearchCacheManifest({
@@ -143,8 +258,8 @@ describe('project cache/search contracts', () => {
         vector: true,
         rag: true,
         modes: ['global', 'agent-tool'],
-        itemKinds: ['document', 'creative-entity'],
-        partitions: ['documents'],
+        itemKinds: ['document', 'creative-entity', 'semantic-evidence'],
+        partitions: ['documents', 'semantic-evidence'],
       }),
     ).toBe(true);
     expect(
@@ -184,11 +299,43 @@ describe('project cache/search contracts', () => {
     ).toBe(true);
     expect(
       isProjectSearchPartitionStatusSnapshot({
+        partition: 'semantic-evidence',
+        status: 'building',
+        freshness: 'stale',
+        itemCount: 12,
+        provider: {
+          providerId: 'semantic-index.local',
+          semantic: true,
+          vector: true,
+          partitions: ['semantic-evidence'],
+          itemKinds: ['semantic-evidence'],
+        },
+        semantic: {
+          providerId: 'semantic-index.local',
+          sourceIdentity: 'semantic-index:mtime',
+          indexVersion: 'semantic-index-v1',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isProjectSearchPartitionStatusSnapshot({
         partition: 'documents',
         status: 'ready',
         freshness: 'fresh',
         provider: { modes: ['bad-mode'] },
       }),
     ).toBe(false);
+  });
+
+  it('keeps heavy semantic indexing work out of the blocking project-open path', () => {
+    expect(canRunSemanticIndexingWorkOnTrigger('sidecar-projection', 'project-open')).toBe(true);
+    expect(canRunSemanticIndexingWorkOnTrigger('ledger-projection', 'project-open')).toBe(true);
+    expect(canRunSemanticIndexingWorkOnTrigger('ocr', 'project-open')).toBe(false);
+    expect(canRunSemanticIndexingWorkOnTrigger('asr', 'project-open')).toBe(false);
+    expect(canRunSemanticIndexingWorkOnTrigger('embedding', 'project-open')).toBe(false);
+    expect(canRunSemanticIndexingWorkOnTrigger('perception-refresh', 'project-open')).toBe(false);
+    expect(canRunSemanticIndexingWorkOnTrigger('ocr', 'on-demand')).toBe(true);
+    expect(canSemanticIndexingWorkBlockProjectOpen('sidecar-projection')).toBe(false);
+    expect(canSemanticIndexingWorkBlockProjectOpen('embedding')).toBe(false);
   });
 });

@@ -909,6 +909,81 @@ describe('storyboard table contract', () => {
     );
   });
 
+  it('normalizes classified OCR text cues and warns on conflicting speaker ids', () => {
+    const result = normalizeStoryboardTable({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Text Cues',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Rin reads a glowing sign.',
+                characterAction: 'Rin reacts to a warning.',
+                imageStrategy: 'generate-new',
+                generationPrompt: 'manga panel',
+                textCues: [
+                  {
+                    cueId: 'text-1',
+                    kind: 'dialogue',
+                    text: 'Run!',
+                    speakerName: 'Rin',
+                    speakerCharacterId: 'char-rin',
+                    speakerEntityRef: { entityId: 'char-aki', entityKind: 'character' },
+                    confidence: 0.8,
+                  },
+                  {
+                    cueId: 'text-2',
+                    kind: 'backgroundText',
+                    text: 'KEEP OUT',
+                    sourceRefId: 'panel-1',
+                  },
+                  {
+                    cueId: 'bad-kind',
+                    kind: 'subtitle',
+                    text: 'drop me',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.table?.scenes[0]?.shots[0]?.textCues).toEqual([
+      {
+        cueId: 'text-1',
+        kind: 'dialogue',
+        text: 'Run!',
+        speakerName: 'Rin',
+        speakerCharacterId: 'char-rin',
+        speakerEntityRef: { entityId: 'char-aki', entityKind: 'character' },
+        confidence: 0.8,
+      },
+      {
+        cueId: 'text-2',
+        kind: 'backgroundText',
+        text: 'KEEP OUT',
+        sourceRefId: 'panel-1',
+      },
+    ]);
+    expect(validateStoryboardTable(result.table).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'warning',
+          code: 'invalid-required-field',
+          path: ['scenes', 0, 'shots', 0, 'textCues', 0, 'speakerEntityRef'],
+        }),
+      ]),
+    );
+  });
+
   it('projects valid semantic tables to Canvas and Cut payloads', () => {
     const table: StoryboardTable = {
       schemaVersion: 1,
@@ -924,12 +999,55 @@ describe('storyboard table contract', () => {
               shotNumber: 1,
               duration: 4,
               visualDescription: 'Rin looks up.',
-              characters: [{ characterId: 'char-rin', name: 'Rin', emotion: 'curious' }],
+              characters: [
+                {
+                  characterId: 'char-rin',
+                  entityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  name: 'Rin',
+                  role: 'primary',
+                  action: 'Looks up',
+                  emotion: 'curious',
+                  continuityNotes: 'Keep the blue scarf.',
+                  appearanceNotes: 'Short hair, blue scarf.',
+                },
+              ],
               shotScale: 'CU',
               characterAction: 'Rin looks up.',
               emotion: ['curious'],
               sceneTags: ['signal'],
               dialogue: 'What is that?',
+              textCues: [
+                {
+                  cueId: 'shot-1-text-1',
+                  kind: 'dialogue',
+                  text: 'What is that?',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  sourceRefId: 'panel-1',
+                  confidence: 0.9,
+                  emotion: 'curious',
+                  delivery: 'quietly',
+                },
+                {
+                  cueId: 'shot-1-text-2',
+                  kind: 'sfx',
+                  text: 'Zzz',
+                  sourceRefId: 'panel-1',
+                },
+              ],
+              voiceCues: [
+                {
+                  cueId: 'shot-1-dialogue-1',
+                  kind: 'dialogue',
+                  text: 'What is that?',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  emotion: 'curious',
+                  delivery: 'quietly',
+                },
+              ],
               voiceOver: 'The signal returns.',
               soundCue: 'Radio static.',
               generationPrompt: 'close-up anime frame',
@@ -967,8 +1085,13 @@ describe('storyboard table contract', () => {
               characters: [
                 {
                   characterId: 'char-rin',
+                  entityRef: { entityId: 'char-rin', entityKind: 'character' },
                   characterName: 'Rin',
+                  role: 'primary',
+                  action: 'Looks up',
                   emotion: 'curious',
+                  continuityNotes: 'Keep the blue scarf.',
+                  appearanceNotes: 'Short hair, blue scarf.',
                 },
               ],
               shotScale: 'CU',
@@ -976,10 +1099,53 @@ describe('storyboard table contract', () => {
               emotion: ['curious'],
               sceneTags: ['signal'],
               dialogue: 'What is that?',
+              textCues: [
+                {
+                  cueId: 'shot-1-text-1',
+                  kind: 'dialogue',
+                  text: 'What is that?',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  sourceRefId: 'panel-1',
+                  confidence: 0.9,
+                  emotion: 'curious',
+                  delivery: 'quietly',
+                },
+                {
+                  cueId: 'shot-1-text-2',
+                  kind: 'sfx',
+                  text: 'Zzz',
+                  sourceRefId: 'panel-1',
+                },
+              ],
+              voiceCues: [
+                {
+                  cueId: 'shot-1-dialogue-1',
+                  kind: 'dialogue',
+                  text: 'What is that?',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  emotion: 'curious',
+                  delivery: 'quietly',
+                },
+              ],
               voiceOver: 'The signal returns.',
               soundCue: 'Radio static.',
               generationPrompt: 'close-up anime frame',
               referenceImagePath: '${WORKSPACE}/.neko/generated/image/shot-1.png',
+              generatedMediaRefs: [
+                {
+                  refId: 'asset-1',
+                  role: 'generated',
+                  locator: {
+                    type: 'workspace-path',
+                    path: '${WORKSPACE}/.neko/generated/image/shot-1.png',
+                  },
+                  mimeType: 'image/png',
+                },
+              ],
             },
           ],
         },
@@ -994,6 +1160,38 @@ describe('storyboard table contract', () => {
           shotNumber: 1,
           duration: 4,
           dialogue: 'What is that?',
+          textCues: [
+            {
+              cueId: 'shot-1-text-1',
+              kind: 'dialogue',
+              text: 'What is that?',
+              speakerName: 'Rin',
+              speakerCharacterId: 'char-rin',
+              speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+              sourceRefId: 'panel-1',
+              confidence: 0.9,
+              emotion: 'curious',
+              delivery: 'quietly',
+            },
+            {
+              cueId: 'shot-1-text-2',
+              kind: 'sfx',
+              text: 'Zzz',
+              sourceRefId: 'panel-1',
+            },
+          ],
+          voiceCues: [
+            {
+              cueId: 'shot-1-dialogue-1',
+              kind: 'dialogue',
+              text: 'What is that?',
+              speakerName: 'Rin',
+              speakerCharacterId: 'char-rin',
+              speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+              emotion: 'curious',
+              delivery: 'quietly',
+            },
+          ],
           voiceOver: 'The signal returns.',
           soundCue: 'Radio static.',
           label: '#001 Scene',

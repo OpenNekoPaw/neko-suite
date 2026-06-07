@@ -218,6 +218,115 @@ describe('composite artifact contracts', () => {
       ]),
     );
   });
+
+  it('composes profile columns from reusable field groups with explicit column overrides', () => {
+    const composedProfile: ArtifactProfileDescriptor = {
+      profileId: 'comic-shot-review',
+      protocol: 'GenericTable',
+      version: 1,
+      source: 'skill-local',
+      fieldDefinitions: [
+        { columnId: 'shotId', cellType: 'string', required: true },
+        { columnId: 'sourcePanel', cellType: 'media-preview', required: true },
+        {
+          columnId: 'characters',
+          cellType: 'json',
+          required: false,
+          schemaRef: 'neko.characters.v1',
+          shape: {
+            requiredKeys: ['name'],
+            fieldTypes: { name: 'string' },
+          },
+        },
+        { columnId: 'dialogue', cellType: 'string', required: false },
+      ],
+      fieldGroups: [
+        { groupId: 'shot-core', fieldIds: ['shotId', 'sourcePanel'] },
+        { groupId: 'character-dialogue', fieldIds: ['characters', 'dialogue'] },
+      ],
+      includeFieldGroups: ['shot-core', 'character-dialogue'],
+      columns: [
+        {
+          columnId: 'characters',
+          cellType: 'json',
+          required: true,
+        },
+      ],
+    };
+    const table = makeTable({
+      profile: 'comic-shot-review',
+      columns: [
+        { columnId: 'shotId', cellType: 'string', required: true },
+        { columnId: 'sourcePanel', cellType: 'media-preview', required: true },
+        { columnId: 'characters', cellType: 'json', required: true },
+        { columnId: 'dialogue', cellType: 'string' },
+      ],
+      rows: [
+        {
+          rowId: 'row-1',
+          cells: {
+            shotId: { type: 'string', value: 'shot-1' },
+            sourcePanel: makeMediaCell(),
+            characters: {
+              type: 'json',
+              schemaRef: 'neko.characters.v1',
+              value: { role: 'primary' },
+            },
+            dialogue: { type: 'string', value: '那一願望實現囉！' },
+          },
+        },
+      ],
+    });
+
+    const result = validateGenericTable(table, {
+      profiles: [composedProfile],
+      resolvedSchemaRefs: ['neko.characters.v1'],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((d) => d.code)).toContain('profile-required-cell-missing');
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['rows', 0, 'cells', 'characters', 'value', 'name'],
+        }),
+      ]),
+    );
+  });
+
+  it('fails closed when composed profile field groups reference unknown fields', () => {
+    const brokenProfile: ArtifactProfileDescriptor = {
+      profileId: 'broken-comic-shot-review',
+      protocol: 'GenericTable',
+      version: 1,
+      source: 'skill-local',
+      fieldDefinitions: [{ columnId: 'shotId', cellType: 'string', required: true }],
+      fieldGroups: [{ groupId: 'shot-core', fieldIds: ['shotId', 'missingField'] }],
+      includeFieldGroups: ['shot-core', 'missing-group'],
+    };
+    const table = makeTable({
+      profile: 'broken-comic-shot-review',
+      columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
+      rows: [
+        {
+          rowId: 'row-1',
+          cells: {
+            shotId: { type: 'string', value: 'shot-1' },
+          },
+        },
+      ],
+    });
+
+    const result = validateGenericTable(table, { profiles: [brokenProfile] });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'profile-field-definition-missing' }),
+        expect.objectContaining({ code: 'profile-field-group-missing' }),
+      ]),
+    );
+  });
 });
 
 function makeTable(overrides: Partial<GenericTable> = {}): GenericTable {

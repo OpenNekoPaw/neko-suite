@@ -16,6 +16,24 @@ The system SHALL define Profile Descriptors that constrain `CompositeArtifact` a
 - **THEN** the profile can be registered in the artifact profile registry facet
 - **THEN** validators and renderers can resolve it without parsing any Skill Markdown
 
+### Requirement: Profile fields are composable
+The system SHALL support composing `GenericTable` profile columns from reusable field definitions and field groups. Explicit profile columns MAY append new columns or override a field-group column rule with the same column id. Field groups MUST be structural constraints only and MUST NOT grant runtime capability.
+
+#### Scenario: Skill-local profile composes field groups
+- **WHEN** a Skill-local Profile Descriptor declares `fieldDefinitions`, `fieldGroups`, and `includeFieldGroups`
+- **THEN** the validator resolves the included field groups into effective profile column rules
+- **THEN** explicit `columns` override matching field rules by `columnId`
+
+#### Scenario: Missing field group fails validation
+- **WHEN** a Profile Descriptor references an unknown group in `includeFieldGroups`
+- **THEN** validation reports a profile diagnostic
+- **THEN** the profile is not treated as fully applied
+
+#### Scenario: Missing field definition fails validation
+- **WHEN** a field group references a field id missing from `fieldDefinitions`
+- **THEN** validation reports a profile diagnostic
+- **THEN** the profile is not treated as fully applied
+
 ### Requirement: Profile validation is stricter than rendering
 The system SHALL treat profile validation as authoritative for structure, while renderer profile support is advisory and visual only. Renderers MUST NOT relax validator failures or grant execute actions.
 

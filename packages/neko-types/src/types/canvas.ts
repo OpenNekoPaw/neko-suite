@@ -5,8 +5,10 @@ import type {
   NodePreviewDescriptor,
 } from './canvas-layered';
 import type { NkProjectType } from './canvas-drop';
+import type { CreativeEntityRef } from './creative-entity-asset-composition';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
+import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -410,6 +412,12 @@ export interface GeneratedImageVersion {
 export interface ShotCharacter {
   characterId?: string;
   characterName: string;
+  /** Stable creative entity identity when the character is resolved. */
+  entityRef?: CreativeEntityRef;
+  /** Shot-local participation role such as primary, secondary, or background. */
+  role?: string;
+  /** Shot-local character action used by storyboard and generation projections. */
+  action?: string;
   /** GalleryNode id used for IP-Adapter reference */
   referenceNodeId?: string;
   /**
@@ -421,6 +429,10 @@ export interface ShotCharacter {
    */
   referenceChain?: string[];
   emotion?: string;
+  /** Notes that help preserve character continuity across shots. */
+  continuityNotes?: string;
+  /** Bounded appearance/costume hints for this shot; durable details belong in character memory. */
+  appearanceNotes?: string;
 }
 
 /**
@@ -458,6 +470,10 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     voiceOver?: string;
     /** Sound effect cue */
     soundCue?: string;
+    /** Structured OCR/dialogue/narration/caption text cues projected from StoryboardTable. */
+    textCues?: readonly StoryboardTextCue[];
+    /** Structured voice/dialogue cues with speaker and voice asset bindings. */
+    voiceCues?: readonly StoryboardVoiceCue[];
     /** AI generation prompt — overrides visualDescription for image generation */
     generationPrompt?: string;
     /** Visual style directive (e.g. "noir", "cyberpunk") */
@@ -472,6 +488,12 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     runtimeReferenceImagePath?: string;
     /** Visual effects cues */
     vfx?: string[];
+    /** Source/reference media refs used to derive this shot. */
+    sourceMediaRefs?: readonly StoryboardMediaRef[];
+    /** Media refs generated from this shot. */
+    generatedMediaRefs?: readonly StoryboardMediaRef[];
+    /** Additional storyboard media refs retained for review and diagnostics. */
+    mediaRefs?: readonly StoryboardMediaRef[];
     /** Last successful storyboard import into neko-cut timeline */
     lastImportedToTimelineAt?: number;
     /** Target project name used during the last storyboard import */

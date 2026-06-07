@@ -567,6 +567,49 @@ Profile 描述的是产物结构约束，而不是任务执行方法。它可以
 - 可选的校验规则、显示建议、字段映射和 suggested actions。
 - 与某个 Skill 相关的输出 profile，例如 `comic-shot-asset-prep`。
 
+Profile 不应一次性设计成覆盖所有未来领域字段的“大而全表结构”。V1 采用可组合结构：
+
+```text
+Field Definition  →  稳定字段原子：id、cell type、schemaRef、shape、显示提示
+Field Group       →  可复用字段包：shot-core / camera / character / dialogue-audio / media-source
+Profile Descriptor→  按任务 include 字段包，并用 columns 做局部 override / required 收紧
+```
+
+组合规则：
+
+- 字段原子只表达数据形状和基础校验，不表达工作流顺序。
+- 字段包只聚合一组可复用字段，不授予子包执行能力。
+- Profile 通过 `includeFieldGroups` 按需引入字段包；显式 `columns` 可追加字段或覆盖字段包中的同名字段约束。
+- `includeFieldGroups` 不是 best-effort 提示。引用不存在的字段包，或字段包引用不存在的字段原子，validator 必须报错并拒绝把该 profile 当作已完整生效。
+- 早期 Skill-local profile 可以先内联字段原子和字段包；当同一字段包被多个 Skill 复用时，再提升为共享 Profile Descriptor。
+- Agent 可以根据 Skill 的任务阶段选择不同 profile 组合，例如“漫画面板切分”“分镜审阅”“生图准备”“视频生成”分别使用不同字段包组合。
+
+例如 `comic-to-animation` 不需要一开始定义终极分镜表，可以按阶段组合：
+
+```json
+{
+  "profileId": "comic-shot-review",
+  "protocol": "GenericTable",
+  "version": 1,
+  "fieldDefinitions": [
+    { "columnId": "shotId", "cellType": "string", "required": true },
+    { "columnId": "visualDescription", "cellType": "string", "required": true },
+    { "columnId": "characters", "cellType": "json", "schemaRef": "neko.shot-characters" },
+    { "columnId": "dialogue", "cellType": "string" }
+  ],
+  "fieldGroups": [
+    { "groupId": "shot-core", "fieldIds": ["shotId", "visualDescription"] },
+    { "groupId": "character-dialogue", "fieldIds": ["characters", "dialogue"] }
+  ],
+  "includeFieldGroups": ["shot-core", "character-dialogue"],
+  "columns": [
+    { "columnId": "characters", "cellType": "json", "required": true }
+  ]
+}
+```
+
+这保证 Skill 能按需扩展 profile 字段，同时保持通用 renderer / validator / projector 面向稳定字段契约，而不是追逐每个 Skill 临时发明的表结构。
+
 Profile 默认跟随 Skill 就近管理：
 
 ```text

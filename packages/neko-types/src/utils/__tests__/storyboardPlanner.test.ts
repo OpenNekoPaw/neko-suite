@@ -131,6 +131,34 @@ describe('storyboardPlanner', () => {
               {
                 ...payload.scenes[0]!.shotPlans[0]!,
                 referenceResourceRef: resourceRef,
+                generationPrompt: 'animated comic panel',
+                textCues: [
+                  {
+                    cueId: 'text-1',
+                    kind: 'dialogue',
+                    text: 'Hello',
+                    speakerName: 'Mika',
+                  },
+                ],
+                voiceCues: [
+                  {
+                    cueId: 'voice-1',
+                    kind: 'dialogue',
+                    text: 'Hello',
+                    speakerName: 'Mika',
+                  },
+                ],
+                sourceMediaRefs: [
+                  {
+                    refId: 'source-1',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'readimage-current-result',
+                      assetIndex: 0,
+                    },
+                  },
+                ],
               },
               ...payload.scenes[0]!.shotPlans.slice(1),
             ],
@@ -165,7 +193,37 @@ describe('storyboardPlanner', () => {
     });
     expect(request?.children).toHaveLength(2);
     expect(request?.children.every((child) => child.type === 'shot')).toBe(true);
-    expect(request?.children[0]?.data).toMatchObject({ referenceResourceRef: resourceRef });
+    expect(request?.children[0]?.data).toMatchObject({
+      referenceResourceRef: resourceRef,
+      generationPrompt: 'animated comic panel',
+      textCues: [
+        {
+          cueId: 'text-1',
+          kind: 'dialogue',
+          text: 'Hello',
+          speakerName: 'Mika',
+        },
+      ],
+      voiceCues: [
+        {
+          cueId: 'voice-1',
+          kind: 'dialogue',
+          text: 'Hello',
+          speakerName: 'Mika',
+        },
+      ],
+      sourceMediaRefs: [
+        {
+          refId: 'source-1',
+          role: 'source',
+          locator: {
+            type: 'tool-result',
+            toolCallId: 'readimage-current-result',
+            assetIndex: 0,
+          },
+        },
+      ],
+    });
     expect(createConnection).not.toHaveBeenCalled();
   });
 

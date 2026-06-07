@@ -85,6 +85,7 @@ export const TOOL_NAMES_CANVAS = {
 
 export const TOOL_NAMES_MEDIA = {
   GENERATE_IMAGE: 'GenerateImage',
+  TRANSFORM_IMAGE: 'TransformImage',
   GENERATE_VIDEO: 'GenerateVideo',
   GENERATE_MUSIC: 'GenerateMusic',
   GENERATE_TTS: 'GenerateTTS',

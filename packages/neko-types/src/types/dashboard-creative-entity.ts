@@ -22,6 +22,17 @@ import {
 } from './dashboard-task';
 import type { ProjectIndexFreshness } from './project-cache-search';
 import { isProjectIndexFreshness } from './project-cache-search';
+import type {
+  CharacterMemoryDimension,
+  CharacterMemoryReviewStatus,
+  CharacterObservationSource,
+} from './character-memory';
+import {
+  CHARACTER_MEMORY_OBSERVATION_SOURCES,
+  CHARACTER_MEMORY_REVIEW_STATUSES,
+} from './character-memory';
+import type { EntityMemoryContributionReviewPolicy } from './media-semantic-index';
+import { ENTITY_MEMORY_CONTRIBUTION_REVIEW_POLICIES } from './media-semantic-index';
 
 export const DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION = 1;
 
@@ -61,7 +72,17 @@ export type DashboardCreativeEntityAction =
   | 'ignore-sync-suggestion'
   | 'character-dialogue'
   | 'embody-character'
+  | 'accept-memory-review'
+  | 'reject-memory-review'
+  | 'mark-memory-conflict'
+  | 'supersede-memory-review'
   | 'refresh';
+
+export type DashboardEntityMemoryReviewAction =
+  | 'accept-memory-review'
+  | 'reject-memory-review'
+  | 'mark-memory-conflict'
+  | 'supersede-memory-review';
 
 export type DashboardCharacterRoleWorkflowAction = 'embody-character';
 
@@ -238,6 +259,24 @@ export interface DashboardCreativeEntitySyncSuggestion {
   readonly readonlyTarget?: boolean;
 }
 
+export interface DashboardEntityMemoryReviewItem {
+  readonly reviewId: string;
+  readonly contributionId?: string;
+  readonly observationId?: string;
+  readonly entityRef: DashboardCreativeEntityRef;
+  readonly sourcePackage: string;
+  readonly sourceLabel?: string;
+  readonly sourceKind: CharacterObservationSource;
+  readonly reviewPolicy: EntityMemoryContributionReviewPolicy;
+  readonly reviewStatus: Exclude<CharacterMemoryReviewStatus, 'accepted'>;
+  readonly dimensions: readonly (CharacterMemoryDimension | (string & {}))[];
+  readonly summary: string;
+  readonly evidenceText?: string;
+  readonly confidence?: number;
+  readonly createdAt?: string;
+  readonly actions: readonly DashboardEntityMemoryReviewAction[];
+}
+
 export interface DashboardCreativeEntityDetail {
   readonly ref: DashboardCreativeEntityRef;
   readonly label: string;
@@ -254,6 +293,7 @@ export interface DashboardCreativeEntityDetail {
   readonly requirements: readonly DashboardCreativeEntityRequirementSummary[];
   readonly visualDrafts: readonly DashboardCreativeEntityVisualDraftSummary[];
   readonly syncSuggestions: readonly DashboardCreativeEntitySyncSuggestion[];
+  readonly memoryReviews?: readonly DashboardEntityMemoryReviewItem[];
   readonly freshness: ProjectIndexFreshness;
   readonly actions: readonly DashboardCreativeEntityActionDescriptor[];
 }
@@ -281,6 +321,7 @@ export interface DashboardCreativeEntityActionRequest {
   readonly action: DashboardCreativeEntityAction;
   readonly suggestionId?: string;
   readonly requirementId?: string;
+  readonly memoryReviewId?: string;
   readonly role?: EntityAssetBindingRole;
   readonly payload?: Record<string, unknown>;
 }
@@ -297,6 +338,7 @@ export interface DashboardCreativeEntitySourceCapabilities {
   readonly detail?: boolean;
   readonly actions?: readonly DashboardCreativeEntityAction[];
   readonly syncSuggestions?: boolean;
+  readonly memoryReviews?: boolean;
 }
 
 export interface DashboardCreativeEntitySource {
@@ -352,8 +394,20 @@ export const DASHBOARD_CREATIVE_ENTITY_ACTIONS: readonly DashboardCreativeEntity
   'ignore-sync-suggestion',
   'character-dialogue',
   'embody-character',
+  'accept-memory-review',
+  'reject-memory-review',
+  'mark-memory-conflict',
+  'supersede-memory-review',
   'refresh',
 ] as const;
+
+export const DASHBOARD_ENTITY_MEMORY_REVIEW_ACTIONS: readonly DashboardEntityMemoryReviewAction[] =
+  [
+    'accept-memory-review',
+    'reject-memory-review',
+    'mark-memory-conflict',
+    'supersede-memory-review',
+  ] as const;
 
 export const DASHBOARD_CHARACTER_ROLE_WORKFLOW_ACTIONS: readonly DashboardCharacterRoleWorkflowAction[] =
   ['embody-character'] as const;
@@ -406,6 +460,12 @@ export function isDashboardCreativeEntityAction(
   value: unknown,
 ): value is DashboardCreativeEntityAction {
   return includesString(DASHBOARD_CREATIVE_ENTITY_ACTIONS, value);
+}
+
+export function isDashboardEntityMemoryReviewAction(
+  value: unknown,
+): value is DashboardEntityMemoryReviewAction {
+  return includesString(DASHBOARD_ENTITY_MEMORY_REVIEW_ACTIONS, value);
 }
 
 export function isDashboardCharacterRoleWorkflowAction(
@@ -647,6 +707,31 @@ export function isDashboardCreativeEntitySyncSuggestion(
   );
 }
 
+export function isDashboardEntityMemoryReviewItem(
+  value: unknown,
+): value is DashboardEntityMemoryReviewItem {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value['reviewId']) &&
+    (value['contributionId'] === undefined || isNonEmptyString(value['contributionId'])) &&
+    (value['observationId'] === undefined || isNonEmptyString(value['observationId'])) &&
+    isDashboardCreativeEntityRef(value['entityRef']) &&
+    isNonEmptyString(value['sourcePackage']) &&
+    (value['sourceLabel'] === undefined || typeof value['sourceLabel'] === 'string') &&
+    isObservationSource(value['sourceKind']) &&
+    isContributionReviewPolicy(value['reviewPolicy']) &&
+    isReviewableMemoryStatus(value['reviewStatus']) &&
+    Array.isArray(value['dimensions']) &&
+    value['dimensions'].every(isNonEmptyString) &&
+    isNonEmptyString(value['summary']) &&
+    (value['evidenceText'] === undefined || typeof value['evidenceText'] === 'string') &&
+    (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
+    (value['createdAt'] === undefined || typeof value['createdAt'] === 'string') &&
+    Array.isArray(value['actions']) &&
+    value['actions'].every(isDashboardEntityMemoryReviewAction)
+  );
+}
+
 export function isDashboardCreativeEntityDetail(
   value: unknown,
 ): value is DashboardCreativeEntityDetail {
@@ -675,6 +760,9 @@ export function isDashboardCreativeEntityDetail(
     value['visualDrafts'].every(isDashboardCreativeEntityVisualDraftSummary) &&
     Array.isArray(value['syncSuggestions']) &&
     value['syncSuggestions'].every(isDashboardCreativeEntitySyncSuggestion) &&
+    (value['memoryReviews'] === undefined ||
+      (Array.isArray(value['memoryReviews']) &&
+        value['memoryReviews'].every(isDashboardEntityMemoryReviewItem))) &&
     isProjectIndexFreshness(value['freshness']) &&
     Array.isArray(value['actions']) &&
     value['actions'].every(isDashboardCreativeEntityActionDescriptor)
@@ -721,6 +809,7 @@ export function isDashboardCreativeEntityActionRequest(
     isDashboardCreativeEntityAction(action) &&
     (value['suggestionId'] === undefined || isNonEmptyString(value['suggestionId'])) &&
     (value['requirementId'] === undefined || isNonEmptyString(value['requirementId'])) &&
+    (value['memoryReviewId'] === undefined || isNonEmptyString(value['memoryReviewId'])) &&
     (value['role'] === undefined || isEntityAssetBindingRole(value['role'])) &&
     (payload === undefined ||
       (isDashboardCharacterRoleWorkflowAction(action)
@@ -750,6 +839,7 @@ export function isDashboardCreativeEntitySourceCapabilities(
   return (
     (value['detail'] === undefined || typeof value['detail'] === 'boolean') &&
     (value['syncSuggestions'] === undefined || typeof value['syncSuggestions'] === 'boolean') &&
+    (value['memoryReviews'] === undefined || typeof value['memoryReviews'] === 'boolean') &&
     (value['actions'] === undefined ||
       (Array.isArray(value['actions']) && value['actions'].every(isDashboardCreativeEntityAction)))
   );
@@ -906,6 +996,20 @@ function isVisualDraftStatus(value: unknown): value is VisualIdentityDraftStatus
   return (
     value === 'drafting' || value === 'selected' || value === 'applied' || value === 'discarded'
   );
+}
+
+function isObservationSource(value: unknown): value is CharacterObservationSource {
+  return includesString(CHARACTER_MEMORY_OBSERVATION_SOURCES, value);
+}
+
+function isContributionReviewPolicy(value: unknown): value is EntityMemoryContributionReviewPolicy {
+  return includesString(ENTITY_MEMORY_CONTRIBUTION_REVIEW_POLICIES, value);
+}
+
+function isReviewableMemoryStatus(
+  value: unknown,
+): value is Exclude<CharacterMemoryReviewStatus, 'accepted'> {
+  return includesString(CHARACTER_MEMORY_REVIEW_STATUSES, value) && value !== 'accepted';
 }
 
 function isMissingRepresentationAction(value: unknown): value is MissingRepresentationAction {

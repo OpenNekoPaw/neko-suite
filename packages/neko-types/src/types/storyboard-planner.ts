@@ -1,4 +1,5 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
+import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { NekoStoryScriptIndex } from './extension-api';
 import type { ResourceRef } from './resource-cache';
@@ -19,12 +20,17 @@ export interface StoryShotPlan {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly textCues?: readonly StoryboardTextCue[];
+  readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
   readonly vfx?: readonly string[];
+  readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
+  readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
+  readonly mediaRefs?: readonly StoryboardMediaRef[];
 }
 
 export interface StoryScenePlan {
@@ -49,12 +55,17 @@ export interface CanvasStoryboardShotPlan {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly textCues?: readonly StoryboardTextCue[];
+  readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
   readonly vfx?: readonly string[];
+  readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
+  readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
+  readonly mediaRefs?: readonly StoryboardMediaRef[];
 }
 
 export interface CanvasStoryboardScenePlan {

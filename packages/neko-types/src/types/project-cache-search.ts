@@ -8,6 +8,13 @@ import {
   type ResourceCacheStatus,
   type ResourceVariantRef,
 } from './resource-cache';
+import type {
+  MediaSemanticIndex,
+  MediaTextSegment,
+  MediaTextSourceKind,
+  MediaTextSegmentKind,
+} from './media-semantic-index';
+import type { CharacterObservation } from './character-memory';
 
 export type ProjectSearchItemKind =
   | 'story-scene'
@@ -18,7 +25,9 @@ export type ProjectSearchItemKind =
   | 'asset'
   | 'media'
   | 'document'
-  | 'generated-asset';
+  | 'generated-asset'
+  | 'semantic-evidence'
+  | 'character-memory-evidence';
 
 export type ProjectSearchPartitionKind =
   | 'story-symbols'
@@ -26,7 +35,9 @@ export type ProjectSearchPartitionKind =
   | 'asset-library'
   | 'media-library'
   | 'documents'
-  | 'generated-assets';
+  | 'generated-assets'
+  | 'semantic-evidence'
+  | 'character-memory';
 
 export type ProjectIndexFreshness = 'fresh' | 'stale' | 'building' | 'partial' | 'failed';
 
@@ -95,11 +106,33 @@ export type ProjectIndexUpdateReason =
   | 'cache-load'
   | 'cache-rebuild';
 
+export type ProjectSemanticIndexingWorkKind =
+  | 'sidecar-projection'
+  | 'ledger-projection'
+  | 'ocr'
+  | 'asr'
+  | 'embedding'
+  | 'perception-refresh';
+
+export type ProjectSemanticIndexingTrigger =
+  | 'project-open'
+  | 'idle'
+  | 'import'
+  | 'on-demand'
+  | 'manual-refresh';
+
 export interface ProjectSearchSourceRef {
   readonly partition: ProjectSearchPartitionKind;
   readonly sourceId?: string;
   readonly sourceKind?: string;
   readonly refId?: string;
+  readonly evidenceId?: string;
+  readonly assetId?: string;
+  readonly segmentId?: string;
+  readonly observationId?: string;
+  readonly textKind?: MediaTextSegmentKind;
+  readonly semanticSourceKind?: MediaTextSourceKind;
+  readonly confidence?: number;
   readonly filePath?: string;
   readonly uri?: string;
   readonly projectRelativePath?: string;
@@ -233,6 +266,25 @@ export interface ProjectSearchAdapterRefreshOptions {
   readonly changedRefs?: readonly ProjectIndexChangedRef[];
 }
 
+export interface ProjectSemanticIndexingPolicy {
+  readonly workKind: ProjectSemanticIndexingWorkKind;
+  readonly allowedTriggers: readonly ProjectSemanticIndexingTrigger[];
+  readonly blocksProjectOpen: boolean;
+  readonly providerId?: string;
+}
+
+export interface ProjectSemanticEvidenceSearchProjectionInput {
+  readonly projectRoot: string;
+  readonly index: MediaSemanticIndex;
+  readonly freshness?: ProjectIndexFreshness;
+}
+
+export interface ProjectCharacterMemorySearchProjectionInput {
+  readonly projectRoot: string;
+  readonly observation: CharacterObservation;
+  readonly freshness?: ProjectIndexFreshness;
+}
+
 export interface ProjectSearchAdapter {
   readonly partition: ProjectSearchPartitionKind;
   ensureInitialized(projectRoot: string): Promise<void>;
@@ -255,6 +307,8 @@ export const PROJECT_SEARCH_ITEM_KINDS: readonly ProjectSearchItemKind[] = [
   'media',
   'document',
   'generated-asset',
+  'semantic-evidence',
+  'character-memory-evidence',
 ] as const;
 
 export const PROJECT_SEARCH_PARTITION_KINDS: readonly ProjectSearchPartitionKind[] = [
@@ -264,6 +318,8 @@ export const PROJECT_SEARCH_PARTITION_KINDS: readonly ProjectSearchPartitionKind
   'media-library',
   'documents',
   'generated-assets',
+  'semantic-evidence',
+  'character-memory',
 ] as const;
 
 export const PROJECT_INDEX_FRESHNESS_VALUES: readonly ProjectIndexFreshness[] = [
@@ -300,6 +356,56 @@ export const PROJECT_SEARCH_SCOPE_KINDS: readonly ProjectSearchScopeKind[] = [
   'current-file',
 ] as const;
 
+export const PROJECT_SEMANTIC_INDEXING_WORK_KINDS: readonly ProjectSemanticIndexingWorkKind[] = [
+  'sidecar-projection',
+  'ledger-projection',
+  'ocr',
+  'asr',
+  'embedding',
+  'perception-refresh',
+] as const;
+
+export const PROJECT_SEMANTIC_INDEXING_TRIGGERS: readonly ProjectSemanticIndexingTrigger[] = [
+  'project-open',
+  'idle',
+  'import',
+  'on-demand',
+  'manual-refresh',
+] as const;
+
+export const PROJECT_SEMANTIC_INDEXING_POLICIES: readonly ProjectSemanticIndexingPolicy[] = [
+  {
+    workKind: 'sidecar-projection',
+    allowedTriggers: ['project-open', 'idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+  {
+    workKind: 'ledger-projection',
+    allowedTriggers: ['project-open', 'idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+  {
+    workKind: 'ocr',
+    allowedTriggers: ['idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+  {
+    workKind: 'asr',
+    allowedTriggers: ['idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+  {
+    workKind: 'embedding',
+    allowedTriggers: ['idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+  {
+    workKind: 'perception-refresh',
+    allowedTriggers: ['idle', 'import', 'on-demand', 'manual-refresh'],
+    blocksProjectOpen: false,
+  },
+] as const;
+
 export function isProjectSearchItemKind(value: unknown): value is ProjectSearchItemKind {
   return includesString(PROJECT_SEARCH_ITEM_KINDS, value);
 }
@@ -324,6 +430,21 @@ export function isProjectSearchMode(value: unknown): value is ProjectSearchMode 
 
 export function isProjectSearchScopeKind(value: unknown): value is ProjectSearchScopeKind {
   return includesString(PROJECT_SEARCH_SCOPE_KINDS, value);
+}
+
+export function canRunSemanticIndexingWorkOnTrigger(
+  workKind: ProjectSemanticIndexingWorkKind,
+  trigger: ProjectSemanticIndexingTrigger,
+): boolean {
+  const policy = PROJECT_SEMANTIC_INDEXING_POLICIES.find((item) => item.workKind === workKind);
+  return Boolean(policy?.allowedTriggers.includes(trigger));
+}
+
+export function canSemanticIndexingWorkBlockProjectOpen(
+  workKind: ProjectSemanticIndexingWorkKind,
+): boolean {
+  const policy = PROJECT_SEMANTIC_INDEXING_POLICIES.find((item) => item.workKind === workKind);
+  return policy?.blocksProjectOpen ?? false;
 }
 
 export function isProjectSearchProviderCapabilities(
@@ -402,6 +523,55 @@ export function isProjectSearchItem(value: unknown): value is ProjectSearchItem 
   );
 }
 
+export function projectMediaSemanticIndexToSearchItems(
+  input: ProjectSemanticEvidenceSearchProjectionInput,
+): readonly ProjectSearchItem[] {
+  return (input.index.textSegments ?? []).map((segment) =>
+    projectMediaTextSegmentToSearchItem(
+      input.projectRoot,
+      input.index,
+      segment,
+      input.freshness ?? 'fresh',
+    ),
+  );
+}
+
+export function projectCharacterObservationToSearchItem(
+  input: ProjectCharacterMemorySearchProjectionInput,
+): ProjectSearchItem {
+  const observation = input.observation;
+  const label =
+    observation.entityRef?.entityId ??
+    observation.candidate?.name ??
+    observation.mention?.text ??
+    observation.candidateId ??
+    observation.observationId;
+  const traitText = observation.dimensions
+    .map((dimension) => `${dimension.dimension} ${stringifySearchValue(dimension.value)}`)
+    .join(' ');
+  return {
+    id: `character-memory:${observation.observationId}`,
+    kind: 'character-memory-evidence',
+    label,
+    description: observation.provenance.source,
+    source: {
+      partition: 'character-memory',
+      sourceKind: observation.provenance.source,
+      semanticSourceKind: observation.provenance.source,
+      observationId: observation.observationId,
+      evidenceId: observation.observationId,
+      confidence: observation.confidence,
+      metadata: {
+        reviewStatus: observation.reviewStatus,
+        sourceRef: observation.sourceRef,
+      },
+    },
+    projectRoot: input.projectRoot,
+    searchText: `${label} ${traitText}`.trim(),
+    freshness: input.freshness ?? 'fresh',
+  };
+}
+
 export function isProjectSearchCacheManifest(value: unknown): value is ProjectSearchCacheManifest {
   if (!isRecord(value)) return false;
   return (
@@ -429,6 +599,48 @@ function isProjectSearchCachePartitionManifest(
     optionalString(value['sourceIdentity']) &&
     typeof value['updatedAt'] === 'string'
   );
+}
+
+function projectMediaTextSegmentToSearchItem(
+  projectRoot: string,
+  index: MediaSemanticIndex,
+  segment: MediaTextSegment,
+  freshness: ProjectIndexFreshness,
+): ProjectSearchItem {
+  return {
+    id: `semantic-evidence:${index.assetId}:${segment.segmentId}`,
+    kind: 'semantic-evidence',
+    label: segment.text,
+    description: `${segment.kind} ${segment.provenance.sourceKind}`,
+    source: {
+      partition: 'semantic-evidence',
+      sourceKind: segment.provenance.sourceKind,
+      semanticSourceKind: segment.provenance.sourceKind,
+      textKind: segment.kind,
+      assetId: index.assetId,
+      segmentId: segment.segmentId,
+      evidenceId: segment.segmentId,
+      confidence: segment.confidence,
+      metadata: {
+        sourceRef: segment.sourceRef,
+        range: segment.range,
+      },
+    },
+    projectRoot,
+    searchText: `${segment.text} ${segment.kind} ${segment.provenance.sourceKind}`.trim(),
+    freshness,
+  };
+}
+
+function stringifySearchValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
 }
 
 function optionalProjectSearchKinds(value: unknown): boolean {

@@ -23,6 +23,14 @@ describe('artifact storyboard projection', () => {
             {
               shotNumber: 1,
               referenceImagePath: '${WORKSPACE}/comic/panel-1.png',
+              characters: [
+                expect.objectContaining({
+                  characterId: 'char-rin',
+                  characterName: 'Rin',
+                  role: 'primary',
+                  continuityNotes: 'Keep scarf.',
+                }),
+              ],
             },
           ],
         },
@@ -36,6 +44,12 @@ describe('artifact storyboard projection', () => {
           shotNumber: 1,
           duration: 1.5,
           dialogue: 'Go.',
+          voiceCues: [
+            expect.objectContaining({
+              cueId: 'shot-1-dialogue-1',
+              speakerName: 'Rin',
+            }),
+          ],
           label: '#001 Opening',
           imagePath: '${WORKSPACE}/comic/panel-1.png',
         },
@@ -166,6 +180,25 @@ function makeStoryboardTable(overrides: Partial<StoryboardTable> = {}): Storyboa
             visualDescription: 'A panel.',
             characterAction: 'A character runs.',
             dialogue: 'Go.',
+            voiceCues: [
+              {
+                cueId: 'shot-1-dialogue-1',
+                kind: 'dialogue',
+                text: 'Go.',
+                speakerName: 'Rin',
+                speakerCharacterId: 'char-rin',
+                speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+              },
+            ],
+            characters: [
+              {
+                characterId: 'char-rin',
+                entityRef: { entityId: 'char-rin', entityKind: 'character' },
+                name: 'Rin',
+                role: 'primary',
+                continuityNotes: 'Keep scarf.',
+              },
+            ],
             imageStrategy: 'reuse-original',
             sourceMediaRefs: [
               {

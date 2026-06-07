@@ -98,6 +98,8 @@ export type ArtifactDiagnosticCode =
   | 'invalid-profile'
   | 'unsupported-profile-version'
   | 'missing-profile-descriptor'
+  | 'profile-field-group-missing'
+  | 'profile-field-definition-missing'
   | 'profile-column-mismatch'
   | 'profile-cell-type-mismatch'
   | 'profile-required-cell-missing'
@@ -368,6 +370,9 @@ export interface ArtifactProfileDescriptor {
   readonly source: ArtifactProfileSource;
   readonly title?: string;
   readonly blockComposition?: readonly ArtifactProfileBlockRule[];
+  readonly fieldDefinitions?: readonly ArtifactProfileFieldDefinition[];
+  readonly fieldGroups?: readonly ArtifactProfileFieldGroup[];
+  readonly includeFieldGroups?: readonly string[];
   readonly columns?: readonly ArtifactProfileColumnRule[];
   readonly display?: ArtifactProfileDisplayHints;
   readonly validators?: readonly string[];
@@ -382,6 +387,16 @@ export interface ArtifactProfileBlockRule {
   readonly minCount?: number;
   readonly maxCount?: number;
   readonly role?: string;
+}
+
+export interface ArtifactProfileFieldDefinition extends ArtifactProfileColumnRule {
+  readonly description?: string;
+}
+
+export interface ArtifactProfileFieldGroup {
+  readonly groupId: string;
+  readonly label?: string;
+  readonly fieldIds: readonly string[];
 }
 
 export interface ArtifactProfileColumnRule {
@@ -883,7 +898,12 @@ function validateProfileForGenericTable(
       ),
     );
   }
-  if (!descriptor.columns || !Array.isArray(table['columns']) || !Array.isArray(table['rows'])) {
+  const profileColumns = resolveProfileColumnRules(descriptor, diagnostics);
+  if (
+    profileColumns.length === 0 ||
+    !Array.isArray(table['columns']) ||
+    !Array.isArray(table['rows'])
+  ) {
     return;
   }
 
@@ -893,7 +913,7 @@ function validateProfileForGenericTable(
       columnsById.set(column['columnId'], column);
     }
   }
-  for (const rule of descriptor.columns) {
+  for (const rule of profileColumns) {
     const column = columnsById.get(rule.columnId);
     if (!column) {
       if (rule.required) {
@@ -938,7 +958,7 @@ function validateProfileForGenericTable(
       ['rows', rowIndex, 'actions'],
       diagnostics,
     );
-    for (const rule of descriptor.columns ?? []) {
+    for (const rule of profileColumns) {
       const column = columnsById.get(rule.columnId);
       const cell = row['cells'][rule.columnId];
       if (cell === undefined) {
@@ -1119,6 +1139,63 @@ function validateProfileCellMetadata(
     }
     validateResolvedSchemaRef(rule.schemaRef, [...path, 'schemaRef'], diagnostics, options);
   }
+}
+
+function resolveProfileColumnRules(
+  descriptor: ArtifactProfileDescriptor,
+  diagnostics: ArtifactDiagnostic[],
+): readonly ArtifactProfileColumnRule[] {
+  const rules = new Map<string, ArtifactProfileColumnRule>();
+  const fieldDefinitions = new Map<string, ArtifactProfileFieldDefinition>();
+  const fieldGroups = new Map<string, ArtifactProfileFieldGroup>();
+
+  for (const fieldDefinition of descriptor.fieldDefinitions ?? []) {
+    fieldDefinitions.set(fieldDefinition.columnId, fieldDefinition);
+  }
+  for (const fieldGroup of descriptor.fieldGroups ?? []) {
+    fieldGroups.set(fieldGroup.groupId, fieldGroup);
+  }
+
+  for (const [groupIndex, groupId] of (descriptor.includeFieldGroups ?? []).entries()) {
+    const group = fieldGroups.get(groupId);
+    if (!group) {
+      diagnostics.push(
+        artifactDiagnostic(
+          'error',
+          'profile-field-group-missing',
+          ['profile', 'includeFieldGroups', groupIndex],
+          `Profile references unknown field group ${groupId}.`,
+          { actual: groupId },
+        ),
+      );
+      continue;
+    }
+    for (const [fieldIndex, fieldId] of group.fieldIds.entries()) {
+      const fieldDefinition = fieldDefinitions.get(fieldId);
+      if (!fieldDefinition) {
+        diagnostics.push(
+          artifactDiagnostic(
+            'error',
+            'profile-field-definition-missing',
+            ['profile', 'fieldGroups', group.groupId, 'fieldIds', fieldIndex],
+            `Profile field group ${group.groupId} references unknown field ${fieldId}.`,
+            {
+              expected: fieldId,
+              actual: group.groupId,
+            },
+          ),
+        );
+        continue;
+      }
+      rules.set(fieldDefinition.columnId, fieldDefinition);
+    }
+  }
+
+  for (const rule of descriptor.columns ?? []) {
+    rules.set(rule.columnId, { ...rules.get(rule.columnId), ...rule });
+  }
+
+  return Array.from(rules.values());
 }
 
 function validateActionsAllowedByProfile(

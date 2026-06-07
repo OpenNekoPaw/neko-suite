@@ -116,12 +116,19 @@ export async function applyStoryboardPayloadToCanvas(
               dialogue: shot.dialogue,
               voiceOver: shot.voiceOver,
               soundCue: shot.soundCue,
+              textCues: shot.textCues ? [...shot.textCues] : undefined,
+              voiceCues: shot.voiceCues ? [...shot.voiceCues] : undefined,
               generationPrompt: shot.generationPrompt,
               visualStyle: shot.visualStyle,
               referenceImagePath: shot.referenceImagePath,
               referenceResourceRef: shot.referenceResourceRef,
               referenceImageResourceRef: shot.referenceImageResourceRef,
               vfx: shot.vfx ? [...shot.vfx] : undefined,
+              sourceMediaRefs: shot.sourceMediaRefs ? [...shot.sourceMediaRefs] : undefined,
+              generatedMediaRefs: shot.generatedMediaRefs
+                ? [...shot.generatedMediaRefs]
+                : undefined,
+              mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
               // Phase 6.3 — stamp plan provenance when orchestrated
               ...(options.workflowPlanId !== undefined && {
                 workflowPlanId: options.workflowPlanId,
@@ -256,12 +263,17 @@ function normalizeShotPlan(
     dialogue: shotPlan.dialogue,
     voiceOver: shotPlan.voiceOver,
     soundCue: shotPlan.soundCue,
+    textCues: shotPlan.textCues ? [...shotPlan.textCues] : undefined,
+    voiceCues: shotPlan.voiceCues ? [...shotPlan.voiceCues] : undefined,
     generationPrompt: shotPlan.generationPrompt,
     visualStyle: shotPlan.visualStyle,
     referenceImagePath: shotPlan.referenceImagePath,
     referenceResourceRef: shotPlan.referenceResourceRef,
     referenceImageResourceRef: shotPlan.referenceImageResourceRef,
     vfx: shotPlan.vfx ? [...shotPlan.vfx] : undefined,
+    sourceMediaRefs: shotPlan.sourceMediaRefs ? [...shotPlan.sourceMediaRefs] : undefined,
+    generatedMediaRefs: shotPlan.generatedMediaRefs ? [...shotPlan.generatedMediaRefs] : undefined,
+    mediaRefs: shotPlan.mediaRefs ? [...shotPlan.mediaRefs] : undefined,
   };
 }
 
