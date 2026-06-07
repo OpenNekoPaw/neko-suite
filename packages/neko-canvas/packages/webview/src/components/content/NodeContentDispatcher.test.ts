@@ -2,7 +2,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
+import { ContainerRenderer } from './ContainerRenderer';
 import { createNodeCollapseUpdate, NodeContentDispatcher } from './NodeContentDispatcher';
+import type { NodeContentRenderContext } from './types';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
 import { setLocale } from '../../i18n';
@@ -278,8 +280,142 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).toContain('data-content-block-id="shot-visual-description"');
     expect(markup).toContain('data-content-block-id="shot-character-action"');
-    expect(markup).toContain('Detail');
+    expect(markup).toContain('Visual');
+    expect(markup).toContain('Characters');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('keeps shot overlay metadata visible alongside bounded reference previews', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 15,
+          duration: 3,
+          visualDescription: 'The wish breaks through the dark frame.',
+          characterAction: 'The character reaches through the white streaks.',
+          characters: [
+            {
+              characterId: 'char-genie',
+              characterName: '燈神',
+              entityRef: { entityId: 'entity-genie', entityKind: 'character' },
+              role: 'primary',
+              action: 'stares forward',
+              emotion: 'determined',
+              appearanceNotes: 'blue aura and gold cuffs',
+              continuityNotes: 'same lamp glow as prior shot',
+            },
+          ],
+          textCues: [
+            {
+              cueId: 'text-1',
+              kind: 'dialogue',
+              text: '那一願望實現囉！',
+              speakerName: '燈神',
+              speakerCharacterId: 'char-genie',
+              speakerEntityRef: { entityId: 'entity-genie', entityKind: 'character' },
+              confidence: 0.93,
+              sourceRefId: 'panel-11',
+            },
+            {
+              cueId: 'text-2',
+              kind: 'backgroundText',
+              text: '第 11 頁',
+              sourceRefId: 'page-header',
+            },
+          ],
+          voiceCues: [
+            {
+              cueId: 'voice-1',
+              kind: 'dialogue',
+              text: '那一願望實現囉！',
+              speakerName: '燈神',
+              speakerCharacterId: 'char-genie',
+              speakerEntityRef: { entityId: 'entity-genie', entityKind: 'character' },
+              emotion: 'triumphant',
+              delivery: 'warm',
+              voiceAssetId: 'voice-genie',
+            },
+          ],
+          dialogue: '那一願望實現囉！',
+          voiceOver: 'A promise becomes visible.',
+          soundCue: 'rushing light',
+          generationPrompt: 'Animate the manga panel with drifting smoke and lamp glow.',
+          generatedVideoAsset: {
+            type: 'generated-video',
+            id: 'video-1',
+            path: 'generated/video-1.mp4',
+            mimeType: 'video/mp4',
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            prompt: 'Video prompt: smoke curls around the genie.',
+            duration: 3,
+            width: 1280,
+            height: 720,
+            fps: 24,
+          },
+          sourceMediaRefs: [
+            {
+              refId: 'source-panel-11',
+              role: 'source',
+              label: 'P11',
+              mimeType: 'image/png',
+              locator: {
+                type: 'tool-result',
+                toolCallId: 'readimage-current-result',
+                assetIndex: 0,
+              },
+            },
+          ],
+          referenceImagePath: 'data:image/png;base64,reference',
+        },
+      }),
+      id: 'shot-overlay',
+    } as CanvasNode;
+    const content = node.content;
+    if (!content) {
+      throw new Error('Expected shot content');
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ContainerRenderer, {
+        section: content,
+        context: createOverlayRenderContext(node),
+      }),
+    );
+
+    expect(markup).toContain('max-h-[52vh]');
+    expect(markup).toContain('object-contain');
+    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-content-block-id="shot-characters"');
+    expect(markup).toContain('燈神');
+    expect(markup).toContain('primary');
+    expect(markup).toContain('stares forward');
+    expect(markup).toContain('entity-genie');
+    expect(markup).toContain('blue aura and gold cuffs');
+    expect(markup).toContain('same lamp glow as prior shot');
+    expect(markup).toContain('data-content-block-id="shot-text-cues"');
+    expect(markup).toContain('backgroundText');
+    expect(markup).toContain('page-header');
+    expect(markup).toContain('0.93');
+    expect(markup).toContain('data-content-block-id="shot-voice-cues"');
+    expect(markup).toContain('triumphant');
+    expect(markup).toContain('voice-genie');
+    expect(markup).toContain('data-content-block-id="shot-dialogue"');
+    expect(markup).toContain('那一願望實現囉！');
+    expect(markup).toContain('data-content-block-id="shot-voice-over"');
+    expect(markup).toContain('A promise becomes visible.');
+    expect(markup).toContain('data-content-block-id="shot-sound-cue"');
+    expect(markup).toContain('rushing light');
+    expect(markup).toContain('data-content-block-id="shot-generation-prompt"');
+    expect(markup).toContain('Animate the manga panel with drifting smoke and lamp glow.');
+    expect(markup).toContain('data-content-block-id="shot-generated-video-prompt"');
+    expect(markup).toContain('Video prompt: smoke curls around the genie.');
+    expect(markup).toContain('data-content-block-id="shot-source-media-refs"');
+    expect(markup).toContain('readimage-current-result');
+    expect(markup).toContain('P11');
   });
 
   it('localizes composable shot control values', () => {
@@ -904,3 +1040,22 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Legacy path');
   });
 });
+
+function createOverlayRenderContext(node: CanvasNode): NodeContentRenderContext {
+  return {
+    node,
+    allNodes: [node],
+    selectedNodeIds: [node.id],
+    isSelected: true,
+    isExpanded: true,
+    layout: {
+      width: 1200,
+      height: 720,
+      density: 'expanded',
+      surface: 'overlay',
+      overflow: 'scroll',
+    },
+    depth: 0,
+    previewSurfaceKind: 'overlay',
+  };
+}

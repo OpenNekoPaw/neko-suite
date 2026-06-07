@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasBlock, CanvasNode, ChildNodeSlot } from '@neko/shared';
 import { getContainerChildIds, getNodeParentId } from '@neko/shared';
@@ -48,7 +48,13 @@ const INLINE_TEXT_OWNED_KEYS = [
 
 export function ContainerRenderer({ section, context }: ContainerRendererProps) {
   const blockRendererRegistry = useMemo(() => createBuiltInBlockRendererRegistry(), []);
-  const [isCollapsed, setIsCollapsed] = useState(() => section.defaultCollapsed ?? false);
+  const [isCollapsed, setIsCollapsed] = useState(() => resolveDefaultCollapsed(section, context));
+
+  useEffect(() => {
+    // Re-apply surface-specific defaults, such as overlay sections that must open
+    // even if the same section was manually collapsed on the canvas surface.
+    setIsCollapsed(resolveDefaultCollapsed(section, context));
+  }, [context.layout.surface, section.defaultCollapsed, section.id, section.metadata]);
 
   if (!isSectionVisible(section.visibleWhen, context)) {
     return null;
@@ -1222,6 +1228,25 @@ function shouldFillSection(
 
 function isStretchBlock(block: CanvasBlock): boolean {
   return block.kind === 'textarea' || block.kind === 'editable-text';
+}
+
+function resolveDefaultCollapsed(
+  section: ContainerRendererProps['section'],
+  context: ContainerRendererProps['context'],
+): boolean {
+  if (shouldExpandSectionBySurface(section, context.layout.surface)) {
+    return false;
+  }
+
+  return section.defaultCollapsed ?? false;
+}
+
+function shouldExpandSectionBySurface(
+  section: ContainerRendererProps['section'],
+  surface: ContainerRendererProps['context']['layout']['surface'],
+): boolean {
+  const surfaces = section.metadata?.['defaultExpandedSurfaces'];
+  return Array.isArray(surfaces) && surfaces.includes(surface);
 }
 
 function resolveLabel(label: string | undefined): string | undefined {

@@ -3,12 +3,18 @@ import type {
   CanvasSerializableRecord,
   CanvasSerializableValue,
   GalleryPreset,
+  GeneratedImage,
   GeneratedImageVersion,
+  GeneratedVideo,
   PortDefinition,
   RegisteredCanvasNode,
   RegisteredCanvasNodeType,
   ScriptScene,
   ShotCharacter,
+  ShotImagePrepPlan,
+  StoryboardMediaRef,
+  StoryboardTextCue,
+  StoryboardVoiceCue,
   TableColumnDef,
 } from '@neko/shared';
 import {
@@ -50,6 +56,9 @@ export const NODE_DEFAULT_SIZES: Partial<Record<CanvasNodeType, NodeDefaultSize>
 
 const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
 const DEFAULT_EMPTY_CHARACTERS: ShotCharacter[] = [];
+const DEFAULT_EMPTY_TEXT_CUES: StoryboardTextCue[] = [];
+const DEFAULT_EMPTY_VOICE_CUES: StoryboardVoiceCue[] = [];
+const DEFAULT_EMPTY_MEDIA_REFS: StoryboardMediaRef[] = [];
 const DEFAULT_EMPTY_SCENES: ScriptScene[] = [];
 const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
 const REGISTERED_NODE_DEFAULT_DATA: Partial<
@@ -91,6 +100,18 @@ function asStringArray(value: unknown): string[] {
 
 function asObjectArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function isGeneratedImage(value: unknown): value is GeneratedImage {
+  return isRecord(value) && value.type === 'generated-image';
+}
+
+function isGeneratedVideo(value: unknown): value is GeneratedVideo {
+  return isRecord(value) && value.type === 'generated-video';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' {
@@ -321,6 +342,10 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             runtimeReferenceImagePath: asString(data.runtimeReferenceImagePath) || undefined,
             generatedImage: asString(data.generatedImage) || undefined,
             generatedVideo: asString(data.generatedVideo) || undefined,
+            generatedAsset: isGeneratedImage(data.generatedAsset) ? data.generatedAsset : undefined,
+            generatedVideoAsset: isGeneratedVideo(data.generatedVideoAsset)
+              ? data.generatedVideoAsset
+              : undefined,
             generationStatus:
               data.generationStatus === 'pending' ||
               data.generationStatus === 'generating' ||
@@ -333,6 +358,22 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             dialogue: asString(data.dialogue) || undefined,
             voiceOver: asString(data.voiceOver) || undefined,
             soundCue: asString(data.soundCue) || undefined,
+            textCues: asObjectArray<StoryboardTextCue>(data.textCues) ?? DEFAULT_EMPTY_TEXT_CUES,
+            voiceCues:
+              asObjectArray<StoryboardVoiceCue>(data.voiceCues) ?? DEFAULT_EMPTY_VOICE_CUES,
+            generationPrompt: asString(data.generationPrompt) || undefined,
+            visualStyle: asString(data.visualStyle) || undefined,
+            vfx: asStringArray(data.vfx),
+            sourceMediaRefs:
+              asObjectArray<StoryboardMediaRef>(data.sourceMediaRefs) ?? DEFAULT_EMPTY_MEDIA_REFS,
+            generatedMediaRefs:
+              asObjectArray<StoryboardMediaRef>(data.generatedMediaRefs) ??
+              DEFAULT_EMPTY_MEDIA_REFS,
+            mediaRefs:
+              asObjectArray<StoryboardMediaRef>(data.mediaRefs) ?? DEFAULT_EMPTY_MEDIA_REFS,
+            shotImagePrepPlan: isShotImagePrepPlanLike(data.shotImagePrepPlan)
+              ? data.shotImagePrepPlan
+              : undefined,
             lastImportedToTimelineAt:
               typeof data.lastImportedToTimelineAt === 'number'
                 ? data.lastImportedToTimelineAt
@@ -501,6 +542,12 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
       }
       throw new Error(`Unsupported Canvas node type "${type}"`);
   }
+}
+
+function isShotImagePrepPlanLike(value: unknown): value is ShotImagePrepPlan {
+  return (
+    isRecord(value) && value.kind === 'shot-image-prep-plan' && typeof value.planId === 'string'
+  );
 }
 
 function buildRegisteredCanvasNode(options: {

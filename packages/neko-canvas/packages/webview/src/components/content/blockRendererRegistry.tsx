@@ -201,7 +201,7 @@ function renderListBlock(context: BlockRendererContext): React.ReactNode {
   return (
     <ul className="space-y-1 text-xs text-[var(--node-fg-secondary)]">
       {items.map((item, index) => (
-        <li key={index} className="truncate">
+        <li key={index} className="break-words">
           {stringifyValue(item, `Item ${index + 1}`)}
         </li>
       ))}
@@ -460,7 +460,30 @@ function stringifyValue(value: unknown, fallback: string | undefined): string {
     return value.map((item) => stringifyValue(item, '')).join(', ');
   }
 
+  if (isRecord(value)) {
+    return stringifyRecordSummary(value);
+  }
+
   return JSON.stringify(value);
+}
+
+function stringifyRecordSummary(value: Record<string, unknown>): string {
+  const knownSummary = compactStrings([
+    readStringValue(value['characterName']) ?? readStringValue(value['name']),
+    readStringValue(value['role']),
+    readStringValue(value['action']),
+    readStringValue(value['emotion']),
+  ]).join(' ');
+
+  return knownSummary || JSON.stringify(value);
+}
+
+function compactStrings(values: readonly (string | undefined)[]): string[] {
+  return values.filter((value): value is string => Boolean(value && value.trim()));
+}
+
+function readStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
 function stringifyFieldValue(
@@ -480,8 +503,14 @@ function getStringArrayMetadata(block: CanvasBlock, key: string): string[] {
 }
 
 function renderCollectionItem(block: CanvasBlock, item: unknown, index: number): React.ReactNode {
+  if (block.collection?.itemBlocks && block.collection.itemBlocks.length > 0) {
+    return renderStructuredCollectionItem(block, item, index);
+  }
+
   const label =
-    readCollectionItemPath(item, block.collection?.itemLabelPath) ?? `Item ${index + 1}`;
+    readCollectionItemPath(item, block.collection?.itemLabelPath) ??
+    readCollectionItemPath(item, block.collection?.itemKeyPath) ??
+    `Item ${index + 1}`;
   const rawPreview = readCollectionItemPath(item, block.collection?.itemPreviewPath);
   const preview = rawPreview && isSafeWebviewUrl(rawPreview) ? rawPreview : undefined;
   const status = isRecord(item) ? stringifyValue(item['generationStatus'], undefined) : undefined;
@@ -505,6 +534,66 @@ function renderCollectionItem(block: CanvasBlock, item: unknown, index: number):
   );
 }
 
+function renderStructuredCollectionItem(
+  block: CanvasBlock,
+  item: unknown,
+  index: number,
+): React.ReactNode {
+  const label =
+    readCollectionItemPath(item, block.collection?.itemLabelPath) ??
+    readCollectionItemPath(item, block.collection?.itemKeyPath) ??
+    `Item ${index + 1}`;
+  const fields = (block.collection?.itemBlocks ?? []).flatMap((itemBlock) => {
+    const value = readCollectionItemValue(item, itemBlock.binding?.path);
+    if (!hasDisplayValue(value)) {
+      return [];
+    }
+    return [
+      {
+        id: itemBlock.id,
+        label: resolveLabel(itemBlock.label) ?? itemBlock.id,
+        value,
+        multiline: itemBlock.kind === 'textarea' || itemBlock.metadata?.['multiline'] === true,
+      },
+    ];
+  });
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="truncate text-xs font-medium text-[var(--node-fg)]">{label}</div>
+      {fields.length > 0 ? (
+        <dl className="space-y-1">
+          {fields.map((field) => (
+            <div
+              key={field.id}
+              className={
+                field.multiline ? 'min-w-0' : 'grid min-w-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1'
+              }
+            >
+              <dt className="text-[10px] uppercase text-[var(--node-fg-secondary)]">
+                {field.label}
+              </dt>
+              <dd
+                className={
+                  field.multiline
+                    ? 'whitespace-pre-wrap break-words text-xs text-[var(--node-fg)]'
+                    : 'min-w-0 truncate text-xs text-[var(--node-fg)]'
+                }
+              >
+                {stringifyValue(field.value, undefined)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <div className="break-words text-xs text-[var(--node-fg-secondary)]">
+          {stringifyValue(item, label)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function readCollectionItemPath(item: unknown, path: string | undefined): string | undefined {
   if (!path || !isRecord(item)) {
     return undefined;
@@ -513,6 +602,38 @@ function readCollectionItemPath(item: unknown, path: string | undefined): string
   const key = path.startsWith('/') ? path.slice(1) : path;
   const value = item[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readCollectionItemValue(item: unknown, path: string | undefined): unknown {
+  if (!path || !isRecord(item)) {
+    return undefined;
+  }
+
+  const keys = path
+    .replace(/^\//, '')
+    .split('/')
+    .map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let current: unknown = item;
+  for (const key of keys) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+function hasDisplayValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (isRecord(value)) {
+    return Object.keys(value).length > 0;
+  }
+  return true;
 }
 
 function getCollectionClassName(layout: string | undefined): string {

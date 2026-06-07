@@ -128,6 +128,18 @@ describe('nodeFactory composable presets', () => {
         shotNumber: 7,
         visualDescription: 'A bright doorway',
         referenceImagePath: 'assets/reference.png',
+        generationPrompt: 'animated doorway',
+        visualStyle: 'noir',
+        vfx: ['glow'],
+        textCues: [{ cueId: 'text-1', kind: 'caption', text: 'Doorway' }],
+        voiceCues: [{ cueId: 'voice-1', kind: 'voiceOver', text: 'The door opens.' }],
+        sourceMediaRefs: [
+          {
+            refId: 'source-1',
+            role: 'source',
+            locator: { type: 'tool-result', toolCallId: 'readimage', assetIndex: 0 },
+          },
+        ],
         generatedImage: 'assets/shot-7.png',
         generationHistory: [
           {
@@ -145,6 +157,20 @@ describe('nodeFactory composable presets', () => {
     expect(node.preset).toBe('shot.basic');
     expect(node.content?.sections?.some((section) => section.id === 'shot-controls')).toBe(true);
     expect(node.content?.sections?.some((section) => section.id === 'shot-preview')).toBe(true);
+    expect(
+      node.content?.sections?.find((section) => section.id === 'shot-generation'),
+    ).toMatchObject({
+      defaultCollapsed: false,
+      metadata: {
+        defaultExpandedSurfaces: ['overlay'],
+      },
+    });
+    expect(node.content?.sections?.find((section) => section.id === 'shot-media')).toMatchObject({
+      defaultCollapsed: true,
+      metadata: {
+        defaultExpandedSurfaces: ['overlay'],
+      },
+    });
     expect(node.preview).toMatchObject({
       title: 'Shot 7',
       subtitle: 'A bright doorway',
@@ -161,6 +187,20 @@ describe('nodeFactory composable presets', () => {
     }
     expect(node.data.visualDescription).toBe('A bright doorway');
     expect(node.data.referenceImagePath).toBe('assets/reference.png');
+    expect(node.data.generationPrompt).toBe('animated doorway');
+    expect(node.data.visualStyle).toBe('noir');
+    expect(node.data.vfx).toEqual(['glow']);
+    expect(node.data.textCues).toEqual([{ cueId: 'text-1', kind: 'caption', text: 'Doorway' }]);
+    expect(node.data.voiceCues).toEqual([
+      { cueId: 'voice-1', kind: 'voiceOver', text: 'The door opens.' },
+    ]);
+    expect(node.data.sourceMediaRefs).toEqual([
+      {
+        refId: 'source-1',
+        role: 'source',
+        locator: { type: 'tool-result', toolCallId: 'readimage', assetIndex: 0 },
+      },
+    ]);
   });
 
   it('applies the migrated scene preset with container capability and child slot content', () => {

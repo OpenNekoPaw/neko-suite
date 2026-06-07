@@ -26,19 +26,84 @@ describe('PropertyPanel node properties registry', () => {
       shotNumber: 1,
       visualDescription: 'A quiet hallway',
       duration: 4,
-      characters: ['Mika'],
+      characters: [{ characterId: 'char-mika', characterName: 'Mika' }],
+      textCues: [{ cueId: 'text-1', kind: 'dialogue', text: 'Hello', speakerName: 'Mika' }],
+      voiceCues: [{ cueId: 'voice-1', kind: 'dialogue', text: 'Hello', speakerName: 'Mika' }],
       emotion: ['calm'],
+      generationPrompt: 'animated hallway',
+      shotImagePrepPlan: {
+        schemaVersion: 1,
+        kind: 'shot-image-prep-plan',
+        planId: 'shot-1-image-prep',
+        sceneId: 'scene-1',
+        shotId: 'shot-1',
+        imageStrategy: 'transform-original',
+        operationPlan: ['crop-panel', 'remove-text', 'inpaint'],
+        sourceMediaRefs: [
+          {
+            refId: 'source-panel-1',
+            role: 'source',
+            locator: { type: 'tool-result', toolCallId: 'read-comic', assetIndex: 0 },
+          },
+        ],
+        referenceBundle: {
+          characterRefs: [
+            {
+              entityRef: { entityId: 'char-mika', entityKind: 'character' },
+              role: 'continuity',
+            },
+          ],
+        },
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'missing-cost-estimate',
+            path: ['costEstimate'],
+            message: 'Cost is unknown.',
+          },
+        ],
+        status: 'needs-approval',
+      },
     });
 
     const items = enumerateComposablePropertyItems(node);
     const fieldPaths = items
       .filter((item) => item.kind === 'field')
       .map((item) => item.binding.path);
+    const collectionPaths = items
+      .filter((item) => item.kind === 'collection')
+      .map((item) => item.collection.source.path);
 
     expect(fieldPaths).toContain('/visualDescription');
     expect(fieldPaths).toContain('/duration');
-    expect(fieldPaths).toContain('/characters');
+    expect(fieldPaths).toContain('/generationPrompt');
     expect(fieldPaths).toContain('/dialogue');
+    expect(fieldPaths).toContain('/shotImagePrepPlan/status');
+    expect(fieldPaths).toContain('/shotImagePrepPlan/imageStrategy');
+    expect(fieldPaths).toContain('/shotImagePrepPlan/operationPlan');
+    expect(collectionPaths).toContain('/characters');
+    expect(collectionPaths).toContain('/textCues');
+    expect(collectionPaths).toContain('/voiceCues');
+    expect(collectionPaths).toContain('/shotImagePrepPlan/sourceMediaRefs');
+    expect(collectionPaths).toContain('/shotImagePrepPlan/referenceBundle/characterRefs');
+    expect(collectionPaths).toContain('/shotImagePrepPlan/diagnostics');
+    expect(items.filter((item) => item.kind === 'action').map((item) => item.action)).toEqual(
+      expect.arrayContaining([
+        'approve-shot-prep',
+        'reject-shot-prep',
+        'estimate-batch-cost',
+        'run-shot-prep',
+        'run-approved-shot-prep-batch',
+      ]),
+    );
+    expect(
+      items.some(
+        (item) =>
+          item.kind === 'collection' &&
+          item.collection.source.path === '/characters' &&
+          item.collection.source.mode === 'read',
+      ),
+    ).toBe(true);
     expect(items.some((item) => item.kind === 'preview')).toBe(true);
   });
 

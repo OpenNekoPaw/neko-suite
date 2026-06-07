@@ -125,7 +125,8 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           ],
         },
         {
-          id: 'shot-metadata',
+          id: 'shot-visual',
+          title: 'preset.shot.visualSection',
           layout: 'stack',
           blocks: [
             fieldBlock(
@@ -140,22 +141,399 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
               '/characterAction',
               'preset.shot.action',
             ),
-            fieldBlock('shot-characters', 'list', '/characters', 'preset.shot.characters'),
             fieldBlock('shot-emotion', 'tag-list', '/emotion', 'preset.shot.emotion'),
             fieldBlock('shot-scene-tags', 'tag-list', '/sceneTags', 'preset.shot.tags'),
+            fieldBlock('shot-visual-style', 'input', '/visualStyle', 'preset.shot.visualStyle'),
+            fieldBlock('shot-vfx', 'tag-list', '/vfx', 'preset.shot.vfx'),
           ],
         },
         {
-          id: 'shot-detail',
-          title: 'preset.shot.detail',
+          id: 'shot-characters-section',
+          title: 'preset.shot.charactersSection',
+          layout: 'stack',
+          blocks: [
+            readonlyCollectionBlock(
+              'shot-characters',
+              '/characters',
+              'preset.shot.characters',
+              'preset.shot.noCharacters',
+              '/characterId',
+              '/characterName',
+              [
+                readonlyItemField('shot-character-role', 'input', '/role', 'preset.shot.role'),
+                readonlyItemField(
+                  'shot-character-action',
+                  'textarea',
+                  '/action',
+                  'preset.shot.action',
+                ),
+                readonlyItemField(
+                  'shot-character-emotion',
+                  'input',
+                  '/emotion',
+                  'preset.shot.emotion',
+                ),
+                readonlyItemField(
+                  'shot-character-entity',
+                  'input',
+                  '/entityRef/entityId',
+                  'preset.shot.entity',
+                ),
+                readonlyItemField(
+                  'shot-character-appearance',
+                  'textarea',
+                  '/appearanceNotes',
+                  'preset.shot.appearance',
+                ),
+                readonlyItemField(
+                  'shot-character-continuity',
+                  'textarea',
+                  '/continuityNotes',
+                  'preset.shot.continuity',
+                ),
+              ],
+            ),
+          ],
+        },
+        {
+          id: 'shot-text-cues-section',
+          title: 'preset.shot.textCuesSection',
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
-          defaultCollapsed: true,
+          blocks: [
+            readonlyCollectionBlock(
+              'shot-text-cues',
+              '/textCues',
+              'preset.shot.textCues',
+              'preset.shot.noTextCues',
+              '/cueId',
+              '/text',
+              [
+                readonlyItemField('shot-text-cue-kind', 'input', '/kind', 'preset.shot.cueKind'),
+                readonlyItemField(
+                  'shot-text-cue-speaker',
+                  'input',
+                  '/speakerName',
+                  'preset.shot.speaker',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-speaker-id',
+                  'input',
+                  '/speakerCharacterId',
+                  'preset.shot.speakerCharacterId',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-speaker-entity',
+                  'input',
+                  '/speakerEntityRef/entityId',
+                  'preset.shot.entity',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-emotion',
+                  'input',
+                  '/emotion',
+                  'preset.shot.emotion',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-delivery',
+                  'input',
+                  '/delivery',
+                  'preset.shot.delivery',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-confidence',
+                  'number',
+                  '/confidence',
+                  'preset.shot.confidence',
+                ),
+                readonlyItemField(
+                  'shot-text-cue-source',
+                  'input',
+                  '/sourceRefId',
+                  'preset.shot.sourceRef',
+                ),
+              ],
+            ),
+          ],
+        },
+        {
+          id: 'shot-voice-cues-section',
+          title: 'preset.shot.voiceCuesSection',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          blocks: [
+            readonlyCollectionBlock(
+              'shot-voice-cues',
+              '/voiceCues',
+              'preset.shot.voiceCues',
+              'preset.shot.noVoiceCues',
+              '/cueId',
+              '/text',
+              [
+                readonlyItemField('shot-voice-cue-kind', 'input', '/kind', 'preset.shot.cueKind'),
+                readonlyItemField(
+                  'shot-voice-cue-speaker',
+                  'input',
+                  '/speakerName',
+                  'preset.shot.speaker',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-speaker-id',
+                  'input',
+                  '/speakerCharacterId',
+                  'preset.shot.speakerCharacterId',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-speaker-entity',
+                  'input',
+                  '/speakerEntityRef/entityId',
+                  'preset.shot.entity',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-emotion',
+                  'input',
+                  '/emotion',
+                  'preset.shot.emotion',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-delivery',
+                  'input',
+                  '/delivery',
+                  'preset.shot.delivery',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-voice-asset',
+                  'input',
+                  '/voiceAssetId',
+                  'preset.shot.voiceAsset',
+                ),
+                readonlyItemField(
+                  'shot-voice-cue-source',
+                  'input',
+                  '/sourceRefId',
+                  'preset.shot.sourceRef',
+                ),
+              ],
+            ),
+          ],
+        },
+        {
+          id: 'shot-audio',
+          title: 'preset.shot.audioSection',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: {
+            defaultExpandedSurfaces: ['overlay'],
+          },
           blocks: [
             fieldBlock('shot-dialogue', 'textarea', '/dialogue', 'preset.shot.dialogue'),
             fieldBlock('shot-voice-over', 'textarea', '/voiceOver', 'preset.shot.voiceOver'),
             fieldBlock('shot-sound-cue', 'input', '/soundCue', 'preset.shot.sound'),
+          ],
+        },
+        {
+          id: 'shot-generation',
+          title: 'preset.shot.generationSection',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: {
+            defaultExpandedSurfaces: ['overlay'],
+          },
+          blocks: [
+            fieldBlock(
+              'shot-generation-prompt',
+              'textarea',
+              '/generationPrompt',
+              'preset.shot.generationPrompt',
+            ),
+            readonlyFieldBlock(
+              'shot-generated-video-prompt',
+              'textarea',
+              '/generatedVideoAsset/prompt',
+              'preset.shot.videoPrompt',
+            ),
+            readonlyFieldBlock(
+              'shot-generated-image-prompt',
+              'textarea',
+              '/generatedAsset/prompt',
+              'preset.shot.imagePrompt',
+            ),
+          ],
+        },
+        {
+          id: 'shot-image-prep',
+          title: 'preset.shot.imagePrepSection',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: {
+            defaultExpandedSurfaces: ['overlay'],
+          },
+          blocks: [
+            readonlyFieldBlock(
+              'shot-image-prep-status',
+              'input',
+              '/shotImagePrepPlan/status',
+              'preset.shot.imagePrepStatus',
+            ),
+            readonlyFieldBlock(
+              'shot-image-prep-strategy',
+              'input',
+              '/shotImagePrepPlan/imageStrategy',
+              'preset.shot.imagePrepStrategy',
+            ),
+            readonlyFieldBlock(
+              'shot-image-prep-edit',
+              'textarea',
+              '/shotImagePrepPlan/editInstruction',
+              'preset.shot.editInstruction',
+            ),
+            readonlyFieldBlock(
+              'shot-image-prep-generation-prompt',
+              'textarea',
+              '/shotImagePrepPlan/generationPrompt',
+              'preset.shot.generationPrompt',
+            ),
+            readonlyFieldBlock(
+              'shot-image-prep-operations',
+              'input',
+              '/shotImagePrepPlan/operationPlan',
+              'preset.shot.operationPlan',
+            ),
+            readonlyCollectionBlock(
+              'shot-image-prep-source-refs',
+              '/shotImagePrepPlan/sourceMediaRefs',
+              'preset.shot.sourceMediaRefs',
+              'preset.shot.noSourceMediaRefs',
+              '/refId',
+              '/label',
+              STORYBOARD_MEDIA_REF_ITEM_BLOCKS,
+            ),
+            readonlyCollectionBlock(
+              'shot-image-prep-mask-refs',
+              '/shotImagePrepPlan/maskRefs',
+              'preset.shot.maskRefs',
+              'preset.shot.noMaskRefs',
+              '/refId',
+              '/label',
+              STORYBOARD_MEDIA_REF_ITEM_BLOCKS,
+            ),
+            readonlyCollectionBlock(
+              'shot-image-prep-output-refs',
+              '/shotImagePrepPlan/outputMediaRefs',
+              'preset.shot.outputMediaRefs',
+              'preset.shot.noOutputMediaRefs',
+              '/refId',
+              '/label',
+              STORYBOARD_MEDIA_REF_ITEM_BLOCKS,
+            ),
+            readonlyCollectionBlock(
+              'shot-image-prep-character-refs',
+              '/shotImagePrepPlan/referenceBundle/characterRefs',
+              'preset.shot.characterRefs',
+              'preset.shot.noCharacterRefs',
+              '/entityRef/entityId',
+              '/entityRef/entityId',
+              [
+                readonlyItemField(
+                  'shot-image-prep-character-role',
+                  'input',
+                  '/role',
+                  'preset.shot.role',
+                ),
+                readonlyItemField(
+                  'shot-image-prep-character-entity',
+                  'input',
+                  '/entityRef/entityId',
+                  'preset.shot.entity',
+                ),
+                readonlyItemField(
+                  'shot-image-prep-character-confidence',
+                  'number',
+                  '/confidence',
+                  'preset.shot.confidence',
+                ),
+              ],
+            ),
+            readonlyCollectionBlock(
+              'shot-image-prep-diagnostics',
+              '/shotImagePrepPlan/diagnostics',
+              'preset.shot.diagnostics',
+              'preset.shot.noDiagnostics',
+              '/code',
+              '/message',
+              [
+                readonlyItemField(
+                  'shot-image-prep-diagnostic-severity',
+                  'input',
+                  '/severity',
+                  'preset.shot.severity',
+                ),
+                readonlyItemField(
+                  'shot-image-prep-diagnostic-code',
+                  'input',
+                  '/code',
+                  'preset.shot.code',
+                ),
+                readonlyItemField(
+                  'shot-image-prep-diagnostic-message',
+                  'textarea',
+                  '/message',
+                  'preset.shot.message',
+                ),
+              ],
+            ),
+            actionBlock('shot-image-prep-approve', 'approve-shot-prep', 'preset.shot.approvePrep'),
+            actionBlock('shot-image-prep-skip', 'reject-shot-prep', 'preset.shot.skipPrep'),
+            actionBlock(
+              'shot-image-prep-estimate',
+              'estimate-batch-cost',
+              'preset.shot.estimatePrep',
+            ),
+            actionBlock('shot-image-prep-run', 'run-shot-prep', 'preset.shot.runPrep'),
+            actionBlock(
+              'shot-image-prep-run-batch',
+              'run-approved-shot-prep-batch',
+              'preset.shot.runPrepBatch',
+            ),
+          ],
+        },
+        {
+          id: 'shot-media',
+          title: 'preset.shot.mediaSection',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: true,
+          metadata: {
+            defaultExpandedSurfaces: ['overlay'],
+          },
+          blocks: [
+            readonlyCollectionBlock(
+              'shot-source-media-refs',
+              '/sourceMediaRefs',
+              'preset.shot.sourceMediaRefs',
+              'preset.shot.noSourceMediaRefs',
+              '/refId',
+              '/label',
+              STORYBOARD_MEDIA_REF_ITEM_BLOCKS,
+            ),
+            readonlyCollectionBlock(
+              'shot-generated-media-refs',
+              '/generatedMediaRefs',
+              'preset.shot.generatedMediaRefs',
+              'preset.shot.noGeneratedMediaRefs',
+              '/refId',
+              '/label',
+              STORYBOARD_MEDIA_REF_ITEM_BLOCKS,
+            ),
           ],
         },
       ],
@@ -651,6 +1029,78 @@ function fieldBlock(
   };
 }
 
+function readonlyFieldBlock(
+  id: string,
+  kind: CanvasBlock['kind'],
+  path: JsonPointerPath,
+  label: string,
+): CanvasBlock {
+  return {
+    id,
+    kind,
+    label,
+    binding: { path, valueType: kind === 'number' ? 'number' : 'string', mode: 'read' },
+  };
+}
+
+function actionBlock(id: string, action: string, label: string): CanvasBlock {
+  return {
+    id,
+    kind: 'button',
+    label,
+    metadata: {
+      action,
+      disabledReasonPath: '/shotImagePrepPlan/diagnostics',
+      requiresCapability:
+        action === 'run-shot-prep' || action === 'estimate-batch-cost'
+          ? 'comic-image-prep-pipeline'
+          : 'comic-shot-asset-prep.review',
+    },
+  };
+}
+
+function readonlyCollectionBlock(
+  id: string,
+  sourcePath: JsonPointerPath,
+  label: string,
+  emptyLabel: string,
+  itemKeyPath: JsonPointerPath,
+  itemLabelPath: JsonPointerPath,
+  itemBlocks: readonly CanvasBlock[],
+): CanvasBlock {
+  return {
+    id,
+    kind: 'collection',
+    label,
+    collection: {
+      id,
+      source: { path: sourcePath, valueType: 'array', mode: 'read' },
+      itemKeyPath,
+      itemLabelPath,
+      emptyLabel,
+      itemBlocks: [...itemBlocks],
+    },
+    metadata: {
+      readOnlyCollection: true,
+    },
+  };
+}
+
+function readonlyItemField(
+  id: string,
+  kind: CanvasBlock['kind'],
+  path: JsonPointerPath,
+  label: string,
+): CanvasBlock {
+  return {
+    id,
+    kind,
+    label,
+    binding: { path, valueType: kind === 'number' ? 'number' : 'string', mode: 'read' },
+    metadata: kind === 'textarea' ? { multiline: true } : undefined,
+  };
+}
+
 function selectBlock(
   id: string,
   path: JsonPointerPath,
@@ -680,6 +1130,36 @@ const CAMERA_MOVEMENT_OPTIONS = [
   'crane',
 ] as const;
 const CAMERA_ANGLE_OPTIONS = ['eye-level', 'high-angle', 'low-angle', 'bird-eye', 'dutch'] as const;
+const STORYBOARD_MEDIA_REF_ITEM_BLOCKS = [
+  readonlyItemField('storyboard-media-ref-role', 'input', '/role', 'preset.shot.mediaRole'),
+  readonlyItemField('storyboard-media-ref-label', 'input', '/label', 'preset.shot.mediaLabel'),
+  readonlyItemField('storyboard-media-ref-mime', 'input', '/mimeType', 'preset.shot.mimeType'),
+  readonlyItemField(
+    'storyboard-media-ref-locator-type',
+    'input',
+    '/locator/type',
+    'preset.shot.locatorType',
+  ),
+  readonlyItemField(
+    'storyboard-media-ref-asset-index',
+    'number',
+    '/locator/assetIndex',
+    'preset.shot.assetIndex',
+  ),
+  readonlyItemField(
+    'storyboard-media-ref-tool-call',
+    'input',
+    '/locator/toolCallId',
+    'preset.shot.toolCallId',
+  ),
+  readonlyItemField(
+    'storyboard-media-ref-asset-id',
+    'input',
+    '/locator/assetId',
+    'preset.shot.assetId',
+  ),
+  readonlyItemField('storyboard-media-ref-path', 'input', '/locator/path', 'preset.shot.path'),
+] as const;
 const GALLERY_PRESET_OPTIONS = [
   'character-3view',
   'character-4view',

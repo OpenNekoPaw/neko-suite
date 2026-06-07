@@ -508,7 +508,10 @@ function handoffRequestKey(request: {
 // Renderers
 // =============================================================================
 
-function renderVisualPreview({ source }: PreviewRendererProps): React.ReactNode {
+function renderVisualPreview({
+  source,
+  surfaceKind = 'inline',
+}: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source);
   const url = variant?.runtimeUrl ?? getStableSafeUrl(source);
 
@@ -517,10 +520,30 @@ function renderVisualPreview({ source }: PreviewRendererProps): React.ReactNode 
   }
 
   return (
-    <div className="relative flex min-h-[80px] items-center justify-center overflow-hidden rounded border border-[var(--node-border)] bg-black/20">
-      <img src={url} alt={source.title ?? source.id} className="h-full w-full object-cover" />
+    <div className={getVisualPreviewFrameClassName(surfaceKind)}>
+      <img
+        src={url}
+        alt={source.title ?? source.id}
+        className={getVisualPreviewImageClassName(surfaceKind)}
+      />
     </div>
   );
+}
+
+function getVisualPreviewFrameClassName(surfaceKind: PlaybackSurfaceKind): string {
+  const base =
+    'relative flex min-h-[80px] items-center justify-center overflow-hidden rounded border border-[var(--node-border)] bg-black/20';
+  if (surfaceKind === 'overlay') {
+    return `${base} max-h-[52vh]`;
+  }
+  return base;
+}
+
+function getVisualPreviewImageClassName(surfaceKind: PlaybackSurfaceKind): string {
+  if (surfaceKind === 'overlay') {
+    return 'max-h-[52vh] w-full object-contain';
+  }
+  return 'h-full w-full object-cover';
 }
 
 function renderVideoPreview({

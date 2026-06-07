@@ -743,8 +743,12 @@ function ComposableCollectionEditor({
   onUpdateData: (data: Record<string, unknown>) => void;
 }) {
   const editorBlocks = getCollectionItemEditorBlocks(item.collection);
+  const readOnly = item.collection.source.mode === 'read';
 
   const handleAddItem = useCallback(() => {
+    if (readOnly) {
+      return;
+    }
     const newItem: Record<string, unknown> = {
       id: `cell-${Date.now()}-${item.items.length}`,
       label: '',
@@ -758,10 +762,13 @@ function ComposableCollectionEditor({
         nextArray,
       ),
     );
-  }, [node, item, onUpdateData]);
+  }, [node, item, onUpdateData, readOnly]);
 
   const handleRemoveItem = useCallback(
     (index: number) => {
+      if (readOnly) {
+        return;
+      }
       const nextArray = item.items.filter((_, i) => i !== index);
       onUpdateData(
         writeComposablePropertyBinding(
@@ -771,7 +778,7 @@ function ComposableCollectionEditor({
         ),
       );
     },
-    [node, item, onUpdateData],
+    [node, item, onUpdateData, readOnly],
   );
 
   return (
@@ -786,15 +793,17 @@ function ComposableCollectionEditor({
             <div key={readCollectionKey(entry, item.collection, index)} className="space-y-1">
               <div className="flex items-center justify-between">
                 <FieldLabel>{readCollectionLabel(entry, item.collection, index)}</FieldLabel>
-                <button
-                  type="button"
-                  className="text-[10px] px-1 rounded hover:bg-[var(--neko-bg-hover)]"
-                  style={{ color: 'var(--neko-fg-secondary)' }}
-                  onClick={() => handleRemoveItem(index)}
-                  title={t('collection.removeItem')}
-                >
-                  ✕
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="text-[10px] px-1 rounded hover:bg-[var(--neko-bg-hover)]"
+                    style={{ color: 'var(--neko-fg-secondary)' }}
+                    onClick={() => handleRemoveItem(index)}
+                    title={t('collection.removeItem')}
+                  >
+                    x
+                  </button>
+                )}
               </div>
               {editorBlocks.map((block) => (
                 <CollectionItemField
@@ -810,14 +819,16 @@ function ComposableCollectionEditor({
             </div>
           ))
         )}
-        <button
-          type="button"
-          className="w-full text-[10px] py-1 rounded border border-dashed hover:bg-[var(--neko-bg-hover)]"
-          style={{ color: 'var(--neko-fg-secondary)', borderColor: 'var(--neko-border)' }}
-          onClick={handleAddItem}
-        >
-          + {t('collection.addItem')}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="w-full text-[10px] py-1 rounded border border-dashed hover:bg-[var(--neko-bg-hover)]"
+            style={{ color: 'var(--neko-fg-secondary)', borderColor: 'var(--neko-border)' }}
+            onClick={handleAddItem}
+          >
+            + {t('collection.addItem')}
+          </button>
+        )}
       </div>
     </CollapsibleSection>
   );
@@ -845,6 +856,7 @@ function CollectionItemField({
 
   const path = joinCollectionItemPath(collection.source.path, itemIndex, binding.path);
   const value = readCollectionPathString(entry, binding.path);
+  const readOnly = collection.source.mode === 'read' || binding.mode === 'read';
   const handleChange = (nextValue: string) =>
     onUpdateData(
       writeComposablePropertyPath(
@@ -854,10 +866,28 @@ function CollectionItemField({
       ),
     );
 
+  if (readOnly) {
+    return (
+      <div>
+        <FieldLabel>{resolveComposableLabel(block.label ?? block.id)}</FieldLabel>
+        <div
+          className="whitespace-pre-wrap break-words rounded border px-2 py-1 text-xs"
+          style={{
+            backgroundColor: 'var(--control-bg)',
+            borderColor: 'var(--control-border)',
+            color: 'var(--neko-fg-secondary)',
+          }}
+        >
+          {value || '-'}
+        </div>
+      </div>
+    );
+  }
+
   if (block.kind === 'textarea') {
     return (
       <TextareaField
-        label={block.label ?? block.id}
+        label={resolveComposableLabel(block.label ?? block.id)}
         value={value}
         onChange={handleChange}
         minHeight={48}
@@ -865,7 +895,13 @@ function CollectionItemField({
     );
   }
 
-  return <TextField label={block.label ?? block.id} value={value} onChange={handleChange} />;
+  return (
+    <TextField
+      label={resolveComposableLabel(block.label ?? block.id)}
+      value={value}
+      onChange={handleChange}
+    />
+  );
 }
 
 export function createBuiltInNodePropertiesRendererRegistry(): NodePropertiesRendererRegistry {
@@ -1284,7 +1320,12 @@ function readCollectionKey(entry: unknown, collection: CollectionView, index: nu
 function readCollectionLabel(entry: unknown, collection: CollectionView, index: number): string {
   const labelPath = collection.itemLabelPath ?? '/label';
   const value = isRecord(entry) ? readShallowPath(entry, labelPath) : undefined;
-  return typeof value === 'string' && value.length > 0 ? value : `Item ${index + 1}`;
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  const key = isRecord(entry) ? readShallowPath(entry, collection.itemKeyPath ?? '/id') : undefined;
+  return typeof key === 'string' && key.length > 0 ? key : `Item ${index + 1}`;
 }
 
 function getCollectionItemEditorBlocks(collection: CollectionView): CanvasBlock[] {
@@ -1341,12 +1382,22 @@ function readCollectionPathString(entry: unknown, path: JsonPointerPath): string
   }
 
   const value = readShallowPath(entry, path);
-  return typeof value === 'string' ? value : '';
+  return toEditableString(value);
 }
 
 function readShallowPath(entry: Record<string, unknown>, path: JsonPointerPath): unknown {
-  const key = path.startsWith('/') ? path.slice(1) : path;
-  return entry[key];
+  const keys = path
+    .replace(/^\//, '')
+    .split('/')
+    .map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let current: unknown = entry;
+  for (const key of keys) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
