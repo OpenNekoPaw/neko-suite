@@ -475,6 +475,13 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - [ ] Text embedding index (descriptions, prompts, action phrases)
 - [ ] Multimodal: image/face/video keyframe/speaker embedding (results default to `inferred`)
 
+### Unified Entity Memory + Semantic Index Follow-ups
+
+> [ADR](./docs/architecture/adr-unified-entity-memory-semantic-index.md) — unified entity memory + multimodal semantic index
+
+- [ ] **P1: Provider execution and sidecar IO** — Real OCR / ASR / embedding execution needs Extension/host-layer providers, idle/on-demand/import triggers, `MediaSemanticIndex` / `MediaTextSegment` sidecar writes, and rebuildable project search/cache projections.
+- [ ] **P2: Long-form character evolution** — Consume `CharacterChangeEvent` on top of `CharacterEvidenceLedger` so `CharacterStateSnapshot` supports story/scene/shot/cut-range scoped state instead of relying only on latest-wins across accepted observations.
+
 ### Multimodal Git Integration
 
 > [ADR](./docs/architecture/adr-multimodal-git-integration.md) — 6-phase plan for Git + multimodal version management

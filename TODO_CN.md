@@ -280,6 +280,13 @@
 - [ ] **P3：规则匹配 + 文本向量** — 文件名/别名/标签匹配；`CharacterMatchSuggestion` 含置信度；描述/提示词文本嵌入索引
 - [ ] **P3：多模态向量增强** — 图像/人脸/视频关键帧/说话人嵌入；多模态候选召回；向量结果默认 `inferred`
 
+### 语义索引与角色记忆后续
+
+> [ADR](./docs/architecture/adr-unified-entity-memory-semantic-index.md) — 统一实体记忆 + 多模态语义索引
+
+- [ ] **P1：OCR / ASR / embedding provider 真实执行 + sidecar IO** — 将当前共享协议与投影接入 Extension/host 层 provider：OCR/ASR/embedding 按 idle/on-demand/import 触发，写入 `MediaSemanticIndex` / `MediaTextSegment` sidecar，保留 stable refs、confidence、provenance，并通过项目搜索/缓存服务重建派生索引；不得在 Webview 或 Skill 中直接执行重型处理。
+- [ ] **P2：长篇角色演化的 `CharacterChangeEvent` 消费** — `deriveCharacterStateSnapshot` 当前是 accepted observation 的 latest-wins 合并；后续需按 story/scene/shot/cut-range scope 消费 `CharacterChangeEvent`，支持角色外观、服装、关系、声音等随剧情变化的时间/范围化状态，避免长篇项目误把最新观察覆盖为全局事实。
+
 ### 多模态 Git 集成
 
 > [ADR](./docs/architecture/adr-multimodal-git-integration.md) — Git + 多模态版本管理 6 阶段计划

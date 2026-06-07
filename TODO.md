@@ -443,6 +443,13 @@
 - [ ] **P3: Rule matching + text vectors** — filename/alias/tag matching; `CharacterMatchSuggestion` with confidence; text embedding index for descriptions/prompts
 - [ ] **P3: Multimodal vector enhancement** — image/face/video keyframe/speaker embedding; multimodal candidate recall; vector results default to `inferred`
 
+### Semantic Index + Character Memory Follow-ups
+
+> [ADR](./docs/architecture/adr-unified-entity-memory-semantic-index.md) — unified entity memory + multimodal semantic index
+
+- [ ] **P1: Real OCR / ASR / embedding provider execution + sidecar IO** — Wire the shared protocol and projections into Extension/host-layer providers: trigger OCR/ASR/embedding on idle/on-demand/import, write `MediaSemanticIndex` / `MediaTextSegment` sidecars, preserve stable refs, confidence, and provenance, and rebuild derived indexes through the project search/cache service; heavy processing must not run directly from Webview or Skill text.
+- [ ] **P2: Long-form character evolution via `CharacterChangeEvent`** — `deriveCharacterStateSnapshot` currently uses latest-wins over accepted observations; consume `CharacterChangeEvent` by story/scene/shot/cut-range scope so appearance, outfit, relationship, voice, and other traits can evolve over time without treating the newest observation as a global truth.
+
 ### Multimodal Git Integration
 
 > [ADR](./docs/architecture/adr-multimodal-git-integration.md) — 6-phase plan for Git + multimodal version management

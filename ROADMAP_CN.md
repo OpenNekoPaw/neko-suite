@@ -390,6 +390,13 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] 文本嵌入索引（描述、提示词、动作短语）
 - [ ] 多模态：图像/人脸/视频关键帧/说话人嵌入（结果默认 `inferred`）
 
+### 统一实体记忆 + 语义索引后续
+
+> [ADR](./docs/architecture/adr-unified-entity-memory-semantic-index.md) — 统一实体记忆 + 多模态语义索引
+
+- [ ] **P1：Provider 执行与 sidecar IO** — OCR / ASR / embedding 的真实执行需要 Extension/host 层 provider 接入，按 idle/on-demand/import 触发，写入 `MediaSemanticIndex` / `MediaTextSegment` sidecar，并通过项目搜索/缓存服务生成可重建索引。
+- [ ] **P2：长篇角色演化** — 在 `CharacterEvidenceLedger` 基础上消费 `CharacterChangeEvent`，让 `CharacterStateSnapshot` 支持 story/scene/shot/cut-range 范围化状态，避免 latest-wins 策略在长篇创作中丢失人物历史变化。
+
 ### 多模态 Git 集成
 
 > [ADR](./docs/architecture/adr-multimodal-git-integration.md) — Git + 多模态版本管理 6 阶段计划
