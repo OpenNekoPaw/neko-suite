@@ -634,6 +634,98 @@ describe('webview protocol projectors', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: 3,
+                imageDataUrl: 'data:image/png;base64,AAAA',
+                label: '#001',
+                textCues: [
+                  {
+                    cueId: 'text-1',
+                    kind: 'dialogue',
+                    text: 'Run!',
+                    speakerName: 'Rin',
+                    speakerCharacterId: 'char-rin',
+                    speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                    confidence: 0.85,
+                  },
+                  {
+                    cueId: 'text-2',
+                    kind: 'backgroundText',
+                    text: 'EXIT',
+                  },
+                ],
+                voiceCues: [
+                  {
+                    cueId: 'voice-1',
+                    kind: 'dialogue',
+                    text: 'Run!',
+                    speakerName: 'Rin',
+                    speakerCharacterId: 'char-rin',
+                    speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'cut',
+      payload: {
+        kind: 'cutStoryboard',
+        storyboard: {
+          projectName: 'Opening',
+          shots: [
+            {
+              id: 'shot-1',
+              shotNumber: 1,
+              duration: 3,
+              imageDataUrl: 'data:image/png;base64,AAAA',
+              label: '#001',
+              textCues: [
+                {
+                  cueId: 'text-1',
+                  kind: 'dialogue',
+                  text: 'Run!',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  confidence: 0.85,
+                },
+                {
+                  cueId: 'text-2',
+                  kind: 'backgroundText',
+                  text: 'EXIT',
+                },
+              ],
+              voiceCues: [
+                {
+                  cueId: 'voice-1',
+                  kind: 'dialogue',
+                  text: 'Run!',
+                  speakerName: 'Rin',
+                  speakerCharacterId: 'char-rin',
+                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
         target: 'model',
         payload: {
           kind: 'singleAsset',

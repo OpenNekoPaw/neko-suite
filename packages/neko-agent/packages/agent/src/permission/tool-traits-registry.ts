@@ -128,6 +128,10 @@ export const DEFAULT_CREATIVE_TOOL_TRAITS: ReadonlyArray<{ name: string; traits:
     traits: { cost: 'moderate', reversible: false, locality: 'network', impactLevel: 'high' },
   },
   {
+    name: 'TransformImage',
+    traits: { cost: 'moderate', reversible: false, locality: 'network', impactLevel: 'high' },
+  },
+  {
     name: 'GenerateVideo',
     traits: { cost: 'expensive', reversible: false, locality: 'network', impactLevel: 'high' },
   },

@@ -8,7 +8,7 @@ import type {
   ResolvedCompositeSection,
   StoryboardTableRichData,
 } from '@/presenters/composite-content-presenter';
-import type { StoryboardSceneRow, StoryboardShotRow } from '@neko/shared';
+import type { StoryboardSceneRow, StoryboardShotRow, StoryboardTextCue } from '@neko/shared';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -124,25 +124,21 @@ function projectSemanticStoryboardRows(
 
 function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRow[] }) {
   const { t } = useTranslation();
+  const groups = groupStoryboardRowsByScene(rows);
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[920px] w-full border-separate border-spacing-0 text-left">
+      <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left">
         <thead>
           <tr className="bg-[var(--agent-elevated)] text-[10px] uppercase text-[var(--agent-fg-secondary)]">
-            <TableHeader>{t('chat.storyboardTable.columns.shot')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.image')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.duration')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.camera')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.visualAction')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.dialogueSfx')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.stylePrompt')}</TableHeader>
-            <TableHeader>{t('chat.storyboardTable.columns.strategy')}</TableHeader>
+            {STORYBOARD_TABLE_COLUMNS.map((columnKey) => (
+              <TableHeader key={columnKey}>{t(columnKey)}</TableHeader>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <SemanticStoryboardTableRow key={row.id} row={row} />
+          {groups.map((group) => (
+            <SemanticStoryboardSceneGroup key={group.id} group={group} />
           ))}
         </tbody>
       </table>
@@ -150,9 +146,106 @@ function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRo
   );
 }
 
+interface SemanticStoryboardSceneGroup {
+  readonly id: string;
+  readonly scene: StoryboardSceneRow;
+  readonly rows: readonly SemanticStoryboardRow[];
+}
+
+function groupStoryboardRowsByScene(
+  rows: readonly SemanticStoryboardRow[],
+): readonly SemanticStoryboardSceneGroup[] {
+  const groups: Array<{
+    id: string;
+    scene: StoryboardSceneRow;
+    rows: SemanticStoryboardRow[];
+  }> = [];
+  let current:
+    | {
+        id: string;
+        scene: StoryboardSceneRow;
+        rows: SemanticStoryboardRow[];
+      }
+    | undefined;
+
+  for (const row of rows) {
+    if (!current || current.scene !== row.scene) {
+      current = {
+        id: `${row.scene.sceneId || 'scene'}:${groups.length + 1}`,
+        scene: row.scene,
+        rows: [],
+      };
+      groups.push(current);
+    }
+    current.rows.push(row);
+  }
+
+  return groups;
+}
+
+function SemanticStoryboardSceneGroup({ group }: { group: SemanticStoryboardSceneGroup }) {
+  return (
+    <>
+      <SemanticStoryboardSceneHeader scene={group.scene} shotCount={group.rows.length} />
+      {group.rows.map((row) => (
+        <SemanticStoryboardTableRow key={row.id} row={row} />
+      ))}
+    </>
+  );
+}
+
+function SemanticStoryboardSceneHeader({
+  scene,
+  shotCount,
+}: {
+  scene: StoryboardSceneRow;
+  shotCount: number;
+}) {
+  const { t } = useTranslation();
+  const title = scene.sceneTitle || scene.sceneId;
+  const meta = compactStrings([
+    scene.sceneNumber
+      ? t('chat.storyboardTable.scene.number', { number: scene.sceneNumber })
+      : undefined,
+    scene.sceneId,
+    scene.location
+      ? t('chat.storyboardTable.scene.location', { location: scene.location })
+      : undefined,
+    scene.timeOfDay
+      ? t('chat.storyboardTable.scene.timeOfDay', { timeOfDay: scene.timeOfDay })
+      : undefined,
+    t('chat.storyboardTable.scene.shots', { count: shotCount }),
+  ]);
+
+  return (
+    <tr className="bg-[color-mix(in_srgb,var(--agent-accent)_12%,var(--agent-elevated))]">
+      <td
+        colSpan={STORYBOARD_TABLE_COLUMN_COUNT}
+        className="border-b border-[var(--agent-divider)] px-2 py-2"
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 break-words text-[12px] font-medium text-[var(--agent-fg)]">
+            {title}
+          </span>
+          {meta.length > 0 && (
+            <span className="break-words font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+              {meta.join(' / ')}
+            </span>
+          )}
+        </div>
+        {scene.summary && (
+          <div className="mt-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[var(--agent-fg-secondary)]">
+            {scene.summary}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
   const { t } = useTranslation();
-  const { scene, shot, section } = row;
+  const { shot, section } = row;
   const camera = compactStrings([shot.shotScale, shot.cameraAngle, shot.cameraMovement]).join(
     ' / ',
   );
@@ -160,11 +253,9 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
   const emotion = formatList(shot.emotion);
   const tags = formatList(shot.sceneTags);
   const vfx = formatList(shot.vfx);
-  const dialogue = compactStrings([
-    shot.dialogue ? `${t('chat.storyboardTable.labels.dialogue')}: ${shot.dialogue}` : undefined,
-    shot.voiceOver ? `${t('chat.storyboardTable.labels.voiceOver')}: ${shot.voiceOver}` : undefined,
-    shot.soundCue ? `${t('chat.storyboardTable.labels.soundCue')}: ${shot.soundCue}` : undefined,
-  ]).join('\n');
+  const dialogue = formatStoryboardTextAndVoice(shot, t);
+  const legacyAudio = formatUncoveredLegacyAudio(shot, t);
+  const cueDisplay = compactStrings([dialogue, legacyAudio]).join('\n');
   const style = compactStrings([
     shot.visualStyle ? `${t('chat.storyboardTable.labels.style')}: ${shot.visualStyle}` : undefined,
     vfx ? `${t('chat.storyboardTable.labels.vfx')}: ${vfx}` : undefined,
@@ -177,12 +268,9 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
     <tr className="align-top text-[11px] text-[var(--agent-fg)] odd:bg-[color-mix(in_srgb,var(--agent-elevated)_40%,transparent)]">
       <TableCell className="w-[110px]">
         <div className="font-mono text-[11px] font-medium">{formatShotNumber(shot.shotNumber)}</div>
-        <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
-          {scene.sceneTitle}
-        </div>
-        {scene.summary && (
-          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
-            {scene.summary}
+        {shot.shotId && (
+          <div className="mt-1 break-words font-mono text-[10px] text-[var(--agent-fg-secondary)]">
+            {shot.shotId}
           </div>
         )}
       </TableCell>
@@ -205,11 +293,6 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
         <div className="mt-1 whitespace-pre-wrap break-words text-[var(--agent-fg-secondary)]">
           {shot.characterAction}
         </div>
-        {characters && (
-          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
-            {t('chat.storyboardTable.labels.characters')}: {characters}
-          </div>
-        )}
         {emotion && (
           <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
             {t('chat.storyboardTable.labels.emotion')}: {emotion}
@@ -221,8 +304,11 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="min-w-[140px] whitespace-pre-wrap break-words">
-        {dialogue || '-'}
+      <TableCell className="min-w-[180px] whitespace-pre-wrap break-words">
+        {characters || '-'}
+      </TableCell>
+      <TableCell className="min-w-[180px] whitespace-pre-wrap break-words">
+        {cueDisplay || legacyAudio || '-'}
       </TableCell>
       <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
         {style || '-'}
@@ -252,6 +338,20 @@ function TableCell({ children, className }: { children: React.ReactNode; classNa
     </td>
   );
 }
+
+const STORYBOARD_TABLE_COLUMNS = [
+  'chat.storyboardTable.columns.shot',
+  'chat.storyboardTable.columns.image',
+  'chat.storyboardTable.columns.duration',
+  'chat.storyboardTable.columns.camera',
+  'chat.storyboardTable.columns.visualAction',
+  'chat.storyboardTable.columns.characters',
+  'chat.storyboardTable.columns.dialogueSfx',
+  'chat.storyboardTable.columns.stylePrompt',
+  'chat.storyboardTable.columns.strategy',
+] as const;
+
+const STORYBOARD_TABLE_COLUMN_COUNT = STORYBOARD_TABLE_COLUMNS.length;
 
 function LegacyStoryboardRows({ sections }: { sections: readonly ResolvedCompositeSection[] }) {
   return (
@@ -306,11 +406,102 @@ function formatCharacters(characters: StoryboardShotRow['characters']): string |
         character.role ? `(${character.role})` : undefined,
         character.action,
         character.emotion,
+        character.appearanceNotes,
       ]).join(' '),
     )
     .filter((value) => value.length > 0)
     .join(', ');
   return text || undefined;
+}
+
+function formatStoryboardTextAndVoice(
+  shot: StoryboardShotRow,
+  t: (key: string) => string,
+): string | undefined {
+  const textCueLines = (shot.textCues ?? []).map((cue) => formatStoryboardTextCue(cue, t));
+  const voiceCueLines = (shot.voiceCues ?? [])
+    .filter((cue) => !hasMatchingTextCue(shot.textCues, cue.kind, cue.text))
+    .map((cue) => {
+      const label =
+        cue.kind === 'dialogue'
+          ? t('chat.storyboardTable.labels.dialogue')
+          : t('chat.storyboardTable.labels.voiceOver');
+      const speaker = formatCueSpeaker(
+        cue.speakerName,
+        cue.speakerCharacterId,
+        cue.speakerEntityRef?.entityId,
+      );
+      return `${label}${speaker ? ` / ${speaker}` : ''}: ${cue.text}`;
+    });
+  return compactStrings([...textCueLines, ...voiceCueLines]).join('\n') || undefined;
+}
+
+function hasMatchingTextCue(
+  textCues: StoryboardShotRow['textCues'],
+  voiceKind: 'dialogue' | 'voiceOver',
+  text: string,
+): boolean {
+  const expectedKind = voiceKind === 'dialogue' ? 'dialogue' : 'narration';
+  const normalizedText = normalizeCueDisplayText(text);
+  return (textCues ?? []).some(
+    (cue) => cue.kind === expectedKind && normalizeCueDisplayText(cue.text) === normalizedText,
+  );
+}
+
+function formatStoryboardTextCue(cue: StoryboardTextCue, t: (key: string) => string): string {
+  const label = t(`chat.storyboardTable.textCueKinds.${cue.kind}`);
+  const speaker = formatCueSpeaker(
+    cue.speakerName,
+    cue.speakerCharacterId,
+    cue.speakerEntityRef?.entityId,
+  );
+  const suffix = compactStrings([cue.emotion, cue.delivery]).join(' / ');
+  return compactStrings([
+    `${label}${speaker ? ` / ${speaker}` : ''}: ${cue.text}`,
+    suffix ? `(${suffix})` : undefined,
+  ]).join(' ');
+}
+
+function formatUncoveredLegacyAudio(
+  shot: StoryboardShotRow,
+  t: (key: string) => string,
+): string | undefined {
+  const hasDialogueCue =
+    (shot.textCues ?? []).some((cue) => cue.kind === 'dialogue') ||
+    (shot.voiceCues ?? []).some((cue) => cue.kind === 'dialogue');
+  const hasVoiceOverCue =
+    (shot.textCues ?? []).some((cue) => cue.kind === 'narration') ||
+    (shot.voiceCues ?? []).some((cue) => cue.kind === 'voiceOver');
+  const hasSoundCue = (shot.textCues ?? []).some((cue) => cue.kind === 'sfx');
+  return compactStrings([
+    shot.dialogue && !hasDialogueCue
+      ? `${t('chat.storyboardTable.labels.dialogue')}: ${shot.dialogue}`
+      : undefined,
+    shot.voiceOver && !hasVoiceOverCue
+      ? `${t('chat.storyboardTable.labels.voiceOver')}: ${shot.voiceOver}`
+      : undefined,
+    shot.soundCue && !hasSoundCue
+      ? `${t('chat.storyboardTable.labels.soundCue')}: ${shot.soundCue}`
+      : undefined,
+  ]).join('\n');
+}
+
+function formatCueSpeaker(
+  speakerName: string | undefined,
+  speakerCharacterId: string | undefined,
+  speakerEntityId: string | undefined,
+): string | undefined {
+  if (speakerName && speakerEntityId && speakerName !== speakerEntityId) {
+    return `${speakerName} [${speakerEntityId}]`;
+  }
+  if (speakerName && speakerCharacterId && speakerName !== speakerCharacterId) {
+    return `${speakerName} [${speakerCharacterId}]`;
+  }
+  return speakerName ?? speakerEntityId ?? speakerCharacterId;
+}
+
+function normalizeCueDisplayText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 function formatList(values: readonly string[] | undefined): string | undefined {

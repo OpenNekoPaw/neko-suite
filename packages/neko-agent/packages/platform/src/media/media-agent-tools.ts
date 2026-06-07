@@ -9,12 +9,20 @@
 import { createTool } from '@neko/shared';
 import type {
   GenerationIntent,
+  ImageGenerationRequest,
   IToolRegistry,
   ProviderAdaptationMode,
   ProviderGenerationCapability,
   ToolExecuteOptions,
 } from '@neko/shared';
 import type { MediaGenerationService } from './media-generation-service';
+
+interface ImageToolRequestInput {
+  readonly args: Record<string, unknown>;
+  readonly target: GenerationTargetMetadata;
+  readonly resolved: ResolvedGenerationPrompt;
+  readonly transformMetadata?: Record<string, unknown>;
+}
 
 interface ResolvedGenerationPrompt {
   readonly prompt: string;
@@ -37,6 +45,7 @@ async function resolveGenerationPrompt(
 ): Promise<ResolvedGenerationPrompt> {
   const explicitProviderId = readOptionalString(args.providerId) ?? defaultProviderId;
   const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+  const negativePrompt = readOptionalString(args.negativePrompt);
   const intent = readMarkdownGenerationIntent(args, capability, prompt);
   const adaptationMode = readProviderAdaptationMode(args);
 
@@ -48,6 +57,7 @@ async function resolveGenerationPrompt(
     }
     return {
       prompt,
+      ...(negativePrompt ? { negativePrompt } : {}),
       ...(explicitProviderId ? { providerId: explicitProviderId } : {}),
       metadata: buildProviderAdaptationMetadata({
         mode: 'native',
@@ -60,12 +70,12 @@ async function resolveGenerationPrompt(
   }
 
   if (adaptationMode === 'native') {
-    return resolveNativeGenerationIntent(intent, explicitProviderId, {
+    return resolveNativeGenerationIntent(intent, explicitProviderId, negativePrompt, {
       reason: 'provider-adaptation-bypassed',
     });
   }
 
-  return resolveNativeGenerationIntent(intent, explicitProviderId, {
+  return resolveNativeGenerationIntent(intent, explicitProviderId, negativePrompt, {
     mode: 'agentic',
     reason: 'agent-expression-context-only',
   });
@@ -74,11 +84,13 @@ async function resolveGenerationPrompt(
 function resolveNativeGenerationIntent(
   intent: GenerationIntent,
   providerId: string | undefined,
+  negativePrompt: string | undefined,
   details: Record<string, unknown>,
 ): ResolvedGenerationPrompt {
   const fallbackPrompt = composeGenerationIntentPrompt(intent);
   return {
     prompt: fallbackPrompt,
+    ...(negativePrompt ? { negativePrompt } : {}),
     ...(providerId ? { providerId } : {}),
     metadata: buildProviderAdaptationMetadata({
       mode: details.mode === 'agentic' ? 'agentic' : 'native',
@@ -182,8 +194,16 @@ function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readOptionalRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
 }
 
 function resolveToolMediaTarget(
@@ -200,6 +220,134 @@ function resolveToolMediaTarget(
     providerId: readOptionalString(args.providerId) ?? runtimeTarget?.providerId,
     modelId: readOptionalString(args.modelId) ?? runtimeTarget?.modelId,
   };
+}
+
+function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerationRequest {
+  const aspectRatio = readOptionalString(input.args.aspectRatio);
+  const sizeStr = readOptionalString(input.args.size);
+  const [width, height] = sizeStr?.split('x').map(Number) ?? [];
+  const metadata = buildImageToolMetadata({
+    resolved: input.resolved,
+    target: input.target,
+    transformMetadata: input.transformMetadata,
+  });
+
+  return {
+    prompt: input.resolved.prompt,
+    ...(input.resolved.negativePrompt ? { negativePrompt: input.resolved.negativePrompt } : {}),
+    ...(input.resolved.providerId ? { providerId: input.resolved.providerId } : {}),
+    ...(input.target.requestedModelId ? { modelId: input.target.requestedModelId } : {}),
+    ...(Number.isFinite(width) ? { width } : {}),
+    ...(Number.isFinite(height) ? { height } : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
+    ...(input.args.quality === 'standard' || input.args.quality === 'hd'
+      ? { quality: input.args.quality }
+      : {}),
+    ...(readOptionalString(input.args.style)
+      ? { style: readOptionalString(input.args.style) }
+      : {}),
+    ...(readOptionalNumber(input.args.n) !== undefined
+      ? { count: readOptionalNumber(input.args.n) }
+      : {}),
+    ...readImageReferenceInputs(input.args),
+    ...readImageControlInputs(input.args),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function buildImageToolMetadata(input: {
+  readonly resolved: ResolvedGenerationPrompt;
+  readonly target: GenerationTargetMetadata;
+  readonly transformMetadata?: Record<string, unknown>;
+}): Record<string, unknown> | undefined {
+  const metadata = input.resolved.metadata
+    ? withGenerationTargetMetadata(input.resolved.metadata, input.target)
+    : undefined;
+  if (!input.transformMetadata) return metadata;
+  return {
+    ...(metadata ?? {}),
+    transformImage: input.transformMetadata,
+  };
+}
+
+function readImageReferenceInputs(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...(readOptionalString(args.referenceImageUrl)
+      ? { referenceImageUrl: readOptionalString(args.referenceImageUrl) }
+      : {}),
+    ...(readOptionalString(args.referenceImageUri)
+      ? { referenceImageUri: readOptionalString(args.referenceImageUri) }
+      : {}),
+    ...(readOptionalString(args.referenceImageBase64)
+      ? { referenceImageBase64: readOptionalString(args.referenceImageBase64) }
+      : {}),
+    ...(readOptionalString(args.maskUri) ? { maskUri: readOptionalString(args.maskUri) } : {}),
+    ...(readOptionalString(args.maskBase64)
+      ? { maskBase64: readOptionalString(args.maskBase64) }
+      : {}),
+    ...(readOptionalNumber(args.inpaintStrength) !== undefined
+      ? { inpaintStrength: readOptionalNumber(args.inpaintStrength) }
+      : {}),
+    ...(readOptionalString(args.editInstruction)
+      ? { editInstruction: readOptionalString(args.editInstruction) }
+      : {}),
+  };
+}
+
+function readImageControlInputs(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...(readOptionalString(args.controlImageUri)
+      ? { controlImageUri: readOptionalString(args.controlImageUri) }
+      : {}),
+    ...(readOptionalString(args.controlImageBase64)
+      ? { controlImageBase64: readOptionalString(args.controlImageBase64) }
+      : {}),
+    ...(readOptionalString(args.controlMode)
+      ? { controlMode: readOptionalString(args.controlMode) }
+      : {}),
+    ...(readOptionalNumber(args.controlStrength) !== undefined
+      ? { controlStrength: readOptionalNumber(args.controlStrength) }
+      : {}),
+  };
+}
+
+function readTransformImageReferenceArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const sourceImageRef = readOptionalRecord(args.sourceImageRef);
+  const referenceBundle = readOptionalRecord(args.referenceBundle);
+  const operationPlan = Array.isArray(args.operationPlan)
+    ? args.operationPlan.filter((entry): entry is string => typeof entry === 'string')
+    : undefined;
+  const maskRefs = Array.isArray(args.maskRefs)
+    ? args.maskRefs.filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    : undefined;
+
+  return {
+    ...(sourceImageRef ? { sourceImageRef } : {}),
+    ...(referenceBundle ? { referenceBundle } : {}),
+    ...(operationPlan && operationPlan.length > 0 ? { operationPlan } : {}),
+    ...(maskRefs && maskRefs.length > 0 ? { maskRefs } : {}),
+    ...(readOptionalString(args.planId) ? { planId: readOptionalString(args.planId) } : {}),
+    ...(readOptionalString(args.sceneId) ? { sceneId: readOptionalString(args.sceneId) } : {}),
+    ...(readOptionalString(args.shotId) ? { shotId: readOptionalString(args.shotId) } : {}),
+    ...(readOptionalString(args.imageStrategy)
+      ? { imageStrategy: readOptionalString(args.imageStrategy) }
+      : {}),
+    ...(readOptionalString(args.targetAspectRatio)
+      ? { targetAspectRatio: readOptionalString(args.targetAspectRatio) }
+      : {}),
+    ...(readOptionalString(args.targetStyle)
+      ? { targetStyle: readOptionalString(args.targetStyle) }
+      : {}),
+  };
+}
+
+function hasResolvedTransformSource(args: Record<string, unknown>): boolean {
+  return Boolean(
+    readOptionalString(args.sourceImageUri) ||
+    readOptionalString(args.referenceImageUri) ||
+    readOptionalString(args.referenceImageUrl) ||
+    readOptionalString(args.referenceImageBase64),
+  );
 }
 
 function readRuntimeMediaModel(
@@ -364,6 +512,10 @@ export function registerMediaAgentTools(
             type: 'string',
             description: 'Text description of the image to generate',
           },
+          negativePrompt: {
+            type: 'string',
+            description: 'Optional negative prompt describing what to avoid',
+          },
           taskRef: {
             type: 'string',
             description: 'Optional task markdown URI/path used as the generation intent source',
@@ -410,6 +562,65 @@ export function registerMediaAgentTools(
             enum: ['natural', 'vivid'],
             description: 'Image style (default: vivid)',
           },
+          aspectRatio: {
+            type: 'string',
+            description: 'Optional target aspect ratio such as 16:9, 9:16, or 1:1',
+          },
+          referenceImageUrl: {
+            type: 'string',
+            description: 'Optional remote reference image URL for image-to-image generation',
+          },
+          referenceImageUri: {
+            type: 'string',
+            description: 'Optional host-resolved local reference image URI/path',
+          },
+          referenceImageBase64: {
+            type: 'string',
+            description: 'Optional reference image bytes as base64 without a data: prefix',
+          },
+          maskUri: {
+            type: 'string',
+            description: 'Optional host-resolved inpaint mask URI/path',
+          },
+          maskBase64: {
+            type: 'string',
+            description: 'Optional inpaint mask bytes as base64 without a data: prefix',
+          },
+          inpaintStrength: {
+            type: 'number',
+            description: 'Optional inpaint strength from 0.0 to 1.0',
+          },
+          controlImageUri: {
+            type: 'string',
+            description: 'Optional host-resolved ControlNet image URI/path',
+          },
+          controlImageBase64: {
+            type: 'string',
+            description: 'Optional ControlNet image bytes as base64 without a data: prefix',
+          },
+          controlMode: {
+            type: 'string',
+            enum: [
+              'canny',
+              'depth',
+              'pose',
+              'normal',
+              'segment',
+              'lineart',
+              'softedge',
+              'scribble',
+            ],
+            description: 'Optional ControlNet conditioning mode',
+          },
+          controlStrength: {
+            type: 'number',
+            description: 'Optional ControlNet conditioning strength from 0.0 to 1.0',
+          },
+          editInstruction: {
+            type: 'string',
+            description:
+              'Optional natural language edit instruction for edit-capable image providers',
+          },
           n: {
             type: 'number',
             description: 'Number of images to generate (1-4, default: 1)',
@@ -418,30 +629,20 @@ export function registerMediaAgentTools(
         required: [],
       },
       execute: async (args, options) => {
-        const sizeStr = readOptionalString(args.size) ?? '1024x1024';
-        const [w, h] = sizeStr.split('x').map(Number);
         const target = resolveToolMediaTarget(args, options, 'image');
 
         try {
           const resolved = await resolveGenerationPrompt(args, 'image.generate', target.providerId);
+          const requestTarget = {
+            ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
+            ...(target.modelId ? { requestedModelId: target.modelId } : {}),
+          };
           const task = await media.generateImage({
-            prompt: resolved.prompt,
-            ...(resolved.negativePrompt ? { negativePrompt: resolved.negativePrompt } : {}),
-            ...(resolved.providerId ? { providerId: resolved.providerId } : {}),
-            ...(target.modelId ? { modelId: target.modelId } : {}),
-            width: w,
-            height: h,
-            quality: args.quality as 'standard' | 'hd' | undefined,
-            style: args.style as string | undefined,
-            count: args.n as number | undefined,
-            ...(resolved.metadata
-              ? {
-                  metadata: withGenerationTargetMetadata(resolved.metadata, {
-                    ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                    ...(target.modelId ? { requestedModelId: target.modelId } : {}),
-                  }),
-                }
-              : {}),
+            ...buildImageGenerationRequest({
+              args: { size: '1024x1024', ...args },
+              target: requestTarget,
+              resolved,
+            }),
           });
           return {
             success: true,
@@ -472,6 +673,237 @@ export function registerMediaAgentTools(
           return {
             success: false,
             error: error instanceof Error ? error.message : 'Image generation failed',
+          };
+        }
+      },
+    }),
+  );
+
+  // TransformImage
+  toolRegistry.register(
+    createTool({
+      name: 'TransformImage',
+      description:
+        'Submit an async source-bound IMAGE transform task. Use this for editing an existing image with source image, optional mask, edit instruction, references, and target aspect ratio/style. This facade preserves transform lineage; host/provider adapters must resolve stable refs before provider execution.',
+      category: 'generation',
+      isConcurrencySafe: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Optional prompt; editInstruction is used when prompt is omitted',
+          },
+          editInstruction: {
+            type: 'string',
+            description: 'Natural language edit instruction for the source-bound transform',
+          },
+          negativePrompt: {
+            type: 'string',
+            description: 'Optional negative prompt describing what to avoid',
+          },
+          sourceImageRef: {
+            type: 'object',
+            description:
+              'Stable source image ref for lineage/review. Host must resolve it to URI/base64 before provider execution.',
+          },
+          sourceImageUri: {
+            type: 'string',
+            description: 'Host-resolved source image URI/path used as provider reference input',
+          },
+          referenceImageUri: {
+            type: 'string',
+            description: 'Host-resolved reference image URI/path used as provider reference input',
+          },
+          referenceImageUrl: {
+            type: 'string',
+            description: 'Optional remote reference image URL',
+          },
+          referenceImageBase64: {
+            type: 'string',
+            description: 'Optional source/reference image bytes as base64 without a data: prefix',
+          },
+          maskRefs: {
+            type: 'array',
+            description:
+              'Stable mask refs for lineage/review; host must resolve them before provider execution',
+            items: { type: 'object' },
+          },
+          maskUri: {
+            type: 'string',
+            description: 'Host-resolved inpaint mask URI/path',
+          },
+          maskBase64: {
+            type: 'string',
+            description: 'Optional inpaint mask bytes as base64 without a data: prefix',
+          },
+          inpaintStrength: {
+            type: 'number',
+            description: 'Optional inpaint strength from 0.0 to 1.0',
+          },
+          referenceBundle: {
+            type: 'object',
+            description: 'Stable character/scene/style reference bundle for lineage/review',
+          },
+          controlImageUri: {
+            type: 'string',
+            description: 'Optional host-resolved ControlNet image URI/path',
+          },
+          controlImageBase64: {
+            type: 'string',
+            description: 'Optional ControlNet image bytes as base64 without a data: prefix',
+          },
+          controlMode: {
+            type: 'string',
+            enum: [
+              'canny',
+              'depth',
+              'pose',
+              'normal',
+              'segment',
+              'lineart',
+              'softedge',
+              'scribble',
+            ],
+            description: 'Optional ControlNet conditioning mode',
+          },
+          controlStrength: {
+            type: 'number',
+            description: 'Optional ControlNet conditioning strength from 0.0 to 1.0',
+          },
+          targetAspectRatio: {
+            type: 'string',
+            description: 'Optional target aspect ratio such as 16:9, 9:16, or 1:1',
+          },
+          targetStyle: {
+            type: 'string',
+            description: 'Optional target style for style normalization',
+          },
+          operationPlan: {
+            type: 'array',
+            description:
+              'Reviewable transform operations such as crop-panel, remove-text, inpaint, outpaint',
+            items: { type: 'string' },
+          },
+          planId: {
+            type: 'string',
+            description: 'Optional shot image prep plan id for lineage metadata',
+          },
+          sceneId: {
+            type: 'string',
+            description: 'Optional scene id for lineage metadata',
+          },
+          shotId: {
+            type: 'string',
+            description: 'Optional shot id for lineage metadata',
+          },
+          providerId: {
+            type: 'string',
+            description: 'Optional explicit provider id for media routing',
+          },
+          modelId: {
+            type: 'string',
+            description: 'Optional explicit model id for media routing',
+          },
+          size: {
+            type: 'string',
+            enum: ['256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'],
+            description: 'Image dimensions (default: 1024x1024)',
+          },
+          quality: {
+            type: 'string',
+            enum: ['standard', 'hd'],
+            description: 'Image quality (default: standard)',
+          },
+          style: {
+            type: 'string',
+            enum: ['natural', 'vivid'],
+            description: 'Image style (default: vivid)',
+          },
+          n: {
+            type: 'number',
+            description: 'Number of images to generate (1-4, default: 1)',
+          },
+        },
+        required: [],
+      },
+      execute: async (args, options) => {
+        const target = resolveToolMediaTarget(args, options, 'image');
+        const editInstruction = readOptionalString(args.editInstruction);
+        const prompt = readOptionalString(args.prompt) ?? editInstruction ?? '';
+        if (!prompt.trim()) {
+          return {
+            success: false,
+            error: 'TransformImage requires prompt or editInstruction.',
+          };
+        }
+        if (!hasResolvedTransformSource(args)) {
+          return {
+            success: false,
+            error:
+              'TransformImage requires a host-resolved sourceImageUri, referenceImageUri, referenceImageUrl, or referenceImageBase64. Stable sourceImageRef is metadata only until host IO resolves it.',
+          };
+        }
+
+        try {
+          const resolved = await resolveGenerationPrompt(
+            { ...args, prompt },
+            'image.generate',
+            target.providerId,
+          );
+          const requestTarget = {
+            ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
+            ...(target.modelId ? { requestedModelId: target.modelId } : {}),
+          };
+          const transformMetadata = readTransformImageReferenceArgs(args);
+          const task = await media.generateImage({
+            ...buildImageGenerationRequest({
+              args: {
+                size: '1024x1024',
+                ...args,
+                referenceImageUri:
+                  readOptionalString(args.referenceImageUri) ??
+                  readOptionalString(args.sourceImageUri),
+                aspectRatio:
+                  readOptionalString(args.targetAspectRatio) ??
+                  readOptionalString(args.aspectRatio),
+                style: readOptionalString(args.style) ?? readOptionalString(args.targetStyle),
+                editInstruction,
+              },
+              target: requestTarget,
+              resolved,
+              transformMetadata,
+            }),
+          });
+          return {
+            success: true,
+            data: {
+              backgroundMode: true,
+              taskId: task.id,
+              type: 'image-transform',
+              status: 'queued',
+              message: resolved.prompt,
+              routedTo: {
+                provider: task.providerId,
+                model: task.modelId,
+                ...(resolved.providerId ? { requestedProvider: resolved.providerId } : {}),
+              },
+              transformImage: transformMetadata,
+              ...(resolved.metadata
+                ? {
+                    providerAdaptation: withGenerationTargetMetadata(resolved.metadata, {
+                      ...requestTarget,
+                      actualProviderId: task.providerId,
+                      actualModelId: task.modelId,
+                    })?.providerAdaptation,
+                  }
+                : {}),
+            },
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Image transform failed',
           };
         }
       },
@@ -690,6 +1122,18 @@ export function registerMediaAgentTools(
             type: 'number',
             description: 'Speech speed multiplier (0.5-2, default: 1)',
           },
+          sourceCueId: {
+            type: 'string',
+            description: 'Optional structured storyboard voice cue ID for lineage',
+          },
+          speakerEntityId: {
+            type: 'string',
+            description: 'Optional creative entity ID for the speaker',
+          },
+          voiceAssetId: {
+            type: 'string',
+            description: 'Optional voice representation or voice asset ID used for this cue',
+          },
         },
         required: ['text'],
       },
@@ -707,6 +1151,14 @@ export function registerMediaAgentTools(
               voice: args.voice,
               language: args.language,
               speed: args.speed,
+              ...(typeof args.sourceCueId === 'string' ? { sourceCueId: args.sourceCueId } : {}),
+              ...(typeof args.speakerEntityId === 'string'
+                ? { speakerEntityId: args.speakerEntityId }
+                : {}),
+              ...(typeof args.voiceAssetId === 'string' ? { voiceAssetId: args.voiceAssetId } : {}),
+              ...(typeof args.speakerEntityId === 'string'
+                ? { characterIds: [args.speakerEntityId] }
+                : {}),
             },
           });
           return {

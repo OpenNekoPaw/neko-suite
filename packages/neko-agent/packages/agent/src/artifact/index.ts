@@ -28,3 +28,22 @@ export {
   createArtifactObservationHooks,
   type ArtifactObservationHooksConfig,
 } from './artifact-observation-hooks';
+
+export {
+  buildEntityMemoryContribution,
+  buildEntityMemoryContributionReviewArtifact,
+  buildCharacterMemoryReviewArtifact,
+  buildCharacterObservationTable,
+  buildMediaTextSegmentTable,
+  type CharacterMemoryArtifactInput,
+  type EntityMemoryContributionBuildInput,
+  type EntityMemoryContributionArtifactInput,
+} from './character-memory-artifact';
+
+export {
+  buildShotImagePrepReviewArtifact,
+  buildStoryboardShotImagePrepReviewArtifact,
+  type ShotImagePrepArtifactInput,
+  type StoryboardShotImagePrepArtifactInput,
+  type StoryboardShotImagePrepArtifactResult,
+} from './shot-image-prep-artifact';

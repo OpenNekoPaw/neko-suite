@@ -18,6 +18,10 @@ import { ConversationBridge } from './conversationBridge';
 import { AttachmentProcessor } from './message/attachmentProcessor';
 import { AgentStreamProcessor } from './message/agentStreamProcessor';
 import { MediaPreprocessor } from './message/mediaPreprocessor';
+import type {
+  EntityMemoryContributionAutomationPort,
+  EntityMemoryContributionAutomationResult,
+} from './message/entityMemoryContributionAutomation';
 import {
   executeAgentProjectFileSearch,
   createAgentMessageId,
@@ -136,6 +140,7 @@ export class AgentMessageTurnHandler {
               agentManager.getContextTokenCount(conversationId),
           }
         : {}),
+      entityMemoryContributionAutomation: createVSCodeEntityMemoryContributionAutomation(),
     });
     this._agentTurnBridge = new AgentTurnBridge({
       settings: this._settings,
@@ -456,4 +461,23 @@ export class AgentMessageTurnHandler {
     }
     this._disposables.length = 0;
   }
+}
+
+function createVSCodeEntityMemoryContributionAutomation(): EntityMemoryContributionAutomationPort {
+  return {
+    async processContribution({ contribution }) {
+      const projectRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      return vscode.commands.executeCommand<EntityMemoryContributionAutomationResult | undefined>(
+        'neko.entity.processMemoryContribution',
+        {
+          ...(projectRoot ? { projectRoot } : {}),
+          contribution,
+          options: {
+            mode: 'candidate',
+            defaultKind: 'character',
+          },
+        },
+      );
+    },
+  };
 }

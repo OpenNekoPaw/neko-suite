@@ -133,8 +133,55 @@
                 "shotNumber": 1,
                 "duration": 1.8,
                 "visualDescription": "A character looks back while running through a narrow alley.",
+                "characters": [
+                  {
+                    "characterId": "char-rin",
+                    "entityRef": {
+                      "entityId": "char-rin",
+                      "entityKind": "character"
+                    },
+                    "name": "Rin",
+                    "role": "primary",
+                    "action": "Looks back while running",
+                    "emotion": "urgent",
+                    "continuityNotes": "Keep the hooded jacket and messenger bag from the source panel.",
+                    "appearanceNotes": "Short dark hair, hooded jacket, messenger bag."
+                  }
+                ],
                 "characterAction": "The character turns, shouts, and accelerates.",
                 "dialogue": "We have to run.",
+                "textCues": [
+                  {
+                    "cueId": "shot-1-text-1",
+                    "kind": "dialogue",
+                    "text": "We have to run.",
+                    "speakerName": "Rin",
+                    "speakerCharacterId": "char-rin",
+                    "speakerEntityRef": {
+                      "entityId": "char-rin",
+                      "entityKind": "character"
+                    },
+                    "sourceRefId": "panel-1",
+                    "confidence": 0.86,
+                    "emotion": "urgent",
+                    "delivery": "shouting while moving"
+                  }
+                ],
+                "voiceCues": [
+                  {
+                    "cueId": "shot-1-dialogue-1",
+                    "kind": "dialogue",
+                    "text": "We have to run.",
+                    "speakerName": "Rin",
+                    "speakerCharacterId": "char-rin",
+                    "speakerEntityRef": {
+                      "entityId": "char-rin",
+                      "entityKind": "character"
+                    },
+                    "emotion": "urgent",
+                    "delivery": "shouting while moving"
+                  }
+                ],
                 "imageStrategy": "use-as-reference",
                 "sourceMediaRefs": [
                   {
@@ -151,6 +198,75 @@
                 ]
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      "blockId": "character-memory",
+      "kind": "table",
+      "title": "Character Memory Drafts",
+      "table": {
+        "schemaVersion": 1,
+        "kind": "generic-table",
+        "tableId": "character-observations",
+        "profile": "character-memory-review",
+        "title": "Character Observations",
+        "columns": [
+          {
+            "columnId": "observationId",
+            "label": "Observation",
+            "cellType": "string",
+            "required": true
+          },
+          { "columnId": "identity", "label": "Identity", "cellType": "string" },
+          {
+            "columnId": "reviewStatus",
+            "label": "Review Status",
+            "cellType": "status",
+            "required": true
+          },
+          { "columnId": "dimensions", "label": "Dimensions", "cellType": "tags" },
+          { "columnId": "traits", "label": "Traits", "cellType": "json" },
+          { "columnId": "source", "label": "Source", "cellType": "json" }
+        ],
+        "rows": [
+          {
+            "rowId": "obs-rin-shot-1",
+            "status": "needs-review",
+            "cells": {
+              "observationId": { "type": "string", "value": "obs-rin-shot-1" },
+              "identity": { "type": "string", "value": "char-rin" },
+              "reviewStatus": { "type": "status", "value": "draft" },
+              "dimensions": { "type": "tags", "value": ["appearance", "outfit", "voice"] },
+              "traits": {
+                "type": "json",
+                "value": {
+                  "confidence": 0.82,
+                  "traits": [
+                    { "dimension": "appearance", "value": "Short dark hair", "confidence": 0.8 },
+                    {
+                      "dimension": "outfit",
+                      "value": "Hooded jacket and messenger bag",
+                      "confidence": 0.84
+                    },
+                    { "dimension": "voice", "value": "Urgent shouted delivery", "confidence": 0.7 }
+                  ]
+                }
+              },
+              "source": {
+                "type": "json",
+                "value": {
+                  "source": "comic",
+                  "sourceRef": {
+                    "kind": "tool-result",
+                    "toolCallId": "read-comic",
+                    "assetIndex": 0,
+                    "range": { "shotId": "shot-1", "panelId": "panel-1" }
+                  }
+                }
+              }
+            }
           }
         ]
       }

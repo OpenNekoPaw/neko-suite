@@ -184,6 +184,121 @@ describe('registerMediaAgentTools', () => {
     expect(request).not.toHaveProperty('semanticPrompt');
   });
 
+  it('passes GenerateImage reference, mask, control, and edit fields to media routing', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('GenerateImage', {
+      prompt: 'Clean the panel',
+      negativePrompt: 'speech bubbles',
+      referenceImageUri: '${PROJECT}/refs/panel.png',
+      maskUri: '${PROJECT}/masks/speech-bubble.png',
+      controlImageUri: '${PROJECT}/controls/lineart.png',
+      controlMode: 'lineart',
+      controlStrength: 0.7,
+      inpaintStrength: 0.8,
+      editInstruction: 'Remove text and reconstruct the background.',
+      aspectRatio: '16:9',
+    });
+
+    expect(result.success).toBe(true);
+    expect(media.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Clean the panel',
+        negativePrompt: 'speech bubbles',
+        referenceImageUri: '${PROJECT}/refs/panel.png',
+        maskUri: '${PROJECT}/masks/speech-bubble.png',
+        controlImageUri: '${PROJECT}/controls/lineart.png',
+        controlMode: 'lineart',
+        controlStrength: 0.7,
+        inpaintStrength: 0.8,
+        editInstruction: 'Remove text and reconstruct the background.',
+        aspectRatio: '16:9',
+      }),
+    );
+  });
+
+  it('blocks TransformImage when only stable refs are provided without host-resolved input', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('TransformImage', {
+      editInstruction: 'Remove dialogue bubbles.',
+      sourceImageRef: {
+        refId: 'source-panel-1',
+        role: 'source',
+        locator: { type: 'tool-result', toolCallId: 'read-comic', assetIndex: 0 },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('host-resolved');
+    expect(media.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('registers TransformImage as a source-bound facade over image generation', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const transformTool = registry.get('TransformImage');
+    expect(transformTool?.parameters.properties.sourceImageRef).toEqual(
+      expect.objectContaining({ type: 'object' }),
+    );
+    expect(transformTool?.parameters.properties.maskRefs).toEqual(
+      expect.objectContaining({ type: 'array' }),
+    );
+
+    const result = await registry.execute('TransformImage', {
+      planId: 'prep-1',
+      sceneId: 'scene-1',
+      shotId: 'shot-1',
+      editInstruction: 'Remove dialogue bubbles and fill the wall.',
+      sourceImageRef: {
+        refId: 'source-panel-1',
+        role: 'source',
+        locator: { type: 'tool-result', toolCallId: 'read-comic', assetIndex: 0 },
+      },
+      sourceImageUri: '${PROJECT}/resolved/source-panel-1.png',
+      maskUri: '${PROJECT}/resolved/speech-mask.png',
+      operationPlan: ['crop-panel', 'remove-text', 'inpaint'],
+      targetAspectRatio: '16:9',
+      targetStyle: 'natural',
+      providerId: 'edit-provider',
+      modelId: 'edit-model',
+    });
+
+    expect(result.success).toBe(true);
+    expect(media.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Remove dialogue bubbles and fill the wall.',
+        providerId: 'edit-provider',
+        modelId: 'edit-model',
+        referenceImageUri: '${PROJECT}/resolved/source-panel-1.png',
+        maskUri: '${PROJECT}/resolved/speech-mask.png',
+        aspectRatio: '16:9',
+        style: 'natural',
+        editInstruction: 'Remove dialogue bubbles and fill the wall.',
+        metadata: expect.objectContaining({
+          transformImage: expect.objectContaining({
+            planId: 'prep-1',
+            sceneId: 'scene-1',
+            shotId: 'shot-1',
+            operationPlan: ['crop-panel', 'remove-text', 'inpaint'],
+          }),
+        }),
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        type: 'image-transform',
+        transformImage: expect.objectContaining({ planId: 'prep-1' }),
+      }),
+    );
+  });
+
   it('passes explicit provider/model routing to GenerateVideo', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();

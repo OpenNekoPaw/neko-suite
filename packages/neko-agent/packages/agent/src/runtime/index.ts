@@ -529,6 +529,27 @@ export {
 } from './storyboard-image-runtime';
 
 export {
+  backfillShotImagePrepOutputRefs,
+  createShotImagePrepToolCapabilities,
+  createShotImagePrepToolRequest,
+  estimateShotImagePrepCost,
+  executeShotImagePrepBatch,
+  executeShotImagePrepPlan,
+  gateShotImagePrepBatch,
+  type ExecuteShotImagePrepBatchInput,
+  type ShotImagePrepBackfillCompletion,
+  type ShotImagePrepBackfillOutput,
+  type ShotImagePrepBatchExecutionResult,
+  type ShotImagePrepBatchGateInput,
+  type ShotImagePrepBatchGateResult,
+  type ShotImagePrepExecutionInput,
+  type ShotImagePrepExecutionResult,
+  type ShotImagePrepRuntimeToolPort,
+  type ShotImagePrepToolCapability,
+  type ShotImagePrepToolRequest,
+} from './shot-image-prep-runtime';
+
+export {
   AgentEventStreamRuntimeProcessor,
   type AgentEventStreamRuntimeBackgroundTasks,
   type AgentEventStreamRuntimeMessage,

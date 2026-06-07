@@ -30,6 +30,10 @@ import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
 import { isDocumentImageCachePath } from '../../services/documentCachePaths';
+import {
+  observeEntityMemoryContributionAutomation,
+  type EntityMemoryContributionAutomationPort,
+} from './entityMemoryContributionAutomation';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -85,6 +89,8 @@ export interface AgentStreamProcessorDeps {
   localResourceAccess?: AgentLocalResourceAccess;
   /** Reads the current estimated conversation context tokens after stream completion. */
   getContextTokenCount?: (conversationId: string) => number;
+  /** Optional host-side automation for reviewable entity memory contribution envelopes. */
+  entityMemoryContributionAutomation?: EntityMemoryContributionAutomationPort;
 }
 
 /**
@@ -129,7 +135,11 @@ export class AgentStreamProcessor {
 
     const result = await this.streamRuntime.process({
       conversationId,
-      events,
+      events: observeEntityMemoryContributionAutomation({
+        events,
+        automation: this.deps.entityMemoryContributionAutomation,
+        logger,
+      }),
       postMessage: postProjectedMessage,
       onPhaseChange: callbacks.onPhaseChange,
       backgroundTasks: {

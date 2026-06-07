@@ -27,8 +27,9 @@
    - 多个 shot 可以显式引用同一页图，但必须在 `label`、`decisionReason` 或 `extensions["neko.mangaToVideo"]` 中说明 panel/page 对应关系；有裁切信息时记录 panel/crop/bbox。
 4. 逐格提取可见内容：
    - 场景、角色、动作、表情和姿态。
-   - 气泡文字和 OCR。
-   - 音效字。
+   - 气泡文字和 OCR，并判断文字角色。
+   - 旁白框、字幕/框内字、背景招牌、屏幕字和其他非对白文字。
+   - 音效和可见音效字。
    - 镜头角度和景别。
 
 ### 分镜结构化
@@ -39,6 +40,35 @@
 2. 先给简洁可读的分析，再追加一个 `neko-composite` fenced JSON block 作为内部结构化 payload。
 3. 外层使用 `CompositeArtifact`：`schemaVersion: 1`、`kind: "composite-artifact"`、`profile: "comic-to-animation-plan"`、`artifactId`、`title` 和 `blocks[]`。
 4. 分镜本体放在 `domain` block 中，使用 `domainKind: "StoryboardTable"`，其 `payload` 是 StoryboardTable：`schemaVersion: 1`、`kind: "storyboard-table"`、`profile: "manga-to-video"`、`title`、`scenes[]` 和 `shots[]`。
+
+### 渐进式人物记忆
+
+- 只从当前素材渐进提取人物观察。除非上下文已有项目证据，不要声称已经完整解决长篇身份一致性。
+- 身份已知时，可填写 `characters[].entityRef` 或 `characters[].characterId`；身份不确定时，只保留显示 `name` 并添加审阅诊断，不要编造 entity id。
+- `characters[]` 中的 `role`、`action`、`emotion`、`continuityNotes`、`appearanceNotes` 必须由当前分格证据支撑，按需填写。
+- 在人物记忆行中，只输出当前素材直接支撑的维度。不要猜测低证据特征，例如 species、gender、occupation、age、relationship 或 voice；没有把握时省略或输出审阅诊断。
+- 人物信息必须在 `characters[]` 中单独提取，并通过 cue speaker 字段把文字绑定到人物。不要只把人物写进 `visualDescription` 或 `characterAction` 的叙述里。
+- 每个对动画或审阅有意义的可见 OCR/文字片段，都应写入 `textCues[]`，至少包含 `cueId`、`kind`、`text`，有来源时填写 `sourceRefId`。支持的 text cue kind 为 `dialogue`、`narration`、`caption`、`sfx`、`backgroundText`、`unknown`。
+- 只有角色气泡对白或明确说出的画外台词才能成为 `textCues[].kind: "dialogue"` 和 legacy `dialogue`。旁白框使用 `textCues[].kind: "narration"`，需要配音时才同步到 `voiceOver`。字幕/框内字使用 `caption`。音效字使用 `sfx`，并可同步到 `soundCue`。招牌、海报、手机/屏幕字和环境文字使用 `backgroundText`。文字角色可见但不确定时用 `unknown`。
+- 对白 text cue 必须在有证据时绑定说话者：填写 `speakerName`，已知时填写 `speakerCharacterId` 和/或 `speakerEntityRef`。`speakerCharacterId` 必须对应 `characters[]` 中的人物；同时存在 `speakerEntityRef.entityId` 时必须指向同一实体。不确定说话者时保留 text cue，但省略 id，并在 `extensions["neko.textCueReview"]` 标注不确定原因。
+- 可见对白保留 legacy `dialogue` 以兼容旧链路；能判断说话者或语气时，再添加 `voiceCues[]`。voice cue 可包含 `cueId`、`kind`、`text`、`speakerName`、`speakerCharacterId`、`speakerEntityRef`、`emotion`、`delivery`、`voiceAssetId`、`sourceRefId`。voice cue 应与对应 dialogue text cue 的 speaker 绑定保持一致。
+- 不要编造 `voiceAssetId`。只有上下文已有真实绑定语音表示时才填写。
+- 当提取可持久化人物证据时，必须在 `extensions["neko.entityMemoryContributionPayload"]` 中放入完整 `EntityMemoryContribution` payload；运行时会用这个协议检查已存在实体、合并 open candidate 或创建待审阅候选。
+- 如有必要，可添加一个 review-only `GenericTable` block，使用 `profile: "character-memory-review"` 输出草稿 `CharacterObservation` 行。表格只是审阅投影，不要只依赖表格触发实体自动化。
+- 这些观察只是待审阅建议，不是已确认人物事实。本 Skill 不直接确认实体，也不直接写 accepted observation。
+
+### 镜头图像准备 Profile
+
+- 当目标是 comic-to-animation 时，在 StoryboardTable 合法之后，准备一个独立、可审阅的 `comic-shot-asset-prep` 表/profile。
+- prep profile 是计划投影，不是执行结果。按证据保守填写兼容 `ShotImagePrepPlan` 的字段：`shotId`、`sceneId`、`imageStrategy`、`sourceMediaRefs`、`operationPlan`、`generationPrompt`、`editInstruction`、`maskRefs`、`referenceBundle`、`perceptionCardRefs`、`status` 和 `diagnostics`。
+- 源图绑定编辑使用 `TransformImage` 语义：裁切分格、去除文字、对白框 inpaint、扩图到目标画幅、上色、放大或统一风格，并尽量保持源构图。
+- 新图或重构关键帧使用 `GenerateImage` 语义：补转场镜头、源 panel 不可用、首次生成角色/场景参考图，或源 panel 只作为参考而不保留原构图。
+- 角色、场景、风格和前后镜头连续性必须尽量使用 `referenceBundle` 或 `sourceMediaRefs` 中的 stable ref，不要只写在 prompt 文本里。
+- 角色参考只能指向已知 `CreativeEntityRef` 角色 id，或来自 entity memory contribution 的待审阅候选；不要由 prep plan 直接创建 confirmed entity。
+- 场景参考只在已有 scene/location 实体或明确来源证据时填写；低置信猜测应省略。
+- 感知缺失、mask 缺失、provider 不可用、unsafe ref、角色/场景绑定不确定时，写入 diagnostics，不要编造输出。
+- 在 runtime/tool 返回稳定 `outputMediaRefs` 或 `generatedMediaRefs` 前，不要声称已经完成清理、上色、转换或生成关键帧。
+- Skill 可以请求 `comic-shot-asset-prep` profile 并说明字段填写倾向，但不能注册运行时能力、绕过 validator、批准成本或执行 GenerateImage/TransformImage。
 
 ## StoryboardTable 规则
 
@@ -53,6 +83,9 @@
 - 不要一镜头一个 scene。漫画通常应把同一页或同一连续动作段落的多个分格合并到一个 scene，除非页码、地点、时间或戏剧段落明显变化。
 - 使用 `shotNumber` 表示全局阅读/视频顺序。
 - 每个 shot 必须包含 `shotNumber`、`duration`、`visualDescription`、`characterAction` 和 `imageStrategy`。
+- 有 OCR 文字时，先用 `textCues[]` 完成分类，再按需要摘要到 `dialogue`、`voiceOver` 或 `soundCue`。
+- 不要把旁白、字幕/框内字、音效字或背景文字放进 `dialogue`。
+- 分格能看出对白说话者时，不要让 speaker 绑定停留在隐含状态；应在 `textCues[].speakerName` 中填写，并在已知时补充 `speakerCharacterId`/`speakerEntityRef`。
 - 明确选择 `imageStrategy`：`reuse-original`、`use-as-reference`、`generate-new` 或 `transform-original`。
 - 不要默认给源图上色。黑白漫画需要彩色动画时，把原图保留在 `sourceMediaRefs`，使用 `imageStrategy: "transform-original"`，并在 `generationPrompt` 或 `extensions["neko.mangaToVideo"].colorization` 中说明。
 - 只有工具真实生成后，才能把彩色图或生成结果写入 `generatedMediaRefs`。
@@ -74,6 +107,45 @@
   "artifactId": "comic-storyboard-plan",
   "profile": "comic-to-animation-plan",
   "title": "Comic Storyboard Plan",
+  "extensions": {
+    "neko.entityMemoryContributionPayload": {
+      "contributionId": "comic-page-1-character-memory",
+      "sourcePackage": "neko-agent",
+      "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc-call-id", "assetIndex": 0 },
+      "reviewPolicy": "requires-user-review",
+      "characterObservations": [
+        {
+          "observationId": "obs-page-1-panel-1-character-1",
+          "sourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-doc-call-id",
+            "assetIndex": 0,
+            "range": { "panelId": "P1" }
+          },
+          "provenance": {
+            "source": "comic",
+            "providerId": "neko-agent",
+            "toolCallId": "read-doc-call-id"
+          },
+          "reviewStatus": "needs-review",
+          "mention": {
+            "mentionId": "mention-page-1-panel-1-character-1",
+            "kind": "visual",
+            "candidateName": "Character name",
+            "confidence": 0.8
+          },
+          "dimensions": [
+            {
+              "dimension": "appearance",
+              "value": "Bounded visual traits from this panel",
+              "confidence": 0.8
+            }
+          ],
+          "confidence": 0.8
+        }
+      ]
+    }
+  },
   "blocks": [
     {
       "blockId": "summary",
@@ -103,8 +175,45 @@
                 "duration": 3,
                 "sourcePage": "P1",
                 "visualDescription": "Panel action and composition",
+                "characters": [
+                  {
+                    "name": "Character name",
+                    "role": "primary",
+                    "action": "Visible action",
+                    "emotion": "visible emotion",
+                    "continuityNotes": "Costume or prop continuity supported by this panel",
+                    "appearanceNotes": "Bounded visual traits from this panel"
+                  }
+                ],
                 "characterAction": "Character action",
                 "dialogue": "OCR dialogue if present",
+                "textCues": [
+                  {
+                    "cueId": "scene-1-shot-1-text-1",
+                    "kind": "dialogue",
+                    "text": "OCR dialogue if present",
+                    "speakerName": "Character name",
+                    "speakerCharacterId": "character-id-if-known",
+                    "sourceRefId": "source-panel-1",
+                    "confidence": 0.8
+                  },
+                  {
+                    "cueId": "scene-1-shot-1-text-2",
+                    "kind": "sfx",
+                    "text": "Visible SFX lettering",
+                    "sourceRefId": "source-panel-1"
+                  }
+                ],
+                "voiceCues": [
+                  {
+                    "cueId": "scene-1-shot-1-dialogue-1",
+                    "kind": "dialogue",
+                    "text": "OCR dialogue if present",
+                    "speakerName": "Character name",
+                    "emotion": "visible emotion",
+                    "delivery": "shouting/whispering/neutral if visible"
+                  }
+                ],
                 "soundCue": "SFX if present",
                 "generationPrompt": "Prompt for runtime generation if needed",
                 "imageStrategy": "use-as-reference",
@@ -153,10 +262,22 @@
 
 旧的裸 `template: "storyboard-table"` payload 可以作为兼容输入读取，但新的输出应使用上面的 CompositeArtifact envelope。
 
+## Profile 组合指引
+
+把 profile 字段模板当作可组合字段包，而不是一张固定万能表。按当前阶段选择最小必要字段：
+
+- 分格/镜头审阅：`shotId`、`sourcePanel`、`visualDescription`、`dialogue` 和审阅状态。
+- 角色连续性：只有当角色身份、作用、情绪、动作或服装连续性会影响下一步时，才加入 `characters`。
+- 文本/OCR 审阅：只有当 OCR、旁白、音效字、背景文字或说话者绑定会影响动画或审阅时，才加入 `textCues`。
+- 镜头/运动规划：只有在准备动画或生成时，才加入 camera、duration、motion 和生成规划字段。
+- 媒体生成准备：加入 `motionPlan`、`sourceMediaRefs`、`imageStrategy` 和由真实工具结果支撑的安全资源引用。
+
+不要因为其他 profile 未来可能使用某个字段，就把所有字段一次性塞进当前表。Profile descriptor 只是用于校验和渲染的结构约束，不授予 Canvas、Cut、生成或执行能力。
+
 ## Profile 字段模板
 
 - `script-breakdown`：强调 `dialogue`、`shotScale`、`cameraMovement`、`cameraAngle`、`duration` 和 scene 连续性。
-- `manga-to-video`：强调 `sourceMediaRefs`、`imageStrategy`、OCR `dialogue`、`soundCue`、`extensions["neko.mangaToVideo"]` 下的 `motionHint` 和分格来源引用。
+- `manga-to-video`：强调 `sourceMediaRefs`、`imageStrategy`、OCR `textCues`、绑定说话者的 `dialogue`、`soundCue`、`extensions["neko.mangaToVideo"]` 下的 `motionHint` 和分格来源引用。
 - `image-sequence`：强调有序 `sourceMediaRefs`、`generatedMediaRefs`、`duration`、`visualDescription` 和逐图转场备注。
 - `ad-storyboard`：强调 `visualStyle`、产品时刻、call-to-action、品牌安全备注和 `extensions["neko.adStoryboard"]` 下的 CTA 元数据。
 - `short-video`：强调 hook/beat/caption 结构、`voiceOver`、`soundCue` 和 `extensions["neko.shortVideo"]` 下的留存点。
@@ -175,8 +296,9 @@
 - 场景位置。
 - 出现角色。
 - 动作和运动。
-- 可见对白及说话者。
-- 音效字。
+- OCR 文字分类：对白、旁白、字幕/框内字、音效字、背景文字或未知。
+- 可见对白及说话者绑定。
+- 音效和可见音效字。
 - 情绪氛围。
 - 镜头角度和景别。
 - 速度线、冲击、发光、网点等特效。

@@ -13,13 +13,18 @@ import { TOOL_NAMES_MEDIA, TOOL_NAMES_TRANSCRIBE, TOOL_NAMES_SYSTEM } from '@nek
  */
 export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
   {
-    name: 'GenerateImage',
+    name: TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     description: 'Generate an image using AI. Prefer prompt or taskRef/planRef markdown.',
     parameters: {
       prompt: {
         type: 'string',
         required: false,
         description: 'Natural language generation prompt; default user-facing input',
+      },
+      negativePrompt: {
+        type: 'string',
+        required: false,
+        description: 'Optional negative prompt describing what to avoid.',
       },
       taskRef: {
         type: 'string',
@@ -66,6 +71,26 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
         default: 'vivid',
         description: 'Image style',
       },
+      referenceImageUri: {
+        type: 'string',
+        required: false,
+        description: 'Optional host-resolved reference image URI/path.',
+      },
+      maskUri: {
+        type: 'string',
+        required: false,
+        description: 'Optional host-resolved inpaint mask URI/path.',
+      },
+      controlImageUri: {
+        type: 'string',
+        required: false,
+        description: 'Optional host-resolved ControlNet image URI/path.',
+      },
+      editInstruction: {
+        type: 'string',
+        required: false,
+        description: 'Optional natural language edit instruction for edit-capable image providers.',
+      },
       n: {
         type: 'number',
         min: 1,
@@ -76,7 +101,60 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
     },
   },
   {
-    name: 'GenerateVideo',
+    name: TOOL_NAMES_MEDIA.TRANSFORM_IMAGE,
+    description:
+      'Transform an existing image using source-bound AI editing. Requires editInstruction or prompt plus a host-resolved sourceImageUri/referenceImageUri/referenceImageBase64.',
+    parameters: {
+      prompt: {
+        type: 'string',
+        required: false,
+        description:
+          'Optional transform prompt; editInstruction is preferred for source-bound edits.',
+      },
+      editInstruction: {
+        type: 'string',
+        required: false,
+        description: 'Natural language edit instruction for the source image.',
+      },
+      sourceImageUri: {
+        type: 'string',
+        required: false,
+        description: 'Host-resolved source image URI/path.',
+      },
+      referenceImageUri: {
+        type: 'string',
+        required: false,
+        description: 'Host-resolved reference image URI/path.',
+      },
+      maskUri: {
+        type: 'string',
+        required: false,
+        description: 'Optional host-resolved inpaint mask URI/path.',
+      },
+      targetAspectRatio: {
+        type: 'string',
+        required: false,
+        description: 'Optional target aspect ratio such as 16:9 or 9:16.',
+      },
+      targetStyle: {
+        type: 'string',
+        required: false,
+        description: 'Optional target style for style normalization.',
+      },
+      providerId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit provider id. Usually omit and let ProviderRouter choose.',
+      },
+      modelId: {
+        type: 'string',
+        required: false,
+        description: 'Optional explicit model id. Usually omit and let media routing choose.',
+      },
+    },
+  },
+  {
+    name: TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     description: 'Generate a video using AI. Prefer prompt or taskRef/planRef markdown.',
     parameters: {
       prompt: {
@@ -366,6 +444,7 @@ export const aiGenerateSkill: Skill = {
   content: aiGenerateContent,
   allowedTools: [
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    TOOL_NAMES_MEDIA.TRANSFORM_IMAGE,
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,
     TOOL_NAMES_MEDIA.GENERATE_TTS,
     TOOL_NAMES_MEDIA.GENERATE_MUSIC,

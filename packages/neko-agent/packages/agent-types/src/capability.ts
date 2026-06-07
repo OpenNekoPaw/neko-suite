@@ -101,12 +101,84 @@ export interface AgentArtifactExecutionCapabilityContribution {
   readonly minVersion?: string;
 }
 
+export type AgentSemanticFacetAvailability = 'available' | 'unavailable' | 'degraded';
+
+export interface AgentSemanticFacetBase {
+  readonly id: string;
+  readonly packageId: string;
+  readonly availability?: AgentSemanticFacetAvailability;
+  readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+  readonly risk?: AgentArtifactCapabilityRisk;
+  readonly requiresApproval?: boolean;
+  readonly actions?: readonly string[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface AgentEntityProviderFacetContribution extends AgentSemanticFacetBase {
+  readonly entityKinds?: readonly string[];
+  readonly sourceKinds?: readonly string[];
+  readonly canConfirm?: boolean;
+}
+
+export interface AgentEntityMemoryContributorFacetContribution extends AgentSemanticFacetBase {
+  readonly sourceKinds?: readonly string[];
+  readonly contributionKinds?: readonly string[];
+  readonly reviewPolicies?: readonly string[];
+  readonly canWriteAccepted?: boolean;
+}
+
+export interface AgentMediaTextExtractorFacetContribution extends AgentSemanticFacetBase {
+  readonly textKinds?: readonly string[];
+  readonly sourceKinds?: readonly string[];
+  readonly modalities?: readonly string[];
+  readonly supportsBoundingBoxes?: boolean;
+}
+
+export interface AgentPerceptionProviderFacetContribution extends AgentSemanticFacetBase {
+  readonly modalities?: readonly string[];
+  readonly layers?: readonly number[];
+  readonly timing?: readonly string[];
+}
+
+export interface AgentSemanticIndexProviderFacetContribution extends AgentSemanticFacetBase {
+  readonly sourceKinds?: readonly string[];
+  readonly partitions?: readonly string[];
+  readonly supportsVector?: boolean;
+  readonly supportsRag?: boolean;
+}
+
+export interface AgentReviewSurfaceFacetContribution extends AgentSemanticFacetBase {
+  readonly surfaceKinds?: readonly string[];
+  readonly actions: readonly string[];
+}
+
+export interface AgentRepresentationResolverFacetContribution extends AgentSemanticFacetBase {
+  readonly entityKinds?: readonly string[];
+  readonly representationKinds?: readonly string[];
+}
+
 export interface AgentArtifactFacetsContribution {
   readonly protocols?: readonly AgentArtifactProtocolContribution[];
   readonly profiles?: readonly AgentArtifactProfileContribution[];
   readonly renderers?: readonly AgentArtifactRendererContribution[];
   readonly projectors?: readonly AgentArtifactProjectorContribution[];
   readonly capabilities?: readonly AgentArtifactExecutionCapabilityContribution[];
+  readonly entityProviders?: readonly AgentEntityProviderFacetContribution[];
+  readonly entityMemoryContributors?: readonly AgentEntityMemoryContributorFacetContribution[];
+  readonly mediaTextExtractors?: readonly AgentMediaTextExtractorFacetContribution[];
+  readonly perceptionProviders?: readonly AgentPerceptionProviderFacetContribution[];
+  readonly semanticIndexProviders?: readonly AgentSemanticIndexProviderFacetContribution[];
+  readonly reviewSurfaces?: readonly AgentReviewSurfaceFacetContribution[];
+  readonly representationResolvers?: readonly AgentRepresentationResolverFacetContribution[];
+}
+
+export interface AgentSemanticFacetActionAvailability {
+  readonly actionId: string;
+  readonly available: boolean;
+  readonly facetIds: readonly string[];
+  readonly unavailableFacetIds: readonly string[];
+  readonly reason?: string;
+  readonly message?: string;
 }
 
 export interface AgentCapabilityContribution {

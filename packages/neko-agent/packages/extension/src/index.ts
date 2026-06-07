@@ -49,6 +49,7 @@ import {
   subscribeCanvasSelection,
 } from './services/canvasAmbientExtensionBridge';
 import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
+import { registerEntityContributionAutomationCommand } from '@neko/entity/host-vscode';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
@@ -257,6 +258,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
       logger: projectSearchLogger,
     }),
   });
+  context.subscriptions.push(
+    registerEntityContributionAutomationCommand({
+      logger: logger.child('EntityContributionAutomation'),
+    }),
+  );
 
   // Listen for extension changes to update tools (register disposable + avoid duplicates)
   let bridgeMetaToolsRegistered = true; // Already registered above

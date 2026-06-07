@@ -4,6 +4,8 @@ import type {
   CanvasStoryboardPayload,
   DocumentArchiveResourceRef,
   ResourceRef,
+  StoryboardTextCue,
+  StoryboardVoiceCue,
 } from '@neko/shared';
 
 export const NEKO_PLUGIN_EXTENSION_IDS = {
@@ -58,6 +60,8 @@ export interface PluginTransferCutStoryboardShotBase {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly textCues?: readonly StoryboardTextCue[];
+  readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly label: string;
 }
 

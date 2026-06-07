@@ -8,6 +8,7 @@ import type {
   AgentCapabilityRegistryProjection,
   AgentCapabilitySlashCommandContribution,
   AgentCapabilitySource,
+  AgentSemanticFacetActionAvailability,
   AgentCapabilityTelemetryEvent,
   AgentCapabilityTelemetryEventKind,
   AgentCapabilityTelemetryReason,
@@ -57,11 +58,15 @@ export interface AgentCapabilityInjectionRuntime {
   ): AgentCapabilityRegistryProjection;
   listRegistered(): readonly AgentCapabilityContribution[];
   getDiagnostics(phase?: 'registration' | 'injection'): readonly AgentCapabilityDiagnostic[];
-  getArtifactFacets(): AgentArtifactFacetsContribution;
+  getArtifactFacets(context?: AgentCapabilityInjectionContext): AgentArtifactFacetsContribution;
   findArtifactCapabilities(
     actionId: string,
     context?: AgentCapabilityInjectionContext,
   ): readonly AgentArtifactExecutionCapabilityContribution[];
+  getSemanticFacetActionAvailability(
+    actionId: string,
+    context?: AgentCapabilityInjectionContext,
+  ): AgentSemanticFacetActionAvailability;
   inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet;
   projectSlashCommandCatalog(
     context: AgentCapabilityInjectionContext,
@@ -315,8 +320,8 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
     return [...this.registrationDiagnostics, ...this.injectionDiagnostics];
   }
 
-  getArtifactFacets(): AgentArtifactFacetsContribution {
-    return mergeArtifactFacets(this.contributions.values());
+  getArtifactFacets(context?: AgentCapabilityInjectionContext): AgentArtifactFacetsContribution {
+    return mergeArtifactFacets(this.contributions.values(), context);
   }
 
   findArtifactCapabilities(
@@ -324,6 +329,13 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
     context?: AgentCapabilityInjectionContext,
   ): readonly AgentArtifactExecutionCapabilityContribution[] {
     return findArtifactCapabilities(this.contributions.values(), actionId, context);
+  }
+
+  getSemanticFacetActionAvailability(
+    actionId: string,
+    context?: AgentCapabilityInjectionContext,
+  ): AgentSemanticFacetActionAvailability {
+    return getSemanticFacetActionAvailability(this.contributions.values(), actionId, context);
   }
 
   inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet {
@@ -681,8 +693,56 @@ function findArtifactCapabilities(
   return matches;
 }
 
+function getSemanticFacetActionAvailability(
+  registeredContributions: Iterable<AgentCapabilityContribution>,
+  actionId: string,
+  context?: AgentCapabilityInjectionContext,
+): AgentSemanticFacetActionAvailability {
+  const contributionList = Array.from(registeredContributions);
+  const registeredFacetIds = collectSemanticFacetActionIds(
+    mergeArtifactFacets(contributionList),
+    actionId,
+  );
+  if (registeredFacetIds.length === 0) {
+    return {
+      actionId,
+      available: false,
+      facetIds: [],
+      unavailableFacetIds: [],
+      reason: 'missing-provider',
+      message: 'No registered semantic facet provider declares this action.',
+    };
+  }
+
+  const availableFacetIds = collectSemanticFacetActionIds(
+    mergeArtifactFacets(contributionList, context),
+    actionId,
+  );
+  const unavailableFacetIds = registeredFacetIds.filter(
+    (facetId) => !availableFacetIds.includes(facetId),
+  );
+  if (availableFacetIds.length === 0) {
+    return {
+      actionId,
+      available: false,
+      facetIds: [],
+      unavailableFacetIds,
+      reason: 'provider-unavailable',
+      message:
+        'Semantic facet providers declare this action but are unavailable in the current context.',
+    };
+  }
+  return {
+    actionId,
+    available: true,
+    facetIds: availableFacetIds,
+    unavailableFacetIds,
+  };
+}
+
 function mergeArtifactFacets(
   registeredContributions: Iterable<AgentCapabilityContribution>,
+  context?: AgentCapabilityInjectionContext,
 ): AgentArtifactFacetsContribution {
   const protocols = new Map<
     string,
@@ -701,8 +761,44 @@ function mergeArtifactFacets(
     NonNullable<AgentArtifactFacetsContribution['projectors']>[number]
   >();
   const capabilities = new Map<string, AgentArtifactExecutionCapabilityContribution>();
+  const entityProviders = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['entityProviders']>[number]
+  >();
+  const entityMemoryContributors = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['entityMemoryContributors']>[number]
+  >();
+  const mediaTextExtractors = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['mediaTextExtractors']>[number]
+  >();
+  const perceptionProviders = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['perceptionProviders']>[number]
+  >();
+  const semanticIndexProviders = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['semanticIndexProviders']>[number]
+  >();
+  const reviewSurfaces = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['reviewSurfaces']>[number]
+  >();
+  const representationResolvers = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['representationResolvers']>[number]
+  >();
+
+  const disabledIds = new Set(context?.disabledContributionIds ?? []);
+  const trust = new Set<AgentCapabilityTrustLevel>(
+    context?.allowedTrustLevels ?? ['core', 'community'],
+  );
 
   for (const contribution of registeredContributions) {
+    if (context && getInjectionSkipReason(contribution, context, disabledIds, trust)) {
+      continue;
+    }
     for (const protocol of contribution.artifactFacets?.protocols ?? []) {
       protocols.set(protocol.id, protocol);
     }
@@ -718,6 +814,27 @@ function mergeArtifactFacets(
     for (const capability of contribution.artifactFacets?.capabilities ?? []) {
       capabilities.set(capability.capabilityId, capability);
     }
+    for (const facet of contribution.artifactFacets?.entityProviders ?? []) {
+      entityProviders.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.entityMemoryContributors ?? []) {
+      entityMemoryContributors.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.mediaTextExtractors ?? []) {
+      mediaTextExtractors.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.perceptionProviders ?? []) {
+      perceptionProviders.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.semanticIndexProviders ?? []) {
+      semanticIndexProviders.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.reviewSurfaces ?? []) {
+      reviewSurfaces.set(facet.id, facet);
+    }
+    for (const facet of contribution.artifactFacets?.representationResolvers ?? []) {
+      representationResolvers.set(facet.id, facet);
+    }
   }
 
   return {
@@ -726,7 +843,31 @@ function mergeArtifactFacets(
     renderers: Array.from(renderers.values()),
     projectors: Array.from(projectors.values()),
     capabilities: Array.from(capabilities.values()),
+    entityProviders: Array.from(entityProviders.values()),
+    entityMemoryContributors: Array.from(entityMemoryContributors.values()),
+    mediaTextExtractors: Array.from(mediaTextExtractors.values()),
+    perceptionProviders: Array.from(perceptionProviders.values()),
+    semanticIndexProviders: Array.from(semanticIndexProviders.values()),
+    reviewSurfaces: Array.from(reviewSurfaces.values()),
+    representationResolvers: Array.from(representationResolvers.values()),
   };
+}
+
+function collectSemanticFacetActionIds(
+  facets: AgentArtifactFacetsContribution,
+  actionId: string,
+): readonly string[] {
+  return [
+    ...(facets.entityProviders ?? []),
+    ...(facets.entityMemoryContributors ?? []),
+    ...(facets.mediaTextExtractors ?? []),
+    ...(facets.perceptionProviders ?? []),
+    ...(facets.semanticIndexProviders ?? []),
+    ...(facets.reviewSurfaces ?? []),
+    ...(facets.representationResolvers ?? []),
+  ]
+    .filter((facet) => (facet.actions ?? []).includes(actionId))
+    .map((facet) => facet.id);
 }
 
 function normalizeRetentionLimit(value: number | undefined, fallback: number): number {
@@ -976,6 +1117,57 @@ function validateArtifactFacets(
       );
     }
   }
+
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.entityProviders,
+    'artifactFacets.entityProviders',
+    ['entityKinds', 'sourceKinds'],
+  );
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.entityMemoryContributors,
+    'artifactFacets.entityMemoryContributors',
+    ['sourceKinds', 'contributionKinds', 'reviewPolicies', 'actions'],
+  );
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.mediaTextExtractors,
+    'artifactFacets.mediaTextExtractors',
+    ['textKinds', 'sourceKinds', 'modalities', 'actions'],
+  );
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.perceptionProviders,
+    'artifactFacets.perceptionProviders',
+    ['modalities', 'timing', 'actions'],
+  );
+  validatePerceptionProviderLayers(contribution, diagnostics, facets.perceptionProviders);
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.semanticIndexProviders,
+    'artifactFacets.semanticIndexProviders',
+    ['sourceKinds', 'partitions', 'actions'],
+  );
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.reviewSurfaces,
+    'artifactFacets.reviewSurfaces',
+    ['surfaceKinds', 'actions'],
+  );
+  validateSemanticFacetArray(
+    contribution,
+    diagnostics,
+    facets.representationResolvers,
+    'artifactFacets.representationResolvers',
+    ['entityKinds', 'representationKinds', 'actions'],
+  );
 }
 
 function pushNameCollisions(
@@ -1276,6 +1468,90 @@ function validateOptionalStringArrayField(
   diagnostics.push(validationDiagnostic(contributionId, 'invalid-string-array-field', field));
 }
 
+function validateSemanticFacetArray(
+  contribution: AgentCapabilityContribution,
+  diagnostics: AgentCapabilityDiagnostic[],
+  facets:
+    | readonly {
+        readonly id: string;
+        readonly packageId: string;
+        readonly availability?: string;
+        readonly risk?: string;
+        readonly requiresApproval?: boolean;
+        readonly metadata?: Readonly<Record<string, unknown>>;
+      }[]
+    | undefined,
+  field: string,
+  stringArrayFields: readonly string[],
+): void {
+  for (const facet of facets ?? []) {
+    pushMissingStringDiagnostic(diagnostics, contribution.identity.id, facet.id, `${field}.id`);
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      facet.packageId,
+      `${field}.packageId`,
+    );
+    if (
+      facet.availability !== undefined &&
+      !['available', 'unavailable', 'degraded'].includes(facet.availability)
+    ) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-facet-availability',
+          `${field}.availability`,
+        ),
+      );
+    }
+    if (facet.risk !== undefined && !isArtifactCapabilityRisk(facet.risk)) {
+      diagnostics.push(
+        validationDiagnostic(contribution.identity.id, 'invalid-artifact-risk', `${field}.risk`),
+      );
+    }
+    if (facet.requiresApproval !== undefined && typeof facet.requiresApproval !== 'boolean') {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-artifact-approval',
+          `${field}.requiresApproval`,
+        ),
+      );
+    }
+    for (const stringArrayField of stringArrayFields) {
+      validateOptionalStringArrayField(
+        diagnostics,
+        contribution.identity.id,
+        (facet as unknown as Record<string, readonly string[] | undefined>)[stringArrayField],
+        `${field}.${stringArrayField}`,
+      );
+    }
+  }
+}
+
+function validatePerceptionProviderLayers(
+  contribution: AgentCapabilityContribution,
+  diagnostics: AgentCapabilityDiagnostic[],
+  facets: NonNullable<AgentArtifactFacetsContribution['perceptionProviders']> | undefined,
+): void {
+  for (const facet of facets ?? []) {
+    if (
+      facet.layers !== undefined &&
+      (!Array.isArray(facet.layers) ||
+        facet.layers.length === 0 ||
+        !facet.layers.every((layer: number) => Number.isInteger(layer) && layer >= 0))
+    ) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-integer-array-field',
+          'artifactFacets.perceptionProviders.layers',
+        ),
+      );
+    }
+  }
+}
+
 function isNonEmptyStringArray(value: readonly string[]): boolean {
   return value.length > 0 && value.every((item) => item.trim().length > 0);
 }
@@ -1286,7 +1562,14 @@ function hasArtifactFacets(facets: AgentArtifactFacetsContribution | undefined):
     (facets?.profiles?.length ?? 0) > 0 ||
     (facets?.renderers?.length ?? 0) > 0 ||
     (facets?.projectors?.length ?? 0) > 0 ||
-    (facets?.capabilities?.length ?? 0) > 0
+    (facets?.capabilities?.length ?? 0) > 0 ||
+    (facets?.entityProviders?.length ?? 0) > 0 ||
+    (facets?.entityMemoryContributors?.length ?? 0) > 0 ||
+    (facets?.mediaTextExtractors?.length ?? 0) > 0 ||
+    (facets?.perceptionProviders?.length ?? 0) > 0 ||
+    (facets?.semanticIndexProviders?.length ?? 0) > 0 ||
+    (facets?.reviewSurfaces?.length ?? 0) > 0 ||
+    (facets?.representationResolvers?.length ?? 0) > 0
   );
 }
 

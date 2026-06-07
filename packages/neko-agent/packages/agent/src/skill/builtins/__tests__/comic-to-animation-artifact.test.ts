@@ -26,7 +26,7 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
     protocol: 'GenericTable',
     version: 1,
     source: 'skill-local',
-    columns: [
+    fieldDefinitions: [
       { columnId: 'shotId', cellType: 'string', required: true },
       {
         columnId: 'sourcePanel',
@@ -37,6 +37,19 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
       {
         columnId: 'motionPlan',
         cellType: 'json',
+        required: false,
+        schemaRef: 'neko.motion-plan.v1',
+      },
+    ],
+    fieldGroups: [
+      { groupId: 'shot-core', fieldIds: ['shotId', 'sourcePanel'] },
+      { groupId: 'generation-prep', fieldIds: ['motionPlan'] },
+    ],
+    includeFieldGroups: ['shot-core', 'generation-prep'],
+    columns: [
+      {
+        columnId: 'motionPlan',
+        cellType: 'json',
         required: true,
         schemaRef: 'neko.motion-plan.v1',
         shape: {
@@ -44,6 +57,20 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
           fieldTypes: { layer: 'string', durationMs: 'number', assetRef: 'string' },
         },
       },
+    ],
+  },
+  {
+    profileId: 'character-memory-review',
+    protocol: 'GenericTable',
+    version: 1,
+    source: 'skill-local',
+    columns: [
+      { columnId: 'observationId', cellType: 'string', required: true },
+      { columnId: 'identity', cellType: 'string' },
+      { columnId: 'reviewStatus', cellType: 'status', required: true },
+      { columnId: 'dimensions', cellType: 'tags' },
+      { columnId: 'traits', cellType: 'json' },
+      { columnId: 'source', cellType: 'json' },
     ],
   },
 ];
@@ -171,11 +198,29 @@ describe('comic-to-animation composite artifact sample', () => {
     expect(canvasProjection.payload?.scenes[0]?.shotPlans[0]).toMatchObject({
       shotNumber: 1,
       dialogue: 'We have to run.',
+      characters: [
+        expect.objectContaining({
+          characterId: 'char-rin',
+          characterName: 'Rin',
+          role: 'primary',
+          action: 'Looks back while running',
+          emotion: 'urgent',
+          continuityNotes: 'Keep the hooded jacket and messenger bag from the source panel.',
+          appearanceNotes: 'Short dark hair, hooded jacket, messenger bag.',
+        }),
+      ],
     });
     expect(cutProjection.diagnostics).toEqual([]);
     expect(cutProjection.payload?.shots[0]).toMatchObject({
       id: 'shot-1',
       imagePath: '${WORKSPACE}/comic/panel-1.png',
+      voiceCues: [
+        expect.objectContaining({
+          cueId: 'shot-1-dialogue-1',
+          speakerName: 'Rin',
+          speakerCharacterId: 'char-rin',
+        }),
+      ],
     });
   });
 });

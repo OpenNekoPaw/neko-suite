@@ -351,6 +351,224 @@ describe('agent-capability-injection-runtime', () => {
     expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
   });
 
+  it('registers entity memory and semantic index facets as discoverable metadata', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    const projection = runtime.register({
+      identity: {
+        id: 'provider:semantic',
+        source: 'provider',
+        sourceId: 'neko-semantic',
+        trustLevel: 'core',
+      },
+      artifactFacets: {
+        entityMemoryContributors: [
+          {
+            id: 'entity-memory:comic',
+            packageId: 'neko-agent',
+            sourceKinds: ['comic', 'agent'],
+            contributionKinds: ['characterObservation', 'mediaTextSegment'],
+            reviewPolicies: ['draft-only', 'requires-user-review', 'source-approved'],
+            actions: ['entityMemory.contribute'],
+            risk: 'low',
+            requiresApproval: false,
+          },
+        ],
+        mediaTextExtractors: [
+          {
+            id: 'media-text:ocr',
+            packageId: 'runtime-media',
+            textKinds: ['ocr'],
+            sourceKinds: ['comic', 'document'],
+            modalities: ['image'],
+            supportsBoundingBoxes: true,
+            actions: ['mediaText.extract'],
+          },
+        ],
+        semanticIndexProviders: [
+          {
+            id: 'semantic-index:project',
+            packageId: 'neko-search',
+            partitions: ['semantic-evidence'],
+            sourceKinds: ['comic', 'video', 'audio', 'document'],
+            supportsVector: true,
+            supportsRag: true,
+          },
+        ],
+        reviewSurfaces: [
+          {
+            id: 'review:agent-artifact',
+            packageId: 'neko-agent',
+            surfaceKinds: ['artifact'],
+            actions: ['accept', 'reject', 'conflict', 'supersede'],
+            requiresApproval: true,
+          },
+        ],
+      },
+    });
+
+    expect(projection.artifactFacets?.entityMemoryContributors?.map((item) => item.id)).toEqual([
+      'entity-memory:comic',
+    ]);
+    expect(runtime.getArtifactFacets().semanticIndexProviders?.[0]).toMatchObject({
+      id: 'semantic-index:project',
+      supportsVector: true,
+    });
+
+    const injected = runtime.inject({ host: 'vscode' });
+    expect(injected.promptFragments).toEqual([]);
+    expect(injected.allowedTools).toEqual([]);
+  });
+
+  it('filters semantic facets through host and trust policy without deleting registry metadata', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.registerMany([
+      {
+        identity: {
+          id: 'provider:dashboard-review',
+          source: 'provider',
+          sourceId: 'neko-dashboard',
+          trustLevel: 'core',
+        },
+        hostRequirements: [{ host: 'vscode' }],
+        artifactFacets: {
+          reviewSurfaces: [
+            {
+              id: 'review:dashboard',
+              packageId: 'neko-dashboard',
+              surfaceKinds: ['dashboard'],
+              actions: ['accept'],
+            },
+          ],
+        },
+      },
+      {
+        identity: {
+          id: 'plugin:semantic',
+          source: 'plugin',
+          sourceId: 'third-party-semantic',
+          trustLevel: 'untrusted',
+        },
+        artifactFacets: {
+          semanticIndexProviders: [
+            {
+              id: 'semantic-index:third-party',
+              packageId: 'third-party-semantic',
+              partitions: ['semantic-evidence'],
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(runtime.getArtifactFacets().reviewSurfaces).toHaveLength(1);
+    expect(runtime.getArtifactFacets().semanticIndexProviders).toHaveLength(1);
+    expect(runtime.getArtifactFacets({ host: 'cli' }).reviewSurfaces).toEqual([]);
+    expect(
+      runtime.getArtifactFacets({
+        host: 'vscode',
+        allowedTrustLevels: ['core', 'community'],
+      }).semanticIndexProviders,
+    ).toEqual([]);
+  });
+
+  it('reports semantic facet action availability without executing providers', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.registerMany([
+      {
+        identity: {
+          id: 'provider:dashboard-review',
+          source: 'provider',
+          sourceId: 'neko-dashboard',
+          trustLevel: 'core',
+        },
+        hostRequirements: [{ host: 'vscode' }],
+        artifactFacets: {
+          reviewSurfaces: [
+            {
+              id: 'review:dashboard',
+              packageId: 'neko-dashboard',
+              surfaceKinds: ['dashboard'],
+              actions: ['entityMemory.review.accept'],
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(runtime.getSemanticFacetActionAvailability('entityMemory.review.accept')).toEqual({
+      actionId: 'entityMemory.review.accept',
+      available: true,
+      facetIds: ['review:dashboard'],
+      unavailableFacetIds: [],
+    });
+    expect(
+      runtime.getSemanticFacetActionAvailability('entityMemory.review.accept', { host: 'cli' }),
+    ).toEqual({
+      actionId: 'entityMemory.review.accept',
+      available: false,
+      facetIds: [],
+      unavailableFacetIds: ['review:dashboard'],
+      reason: 'provider-unavailable',
+      message:
+        'Semantic facet providers declare this action but are unavailable in the current context.',
+    });
+    expect(runtime.getSemanticFacetActionAvailability('mediaText.extract.ocr')).toEqual({
+      actionId: 'mediaText.extract.ocr',
+      available: false,
+      facetIds: [],
+      unavailableFacetIds: [],
+      reason: 'missing-provider',
+      message: 'No registered semantic facet provider declares this action.',
+    });
+  });
+
+  it('diagnoses invalid semantic facet metadata at registration', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.register({
+      identity: {
+        id: 'provider:bad-semantic',
+        source: 'provider',
+        sourceId: 'bad-semantic',
+        trustLevel: 'core',
+      },
+      artifactFacets: {
+        entityMemoryContributors: [
+          {
+            id: '',
+            packageId: '',
+            sourceKinds: [],
+            reviewPolicies: [],
+            availability: 'missing' as never,
+            risk: 'unsafe' as never,
+            requiresApproval: 'yes' as never,
+          },
+        ],
+        perceptionProviders: [
+          {
+            id: 'perception:bad',
+            packageId: 'neko-agent',
+            layers: [0, -1.5],
+          },
+        ],
+      },
+    });
+
+    expect(runtime.getDiagnostics('registration').map((item) => item.reason)).toEqual(
+      expect.arrayContaining([
+        'missing-required-field',
+        'invalid-string-array-field',
+        'invalid-facet-availability',
+        'invalid-artifact-risk',
+        'invalid-artifact-approval',
+        'invalid-integer-array-field',
+      ]),
+    );
+  });
+
   it('reports deterministic command, tool, prompt, and workflow collisions at registration', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
 

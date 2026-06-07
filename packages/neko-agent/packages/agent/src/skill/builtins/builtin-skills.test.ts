@@ -113,6 +113,26 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('ad-storyboard');
       expect(comicToStoryboardSkill.content).toContain('short-video');
       expect(comicToStoryboardSkill.content).toContain('character-design');
+      expect(comicToStoryboardSkill.content).toContain('Profile Composition Guidance');
+      expect(comicToStoryboardSkill.content).toContain('composable field groups');
+      expect(comicToStoryboardSkill.content).toContain('smallest field set needed');
+      expect(comicToStoryboardSkill.content).toContain('do not grant Canvas, Cut');
+      expect(comicToStoryboardSkill.content).toContain('Progressive Character Memory');
+      expect(comicToStoryboardSkill.content).toContain('textCues');
+      expect(comicToStoryboardSkill.content).toContain('OCR/text fragment');
+      expect(comicToStoryboardSkill.content).toContain('`dialogue`');
+      expect(comicToStoryboardSkill.content).toContain('`narration`');
+      expect(comicToStoryboardSkill.content).toContain('`backgroundText`');
+      expect(comicToStoryboardSkill.content).toContain('Do not put narration, caption boxes');
+      expect(comicToStoryboardSkill.content).toContain('speaker binding');
+      expect(comicToStoryboardSkill.content).toContain('voiceCues');
+      expect(comicToStoryboardSkill.content).toContain('character-memory-review');
+      expect(comicToStoryboardSkill.content).toContain('neko.entityMemoryContributionPayload');
+      expect(comicToStoryboardSkill.content).toContain('EntityMemoryContribution');
+      expect(comicToStoryboardSkill.content).toContain(
+        'emit only dimensions supported by direct source evidence',
+      );
+      expect(comicToStoryboardSkill.content).toContain('Do not invent `voiceAssetId`');
     });
 
     it('should group storyboard shots into coarser scenes', () => {
@@ -160,7 +180,11 @@ describe('Builtin Skills', () => {
         acceptedModalities: ['comic', 'document', 'image-sequence'],
         producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
         artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-        referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+        referencedCapabilities: [
+          'comic-image-prep-pipeline',
+          'canvas.importStoryboard',
+          'cut.importStoryboard',
+        ],
         suggestedProjectors: [
           'projector:comic-shot-plan-to-storyboard',
           'projector:storyboard-to-canvas',
@@ -174,6 +198,13 @@ describe('Builtin Skills', () => {
           { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
         ]),
       );
+    });
+
+    it('should guide shot image prep without claiming generated outputs', () => {
+      expect(comicToStoryboardSkill.content).toContain('comic-shot-asset-prep');
+      expect(comicToStoryboardSkill.content).toContain('TransformImage');
+      expect(comicToStoryboardSkill.content).toContain('GenerateImage');
+      expect(comicToStoryboardSkill.content).toContain('Do not claim a transformed');
     });
 
     it('should have comic icon', () => {
@@ -262,6 +293,11 @@ describe('Builtin Skills', () => {
       expect(zhComic?.content).toContain('sourceMediaRefs');
       expect(zhComic?.content).toContain('不要对同一张图先 ReadImage 再 ReadDocumentImage');
       expect(zhComic?.content).toContain('不要在表格中嵌入 base64');
+      expect(zhComic?.content).toContain('Profile 组合指引');
+      expect(zhComic?.content).toContain('可组合字段包');
+      expect(zhComic?.content).toContain('只输出当前素材直接支撑的维度');
+      expect(zhComic?.content).toContain('最小必要字段');
+      expect(zhComic?.content).toContain('不授予 Canvas、Cut');
       expect(zhMedia?.content).toContain('媒体转视频协调器');
       expect(zhMedia?.content).toContain('结构化产物规则');
       expect(zhMedia?.content).toContain('不要嵌入 base64');
@@ -466,6 +502,7 @@ describe('Builtin Skills', () => {
   describe('tool coverage', () => {
     it('should have AI generation tools in ai-generate skill', () => {
       expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_IMAGE);
+      expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.TRANSFORM_IMAGE);
       expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
       expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
       expect(aiGenerateSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_MUSIC);
@@ -485,6 +522,20 @@ describe('Builtin Skills', () => {
       );
       expect(aiGenerateSkill.content).toContain('Generation Intent Sources');
       expect(aiGenerateSkill.content).toContain('taskRef');
+    });
+
+    it('should expose TransformImage as a source-bound image edit tool', () => {
+      const transformImage = aiGenerateSkill.toolDefinitions?.find(
+        (tool) => tool.name === TOOL_NAMES_MEDIA.TRANSFORM_IMAGE,
+      );
+
+      expect(transformImage?.description).toContain('Transform');
+      expect(transformImage?.parameters.editInstruction).toEqual(
+        expect.objectContaining({ required: false }),
+      );
+      expect(transformImage?.parameters.sourceImageUri).toEqual(
+        expect.objectContaining({ required: false }),
+      );
     });
 
     it('should have timeline tools in video-editing skill', () => {

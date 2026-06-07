@@ -17,7 +17,9 @@ import type {
   NpcTranscriptArtifact,
   SkillSummary,
 } from '@neko/shared';
+import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
+  STORYBOARD_TEXT_CUE_KINDS,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
@@ -1878,6 +1880,8 @@ function parseCutStoryboardShot(value: unknown): PluginTransferCutStoryboardShot
   const dialogue = optionalStringStrict(value.dialogue);
   const voiceOver = optionalStringStrict(value.voiceOver);
   const soundCue = optionalStringStrict(value.soundCue);
+  const textCues = parseStoryboardTextCues(value.textCues);
+  const voiceCues = parseStoryboardVoiceCues(value.voiceCues);
   if (
     !id ||
     !label ||
@@ -1889,7 +1893,9 @@ function parseCutStoryboardShot(value: unknown): PluginTransferCutStoryboardShot
     imageDataUrl === null ||
     dialogue === null ||
     voiceOver === null ||
-    soundCue === null
+    soundCue === null ||
+    textCues === null ||
+    voiceCues === null
   ) {
     return null;
   }
@@ -1901,6 +1907,8 @@ function parseCutStoryboardShot(value: unknown): PluginTransferCutStoryboardShot
     ...(dialogue !== undefined ? { dialogue } : {}),
     ...(voiceOver !== undefined ? { voiceOver } : {}),
     ...(soundCue !== undefined ? { soundCue } : {}),
+    ...(textCues !== undefined ? { textCues } : {}),
+    ...(voiceCues !== undefined ? { voiceCues } : {}),
     label,
   };
 
@@ -1920,6 +1928,122 @@ function parseCutStoryboardShot(value: unknown): PluginTransferCutStoryboardShot
   }
 
   return null;
+}
+
+function parseStoryboardTextCues(value: unknown): readonly StoryboardTextCue[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  const cues: StoryboardTextCue[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    const cueId = requiredString(item.cueId);
+    const text = requiredString(item.text);
+    if (!cueId || !text || !isStoryboardTextCueKind(item.kind)) return null;
+    const optional = parseStoryboardCueOptionalStrings(item, [
+      'speakerName',
+      'speakerCharacterId',
+      'sourceRefId',
+      'language',
+      'emotion',
+      'delivery',
+    ]);
+    if (!optional) return null;
+    const speakerEntityRef = parseCharacterEntityRef(item.speakerEntityRef);
+    if (speakerEntityRef === null) return null;
+    const confidence = optionalConfidence(item.confidence);
+    if (confidence === null) return null;
+    cues.push({
+      cueId,
+      kind: item.kind,
+      text,
+      ...(optional.speakerName !== undefined ? { speakerName: optional.speakerName } : {}),
+      ...(optional.speakerCharacterId !== undefined
+        ? { speakerCharacterId: optional.speakerCharacterId }
+        : {}),
+      ...(speakerEntityRef ? { speakerEntityRef } : {}),
+      ...(optional.sourceRefId !== undefined ? { sourceRefId: optional.sourceRefId } : {}),
+      ...(optional.language !== undefined ? { language: optional.language } : {}),
+      ...(confidence !== undefined ? { confidence } : {}),
+      ...(optional.emotion !== undefined ? { emotion: optional.emotion } : {}),
+      ...(optional.delivery !== undefined ? { delivery: optional.delivery } : {}),
+    });
+  }
+  return cues;
+}
+
+function parseStoryboardVoiceCues(
+  value: unknown,
+): readonly StoryboardVoiceCue[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  const cues: StoryboardVoiceCue[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    const cueId = requiredString(item.cueId);
+    const text = requiredString(item.text);
+    if (!cueId || !text || (item.kind !== 'dialogue' && item.kind !== 'voiceOver')) return null;
+    const optional = parseStoryboardCueOptionalStrings(item, [
+      'speakerName',
+      'speakerCharacterId',
+      'emotion',
+      'delivery',
+      'voiceAssetId',
+      'sourceRefId',
+    ]);
+    if (!optional) return null;
+    const speakerEntityRef = parseCharacterEntityRef(item.speakerEntityRef);
+    if (speakerEntityRef === null) return null;
+    cues.push({
+      cueId,
+      kind: item.kind,
+      text,
+      ...(optional.speakerName !== undefined ? { speakerName: optional.speakerName } : {}),
+      ...(optional.speakerCharacterId !== undefined
+        ? { speakerCharacterId: optional.speakerCharacterId }
+        : {}),
+      ...(speakerEntityRef ? { speakerEntityRef } : {}),
+      ...(optional.emotion !== undefined ? { emotion: optional.emotion } : {}),
+      ...(optional.delivery !== undefined ? { delivery: optional.delivery } : {}),
+      ...(optional.voiceAssetId !== undefined ? { voiceAssetId: optional.voiceAssetId } : {}),
+      ...(optional.sourceRefId !== undefined ? { sourceRefId: optional.sourceRefId } : {}),
+    });
+  }
+  return cues;
+}
+
+function parseStoryboardCueOptionalStrings(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string | undefined> | null {
+  const result: Record<string, string | undefined> = {};
+  for (const key of keys) {
+    const parsed = optionalStringStrict(value[key]);
+    if (parsed === null) return null;
+    if (parsed !== undefined && parsed.trim().length > 0) {
+      result[key] = parsed.trim();
+    }
+  }
+  return result;
+}
+
+function parseCharacterEntityRef(
+  value: unknown,
+): StoryboardTextCue['speakerEntityRef'] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const entityId = requiredString(value.entityId);
+  if (!entityId || value.entityKind !== 'character') return null;
+  return { entityId, entityKind: 'character' };
+}
+
+function isStoryboardTextCueKind(value: unknown): value is StoryboardTextCue['kind'] {
+  return STORYBOARD_TEXT_CUE_KINDS.includes(value as StoryboardTextCue['kind']);
+}
+
+function optionalConfidence(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) return null;
+  return value;
 }
 
 function parseDragStartMessage(raw: Record<string, unknown>): DragStartWebviewMessage | null {

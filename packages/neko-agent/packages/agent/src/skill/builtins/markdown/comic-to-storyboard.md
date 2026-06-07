@@ -27,8 +27,9 @@ This skill stops at analysis and storyboard planning. It does not generate image
    - Multiple shots may explicitly reference the same page image, but explain the panel/page mapping in `label`, `decisionReason`, or `extensions["neko.mangaToVideo"]`; include panel/crop/bbox when crop information is available.
 4. Extract visible content per panel:
    - Setting, characters, actions, expressions, poses.
-   - Speech bubble text and OCR.
-   - Sound effects.
+   - Speech bubble text and OCR, classified by text role.
+   - Narration/caption boxes, background signs, UI text, and other non-dialogue text.
+   - Sound effects and visible SFX lettering.
    - Camera angle and shot scale.
 
 ### Storyboard Structuring
@@ -39,6 +40,35 @@ This skill stops at analysis and storyboard planning. It does not generate image
 2. Present concise notes first, then append one internal structured payload in a `neko-composite` fenced JSON block.
 3. Use `CompositeArtifact` as the outer payload: `schemaVersion: 1`, `kind: "composite-artifact"`, `profile: "comic-to-animation-plan"`, `artifactId`, `title`, and `blocks[]`.
 4. Put the storyboard itself in a `domain` block with `domainKind: "StoryboardTable"` and a StoryboardTable `payload` using `schemaVersion: 1`, `kind: "storyboard-table"`, `profile: "manga-to-video"`, `title`, `scenes[]`, and `shots[]`.
+
+### Progressive Character Memory
+
+- Extract character observations incrementally from the current source only. Do not claim you have fully solved long-form identity unless prior project evidence is present.
+- When identity is known, include `characters[].entityRef` or `characters[].characterId`; when identity is uncertain, keep the display `name` and add review diagnostics instead of inventing an entity id.
+- In `characters[]`, include `role`, `action`, `emotion`, `continuityNotes`, and `appearanceNotes` only when the panel evidence supports them.
+- In character memory rows, emit only dimensions supported by direct source evidence. Do not guess low-evidence traits such as species, gender, occupation, age, relationship, or voice; omit them or surface a review diagnostic instead.
+- Extract character information separately in `characters[]` and bind text to characters through cue speaker fields. Do not rely on narrative prose inside `visualDescription` or `characterAction` as the only character record.
+- For every visible OCR/text fragment that matters to animation or review, add `textCues[]` with `cueId`, `kind`, `text`, and `sourceRefId` when available. Supported text cue kinds are `dialogue`, `narration`, `caption`, `sfx`, `backgroundText`, and `unknown`.
+- Only character speech bubbles or clearly spoken off-panel lines may become `textCues[].kind: "dialogue"` and legacy `dialogue`. Narration boxes should use `textCues[].kind: "narration"` and `voiceOver` only when they should be voiced. Caption/card text should use `caption`. Sound-effect lettering should use `sfx` and may also populate `soundCue`. Signs, posters, phone screens, and environmental text should use `backgroundText`. Use `unknown` when the text role is visible but ambiguous.
+- For dialogue text cues, bind the speaker when supported by panel evidence: set `speakerName` and, when known, `speakerCharacterId` and/or `speakerEntityRef`. The `speakerCharacterId` must match a character in `characters[]`; `speakerEntityRef.entityId` must match the same entity when present. If the speaker is uncertain, keep the text cue but omit ids and add the uncertainty under `extensions["neko.textCueReview"]`.
+- For visible speech bubbles, keep legacy `dialogue` for compatibility and add `voiceCues[]` when speaker or delivery can be inferred. A voice cue may include `cueId`, `kind`, `text`, `speakerName`, `speakerCharacterId`, `speakerEntityRef`, `emotion`, `delivery`, `voiceAssetId`, and `sourceRefId`. The voice cue should mirror the speaker binding from the corresponding dialogue text cue.
+- Do not invent `voiceAssetId`. Use it only if a real bound voice representation is available in the provided context.
+- When you extract durable character evidence, include a complete `EntityMemoryContribution` payload in `extensions["neko.entityMemoryContributionPayload"]`; the runtime uses that protocol to check existing entities, merge open candidates, or create reviewable candidates.
+- If useful, include a review-only `GenericTable` block with `profile: "character-memory-review"` for draft `CharacterObservation` rows. The table is only a review projection; do not rely on the table alone for entity automation.
+- These observations are suggestions for review, not confirmed character facts. Do not directly confirm entities or accepted observations from this skill.
+
+### Shot Image Prep Profile
+
+- When the user is aiming for comic-to-animation, prepare for a separate reviewable `comic-shot-asset-prep` table/profile after the StoryboardTable is valid.
+- The prep profile is a plan projection, not an execution result. Fill `ShotImagePrepPlan`-compatible fields conservatively: `shotId`, `sceneId`, `imageStrategy`, `sourceMediaRefs`, `operationPlan`, `generationPrompt`, `editInstruction`, `maskRefs`, `referenceBundle`, `perceptionCardRefs`, `status`, and `diagnostics` when evidence exists.
+- Choose `TransformImage` semantics for source-bound edits: crop panel, remove text, inpaint speech bubbles, outpaint to aspect ratio, colorize, upscale, or style-normalize while preserving the source composition.
+- Choose `GenerateImage` semantics for new or re-composed keyframes: missing transition shots, unusable panels, first-pass character/scene reference images, or shots where the source panel is only a reference.
+- Always keep reference images as stable refs in `referenceBundle` or `sourceMediaRefs`. Do not rely only on prompt prose for character, scene, style, or previous-shot continuity.
+- Use character references only when they point to known `CreativeEntityRef` character ids or reviewable candidates from entity memory contribution. Do not create confirmed entities from the prep plan.
+- Use scene references only when there is a known scene/location entity or a clear source evidence ref. Omit low-confidence guesses.
+- Report missing perception, missing mask, unresolved provider, unsafe ref, or uncertain character/scene binding as diagnostics instead of inventing outputs.
+- Do not claim a transformed, cleaned, colored, or generated keyframe exists until a runtime/tool result has returned stable `outputMediaRefs` or `generatedMediaRefs`.
+- Skill content may request the `comic-shot-asset-prep` profile and describe field-filling tendencies, but it does not register runtime capabilities, bypass validators, approve costs, or execute GenerateImage/TransformImage.
 
 ## StoryboardTable Rules
 
@@ -53,6 +83,9 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - Do not create one scene per shot. For manga/comics, group multiple panels from the same page or continuous action beat into one scene unless page, location, time, or dramatic beat clearly changes.
 - Use `shotNumber` for reading/video order across the whole storyboard.
 - Every shot must include `shotNumber`, `duration`, `visualDescription`, `characterAction`, and `imageStrategy`.
+- When OCR text is present, include `textCues[]` to classify it before summarizing it into `dialogue`, `voiceOver`, or `soundCue`.
+- Do not put narration, caption boxes, SFX lettering, or background text into `dialogue`.
+- Do not leave dialogue speaker binding implicit when the panel shows the speaker. Bind dialogue through `textCues[].speakerName` plus `speakerCharacterId`/`speakerEntityRef` when known.
 - Choose `imageStrategy`: `reuse-original`, `use-as-reference`, `generate-new`, or `transform-original`.
 - Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
 - Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
@@ -74,6 +107,45 @@ This skill stops at analysis and storyboard planning. It does not generate image
   "artifactId": "comic-storyboard-plan",
   "profile": "comic-to-animation-plan",
   "title": "Comic Storyboard Plan",
+  "extensions": {
+    "neko.entityMemoryContributionPayload": {
+      "contributionId": "comic-page-1-character-memory",
+      "sourcePackage": "neko-agent",
+      "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc-call-id", "assetIndex": 0 },
+      "reviewPolicy": "requires-user-review",
+      "characterObservations": [
+        {
+          "observationId": "obs-page-1-panel-1-character-1",
+          "sourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-doc-call-id",
+            "assetIndex": 0,
+            "range": { "panelId": "P1" }
+          },
+          "provenance": {
+            "source": "comic",
+            "providerId": "neko-agent",
+            "toolCallId": "read-doc-call-id"
+          },
+          "reviewStatus": "needs-review",
+          "mention": {
+            "mentionId": "mention-page-1-panel-1-character-1",
+            "kind": "visual",
+            "candidateName": "Character name",
+            "confidence": 0.8
+          },
+          "dimensions": [
+            {
+              "dimension": "appearance",
+              "value": "Bounded visual traits from this panel",
+              "confidence": 0.8
+            }
+          ],
+          "confidence": 0.8
+        }
+      ]
+    }
+  },
   "blocks": [
     {
       "blockId": "summary",
@@ -103,8 +175,45 @@ This skill stops at analysis and storyboard planning. It does not generate image
                 "duration": 3,
                 "sourcePage": "P1",
                 "visualDescription": "Panel action and composition",
+                "characters": [
+                  {
+                    "name": "Character name",
+                    "role": "primary",
+                    "action": "Visible action",
+                    "emotion": "visible emotion",
+                    "continuityNotes": "Costume or prop continuity supported by this panel",
+                    "appearanceNotes": "Bounded visual traits from this panel"
+                  }
+                ],
                 "characterAction": "Character action",
                 "dialogue": "OCR dialogue if present",
+                "textCues": [
+                  {
+                    "cueId": "scene-1-shot-1-text-1",
+                    "kind": "dialogue",
+                    "text": "OCR dialogue if present",
+                    "speakerName": "Character name",
+                    "speakerCharacterId": "character-id-if-known",
+                    "sourceRefId": "source-panel-1",
+                    "confidence": 0.8
+                  },
+                  {
+                    "cueId": "scene-1-shot-1-text-2",
+                    "kind": "sfx",
+                    "text": "Visible SFX lettering",
+                    "sourceRefId": "source-panel-1"
+                  }
+                ],
+                "voiceCues": [
+                  {
+                    "cueId": "scene-1-shot-1-dialogue-1",
+                    "kind": "dialogue",
+                    "text": "OCR dialogue if present",
+                    "speakerName": "Character name",
+                    "emotion": "visible emotion",
+                    "delivery": "shouting/whispering/neutral if visible"
+                  }
+                ],
                 "soundCue": "SFX if present",
                 "generationPrompt": "Prompt for runtime generation if needed",
                 "imageStrategy": "use-as-reference",
@@ -153,10 +262,22 @@ This skill stops at analysis and storyboard planning. It does not generate image
 
 Legacy bare `template: "storyboard-table"` payloads may be read for compatibility, but new outputs should use the CompositeArtifact envelope above.
 
+## Profile Composition Guidance
+
+Treat profile field templates as composable field groups, not as one fixed universal table. Pick the smallest field set needed for the current stage:
+
+- Panel/shot review: `shotId`, `sourcePanel`, `visualDescription`, `dialogue`, and review status.
+- Character continuity: add `characters` only when character identity, role, emotion, action, or costume continuity affects the next step.
+- Text/OCR review: add `textCues` only when OCR, narration, SFX lettering, background text, or speaker binding matters to animation or review.
+- Camera/motion planning: add camera, duration, motion, and generation-planning fields only when preparing animation or generation.
+- Media generation prep: add `motionPlan`, `sourceMediaRefs`, `imageStrategy`, and safe resource refs backed by real tool results.
+
+Do not include every possible field just because another profile might use it later. Profile descriptors are structural constraints for validation and rendering; they do not grant Canvas, Cut, generation, or execution capability.
+
 ## Profile Field Templates
 
 - `script-breakdown`: emphasize `dialogue`, `shotScale`, `cameraMovement`, `cameraAngle`, `duration`, and scene continuity.
-- `manga-to-video`: emphasize `sourceMediaRefs`, `imageStrategy`, OCR `dialogue`, `soundCue`, `motionHint` under `extensions["neko.mangaToVideo"]`, and panel source refs.
+- `manga-to-video`: emphasize `sourceMediaRefs`, `imageStrategy`, OCR `textCues`, speaker-bound `dialogue`, `soundCue`, `motionHint` under `extensions["neko.mangaToVideo"]`, and panel source refs.
 - `image-sequence`: emphasize ordered `sourceMediaRefs`, `generatedMediaRefs`, `duration`, `visualDescription`, and per-image transition notes.
 - `ad-storyboard`: emphasize `visualStyle`, product moment, call-to-action, brand-safety notes, and CTA metadata under `extensions["neko.adStoryboard"]`.
 - `short-video`: emphasize hook/beat/caption structure, `voiceOver`, `soundCue`, and retention moments under `extensions["neko.shortVideo"]`.
@@ -175,8 +296,9 @@ Legacy bare `template: "storyboard-table"` payloads may be read for compatibilit
 - Scene location.
 - Characters present.
 - Actions and movements.
-- Dialogue and speaker when visible.
-- Sound effects.
+- OCR text classification: dialogue, narration, caption, SFX, background text, or unknown.
+- Dialogue speaker binding when visible.
+- Sound effects and visible SFX lettering.
 - Mood and emotion.
 - Camera angle and shot scale.
 - Special effects such as speed lines, impact, glow, or screen tones.

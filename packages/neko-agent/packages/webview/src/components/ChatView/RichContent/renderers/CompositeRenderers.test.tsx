@@ -90,6 +90,9 @@ describe('composite rich content renderers', () => {
                 {
                   sceneId: 'scene-1',
                   sceneTitle: 'INT. CAFE - DAY',
+                  sceneNumber: 1,
+                  location: 'Cafe',
+                  timeOfDay: 'Day',
                   summary: 'Rin finds the signal.',
                   shots: [
                     {
@@ -112,6 +115,32 @@ describe('composite rich content renderers', () => {
                       emotion: ['focused', 'curious'],
                       sceneTags: ['signal'],
                       dialogue: '找到了。',
+                      textCues: [
+                        {
+                          cueId: 'shot-1-text-1',
+                          kind: 'dialogue',
+                          text: '找到了。',
+                          speakerName: 'Rin',
+                          speakerCharacterId: 'char-rin',
+                          emotion: 'focused',
+                          delivery: 'quietly',
+                        },
+                        {
+                          cueId: 'shot-1-text-2',
+                          kind: 'narration',
+                          text: '她终于看见线索。',
+                        },
+                        {
+                          cueId: 'shot-1-text-3',
+                          kind: 'sfx',
+                          text: '嗡',
+                        },
+                        {
+                          cueId: 'shot-1-text-4',
+                          kind: 'backgroundText',
+                          text: 'CAFE',
+                        },
+                      ],
                       voiceOver: '她终于看见线索。',
                       soundCue: '嗡',
                       visualStyle: 'noir manga',
@@ -154,15 +183,21 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText('1 shots')).toBeTruthy();
     expect(screen.getByText('#01')).toBeTruthy();
     expect(screen.getByText('INT. CAFE - DAY')).toBeTruthy();
+    expect(screen.getByText(/Scene 1/)).toBeTruthy();
+    expect(screen.getByText(/Location: Cafe/)).toBeTruthy();
+    expect(screen.getByText(/Time: Day/)).toBeTruthy();
+    expect(screen.getByText('Rin finds the signal.')).toBeTruthy();
     expect(screen.getByText('4s')).toBeTruthy();
     expect(screen.getByText('CU / low-angle / zoom-in')).toBeTruthy();
     expect(screen.getByText('Rin notices a blue pulse under the table.')).toBeTruthy();
     expect(screen.getByText('Rin kneels and reaches toward the light.')).toBeTruthy();
-    expect(screen.getByText('Characters: Rin (primary) kneels focused')).toBeTruthy();
+    expect(screen.getByText('Characters')).toBeTruthy();
+    expect(screen.getByText('Rin (primary) kneels focused')).toBeTruthy();
     expect(screen.getByText('Emotion: focused, curious')).toBeTruthy();
-    expect(screen.getByText(/Dialogue: 找到了。/)).toBeTruthy();
-    expect(screen.getByText(/VO: 她终于看见线索。/)).toBeTruthy();
-    expect(screen.getByText(/SFX: 嗡/)).toBeTruthy();
+    expect(screen.getByText(/Dialogue \/ Rin \[char-rin\]: 找到了。/)).toBeTruthy();
+    expect(screen.getByText(/Narration: 她终于看见线索。/)).toBeTruthy();
+    expect(screen.getByText(/SFX Text: 嗡/)).toBeTruthy();
+    expect(screen.getByText(/Background Text: CAFE/)).toBeTruthy();
     expect(screen.getByText(/Style: noir manga/)).toBeTruthy();
     expect(screen.getByText(/VFX: blue glow/)).toBeTruthy();
     expect(screen.getByText(/Prompt: close-up, blue pulse, manga noir/)).toBeTruthy();
@@ -262,6 +297,10 @@ describe('composite rich content renderers', () => {
                 {
                   sceneId: 'scene-1',
                   sceneTitle: '第1页',
+                  sceneNumber: 1,
+                  location: '沙漠',
+                  timeOfDay: '黃昏',
+                  summary: '角色准备出发。',
                   shots: [
                     {
                       shotNumber: 1,
@@ -288,11 +327,16 @@ describe('composite rich content renderers', () => {
     );
 
     expect(screen.getByText('1 个镜头')).toBeTruthy();
+    expect(screen.getByText(/场景 1/)).toBeTruthy();
+    expect(screen.getByText(/地点: 沙漠/)).toBeTruthy();
+    expect(screen.getByText(/时间: 黃昏/)).toBeTruthy();
+    expect(screen.getByText('角色准备出发。')).toBeTruthy();
     expect(screen.getByText('镜头')).toBeTruthy();
     expect(screen.getByText('图片')).toBeTruthy();
     expect(screen.getByText('时长')).toBeTruthy();
     expect(screen.getByText('画面 / 动作')).toBeTruthy();
-    expect(screen.getByText(/角色: 燈神/)).toBeTruthy();
+    expect(screen.getByText('人物')).toBeTruthy();
+    expect(screen.getByText(/燈神/)).toBeTruthy();
     expect(screen.getByText(/对白: 開始吧。/)).toBeTruthy();
     expect(screen.getByText(/音效: 沙/)).toBeTruthy();
     expect(screen.getByText(/风格: 繁中漫画/)).toBeTruthy();

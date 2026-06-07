@@ -149,6 +149,17 @@ export type {
   AgentCapabilityTelemetrySnapshot,
   AgentCapabilityWorkflowNodeRequirement,
   AgentCapabilityWorkflowFragmentContribution,
+  AgentArtifactExecutionCapabilityContribution,
+  AgentArtifactFacetsContribution,
+  AgentEntityMemoryContributorFacetContribution,
+  AgentEntityProviderFacetContribution,
+  AgentMediaTextExtractorFacetContribution,
+  AgentPerceptionProviderFacetContribution,
+  AgentRepresentationResolverFacetContribution,
+  AgentReviewSurfaceFacetContribution,
+  AgentSemanticFacetAvailability,
+  AgentSemanticFacetActionAvailability,
+  AgentSemanticIndexProviderFacetContribution,
   AgentInjectedCapabilitySet,
 } from './capability';
 export type {

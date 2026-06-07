@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor } from '../agentStreamProcessor';
+import type { EntityMemoryContribution } from '@neko/shared';
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -184,6 +185,182 @@ describe('AgentStreamProcessor', () => {
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'toolResult', toolCallId: 'tc-1', success: true }),
+      );
+    });
+
+    it('automates entity memory contributions and backfills the decision summary', async () => {
+      const contribution = makeEntityMemoryContribution();
+      const automation = {
+        processContribution: vi.fn().mockResolvedValue({
+          contributionId: contribution.contributionId,
+          decisions: [
+            {
+              kind: 'created-candidate',
+              name: '少年英雄',
+              candidateId: 'candidate:character:char_少年英雄',
+            },
+          ],
+        }),
+      };
+      processor = new AgentStreamProcessor({
+        entityMemoryContributionAutomation: automation,
+      });
+      const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-memory',
+            name: 'AnalyzeComicPage',
+            arguments: {},
+          },
+        },
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-memory',
+            success: true,
+            data: { entityMemoryContribution: contribution },
+          },
+        },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(automation.processContribution).toHaveBeenCalledWith({
+        contribution,
+        toolCallId: 'tc-memory',
+      });
+      expect(result.collectedToolCalls[0]!.result?.data).toMatchObject({
+        entityMemoryAutomation: {
+          status: 'succeeded',
+          contributionId: 'contribution-page-1',
+          decisions: [
+            {
+              kind: 'created-candidate',
+              candidateId: 'candidate:character:char_少年英雄',
+            },
+          ],
+        },
+      });
+      expect(result.collectedToolCalls[0]!.result?.artifacts).toEqual([
+        {
+          type: 'artifactExecutionSummary',
+          summary: expect.objectContaining({
+            summaryId: 'entity-memory:contribution-page-1',
+            actionId: 'entity-memory.processContribution',
+            providerId: 'neko-entity',
+            status: 'succeeded',
+          }),
+        },
+      ]);
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResultBackfill',
+          toolCallId: 'tc-memory',
+          dataPatch: expect.objectContaining({
+            entityMemoryAutomation: expect.objectContaining({
+              contributionId: 'contribution-page-1',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('automates entity memory contributions embedded in final composite text', async () => {
+      const contribution = makeEntityMemoryContribution();
+      const automation = {
+        processContribution: vi.fn().mockResolvedValue({
+          contributionId: contribution.contributionId,
+          decisions: [
+            {
+              kind: 'matched-candidate',
+              name: '少年英雄',
+              candidateId: 'candidate:character:char_少年英雄',
+            },
+          ],
+        }),
+      };
+      processor = new AgentStreamProcessor({
+        entityMemoryContributionAutomation: automation,
+      });
+      const text =
+        '分析完成。\n\n```neko-composite\n' +
+        JSON.stringify({
+          schemaVersion: 1,
+          kind: 'composite-artifact',
+          artifactId: 'comic-storyboard-plan',
+          profile: 'comic-to-animation-plan',
+          title: 'Comic Storyboard Plan',
+          extensions: {
+            'neko.entityMemoryContributionPayload': contribution,
+          },
+          blocks: [
+            {
+              blockId: 'summary',
+              kind: 'text',
+              format: 'plain',
+              text: 'summary',
+            },
+          ],
+        }) +
+        '\n```';
+
+      const result = await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc-memory',
+              name: 'ReadImage',
+              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-memory',
+              success: true,
+              data: { imagePaths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          { type: 'text', content: text },
+          { type: 'done' },
+        ]),
+        callbacks,
+      );
+
+      expect(automation.processContribution).toHaveBeenCalledWith({
+        contribution,
+        toolCallId: 'tc-memory',
+        sourceArtifactId: 'comic-storyboard-plan',
+      });
+      expect(result.collectedToolCalls[0]!.result?.data).toMatchObject({
+        entityMemoryAutomation: {
+          contributionId: 'contribution-page-1',
+          decisions: [
+            {
+              kind: 'matched-candidate',
+              candidateId: 'candidate:character:char_少年英雄',
+            },
+          ],
+        },
+      });
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResultBackfill',
+          toolCallId: 'tc-memory',
+          artifacts: [
+            {
+              type: 'artifactExecutionSummary',
+              summary: expect.objectContaining({
+                artifactId: 'comic-storyboard-plan',
+                status: 'succeeded',
+              }),
+            },
+          ],
+        }),
       );
     });
 
@@ -997,3 +1174,47 @@ describe('AgentStreamProcessor', () => {
     });
   });
 });
+
+function makeEntityMemoryContribution(): EntityMemoryContribution {
+  return {
+    contributionId: 'contribution-page-1',
+    sourcePackage: 'neko-agent',
+    sourceRef: {
+      kind: 'tool-result',
+      toolCallId: 'tc-memory',
+      assetIndex: 0,
+    },
+    reviewPolicy: 'requires-user-review',
+    characterObservations: [
+      {
+        observationId: 'obs-page-1-hero',
+        sourceRef: {
+          kind: 'tool-result',
+          toolCallId: 'tc-memory',
+          assetIndex: 0,
+          range: { panelId: 'P1' },
+        },
+        provenance: {
+          source: 'comic',
+          providerId: 'neko-agent',
+          toolCallId: 'tc-memory',
+        },
+        reviewStatus: 'needs-review',
+        mention: {
+          mentionId: 'mention-page-1-hero',
+          kind: 'visual',
+          candidateName: '少年英雄',
+          confidence: 0.86,
+        },
+        dimensions: [
+          {
+            dimension: 'appearance',
+            value: 'Short dark hair and hooded jacket',
+            confidence: 0.8,
+          },
+        ],
+        confidence: 0.84,
+      },
+    ],
+  };
+}

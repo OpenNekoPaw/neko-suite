@@ -53,7 +53,11 @@ export const comicToStoryboardSkill: Skill = {
     acceptedModalities: ['comic', 'document', 'image-sequence'],
     producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
     artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-    referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+    referencedCapabilities: [
+      'comic-image-prep-pipeline',
+      'canvas.importStoryboard',
+      'cut.importStoryboard',
+    ],
     suggestedProjectors: [
       'projector:comic-shot-plan-to-storyboard',
       'projector:storyboard-to-canvas',
