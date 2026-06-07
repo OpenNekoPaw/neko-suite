@@ -494,6 +494,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     generatedMediaRefs?: readonly StoryboardMediaRef[];
     /** Additional storyboard media refs retained for review and diagnostics. */
     mediaRefs?: readonly StoryboardMediaRef[];
+    /** Comic-to-animation image preparation plan attached to this shot for review/execution. */
+    shotImagePrepPlan?: import('./shot-image-prep').ShotImagePrepPlan;
     /** Last successful storyboard import into neko-cut timeline */
     lastImportedToTimelineAt?: number;
     /** Target project name used during the last storyboard import */
