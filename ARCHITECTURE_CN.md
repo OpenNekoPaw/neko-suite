@@ -247,9 +247,23 @@ neko-canvas
 | `scene`        | 场景横向容器（SceneGroupNode，按场景聚合 ShotNode）               |
 | `gallery`      | 多视图画廊（5 种 layout + costumeLabel + @引用 + 批量生图）       |
 | `script`       | 剧本节点（TOC 目录 + getScriptIndex → 点击跳转 SceneGroupNode）   |
+| `narrative-start` | 交互叙事入口节点（`.nkc` 分支图 SSOT，至多一个）               |
+| `narrative-scene` | 交互叙事场景节点（`sceneRef` 只引用标准 `.fountain` 文件）      |
+| `choice`       | 分支选择点（选项文字、条件和变量效果来自 Canvas 图）              |
+| `merge`        | 分支汇合点                                                        |
+| `narrative-ending` | 交互叙事终点节点（可多个，属于有效终端）                      |
+| `narrative-note` | 编辑注释节点（激活 narrative 子系统，但不参与运行时遍历）       |
 | `document`     | 文档节点（PDF/DOCX/EPUB 封面缩略图 + openDocument → vscode.open） |
 | `model`        | AI 模型节点（reference/workflow 双模式 + checkModelInstalled）    |
 | `canvas-embed` | 嵌套画布引用（P3 规划中，.nkc 缩略图 + 双击打开）                 |
+
+**Canvas 交互叙事路径**：
+
+- `.nkc` 是 branching graph SSOT，保存节点、连线、变量、genre、locale、入口和终点语义。
+- `narrative-scene.sceneRef` 只指向标准 `.fountain` 场景内容；`.nks`、`.story`、独立 `.nkstory` 不作为新交互叙事的图源或场景格式。
+- Canvas 节点卡只做轻量摘要和 Story 编辑委托；沉浸式播放在独立 Narrative Preview Webview 中完成。
+- Preview、HTML5 Export 和测试复用 `@neko/shared` 的 `NarrativeRuntime` / `WhitelistConditionEvaluator`，资产通过注入式 `NarrativeAssetResolver` 按 `interactive-preview`、`final-export`、`package` intent 解析。
+- Agent structured context 暴露 narrative 节点摘要和图诊断，但不包含 resolved Preview URL、renderer state 或 runtime handle。
 
 ### AI Agent 工作流
 
@@ -339,6 +353,7 @@ Extension Host
 | 代码审查与质量门禁      | [architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md)                         | 统一 Review 基线 + 风险分级 + 子包专项清单；覆盖功能、UX、性能、专业软件对标、本地检查与 CI 门禁                                                                                                                                                             |
 | Agent 媒体架构          | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md)                                   | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧                                                                        |
 | Story-Agent-Canvas 职责 | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md)                             | Agent-first 架构下的职责收敛：story 负责剧本事实与审阅入口，agent 负责编排，canvas 负责正式分镜工作台；定义轻量分镜表的目标、字段和非目标                                                                                                                    |
+| Canvas 交互叙事         | [architecture/adr-canvas-interactive-narrative.md](./docs/architecture/adr-canvas-interactive-narrative.md)                   | `.nkc` 分支图是交互叙事 SSOT；场景内容只用标准 `.fountain`；新增 start/ending 节点；Canvas 轻量预览与独立 Narrative Preview 分离；`.nks`/`.story`/独立 `.nkstory` 不进入新工作流；Preview/Export 共用共享 runtime 和 intent-aware asset resolver |
 | 统一文件访问            | [architecture/engine-file-access.md](./docs/architecture/engine-file-access.md)                                               | FileAccessRegistry + `/v1/files/*` + `sourceRef`，二进制源文件由 Engine 读取，Extension 仅保留项目 JSON/设置/sidecar 等文本语义                                                                                                                              |
 | 文档预览                | [architecture/document-preview.md](./docs/architecture/document-preview.md)                                                   | PDF/EPUB/CBZ/DOCX 自建预览器；瀑布流虚拟滚动 + 双栏模式；Webview 直连 neko-engine HTTP（无 postMessage 中继）；epub.js fetchForEpub 替代 XHR                                                                                                                 |
 | 路径体系                | _已内化_                                                                                                                      | 项目文件只存相对路径 + `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；Rust ProjectContext(resolve/validate)；EngineClient/PreviewFileServer 自动展开变量；变量来源: neko/settings.json（Git 跟踪）+ .neko/settings.local.json（gitignore）           |

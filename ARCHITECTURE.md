@@ -222,12 +222,26 @@ neko-canvas
 | `scene`        | Horizontal scene container (SceneGroupNode, groups ShotNodes by scene)         |
 | `gallery`      | Multi-view gallery (5 layouts + costumeLabel + @references + batch generation) |
 | `script`       | Script node (TOC directory + getScriptIndex → click to jump to SceneGroupNode) |
+| `narrative-start` | Interactive narrative entry node (`.nkc` branching graph SSOT, at most one) |
+| `narrative-scene` | Interactive narrative scene node (`sceneRef` points only to standard `.fountain`) |
+| `choice`       | Branch choice point (choice labels, conditions, and variable effects live in Canvas) |
+| `merge`        | Branch merge point                                                             |
+| `narrative-ending` | Interactive narrative ending node (valid terminal, multiple allowed)       |
+| `narrative-note` | Editor note node (activates narrative subsystem, excluded from runtime traversal) |
 | `document`     | Document node (PDF/DOCX/EPUB cover thumbnail + openDocument → vscode.open)     |
 | `model`        | AI model node (reference/workflow dual mode + checkModelInstalled)             |
 | `canvas-embed` | Nested canvas reference (.nkc thumbnail + double-click to open)                |
 | `video`        | Video container (multi-stream layout + InlineVideoPlayer)                      |
 | `audio`        | Audio container (InlineAudioPlayer + waveform)                                 |
 | `container`    | Generic container (policy-driven layout + NodeCard rendering)                  |
+
+**Canvas Interactive Narrative Path**:
+
+- `.nkc` is the branching graph SSOT and stores nodes, connections, variables, genre, locale, entry, and ending semantics.
+- `narrative-scene.sceneRef` points only to standard `.fountain` scene content; `.nks`, `.story`, and standalone `.nkstory` are not graph or scene formats for the new workflow.
+- Canvas node cards stay lightweight and delegate scene editing to Story; immersive playback lives in the separate Narrative Preview Webview.
+- Preview, HTML5 export, and tests share `@neko/shared` `NarrativeRuntime` / `WhitelistConditionEvaluator`; assets are resolved through injected `NarrativeAssetResolver` implementations for `interactive-preview`, `final-export`, and `package` intents.
+- Agent structured context exposes narrative node summaries and graph diagnostics without resolved Preview URLs, renderer state, or runtime handles.
 
 ### AI Agent Workflow
 
@@ -314,6 +328,7 @@ Extension Host
 | Ablation Experiment Framework | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md)                         | AblationToggles → AgentSessionConfig mapping + MetricsHooks metric collection, zero intrusion on existing subsystems                                                                                                                                                                                                         |
 | Agent Media Architecture      | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md)                                   | Story storyboard responsibility boundaries; Agent self-sufficiency; GeneratedAsset disk storage + JSON references; DragDropBroker cross-extension transfer; Send-to-Agent unified protocol (file-level + content-level, zero base64); MediaPreprocessor auto-scaling/frame-extraction                                        |
 | Story-Agent-Canvas Boundary   | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md)                             | Agent-first boundary convergence: story owns script facts + lightweight review table, agent owns orchestration, canvas owns storyboard workspace; dual-path (mechanical/semantic) import; StorySceneStateStore + workspaceState persistence                                                                                  |
+| Canvas Interactive Narrative  | [architecture/adr-canvas-interactive-narrative.md](./docs/architecture/adr-canvas-interactive-narrative.md)                   | `.nkc` branching graph SSOT; standard `.fountain` scene content; start/ending nodes; Canvas lightweight preview separated from Narrative Preview; `.nks`/`.story`/standalone `.nkstory` excluded from the new workflow; Preview/Export share runtime and intent-aware asset resolver |
 | Document Preview              | [architecture/document-preview.md](./docs/architecture/document-preview.md)                                                   | PDF/EPUB/CBZ/DOCX built-in previewer; waterfall virtual scroll + dual-column mode; Webview direct connection to neko-engine HTTP (no postMessage relay); epub.js fetchForEpub replaces XHR                                                                                                                                   |
 | Path System                   | _Internalized_                                                                                                                | Project files store only relative paths + `${VAR}/path`; PathResolver (@neko/shared L0) unified resolution; Rust ProjectContext (resolve/validate); EngineClient/PreviewFileServer auto-expand variables; variable sources: neko/settings.json (git-tracked) + .neko/settings.local.json (gitignored)                        |
 

@@ -33,6 +33,8 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 
 **命名规则**：`nk` + 英文名首字母小写。`.fountain` 是行业标准，保持原样不改名。
 
+**交互叙事格式边界**：Canvas 交互叙事不新增 `.nkstory`，也不使用历史 `.nks` / `.story` Story 语言文件。`.nkc` 是分支图 SSOT，保存 `narrative-start`、`narrative-scene`、`choice`、`merge`、`narrative-ending`、变量和连线；`narrative-scene.sceneRef` 只引用标准 `.fountain` 场景文件。这里的排除仅指 Story/交互叙事用途，`.nks` 仍是 neko-sketch 的 2D 绘画项目格式。
+
 **Fountain `[[KEY: value]]` 指令扩展**：neko-story 通过 Fountain 标准的 Notes 语法 `[[...]]` 支持结构化指令，保持与其他 Fountain 工具的兼容性（标准渲染器将 `[[...]]` 视为不可见注释）。
 
 | 类别 | 指令键 | 示例 |

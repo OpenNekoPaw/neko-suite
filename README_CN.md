@@ -10,7 +10,7 @@
 
 **Neko Suite** 的目标不是把聊天机器人塞进编辑器，而是做一个 AIGC 原生的内容创作 IDE、内容创作 Agent 和互动引擎：IDE 提供剧本、画布、时间线、3D、2D、音频和素材等专业创作面板；Agent 理解意图、规划任务、激活 Skill、调用工具、生成资产、检查结果并推动下一轮迭代；Rust 引擎负责实时预览、媒体处理、3D/2D 运行时、流媒体与互动控制。
 
-当前仓库是 Alpha 阶段 monorepo，实际包含 **23 个顶层 workspace 包**。最成熟的方向是内容创作 Agent 运行时、Rust 媒体引擎、视频剪辑、Story/Canvas 语义工作流、预览/流媒体客户端和共享契约层。主要待推进的是跨包产品化：统一项目图谱、统一 Agent 能力注册、统一互动运行时，以及端到端 smoke 验证。
+当前仓库是 Alpha 阶段 monorepo，实际包含 **23 个顶层 workspace 包**。最成熟的方向是内容创作 Agent 运行时、Rust 媒体引擎、视频剪辑、Story/Canvas 语义工作流、预览/流媒体客户端和共享契约层。Canvas 交互叙事正在收敛到 `.nkc` 分支图 + 标准 `.fountain` 场景内容 + 独立 Narrative Preview/HTML5 Export 的单一路径。主要待推进的是跨包产品化：统一项目图谱、统一 Agent 能力注册、统一互动运行时，以及端到端 smoke 验证。
 
 📋 **[查看开发路线图 →](./ROADMAP_CN.md)**
 
@@ -104,7 +104,7 @@ Agent 是创作执行者。它把用户意图转成计划，激活 Skill，发�
 | 包               | 目标职责                             | 进度 | 已具备                                                                                                            | 下一步                                                                  |
 | ---------------- | ------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | **neko-story**   | 文本驱动制片入口                     | 78%  | Fountain parser/types/webview/extension；SceneIndex；准备度表；story -> agent -> canvas 命令                      | flow-F 从剧本到生成时间线的完整 smoke                                   |
-| **neko-canvas**  | 无限画布、分镜和视觉编排             | 80%  | 197 个 TS/TSX 文件；45 个测试；13+ 节点；storyboard import；GenerationPromptPanel；batch generation；inline media | 大画布性能、entity/search 接地、候选审阅到时间线闭环                    |
+| **neko-canvas**  | 无限画布、分镜和视觉编排             | 80%  | 197 个 TS/TSX 文件；45 个测试；13+ 节点；storyboard import；GenerationPromptPanel；batch generation；inline media；`narrative-start` / `narrative-ending` 分支叙事节点 | 大画布性能、entity/search 接地、候选审阅到时间线闭环                    |
 | **neko-cut**     | 视频时间线与最终装配                 | 82%  | 309 个 TS/TSX 文件；时间线、EditOperation、预览/导出服务、命令、测试                                              | AI 分镜导入、QC、导出的一体化 smoke                                     |
 | **neko-preview** | 引擎优先的媒体/文档预览              | 76%  | Video/Audio/Panoramic/Document provider；WebCodecs 播放；波形和 stream clients                                    | 统一 file-access、跨 surface handoff、预览状态共享                      |
 | **neko-assets**  | 统一素材注册表与媒体库               | 72%  | asset core；registry/entity/variant/file service；ImportDispatcher；媒体库搜索；角色资产导出                      | 与 `neko-entity`、generated asset provenance、market install state 收敛 |
@@ -133,6 +133,7 @@ Agent 是创作执行者。它把用户意图转成计划，激活 Skill，发�
 
 3. **统一互动运行时**
    `neko-engine`、`neko-client`、`neko-model`、`neko-puppet`、`neko-audio`、`neko-live`、`neko-preview` 需要共享 session、stream、file-access 和 authority 契约。
+   Canvas 交互叙事采用独立 Narrative Preview：`.nkc` 保存分支图，`narrative-scene.sceneRef` 只引用标准 `.fountain`，Preview/HTML5 Export 复用 `@neko/shared` 的 NarrativeRuntime 与注入式 asset resolver；`.nks`、`.story`、独立 `.nkstory` 不作为新叙事工作流格式。
 
 4. **端到端 smoke**
    发布门禁应覆盖 Story -> Agent -> Canvas -> 生成 -> Cut -> Preview/Export，以及 Character/Entity -> Model/Puppet -> Live/Agent feedback。
@@ -265,6 +266,7 @@ neko-suite/
 | 图片      | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                  |
 | 3D        | glTF, GLB, VRM, `.nkm`                               |
 | 2D / 角色 | `.nks`, `.nkp` v2, MOC3/Live2D 导入兼容, `.nkentity` |
+| 剧本/叙事 | `.fountain`；交互叙事使用 `.nkc` 分支图引用 `.fountain` 场景 |
 | 项目      | `.nkv`, `.nkc`, `.nka`, `.nkm`, `.nks`, `.nkp`       |
 
 ---

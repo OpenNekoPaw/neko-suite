@@ -1,7 +1,8 @@
-# ADR: Canvas 交互叙事双模设计 (Interactive Narrative Dual-Mode Canvas)
+# ADR: Canvas 交互叙事 — 编辑 + 预览分离架构 (Interactive Narrative: Editor + Preview Split)
 
-> 状态：**Proposed (2026-06-07)**
+> 状态：**Proposed (2026-06-07, revised 2026-06-08)**
 > 关联：[adr-canvas-kind-multi-purpose.md](./adr-canvas-kind-multi-purpose.md) · [adr-canvas-preview-boundary.md](./adr-canvas-preview-boundary.md) · [story-agent-canvas-boundary.md](./story-agent-canvas-boundary.md) · [adr-deliverable-management.md](./adr-deliverable-management.md) · [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md) · [agent-media-architecture.md](./agent-media-architecture.md)
+> 实现同步：核心运行时已上移到 `@neko/shared`，Story Preview Webview 仅消费/重导出共享内核；HTML5 导出由 `neko-story/packages/extension` 的纯编排 `NarrativeExporter` 通过注入的 scene reader、asset resolver 和 copy adapter 产生产物；Agent 诊断和结构化上下文通过 Canvas structured content 暴露。
 
 ---
 
@@ -19,9 +20,10 @@ neko-suite 的创作管线已覆盖视频剪辑、AI 辅助、2D/3D 角色、剧
 
 ### 1.2 核心缺口
 
-1. **分支叙事数据模型**——neko-story 的 Fountain 是线性剧本，无分支/条件/变量
+1. **分支叙事编辑**——neko-story 的 Fountain 是线性剧本，无分支/条件/变量；Canvas narrative 子系统已有节点类型但缺少入口/终点语义和预览联动
 2. **交互预览运行时**——当前 preview 只能单向播放，无法处理选项、变量、跳转
-3. **导出为可独立运行的格式**——制作完成后无法导出为 HTML5 / Electron 等可交互产物
+3. **人物演绎**——立绘/Live2D 资产已有，但缺少在预览中的演出层（表情切换、位置管理、口型同步）
+4. **导出为可独立运行的格式**——制作完成后无法导出为 HTML5 / Electron 等可交互产物
 
 ### 1.3 已有基础
 
@@ -33,83 +35,58 @@ Multi-Purpose Canvas ADR（[adr-canvas-kind-multi-purpose.md](./adr-canvas-kind-
 | Choice 连接属性 | 已实现 | `choiceText` / `condition` / `priority` |
 | FlowTraversal API | 已实现 | `getSuccessors` / `getChoicesAt` / `resolveDefaultPath` / `detectCycles` |
 | 变量浮动面板 | 已实现 | `NarrativeVariable[]` 定义与编辑 |
-| 播放控件 | 工具栏 slot | disabled placeholder，步进/路径高亮属后续 P1 |
+| 播放控件 | 工具栏 slot | `NarrativePlaybackController`：三按钮（上一步/播放/下一步），沿 defaultPath 步进高亮，1.2s 间隔；不处理 Choice 暂停、不渲染场景内容 |
 | CanvasPlaybackState | 已定义 | `activeNodeId` / `visitedNodeIds` / `variables` |
+| Fountain 文件拖入 | 已实现 | `.fountain` 可拖入 Canvas 作为 `script` 节点（引用源，不参与叙事遍历） |
 
-**本 ADR 在此基础上定义**：Canvas 双模交互设计（Graph Mode + Play Mode）、Story-centric SSOT（场景图 + Fountain 片段，不发明新格式）、三种创作类型的 Play Mode 渲染器、以及导出管线。
+**本 ADR 在此基础上定义**：
+
+- 线性/分支分治——线性剧情以 neko-story 为主，多分支剧情以 Canvas 为创作核心
+- Canvas-native 故事图——新增 `narrative-start` / `narrative-ending` 节点类型，画布文件即故事图
+- 独立 Narrative Preview 面板——交互式预览播放（编辑+预览分离）
+- 人物演绎分级——L0 静态立绘 → L1 CSS 动效 → L2 Live2D → L3 3D（分阶段）
+- 三种创作类型的 PlayRenderer
+- Canvas ↔ Preview 双向联动协议
+- 导出管线（Preview = 导出原型）
 
 ---
 
 ## 二、设计决策
 
-### D1: Story-centric SSOT，Canvas 为投影与交互层
+### D1: 线性/分支分治——Canvas-native 故事图
 
-**决策**：叙事内容的 SSOT 分为两层——**场景图结构**（`.nkstory` JSON）+**场景内容**（标准 Fountain 片段）。Canvas 是这些数据的可视化编辑与交互预览表面，不独立持有叙事数据。
+**决策**：线性剧情以 neko-story 为主编辑器（Fountain SSOT），多分支剧情以 Canvas narrative 子系统为创作核心（`.nkc` 画布文件即故事图 SSOT）。不引入独立的场景图中间格式，也不把 `.nks`、`.story` 或独立 `.nkstory` 作为新交互叙事工作流的图源或场景格式。
 
-**项目结构**：
+| 创作类型 | 主编辑器 | SSOT | Canvas 角色 |
+|---------|---------|------|------------|
+| 线性剧情 | neko-story | `.fountain` 文件 | 可拖入 `script` 节点作引用（现有能力） |
+| 多分支剧情 | neko-canvas | `.nkc` 画布文件 | **创作核心**——narrative 节点图就是故事图 |
+
+**项目结构**（多分支剧情）：
 
 ```
 story-project/
-├── story.nkstory              ← 场景图 JSON（节点 + 边 + 条件 + 变量定义）
+├── narrative.nkc                 ← Canvas 画布文件（节点 + 连线 + 变量 = 故事图 SSOT）
 ├── scenes/
-│   ├── cafe-encounter.fountain  ← 纯标准 Fountain
+│   ├── cafe-encounter.fountain   ← 纯标准 Fountain（场景内容）
 │   ├── insomnia-branch.fountain
 │   ├── daily-chat.fountain
 │   └── confession.fountain
-├── characters.yaml             ← 角色表（立绘/表情/语音映射）
-└── assets/                     ← 媒体资产（背景 CG、立绘、音效、视频片段）
+├── characters.yaml               ← 角色表（立绘/表情/语音映射）
+└── assets/                       ← 媒体资产（背景 CG、立绘、音效、视频片段）
 ```
 
-**`.nkstory` 场景图格式**：
+**Canvas narrative metadata**（扩展现有 `NarrativeMetadata`）：
 
 ```typescript
-interface StoryGraph {
-  version: '1.0';
-  metadata: StoryMetadata;
-  variables: StoryVariable[];
-  nodes: StoryNode[];
-  edges: StoryEdge[];
+interface NarrativeMetadata {
+  entryNodeId?: string;            // 已有：入口节点（指向 narrative-start）
+  variables: NarrativeVariable[];  // 已有：叙事变量
+  genre?: StoryGenre;              // 新增：创作类型
+  defaultLocale?: string;          // 新增：默认语言
 }
 
-interface StoryMetadata {
-  title: string;
-  author?: string;
-  genre: 'interactive-film' | 'visual-novel' | 'illustrated-text' | 'hybrid';
-  defaultLocale?: string;
-}
-
-interface StoryVariable {
-  id: string;
-  name: string;
-  type: 'number' | 'boolean' | 'string';
-  defaultValue: unknown;
-  description?: string;
-}
-
-interface StoryNode {
-  id: string;
-  type: 'scene' | 'choice' | 'merge' | 'start' | 'ending';
-  label: string;
-  sceneRef?: string;           // 指向 scenes/*.fountain 的相对路径
-  tags?: string[];             // act1, intro, bad-ending, ...
-  variableEffects?: VariableEffect[];  // 进入此节点时的变量修改
-  metadata?: Record<string, unknown>;  // 扩展字段（角色出场、背景、BGM）
-}
-
-interface StoryEdge {
-  id: string;
-  from: string;               // 源节点 ID
-  to: string;                 // 目标节点 ID
-  label?: string;             // 选项文字（对 choice 边）
-  condition?: string;         // 条件表达式（如 "closeness >= 3"）
-  priority?: number;          // 同源边排序（默认 0）
-}
-
-interface VariableEffect {
-  variableId: string;
-  operation: 'set' | 'add' | 'subtract' | 'toggle';
-  value: unknown;
-}
+type StoryGenre = 'interactive-film' | 'visual-novel' | 'illustrated-text' | 'hybrid';
 ```
 
 **Fountain 片段保持纯标准**，不加任何分支扩展：
@@ -127,138 +104,328 @@ INT. 咖啡馆 - 白天
 昨晚没怎么睡。
 ```
 
+**格式边界**：`narrative-scene.sceneRef` 只指向标准 `.fountain` 文件。分支、条件、变量、入口、终点和路径诊断属于 `.nkc` Canvas 图；`.nks` / `.story` / standalone `.nkstory` 是废弃的 Story/交互叙事设计，不参与 Preview、Agent 诊断或 HTML5 Export。注意 `.nks` 仍是 neko-sketch 的 2D 绘画项目扩展名，本 ADR 排除的是历史 Story 语言用途。
+
 **设计理由**：
 
-1. **零格式发明**——Fountain 就是 Fountain（现有 LSP 零改动），JSON 就是 JSON（标准 schema 验证）
-2. **关注点完全分离**——场景内容由编剧在 neko-story 中编辑，分支结构由策划在 Canvas 中编排
-3. **git 友好**——Fountain 文件和 JSON 均可 diff/merge，比混合格式清晰
-4. **AI 友好**——Agent 处理结构化 JSON 比解析混合格式容易一个数量级
-5. **投影方向天然**——story graph 投影到 canvas 是降维（结构→视觉），反之需升维
+1. **激活模式一致**——Canvas 子系统因节点类型存在而激活（`summarizeCanvasSubsystems()`），narrative 子系统天然适合作为分支故事的创作面
+2. **零格式发明**——不需要 `.nkstory` 中间格式，Canvas `.nkc` 已有完整的节点/连线/元数据模型
+3. **关注点分离**——场景内容（Fountain）由编剧在 neko-story 中编辑，分支结构（节点图）由策划在 Canvas 中编排
+4. **现有能力直接复用**——`.fountain` 文件已可作为 `script` 节点拖入 Canvas（引用源）；narrative 节点已可手动创建；双击委托打开 neko-story 已有先例
+5. **git 友好**——Fountain 文件和 `.nkc` JSON 均可 diff/merge
+6. **AI 友好**——Agent 直接操作 Canvas API（现有 narrative 子系统 agent tools），无需额外学习场景图格式
 
 **否决方案**：
 
+- **`.nkstory` 独立场景图 JSON + Canvas 投影**——额外增加一个 SSOT 格式、一个 `StoryProjectionAdapter`、双向同步机制（投影→Canvas + 写回→`.nkstory`）。Canvas 已具备完整的节点编辑能力，不需要外部数据源投影
+- **`.nks` / `.story` 作为叙事脚本格式**——属于早期 Story 语言设计，会和标准 Fountain 编辑、LSP、导出以及 Agent 结构化上下文形成双轨语义。新工作流直接使用 `.fountain`
 - **Fountain + Yarn 混合格式**——需要同时理解两套语法的 LSP，交叉验证复杂度高；分支在文本中管理在 10+ 节点时不如可视化编辑
 - **Fountain + 最小扩展**（`@choice` / `@if`）——非标扩展，Fountain 编辑器报警；变量系统表达力弱
-- **Canvas 自持叙事数据**——违反 `projected` 画布投影模式（D4 of multi-purpose canvas ADR）；叙事数据散落在 `.nkc` 空间布局中，不可独立使用
 
-### D2: Canvas 双模设计（Graph Mode + Play Mode）
+### D2: 编辑与预览分离——Canvas + Narrative Preview
 
-**决策**：Canvas 在 Narrative 子系统激活时支持两种交互模式，通过工具栏切换：
-
-```
-┌─ 工具栏 ─────────────────────────────────────────────────────────┐
-│ [V][C][M][H] [↩ ↪] [Arrange▼]  │  [Graph] [Play] │  [⏮ ◀ ▶⏸]  │
-│                                  │   模式切换       │  播放控件     │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-#### Graph Mode（图编辑模式）
-
-全局拓扑视图，用于故事结构编排：
+**决策**：采用 neko-story（Script + Preview）、neko-cut（Timeline + PreviewPanel）已验证的 **Editor + Preview 分离模式**。Canvas 负责故事图编辑，独立的 Narrative Preview Webview Panel 负责交互式预览播放。不在 Canvas 内做模式切换。
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  ┌─────────┐     ┌──────────┐     ┌─────────┐       │
-│  │ ▶ 开场   │────→│ ◇ 选择A  │────→│ ■ 结局1  │       │
-│  │ cafe.ftn │     │ 追问原因  │     │ good.ftn│       │
-│  └─────────┘     │ 转移话题  │     └─────────┘       │
-│       │          └──────────┘                        │
-│       │                                              │
-│       │          ┌──────────┐     ┌─────────┐       │
-│       └─────────→│ ◇ 选择B  │────→│ ■ 结局2  │       │
-│                  │ [好感≥3]  │     │ bad.ftn │       │
-│                  └──────────┘     └─────────┘       │
-│                                                      │
-│  节点操作: 拖拽 / 连线 / 双击编辑 / 右键菜单          │
-│  路径高亮: 鼠标悬停节点显示所有可达路径                 │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────┬──────────────────────┐
+│      Canvas          │   Narrative Preview  │
+│   （图编辑器）         │   （交互预览器）       │
+│                      │                      │
+│  ┌───┐   ┌───┐      │  ┌────────────────┐  │
+│  │开场│──→│◇A │──→…  │  │ [咖啡馆背景]    │  │
+│  └───┘   └───┘      │  │                │  │
+│   │        ▲         │  │  [小红立绘]     │  │
+│   │      当前高亮     │  │                │  │
+│   └──→ ┌───┐        │  │  小红：你怎么来  │  │
+│        │◇B │──→…    │  │  这么早？       │  │
+│        └───┘        │  │                │  │
+│                      │  │  ► 追问原因     │  │
+│  编辑连线/条件/变量   │  │  ► 转移话题     │  │
+│                      │  └────────────────┘  │
+│  纯编辑职责           │  纯预览职责           │
+└──────────────────────┴──────────────────────┘
 ```
 
-功能：
+**与已有模式的一致性**：
 
-| 操作 | 效果 |
+| 模块 | Editor | Preview | 通信 |
+|------|--------|---------|------|
+| neko-story | Fountain 文本编辑器 | ScriptPreview 渲染视图 | Extension Host 中转 |
+| neko-cut | Timeline 时间线 | PreviewPanel 视频预览 | Extension Host + WebSocket 流 |
+| **本 ADR** | **Canvas 图编辑** | **NarrativePreview 交互播放** | **Extension Host 中转** |
+
+**否决方案——Canvas 内双模切换（Graph Mode + Play Mode）**：
+
+Canvas 的基础设施（无限画布 / zoom+pan / 节点框选 / 连线拖拽）和沉浸预览的需求（固定视口 / 顺序阅读 / 全屏场景渲染）存在根本冲突：
+
+| 维度 | 图编辑 | 沉浸预览 |
+|------|--------|---------|
+| 视口 | 无限画布，自由缩放 | 固定尺寸，场景铺满 |
+| 交互 | 多选、框选、拖拽节点 | 点击选项、滚动文字 |
+| 焦点 | 全局拓扑 | 当前单一场景 |
+| 渲染 | 小节点卡片 + 连线 | 全屏背景 + 立绘 + 对话框 |
+| 鼠标 | pan（中键拖拽）、zoom（滚轮） | 滚动文字、hover 选项 |
+
+在同一 Webview 里切换需要大量 mode gate 代码——每个事件处理器都要判断当前模式。分离后各自干净。
+
+**分离架构的额外优势**：
+
+1. **Preview = 导出原型**。NarrativePreview 是自包含的 React 应用，HTML5 导出 = 把 Preview 打包成独立页面。Preview 里看到什么，导出就是什么。双模方案需要从 Canvas store/hooks/subsystem 中抽离渲染逻辑再重新打包——额外工作和一致性风险
+2. **并排实时反馈**。编辑和预览同时可见，修改立即体现。不需要在模式间来回切换
+3. **Canvas 保持纯粹**。Canvas 已有的 `NarrativePlaybackController`（三按钮步进高亮）继续作为轻量图遍历工具，不承担沉浸预览职责
+
+**Canvas 工具栏保留现有播放控件**：
+
+现有 `NarrativePlaybackController` 的三按钮（上一步/播放/下一步）沿 defaultPath 步进高亮节点，用于快速检查图连通性。这与 NarrativePreview 的沉浸式播放不冲突——前者是"图的遍历工具"，后者是"叙事的体验工具"。
+
+### D3: Canvas ↔ Preview 双向联动协议
+
+**决策**：两个 Webview 通过 Extension Host 中转通信。Canvas 和 Preview 各自通过 `vscode.postMessage` 发送消息到 Extension Host，Extension Host 路由到对端。
+
+**消息协议**：
+
+```typescript
+// 所有消息携带 requestId，防止快速编辑时旧消息覆盖新状态
+interface NarrativeMessageEnvelope {
+  requestId: string;               // ulid，发送方生成
+}
+
+// Canvas → Preview（通过 Extension Host 中转）
+type CanvasToPreviewMessage = NarrativeMessageEnvelope & (
+  | { type: 'preview:loadGraph'; snapshot: NarrativeGraphSnapshot; revision: number }
+  | { type: 'preview:jumpTo'; nodeId: string; revision: number }
+  | { type: 'preview:refresh'; snapshot: NarrativeGraphSnapshot; revision: number }
+  | { type: 'preview:setVariables'; variables: Record<string, unknown> }
+  | { type: 'preview:setGenre'; genre: StoryGenre }
+);
+
+// Preview → Canvas（通过 Extension Host 中转）
+type PreviewToCanvasMessage = NarrativeMessageEnvelope & (
+  | { type: 'canvas:highlightPath'; nodeIds: string[] }
+  | { type: 'canvas:highlightNode'; nodeId: string }
+  | { type: 'canvas:choiceMade'; fromNodeId: string; toNodeId: string }
+);
+
+// Extension Host 路由
+// NarrativePreviewBridge.ts — 归属 neko-canvas/packages/extension/
+// 原因：Bridge 需要访问 Canvas editor provider 的当前文档模型（in-memory），
+// 不能从磁盘 .nkc 读取（用户可能有未保存编辑）。
+class NarrativePreviewBridge {
+  constructor(
+    private canvasEditorProvider: CanvasEditorProvider,  // 拥有当前文档模型
+    private previewPanel: vscode.WebviewPanel,
+  ) {}
+
+  // 从 editor provider 的 in-memory 文档模型提取叙事图快照
+  private extractGraphSnapshot(): { snapshot: NarrativeGraphSnapshot; revision: number } {
+    const document = this.canvasEditorProvider.currentDocument;
+    // 提取 narrative 节点/连线/metadata，不从磁盘读 .nkc
+    // revision 为文档的编辑版本号，用于乐观并发控制
+  }
+
+  routeCanvasMessage(msg: CanvasToPreviewMessage): void {
+    this.previewPanel.webview.postMessage(msg);
+  }
+
+  routePreviewMessage(msg: PreviewToCanvasMessage): void {
+    this.canvasEditorProvider.postMessageToWebview(msg);
+  }
+}
+```
+
+**数据来源**：`NarrativePreviewBridge` 从 Canvas editor provider 的 **in-memory 文档模型**（不是磁盘 `.nkc`）提取叙事图快照，确保包含未保存编辑。每条消息携带 `revision`（文档编辑版本号）和 `requestId`（ulid），Preview 端丢弃 `revision` 低于已处理值的消息，避免快速编辑时旧消息覆盖新状态。
+
+**联动交互**：
+
+| 操作 | 发起方 | 消息 | 接收方效果 |
+|------|--------|------|-----------|
+| 点击 Canvas 节点 | Canvas | `preview:jumpTo` | Preview 跳转到该场景 |
+| 修改连线/条件 | Canvas | `preview:refresh` | Preview 重新加载故事图 |
+| 右键"从此处预览" | Canvas | `preview:jumpTo` | Preview 从该节点开始播放 |
+| 选择分支 | Preview | `canvas:choiceMade` | Canvas 高亮走过的边 |
+| 场景切换 | Preview | `canvas:highlightNode` | Canvas 选中当前节点 |
+| 播放路径推进 | Preview | `canvas:highlightPath` | Canvas 高亮已访问路径 |
+
+**同步示意**：
+
+```
+Canvas Webview              Extension Host              Preview Webview
+     │                            │                           │
+     │── click node(id) ────────→ │                           │
+     │                            │── preview:jumpTo(id) ───→ │
+     │                            │                           │── render scene
+     │                            │                           │
+     │                            │ ←── canvas:highlightNode ─│
+     │ ←── highlightNode ──────── │                           │
+     │                            │                           │
+     │                            │                           │── user clicks choice
+     │                            │ ←── canvas:choiceMade ────│
+     │ ←── highlightPath ──────── │                           │
+     │── highlight edge ──        │                           │
+     │                            │                           │
+     │── edit condition ────────→ │                           │
+     │                            │── preview:refresh ──────→ │
+     │                            │                           │── reload graph
+```
+
+### D4: Narrative Preview 面板设计
+
+**决策**：Narrative Preview 是独立的 Webview Panel，包含工具栏、Scene Viewport、PlaybackControlBar 三个区域。
+
+**布局**：
+
+```
+┌─ Narrative Preview ─────────────────────────────────────────┐
+│ [VN ▼] [ADV ▼]                [变量] [历史] [⛶ 全屏]        │ ← 工具栏
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                                                     │   │
+│  │                  Scene Viewport                     │   │
+│  │           (背景 + 立绘 + 对白 + 选项)                │   │
+│  │                                                     │   │
+│  │                                                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│ [◄ 回退] [▶/⏸] [► 下一步] [⏭ 下一选择] │ 速度:1x │ 3/12   │ ← 播放控件
+└─────────────────────────────────────────────────────────────┘
+```
+
+**工具栏**：
+
+| 控件 | 功能 |
 |------|------|
-| 拖拽节点 | 调整布局 |
-| 节点间连线 | 创建 StoryEdge（弹出选项文字/条件输入） |
-| 双击场景节点 | 在 neko-story 中打开对应 `.fountain` 文件 |
-| 右键节点 | 「从此处开始播放」/ 「在 Story 中打开」/ 「删除」 |
-| Auto Arrange | Flow (左→右) 自动布局 |
-| 鼠标悬停节点 | 高亮该节点所有可达路径（FlowTraversal） |
-| 条件标注 | 边上显示条件表达式（如 `好感 ≥ 3`） |
+| Genre 切换 | 切换渲染器（VN / 互动影游 / 图文） |
+| ADV/NVL 切换 | 视觉小说对话显示模式（仅 VN 渲染器时显示） |
+| 变量面板 | 侧边浮出，显示/编辑当前变量状态（调试用） |
+| 历史面板 | 侧边浮出，显示已走过的节点路径 + 选择记录 |
+| 全屏 | Viewport 全屏展示（隐藏工具栏和播放控件） |
 
-#### Play Mode（沉浸式预览模式）
+**PlaybackControlBar**：
 
-聚焦当前场景，体验叙事流程：
+| 控件 | 功能 | 与 neko-cut 的对比 |
+|------|------|------------------|
+| ◄ 回退 | 历史栈回退到上一节点 | 类似 Rewind，但按节点而非帧 |
+| ▶/⏸ 播放/暂停 | 自动前进（默认路径），Choice 时暂停 | 类似 Play/Pause |
+| ► 下一步 | 手动前进一步（一段对白或一个 action） | 类似 Forward |
+| ⏭ 下一选择 | 跳过中间叙事直达下一个 Choice 节点 | 无对应（neko-cut 是连续时间轴） |
+| 速度 | 文字显示速度 / 视频播放速度 | 类似 Speed 下拉 |
+| 进度 | `已访问节点/总节点` | 类似时间显示，但离散 |
 
-```
-┌────────────────────────────────────────────────────────────┐
-│ ┌─ Mini Map (可折叠) ──┐  ┌─ Scene Viewport ────────────┐ │
-│ │                      │  │                              │ │
-│ │  ┌──┐   ┌──┐        │  │  [背景图: 咖啡馆内景]         │ │
-│ │  │开 │──→│◇A│──→ …   │  │                              │ │
-│ │  └──┘   └──┘        │  │       ┌──────────┐           │ │
-│ │   │      ▲           │  │       │ 小红立绘  │           │ │
-│ │   │    当前           │  │       └──────────┘           │ │
-│ │   └──→┌──┐           │  │                              │ │
-│ │       │◇B│──→ …      │  │  ┌──────────────────────┐   │ │
-│ │       └──┘           │  │  │ 小红：你怎么来这么早？ │   │ │
-│ │                      │  │  │                      │   │ │
-│ └──────────────────────┘  │  │  ► 追问原因           │   │ │
-│                           │  │  ► 转移话题           │   │ │
-│ ┌─ State Panel ────────┐  │  └──────────────────────┘   │ │
-│ │ 好感度: 2             │  │                              │ │
-│ │ 已访问: 3/12          │  │  [◄ 回退]        [自动播放]  │ │
-│ │ 当前路径: 开场→选择A  │  └──────────────────────────────┘ │
-│ └──────────────────────┘                                   │
-└────────────────────────────────────────────────────────────┘
-```
+**关键差异**：neko-cut 的控件是连续时间轴上的（seek bar / 精确到帧），交互叙事是离散节点间的（步进 / 分支选择）。不需要 seek bar，但需要**历史路径面包屑**。
 
-功能：
+### D5: Scene Viewport 渲染——预览能力与人物演绎
 
-| 操作 | 效果 |
-|------|------|
-| 点击选项 | 前进到对应分支节点，Mini Map 路径高亮 |
-| 点击回退 | 回到上一节点（历史栈） |
-| 自动播放 | 按默认路径（priority=0）自动前进，Choice 暂停 |
-| 点击 Mini Map 节点 | 跳转到该节点预览（不影响变量状态） |
-| Esc | 退出 Play Mode，返回 Graph Mode，当前位置高亮 |
-| 变量面板 | 实时显示当前变量状态 |
-| 修改变量 | 在 State Panel 手动修改变量值（调试用） |
+**决策**：Scene Viewport 是 Preview 的核心渲染区域。所有渲染 **DOM-native**（Preview = 导出原型，必须脱离 VSCode/engine 独立运行）。
 
-#### 模式切换交互
+**预览内容能力分级**：
+
+| 内容类型 | 优先级 | 渲染方式 | 技术方案 |
+|---------|--------|---------|---------|
+| 剧本文本（对白/旁白/动作） | P0 | 对白框 + 旁白文字 + 打字机效果 | 纯 HTML/CSS |
+| 背景图/CG | P0 | 全屏 `<img>` + CSS transition（淡入/淡出/滑动） | DOM-native |
+| 分支选项 | P0 | 可点击按钮/链接（三种 choiceLayout） | DOM-native |
+| 角色立绘 | P0 | 多层 `<img>` 绝对定位（左/中/右）+ 表情切换 | DOM-native |
+| BGM / 音效 | P1 | 场景切换时触发 | `<audio>` 标签 |
+| 角色语音 | P1 | 逐句播放，配合对白高亮 | `<audio>` 标签 |
+| 视频片段（互动影游） | P1 | 预导出 mp4 播放，结束后触发选项 | `<video>` 标签 |
+| 分镜表浏览 | P1 | 镜头描述 + 参考图网格（只读，非编辑） | DOM-native |
+
+**选项渲染——按创作类型分派**：
 
 ```
-Graph Mode                              Play Mode
-    │                                       │
-    │── 工具栏 [Play] 按钮 ──────────────→  │  从 start 节点开始
-    │── 右键节点 "从此处开始播放" ─────────→  │  从指定节点开始
-    │                                       │
-    │  ←──────────────── Esc ──────────────  │  返回 Graph，高亮最后位置
-    │  ←──────────── 到达 ending 节点 ─────  │  显示结局摘要，返回 Graph
-    │                                       │
+视觉小说 (choiceLayout: 'dialogue-box'):
+┌──────────────────────────┐
+│  [背景]                   │
+│       [角色立绘]           │
+│                           │
+│  ┌──────────────────────┐ │
+│  │ 小红：你怎么想？       │ │
+│  │                      │ │
+│  │  ► 追问原因           │ │  ← 选项在对话框内
+│  │  ► 转移话题           │ │
+│  └──────────────────────┘ │
+└──────────────────────────┘
+
+互动影游 (choiceLayout: 'overlay-center'):
+┌──────────────────────────┐
+│  [视频最后一帧/冻结]       │
+│                           │
+│     ┌──────────────┐     │
+│     │ ► 追问原因    │     │  ← 选项浮在视频上方
+│     │ ► 转移话题    │     │
+│     └──────────────┘     │
+│                           │
+└──────────────────────────┘
+
+图文游戏 (choiceLayout: 'inline'):
+┌──────────────────────────┐
+│  [插图]                   │
+│                           │
+│  你走到了岔路口。          │
+│  左边是幽暗的小路，        │
+│  右边是宽阔的大道。        │
+│                           │
+│  ► 走左边的小路            │  ← 选项在文本流末尾
+│  ► 走右边的大道            │
+│  ▸ 原地等待 [需要勇气≥3]  │  ← 条件不满足时灰显
+└──────────────────────────┘
 ```
 
-**设计理由**：
+**选项交互流程**：
 
-- **编辑与预览同一表面**——创作者始终知道自己在故事结构中的位置，不需要在多窗口间切换
-- **Mini Map 保持上下文**——Play Mode 不丢失全局视角，选择分支时能看到后续拓扑
-- **符合 Canvas Preview Boundary**——Play Mode 的渲染内容（文字、立绘、背景图）均为 DOM-native，不违反"Canvas 不做 WebGL"规则
-- **复用已有基础设施**——CanvasPlaybackState / FlowTraversal / ConditionEvaluator 已在 D6 (multi-purpose canvas ADR) 定义
+```
+NarrativeRuntime.status == 'waiting-choice'
+  → PlayRenderer.renderChoice(choices)
+  → 用户点击选项
+  → NarrativeRuntime.advance(choiceIndex)
+  → 应用 variableEffects
+  → 发送 canvas:choiceMade 到 Canvas
+  → 切换到目标节点
+  → NarrativeRuntime.status = 'playing'
+  → PlayRenderer.renderScene(nextNode)
+```
 
-### D3: Play Mode 渲染器分类型注册
+**条件不满足的选项**：渲染为灰色禁用状态，hover 提示"需要 XX ≥ N"。通过消融开关 `narrative.showLockedChoices` 控制显示策略（隐藏 vs 灰显）。
 
-**决策**：Play Mode 的场景渲染按创作类型分派，通过 `PlayRenderer` 接口注册到 `PreviewRendererRegistry`：
+**人物演绎能力分级**：
+
+| 级别 | 表现 | 技术方案 | 优先级 | 导出兼容 |
+|------|------|---------|--------|---------|
+| **L0 静态立绘** | 固定立绘 + 表情差分图切换 | `<img>` src 替换 + crossfade | P0 | 完全兼容 |
+| **L1 CSS 待机动效** | 呼吸/微摇晃/入场动画 | CSS `@keyframes`（transform scale/translate 循环） | P0 | 完全兼容 |
+| **L2 Live2D** | MOC3 待机 + 表情 + 口型同步 | Cubism Web SDK（`<canvas>` 2D） | P2 | 兼容（SDK ~200KB） |
+| **L3 Spine** | 骨骼动画角色表演 | spine-ts runtime（`<canvas>` 2D） | P2 | 兼容（runtime ~150KB） |
+| **L4 3D 角色** | 3D 模型实时演绎 | 需 engine 流（超出 DOM-native 范围） | P3 远期 | 需预渲染 |
+
+**P0 阶段**覆盖 90% 视觉小说需求：静态立绘 + 表情切换 + CSS 呼吸/入场动效。
+
+**L2/L3 可行性**：Cubism Web SDK 和 spine-ts 都是纯 `<canvas>` 2D 渲染，不依赖 WebGL heavy pipeline，可在 Webview 中运行，也能打包到 HTML5 导出中。作为 P2 扩展。
+
+**L4 限制**：3D 角色演绎必须走 engine streaming（类似 neko-cut 的 H264 流），与"Preview = 导出原型"设计原则冲突。作为远期扩展，需预渲染为视频片段后嵌入。
+
+### D6: PlayRenderer 分类型注册
+
+**决策**：Scene Viewport 的渲染按创作类型分派，通过 `PlayRenderer` 接口注册：
 
 ```typescript
 interface PlayRenderer {
-  readonly type: StoryGenre;
+  readonly genre: StoryGenre;
   renderScene(
-    node: StoryNode,
-    fountainContent: string,
+    node: NarrativeSceneData,
+    directives: PlayDirective[],
     context: PlayContext
   ): React.ReactNode;
   renderChoice(choices: ChoiceOption[]): React.ReactNode;
-  renderEnding(node: StoryNode, stats: PlayStats): React.ReactNode;
+  renderEnding(node: NarrativeSceneData, stats: PlayStats): React.ReactNode;
+}
+
+interface NarrativeSceneData {
+  nodeId: string;
+  label: string;
+  sceneRef?: string;
+  metadata: NarrativeSceneMetadata;
 }
 
 interface PlayContext {
@@ -266,7 +433,7 @@ interface PlayContext {
   visitedNodes: Set<string>;
   characters: CharacterMap;
   assets: AssetResolver;
-  history: StoryNode[];
+  history: NarrativeSceneData[];
 }
 
 interface ChoiceOption {
@@ -289,11 +456,11 @@ interface PlayStats {
 
 | 渲染器 | 创作类型 | Scene Viewport 内容 | 素材来源 |
 |--------|---------|-------------------|---------|
-| `InteractiveFilmRenderer` | interactive-film | 视频播放器（engine H264 流）+ 字幕叠层 | neko-cut 导出片段 |
-| `VisualNovelRenderer` | visual-novel | 背景 CG + 角色立绘层叠 + ADV/NVL 对话框 + 表情切换 | neko-puppet + neko-sketch |
-| `IllustratedTextRenderer` | illustrated-text | 富文本渲染 + 内嵌插图 + 状态/物品面板 | neko-story + neko-sketch |
+| `InteractiveFilmRenderer` | interactive-film | `<video>` 播放器 + 字幕叠层 + 选项浮层 | neko-cut 导出 mp4 |
+| `VisualNovelRenderer` | visual-novel | 背景 `<img>` + 立绘 `<img>` 层叠 + ADV/NVL 对话框 + 打字机效果 + 人物演绎 | neko-puppet + neko-sketch |
+| `IllustratedTextRenderer` | illustrated-text | 富文本渲染 + 内嵌 `<img>` 插图 + 状态/物品面板 | neko-story + neko-sketch |
 
-**渲染器选择**：由 `.nkstory` 的 `metadata.genre` 字段决定，也可在 Play Mode 工具栏切换。
+**渲染器选择**：由 Canvas narrative metadata 的 `genre` 字段决定，也可在工具栏 Genre 下拉切换。
 
 **ADV / NVL 模式**（视觉小说渲染器特有）：
 
@@ -308,13 +475,9 @@ interface VisualNovelConfig {
 }
 ```
 
-**与 Canvas Preview Boundary 的关系**：
+### D7: 场景内容解析——Fountain 到 Play 指令
 
-Play Mode 的渲染全部在 DOM 内完成（`<img>` / `<video>` / CSS 动画 / 富文本），不引入 WebGL。互动影游的视频播放通过 `<video>` 标签 + engine 预转码轻量 mp4（与 canvas preview boundary 的 Video 行一致）。角色立绘是 `<img>` 层叠 + CSS transform（位置/表情切换），不需要 Live2D 实时渲染——实时渲染属于 neko-puppet 专业编辑器的职责。
-
-### D4: 场景内容解析——Fountain 到 Play 指令
-
-**决策**：Play Mode 需要从标准 Fountain 文本中提取结构化的演出指令。这通过 `FountainPlayParser` 完成，**不修改 Fountain 语法**，而是利用 Fountain 已有元素的语义约定：
+**决策**：Preview 需要从标准 Fountain 文本中提取结构化的演出指令。这通过 `FountainPlayParser` 完成，**不修改 Fountain 语法**，而是利用 Fountain 已有元素的语义约定：
 
 ```typescript
 interface PlayDirective {
@@ -354,6 +517,10 @@ characters:
       sad: assets/characters/xiaohong/sad.png
       surprised: assets/characters/xiaohong/surprised.png
     position: right
+    # L2 扩展
+    live2d: assets/characters/xiaohong/model.moc3
+    motions:
+      idle: assets/characters/xiaohong/idle.motion3.json
   小明:
     portrait: assets/characters/xiaoming/default.png
     position: left
@@ -376,85 +543,125 @@ backgrounds:
 
 `FountainPlayParser` 在 Parenthetical 中匹配 `characters.yaml` 定义的表情关键词。未匹配则使用 `default` 表情。AI Agent 可辅助生成更精确的表情标注。
 
-### D5: Story ↔ Canvas 投影协议
+### D8: Canvas-native 故事节点体系
 
-**决策**：`.nkstory` 到 Canvas 的投影复用 Multi-Purpose Canvas ADR 的 `ProjectionAdapter` 机制（D4）：
+**决策**：新增 `narrative-start` 和 `narrative-ending` 两种 Canvas 节点类型，构成完整的故事图入口/终点语义。Canvas narrative 节点直接承载故事图数据，不投影外部格式。
+
+**节点类型映射表**：
+
+| Canvas 节点类型 | 语义角色 | 状态 | 视觉标识 |
+|----------------|---------|------|---------|
+| `narrative-start` | 故事入口（至多一个） | **新增** | `▶` 绿色 #22c55e |
+| `narrative-scene` | 场景节点（链接 Fountain） | 已有 | `§` 蓝色 #0ea5e9 |
+| `choice` | 分支选择点 | 已有 | `◇` 橙色 #f97316 |
+| `merge` | 分支汇合点 | 已有 | `◆` 绿色 #22c55e |
+| `narrative-ending` | 故事终点（可多个） | **新增** | `■` 红色 #ef4444 |
+| `narrative-note` | 注释/备忘（不参与遍历） | 已有 | `¶` 紫色 #a855f7 |
+
+**结构约束**：
+
+| 约束 | 规则 | 校验时机 |
+|------|------|---------|
+| `narrative-start` 唯一性 | 画布中至多一个 start 节点 | 创建时 + FlowTraversal |
+| `narrative-start` 无入边 | start 不接受入向连线 | 连线时校验 |
+| `narrative-ending` 无出边 | ending 不发出连线 | 连线时校验 |
+| `entryNodeId` 自动绑定 | 创建 start 节点时自动设为 `NarrativeMetadata.entryNodeId` | 创建时 |
+
+**`narrative-scene` 节点 metadata 扩展**：
 
 ```typescript
-// neko-story 注册的投影适配器
-class StoryProjectionAdapter implements ProjectionAdapter {
-  readonly sourceUri: string;  // story.nkstory 路径
+interface NarrativeSceneMetadata {
+  sceneRef?: string;                       // scenes/*.fountain 相对路径
+  backgroundRef?: NarrativeAssetRef;       // 背景图资产引用
+  bgm?: NarrativeAssetRef;                 // 背景音乐
+  characters?: string[];                   // 出场角色名（从 characters.yaml 解析）
+  variableEffects?: VariableEffect[];      // 进入时变量修改
+}
 
-  async project(): Promise<ProjectedCanvasData> {
-    const graph = await this.loadStoryGraph();
-    return {
-      nodes: graph.nodes.map(n => this.toCanvasNode(n)),
-      connections: graph.edges.map(e => this.toCanvasConnection(e)),
-      metadata: { narrative: this.toNarrativeMetadata(graph) },
-      projected: true,
-    };
-  }
-
-  async writeBack(changes: ProjectionWriteBack[]): Promise<void> {
-    // Canvas 中的编辑操作写回 .nkstory JSON
-    // 例如：拖拽节点不写回（纯布局），新增连线写回为 StoryEdge
-  }
-
-  onSourceChanged(listener: () => void): DisposableLike {
-    // 监听 .nkstory 文件变化，触发 Canvas 重新投影
-  }
+interface VariableEffect {
+  variableId: string;
+  operation: 'set' | 'add' | 'subtract' | 'toggle';
+  value: unknown;
 }
 ```
 
-**写回边界**：
-
-| Canvas 操作 | 写回目标 | 说明 |
-|-------------|---------|------|
-| 拖拽节点位置 | `.nkc` 缓存布局 | 纯视觉，不修改 SSOT |
-| 新增/删除连线 | `.nkstory` edges[] | 修改叙事结构 |
-| 编辑连线条件/选项文字 | `.nkstory` edges[] | 修改叙事逻辑 |
-| 新增场景节点 | `.nkstory` nodes[] + 创建 `.fountain` 文件 | 扩展叙事 |
-| 删除场景节点 | `.nkstory` nodes[] | 不删除 `.fountain` 文件（防误删） |
-| 编辑变量定义 | `.nkstory` variables[] | 修改叙事状态模型 |
-| 修改节点 variableEffects | `.nkstory` nodes[] | 修改叙事逻辑 |
-
-**同步方向**：
+**双击委托——遵循 Canvas Preview Boundary ADR 的 double-click to delegate 模式**：
 
 ```
-.nkstory (SSOT)  ←→  Canvas (.nkc 缓存)  ←→  用户交互
-       ↑                                         │
-       └─────── writeBack ────────────────────────┘
-
-scenes/*.fountain (SSOT)  →  FountainPlayParser  →  Play Mode 渲染
-       ↑                                              │
-       └──── 双击节点在 neko-story 中打开编辑 ──────────┘
+narrative-scene 节点
+├─ 静态卡片：场景标题 + Fountain 首行摘要 + 缩略图
+├─ Hover：扩展预览（对白片段、角色列表、背景图）
+└─ Double-click → Extension Host 打开 neko-story 编辑器编辑 sceneRef 指向的 .fountain 文件
 ```
 
-### D6: 叙事运行时（Narrative Runtime）
+已有通道：`subscribeCanvasSceneWriteback()` 已在 story extension 中实现，可监听编辑保存并刷新 Preview。
 
-**决策**：Play Mode 需要一个轻量运行时追踪当前状态，基于已有 `CanvasPlaybackState` 扩展：
+**`narrative-ending` 节点 metadata**：
+
+```typescript
+interface NarrativeEndingMetadata {
+  endingType?: 'good' | 'normal' | 'bad' | 'secret' | 'custom';
+  endingLabel?: string;            // "True Ending" / "Bad End 01"
+  statisticsSummary?: boolean;     // 结束时是否显示游玩统计
+}
+```
+
+**FlowTraversal 更新**：
+
+现有 `traverseNarrativeFlow()` 使用 `NARRATIVE_NODE_TYPES` Set 过滤叙事节点。当前代码（`canvas-flow-traversal.ts` L21）**错误地包含了 `narrative-note`**——note 是注释节点，不应参与运行图遍历。需修正并扩展：
+
+```typescript
+// 参与叙事运行图遍历的节点类型（不含 narrative-note）
+const NARRATIVE_TRAVERSAL_NODE_TYPES = new Set([
+  'narrative-start',      // 新增：入口
+  'narrative-scene',
+  'choice',
+  'merge',
+  'narrative-ending',     // 新增：终点
+]);
+
+// 所有 narrative 子系统节点（含 note，用于子系统激活判断等非遍历场景）
+const NARRATIVE_NODE_TYPES = new Set([
+  ...NARRATIVE_TRAVERSAL_NODE_TYPES,
+  'narrative-note',       // 注释节点，不参与遍历
+]);
+```
+
+**分离理由**：`narrative-note` 是编辑时的注释/备忘，不连接到叙事流，不应出现在 `defaultPath`、`successors`、`deadEndNodeIds` 中。子系统激活判断（`summarizeCanvasSubsystems()`）仍需包含 note。
+
+`narrative-start` 作为入口时，`traverseNarrativeFlow()` 优先使用类型定位（`node.type === 'narrative-start'`），fallback 到 `entryNodeId`，最后到首个 traversal 节点。
+
+`narrative-ending` 节点出现在 `deadEndNodeIds` 中但不视为错误——它是预期的终点。`deadEndNodeIds` 应区分 `narrative-ending`（预期终点）和其他叙事节点的意外死端。
+
+### D9: 叙事运行时（Narrative Runtime）
+
+**决策**：NarrativeRuntime 是 host-independent 的共享内核，位于 `@neko/shared`。Preview Webview、HTML5 Export 和测试只通过共享契约加载 `NarrativeGraphSnapshot`，不直接访问 VSCode API、不读磁盘、不持久化 runtime URL。Story Preview Webview 的 `preview/NarrativeRuntime.ts` 和 `preview/conditionEvaluator.ts` 只是对共享内核的兼容重导出。
 
 ```typescript
 interface NarrativeRuntime {
-  // 状态
   readonly state: NarrativeRuntimeState;
 
-  // 控制
-  start(nodeId?: string): void;         // 从指定节点（或 start 节点）开始
-  advance(choiceIndex?: number): void;  // 前进（选择分支或默认路径）
-  stepBack(): void;                     // 回退到历史栈上一步
-  jumpTo(nodeId: string): void;         // 调试跳转（不修改变量）
-  reset(): void;                        // 重置到初始状态
+  load(graph: NarrativeGraphSnapshot): void;  // 加载叙事图快照
+  start(nodeId?: string): void;
+  advance(choiceIndex?: number): void;
+  stepBack(): void;
+  jumpTo(nodeId: string): void;
+  reset(): void;
 
-  // 变量
   getVariable(name: string): unknown;
-  setVariable(name: string, value: unknown): void;  // 调试用
+  setVariable(name: string, value: unknown): void;
 
-  // 事件
   onStateChange: Event<NarrativeRuntimeState>;
-  onSceneEnter: Event<StoryNode>;
+  onSceneEnter: Event<NarrativeSceneData>;
   onChoicePresented: Event<ChoiceOption[]>;
-  onEnding: Event<{ node: StoryNode; stats: PlayStats }>;
+  onEnding: Event<{ node: NarrativeSceneData; stats: PlayStats }>;
+}
+
+interface NarrativeGraphSnapshot {
+  nodes: NarrativeNodeSnapshot[];
+  connections: NarrativeConnectionSnapshot[];
+  metadata: NarrativeMetadata;
+  charactersYaml?: string;  // characters.yaml 路径（Extension Host 解析后传入内容）
 }
 
 interface NarrativeRuntimeState {
@@ -466,7 +673,18 @@ interface NarrativeRuntimeState {
 }
 ```
 
-**条件表达式求值**：复用 Multi-Purpose Canvas ADR 已定义的 `ConditionEvaluator`。表达式语法为简单比较：
+**与 Canvas 现有 `NarrativePlaybackController` 的关系**：
+
+| | Canvas NarrativePlaybackController | Preview NarrativeRuntime |
+|--|----|----|
+| **位置** | Canvas Webview 工具栏 | Preview Webview |
+| **职责** | 沿 defaultPath 步进高亮节点（图遍历工具） | 完整叙事播放（含分支、变量、选项） |
+| **交互** | 三按钮（上一步/播放/下一步） | 完整播放控件 + 场景内选项点击 |
+| **渲染** | 仅高亮节点，不渲染场景内容 | 全场景渲染（背景/立绘/对白/视频） |
+| **状态** | `NarrativePlaybackState`（简单索引） | `NarrativeRuntimeState`（完整变量+历史） |
+| **保留** | 保留现有实现，不修改 | 新增 |
+
+**条件表达式求值**：复用 Multi-Purpose Canvas ADR 已定义的 `ConditionEvaluator`。表达式语法为简单比较，白名单 AST（不使用 `eval` / `new Function`）：
 
 ```
 closeness >= 3
@@ -475,23 +693,74 @@ visitCount > 0
 chapter == "act2"
 ```
 
-不支持复杂逻辑（函数调用、嵌套表达式）。需要复杂条件时在 `variableEffects` 中用多个简单变量组合。
+**资源解析——对齐 ResourceRef + ContentAccessIntent**：
 
-### D7: 导出管线
+Preview 中的资源引用对齐仓库已有的 `ResourceRef`（`resource-cache.ts`）和 `ContentAccessIntent`（`content-access.ts`），不自创 stringly-typed 接口：
 
-**决策**：创作完成后可导出为可独立运行的格式，通过 Deliverable Management ADR（[adr-deliverable-management.md](./adr-deliverable-management.md)）的 `ExportProfile` 体系扩展：
+```typescript
+import type { ResourceRef } from '@neko/shared';
+import type { ContentAccessIntent } from '@neko/shared';
 
-| 导出格式 | 产物 | 运行依赖 |
-|---------|------|---------|
+// 叙事资源引用：优先 ResourceRef，兼容项目相对路径
+type NarrativeAssetRef =
+  | ResourceRef                                          // 稳定跨包引用
+  | { readonly kind: 'relative-path'; readonly path: string };  // characters.yaml 中的简写
+
+interface NarrativeAssetResolver {
+  resolve(
+    ref: NarrativeAssetRef,
+    intent: ContentAccessIntent,    // 'interactive-preview' | 'final-export' | 'package'
+  ): Promise<string>;               // 返回可用 URL 或路径
+}
+```
+
+| 场景 | `ContentAccessIntent` | 解析结果 |
+|------|----------------------|---------|
+| Preview Webview 中渲染 | `'interactive-preview'` | `webview.asWebviewUri()` 结果 |
+| HTML5 导出打包 | `'final-export'` | 相对路径（`assets/...`） |
+| 发行包 | `'package'` | 内联或相对路径 |
+
+`NarrativeSceneMetadata` 中的 `backgroundRef` / `bgm` 等字段存储 `NarrativeAssetRef`（持久化时序列化为 `ResourceRef` 或 `{ kind, path }`）。Runtime-only 的 webview URI 不持久化。
+
+NarrativeRuntime 和 PlayRenderer 通过 `NarrativeAssetResolver` 获取资源 URL，不直接依赖 VSCode API。Preview 注入 `'interactive-preview'` intent；导出分别注入 `'final-export'` 和 `'package'` intent，确保导出产物不复用 Webview URI、blob URL、object URL 或 engine runtime token。
+
+### D10: 导出管线——Preview 即导出原型
+
+**决策**：HTML5 导出复用与 Narrative Preview 相同的共享运行时语义，并通过 host adapter 替换资源解析和文件读取。`NarrativeExporter` 是纯导出编排类：输入 `NarrativeGraphSnapshot`，通过注入的 `readScene`、`NarrativeAssetResolver` 和 `copyAsset` 读取标准 `.fountain` 场景、解析 `characters.yaml`、打包资产，并生成 HTML5 artifacts。它不直接依赖 VSCode API，不把 React 引入 Extension Host，也不把 Preview 的 runtime URL 写入 `story.json`。
+
+```
+Narrative Preview (VSCode Webview)
+  │
+  ├── NarrativePlayer.tsx          ← 播放器 shell / controls
+  ├── @neko/shared NarrativeRuntime ← 共享状态机
+  ├── renderers/
+  │   ├── VisualNovelRenderer.tsx
+  │   ├── InteractiveFilmRenderer.tsx
+  │   └── IllustratedTextRenderer.tsx
+  │
+  ▼
+NarrativeExporter (neko-story/packages/extension/src/export/)
+  │
+  ├── 接收 Canvas bridge 提供的 NarrativeGraphSnapshot
+  ├── readScene(sceneRef) → loadFountainPlayScene()
+  ├── NarrativeAssetResolver('final-export') → source/export material
+  ├── NarrativeAssetResolver('package') → packaged bundle material
+  ├── copyAsset(adapter) → 相对 assets/... 输出
+  └── 输出:
+      ├── index.html
+      ├── data/story.json         ← graph + parsed Fountain scenes + bindings + asset manifest
+      ├── assets/neko-narrative-runtime.js
+      ├── assets/neko-narrative-renderer.js
+      └── assets/...              ← 相对打包资产
+```
+
+**导出格式**：
+
+| 格式 | 产物 | 运行依赖 |
+|------|------|---------|
 | **HTML5** | 单 `index.html` + 资产目录 | 浏览器 |
 | **Electron** | 桌面应用包 | 无 |
-| **JSON Bundle** | `.nkstory` + 场景 + 资产打包 | 第三方引擎（Ren'Py / Unity 适配） |
-
-**HTML5 导出**包含：
-- 内嵌的轻量叙事运行时（NarrativeRuntime 的浏览器版本）
-- PlayRenderer 对应的渲染模板
-- 打包后的资产（图片压缩 + 视频转码）
-- 可选：存档/读档 + 设置页面
+| **JSON Bundle** | 叙事图 + 场景 + 资产打包 | 第三方引擎适配 |
 
 导出由 `host-cli` 的 `deliverables render` 命令支持无头执行，可接入 CI 管线。
 
@@ -503,98 +772,139 @@ chapter == "act2"
 
 | 现有能力 | 本 ADR 的复用方式 |
 |---------|-----------------|
-| Narrative 子系统节点类型（choice/merge/narrative-scene） | 直接复用，Canvas 投影映射 StoryNode → CanvasNode |
-| FlowTraversal API | NarrativeRuntime 的路径遍历基础 |
-| CanvasPlaybackState | 扩展为 NarrativeRuntimeState |
-| ConditionEvaluator | Play Mode 条件求值 |
-| ProjectionAdapter | StoryProjectionAdapter 实现 |
-| PreviewRendererRegistry | 注册 PlayRenderer |
+| Narrative 子系统节点类型（choice/merge/narrative-scene/narrative-note） | 直接复用，新增 narrative-start + narrative-ending |
+| Narrative 子系统 triggerNodeTypes | 扩展为 6 种节点类型 |
+| FlowTraversal API | Canvas 图遍历 + NarrativeRuntime 路径计算 |
+| NarrativePlaybackController（三按钮） | 保留现有实现，Canvas 内轻量图遍历 |
+| ConditionEvaluator | Preview 条件求值 |
 | neko-story Fountain LSP | 场景内容编辑，零修改 |
 | neko-story ScriptIndex | 结构化提取场景元数据 |
 | characters.yaml / Asset Federation | 角色/资产绑定 |
+| `script` 节点文件拖入 | `.fountain` 拖入 Canvas 作为引用节点（storyboard 子系统，不参与 narrative 遍历） |
+| subscribeCanvasSceneWriteback | Fountain 编辑后同步刷新 |
 
 ### 3.2 新增模块
 
 | 模块 | 位置 | 职责 |
 |------|------|------|
-| `StoryGraphService` | neko-story/packages/story/ | `.nkstory` CRUD + 校验 + 事件 |
-| `StoryProjectionAdapter` | neko-story/packages/extension/ | .nkstory → Canvas 投影 + 写回 |
-| `FountainPlayParser` | neko-story/packages/story/ | Fountain → PlayDirective[] |
-| `NarrativeRuntime` | neko-canvas/packages/webview/ | Play Mode 状态机 |
-| `InteractiveFilmRenderer` | neko-canvas/packages/webview/ | 互动影游 Play 渲染器 |
-| `VisualNovelRenderer` | neko-canvas/packages/webview/ | 视觉小说 Play 渲染器 |
-| `IllustratedTextRenderer` | neko-canvas/packages/webview/ | 图文游戏 Play 渲染器 |
-| `NarrativeExporter` | neko-story/packages/story/ | 导出管线 |
+| `narrative-start` / `narrative-ending` 节点注册 | @neko/shared（types）+ neko-canvas/packages/webview/ | Canvas 节点类型 + descriptors + presets |
+| `NarrativePreviewBridge` | **neko-canvas/packages/extension/** | Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图快照 |
+| `FountainPlayParser` | neko-story/packages/parser/ | Fountain → PlayDirective[]（扩展现有 parser 包） |
+| `NarrativeAssetResolver` | @neko/shared（接口）+ Extension Host adapters | 端口化资源解析（`interactive-preview` / `final-export` / `package`） |
+| `NarrativeRuntime` | **@neko/shared**（`types/narrative-runtime.ts`） | host-independent 叙事状态机，Preview 与 HTML5 Export 共用 |
+| `NarrativePlayer` | neko-story/packages/webview/（preview 子目录） | Preview 核心播放器组件 |
+| `InteractiveFilmRenderer` | neko-story/packages/webview/（preview 子目录） | 互动影游渲染器 |
+| `VisualNovelRenderer` | neko-story/packages/webview/（preview 子目录） | 视觉小说渲染器 |
+| `IllustratedTextRenderer` | neko-story/packages/webview/（preview 子目录） | 图文游戏渲染器 |
+| `NarrativeExporter` | neko-story/packages/extension/src/export/ | 纯导出编排；通过注入 reader/resolver/copy adapter 生成 HTML5 artifacts |
+| Agent 叙事诊断与摘要 | @neko/shared + neko-canvas/packages/webview/ | 结构化 Agent context；不包含 resolved Preview URL 或 renderer state |
+
+**包路径说明**：neko-story 当前子包为 `extension/parser/types/webview`。Preview 组件放入 `webview/` 包的 `src/preview/` 子目录（共享 Vite 构建配置），而非新建顶层子包。若后续 Preview Webview 需要独立构建入口（独立 `index.html`），再提升为 `@neko-story/preview` 子包。
 
 ### 3.3 依赖方向
 
 ```
-neko-story/story (Domain Layer)
-  ├── StoryGraphService        ← .nkstory CRUD
-  ├── FountainPlayParser       ← Fountain → PlayDirective
-  └── NarrativeExporter        ← 导出
+neko-story/packages/parser/ (Domain Layer — 现有包)
+  └── FountainPlayParser       ← Fountain → PlayDirective（扩展现有 parser）
 
-neko-story/extension (Bridge Layer)
-  └── StoryProjectionAdapter   ← 注册到 Canvas 投影系统
+neko-story/packages/webview/src/preview/ (UI Layer — 独立 Webview 入口)
+  ├── NarrativePlayer          ← 核心播放器组件
+  ├── NarrativePreviewController ← 消费共享 Runtime，处理 revisioned messages
+  └── renderers/               ← 三种类型渲染器
 
-neko-canvas/webview (UI Layer)
-  ├── NarrativeRuntime         ← Play Mode 状态机
-  ├── GraphModeView            ← 图编辑视图
-  ├── PlayModeView             ← 沉浸预览视图
-  └── PlayRenderers/           ← 三种类型渲染器
+neko-story/packages/extension/ (Bridge Layer — 现有包)
+  └── NarrativeExporter        ← HTML5 导出编排（无 VSCode API 硬依赖）
+
+neko-canvas/packages/extension/ (Bridge Layer — 现有包)
+  └── NarrativePreviewBridge   ← Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图
+
+neko-canvas/packages/webview/ (UI Layer — 现有)
+  ├── narrative-start / narrative-ending descriptors + presets  ← 新增
+  └── NarrativePlaybackController ← 保留现有三按钮步进（不修改）
 
 @neko/shared (Layer 0)
-  └── types/story-graph.ts     ← StoryGraph / StoryNode / StoryEdge 共享类型
+  ├── types/canvas.ts               ← REGISTERED_CANVAS_NODE_TYPES 扩展
+  ├── types/canvas-subsystem.ts      ← narrative triggerNodeTypes 扩展
+  ├── types/canvas-flow-traversal.ts ← NARRATIVE_TRAVERSAL_NODE_TYPES / NARRATIVE_NODE_TYPES 拆分
+  ├── types/narrative-preview.ts     ← Canvas ↔ Preview 消息类型 + NarrativeGraphSnapshot
+  ├── types/narrative-asset.ts       ← NarrativeAssetRef / NarrativeAssetResolver 接口
+  ├── types/narrative-runtime.ts     ← NarrativeRuntime + WhitelistConditionEvaluator
+  └── types/canvas-narrative-agent.ts ← Agent-facing diagnostics + structured summaries
 ```
 
-遵守 `no-cross-extension-deps` 规则——neko-canvas 不 import neko-story。通过共享类型 + Extension API + ProjectionAdapter 接口通信。
+遵守 `no-cross-extension-deps` 规则——neko-canvas 不 import neko-story。通过共享类型 + Extension API + postMessage 通信。
 
 ---
 
 ## 四、用户工作流
 
-### 4.1 从零开始创建互动叙事
+### 4.1 从零开始创建多分支叙事
 
 ```
-1. 命令面板: "Neko: New Interactive Story"
-   → 创建 story.nkstory + scenes/ 目录 + characters.yaml 模板
-   → 在 Canvas 中打开投影画布（自动展开 Narrative 节点面板）
+1. 新建 Canvas: 命令面板 "Neko Canvas: New Canvas"
+   → 创建 narrative.nkc
+   → 从节点库拖入 narrative-start 节点（narrative 子系统激活）
 
-2. Graph Mode: 拖入 Start 节点 + 若干 Scene 节点 + Choice 节点
+2. 构建故事图:
+   → 拖入 narrative-scene 节点 + choice 节点 + merge 节点
    → 连线建立分支结构
-   → 双击 Scene 节点 → 在 neko-story 中编写 Fountain 内容
+   → 在 choice 连线上编辑选项文字和条件
 
-3. 编辑 characters.yaml: 绑定角色立绘、背景图
+3. 编写场景内容:
+   → 双击 narrative-scene 节点 → 在 neko-story 中编写标准 .fountain 内容
+   → 不创建 .nks / .story / .nkstory 叙事文件
+   → 编辑 characters.yaml 绑定角色立绘、背景图
 
-4. 切换 Play Mode: 从 Start 开始体验
-   → 阅读对白 → 选择分支 → 观察变量变化
-   → 发现问题 → Esc 回到 Graph Mode → 定位节点修改
+4. 交互预览:
+   → 命令面板 "Neko: Open Narrative Preview"（或 Canvas 工具栏按钮）
+   → 打开 Narrative Preview 面板（与 Canvas 并排显示）
+   → 从 Start 开始交互式体验
+   → 阅读对白 → 选择分支 → 观察 Canvas 路径高亮
+   → 发现问题 → 修改 Canvas 节点/连线 → Preview 实时刷新
 
-5. 导出: 命令面板 "Neko: Export Interactive Story"
+5. 添加终点:
+   → 拖入 narrative-ending 节点（可多个：good/bad/secret ending）
+   → 连线到达终点 → Preview 显示游玩统计
+
+6. 导出:
+   → 命令面板 "Neko: Export Interactive Story"
    → 选择 HTML5 → 生成可分享的单页应用
 ```
 
-### 4.2 编剧与策划协作
+### 4.2 线性剧情 + 少量分支
+
+```
+编剧（neko-story）:
+  → 在 neko-story 中写线性 Fountain 剧本
+  → 需要加分支时 → 新建 Canvas，创建 narrative-scene 节点
+  → 每个 narrative-scene 的 sceneRef 指向已有的 .fountain 文件
+  → 在 Canvas 中添加 choice 节点连接分支 narrative-scene
+  → 形成"主线线性 + 局部分支"的混合结构
+```
+
+**script 节点的角色**：`.fountain` 拖入 Canvas 产生的 `script` 节点是**引用源**（storyboard 子系统），不参与 narrative 遍历。如需将 script 节点的场景纳入叙事流，用户应创建对应的 `narrative-scene` 节点并设置 `sceneRef` 指向同一 `.fountain` 文件。不提供自动"展开"机制——引用与叙事节点是不同语义。
+
+### 4.3 编剧与策划协作
 
 ```
 编剧（neko-story）:
   → 打开 scenes/cafe-encounter.fountain
   → 用标准 Fountain 写对白和动作
-  → 保存
+  → 保存 → Preview 实时刷新对应场景
 
-策划（neko-canvas）:
-  → 在 Graph Mode 中看到节点内容实时更新
-  → 调整分支结构、添加条件
-  → 切 Play Mode 测试流程
-  → 发现缺少一个场景 → 新建节点 → 通知编剧填写内容
+策划（neko-canvas + Narrative Preview 并排）:
+  → Canvas 中调整分支结构、添加条件、设置变量
+  → Preview 中测试流程、选择分支
+  → 发现缺少一个场景 → Canvas 中新建 narrative-scene → 通知编剧填写
 ```
 
-### 4.3 AI Agent 辅助
+### 4.4 AI Agent 辅助
 
 ```
 Agent 可执行的操作:
-  → 读取 .nkstory 理解全局分支结构
-  → 分析分支覆盖率（死路径检测、未连接节点）
+  → 读取 Canvas 叙事图理解全局分支结构（structured Canvas context）
+  → 分析分支覆盖率（死路径检测、未连接节点、缺少 ending 的路径）
+  → 输出 missing entry / unreachable node / accidental dead end / invalid sceneRef / unsupported condition 等诊断
   → 根据 Fountain 对白自动推荐表情映射
   → 生成分支建议（"此处可加一个好感度判定"）
   → 批量生成 Fountain 场景草稿
@@ -605,40 +915,39 @@ Agent 可执行的操作:
 
 ## 五、实施计划
 
-### Phase 0: 数据模型与基础设施（~4d）
+### Phase 0: 节点类型 + 共享契约（~3d）
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| PR1 | `@neko/shared/types/story-graph.ts` 共享类型定义 | 无 |
-| PR2 | `StoryGraphService` (.nkstory CRUD + JSON Schema 校验) | PR1 |
-| PR3 | `FountainPlayParser` (Fountain → PlayDirective) + 单元测试 | PR1 |
+| PR1 | `@neko/shared` 扩展：`REGISTERED_CANVAS_NODE_TYPES` + `triggerNodeTypes` + `NARRATIVE_TRAVERSAL_NODE_TYPES` / `NARRATIVE_NODE_TYPES` 拆分（排除 note 参与遍历）；`NarrativeMetadata` 加 `genre` / `defaultLocale`；`NarrativeSceneMetadata` / `NarrativeEndingMetadata` / `VariableEffect` / `NarrativeAssetRef` 类型；`NarrativeGraphSnapshot` + Canvas ↔ Preview 消息类型（含 `requestId` / `revision`） | 无 |
+| PR2 | neko-canvas/packages/webview/：`narrative-start` / `narrative-ending` node descriptors + presets + renderer 注册；FlowTraversal 修正（排除 `narrative-note`，入口优先 `narrative-start` 类型） | PR1 |
+| PR3 | neko-story/packages/parser/：`FountainPlayParser` (Fountain → PlayDirective[]) + 单元测试 | PR1 |
 
-### Phase 1: Canvas 投影与 Graph Mode（~5d）
-
-| PR | 内容 | 依赖 |
-|----|------|------|
-| PR4 | `StoryProjectionAdapter` 实现 + 注册 | PR2 |
-| PR5 | Graph Mode 视图增强（节点预览卡片 + 条件标注 + 路径高亮） | PR4 |
-| PR6 | Graph Mode 写回（新增/删除连线、编辑条件写回 .nkstory） | PR4 |
-
-### Phase 2: Play Mode 核心（~6d）
+### Phase 1: Preview 核心（~7d）
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| PR7 | `NarrativeRuntime` 状态机 + 单元测试 | PR1 |
-| PR8 | Play Mode 框架（模式切换 + Mini Map + State Panel） | PR7 |
-| PR9 | `IllustratedTextRenderer`（图文游戏渲染器，最简版） | PR8 |
-| PR10 | `VisualNovelRenderer`（VN 渲染器：ADV/NVL + 立绘 + 背景） | PR8, PR3 |
+| PR4 | `NarrativeRuntime` 状态机（neko-story/packages/webview/src/preview/）+ `NarrativeAssetResolver` 接口（@neko/shared）+ `ConditionEvaluator` 白名单 AST + 单元测试 | PR1 |
+| PR5 | Preview Webview Panel 框架（neko-story/packages/webview/ 新增 preview 入口）+ `NarrativePreviewBridge`（neko-canvas/packages/extension/，从 editor document model 提取快照） | PR4, PR2 |
+| PR6 | `IllustratedTextRenderer`（图文游戏渲染器，最简版——验证全链路） | PR5, PR3 |
+| PR7 | `VisualNovelRenderer`（ADV/NVL + 立绘 L0/L1 + 背景 + 打字机效果） | PR5, PR3 |
 
-### Phase 3: 互动影游 + 导出（~5d）
+### Phase 2: 互动影游 + 导出（~5d）
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| PR11 | `InteractiveFilmRenderer`（视频节点播放 + 字幕叠层） | PR8 |
-| PR12 | HTML5 导出管线（NarrativeExporter + 模板） | PR7, PR9 |
-| PR13 | Agent 集成（.nkstory 分析工具 + 分支覆盖率 + 一致性检查） | PR2 |
+| PR8 | `InteractiveFilmRenderer`（`<video>` 播放 + 选项浮层） | PR5 |
+| PR9 | HTML5 导出管线（NarrativeExporter（neko-story/packages/extension/）+ `NarrativeAssetResolver` `final-export` 实现 + 模板打包） | PR4, PR6 |
+| PR10 | Agent 集成（叙事图分析工具 + 分支覆盖率 + 一致性检查） | PR2 |
 
-**总计：~20d，13 PR**
+### Phase 3: 人物演绎增强（P2, ~4d）
+
+| PR | 内容 | 依赖 |
+|----|------|------|
+| PR11 | Live2D L2 演绎（Cubism Web SDK 集成 + VisualNovelRenderer 扩展） | PR7 |
+| PR12 | Spine L3 演绎（spine-ts 集成） | PR7 |
+
+**总计：Phase 0-2 ~15d，10 PR（核心功能）；Phase 3 ~4d，2 PR（增强）**
 
 ---
 
@@ -646,10 +955,12 @@ Agent 可执行的操作:
 
 | Toggle | 默认 | 效果 |
 |--------|------|------|
-| `narrative.playMode` | `true` | 关闭后 Canvas 仅保留 Graph Mode，Play Mode 不可用 |
-| `narrative.miniMap` | `true` | 关闭后 Play Mode 不显示 Mini Map |
+| `narrative.preview` | `true` | 关闭后 Narrative Preview 面板不可用 |
 | `narrative.typewriterEffect` | `true` | 关闭后对白直接显示，不逐字打出 |
 | `narrative.autoExpressionMatch` | `true` | 关闭后不从 Parenthetical 自动推断表情 |
+| `narrative.showLockedChoices` | `true` | 关闭后条件不满足的选项隐藏而非灰显 |
+| `narrative.previewAutoSync` | `true` | 关闭后 Canvas 节点选择不自动同步到 Preview |
+| `narrative.live2dPerformance` | `false` | 开启后 VN 渲染器使用 Live2D 替代静态立绘（P2） |
 
 ---
 
@@ -657,19 +968,22 @@ Agent 可执行的操作:
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| Play Mode 渲染性能（大量立绘 + 背景切换） | 卡顿 | 预加载当前节点 ±2 跳邻居资产；图片懒加载 + 缓存 |
-| .nkstory 与 Canvas 同步延迟 | 编辑丢失 | ProjectionAdapter 增量 diff（非全量重建）；乐观更新 + 冲突检测 |
-| Fountain 语义不足以表达演出指令 | 立绘位置/BGM/转场效果无法标注 | characters.yaml 扩展元数据；Fountain Notes (`[[BGM: peaceful]]`) 作为约定 |
-| 单一 .nkstory 文件过大 | 大型项目 100+ 节点 | 支持按 Chapter 拆分为多个 .nkstory + 跨文件引用 |
-| 导出 HTML5 体积过大 | 互动影游视频资产大 | 视频按需加载（流式）；图文/VN 类型单页 < 10MB |
+| 两个 Webview 内存开销 | 大型项目占用增加 | Preview 关闭时释放资产；`retainContextWhenHidden` 仅 Canvas 常驻 |
+| Canvas ↔ Preview 同步延迟 | 操作不流畅 | postMessage 延迟 < 1ms（同进程）；乐观更新 |
+| Fountain 语义不足以表达演出指令 | 立绘位置/BGM/转场无法标注 | characters.yaml 扩展元数据；Fountain Notes (`[[BGM: peaceful]]`) 作为约定；narrative-scene metadata 补充 |
+| Canvas .nkc 文件过大 | 100+ 节点 | Canvas 已支持大画布；可按 Chapter 拆分多个 .nkc |
+| 导出 HTML5 体积过大 | 互动影游视频资产大 | 视频按需加载（流式）；图文/VN 类型 < 10MB |
+| Preview 组件与 VSCode API 耦合影响导出 | 导出需额外解耦 | Preview 从设计上隔离 VSCode 依赖（AssetResolver 端口化，数据通过 props/context 注入） |
+| Live2D/Spine SDK 许可证 | 商用限制 | Cubism SDK for Web (MIT/Live2D Proprietary)；spine-ts (Spine license)；需确认许可证条款 |
 
 ---
 
 ## 八、未来扩展方向（不在本 ADR 范围）
 
-1. **多语言支持**——每个 `.fountain` 文件可有 `.fountain.zh-cn` / `.fountain.en` 变体，Play Mode 按 locale 切换
-2. **Live2D 实时演出**——Play Mode 的 VN 渲染器接入 neko-puppet engine 实时渲染（需要 WebGL，突破当前 DOM-only 约束）
+1. **多语言支持**——每个 `.fountain` 文件可有 `.fountain.zh-cn` / `.fountain.en` 变体，Preview 按 locale 切换
+2. **3D 角色演绎（L4）**——VN 渲染器接入 engine 实时渲染（需预渲染方案兼容导出）
 3. **语音合成**——对白文本 → TTS → 自动配音；角色绑定声纹
-4. **多人协作编辑**——.nkstory 的 CRDT 同步
+4. **多人协作编辑**——Canvas `.nkc` 的 CRDT 同步
 5. **Analytics**——记录测试游玩数据（选择分布、完成率、平均时长），辅助叙事平衡调整
 6. **Ren'Py / Unity 导出**——NarrativeExporter 适配器，输出 `.rpy` / C# 脚本
+7. **存档系统**——Preview 支持 save/load，多存档槽位，导出后也可存档

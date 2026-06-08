@@ -10,7 +10,7 @@
 
 **Neko Suite** is an AIGC-native creative IDE, content creation Agent, and interactive media engine. The product goal is not only "AI chat inside an editor"; it is a closed creative workspace where an Agent can understand intent, plan work, call tools, generate assets, inspect results, edit, preview, and iterate across screenplay, storyboard canvas, video timeline, 3D, 2D drawing, 2D puppet animation, audio, assets, and live interaction.
 
-The repo is currently an Alpha-stage monorepo with **23 top-level workspace packages**. The strongest areas are the content creation Agent runtime, Rust media engine, video timeline, story/canvas workflow, preview/streaming stack, and shared contract layers. The main remaining work is cross-package product hardening: one project graph, one Agent capability registry, one interactive runtime surface, and end-to-end smoke coverage for full AIGC creation loops.
+The repo is currently an Alpha-stage monorepo with **23 top-level workspace packages**. The strongest areas are the content creation Agent runtime, Rust media engine, video timeline, story/canvas workflow, preview/streaming stack, and shared contract layers. Canvas interactive narrative is converging on one path: `.nkc` branching graphs, standard `.fountain` scene content, and separate Narrative Preview/HTML5 export. The main remaining work is cross-package product hardening: one project graph, one Agent capability registry, one interactive runtime surface, and end-to-end smoke coverage for full AIGC creation loops.
 
 📋 **[View Roadmap →](./ROADMAP.md)**
 
@@ -106,7 +106,7 @@ Updated on **2026-06-03**. Percentages below are qualitative target-fit estimate
 | Package          | Target role                                                 | Progress | What is in place                                                                                                            | Main gap                                                                                    |
 | ---------------- | ----------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **neko-story**   | Script-first planning and story-to-video entry              | 78%      | Fountain parser/types/webview/extension; scene index; readiness table; story -> agent -> canvas commands                    | Full flow-F smoke from script to generated timeline                                         |
-| **neko-canvas**  | Infinite canvas, storyboard, and visual orchestration       | 80%      | 197 TS/TSX files; 45 tests; 13+ node types; storyboard import; generation prompt panel; batch generation; inline media      | Stronger entity/search integration and large-canvas performance baselines                   |
+| **neko-canvas**  | Infinite canvas, storyboard, and visual orchestration       | 80%      | 197 TS/TSX files; 45 tests; 13+ node types; storyboard import; generation prompt panel; batch generation; inline media; `narrative-start` / `narrative-ending` branching narrative nodes | Stronger entity/search integration and large-canvas performance baselines                   |
 | **neko-cut**     | Video timeline editor and final assembly surface            | 82%      | 309 TS/TSX files; timeline editor, edit operations, preview/export services, commands, tests                                | End-to-end AI-generated storyboard import, QC, export smoke                                 |
 | **neko-preview** | Engine-first media preview                                  | 76%      | Video/audio/panoramic/document preview routes; WebCodecs playback; waveform and stream clients                              | Unified document/media file-access hardening and multi-surface preview handoff              |
 | **neko-assets**  | Unified asset registry and media library                    | 72%      | Asset core package, registry, entity/variant/file services, import dispatcher, media library search, character asset export | One project graph with `neko-entity`, generated asset provenance, marketplace install state |
@@ -135,6 +135,7 @@ Updated on **2026-06-03**. Percentages below are qualitative target-fit estimate
 
 3. **One interactive runtime**
    `neko-engine`, `neko-client`, `neko-model`, `neko-puppet`, `neko-audio`, `neko-live`, and `neko-preview` should share session, stream, file-access, and authority contracts.
+   Canvas interactive narrative uses a separate Narrative Preview: `.nkc` stores the branching graph, `narrative-scene.sceneRef` points only to standard `.fountain` files, and Preview/HTML5 export share the `@neko/shared` NarrativeRuntime with injected asset resolvers. `.nks`, `.story`, and standalone `.nkstory` are not graph or scene formats for this workflow.
 
 4. **End-to-end smoke paths**
    The release gate should include Story -> Agent -> Canvas -> generation -> Cut -> Preview/Export and Character/Entity -> Model/Puppet -> Live/Agent feedback.
@@ -267,6 +268,7 @@ neko-suite/
 | Image          | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                              |
 | 3D             | glTF, GLB, VRM, `.nkm`                                           |
 | 2D / Character | `.nks`, `.nkp` v2, MOC3/Live2D import compatibility, `.nkentity` |
+| Script/Narrative | `.fountain`; interactive narrative uses `.nkc` branching graphs that reference `.fountain` scenes |
 | Project        | `.nkv`, `.nkc`, `.nka`, `.nkm`, `.nks`, `.nkp`                   |
 
 ---
