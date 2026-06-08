@@ -267,27 +267,161 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   <title>Narrative Preview</title>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
-    main { min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
-    section { max-width: 720px; width: 100%; border: 1px solid var(--vscode-panel-border); padding: 16px; border-radius: 6px; background: var(--vscode-sideBar-background); }
-    h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+    main { min-height: 100vh; display: flex; flex-direction: column; padding: 18px; box-sizing: border-box; gap: 14px; }
+    section { width: 100%; box-sizing: border-box; }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    h2 { margin: 10px 0 8px; font-size: 26px; font-weight: 650; }
+    h3 { margin: 0 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; color: var(--vscode-descriptionForeground); letter-spacing: 0; }
     p { margin: 0; color: var(--vscode-descriptionForeground); line-height: 1.5; }
     code { color: var(--vscode-textLink-foreground); }
+    button { height: 30px; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); border-radius: 4px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 0 10px; cursor: pointer; }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
+    .placeholder { max-width: 720px; border: 1px solid var(--vscode-panel-border); padding: 16px; border-radius: 6px; background: var(--vscode-sideBar-background); }
+    .playback-shell { display: none; min-height: calc(100vh - 36px); }
+    .playback-shell[data-visible="true"] { display: flex; flex-direction: column; gap: 14px; }
+    .playback-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 12px; }
+    .playback-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .progress { min-width: 48px; text-align: center; color: var(--vscode-descriptionForeground); }
+    .timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 4px; }
+    .timeline:empty { display: none; }
+    .timeline button { min-width: 0; width: 100%; height: 28px; padding: 0 6px; border-color: var(--vscode-panel-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .timeline button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    .timeline button[data-kind="shot"] { border-bottom-color: var(--vscode-charts-blue, #3794ff); }
+    .timeline button[data-kind="media"] { border-bottom-color: var(--vscode-charts-green, #89d185); }
+    .timeline button[data-kind="narrative"] { border-bottom-color: var(--vscode-charts-purple, #b180d7); }
+    .unit-surface { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 14px; align-items: stretch; min-height: 0; }
+    .unit-card { border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-sideBar-background); padding: 22px; box-sizing: border-box; min-width: 0; }
+    .unit-card[data-kind="shot"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-blue, #3794ff)); }
+    .unit-card[data-kind="media"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-green, #89d185)); }
+    .unit-card[data-kind="narrative"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-purple, #b180d7)); }
+    .unit-kind { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .unit-body { max-width: 780px; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 15px; }
+    .unit-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .unit-meta { display: grid; gap: 6px; }
+    .meta-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+    .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+    .choices:empty { display: none; }
+    .diagnostics { display: grid; gap: 6px; }
+    .diagnostics:empty { display: none; }
+    .diagnostic { border-left: 3px solid var(--vscode-editorWarning-foreground); padding: 6px 8px; background: var(--vscode-inputValidation-warningBackground, transparent); color: var(--vscode-descriptionForeground); }
+    @media (max-width: 760px) {
+      main { padding: 12px; }
+      .playback-toolbar { align-items: flex-start; flex-direction: column; }
+      .unit-surface { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <section>
+    <section class="placeholder" id="placeholder">
       <h1>Narrative Preview</h1>
       <p id="status">Waiting for Canvas graph...</p>
+    </section>
+    <section class="playback-shell" id="playback-preview" data-visible="false">
+      <header class="playback-toolbar">
+        <div>
+          <h1 id="playback-title">Canvas Playback</h1>
+          <p id="playback-summary"></p>
+        </div>
+        <div class="playback-controls">
+          <button type="button" id="preview-previous" title="Previous">Previous</button>
+          <button type="button" id="preview-play" title="Play">Play</button>
+          <button type="button" id="preview-next" title="Next">Next</button>
+          <span class="progress" id="preview-progress">0/0</span>
+        </div>
+      </header>
+      <nav class="timeline" id="unit-timeline" aria-label="Playback timeline"></nav>
+      <div class="unit-surface">
+        <article class="unit-card" id="unit-card" data-kind="node">
+          <span class="unit-kind" id="unit-kind">unit</span>
+          <h2 id="unit-title">No unit selected</h2>
+          <p class="unit-body" id="unit-body"></p>
+        </article>
+        <aside class="unit-panel" aria-label="Playback unit details">
+          <section>
+            <h3>Info</h3>
+            <div class="unit-meta" id="unit-meta"></div>
+          </section>
+          <section>
+            <h3>Branches</h3>
+            <div class="choices" id="unit-choices"></div>
+          </section>
+          <section>
+            <h3>Diagnostics</h3>
+            <div class="diagnostics" id="unit-diagnostics"></div>
+          </section>
+        </aside>
+      </div>
     </section>
   </main>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    const DEFAULT_TIMER_MS = 1200;
     const status = document.getElementById('status');
+    const placeholder = document.getElementById('placeholder');
+    const playbackPreview = document.getElementById('playback-preview');
+    const playbackTitle = document.getElementById('playback-title');
+    const playbackSummary = document.getElementById('playback-summary');
+    const previewPrevious = document.getElementById('preview-previous');
+    const previewPlay = document.getElementById('preview-play');
+    const previewNext = document.getElementById('preview-next');
+    const previewProgress = document.getElementById('preview-progress');
+    const unitTimeline = document.getElementById('unit-timeline');
+    const unitCard = document.getElementById('unit-card');
+    const unitKind = document.getElementById('unit-kind');
+    const unitTitle = document.getElementById('unit-title');
+    const unitBody = document.getElementById('unit-body');
+    const unitMeta = document.getElementById('unit-meta');
+    const unitChoices = document.getElementById('unit-choices');
+    const unitDiagnostics = document.getElementById('unit-diagnostics');
+
+    let playbackPlan = null;
+    let route = [];
+    let activeUnitId = null;
+    let timer = null;
+    let isPlaying = false;
+
+    previewPrevious.addEventListener('click', () => {
+      stopPlayback();
+      const index = getCurrentIndex();
+      if (index > 0) {
+        setActiveUnit(route[index - 1], false);
+      }
+    });
+    previewPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        stopPlayback();
+        renderPlaybackPlan();
+        return;
+      }
+      if (!canPreviewAutoAdvance()) {
+        return;
+      }
+      const unit = getCurrentUnit();
+      if (!unit) {
+        return;
+      }
+      isPlaying = true;
+      renderPlaybackPlan();
+      scheduleNext(unit.id);
+    });
+    previewNext.addEventListener('click', () => {
+      stopPlayback();
+      const next = resolveNextStep();
+      if (next) {
+        route = next.route;
+        setActiveUnit(next.unitId, false);
+      }
+    });
+
     window.addEventListener('message', (event) => {
       const message = event.data || {};
       if (message.type === 'preview:loadGraph' || message.type === 'preview:refresh') {
         const count = Array.isArray(message.snapshot?.nodes) ? message.snapshot.nodes.length : 0;
+        if (count === 0 && playbackPlan) {
+          return;
+        }
         if (count === 0) {
           status.textContent = 'Loaded revision ' + message.revision + ' with 0 Narrative Runtime nodes. Storyboard scene/shot and generic Canvas nodes use Canvas Playback Plan preview instead of Narrative Runtime.';
         } else {
@@ -299,10 +433,505 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         const kinds = Array.from(new Set(units.map((unit) => unit && unit.kind).filter(Boolean))).join(', ');
         const suffix = diagnostics.length > 0 ? ' Diagnostics: ' + diagnostics.map((item) => item.message).join(' ') : '';
         status.textContent = 'Loaded Canvas playback plan (' + message.plan.adapterId + ', ' + message.plan.behaviorMode + ') with ' + units.length + ' units' + (kinds ? ' [' + kinds + ']' : '') + '.' + suffix;
+        loadPlaybackPlan(message.plan);
       } else if (message.type === 'preview:jumpTo') {
         status.textContent = 'Jump request: ' + message.nodeId + ' at revision ' + message.revision + '.';
+        if (playbackPlan) {
+          const unit = playbackPlan.units.find((candidate) => candidate.sourceNodeId === message.nodeId || candidate.id === message.nodeId);
+          if (unit) {
+            stopPlayback();
+            const index = route.indexOf(unit.id);
+            route = index >= 0 ? route.slice(0, index + 1) : [unit.id];
+            setActiveUnit(unit.id, false);
+          }
+        }
       }
     });
+
+    function loadPlaybackPlan(plan) {
+      stopPlayback();
+      playbackPlan = plan;
+      route = buildInitialRoute(plan);
+      activeUnitId = route[0] || null;
+      placeholder.style.display = 'none';
+      playbackPreview.dataset.visible = 'true';
+      renderPlaybackPlan();
+      postPlaybackHighlight();
+    }
+
+    function renderPlaybackPlan() {
+      const unit = getCurrentUnit();
+      const index = getCurrentIndex();
+      const diagnostics = Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : [];
+      playbackTitle.textContent = formatPlanTitle(playbackPlan);
+      playbackSummary.textContent = playbackPlan
+        ? playbackPlan.adapterId + ' / ' + playbackPlan.behaviorMode + ' / ' + playbackPlan.advancePolicy
+        : 'Waiting for Canvas playback plan...';
+      previewProgress.textContent = (index >= 0 ? index + 1 : 0) + '/' + route.length;
+      previewPrevious.disabled = index <= 0;
+      previewNext.disabled = !resolveNextStep();
+      previewPlay.disabled = !unit || !canPreviewAutoAdvance() || !resolveNextStep();
+      previewPlay.textContent = isPlaying ? 'Pause' : 'Play';
+      unitKind.textContent = unit ? unit.kind : 'unit';
+      unitCard.dataset.kind = unit ? unit.kind : 'node';
+      unitTitle.textContent = unit ? formatUnitTitle(unit, index) : 'No playable unit';
+      unitBody.textContent = unit ? formatUnitBody(unit) : 'This Canvas does not expose a playable unit for the selected preview surface.';
+      renderTimeline();
+      renderMeta(unit);
+      renderChoices(unit);
+      renderDiagnostics(diagnostics);
+    }
+
+    function renderTimeline() {
+      unitTimeline.replaceChildren();
+      if (!playbackPlan || route.length === 0) {
+        return;
+      }
+      route.forEach((unitId, index) => {
+        const unit = playbackPlan.units.find((candidate) => candidate.id === unitId);
+        if (!unit) {
+          return;
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.kind = unit.kind;
+        button.dataset.active = unit.id === activeUnitId ? 'true' : 'false';
+        button.textContent = String(index + 1);
+        button.title = formatUnitTitle(unit, index);
+        button.addEventListener('click', () => {
+          stopPlayback();
+          setActiveUnit(unit.id, false);
+        });
+        unitTimeline.appendChild(button);
+      });
+    }
+
+    function renderMeta(unit) {
+      unitMeta.replaceChildren();
+      if (!unit) {
+        return;
+      }
+      appendMeta('Source node', unit.sourceNodeId);
+      appendMeta('Render mode', unit.renderMode);
+      appendMeta('Duration', formatDuration(unit.durationMs));
+      if (unit.assetPath) {
+        appendMeta('Asset', unit.assetPath);
+      }
+      if (unit.resourceRef) {
+        appendMeta('Resource', JSON.stringify(unit.resourceRef));
+      }
+      const metadata = getMetadata(unit);
+      if (unit.kind === 'shot') {
+        appendMetaField(metadata, 'Shot', 'shotNumber');
+        appendMetaField(metadata, 'Scale', 'shotScale');
+        appendMetaField(metadata, 'Camera', 'cameraMovement');
+        appendMetaField(metadata, 'Angle', 'cameraAngle');
+        appendMetaField(metadata, 'Action', 'characterAction');
+        appendMetaField(metadata, 'Dialogue', 'dialogue');
+        appendMetaField(metadata, 'Voice', 'voiceOver');
+        appendMetaField(metadata, 'Sound', 'soundCue');
+        appendMetaField(metadata, 'Status', 'generationStatus');
+        appendMetaValue('Characters', summarizeCharacters(metadata.characters));
+        appendMetaValue('Media refs', summarizeCount(metadata.sourceMediaRefs, metadata.generatedMediaRefs, metadata.mediaRefs));
+        appendMetaValue('Image asset', readNestedString(metadata.generatedAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedImage));
+        appendMetaValue('Video asset', readNestedString(metadata.generatedVideoAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedVideo));
+      } else if (unit.kind === 'scene') {
+        appendMetaField(metadata, 'Scene', 'sceneNumber');
+        appendMetaField(metadata, 'Location', 'location');
+        appendMetaField(metadata, 'Time', 'timeOfDay');
+        appendMetaField(metadata, 'Script', 'sourceScriptUri');
+      } else if (unit.kind === 'media') {
+        appendMetaField(metadata, 'Media type', 'mediaType');
+        appendMetaField(metadata, 'Asset path', 'assetPath');
+        appendMetaField(metadata, 'Duration', 'duration');
+        appendMetaField(metadata, 'MIME', 'mimeType');
+      } else {
+        appendMetaField(metadata, 'Script', 'scriptPath');
+        appendMetaField(metadata, 'Document', 'docPath');
+        appendMetaField(metadata, 'Project', 'projectPath');
+        appendMetaValue('Scenes', summarizeArray(metadata.scenes));
+      }
+    }
+
+    function appendMeta(label, value) {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+      const item = document.createElement('div');
+      item.className = 'meta-item';
+      item.textContent = label + ': ' + formatValue(value);
+      unitMeta.appendChild(item);
+    }
+
+    function appendMetaField(metadata, label, field) {
+      appendMeta(label, metadata[field]);
+    }
+
+    function appendMetaValue(label, value) {
+      appendMeta(label, value);
+    }
+
+    function renderChoices(unit) {
+      unitChoices.replaceChildren();
+      if (!unit) {
+        return;
+      }
+      const choices = getOutgoingTransitions(unit.id);
+      if (choices.length <= 1) {
+        return;
+      }
+      for (const choice of choices) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = formatChoiceLabel(choice);
+        button.title = button.textContent;
+        button.addEventListener('click', () => {
+          stopPlayback();
+          const sourceUnit = getCurrentUnit();
+          route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
+          setActiveUnit(choice.targetUnitId, false);
+          if (sourceUnit) {
+            postMessage({
+              type: 'canvas:choiceMade',
+              requestId: createRequestId('choice'),
+              fromNodeId: sourceUnit.sourceNodeId,
+              toNodeId: getCurrentUnit()?.sourceNodeId || choice.targetUnitId,
+            });
+          }
+        });
+        unitChoices.appendChild(button);
+      }
+    }
+
+    function renderDiagnostics(diagnostics) {
+      unitDiagnostics.replaceChildren();
+      for (const diagnostic of diagnostics) {
+        const item = document.createElement('div');
+        item.className = 'diagnostic';
+        item.textContent = diagnostic.message || diagnostic.code;
+        unitDiagnostics.appendChild(item);
+      }
+    }
+
+    function setActiveUnit(unitId, keepPlaying) {
+      activeUnitId = unitId;
+      if (!keepPlaying) {
+        isPlaying = false;
+      }
+      renderPlaybackPlan();
+      postPlaybackHighlight();
+    }
+
+    function scheduleNext(currentUnitId) {
+      clearTimer();
+      timer = window.setTimeout(() => {
+        timer = null;
+        const next = resolveNextStep();
+        if (!next) {
+          isPlaying = false;
+          renderPlaybackPlan();
+          return;
+        }
+        route = next.route;
+        activeUnitId = next.unitId;
+        renderPlaybackPlan();
+        postPlaybackHighlight();
+        if (isPlaying) {
+          scheduleNext(next.unitId);
+        }
+      }, resolveUnitDurationMs(currentUnitId));
+    }
+
+    function stopPlayback() {
+      isPlaying = false;
+      clearTimer();
+    }
+
+    function clearTimer() {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function getCurrentUnit() {
+      if (!playbackPlan || !activeUnitId) {
+        return null;
+      }
+      return playbackPlan.units.find((unit) => unit.id === activeUnitId) || null;
+    }
+
+    function getCurrentIndex() {
+      return activeUnitId ? route.indexOf(activeUnitId) : -1;
+    }
+
+    function buildInitialRoute(plan) {
+      if (!plan || !Array.isArray(plan.entryUnitIds) || plan.entryUnitIds.length === 0) {
+        return [];
+      }
+      if (plan.behaviorMode === 'interactive') {
+        return [plan.entryUnitIds[0]];
+      }
+      return buildDefaultRoute(plan);
+    }
+
+    function buildDefaultRoute(plan) {
+      const output = [];
+      const visited = new Set();
+      let current = plan.entryUnitIds[0];
+      while (current && !visited.has(current) && output.length <= plan.units.length) {
+        output.push(current);
+        visited.add(current);
+        const next = getOutgoingTransitions(current)[0];
+        current = next && next.targetUnitId;
+      }
+      return output;
+    }
+
+    function resolveNextStep() {
+      if (!playbackPlan || !activeUnitId) {
+        return null;
+      }
+      const index = getCurrentIndex();
+      if (index < 0) {
+        return null;
+      }
+      const existingNext = route[index + 1];
+      if (existingNext) {
+        return { unitId: existingNext, route };
+      }
+      const transitions = getOutgoingTransitions(activeUnitId).filter((transition) => route.indexOf(transition.targetUnitId) === -1);
+      if (playbackPlan.behaviorMode === 'interactive' && transitions.length > 1) {
+        return null;
+      }
+      const transition = transitions[0];
+      if (!transition) {
+        return null;
+      }
+      return {
+        unitId: transition.targetUnitId,
+        route: appendTargetToRoute(route, index, activeUnitId, transition.targetUnitId),
+      };
+    }
+
+    function getOutgoingTransitions(unitId) {
+      if (!playbackPlan || !Array.isArray(playbackPlan.transitions)) {
+        return [];
+      }
+      return playbackPlan.transitions
+        .filter((transition) => transition.sourceUnitId === unitId && transition.enabled !== false)
+        .slice()
+        .sort((left, right) => (left.priority || 0) - (right.priority || 0) || String(left.id).localeCompare(String(right.id)));
+    }
+
+    function appendTargetToRoute(inputRoute, currentIndex, currentUnitId, targetUnitId) {
+      const prefix = currentIndex >= 0 ? inputRoute.slice(0, currentIndex + 1) : currentUnitId ? [currentUnitId] : [];
+      const existingIndex = prefix.indexOf(targetUnitId);
+      return existingIndex >= 0 ? prefix.slice(0, existingIndex + 1) : prefix.concat(targetUnitId);
+    }
+
+    function resolveUnitDurationMs(unitId) {
+      const durationMs = playbackPlan?.units.find((unit) => unit.id === unitId)?.durationMs;
+      return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+        ? durationMs
+        : DEFAULT_TIMER_MS;
+    }
+
+    function canPreviewAutoAdvance() {
+      if (!playbackPlan) {
+        return false;
+      }
+      if (playbackPlan.advancePolicy === 'timer') {
+        return true;
+      }
+      if (playbackPlan.advancePolicy !== 'media-ended') {
+        return false;
+      }
+      const unit = getCurrentUnit();
+      return Boolean(unit && typeof unit.durationMs === 'number' && Number.isFinite(unit.durationMs));
+    }
+
+    function postPlaybackHighlight() {
+      const unit = getCurrentUnit();
+      if (!unit) {
+        return;
+      }
+      postMessage({
+        type: 'canvas:highlightNode',
+        requestId: createRequestId('node'),
+        nodeId: unit.sourceNodeId,
+      });
+      const nodeIds = route
+        .map((unitId) => playbackPlan?.units.find((candidate) => candidate.id === unitId)?.sourceNodeId)
+        .filter(Boolean);
+      if (nodeIds.length > 0) {
+        postMessage({
+          type: 'canvas:highlightPath',
+          requestId: createRequestId('path'),
+          nodeIds,
+        });
+      }
+    }
+
+    function postMessage(message) {
+      vscode.postMessage(message);
+    }
+
+    function createRequestId(reason) {
+      return 'canvas-playback-preview:' + reason + ':' + Date.now();
+    }
+
+    function formatPlanTitle(plan) {
+      if (!plan) {
+        return 'Canvas Playback';
+      }
+      if (plan.adapterId === 'storyboard') {
+        return 'Storyboard Preview';
+      }
+      if (plan.adapterId === 'media-sequence') {
+        return 'Media Sequence Preview';
+      }
+      if (plan.adapterId === 'narrative') {
+        return 'Narrative Playback Plan';
+      }
+      return 'Canvas Playback';
+    }
+
+    function formatUnitTitle(unit, index) {
+      const metadata = getMetadata(unit);
+      if (unit.kind === 'shot') {
+        const shotNumber = metadata.shotNumber !== undefined ? String(metadata.shotNumber) : String(index + 1);
+        return unit.label || 'Shot ' + shotNumber;
+      }
+      return (
+        unit.label ||
+        readFirstString(metadata, ['sceneTitle', 'scriptTitle', 'title', 'name', 'projectTitle', 'docPath', 'assetPath']) ||
+        unit.kind + ' ' + (index + 1)
+      );
+    }
+
+    function formatUnitBody(unit) {
+      const metadata = getMetadata(unit);
+      if (unit.kind === 'shot') {
+        return (
+          readString(metadata.visualDescription) ||
+          readString(metadata.generationPrompt) ||
+          readString(metadata.dialogue) ||
+          'Storyboard shot playback unit. Use Canvas to edit shot content and route ordering.'
+        );
+      }
+      if (unit.kind === 'scene') {
+        const location = readString(metadata.location);
+        const timeOfDay = readString(metadata.timeOfDay);
+        return [readString(metadata.sceneTitle), location, timeOfDay].filter(Boolean).join(' / ') || 'Storyboard scene playback unit.';
+      }
+      if (unit.kind === 'media') {
+        const source = unit.assetPath || readString(metadata.assetPath) || readNestedString(unit.resourceRef, ['key', 'id', 'path']);
+        return source ? 'Media source: ' + source : 'Media playback unit. Runtime source will be resolved by the host.';
+      }
+      if (unit.kind === 'narrative') {
+        return readString(metadata.content) || readString(metadata.sceneRef) || 'Narrative runtime unit. Interactive rendering remains handled by the Narrative Runtime.';
+      }
+      if (unit.kind === 'container') {
+        return readFirstString(metadata, ['description', 'sceneTitle', 'label', 'name']) || 'Container playback unit.';
+      }
+      return readFirstString(metadata, ['content', 'description', 'scriptPath', 'docPath', 'modelPath', 'canvasPath', 'projectPath']) || 'Generic Canvas node playback unit.';
+    }
+
+    function formatChoiceLabel(choice) {
+      if (choice.label) {
+        return choice.label;
+      }
+      const target = playbackPlan?.units.find((unit) => unit.id === choice.targetUnitId);
+      return target ? 'Continue to ' + formatUnitTitle(target, route.length) : 'Continue';
+    }
+
+    function getMetadata(unit) {
+      return unit && unit.metadata && typeof unit.metadata === 'object' && !Array.isArray(unit.metadata)
+        ? unit.metadata
+        : {};
+    }
+
+    function readFirstString(source, fields) {
+      for (const field of fields) {
+        const value = readString(source[field]);
+        if (value) {
+          return value;
+        }
+      }
+      return undefined;
+    }
+
+    function readString(value) {
+      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+    }
+
+    function readNestedString(source, fields) {
+      if (!source || typeof source !== 'object') {
+        return undefined;
+      }
+      for (const field of fields) {
+        const value = readString(source[field]);
+        if (value) {
+          return value;
+        }
+      }
+      return undefined;
+    }
+
+    function summarizeCharacters(value) {
+      if (!Array.isArray(value) || value.length === 0) {
+        return undefined;
+      }
+      return value
+        .map((item) => {
+          if (typeof item === 'string') {
+            return item;
+          }
+          if (item && typeof item === 'object') {
+            return readString(item.characterName) || readString(item.displayName) || readString(item.characterId);
+          }
+          return undefined;
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    function summarizeCount() {
+      let count = 0;
+      for (const value of arguments) {
+        if (Array.isArray(value)) {
+          count += value.length;
+        }
+      }
+      return count > 0 ? count + ' item' + (count === 1 ? '' : 's') : undefined;
+    }
+
+    function summarizeArray(value) {
+      return Array.isArray(value) && value.length > 0 ? String(value.length) : undefined;
+    }
+
+    function formatDuration(value) {
+      return typeof value === 'number' && Number.isFinite(value)
+        ? (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) + 's'
+        : undefined;
+    }
+
+    function formatValue(value) {
+      if (Array.isArray(value)) {
+        return value.map(formatValue).join(', ');
+      }
+      if (value && typeof value === 'object') {
+        const preferred = readNestedString(value, ['path', 'assetPath', 'scriptPath', 'docPath', 'id', 'key', 'name', 'title']);
+        if (preferred) {
+          return preferred;
+        }
+        const json = JSON.stringify(value);
+        return json.length > 160 ? json.slice(0, 157) + '...' : json;
+      }
+      return String(value);
+    }
+
     window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
   </script>
 </body>

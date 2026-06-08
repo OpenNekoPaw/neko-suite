@@ -7,7 +7,7 @@ import type {
   SceneGroupCanvasNode,
   ShotCanvasNode,
 } from './canvas';
-import type { CanvasSerializableRecord } from './canvas-serializable';
+import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import { NARRATIVE_RUNTIME_NODE_TYPES } from './narrative-preview';
 import { getContainerChildIds, getNodeParentId, isContainerNode } from '../utils/canvasLayered';
 
@@ -622,19 +622,102 @@ function syntheticSequenceTransitions(
 
 function toPlaybackUnit(node: CanvasNode, context: PlaybackProjectionContext): CanvasPlaybackUnit {
   const override = getCanvasPlaybackNodeOverride(context.metadata, node);
+  const metadata = copyPlaybackMetadata(node.data);
+  const durationMs = resolvePlaybackUnitDurationMs(node, override);
+  const assetPath =
+    node.type === 'media' ? readDurablePlaybackString(node.data.assetPath) : undefined;
   return {
     id: node.id,
     sourceNodeId: node.id,
     kind: playbackUnitKindForNode(node),
     renderMode: renderModeForNode(node),
     label: readNodeLabel(node),
-    ...(override.durationMs !== undefined ? { durationMs: override.durationMs } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
     ...(override.role === 'end' ? { terminal: true } : {}),
-    ...(node.type === 'media' && node.data.assetPath ? { assetPath: node.data.assetPath } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(assetPath ? { assetPath } : {}),
     ...(node.type === 'media' && node.data.resourceRef
       ? { resourceRef: node.data.resourceRef }
       : {}),
   };
+}
+
+function resolvePlaybackUnitDurationMs(
+  node: CanvasNode,
+  override: CanvasPlaybackNodeOverride,
+): number | undefined {
+  if (override.durationMs !== undefined) return override.durationMs;
+  const data = isRecord(node.data) ? (node.data as Readonly<Record<string, unknown>>) : undefined;
+  const durationSeconds = data?.['duration'];
+  return typeof durationSeconds === 'number' &&
+    Number.isFinite(durationSeconds) &&
+    durationSeconds >= 0
+    ? Math.round(durationSeconds * 1000)
+    : undefined;
+}
+
+function copyPlaybackMetadata(value: unknown): CanvasSerializableRecord {
+  if (!isRecord(value)) return {};
+  const result: Record<string, CanvasSerializableValue> = {};
+  for (const [key, field] of Object.entries(value)) {
+    if (isRuntimeOnlyMetadataKey(key)) continue;
+    const copied = copyPlaybackMetadataValue(field);
+    if (copied !== undefined) {
+      result[key] = copied;
+    }
+  }
+  return result;
+}
+
+function copyPlaybackMetadataValue(value: unknown): CanvasSerializableValue | undefined {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
+    return typeof value === 'string' && isRuntimePlaybackUrl(value) ? undefined : value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map(copyPlaybackMetadataValue)
+      .filter((item): item is CanvasSerializableValue => item !== undefined);
+  }
+  if (isRecord(value)) {
+    const record = copyPlaybackMetadata(value);
+    return Object.keys(record).length > 0 ? record : undefined;
+  }
+  return undefined;
+}
+
+function readDurablePlaybackString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 && !isRuntimePlaybackUrl(value)
+    ? value
+    : undefined;
+}
+
+function isRuntimeOnlyMetadataKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.startsWith('runtime') ||
+    normalized === 'webviewuri' ||
+    normalized === 'webviewurl' ||
+    normalized === 'previewuri' ||
+    normalized === 'previewurl' ||
+    normalized === 'proxypath' ||
+    normalized.endsWith('token')
+  );
+}
+
+function isRuntimePlaybackUrl(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith('blob:') ||
+    normalized.startsWith('data:') ||
+    normalized.startsWith('vscode-webview-resource:') ||
+    normalized.startsWith('vscode-resource:') ||
+    normalized.startsWith('webview:') ||
+    normalized.startsWith('vscode://') ||
+    normalized.includes('vscode-resource.vscode-cdn.net')
+  );
 }
 
 function toPlaybackTransition(

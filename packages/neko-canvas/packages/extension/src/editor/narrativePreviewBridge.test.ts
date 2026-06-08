@@ -150,7 +150,14 @@ describe('NarrativePreviewBridge', () => {
         revision: 4,
         plan: expect.objectContaining({
           adapterId: 'storyboard',
-          units: expect.arrayContaining([expect.objectContaining({ id: 'shot-a1', kind: 'shot' })]),
+          units: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'shot-a1',
+              kind: 'shot',
+              durationMs: 2000,
+              metadata: expect.objectContaining({ visualDescription: 'Opening' }),
+            }),
+          ]),
         }),
       }),
     );
@@ -163,6 +170,27 @@ describe('NarrativePreviewBridge', () => {
         revision: 4,
       }),
     );
+  });
+
+  it('renders the Canvas playback preview shell instead of a status-only placeholder', () => {
+    const host = createHost(createSnapshot(4), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 3100,
+    });
+
+    expect(bridge.open()).toBe(true);
+    const html = panelFactory.createdPanels[0]?.webview.html ?? '';
+
+    expect(html).toContain('id="playback-preview"');
+    expect(html).toContain('id="unit-timeline"');
+    expect(html).toContain('id="unit-meta"');
+    expect(html).toContain('formatUnitBody');
+    expect(html).toContain('canvas:highlightNode');
+    expect(html).toContain('Storyboard Preview');
   });
 
   it('keeps storyboard Canvas playback available when narrative snapshot has zero runtime nodes', () => {
@@ -385,8 +413,30 @@ function createStoryboardCanvasData(): CanvasData {
         },
         data: { sceneTitle: 'Scene A', sceneNumber: 1 },
       },
-      createNode('shot-a1', 'shot', { shotNumber: 1, visualDescription: 'Opening' }),
-      createNode('shot-a2', 'shot', { shotNumber: 2, visualDescription: 'Close up' }),
+      createNode('shot-a1', 'shot', {
+        shotNumber: 1,
+        duration: 2,
+        visualDescription: 'Opening',
+        characters: [{ characterName: 'Hero' }],
+        shotScale: 'MS',
+        characterAction: 'Looks around',
+        emotion: [],
+        sceneTags: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      }),
+      createNode('shot-a2', 'shot', {
+        shotNumber: 2,
+        duration: 3,
+        visualDescription: 'Close up',
+        characters: [],
+        shotScale: 'CU',
+        characterAction: 'Speaks',
+        emotion: [],
+        sceneTags: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      }),
     ].map((node) =>
       node.id === 'shot-a1' || node.id === 'shot-a2' ? { ...node, parentId: 'scene-a' } : node,
     ) as CanvasData['nodes'],

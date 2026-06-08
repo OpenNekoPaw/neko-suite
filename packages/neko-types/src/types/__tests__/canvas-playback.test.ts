@@ -40,7 +40,7 @@ function shot(id: string, shotNumber: number, parentId?: string): CanvasNode {
       duration: 3,
       visualDescription: id,
       characters: [],
-      shotScale: 'medium',
+      shotScale: 'MS',
       characterAction: '',
       emotion: [],
       sceneTags: [],
@@ -169,6 +169,15 @@ describe('canvas playback contracts', () => {
     expect(plan.adapterId).toBe('storyboard');
     expect(plan.entryUnitIds).toEqual(['shot-a1']);
     expect(plan.units.map((unit) => unit.id)).toEqual(['shot-a1', 'shot-a2', 'shot-b1']);
+    expect(plan.units[0]).toMatchObject({
+      durationMs: 3000,
+      metadata: expect.objectContaining({
+        shotNumber: 1,
+        duration: 3,
+        visualDescription: 'shot-a1',
+        shotScale: 'MS',
+      }),
+    });
     expect(
       plan.transitions.map((transition) => [transition.sourceUnitId, transition.targetUnitId]),
     ).toEqual([
@@ -249,6 +258,54 @@ describe('canvas playback contracts', () => {
     );
     expect(storyboardPlan.adapterId).toBe('storyboard');
     expect(storyboardPlan.units.map((unit) => unit.kind)).toEqual(['shot']);
+  });
+
+  it('copies durable playback metadata while excluding runtime-only preview resources', () => {
+    const data = canvas([
+      scene('scene-a', ['shot-a']),
+      {
+        ...shot('shot-a', 1, 'scene-a'),
+        data: {
+          ...shot('shot-a', 1, 'scene-a').data,
+          visualDescription: 'Durable storyboard summary',
+          referenceImagePath: 'assets/ref.png',
+          runtimeReferenceImagePath: 'blob:runtime-reference',
+          generatedImage: 'blob:runtime-image',
+          generatedVideoAsset: {
+            id: 'video-1',
+            path: 'assets/shot-a.mp4',
+            runtimeUrl: 'blob:runtime-video',
+          },
+          generationHistory: [
+            {
+              id: 'candidate-1',
+              dataUrl: 'data:image/png;base64,runtime',
+              prompt: 'keep prompt',
+              timestamp: 1,
+              selected: true,
+            },
+          ],
+        },
+      } as CanvasNode,
+    ]);
+
+    const plan = createCanvasPlaybackPlan({ canvas: data, selectedNodeId: 'scene-a' });
+    const unit = plan.units[0];
+    const metadata = unit?.metadata as Record<string, unknown> | undefined;
+
+    expect(unit).toMatchObject({
+      id: 'shot-a',
+      durationMs: 3000,
+    });
+    expect(metadata).toMatchObject({
+      visualDescription: 'Durable storyboard summary',
+      referenceImagePath: 'assets/ref.png',
+      generatedVideoAsset: expect.objectContaining({ path: 'assets/shot-a.mp4' }),
+      generationHistory: [expect.objectContaining({ prompt: 'keep prompt' })],
+    });
+    expect(JSON.stringify(unit)).not.toContain('blob:runtime');
+    expect(JSON.stringify(unit)).not.toContain('data:image/png');
+    expect(JSON.stringify(unit)).not.toContain('runtimeReferenceImagePath');
   });
 
   it('does not persist runtime URLs in media playback units', () => {
