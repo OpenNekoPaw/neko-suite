@@ -45,6 +45,10 @@ const config: KnipConfig = {
     'packages/neko-canvas/packages/webview/src/types/extendedCanvas.ts': ['exports'],
     'packages/neko-preview/packages/extension/src/types/document-messages.ts': ['exports'],
     'packages/neko-preview/packages/webview/src/shared/document-types.ts': ['exports'],
+    'packages/neko-story/packages/webview/src/preview/index.ts': ['exports'],
+    'packages/neko-story/packages/webview/src/preview/conditionEvaluator.ts': ['exports'],
+    'packages/neko-story/packages/webview/src/preview/rendererRegistry.tsx': ['exports'],
+    'packages/neko-story/packages/webview/src/preview/renderers.tsx': ['exports'],
   },
 
   workspaces: {
