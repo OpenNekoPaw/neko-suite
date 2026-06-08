@@ -5,7 +5,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasConnection, CanvasData, CanvasNode } from '@neko/shared';
-import { CanvasPlaybackController, buildDefaultPlaybackPath } from './CanvasPlaybackController';
+import {
+  CanvasPlaybackController,
+  buildDefaultPlaybackPath,
+  buildInitialPlaybackRoute,
+} from './CanvasPlaybackController';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { setLocale } from '../../i18n';
 
@@ -107,6 +111,81 @@ describe('CanvasPlaybackController', () => {
     expect(host.textContent).toContain('Go right');
   });
 
+  it('tracks the actual route after choosing a non-default interactive branch', () => {
+    const data = genericChoiceCanvas();
+    data.playback = { version: 1, adapterId: 'generic', mode: 'interactive' };
+    useCanvasStore.setState({
+      canvasData: data,
+      selection: { nodeIds: ['a'], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<CanvasPlaybackController />);
+    });
+
+    const rightChoice = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Go right',
+    );
+    act(() => {
+      rightChoice?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('c');
+    expect(host.textContent).toContain('2/2');
+    expect(host.querySelector<HTMLButtonElement>('button[title="Next"]')?.disabled).toBe(true);
+  });
+
+  it('uses unit duration when auto-advancing timer playback', () => {
+    vi.useFakeTimers();
+    useCanvasStore.setState({
+      canvasData: durationCanvas(),
+      selection: { nodeIds: ['a'], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<CanvasPlaybackController />);
+    });
+    const playButton = host.querySelector<HTMLButtonElement>('button[title="Play"]');
+
+    act(() => {
+      playButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('a');
+
+    act(() => {
+      vi.advanceTimersByTime(49);
+    });
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('a');
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('b');
+
+    vi.useRealTimers();
+  });
+
+  it('starts interactive routes at the entry unit instead of precomputing a default branch', () => {
+    expect(
+      buildInitialPlaybackRoute({
+        adapterId: 'generic',
+        requestedAdapterId: 'generic',
+        behaviorMode: 'interactive',
+        advancePolicy: 'user-input',
+        entryUnitIds: ['a'],
+        units: [
+          { id: 'a', sourceNodeId: 'a', kind: 'node', renderMode: 'select-node' },
+          { id: 'b', sourceNodeId: 'b', kind: 'node', renderMode: 'select-node' },
+        ],
+        transitions: [
+          { id: 'a-b', sourceUnitId: 'a', targetUnitId: 'b', type: 'choice', priority: 0 },
+        ],
+        diagnostics: [],
+        metadata: {},
+      }),
+    ).toEqual(['a']);
+  });
+
   it('builds a default path without looping forever', () => {
     expect(
       buildDefaultPlaybackPath({
@@ -153,6 +232,18 @@ function genericChoiceCanvas(): CanvasData {
       connection('right', 'a', 'c', 'choice', { choiceText: 'Go right', priority: 1 }),
     ],
   };
+}
+
+function durationCanvas(): CanvasData {
+  const data = genericChoiceCanvas();
+  data.playback = {
+    version: 1,
+    adapterId: 'generic',
+    mode: 'linear',
+    nodeOverrides: { a: { durationMs: 50 } },
+  };
+  data.connections = [connection('next', 'a', 'b', 'sequence', { priority: 0 })];
+  return data;
 }
 
 function scene(id: string, childIds: readonly string[]): CanvasNode {
