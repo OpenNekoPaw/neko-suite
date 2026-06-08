@@ -1,8 +1,9 @@
 # ADR: Canvas 交互叙事 — 编辑 + 预览分离架构 (Interactive Narrative: Editor + Preview Split)
 
-> 状态：**Proposed (2026-06-07, revised 2026-06-08)**
+> 状态：**Accepted / Phase 0-2 Implemented (2026-06-08); Phase 3.5+ Deferred**
 > 关联：[adr-canvas-kind-multi-purpose.md](./adr-canvas-kind-multi-purpose.md) · [adr-canvas-preview-boundary.md](./adr-canvas-preview-boundary.md) · [story-agent-canvas-boundary.md](./story-agent-canvas-boundary.md) · [adr-deliverable-management.md](./adr-deliverable-management.md) · [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md) · [agent-media-architecture.md](./agent-media-architecture.md)
-> 实现同步：核心运行时已上移到 `@neko/shared`，Story Preview Webview 仅消费/重导出共享内核；HTML5 导出由 `neko-story/packages/extension` 的纯编排 `NarrativeExporter` 通过注入的 scene reader、asset resolver 和 copy adapter 产生产物；Agent 诊断和结构化上下文通过 Canvas structured content 暴露。
+> 实现同步：Phase 0-2 / PR1-PR10 已完成，核心链路 **Canvas 编辑 → Bridge 同步 → Preview 播放 → 三种渲染器 → HTML5 导出 → Agent 诊断** 已贯通。核心运行时已上移到 `@neko/shared`，Story Preview Webview 仅消费/重导出共享内核；HTML5 导出由 `neko-story/packages/extension` 的纯编排 `NarrativeExporter` 通过注入的 scene reader、asset resolver 和 copy adapter 产生产物；Agent 诊断和结构化上下文通过 Canvas structured content 暴露。
+> 延后范围：原 Phase 3 的 PR11 Live2D / PR12 Spine 不属于 Phase 0-2 完成范围，明确延后到 Phase 3.5+。6 个 `narrative.*` 消融开关已注册到 `AblationToggles.narrative` / `NarrativePreviewFeatureToggles`，其中 `previewAutoSync` 和 `showLockedChoices` 已被 Preview 消费；`narrative.preview` 的 Extension command/panel hard gate、Live2D/Spine 真实运行时仍是后续项。
 
 ---
 
@@ -395,13 +396,13 @@ NarrativeRuntime.status == 'waiting-choice'
 |------|------|---------|--------|---------|
 | **L0 静态立绘** | 固定立绘 + 表情差分图切换 | `<img>` src 替换 + crossfade | P0 | 完全兼容 |
 | **L1 CSS 待机动效** | 呼吸/微摇晃/入场动画 | CSS `@keyframes`（transform scale/translate 循环） | P0 | 完全兼容 |
-| **L2 Live2D** | MOC3 待机 + 表情 + 口型同步 | Cubism Web SDK（`<canvas>` 2D） | P2 | 兼容（SDK ~200KB） |
-| **L3 Spine** | 骨骼动画角色表演 | spine-ts runtime（`<canvas>` 2D） | P2 | 兼容（runtime ~150KB） |
+| **L2 Live2D** | MOC3 待机 + 表情 + 口型同步 | Cubism Web SDK（`<canvas>` 2D） | Phase 3.5+ 延后 | 兼容（SDK ~200KB） |
+| **L3 Spine** | 骨骼动画角色表演 | spine-ts runtime（`<canvas>` 2D） | Phase 3.5+ 延后 | 兼容（runtime ~150KB） |
 | **L4 3D 角色** | 3D 模型实时演绎 | 需 engine 流（超出 DOM-native 范围） | P3 远期 | 需预渲染 |
 
 **P0 阶段**覆盖 90% 视觉小说需求：静态立绘 + 表情切换 + CSS 呼吸/入场动效。
 
-**L2/L3 可行性**：Cubism Web SDK 和 spine-ts 都是纯 `<canvas>` 2D 渲染，不依赖 WebGL heavy pipeline，可在 Webview 中运行，也能打包到 HTML5 导出中。作为 P2 扩展。
+**L2/L3 可行性与状态**：Cubism Web SDK 和 spine-ts 都是纯 `<canvas>` 2D 渲染，不依赖 WebGL heavy pipeline，可在 Webview 中运行，也能打包到 HTML5 导出中。但 PR11 / PR12 已从原 Phase 3 延后到 Phase 3.5+，Phase 0-2 只保留 feature gate 与静态/CSS 演绎路径。
 
 **L4 限制**：3D 角色演绎必须走 engine streaming（类似 neko-cut 的 H264 流），与"Preview = 导出原型"设计原则冲突。作为远期扩展，需预渲染为视频片段后嵌入。
 
@@ -762,7 +763,7 @@ NarrativeExporter (neko-story/packages/extension/src/export/)
 | **Electron** | 桌面应用包 | 无 |
 | **JSON Bundle** | 叙事图 + 场景 + 资产打包 | 第三方引擎适配 |
 
-导出由 `host-cli` 的 `deliverables render` 命令支持无头执行，可接入 CI 管线。
+当前 Phase 0-2 已完成的是 `NarrativeExporter` 纯编排内核、HTML5 artifact 生成与测试。`host-cli` / `deliverables render` 的无头命令面接入仍作为后续 Deliverables/CLI 表面工作，可在接入后进入 CI 管线。
 
 ---
 
@@ -901,66 +902,70 @@ neko-canvas/packages/webview/ (UI Layer — 现有)
 ### 4.4 AI Agent 辅助
 
 ```
-Agent 可执行的操作:
+已落地:
   → 读取 Canvas 叙事图理解全局分支结构（structured Canvas context）
   → 分析分支覆盖率（死路径检测、未连接节点、缺少 ending 的路径）
   → 输出 missing entry / unreachable node / accidental dead end / invalid sceneRef / unsupported condition 等诊断
+  → 一致性检查（角色名拼写、变量引用有效性、Fountain sceneRef 有效性）
+
+后续增强:
   → 根据 Fountain 对白自动推荐表情映射
   → 生成分支建议（"此处可加一个好感度判定"）
   → 批量生成 Fountain 场景草稿
-  → 一致性检查（角色名拼写、变量引用有效性）
 ```
 
 ---
 
-## 五、实施计划
+## 五、实施状态与后续计划
 
-### Phase 0: 节点类型 + 共享契约（~3d）
+### Phase 0: 节点类型 + 共享契约（已完成）
 
-| PR | 内容 | 依赖 |
-|----|------|------|
-| PR1 | `@neko/shared` 扩展：`REGISTERED_CANVAS_NODE_TYPES` + `triggerNodeTypes` + `NARRATIVE_TRAVERSAL_NODE_TYPES` / `NARRATIVE_NODE_TYPES` 拆分（排除 note 参与遍历）；`NarrativeMetadata` 加 `genre` / `defaultLocale`；`NarrativeSceneMetadata` / `NarrativeEndingMetadata` / `VariableEffect` / `NarrativeAssetRef` 类型；`NarrativeGraphSnapshot` + Canvas ↔ Preview 消息类型（含 `requestId` / `revision`） | 无 |
-| PR2 | neko-canvas/packages/webview/：`narrative-start` / `narrative-ending` node descriptors + presets + renderer 注册；FlowTraversal 修正（排除 `narrative-note`，入口优先 `narrative-start` 类型） | PR1 |
-| PR3 | neko-story/packages/parser/：`FountainPlayParser` (Fountain → PlayDirective[]) + 单元测试 | PR1 |
+| PR | 状态 | 内容 | 依赖 |
+|----|------|------|------|
+| PR1 | 完成 | `@neko/shared` 扩展：`REGISTERED_CANVAS_NODE_TYPES` + `triggerNodeTypes` + `NARRATIVE_TRAVERSAL_NODE_TYPES` / `NARRATIVE_NODE_TYPES` 拆分（排除 note 参与遍历）；`NarrativeMetadata` 加 `genre` / `defaultLocale`；`NarrativeSceneMetadata` / `NarrativeEndingMetadata` / `VariableEffect` / `NarrativeAssetRef` 类型；`NarrativeGraphSnapshot` + Canvas ↔ Preview 消息类型（含 `requestId` / `revision`） | 无 |
+| PR2 | 完成 | neko-canvas/packages/webview/：`narrative-start` / `narrative-ending` node descriptors + presets + renderer 注册；FlowTraversal 修正（排除 `narrative-note`，入口优先 `narrative-start` 类型） | PR1 |
+| PR3 | 完成 | neko-story/packages/parser/：`FountainPlayParser` (Fountain → PlayDirective[]) + 单元测试 | PR1 |
 
-### Phase 1: Preview 核心（~7d）
+### Phase 1: Preview 核心（已完成）
 
-| PR | 内容 | 依赖 |
-|----|------|------|
-| PR4 | `NarrativeRuntime` 状态机（neko-story/packages/webview/src/preview/）+ `NarrativeAssetResolver` 接口（@neko/shared）+ `ConditionEvaluator` 白名单 AST + 单元测试 | PR1 |
-| PR5 | Preview Webview Panel 框架（neko-story/packages/webview/ 新增 preview 入口）+ `NarrativePreviewBridge`（neko-canvas/packages/extension/，从 editor document model 提取快照） | PR4, PR2 |
-| PR6 | `IllustratedTextRenderer`（图文游戏渲染器，最简版——验证全链路） | PR5, PR3 |
-| PR7 | `VisualNovelRenderer`（ADV/NVL + 立绘 L0/L1 + 背景 + 打字机效果） | PR5, PR3 |
+| PR | 状态 | 内容 | 依赖 |
+|----|------|------|------|
+| PR4 | 完成 | `NarrativeRuntime` 状态机（共享内核）+ `NarrativeAssetResolver` 接口（@neko/shared）+ `ConditionEvaluator` 白名单 AST + 单元测试 | PR1 |
+| PR5 | 完成 | Preview Webview Panel 框架（neko-story/packages/webview/ preview 入口）+ `NarrativePreviewBridge`（neko-canvas/packages/extension/，从 editor document model 提取快照） | PR4, PR2 |
+| PR6 | 完成 | `IllustratedTextRenderer`（图文游戏渲染器，验证全链路） | PR5, PR3 |
+| PR7 | 完成 | `VisualNovelRenderer`（ADV/NVL + 立绘 L0/L1 + 背景 + 打字机 feature gate） | PR5, PR3 |
 
-### Phase 2: 互动影游 + 导出（~5d）
+### Phase 2: 互动影游 + 导出（已完成）
 
-| PR | 内容 | 依赖 |
-|----|------|------|
-| PR8 | `InteractiveFilmRenderer`（`<video>` 播放 + 选项浮层） | PR5 |
-| PR9 | HTML5 导出管线（NarrativeExporter（neko-story/packages/extension/）+ `NarrativeAssetResolver` `final-export` 实现 + 模板打包） | PR4, PR6 |
-| PR10 | Agent 集成（叙事图分析工具 + 分支覆盖率 + 一致性检查） | PR2 |
+| PR | 状态 | 内容 | 依赖 |
+|----|------|------|------|
+| PR8 | 完成 | `InteractiveFilmRenderer`（`<video>` 播放 + 选项浮层） | PR5 |
+| PR9 | 完成 | HTML5 导出内核（NarrativeExporter（neko-story/packages/extension/）+ `NarrativeAssetResolver` `final-export` 实现 + 模板打包） | PR4, PR6 |
+| PR10 | 完成 | Agent 集成（叙事图分析工具 + 分支覆盖率 + 一致性检查） | PR2 |
 
-### Phase 3: 人物演绎增强（P2, ~4d）
+### Phase 3.5+: 人物演绎增强（延后）
 
-| PR | 内容 | 依赖 |
-|----|------|------|
-| PR11 | Live2D L2 演绎（Cubism Web SDK 集成 + VisualNovelRenderer 扩展） | PR7 |
-| PR12 | Spine L3 演绎（spine-ts 集成） | PR7 |
+| PR | 状态 | 内容 | 依赖 |
+|----|------|------|------|
+| PR11 | 延后到 Phase 3.5+ | Live2D L2 演绎（Cubism Web SDK 集成 + VisualNovelRenderer 扩展） | PR7 |
+| PR12 | 延后到 Phase 3.5+ | Spine L3 演绎（spine-ts 集成） | PR7 |
 
-**总计：Phase 0-2 ~15d，10 PR（核心功能）；Phase 3 ~4d，2 PR（增强）**
+**当前总计：Phase 0-2 / 10 PR 已完成；Phase 3.5+ / 2 PR 延后，不阻塞核心链路交付。**
 
 ---
 
 ## 六、消融开关
 
-| Toggle | 默认 | 效果 |
-|--------|------|------|
-| `narrative.preview` | `true` | 关闭后 Narrative Preview 面板不可用 |
-| `narrative.typewriterEffect` | `true` | 关闭后对白直接显示，不逐字打出 |
-| `narrative.autoExpressionMatch` | `true` | 关闭后不从 Parenthetical 自动推断表情 |
-| `narrative.showLockedChoices` | `true` | 关闭后条件不满足的选项隐藏而非灰显 |
-| `narrative.previewAutoSync` | `true` | 关闭后 Canvas 节点选择不自动同步到 Preview |
-| `narrative.live2dPerformance` | `false` | 开启后 VN 渲染器使用 Live2D 替代静态立绘（P2） |
+当前 6 个 `narrative.*` toggle 已接入消融配置契约：`AblationToggles.narrative` → `AblationMarkerHook.narrative`，共享默认由 `NarrativePreviewFeatureToggles` 定义。标准消融套件包含 6 个单项 variant，group/minimal suite 也包含 narrative preview stack 开关。
+
+| Toggle | 默认 | 配置状态 | 当前消费状态 | 效果 / 目标 |
+|--------|------|----------|--------------|-------------|
+| `narrative.preview` | `true` | 已注册 | Extension command/panel hard gate 待接入 | 关闭后 Narrative Preview 面板不可用 |
+| `narrative.typewriterEffect` | `true` | 已注册 | Preview renderer feature gate 已接入 | 关闭后对白直接显示，不逐字打出 |
+| `narrative.autoExpressionMatch` | `true` | 已注册 | Preview renderer feature gate 已接入；完整表情自动匹配随角色演绎增强推进 | 关闭后不从 Parenthetical 自动推断表情 |
+| `narrative.showLockedChoices` | `true` | 已注册 | Preview renderer 已消费 | 关闭后条件不满足的选项隐藏而非灰显 |
+| `narrative.previewAutoSync` | `true` | 已注册 | Preview controller 已消费 | 关闭后 Canvas 节点选择和 Preview 高亮路径不自动同步 |
+| `narrative.live2dPerformance` | `false` | 已注册 | Preview renderer feature gate 已接入；Live2D runtime 延后到 Phase 3.5+ | 开启后 VN 渲染器优先使用 Live2D 表演路径 |
 
 ---
 
