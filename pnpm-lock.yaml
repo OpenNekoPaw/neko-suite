@@ -1510,6 +1510,9 @@ importers:
       '@neko-story/types':
         specifier: workspace:*
         version: link:../types
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       typescript:
         specifier: ^5.3.2

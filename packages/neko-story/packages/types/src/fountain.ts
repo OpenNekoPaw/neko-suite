@@ -256,6 +256,123 @@ export interface FountainDocument {
   elements: AnyFountainElement[];
 }
 
+export type PlayDirectiveType =
+  | 'scene-heading'
+  | 'action'
+  | 'dialogue'
+  | 'transition'
+  | 'note'
+  | 'unsupported';
+
+export interface PlaySourceRange {
+  readonly range: Range;
+  readonly raw: string;
+}
+
+export interface PlayRelativePathAssetRef {
+  readonly kind: 'relative-path';
+  readonly path: string;
+}
+
+export type PlayNarrativeAssetRef = PlayRelativePathAssetRef;
+
+export interface PlayCharacterBinding {
+  readonly name: string;
+  readonly portraitRef?: PlayNarrativeAssetRef;
+  readonly expressionRefs?: Readonly<Record<string, PlayNarrativeAssetRef>>;
+  readonly expression?: string;
+  readonly expressionRef?: PlayNarrativeAssetRef;
+  readonly position?: 'left' | 'center' | 'right';
+  readonly voiceRef?: PlayNarrativeAssetRef;
+  readonly live2dRef?: PlayNarrativeAssetRef;
+  readonly motionRefs?: Readonly<Record<string, PlayNarrativeAssetRef>>;
+}
+
+export interface PlayBackgroundBinding {
+  readonly location: string;
+  readonly variant: string;
+  readonly ref: PlayNarrativeAssetRef;
+}
+
+export interface BasePlayDirective extends PlaySourceRange {
+  readonly type: PlayDirectiveType;
+}
+
+export interface SceneHeadingPlayDirective extends BasePlayDirective {
+  readonly type: 'scene-heading';
+  readonly location: string;
+  readonly time?: string;
+  readonly intExt?: SceneHeading['intExt'];
+  readonly sceneNumber?: string;
+  readonly backgroundRef?: PlayNarrativeAssetRef;
+}
+
+export interface ActionPlayDirective extends BasePlayDirective {
+  readonly type: 'action';
+  readonly text: string;
+}
+
+export interface DialoguePlayDirective extends BasePlayDirective {
+  readonly type: 'dialogue';
+  readonly character: string;
+  readonly extension?: string;
+  readonly parenthetical?: string;
+  readonly text: string;
+  readonly characterRef?: PlayCharacterBinding;
+}
+
+export interface TransitionPlayDirective extends BasePlayDirective {
+  readonly type: 'transition';
+  readonly text: string;
+}
+
+export interface NotePlayDirective extends BasePlayDirective {
+  readonly type: 'note';
+  readonly text: string;
+  readonly noteType: Note['noteType'];
+  readonly assetRef?: AssetReference;
+  readonly directive?: Directive;
+}
+
+export interface UnsupportedPlayDirective extends BasePlayDirective {
+  readonly type: 'unsupported';
+  readonly elementType: ElementType;
+  readonly reason: string;
+}
+
+export type PlayDirective =
+  | SceneHeadingPlayDirective
+  | ActionPlayDirective
+  | DialoguePlayDirective
+  | TransitionPlayDirective
+  | NotePlayDirective
+  | UnsupportedPlayDirective;
+
+export interface FountainPlayScene {
+  readonly sourceRef: string;
+  readonly title?: string;
+  readonly directives: readonly PlayDirective[];
+  readonly characterBindings: Readonly<Record<string, PlayCharacterBinding>>;
+  readonly backgroundBindings: readonly PlayBackgroundBinding[];
+  readonly diagnostics: readonly FountainPlayDiagnostic[];
+}
+
+export type FountainPlayDiagnosticCode =
+  | 'scene-file-missing'
+  | 'scene-file-unsupported-extension'
+  | 'scene-content-empty'
+  | 'characters-yaml-invalid'
+  | 'characters-yaml-unsupported-entry'
+  | 'unsupported-fountain-element';
+
+export interface FountainPlayDiagnostic {
+  readonly code: FountainPlayDiagnosticCode;
+  readonly severity: 'warning' | 'error';
+  readonly message: string;
+  readonly path?: string;
+  readonly range?: Range;
+}
+
 /**
  * Text emphasis types
  */

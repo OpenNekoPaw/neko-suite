@@ -122,6 +122,7 @@ export function activate(context: vscode.ExtensionContext) {
   void entityGraphService.ensureInitialized();
   void creativeEntityIndexService.ensureInitialized();
   subscribeCanvasSceneWriteback(context, sceneStateStore);
+  subscribeNarrativePreviewFountainRefresh(context, logger);
 
   const resolveStoryboardCharacterBindings = async (
     names: readonly string[],
@@ -774,6 +775,37 @@ function subscribeCanvasSceneWriteback(
       void trySubscribe();
     }),
   );
+}
+
+function subscribeNarrativePreviewFountainRefresh(
+  context: vscode.ExtensionContext,
+  logger: Pick<ReturnType<typeof getRootLogger>, 'debug'>,
+): void {
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      if (!isFountainSceneDocument(document)) {
+        return;
+      }
+
+      void vscode.commands
+        .executeCommand('neko.canvas.refreshNarrativePreview', {
+          sceneRef: document.uri.toString(),
+        })
+        .then(
+          () => undefined,
+          (error) => {
+            logger.debug(
+              `Narrative Preview refresh skipped for saved Fountain scene: ${formatError(error)}`,
+            );
+          },
+        );
+    }),
+  );
+}
+
+function isFountainSceneDocument(document: Pick<vscode.TextDocument, 'uri' | 'fileName'>): boolean {
+  const pathValue = document.uri.scheme === 'file' ? document.uri.fsPath : document.fileName;
+  return path.extname(pathValue).toLowerCase() === '.fountain';
 }
 
 function resolveUriOrPath(uriOrPath: string): vscode.Uri {

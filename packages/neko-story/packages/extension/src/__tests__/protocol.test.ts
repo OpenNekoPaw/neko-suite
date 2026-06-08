@@ -159,6 +159,18 @@ describe('neko-story protocol', () => {
       expect(extensionSource).toContain('sceneStateStore.handleCanvasEvent(event);');
     });
 
+    it('refreshes Canvas Narrative Preview when standard Fountain scenes are saved', () => {
+      expect(extensionSource).toContain(
+        'subscribeNarrativePreviewFountainRefresh(context, logger);',
+      );
+      expect(extensionSource).toContain('vscode.workspace.onDidSaveTextDocument');
+      expect(extensionSource).toContain('isFountainSceneDocument(document)');
+      expect(extensionSource).toContain("'neko.canvas.refreshNarrativePreview'");
+      expect(extensionSource).toContain("toLowerCase() === '.fountain'");
+      expect(extensionSource).not.toContain("toLowerCase() === '.nks'");
+      expect(extensionSource).not.toContain("toLowerCase() === '.story'");
+    });
+
     it('registers a standard video creation command as structured story-table handoff', () => {
       expect(extensionSource).toContain("'neko.story.startVideoCreation'");
       expect(extensionSource).toContain('buildStoryTableAgentPayload({');
