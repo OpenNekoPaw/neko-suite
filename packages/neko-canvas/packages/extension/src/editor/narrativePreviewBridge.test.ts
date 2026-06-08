@@ -172,6 +172,39 @@ describe('NarrativePreviewBridge', () => {
     );
   });
 
+  it('replays initial preview messages after the Webview reports ready', () => {
+    const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+    const host = createHost(createSnapshot(6), () => plan);
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 3200,
+    });
+
+    expect(bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    expect(panel?.webview.postMessage).toHaveBeenCalledTimes(3);
+
+    panel?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready',
+    });
+
+    expect(panel?.webview.postMessage).toHaveBeenCalledTimes(6);
+    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ type: 'preview:setFeatureToggles', revision: 6 }),
+    );
+    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
+      5,
+      expect.objectContaining({ type: 'preview:loadGraph', revision: 6 }),
+    );
+    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
+      6,
+      expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 6 }),
+    );
+  });
+
   it('renders the Canvas playback preview shell instead of a status-only placeholder', () => {
     const host = createHost(createSnapshot(4), () =>
       createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
@@ -460,14 +493,17 @@ function createPanelFactory(): NarrativePreviewPanelFactory & {
 
 function createPanel() {
   const disposeHandlers: Array<() => void> = [];
+  let messageHandler: ((message: unknown) => void) | undefined;
   const panel = {
     webview: {
       html: '',
       cspSource: 'vscode-webview:',
       postMessage: vi.fn(() => Promise.resolve(true)),
-      onDidReceiveMessage: vi.fn((handler: () => void) => {
+      onDidReceiveMessage: vi.fn((handler: (message: unknown) => void) => {
+        messageHandler = handler;
         return { dispose: vi.fn() };
       }),
+      receiveMessage: (message: unknown) => messageHandler?.(message),
     },
     reveal: vi.fn(),
     dispose: vi.fn(() => {

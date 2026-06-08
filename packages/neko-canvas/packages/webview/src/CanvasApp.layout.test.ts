@@ -13,10 +13,6 @@ describe('Canvas creative workbench layout boundary', () => {
     'utf8',
   );
   const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
-  const playbackControllerSource = readFileSync(
-    resolve(__dirname, 'components/playback/CanvasPlaybackController.tsx'),
-    'utf8',
-  );
   const containerRendererSource = readFileSync(
     resolve(__dirname, 'components/content/ContainerRenderer.tsx'),
     'utf8',
@@ -39,7 +35,6 @@ describe('Canvas creative workbench layout boundary', () => {
       '<MiniMap',
       '<ZoomControls',
       '<FloatingPanelHost',
-      '<PlaybackControllerHost',
       '<GenerationPromptPanel',
       '<ContentOverlay',
     ]) {
@@ -49,13 +44,15 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/isHudVisible && \(/);
   });
 
-  it('arbitrates playback through one shared Canvas playback controller', () => {
-    expect(appSource).toMatch(/createCanvasPlaybackPlan\(\{ canvas: canvasData, selectedNodeId/);
-    expect(appSource).toMatch(/data-active-playback-controller="canvas-playback"/);
-    expect(appSource).toMatch(/data-inactive-playback-controller-count=\{controllers\.length\}/);
-    expect(appSource).toMatch(/<CanvasPlaybackController plan=\{plan\}/);
-    expect(appSource).not.toMatch(/controllers\.map\(/);
-    expect(appSource).not.toMatch(/controllers\[0\]/);
+  it('keeps playback controls owned by the Preview panel, with Canvas exposing only the entry point', () => {
+    expect(appSource).not.toMatch(/<PlaybackControllerHost/);
+    expect(appSource).not.toMatch(/<CanvasPlaybackController/);
+    expect(appSource).not.toMatch(/createCanvasPlaybackPlan\(/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-narrative-preview"/);
+    expect(toolbarSource).toMatch(/icon=\{<PlayIcon size=\{18\} \/>\}/);
+    expect(appSource).toMatch(
+      /reportAction\('openNarrativePreview', t\('toolbar\.narrativePreview'\)\)/,
+    );
   });
 
   it('keeps playback highlight as visual state separate from selection props', () => {
@@ -64,7 +61,7 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(baseNodeSource).toMatch(/isSelected \|\| isPlaybackActive/);
     expect(containerRendererSource).toMatch(/state\.activePlayingNodeId === childNode\.id/);
     expect(containerRendererSource).toMatch(/data-playback-active=\{isPlaybackActive/);
-    expect(playbackControllerSource).not.toMatch(/selectNode\(/);
+    expect(appSource).not.toMatch(/setActivePlayingNode\(/);
   });
 
   it('keeps the right node library in the right-panel responsibility', () => {

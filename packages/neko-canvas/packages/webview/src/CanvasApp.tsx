@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   getKeyboardBoundaryMetadata,
   useFocusedWebviewRoot,
@@ -6,12 +6,10 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
-import { createCanvasPlaybackPlan } from '@neko/shared';
 import type {
   CanvasData,
   CanvasDroppedAsset,
   CanvasNodeType,
-  CanvasPlaybackPlan,
   CanvasSubsystemId,
   CanvasViewport,
   ProjectedCanvasStatus,
@@ -27,7 +25,6 @@ import {
 } from './components/panels/GenerationPromptPanel';
 import { ContentOverlay } from './components/panels/ContentOverlay';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
-import { CanvasPlaybackController } from './components/playback/CanvasPlaybackController';
 import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
 import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
@@ -53,7 +50,7 @@ import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { getImportedGeneratedAssetNodeInput } from './utils/importedGeneratedAsset';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
-import type { FloatingPanelDefinition, PlaybackControllerDefinition } from './subsystems';
+import type { FloatingPanelDefinition } from './subsystems';
 import type { NodeTypeDescriptorRegistry } from './components/nodes/nodeTypeDescriptor';
 import {
   screenToCanvas as screenToCanvasMath,
@@ -113,9 +110,6 @@ export function CanvasApp() {
   const [subsystemNodeTypeDescriptors, setSubsystemNodeTypeDescriptors] =
     useState<NodeTypeDescriptorRegistry>({});
   const [floatingPanels, setFloatingPanels] = useState<readonly FloatingPanelDefinition[]>([]);
-  const [playbackControllers, setPlaybackControllers] = useState<
-    readonly PlaybackControllerDefinition[]
-  >([]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
@@ -209,18 +203,12 @@ export function CanvasApp() {
         setFloatingPanels(
           registrations.flatMap((registration) => registration.floatingPanels ?? []),
         );
-        setPlaybackControllers(
-          registrations.flatMap((registration) =>
-            registration.playbackController ? [registration.playbackController] : [],
-          ),
-        );
       })
       .catch((error: unknown) => {
         logger.warn('Failed to load active Canvas subsystems', error);
         if (!cancelled) {
           setSubsystemNodeTypeDescriptors({});
           setFloatingPanels([]);
-          setPlaybackControllers([]);
         }
       });
 
@@ -1404,12 +1392,6 @@ export function CanvasApp() {
             )}
 
             <FloatingPanelHost panels={floatingPanels} />
-            <PlaybackControllerHost
-              activeSubsystemIds={activeSubsystemIds}
-              controllers={playbackControllers}
-              canvasData={canvasData}
-              selectedNodeId={selectedNodeIds[0]}
-            />
 
             <GenerationPromptPanel
               visible={generationPanelState.visible}
@@ -1474,44 +1456,6 @@ export function CanvasApp() {
           ) : undefined
         }
       />
-    </div>
-  );
-}
-
-function PlaybackControllerHost({
-  activeSubsystemIds,
-  controllers,
-  canvasData,
-  selectedNodeId,
-}: {
-  readonly activeSubsystemIds: readonly CanvasSubsystemId[];
-  readonly controllers: readonly PlaybackControllerDefinition[];
-  readonly canvasData: CanvasData | null | undefined;
-  readonly selectedNodeId?: string;
-}) {
-  const plan = useMemo<CanvasPlaybackPlan | null>(
-    () =>
-      canvasData
-        ? createCanvasPlaybackPlan({ canvas: canvasData, selectedNodeId, adapterId: 'auto' })
-        : null,
-    [canvasData, selectedNodeId],
-  );
-
-  if (!plan || plan.units.length === 0 || plan.entryUnitIds.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      className="pointer-events-auto absolute right-4 top-4 z-20 rounded border border-[var(--control-border)] bg-[var(--toolbar-bg)] p-1 shadow-[var(--glass-shadow-sm)]"
-      data-active-subsystems={activeSubsystemIds.join(',')}
-      data-playback-controller-count={controllers.length}
-      data-active-playback-controller="canvas-playback"
-      data-inactive-playback-controller-count={controllers.length}
-    >
-      <Suspense fallback={<div className="h-7 w-24 rounded bg-[var(--control-bg)]" />}>
-        <CanvasPlaybackController plan={plan} />
-      </Suspense>
     </div>
   );
 }

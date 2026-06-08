@@ -64,6 +64,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private disposed = false;
   private lastAcceptedPreviewRevision = 0;
+  private previewWebviewReady = false;
+  private pendingPreviewMessages: CanvasToPreviewMessage[] = [];
   private requestSequence = 0;
   private readonly panelFactory: NarrativePreviewPanelFactory;
   private readonly getFeatureToggles: () => NarrativePreviewFeatureToggles;
@@ -188,6 +190,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     this.disposed = true;
     const panel = this.panel;
     this.panel = undefined;
+    this.previewWebviewReady = false;
+    this.pendingPreviewMessages = [];
     panel?.dispose();
   }
 
@@ -209,9 +213,15 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         retainContextWhenHidden: true,
       },
     );
-    panel.webview.html = this.getPreviewHtml(panel.webview);
+    this.previewWebviewReady = false;
+    this.pendingPreviewMessages = [];
     panel.webview.onDidReceiveMessage(
       (message) => {
+        if (isPreviewWebviewReadyMessage(message)) {
+          this.previewWebviewReady = true;
+          this.flushPendingPreviewMessages();
+          return;
+        }
         const previewMessage = parsePreviewToCanvasMessage(message);
         if (previewMessage) {
           this.handlePreviewMessage(previewMessage);
@@ -220,9 +230,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       undefined,
       [],
     );
+    panel.webview.html = this.getPreviewHtml(panel.webview);
     panel.onDidDispose(() => {
       if (this.panel === panel) {
         this.panel = undefined;
+        this.previewWebviewReady = false;
+        this.pendingPreviewMessages = [];
       }
     });
     this.panel = panel;
@@ -234,7 +247,22 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     if (revision !== undefined) {
       this.lastAcceptedPreviewRevision = Math.max(this.lastAcceptedPreviewRevision, revision);
     }
-    this.panel?.webview.postMessage(message);
+    const panel = this.panel;
+    if (!panel) return;
+    if (!this.previewWebviewReady) {
+      this.pendingPreviewMessages.push(message);
+    }
+    panel.webview.postMessage(message);
+  }
+
+  private flushPendingPreviewMessages(): void {
+    const panel = this.panel;
+    if (!panel || this.pendingPreviewMessages.length === 0) return;
+    const messages = this.pendingPreviewMessages;
+    this.pendingPreviewMessages = [];
+    for (const message of messages) {
+      panel.webview.postMessage(message);
+    }
   }
 
   private postFeatureToggles(revision: number): void {
@@ -933,6 +961,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
+    postMessage({ type: 'preview:webviewReady', requestId: createRequestId('ready') });
   </script>
 </body>
 </html>`;
@@ -1009,6 +1038,10 @@ export function parsePreviewToCanvasMessage(value: unknown): PreviewToCanvasMess
     default:
       return undefined;
   }
+}
+
+function isPreviewWebviewReadyMessage(value: unknown): boolean {
+  return isRecord(value) && value['type'] === 'preview:webviewReady';
 }
 
 function readCanvasNodes(canvas: CanvasData | Record<string, unknown>): readonly CanvasNode[] {
