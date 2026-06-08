@@ -3,7 +3,7 @@
 > 状态：**Accepted / Phase 0-2 Implemented (2026-06-08); Phase 3.5+ Deferred**
 > 关联：[adr-canvas-kind-multi-purpose.md](./adr-canvas-kind-multi-purpose.md) · [adr-canvas-preview-boundary.md](./adr-canvas-preview-boundary.md) · [story-agent-canvas-boundary.md](./story-agent-canvas-boundary.md) · [adr-deliverable-management.md](./adr-deliverable-management.md) · [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md) · [agent-media-architecture.md](./agent-media-architecture.md)
 > 实现同步：Phase 0-2 / PR1-PR10 已完成，核心链路 **Canvas 编辑 → Bridge 同步 → Preview 播放 → 三种渲染器 → HTML5 导出 → Agent 诊断** 已贯通。核心运行时已上移到 `@neko/shared`，Story Preview Webview 仅消费/重导出共享内核；HTML5 导出由 `neko-story/packages/extension` 的纯编排 `NarrativeExporter` 通过注入的 scene reader、asset resolver 和 copy adapter 产生产物；Agent 诊断和结构化上下文通过 Canvas structured content 暴露。
-> 延后范围：原 Phase 3 的 PR11 Live2D / PR12 Spine 不属于 Phase 0-2 完成范围，明确延后到 Phase 3.5+。6 个 `narrative.*` 消融开关已注册到 `AblationToggles.narrative` / `NarrativePreviewFeatureToggles`，其中 `previewAutoSync` 和 `showLockedChoices` 已被 Preview 消费；`narrative.preview` 的 Extension command/panel hard gate、Live2D/Spine 真实运行时仍是后续项。
+> 延后范围：原 Phase 3 的 PR11 Live2D / PR12 Spine 不属于 Phase 0-2 完成范围，明确延后到 Phase 3.5+。6 个 `narrative.*` 消融开关已注册到 `AblationToggles.narrative` / `NarrativePreviewFeatureToggles`，并通过 `neko.canvas.narrative.*` VSCode settings 投影到 Extension / Preview；`narrative.preview` 已作为 Extension command/panel hard gate 接入，Live2D/Spine 真实运行时仍是后续项。
 
 ---
 
@@ -956,11 +956,11 @@ neko-canvas/packages/webview/ (UI Layer — 现有)
 
 ## 六、消融开关
 
-当前 6 个 `narrative.*` toggle 已接入消融配置契约：`AblationToggles.narrative` → `AblationMarkerHook.narrative`，共享默认由 `NarrativePreviewFeatureToggles` 定义。标准消融套件包含 6 个单项 variant，group/minimal suite 也包含 narrative preview stack 开关。
+当前 6 个 `narrative.*` toggle 已接入消融配置契约：`AblationToggles.narrative` → `AblationMarkerHook.narrative`，共享默认由 `NarrativePreviewFeatureToggles` 定义。标准消融套件包含 6 个单项 variant，group/minimal suite 也包含 narrative preview stack 开关。Canvas 扩展贡献 `neko.canvas.narrative.*` settings，并在打开、刷新、跳转和变量同步前把最新 toggle 快照投递给 Preview。
 
 | Toggle | 默认 | 配置状态 | 当前消费状态 | 效果 / 目标 |
 |--------|------|----------|--------------|-------------|
-| `narrative.preview` | `true` | 已注册 | Extension command/panel hard gate 待接入 | 关闭后 Narrative Preview 面板不可用 |
+| `narrative.preview` | `true` | 已注册 + `neko.canvas.narrative.preview` setting | Extension command/panel hard gate 已接入 | 关闭后 Narrative Preview 面板不可用 |
 | `narrative.typewriterEffect` | `true` | 已注册 | Preview renderer feature gate 已接入 | 关闭后对白直接显示，不逐字打出 |
 | `narrative.autoExpressionMatch` | `true` | 已注册 | Preview renderer feature gate 已接入；完整表情自动匹配随角色演绎增强推进 | 关闭后不从 Parenthetical 自动推断表情 |
 | `narrative.showLockedChoices` | `true` | 已注册 | Preview renderer 已消费 | 关闭后条件不满足的选项隐藏而非灰显 |
