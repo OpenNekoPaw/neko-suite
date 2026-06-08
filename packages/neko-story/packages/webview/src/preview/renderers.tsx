@@ -1,5 +1,10 @@
-import type { NarrativeAssetRef, NarrativeAssetResolver, StoryGenre } from '@neko/shared';
-import type { NarrativeChoiceOption, PlayRenderer, PlayRendererProps } from './types';
+import {
+  normalizeNarrativePreviewFeatureToggles,
+  type NarrativeAssetRef,
+  type NarrativeAssetResolver,
+  type StoryGenre,
+} from '@neko/shared';
+import type { PlayRenderer, PlayRendererProps } from './types';
 
 export function createDefaultPlayRenderers(): readonly PlayRenderer[] {
   return [
@@ -86,7 +91,15 @@ function SceneTitle({ props }: { readonly props: PlayRendererProps }): React.Rea
 function SceneBody({ props }: { readonly props: PlayRendererProps }): React.ReactElement {
   const node = props.state.currentNode;
   const text = node?.scene?.sceneRef ?? node?.label ?? 'No Fountain scene loaded.';
-  return <p className="m-0 text-sm leading-6 text-[var(--vscode-foreground)]">{text}</p>;
+  const toggles = normalizeNarrativePreviewFeatureToggles(props.context.featureToggles);
+  return (
+    <p
+      className="m-0 text-sm leading-6 text-[var(--vscode-foreground)]"
+      data-typewriter={toggles.typewriterEffect ? 'enabled' : 'disabled'}
+    >
+      {text}
+    </p>
+  );
 }
 
 function AssetState({
@@ -121,8 +134,13 @@ function BackgroundLayer({ props }: { readonly props: PlayRendererProps }): Reac
 
 function CharacterLayer({ props }: { readonly props: PlayRendererProps }): React.ReactElement {
   const characters = props.state.currentNode?.scene?.characters ?? [];
+  const toggles = normalizeNarrativePreviewFeatureToggles(props.context.featureToggles);
   return (
-    <div className="absolute inset-x-0 bottom-20 flex justify-center gap-4">
+    <div
+      className="absolute inset-x-0 bottom-20 flex justify-center gap-4"
+      data-expression-match={toggles.autoExpressionMatch ? 'enabled' : 'disabled'}
+      data-performance={toggles.live2dPerformance ? 'live2d' : 'static'}
+    >
       {characters.map((character) => (
         <div
           key={character}
@@ -153,35 +171,38 @@ function VideoLayer({ props }: { readonly props: PlayRendererProps }): React.Rea
 }
 
 function InlineChoices({ props }: { readonly props: PlayRendererProps }): React.ReactElement {
-  return <ChoiceList choices={props.choices} onChoice={props.onChoice} layout="inline" />;
+  return <ChoiceList props={props} layout="inline" />;
 }
 
 function DialogueBoxChoices({ props }: { readonly props: PlayRendererProps }): React.ReactElement {
-  return <ChoiceList choices={props.choices} onChoice={props.onChoice} layout="dialogue" />;
+  return <ChoiceList props={props} layout="dialogue" />;
 }
 
 function OverlayChoices({ props }: { readonly props: PlayRendererProps }): React.ReactElement {
-  return <ChoiceList choices={props.choices} onChoice={props.onChoice} layout="overlay" />;
+  return <ChoiceList props={props} layout="overlay" />;
 }
 
 function ChoiceList({
-  choices,
-  onChoice,
+  props,
   layout,
 }: {
-  readonly choices: readonly NarrativeChoiceOption[];
-  readonly onChoice: (choiceIndex: number) => void;
+  readonly props: PlayRendererProps;
   readonly layout: string;
 }): React.ReactElement {
+  const toggles = normalizeNarrativePreviewFeatureToggles(props.context.featureToggles);
+  const visibleChoices = props.choices
+    .map((choice, index) => ({ choice, index }))
+    .filter(({ choice }) => !choice.disabled || toggles.showLockedChoices);
+
   return (
     <div className="flex flex-col gap-2" data-testid={`${layout}-choices`}>
-      {choices.map((choice, index) => (
+      {visibleChoices.map(({ choice, index }) => (
         <button
           key={choice.connection.connectionId}
           type="button"
           disabled={choice.disabled}
           className="rounded border border-[var(--vscode-panel-border)] px-3 py-2 text-left text-sm disabled:opacity-50"
-          onClick={() => onChoice(index)}
+          onClick={() => props.onChoice(index)}
         >
           {choice.label}
         </button>

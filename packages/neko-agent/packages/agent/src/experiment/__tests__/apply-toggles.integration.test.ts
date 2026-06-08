@@ -211,6 +211,45 @@ describe('applyAblationToggles — skill/tool marker fields (P1-A)', () => {
   });
 });
 
+describe('applyAblationToggles — Canvas narrative marker fields', () => {
+  it('empty toggles expose default narrative Preview feature flags', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {});
+    const marker = extractAblationMarker(config.hooks)!;
+
+    expect(marker.narrative).toEqual({
+      preview: true,
+      typewriterEffect: true,
+      autoExpressionMatch: true,
+      showLockedChoices: true,
+      previewAutoSync: true,
+      live2dPerformance: false,
+    });
+  });
+
+  it('normalizes all six narrative feature flags into the marker', () => {
+    const config = applyAblationToggles(makeBaseConfig(), {
+      narrative: {
+        preview: false,
+        typewriterEffect: false,
+        autoExpressionMatch: false,
+        showLockedChoices: false,
+        previewAutoSync: false,
+        live2dPerformance: true,
+      },
+    });
+    const marker = extractAblationMarker(config.hooks)!;
+
+    expect(marker.narrative).toEqual({
+      preview: false,
+      typewriterEffect: false,
+      autoExpressionMatch: false,
+      showLockedChoices: false,
+      previewAutoSync: false,
+      live2dPerformance: true,
+    });
+  });
+});
+
 describe('applyAblationToggles — Agent-first marker fields', () => {
   it('agentFirst.enabled: false disables all Agent-first marker fields and tool evidence policy', () => {
     const config = applyAblationToggles(makeBaseConfig(), {

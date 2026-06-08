@@ -6,6 +6,7 @@
  */
 
 import type { AgentResult } from '@neko/shared';
+import type { NarrativePreviewFeatureToggles } from '@neko/shared';
 import type { AgentMultimodalEvidenceRef } from '@neko-agent/types';
 import type { AgentWorkflowIdentity } from '@neko-agent/types';
 import type { PermissionMode } from '../permission/types';
@@ -25,6 +26,8 @@ export interface AgentFirstAblationToggles {
   /** Confidence policy override for low-confidence evidence guidance. */
   readonly toolEvidenceMode?: AgentFirstToolEvidenceMode;
 }
+
+export type NarrativeAblationToggles = Partial<NarrativePreviewFeatureToggles>;
 
 // =============================================================================
 // Feature Toggles
@@ -102,6 +105,11 @@ export interface AblationToggles {
 
   /** Agent-first multimodal observation/evidence/recovery toggles. */
   agentFirst?: AgentFirstAblationToggles;
+
+  // --- Canvas interactive narrative ---
+
+  /** Canvas Narrative Preview feature flags. */
+  narrative?: NarrativeAblationToggles;
 
   // --- Unified workflow runtime ---
 

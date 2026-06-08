@@ -75,6 +75,42 @@ describe('PlayRenderer registry and renderers', () => {
     expect(onChoice).toHaveBeenCalledWith(0);
   });
 
+  it('hides disabled choices when the narrative toggle is off', () => {
+    const renderer = createPlayRendererRegistry(createDefaultPlayRenderers()).get(
+      'illustrated-text',
+    );
+
+    render(
+      <>
+        {renderWithPlayRenderer(
+          renderer,
+          createProps({
+            state: createState({ status: 'waiting-choice' }),
+            choices: [
+              createChoice({ label: 'Available', disabled: false }),
+              createChoice({ connectionId: 'locked', label: 'Locked', disabled: true }),
+            ],
+            context: {
+              variables: {},
+              featureToggles: {
+                preview: true,
+                typewriterEffect: false,
+                autoExpressionMatch: false,
+                showLockedChoices: false,
+                previewAutoSync: true,
+                live2dPerformance: false,
+              },
+            },
+          }),
+        )}
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Available' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Locked' })).toBeNull();
+    expect(screen.getByText('scenes/cafe.fountain')).toHaveAttribute('data-typewriter', 'disabled');
+  });
+
   it('renders visual-novel and interactive-film fallback states', () => {
     const registry = createPlayRendererRegistry(createDefaultPlayRenderers());
 
@@ -95,6 +131,17 @@ describe('PlayRenderer registry and renderers', () => {
                 },
               },
             }),
+            context: {
+              variables: {},
+              featureToggles: {
+                preview: true,
+                typewriterEffect: true,
+                autoExpressionMatch: false,
+                showLockedChoices: true,
+                previewAutoSync: true,
+                live2dPerformance: true,
+              },
+            },
           }),
         )}
         {renderWithPlayRenderer(
@@ -115,6 +162,9 @@ describe('PlayRenderer registry and renderers', () => {
     );
 
     expect(screen.getByTestId('visual-novel-renderer')).toHaveTextContent('Alice');
+    const characterLayer = screen.getByText('Alice').parentElement;
+    expect(characterLayer).toHaveAttribute('data-expression-match', 'disabled');
+    expect(characterLayer).toHaveAttribute('data-performance', 'live2d');
     expect(screen.getByTestId('interactive-film-renderer')).toHaveTextContent('Film Scene');
     expect(screen.getByTestId('video-missing')).toHaveTextContent('Video unavailable');
   });

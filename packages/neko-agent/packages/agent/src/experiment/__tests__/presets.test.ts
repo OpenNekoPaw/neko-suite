@@ -5,9 +5,16 @@ import {
   createStandardAblationSuite,
   ALWAYS_ONLY_TOOLS,
   ASK_PERMISSION_MODE,
+  HIDE_LOCKED_NARRATIVE_CHOICES,
   NO_AUTO_MEMORY_EXTRACTION,
   NO_COMPACT_LOGGING,
   NO_MEMORY_RECALL,
+  NO_NARRATIVE_AUTO_EXPRESSION,
+  NO_NARRATIVE_PREVIEW,
+  NO_NARRATIVE_PREVIEW_AUTO_SYNC,
+  NO_NARRATIVE_PREVIEW_STACK,
+  NO_NARRATIVE_TYPEWRITER,
+  NARRATIVE_LIVE2D_PERFORMANCE,
   MINIMAL,
 } from '../presets';
 
@@ -28,8 +35,22 @@ describe('experiment presets', () => {
     expect(MINIMAL.toggles.memoryRecall).toBe(false);
   });
 
-  it('group suite retains baseline plus 4 grouped variants', () => {
-    expect(createGroupAblationSuite()).toHaveLength(5);
+  it('standard suite registers Canvas narrative Preview toggles', () => {
+    const names = createStandardAblationSuite().map((variant) => variant.name);
+
+    expect(names).toContain(NO_NARRATIVE_PREVIEW.name);
+    expect(names).toContain(NO_NARRATIVE_TYPEWRITER.name);
+    expect(names).toContain(NO_NARRATIVE_AUTO_EXPRESSION.name);
+    expect(names).toContain(HIDE_LOCKED_NARRATIVE_CHOICES.name);
+    expect(names).toContain(NO_NARRATIVE_PREVIEW_AUTO_SYNC.name);
+    expect(names).toContain(NARRATIVE_LIVE2D_PERFORMANCE.name);
+  });
+
+  it('group suite retains baseline plus 5 grouped variants', () => {
+    expect(createGroupAblationSuite()).toHaveLength(6);
+    expect(createGroupAblationSuite().map((variant) => variant.name)).toContain(
+      NO_NARRATIVE_PREVIEW_STACK.name,
+    );
   });
 
   it('parameter suite keeps policy and budget overrides separate from standard suite', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
+import { normalizeNarrativePreviewFeatureToggles } from '@neko/shared';
 import { renderWithI18n } from '../../__tests__/setup';
 import { NarrativePlayer } from '../NarrativePlayer';
 import type { NarrativePreviewController, NarrativeRuntimeState } from '../types';
@@ -112,6 +113,7 @@ function createController(
   return {
     state: createState(),
     genre: 'illustrated-text',
+    featureToggles: normalizeNarrativePreviewFeatureToggles(undefined),
     fullscreen: false,
     variablesPanelOpen: false,
     historyPanelOpen: false,
@@ -122,6 +124,7 @@ function createController(
     stepBack: vi.fn(),
     jumpTo: vi.fn(),
     setGenre: vi.fn(),
+    setFeatureToggles: vi.fn(),
     setVariables: vi.fn(),
     toggleFullscreen: vi.fn(),
     toggleVariablesPanel: vi.fn(),

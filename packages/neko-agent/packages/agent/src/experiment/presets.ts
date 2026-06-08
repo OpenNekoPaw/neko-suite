@@ -1,9 +1,10 @@
 /**
  * Preset Ablation Variants — Ready-to-use experiment configurations
  *
- * Two suites:
- * - Standard: baseline + one feature off per variant (16 variants total)
- * - Group: baseline + subsystem-level off (5 variants total)
+ * Three suites:
+ * - Standard: baseline + one feature off per variant
+ * - Group: baseline + subsystem-level off variants
+ * - Parameter: baseline + policy/budget overrides
  */
 
 import type { ExperimentVariant } from './types';
@@ -154,6 +155,42 @@ export const NO_EVALUATOR_HINTS: ExperimentVariant = {
   toggles: { evaluatorHints: false },
 };
 
+export const NO_NARRATIVE_PREVIEW: ExperimentVariant = {
+  name: 'no-narrative-preview',
+  description: 'Canvas Narrative Preview command and panel disabled',
+  toggles: { narrative: { preview: false } },
+};
+
+export const NO_NARRATIVE_TYPEWRITER: ExperimentVariant = {
+  name: 'no-narrative-typewriter',
+  description: 'Narrative Preview dialogue text renders immediately',
+  toggles: { narrative: { typewriterEffect: false } },
+};
+
+export const NO_NARRATIVE_AUTO_EXPRESSION: ExperimentVariant = {
+  name: 'no-narrative-auto-expression',
+  description: 'Narrative Preview skips parenthetical-to-expression matching',
+  toggles: { narrative: { autoExpressionMatch: false } },
+};
+
+export const HIDE_LOCKED_NARRATIVE_CHOICES: ExperimentVariant = {
+  name: 'hide-locked-narrative-choices',
+  description: 'Narrative Preview hides choices whose conditions are not met',
+  toggles: { narrative: { showLockedChoices: false } },
+};
+
+export const NO_NARRATIVE_PREVIEW_AUTO_SYNC: ExperimentVariant = {
+  name: 'no-narrative-preview-auto-sync',
+  description: 'Canvas selection does not automatically sync into Narrative Preview',
+  toggles: { narrative: { previewAutoSync: false } },
+};
+
+export const NARRATIVE_LIVE2D_PERFORMANCE: ExperimentVariant = {
+  name: 'narrative-live2d-performance',
+  description: 'Narrative Preview prefers Live2D performance over static portraits',
+  toggles: { narrative: { live2dPerformance: true } },
+};
+
 // =============================================================================
 // Parameter Override Variants
 // =============================================================================
@@ -211,6 +248,21 @@ export const NO_ALL_EXTERNAL: ExperimentVariant = {
   },
 };
 
+export const NO_NARRATIVE_PREVIEW_STACK: ExperimentVariant = {
+  name: 'no-narrative-preview-stack',
+  description: 'Canvas interactive narrative Preview and renderer assists disabled',
+  toggles: {
+    narrative: {
+      preview: false,
+      typewriterEffect: false,
+      autoExpressionMatch: false,
+      showLockedChoices: false,
+      previewAutoSync: false,
+      live2dPerformance: false,
+    },
+  },
+};
+
 export const MINIMAL: ExperimentVariant = {
   name: 'minimal',
   description: 'Only permission hooks, everything else off',
@@ -228,6 +280,14 @@ export const MINIMAL: ExperimentVariant = {
     autoMemoryExtraction: false,
     memoryRecall: false,
     traitsRegistry: false,
+    narrative: {
+      preview: false,
+      typewriterEffect: false,
+      autoExpressionMatch: false,
+      showLockedChoices: false,
+      previewAutoSync: false,
+      live2dPerformance: false,
+    },
     thinkingBudget: 0,
   },
 };
@@ -237,8 +297,7 @@ export const MINIMAL: ExperimentVariant = {
 // =============================================================================
 
 /**
- * Standard ablation suite: baseline + one feature off per variant.
- * 15 variants total (baseline + 14 single-feature).
+ * Standard ablation suite: baseline + single-feature variants.
  */
 export function createStandardAblationSuite(): ExperimentVariant[] {
   return [
@@ -264,15 +323,27 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
     NO_SUBAGENT_ORCHESTRATION,
     NO_MULTIMODAL_CONTEXT,
     NO_EVALUATOR_HINTS,
+    NO_NARRATIVE_PREVIEW,
+    NO_NARRATIVE_TYPEWRITER,
+    NO_NARRATIVE_AUTO_EXPRESSION,
+    HIDE_LOCKED_NARRATIVE_CHOICES,
+    NO_NARRATIVE_PREVIEW_AUTO_SYNC,
+    NARRATIVE_LIVE2D_PERFORMANCE,
   ];
 }
 
 /**
  * Group ablation suite: baseline + subsystem-level off.
- * 5 variants total.
  */
 export function createGroupAblationSuite(): ExperimentVariant[] {
-  return [BASELINE, NO_ALL_COMPRESSION, NO_ALL_SKILLS, NO_ALL_EXTERNAL, MINIMAL];
+  return [
+    BASELINE,
+    NO_ALL_COMPRESSION,
+    NO_ALL_SKILLS,
+    NO_ALL_EXTERNAL,
+    NO_NARRATIVE_PREVIEW_STACK,
+    MINIMAL,
+  ];
 }
 
 /**

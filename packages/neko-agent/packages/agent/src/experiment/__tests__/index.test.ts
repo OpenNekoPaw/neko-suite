@@ -4,6 +4,7 @@ import {
   NO_AUTO_MEMORY_EXTRACTION,
   NO_COMPACT_LOGGING,
   NO_MEMORY_RECALL,
+  NO_NARRATIVE_PREVIEW,
 } from '../index';
 
 describe('experiment public exports', () => {
@@ -13,5 +14,6 @@ describe('experiment public exports', () => {
     expect(names).toContain(NO_COMPACT_LOGGING.name);
     expect(names).toContain(NO_AUTO_MEMORY_EXTRACTION.name);
     expect(names).toContain(NO_MEMORY_RECALL.name);
+    expect(names).toContain(NO_NARRATIVE_PREVIEW.name);
   });
 });

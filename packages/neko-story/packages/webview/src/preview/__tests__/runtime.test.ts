@@ -156,12 +156,18 @@ describe('DefaultNarrativePreviewController', () => {
     ).toBe(true);
     expect(controller.genre).toBe('visual-novel');
 
+    controller.setFeatureToggles({ previewAutoSync: false });
+    expect(controller.featureToggles.previewAutoSync).toBe(false);
+
     controller.handleMessage({
       type: 'preview:jumpTo',
       requestId: 'jump',
       revision: 1,
       nodeId: 'scene-a',
     });
+    expect(controller.state.currentNode?.nodeId).toBe('start');
+
+    controller.jumpTo('scene-a');
     controller.advance(0);
 
     expect(postMessage).toHaveBeenCalledWith(
@@ -170,6 +176,23 @@ describe('DefaultNarrativePreviewController', () => {
         fromNodeId: 'scene-a',
         toNodeId: 'scene-b',
       }),
+    );
+  });
+
+  it('can disable Canvas highlight auto-sync', () => {
+    const postMessage = vi.fn();
+    const controller = new DefaultNarrativePreviewController({ postMessage });
+    controller.setFeatureToggles({ previewAutoSync: false });
+
+    controller.handleMessage({
+      type: 'preview:loadGraph',
+      requestId: 'load',
+      revision: 1,
+      snapshot: createGraph({ revision: 1 }),
+    });
+
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'canvas:highlightNode' }),
     );
   });
 });

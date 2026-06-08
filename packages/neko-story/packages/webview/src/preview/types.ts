@@ -4,6 +4,7 @@ import type {
   NarrativeAssetResolver,
   NarrativeAssetResolveResult,
   NarrativeChoiceOption,
+  NarrativePreviewFeatureToggles,
   NarrativeRuntimeState,
   NarrativeRuntimeVariables,
   PreviewToCanvasMessage,
@@ -34,6 +35,7 @@ export interface NarrativePreviewAdapterPort {
 export interface NarrativePreviewControllerState {
   readonly state: NarrativeRuntimeState;
   readonly genre: StoryGenre;
+  readonly featureToggles: NarrativePreviewFeatureToggles;
   readonly fullscreen: boolean;
   readonly variablesPanelOpen: boolean;
   readonly historyPanelOpen: boolean;
@@ -42,6 +44,7 @@ export interface NarrativePreviewControllerState {
 export interface NarrativePreviewController {
   readonly state: NarrativeRuntimeState;
   readonly genre: StoryGenre;
+  readonly featureToggles: NarrativePreviewFeatureToggles;
   readonly fullscreen: boolean;
   readonly variablesPanelOpen: boolean;
   readonly historyPanelOpen: boolean;
@@ -52,6 +55,7 @@ export interface NarrativePreviewController {
   stepBack(): void;
   jumpTo(nodeId: string): void;
   setGenre(genre: StoryGenre): void;
+  setFeatureToggles(toggles: Partial<NarrativePreviewFeatureToggles>): void;
   setVariables(variables: Readonly<Record<string, unknown>>): void;
   toggleFullscreen(): void;
   toggleVariablesPanel(): void;
@@ -60,6 +64,7 @@ export interface NarrativePreviewController {
 
 export interface PlayRendererContext {
   readonly variables: NarrativeRuntimeVariables;
+  readonly featureToggles?: NarrativePreviewFeatureToggles;
   readonly assetResolver?: NarrativeAssetResolver;
   readonly resolvedAssets?: Readonly<Record<string, NarrativeAssetResolveResult>>;
   readonly resolveAsset?: (

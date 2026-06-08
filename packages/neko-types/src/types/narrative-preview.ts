@@ -55,6 +55,33 @@ export interface NarrativeMetadata {
   defaultLocale?: string;
 }
 
+export interface NarrativePreviewFeatureToggles {
+  readonly preview: boolean;
+  readonly typewriterEffect: boolean;
+  readonly autoExpressionMatch: boolean;
+  readonly showLockedChoices: boolean;
+  readonly previewAutoSync: boolean;
+  readonly live2dPerformance: boolean;
+}
+
+export const DEFAULT_NARRATIVE_PREVIEW_FEATURE_TOGGLES: NarrativePreviewFeatureToggles = {
+  preview: true,
+  typewriterEffect: true,
+  autoExpressionMatch: true,
+  showLockedChoices: true,
+  previewAutoSync: true,
+  live2dPerformance: false,
+};
+
+export function normalizeNarrativePreviewFeatureToggles(
+  toggles: Partial<NarrativePreviewFeatureToggles> | undefined,
+): NarrativePreviewFeatureToggles {
+  return {
+    ...DEFAULT_NARRATIVE_PREVIEW_FEATURE_TOGGLES,
+    ...toggles,
+  };
+}
+
 export interface NarrativeNodeSnapshot {
   readonly nodeId: string;
   readonly type: NarrativeRuntimeNodeType;

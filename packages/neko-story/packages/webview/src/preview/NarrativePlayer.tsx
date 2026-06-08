@@ -1,5 +1,5 @@
 import { Button } from '@neko/ui/primitives';
-import type { StoryGenre } from '@neko/shared';
+import { normalizeNarrativePreviewFeatureToggles, type StoryGenre } from '@neko/shared';
 import { createDefaultPlayRenderers } from './renderers';
 import { createPlayRendererRegistry, renderWithPlayRenderer } from './rendererRegistry';
 import type {
@@ -34,7 +34,14 @@ export function NarrativePlayer({
   const rendererProps = {
     state,
     choices: state.choices,
-    context: { ...rendererContext, variables: state.variables },
+    context: {
+      ...rendererContext,
+      variables: state.variables,
+      featureToggles: normalizeNarrativePreviewFeatureToggles({
+        ...rendererContext.featureToggles,
+        ...controller.featureToggles,
+      }),
+    },
     onChoice: (choiceIndex: number) => controller.advance(choiceIndex),
   };
 

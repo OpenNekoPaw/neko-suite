@@ -7,6 +7,10 @@
  */
 
 import type { ExecutorHooks } from '@neko/shared';
+import {
+  normalizeNarrativePreviewFeatureToggles,
+  type NarrativePreviewFeatureToggles,
+} from '@neko/shared';
 import type { AgentSessionConfig } from '../session/types';
 import type { AblationToggles, AgentFirstToolEvidenceMode } from './types';
 
@@ -55,6 +59,7 @@ export interface AblationMarkerHook extends ExecutorHooks {
   disableAgentFirstRecoveryGuidance: boolean;
   /** Agent-first tool-evidence guidance mode override. */
   agentFirstToolEvidenceMode?: AgentFirstToolEvidenceMode;
+  narrative: NarrativePreviewFeatureToggles;
   disableIdcWorkflow: boolean;
   disablePlanModeProfile: boolean;
   disableCapabilityProtocol: boolean;
@@ -87,6 +92,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     ...(toggles.toolInjection !== undefined && {
       toolInjectionMode: toggles.toolInjection,
     }),
+    narrative: normalizeNarrativePreviewFeatureToggles(toggles.narrative),
     disableIdcWorkflow: toggles.idcWorkflow === false,
     disablePlanModeProfile: toggles.planModeProfile === false,
     disableCapabilityProtocol: toggles.capabilityProtocol === false,
@@ -126,6 +132,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | memoryRecall          | memoryRecall = false                               |
  * | providerCardAutoEvolve | marker flag for ProviderCard auto-evolution writes |
  * | agentFirst           | marker flags + feedback control policy           |
+ * | narrative            | marker feature flags for Canvas Narrative Preview |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
  */

@@ -1,4 +1,10 @@
-import type { CanvasToPreviewMessage, PreviewToCanvasMessage, StoryGenre } from '@neko/shared';
+import {
+  normalizeNarrativePreviewFeatureToggles,
+  type CanvasToPreviewMessage,
+  type NarrativePreviewFeatureToggles,
+  type PreviewToCanvasMessage,
+  type StoryGenre,
+} from '@neko/shared';
 import { NarrativeRuntime } from './NarrativeRuntime';
 import type {
   NarrativePreviewAdapterPort,
@@ -10,6 +16,7 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
   private latestRevision = 0;
   private runtime = new NarrativeRuntime();
   private currentGenre: StoryGenre = 'illustrated-text';
+  private currentFeatureToggles = normalizeNarrativePreviewFeatureToggles(undefined);
   private isFullscreen = false;
   private isVariablesPanelOpen = false;
   private isHistoryPanelOpen = false;
@@ -22,6 +29,10 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
 
   get genre(): StoryGenre {
     return this.currentGenre;
+  }
+
+  get featureToggles(): NarrativePreviewFeatureToggles {
+    return this.currentFeatureToggles;
   }
 
   get fullscreen(): boolean {
@@ -54,6 +65,9 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
         this.emitHighlight();
         return true;
       case 'preview:jumpTo':
+        if (!this.currentFeatureToggles.previewAutoSync) {
+          return true;
+        }
         this.runtime.jumpTo(message.nodeId);
         this.emitHighlight();
         return true;
@@ -104,6 +118,13 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
     this.currentGenre = genre;
   }
 
+  setFeatureToggles(toggles: Partial<NarrativePreviewFeatureToggles>): void {
+    this.currentFeatureToggles = normalizeNarrativePreviewFeatureToggles({
+      ...this.currentFeatureToggles,
+      ...toggles,
+    });
+  }
+
   setVariables(variables: Readonly<Record<string, unknown>>): void {
     this.runtime.setVariables(variables);
   }
@@ -121,6 +142,8 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
   }
 
   private emitHighlight(): void {
+    if (!this.currentFeatureToggles.previewAutoSync) return;
+
     const nodeId = this.runtime.state.currentNode?.nodeId;
     if (nodeId) {
       this.post({ type: 'canvas:highlightNode', requestId: createRequestId('node'), nodeId });
