@@ -82,3 +82,10 @@ P1 does not require full persistence engines or all providers to be available. U
 - Continuity snapshots can grow too large -> default lookback is bounded by scene/chapter and runtime limits.
 - Low-confidence evidence may pollute character memory -> confidence-less and low-confidence outputs are `needs-review` and cannot auto-confirm identity or memory facts.
 - Batch plans may overlap with domain requests -> domain requests remain provider-specific; BatchExecutionPlan is the approval/recovery envelope.
+
+## Implementation Notes
+
+- Shared contracts landed in `packages/neko-types/src/types/comic-animation-indexing.ts`, with Canvas shot review fields added to `packages/neko-types/src/types/canvas.ts` so Canvas can display host-projected visual occurrences, character candidates, continuity diagnostics, and batch execution plans without depending on Agent internals.
+- Agent runtime integration landed in `packages/neko-agent/packages/agent/src/runtime/comic-animation-indexing-runtime.ts`; it provides sidecar-first/cache-projection ports and pure planning/query helpers, but does not implement provider IO or SQLite as source of truth.
+- Agent Webview renders `CompositeArtifact` and paged artifact blocks through a read-only RichContent renderer. It consumes only transfer payloads delivered by the host and never reads `.neko/semantic-index`, `.neko/memory`, `.neko/runs`, SQLite, or vector cache files directly.
+- Canvas uses the existing composable preset system to add read-only shot review sections. Batch/action gate metadata is preserved through property item enumeration so unavailable providers, missing capabilities, diagnostics, unknown costs, low confidence, and conflicts can be surfaced without embedding execution policy in the UI.
