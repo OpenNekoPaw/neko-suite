@@ -1,0 +1,1027 @@
+import type { ResourceRef } from './resource-cache';
+import type {
+  CanvasConnection,
+  CanvasData,
+  CanvasNode,
+  MediaCanvasNode,
+  SceneGroupCanvasNode,
+  ShotCanvasNode,
+} from './canvas';
+import type { CanvasSerializableRecord } from './canvas-serializable';
+import { NARRATIVE_RUNTIME_NODE_TYPES } from './narrative-preview';
+import { getContainerChildIds, getNodeParentId, isContainerNode } from '../utils/canvasLayered';
+
+export const CANVAS_PLAYBACK_ADAPTER_IDS = [
+  'auto',
+  'storyboard',
+  'narrative',
+  'media-sequence',
+  'generic',
+] as const;
+
+export type CanvasPlaybackAdapterId = (typeof CANVAS_PLAYBACK_ADAPTER_IDS)[number];
+export type ResolvedCanvasPlaybackAdapterId = Exclude<CanvasPlaybackAdapterId, 'auto'>;
+
+export const CANVAS_PLAYBACK_BEHAVIOR_MODES = ['auto', 'manual', 'linear', 'interactive'] as const;
+
+export type CanvasPlaybackBehaviorMode = (typeof CANVAS_PLAYBACK_BEHAVIOR_MODES)[number];
+export type ResolvedCanvasPlaybackBehaviorMode = Exclude<CanvasPlaybackBehaviorMode, 'auto'>;
+
+export type CanvasPlaybackAdvancePolicy = 'timer' | 'media-ended' | 'user-input' | 'condition';
+export type CanvasPlaybackNodeRole = 'start' | 'end' | 'skip' | 'step';
+export type CanvasPlaybackExpansion = 'self' | 'children' | 'recursive';
+
+export interface CanvasPlaybackNodeOverride {
+  readonly role?: CanvasPlaybackNodeRole;
+  readonly order?: number;
+  readonly durationMs?: number;
+  readonly expand?: CanvasPlaybackExpansion;
+}
+
+export interface CanvasPlaybackEdgeOverride {
+  readonly enabled?: boolean;
+  readonly order?: number;
+  readonly branchLabel?: string;
+  readonly condition?: string;
+}
+
+export interface CanvasPlaybackMetadata {
+  readonly version: 1;
+  readonly adapterId?: CanvasPlaybackAdapterId;
+  readonly mode?: CanvasPlaybackBehaviorMode;
+  readonly entryIds?: readonly string[];
+  readonly nodeOverrides?: Readonly<Record<string, CanvasPlaybackNodeOverride>>;
+  readonly edgeOverrides?: Readonly<Record<string, CanvasPlaybackEdgeOverride>>;
+}
+
+export type CanvasPlaybackUnitKind =
+  | 'node'
+  | 'container'
+  | 'media'
+  | 'shot'
+  | 'scene'
+  | 'narrative';
+
+export type CanvasPlaybackRenderMode =
+  | 'select-node'
+  | 'inline-preview'
+  | 'story-preview'
+  | 'media-playback'
+  | 'narrative-preview';
+
+export interface CanvasPlaybackUnit {
+  readonly id: string;
+  readonly sourceNodeId: string;
+  readonly kind: CanvasPlaybackUnitKind;
+  readonly renderMode: CanvasPlaybackRenderMode;
+  readonly label?: string;
+  readonly durationMs?: number;
+  readonly terminal?: boolean;
+  readonly assetPath?: string;
+  readonly resourceRef?: ResourceRef;
+  readonly metadata?: CanvasSerializableRecord;
+}
+
+export type CanvasPlaybackTransitionType = 'sequence' | 'default' | 'choice';
+
+export interface CanvasPlaybackTransition {
+  readonly id: string;
+  readonly sourceUnitId: string;
+  readonly targetUnitId: string;
+  readonly type: CanvasPlaybackTransitionType;
+  readonly priority: number;
+  readonly label?: string;
+  readonly condition?: string;
+  readonly sourceConnectionId?: string;
+  readonly sourceNodeId?: string;
+  readonly targetNodeId?: string;
+  readonly enabled?: boolean;
+  readonly metadata?: CanvasSerializableRecord;
+}
+
+export type CanvasPlaybackDiagnosticCode =
+  | 'playback-missing-entry'
+  | 'playback-missing-unit'
+  | 'playback-unsupported-graph'
+  | 'playback-dangling-node'
+  | 'playback-dangling-connection'
+  | 'playback-filtered-branch'
+  | 'playback-unsupported-connection'
+  | 'playback-missing-media-source'
+  | 'playback-narrative-runtime-only';
+
+export interface CanvasPlaybackDiagnostic {
+  readonly code: CanvasPlaybackDiagnosticCode;
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly message: string;
+  readonly adapterId?: ResolvedCanvasPlaybackAdapterId;
+  readonly nodeId?: string;
+  readonly connectionId?: string;
+}
+
+export interface CanvasPlaybackPlan {
+  readonly adapterId: ResolvedCanvasPlaybackAdapterId;
+  readonly requestedAdapterId: CanvasPlaybackAdapterId;
+  readonly behaviorMode: ResolvedCanvasPlaybackBehaviorMode;
+  readonly advancePolicy: CanvasPlaybackAdvancePolicy;
+  readonly entryUnitIds: readonly string[];
+  readonly units: readonly CanvasPlaybackUnit[];
+  readonly transitions: readonly CanvasPlaybackTransition[];
+  readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
+  readonly metadata: CanvasSerializableRecord;
+}
+
+export interface CreateCanvasPlaybackPlanInput {
+  readonly canvas: CanvasData;
+  readonly selectedNodeId?: string;
+  readonly adapterId?: CanvasPlaybackAdapterId;
+  readonly mode?: CanvasPlaybackBehaviorMode;
+}
+
+interface PlaybackProjectionContext {
+  readonly canvas: CanvasData;
+  readonly metadata: NormalizedCanvasPlaybackMetadata;
+  readonly selectedNodeId?: string;
+  readonly requestedAdapterId: CanvasPlaybackAdapterId;
+  readonly adapterId: ResolvedCanvasPlaybackAdapterId;
+  readonly behaviorMode: ResolvedCanvasPlaybackBehaviorMode;
+  readonly advancePolicy: CanvasPlaybackAdvancePolicy;
+  readonly nodeById: ReadonlyMap<string, CanvasNode>;
+}
+
+export interface NormalizedCanvasPlaybackMetadata {
+  readonly version: 1;
+  readonly adapterId: CanvasPlaybackAdapterId;
+  readonly mode: CanvasPlaybackBehaviorMode;
+  readonly entryIds: readonly string[];
+  readonly nodeOverrides: Readonly<Record<string, CanvasPlaybackNodeOverride>>;
+  readonly edgeOverrides: Readonly<Record<string, CanvasPlaybackEdgeOverride>>;
+}
+
+interface AdapterProjection {
+  readonly units: readonly CanvasPlaybackUnit[];
+  readonly transitions: readonly CanvasPlaybackTransition[];
+  readonly entryUnitIds: readonly string[];
+  readonly diagnostics?: readonly CanvasPlaybackDiagnostic[];
+}
+
+interface CanvasPlaybackAdapter {
+  readonly id: ResolvedCanvasPlaybackAdapterId;
+  readonly canHandle: (context: PlaybackProjectionContext) => boolean;
+  readonly project: (context: PlaybackProjectionContext) => AdapterProjection;
+}
+
+const PLAYABLE_CONNECTION_TYPES = new Set<string | undefined>([
+  undefined,
+  'default',
+  'sequence',
+  'choice',
+]);
+const NARRATIVE_RUNTIME_NODE_TYPE_SET = new Set<string>(NARRATIVE_RUNTIME_NODE_TYPES);
+
+export function normalizeCanvasPlaybackMetadata(
+  canvas: Pick<CanvasData, 'playback'> | Record<string, unknown>,
+): NormalizedCanvasPlaybackMetadata {
+  const playbackValue = (canvas as { readonly playback?: unknown }).playback;
+  const source = isRecord(playbackValue) ? playbackValue : undefined;
+  const adapterId = readAdapterId(source?.['adapterId']) ?? 'auto';
+  const mode = readBehaviorMode(source?.['mode']) ?? 'auto';
+
+  return {
+    version: 1,
+    adapterId,
+    mode,
+    entryIds: readStringArray(source?.['entryIds']),
+    nodeOverrides: readOverrideRecord(source?.['nodeOverrides'], readNodeOverride),
+    edgeOverrides: readOverrideRecord(source?.['edgeOverrides'], readEdgeOverride),
+  };
+}
+
+export function getCanvasPlaybackNodeOverride(
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'nodeOverrides'>,
+  node: Pick<CanvasNode, 'id' | 'extension'>,
+): CanvasPlaybackNodeOverride {
+  return {
+    ...(metadata.nodeOverrides[node.id] ?? {}),
+    ...readNodeOverride(readExtensionPlaybackRecord(node.extension)),
+  };
+}
+
+export function getCanvasPlaybackEdgeOverride(
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'edgeOverrides'>,
+  connection: Pick<CanvasConnection, 'id' | 'extension'>,
+): CanvasPlaybackEdgeOverride {
+  return {
+    ...(metadata.edgeOverrides[connection.id] ?? {}),
+    ...readEdgeOverride(readExtensionPlaybackRecord(connection.extension)),
+  };
+}
+
+export function sortCanvasPlaybackContainerChildren(
+  container: CanvasNode,
+  nodes: readonly CanvasNode[],
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'nodeOverrides'>,
+): readonly CanvasNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const childIds = getContainerChildIds(container);
+  return childIds
+    .map((childId) => nodeById.get(childId))
+    .filter((node): node is CanvasNode => Boolean(node))
+    .slice()
+    .sort((left, right) => comparePlaybackNodes(left, right, container, childIds, metadata));
+}
+
+export function sortCanvasPlaybackConnections(
+  connections: readonly CanvasConnection[],
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'edgeOverrides'>,
+  options: { readonly includeTransition?: boolean } = {},
+): readonly CanvasConnection[] {
+  return connections
+    .filter((connection) => isCanvasPlaybackConnectionPlayable(connection, metadata, options))
+    .map((connection, index) => ({ connection, index }))
+    .sort((left, right) => comparePlaybackConnections(left, right, metadata))
+    .map((entry) => entry.connection);
+}
+
+export function isCanvasPlaybackConnectionPlayable(
+  connection: Pick<CanvasConnection, 'id' | 'type' | 'extension'>,
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'edgeOverrides'>,
+  options: { readonly includeTransition?: boolean } = {},
+): boolean {
+  const override = getCanvasPlaybackEdgeOverride(metadata, connection);
+  if (override.enabled === false) return false;
+  if (connection.type === 'transition') return options.includeTransition === true;
+  return PLAYABLE_CONNECTION_TYPES.has(connection.type);
+}
+
+export function resolveCanvasPlaybackBehavior(
+  adapterId: ResolvedCanvasPlaybackAdapterId,
+  mode: CanvasPlaybackBehaviorMode,
+): {
+  readonly behaviorMode: ResolvedCanvasPlaybackBehaviorMode;
+  readonly advancePolicy: CanvasPlaybackAdvancePolicy;
+} {
+  const behaviorMode = mode === 'auto' ? defaultBehaviorModeForAdapter(adapterId) : mode;
+  return {
+    behaviorMode,
+    advancePolicy: defaultAdvancePolicyForAdapter(adapterId, behaviorMode),
+  };
+}
+
+export function createCanvasPlaybackPlan(input: CreateCanvasPlaybackPlanInput): CanvasPlaybackPlan {
+  const metadata = normalizeCanvasPlaybackMetadata(input.canvas);
+  const requestedAdapterId = input.adapterId ?? metadata.adapterId;
+  const adapterId = resolveCanvasPlaybackAdapterId(
+    input.canvas,
+    input.selectedNodeId,
+    requestedAdapterId,
+  );
+  const behavior = resolveCanvasPlaybackBehavior(adapterId, input.mode ?? metadata.mode);
+  const context: PlaybackProjectionContext = {
+    canvas: input.canvas,
+    metadata,
+    selectedNodeId: input.selectedNodeId,
+    requestedAdapterId,
+    adapterId,
+    behaviorMode: behavior.behaviorMode,
+    advancePolicy: behavior.advancePolicy,
+    nodeById: new Map(input.canvas.nodes.map((node) => [node.id, node])),
+  };
+  const adapter = CANVAS_PLAYBACK_ADAPTERS.find((candidate) => candidate.id === adapterId);
+  const projection =
+    adapter?.project(context) ?? emptyProjection(context, 'No playback adapter was available.');
+  const diagnostics = [
+    ...validateProjectionReferences(context, projection),
+    ...(projection.diagnostics ?? []),
+  ];
+  const terminalUnitIds = resolveTerminalUnitIds(projection.units, projection.transitions);
+  const units = projection.units.map((unit) =>
+    terminalUnitIds.has(unit.id) || unit.terminal ? { ...unit, terminal: true } : unit,
+  );
+
+  return {
+    adapterId,
+    requestedAdapterId,
+    behaviorMode: behavior.behaviorMode,
+    advancePolicy: behavior.advancePolicy,
+    entryUnitIds: projection.entryUnitIds,
+    units,
+    transitions: projection.transitions,
+    diagnostics,
+    metadata: { sourceCanvasName: input.canvas.name },
+  };
+}
+
+export function resolveCanvasPlaybackAdapterId(
+  canvas: CanvasData,
+  selectedNodeId: string | undefined,
+  requestedAdapterId: CanvasPlaybackAdapterId,
+): ResolvedCanvasPlaybackAdapterId {
+  if (requestedAdapterId !== 'auto') return requestedAdapterId;
+  const selected = selectedNodeId
+    ? canvas.nodes.find((node) => node.id === selectedNodeId)
+    : undefined;
+  if (selected && isNarrativeRuntimeNode(selected)) return 'narrative';
+  if (selected && (selected.type === 'scene' || selected.type === 'shot')) return 'storyboard';
+  if (selected?.type === 'media') return 'media-sequence';
+  if (canvas.nodes.some(isNarrativeRuntimeNode)) return 'narrative';
+  if (canvas.nodes.some((node) => node.type === 'scene' || node.type === 'shot'))
+    return 'storyboard';
+  if (canvas.nodes.some((node) => node.type === 'media')) return 'media-sequence';
+  return 'generic';
+}
+
+function projectStoryboard(context: PlaybackProjectionContext): AdapterProjection {
+  const selected = context.selectedNodeId
+    ? context.nodeById.get(context.selectedNodeId)
+    : undefined;
+  const startScene = resolveStoryboardStartScene(context, selected);
+  if (selected?.type === 'shot' && !startScene) {
+    return {
+      units: [toPlaybackUnit(selected, context)],
+      transitions: outgoingNodeTransitions(context, new Set([selected.id])),
+      entryUnitIds: [selected.id],
+    };
+  }
+  if (!startScene) {
+    return emptyProjection(context, 'Storyboard playback has no Scene or Shot entry.');
+  }
+
+  const visitedScenes = new Set<string>();
+  const units: CanvasPlaybackUnit[] = [];
+  const transitions: CanvasPlaybackTransition[] = [];
+  const entryUnitIds: string[] = [];
+  const sceneQueue: Array<{ scene: SceneGroupCanvasNode; startShotId?: string }> = [
+    { scene: startScene, startShotId: selected?.type === 'shot' ? selected.id : undefined },
+  ];
+
+  while (sceneQueue.length > 0) {
+    const item = sceneQueue.shift();
+    if (!item || visitedScenes.has(item.scene.id)) continue;
+    visitedScenes.add(item.scene.id);
+    const sceneUnits = projectSceneUnits(context, item.scene, item.startShotId);
+    if (entryUnitIds.length === 0 && sceneUnits.units[0]) entryUnitIds.push(sceneUnits.units[0].id);
+    units.push(...sceneUnits.units);
+    transitions.push(...sceneUnits.transitions);
+
+    const sceneConnections = sortCanvasPlaybackConnections(
+      context.canvas.connections.filter((connection) => connection.sourceId === item.scene.id),
+      context.metadata,
+    ).filter((connection) => context.nodeById.get(connection.targetId)?.type === 'scene');
+
+    for (const connection of sceneConnections) {
+      const targetScene = context.nodeById.get(connection.targetId);
+      if (targetScene?.type !== 'scene') continue;
+      const targetUnits = projectSceneUnits(context, targetScene);
+      const lastSourceUnit = sceneUnits.units[sceneUnits.units.length - 1];
+      const firstTargetUnit = targetUnits.units[0];
+      if (lastSourceUnit && firstTargetUnit) {
+        transitions.push(
+          toPlaybackTransition(connection, lastSourceUnit.id, firstTargetUnit.id, context),
+        );
+      }
+      sceneQueue.push({ scene: targetScene });
+    }
+  }
+
+  return finalizeProjectionEntries(context, { units, transitions, entryUnitIds });
+}
+
+function projectNarrative(context: PlaybackProjectionContext): AdapterProjection {
+  const nodes = context.canvas.nodes.filter(isNarrativeRuntimeNode);
+  if (nodes.length === 0) {
+    return emptyProjection(
+      context,
+      'Narrative playback requires narrative-start, narrative-scene, choice, merge, or narrative-ending nodes.',
+      'playback-narrative-runtime-only',
+    );
+  }
+  const unitIds = new Set(nodes.map((node) => node.id));
+  const units = nodes.map((node) => toPlaybackUnit(node, context));
+  const transitions = sortCanvasPlaybackConnections(context.canvas.connections, context.metadata)
+    .filter((connection) => unitIds.has(connection.sourceId) && unitIds.has(connection.targetId))
+    .map((connection) =>
+      toPlaybackTransition(connection, connection.sourceId, connection.targetId, context),
+    );
+  const start =
+    nodes.find((node) => node.type === 'narrative-start')?.id ??
+    (context.canvas.narrative?.entryNodeId && unitIds.has(context.canvas.narrative.entryNodeId)
+      ? context.canvas.narrative.entryNodeId
+      : undefined);
+  return finalizeProjectionEntries(context, {
+    units,
+    transitions,
+    entryUnitIds: start ? [start] : [],
+  });
+}
+
+function projectMediaSequence(context: PlaybackProjectionContext): AdapterProjection {
+  const selected = context.selectedNodeId
+    ? context.nodeById.get(context.selectedNodeId)
+    : undefined;
+  const mediaNodes =
+    selected?.type === 'media'
+      ? collectReachableNodes(
+          context,
+          selected,
+          (node): node is MediaCanvasNode => node.type === 'media',
+        )
+      : context.canvas.nodes.filter((node): node is MediaCanvasNode => node.type === 'media');
+  const units = mediaNodes.map((node) => toPlaybackUnit(node, context));
+  const unitIds = new Set(units.map((unit) => unit.id));
+  const transitions = sortCanvasPlaybackConnections(context.canvas.connections, context.metadata)
+    .filter((connection) => unitIds.has(connection.sourceId) && unitIds.has(connection.targetId))
+    .map((connection) =>
+      toPlaybackTransition(connection, connection.sourceId, connection.targetId, context),
+    );
+
+  return finalizeProjectionEntries(context, {
+    units,
+    transitions: transitions.length > 0 ? transitions : syntheticSequenceTransitions(units),
+    entryUnitIds: selected?.type === 'media' ? [selected.id] : [],
+    diagnostics: mediaDiagnostics(context, mediaNodes),
+  });
+}
+
+function projectGeneric(context: PlaybackProjectionContext): AdapterProjection {
+  const selected = context.selectedNodeId
+    ? context.nodeById.get(context.selectedNodeId)
+    : undefined;
+  if (selected) {
+    const expansion = getCanvasPlaybackNodeOverride(context.metadata, selected).expand ?? 'self';
+    const units =
+      expansion === 'self' && !isContainerNode(selected)
+        ? collectReachableNodes(context, selected, isCanvasPlaybackNode).map((node) =>
+            toPlaybackUnit(node, context),
+          )
+        : expandPlaybackNode(context, selected, expansion);
+    const unitIds = new Set(units.map((unit) => unit.id));
+    const transitions = sortCanvasPlaybackConnections(context.canvas.connections, context.metadata)
+      .filter((connection) => unitIds.has(connection.sourceId) && unitIds.has(connection.targetId))
+      .map((connection) =>
+        toPlaybackTransition(connection, connection.sourceId, connection.targetId, context),
+      );
+    return finalizeProjectionEntries(context, {
+      units,
+      transitions: transitions.length > 0 ? transitions : syntheticSequenceTransitions(units),
+      entryUnitIds: units[0] ? [units[0].id] : [],
+    });
+  }
+
+  const topLevelNodes = context.canvas.nodes.filter((node) => !getNodeParentId(node));
+  const units = topLevelNodes.map((node) => toPlaybackUnit(node, context));
+  const unitIds = new Set(units.map((unit) => unit.id));
+  const transitions = sortCanvasPlaybackConnections(context.canvas.connections, context.metadata)
+    .filter((connection) => unitIds.has(connection.sourceId) && unitIds.has(connection.targetId))
+    .map((connection) =>
+      toPlaybackTransition(connection, connection.sourceId, connection.targetId, context),
+    );
+  return finalizeProjectionEntries(context, { units, transitions, entryUnitIds: [] });
+}
+
+function projectSceneUnits(
+  context: PlaybackProjectionContext,
+  scene: SceneGroupCanvasNode,
+  startShotId?: string,
+): {
+  readonly units: readonly CanvasPlaybackUnit[];
+  readonly transitions: readonly CanvasPlaybackTransition[];
+} {
+  const orderedShots = sortCanvasPlaybackContainerChildren(
+    scene,
+    context.canvas.nodes,
+    context.metadata,
+  ).filter((node): node is ShotCanvasNode => node.type === 'shot');
+  const startIndex = startShotId
+    ? Math.max(
+        0,
+        orderedShots.findIndex((shot) => shot.id === startShotId),
+      )
+    : 0;
+  const shots = orderedShots.slice(startIndex >= 0 ? startIndex : 0);
+  const units =
+    shots.length > 0
+      ? shots.map((shot) => toPlaybackUnit(shot, context))
+      : [toPlaybackUnit(scene, context)];
+  return { units, transitions: syntheticSequenceTransitions(units) };
+}
+
+function expandPlaybackNode(
+  context: PlaybackProjectionContext,
+  node: CanvasNode,
+  expansion: CanvasPlaybackExpansion,
+  visiting: ReadonlySet<string> = new Set(),
+): readonly CanvasPlaybackUnit[] {
+  if (expansion === 'self' || !isContainerNode(node)) return [toPlaybackUnit(node, context)];
+  if (visiting.has(node.id)) return [];
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(node.id);
+  const children = sortCanvasPlaybackContainerChildren(
+    node,
+    context.canvas.nodes,
+    context.metadata,
+  );
+  if (expansion === 'children') return children.map((child) => toPlaybackUnit(child, context));
+  return children.flatMap((child) =>
+    isContainerNode(child)
+      ? expandPlaybackNode(
+          context,
+          child,
+          getCanvasPlaybackNodeOverride(context.metadata, child).expand ?? 'children',
+          nextVisiting,
+        )
+      : [toPlaybackUnit(child, context)],
+  );
+}
+
+function outgoingNodeTransitions(
+  context: PlaybackProjectionContext,
+  unitIds: ReadonlySet<string>,
+): readonly CanvasPlaybackTransition[] {
+  return sortCanvasPlaybackConnections(context.canvas.connections, context.metadata)
+    .filter((connection) => unitIds.has(connection.sourceId) && unitIds.has(connection.targetId))
+    .map((connection) =>
+      toPlaybackTransition(connection, connection.sourceId, connection.targetId, context),
+    );
+}
+
+function finalizeProjectionEntries(
+  context: PlaybackProjectionContext,
+  projection: AdapterProjection,
+): AdapterProjection {
+  const unitIds = new Set(projection.units.map((unit) => unit.id));
+  const explicitEntry = context.metadata.entryIds.find((entryId) => unitIds.has(entryId));
+  const roleStart = projection.units.find((unit) => {
+    const node = context.nodeById.get(unit.sourceNodeId);
+    return node && getCanvasPlaybackNodeOverride(context.metadata, node).role === 'start';
+  });
+  const zeroIncoming = projection.units.find(
+    (unit) => !projection.transitions.some((transition) => transition.targetUnitId === unit.id),
+  );
+  const selected =
+    context.selectedNodeId && unitIds.has(context.selectedNodeId)
+      ? context.selectedNodeId
+      : undefined;
+  const fallback = projection.units[0]?.id;
+  const entryUnitIds =
+    projection.entryUnitIds.length > 0
+      ? projection.entryUnitIds.filter((entryId) => unitIds.has(entryId))
+      : [explicitEntry ?? roleStart?.id ?? zeroIncoming?.id ?? selected ?? fallback].filter(
+          (entryId): entryId is string => Boolean(entryId),
+        );
+
+  return {
+    ...projection,
+    entryUnitIds,
+    diagnostics: [
+      ...(projection.diagnostics ?? []),
+      ...(entryUnitIds.length === 0 && projection.units.length > 0
+        ? [
+            diagnostic(
+              context,
+              'playback-missing-entry',
+              'warning',
+              'Playback plan has no resolved entry unit.',
+            ),
+          ]
+        : []),
+      ...(projection.units.length === 0
+        ? [
+            diagnostic(
+              context,
+              'playback-missing-unit',
+              'warning',
+              'Playback plan has no playable units.',
+            ),
+          ]
+        : []),
+    ],
+  };
+}
+
+function syntheticSequenceTransitions(
+  units: readonly CanvasPlaybackUnit[],
+): readonly CanvasPlaybackTransition[] {
+  const transitions: CanvasPlaybackTransition[] = [];
+  for (let index = 0; index < units.length - 1; index += 1) {
+    const source = units[index];
+    const target = units[index + 1];
+    if (!source || !target) continue;
+    transitions.push({
+      id: `synthetic-sequence:${source.id}:${target.id}`,
+      sourceUnitId: source.id,
+      targetUnitId: target.id,
+      type: 'sequence',
+      priority: index,
+      sourceNodeId: source.sourceNodeId,
+      targetNodeId: target.sourceNodeId,
+    });
+  }
+  return transitions;
+}
+
+function toPlaybackUnit(node: CanvasNode, context: PlaybackProjectionContext): CanvasPlaybackUnit {
+  const override = getCanvasPlaybackNodeOverride(context.metadata, node);
+  return {
+    id: node.id,
+    sourceNodeId: node.id,
+    kind: playbackUnitKindForNode(node),
+    renderMode: renderModeForNode(node),
+    label: readNodeLabel(node),
+    ...(override.durationMs !== undefined ? { durationMs: override.durationMs } : {}),
+    ...(override.role === 'end' ? { terminal: true } : {}),
+    ...(node.type === 'media' && node.data.assetPath ? { assetPath: node.data.assetPath } : {}),
+    ...(node.type === 'media' && node.data.resourceRef
+      ? { resourceRef: node.data.resourceRef }
+      : {}),
+  };
+}
+
+function toPlaybackTransition(
+  connection: CanvasConnection,
+  sourceUnitId: string,
+  targetUnitId: string,
+  context: PlaybackProjectionContext,
+): CanvasPlaybackTransition {
+  const override = getCanvasPlaybackEdgeOverride(context.metadata, connection);
+  const type: CanvasPlaybackTransitionType =
+    connection.type === 'choice'
+      ? 'choice'
+      : connection.type === 'sequence'
+        ? 'sequence'
+        : 'default';
+  return {
+    id: connection.id,
+    sourceUnitId,
+    targetUnitId,
+    type,
+    priority: override.order ?? connection.priority ?? 0,
+    label: override.branchLabel ?? connection.choiceText ?? connection.label,
+    condition: override.condition ?? connection.condition,
+    sourceConnectionId: connection.id,
+    sourceNodeId: connection.sourceId,
+    targetNodeId: connection.targetId,
+    ...(override.enabled !== undefined ? { enabled: override.enabled } : {}),
+  };
+}
+
+function resolveTerminalUnitIds(
+  units: readonly CanvasPlaybackUnit[],
+  transitions: readonly CanvasPlaybackTransition[],
+): ReadonlySet<string> {
+  const sourceIds = new Set(transitions.map((transition) => transition.sourceUnitId));
+  return new Set(units.filter((unit) => !sourceIds.has(unit.id)).map((unit) => unit.id));
+}
+
+function validateProjectionReferences(
+  context: PlaybackProjectionContext,
+  projection: AdapterProjection,
+): readonly CanvasPlaybackDiagnostic[] {
+  const diagnostics: CanvasPlaybackDiagnostic[] = [];
+  const unitIds = new Set(projection.units.map((unit) => unit.id));
+  for (const entryUnitId of projection.entryUnitIds) {
+    if (!unitIds.has(entryUnitId)) {
+      diagnostics.push(
+        diagnostic(
+          context,
+          'playback-missing-entry',
+          'warning',
+          `Playback entry "${entryUnitId}" is not a playable unit.`,
+        ),
+      );
+    }
+  }
+  for (const transition of projection.transitions) {
+    if (!unitIds.has(transition.sourceUnitId) || !unitIds.has(transition.targetUnitId)) {
+      diagnostics.push(
+        diagnostic(
+          context,
+          'playback-dangling-connection',
+          'warning',
+          `Playback transition "${transition.id}" references missing units.`,
+          transition.sourceNodeId,
+          transition.sourceConnectionId,
+        ),
+      );
+    }
+  }
+  for (const entryId of context.metadata.entryIds) {
+    if (!context.nodeById.has(entryId)) {
+      diagnostics.push(
+        diagnostic(
+          context,
+          'playback-dangling-node',
+          'warning',
+          `Playback entry node "${entryId}" is missing.`,
+          entryId,
+        ),
+      );
+    }
+  }
+  return diagnostics;
+}
+
+function emptyProjection(
+  context: PlaybackProjectionContext,
+  message: string,
+  code: CanvasPlaybackDiagnosticCode = 'playback-unsupported-graph',
+): AdapterProjection {
+  return {
+    units: [],
+    transitions: [],
+    entryUnitIds: [],
+    diagnostics: [diagnostic(context, code, 'warning', message)],
+  };
+}
+
+function mediaDiagnostics(
+  context: PlaybackProjectionContext,
+  nodes: readonly MediaCanvasNode[],
+): readonly CanvasPlaybackDiagnostic[] {
+  return nodes
+    .filter(
+      (node) => !node.data.assetPath && !node.data.resourceRef && !node.data.documentResourceRef,
+    )
+    .map((node) =>
+      diagnostic(
+        context,
+        'playback-missing-media-source',
+        'warning',
+        `Media node "${node.id}" has no durable playback source.`,
+        node.id,
+      ),
+    );
+}
+
+function collectReachableNodes<T extends CanvasNode>(
+  context: PlaybackProjectionContext,
+  start: CanvasNode,
+  predicate: (node: CanvasNode) => node is T,
+): readonly T[] {
+  const result: T[] = [];
+  const queue = [start.id];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    if (!nodeId || visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const node = context.nodeById.get(nodeId);
+    if (node && predicate(node)) result.push(node);
+    for (const connection of sortCanvasPlaybackConnections(
+      context.canvas.connections,
+      context.metadata,
+    )) {
+      if (connection.sourceId === nodeId) queue.push(connection.targetId);
+    }
+  }
+  return result;
+}
+
+function resolveStoryboardStartScene(
+  context: PlaybackProjectionContext,
+  selected: CanvasNode | undefined,
+): SceneGroupCanvasNode | undefined {
+  if (selected?.type === 'scene') return selected;
+  if (selected?.type === 'shot') {
+    const parentId = getNodeParentId(selected);
+    const parent = parentId ? context.nodeById.get(parentId) : undefined;
+    if (parent?.type === 'scene') return parent;
+    return context.canvas.nodes.find(
+      (node): node is SceneGroupCanvasNode =>
+        node.type === 'scene' && getContainerChildIds(node).includes(selected.id),
+    );
+  }
+  return context.canvas.nodes.find((node): node is SceneGroupCanvasNode => node.type === 'scene');
+}
+
+function comparePlaybackNodes(
+  left: CanvasNode,
+  right: CanvasNode,
+  container: CanvasNode,
+  childIds: readonly string[],
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'nodeOverrides'>,
+): number {
+  return firstNonZero([
+    compareOptionalNumber(
+      getCanvasPlaybackNodeOverride(metadata, left).order,
+      getCanvasPlaybackNodeOverride(metadata, right).order,
+    ),
+    compareOptionalNumber(
+      container.container?.childPlacements?.[left.id]?.order,
+      container.container?.childPlacements?.[right.id]?.order,
+    ),
+    childIds.indexOf(left.id) - childIds.indexOf(right.id),
+    compareOptionalNumber(readDomainOrder(left), readDomainOrder(right)),
+    left.position.y - right.position.y,
+    left.position.x - right.position.x,
+    left.id.localeCompare(right.id),
+  ]);
+}
+
+function comparePlaybackConnections(
+  left: { readonly connection: CanvasConnection; readonly index: number },
+  right: { readonly connection: CanvasConnection; readonly index: number },
+  metadata: Pick<NormalizedCanvasPlaybackMetadata, 'edgeOverrides'>,
+): number {
+  return firstNonZero([
+    compareOptionalNumber(
+      getCanvasPlaybackEdgeOverride(metadata, left.connection).order,
+      getCanvasPlaybackEdgeOverride(metadata, right.connection).order,
+    ),
+    compareOptionalNumber(left.connection.priority, right.connection.priority),
+    left.index - right.index,
+    left.connection.id.localeCompare(right.connection.id),
+  ]);
+}
+
+function compareOptionalNumber(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined && right === undefined) return undefined;
+  if (left === undefined) return 1;
+  if (right === undefined) return -1;
+  return left - right;
+}
+
+function firstNonZero(values: readonly (number | undefined)[]): number {
+  return values.find((value) => value !== undefined && value !== 0) ?? 0;
+}
+
+function readDomainOrder(node: CanvasNode): number | undefined {
+  if (node.type === 'shot') return node.data.shotNumber;
+  if (node.type === 'scene') return node.data.sceneNumber;
+  return undefined;
+}
+
+function playbackUnitKindForNode(node: CanvasNode): CanvasPlaybackUnitKind {
+  if (node.type === 'media') return 'media';
+  if (node.type === 'shot') return 'shot';
+  if (node.type === 'scene') return 'scene';
+  if (isNarrativeRuntimeNode(node)) return 'narrative';
+  if (isContainerNode(node)) return 'container';
+  return 'node';
+}
+
+function renderModeForNode(node: CanvasNode): CanvasPlaybackRenderMode {
+  if (node.type === 'media') return 'media-playback';
+  if (node.type === 'shot' || node.type === 'scene') return 'story-preview';
+  if (isNarrativeRuntimeNode(node)) return 'narrative-preview';
+  return 'select-node';
+}
+
+function isNarrativeRuntimeNode(node: Pick<CanvasNode, 'type'>): boolean {
+  return NARRATIVE_RUNTIME_NODE_TYPE_SET.has(node.type);
+}
+
+function isCanvasPlaybackNode(node: CanvasNode): node is CanvasNode {
+  return Boolean(node.id);
+}
+
+function readNodeLabel(node: CanvasNode): string | undefined {
+  const data = isRecord(node.data) ? (node.data as CanvasSerializableRecord) : {};
+  const candidate =
+    data['label'] ??
+    data['title'] ??
+    data['name'] ??
+    (node.type === 'scene' ? node.data.sceneTitle : undefined) ??
+    (node.type === 'shot' ? `Shot ${node.data.shotNumber}` : undefined);
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
+}
+
+function defaultBehaviorModeForAdapter(
+  adapterId: ResolvedCanvasPlaybackAdapterId,
+): ResolvedCanvasPlaybackBehaviorMode {
+  return adapterId === 'narrative' ? 'interactive' : 'linear';
+}
+
+function defaultAdvancePolicyForAdapter(
+  adapterId: ResolvedCanvasPlaybackAdapterId,
+  behaviorMode: ResolvedCanvasPlaybackBehaviorMode,
+): CanvasPlaybackAdvancePolicy {
+  if (adapterId === 'media-sequence') return 'media-ended';
+  if (adapterId === 'narrative' || behaviorMode === 'interactive' || behaviorMode === 'manual') {
+    return 'user-input';
+  }
+  return 'timer';
+}
+
+function diagnostic(
+  context: PlaybackProjectionContext,
+  code: CanvasPlaybackDiagnosticCode,
+  severity: CanvasPlaybackDiagnostic['severity'],
+  message: string,
+  nodeId?: string,
+  connectionId?: string,
+): CanvasPlaybackDiagnostic {
+  return {
+    code,
+    severity,
+    message,
+    adapterId: context.adapterId,
+    ...(nodeId ? { nodeId } : {}),
+    ...(connectionId ? { connectionId } : {}),
+  };
+}
+
+function readAdapterId(value: unknown): CanvasPlaybackAdapterId | undefined {
+  return CANVAS_PLAYBACK_ADAPTER_IDS.includes(value as CanvasPlaybackAdapterId)
+    ? (value as CanvasPlaybackAdapterId)
+    : undefined;
+}
+
+function readBehaviorMode(value: unknown): CanvasPlaybackBehaviorMode | undefined {
+  return CANVAS_PLAYBACK_BEHAVIOR_MODES.includes(value as CanvasPlaybackBehaviorMode)
+    ? (value as CanvasPlaybackBehaviorMode)
+    : undefined;
+}
+
+function readNodeOverride(value: unknown): CanvasPlaybackNodeOverride {
+  if (!isRecord(value)) return {};
+  const role = readNodeRole(value['role']);
+  const expand = readExpansion(value['expand']);
+  return {
+    ...(role ? { role } : {}),
+    ...readOptionalNumberField(value, 'order'),
+    ...readOptionalNumberField(value, 'durationMs'),
+    ...(expand ? { expand } : {}),
+  };
+}
+
+function readEdgeOverride(value: unknown): CanvasPlaybackEdgeOverride {
+  if (!isRecord(value)) return {};
+  return {
+    ...(typeof value['enabled'] === 'boolean' ? { enabled: value['enabled'] } : {}),
+    ...readOptionalNumberField(value, 'order'),
+    ...(typeof value['branchLabel'] === 'string' ? { branchLabel: value['branchLabel'] } : {}),
+    ...(typeof value['condition'] === 'string' ? { condition: value['condition'] } : {}),
+  };
+}
+
+function readOptionalNumberField<T extends string>(
+  value: Readonly<Record<string, unknown>>,
+  field: T,
+): Partial<Record<T, number>> {
+  const candidate = value[field];
+  return typeof candidate === 'number' && Number.isFinite(candidate)
+    ? ({ [field]: candidate } as Partial<Record<T, number>>)
+    : {};
+}
+
+function readOverrideRecord<T>(
+  value: unknown,
+  read: (entry: unknown) => T,
+): Readonly<Record<string, T>> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, read(entry)]));
+}
+
+function readNodeRole(value: unknown): CanvasPlaybackNodeRole | undefined {
+  return value === 'start' || value === 'end' || value === 'skip' || value === 'step'
+    ? value
+    : undefined;
+}
+
+function readExpansion(value: unknown): CanvasPlaybackExpansion | undefined {
+  return value === 'self' || value === 'children' || value === 'recursive' ? value : undefined;
+}
+
+function readStringArray(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function readExtensionPlaybackRecord(extension: unknown): CanvasSerializableRecord | undefined {
+  if (!isRecord(extension)) return undefined;
+  const playback = extension['playback'];
+  return isRecord(playback) ? (playback as CanvasSerializableRecord) : undefined;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const CANVAS_PLAYBACK_ADAPTERS: readonly CanvasPlaybackAdapter[] = [
+  {
+    id: 'storyboard',
+    canHandle: (context) =>
+      context.canvas.nodes.some((node) => node.type === 'scene' || node.type === 'shot'),
+    project: projectStoryboard,
+  },
+  {
+    id: 'narrative',
+    canHandle: (context) => context.canvas.nodes.some(isNarrativeRuntimeNode),
+    project: projectNarrative,
+  },
+  {
+    id: 'media-sequence',
+    canHandle: (context) => context.canvas.nodes.some((node) => node.type === 'media'),
+    project: projectMediaSequence,
+  },
+  {
+    id: 'generic',
+    canHandle: () => true,
+    project: projectGeneric,
+  },
+];

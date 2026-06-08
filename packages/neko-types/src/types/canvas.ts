@@ -6,6 +6,7 @@ import type {
 } from './canvas-layered';
 import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import type { NkProjectType } from './canvas-drop';
+import type { CanvasPlaybackMetadata } from './canvas-playback';
 import type { CreativeEntityRef } from './creative-entity-asset-composition';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type {
@@ -227,6 +228,8 @@ export interface CanvasNodeBase {
   container?: ContainerCapability;
   /** Optional stable node summary descriptor for child slots, minimaps, and Agent context. */
   preview?: NodePreviewDescriptor;
+  /** Optional subsystem or feature extension data. Base Canvas semantics remain owned by core fields. */
+  extension?: CanvasSerializableRecord;
   /** Optional registered preset that assembled this node's capabilities. */
   preset?: string;
 }
@@ -837,6 +840,8 @@ export interface CanvasData {
   entityGraph?: EntityGraphMetadata;
   /** Memory graph subsystem metadata. */
   memoryGraph?: MemoryGraphMetadata;
+  /** Optional Canvas playback projection metadata. */
+  playback?: CanvasPlaybackMetadata;
 }
 
 // =============================================================================
