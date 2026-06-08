@@ -2,6 +2,8 @@ import type {
   CanvasNodeType,
   CanvasSerializableRecord,
   CanvasSerializableValue,
+  BatchExecutionPlan,
+  ComicAnimationDiagnostic,
   GalleryPreset,
   GeneratedImage,
   GeneratedImageVersion,
@@ -11,11 +13,13 @@ import type {
   RegisteredCanvasNodeType,
   ScriptScene,
   ShotCharacter,
+  ShotCharacterCandidate,
   ShotImagePrepPlan,
   StoryboardMediaRef,
   StoryboardTextCue,
   StoryboardVoiceCue,
   TableColumnDef,
+  VisualOccurrence,
 } from '@neko/shared';
 import {
   GALLERY_PRESET_CONFIGS,
@@ -59,6 +63,9 @@ const DEFAULT_EMPTY_CHARACTERS: ShotCharacter[] = [];
 const DEFAULT_EMPTY_TEXT_CUES: StoryboardTextCue[] = [];
 const DEFAULT_EMPTY_VOICE_CUES: StoryboardVoiceCue[] = [];
 const DEFAULT_EMPTY_MEDIA_REFS: StoryboardMediaRef[] = [];
+const DEFAULT_EMPTY_VISUAL_OCCURRENCES: VisualOccurrence[] = [];
+const DEFAULT_EMPTY_CHARACTER_CANDIDATES: ShotCharacterCandidate[] = [];
+const DEFAULT_EMPTY_COMIC_DIAGNOSTICS: ComicAnimationDiagnostic[] = [];
 const DEFAULT_EMPTY_SCENES: ScriptScene[] = [];
 const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
 const REGISTERED_NODE_DEFAULT_DATA: Partial<
@@ -376,6 +383,18 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             shotImagePrepPlan: isShotImagePrepPlanLike(data.shotImagePrepPlan)
               ? data.shotImagePrepPlan
               : undefined,
+            visualOccurrences:
+              asObjectArray<VisualOccurrence>(data.visualOccurrences) ??
+              DEFAULT_EMPTY_VISUAL_OCCURRENCES,
+            characterCandidates:
+              asObjectArray<ShotCharacterCandidate>(data.characterCandidates) ??
+              DEFAULT_EMPTY_CHARACTER_CANDIDATES,
+            continuityDiagnostics:
+              asObjectArray<ComicAnimationDiagnostic>(data.continuityDiagnostics) ??
+              DEFAULT_EMPTY_COMIC_DIAGNOSTICS,
+            batchExecutionPlan: isBatchExecutionPlanLike(data.batchExecutionPlan)
+              ? data.batchExecutionPlan
+              : undefined,
             lastImportedToTimelineAt:
               typeof data.lastImportedToTimelineAt === 'number'
                 ? data.lastImportedToTimelineAt
@@ -549,6 +568,12 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
 function isShotImagePrepPlanLike(value: unknown): value is ShotImagePrepPlan {
   return (
     isRecord(value) && value.kind === 'shot-image-prep-plan' && typeof value.planId === 'string'
+  );
+}
+
+function isBatchExecutionPlanLike(value: unknown): value is BatchExecutionPlan {
+  return (
+    isRecord(value) && value.kind === 'batch-execution-plan' && typeof value.planId === 'string'
   );
 }
 

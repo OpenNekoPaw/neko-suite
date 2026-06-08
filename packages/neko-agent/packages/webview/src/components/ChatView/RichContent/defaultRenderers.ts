@@ -12,6 +12,7 @@ import {
   videoRendererEntry,
   audioRendererEntry,
   storyboardRendererEntry,
+  compositeArtifactRendererEntry,
   storyboardTableRendererEntry,
   comparisonGridRendererEntry,
   assetGalleryRendererEntry,
@@ -33,6 +34,7 @@ export function registerDefaultRenderers(): void {
   richContentRegistry.register(videoRendererEntry);
   richContentRegistry.register(audioRendererEntry);
   richContentRegistry.register(storyboardRendererEntry);
+  richContentRegistry.register(compositeArtifactRendererEntry);
   richContentRegistry.register(storyboardTableRendererEntry);
   richContentRegistry.register(comparisonGridRendererEntry);
   richContentRegistry.register(assetGalleryRendererEntry);

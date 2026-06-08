@@ -9,6 +9,11 @@ export { videoRendererEntry, type VideoRichData } from './VideoRenderer';
 export { audioRendererEntry, type AudioRichData } from './AudioRenderer';
 export { storyboardRendererEntry, type StoryboardRichData } from './StoryboardRenderer';
 export {
+  compositeArtifactRendererEntry,
+  type CompositeArtifactRichData,
+  type CompositeArtifactPageRichData,
+} from './CompositeArtifactRenderer';
+export {
   assetGalleryRendererEntry,
   comparisonGridRendererEntry,
   storyboardTableRendererEntry,

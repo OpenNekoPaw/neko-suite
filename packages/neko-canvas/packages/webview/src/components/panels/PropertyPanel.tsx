@@ -84,6 +84,8 @@ type ComposablePropertyItem =
       blockId: string;
       label: string;
       action: string;
+      disabledReasonPath?: string;
+      requiresCapability?: string;
     }
   | {
       kind: 'preview';
@@ -624,26 +626,62 @@ export function ComposableNodeProperties({
       {actionItems.length > 0 && (
         <CollapsibleSection title={t('panel.actions')} defaultExpanded={false}>
           <div className="space-y-1">
-            {actionItems.map((item) => (
-              <button
-                key={item.blockId}
-                type="button"
-                className="w-full rounded border px-2 py-1 text-xs"
-                style={{
-                  borderColor: 'var(--control-border)',
-                  backgroundColor: 'var(--control-bg)',
-                  color: 'var(--control-fg)',
-                }}
-                onClick={() => onAction?.(item.action, { blockId: item.blockId })}
-              >
-                {item.label}
-              </button>
-            ))}
+            {actionItems.map((item) => {
+              const disabledReason = resolveComposableActionDisabledReason(node, item);
+              return (
+                <button
+                  key={item.blockId}
+                  type="button"
+                  className="w-full rounded border px-2 py-1 text-xs disabled:opacity-55"
+                  style={{
+                    borderColor: 'var(--control-border)',
+                    backgroundColor: 'var(--control-bg)',
+                    color: 'var(--control-fg)',
+                  }}
+                  disabled={Boolean(disabledReason)}
+                  title={disabledReason}
+                  onClick={() => onAction?.(item.action, { blockId: item.blockId })}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </CollapsibleSection>
       )}
     </>
   );
+}
+
+function resolveComposableActionDisabledReason(
+  node: CanvasNode,
+  item: Extract<ComposablePropertyItem, { kind: 'action' }>,
+): string | undefined {
+  return resolveComposableActionDisabledReasonPath(node, item.disabledReasonPath);
+}
+
+export function resolveComposableActionDisabledReasonPath(
+  node: CanvasNode,
+  disabledReasonPath: string | undefined,
+): string | undefined {
+  const path = toJsonPointerPath(disabledReasonPath);
+  if (!path) return undefined;
+  const result = readFieldBinding(node.data, {
+    path,
+    valueType: 'unknown',
+  });
+  return hasBlockingActionValue(result.value) ? path : undefined;
+}
+
+function hasBlockingActionValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.keys(value).length > 0;
+  return Boolean(value);
+}
+
+function toJsonPointerPath(value: string | undefined): JsonPointerPath | undefined {
+  if (value === '' || value?.startsWith('/')) return value as JsonPointerPath;
+  return undefined;
 }
 
 function ComposableFieldEditor({
@@ -1166,6 +1204,8 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
           blockId: block.id,
           label: resolveComposableLabel(block.label ?? action),
           action,
+          disabledReasonPath: getStringMetadata(block, 'disabledReasonPath'),
+          requiresCapability: getStringMetadata(block, 'requiresCapability'),
         });
       }
     }

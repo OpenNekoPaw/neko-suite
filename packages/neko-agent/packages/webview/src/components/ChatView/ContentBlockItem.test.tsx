@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ContentBlock } from '@/components/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
+import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { ContentBlockItem } from './ContentBlockItem';
 
 vi.mock('@neko/shared/vscode', () => ({
@@ -64,7 +65,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
-  it('renders composite artifact transfers as review-only summaries', () => {
+  it('renders composite artifact transfers as review-only artifact cards', () => {
     renderContentBlock({
       id: 'tool-artifact',
       type: 'tool_call',
@@ -102,15 +103,16 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       },
     });
 
-    expect(screen.getByText('Artifact')).toBeTruthy();
     expect(screen.getByText('Comic shot plan')).toBeTruthy();
+    expect(screen.getByText('Review shots.')).toBeTruthy();
     expect(screen.getByText('text')).toBeTruthy();
     expect(screen.getByText('comic-shot-asset-prep')).toBeTruthy();
-    expect(screen.getByText('1 suggested actions')).toBeTruthy();
+    expect(screen.getByText('canvas.importStoryboard')).toBeTruthy();
+    expect(screen.getByText(/disabled: Provider unavailable/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
   });
 
-  it('summarizes generic artifact table blocks without exposing execute controls', () => {
+  it('renders generic artifact table blocks without exposing execute controls', () => {
     renderContentBlock({
       id: 'tool-table-artifact',
       type: 'tool_call',
@@ -158,7 +160,10 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       },
     });
 
-    expect(screen.getByText('table')).toBeTruthy();
+    expect(screen.getAllByText('table').length).toBeGreaterThan(0);
+    expect(screen.getByText('Shots')).toBeTruthy();
+    expect(screen.getByText('shotId')).toBeTruthy();
+    expect(screen.getByText('shot-1')).toBeTruthy();
     expect(screen.getByText('1 rows / 1 columns')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /execute|import/i })).toBeNull();
   });
@@ -168,6 +173,7 @@ function renderContentBlock(
   block: ContentBlock,
   assistantIdentity?: { avatarLabel: string; title: string },
 ) {
+  registerDefaultRenderers();
   render(
     <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
       <ContentBlockItem

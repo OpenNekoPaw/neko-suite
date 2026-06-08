@@ -159,6 +159,51 @@ describe('nodeFactory composable presets', () => {
         vfx: ['glow'],
         textCues: [{ cueId: 'text-1', kind: 'caption', text: 'Doorway' }],
         voiceCues: [{ cueId: 'voice-1', kind: 'voiceOver', text: 'The door opens.' }],
+        visualOccurrences: [
+          {
+            schemaVersion: 1,
+            kind: 'visual-occurrence',
+            occurrenceId: 'occ-1',
+            sourceRef: { kind: 'asset', assetId: 'page-1' },
+            appearanceText: 'Mika in a red coat',
+            confidence: 0.74,
+            reviewState: 'needs-review',
+          },
+        ],
+        characterCandidates: [
+          {
+            candidateId: 'candidate-1',
+            entityRef: { entityId: 'char-mika', entityKind: 'character' },
+            displayName: 'Mika',
+            confidence: 0.8,
+          },
+        ],
+        continuityDiagnostics: [
+          {
+            severity: 'warning',
+            code: 'conflict',
+            path: ['characters', 0],
+            message: 'Outfit differs from previous panel.',
+          },
+        ],
+        batchExecutionPlan: {
+          schemaVersion: 1,
+          kind: 'batch-execution-plan',
+          planId: 'batch-1',
+          targetDomain: 'asset-indexing',
+          items: [
+            {
+              itemId: 'item-1',
+              targetRef: 'page-1',
+              capabilityId: 'perception.ocr',
+              status: 'blocked',
+              providerId: 'local-ocr',
+            },
+          ],
+          approvalPolicy: { mode: 'explicit' },
+          executionPolicy: { maxConcurrency: 1 },
+          status: 'needs-approval',
+        },
         sourceMediaRefs: [
           {
             refId: 'source-1',
@@ -220,6 +265,24 @@ describe('nodeFactory composable presets', () => {
     expect(node.data.voiceCues).toEqual([
       { cueId: 'voice-1', kind: 'voiceOver', text: 'The door opens.' },
     ]);
+    expect(node.data.visualOccurrences?.[0]).toMatchObject({
+      occurrenceId: 'occ-1',
+      appearanceText: 'Mika in a red coat',
+      reviewState: 'needs-review',
+    });
+    expect(node.data.characterCandidates?.[0]).toMatchObject({
+      candidateId: 'candidate-1',
+      displayName: 'Mika',
+    });
+    expect(node.data.continuityDiagnostics?.[0]).toMatchObject({
+      code: 'conflict',
+      message: 'Outfit differs from previous panel.',
+    });
+    expect(node.data.batchExecutionPlan).toMatchObject({
+      planId: 'batch-1',
+      targetDomain: 'asset-indexing',
+      status: 'needs-approval',
+    });
     expect(node.data.sourceMediaRefs).toEqual([
       {
         refId: 'source-1',

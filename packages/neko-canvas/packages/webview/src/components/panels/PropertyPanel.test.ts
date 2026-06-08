@@ -4,6 +4,7 @@ import { buildCanvasNode } from '../../utils/nodeFactory';
 import {
   createBuiltInNodePropertiesRendererRegistry,
   enumerateComposablePropertyItems,
+  resolveComposableActionDisabledReasonPath,
   writeComposablePropertyBinding,
 } from './PropertyPanel';
 
@@ -64,6 +65,68 @@ describe('PropertyPanel node properties registry', () => {
         ],
         status: 'needs-approval',
       },
+      visualOccurrences: [
+        {
+          schemaVersion: 1,
+          kind: 'visual-occurrence',
+          occurrenceId: 'occ-1',
+          sourceRef: { kind: 'asset', assetId: 'page-1' },
+          appearanceText: 'Mika in a red coat',
+          confidence: 0.74,
+          reviewState: 'needs-review',
+        },
+      ],
+      characterCandidates: [
+        {
+          candidateId: 'candidate-1',
+          entityRef: { entityId: 'char-mika', entityKind: 'character' },
+          displayName: 'Mika',
+          confidence: 0.8,
+        },
+      ],
+      continuityDiagnostics: [
+        {
+          severity: 'warning',
+          code: 'conflict',
+          path: ['characters', 0],
+          message: 'Outfit differs from previous panel.',
+        },
+      ],
+      batchExecutionPlan: {
+        schemaVersion: 1,
+        kind: 'batch-execution-plan',
+        planId: 'batch-1',
+        targetDomain: 'asset-indexing',
+        items: [
+          {
+            itemId: 'item-1',
+            targetRef: 'page-1',
+            capabilityId: 'perception.ocr',
+            status: 'blocked',
+            providerId: 'local-ocr',
+            diagnostics: [
+              {
+                severity: 'error',
+                code: 'provider-unavailable',
+                path: ['providerId'],
+                message: 'Local OCR provider unavailable.',
+              },
+            ],
+          },
+        ],
+        approvalPolicy: { mode: 'explicit' },
+        executionPolicy: { maxConcurrency: 1 },
+        costEstimate: { estimateState: 'unknown' },
+        status: 'needs-approval',
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'unknown-cost',
+            path: ['costEstimate'],
+            message: 'Cost is unknown.',
+          },
+        ],
+      },
     });
 
     const items = enumerateComposablePropertyItems(node);
@@ -87,6 +150,14 @@ describe('PropertyPanel node properties registry', () => {
     expect(collectionPaths).toContain('/shotImagePrepPlan/sourceMediaRefs');
     expect(collectionPaths).toContain('/shotImagePrepPlan/referenceBundle/characterRefs');
     expect(collectionPaths).toContain('/shotImagePrepPlan/diagnostics');
+    expect(collectionPaths).toContain('/visualOccurrences');
+    expect(collectionPaths).toContain('/characterCandidates');
+    expect(collectionPaths).toContain('/continuityDiagnostics');
+    expect(collectionPaths).toContain('/batchExecutionPlan/items');
+    expect(collectionPaths).toContain('/batchExecutionPlan/diagnostics');
+    expect(fieldPaths).toContain('/batchExecutionPlan/status');
+    expect(fieldPaths).toContain('/batchExecutionPlan/targetDomain');
+    expect(fieldPaths).toContain('/batchExecutionPlan/costEstimate/estimatedCost');
     expect(items.filter((item) => item.kind === 'action').map((item) => item.action)).toEqual(
       expect.arrayContaining([
         'approve-shot-prep',
@@ -96,6 +167,12 @@ describe('PropertyPanel node properties registry', () => {
         'run-approved-shot-prep-batch',
       ]),
     );
+    expect(
+      items.find((item) => item.kind === 'action' && item.action === 'run-shot-prep'),
+    ).toMatchObject({
+      disabledReasonPath: '/shotImagePrepPlan/diagnostics',
+      requiresCapability: 'comic-image-prep-pipeline',
+    });
     expect(
       items.some(
         (item) =>
@@ -134,6 +211,38 @@ describe('PropertyPanel node properties registry', () => {
     expect(withTags.generationHistory).toEqual(
       (node.data as Record<string, unknown>).generationHistory,
     );
+  });
+
+  it('resolves disabled execution action reasons when diagnostics block the gate', () => {
+    const node = createMigratedNode('shot', {
+      shotNumber: 3,
+      visualDescription: 'A blocked shot',
+      duration: 3,
+      shotImagePrepPlan: {
+        schemaVersion: 1,
+        kind: 'shot-image-prep-plan',
+        planId: 'shot-3-image-prep',
+        sceneId: 'scene-1',
+        shotId: 'shot-3',
+        imageStrategy: 'transform-original',
+        operationPlan: ['crop-panel'],
+        sourceMediaRefs: [],
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'provider-unavailable',
+            path: ['providerId'],
+            message: 'Provider unavailable.',
+          },
+        ],
+        status: 'needs-approval',
+      },
+    });
+
+    expect(resolveComposableActionDisabledReasonPath(node, '/shotImagePrepPlan/diagnostics')).toBe(
+      '/shotImagePrepPlan/diagnostics',
+    );
+    expect(resolveComposableActionDisabledReasonPath(node, '/missing/diagnostics')).toBeUndefined();
   });
 
   it('enumerates migrated Gallery as container without cells collection', () => {

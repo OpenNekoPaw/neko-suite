@@ -6,6 +6,7 @@ import { chat as zhCnChat } from '@/i18n/locales/zh-cn/chat';
 import { registerDefaultRenderers, RichContentRenderer } from '@/components/ChatView/RichContent';
 import { richContentRegistry } from '../RichContentRegistry';
 import { I18nService } from '@neko/shared';
+import type { CompositeArtifactRichData } from './CompositeArtifactRenderer';
 import type {
   AssetGalleryRichData,
   ComparisonGridRichData,
@@ -19,6 +20,137 @@ describe('composite rich content renderers', () => {
     expect(richContentRegistry.has('storyboard-table')).toBe(true);
     expect(richContentRegistry.has('comparison-grid')).toBe(true);
     expect(richContentRegistry.has('asset-gallery')).toBe(true);
+    expect(richContentRegistry.has('composite-artifact')).toBe(true);
+  });
+
+  it('renders composite artifact review tables and blocking diagnostics without execute controls', () => {
+    registerDefaultRenderers();
+
+    render(
+      <RichContentRenderer
+        kind="composite-artifact"
+        data={
+          {
+            schemaVersion: 1,
+            kind: 'composite-artifact',
+            artifactId: 'comic-review-1',
+            profile: 'comic-animation-review',
+            title: 'Comic Animation Review',
+            suggestedActions: [
+              {
+                actionId: 'run-batch',
+                kind: 'execute',
+                label: 'Run Batch',
+                disabled: true,
+                disabledReason: 'Provider unavailable',
+              },
+            ],
+            diagnostics: [
+              {
+                severity: 'warning',
+                code: 'provider-unavailable',
+                path: ['batchExecutionPlan', 'items', 0],
+                message: 'Local OCR provider unavailable.',
+              },
+            ],
+            blocks: [
+              {
+                blockId: 'visual-occurrences',
+                kind: 'table',
+                title: 'Visual Occurrences',
+                table: {
+                  schemaVersion: 1,
+                  kind: 'generic-table',
+                  tableId: 'visual-occurrence-review',
+                  profile: 'comic-visual-occurrence-review',
+                  title: 'Visual Occurrence Review',
+                  columns: [
+                    { columnId: 'occurrenceId', label: 'Occurrence', cellType: 'string' },
+                    { columnId: 'confidence', label: 'Confidence', cellType: 'number' },
+                    { columnId: 'status', label: 'Status', cellType: 'status' },
+                    { columnId: 'diagnostics', label: 'Diagnostics', cellType: 'diagnostic' },
+                  ],
+                  rows: [
+                    {
+                      rowId: 'occ-1',
+                      status: 'needs-review',
+                      cells: {
+                        occurrenceId: { type: 'string', value: 'occ-1' },
+                        confidence: { type: 'number', value: 0.42 },
+                        status: { type: 'status', value: 'needs-review' },
+                        diagnostics: {
+                          type: 'diagnostic',
+                          value: {
+                            severity: 'warning',
+                            code: 'invalid-required-field',
+                            path: ['visualOccurrences', 0, 'confidence'],
+                            message: 'Low confidence visual occurrence.',
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                blockId: 'batch-execution',
+                kind: 'table',
+                title: 'Batch Execution',
+                table: {
+                  schemaVersion: 1,
+                  kind: 'generic-table',
+                  tableId: 'batch-execution-review',
+                  profile: 'batch-execution-review',
+                  title: 'Batch Execution Review',
+                  columns: [
+                    { columnId: 'itemId', label: 'Item', cellType: 'string' },
+                    { columnId: 'capabilityId', label: 'Capability', cellType: 'string' },
+                    { columnId: 'status', label: 'Status', cellType: 'status' },
+                    { columnId: 'diagnostics', label: 'Diagnostics', cellType: 'diagnostic' },
+                  ],
+                  rows: [
+                    {
+                      rowId: 'item-1',
+                      status: 'blocked',
+                      cells: {
+                        itemId: { type: 'string', value: 'item-1' },
+                        capabilityId: { type: 'string', value: 'perception.ocr' },
+                        status: { type: 'status', value: 'blocked' },
+                        diagnostics: {
+                          type: 'diagnostic',
+                          value: {
+                            severity: 'error',
+                            code: 'invalid-required-field',
+                            path: ['costEstimate'],
+                            message: 'Cost is unknown.',
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          } satisfies CompositeArtifactRichData
+        }
+      />,
+    );
+
+    expect(screen.getByText('Comic Animation Review')).toBeTruthy();
+    expect(screen.getByText('comic-animation-review')).toBeTruthy();
+    expect(screen.getByText('Run Batch')).toBeTruthy();
+    expect(screen.getByText(/disabled: Provider unavailable/)).toBeTruthy();
+    expect(screen.getByText(/Local OCR provider unavailable/)).toBeTruthy();
+    expect(screen.getByText('Visual Occurrences')).toBeTruthy();
+    expect(screen.getByText('Visual Occurrence Review')).toBeTruthy();
+    expect(screen.getByText('occ-1')).toBeTruthy();
+    expect(screen.getByText('0.42')).toBeTruthy();
+    expect(screen.getAllByText('needs-review').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Low confidence visual occurrence/)).toBeTruthy();
+    expect(screen.getByText('Batch Execution')).toBeTruthy();
+    expect(screen.getByText('perception.ocr')).toBeTruthy();
+    expect(screen.getByText(/Cost is unknown/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Run Batch|execute/i })).toBeNull();
   });
 
   it('renders storyboard rows with media previews and diagnostics', () => {
