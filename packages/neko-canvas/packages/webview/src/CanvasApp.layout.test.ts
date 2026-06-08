@@ -54,10 +54,15 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-pan-mode"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-add-node-popover"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="import-file"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-narrative-preview"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
+    expect(toolbarSource).toMatch(/onOpenNarrativePreview\?: \(\) => void/);
     expect(toolbarSource).toMatch(/onOpenExport\?: \(\) => void/);
     expect(toolbarSource).toMatch(/onOpenPackage\?: \(\) => void/);
+    expect(appSource).toMatch(
+      /reportAction\('openNarrativePreview', t\('toolbar\.narrativePreview'\)\)/,
+    );
     expect(appSource).toMatch(/reportAction\('openExport', t\('toolbar\.export'\)\)/);
     expect(appSource).toMatch(
       /reportAction\('openPackage', t\('toolbar\.package'\), undefined, canvasData\)/,

@@ -445,9 +445,13 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
-  describe('NKV-012: canvas toolbar export and package intents', () => {
-    it('routes toolbar export and package actions through separate whitelisted paths', () => {
+  describe('NKV-012: canvas toolbar preview, export, and package intents', () => {
+    it('routes toolbar preview, export, and package actions through separate whitelisted paths', () => {
       expect(providerSource).toContain("case 'canvasAction'");
+      expect(providerSource).toContain("message.action === 'openNarrativePreview'");
+      expect(providerSource).toContain(
+        "vscode.commands.executeCommand('neko.canvas.openNarrativePreview')",
+      );
       expect(providerSource).toContain("message.action === 'openExport'");
       expect(providerSource).toContain(
         "vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export')",
@@ -459,6 +463,9 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('sends lightweight canvasAction intents from the webview toolbar', () => {
       expect(canvasAppSource).toContain("type: 'canvasAction'");
+      expect(canvasAppSource).toContain(
+        "reportAction('openNarrativePreview', t('toolbar.narrativePreview'))",
+      );
       expect(canvasAppSource).toContain("reportAction('openExport', t('toolbar.export'))");
       expect(canvasAppSource).toContain(
         "reportAction('openPackage', t('toolbar.package'), undefined, canvasData)",

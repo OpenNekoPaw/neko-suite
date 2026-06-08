@@ -10,6 +10,7 @@ vi.mock('@neko/ui/icons', () => ({
   DownloadIcon: ({ size = 16 }: { size?: number }) => <span data-icon="download">{size}</span>,
   LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
   PackageIcon: ({ size = 16 }: { size?: number }) => <span data-icon="package">{size}</span>,
+  PlayIcon: ({ size = 16 }: { size?: number }) => <span data-icon="play">{size}</span>,
   RedoIcon: ({ size = 16 }: { size?: number }) => <span data-icon="redo">{size}</span>,
   RightPanelIcon: ({ size = 16 }: { size?: number }) => <span data-icon="right-panel">{size}</span>,
   RightPanelOffIcon: ({ size = 16 }: { size?: number }) => (
@@ -105,7 +106,8 @@ describe('CanvasToolbar', () => {
     expect(collapsedButton?.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('opens separate Extension Host-owned export and package flows', () => {
+  it('opens separate Extension Host-owned preview, export, and package flows', () => {
+    const onOpenNarrativePreview = vi.fn();
     const onOpenExport = vi.fn();
     const onOpenPackage = vi.fn();
 
@@ -114,18 +116,25 @@ describe('CanvasToolbar', () => {
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
+          onOpenNarrativePreview={onOpenNarrativePreview}
           onOpenExport={onOpenExport}
           onOpenPackage={onOpenPackage}
         />,
       );
     });
 
+    const previewButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="open-narrative-preview"]',
+    );
     const exportButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-export"]',
     );
     const packageButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-package"]',
     );
+    expect(previewButton?.getAttribute('aria-label')).toBe('Narrative Preview');
+    expect(previewButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
+    expect(previewButton?.querySelector('[data-icon="play"]')).not.toBeNull();
     expect(exportButton?.getAttribute('aria-label')).toBe('Export');
     expect(exportButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
     expect(exportButton?.querySelector('[data-icon="download"]')).not.toBeNull();
@@ -134,9 +143,11 @@ describe('CanvasToolbar', () => {
     expect(packageButton?.querySelector('[data-icon="package"]')).not.toBeNull();
 
     act(() => {
+      previewButton?.click();
       exportButton?.click();
       packageButton?.click();
     });
+    expect(onOpenNarrativePreview).toHaveBeenCalledTimes(1);
     expect(onOpenExport).toHaveBeenCalledTimes(1);
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });

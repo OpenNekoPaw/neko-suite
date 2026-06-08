@@ -1589,6 +1589,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'canvasAction': {
         if (message.action === 'openExport') {
           await vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export');
+        } else if (message.action === 'openNarrativePreview') {
+          await vscode.commands.executeCommand('neko.canvas.openNarrativePreview');
         } else if (message.action === 'openPackage') {
           const data =
             message.data && typeof message.data === 'object'

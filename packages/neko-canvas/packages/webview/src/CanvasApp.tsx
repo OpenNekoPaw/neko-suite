@@ -1275,6 +1275,9 @@ export function CanvasApp() {
             onRedo={redo}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
+            onOpenNarrativePreview={() => {
+              reportAction('openNarrativePreview', t('toolbar.narrativePreview'));
+            }}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}

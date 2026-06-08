@@ -27,6 +27,7 @@ export const zhCN = {
   'toolbar.toggleNodeLibrary': '切换节点库',
   'toolbar.showRightNodeTree': '显示右侧节点树',
   'toolbar.hideRightNodeTree': '折叠右侧节点树',
+  'toolbar.narrativePreview': '叙事 Preview',
   'toolbar.export': '导出',
   'toolbar.package': '打包',
   'toolbar.showHudControls': '显示画布 HUD',
