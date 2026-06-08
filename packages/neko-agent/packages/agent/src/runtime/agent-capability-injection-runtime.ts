@@ -777,6 +777,10 @@ function mergeArtifactFacets(
     string,
     NonNullable<AgentArtifactFacetsContribution['perceptionProviders']>[number]
   >();
+  const perceptionCapabilities = new Map<
+    string,
+    NonNullable<AgentArtifactFacetsContribution['perceptionCapabilities']>[number]
+  >();
   const semanticIndexProviders = new Map<
     string,
     NonNullable<AgentArtifactFacetsContribution['semanticIndexProviders']>[number]
@@ -826,6 +830,9 @@ function mergeArtifactFacets(
     for (const facet of contribution.artifactFacets?.perceptionProviders ?? []) {
       perceptionProviders.set(facet.id, facet);
     }
+    for (const facet of contribution.artifactFacets?.perceptionCapabilities ?? []) {
+      perceptionCapabilities.set(facet.providerId, facet);
+    }
     for (const facet of contribution.artifactFacets?.semanticIndexProviders ?? []) {
       semanticIndexProviders.set(facet.id, facet);
     }
@@ -847,6 +854,7 @@ function mergeArtifactFacets(
     entityMemoryContributors: Array.from(entityMemoryContributors.values()),
     mediaTextExtractors: Array.from(mediaTextExtractors.values()),
     perceptionProviders: Array.from(perceptionProviders.values()),
+    perceptionCapabilities: Array.from(perceptionCapabilities.values()),
     semanticIndexProviders: Array.from(semanticIndexProviders.values()),
     reviewSurfaces: Array.from(reviewSurfaces.values()),
     representationResolvers: Array.from(representationResolvers.values()),
@@ -1147,6 +1155,7 @@ function validateArtifactFacets(
     ['modalities', 'timing', 'actions'],
   );
   validatePerceptionProviderLayers(contribution, diagnostics, facets.perceptionProviders);
+  validatePerceptionCapabilityFacets(contribution, diagnostics, facets.perceptionCapabilities);
   validateSemanticFacetArray(
     contribution,
     diagnostics,
@@ -1552,6 +1561,96 @@ function validatePerceptionProviderLayers(
   }
 }
 
+function validatePerceptionCapabilityFacets(
+  contribution: AgentCapabilityContribution,
+  diagnostics: AgentCapabilityDiagnostic[],
+  facets: NonNullable<AgentArtifactFacetsContribution['perceptionCapabilities']> | undefined,
+): void {
+  for (const facet of facets ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      facet.providerId,
+      'artifactFacets.perceptionCapabilities.providerId',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      facet.tasks,
+      'artifactFacets.perceptionCapabilities.tasks',
+    );
+    validateRequiredStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      facet.supportedMediaKinds,
+      'artifactFacets.perceptionCapabilities.supportedMediaKinds',
+    );
+    if (!isPerceptionCapabilitySource(facet.source)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-source',
+          'artifactFacets.perceptionCapabilities.source',
+        ),
+      );
+    }
+    if (!isPerceptionCapabilityExecutionMode(facet.executionMode)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-execution-mode',
+          'artifactFacets.perceptionCapabilities.executionMode',
+        ),
+      );
+    }
+    if (!isPerceptionCapabilityDeviceTier(facet.deviceTier)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-device-tier',
+          'artifactFacets.perceptionCapabilities.deviceTier',
+        ),
+      );
+    }
+    if (!isPerceptionCapabilityCachePolicy(facet.cachePolicy)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-cache-policy',
+          'artifactFacets.perceptionCapabilities.cachePolicy',
+        ),
+      );
+    }
+    if (!isPerceptionCapabilityConfidenceKind(facet.confidenceKind)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-confidence-kind',
+          'artifactFacets.perceptionCapabilities.confidenceKind',
+        ),
+      );
+    }
+    if (!Number.isInteger(facet.defaultConcurrency) || facet.defaultConcurrency <= 0) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-perception-capability-concurrency',
+          'artifactFacets.perceptionCapabilities.defaultConcurrency',
+        ),
+      );
+    }
+    if (facet.approvalRequired !== undefined && typeof facet.approvalRequired !== 'boolean') {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-artifact-approval',
+          'artifactFacets.perceptionCapabilities.approvalRequired',
+        ),
+      );
+    }
+  }
+}
+
 function isNonEmptyStringArray(value: readonly string[]): boolean {
   return value.length > 0 && value.every((item) => item.trim().length > 0);
 }
@@ -1567,6 +1666,7 @@ function hasArtifactFacets(facets: AgentArtifactFacetsContribution | undefined):
     (facets?.entityMemoryContributors?.length ?? 0) > 0 ||
     (facets?.mediaTextExtractors?.length ?? 0) > 0 ||
     (facets?.perceptionProviders?.length ?? 0) > 0 ||
+    (facets?.perceptionCapabilities?.length ?? 0) > 0 ||
     (facets?.semanticIndexProviders?.length ?? 0) > 0 ||
     (facets?.reviewSurfaces?.length ?? 0) > 0 ||
     (facets?.representationResolvers?.length ?? 0) > 0
@@ -1575,6 +1675,26 @@ function hasArtifactFacets(facets: AgentArtifactFacetsContribution | undefined):
 
 function isArtifactCapabilityRisk(value: string): boolean {
   return ['low', 'medium', 'high', 'destructive'].includes(value);
+}
+
+function isPerceptionCapabilitySource(value: string): boolean {
+  return ['builtin', 'local', 'engine', 'plugin', 'mcp', 'cloud'].includes(value);
+}
+
+function isPerceptionCapabilityExecutionMode(value: string): boolean {
+  return ['sync-light', 'async-local', 'async-cloud'].includes(value);
+}
+
+function isPerceptionCapabilityDeviceTier(value: string): boolean {
+  return ['light', 'medium', 'high'].includes(value);
+}
+
+function isPerceptionCapabilityCachePolicy(value: string): boolean {
+  return ['required', 'recommended', 'none'].includes(value);
+}
+
+function isPerceptionCapabilityConfidenceKind(value: string): boolean {
+  return ['provider-score', 'heuristic', 'none'].includes(value);
 }
 
 function validationDiagnostic(

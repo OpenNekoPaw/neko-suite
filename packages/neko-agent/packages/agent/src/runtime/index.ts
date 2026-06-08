@@ -550,6 +550,34 @@ export {
 } from './shot-image-prep-runtime';
 
 export {
+  COMIC_ANIMATION_SIDECAR_PATHS,
+  backfillBatchExecutionPlanFromSummary,
+  createAssetIndexingBatchExecutionPlan,
+  createComicAnimationSidecarRecord,
+  createDefaultComicAnimationPerceptionFacets,
+  createMentionResolverContinuityContext,
+  createShotImagePrepBatchExecutionPlan,
+  isIndexedRangeTaskStale,
+  planComicAnimationIndexingTasks,
+  queryStoryContinuitySnapshot,
+  rebuildComicAnimationCacheFromSidecars,
+  registerComicAnimationAsset,
+  writeComicAnimationSidecarFirst,
+  type AssetIndexingBatchInput,
+  type BatchExecutionRuntimeBackfillInput,
+  type ComicAnimationAssetRegistrationInput,
+  type ComicAnimationCacheProjectionPort,
+  type ComicAnimationSidecarPaths,
+  type ComicAnimationSidecarPort,
+  type ComicAnimationSidecarRecord,
+  type IndexingTaskPlan,
+  type IndexingTaskPlanningInput,
+  type ShotImagePrepBatchPlanInput,
+  type StoryContinuityRuntimeOptions,
+  type StoryContinuityStoreSnapshot,
+} from './comic-animation-indexing-runtime';
+
+export {
   AgentEventStreamRuntimeProcessor,
   type AgentEventStreamRuntimeBackgroundTasks,
   type AgentEventStreamRuntimeMessage,

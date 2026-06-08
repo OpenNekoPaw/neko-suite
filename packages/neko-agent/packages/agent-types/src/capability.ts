@@ -157,6 +157,58 @@ export interface AgentRepresentationResolverFacetContribution extends AgentSeman
   readonly representationKinds?: readonly string[];
 }
 
+export type AgentPerceptionCapabilitySource =
+  | 'builtin'
+  | 'local'
+  | 'engine'
+  | 'plugin'
+  | 'mcp'
+  | 'cloud';
+
+export type AgentPerceptionCapabilityTask =
+  | 'ocr'
+  | 'asr'
+  | 'subtitle'
+  | 'panel-detection'
+  | 'reading-order'
+  | 'speech-balloon-mask'
+  | 'visual-occurrence'
+  | 'embedding'
+  | 'vlm-review';
+
+export type AgentPerceptionCapabilityMediaKind =
+  | 'image'
+  | 'comic'
+  | 'document-page'
+  | 'video-frame'
+  | 'audio'
+  | 'subtitle';
+
+export type AgentPerceptionCapabilityExecutionMode = 'sync-light' | 'async-local' | 'async-cloud';
+
+export type AgentPerceptionCapabilityDeviceTier = 'light' | 'medium' | 'high';
+
+export type AgentPerceptionCapabilityCachePolicy = 'required' | 'recommended' | 'none';
+
+export type AgentPerceptionCapabilityConfidenceKind = 'provider-score' | 'heuristic' | 'none';
+
+export interface AgentPerceptionCapabilityFacetContribution {
+  readonly providerId: string;
+  readonly source: AgentPerceptionCapabilitySource;
+  readonly tasks: readonly AgentPerceptionCapabilityTask[];
+  readonly supportedMediaKinds: readonly AgentPerceptionCapabilityMediaKind[];
+  readonly executionMode: AgentPerceptionCapabilityExecutionMode;
+  readonly deviceTier: AgentPerceptionCapabilityDeviceTier;
+  readonly defaultConcurrency: number;
+  readonly cachePolicy: AgentPerceptionCapabilityCachePolicy;
+  readonly confidenceKind: AgentPerceptionCapabilityConfidenceKind;
+  readonly approvalRequired?: boolean;
+  readonly providerVersion?: string;
+  readonly modelVersion?: string;
+  readonly unavailableReason?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 export interface AgentArtifactFacetsContribution {
   readonly protocols?: readonly AgentArtifactProtocolContribution[];
   readonly profiles?: readonly AgentArtifactProfileContribution[];
@@ -167,6 +219,7 @@ export interface AgentArtifactFacetsContribution {
   readonly entityMemoryContributors?: readonly AgentEntityMemoryContributorFacetContribution[];
   readonly mediaTextExtractors?: readonly AgentMediaTextExtractorFacetContribution[];
   readonly perceptionProviders?: readonly AgentPerceptionProviderFacetContribution[];
+  readonly perceptionCapabilities?: readonly AgentPerceptionCapabilityFacetContribution[];
   readonly semanticIndexProviders?: readonly AgentSemanticIndexProviderFacetContribution[];
   readonly reviewSurfaces?: readonly AgentReviewSurfaceFacetContribution[];
   readonly representationResolvers?: readonly AgentRepresentationResolverFacetContribution[];

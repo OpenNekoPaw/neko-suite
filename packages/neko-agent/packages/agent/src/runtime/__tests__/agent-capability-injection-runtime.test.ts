@@ -473,6 +473,55 @@ describe('agent-capability-injection-runtime', () => {
     ).toEqual([]);
   });
 
+  it('registers perception capability facets through the artifact facet registry', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+
+    runtime.registerMany([
+      {
+        identity: {
+          id: 'provider:local-perception',
+          source: 'provider',
+          sourceId: 'neko-local-perception',
+          trustLevel: 'core',
+        },
+        hostRequirements: [{ host: 'vscode' }],
+        artifactFacets: {
+          perceptionCapabilities: [
+            {
+              providerId: 'local.ocr',
+              source: 'engine',
+              tasks: ['ocr', 'panel-detection'],
+              supportedMediaKinds: ['comic', 'image'],
+              executionMode: 'async-local',
+              deviceTier: 'light',
+              defaultConcurrency: 2,
+              cachePolicy: 'recommended',
+              confidenceKind: 'provider-score',
+            },
+            {
+              providerId: 'local.vlm-review',
+              source: 'local',
+              tasks: ['vlm-review'],
+              supportedMediaKinds: ['comic'],
+              executionMode: 'async-local',
+              deviceTier: 'medium',
+              defaultConcurrency: 1,
+              cachePolicy: 'recommended',
+              confidenceKind: 'none',
+              approvalRequired: true,
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(
+      runtime.getArtifactFacets().perceptionCapabilities?.map((facet) => facet.providerId),
+    ).toEqual(['local.ocr', 'local.vlm-review']);
+    expect(runtime.getArtifactFacets({ host: 'cli' }).perceptionCapabilities).toEqual([]);
+    expect(runtime.inject({ host: 'vscode' }).allowedTools).toEqual([]);
+  });
+
   it('reports semantic facet action availability without executing providers', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
 
@@ -554,6 +603,20 @@ describe('agent-capability-injection-runtime', () => {
             layers: [0, -1.5],
           },
         ],
+        perceptionCapabilities: [
+          {
+            providerId: '',
+            source: 'desktop' as never,
+            tasks: [],
+            supportedMediaKinds: [],
+            executionMode: 'worker' as never,
+            deviceTier: 'gpu' as never,
+            defaultConcurrency: 0,
+            cachePolicy: 'always' as never,
+            confidenceKind: 'score' as never,
+            approvalRequired: 'yes' as never,
+          },
+        ],
       },
     });
 
@@ -565,6 +628,12 @@ describe('agent-capability-injection-runtime', () => {
         'invalid-artifact-risk',
         'invalid-artifact-approval',
         'invalid-integer-array-field',
+        'invalid-perception-capability-source',
+        'invalid-perception-capability-execution-mode',
+        'invalid-perception-capability-device-tier',
+        'invalid-perception-capability-cache-policy',
+        'invalid-perception-capability-confidence-kind',
+        'invalid-perception-capability-concurrency',
       ]),
     );
   });
