@@ -8,12 +8,18 @@ vi.mock('vscode', () => ({
 }));
 
 import {
+  createCanvasPlaybackPlanFromCanvasData,
   createNarrativeGraphSnapshotFromCanvasData,
   NarrativePreviewBridge,
   parsePreviewToCanvasMessage,
   type NarrativePreviewPanelFactory,
 } from './narrativePreviewBridge';
-import type { CanvasData, NarrativeGraphSnapshot, PreviewToCanvasMessage } from '@neko/shared';
+import type {
+  CanvasData,
+  CanvasPlaybackPlan,
+  NarrativeGraphSnapshot,
+  PreviewToCanvasMessage,
+} from '@neko/shared';
 
 describe('createNarrativeGraphSnapshotFromCanvasData', () => {
   it('extracts runtime nodes, edges, metadata, variables, scene refs, and character bindings', () => {
@@ -118,6 +124,64 @@ describe('NarrativePreviewBridge', () => {
 
     bridge.dispose();
     expect(panelFactory.createdPanels[1]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts Canvas playback plan messages alongside narrative graph messages', () => {
+    const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+    const host = createHost(createSnapshot(4), () => plan);
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 3000,
+    });
+
+    expect(bridge.open()).toBe(true);
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:loadGraph',
+        requestId: 'canvas-narrative:load:3000:2',
+        revision: 4,
+      }),
+    );
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:loadPlaybackPlan',
+        requestId: 'canvas-narrative:load-plan:3000:3',
+        revision: 4,
+        plan: expect.objectContaining({
+          adapterId: 'storyboard',
+          units: expect.arrayContaining([expect.objectContaining({ id: 'shot-a1', kind: 'shot' })]),
+        }),
+      }),
+    );
+
+    expect(bridge.refresh()).toBe(true);
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:refreshPlaybackPlan',
+        requestId: 'canvas-narrative:refresh-plan:3000:6',
+        revision: 4,
+      }),
+    );
+  });
+
+  it('keeps storyboard Canvas playback available when narrative snapshot has zero runtime nodes', () => {
+    const canvas = createStoryboardCanvasData();
+    const snapshot = createNarrativeGraphSnapshotFromCanvasData(canvas, { revision: 5 });
+    const plan = createCanvasPlaybackPlanFromCanvasData(canvas);
+
+    expect(snapshot.nodes).toHaveLength(0);
+    expect(plan).toMatchObject({
+      adapterId: 'storyboard',
+      behaviorMode: 'linear',
+      units: [
+        expect.objectContaining({ id: 'shot-a1', kind: 'shot' }),
+        expect.objectContaining({ id: 'shot-a2', kind: 'shot' }),
+      ],
+    });
+    expect(plan?.diagnostics.some((item) => item.code === 'playback-narrative-runtime-only')).toBe(
+      false,
+    );
   });
 
   it('drops stale Preview-to-Canvas messages after newer revisions are posted', () => {
@@ -290,12 +354,43 @@ function createSnapshot(revision: number): NarrativeGraphSnapshot {
   });
 }
 
-function createHost(snapshot: NarrativeGraphSnapshot | (() => NarrativeGraphSnapshot)) {
+function createHost(
+  snapshot: NarrativeGraphSnapshot | (() => NarrativeGraphSnapshot),
+  plan?: CanvasPlaybackPlan | (() => CanvasPlaybackPlan | undefined) | undefined,
+) {
   return {
     extractNarrativeGraphSnapshot: vi.fn(() =>
       typeof snapshot === 'function' ? snapshot() : snapshot,
     ),
+    extractCanvasPlaybackPlan: vi.fn(() => (typeof plan === 'function' ? plan() : plan)),
     postNarrativePreviewCanvasMessage: vi.fn(() => true),
+  };
+}
+
+function createStoryboardCanvasData(): CanvasData {
+  return {
+    version: '2.1',
+    name: 'Scene Only',
+    nodes: [
+      {
+        id: 'scene-a',
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        size: { width: 480, height: 280 },
+        zIndex: 0,
+        container: {
+          policy: 'scene',
+          childIds: ['shot-a1', 'shot-a2'],
+          layout: { mode: 'sequence' },
+        },
+        data: { sceneTitle: 'Scene A', sceneNumber: 1 },
+      },
+      createNode('shot-a1', 'shot', { shotNumber: 1, visualDescription: 'Opening' }),
+      createNode('shot-a2', 'shot', { shotNumber: 2, visualDescription: 'Close up' }),
+    ].map((node) =>
+      node.id === 'shot-a1' || node.id === 'shot-a2' ? { ...node, parentId: 'scene-a' } : node,
+    ) as CanvasData['nodes'],
+    connections: [],
   };
 }
 

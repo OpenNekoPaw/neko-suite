@@ -1,4 +1,5 @@
 import type {
+  CanvasPlaybackPlan,
   CanvasToPreviewMessage,
   NarrativeAssetRef,
   NarrativeAssetResolver,
@@ -34,6 +35,7 @@ export interface NarrativePreviewAdapterPort {
 
 export interface NarrativePreviewControllerState {
   readonly state: NarrativeRuntimeState;
+  readonly playbackPlan?: CanvasPlaybackPlan;
   readonly genre: StoryGenre;
   readonly featureToggles: NarrativePreviewFeatureToggles;
   readonly fullscreen: boolean;
@@ -43,6 +45,7 @@ export interface NarrativePreviewControllerState {
 
 export interface NarrativePreviewController {
   readonly state: NarrativeRuntimeState;
+  readonly playbackPlan?: CanvasPlaybackPlan;
   readonly genre: StoryGenre;
   readonly featureToggles: NarrativePreviewFeatureToggles;
   readonly fullscreen: boolean;

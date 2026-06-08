@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import {
+  createCanvasPlaybackPlan,
   createNarrativeRelativePathAssetRef,
   isNarrativeAssetRef,
   isResourceRef,
   NARRATIVE_RUNTIME_NODE_TYPES,
   normalizeNarrativePreviewFeatureToggles,
+  type CanvasPlaybackPlan,
   type CanvasConnection,
   type CanvasData,
   type CanvasNode,
@@ -39,6 +41,7 @@ const NARRATIVE_RUNTIME_CONNECTION_TYPES = new Set<string | undefined>([
 
 export interface NarrativeCanvasSnapshotHost {
   extractNarrativeGraphSnapshot(): NarrativeGraphSnapshot | undefined;
+  extractCanvasPlaybackPlan?(): CanvasPlaybackPlan | undefined;
   postNarrativePreviewCanvasMessage(message: PreviewToCanvasMessage): boolean;
 }
 
@@ -96,12 +99,21 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const panel = this.ensurePanel();
     this.postFeatureToggles(snapshot.revision);
+    const plan = this.host.extractCanvasPlaybackPlan?.();
     this.postToPreview({
       type: 'preview:loadGraph',
       requestId: this.createRequestId('load'),
       snapshot,
       revision: snapshot.revision,
     });
+    if (plan) {
+      this.postToPreview({
+        type: 'preview:loadPlaybackPlan',
+        requestId: this.createRequestId('load-plan'),
+        plan,
+        revision: snapshot.revision,
+      });
+    }
     return true;
   }
 
@@ -111,6 +123,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
     if (!this.panel) return false;
+    const plan = this.host.extractCanvasPlaybackPlan?.();
 
     this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
@@ -119,6 +132,14 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       snapshot,
       revision: snapshot.revision,
     });
+    if (plan) {
+      this.postToPreview({
+        type: 'preview:refreshPlaybackPlan',
+        requestId: this.createRequestId('refresh-plan'),
+        plan,
+        revision: snapshot.revision,
+      });
+    }
     return true;
   }
 
@@ -267,7 +288,17 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const message = event.data || {};
       if (message.type === 'preview:loadGraph' || message.type === 'preview:refresh') {
         const count = Array.isArray(message.snapshot?.nodes) ? message.snapshot.nodes.length : 0;
-        status.textContent = 'Loaded revision ' + message.revision + ' with ' + count + ' runtime nodes.';
+        if (count === 0) {
+          status.textContent = 'Loaded revision ' + message.revision + ' with 0 Narrative Runtime nodes. Storyboard scene/shot and generic Canvas nodes use Canvas Playback Plan preview instead of Narrative Runtime.';
+        } else {
+          status.textContent = 'Loaded revision ' + message.revision + ' with ' + count + ' runtime nodes.';
+        }
+      } else if (message.type === 'preview:loadPlaybackPlan' || message.type === 'preview:refreshPlaybackPlan') {
+        const units = Array.isArray(message.plan?.units) ? message.plan.units : [];
+        const diagnostics = Array.isArray(message.plan?.diagnostics) ? message.plan.diagnostics : [];
+        const kinds = Array.from(new Set(units.map((unit) => unit && unit.kind).filter(Boolean))).join(', ');
+        const suffix = diagnostics.length > 0 ? ' Diagnostics: ' + diagnostics.map((item) => item.message).join(' ') : '';
+        status.textContent = 'Loaded Canvas playback plan (' + message.plan.adapterId + ', ' + message.plan.behaviorMode + ') with ' + units.length + ' units' + (kinds ? ' [' + kinds + ']' : '') + '.' + suffix;
       } else if (message.type === 'preview:jumpTo') {
         status.textContent = 'Jump request: ' + message.nodeId + ' at revision ' + message.revision + '.';
       }
@@ -306,6 +337,21 @@ export function createNarrativeGraphSnapshotFromCanvasData(
     ...readOptionalStringRecord(canvas, 'sceneContents', 'sceneContents'),
     ...readOptionalString(canvas, 'charactersYaml', 'charactersYaml'),
   };
+}
+
+export function createCanvasPlaybackPlanFromCanvasData(
+  canvas: CanvasData | Record<string, unknown>,
+  options: {
+    readonly selectedNodeId?: string;
+  } = {},
+): CanvasPlaybackPlan | undefined {
+  const normalized = normalizeCanvasDataForPlayback(canvas);
+  if (!normalized) return undefined;
+  return createCanvasPlaybackPlan({
+    canvas: normalized,
+    selectedNodeId: options.selectedNodeId,
+    adapterId: 'auto',
+  });
 }
 
 export function parsePreviewToCanvasMessage(value: unknown): PreviewToCanvasMessage | undefined {
@@ -348,6 +394,39 @@ function readCanvasConnections(
   return Array.isArray(connections)
     ? (connections.filter(isCanvasConnectionLike) as CanvasConnection[])
     : [];
+}
+
+function normalizeCanvasDataForPlayback(
+  canvas: CanvasData | Record<string, unknown>,
+): CanvasData | undefined {
+  if (!isRecord(canvas)) return undefined;
+  const nodes = readCanvasNodes(canvas);
+  const connections = readCanvasConnections(canvas);
+  if (!Array.isArray(canvas['nodes']) || !Array.isArray(canvas['connections'])) return undefined;
+
+  return {
+    version: typeof canvas['version'] === 'string' ? canvas['version'] : '2.1',
+    name: typeof canvas['name'] === 'string' ? canvas['name'] : 'Untitled Canvas',
+    ...(isCanvasViewportLike(canvas['viewport']) ? { viewport: canvas['viewport'] } : {}),
+    nodes: [...nodes],
+    connections: [...connections],
+    ...(isRecord(canvas['narrative']) ? { narrative: readNarrativeMetadata(canvas) } : {}),
+    ...(isPlaybackMetadataLike(canvas['playback']) ? { playback: canvas['playback'] } : {}),
+  };
+}
+
+function isCanvasViewportLike(value: unknown): value is NonNullable<CanvasData['viewport']> {
+  return (
+    isRecord(value) &&
+    isRecord(value['pan']) &&
+    typeof value['pan']['x'] === 'number' &&
+    typeof value['pan']['y'] === 'number' &&
+    typeof value['zoom'] === 'number'
+  );
+}
+
+function isPlaybackMetadataLike(value: unknown): value is NonNullable<CanvasData['playback']> {
+  return isRecord(value) && value['version'] === 1;
 }
 
 function isNarrativeRuntimeCanvasNode(

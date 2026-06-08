@@ -1,5 +1,7 @@
 import {
   normalizeNarrativePreviewFeatureToggles,
+  type CanvasPlaybackPlan,
+  type CanvasPlaybackUnit,
   type CanvasToPreviewMessage,
   type NarrativePreviewFeatureToggles,
   type PreviewToCanvasMessage,
@@ -15,6 +17,7 @@ import type {
 export class DefaultNarrativePreviewController implements NarrativePreviewController {
   private latestRevision = 0;
   private runtime = new NarrativeRuntime();
+  private currentPlaybackPlan: CanvasPlaybackPlan | undefined;
   private currentGenre: StoryGenre = 'illustrated-text';
   private currentFeatureToggles = normalizeNarrativePreviewFeatureToggles(undefined);
   private isFullscreen = false;
@@ -25,6 +28,10 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
 
   get state(): NarrativeRuntimeState {
     return this.runtime.state;
+  }
+
+  get playbackPlan(): CanvasPlaybackPlan | undefined {
+    return this.currentPlaybackPlan;
   }
 
   get genre(): StoryGenre {
@@ -63,6 +70,11 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
         this.currentGenre = message.snapshot.metadata.genre ?? this.currentGenre;
         this.runtime.start();
         this.emitHighlight();
+        return true;
+      case 'preview:loadPlaybackPlan':
+      case 'preview:refreshPlaybackPlan':
+        this.currentPlaybackPlan = message.plan;
+        this.emitPlaybackPlanHighlight(message.plan);
         return true;
       case 'preview:jumpTo':
         if (!this.currentFeatureToggles.previewAutoSync) {
@@ -160,9 +172,53 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
     }
   }
 
+  private emitPlaybackPlanHighlight(plan: CanvasPlaybackPlan): void {
+    if (!this.currentFeatureToggles.previewAutoSync) return;
+
+    const route = resolvePlaybackPlanRoute(plan);
+    if (route.length > 0) {
+      this.post({
+        type: 'canvas:highlightPath',
+        requestId: createRequestId('playback-path'),
+        nodeIds: route.map((unit) => unit.sourceNodeId),
+      });
+    }
+    const entryUnit = route[0] ?? plan.units.find((unit) => unit.id === plan.entryUnitIds[0]);
+    if (entryUnit) {
+      this.post({
+        type: 'canvas:highlightNode',
+        requestId: createRequestId('playback-node'),
+        nodeId: entryUnit.sourceNodeId,
+      });
+    }
+  }
+
   private post(message: PreviewToCanvasMessage): void {
     this.port?.postMessage(message);
   }
+}
+
+function resolvePlaybackPlanRoute(plan: CanvasPlaybackPlan): readonly CanvasPlaybackUnit[] {
+  const route: CanvasPlaybackUnit[] = [];
+  const visited = new Set<string>();
+  const unitById = new Map(plan.units.map((unit) => [unit.id, unit]));
+  let currentUnitId = plan.entryUnitIds[0];
+
+  while (currentUnitId && !visited.has(currentUnitId) && route.length <= plan.units.length) {
+    visited.add(currentUnitId);
+    const unit = unitById.get(currentUnitId);
+    if (!unit) break;
+    route.push(unit);
+    const next = plan.transitions
+      .filter(
+        (transition) => transition.sourceUnitId === currentUnitId && transition.enabled !== false,
+      )
+      .slice()
+      .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))[0];
+    currentUnitId = next?.targetUnitId;
+  }
+
+  return route;
 }
 
 function readMessageRevision(message: CanvasToPreviewMessage): number | undefined {

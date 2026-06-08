@@ -56,6 +56,7 @@ import {
   resolveStorageLayout,
 } from '@neko/shared';
 import type {
+  CanvasPlaybackPlan,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasCreateConnectionRequest,
@@ -109,6 +110,7 @@ import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 import { createCanvasDocumentEntryReader } from '../services/documentEntryReader';
 import {
+  createCanvasPlaybackPlanFromCanvasData,
   createNarrativeGraphSnapshotFromCanvasData,
   NarrativePreviewBridge,
 } from './narrativePreviewBridge';
@@ -752,6 +754,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       revision: this.getCanvasRevision(documentUri),
       sourceCanvasUri: documentUri,
     });
+  }
+
+  extractCanvasPlaybackPlan(): CanvasPlaybackPlan | undefined {
+    const document = this.activeDocument;
+    if (!document) return undefined;
+    const canvasData = this.canvasSnapshotsByDocumentUri.get(document.uri.toString());
+    if (!canvasData) return undefined;
+    return createCanvasPlaybackPlanFromCanvasData(canvasData);
   }
 
   postNarrativePreviewCanvasMessage(message: PreviewToCanvasMessage): boolean {

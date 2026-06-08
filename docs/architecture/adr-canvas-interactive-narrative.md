@@ -196,6 +196,8 @@ type CanvasToPreviewMessage = NarrativeMessageEnvelope & (
   | { type: 'preview:loadGraph'; snapshot: NarrativeGraphSnapshot; revision: number }
   | { type: 'preview:jumpTo'; nodeId: string; revision: number }
   | { type: 'preview:refresh'; snapshot: NarrativeGraphSnapshot; revision: number }
+  | { type: 'preview:loadPlaybackPlan'; plan: CanvasPlaybackPlan; revision: number }
+  | { type: 'preview:refreshPlaybackPlan'; plan: CanvasPlaybackPlan; revision: number }
   | { type: 'preview:setVariables'; variables: Record<string, unknown> }
   | { type: 'preview:setGenre'; genre: StoryGenre }
 );
@@ -217,10 +219,10 @@ class NarrativePreviewBridge {
     private previewPanel: vscode.WebviewPanel,
   ) {}
 
-  // 从 editor provider 的 in-memory 文档模型提取叙事图快照
-  private extractGraphSnapshot(): { snapshot: NarrativeGraphSnapshot; revision: number } {
+  // 从 editor provider 的 in-memory 文档模型提取叙事图快照和 Canvas Playback Plan
+  private extractGraphSnapshot(): { snapshot: NarrativeGraphSnapshot; plan?: CanvasPlaybackPlan; revision: number } {
     const document = this.canvasEditorProvider.currentDocument;
-    // 提取 narrative 节点/连线/metadata，不从磁盘读 .nkc
+    // 提取 narrative 节点/连线/metadata，并对同一 CanvasData 做 playback 投影，不从磁盘读 .nkc
     // revision 为文档的编辑版本号，用于乐观并发控制
   }
 
@@ -234,7 +236,7 @@ class NarrativePreviewBridge {
 }
 ```
 
-**数据来源**：`NarrativePreviewBridge` 从 Canvas editor provider 的 **in-memory 文档模型**（不是磁盘 `.nkc`）提取叙事图快照，确保包含未保存编辑。每条消息携带 `revision`（文档编辑版本号）和 `requestId`（ulid），Preview 端丢弃 `revision` 低于已处理值的消息，避免快速编辑时旧消息覆盖新状态。
+**数据来源**：`NarrativePreviewBridge` 从 Canvas editor provider 的 **in-memory 文档模型**（不是磁盘 `.nkc`）提取叙事图快照，并从同一 `CanvasData` 生成瞬态 `CanvasPlaybackPlan`，确保包含未保存编辑。每条消息携带 `revision`（文档编辑版本号）和 `requestId`（ulid），Preview 端丢弃 `revision` 低于已处理值的消息，避免快速编辑时旧消息覆盖新状态。`NarrativeGraphSnapshot` 仍只包含 Narrative Runtime 节点；`scene`、`shot`、`script`、普通分组和媒体序列通过 `CanvasPlaybackPlan` 消费，不能塞入 Narrative Runtime。
 
 **联动交互**：
 
@@ -634,6 +636,43 @@ const NARRATIVE_NODE_TYPES = new Set([
 
 `narrative-ending` 节点出现在 `deadEndNodeIds` 中但不视为错误——它是预期的终点。`deadEndNodeIds` 应区分 `narrative-ending`（预期终点）和其他叙事节点的意外死端。
 
+### D8.5: Canvas Playback Layer — 通用播放投影，不扩张 Narrative Runtime
+
+**决策**：Canvas 播放采用 `CanvasData -> CanvasPlaybackPlan -> Preview/UI` 的瞬态投影层。基础 Canvas 仍只保存节点、容器、连接和可选 extension metadata；不在 `CanvasNodeBase` 上新增 `start` / `end` 必填字段，也不引入 `.nks` / `.story` / `.nkstory` 等新故事格式。线性内容直接引用 `.fountain` 文件，分支和播放路线属于 `.nkc` Canvas 图。
+
+**Adapter / profile 与 behavior mode 分离**：
+
+| 维度 | 含义 | 当前取值 |
+|------|------|----------|
+| Adapter/profile | 如何解释 Canvas 结构 | `auto` / `storyboard` / `narrative` / `media-sequence` / `generic` |
+| Behavior mode | 如何执行已投影的计划 | `auto` / `manual` / `linear` / `interactive` |
+| Advance policy | 运行时推进触发 | `timer` / `media-ended` / `user-input` / `condition` |
+
+`storyboard` 将 `scene` 容器展开为按序 `shot` 单元，可通过 `scene -> scene` 的 `sequence` 连接继续播放；`narrative` 只投影 `narrative-start` / `narrative-scene` / `choice` / `merge` / `narrative-ending`；`media-sequence` 只携带持久 asset/resource 引用，运行时 URL 由 Preview resolver 现场解析；`generic` 使用容器顺序和 `sequence` / `default` / `choice` 连接播放普通节点。
+
+**排序规则**：
+
+1. 容器子节点：playback node override `order`
+2. `container.childPlacements[childId].order`
+3. `container.childIds` 顺序
+4. 领域顺序（如 `shotNumber` / `sceneNumber`）
+5. 稳定 fallback：位置自上而下、自左向右、最后按 node id
+
+连接路线排序：
+
+1. playback edge override `order`
+2. `connection.priority`
+3. `CanvasData.connections` 数组顺序
+4. connection id
+
+`sequence`、`default`、`choice` 是默认可播放连接；`reference` 默认不参与播放路线；`transition` 只作为装饰，除非后续 adapter 明确 opt-in。分组关系仍由 `parentId` + `container.childIds` 表达，连接线不决定归属。
+
+**分支规则**：`linear` 选择排序后的第一条可用连接；`interactive` 在存在多条可用分支时暂停并展示分支按钮，标签优先级为 playback override label、`choiceText`、connection label、默认 continue。条件过滤分支时以 typed diagnostic 表达，不修改底层 Canvas 连接。
+
+**Preview 诊断**：当 Narrative Preview 收到 0 个 runtime nodes 时，不再只显示 “0 runtime nodes”。UI 必须说明 Narrative Runtime 只接受 narrative runtime 节点，并提示 scene/shot、media 或普通分组会通过 Canvas Playback Plan 预览。Preview 消费 plan 时按 unit kind 处理：`shot`/`scene` 显示 storyboard 摘要或高亮，`media` 交给媒体 resolver，`narrative` 交给 Narrative Runtime，`node`/`container` 做通用节点摘要或 Canvas 高亮。
+
+**非目标**：本层不替代 Narrative Runtime、HTML5 narrative export 或条件求值器；不做完整时间线编辑；不把 runtime URL、blob URL、Webview URI、timer handle 或当前 playhead 写回 `.nkc`；不把 `scene` / `shot` 加入 Narrative Runtime 节点集合。
+
 ### D9: 叙事运行时（Narrative Runtime）
 
 **决策**：NarrativeRuntime 是 host-independent 的共享内核，位于 `@neko/shared`。Preview Webview、HTML5 Export 和测试只通过共享契约加载 `NarrativeGraphSnapshot`，不直接访问 VSCode API、不读磁盘、不持久化 runtime URL。Story Preview Webview 的 `preview/NarrativeRuntime.ts` 和 `preview/conditionEvaluator.ts` 只是对共享内核的兼容重导出。
@@ -789,7 +828,9 @@ NarrativeExporter (neko-story/packages/extension/src/export/)
 | 模块 | 位置 | 职责 |
 |------|------|------|
 | `narrative-start` / `narrative-ending` 节点注册 | @neko/shared（types）+ neko-canvas/packages/webview/ | Canvas 节点类型 + descriptors + presets |
-| `NarrativePreviewBridge` | **neko-canvas/packages/extension/** | Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图快照 |
+| `CanvasPlaybackPlan` / adapter registry | @neko/shared（types） | 将 CanvasData 瞬态投影为 storyboard / narrative / media-sequence / generic 播放计划 |
+| `CanvasPlaybackController` | neko-canvas/packages/webview/ | 共享 Canvas 播放控件；显示 adapter/mode、路径位置、分支选项和当前播放高亮 |
+| `NarrativePreviewBridge` | **neko-canvas/packages/extension/** | Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图快照和 Canvas Playback Plan |
 | `FountainPlayParser` | neko-story/packages/parser/ | Fountain → PlayDirective[]（扩展现有 parser 包） |
 | `NarrativeAssetResolver` | @neko/shared（接口）+ Extension Host adapters | 端口化资源解析（`interactive-preview` / `final-export` / `package`） |
 | `NarrativeRuntime` | **@neko/shared**（`types/narrative-runtime.ts`） | host-independent 叙事状态机，Preview 与 HTML5 Export 共用 |
@@ -810,24 +851,26 @@ neko-story/packages/parser/ (Domain Layer — 现有包)
 
 neko-story/packages/webview/src/preview/ (UI Layer — 独立 Webview 入口)
   ├── NarrativePlayer          ← 核心播放器组件
-  ├── NarrativePreviewController ← 消费共享 Runtime，处理 revisioned messages
+  ├── NarrativePreviewController ← 消费共享 Runtime + CanvasPlaybackPlan，处理 revisioned messages
   └── renderers/               ← 三种类型渲染器
 
 neko-story/packages/extension/ (Bridge Layer — 现有包)
   └── NarrativeExporter        ← HTML5 导出编排（无 VSCode API 硬依赖）
 
 neko-canvas/packages/extension/ (Bridge Layer — 现有包)
-  └── NarrativePreviewBridge   ← Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图
+  └── NarrativePreviewBridge   ← Canvas ↔ Preview 消息路由 + 从 editor document model 提取叙事图和播放计划
 
 neko-canvas/packages/webview/ (UI Layer — 现有)
   ├── narrative-start / narrative-ending descriptors + presets  ← 新增
-  └── NarrativePlaybackController ← 保留现有三按钮步进（不修改）
+  ├── CanvasPlaybackController ← adapter-aware 共享播放控件（storyboard/generic/media/narrative）
+  └── NarrativePlaybackController ← narrative 子系统轻量步进能力迁移到共享播放层
 
 @neko/shared (Layer 0)
   ├── types/canvas.ts               ← REGISTERED_CANVAS_NODE_TYPES 扩展
   ├── types/canvas-subsystem.ts      ← narrative triggerNodeTypes 扩展
   ├── types/canvas-flow-traversal.ts ← NARRATIVE_TRAVERSAL_NODE_TYPES / NARRATIVE_NODE_TYPES 拆分
-  ├── types/narrative-preview.ts     ← Canvas ↔ Preview 消息类型 + NarrativeGraphSnapshot
+  ├── types/canvas-playback.ts       ← CanvasPlaybackPlan + adapter registry + ordering/diagnostics helpers
+  ├── types/narrative-preview.ts     ← Canvas ↔ Preview 消息类型 + NarrativeGraphSnapshot + CanvasPlaybackPlan messages
   ├── types/narrative-asset.ts       ← NarrativeAssetRef / NarrativeAssetResolver 接口
   ├── types/narrative-runtime.ts     ← NarrativeRuntime + WhitelistConditionEvaluator
   └── types/canvas-narrative-agent.ts ← Agent-facing diagnostics + structured summaries
@@ -942,6 +985,14 @@ neko-canvas/packages/webview/ (UI Layer — 现有)
 | PR8 | 完成 | `InteractiveFilmRenderer`（`<video>` 播放 + 选项浮层） | PR5 |
 | PR9 | 完成 | HTML5 导出内核（NarrativeExporter（neko-story/packages/extension/）+ `NarrativeAssetResolver` `final-export` 实现 + 模板打包） | PR4, PR6 |
 | PR10 | 完成 | Agent 集成（叙事图分析工具 + 分支覆盖率 + 一致性检查） | PR2 |
+
+### Phase 2.5: Canvas Playback Layer（实施中）
+
+| PR | 状态 | 内容 | 依赖 |
+|----|------|------|------|
+| PR10.5 | 实施中 | `@neko/shared` 新增 `CanvasPlaybackPlan`、playback metadata、adapter registry、storyboard/generic/media/narrative 投影和 typed diagnostics；`scene` / `shot` 不进入 Narrative Runtime | PR1, PR5 |
+| PR10.6 | 实施中 | Canvas Webview 使用 adapter-aware `CanvasPlaybackController`，支持 play/pause、previous/next、路径位置、分支选择和当前播放高亮；子系统 controller 由 Canvas shell 仲裁为单一 active playback surface | PR10.5 |
+| PR10.7 | 实施中 | `NarrativePreviewBridge` 在保留 `preview:loadGraph` / `preview:refresh` 的同时发送 `preview:loadPlaybackPlan` / `preview:refreshPlaybackPlan`；0 runtime nodes 诊断区分 Narrative Runtime 与 storyboard/generic/media playback | PR10.5, PR10.6 |
 
 ### Phase 3.5+: 人物演绎增强（延后）
 

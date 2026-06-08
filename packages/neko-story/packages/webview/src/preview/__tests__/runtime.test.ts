@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { NarrativeGraphSnapshot } from '@neko/shared';
+import type { CanvasPlaybackPlan, NarrativeGraphSnapshot } from '@neko/shared';
 import { WhitelistConditionEvaluator } from '../conditionEvaluator';
 import { NarrativeRuntime } from '../NarrativeRuntime';
 import { DefaultNarrativePreviewController } from '../NarrativePreviewController';
@@ -205,6 +205,82 @@ describe('DefaultNarrativePreviewController', () => {
       expect.objectContaining({ type: 'canvas:highlightNode' }),
     );
   });
+
+  it('loads Canvas playback plans and emits route highlights for storyboard previews', () => {
+    const postMessage = vi.fn();
+    const controller = new DefaultNarrativePreviewController({ postMessage });
+    const plan = createPlaybackPlan({
+      adapterId: 'storyboard',
+      units: [
+        { id: 'shot-a', sourceNodeId: 'shot-a', kind: 'shot', renderMode: 'story-preview' },
+        { id: 'shot-b', sourceNodeId: 'shot-b', kind: 'shot', renderMode: 'story-preview' },
+      ],
+      transitions: [
+        {
+          id: 'shot-a-shot-b',
+          sourceUnitId: 'shot-a',
+          targetUnitId: 'shot-b',
+          type: 'sequence',
+          priority: 0,
+        },
+      ],
+      entryUnitIds: ['shot-a'],
+    });
+
+    expect(
+      controller.handleMessage({
+        type: 'preview:loadPlaybackPlan',
+        requestId: 'load-plan',
+        revision: 3,
+        plan,
+      }),
+    ).toBe(true);
+
+    expect(controller.playbackPlan).toBe(plan);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'canvas:highlightPath',
+        nodeIds: ['shot-a', 'shot-b'],
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'canvas:highlightNode', nodeId: 'shot-a' }),
+    );
+  });
+
+  it('keeps media playback plans on durable sources instead of runtime URLs', () => {
+    const controller = new DefaultNarrativePreviewController();
+    const plan = createPlaybackPlan({
+      adapterId: 'media-sequence',
+      advancePolicy: 'media-ended',
+      units: [
+        {
+          id: 'media-a',
+          sourceNodeId: 'media-a',
+          kind: 'media',
+          renderMode: 'media-playback',
+          assetPath: 'assets/clip.mp4',
+        },
+      ],
+      entryUnitIds: ['media-a'],
+    });
+
+    expect(
+      controller.handleMessage({
+        type: 'preview:refreshPlaybackPlan',
+        requestId: 'refresh-plan',
+        revision: 4,
+        plan,
+      }),
+    ).toBe(true);
+
+    expect(JSON.stringify(controller.playbackPlan)).not.toContain('blob:');
+    expect(JSON.stringify(controller.playbackPlan)).not.toContain('vscode-webview-resource');
+    expect(controller.playbackPlan?.units[0]).toMatchObject({
+      kind: 'media',
+      assetPath: 'assets/clip.mp4',
+    });
+  });
 });
 
 function createGraph(overrides: Partial<NarrativeGraphSnapshot> = {}): NarrativeGraphSnapshot {
@@ -281,6 +357,21 @@ function createGraph(overrides: Partial<NarrativeGraphSnapshot> = {}): Narrative
         priority: 0,
       },
     ],
+    ...overrides,
+  };
+}
+
+function createPlaybackPlan(overrides: Partial<CanvasPlaybackPlan>): CanvasPlaybackPlan {
+  return {
+    adapterId: 'generic',
+    requestedAdapterId: 'generic',
+    behaviorMode: 'linear',
+    advancePolicy: 'timer',
+    entryUnitIds: [],
+    units: [],
+    transitions: [],
+    diagnostics: [],
+    metadata: {},
     ...overrides,
   };
 }

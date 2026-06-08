@@ -1,4 +1,5 @@
 import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
+import type { CanvasPlaybackPlan } from './canvas-playback';
 import type { NarrativeAssetRef } from './narrative-asset';
 
 export const STORY_GENRES = [
@@ -130,6 +131,16 @@ export type CanvasToPreviewMessage = NarrativeMessageEnvelope &
     | {
         readonly type: 'preview:refresh';
         readonly snapshot: NarrativeGraphSnapshot;
+        readonly revision: number;
+      }
+    | {
+        readonly type: 'preview:loadPlaybackPlan';
+        readonly plan: CanvasPlaybackPlan;
+        readonly revision: number;
+      }
+    | {
+        readonly type: 'preview:refreshPlaybackPlan';
+        readonly plan: CanvasPlaybackPlan;
         readonly revision: number;
       }
     | {
