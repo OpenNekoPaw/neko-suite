@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { isDocumentResourceStatusReason, parseDocumentResourceStatus } from '../canvas';
+import {
+  isCanvasNodeType,
+  isDocumentResourceStatusReason,
+  parseDocumentResourceStatus,
+} from '../canvas';
 
 describe('canvas contracts', () => {
+  it('registers narrative start and ending node types', () => {
+    expect(isCanvasNodeType('narrative-start')).toBe(true);
+    expect(isCanvasNodeType('narrative-ending')).toBe(true);
+  });
+
   it('normalizes document resource status reasons', () => {
     expect(isDocumentResourceStatusReason('cache-missing')).toBe(true);
     expect(isDocumentResourceStatusReason('legacy-cache-fallback')).toBe(false);

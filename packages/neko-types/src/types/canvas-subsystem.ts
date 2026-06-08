@@ -71,7 +71,14 @@ export const BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS = [
   {
     id: 'narrative',
     label: 'Narrative',
-    triggerNodeTypes: ['choice', 'merge', 'narrative-scene', 'narrative-note'],
+    triggerNodeTypes: [
+      'narrative-start',
+      'choice',
+      'merge',
+      'narrative-scene',
+      'narrative-note',
+      'narrative-ending',
+    ],
     connectionTypes: ['choice'],
     connectionRules: [{ id: 'narrative-choice-target' }],
     autoArrangeStrategy: 'flow',
@@ -79,6 +86,7 @@ export const BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS = [
       key: 'narrative',
       defaultValue: {
         variables: [],
+        genre: 'illustrated-text',
       },
     },
   },

@@ -4,9 +4,18 @@ import type {
   ContainerSection,
   NodePreviewDescriptor,
 } from './canvas-layered';
+import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import type { NkProjectType } from './canvas-drop';
 import type { CreativeEntityRef } from './creative-entity-asset-composition';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type {
+  NarrativeEndingMetadata,
+  NarrativeMetadata,
+  NarrativeSceneMetadata,
+  NarrativeVariable,
+  StoryGenre,
+  VariableEffect,
+} from './narrative-preview';
 import type { ResourceRef } from './resource-cache';
 import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
 
@@ -14,20 +23,7 @@ import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from '
 // Canvas Types - Infinite Canvas Editor Data Model
 // =============================================================================
 
-/**
- * JSON-serializable value used by persisted Canvas extension fields.
- */
-export type CanvasSerializableValue =
-  | string
-  | number
-  | boolean
-  | null
-  | CanvasSerializableValue[]
-  | { [key: string]: CanvasSerializableValue };
-
-export type CanvasSerializableRecord = {
-  [key: string]: CanvasSerializableValue;
-};
+export type { CanvasSerializableRecord, CanvasSerializableValue };
 
 /**
  * Canvas node type discriminator
@@ -61,10 +57,12 @@ export type CoreCanvasNodeType = (typeof CORE_CANVAS_NODE_TYPES)[number];
  */
 export const REGISTERED_CANVAS_NODE_TYPES = [
   // Narrative subsystem
+  'narrative-start',
   'choice',
   'merge',
   'narrative-scene',
   'narrative-note',
+  'narrative-ending',
   // Behavior subsystem
   'state',
   'trigger',
@@ -748,16 +746,14 @@ export interface CanvasViewport {
 // Subsystem Metadata
 // =============================================================================
 
-export interface NarrativeVariable {
-  id: string;
-  name: string;
-  value: CanvasSerializableValue;
-}
-
-export interface NarrativeMetadata {
-  entryNodeId?: string;
-  variables: NarrativeVariable[];
-}
+export type {
+  NarrativeEndingMetadata,
+  NarrativeMetadata,
+  NarrativeSceneMetadata,
+  NarrativeVariable,
+  StoryGenre,
+  VariableEffect,
+};
 
 export interface BlackboardVariable {
   id: string;

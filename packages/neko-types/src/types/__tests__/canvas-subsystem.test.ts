@@ -35,10 +35,17 @@ describe('canvas subsystem contracts', () => {
     expect(JSON.parse(manifestsJson)).toHaveLength(5);
     expect(createBuiltInCanvasSubsystemManifestRegistry().get('narrative')).toMatchObject({
       id: 'narrative',
-      triggerNodeTypes: ['choice', 'merge', 'narrative-scene', 'narrative-note'],
+      triggerNodeTypes: [
+        'narrative-start',
+        'choice',
+        'merge',
+        'narrative-scene',
+        'narrative-note',
+        'narrative-ending',
+      ],
       metadata: {
         key: 'narrative',
-        defaultValue: { variables: [] },
+        defaultValue: { variables: [], genre: 'illustrated-text' },
       },
     });
     expect(
@@ -68,7 +75,7 @@ describe('canvas subsystem contracts', () => {
     const withDefaults = applyCanvasSubsystemMetadataDefaults(canvas);
 
     expect(withDefaults).not.toBe(canvas);
-    expect(withDefaults.narrative).toEqual({ variables: [] });
+    expect(withDefaults.narrative).toEqual({ variables: [], genre: 'illustrated-text' });
     expect(withDefaults.memoryGraph).toEqual({});
     expect(withDefaults.behavior).toBeUndefined();
 

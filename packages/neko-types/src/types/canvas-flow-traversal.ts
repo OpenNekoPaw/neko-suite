@@ -1,4 +1,8 @@
-import type { CanvasConnection, CanvasNode } from './canvas';
+import type {
+  CanvasNarrativeConnectionLike,
+  CanvasNarrativeNodeLike,
+} from './canvas-narrative-contract';
+import type { NarrativeRuntimeNodeType } from './narrative-preview';
 
 export interface NarrativeChoiceEdge {
   readonly connectionId: string;
@@ -15,24 +19,48 @@ export interface NarrativeFlowTraversalResult {
   readonly defaultPath: readonly string[];
   readonly choices: Readonly<Record<string, readonly NarrativeChoiceEdge[]>>;
   readonly deadEndNodeIds: readonly string[];
+  readonly endingNodeIds: readonly string[];
+  readonly accidentalDeadEndNodeIds: readonly string[];
   readonly cycles: readonly (readonly string[])[];
 }
 
-const NARRATIVE_NODE_TYPES = new Set(['choice', 'merge', 'narrative-scene', 'narrative-note']);
+export const NARRATIVE_TRAVERSAL_NODE_TYPES = [
+  'narrative-start',
+  'narrative-scene',
+  'choice',
+  'merge',
+  'narrative-ending',
+] as const satisfies readonly NarrativeRuntimeNodeType[];
+
+export type NarrativeTraversalNodeType = (typeof NARRATIVE_TRAVERSAL_NODE_TYPES)[number];
+
+export const NARRATIVE_NODE_TYPES = [...NARRATIVE_TRAVERSAL_NODE_TYPES, 'narrative-note'] as const;
+
+export type NarrativeNodeType = (typeof NARRATIVE_NODE_TYPES)[number];
+
+export const NARRATIVE_TRAVERSAL_NODE_TYPE_SET: ReadonlySet<NarrativeTraversalNodeType> = new Set(
+  NARRATIVE_TRAVERSAL_NODE_TYPES,
+);
+
+export const NARRATIVE_NODE_TYPE_SET: ReadonlySet<NarrativeNodeType> = new Set(
+  NARRATIVE_NODE_TYPES,
+);
 
 export function traverseNarrativeFlow(
-  nodes: readonly CanvasNode[],
-  connections: readonly CanvasConnection[],
+  nodes: readonly CanvasNarrativeNodeLike[],
+  connections: readonly CanvasNarrativeConnectionLike[],
   startNodeId?: string,
 ): NarrativeFlowTraversalResult {
   const narrativeNodeIds = new Set(
-    nodes.filter((node) => NARRATIVE_NODE_TYPES.has(node.type)).map((node) => node.id),
+    nodes.filter((node) => isNarrativeTraversalNode(node)).map((node) => node.id),
   );
   const narrativeConnections = connections.filter(
     (connection) =>
       narrativeNodeIds.has(connection.sourceId) &&
       narrativeNodeIds.has(connection.targetId) &&
-      (connection.type === 'choice' || connection.type === 'default' || connection.type === undefined),
+      (connection.type === 'choice' ||
+        connection.type === 'default' ||
+        connection.type === undefined),
   );
 
   const successors: Record<string, string[]> = {};
@@ -61,10 +89,19 @@ export function traverseNarrativeFlow(
     edges.sort((left, right) => left.priority - right.priority);
   }
 
+  const startNodeByType = nodes.find(
+    (node) => isNarrativeStartNode(node) && narrativeNodeIds.has(node.id),
+  );
   const resolvedStartNodeId =
-    startNodeId && narrativeNodeIds.has(startNodeId)
-      ? startNodeId
-      : nodes.find((node) => narrativeNodeIds.has(node.id))?.id;
+    startNodeByType?.id ??
+    (startNodeId && narrativeNodeIds.has(startNodeId) ? startNodeId : undefined) ??
+    nodes.find((node) => narrativeNodeIds.has(node.id))?.id;
+  const deadEndNodeIds = Array.from(narrativeNodeIds).filter(
+    (nodeId) => (successors[nodeId]?.length ?? 0) === 0,
+  );
+  const endingNodeIds = nodes
+    .filter((node) => isNarrativeEndingNode(node) && narrativeNodeIds.has(node.id))
+    .map((node) => node.id);
 
   return {
     startNodeId: resolvedStartNodeId,
@@ -74,11 +111,33 @@ export function traverseNarrativeFlow(
       ? buildDefaultPath(resolvedStartNodeId, choices, narrativeNodeIds.size)
       : [],
     choices,
-    deadEndNodeIds: Array.from(narrativeNodeIds).filter(
-      (nodeId) => (successors[nodeId]?.length ?? 0) === 0,
-    ),
+    deadEndNodeIds,
+    endingNodeIds,
+    accidentalDeadEndNodeIds: deadEndNodeIds.filter((nodeId) => !endingNodeIds.includes(nodeId)),
     cycles: detectCycles(successors),
   };
+}
+
+export function isNarrativeNode(node: Pick<CanvasNarrativeNodeLike, 'type'>): boolean {
+  return NARRATIVE_NODE_TYPE_SET.has(node.type as NarrativeNodeType);
+}
+
+export function isNarrativeTraversalNode(
+  node: Pick<CanvasNarrativeNodeLike, 'type'>,
+): node is Pick<CanvasNarrativeNodeLike, 'type'> & { readonly type: NarrativeTraversalNodeType } {
+  return NARRATIVE_TRAVERSAL_NODE_TYPE_SET.has(node.type as NarrativeTraversalNodeType);
+}
+
+export function isNarrativeStartNode(
+  node: Pick<CanvasNarrativeNodeLike, 'type'>,
+): node is Pick<CanvasNarrativeNodeLike, 'type'> & { readonly type: 'narrative-start' } {
+  return node.type === 'narrative-start';
+}
+
+export function isNarrativeEndingNode(
+  node: Pick<CanvasNarrativeNodeLike, 'type'>,
+): node is Pick<CanvasNarrativeNodeLike, 'type'> & { readonly type: 'narrative-ending' } {
+  return node.type === 'narrative-ending';
 }
 
 function buildDefaultPath(
@@ -99,7 +158,9 @@ function buildDefaultPath(
   return path;
 }
 
-function detectCycles(successors: Readonly<Record<string, readonly string[]>>): readonly string[][] {
+function detectCycles(
+  successors: Readonly<Record<string, readonly string[]>>,
+): readonly string[][] {
   const cycles: string[][] = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();

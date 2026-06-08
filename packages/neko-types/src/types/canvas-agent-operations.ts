@@ -8,6 +8,10 @@ import type {
   NarrativeMetadata,
 } from './canvas';
 import type { FieldBinding, JsonPointerPath } from './canvas-layered';
+import type {
+  CanvasNarrativeAgentDiagnostic,
+  CanvasNarrativeNodeAgentSummary,
+} from './canvas-narrative-agent';
 import type { CanvasSubsystemId } from './canvas-subsystem';
 
 export interface CanvasPoint {
@@ -128,6 +132,7 @@ export interface CanvasStructuredNodeSummary {
     role?: string;
     thumbnailVariantId?: string;
   };
+  narrative?: CanvasNarrativeNodeAgentSummary;
 }
 
 export interface CanvasExtractStructuredContentResult {
@@ -231,6 +236,7 @@ export interface CanvasAgentActiveContextResult {
   connections?: CanvasConnection[];
   focusedContainer?: CanvasAgentContainerSummary;
   subsystemMetadata?: CanvasAgentSubsystemMetadataSummary;
+  narrativeDiagnostics?: readonly CanvasNarrativeAgentDiagnostic[];
   insertionPoint?: CanvasAgentInsertionPoint;
   viewport?: {
     pan: CanvasPoint;
