@@ -388,6 +388,8 @@ neko-dashboard
 - 索引保存 stable refs、range、confidence、provider，不保存大图、大音频或 base64。
 - OCR/截图只能作为视觉证据，不能替代结构化 query 的 nodeId、clipId、fieldPath。
 - 可写操作必须回到结构化 editor / project API。
+- 本地 OCR 应作为图片/漫画/视频帧文本提取的第一层默认能力；Vision LLM OCR 作为低置信、复杂版式、手写/艺术字或语义分类增强的兜底，而不是唯一入口。
+- 本地 OCR 结果必须先落为 `MediaTextSegment(kind: "ocr")`，再由 mention resolver / Agent 投影为 `EntityMention`、`CharacterObservation` 或 review artifact；不能把 OCR 文本直接写成确认实体事实。
 
 ### 6.3 文本来源优先级
 
@@ -413,6 +415,39 @@ neko-dashboard
 - profile / skill 可以给特定任务提供排序倾向，但不能越权确认事实。
 
 低优先级证据可以提出观察，但不能覆盖高优先级事实。比如 OCR 读到的对白可以生成 `needs-review` observation；如果它与 Story structured facts 冲突，应进入 conflict review，而不是直接覆盖剧本事实。
+
+### 6.4 本地 OCR 作为第一层感知
+
+长篇漫画、文档图片和视频帧需要低成本、可缓存、可复用的文本索引。Neko Suite 应优先提供本地 OCR provider，并把云端 Vision LLM OCR 定位为增强层：
+
+```text
+本地 OCR
+  -> MediaTextSegment(kind="ocr")
+  -> EntityMention extraction
+  -> Mention Resolver
+  -> CreativeEntityRef / CreativeEntityCandidate
+  -> CharacterObservation / review
+```
+
+本地 OCR provider 的职责：
+
+- 从图片、漫画页、文档页截图、视频抽帧中提取文本。
+- 输出 `text`、`confidence`、`language`、`boundingBox`、`sourceRef`、`range` 和 provider provenance。
+- 按 source/page/panel/frame 生成可重建的 segment id，方便幂等更新。
+- 将结果写入 `.neko/semantic-index` sidecar 或 project search 投影，供中段文档分析、角色 mention resolution、分镜、字幕和去字 mask 流程复用。
+
+本地 OCR 不负责：
+
+- 直接确认角色身份或修改 `CreativeEntity`。
+- 自动决定对白归属、旁白分类或代词消解。
+- 持久化原始图片、base64、Webview URI、provider 临时句柄或绝对缓存路径。
+
+Vision LLM OCR / VLM 可以在以下情况介入：
+
+- 本地 OCR 置信度低或文本区域过于复杂。
+- 需要区分对白、旁白、背景字、拟声词、UI 文本或招牌。
+- 需要结合画面判断气泡归属、人物位置或阅读顺序。
+- 需要对 OCR 结果进行语义纠错，但纠错结果仍必须带 provenance 和 confidence。
 
 ---
 
@@ -554,7 +589,8 @@ Storyboard shot / Canvas node / Cut cue
 ### P3: 语义索引与检索
 
 - `.neko/semantic-index` 支持分页和按 asset/source 查询。
-- OCR/ASR/subtitle extraction 支持 idle/on-demand。
+- 本地 OCR provider 支持 image/comic/document-page/video-frame 的 on-demand 与 idle extraction，并输出 `MediaTextSegment(kind="ocr")`。
+- OCR/ASR/subtitle extraction 支持 idle/on-demand；本地 OCR 为第一层默认文本提取，Vision LLM OCR 为增强/兜底 provider。
 - embedding/vector/RAG 作为 optional provider capability，不进入基础必需路径。
 - 按 `adr-structured-data-persistence.md` 将语义索引投影到 SQLite / FTS / vector cache；JSON/sidecar 继续作为 SSOT。
 
@@ -563,7 +599,7 @@ Storyboard shot / Canvas node / Cut cue
 ## 十一、开放问题
 
 1. `MediaSemanticIndex` 是否应作为 `project-cache-search-service` 的 typed projection，还是独立 `.neko/semantic-index`？
-2. OCR/ASR 文本的语言检测、分词和 embedding 是否由 runtime-media、agent platform，还是 search provider 负责？
+2. OCR/ASR 文本的语言检测、分词和 embedding 是否由 runtime-media、agent platform，还是 search provider 负责？本地 OCR provider 应先输出语言/置信度的基础字段，后续分词和 embedding 可由 search/index provider 接管。
 3. GeneratedAsset 的 semantic sidecar 是否应进入 asset package 标准格式？
 4. `MediaSemanticIndex` 与 `PerceptionCard` 的重建策略应由哪个服务触发：perception pipeline、asset indexer，还是 project cache coordinator？
 

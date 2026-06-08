@@ -1,7 +1,7 @@
 # ADR: Comic-to-Animation 图像准备与 TransformImage 能力边界
 
 **状态**: Accepted / Partially Implemented (2026-06-07)
-**关联**: `adr-agent-storyboard-table-schema.md` · `adr-composite-artifact-table-protocol.md` · `agent-asset-ref-contract.md` · `agent-media-architecture.md` · `adr-agent-multimodal-perception.md` · `adr-unified-entity-memory-semantic-index.md`
+**关联**: `adr-agent-storyboard-table-schema.md` · `adr-composite-artifact-table-protocol.md` · `agent-asset-ref-contract.md` · `agent-media-architecture.md` · `adr-agent-multimodal-perception.md` · `adr-unified-entity-memory-semantic-index.md` · `adr-comic-to-animation-capability-gap.md`
 **范围**: `neko-agent` · `neko-canvas` · `neko-cut` · `@neko/shared` · media provider adapters
 
 ---
