@@ -50,6 +50,7 @@ import {
   loadNkc,
   createProjectionAdapterRegistry,
   NEKO_EXTENSION_IDS,
+  normalizeNarrativePreviewFeatureToggles,
   PathResolver,
   summarizeCanvasSubsystems,
   resolveStorageLayout,
@@ -91,6 +92,7 @@ import type {
   NekoAssetsAPI,
   NekoStoryAPI,
   NekoStoryScriptIndex,
+  NarrativePreviewFeatureToggles,
   ResourceRef,
   ResourceVariantRole,
   ScriptScene,
@@ -469,9 +471,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   constructor(
     private readonly context: vscode.ExtensionContext,
     focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+    getNarrativePreviewFeatureToggles: () => NarrativePreviewFeatureToggles = () =>
+      normalizeNarrativePreviewFeatureToggles(undefined),
   ) {
     this.focusedWebviews = focusedWebviews;
-    this.narrativePreviewBridge = new NarrativePreviewBridge(this, {});
+    this.narrativePreviewBridge = new NarrativePreviewBridge(this, {
+      getFeatureToggles: getNarrativePreviewFeatureToggles,
+    });
     this.localResourceAccess = createDefaultLocalResourceAccessService({
       extensionUri: context.extensionUri,
       context,

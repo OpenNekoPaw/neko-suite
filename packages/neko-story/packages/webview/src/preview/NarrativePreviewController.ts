@@ -77,6 +77,9 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
       case 'preview:setGenre':
         this.currentGenre = message.genre;
         return true;
+      case 'preview:setFeatureToggles':
+        this.setFeatureToggles(message.toggles);
+        return true;
     }
   }
 

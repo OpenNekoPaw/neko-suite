@@ -156,6 +156,16 @@ describe('DefaultNarrativePreviewController', () => {
     ).toBe(true);
     expect(controller.genre).toBe('visual-novel');
 
+    expect(
+      controller.handleMessage({
+        type: 'preview:setFeatureToggles',
+        requestId: 'toggles',
+        revision: 1,
+        toggles: { typewriterEffect: false, previewAutoSync: false },
+      }),
+    ).toBe(true);
+    expect(controller.featureToggles.typewriterEffect).toBe(false);
+
     controller.setFeatureToggles({ previewAutoSync: false });
     expect(controller.featureToggles.previewAutoSync).toBe(false);
 

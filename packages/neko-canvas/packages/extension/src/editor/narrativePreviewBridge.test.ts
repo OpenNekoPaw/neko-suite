@@ -94,8 +94,16 @@ describe('NarrativePreviewBridge', () => {
     expect(panelFactory.createdPanels).toHaveLength(1);
     expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
+        type: 'preview:setFeatureToggles',
+        requestId: 'canvas-narrative:toggles:1000:1',
+        revision: 1,
+        toggles: expect.objectContaining({ preview: true }),
+      }),
+    );
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
         type: 'preview:loadGraph',
-        requestId: 'canvas-narrative:load:1000:1',
+        requestId: 'canvas-narrative:load:1000:2',
         revision: 1,
       }),
     );
@@ -129,7 +137,7 @@ describe('NarrativePreviewBridge', () => {
     expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: 'preview:setVariables',
-        requestId: 'canvas-narrative:variables:2000:4',
+        requestId: 'canvas-narrative:variables:2000:8',
         revision: 3,
         variables: { affection: 4 },
       }),
@@ -156,6 +164,26 @@ describe('NarrativePreviewBridge', () => {
     expect(host.postNarrativePreviewCanvasMessage).toHaveBeenCalledWith(
       expect.objectContaining({ nodeId: 'scene-a' }),
     );
+  });
+
+  it('hard gates panel creation when Narrative Preview is disabled', () => {
+    const host = createHost(createSnapshot(1));
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      getFeatureToggles: () => ({
+        preview: false,
+        typewriterEffect: true,
+        autoExpressionMatch: true,
+        showLockedChoices: true,
+        previewAutoSync: true,
+        live2dPerformance: false,
+      }),
+    });
+
+    expect(bridge.open()).toBe(false);
+    expect(panelFactory.createdPanels).toHaveLength(0);
+    expect(host.extractNarrativeGraphSnapshot).not.toHaveBeenCalled();
   });
 
   it('parses typed Preview-to-Canvas messages and rejects malformed payloads', () => {

@@ -26,6 +26,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+interface CanvasManifest {
+  readonly contributes: {
+    readonly configuration: {
+      readonly properties: Record<string, unknown>;
+    };
+  };
+}
+
 // Read the production source file for contract verification
 const providerSource = readFileSync(join(__dirname, '../editor/canvasEditorProvider.ts'), 'utf-8');
 const webviewSource = readFileSync(
@@ -45,6 +53,9 @@ const operationStoreSource = readFileSync(
   join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
   'utf-8',
 );
+const canvasManifest = JSON.parse(
+  readFileSync(join(__dirname, '../../../../package.json'), 'utf-8'),
+) as CanvasManifest;
 
 describe('canvasEditorProvider message contracts', () => {
   describe('NKV-001: nodes.list nodeType parameter', () => {
@@ -348,6 +359,7 @@ describe('canvasEditorProvider message contracts', () => {
       expect(narrativePreviewBridgeSource).toContain("type: 'preview:refresh'");
       expect(narrativePreviewBridgeSource).toContain("type: 'preview:jumpTo'");
       expect(narrativePreviewBridgeSource).toContain("type: 'preview:setVariables'");
+      expect(narrativePreviewBridgeSource).toContain("type: 'preview:setFeatureToggles'");
       expect(narrativePreviewBridgeSource).toContain('requestId: this.createRequestId');
       expect(narrativePreviewBridgeSource).toContain('revision: snapshot.revision');
       expect(narrativePreviewBridgeSource).toContain('isStalePreviewMessage');
@@ -357,9 +369,24 @@ describe('canvasEditorProvider message contracts', () => {
       expect(extensionSource).toContain(
         "vscode.commands.registerCommand('neko.canvas.openNarrativePreview'",
       );
+      expect(extensionSource).toContain('getNarrativePreviewFeatureToggles().preview');
       expect(extensionSource).toContain('canvasEditorProvider.openNarrativePreview()');
       expect(narrativePreviewBridgeSource).not.toContain('workspace.fs.readFile');
       expect(narrativePreviewBridgeSource).not.toContain('loadNkc(');
+    });
+
+    it('contributes all Narrative Preview ablation settings', () => {
+      const properties = canvasManifest.contributes.configuration.properties;
+      expect(
+        Object.keys(properties).filter((key) => key.startsWith('neko.canvas.narrative.')),
+      ).toEqual([
+        'neko.canvas.narrative.preview',
+        'neko.canvas.narrative.typewriterEffect',
+        'neko.canvas.narrative.autoExpressionMatch',
+        'neko.canvas.narrative.showLockedChoices',
+        'neko.canvas.narrative.previewAutoSync',
+        'neko.canvas.narrative.live2dPerformance',
+      ]);
     });
 
     it('registers a refresh command for saved Fountain scene updates', () => {

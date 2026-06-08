@@ -35,6 +35,10 @@ import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from './agentCapabilityProvider';
+import {
+  NARRATIVE_PREVIEW_CONFIG_SECTION,
+  readNarrativePreviewFeatureToggles,
+} from './editor/narrativePreviewFeatureGate';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
@@ -164,7 +168,15 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   logger.info('Activating extension...');
 
   // Create providers
-  canvasEditorProvider = new CanvasEditorProvider(context);
+  const getNarrativePreviewFeatureToggles = () =>
+    readNarrativePreviewFeatureToggles(
+      vscode.workspace.getConfiguration(NARRATIVE_PREVIEW_CONFIG_SECTION),
+    );
+  canvasEditorProvider = new CanvasEditorProvider(
+    context,
+    undefined,
+    getNarrativePreviewFeatureToggles,
+  );
   canvasOutlineProvider = new CanvasOutlineProvider();
   canvasStatusBar = new CanvasStatusBar();
 
@@ -350,7 +362,12 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   };
 
   // Register commands
-  registerCommands(context, api.storyboard.import, api.storyboard.getExecutionSummary);
+  registerCommands(
+    context,
+    api.storyboard.import,
+    api.storyboard.getExecutionSummary,
+    getNarrativePreviewFeatureToggles,
+  );
 
   // Register plugin slash commands into neko-agent chat panel
   registerAgentSlashCommands(context);
@@ -394,6 +411,7 @@ function registerCommands(
   getExecutionSummary: (
     request?: CanvasStoryboardExecutionSummaryRequest,
   ) => Promise<CanvasStoryboardExecutionSummary>,
+  getNarrativePreviewFeatureToggles: () => ReturnType<typeof readNarrativePreviewFeatureToggles>,
 ): void {
   // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
@@ -553,6 +571,14 @@ function registerCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.openNarrativePreview', async () => {
+      if (!getNarrativePreviewFeatureToggles().preview) {
+        await handleError(new Error('Narrative Preview is disabled by configuration.'), {
+          showToUser: true,
+          severity: 'warning',
+        });
+        return;
+      }
+
       const opened = canvasEditorProvider.openNarrativePreview();
       if (!opened) {
         await handleError(new Error('Open a Canvas narrative graph before opening Preview.'), {
@@ -563,9 +589,10 @@ function registerCommands(
     }),
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.canvas.refreshNarrativePreview', () =>
-      canvasEditorProvider.refreshNarrativePreview(),
-    ),
+    vscode.commands.registerCommand('neko.canvas.refreshNarrativePreview', () => {
+      if (!getNarrativePreviewFeatureToggles().preview) return false;
+      return canvasEditorProvider.refreshNarrativePreview();
+    }),
   );
 
   // Canvas keyboard shortcuts - forwarded to webview

@@ -163,6 +163,41 @@
           "group": "2_manage@1"
         }
       ]
+    },
+    "configuration": {
+      "title": "NekoCanvas",
+      "properties": {
+        "neko.canvas.narrative.preview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Canvas Narrative Preview command and panel."
+        },
+        "neko.canvas.narrative.typewriterEffect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable typewriter-style dialogue rendering in Narrative Preview."
+        },
+        "neko.canvas.narrative.autoExpressionMatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic parenthetical-to-expression matching in Narrative Preview."
+        },
+        "neko.canvas.narrative.showLockedChoices": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show locked choices as disabled instead of hiding them in Narrative Preview."
+        },
+        "neko.canvas.narrative.previewAutoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Synchronize Canvas selection and Narrative Preview playback highlights automatically."
+        },
+        "neko.canvas.narrative.live2dPerformance": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer the Live2D performance path when Narrative Preview renderers support it."
+        }
+      }
     }
   },
   "scripts": {

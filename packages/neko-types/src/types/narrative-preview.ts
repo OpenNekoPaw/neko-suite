@@ -141,6 +141,11 @@ export type CanvasToPreviewMessage = NarrativeMessageEnvelope &
         readonly type: 'preview:setGenre';
         readonly genre: StoryGenre;
       }
+    | {
+        readonly type: 'preview:setFeatureToggles';
+        readonly toggles: Partial<NarrativePreviewFeatureToggles>;
+        readonly revision?: number;
+      }
   );
 
 export type PreviewToCanvasMessage = NarrativeMessageEnvelope &

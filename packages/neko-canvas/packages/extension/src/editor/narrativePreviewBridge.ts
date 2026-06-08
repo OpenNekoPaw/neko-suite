@@ -4,6 +4,7 @@ import {
   isNarrativeAssetRef,
   isResourceRef,
   NARRATIVE_RUNTIME_NODE_TYPES,
+  normalizeNarrativePreviewFeatureToggles,
   type CanvasConnection,
   type CanvasData,
   type CanvasNode,
@@ -16,6 +17,7 @@ import {
   type NarrativeGraphSnapshot,
   type NarrativeMetadata,
   type NarrativeNodeSnapshot,
+  type NarrativePreviewFeatureToggles,
   type NarrativeRuntimeNodeType,
   type NarrativeSceneMetadata,
   type PreviewToCanvasMessage,
@@ -42,6 +44,7 @@ export interface NarrativeCanvasSnapshotHost {
 
 export interface NarrativePreviewBridgeOptions {
   readonly panelFactory?: NarrativePreviewPanelFactory;
+  readonly getFeatureToggles?: () => NarrativePreviewFeatureToggles;
   readonly now?: () => number;
 }
 
@@ -60,6 +63,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private lastAcceptedPreviewRevision = 0;
   private requestSequence = 0;
   private readonly panelFactory: NarrativePreviewPanelFactory;
+  private readonly getFeatureToggles: () => NarrativePreviewFeatureToggles;
   private readonly now: () => number;
 
   constructor(
@@ -67,10 +71,20 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     private readonly options: NarrativePreviewBridgeOptions,
   ) {
     this.panelFactory = options.panelFactory ?? vscode.window;
+    this.getFeatureToggles =
+      options.getFeatureToggles ?? (() => normalizeNarrativePreviewFeatureToggles(undefined));
     this.now = options.now ?? Date.now;
   }
 
   open(): boolean {
+    if (!this.getFeatureToggles().preview) {
+      void handleError(new Error('Narrative Preview is disabled by configuration.'), {
+        showToUser: true,
+        severity: 'warning',
+      });
+      return false;
+    }
+
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) {
       void handleError(new Error('No active Canvas narrative graph is available.'), {
@@ -81,6 +95,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     const panel = this.ensurePanel();
+    this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:loadGraph',
       requestId: this.createRequestId('load'),
@@ -91,10 +106,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   refresh(): boolean {
+    if (!this.getFeatureToggles().preview) return false;
+
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
     if (!this.panel) return false;
 
+    this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:refresh',
       requestId: this.createRequestId('refresh'),
@@ -105,9 +123,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   jumpTo(nodeId: string): boolean {
+    if (!this.getFeatureToggles().preview) return false;
+
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
     this.ensurePanel();
+    this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:jumpTo',
       requestId: this.createRequestId('jump'),
@@ -118,10 +139,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   setVariables(variables: Readonly<Record<string, unknown>>): boolean {
+    if (!this.getFeatureToggles().preview) return false;
+
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
     if (!this.panel) return false;
 
+    this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:setVariables',
       requestId: this.createRequestId('variables'),
@@ -190,6 +214,15 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       this.lastAcceptedPreviewRevision = Math.max(this.lastAcceptedPreviewRevision, revision);
     }
     this.panel?.webview.postMessage(message);
+  }
+
+  private postFeatureToggles(revision: number): void {
+    this.postToPreview({
+      type: 'preview:setFeatureToggles',
+      requestId: this.createRequestId('toggles'),
+      toggles: this.getFeatureToggles(),
+      revision,
+    });
   }
 
   private isStalePreviewMessage(message: PreviewToCanvasMessage): boolean {
