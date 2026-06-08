@@ -6,10 +6,12 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
+import { createCanvasPlaybackPlan } from '@neko/shared';
 import type {
   CanvasData,
   CanvasDroppedAsset,
   CanvasNodeType,
+  CanvasPlaybackPlan,
   CanvasSubsystemId,
   CanvasViewport,
   ProjectedCanvasStatus,
@@ -25,6 +27,7 @@ import {
 } from './components/panels/GenerationPromptPanel';
 import { ContentOverlay } from './components/panels/ContentOverlay';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
+import { CanvasPlaybackController } from './components/playback/CanvasPlaybackController';
 import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
 import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
@@ -1404,6 +1407,8 @@ export function CanvasApp() {
             <PlaybackControllerHost
               activeSubsystemIds={activeSubsystemIds}
               controllers={playbackControllers}
+              canvasData={canvasData}
+              selectedNodeId={selectedNodeIds[0]}
             />
 
             <GenerationPromptPanel
@@ -1476,23 +1481,36 @@ export function CanvasApp() {
 function PlaybackControllerHost({
   activeSubsystemIds,
   controllers,
+  canvasData,
+  selectedNodeId,
 }: {
   readonly activeSubsystemIds: readonly CanvasSubsystemId[];
   readonly controllers: readonly PlaybackControllerDefinition[];
+  readonly canvasData: CanvasData | null | undefined;
+  readonly selectedNodeId?: string;
 }) {
-  if (controllers.length === 0) {
-    return null;
-  }
+  const plan = useMemo<CanvasPlaybackPlan | null>(
+    () =>
+      canvasData
+        ? createCanvasPlaybackPlan({ canvas: canvasData, selectedNodeId, adapterId: 'auto' })
+        : null,
+    [canvasData, selectedNodeId],
+  );
 
-  const PlaybackComponent = controllers[0]?.component;
-  if (!PlaybackComponent) {
+  if (!plan || plan.units.length === 0 || plan.entryUnitIds.length === 0) {
     return null;
   }
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 z-20 rounded border border-[var(--control-border)] bg-[var(--toolbar-bg)] p-1 shadow-[var(--glass-shadow-sm)]">
+    <div
+      className="pointer-events-auto absolute right-4 top-4 z-20 rounded border border-[var(--control-border)] bg-[var(--toolbar-bg)] p-1 shadow-[var(--glass-shadow-sm)]"
+      data-active-subsystems={activeSubsystemIds.join(',')}
+      data-playback-controller-count={controllers.length}
+      data-active-playback-controller="canvas-playback"
+      data-inactive-playback-controller-count={controllers.length}
+    >
       <Suspense fallback={<div className="h-7 w-24 rounded bg-[var(--control-bg)]" />}>
-        <PlaybackComponent activeSubsystemIds={activeSubsystemIds} />
+        <CanvasPlaybackController plan={plan} />
       </Suspense>
     </div>
   );

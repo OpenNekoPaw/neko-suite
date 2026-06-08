@@ -265,6 +265,7 @@ function GroupChildSummaryCard({
   const subtitle = resolveChildSummaryText(childNode, policy.resolveSubtitle?.(childNode));
   const badges = policy.resolveBadges?.(childNode) ?? [];
   const isSelected = context.selectedNodeIds.includes(childNode.id);
+  const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === childNode.id);
   const childTypeLabel = resolveNodeTypeLabel(childNode);
 
   const handleSelect = useCallback(
@@ -305,7 +306,7 @@ function GroupChildSummaryCard({
     <div
       role="button"
       tabIndex={0}
-      className={getGroupSummaryCardClassName(variant, isSelected)}
+      className={getGroupSummaryCardClassName(variant, isSelected, isPlaybackActive)}
       {...getKeyboardBoundaryMetadata({
         scope: 'container',
         ownerId: `container-child:${childNode.id}`,
@@ -315,6 +316,7 @@ function GroupChildSummaryCard({
       data-group-child-card-id={childNode.id}
       data-group-child-card-layout="summary"
       data-group-child-card-height={readStyleHeight(style)}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
       aria-pressed={isSelected}
       onClick={handleSelect}
       onDoubleClick={handleOpenDetails}
@@ -417,6 +419,7 @@ function GalleryChildCard({
     }),
   );
   const isSelected = context.selectedNodeIds.includes(childNode.id);
+  const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === childNode.id);
 
   const handleSelect = useCallback(
     (event: React.MouseEvent) => {
@@ -456,7 +459,7 @@ function GalleryChildCard({
     <div
       role="button"
       tabIndex={0}
-      className={getGalleryChildCardClassName(isSelected)}
+      className={getGalleryChildCardClassName(isSelected, isPlaybackActive)}
       {...getKeyboardBoundaryMetadata({
         scope: 'container',
         ownerId: `gallery-child:${childNode.id}`,
@@ -466,6 +469,7 @@ function GalleryChildCard({
       data-gallery-child-card-id={childNode.id}
       data-gallery-child-card-layout="visual-grid"
       data-gallery-child-card-height={readStyleHeight(style)}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
       aria-pressed={isSelected}
       onClick={handleSelect}
       onDoubleClick={handleOpenDetails}
@@ -607,6 +611,7 @@ function SceneShotRailCard({
     }),
   );
   const isSelected = context.selectedNodeIds.includes(childNode.id);
+  const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === childNode.id);
   const duration = readNumber(childNode.data, 'duration');
 
   const handleSelect = useCallback(
@@ -647,7 +652,7 @@ function SceneShotRailCard({
     <div
       role="button"
       tabIndex={0}
-      className={getSceneShotRailCardClassName(isSelected)}
+      className={getSceneShotRailCardClassName(isSelected, isPlaybackActive)}
       {...getKeyboardBoundaryMetadata({
         scope: 'container',
         ownerId: `scene-shot:${childNode.id}`,
@@ -657,6 +662,7 @@ function SceneShotRailCard({
       data-scene-shot-card-id={childNode.id}
       data-scene-shot-card-layout="rail"
       data-scene-shot-card-height={readStyleHeight(style)}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
       aria-pressed={isSelected}
       onClick={handleSelect}
       onDoubleClick={handleOpenDetails}
@@ -749,6 +755,7 @@ function ChildNodeDetailCard({
   const actions = policy.resolveActions?.(childNode, parentNode) ?? [];
   const fields = resolveInlineEditableFields(childNode);
   const hasPreview = shouldRenderCardPreview(previewSource, fields.length);
+  const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === childNode.id);
 
   const handleSelect = useCallback(
     (event: React.MouseEvent) => {
@@ -774,12 +781,13 @@ function ChildNodeDetailCard({
 
   return (
     <div
-      className={getChildDetailCardClassName(variant)}
+      className={getChildDetailCardClassName(variant, isPlaybackActive)}
       style={style}
       data-child-card-id={childNode.id}
       data-child-card-layout="detail"
       data-child-card-variant={variant}
       data-child-card-height={readStyleHeight(style)}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
       onClick={handleSelect}
       onMouseDown={(event) => event.stopPropagation()}
     >
@@ -953,35 +961,40 @@ function shouldRenderCardPreview(
   return true;
 }
 
-function getChildDetailCardClassName(variant: NodeCardVariant): string {
+function getChildDetailCardClassName(variant: NodeCardVariant, isPlaybackActive = false): string {
   const base =
     'group/child-card min-w-0 overflow-hidden rounded border border-[var(--node-border)] bg-white text-left shadow-sm';
+  const active = isPlaybackActive ? ' ring-2 ring-[var(--node-selected)] ring-offset-2' : '';
   if (variant === 'row') {
-    return `${base} flex flex-col`;
+    return `${base}${active} flex flex-col`;
   }
-  return `${base} flex min-h-0 flex-col`;
+  return `${base}${active} flex min-h-0 flex-col`;
 }
 
-function getSceneShotRailCardClassName(isSelected: boolean): string {
+function getSceneShotRailCardClassName(isSelected: boolean, isPlaybackActive = false): string {
   const base =
     'flex w-[260px] flex-shrink-0 cursor-pointer flex-col overflow-hidden rounded border bg-white text-left shadow-sm outline-none transition-colors focus:border-[var(--node-selected)] focus:ring-1 focus:ring-[var(--node-selected)]';
-  return isSelected
+  return isSelected || isPlaybackActive
     ? `${base} border-[var(--node-selected)] ring-1 ring-[var(--node-selected)]`
     : `${base} border-gray-200 hover:border-blue-300`;
 }
 
-function getGroupSummaryCardClassName(variant: NodeCardVariant, isSelected: boolean): string {
+function getGroupSummaryCardClassName(
+  variant: NodeCardVariant,
+  isSelected: boolean,
+  isPlaybackActive = false,
+): string {
   const sizeClass = variant === 'row' ? 'min-h-[132px] w-full' : 'min-h-[156px] w-full';
   const base = `flex ${sizeClass} min-w-0 cursor-pointer flex-col overflow-hidden rounded border bg-white text-left shadow-sm outline-none transition-colors focus:border-[var(--node-selected)] focus:ring-1 focus:ring-[var(--node-selected)]`;
-  return isSelected
+  return isSelected || isPlaybackActive
     ? `${base} border-[var(--node-selected)] ring-1 ring-[var(--node-selected)]`
     : `${base} border-gray-200 hover:border-blue-300`;
 }
 
-function getGalleryChildCardClassName(isSelected: boolean): string {
+function getGalleryChildCardClassName(isSelected: boolean, isPlaybackActive = false): string {
   const base =
     'flex min-w-0 cursor-pointer flex-col overflow-hidden rounded border bg-white text-left shadow-sm outline-none transition-colors focus:border-[var(--node-selected)] focus:ring-1 focus:ring-[var(--node-selected)]';
-  return isSelected
+  return isSelected || isPlaybackActive
     ? `${base} border-[var(--node-selected)] ring-1 ring-[var(--node-selected)]`
     : `${base} border-gray-200 hover:border-blue-300`;
 }

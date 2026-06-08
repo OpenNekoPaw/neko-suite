@@ -1,0 +1,220 @@
+// @vitest-environment jsdom
+
+import React from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanvasConnection, CanvasData, CanvasNode } from '@neko/shared';
+import { CanvasPlaybackController, buildDefaultPlaybackPath } from './CanvasPlaybackController';
+import { useCanvasStore } from '../../stores/canvasStore';
+import { setLocale } from '../../i18n';
+
+(globalThis as { React?: typeof React }).React = React;
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+vi.mock('@neko/ui/icons', () => ({
+  PauseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="pause">{size}</span>,
+  PlayIcon: ({ size = 16 }: { size?: number }) => <span data-icon="play">{size}</span>,
+  SkipBackIcon: ({ size = 16 }: { size?: number }) => <span data-icon="skip-back">{size}</span>,
+  SkipForwardIcon: ({ size = 16 }: { size?: number }) => (
+    <span data-icon="skip-forward">{size}</span>
+  ),
+}));
+
+describe('CanvasPlaybackController', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    setLocale('en');
+    useCanvasStore.setState({
+      canvasData: null,
+      selection: { nodeIds: [], connectionIds: [] },
+      isConnecting: false,
+      pendingConnectionSource: null,
+      activePlayingNodeId: null,
+      expandedNodeId: null,
+      generationPanelState: { visible: false, nodeId: null, childNodeId: null },
+      contentOverlayState: { visible: false, nodeId: null },
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  it('renders storyboard playback for scene and shot nodes without narrative nodes', () => {
+    useCanvasStore.setState({
+      canvasData: storyboardCanvas(),
+      selection: { nodeIds: ['scene-a'], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<CanvasPlaybackController />);
+    });
+
+    const controller = host.querySelector<HTMLElement>(
+      '[data-testid="canvas-playback-controller"]',
+    );
+    expect(controller).not.toBeNull();
+    expect(controller?.getAttribute('data-playback-adapter')).toBe('storyboard');
+    expect(host.textContent).toContain('Storyboard');
+    expect(host.textContent).toContain('1/2');
+  });
+
+  it('moves playback highlight without mutating the graph or changing selection', () => {
+    const data = storyboardCanvas();
+    useCanvasStore.setState({
+      canvasData: data,
+      selection: { nodeIds: ['scene-a'], connectionIds: [] },
+    });
+    const before = JSON.stringify(data);
+
+    act(() => {
+      root.render(<CanvasPlaybackController />);
+    });
+    const nextButton = host.querySelector<HTMLButtonElement>('button[title="Next"]');
+
+    act(() => {
+      nextButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['scene-a']);
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('shot-a2');
+    expect(JSON.stringify(useCanvasStore.getState().canvasData)).toBe(before);
+  });
+
+  it('renders branch choices for interactive playback plans', () => {
+    const data = genericChoiceCanvas();
+    data.playback = { version: 1, adapterId: 'generic', mode: 'interactive' };
+    useCanvasStore.setState({
+      canvasData: data,
+      selection: { nodeIds: ['a'], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<CanvasPlaybackController />);
+    });
+
+    expect(host.querySelector('[data-testid="canvas-playback-branches"]')).not.toBeNull();
+    expect(host.textContent).toContain('Go left');
+    expect(host.textContent).toContain('Go right');
+  });
+
+  it('builds a default path without looping forever', () => {
+    expect(
+      buildDefaultPlaybackPath({
+        adapterId: 'generic',
+        requestedAdapterId: 'generic',
+        behaviorMode: 'linear',
+        advancePolicy: 'timer',
+        entryUnitIds: ['a'],
+        units: [
+          { id: 'a', sourceNodeId: 'a', kind: 'node', renderMode: 'select-node' },
+          { id: 'b', sourceNodeId: 'b', kind: 'node', renderMode: 'select-node' },
+        ],
+        transitions: [
+          { id: 'a-b', sourceUnitId: 'a', targetUnitId: 'b', type: 'sequence', priority: 0 },
+          { id: 'b-a', sourceUnitId: 'b', targetUnitId: 'a', type: 'sequence', priority: 0 },
+        ],
+        diagnostics: [],
+        metadata: {},
+      }),
+    ).toEqual(['a', 'b']);
+  });
+});
+
+function storyboardCanvas(): CanvasData {
+  return {
+    version: '2.1',
+    name: 'Storyboard',
+    nodes: [
+      scene('scene-a', ['shot-a1', 'shot-a2']),
+      shot('shot-a1', 1, 'scene-a'),
+      shot('shot-a2', 2, 'scene-a'),
+    ],
+    connections: [],
+  };
+}
+
+function genericChoiceCanvas(): CanvasData {
+  return {
+    version: '2.1',
+    name: 'Generic',
+    nodes: [annotation('a'), annotation('b'), annotation('c')],
+    connections: [
+      connection('left', 'a', 'b', 'choice', { choiceText: 'Go left', priority: 0 }),
+      connection('right', 'a', 'c', 'choice', { choiceText: 'Go right', priority: 1 }),
+    ],
+  };
+}
+
+function scene(id: string, childIds: readonly string[]): CanvasNode {
+  return {
+    id,
+    type: 'scene',
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 240 },
+    zIndex: 0,
+    container: { policy: 'scene', childIds: [...childIds], layout: { mode: 'sequence' } },
+    data: { sceneTitle: 'Scene', sceneNumber: 1 },
+  };
+}
+
+function shot(id: string, shotNumber: number, parentId: string): CanvasNode {
+  return {
+    id,
+    type: 'shot',
+    parentId,
+    position: { x: shotNumber * 240, y: 40 },
+    size: { width: 200, height: 120 },
+    zIndex: shotNumber,
+    data: {
+      shotNumber,
+      duration: 3,
+      visualDescription: id,
+      characters: [],
+      shotScale: 'MS',
+      characterAction: '',
+      emotion: [],
+      sceneTags: [],
+      generationStatus: 'idle',
+      generationHistory: [],
+    },
+  };
+}
+
+function annotation(id: string): CanvasNode {
+  return {
+    id,
+    type: 'annotation',
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 120 },
+    zIndex: 0,
+    data: { content: id },
+  };
+}
+
+function connection(
+  id: string,
+  sourceId: string,
+  targetId: string,
+  type: CanvasConnection['type'],
+  extra: Partial<CanvasConnection>,
+): CanvasConnection {
+  return {
+    id,
+    sourceId,
+    sourceAnchor: 'right',
+    targetId,
+    targetAnchor: 'left',
+    type,
+    ...extra,
+  };
+}

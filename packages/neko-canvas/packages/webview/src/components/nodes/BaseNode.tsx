@@ -246,6 +246,8 @@ export function BaseNode({
   minSize,
   renderHeight,
 }: BaseNodeProps) {
+  const activePlayingNodeId = useCanvasStore((state) => state.activePlayingNodeId);
+  const isPlaybackActive = activePlayingNodeId === node.id;
   const nodeMinSize = minSize ?? resolveNodeMinSize(node);
   const initialResizeSize = useMemo(
     () => clampNodeSize(node.size, nodeMinSize),
@@ -428,6 +430,7 @@ export function BaseNode({
   return (
     <div
       data-node-id={node.id}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
       {...getKeyboardBoundaryMetadata({
         scope: 'node',
         ownerId: node.id,
@@ -459,7 +462,10 @@ export function BaseNode({
         className={clsx(
           'w-full h-full rounded-lg border-2 shadow-lg overflow-hidden',
           'bg-[var(--node-bg)] transition-colors duration-150',
-          isSelected ? 'border-[var(--node-selected)]' : 'border-[var(--node-border)]',
+          isSelected || isPlaybackActive
+            ? 'border-[var(--node-selected)]'
+            : 'border-[var(--node-border)]',
+          isPlaybackActive && !isSelected && 'ring-2 ring-[var(--node-selected)] ring-offset-2',
           (isDragging || isResizing) && 'shadow-2xl',
         )}
       >

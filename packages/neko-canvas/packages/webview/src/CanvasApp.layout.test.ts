@@ -12,6 +12,15 @@ describe('Canvas creative workbench layout boundary', () => {
     resolve(__dirname, 'components/panels/NodeLibraryPanel.tsx'),
     'utf8',
   );
+  const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
+  const playbackControllerSource = readFileSync(
+    resolve(__dirname, 'components/playback/CanvasPlaybackController.tsx'),
+    'utf8',
+  );
+  const containerRendererSource = readFileSync(
+    resolve(__dirname, 'components/content/ContainerRenderer.tsx'),
+    'utf8',
+  );
 
   it('uses the shared shell without changing the canvas-first main panel', () => {
     expect(appSource).toMatch(/import \{ CreativeWorkbenchShell \} from '@neko\/ui\/workbench'/);
@@ -38,6 +47,24 @@ describe('Canvas creative workbench layout boundary', () => {
     }
     expect(appSource).toMatch(/id="canvas-hud-controls"/);
     expect(appSource).toMatch(/isHudVisible && \(/);
+  });
+
+  it('arbitrates playback through one shared Canvas playback controller', () => {
+    expect(appSource).toMatch(/createCanvasPlaybackPlan\(\{ canvas: canvasData, selectedNodeId/);
+    expect(appSource).toMatch(/data-active-playback-controller="canvas-playback"/);
+    expect(appSource).toMatch(/data-inactive-playback-controller-count=\{controllers\.length\}/);
+    expect(appSource).toMatch(/<CanvasPlaybackController plan=\{plan\}/);
+    expect(appSource).not.toMatch(/controllers\.map\(/);
+    expect(appSource).not.toMatch(/controllers\[0\]/);
+  });
+
+  it('keeps playback highlight as visual state separate from selection props', () => {
+    expect(baseNodeSource).toMatch(/state\.activePlayingNodeId/);
+    expect(baseNodeSource).toMatch(/data-playback-active=\{isPlaybackActive/);
+    expect(baseNodeSource).toMatch(/isSelected \|\| isPlaybackActive/);
+    expect(containerRendererSource).toMatch(/state\.activePlayingNodeId === childNode\.id/);
+    expect(containerRendererSource).toMatch(/data-playback-active=\{isPlaybackActive/);
+    expect(playbackControllerSource).not.toMatch(/selectNode\(/);
   });
 
   it('keeps the right node library in the right-panel responsibility', () => {
