@@ -18,6 +18,11 @@ import type {
 } from './narrative-preview';
 import type { ResourceRef } from './resource-cache';
 import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
+import type {
+  BatchExecutionPlan,
+  ComicAnimationDiagnostic,
+  VisualOccurrence,
+} from './comic-animation-indexing';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -433,6 +438,17 @@ export interface ShotCharacter {
   appearanceNotes?: string;
 }
 
+/** Review-only candidate identity surfaced by comic-to-animation indexing. */
+export interface ShotCharacterCandidate {
+  readonly candidateId: string;
+  readonly entityRef?: CreativeEntityRef;
+  readonly displayName?: string;
+  readonly role?: string;
+  readonly confidence?: number;
+  readonly sourceRefId?: string;
+  readonly diagnostics?: readonly ComicAnimationDiagnostic[];
+}
+
 /**
  * Shot node - a single storyboard panel with full production metadata
  */
@@ -494,6 +510,14 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     mediaRefs?: readonly StoryboardMediaRef[];
     /** Comic-to-animation image preparation plan attached to this shot for review/execution. */
     shotImagePrepPlan?: import('./shot-image-prep').ShotImagePrepPlan;
+    /** Review-only visual evidence refs projected from host-side semantic indexing. */
+    visualOccurrences?: readonly VisualOccurrence[];
+    /** Review-only candidate character bindings projected from host-side entity/memory matching. */
+    characterCandidates?: readonly ShotCharacterCandidate[];
+    /** Review-only continuity diagnostics for this shot's current story position. */
+    continuityDiagnostics?: readonly ComicAnimationDiagnostic[];
+    /** Review-only batch approval/execution envelope for this shot or its scene. */
+    batchExecutionPlan?: BatchExecutionPlan;
     /** Last successful storyboard import into neko-cut timeline */
     lastImportedToTimelineAt?: number;
     /** Target project name used during the last storyboard import */

@@ -16,6 +16,7 @@ import type { Skill } from './skill';
 import type { LoadingTier } from './loading-tier';
 import type { PromptFragment } from './prompt-fragment';
 import type { ProviderCard } from './provider-card';
+import type { PerceptionCapabilityFacet } from './comic-animation-indexing';
 
 // =============================================================================
 // Protocol v1 metadata
@@ -152,6 +153,7 @@ export interface AgentArtifactFacetsContribution {
   readonly renderers?: readonly AgentArtifactRendererContribution[];
   readonly projectors?: readonly AgentArtifactProjectorContribution[];
   readonly capabilities?: readonly AgentArtifactExecutionCapabilityContribution[];
+  readonly perceptionCapabilities?: readonly PerceptionCapabilityFacet[];
 }
 
 // =============================================================================

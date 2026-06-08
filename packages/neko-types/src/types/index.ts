@@ -201,6 +201,7 @@ export * from './composite-artifact';
 export * from './artifact-projection';
 export * from './character-memory';
 export * from './media-semantic-index';
+export * from './comic-animation-indexing';
 
 // Sketch types (.nks document format)
 export * from './sketch';
