@@ -64,10 +64,12 @@ const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
 const REGISTERED_NODE_DEFAULT_DATA: Partial<
   Record<RegisteredCanvasNodeType, CanvasSerializableRecord>
 > = {
+  'narrative-start': { label: 'Start', description: '' },
   choice: { choices: [] },
   merge: {},
   'narrative-scene': { summary: '' },
   'narrative-note': { content: '' },
+  'narrative-ending': { endingType: 'normal', endingLabel: 'Ending', statisticsSummary: true },
   state: {},
   trigger: { event: '' },
   action: {},

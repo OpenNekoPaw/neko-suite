@@ -36,6 +36,11 @@ const canvasAppSource = readFileSync(
   join(__dirname, '../../../webview/src/CanvasApp.tsx'),
   'utf-8',
 );
+const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
+const narrativePreviewBridgeSource = readFileSync(
+  join(__dirname, '../editor/narrativePreviewBridge.ts'),
+  'utf-8',
+);
 const operationStoreSource = readFileSync(
   join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
   'utf-8',
@@ -308,9 +313,65 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 
+  describe('NKV-015: Canvas narrative preview bridge', () => {
+    it('extracts NarrativeGraphSnapshot from the in-memory Canvas provider state', () => {
+      expect(providerSource).toContain('private readonly canvasSnapshotsByDocumentUri');
+      expect(providerSource).toContain('private readonly canvasRevisionsByDocumentUri');
+      expect(providerSource).toContain('extractNarrativeGraphSnapshot()');
+      expect(providerSource).toContain('createNarrativeGraphSnapshotFromCanvasData(canvasData');
+      expect(providerSource).toContain('sourceCanvasUri: documentUri');
+      expect(narrativePreviewBridgeSource).toContain('createNarrativeGraphSnapshotFromCanvasData(');
+      expect(narrativePreviewBridgeSource).toContain('NARRATIVE_RUNTIME_NODE_TYPES');
+      expect(narrativePreviewBridgeSource).toContain('NARRATIVE_RUNTIME_CONNECTION_TYPES');
+      expect(narrativePreviewBridgeSource).toContain('nodes.filter(isNarrativeRuntimeCanvasNode)');
+      expect(narrativePreviewBridgeSource).not.toContain("'.nkstory'");
+      expect(narrativePreviewBridgeSource).not.toContain("'.story'");
+      expect(narrativePreviewBridgeSource).not.toContain("'.nks'");
+    });
+
+    it('keeps unsaved narrative metadata in Canvas status sync', () => {
+      expect(canvasAppSource).toContain('narrativeSnapshotFingerprint');
+      expect(canvasAppSource).toContain('narrative: canvasData.narrative');
+      expect(canvasAppSource).toContain('nodes: canvasData.nodes');
+      expect(canvasAppSource).toContain('connections: canvasData.connections');
+      expect(providerSource).toContain("case 'canvasStatus'");
+      expect(providerSource).toContain('this.rememberCanvasSnapshot(document, data)');
+    });
+
+    it('routes revisioned Preview messages through a Canvas-owned bridge', () => {
+      expect(providerSource).toContain('private readonly narrativePreviewBridge');
+      expect(providerSource).toContain('openNarrativePreview()');
+      expect(providerSource).toContain('refreshNarrativePreview()');
+      expect(providerSource).toContain('jumpNarrativePreviewToNode(nodeId: string)');
+      expect(providerSource).toContain('setNarrativePreviewVariables(');
+      expect(narrativePreviewBridgeSource).toContain("type: 'preview:loadGraph'");
+      expect(narrativePreviewBridgeSource).toContain("type: 'preview:refresh'");
+      expect(narrativePreviewBridgeSource).toContain("type: 'preview:jumpTo'");
+      expect(narrativePreviewBridgeSource).toContain("type: 'preview:setVariables'");
+      expect(narrativePreviewBridgeSource).toContain('requestId: this.createRequestId');
+      expect(narrativePreviewBridgeSource).toContain('revision: snapshot.revision');
+      expect(narrativePreviewBridgeSource).toContain('isStalePreviewMessage');
+    });
+
+    it('registers the Narrative Preview command without letting Preview read .nkc directly', () => {
+      expect(extensionSource).toContain(
+        "vscode.commands.registerCommand('neko.canvas.openNarrativePreview'",
+      );
+      expect(extensionSource).toContain('canvasEditorProvider.openNarrativePreview()');
+      expect(narrativePreviewBridgeSource).not.toContain('workspace.fs.readFile');
+      expect(narrativePreviewBridgeSource).not.toContain('loadNkc(');
+    });
+
+    it('registers a refresh command for saved Fountain scene updates', () => {
+      expect(extensionSource).toContain(
+        "vscode.commands.registerCommand('neko.canvas.refreshNarrativePreview'",
+      );
+      expect(extensionSource).toContain('canvasEditorProvider.refreshNarrativePreview()');
+    });
+  });
+
   describe('NKV-010: projected Canvas contracts', () => {
     it('exposes projection adapter registration and write-back through the extension API', () => {
-      const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
       expect(extensionSource).toContain('projections: {');
       expect(extensionSource).toContain('registerProjectionAdapter(adapter)');
       expect(extensionSource).toContain('openProjectedCanvas(source)');

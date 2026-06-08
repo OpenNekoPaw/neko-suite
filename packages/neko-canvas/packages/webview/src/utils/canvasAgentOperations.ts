@@ -22,8 +22,10 @@ import type {
   CanvasUpdateBlockResult,
   FieldBinding,
   JsonPointerPath,
+  CanvasNarrativeAgentAnalysis,
 } from '@neko/shared';
 import {
+  analyzeCanvasNarrativeForAgent,
   getBuiltInCanvasNodePresetMetadata,
   getContainerChildIds,
   getContainerPolicyName,
@@ -117,6 +119,12 @@ export function createCanvasAgentActiveContext(
     .map((node) => summarizeCanvasAgentNode(node, input.request?.includeNodeDetails === true));
   const subsystemSummary = summarizeCanvasSubsystems({ nodes: input.nodes });
   const selectedNodeTypes = uniqueStrings(selectedNodes.map((node) => node.type));
+  const narrativeAnalysis = analyzeCanvasNarrativeForAgent({
+    nodes: input.nodes,
+    connections: input.connections ?? [],
+    variableNames: input.canvasData?.narrative?.variables.map((variable) => variable.name) ?? [],
+    entryNodeId: input.canvasData?.narrative?.entryNodeId,
+  });
 
   const result: CanvasAgentActiveContextResult = {
     nodeTypeSummary: subsystemSummary.nodeTypeSummary,
@@ -125,6 +133,9 @@ export function createCanvasAgentActiveContext(
     selectedNodeTypes,
     selectedNodes,
     connections: input.connections ? [...input.connections] : undefined,
+    ...(narrativeAnalysis.diagnostics.length > 0
+      ? { narrativeDiagnostics: narrativeAnalysis.diagnostics }
+      : {}),
     ...(input.documentUri ? { documentUri: input.documentUri } : {}),
     ...(input.canvasId ? { canvasId: input.canvasId } : {}),
     ...(input.insertionPoint ? { insertionPoint: input.insertionPoint } : {}),
@@ -261,7 +272,7 @@ function getDeriveContainerTargetId(sourceNode: CanvasNode): string | undefined 
   return getNodeParentId(sourceNode);
 }
 
-export function summarizeCanvasAgentNode(
+function summarizeCanvasAgentNode(
   node: CanvasNode,
   includeDetails = false,
 ): CanvasAgentNodeSummary {
@@ -287,7 +298,7 @@ export function summarizeCanvasAgentNode(
   };
 }
 
-export function summarizeCanvasAgentContainer(node: CanvasNode): CanvasAgentContainerSummary {
+function summarizeCanvasAgentContainer(node: CanvasNode): CanvasAgentContainerSummary {
   const policyName = getContainerPolicyName(node);
   const policy = getContainerPolicy(CONTAINER_POLICIES, policyName);
   const childIds = getContainerChildIds(node);
@@ -741,27 +752,40 @@ export function updateCanvasBlock(
 
 export function extractStructuredCanvasContent(
   nodes: CanvasNode[],
-  request: CanvasExtractStructuredContentRequest,
+  connectionsOrRequest: readonly CanvasConnection[] | CanvasExtractStructuredContentRequest,
+  request?: CanvasExtractStructuredContentRequest,
 ): CanvasExtractStructuredContentResult {
-  const selectedIds = request.nodeIds?.length
-    ? Array.from(new Set(request.nodeIds))
+  const hasConnectionsOnly = Array.isArray(connectionsOrRequest) && request === undefined;
+  const hasExplicitRequest = request !== undefined;
+  const connections =
+    hasExplicitRequest || hasConnectionsOnly
+      ? (connectionsOrRequest as readonly CanvasConnection[])
+      : [];
+  const normalizedRequest: CanvasExtractStructuredContentRequest = hasExplicitRequest
+    ? request
+    : hasConnectionsOnly
+      ? { format: 'json' }
+      : (connectionsOrRequest as CanvasExtractStructuredContentRequest);
+  const selectedIds = normalizedRequest.nodeIds?.length
+    ? Array.from(new Set(normalizedRequest.nodeIds))
     : nodes.map((node) => node.id);
-  const expandedIds = request.includeChildren
+  const expandedIds = normalizedRequest.includeChildren
     ? includeDescendantIds(nodes, selectedIds)
     : selectedIds;
+  const narrativeAnalysis = analyzeCanvasNarrativeForAgent({ nodes, connections });
   const summaries = expandedIds
     .map((nodeId) => nodes.find((node) => node.id === nodeId))
     .filter((node): node is CanvasNode => Boolean(node))
-    .map(summarizeNode);
+    .map((node) => summarizeNode(node, narrativeAnalysis));
 
   return {
-    format: request.format,
+    format: normalizedRequest.format,
     nodeIds: summaries.map((summary) => summary.id),
     nodes: summaries,
     content:
-      request.format === 'json'
+      normalizedRequest.format === 'json'
         ? summaries
-        : request.format === 'markdown'
+        : normalizedRequest.format === 'markdown'
           ? renderMarkdown(summaries)
           : renderPrompt(summaries),
   };
@@ -977,7 +1001,10 @@ function includeDescendantIds(nodes: CanvasNode[], selectedIds: readonly string[
   return result;
 }
 
-function summarizeNode(node: CanvasNode): CanvasStructuredNodeSummary {
+function summarizeNode(
+  node: CanvasNode,
+  narrativeAnalysis?: CanvasNarrativeAgentAnalysis,
+): CanvasStructuredNodeSummary {
   const childIds = getContainerChildIds(node);
   const bindings = collectBindings(node);
   return {
@@ -998,6 +1025,7 @@ function summarizeNode(node: CanvasNode): CanvasStructuredNodeSummary {
           thumbnailVariantId: node.preview.thumbnailVariantId,
         }
       : undefined,
+    narrative: narrativeAnalysis?.nodeSummaries[node.id],
   };
 }
 
@@ -1182,7 +1210,12 @@ function sanitizeRuntimeValue(value: unknown): unknown {
 
 function isRuntimeUrl(value: unknown): value is string {
   return (
-    typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('mediastream:'))
+    typeof value === 'string' &&
+    (value.startsWith('blob:') ||
+      value.startsWith('mediastream:') ||
+      value.startsWith('vscode-resource:') ||
+      value.startsWith('vscode-webview-resource:') ||
+      value.startsWith('object:'))
   );
 }
 

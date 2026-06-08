@@ -267,8 +267,10 @@ const NODE_TYPE_LABEL_KEY_FALLBACK: Partial<Record<CanvasNodeType, string>> = {
   text: 'toolbar.text',
   scene: 'node.sceneGroup',
   'canvas-embed': 'node.canvasEmbed',
+  'narrative-start': 'node.narrativeStart',
   'narrative-scene': 'node.narrativeScene',
   'narrative-note': 'node.narrativeNote',
+  'narrative-ending': 'node.narrativeEnding',
   'representation-slot': 'node.representationSlot',
   'generated-asset': 'node.generatedAsset',
 };

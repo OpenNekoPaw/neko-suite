@@ -136,8 +136,10 @@ export const en = {
   'node.project': 'Project',
   'node.choice': 'Choice',
   'node.merge': 'Merge',
+  'node.narrativeStart': 'Narrative Start',
   'node.narrativeScene': 'Narrative Scene',
   'node.narrativeNote': 'Narrative Note',
+  'node.narrativeEnding': 'Narrative Ending',
   'node.state': 'State',
   'node.trigger': 'Trigger',
   'node.action': 'Action',
@@ -164,6 +166,10 @@ export const en = {
   'media.emptyImage': 'Empty image',
   'media.emptyVideo': 'Empty video',
   'media.emptyAudio': 'Empty audio',
+  'narrative.scene.sceneRef': 'Fountain scene',
+  'narrative.scene.missingRef': 'No .fountain scene linked',
+  'narrative.scene.invalidRef': 'Scene ref must be a .fountain file',
+  'narrative.scene.openFountain': 'Open Fountain',
 
   // Group
   'group.empty': 'No children',

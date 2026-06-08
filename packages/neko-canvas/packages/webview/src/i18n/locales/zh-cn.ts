@@ -136,8 +136,10 @@ export const zhCN = {
   'node.project': '项目',
   'node.choice': '选项',
   'node.merge': '合流',
+  'node.narrativeStart': '叙事入口',
   'node.narrativeScene': '叙事场景',
   'node.narrativeNote': '叙事备注',
+  'node.narrativeEnding': '叙事终点',
   'node.state': '状态',
   'node.trigger': '触发器',
   'node.action': '动作',
@@ -164,6 +166,10 @@ export const zhCN = {
   'media.emptyImage': '空图片',
   'media.emptyVideo': '空视频',
   'media.emptyAudio': '空音频',
+  'narrative.scene.sceneRef': 'Fountain 场景',
+  'narrative.scene.missingRef': '未关联 .fountain 场景',
+  'narrative.scene.invalidRef': '场景引用必须是 .fountain 文件',
+  'narrative.scene.openFountain': '打开 Fountain',
 
   // Group
   'group.empty': '无子节点',

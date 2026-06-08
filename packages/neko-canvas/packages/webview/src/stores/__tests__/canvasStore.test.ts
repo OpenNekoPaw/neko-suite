@@ -9,7 +9,7 @@ import {
 } from '@neko/shared';
 import { buildCanvasNode } from '../../utils/nodeFactory';
 import { hydrateCanvasNodePreview } from '../../utils/canvasPresetRegistry';
-import { useCanvasStore } from '../canvasStore';
+import { canCreateCanvasConnection, useCanvasStore } from '../canvasStore';
 import { useHistoryStore } from '../historyStore';
 import { usePlaybackStore } from '../playbackStore';
 
@@ -356,7 +356,10 @@ describe('canvasStore scene container actions', () => {
       ]),
     );
 
-    expect(useCanvasStore.getState().canvasData?.narrative).toEqual({ variables: [] });
+    expect(useCanvasStore.getState().canvasData?.narrative).toEqual({
+      variables: [],
+      genre: 'illustrated-text',
+    });
 
     useCanvasStore.getState().addNode({
       type: 'state',
@@ -367,6 +370,79 @@ describe('canvasStore scene container actions', () => {
     });
 
     expect(useCanvasStore.getState().canvasData?.behavior).toEqual({ blackboard: [] });
+  });
+
+  it('enforces narrative start and ending runtime connection constraints', () => {
+    const start = {
+      ...buildCanvasNode({
+        type: 'narrative-start',
+        position: { x: 0, y: 0 },
+        zIndex: 1,
+        data: {},
+      }),
+      id: 'start',
+    } as CanvasData['nodes'][number];
+    const scene = {
+      ...buildCanvasNode({
+        type: 'narrative-scene',
+        position: { x: 260, y: 0 },
+        zIndex: 2,
+        data: { sceneRef: 'scenes/cafe.fountain' },
+      }),
+      id: 'scene',
+    } as CanvasData['nodes'][number];
+    const ending = {
+      ...buildCanvasNode({
+        type: 'narrative-ending',
+        position: { x: 520, y: 0 },
+        zIndex: 3,
+        data: {},
+      }),
+      id: 'ending',
+    } as CanvasData['nodes'][number];
+    const nodes = [start, scene, ending];
+
+    expect(
+      canCreateCanvasConnection(nodes, {
+        sourceId: 'start',
+        targetId: 'scene',
+        type: 'default',
+      }),
+    ).toBe(true);
+    expect(
+      canCreateCanvasConnection(nodes, {
+        sourceId: 'scene',
+        targetId: 'start',
+        type: 'default',
+      }),
+    ).toBe(false);
+    expect(
+      canCreateCanvasConnection(nodes, {
+        sourceId: 'ending',
+        targetId: 'scene',
+        type: 'default',
+      }),
+    ).toBe(false);
+
+    useCanvasStore.getState().setCanvasData(createCanvasData(nodes));
+    expect(() =>
+      useCanvasStore.getState().addConnection({
+        sourceId: 'scene',
+        sourceAnchor: 'right',
+        targetId: 'start',
+        targetAnchor: 'left',
+        type: 'default',
+      }),
+    ).toThrow(/narrative graph constraints/);
+    expect(() =>
+      useCanvasStore.getState().addConnection({
+        sourceId: 'start',
+        sourceAnchor: 'right',
+        targetId: 'scene',
+        targetAnchor: 'left',
+        type: 'default',
+      }),
+    ).not.toThrow();
   });
 
   it('normalizes undersized nodes at store boundaries', () => {

@@ -1042,15 +1042,24 @@ export function CanvasApp() {
     if (!vscode || !canvasData) return;
     const projectionStatus = (canvasData as { projectionStatus?: ProjectedCanvasStatus })
       .projectionStatus;
-    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}:${projectionStatus?.state ?? 'none'}:${projectionStatus?.message ?? ''}`;
+    const narrativeSnapshotFingerprint = JSON.stringify({
+      name: canvasData.name,
+      nodes: canvasData.nodes,
+      connections: canvasData.connections,
+      narrative: canvasData.narrative,
+    });
+    const fingerprint = `${narrativeSnapshotFingerprint}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}:${projectionStatus?.state ?? 'none'}:${projectionStatus?.message ?? ''}`;
     if (fingerprint === lastSyncRef.current) return;
     lastSyncRef.current = fingerprint;
     vscode.postMessage({
       type: 'canvasStatus',
       data: {
+        version: canvasData.version,
+        name: canvasData.name,
         nodes: canvasData.nodes,
         connections: canvasData.connections,
         viewport: canvasData.viewport,
+        narrative: canvasData.narrative,
         _selection: { nodeIds: selectedNodeIds },
         _subsystemStatus: {
           activeSubsystems: activeSubsystemIds,

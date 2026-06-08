@@ -58,6 +58,32 @@ describe('nodeFactory gallery container', () => {
 });
 
 describe('nodeFactory composable presets', () => {
+  it('creates narrative start and ending nodes with default data', () => {
+    const start = buildCanvasNode({
+      type: 'narrative-start',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      data: {},
+    });
+    const ending = buildCanvasNode({
+      type: 'narrative-ending',
+      position: { x: 0, y: 120 },
+      zIndex: 1,
+      data: {},
+    });
+
+    expect(start).toMatchObject({
+      type: 'narrative-start',
+      size: { width: 200, height: 100 },
+      data: { label: 'Start', description: '' },
+    });
+    expect(ending).toMatchObject({
+      type: 'narrative-ending',
+      size: { width: 220, height: 110 },
+      data: { endingType: 'normal', endingLabel: 'Ending', statisticsSummary: true },
+    });
+  });
+
   it('registers migrated core presets without legacy core escape hatches', () => {
     expect(getBuiltInCanvasNodePresetMetadata('shot.basic')).toMatchObject({
       nodeType: 'shot',

@@ -52,6 +52,8 @@ describe('NodeLibraryPanel', () => {
     expect(behaviorDescriptors.state?.labelKey).toBe('node.state');
     expect(resolveNodeLibraryLabel('shot')).toBe('镜头');
     expect(resolveNodeLibraryLabel('state')).toBe('状态');
+    expect(resolveNodeLibraryLabel('narrative-start')).toBe('叙事入口');
+    expect(resolveNodeLibraryLabel('narrative-ending')).toBe('叙事终点');
     expect(
       t('toolbar.autoArrangeChoice', {
         subsystem: t('library.group.storyboard'),
@@ -163,6 +165,14 @@ describe('NodeLibraryPanel', () => {
       'scene',
       'gallery',
       'table',
+    ]);
+    expect(groups.find((group) => group.id === 'narrative')?.nodeTypes).toEqual([
+      'narrative-start',
+      'choice',
+      'merge',
+      'narrative-scene',
+      'narrative-note',
+      'narrative-ending',
     ]);
     expect(groups.find((group) => group.id === 'entity')).toBeUndefined();
     expect(groups.find((group) => group.id === 'file-references')?.nodeTypes).toEqual([

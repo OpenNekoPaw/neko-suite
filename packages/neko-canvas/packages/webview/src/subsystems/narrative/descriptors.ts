@@ -2,6 +2,14 @@ import type { NodeTypeDescriptorRegistry } from '../../components/nodes/nodeType
 
 export function createNarrativeNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
   return {
+    'narrative-start': {
+      type: 'narrative-start',
+      labelKey: 'node.narrativeStart',
+      icon: '▶',
+      tagLabel: 'START',
+      tagColor: '#22c55e',
+      defaultSize: { width: 200, height: 100 },
+    },
     choice: {
       type: 'choice',
       labelKey: 'node.choice',
@@ -33,6 +41,14 @@ export function createNarrativeNodeTypeDescriptors(): NodeTypeDescriptorRegistry
       tagLabel: 'NOTE',
       tagColor: '#a855f7',
       defaultSize: { width: 220, height: 120 },
+    },
+    'narrative-ending': {
+      type: 'narrative-ending',
+      labelKey: 'node.narrativeEnding',
+      icon: '■',
+      tagLabel: 'ENDING',
+      tagColor: '#ef4444',
+      defaultSize: { width: 220, height: 110 },
     },
   };
 }

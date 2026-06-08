@@ -320,6 +320,68 @@ describe('canvasAgentOperations', () => {
     expect(serialized).not.toContain('currentTime');
   });
 
+  it('extracts narrative node summaries for Agent without Preview renderer state', () => {
+    const start = node('start', 'narrative-start');
+    const scene = {
+      ...node('scene-a', 'narrative-scene'),
+      data: {
+        title: 'Cafe',
+        sceneRef: 'scenes/cafe.fountain',
+        variableEffects: [{ variableId: 'closeness', operation: 'add', value: 1 }],
+        resolvedPreviewUrl: 'vscode-webview-resource://panel/cafe.png',
+      },
+    } as CanvasNode;
+    const ending = {
+      ...node('ending', 'narrative-ending'),
+      data: { endingLabel: 'True Ending', endingType: 'good' },
+    } as CanvasNode;
+
+    const result = extractStructuredCanvasContent(
+      [start, scene, ending],
+      [
+        {
+          id: 'start-scene',
+          sourceId: 'start',
+          sourceAnchor: 'right',
+          targetId: 'scene-a',
+          targetAnchor: 'left',
+          type: 'choice',
+          choiceText: 'Enter cafe',
+          condition: 'closeness >= 1',
+        },
+        {
+          id: 'scene-ending',
+          sourceId: 'scene-a',
+          sourceAnchor: 'right',
+          targetId: 'ending',
+          targetAnchor: 'left',
+          type: 'choice',
+          choiceText: 'Finish',
+        },
+      ],
+      {
+        nodeIds: ['scene-a', 'ending'],
+        includeChildren: false,
+        format: 'json',
+      },
+    );
+
+    expect(result.nodes[0]?.narrative).toMatchObject({
+      role: 'scene',
+      sceneRef: 'scenes/cafe.fountain',
+      choiceLabels: ['Finish'],
+      variableEffects: ['add:closeness'],
+    });
+    expect(result.nodes[1]?.narrative).toMatchObject({
+      role: 'ending',
+      endingLabel: 'True Ending',
+      endingType: 'good',
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('vscode-webview-resource://panel/cafe.png');
+    expect(serialized).not.toContain('renderer');
+  });
+
   it('extracts composable gallery container with binding summaries', () => {
     const galleryContainer = hydrateCanvasNodePreview({
       ...buildCanvasNode({
@@ -451,6 +513,43 @@ describe('canvasAgentOperations', () => {
       bindingSource: 'assets/entities.json',
     });
     expect(detailed.subsystemMetadata?.memoryGraph?.queryContext).toBe('scene memories');
+  });
+
+  it('includes narrative diagnostics in active context without resolved Preview URLs', () => {
+    const result = createCanvasAgentActiveContext({
+      nodes: [
+        {
+          ...node('start', 'narrative-start'),
+          data: { previewUrl: 'blob:runtime-preview' },
+        } as CanvasNode,
+        {
+          ...node('scene', 'narrative-scene'),
+          data: { sceneRef: 'story/main.story' },
+        } as CanvasNode,
+      ],
+      connections: [
+        {
+          id: 'start-scene',
+          sourceId: 'start',
+          sourceAnchor: 'right',
+          targetId: 'scene',
+          targetAnchor: 'left',
+          type: 'choice',
+          condition: 'missingVar',
+        },
+      ],
+      selectedNodeIds: ['scene'],
+    });
+
+    expect(result.narrativeDiagnostics?.map((diagnostic) => diagnostic.code)).toEqual(
+      expect.arrayContaining([
+        'narrative-missing-ending',
+        'narrative-accidental-dead-end',
+        'narrative-deprecated-scene-graph-ref',
+        'narrative-unresolved-variable',
+      ]),
+    );
+    expect(JSON.stringify(result)).not.toContain('blob:runtime-preview');
   });
 
   it('applies prompt content to a validated Shot field without replacing unrelated data', () => {

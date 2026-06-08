@@ -94,6 +94,8 @@ import type {
   ResourceRef,
   ResourceVariantRole,
   ScriptScene,
+  NarrativeGraphSnapshot,
+  PreviewToCanvasMessage,
 } from '@neko/shared';
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
@@ -104,6 +106,10 @@ import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 import { createCanvasDocumentEntryReader } from '../services/documentEntryReader';
+import {
+  createNarrativeGraphSnapshotFromCanvasData,
+  NarrativePreviewBridge,
+} from './narrativePreviewBridge';
 
 const logger = getLogger('CanvasEditorProvider');
 const CANVAS_KEYBOARD_OWNER_PREFIX = 'neko.canvasEditor:';
@@ -437,7 +443,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private activeDocument: vscode.CustomDocument | undefined;
   private readonly webviewPanelsByDocumentUri = new Map<string, vscode.WebviewPanel>();
   private readonly canvasSnapshotsByDocumentUri = new Map<string, Record<string, unknown>>();
+  private readonly canvasRevisionsByDocumentUri = new Map<string, number>();
   private readonly canvasDataReadyDocumentUris = new Set<string>();
+  private readonly narrativePreviewBridge: NarrativePreviewBridge;
 
   // External providers for VSCode integration
   private outlineProvider: CanvasOutlineProvider | undefined;
@@ -463,6 +471,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
   ) {
     this.focusedWebviews = focusedWebviews;
+    this.narrativePreviewBridge = new NarrativePreviewBridge(this, {});
     this.localResourceAccess = createDefaultLocalResourceAccessService({
       extensionUri: context.extensionUri,
       context,
@@ -470,6 +479,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
     this.resourceCache = this.createProjectResourceCacheService();
     this.contentAccess = this.createContentAccessService();
+  }
+
+  dispose(): void {
+    this.narrativePreviewBridge.dispose();
+    this.scheduler.dispose();
+    for (const subscription of this.projectionSubscriptions.values()) {
+      subscription.dispose();
+    }
+    this.projectionSubscriptions.clear();
+    this._onSelectionChange.dispose();
+    this._onDidChangeCanvas.dispose();
+    this._onDidChangeCustomDocument.dispose();
   }
 
   private createProjectResourceCacheService(): ResourceCacheService | undefined {
@@ -690,7 +711,70 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     document: vscode.CustomDocument,
     canvasData: Record<string, unknown>,
   ): void {
-    this.canvasSnapshotsByDocumentUri.set(document.uri.toString(), canvasData);
+    const documentUri = document.uri.toString();
+    this.canvasSnapshotsByDocumentUri.set(documentUri, canvasData);
+    this.canvasRevisionsByDocumentUri.set(documentUri, this.getCanvasRevision(documentUri) + 1);
+  }
+
+  private getCanvasRevision(documentUri: string): number {
+    return this.canvasRevisionsByDocumentUri.get(documentUri) ?? 0;
+  }
+
+  openNarrativePreview(): boolean {
+    return this.narrativePreviewBridge.open();
+  }
+
+  refreshNarrativePreview(): boolean {
+    return this.narrativePreviewBridge.refresh();
+  }
+
+  jumpNarrativePreviewToNode(nodeId: string): boolean {
+    return this.narrativePreviewBridge.jumpTo(nodeId);
+  }
+
+  setNarrativePreviewVariables(variables: Readonly<Record<string, unknown>>): boolean {
+    return this.narrativePreviewBridge.setVariables(variables);
+  }
+
+  extractNarrativeGraphSnapshot(): NarrativeGraphSnapshot | undefined {
+    const document = this.activeDocument;
+    if (!document) return undefined;
+    const documentUri = document.uri.toString();
+    const canvasData = this.canvasSnapshotsByDocumentUri.get(documentUri);
+    if (!canvasData) return undefined;
+    return createNarrativeGraphSnapshotFromCanvasData(canvasData, {
+      revision: this.getCanvasRevision(documentUri),
+      sourceCanvasUri: documentUri,
+    });
+  }
+
+  postNarrativePreviewCanvasMessage(message: PreviewToCanvasMessage): boolean {
+    switch (message.type) {
+      case 'canvas:highlightNode':
+        return this.postNarrativeKeyboardAction(`selectNode:${message.nodeId}`);
+      case 'canvas:highlightPath':
+        return this.postNarrativeHighlightMessage(message);
+      case 'canvas:choiceMade':
+        return this.postNarrativeHighlightMessage(message);
+    }
+  }
+
+  private postNarrativeKeyboardAction(action: string): boolean {
+    if (!this.activeWebviewPanel) return false;
+    this.activeWebviewPanel.webview.postMessage({
+      type: 'keyboardAction',
+      action,
+    });
+    return true;
+  }
+
+  private postNarrativeHighlightMessage(message: PreviewToCanvasMessage): boolean {
+    if (!this.activeWebviewPanel) return false;
+    this.activeWebviewPanel.webview.postMessage({
+      type: 'narrativePreviewCanvasMessage',
+      message,
+    });
+    return true;
   }
 
   private syncActiveCanvasChrome(documentUri: string): void {
@@ -776,6 +860,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       await this.setGlobalKeyboardEditable(documentUri, false);
       this.webviewPanelsByDocumentUri.delete(documentUri);
       this.canvasSnapshotsByDocumentUri.delete(documentUri);
+      this.canvasRevisionsByDocumentUri.delete(documentUri);
       this.canvasDataReadyDocumentUris.delete(documentUri);
       const panelStreams = this._activeStreams.get(webviewPanel);
       if (panelStreams && panelStreams.size > 0) {

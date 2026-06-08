@@ -4,6 +4,7 @@
   "neko.asset.import.title": "导入素材",
   "neko.addToAssetLibrary.title": "添加到素材库",
   "neko.canvas.previewMedia.title": "预览媒体",
+  "neko.canvas.openNarrativePreview.title": "打开叙事 Preview",
   "neko.canvas.deleteSelected.title": "删除选中",
   "neko.canvas.escape.title": "取消 / 取消选择",
   "neko.canvas.selectAll.title": "全选",

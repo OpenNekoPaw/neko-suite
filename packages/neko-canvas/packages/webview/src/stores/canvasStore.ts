@@ -28,6 +28,9 @@ import {
   getNodeParentId,
   isContainerNode,
   applyCanvasSubsystemMetadataDefaults,
+  isNarrativeEndingNode,
+  isNarrativeStartNode,
+  isNarrativeTraversalNode,
 } from '@neko/shared';
 import { useHistoryStore } from './historyStore';
 import { useCanvasOperationStore } from './canvasOperationStore';
@@ -216,6 +219,30 @@ export interface CanvasStore {
   // ==================== History Actions ====================
   undo: () => void;
   redo: () => void;
+}
+
+export function canCreateCanvasConnection(
+  nodes: readonly CanvasNode[],
+  connection: Pick<CanvasConnection, 'sourceId' | 'targetId' | 'type'>,
+): boolean {
+  const sourceNode = nodes.find((node) => node.id === connection.sourceId);
+  const targetNode = nodes.find((node) => node.id === connection.targetId);
+  if (!sourceNode || !targetNode) return false;
+  if (!isRuntimeConnectionType(connection.type)) return true;
+
+  if (isNarrativeStartNode(targetNode) && isNarrativeTraversalNode(sourceNode)) {
+    return false;
+  }
+
+  if (isNarrativeEndingNode(sourceNode) && isNarrativeTraversalNode(targetNode)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isRuntimeConnectionType(type: CanvasConnection['type']): boolean {
+  return type === undefined || type === 'default' || type === 'choice';
 }
 
 // =============================================================================
@@ -1023,6 +1050,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!hasSource || !hasTarget) {
       throw new Error('Connection source and target nodes must exist');
     }
+    if (!canCreateCanvasConnection(canvasData.nodes, connection)) {
+      throw new Error('Connection violates Canvas narrative graph constraints');
+    }
 
     recordHistory(canvasData);
 
@@ -1153,8 +1183,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       // Determine anchor positions from ports or use directly
       const sourceAnchor = sourcePort?.position ?? pendingConnectionSource.anchor;
       const targetAnchor = targetPort?.position ?? anchor;
-
-      get().addConnection({
+      const connection: Omit<CanvasConnection, 'id'> = {
         sourceId: pendingConnectionSource.nodeId,
         sourceAnchor: sourceAnchor as CanvasConnection['sourceAnchor'],
         targetId: nodeId,
@@ -1162,7 +1191,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         type: 'default',
         sourcePort: sourcePort ? pendingConnectionSource.anchor : undefined,
         targetPort: targetPort ? anchor : undefined,
-      });
+      };
+
+      if (!canCreateCanvasConnection(canvasData.nodes, connection)) {
+        set({ isConnecting: false, pendingConnectionSource: null });
+        return;
+      }
+
+      get().addConnection(connection);
     }
 
     set({ isConnecting: false, pendingConnectionSource: null });
@@ -1297,7 +1333,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   extractStructuredContent: (request) => {
     const { canvasData, selection } = get();
     const nodes = canvasData?.nodes ?? [];
-    return extractStructuredCanvasContent(nodes, {
+    return extractStructuredCanvasContent(nodes, canvasData?.connections ?? [], {
       ...request,
       nodeIds:
         request.nodeIds ??

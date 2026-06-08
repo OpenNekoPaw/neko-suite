@@ -199,6 +199,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   // Register disposables
   context.subscriptions.push(canvasOutlineProvider);
   context.subscriptions.push(canvasStatusBar);
+  context.subscriptions.push(canvasEditorProvider);
 
   // Show/hide status bar based on active editor
   context.subscriptions.push(
@@ -547,6 +548,23 @@ function registerCommands(
       'neko.canvas.getStoryboardExecutionSummary',
       async (request?: CanvasStoryboardExecutionSummaryRequest) =>
         getExecutionSummary(request ?? {}),
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.canvas.openNarrativePreview', async () => {
+      const opened = canvasEditorProvider.openNarrativePreview();
+      if (!opened) {
+        await handleError(new Error('Open a Canvas narrative graph before opening Preview.'), {
+          showToUser: true,
+          severity: 'warning',
+        });
+      }
+    }),
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.canvas.refreshNarrativePreview', () =>
+      canvasEditorProvider.refreshNarrativePreview(),
     ),
   );
 
