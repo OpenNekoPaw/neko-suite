@@ -69,6 +69,7 @@ import type {
   CanvasData,
   CanvasNode,
   CanvasNodeType,
+  ContentAccessRequest,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
   CanvasTimelineSyncPayload,
@@ -117,6 +118,7 @@ import {
 
 const logger = getLogger('CanvasEditorProvider');
 const CANVAS_KEYBOARD_OWNER_PREFIX = 'neko.canvasEditor:';
+const CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY = 'webviewResolverToken';
 const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'deleteSelected',
   'escape',
@@ -131,6 +133,27 @@ const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'resetZoom',
   'generateSelected',
 ]);
+
+type CanvasPlaybackPreviewSourceKind =
+  | 'generated-image'
+  | 'generated-media'
+  | 'reference-image'
+  | 'source-media'
+  | 'media-asset';
+
+interface CanvasPlaybackPreviewSourceProjection {
+  readonly url: string;
+  readonly kind: CanvasPlaybackPreviewSourceKind;
+  readonly label?: string;
+  readonly mediaType?: string;
+  readonly refId?: string;
+}
+
+interface CanvasPlaybackPreviewSourceCandidate {
+  readonly source?: string;
+  readonly resourceRef?: ResourceRef;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
+}
 
 function isCanvasEditorLevelKeyboardAction(action: string): boolean {
   return CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS.has(action);
@@ -465,6 +488,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly resourceCache: ResourceCacheService | undefined;
   private readonly contentAccess: ContentAccessService | undefined;
+  private readonly contentAccessWebviewsByToken = new Map<string, vscode.Webview>();
+  private contentAccessWebviewResolverSequence = 0;
   private readonly projectionAdapters: ProjectionAdapterRegistry =
     createProjectionAdapterRegistry();
   private readonly projectionSubscriptions = new Map<string, ProjectionDisposable>();
@@ -479,6 +504,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this.focusedWebviews = focusedWebviews;
     this.narrativePreviewBridge = new NarrativePreviewBridge(this, {
       getFeatureToggles: getNarrativePreviewFeatureToggles,
+      getMediaRuntimeScriptUri: () =>
+        vscode.Uri.joinPath(
+          this.context.extensionUri,
+          'dist',
+          'webview',
+          'assets',
+          'narrative-preview-media-runtime.js',
+        ),
+      getWebviewLocalResourceRoots: (sourceCanvasUri?: string) =>
+        this.getNarrativePreviewLocalResourceRoots(sourceCanvasUri),
     });
     this.localResourceAccess = createDefaultLocalResourceAccessService({
       extensionUri: context.extensionUri,
@@ -568,11 +603,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       providers: [
         new ResourceCacheContentAccessProvider({
           resourceCache: this.resourceCache,
-          webviewResolver: () => this.activeWebviewPanel?.webview,
+          webviewResolver: (request) => this.resolveContentAccessWebview(request),
         }),
       ],
       logger,
     });
+  }
+
+  private resolveContentAccessWebview(request: ContentAccessRequest): vscode.Webview | undefined {
+    const token = request.metadata?.[CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY];
+    return typeof token === 'string'
+      ? this.contentAccessWebviewsByToken.get(token)
+      : this.activeWebviewPanel?.webview;
+  }
+
+  private async withContentAccessWebview<T>(
+    webview: vscode.Webview,
+    operation: (webviewResolverToken: string) => Promise<T>,
+  ): Promise<T> {
+    this.contentAccessWebviewResolverSequence += 1;
+    const webviewResolverToken = `neko-canvas-webview:${Date.now()}:${this.contentAccessWebviewResolverSequence}`;
+    this.contentAccessWebviewsByToken.set(webviewResolverToken, webview);
+    try {
+      return await operation(webviewResolverToken);
+    } finally {
+      this.contentAccessWebviewsByToken.delete(webviewResolverToken);
+    }
   }
 
   private async getNekoAssetsApi(): Promise<NekoAssetsAPI | null> {
@@ -640,6 +696,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     } catch {
       return null;
     }
+  }
+
+  private async disposeMediaPlaybackPanel(webviewPanel: vscode.WebviewPanel): Promise<void> {
+    const panelStreams = this._activeStreams.get(webviewPanel);
+    if (!panelStreams || panelStreams.size === 0) return;
+    const playback = await this.getMediaPlayback();
+    for (const handle of panelStreams.values()) {
+      await playback?.stopPlayback(handle).catch(() => {});
+    }
+    this._activeStreams.delete(webviewPanel);
   }
 
   /** Wire up external providers after construction */
@@ -756,12 +822,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
-  extractCanvasPlaybackPlan(): CanvasPlaybackPlan | undefined {
-    const document = this.activeDocument;
-    if (!document) return undefined;
-    const canvasData = this.canvasSnapshotsByDocumentUri.get(document.uri.toString());
+  extractCanvasPlaybackPlan(sourceCanvasUri?: string): CanvasPlaybackPlan | undefined {
+    const documentUri = sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    if (!documentUri) return undefined;
+    const canvasData = this.canvasSnapshotsByDocumentUri.get(documentUri);
     if (!canvasData) return undefined;
     return createCanvasPlaybackPlanFromCanvasData(canvasData);
+  }
+
+  async extractCanvasPlaybackPlanForPreview(
+    webview: vscode.Webview,
+    sourceCanvasUri?: string,
+  ): Promise<CanvasPlaybackPlan | undefined> {
+    const documentUri = sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    if (!documentUri) return undefined;
+    const canvasData = this.canvasSnapshotsByDocumentUri.get(documentUri);
+    if (!canvasData) return undefined;
+    const parsedDocumentUri = vscode.Uri.parse(documentUri);
+    await this.localResourceAccess.configureWebview(webview, {
+      enableScripts: true,
+      extraRoots: this.getDocumentLocalResourceRoots(parsedDocumentUri),
+    });
+    const plan = createCanvasPlaybackPlanFromCanvasData(canvasData);
+    return this.enrichCanvasPlaybackPlanForPreview(plan, canvasData, parsedDocumentUri, webview);
   }
 
   postNarrativePreviewCanvasMessage(message: PreviewToCanvasMessage): boolean {
@@ -773,6 +856,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'canvas:choiceMade':
         return this.postNarrativeHighlightMessage(message);
     }
+  }
+
+  async handleNarrativePreviewMediaMessage(
+    message: Record<string, unknown>,
+    webviewPanel: vscode.WebviewPanel,
+    sourceCanvasUri?: string,
+  ): Promise<void> {
+    const documentUri = sourceCanvasUri
+      ? vscode.Uri.parse(sourceCanvasUri)
+      : this.activeDocument?.uri;
+    if (!documentUri) return;
+    await this.handleMediaPlaybackMessage(message, webviewPanel, documentUri);
+  }
+
+  async disposeNarrativePreviewMediaPanel(webviewPanel: vscode.WebviewPanel): Promise<void> {
+    await this.disposeMediaPlaybackPanel(webviewPanel);
   }
 
   private postNarrativeKeyboardAction(action: string): boolean {
@@ -830,11 +929,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
     this.context.subscriptions.push(focusedRegistration);
 
-    const extraRoots =
-      document.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(document.uri.fsPath))] : [];
     await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      extraRoots,
+      extraRoots: this.getDocumentLocalResourceRoots(document.uri),
     });
 
     webviewPanel.webview.onDidReceiveMessage(
@@ -878,14 +975,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       this.canvasSnapshotsByDocumentUri.delete(documentUri);
       this.canvasRevisionsByDocumentUri.delete(documentUri);
       this.canvasDataReadyDocumentUris.delete(documentUri);
-      const panelStreams = this._activeStreams.get(webviewPanel);
-      if (panelStreams && panelStreams.size > 0) {
-        const playback = await this.getMediaPlayback();
-        for (const handle of panelStreams.values()) {
-          await playback?.stopPlayback(handle).catch(() => {});
-        }
-        this._activeStreams.delete(webviewPanel);
-      }
+      await this.disposeMediaPlaybackPanel(webviewPanel);
       if (this.activeWebviewPanel === webviewPanel) {
         this.clearActiveCanvasEditor(webviewPanel);
       }
@@ -2267,145 +2357,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       // =================================================================
 
       case 'media:probe': {
-        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
-        const assetPath = this.resolveDocumentResourceAssetPath(
-          message.assetPath as string | undefined,
-          message.documentResourceRef,
-          resourceRef,
-        );
-        const mediaType = readPlaybackMediaType(message.mediaType);
-        if (!assetPath && !resourceRef) break;
-        try {
-          const filePath = resourceRef
-            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-probe')
-            : await this.resolveAssetPath(assetPath!, document.uri);
-          const playback = await this.getMediaPlayback();
-          if (!playback) {
-            webviewPanel.webview.postMessage({
-              type: 'media:probeResult',
-              nodeId: message.nodeId,
-              error: 'Media engine not available',
-            });
-            break;
-          }
-          const mediaInfo = await playback.probeMedia(filePath, mediaType);
-          webviewPanel.webview.postMessage({
-            type: 'media:probeResult',
-            nodeId: message.nodeId,
-            mediaInfo,
-            port: playback.port,
-          });
-        } catch (error) {
-          logger.error(`Probe failed: ${error}`);
-          webviewPanel.webview.postMessage({
-            type: 'media:probeResult',
-            nodeId: message.nodeId,
-            error: error instanceof Error ? error.message : 'Probe failed',
-          });
-        }
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
       case 'media:play': {
-        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
-        const assetPath = this.resolveDocumentResourceAssetPath(
-          message.assetPath as string | undefined,
-          message.documentResourceRef,
-          resourceRef,
-        );
-        const mediaInfo = message.mediaInfo as Record<string, unknown>;
-        const startTime = (message.startTime as number) ?? 0;
-        const speed = (message.speed as number) ?? 1.0;
-        const mediaType = readPlaybackMediaType(message.mediaType);
-        if ((!assetPath && !resourceRef) || !mediaInfo) break;
-        try {
-          const filePath = resourceRef
-            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-play')
-            : await this.resolveAssetPath(assetPath!, document.uri);
-          const playback = await this.getMediaPlayback();
-          if (!playback) {
-            webviewPanel.webview.postMessage({
-              type: 'media:streamReady',
-              nodeId: message.nodeId,
-              error: 'Media engine not available',
-            });
-            break;
-          }
-          const nodeId = (message.nodeId as string) ?? assetPath;
-          let panelStreams = this._activeStreams.get(webviewPanel);
-          if (!panelStreams) {
-            panelStreams = new Map();
-            this._activeStreams.set(webviewPanel, panelStreams);
-          }
-          const prev = panelStreams.get(nodeId);
-          if (prev) {
-            await playback.stopPlayback(prev).catch(() => {});
-          }
-          const hasAudio = (mediaInfo.hasAudio as boolean) ?? true;
-          const handle = await playback.startPlayback(filePath, {
-            hasAudio,
-            mediaType,
-            startTime,
-            speed,
-          });
-          panelStreams.set(nodeId, handle);
-          webviewPanel.webview.postMessage({
-            type: 'media:streamReady',
-            nodeId: message.nodeId,
-            videoStreamUrl: handle.videoStreamUrl,
-            audioStreamUrl: handle.audioStreamUrl,
-            videoStreamId: handle.videoStreamId,
-            audioStreamId: handle.audioStreamId,
-            mediaInfo,
-          });
-        } catch (error) {
-          webviewPanel.webview.postMessage({
-            type: 'media:streamReady',
-            nodeId: message.nodeId,
-            error: error instanceof Error ? error.message : 'Play failed',
-          });
-        }
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
       case 'media:seek': {
-        const seekNodeId = (message.nodeId as string) ?? '';
-        const seekHandle = this._activeStreams.get(webviewPanel)?.get(seekNodeId);
-        if (!seekHandle) break;
-        const seekPlayback = await this.getMediaPlayback();
-        await seekPlayback?.seekPlayback(seekHandle, message.time as number);
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
       case 'media:pause': {
-        const pauseNodeId = (message.nodeId as string) ?? '';
-        const pauseHandle = this._activeStreams.get(webviewPanel)?.get(pauseNodeId);
-        if (!pauseHandle) break;
-        const pausePlayback = await this.getMediaPlayback();
-        await pausePlayback?.pausePlayback(pauseHandle);
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
       case 'media:resume': {
-        const resumeNodeId = (message.nodeId as string) ?? '';
-        const resumeHandle = this._activeStreams.get(webviewPanel)?.get(resumeNodeId);
-        if (!resumeHandle) break;
-        const resumePlayback = await this.getMediaPlayback();
-        await resumePlayback?.resumePlayback(resumeHandle);
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
       case 'media:stop': {
-        const stopNodeId = (message.nodeId as string) ?? '';
-        const stopPanelStreams = this._activeStreams.get(webviewPanel);
-        const stopHandle = stopPanelStreams?.get(stopNodeId);
-        if (!stopHandle) break;
-        const stopPlayback = await this.getMediaPlayback();
-        await stopPlayback?.stopPlayback(stopHandle);
-        stopPanelStreams?.delete(stopNodeId);
-        if (stopPanelStreams?.size === 0) {
-          this._activeStreams.delete(webviewPanel);
-        }
+        await this.handleMediaPlaybackMessage(message, webviewPanel, document.uri);
         break;
       }
 
@@ -3095,10 +3072,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       return assetPath;
     }
-    // Handle webview URIs (https:/file+.vscode-resource.vscode-cdn.net/path/to/file)
-    const vscodeResourceMatch = assetPath.match(/vscode-resource\.vscode-cdn\.net(\/.*)/);
-    if (vscodeResourceMatch) {
-      return decodeURIComponent(vscodeResourceMatch[1]!);
+    // Handle webview URIs (https://file+.vscode-resource.vscode-cdn.net/path/to/file)
+    const vscodeResourcePath = this.resolveVSCodeResourceUriPath(assetPath);
+    if (vscodeResourcePath) {
+      return vscodeResourcePath;
+    }
+    try {
+      const uri = vscode.Uri.parse(assetPath);
+      if (uri.scheme === 'file') {
+        return uri.fsPath;
+      }
+      if (uri.scheme && !/^[A-Za-z]$/.test(uri.scheme)) {
+        return assetPath;
+      }
+    } catch {
+      // Fall through to local path handling.
     }
     // Absolute filesystem path
     if (assetPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(assetPath)) {
@@ -3107,6 +3095,36 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     // Relative path — resolve against document's directory
     const docDir = vscode.Uri.joinPath(documentUri, '..');
     return vscode.Uri.joinPath(docDir, assetPath).fsPath;
+  }
+
+  private resolveVSCodeResourceUriPath(value: string): string | undefined {
+    const source = value.trim();
+    try {
+      const url = new URL(source);
+      if (/vscode-resource\.vscode-cdn\.net$/i.test(url.hostname)) {
+        return decodeURIComponent(url.pathname);
+      }
+    } catch {
+      // Fall through to permissive parsing for VSCode's historical URI shapes.
+    }
+
+    const cdnMatch = source.match(/vscode-resource\.vscode-cdn\.net(\/[^?#]*)/i);
+    if (cdnMatch?.[1]) {
+      return decodeURIComponent(cdnMatch[1]);
+    }
+
+    try {
+      const uri = vscode.Uri.parse(source);
+      if (
+        (uri.scheme === 'vscode-resource' || uri.scheme === 'vscode-webview-resource') &&
+        uri.path
+      ) {
+        return uri.fsPath || uri.path;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 
   private resolveDocumentResourceAssetPath(
@@ -3126,6 +3144,157 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return isDocumentArchiveResourceRef(documentResourceRef)
       ? documentResourceRef.cachePath
       : undefined;
+  }
+
+  private async handleMediaPlaybackMessage(
+    message: Record<string, unknown>,
+    webviewPanel: vscode.WebviewPanel,
+    documentUri: vscode.Uri,
+  ): Promise<void> {
+    switch (message.type) {
+      case 'media:probe': {
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+          resourceRef,
+        );
+        const mediaType = readPlaybackMediaType(message.mediaType);
+        if (!assetPath && !resourceRef) break;
+        try {
+          const filePath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-probe')
+            : await this.resolveAssetPath(assetPath!, documentUri);
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
+            webviewPanel.webview.postMessage({
+              type: 'media:probeResult',
+              nodeId: message.nodeId,
+              error: 'Media engine not available',
+            });
+            break;
+          }
+          const mediaInfo = await playback.probeMedia(filePath, mediaType);
+          webviewPanel.webview.postMessage({
+            type: 'media:probeResult',
+            nodeId: message.nodeId,
+            mediaInfo,
+            port: playback.port,
+          });
+        } catch (error) {
+          logger.error(`Probe failed: ${error}`);
+          webviewPanel.webview.postMessage({
+            type: 'media:probeResult',
+            nodeId: message.nodeId,
+            error: error instanceof Error ? error.message : 'Probe failed',
+          });
+        }
+        break;
+      }
+
+      case 'media:play': {
+        const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+          resourceRef,
+        );
+        const mediaInfo = message.mediaInfo as Record<string, unknown> | undefined;
+        const startTime = (message.startTime as number) ?? 0;
+        const speed = (message.speed as number) ?? 1.0;
+        const mediaType = readPlaybackMediaType(message.mediaType);
+        if ((!assetPath && !resourceRef) || !mediaInfo) break;
+        try {
+          const filePath = resourceRef
+            ? await this.resolveResourceRefLocalPreviewPath(resourceRef, 'neko-canvas.media-play')
+            : await this.resolveAssetPath(assetPath!, documentUri);
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
+            webviewPanel.webview.postMessage({
+              type: 'media:streamReady',
+              nodeId: message.nodeId,
+              error: 'Media engine not available',
+            });
+            break;
+          }
+          const nodeId = (message.nodeId as string) ?? assetPath;
+          let panelStreams = this._activeStreams.get(webviewPanel);
+          if (!panelStreams) {
+            panelStreams = new Map();
+            this._activeStreams.set(webviewPanel, panelStreams);
+          }
+          const prev = panelStreams.get(nodeId);
+          if (prev) {
+            await playback.stopPlayback(prev).catch(() => {});
+          }
+          const hasAudio = (mediaInfo.hasAudio as boolean) ?? true;
+          const handle = await playback.startPlayback(filePath, {
+            hasAudio,
+            mediaType,
+            startTime,
+            speed,
+          });
+          panelStreams.set(nodeId, handle);
+          webviewPanel.webview.postMessage({
+            type: 'media:streamReady',
+            nodeId: message.nodeId,
+            videoStreamUrl: handle.videoStreamUrl,
+            audioStreamUrl: handle.audioStreamUrl,
+            videoStreamId: handle.videoStreamId,
+            audioStreamId: handle.audioStreamId,
+            mediaInfo,
+          });
+        } catch (error) {
+          webviewPanel.webview.postMessage({
+            type: 'media:streamReady',
+            nodeId: message.nodeId,
+            error: error instanceof Error ? error.message : 'Play failed',
+          });
+        }
+        break;
+      }
+
+      case 'media:seek': {
+        const nodeId = (message.nodeId as string) ?? '';
+        const handle = this._activeStreams.get(webviewPanel)?.get(nodeId);
+        if (!handle) break;
+        const playback = await this.getMediaPlayback();
+        await playback?.seekPlayback(handle, message.time as number);
+        break;
+      }
+
+      case 'media:pause': {
+        const nodeId = (message.nodeId as string) ?? '';
+        const handle = this._activeStreams.get(webviewPanel)?.get(nodeId);
+        if (!handle) break;
+        const playback = await this.getMediaPlayback();
+        await playback?.pausePlayback(handle);
+        break;
+      }
+
+      case 'media:resume': {
+        const nodeId = (message.nodeId as string) ?? '';
+        const handle = this._activeStreams.get(webviewPanel)?.get(nodeId);
+        if (!handle) break;
+        const playback = await this.getMediaPlayback();
+        await playback?.resumePlayback(handle);
+        break;
+      }
+
+      case 'media:stop': {
+        const nodeId = (message.nodeId as string) ?? '';
+        const panelStreams = this._activeStreams.get(webviewPanel);
+        const handle = panelStreams?.get(nodeId);
+        if (!handle) break;
+        const playback = await this.getMediaPlayback();
+        await playback?.stopPlayback(handle);
+        panelStreams?.delete(nodeId);
+        if (panelStreams?.size === 0) {
+          this._activeStreams.delete(webviewPanel);
+        }
+        break;
+      }
+    }
   }
 
   private resolvePreviewResourceRef(
@@ -3284,24 +3453,557 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
+  private async enrichCanvasPlaybackPlanForPreview(
+    plan: CanvasPlaybackPlan,
+    canvasData: Record<string, unknown>,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<CanvasPlaybackPlan> {
+    const nodeById = this.createCanvasNodeLookup(canvasData);
+    const units = await Promise.all(
+      plan.units.map(async (unit) => {
+        const node = nodeById.get(unit.sourceNodeId);
+        if (!node) return unit;
+        const previewSource = await this.resolveCanvasPlaybackUnitPreviewSource(
+          node,
+          documentUri,
+          webview,
+        );
+        if (!previewSource) return unit;
+        return {
+          ...unit,
+          metadata: {
+            ...(unit.metadata ?? {}),
+            previewUrl: previewSource.url,
+            previewSourceKind: previewSource.kind,
+            ...(previewSource.label ? { previewSourceLabel: previewSource.label } : {}),
+            ...(previewSource.mediaType ? { previewMediaType: previewSource.mediaType } : {}),
+            ...(previewSource.refId ? { previewSourceRefId: previewSource.refId } : {}),
+          },
+        };
+      }),
+    );
+    return { ...plan, units };
+  }
+
+  private createCanvasNodeLookup(canvasData: Record<string, unknown>): Map<string, CanvasNode> {
+    const nodes = canvasData['nodes'];
+    const lookup = new Map<string, CanvasNode>();
+    if (!Array.isArray(nodes)) {
+      return lookup;
+    }
+    for (const node of nodes) {
+      if (
+        node &&
+        typeof node === 'object' &&
+        !Array.isArray(node) &&
+        typeof (node as { id?: unknown }).id === 'string'
+      ) {
+        const candidate = node as CanvasNode;
+        lookup.set(candidate.id, candidate);
+      }
+    }
+    return lookup;
+  }
+
+  private async resolveCanvasPlaybackUnitPreviewSource(
+    node: CanvasNode,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<CanvasPlaybackPreviewSourceProjection | undefined> {
+    if (node.type === 'shot') {
+      return this.resolveShotPlaybackPreviewSource(node, documentUri, webview);
+    }
+    if (node.type === 'media') {
+      return this.resolveMediaPlaybackPreviewSource(node, documentUri, webview);
+    }
+    return undefined;
+  }
+
+  private async resolveShotPlaybackPreviewSource(
+    node: CanvasNode,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<CanvasPlaybackPreviewSourceProjection | undefined> {
+    const data = node.data as Record<string, unknown>;
+    const selectedGenerationUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readSelectedGenerationCandidatePreviewSource(data),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-selected-generation',
+    );
+    if (selectedGenerationUrl) {
+      return { url: selectedGenerationUrl, kind: 'generated-image', mediaType: 'image' };
+    }
+
+    const generatedImageUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readPreviewSourceCandidate(data['generatedImage']),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-generated-image',
+    );
+    if (generatedImageUrl) {
+      return { url: generatedImageUrl, kind: 'generated-image', mediaType: 'image' };
+    }
+    const generatedAssetUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readPreviewSourceCandidate(data['generatedAsset']),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-generated-asset',
+    );
+    if (generatedAssetUrl) {
+      return { url: generatedAssetUrl, kind: 'generated-image', mediaType: 'image' };
+    }
+
+    const generatedMediaUrl = await this.resolveShotMediaRefsPlaybackPreviewSource(
+      this.readStoryboardMediaRefArray(data['generatedMediaRefs']),
+      documentUri,
+      webview,
+      'generated-media',
+      'neko-canvas.preview-playback-shot-generated-media-ref',
+    );
+    if (generatedMediaUrl) {
+      return generatedMediaUrl;
+    }
+
+    const prepOutputMediaUrl = await this.resolveShotMediaRefsPlaybackPreviewSource(
+      this.readStoryboardMediaRefArray(
+        this.readNestedRecord(data['shotImagePrepPlan'])?.['outputMediaRefs'],
+      ),
+      documentUri,
+      webview,
+      'generated-media',
+      'neko-canvas.preview-playback-shot-prep-output-media-ref',
+    );
+    if (prepOutputMediaUrl) {
+      return prepOutputMediaUrl;
+    }
+
+    const runtimeReferenceImageUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readPreviewSourceCandidate(data['runtimeReferenceImagePath']),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-runtime-reference',
+    );
+    if (runtimeReferenceImageUrl) {
+      return { url: runtimeReferenceImageUrl, kind: 'reference-image', mediaType: 'image' };
+    }
+
+    const referenceImageResourceRef = isDocumentArchiveResourceRef(
+      data['referenceImageResourceRef'],
+    )
+      ? data['referenceImageResourceRef']
+      : undefined;
+    const resourceRef = this.resolvePreviewResourceRef(
+      data['referenceResourceRef'],
+      referenceImageResourceRef,
+    );
+    const projected = await this.projectResourceCacheVariant(
+      webview,
+      resourceRef,
+      'neko-canvas.preview-playback-shot-reference',
+    );
+    if (projected) {
+      return { url: projected, kind: 'reference-image', mediaType: 'image' };
+    }
+
+    const referenceImageUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readPreviewSourceCandidate(data['referenceImagePath']),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-shot-reference-path',
+    );
+    if (referenceImageUrl) {
+      return { url: referenceImageUrl, kind: 'reference-image', mediaType: 'image' };
+    }
+
+    return this.resolveShotMediaRefsPlaybackPreviewSource(
+      [
+        ...this.readStoryboardMediaRefArray(data['sourceMediaRefs']),
+        ...this.readStoryboardMediaRefArray(data['mediaRefs']),
+      ],
+      documentUri,
+      webview,
+      'source-media',
+      'neko-canvas.preview-playback-shot-media-ref',
+    );
+  }
+
+  private async resolveShotMediaRefsPlaybackPreviewSource(
+    mediaRefs: readonly Record<string, unknown>[],
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+    sourceKind: CanvasPlaybackPreviewSourceKind,
+    caller: string,
+  ): Promise<CanvasPlaybackPreviewSourceProjection | undefined> {
+    for (const mediaRef of this.sortStoryboardPreviewMediaRefs(mediaRefs)) {
+      const candidate = this.readStoryboardMediaRefPreviewSource(mediaRef);
+      const projected = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+        candidate,
+        documentUri,
+        webview,
+        caller,
+      );
+      if (projected) {
+        return {
+          url: projected,
+          kind: sourceKind,
+          label: this.readPreviewSourceString(mediaRef['label']),
+          mediaType: this.resolveStoryboardMediaRefMediaType(mediaRef, projected),
+          refId: this.readPreviewSourceString(mediaRef['refId']),
+        };
+      }
+    }
+    return undefined;
+  }
+
+  private sortStoryboardPreviewMediaRefs(
+    mediaRefs: readonly Record<string, unknown>[],
+  ): readonly Record<string, unknown>[] {
+    const refs = mediaRefs.filter((ref) =>
+      this.hasCanvasPlaybackPreviewSourceCandidate(this.readStoryboardMediaRefPreviewSource(ref)),
+    );
+    const imageRefs = refs.filter((ref) => this.isStoryboardImageMediaRef(ref));
+    return imageRefs.length > 0 ? imageRefs : refs;
+  }
+
+  private readStoryboardMediaRefArray(value: unknown): readonly Record<string, unknown>[] {
+    return Array.isArray(value)
+      ? value.filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+        )
+      : [];
+  }
+
+  private isStoryboardImageMediaRef(ref: Record<string, unknown>): boolean {
+    const mimeType = this.readPreviewSourceString(ref['mimeType']);
+    if (mimeType?.toLowerCase().startsWith('image/')) {
+      return true;
+    }
+    const pathValue = this.readStoryboardMediaRefPreviewSource(ref);
+    const source = pathValue?.source;
+    return Boolean(
+      source && /\.(avif|gif|jpe?g|png|webp)$/i.test(source.split(/[?#]/)[0] ?? source),
+    );
+  }
+
+  private readStoryboardMediaRefPreviewSource(
+    ref: Record<string, unknown>,
+  ): CanvasPlaybackPreviewSourceCandidate | undefined {
+    const directCandidate = this.readPreviewSourceCandidate(ref);
+    if (this.hasCanvasPlaybackPreviewSourceCandidate(directCandidate)) {
+      return directCandidate;
+    }
+
+    const locator = this.readNestedRecord(ref['locator']);
+    if (!locator) {
+      return undefined;
+    }
+    return this.readPreviewSourceCandidate(locator);
+  }
+
+  private resolveStoryboardMediaRefMediaType(
+    mediaRef: Record<string, unknown>,
+    source: string,
+  ): string | undefined {
+    const mimeType = this.readPreviewSourceString(mediaRef['mimeType']);
+    if (mimeType?.startsWith('image/')) return 'image';
+    if (mimeType?.startsWith('video/')) return 'video';
+    if (mimeType?.startsWith('audio/')) return 'audio';
+    const clean = source.split(/[?#]/)[0]?.toLowerCase() ?? source.toLowerCase();
+    if (/\.(avif|gif|jpe?g|png|webp)$/.test(clean)) return 'image';
+    if (/\.(m4v|mkv|mov|mp4|webm)$/.test(clean)) return 'video';
+    if (/\.(aac|flac|m4a|mp3|ogg|wav)$/.test(clean)) return 'audio';
+    return undefined;
+  }
+
+  private async resolveMediaPlaybackPreviewSource(
+    node: CanvasNode,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<CanvasPlaybackPreviewSourceProjection | undefined> {
+    const data = node.data as Record<string, unknown>;
+    const documentResourceRef = isDocumentArchiveResourceRef(data['documentResourceRef'])
+      ? data['documentResourceRef']
+      : undefined;
+    const resourceRef = this.resolvePreviewResourceRef(data['resourceRef'], documentResourceRef);
+    const projected = await this.projectResourceCacheVariant(
+      webview,
+      resourceRef,
+      'neko-canvas.preview-playback-media-resource',
+    );
+    if (projected) {
+      return {
+        url: projected,
+        kind: 'media-asset',
+        mediaType: this.readPreviewSourceString(data['mediaType']),
+      };
+    }
+    const assetUrl = await this.resolveCanvasPlaybackPreviewSourceCandidate(
+      this.readPreviewSourceCandidate({
+        assetPath: this.resolveDocumentResourceAssetPath(
+          this.readPreviewSourceString(data['assetPath']),
+          documentResourceRef,
+          resourceRef,
+        ),
+      }),
+      documentUri,
+      webview,
+      'neko-canvas.preview-playback-media-path',
+    );
+    return assetUrl
+      ? {
+          url: assetUrl,
+          kind: 'media-asset',
+          mediaType: this.readPreviewSourceString(data['mediaType']),
+        }
+      : undefined;
+  }
+
+  private readSelectedGenerationCandidatePreviewSource(
+    data: Record<string, unknown>,
+  ): CanvasPlaybackPreviewSourceCandidate | undefined {
+    const history = data['generationHistory'];
+    if (!Array.isArray(history)) {
+      return undefined;
+    }
+    const selected = history.find(
+      (candidate): candidate is Record<string, unknown> =>
+        Boolean(candidate) &&
+        typeof candidate === 'object' &&
+        !Array.isArray(candidate) &&
+        candidate['selected'] === true,
+    );
+    if (!selected) {
+      return undefined;
+    }
+    return this.readPreviewSourceCandidate(selected);
+  }
+
+  private async resolveCanvasPlaybackPreviewSourceCandidate(
+    candidate: CanvasPlaybackPreviewSourceCandidate | undefined,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+    caller: string,
+  ): Promise<string | undefined> {
+    if (!this.hasCanvasPlaybackPreviewSourceCandidate(candidate)) {
+      return undefined;
+    }
+    const resourceRef = this.resolvePreviewResourceRef(
+      candidate.resourceRef,
+      candidate.documentResourceRef,
+    );
+    const projectedResource = await this.projectResourceCacheVariant(webview, resourceRef, caller);
+    if (projectedResource) {
+      return projectedResource;
+    }
+    return this.projectCanvasPlaybackLocalPreviewUrl(
+      candidate.source,
+      documentUri,
+      webview,
+      caller,
+    );
+  }
+
+  private async projectCanvasPlaybackLocalPreviewUrl(
+    value: string | undefined,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+    caller: string,
+  ): Promise<string | undefined> {
+    const source = this.readPreviewSourceString(value);
+    if (!source) return undefined;
+    if (this.isReusableCanvasPlaybackPreviewSource(source)) {
+      return source;
+    }
+    try {
+      const fsPath = await this.resolveAssetPath(source, documentUri);
+      const projected = await this.localResourceAccess.toWebviewUri(webview, fsPath, {
+        caller,
+        extraRoots: [
+          ...(webview.options.localResourceRoots ?? []),
+          ...this.getDocumentLocalResourceRoots(documentUri),
+        ],
+      });
+      return projected.ok ? projected.uri : undefined;
+    } catch (error) {
+      logger.warn(`Preview playback source projection failed: ${error}`);
+      return undefined;
+    }
+  }
+
+  private getDocumentLocalResourceRoots(documentUri: vscode.Uri): readonly vscode.Uri[] {
+    return documentUri.scheme === 'file' ? [vscode.Uri.file(path.dirname(documentUri.fsPath))] : [];
+  }
+
+  private getNarrativePreviewLocalResourceRoots(
+    sourceCanvasUri: string | undefined,
+  ): readonly vscode.Uri[] {
+    const roots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
+    if (sourceCanvasUri) {
+      roots.push(...this.getDocumentLocalResourceRoots(vscode.Uri.parse(sourceCanvasUri)));
+    }
+    return roots;
+  }
+
+  private readPreviewSourceString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  }
+
+  private readPreviewSourceCandidate(
+    value: unknown,
+  ): CanvasPlaybackPreviewSourceCandidate | undefined {
+    const direct = this.readPreviewSourceString(value);
+    if (direct) {
+      return { source: direct };
+    }
+
+    const record = this.readNestedRecord(value);
+    if (!record) {
+      return undefined;
+    }
+
+    const nestedAssetRef = this.readNestedRecord(record['assetRef']);
+    const nestedMetadata = this.readNestedRecord(record['metadata']);
+    const resourceRef =
+      this.readPreviewResourceRef(record) ??
+      this.readPreviewResourceRef(nestedAssetRef) ??
+      this.readPreviewResourceRef(nestedMetadata);
+    const documentResourceRef =
+      this.readPreviewDocumentResourceRef(record) ??
+      this.readPreviewDocumentResourceRef(nestedAssetRef) ??
+      this.readPreviewDocumentResourceRef(nestedMetadata);
+    const source =
+      this.readFirstPreviewSourceString(record, [
+        'dataUrl',
+        'sourcePath',
+        'localPath',
+        'path',
+        'assetPath',
+        'uri',
+        'filePath',
+        'previewUrl',
+        'url',
+        'src',
+        'webviewUri',
+        'webviewUrl',
+      ]) ??
+      this.readFirstPreviewSourceString(nestedAssetRef, [
+        'dataUrl',
+        'sourcePath',
+        'localPath',
+        'path',
+        'assetPath',
+        'uri',
+        'filePath',
+        'previewUrl',
+        'url',
+        'src',
+        'webviewUri',
+        'webviewUrl',
+      ]);
+    return this.hasCanvasPlaybackPreviewSourceCandidate({
+      ...(source ? { source } : {}),
+      ...(resourceRef ? { resourceRef } : {}),
+      ...(documentResourceRef ? { documentResourceRef } : {}),
+    })
+      ? {
+          ...(source ? { source } : {}),
+          ...(resourceRef ? { resourceRef } : {}),
+          ...(documentResourceRef ? { documentResourceRef } : {}),
+        }
+      : undefined;
+  }
+
+  private readPreviewResourceRef(
+    record: Record<string, unknown> | undefined,
+  ): ResourceRef | undefined {
+    if (!record) {
+      return undefined;
+    }
+    if (isResourceRef(record['resourceRef'])) {
+      return record['resourceRef'];
+    }
+    if (isResourceRef(record['cacheResourceRef'])) {
+      return record['cacheResourceRef'];
+    }
+    return undefined;
+  }
+
+  private readPreviewDocumentResourceRef(
+    record: Record<string, unknown> | undefined,
+  ): DocumentArchiveResourceRef | undefined {
+    if (!record) {
+      return undefined;
+    }
+    for (const key of ['documentResourceRef', 'referenceImageResourceRef', 'resourceRef']) {
+      const value = record[key];
+      if (isDocumentArchiveResourceRef(value)) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  private hasCanvasPlaybackPreviewSourceCandidate(
+    candidate: CanvasPlaybackPreviewSourceCandidate | undefined,
+  ): candidate is CanvasPlaybackPreviewSourceCandidate {
+    return Boolean(candidate?.source || candidate?.resourceRef || candidate?.documentResourceRef);
+  }
+
+  private readFirstPreviewSourceString(
+    record: Record<string, unknown> | undefined,
+    fields: readonly string[],
+  ): string | undefined {
+    if (!record) {
+      return undefined;
+    }
+    for (const field of fields) {
+      const source = this.readPreviewSourceString(record[field]);
+      if (source) {
+        return source;
+      }
+    }
+    return undefined;
+  }
+
+  private readNestedRecord(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  }
+
+  private isReusableCanvasPlaybackPreviewSource(value: string | undefined): value is string {
+    if (!value) return false;
+    if (/^data:/i.test(value)) {
+      return true;
+    }
+    return /^https:/i.test(value) && !/vscode-resource\.vscode-cdn\.net/i.test(value);
+  }
+
   private async projectResourceCacheVariant(
-    _webview: vscode.Webview,
+    webview: vscode.Webview,
     resourceRef: unknown,
     caller: string,
     preferredRole?: ResourceVariantRole,
   ): Promise<string | undefined> {
-    if (!this.contentAccess || !isResourceRef(resourceRef)) {
+    const contentAccess = this.contentAccess;
+    if (!contentAccess || !isResourceRef(resourceRef)) {
       return undefined;
     }
     const role = resolveCanvasPreviewVariantRole(resourceRef, preferredRole);
-    const result = await this.contentAccess.resolve({
-      ref: resourceRef,
-      intent: 'interactive-preview',
-      target: 'webview-uri',
-      variant: { role },
-      materialization: 'if-missing',
-      caller,
-    });
+    const result = await this.withContentAccessWebview(webview, (webviewResolverToken) =>
+      contentAccess.resolve({
+        ref: resourceRef,
+        intent: 'interactive-preview',
+        target: 'webview-uri',
+        variant: { role },
+        materialization: 'if-missing',
+        caller,
+        metadata: { [CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY]: webviewResolverToken },
+      }),
+    );
     if (result.status === 'ready' && result.uri) {
       return result.uri;
     }

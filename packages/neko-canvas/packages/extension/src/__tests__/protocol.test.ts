@@ -282,6 +282,87 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("materialization: 'if-missing'");
     });
 
+    it('binds Webview URI projection to the requesting Webview instead of the active editor', () => {
+      expect(providerSource).toContain('CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY');
+      expect(providerSource).toContain('private readonly contentAccessWebviewsByToken');
+      expect(providerSource).toContain('resolveContentAccessWebview(request');
+      expect(providerSource).toContain('this.contentAccessWebviewsByToken.get(token)');
+      expect(providerSource).toContain('withContentAccessWebview(webview');
+      expect(providerSource).toContain(
+        'metadata: { [CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY]: webviewResolverToken }',
+      );
+      expect(providerSource).not.toContain(
+        'webviewResolver: () => this.activeWebviewPanel?.webview',
+      );
+    });
+
+    it('projects Canvas playback plans for the Preview panel without persisting runtime URLs', () => {
+      expect(providerSource).toContain('extractCanvasPlaybackPlanForPreview(');
+      expect(providerSource).toContain('enrichCanvasPlaybackPlanForPreview(');
+      expect(providerSource).toContain('resolveCanvasPlaybackUnitPreviewSource(');
+      expect(providerSource).toContain('resolveShotPlaybackPreviewSource(');
+      expect(providerSource).toContain('resolveMediaPlaybackPreviewSource(');
+      expect(providerSource).toContain('previewUrl: previewSource.url');
+      expect(providerSource).toContain('previewSourceKind: previewSource.kind');
+      expect(narrativePreviewBridgeSource).toContain('extractCanvasPlaybackPlanForPreview?(');
+      expect(narrativePreviewBridgeSource).toContain('resolveCanvasPlaybackPlanForPreview(');
+      expect(narrativePreviewBridgeSource).toContain('postPreviewPlaybackPlan(');
+    });
+
+    it('uses storyboard media refs as shot Preview image fallbacks', () => {
+      expect(providerSource).toContain('resolveShotMediaRefsPlaybackPreviewSource(');
+      expect(providerSource).toContain("data['generatedMediaRefs']");
+      expect(providerSource).toContain("data['shotImagePrepPlan']");
+      expect(providerSource).toContain("['outputMediaRefs']");
+      expect(providerSource).toContain("data['sourceMediaRefs']");
+      expect(providerSource).toContain("data['mediaRefs']");
+      expect(providerSource).toContain("'neko-canvas.preview-playback-shot-media-ref'");
+      expect(providerSource).toContain('readStoryboardMediaRefPreviewSource(');
+      expect(providerSource).toContain('this.readPreviewSourceCandidate(ref)');
+      expect(providerSource).toContain("this.readNestedRecord(ref['locator'])");
+      expect(providerSource).toContain("record['cacheResourceRef']");
+      expect(providerSource).toContain("record['resourceRef']");
+      expect(providerSource).toContain("'previewUrl'");
+      expect(providerSource).toContain("'dataUrl'");
+      expect(providerSource).toContain("'webviewUri'");
+      expect(providerSource).toContain("'url'");
+      expect(providerSource).toContain("'src'");
+      expect(providerSource).toContain("'sourcePath'");
+      expect(providerSource).toContain("'localPath'");
+      expect(providerSource).toContain("'path'");
+      expect(providerSource).toContain("'assetPath'");
+      expect(providerSource).toContain("'uri'");
+      expect(providerSource).toContain("'filePath'");
+    });
+
+    it('labels Preview visual sources without merging generated and reference semantics', () => {
+      expect(providerSource).toContain("kind: 'generated-image'");
+      expect(providerSource).toContain("'generated-media'");
+      expect(providerSource).toContain("kind: 'reference-image'");
+      expect(providerSource).toContain("'source-media'");
+      expect(narrativePreviewBridgeSource).toContain('formatPreviewSourceKind(');
+      expect(narrativePreviewBridgeSource).toContain('summarizeStoryboardMediaRefs(');
+      expect(narrativePreviewBridgeSource).toContain('previewSourceGeneratedImage');
+      expect(narrativePreviewBridgeSource).toContain('previewSourceReferenceImage');
+      expect(narrativePreviewBridgeSource).toContain('previewSourceSourceMedia');
+    });
+
+    it('keeps shot Preview source priority aligned with Canvas node cards', () => {
+      expect(providerSource).toContain('readSelectedGenerationCandidatePreviewSource(');
+      expect(providerSource).toContain("data['generationHistory']");
+      expect(providerSource).toContain("'neko-canvas.preview-playback-selected-generation'");
+      expect(providerSource).toContain("data['runtimeReferenceImagePath']");
+      expect(providerSource).toContain("'neko-canvas.preview-playback-runtime-reference'");
+      expect(providerSource).toContain('resolveCanvasPlaybackPreviewSourceCandidate(');
+      expect(providerSource).toContain('readFirstPreviewSourceString(');
+      expect(providerSource).toContain('...(webview.options.localResourceRoots ?? [])');
+      expect(providerSource).toContain('!/vscode-resource\\.vscode-cdn\\.net/i.test(value)');
+      expect(providerSource).toContain('resolveVSCodeResourceUriPath(');
+      expect(providerSource).toContain('new URL(source)');
+      expect(providerSource).toContain('return decodeURIComponent(url.pathname);');
+      expect(providerSource).toContain('/vscode-resource\\.vscode-cdn\\.net(\\/[^?#]*)/i');
+    });
+
     it('registers document resources so stable document refs can be materialized in Canvas', () => {
       expect(providerSource).toContain('DocumentResourceCacheProvider');
       expect(providerSource).toContain('createCanvasDocumentEntryReader(workspaceRoot)');

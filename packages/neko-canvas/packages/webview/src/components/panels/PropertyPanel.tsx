@@ -23,7 +23,12 @@ import type {
   FieldBinding,
   JsonPointerPath,
 } from '@neko/shared';
-import { getContainerChildIds, readFieldBinding, writeFieldBinding } from '@neko/shared';
+import {
+  getContainerChildIds,
+  readFieldBinding,
+  summarizeReferencesFromCanvasNode,
+  writeFieldBinding,
+} from '@neko/shared';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
 import { getNodeLabel } from '../nodes/nodeTypeDescriptor';
@@ -34,6 +39,7 @@ import {
   mapCanvasNodeTransformToProperties,
 } from '../adapters/sharedCanvasUiAdapter';
 import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
+import { resolveConnectionTypeLabel } from '../../i18n/connectionLabels';
 
 // =============================================================================
 // Types
@@ -325,11 +331,85 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
 }
 
 function NodeSpecificProperties({ node, onUpdateData, onAction }: NodeSpecificPropertiesProps) {
+  const referenceSummary = summarizeReferencesFromCanvasNode(node);
+  const referenceSection =
+    referenceSummary.total > 0 ? <ReferenceSummarySection node={node} /> : null;
   if (node.content) {
-    return <ComposableNodeProperties node={node} onUpdateData={onUpdateData} onAction={onAction} />;
+    return (
+      <>
+        {referenceSection}
+        <ComposableNodeProperties node={node} onUpdateData={onUpdateData} onAction={onAction} />
+      </>
+    );
   }
 
-  return renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData, onAction });
+  return (
+    <>
+      {referenceSection}
+      {renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData, onAction })}
+    </>
+  );
+}
+
+export function ReferenceSummarySection({ node }: { readonly node: CanvasNode }) {
+  const summary = summarizeReferencesFromCanvasNode(node);
+  if (summary.total === 0) return null;
+  return (
+    <CollapsibleSection title="References">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span style={{ color: 'var(--neko-fg-secondary)' }}>Total</span>
+          <span style={{ color: 'var(--neko-fg)' }}>{summary.total}</span>
+        </div>
+        <div className="space-y-1">
+          {summary.groups.map((group) => (
+            <div
+              key={`${group.role}:${group.modality}`}
+              className="flex min-w-0 items-center justify-between gap-2 rounded border px-2 py-1 text-xs"
+              style={{
+                backgroundColor: 'var(--control-bg)',
+                borderColor: 'var(--control-border)',
+                color: 'var(--control-fg)',
+              }}
+            >
+              <span className="truncate">{referenceGroupLabel(group.role)}</span>
+              <span
+                className="flex-shrink-0 text-[10px]"
+                style={{ color: 'var(--neko-fg-secondary)' }}
+              >
+                {group.modality} x{group.count}
+              </span>
+            </div>
+          ))}
+        </div>
+        {summary.diagnostics.length > 0 ? (
+          <div className="space-y-1">
+            {summary.diagnostics.slice(0, 3).map((item, index) => (
+              <div
+                key={`${item.code}:${index}`}
+                className="rounded px-2 py-1 text-[10px] leading-snug"
+                style={{
+                  backgroundColor:
+                    item.severity === 'error' ? 'var(--danger-soft)' : 'var(--control-bg)',
+                  color:
+                    item.severity === 'error' ? 'var(--neko-danger)' : 'var(--neko-fg-secondary)',
+                }}
+              >
+                {item.message}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function referenceGroupLabel(role: string): string {
+  return role
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
@@ -1116,9 +1196,9 @@ function ConnectionProperties({
           value={connection.type ?? 'default'}
           onChange={(e) => onUpdate?.(connection.id, { type: e.target.value as ConnectionType })}
         >
-          <option value="default">Default</option>
-          <option value="sequence">Sequence</option>
-          <option value="reference">Reference</option>
+          <option value="default">{resolveConnectionTypeLabel('default')}</option>
+          <option value="sequence">{resolveConnectionTypeLabel('sequence')}</option>
+          <option value="reference">{resolveConnectionTypeLabel('reference')}</option>
         </select>
       </CollapsibleSection>
 
@@ -1131,13 +1211,13 @@ function ConnectionProperties({
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Source</span>
+            <span>{t('connection.source')}</span>
             <span className="truncate max-w-[120px]" style={{ color: 'var(--neko-fg)' }}>
               {connection.sourceId.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Target</span>
+            <span>{t('connection.target')}</span>
             <span className="truncate max-w-[120px]" style={{ color: 'var(--neko-fg)' }}>
               {connection.targetId.slice(-8)}
             </span>

@@ -269,6 +269,14 @@ describe('canvas playback contracts', () => {
           ...shot('shot-a', 1, 'scene-a').data,
           visualDescription: 'Durable storyboard summary',
           referenceImagePath: 'assets/ref.png',
+          sourceMediaRefs: [
+            {
+              refId: 'source-panel-1',
+              role: 'source',
+              locator: { type: 'workspace-path', path: 'assets/source-panel.png' },
+              mimeType: 'image/png',
+            },
+          ],
           runtimeReferenceImagePath: 'blob:runtime-reference',
           generatedImage: 'blob:runtime-image',
           generatedVideoAsset: {
@@ -300,6 +308,12 @@ describe('canvas playback contracts', () => {
     expect(metadata).toMatchObject({
       visualDescription: 'Durable storyboard summary',
       referenceImagePath: 'assets/ref.png',
+      sourceMediaRefs: [
+        expect.objectContaining({
+          refId: 'source-panel-1',
+          locator: { type: 'workspace-path', path: 'assets/source-panel.png' },
+        }),
+      ],
       generatedVideoAsset: expect.objectContaining({ path: 'assets/shot-a.mp4' }),
       generationHistory: [expect.objectContaining({ prompt: 'keep prompt' })],
     });

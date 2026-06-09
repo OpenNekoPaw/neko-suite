@@ -1,21 +1,15 @@
 /**
- * CanvasGrid - Background grid component
- * Renders a dot grid pattern that scales with zoom
+ * CanvasGrid - low-cost canvas-backed background grid.
+ *
+ * The grid follows runtime viewport pan/zoom without creating one DOM node per dot.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CanvasViewport } from '@neko/shared';
-
-// =============================================================================
-// Constants
-// =============================================================================
 
 const GRID_SIZE = 20;
 const GRID_MAJOR_INTERVAL = 5;
-
-// =============================================================================
-// Types
-// =============================================================================
+const MIN_GRID_ZOOM = 0.15;
 
 export interface CanvasGridProps {
   viewport: CanvasViewport;
@@ -23,104 +17,111 @@ export interface CanvasGridProps {
   height: number;
 }
 
-// =============================================================================
-// Component
-// =============================================================================
-
 export function CanvasGrid({ viewport, width, height }: CanvasGridProps) {
-  // Calculate grid pattern based on zoom level
-  const gridPattern = useMemo(() => {
-    const { zoom, pan } = viewport;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // Adjust grid size based on zoom
-    let effectiveGridSize = GRID_SIZE;
-    if (zoom < 0.5) {
-      effectiveGridSize = GRID_SIZE * 2;
-    } else if (zoom < 0.25) {
-      effectiveGridSize = GRID_SIZE * 4;
-    }
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || width <= 0 || height <= 0) return;
 
-    const scaledGridSize = effectiveGridSize * zoom;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // Calculate offset to align grid with pan
-    const offsetX = pan.x % scaledGridSize;
-    const offsetY = pan.y % scaledGridSize;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(width * ratio));
+    canvas.height = Math.max(1, Math.floor(height * ratio));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    return {
-      gridSize: scaledGridSize,
-      offsetX,
-      offsetY,
-      majorInterval: GRID_MAJOR_INTERVAL,
-    };
-  }, [viewport]);
+    const styles = getComputedStyle(canvas);
+    const backgroundColor = styles.getPropertyValue('--canvas-bg').trim() || '#1e1e1e';
+    const gridColor = styles.getPropertyValue('--canvas-grid').trim() || '#333333';
+    const majorColor = styles.getPropertyValue('--canvas-grid-major').trim() || gridColor;
 
-  // Generate grid dots
-  const dots = useMemo(() => {
-    const { gridSize, offsetX, offsetY, majorInterval } = gridPattern;
-    const result: Array<{ x: number; y: number; isMajor: boolean }> = [];
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, width, height);
 
-    // Calculate number of dots needed
-    const cols = Math.ceil(width / gridSize) + 2;
-    const rows = Math.ceil(height / gridSize) + 2;
+    if (viewport.zoom < MIN_GRID_ZOOM) return;
 
-    // Calculate starting indices for major grid alignment
-    const startCol = Math.floor(-offsetX / gridSize);
-    const startRow = Math.floor(-offsetY / gridSize);
-
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const x = offsetX + col * gridSize;
-        const y = offsetY + row * gridSize;
-
-        // Skip dots outside visible area
-        if (x < -gridSize || x > width + gridSize || y < -gridSize || y > height + gridSize) {
-          continue;
-        }
-
-        // Determine if this is a major grid point
-        const globalCol = startCol + col;
-        const globalRow = startRow + row;
-        const isMajor = globalCol % majorInterval === 0 && globalRow % majorInterval === 0;
-
-        result.push({ x, y, isMajor });
-      }
-    }
-
-    return result;
-  }, [gridPattern, width, height]);
-
-  // Don't render too many dots at low zoom
-  if (viewport.zoom < 0.15) {
-    return (
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundColor: 'var(--canvas-bg)',
-        }}
-      />
-    );
-  }
+    const pattern = resolveGridPattern(viewport);
+    drawGridDots(ctx, {
+      width,
+      height,
+      gridSize: pattern.gridSize,
+      offsetX: pattern.offsetX,
+      offsetY: pattern.offsetY,
+      gridColor,
+      majorColor,
+    });
+  }, [height, viewport, width]);
 
   return (
-    <svg
+    <canvas
+      ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      width={width}
-      height={height}
-      style={{ overflow: 'hidden' }}
-    >
-      {/* Background */}
-      <rect width={width} height={height} fill="var(--canvas-bg)" />
-
-      {/* Grid dots */}
-      {dots.map((dot, index) => (
-        <circle
-          key={index}
-          cx={dot.x}
-          cy={dot.y}
-          r={dot.isMajor ? 1.5 : 1}
-          fill={dot.isMajor ? 'var(--canvas-grid-major)' : 'var(--canvas-grid)'}
-        />
-      ))}
-    </svg>
+      data-canvas-background="grid"
+    />
   );
+}
+
+export function resolveGridPattern(viewport: CanvasViewport): {
+  gridSize: number;
+  offsetX: number;
+  offsetY: number;
+} {
+  const { zoom, pan } = viewport;
+  const effectiveGridSize = zoom < 0.25 ? GRID_SIZE * 4 : zoom < 0.5 ? GRID_SIZE * 2 : GRID_SIZE;
+  const gridSize = effectiveGridSize * zoom;
+
+  return {
+    gridSize,
+    offsetX: pan.x % gridSize,
+    offsetY: pan.y % gridSize,
+  };
+}
+
+function drawGridDots(
+  ctx: CanvasRenderingContext2D,
+  input: {
+    width: number;
+    height: number;
+    gridSize: number;
+    offsetX: number;
+    offsetY: number;
+    gridColor: string;
+    majorColor: string;
+  },
+): void {
+  const cols = Math.ceil(input.width / input.gridSize) + 2;
+  const rows = Math.ceil(input.height / input.gridSize) + 2;
+  const startCol = Math.floor(-input.offsetX / input.gridSize);
+  const startRow = Math.floor(-input.offsetY / input.gridSize);
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = input.offsetX + col * input.gridSize;
+      const y = input.offsetY + row * input.gridSize;
+
+      if (
+        x < -input.gridSize ||
+        x > input.width + input.gridSize ||
+        y < -input.gridSize ||
+        y > input.height + input.gridSize
+      ) {
+        continue;
+      }
+
+      const globalCol = startCol + col;
+      const globalRow = startRow + row;
+      const isMajor =
+        globalCol % GRID_MAJOR_INTERVAL === 0 && globalRow % GRID_MAJOR_INTERVAL === 0;
+
+      ctx.beginPath();
+      ctx.arc(x, y, isMajor ? 1.5 : 1, 0, Math.PI * 2);
+      ctx.fillStyle = isMajor ? input.majorColor : input.gridColor;
+      ctx.fill();
+    }
+  }
 }

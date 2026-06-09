@@ -161,6 +161,46 @@ describe('CardPreviewSlot rendering', () => {
     expect(unsafe).toContain('IMG');
     expect(unsafe).not.toContain('javascript:alert');
   });
+
+  it('renders static preview shells during low-cost interaction mode', () => {
+    const shell = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: {
+          renderForm: 'asset-thumbnail',
+          aspectRatio: '3/2',
+          source: {
+            id: 'preview',
+            role: 'image',
+            variants: [{ id: 'preview', role: 'image', sourcePath: 'data:image/png;base64,image' }],
+          },
+        } satisfies CardPreviewSource,
+        title: 'Preview',
+        interactionRenderMode: 'shell',
+      }),
+    );
+    const video = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: {
+          renderForm: 'media-poster',
+          aspectRatio: '3/2',
+          source: {
+            id: 'video',
+            role: 'video-poster',
+            variants: [
+              { id: 'poster', role: 'video-poster', sourcePath: 'data:image/png;base64,poster' },
+            ],
+          },
+        } satisfies CardPreviewSource,
+        title: 'Video',
+        interactionRenderMode: 'shell',
+      }),
+    );
+
+    expect(shell).toContain('data-node-card-preview-shell="true"');
+    expect(shell).not.toContain('data:image/png;base64,image');
+    expect(video).not.toContain('data-node-card-preview-shell="true"');
+    expect(video).toContain('data:image/png;base64,poster');
+  });
 });
 
 function createNode(

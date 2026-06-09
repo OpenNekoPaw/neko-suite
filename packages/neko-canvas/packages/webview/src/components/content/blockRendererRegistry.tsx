@@ -278,6 +278,7 @@ function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNod
                 node={child}
                 parentNode={context.node}
                 selection={{ nodeIds: context.selectedNodeIds }}
+                interactionRenderMode={context.interactionRenderMode}
                 onSelect={context.onSelectNode}
               />
             ) : null;

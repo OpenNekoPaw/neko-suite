@@ -6,6 +6,7 @@ export interface FallbackNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onTransformStart?: (nodeId: string) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onResize?: (
@@ -28,6 +29,7 @@ export function FallbackNode({
   viewport,
   isSelected,
   onSelect,
+  onTransformStart,
   onDrag,
   onMove,
   onResize,
@@ -42,6 +44,7 @@ export function FallbackNode({
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}
+      onTransformStart={onTransformStart}
       onDrag={onDrag}
       onMove={onMove}
       onResize={onResize}

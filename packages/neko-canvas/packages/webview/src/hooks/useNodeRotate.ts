@@ -4,7 +4,7 @@
  * Calculates angle from mouse position relative to node center.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDrag } from '@neko/ui/hooks';
 import type { CanvasViewport } from '@neko/shared';
 
@@ -95,6 +95,12 @@ export function useNodeRotate({
   disabled = false,
 }: UseNodeRotateOptions): UseNodeRotateReturn {
   const [rotation, setRotation] = useState(initialRotation);
+  const latestRotationRef = useRef(initialRotation);
+
+  const updateRotation = (nextRotation: number) => {
+    latestRotationRef.current = nextRotation;
+    setRotation(nextRotation);
+  };
 
   const { isDragging: isRotating, bindDrag } = useDrag<RotateCtx>({
     onStart: (e) => {
@@ -135,18 +141,18 @@ export function useNodeRotate({
       // Normalize to 0..360
       newRotation = ((newRotation % 360) + 360) % 360;
 
-      setRotation(newRotation);
+      updateRotation(newRotation);
       onRotate?.(nodeId, newRotation);
     },
     onEnd: () => {
-      onRotateEnd?.(nodeId, rotation);
+      onRotateEnd?.(nodeId, latestRotationRef.current);
     },
   });
 
   // Sync from external updates when not rotating
   useEffect(() => {
     if (!isRotating) {
-      setRotation(initialRotation);
+      updateRotation(initialRotation);
     }
   }, [initialRotation, isRotating]);
 

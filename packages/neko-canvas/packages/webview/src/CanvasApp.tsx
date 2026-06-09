@@ -16,6 +16,7 @@ import type {
 } from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
+import { useRuntimeViewportStore } from './stores/runtimeViewportStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
 import {
@@ -39,6 +40,7 @@ import {
 import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
+import { useThrottledCanvasViewport } from './hooks/useThrottledCanvasViewport';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
 import {
@@ -52,10 +54,13 @@ import { setGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
 import type { FloatingPanelDefinition } from './subsystems';
 import type { NodeTypeDescriptorRegistry } from './components/nodes/nodeTypeDescriptor';
+import { DEFAULT_RUNTIME_VIEWPORT } from './stores/runtimeViewportStore';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
 } from './utils/viewportMath';
+import { createCanvasDocumentSaveFingerprint } from './utils/canvasPersistence';
+import { resolveCanvasRenderRefreshDecision } from './utils/renderRefreshTiering';
 import { t } from './i18n';
 import { getLogger } from './utils/logger';
 
@@ -119,49 +124,47 @@ export function CanvasApp() {
   useReportWebviewKeyboardFocus(rootRef, vscode);
   useReportWebviewKeyboardEditable(vscode);
 
-  const {
-    setCanvasData,
-    canvasData,
-    selection,
-    setViewport,
-    zoomCanvas,
-    resetViewport,
-    selectNode,
-    selectConnection,
-    clearSelection,
-    moveNode,
-    addNode,
-    createComposite,
-    updateNode,
-    updateConnection,
-    deleteSelected,
-    updateNodeData,
-    startConnection,
-    completeConnection,
-    cancelConnection,
-    isConnecting,
-    undo,
-    redo,
-    moveNodeEnd,
-    resizeNode,
-    resizeNodeEnd,
-    rotateNode,
-    rotateNodeEnd,
-    removeChildFromContainer,
-    selectNodes,
-    groupNodes,
-    ungroupNodes,
-    generationPanelState,
-    openGenerationPanel,
-    closeGenerationPanel,
-    contentOverlayState,
-    closeContentOverlay,
-  } = useCanvasStore();
+  const canvasData = useCanvasStore((state) => state.canvasData);
+  const selection = useCanvasStore((state) => state.selection);
+  const isConnecting = useCanvasStore((state) => state.isConnecting);
+  const generationPanelState = useCanvasStore((state) => state.generationPanelState);
+  const contentOverlayState = useCanvasStore((state) => state.contentOverlayState);
+  const setCanvasData = useCanvasStore((state) => state.setCanvasData);
+  const selectNode = useCanvasStore((state) => state.selectNode);
+  const selectConnection = useCanvasStore((state) => state.selectConnection);
+  const clearSelection = useCanvasStore((state) => state.clearSelection);
+  const addNode = useCanvasStore((state) => state.addNode);
+  const createComposite = useCanvasStore((state) => state.createComposite);
+  const updateNode = useCanvasStore((state) => state.updateNode);
+  const updateConnection = useCanvasStore((state) => state.updateConnection);
+  const deleteSelected = useCanvasStore((state) => state.deleteSelected);
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const startConnection = useCanvasStore((state) => state.startConnection);
+  const completeConnection = useCanvasStore((state) => state.completeConnection);
+  const cancelConnection = useCanvasStore((state) => state.cancelConnection);
+  const undo = useCanvasStore((state) => state.undo);
+  const redo = useCanvasStore((state) => state.redo);
+  const moveNodeEnd = useCanvasStore((state) => state.moveNodeEnd);
+  const resizeNodeEnd = useCanvasStore((state) => state.resizeNodeEnd);
+  const rotateNodeEnd = useCanvasStore((state) => state.rotateNodeEnd);
+  const removeChildFromContainer = useCanvasStore((state) => state.removeChildFromContainer);
+  const selectNodes = useCanvasStore((state) => state.selectNodes);
+  const groupNodes = useCanvasStore((state) => state.groupNodes);
+  const ungroupNodes = useCanvasStore((state) => state.ungroupNodes);
+  const openGenerationPanel = useCanvasStore((state) => state.openGenerationPanel);
+  const closeGenerationPanel = useCanvasStore((state) => state.closeGenerationPanel);
+  const closeContentOverlay = useCanvasStore((state) => state.closeContentOverlay);
+  const viewport = useRuntimeViewportStore((state) => state.viewport);
+  const setViewport = useRuntimeViewportStore((state) => state.setViewport);
+  const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
+  const resetViewport = useRuntimeViewportStore((state) => state.resetViewport);
+  const seedViewportFromDocument = useRuntimeViewportStore(
+    (state) => state.seedViewportFromDocument,
+  );
 
   // Derive computed values from canvasData
   const nodes = canvasData?.nodes ?? [];
   const connections = canvasData?.connections ?? [];
-  const viewport = canvasData?.viewport ?? { pan: { x: 0, y: 0 }, zoom: 1 };
   const selectedNodeIds = selection.nodeIds;
   const selectedConnectionIds = selection.connectionIds;
   const { expandedNodeId } = useNodeExpand();
@@ -432,6 +435,12 @@ export function CanvasApp() {
     vscode,
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
+    onCanvasDataLoaded: (data) => {
+      seedViewportFromDocument(
+        `${data.name}:${data.version}`,
+        data.viewport ?? DEFAULT_RUNTIME_VIEWPORT,
+      );
+    },
     onAddMediaFromExtension: handleAddMediaFromExtension,
     onImportGeneratedAsset: (asset) => {
       const nodeInput = getImportedGeneratedAssetNodeInput(asset);
@@ -703,6 +712,20 @@ export function CanvasApp() {
     setMiniMapWidth(el.offsetWidth);
     return () => ro.disconnect();
   }, [isReady, isHudVisible]);
+
+  const minimapRefreshDecision = useMemo(
+    () =>
+      resolveCanvasRenderRefreshDecision({
+        nodes,
+        connections,
+        phase: isHudVisible ? 'fast-viewport' : 'idle',
+      }),
+    [connections, isHudVisible, nodes],
+  );
+  const minimapViewport = useThrottledCanvasViewport(viewport, {
+    enabled: minimapRefreshDecision.shouldThrottleViewportProjection,
+    intervalMs: 100,
+  });
 
   // =========================================================================
   // AI generation / agent handlers
@@ -994,11 +1017,11 @@ export function CanvasApp() {
 
   useEffect(() => {
     if (!vscode || !isReady || !canvasData) return;
-    const currentDataStr = JSON.stringify(canvasData);
-    if (currentDataStr === lastSavedDataRef.current) return;
+    const currentDataFingerprint = createCanvasDocumentSaveFingerprint(canvasData);
+    if (currentDataFingerprint === lastSavedDataRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      lastSavedDataRef.current = currentDataStr;
+      lastSavedDataRef.current = currentDataFingerprint;
       vscode.postMessage({ type: 'save', data: canvasData });
     }, 300);
     return () => {
@@ -1039,7 +1062,7 @@ export function CanvasApp() {
       connections: canvasData.connections,
       narrative: canvasData.narrative,
     });
-    const fingerprint = `${narrativeSnapshotFingerprint}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}:${projectionStatus?.state ?? 'none'}:${projectionStatus?.message ?? ''}`;
+    const fingerprint = `${narrativeSnapshotFingerprint}:${selectedNodeIds.join(',')}:${activeSubsystemKey}:${projectionStatus?.state ?? 'none'}:${projectionStatus?.message ?? ''}`;
     if (fingerprint === lastSyncRef.current) return;
     lastSyncRef.current = fingerprint;
     vscode.postMessage({
@@ -1049,7 +1072,7 @@ export function CanvasApp() {
         name: canvasData.name,
         nodes: canvasData.nodes,
         connections: canvasData.connections,
-        viewport: canvasData.viewport,
+        viewport,
         narrative: canvasData.narrative,
         _selection: { nodeIds: selectedNodeIds },
         _subsystemStatus: {
@@ -1062,7 +1085,6 @@ export function CanvasApp() {
   }, [
     nodes.length,
     connections.length,
-    viewport.zoom,
     selectedNodeIds,
     canvasData,
     activeSubsystemIds,
@@ -1125,27 +1147,14 @@ export function CanvasApp() {
     if (isConnecting) cancelConnection();
     else clearSelection();
   }, [isConnecting, cancelConnection, clearSelection, setContextMenu]);
-  const handleNodeDrag = useCallback(
-    (nodeId: string, position: { x: number; y: number }) => moveNode(nodeId, position),
-    [moveNode],
-  );
   const handleNodeMove = useCallback(
     (nodeId: string, position: { x: number; y: number }) => moveNodeEnd(nodeId, position),
     [moveNodeEnd],
-  );
-  const handleNodeResize = useCallback(
-    (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) =>
-      resizeNode(nodeId, size, position),
-    [resizeNode],
   );
   const handleNodeResizeEnd = useCallback(
     (nodeId: string, size: { width: number; height: number }, position: { x: number; y: number }) =>
       resizeNodeEnd(nodeId, size, position),
     [resizeNodeEnd],
-  );
-  const handleNodeRotate = useCallback(
-    (nodeId: string, rotation: number) => rotateNode(nodeId, rotation),
-    [rotateNode],
   );
   const handleNodeRotateEnd = useCallback(
     (nodeId: string, rotation: number) => rotateNodeEnd(nodeId, rotation),
@@ -1306,11 +1315,8 @@ export function CanvasApp() {
               selectedConnectionIds={selectedConnectionIds}
               onViewportChange={handleViewportChange}
               onNodeSelect={handleNodeSelect}
-              onNodeDrag={handleNodeDrag}
               onNodeMove={handleNodeMove}
-              onNodeResize={handleNodeResize}
               onNodeResizeEnd={handleNodeResizeEnd}
-              onNodeRotate={handleNodeRotate}
               onNodeRotateEnd={handleNodeRotateEnd}
               onNodeUpdateData={handleNodeUpdateData}
               onConnectionSelect={handleConnectionSelect}
@@ -1361,7 +1367,7 @@ export function CanvasApp() {
               >
                 <MiniMap
                   nodes={nodes}
-                  viewport={viewport}
+                  viewport={minimapViewport}
                   containerWidth={containerSize.width}
                   containerHeight={containerSize.height}
                   onViewportChange={handleViewportChange}

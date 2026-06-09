@@ -28,6 +28,8 @@ import type {
   CanvasAgentContentFormat,
   CanvasAgentMutationMode,
   CanvasConnection,
+  ReferenceDescriptor,
+  StoryboardMediaRef,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -130,6 +132,140 @@ function readOptionalCanvasNodeType(
     return value;
   }
   throw new Error(`Unsupported Canvas ${label} "${String(value)}"`);
+}
+
+function collectShotKeyframeReferenceDescriptors(
+  nodeId: string,
+  data: Record<string, unknown>,
+): readonly ReferenceDescriptor[] {
+  const mediaRefs = [
+    ...readStoryboardMediaRefs(data['generatedMediaRefs']),
+    ...readStoryboardMediaRefs(
+      data['shotImagePrepPlan'] && isRecord(data['shotImagePrepPlan'])
+        ? data['shotImagePrepPlan']['outputMediaRefs']
+        : undefined,
+    ),
+  ];
+  return mediaRefs.map(
+    (ref, index): ReferenceDescriptor => ({
+      schemaVersion: 1,
+      kind: 'reference-descriptor',
+      referenceId: `${nodeId}:keyframeRefs:${index}:${ref.refId}`,
+      sourceKind: 'canvas-node',
+      sourceId: nodeId,
+      referenceKind: ref.locator.type === 'asset' ? 'generated-asset' : 'custom',
+      role: ref.role === 'generated' || ref.role === 'derived' ? 'keyframe' : 'reference',
+      modality: ref.mimeType?.startsWith('video/') ? 'video' : 'image',
+      payload: storyboardMediaRefPayloadForReference(ref),
+      metadata: {
+        storyboardRefId: ref.refId,
+        ...(ref.label ? { label: ref.label } : {}),
+        ...(ref.mimeType ? { mimeType: ref.mimeType } : {}),
+      },
+    }),
+  );
+}
+
+function readStoryboardMediaRefs(value: unknown): readonly StoryboardMediaRef[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): readonly StoryboardMediaRef[] =>
+    isStoryboardMediaRef(item) ? [item] : [],
+  );
+}
+
+function readShotPreparedKeyframeRef(
+  data: Record<string, unknown>,
+): StoryboardMediaRef | undefined {
+  const refs = [
+    ...readStoryboardMediaRefs(data['generatedMediaRefs']),
+    ...readStoryboardMediaRefs(
+      data['shotImagePrepPlan'] && isRecord(data['shotImagePrepPlan'])
+        ? data['shotImagePrepPlan']['outputMediaRefs']
+        : undefined,
+    ),
+  ];
+  return refs.find(
+    (ref) =>
+      ref.role === 'derived' ||
+      ref.role === 'generated' ||
+      ref.role === 'thumbnail' ||
+      ref.role === 'reference',
+  );
+}
+
+function isStoryboardMediaRef(value: unknown): value is StoryboardMediaRef {
+  if (!isRecord(value) || typeof value['refId'] !== 'string' || !isRecord(value['locator'])) {
+    return false;
+  }
+  const locatorType = value['locator']['type'];
+  return (
+    locatorType === 'tool-result' ||
+    locatorType === 'asset' ||
+    locatorType === 'workspace-path' ||
+    locatorType === 'canvas-node' ||
+    locatorType === 'story-source'
+  );
+}
+
+function storyboardMediaRefPayloadForReference(
+  ref: StoryboardMediaRef,
+): ReferenceDescriptor['payload'] {
+  switch (ref.locator.type) {
+    case 'asset':
+      return {
+        type: 'generated-asset',
+        assetId: ref.locator.assetId,
+        ...(ref.locator.assetVersion ? { variantId: ref.locator.assetVersion } : {}),
+      };
+    case 'canvas-node':
+      return {
+        type: 'canvas-node',
+        nodeId: ref.locator.canvasNodeId,
+        ...(ref.locator.outputId ? { slotId: ref.locator.outputId } : {}),
+      };
+    case 'workspace-path':
+      return {
+        type: 'path',
+        path: ref.locator.path,
+        pathKind: storyboardPathKindForReference(ref.locator.path),
+      };
+    case 'story-source':
+      return {
+        type: 'custom',
+        data: {
+          locatorType: 'story-source',
+          storyId: ref.locator.storyId,
+          ...(ref.locator.sceneId ? { sceneId: ref.locator.sceneId } : {}),
+          ...(ref.locator.frameIndex !== undefined ? { frameIndex: ref.locator.frameIndex } : {}),
+        },
+      };
+    case 'tool-result':
+      return {
+        type: 'custom',
+        data: {
+          locatorType: 'tool-result',
+          toolCallId: ref.locator.toolCallId,
+          assetIndex: ref.locator.assetIndex,
+          ...(ref.locator.taskId ? { taskId: ref.locator.taskId } : {}),
+        },
+      };
+  }
+}
+
+function storyboardPathKindForReference(
+  path: string,
+): 'workspace-relative' | 'variable' | 'transitional' {
+  if (path.startsWith('${')) return 'variable';
+  if (/^(?:\.{0,2}\/)?[^/]/.test(path)) return 'workspace-relative';
+  return 'transitional';
+}
+
+function readShotGeneratedImageFallback(data: Record<string, unknown>): string | undefined {
+  const generatedAsset = isRecord(data['generatedAsset']) ? data['generatedAsset'] : undefined;
+  return (
+    (typeof generatedAsset?.['path'] === 'string' ? generatedAsset['path'] : undefined) ??
+    (typeof data['generatedImage'] === 'string' ? data['generatedImage'] : undefined)
+  );
 }
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -1093,25 +1229,36 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 dialogue: d['dialogue'] as string | undefined,
                 voiceOver: d['voiceOver'] as string | undefined,
                 soundCue: d['soundCue'] as string | undefined,
-                imageFile: (d['generatedImage'] as string | undefined) ? imageFile : undefined,
+                imageFile: readShotGeneratedImageFallback(d) ? imageFile : undefined,
               };
             });
 
             if (format === 'neko-cut') {
-              const timelineShots = manifestShots.map((s) => ({
-                id: s.id,
-                shotNumber: s.shotNumber,
-                duration: s.duration,
-                imageDataUrl: allShots.find((n) => n.id === s.id)
-                  ? ((allShots.find((n) => n.id === s.id)!.data as Record<string, unknown>)[
-                      'generatedImage'
-                    ] as string | undefined)
-                  : undefined,
-                dialogue: s.dialogue,
-                voiceOver: s.voiceOver,
-                soundCue: s.soundCue,
-                label: `#${String(s.shotNumber).padStart(3, '0')} ${s.shotScale ?? ''}`.trim(),
-              }));
+              const shotDataById = new Map<string, Record<string, unknown>>(
+                allShots.map((node) => [node.id, node.data as Record<string, unknown>]),
+              );
+              const timelineShots = manifestShots.map((s) => {
+                const data = shotDataById.get(s.id);
+                const referenceDescriptors: readonly ReferenceDescriptor[] = data
+                  ? collectShotKeyframeReferenceDescriptors(s.id, data)
+                  : [];
+                return {
+                  id: s.id,
+                  shotNumber: s.shotNumber,
+                  duration: s.duration,
+                  ...(data
+                    ? {
+                        preparedKeyframeRef: readShotPreparedKeyframeRef(data),
+                        imageDataUrl: readShotGeneratedImageFallback(data),
+                      }
+                    : {}),
+                  ...(referenceDescriptors.length > 0 ? { referenceDescriptors } : {}),
+                  dialogue: s.dialogue,
+                  voiceOver: s.voiceOver,
+                  soundCue: s.soundCue,
+                  label: `#${String(s.shotNumber).padStart(3, '0')} ${s.shotScale ?? ''}`.trim(),
+                };
+              });
 
               await vscode.commands.executeCommand('neko.cut.importStoryboard', {
                 projectName,
@@ -1420,17 +1567,23 @@ function createVideoKeyframeTool(
         if (!lastNode)
           return { success: false, error: `Last frame node "${lastFrameNodeId}" not found` };
 
-        const firstFrameData = (firstNode.data as Record<string, unknown>)['generatedImage'] as
-          | string
-          | undefined;
-        const lastFrameData = (lastNode.data as Record<string, unknown>)['generatedImage'] as
-          | string
-          | undefined;
+        const firstNodeData = firstNode.data as Record<string, unknown>;
+        const lastNodeData = lastNode.data as Record<string, unknown>;
+        const firstFrameRefs = collectShotKeyframeReferenceDescriptors(
+          firstFrameNodeId,
+          firstNodeData,
+        );
+        const lastFrameRefs = collectShotKeyframeReferenceDescriptors(
+          lastFrameNodeId,
+          lastNodeData,
+        );
+        const firstFrameData = readShotGeneratedImageFallback(firstNodeData);
+        const lastFrameData = readShotGeneratedImageFallback(lastNodeData);
 
-        if (!firstFrameData) {
+        if (!firstFrameData && firstFrameRefs.length === 0) {
           return {
             success: false,
-            error: `First frame node "${firstFrameNodeId}" has no generated image. Run canvas_generate_image first.`,
+            error: `First frame node "${firstFrameNodeId}" has no generated image or prepared keyframe reference. Run canvas_generate_image first.`,
           };
         }
 
@@ -1449,6 +1602,10 @@ function createVideoKeyframeTool(
         if (lastFrameData) {
           metadata['lastFrameUrl'] = lastFrameData;
         }
+        const referenceDescriptors = [...firstFrameRefs, ...lastFrameRefs];
+        if (referenceDescriptors.length > 0) {
+          metadata['referenceDescriptors'] = referenceDescriptors;
+        }
         if (lineage?.characterIds && lineage.characterIds.length > 0) {
           metadata['characterIds'] = [...lineage.characterIds];
         }
@@ -1462,7 +1619,7 @@ function createVideoKeyframeTool(
             prompt,
             aspectRatio,
             duration,
-            referenceImageUrl: firstFrameData,
+            ...(firstFrameData ? { referenceImageUrl: firstFrameData } : {}),
             metadata,
           });
         } catch (err) {

@@ -73,6 +73,8 @@ interface NarrativePreviewI18n {
   readonly noPlayableUnitDescription: string;
   readonly mediaUnavailable: string;
   readonly mediaUnavailableDescription: string;
+  readonly mediaLoading: string;
+  readonly mediaPreparing: string;
   readonly storyboardShot: string;
   readonly storyboardShotUnavailableDescription: string;
   readonly storyboardScene: string;
@@ -102,6 +104,12 @@ interface NarrativePreviewI18n {
   readonly labelStatus: string;
   readonly labelCharacters: string;
   readonly labelMediaRefs: string;
+  readonly labelPreviewSource: string;
+  readonly previewSourceGeneratedImage: string;
+  readonly previewSourceGeneratedMedia: string;
+  readonly previewSourceReferenceImage: string;
+  readonly previewSourceSourceMedia: string;
+  readonly previewSourceMediaAsset: string;
   readonly labelImageAsset: string;
   readonly labelVideoAsset: string;
   readonly labelScript: string;
@@ -143,13 +151,25 @@ interface NarrativePreviewI18n {
 
 export interface NarrativeCanvasSnapshotHost {
   extractNarrativeGraphSnapshot(): NarrativeGraphSnapshot | undefined;
-  extractCanvasPlaybackPlan?(): CanvasPlaybackPlan | undefined;
+  extractCanvasPlaybackPlan?(sourceCanvasUri?: string): CanvasPlaybackPlan | undefined;
+  extractCanvasPlaybackPlanForPreview?(
+    webview: vscode.Webview,
+    sourceCanvasUri?: string,
+  ): CanvasPlaybackPlan | Promise<CanvasPlaybackPlan | undefined> | undefined;
+  handleNarrativePreviewMediaMessage?(
+    message: Record<string, unknown>,
+    webviewPanel: vscode.WebviewPanel,
+    sourceCanvasUri?: string,
+  ): void | Promise<void>;
+  disposeNarrativePreviewMediaPanel?(webviewPanel: vscode.WebviewPanel): void | Promise<void>;
   postNarrativePreviewCanvasMessage(message: PreviewToCanvasMessage): boolean;
 }
 
 export interface NarrativePreviewBridgeOptions {
   readonly panelFactory?: NarrativePreviewPanelFactory;
   readonly getFeatureToggles?: () => NarrativePreviewFeatureToggles;
+  readonly getMediaRuntimeScriptUri?: (webview: vscode.Webview) => vscode.Uri;
+  readonly getWebviewLocalResourceRoots?: (sourceCanvasUri?: string) => readonly vscode.Uri[];
   readonly now?: () => number;
 }
 
@@ -169,8 +189,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private previewWebviewReady = false;
   private pendingPreviewMessages: CanvasToPreviewMessage[] = [];
   private requestSequence = 0;
+  private sourceCanvasUri: string | undefined;
   private readonly panelFactory: NarrativePreviewPanelFactory;
   private readonly getFeatureToggles: () => NarrativePreviewFeatureToggles;
+  private readonly getMediaRuntimeScriptUri: ((webview: vscode.Webview) => vscode.Uri) | undefined;
+  private readonly getWebviewLocalResourceRoots:
+    | ((sourceCanvasUri?: string) => readonly vscode.Uri[])
+    | undefined;
   private readonly now: () => number;
 
   constructor(
@@ -180,6 +205,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     this.panelFactory = options.panelFactory ?? vscode.window;
     this.getFeatureToggles =
       options.getFeatureToggles ?? (() => normalizeNarrativePreviewFeatureToggles(undefined));
+    this.getMediaRuntimeScriptUri = options.getMediaRuntimeScriptUri;
+    this.getWebviewLocalResourceRoots = options.getWebviewLocalResourceRoots;
     this.now = options.now ?? Date.now;
   }
 
@@ -202,7 +229,6 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return false;
     }
 
-    const plan = this.host.extractCanvasPlaybackPlan?.();
     const messages: CanvasToPreviewMessage[] = [
       this.createFeatureTogglesMessage(snapshot.revision),
       {
@@ -212,24 +238,30 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         revision: snapshot.revision,
       },
     ];
-    if (plan) {
+    const sourceCanvasUri = snapshot.sourceCanvasUri;
+    this.sourceCanvasUri = sourceCanvasUri;
+    const fallbackPlan = this.host.extractCanvasPlaybackPlan?.(sourceCanvasUri);
+    if (fallbackPlan) {
       messages.push({
         type: 'preview:loadPlaybackPlan',
-        requestId: this.createRequestId('load-plan'),
-        plan,
+        requestId: this.createRequestId('load-plan-fallback'),
+        plan: fallbackPlan,
         revision: snapshot.revision,
       });
     }
     const existingPanel = Boolean(this.panel);
-    this.ensurePanel(existingPanel ? [] : messages);
-    if (existingPanel) {
-      for (const message of messages) {
-        this.postToPreview(message);
-      }
-    } else {
+    const panel = this.ensurePanel(existingPanel ? [] : messages, sourceCanvasUri);
+    if (!existingPanel) {
+      void this.postPreviewPlaybackPlan(panel.webview, snapshot.revision, 'load', sourceCanvasUri);
       for (const message of messages) {
         this.recordPreviewMessageRevision(message);
       }
+      return true;
+    }
+
+    void this.postPreviewPlaybackPlan(panel.webview, snapshot.revision, 'load', sourceCanvasUri);
+    for (const message of messages) {
+      this.postToPreview(message);
     }
     return true;
   }
@@ -239,9 +271,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
+    this.sourceCanvasUri = snapshot.sourceCanvasUri;
     if (!this.panel) return false;
-    const plan = this.host.extractCanvasPlaybackPlan?.();
-
     this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:refresh',
@@ -249,14 +280,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       snapshot,
       revision: snapshot.revision,
     });
-    if (plan) {
-      this.postToPreview({
-        type: 'preview:refreshPlaybackPlan',
-        requestId: this.createRequestId('refresh-plan'),
-        plan,
-        revision: snapshot.revision,
-      });
-    }
+    void this.postPreviewPlaybackPlan(
+      this.panel.webview,
+      snapshot.revision,
+      'refresh',
+      snapshot.sourceCanvasUri,
+    );
     return true;
   }
 
@@ -265,7 +294,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
-    this.ensurePanel();
+    this.sourceCanvasUri = snapshot.sourceCanvasUri;
+    this.ensurePanel([], snapshot.sourceCanvasUri);
     this.postFeatureToggles(snapshot.revision);
     this.postToPreview({
       type: 'preview:jumpTo',
@@ -281,6 +311,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
+    this.sourceCanvasUri = snapshot.sourceCanvasUri;
     if (!this.panel) return false;
 
     this.postFeatureToggles(snapshot.revision);
@@ -312,6 +343,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
   private ensurePanel(
     bootstrapMessages: readonly CanvasToPreviewMessage[] = [],
+    sourceCanvasUri?: string,
   ): vscode.WebviewPanel {
     if (this.disposed) {
       throw new Error('NarrativePreviewBridge has been disposed.');
@@ -329,6 +361,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
+        ...(this.getWebviewLocalResourceRoots
+          ? { localResourceRoots: [...this.getWebviewLocalResourceRoots(sourceCanvasUri)] }
+          : {}),
       },
     );
     this.previewWebviewReady = false;
@@ -338,6 +373,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         if (isPreviewWebviewReadyMessage(message)) {
           this.previewWebviewReady = true;
           this.flushPendingPreviewMessages();
+          return;
+        }
+        if (isNarrativePreviewMediaMessage(message)) {
+          void this.host.handleNarrativePreviewMediaMessage?.(message, panel, this.sourceCanvasUri);
           return;
         }
         const previewMessage = parsePreviewToCanvasMessage(message);
@@ -350,10 +389,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     );
     panel.webview.html = this.getPreviewHtml(panel.webview, bootstrapMessages, i18n);
     panel.onDidDispose(() => {
+      void this.host.disposeNarrativePreviewMediaPanel?.(panel);
       if (this.panel === panel) {
         this.panel = undefined;
         this.previewWebviewReady = false;
         this.pendingPreviewMessages = [];
+        this.sourceCanvasUri = undefined;
       }
     });
     this.panel = panel;
@@ -366,6 +407,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     if (!panel) return;
     if (!this.previewWebviewReady) {
       this.pendingPreviewMessages.push(message);
+      return;
     }
     panel.webview.postMessage(message);
   }
@@ -393,6 +435,51 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     };
   }
 
+  private async postPreviewPlaybackPlan(
+    webview: vscode.Webview,
+    revision: number,
+    mode: 'load' | 'refresh',
+    sourceCanvasUri: string | undefined,
+  ): Promise<void> {
+    try {
+      const plan = await this.resolveCanvasPlaybackPlanForPreview(webview, sourceCanvasUri);
+      if (!plan) {
+        logger.warn('Canvas playback plan was unavailable for Preview', { revision, mode });
+        return;
+      }
+      if (this.panel?.webview !== webview || revision < this.lastAcceptedPreviewRevision) {
+        logger.debug('Dropped stale Canvas playback plan for Preview', {
+          revision,
+          mode,
+          lastAcceptedPreviewRevision: this.lastAcceptedPreviewRevision,
+        });
+        return;
+      }
+      this.postToPreview({
+        type: mode === 'load' ? 'preview:loadPlaybackPlan' : 'preview:refreshPlaybackPlan',
+        requestId: this.createRequestId(`${mode}-plan`),
+        plan,
+        revision,
+      });
+    } catch (error) {
+      logger.warn('Failed to prepare Canvas playback plan for Preview', {
+        revision,
+        mode,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async resolveCanvasPlaybackPlanForPreview(
+    webview: vscode.Webview,
+    sourceCanvasUri: string | undefined,
+  ): Promise<CanvasPlaybackPlan | undefined> {
+    return (
+      (await this.host.extractCanvasPlaybackPlanForPreview?.(webview, sourceCanvasUri)) ??
+      this.host.extractCanvasPlaybackPlan?.(sourceCanvasUri)
+    );
+  }
+
   private recordPreviewMessageRevision(message: CanvasToPreviewMessage): void {
     const revision = readCanvasMessageRevision(message);
     if (revision !== undefined) {
@@ -418,6 +505,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const nonce = createNonce();
     const bootstrapJson = serializePreviewBootstrapMessages(bootstrapMessages);
     const i18nJson = serializePreviewJson(i18n);
+    const mediaRuntimeScriptUri = this.resolveMediaRuntimeScriptUri(webview);
     const localeAttr = injectLocaleAttribute();
     const h = escapeHtml;
     return `<!DOCTYPE html>
@@ -425,7 +513,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:; connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:; connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
   <title>${h(i18n.title)}</title>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
@@ -454,8 +542,25 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .stage-actions button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
     .stage-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 18px; padding: 72px 28px 32px; box-sizing: border-box; }
     .stage-visual { min-width: 0; width: min(100%, 980px); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .stage-visual img, .stage-visual video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
-    .stage-visual audio { width: min(520px, 100%); }
+    .stage-visual img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
+    .stage-media-slot { width: min(100%, 980px); height: min(100%, 62vh); min-height: 220px; display: flex; align-items: stretch; justify-content: center; }
+    .neko-preview-media-player { width: 100%; min-height: 220px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; color: var(--vscode-foreground); }
+    .neko-preview-media-title { color: var(--vscode-descriptionForeground); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .neko-preview-media-viewport { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: #000; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
+    .neko-preview-video-surface { width: 100%; height: 100%; display: block; object-fit: contain; }
+    .neko-preview-media-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.42; pointer-events: none; }
+    .neko-preview-media-player[data-state="playing"] .neko-preview-media-poster { display: none; }
+    .neko-preview-media-message { position: absolute; inset: auto 12px 12px; color: rgba(255,255,255,0.82); font-size: 12px; text-align: center; pointer-events: none; }
+    .neko-preview-media-player[data-state="playing"] .neko-preview-media-message:empty { display: none; }
+    .neko-preview-audio-visualization { width: min(620px, 84%); height: 130px; display: flex; align-items: end; justify-content: center; gap: 4px; }
+    .neko-preview-audio-visualization span { width: 7px; height: var(--bar-height); border-radius: 3px 3px 0 0; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); opacity: 0.72; transform-origin: bottom; animation: neko-preview-audio-bar 0.8s ease-in-out infinite; animation-delay: var(--bar-delay); }
+    .neko-preview-media-player[data-state="error"] .neko-preview-audio-visualization span,
+    .neko-preview-media-player[data-state="loading"] .neko-preview-audio-visualization span { animation-play-state: paused; opacity: 0.32; }
+    .neko-preview-media-controls { display: grid; grid-template-columns: auto minmax(80px, 1fr) auto; align-items: center; gap: 8px; }
+    .neko-preview-media-controls button { min-width: 54px; }
+    .neko-preview-media-progress { width: 100%; accent-color: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
+    .neko-preview-media-time { color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    @keyframes neko-preview-audio-bar { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.42); } }
     .stage-unavailable { width: min(720px, 100%); border: 1px dashed var(--vscode-panel-border); border-radius: 6px; padding: 22px; box-sizing: border-box; display: grid; gap: 8px; text-align: center; background: color-mix(in srgb, var(--vscode-sideBar-background) 78%, transparent); }
     .stage-copy { width: min(820px, 100%); display: grid; gap: 10px; }
     .unit-body { max-height: 26vh; overflow: auto; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 15px; line-height: 1.65; }
@@ -584,6 +689,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       </footer>
     </section>
   </main>
+  ${
+    mediaRuntimeScriptUri
+      ? `<script nonce="${nonce}" type="module" src="${h(mediaRuntimeScriptUri)}"></script>`
+      : ''
+  }
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const DEFAULT_TIMER_MS = 1200;
@@ -640,6 +750,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     let elapsedInUnitMs = 0;
     let playbackStartedAtMs = 0;
     let playbackStartElapsedMs = 0;
+    let activeMediaSurfaceId = null;
+    let renderedStageKey = null;
+
+    window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
 
     previewPrevious.addEventListener('click', () => {
       stopPlayback();
@@ -664,6 +778,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       isPlaying = true;
       playbackStartedAtMs = performance.now();
       playbackStartElapsedMs = elapsedInUnitMs;
+      if (activeMediaSurfaceId) {
+        window.__nekoNarrativePreviewMediaRuntime?.resume(activeMediaSurfaceId);
+      }
       renderPlaybackPlan();
       scheduleNext(unit.id);
     });
@@ -680,7 +797,14 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     inspectorDiagnostics.addEventListener('click', () => toggleInspector('diagnostics'));
     inspectorClose.addEventListener('click', () => closeInspector());
 
-    window.addEventListener('message', (event) => handleCanvasPreviewMessage(event.data || {}));
+    window.addEventListener('message', (event) => {
+      const message = event.data || {};
+      if (message.type === 'media:probeResult' || message.type === 'media:streamReady') {
+        window.__nekoNarrativePreviewMediaRuntime?.handleHostMessage(message);
+        return;
+      }
+      handleCanvasPreviewMessage(message);
+    });
     for (const message of BOOTSTRAP_MESSAGES) {
       handleCanvasPreviewMessage(message);
     }
@@ -731,9 +855,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function loadPlaybackPlan(plan) {
       stopPlayback();
+      disposeActiveMediaSurface();
       playbackPlan = plan;
       route = buildInitialRoute(plan);
       activeUnitId = route[0] || null;
+      renderedStageKey = null;
       elapsedInUnitMs = 0;
       playbackStartedAtMs = 0;
       playbackStartElapsedMs = 0;
@@ -762,7 +888,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       unitKind.textContent = unit ? formatKindLabel(unit.kind) : t('unitFallback');
       stageContent.dataset.kind = unit ? unit.kind : 'node';
       stageContent.dataset.renderMode = unit ? unit.renderMode : 'select-node';
-      renderStageContent(unit, index);
+      const stageKey = unit ? unit.id + ':' + index : 'none';
+      if (stageKey !== renderedStageKey) {
+        renderStageContent(unit, index);
+        renderedStageKey = stageKey;
+      }
       renderSegmentedTimeline();
       renderMeta(unit);
       renderChoices(unit);
@@ -822,6 +952,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function renderStageContent(unit, index) {
+      const nextMediaSurfaceId = unit ? createMediaSurfaceId(unit) : null;
+      if (activeMediaSurfaceId && activeMediaSurfaceId !== nextMediaSurfaceId) {
+        disposeActiveMediaSurface();
+      }
       stageVisual.replaceChildren();
       stageDetails.replaceChildren();
       unitTitle.textContent = unit ? formatUnitTitle(unit, index) : t('noPlayableUnit');
@@ -834,7 +968,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const metadata = getMetadata(unit);
       const visual = resolveStageVisual(unit, metadata);
       if (visual) {
-        appendStageVisual(visual);
+        appendStageVisual(visual, unit);
       } else if (unit.kind === 'media' || unit.renderMode === 'media-playback') {
         appendStageUnavailable(t('mediaUnavailable'), t('mediaUnavailableDescription'));
       } else if (unit.kind === 'shot') {
@@ -852,9 +986,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
       if (unit.kind === 'shot') {
         appendStageDetail(t('labelShot'), metadata.shotNumber);
+        appendStageDetail(t('labelPreviewSource'), formatPreviewSourceKind(metadata.previewSourceKind));
         appendStageDetail(t('labelScale'), metadata.shotScale);
         appendStageDetail(t('labelAction'), metadata.characterAction);
         appendStageDetail(t('labelDialogue'), metadata.dialogue);
+        appendStageDetail(t('labelMediaRefs'), summarizeStoryboardMediaRefs(metadata));
       } else if (unit.kind === 'scene') {
         appendStageDetail(t('labelScene'), metadata.sceneNumber);
         appendStageDetail(t('labelLocation'), metadata.location);
@@ -866,32 +1002,48 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function resolveStageVisual(unit, metadata) {
-      const candidate =
-        unit.assetPath ||
+      const safeVisualSource =
         readString(metadata.previewUrl) ||
         readString(metadata.posterUrl) ||
-        readString(metadata.thumbnailUrl) ||
+        readString(metadata.thumbnailUrl);
+      const playbackSource =
+        unit.assetPath ||
         readString(metadata.generatedImage) ||
         readNestedString(metadata.generatedAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
         readNestedString(metadata.generatedVideoAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
         readString(metadata.assetPath);
-      if (!candidate || !isSafePreviewSource(candidate)) {
+      const displaySource = safeVisualSource && isSafePreviewSource(safeVisualSource) ? safeVisualSource : undefined;
+      const playableSource = playbackSource || displaySource;
+      if (!displaySource && !playableSource && !unit.resourceRef) {
         return undefined;
       }
-      const mediaType = readString(metadata.mediaType) || inferMediaType(candidate);
+      const mediaType =
+        readString(metadata.previewMediaType) ||
+        readString(metadata.mediaType) ||
+        inferMediaType(playableSource || displaySource || '');
       if (mediaType === 'audio') {
-        return { type: 'audio', source: candidate };
+        return {
+          type: 'audio',
+          source: playableSource,
+          posterUrl: displaySource,
+          resourceRef: unit.resourceRef,
+        };
       }
       if (mediaType === 'video') {
-        return { type: 'video', source: candidate };
+        return {
+          type: 'video',
+          source: playableSource,
+          posterUrl: displaySource,
+          resourceRef: unit.resourceRef,
+        };
       }
-      if (mediaType === 'image' || unit.kind === 'shot') {
-        return { type: 'image', source: candidate };
+      if ((mediaType === 'image' || unit.kind === 'shot') && displaySource) {
+        return { type: 'image', source: displaySource };
       }
       return undefined;
     }
 
-    function appendStageVisual(visual) {
+    function appendStageVisual(visual, unit) {
       if (visual.type === 'image') {
         const image = document.createElement('img');
         image.src = visual.source;
@@ -899,20 +1051,66 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         stageVisual.appendChild(image);
         return;
       }
-      if (visual.type === 'video') {
-        const video = document.createElement('video');
-        video.src = visual.source;
-        video.controls = true;
-        video.playsInline = true;
-        stageVisual.appendChild(video);
+      if (visual.type === 'video' || visual.type === 'audio') {
+        appendMediaPlaybackSurface(visual, unit);
+      }
+    }
+
+    function appendMediaPlaybackSurface(visual, unit) {
+      const surfaceId = createMediaSurfaceId(unit);
+      activeMediaSurfaceId = surfaceId;
+      const slot = document.createElement('div');
+      slot.className = 'stage-media-slot';
+      stageVisual.appendChild(slot);
+      const metadata = getMetadata(unit);
+      const label = formatUnitTitle(unit, getCurrentIndex());
+      const durationMs = resolveUnitDurationMs(unit.id);
+      ensureMediaRuntime(() => {
+        const runtime = window.__nekoNarrativePreviewMediaRuntime;
+        runtime.mount({
+          surfaceId,
+          container: slot,
+          mediaType: visual.type,
+          label,
+          startTime: elapsedInUnitMs / 1000,
+          duration: durationMs / 1000,
+          posterUrl: visual.posterUrl,
+          labels: {
+            play: t('play'),
+            pause: t('pause'),
+            loading: t('mediaLoading'),
+            preparing: t('mediaPreparing'),
+          },
+        });
+        runtime.start({
+          surfaceId,
+          assetPath: visual.source || unit.assetPath || readString(metadata.assetPath),
+          resourceRef: visual.resourceRef || unit.resourceRef,
+          mediaType: visual.type,
+          startTime: elapsedInUnitMs / 1000,
+          autoPlay: isPlaying,
+        });
+      });
+    }
+
+    function ensureMediaRuntime(callback) {
+      if (window.__nekoNarrativePreviewMediaRuntime) {
+        callback();
         return;
       }
-      if (visual.type === 'audio') {
-        const audio = document.createElement('audio');
-        audio.src = visual.source;
-        audio.controls = true;
-        stageVisual.appendChild(audio);
+      window.setTimeout(() => ensureMediaRuntime(callback), 25);
+    }
+
+    function createMediaSurfaceId(unit) {
+      return unit ? 'preview-media:' + unit.id : null;
+    }
+
+    function disposeActiveMediaSurface() {
+      if (!activeMediaSurfaceId) {
+        return;
       }
+      window.__nekoNarrativePreviewMediaRuntime?.dispose(activeMediaSurfaceId);
+      activeMediaSurfaceId = null;
     }
 
     function appendStageUnavailable(title, description) {
@@ -953,6 +1151,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const metadata = getMetadata(unit);
       if (unit.kind === 'shot') {
         appendMetaField(metadata, t('labelShot'), 'shotNumber');
+        appendMetaValue(t('labelPreviewSource'), formatPreviewSourceKind(metadata.previewSourceKind));
         appendMetaField(metadata, t('labelScale'), 'shotScale');
         appendMetaField(metadata, t('labelCamera'), 'cameraMovement');
         appendMetaField(metadata, t('labelAngle'), 'cameraAngle');
@@ -962,7 +1161,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         appendMetaField(metadata, t('labelSound'), 'soundCue');
         appendMetaField(metadata, t('labelStatus'), 'generationStatus');
         appendMetaValue(t('labelCharacters'), summarizeCharacters(metadata.characters));
-        appendMetaValue(t('labelMediaRefs'), summarizeCount(metadata.sourceMediaRefs, metadata.generatedMediaRefs, metadata.mediaRefs));
+        appendMetaValue(t('labelMediaRefs'), summarizeStoryboardMediaRefs(metadata));
         appendMetaValue(t('labelImageAsset'), readNestedString(metadata.generatedAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedImage));
         appendMetaValue(t('labelVideoAsset'), readNestedString(metadata.generatedVideoAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedVideo));
       } else if (unit.kind === 'scene') {
@@ -999,6 +1198,65 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function appendMetaValue(label, value) {
       appendMeta(label, value);
+    }
+
+    function formatPreviewSourceKind(value) {
+      switch (readString(value)) {
+        case 'generated-image':
+          return t('previewSourceGeneratedImage');
+        case 'generated-media':
+          return t('previewSourceGeneratedMedia');
+        case 'reference-image':
+          return t('previewSourceReferenceImage');
+        case 'source-media':
+          return t('previewSourceSourceMedia');
+        case 'media-asset':
+          return t('previewSourceMediaAsset');
+        default:
+          return undefined;
+      }
+    }
+
+    function summarizeStoryboardMediaRefs(metadata) {
+      const refs = [
+        ...readArray(metadata.generatedMediaRefs),
+        ...readArray(metadata.shotImagePrepPlan?.outputMediaRefs),
+        ...readArray(metadata.sourceMediaRefs),
+        ...readArray(metadata.mediaRefs),
+      ];
+      if (refs.length === 0) {
+        return undefined;
+      }
+      const labels = refs
+        .map((ref) => summarizeStoryboardMediaRef(ref))
+        .filter(Boolean)
+        .slice(0, 3);
+      const suffix = refs.length > labels.length ? ' +' + (refs.length - labels.length) : '';
+      return labels.length > 0 ? labels.join(', ') + suffix : summarizeCount(refs);
+    }
+
+    function summarizeStoryboardMediaRef(ref) {
+      if (!ref || typeof ref !== 'object') {
+        return undefined;
+      }
+      const label = readString(ref.label);
+      const refId = readString(ref.refId);
+      const role = readString(ref.role);
+      const locator = ref.locator && typeof ref.locator === 'object' ? ref.locator : undefined;
+      const locatorType = locator ? readString(locator.type) : undefined;
+      const source =
+        readString(locator?.path) ||
+        readString(locator?.uri) ||
+        readString(locator?.assetId) ||
+        readString(locator?.toolCallId) ||
+        readString(locator?.canvasNodeId) ||
+        readString(locator?.storyId);
+      const name = label || refId || source || locatorType;
+      return [role, name].filter(Boolean).join(': ');
+    }
+
+    function readArray(value) {
+      return Array.isArray(value) ? value : [];
     }
 
     function renderChoices(unit) {
@@ -1140,6 +1398,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         );
       }
       isPlaying = false;
+      if (activeMediaSurfaceId) {
+        window.__nekoNarrativePreviewMediaRuntime?.pause(activeMediaSurfaceId);
+      }
       clearTimer();
     }
 
@@ -1487,11 +1748,17 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return String(value);
     }
 
-    window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
-    postMessage({ type: 'preview:webviewReady', requestId: createRequestId('ready') });
+    vscode.postMessage({ type: 'preview:webviewReady', requestId: createRequestId('ready') });
   </script>
 </body>
 </html>`;
+  }
+
+  private resolveMediaRuntimeScriptUri(webview: vscode.Webview): string | undefined {
+    if (!this.getMediaRuntimeScriptUri) {
+      return undefined;
+    }
+    return webview.asWebviewUri(this.getMediaRuntimeScriptUri(webview)).toString();
   }
 }
 
@@ -1554,6 +1821,8 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
       'neko.canvas.preview.mediaUnavailableDescription',
       'A durable media reference exists, but no runtime preview URL is available in this player shell.',
     ),
+    mediaLoading: t('neko.canvas.preview.mediaLoading', 'Loading media stream...'),
+    mediaPreparing: t('neko.canvas.preview.mediaPreparing', 'Preparing media stream...'),
     storyboardShot: t('neko.canvas.preview.storyboardShot', 'Storyboard shot'),
     storyboardShotUnavailableDescription: t(
       'neko.canvas.preview.storyboardShotUnavailableDescription',
@@ -1592,6 +1861,21 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
     labelStatus: t('neko.canvas.preview.labelStatus', 'Status'),
     labelCharacters: t('neko.canvas.preview.labelCharacters', 'Characters'),
     labelMediaRefs: t('neko.canvas.preview.labelMediaRefs', 'Media refs'),
+    labelPreviewSource: t('neko.canvas.preview.labelPreviewSource', 'Preview source'),
+    previewSourceGeneratedImage: t(
+      'neko.canvas.preview.previewSourceGeneratedImage',
+      'Generated image',
+    ),
+    previewSourceGeneratedMedia: t(
+      'neko.canvas.preview.previewSourceGeneratedMedia',
+      'Generated media',
+    ),
+    previewSourceReferenceImage: t(
+      'neko.canvas.preview.previewSourceReferenceImage',
+      'Reference image',
+    ),
+    previewSourceSourceMedia: t('neko.canvas.preview.previewSourceSourceMedia', 'Source media'),
+    previewSourceMediaAsset: t('neko.canvas.preview.previewSourceMediaAsset', 'Media asset'),
     labelImageAsset: t('neko.canvas.preview.labelImageAsset', 'Image asset'),
     labelVideoAsset: t('neko.canvas.preview.labelVideoAsset', 'Video asset'),
     labelScript: t('neko.canvas.preview.labelScript', 'Script'),
@@ -1738,6 +2022,20 @@ function isPreviewWebviewReadyMessage(value: unknown): boolean {
   return isRecord(value) && value['type'] === 'preview:webviewReady';
 }
 
+function isNarrativePreviewMediaMessage(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || typeof value['type'] !== 'string') {
+    return false;
+  }
+  return (
+    value['type'] === 'media:probe' ||
+    value['type'] === 'media:play' ||
+    value['type'] === 'media:seek' ||
+    value['type'] === 'media:pause' ||
+    value['type'] === 'media:resume' ||
+    value['type'] === 'media:stop'
+  );
+}
+
 function readCanvasNodes(canvas: CanvasData | Record<string, unknown>): readonly CanvasNode[] {
   const nodes = isRecord(canvas) ? canvas['nodes'] : undefined;
   return Array.isArray(nodes) ? (nodes.filter(isCanvasNodeLike) as CanvasNode[]) : [];
@@ -1758,7 +2056,7 @@ function normalizeCanvasDataForPlayback(
   if (!isRecord(canvas)) return undefined;
   const nodes = readCanvasNodes(canvas);
   const connections = readCanvasConnections(canvas);
-  if (!Array.isArray(canvas['nodes']) || !Array.isArray(canvas['connections'])) return undefined;
+  if (!Array.isArray(canvas['nodes'])) return undefined;
 
   return {
     version: typeof canvas['version'] === 'string' ? canvas['version'] : '2.1',

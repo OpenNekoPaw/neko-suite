@@ -66,9 +66,58 @@ describe('Canvas PropertyPanel shared UI migration', () => {
     });
     expect(onDeleteNode).toHaveBeenCalledWith('node-1');
   });
+
+  it('renders lightweight reference summaries without raw descriptor JSON', () => {
+    act(() => {
+      root.render(
+        <PropertyPanel
+          selectedNodes={[
+            createNode({
+              id: 'shot-1',
+              type: 'shot',
+              data: {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'A close-up panel',
+                characters: [],
+                shotScale: 'MS',
+                characterAction: '',
+                emotion: [],
+                sceneTags: [],
+                generationStatus: 'idle',
+                generationHistory: [],
+                referenceRefs: ['gallery-1'],
+                generatedAsset: {
+                  id: 'asset-generated-1',
+                  type: 'generated-image',
+                  path: '${PROJECT}/generated/asset-generated-1.png',
+                  mimeType: 'image/png',
+                  generatedAt: '2026-06-09T00:00:00.000Z',
+                  width: 1024,
+                  height: 576,
+                  ratio: '16:9',
+                },
+                runtimeReferenceImagePath: 'vscode-resource://runtime/panel.png',
+              },
+            }),
+          ]}
+          onDeleteNode={vi.fn()}
+          onToggleLock={vi.fn()}
+          onUpdateNode={vi.fn()}
+          onUpdateNodeData={vi.fn()}
+        />,
+      );
+    });
+
+    expect(host.textContent).toContain('References');
+    expect(host.textContent).toContain('Reference');
+    expect(host.textContent).toContain('Output');
+    expect(host.textContent).toContain('runtime projection');
+    expect(host.textContent).not.toContain('reference-descriptor');
+  });
 });
 
-function createNode(): CanvasNode {
+function createNode(overrides: Partial<CanvasNode> = {}): CanvasNode {
   return {
     id: 'node-1',
     type: 'annotation',
@@ -78,6 +127,7 @@ function createNode(): CanvasNode {
     rotation: 15,
     locked: true,
     data: { content: 'Note' },
+    ...overrides,
   } as CanvasNode;
 }
 

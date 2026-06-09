@@ -25,9 +25,14 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: path.resolve(__dirname, 'index.html'),
+        'narrative-preview-media-runtime': path.resolve(
+          __dirname,
+          'src/preview/narrativePreviewMediaRuntime.ts',
+        ),
       },
       output: {
-        entryFileNames: 'assets/index.js',
+        entryFileNames: (chunkInfo) =>
+          chunkInfo.name === 'index' ? 'assets/index.js' : 'assets/[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           if (assetInfo.name === 'style.css') {

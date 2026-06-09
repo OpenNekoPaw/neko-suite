@@ -76,6 +76,16 @@ export function useNodeResize({
   const [position, setPosition] = useState(initialPosition);
 
   const pendingHandleRef = useRef<ResizeHandle | null>(null);
+  const latestPreviewRef = useRef({ size: initialSize, position: initialPosition });
+
+  const updatePreview = useCallback(
+    (nextSize: { width: number; height: number }, nextPosition: { x: number; y: number }) => {
+      latestPreviewRef.current = { size: nextSize, position: nextPosition };
+      setSize(nextSize);
+      setPosition(nextPosition);
+    },
+    [],
+  );
 
   const { isDragging: isResizing, bindDrag } = useDrag<ResizeCtx>({
     onStart: (e) => {
@@ -120,23 +130,22 @@ export function useNodeResize({
 
       const newSize = { width: newW, height: newH };
       const newPos = { x: newX, y: newY };
-      setSize(newSize);
-      setPosition(newPos);
+      updatePreview(newSize, newPos);
       onResize?.(nodeId, newSize, newPos);
     },
     onEnd: () => {
       pendingHandleRef.current = null;
-      onResizeEnd?.(nodeId, size, position);
+      const latest = latestPreviewRef.current;
+      onResizeEnd?.(nodeId, latest.size, latest.position);
     },
   });
 
   // Sync from external updates when not resizing
   useEffect(() => {
     if (!isResizing) {
-      setSize(initialSize);
-      setPosition(initialPosition);
+      updatePreview(initialSize, initialPosition);
     }
-  }, [initialSize, initialPosition, isResizing]);
+  }, [initialSize, initialPosition, isResizing, updatePreview]);
 
   const startResize = useCallback(
     (handle: ResizeHandle, e: React.MouseEvent) => {

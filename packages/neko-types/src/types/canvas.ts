@@ -471,6 +471,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     sceneTags: string[];
     /** GalleryNode id for background/IP-Adapter reference */
     referenceNodeId?: string;
+    /** Stable Canvas node / slot references used as generation or review references. */
+    referenceRefs?: string[];
     /** Currently displayed image (data URL or asset path) @deprecated Use generatedAsset.path */
     generatedImage?: string;
     /** AI-generated video URL — result of keyframe/video generation @deprecated Use generatedVideoAsset */

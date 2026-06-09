@@ -94,6 +94,8 @@ export interface UseVSCodeMessagesOptions {
   applyAgentContent?: (payload: CanvasAgentContentPayload) => unknown;
   onProjectionStatus?: (status: ProjectedCanvasStatus) => void;
   onProjectionSourceChanged?: (event: ProjectionSourceChangeEvent) => void;
+  /** Called after a Canvas document payload has been normalized and applied. */
+  onCanvasDataLoaded?: (data: CanvasData) => void;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
   onKeyboardFocusChange?: (focused: boolean) => void;
@@ -188,6 +190,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     applyAgentContent,
     onProjectionStatus,
     onProjectionSourceChanged,
+    onCanvasDataLoaded,
     onUpdateNodeImage,
     onKeyboardFocusChange,
     isKeyboardFocusedRef,
@@ -240,6 +243,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onProjectionStatusRef.current = onProjectionStatus;
   const onProjectionSourceChangedRef = useRef(onProjectionSourceChanged);
   onProjectionSourceChangedRef.current = onProjectionSourceChanged;
+  const onCanvasDataLoadedRef = useRef(onCanvasDataLoaded);
+  onCanvasDataLoadedRef.current = onCanvasDataLoaded;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
   const onKeyboardFocusChangeRef = useRef(onKeyboardFocusChange);
@@ -276,6 +281,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               canvasData = { ...canvasData, nodes: migrationResult.nodes };
             }
             setCanvasData(canvasData);
+            onCanvasDataLoadedRef.current?.(canvasData);
             setIsReady(true);
             vscode.postMessage({ type: 'canvasDataReady' });
             break;
@@ -649,6 +655,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
       };
     } else {
       setCanvasData(defaultCanvasData);
+      onCanvasDataLoadedRef.current?.(defaultCanvasData);
       setIsReady(true);
     }
   }, [vscode, setCanvasData, defaultCanvasData]);

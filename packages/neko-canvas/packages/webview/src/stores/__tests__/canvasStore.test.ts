@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createCanvasStoryboardExecutionSummary,
   isSceneGroupNode,
@@ -12,6 +12,7 @@ import { hydrateCanvasNodePreview } from '../../utils/canvasPresetRegistry';
 import { canCreateCanvasConnection, useCanvasStore } from '../canvasStore';
 import { useHistoryStore } from '../historyStore';
 import { usePlaybackStore } from '../playbackStore';
+import { useCanvasOperationStore } from '../canvasOperationStore';
 
 function createSceneNode(): SceneGroupCanvasNode {
   return {
@@ -60,8 +61,27 @@ function createCanvasData(nodes: CanvasData['nodes']): CanvasData {
   };
 }
 
+function createConnection(
+  id: string,
+  sourceId: string,
+  targetId: string,
+  type: CanvasData['connections'][number]['type'] = 'default',
+): CanvasData['connections'][number] {
+  return {
+    id,
+    sourceId,
+    sourceAnchor: 'right',
+    targetId,
+    targetAnchor: 'left',
+    type,
+  };
+}
+
 describe('canvasStore scene container actions', () => {
+  let recordNodeUpdateSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
+    recordNodeUpdateSpy = vi.spyOn(useCanvasOperationStore.getState(), 'recordNodeUpdate');
     useCanvasStore.setState({
       canvasData: null,
       selection: { nodeIds: [], connectionIds: [] },
@@ -71,6 +91,10 @@ describe('canvasStore scene container actions', () => {
       generationPanelState: { visible: false, nodeId: null, childNodeId: null },
     });
     useHistoryStore.setState({ undoStack: [], redoStack: [], maxHistory: 50 });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('assigns selected shots into a scene and auto-layouts them in container order', () => {
@@ -136,6 +160,63 @@ describe('canvasStore scene container actions', () => {
     expect(scene?.container?.childIds).toEqual([]);
   });
 
+  it('preserves real child connections when dragging a shot into and out of a scene', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        createSceneNode(),
+        createShotNode('shot-1', 900, 900),
+        createShotNode('shot-2', 1200, 900),
+      ]),
+      connections: [createConnection('shot-link', 'shot-1', 'shot-2', 'reference')],
+    });
+
+    useCanvasStore.getState().moveNodeEnd('shot-1', { x: 160, y: 220 });
+    expect(useCanvasStore.getState().canvasData?.connections).toEqual([
+      createConnection('shot-link', 'shot-1', 'shot-2', 'reference'),
+    ]);
+
+    useCanvasStore.getState().moveNodeEnd('shot-1', { x: 980, y: 980 });
+    expect(useCanvasStore.getState().canvasData?.connections).toEqual([
+      createConnection('shot-link', 'shot-1', 'shot-2', 'reference'),
+    ]);
+  });
+
+  it('records one history and operation entry for completed node transform gestures only', () => {
+    useCanvasStore.getState().setCanvasData(createCanvasData([createShotNode('shot-1', 100, 100)]));
+
+    useCanvasStore.getState().moveNode('shot-1', { x: 120, y: 130 });
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(recordNodeUpdateSpy).not.toHaveBeenCalled();
+
+    useCanvasStore.getState().moveNodeEnd('shot-1', { x: 160, y: 180 });
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordNodeUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(recordNodeUpdateSpy).toHaveBeenLastCalledWith(
+      'shot-1',
+      { position: { x: 160, y: 180 } },
+      { position: { x: 120, y: 130 } },
+    );
+
+    useCanvasStore.getState().moveNodeEnd('shot-1', { x: 160, y: 180 });
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordNodeUpdateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not record resize or rotation gestures when the committed value is unchanged', () => {
+    useCanvasStore.getState().setCanvasData(createCanvasData([createShotNode('shot-1', 100, 100)]));
+
+    useCanvasStore
+      .getState()
+      .resizeNodeEnd('shot-1', { width: 220, height: 200 }, { x: 100, y: 100 });
+    useCanvasStore.getState().rotateNodeEnd('shot-1', 0);
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(recordNodeUpdateSpy).not.toHaveBeenCalled();
+  });
+
   it('reorders managed shots within a scene and preserves container order', () => {
     useCanvasStore.getState().setCanvasData(
       createCanvasData([
@@ -169,6 +250,31 @@ describe('canvasStore scene container actions', () => {
 
     expect(scene?.container?.childIds).toEqual(['shot-2', 'shot-1']);
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
+  });
+
+  it('reorders managed shots without rewriting real sequence edges by default', () => {
+    const sequence = createConnection('sequence-1', 'shot-1', 'shot-2', 'sequence');
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        {
+          ...createSceneNode(),
+          container: { policy: 'scene', childIds: ['shot-1', 'shot-2'] },
+        },
+        {
+          ...createShotNode('shot-1', 160, 220),
+          parentId: 'scene-1',
+        },
+        {
+          ...createShotNode('shot-2', 420, 220),
+          parentId: 'scene-1',
+        },
+      ]),
+      connections: [sequence],
+    });
+
+    useCanvasStore.getState().reorderSceneShots('scene-1', ['shot-2', 'shot-1'], false);
+
+    expect(useCanvasStore.getState().canvasData?.connections).toEqual([sequence]);
   });
 
   it('records moved shot positions when auto-layout runs on an existing scene', () => {
@@ -220,6 +326,134 @@ describe('canvasStore scene container actions', () => {
 
     expect(state?.nodes.some((node) => node.id === groupId)).toBe(false);
     expect(releasedShot?.parentId).toBeUndefined();
+  });
+
+  it('releases a child from a non-gallery container without deleting child connections', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        {
+          id: 'group-1',
+          type: 'group',
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'group', childIds: ['shot-1'] },
+          data: { childIds: ['shot-1'], label: 'Group' },
+        },
+        { ...createShotNode('shot-1', 20, 60), parentId: 'group-1' },
+        createShotNode('shot-2', 500, 60),
+      ]),
+      connections: [createConnection('shot-link', 'shot-1', 'shot-2', 'reference')],
+    });
+
+    useCanvasStore.getState().removeChildFromContainer('group-1', 'shot-1');
+
+    const state = useCanvasStore.getState().canvasData;
+    expect(state?.nodes.find((node) => node.id === 'shot-1')?.parentId).toBeUndefined();
+    expect(state?.connections).toEqual([
+      createConnection('shot-link', 'shot-1', 'shot-2', 'reference'),
+    ]);
+  });
+
+  it('removes gallery child nodes and their connections for delete-subtree gallery policy', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        {
+          id: 'gallery-1',
+          type: 'gallery',
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'gallery', childIds: ['media-1'], deleteBehavior: 'delete-subtree' },
+          data: { preset: 'custom', rows: 1, cols: 1, cells: [] },
+        } as CanvasData['nodes'][number],
+        {
+          id: 'media-1',
+          type: 'media',
+          position: { x: 20, y: 60 },
+          size: { width: 200, height: 120 },
+          zIndex: 1,
+          parentId: 'gallery-1',
+          data: { assetPath: 'image.png' },
+        } as CanvasData['nodes'][number],
+        createShotNode('shot-1', 500, 60),
+      ]),
+      connections: [createConnection('media-link', 'media-1', 'shot-1', 'reference')],
+    });
+
+    useCanvasStore.getState().removeChildFromContainer('gallery-1', 'media-1');
+
+    const state = useCanvasStore.getState().canvasData;
+    expect(state?.nodes.some((node) => node.id === 'media-1')).toBe(false);
+    expect(state?.connections).toEqual([]);
+  });
+
+  it('deletes release-children containers while preserving released child connections', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        {
+          id: 'group-1',
+          type: 'group',
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'group', childIds: ['shot-1'], deleteBehavior: 'release-children' },
+          data: { childIds: ['shot-1'], label: 'Group' },
+        },
+        { ...createShotNode('shot-1', 20, 60), parentId: 'group-1' },
+        createShotNode('shot-2', 500, 60),
+      ]),
+      connections: [
+        createConnection('container-link', 'group-1', 'shot-2', 'reference'),
+        createConnection('child-link', 'shot-1', 'shot-2', 'reference'),
+      ],
+    });
+
+    useCanvasStore.getState().removeNode('group-1');
+
+    const state = useCanvasStore.getState().canvasData;
+    expect(state?.nodes.some((node) => node.id === 'group-1')).toBe(false);
+    expect(state?.nodes.find((node) => node.id === 'shot-1')?.parentId).toBeUndefined();
+    expect(state?.connections).toEqual([
+      createConnection('child-link', 'shot-1', 'shot-2', 'reference'),
+    ]);
+  });
+
+  it('deletes delete-subtree containers with descendant connections', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([
+        {
+          id: 'gallery-1',
+          type: 'gallery',
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'gallery', childIds: ['media-1'], deleteBehavior: 'delete-subtree' },
+          data: { preset: 'custom', rows: 1, cols: 1, cells: [] },
+        } as CanvasData['nodes'][number],
+        {
+          id: 'media-1',
+          type: 'media',
+          position: { x: 20, y: 60 },
+          size: { width: 200, height: 120 },
+          zIndex: 1,
+          parentId: 'gallery-1',
+          data: { assetPath: 'image.png' },
+        } as CanvasData['nodes'][number],
+        createShotNode('shot-1', 500, 60),
+      ]),
+      connections: [
+        createConnection('gallery-link', 'gallery-1', 'shot-1', 'reference'),
+        createConnection('media-link', 'media-1', 'shot-1', 'reference'),
+      ],
+    });
+
+    useCanvasStore.getState().removeNode('gallery-1');
+
+    const state = useCanvasStore.getState().canvasData;
+    expect(state?.nodes.some((node) => node.id === 'gallery-1')).toBe(false);
+    expect(state?.nodes.some((node) => node.id === 'media-1')).toBe(false);
+    expect(state?.connections).toEqual([]);
   });
 
   it('refreshes migrated node previews after data and block updates', () => {
@@ -443,6 +677,41 @@ describe('canvasStore scene container actions', () => {
         type: 'default',
       }),
     ).not.toThrow();
+  });
+
+  it('rejects strict sequence cycles while allowing choice loops', () => {
+    const a = createShotNode('shot-a', 0, 0);
+    const b = createShotNode('shot-b', 260, 0);
+
+    expect(
+      canCreateCanvasConnection(
+        [a, b],
+        { sourceId: 'shot-a', targetId: 'shot-b', type: 'sequence' },
+        [createConnection('b-a', 'shot-b', 'shot-a', 'sequence')],
+      ),
+    ).toBe(false);
+    expect(
+      canCreateCanvasConnection(
+        [a, b],
+        { sourceId: 'shot-a', targetId: 'shot-b', type: 'choice' },
+        [createConnection('b-a', 'shot-b', 'shot-a', 'choice')],
+      ),
+    ).toBe(true);
+
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([a, b]),
+      connections: [createConnection('b-a', 'shot-b', 'shot-a', 'sequence')],
+    });
+
+    expect(() =>
+      useCanvasStore.getState().addConnection({
+        sourceId: 'shot-a',
+        sourceAnchor: 'right',
+        targetId: 'shot-b',
+        targetAnchor: 'left',
+        type: 'sequence',
+      }),
+    ).toThrow(/constraints/);
   });
 
   it('normalizes undersized nodes at store boundaries', () => {

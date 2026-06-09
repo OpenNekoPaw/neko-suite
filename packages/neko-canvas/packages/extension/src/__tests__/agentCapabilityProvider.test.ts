@@ -31,6 +31,23 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('buildStoryboardImportTimelineSyncPayload(');
   });
 
+  it('hands off prepared keyframe references to neko-cut without reparsing source media', () => {
+    expect(providerSource).toContain('collectShotKeyframeReferenceDescriptors');
+    expect(providerSource).toContain('readShotPreparedKeyframeRef');
+    expect(providerSource).toContain('preparedKeyframeRef: readShotPreparedKeyframeRef(data)');
+    expect(providerSource).toContain('referenceDescriptors');
+    expect(providerSource).toContain('readShotGeneratedImageFallback(data)');
+    expect(providerSource).not.toContain("['generatedImage'] as string | undefined");
+  });
+
+  it('carries stable keyframe descriptors through video keyframe generation metadata', () => {
+    expect(providerSource).toContain('firstFrameRefs = collectShotKeyframeReferenceDescriptors');
+    expect(providerSource).toContain('lastFrameRefs = collectShotKeyframeReferenceDescriptors');
+    expect(providerSource).toContain("metadata['referenceDescriptors'] = referenceDescriptors");
+    expect(providerSource).toContain('referenceImageUrl: firstFrameData');
+    expect(providerSource).not.toContain("['generatedImage'] as\n          | string");
+  });
+
   it('registers additive composable Canvas Agent tools', () => {
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_DERIVE_NODE');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE');

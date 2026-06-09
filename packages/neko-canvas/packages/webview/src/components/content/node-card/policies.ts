@@ -1,4 +1,5 @@
 import type { CanvasNode, CanvasPreviewRole, NodePreviewDescriptor } from '@neko/shared';
+import { summarizeReferencesFromCanvasNode } from '@neko/shared';
 import type {
   CardActionDescriptor,
   CardBadge,
@@ -101,6 +102,7 @@ export const mediaCardPolicy: NodeCardPolicy = {
   resolveBadges: (node) => [
     ...normalizePreviewBadges(node.preview?.badges),
     ...(readDocumentResourceStatus(node) ? [{ label: 'Cache', tone: 'warning' as const }] : []),
+    ...referenceSummaryBadges(node),
   ],
   resolveActions: () => [
     REMOVE_ACTION,
@@ -178,9 +180,12 @@ export const shotCardPolicy: NodeCardPolicy = {
   resolveSubtitle: (node) => createSubtitle(readRecord(node.data)['visualDescription']),
   resolveBadges: (node) => {
     const status = readString(node.data, 'generationStatus');
-    return status
-      ? [{ label: resolveCanvasStatusLabel(status), tone: badgeToneForGenerationStatus(status) }]
-      : [];
+    return [
+      ...(status
+        ? [{ label: resolveCanvasStatusLabel(status), tone: badgeToneForGenerationStatus(status) }]
+        : []),
+      ...referenceSummaryBadges(node),
+    ];
   },
   resolveActions: () => [
     REMOVE_ACTION,
@@ -241,6 +246,35 @@ export const containerSummaryCardPolicy: NodeCardPolicy = {
   resolveActions: () => DEFAULT_ACTIONS,
 };
 
+const galleryCardPolicy: NodeCardPolicy = {
+  ...containerSummaryCardPolicy,
+  nodeType: 'gallery',
+  resolveBadges: (node) => [
+    ...normalizePreviewBadges(node.preview?.badges),
+    ...referenceSummaryBadges(node),
+  ],
+};
+
+const generatedAssetCardPolicy: NodeCardPolicy = {
+  ...containerSummaryCardPolicy,
+  nodeType: 'generated-asset',
+  resolveBadges: (node) => [
+    ...normalizePreviewBadges(node.preview?.badges),
+    ...referenceSummaryBadges(node),
+  ],
+};
+
+function referenceSummaryBadges(node: CanvasNode): readonly CardBadge[] {
+  const summary = summarizeReferencesFromCanvasNode(node);
+  if (summary.total === 0) return [];
+  return [
+    {
+      label: `Refs ${summary.total}`,
+      tone: summary.blockedCount > 0 ? 'error' : summary.warningCount > 0 ? 'warning' : 'info',
+    },
+  ];
+}
+
 export function createBuiltInNodeCardPolicyRegistry(): NodeCardPolicyRegistry {
   return {
     media: mediaCardPolicy,
@@ -248,10 +282,11 @@ export function createBuiltInNodeCardPolicyRegistry(): NodeCardPolicyRegistry {
     annotation: annotationCardPolicy,
     text: textCardPolicy,
     scene: { ...containerSummaryCardPolicy, nodeType: 'scene' },
-    gallery: { ...containerSummaryCardPolicy, nodeType: 'gallery' },
+    gallery: galleryCardPolicy,
     group: { ...containerSummaryCardPolicy, nodeType: 'group' },
     artboard: { ...containerSummaryCardPolicy, nodeType: 'artboard' },
     table: { ...containerSummaryCardPolicy, nodeType: 'table' },
+    'generated-asset': generatedAssetCardPolicy,
   };
 }
 

@@ -249,6 +249,63 @@ describe('node card policies', () => {
     expect(JSON.stringify(source.source.variants) ?? '').not.toContain(resourceRef.cachePath);
   });
 
+  it('adds reference summary badges for shot references and diagnostics', () => {
+    const node = createShotNode({
+      id: 'shot-reference-summary',
+      data: {
+        generationStatus: 'idle',
+        referenceRefs: ['gallery-1'],
+        generatedAsset: {
+          id: 'asset-generated-1',
+          type: 'generated-image',
+          path: '${PROJECT}/generated/asset-generated-1.png',
+          mimeType: 'image/png',
+          generatedAt: '2026-06-09T00:00:00.000Z',
+          width: 1024,
+          height: 576,
+          ratio: '16:9',
+        },
+        runtimeReferenceImagePath: 'vscode-resource://runtime/panel.png',
+      },
+    });
+
+    expect(shotCardPolicy.resolveBadges?.(node)).toEqual(
+      expect.arrayContaining([
+        { label: 'Idle', tone: 'neutral' },
+        { label: 'Refs 2', tone: 'error' },
+      ]),
+    );
+  });
+
+  it('adds reference summary badges for gallery and generated asset nodes', () => {
+    const registry = createBuiltInNodeCardPolicyRegistry();
+    const gallery = {
+      id: 'gallery-1',
+      type: 'gallery',
+      position: { x: 0, y: 0 },
+      size: { width: 180, height: 120 },
+      zIndex: 1,
+      data: {
+        cells: [{ id: 'front', image: '${PROJECT}/refs/front.png', label: 'Front' }],
+      },
+    } as CanvasNode;
+    const generated = {
+      id: 'asset-1',
+      type: 'generated-asset',
+      position: { x: 0, y: 0 },
+      size: { width: 180, height: 120 },
+      zIndex: 1,
+      data: { assetId: 'asset-generated-1' },
+    } as CanvasNode;
+
+    expect(getNodeCardPolicy(registry, gallery).resolveBadges?.(gallery)).toEqual([
+      { label: 'Refs 1', tone: 'info' },
+    ]);
+    expect(getNodeCardPolicy(registry, generated).resolveBadges?.(generated)).toEqual([
+      { label: 'Refs 1', tone: 'info' },
+    ]);
+  });
+
   it('uses a materialized shot reference image as a safe runtime variant', () => {
     const resourceRef = {
       kind: 'document-entry' as const,

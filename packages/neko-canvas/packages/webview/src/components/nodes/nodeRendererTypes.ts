@@ -7,6 +7,7 @@ export interface NodeRendererCommonProps {
   isSelected: boolean;
   containerRef: React.RefObject<HTMLElement | null>;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onTransformStart?: (nodeId: string) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onResize?: (
@@ -25,6 +26,7 @@ export interface NodeRendererCommonProps {
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   isExpanded?: boolean;
   onToggleExpand?: (nodeId: string) => void;
+  interactionRenderMode?: 'full' | 'shell';
 }
 
 export interface NodeRendererContext extends NodeRendererCommonProps {

@@ -341,6 +341,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             emotion: asStringArray(data.emotion),
             sceneTags: asStringArray(data.sceneTags),
             referenceNodeId: asString(data.referenceNodeId) || undefined,
+            referenceRefs: asStringArray(data.referenceRefs),
             referenceImagePath: asString(data.referenceImagePath) || undefined,
             referenceImageResourceRef: isDocumentArchiveResourceRef(data.referenceImageResourceRef)
               ? data.referenceImageResourceRef

@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CanvasNode } from '@neko/shared';
 import type { RuntimePreviewVariant } from '../../../preview';
 import { WebviewPreviewResolver } from '../../../preview/previewResolver';
+import {
+  useInteractionRenderMode,
+  type NodeInteractionRenderMode,
+} from '../../../hooks/useInteractionRenderMode';
 import { useCanvasStore } from '../../../stores/canvasStore';
 import { useClipboardStore } from '../../../stores/clipboardStore';
 import { useHistoryStore } from '../../../stores/historyStore';
@@ -32,6 +36,7 @@ export interface NodeCardProps {
   policyRegistry?: NodeCardPolicyRegistry;
   selection?: { nodeIds: readonly string[] };
   variant?: NodeCardVariant;
+  interactionRenderMode?: NodeInteractionRenderMode;
   onSelect?: (id: string, multi: boolean) => void;
   onAction?: (nodeId: string, actionId: NodeCardActionId) => void;
 }
@@ -42,6 +47,7 @@ export function NodeCard({
   policyRegistry = BUILT_IN_POLICY_REGISTRY,
   selection = { nodeIds: [] },
   variant = 'thumbnail',
+  interactionRenderMode = 'full',
   onSelect,
   onAction,
 }: NodeCardProps): React.ReactNode {
@@ -81,7 +87,12 @@ export function NodeCard({
         onClick={(event) => onSelect?.(node.id, event.shiftKey || event.metaKey)}
       >
         {variant !== 'summary' && (
-          <CardPreviewSlot source={previewSource} title={title} variant={variant} />
+          <CardPreviewSlot
+            source={previewSource}
+            title={title}
+            variant={variant}
+            interactionRenderMode={interactionRenderMode}
+          />
         )}
         <CardMetadataSlot title={title} subtitle={subtitle} badges={badges} variant={variant} />
       </button>
@@ -101,11 +112,17 @@ export function CardPreviewSlot({
   source,
   title,
   variant = 'thumbnail',
+  interactionRenderMode = 'full',
 }: {
   source: CardPreviewSource;
   title: string;
   variant?: NodeCardVariant;
+  interactionRenderMode?: NodeInteractionRenderMode;
 }): React.ReactNode {
+  const effectiveMode = useInteractionRenderMode({
+    requestedMode: interactionRenderMode,
+  });
+  const shouldRenderShell = effectiveMode === 'shell' && canShellPreviewSource(source);
   const previewDescriptor =
     source.renderForm === 'asset-thumbnail' || source.renderForm === 'media-poster'
       ? source.source
@@ -123,6 +140,9 @@ export function CardPreviewSlot({
 
   switch (source.renderForm) {
     case 'asset-thumbnail':
+      if (shouldRenderShell) {
+        return <PreviewShell aspectRatio={source.aspectRatio} variant={variant} />;
+      }
       return displayUrl ? (
         <PreviewImage
           url={displayUrl}
@@ -154,14 +174,27 @@ export function CardPreviewSlot({
         </div>
       );
     case 'waveform':
+      if (shouldRenderShell) {
+        return <PreviewShell aspectRatio="3/2" variant={variant} />;
+      }
       return <AudioWaveformPreview variant={variant} />;
     case 'text':
+      if (shouldRenderShell) {
+        return <PreviewShell aspectRatio="3/2" variant={variant} />;
+      }
       return <TextExcerptPreview text={source.textExcerpt} variant={variant} />;
     case 'icon':
+      if (shouldRenderShell) {
+        return <PreviewShell aspectRatio="3/2" variant={variant} />;
+      }
       return <IconPlaceholder icon={source.icon} aspectRatio="3/2" variant={variant} />;
     case 'none':
       return null;
   }
+}
+
+function canShellPreviewSource(source: CardPreviewSource): boolean {
+  return source.renderForm !== 'media-poster' && source.renderForm !== 'none';
 }
 
 function CardMetadataSlot({
@@ -192,8 +225,14 @@ function CardMetadataSlot({
           <div className="truncate text-[9px] text-[var(--node-fg-secondary)]">{subtitle}</div>
         ) : null}
       </div>
-      {badges[0] ? (
-        <span className={getBadgeClassName(badges[0].tone)}>{badges[0].label}</span>
+      {badges.length > 0 ? (
+        <div className="flex max-w-[72px] flex-shrink-0 flex-wrap justify-end gap-0.5">
+          {badges.slice(0, 2).map((badge) => (
+            <span key={`${badge.tone}:${badge.label}`} className={getBadgeClassName(badge.tone)}>
+              {badge.label}
+            </span>
+          ))}
+        </div>
       ) : null}
     </div>
   );
@@ -402,6 +441,24 @@ function IconPlaceholder({
       style={previewFrameStyle(aspectRatio, variant)}
     >
       {icon}
+    </div>
+  );
+}
+
+function PreviewShell({
+  aspectRatio,
+  variant,
+}: {
+  aspectRatio: CardPreviewAspectRatio;
+  variant: NodeCardVariant;
+}): React.ReactNode {
+  return (
+    <div
+      className={getPreviewFrameClassName(variant)}
+      data-node-card-preview-shell="true"
+      style={previewFrameStyle(aspectRatio, variant)}
+    >
+      <div className="h-5 w-12 rounded bg-white/10" />
     </div>
   );
 }

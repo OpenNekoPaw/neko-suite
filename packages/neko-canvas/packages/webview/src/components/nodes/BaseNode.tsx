@@ -47,6 +47,8 @@ export interface BaseNodeProps {
   /** Container ref for coordinate conversion (needed for rotation) */
   containerRef?: React.RefObject<HTMLElement | null>;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  /** Called once when a transform gesture starts; does not mutate document data. */
+  onTransformStart?: (nodeId: string) => void;
   /** Called on every mousemove during drag (real-time position update) */
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on mouseup when drag ends (final position + history) */
@@ -233,11 +235,9 @@ export function BaseNode({
   isSelected,
   containerRef,
   onSelect,
-  onDrag,
+  onTransformStart,
   onMove,
-  onResize,
   onResizeEnd,
-  onRotate,
   onRotateEnd,
   onConnectionStart,
   children,
@@ -263,7 +263,7 @@ export function BaseNode({
     nodeId: node.id,
     initialPosition: node.position,
     viewport,
-    onDrag,
+    onDragStart: onTransformStart,
     onDragEnd: onMove,
     disabled: node.locked,
   });
@@ -281,7 +281,6 @@ export function BaseNode({
     viewport,
     minWidth: nodeMinSize.width,
     minHeight: nodeMinSize.height,
-    onResize,
     onResizeEnd,
     disabled: node.locked,
   });
@@ -314,7 +313,6 @@ export function BaseNode({
     nodeCenter,
     viewport,
     containerRef: containerRef ?? { current: null },
-    onRotate,
     onRotateEnd,
     disabled: node.locked,
   });
@@ -483,7 +481,10 @@ export function BaseNode({
             key={handle}
             className="absolute z-20"
             style={{ ...style, cursor, position: 'absolute' }}
-            onMouseDown={(e) => startResize(handle, e)}
+            onMouseDown={(e) => {
+              onTransformStart?.(node.id);
+              startResize(handle, e);
+            }}
           />
         ))}
 
@@ -520,7 +521,10 @@ export function BaseNode({
               color: 'var(--node-bg)',
               lineHeight: 1,
             }}
-            onMouseDown={startRotate}
+            onMouseDown={(e) => {
+              onTransformStart?.(node.id);
+              startRotate(e);
+            }}
             title={`Rotation: ${Math.round(currentRotation)}°`}
           >
             ↻

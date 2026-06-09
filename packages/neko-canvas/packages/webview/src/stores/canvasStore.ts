@@ -37,6 +37,8 @@ import { useCanvasOperationStore } from './canvasOperationStore';
 import {
   addContainerChild,
   addGalleryChild,
+  deleteContainerSubtree,
+  getContainerDescendantIds,
   releaseContainerChildren,
   removeContainerChild,
   removeGalleryChild,
@@ -64,6 +66,7 @@ import {
   clampNodeStoredSizes,
   resolveNodeMinSize,
 } from '../utils/nodeSizing';
+import { createsDisallowedConnectionCycle } from '../utils/connectionProjection';
 
 // =============================================================================
 // Types
@@ -224,10 +227,12 @@ export interface CanvasStore {
 export function canCreateCanvasConnection(
   nodes: readonly CanvasNode[],
   connection: Pick<CanvasConnection, 'sourceId' | 'targetId' | 'type'>,
+  existingConnections: readonly CanvasConnection[] = [],
 ): boolean {
   const sourceNode = nodes.find((node) => node.id === connection.sourceId);
   const targetNode = nodes.find((node) => node.id === connection.targetId);
   if (!sourceNode || !targetNode) return false;
+  if (createsDisallowedConnectionCycle(nodes, existingConnections, connection)) return false;
   if (!isRuntimeConnectionType(connection.type)) return true;
 
   if (isNarrativeStartNode(targetNode) && isNarrativeTraversalNode(sourceNode)) {
@@ -257,6 +262,20 @@ function generateId(): string {
 function recordHistory(canvasData: CanvasData | null): void {
   if (!canvasData) return;
   useHistoryStore.getState().pushState(canvasData);
+}
+
+function arePositionsEqual(
+  a: { x: number; y: number } | undefined,
+  b: { x: number; y: number } | undefined,
+): boolean {
+  return a?.x === b?.x && a?.y === b?.y;
+}
+
+function areSizesEqual(
+  a: { width: number; height: number } | undefined,
+  b: { width: number; height: number } | undefined,
+): boolean {
+  return a?.width === b?.width && a?.height === b?.height;
 }
 
 const SCENE_LAYOUT_PADDING_X = 24;
@@ -301,15 +320,21 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
   });
 }
 
-function detachNodeFromParent(node: CanvasNode, parentId: string): CanvasNode {
-  if (getNodeParentId(node) !== parentId) {
-    return node;
+function filterConnectionsTouchingNodeIds(
+  connections: readonly CanvasConnection[],
+  removedNodeIds: ReadonlySet<string>,
+): CanvasConnection[] {
+  return connections.filter(
+    (conn) => !removedNodeIds.has(conn.sourceId) && !removedNodeIds.has(conn.targetId),
+  );
+}
+
+function getNodeIdsRemovedByDeletePolicy(nodes: CanvasNode[], node: CanvasNode): Set<string> {
+  if (!isContainerNode(node) || node.container?.deleteBehavior !== 'delete-subtree') {
+    return new Set([node.id]);
   }
 
-  return {
-    ...node,
-    parentId: undefined,
-  } as CanvasNode;
+  return new Set([node.id, ...getContainerDescendantIds(nodes, node.id)]);
 }
 
 function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
@@ -599,38 +624,44 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData, selection } = get();
     if (!canvasData) return;
 
+    const removedNode = canvasData.nodes.find((n) => n.id === id);
+    if (!removedNode) return;
     recordHistory(canvasData);
 
-    const removedNode = canvasData.nodes.find((n) => n.id === id);
+    const removedNodeIds = getNodeIdsRemovedByDeletePolicy(canvasData.nodes, removedNode);
     const removedConnections = canvasData.connections.filter(
-      (conn) => conn.sourceId === id || conn.targetId === id,
+      (conn) => removedNodeIds.has(conn.sourceId) || removedNodeIds.has(conn.targetId),
     );
 
-    const filteredNodes = canvasData.nodes.filter((node) => node.id !== id);
-    const nodesWithDetachedShots =
-      removedNode && isSceneGroupNode(removedNode)
-        ? filteredNodes.map((node) => detachNodeFromParent(node, id))
-        : filteredNodes;
-    const relinkedNodes = relinkSceneShotIds(nodesWithDetachedShots);
+    const membershipNodes = removedNode.parentId
+      ? removeContainerChild(canvasData.nodes, removedNode.parentId, id).nodes
+      : canvasData.nodes;
+    let nextNodes: CanvasNode[];
+    if (removedNodeIds.size > 1) {
+      nextNodes = deleteContainerSubtree(membershipNodes, id).nodes;
+    } else if (isContainerNode(removedNode)) {
+      nextNodes = releaseContainerChildren(membershipNodes, id).nodes.filter(
+        (node) => node.id !== id,
+      );
+    } else {
+      nextNodes = membershipNodes.filter((node) => node.id !== id);
+    }
+
+    const relinkedNodes = relinkSceneShotIds(nextNodes);
 
     set({
       canvasData: {
         ...canvasData,
         nodes: relinkedNodes,
-        // Also remove connections involving this node
-        connections: canvasData.connections.filter(
-          (conn) => conn.sourceId !== id && conn.targetId !== id,
-        ),
+        connections: filterConnectionsTouchingNodeIds(canvasData.connections, removedNodeIds),
       },
       selection: {
         ...selection,
-        nodeIds: selection.nodeIds.filter((nodeId) => nodeId !== id),
+        nodeIds: selection.nodeIds.filter((nodeId) => !removedNodeIds.has(nodeId)),
       },
     });
 
-    if (removedNode) {
-      useCanvasOperationStore.getState().recordNodeRemove(id, removedNode, removedConnections);
-    }
+    useCanvasOperationStore.getState().recordNodeRemove(id, removedNode, removedConnections);
   },
 
   moveNode: (id, position) => {
@@ -665,9 +696,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     const oldNode = canvasData.nodes.find((n) => n.id === id);
+    if (!oldNode || arePositionsEqual(oldNode.position, position)) return;
     recordHistory(canvasData);
 
-    if (oldNode && isContainerNode(oldNode)) {
+    if (isContainerNode(oldNode)) {
       const dx = position.x - oldNode.position.x;
       const dy = position.y - oldNode.position.y;
       const nextNodes = translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy });
@@ -680,11 +712,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       set({ canvasData: { ...canvasData, nodes: nextNodes } });
     }
 
-    if (oldNode) {
-      useCanvasOperationStore
-        .getState()
-        .recordNodeUpdate(id, { position } as any, { position: oldNode.position } as any);
-    }
+    useCanvasOperationStore
+      .getState()
+      .recordNodeUpdate(id, { position } as any, { position: oldNode.position } as any);
   },
 
   resizeNode: (id, size, position) => {
@@ -713,6 +743,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     if (!oldNode) return;
     const clampedSize = clampNodeSize(size, resolveNodeMinSize(oldNode));
+    if (areSizesEqual(oldNode.size, clampedSize) && arePositionsEqual(oldNode.position, position)) {
+      return;
+    }
     recordHistory(canvasData);
 
     set({
@@ -751,6 +784,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     const oldNode = canvasData.nodes.find((n) => n.id === id);
+    if (!oldNode || (oldNode.rotation ?? 0) === rotation) return;
     recordHistory(canvasData);
 
     set({
@@ -760,11 +794,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
     });
 
-    if (oldNode) {
-      useCanvasOperationStore
-        .getState()
-        .recordNodeUpdate(id, { rotation } as any, { rotation: oldNode.rotation } as any);
-    }
+    useCanvasOperationStore
+      .getState()
+      .recordNodeUpdate(id, { rotation } as any, { rotation: oldNode.rotation } as any);
   },
 
   assignShotsToScene: (sceneId, shotIds, autoLayout = true) => {
@@ -996,9 +1028,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     const policyName = getContainerPolicyName(container);
     let nextNodes: CanvasNode[];
+    let nextConnections = canvasData.connections;
     if (policyName === 'gallery') {
       const result = removeGalleryChild(canvasData.nodes, containerId, childId);
       nextNodes = result.nodes.filter((n) => n.id !== childId);
+      nextConnections = canvasData.connections.filter(
+        (connection) => connection.sourceId !== childId && connection.targetId !== childId,
+      );
     } else {
       nextNodes = removeContainerChild(canvasData.nodes, containerId, childId).nodes;
     }
@@ -1007,9 +1043,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: nextNodes,
-        connections: canvasData.connections.filter(
-          (c) => c.sourceId !== childId && c.targetId !== childId,
-        ),
+        connections: nextConnections,
       },
     });
   },
@@ -1050,7 +1084,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!hasSource || !hasTarget) {
       throw new Error('Connection source and target nodes must exist');
     }
-    if (!canCreateCanvasConnection(canvasData.nodes, connection)) {
+    if (!canCreateCanvasConnection(canvasData.nodes, connection, canvasData.connections)) {
       throw new Error('Connection violates Canvas narrative graph constraints');
     }
 
@@ -1193,7 +1227,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         targetPort: targetPort ? anchor : undefined,
       };
 
-      if (!canCreateCanvasConnection(canvasData.nodes, connection)) {
+      if (!canCreateCanvasConnection(canvasData.nodes, connection, canvasData.connections)) {
         set({ isConnecting: false, pendingConnectionSource: null });
         return;
       }

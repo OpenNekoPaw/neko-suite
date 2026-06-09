@@ -30,6 +30,7 @@ export interface NodeContentRenderContext {
   layout: NodeContentLayoutContext;
   depth: number;
   previewSurfaceKind?: 'inline' | 'overlay';
+  interactionRenderMode?: 'full' | 'shell';
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
   onUpdateNodeData?: (nodeId: string, data: Record<string, unknown>) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;

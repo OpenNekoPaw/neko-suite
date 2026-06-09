@@ -110,6 +110,74 @@ describe('content access providers', () => {
     });
   });
 
+  it('passes the requested Webview from resolver metadata into cache projection', async () => {
+    const panelWebview = { id: 'panel' };
+    const previewWebview = { id: 'preview' };
+    const webviews = new Map<string, unknown>([
+      ['panel-token', panelWebview],
+      ['preview-token', previewWebview],
+    ]);
+    const cache = {
+      ...createResourceCache({
+        absolutePath: '/workspace/demo/.neko/.cache/resources/page-1.jpg',
+      }),
+      project: vi.fn(
+        async (
+          webview: { readonly id: string },
+          ref: ResourceRef,
+          request: ResourceVariantRequest,
+        ) => ({
+          status: 'ready' as const,
+          ref,
+          variant: { resource: ref, ...request },
+          absolutePath: '/workspace/demo/.neko/.cache/resources/page-1.jpg',
+          uri: `webview:/${webview.id}/page-1.jpg`,
+        }),
+      ),
+    } satisfies ResourceCacheService;
+    const provider = new ResourceCacheContentAccessProvider({
+      resourceCache: cache,
+      webviewResolver: (request) =>
+        webviews.get(String(request.metadata?.['webviewResolverToken'])) as never,
+    });
+
+    const panelResult = await provider.resolve({
+      request: {
+        ref: resource,
+        intent: 'interactive-preview',
+        target: 'webview-uri',
+        variant,
+        metadata: { webviewResolverToken: 'panel-token' },
+      },
+    });
+    const previewResult = await provider.resolve({
+      request: {
+        ref: resource,
+        intent: 'interactive-preview',
+        target: 'webview-uri',
+        variant,
+        metadata: { webviewResolverToken: 'preview-token' },
+      },
+    });
+
+    expect(panelResult.uri).toBe('webview:/panel/page-1.jpg');
+    expect(previewResult.uri).toBe('webview:/preview/page-1.jpg');
+    expect(cache.project).toHaveBeenNthCalledWith(
+      1,
+      panelWebview,
+      resource,
+      variant,
+      expect.any(Object),
+    );
+    expect(cache.project).toHaveBeenNthCalledWith(
+      2,
+      previewWebview,
+      resource,
+      variant,
+      expect.any(Object),
+    );
+  });
+
   it('resolves source-first local paths, bytes, and engine source tokens', async () => {
     const fileOps = createFileOps({ '/media/books/comic.epub': bytes('book') });
     const pathResolver = new PathResolver(new Map([['BOOKS', '/media/books']]));

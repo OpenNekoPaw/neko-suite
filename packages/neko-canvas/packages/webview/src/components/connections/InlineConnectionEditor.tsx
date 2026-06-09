@@ -3,6 +3,10 @@ import type { CanvasConnection, CanvasNode, ConnectionType } from '@neko/shared'
 import { CANVAS_CONNECTION_TYPES, isCanvasConnectionType } from '@neko/shared';
 import { t } from '../../i18n';
 import { getConnectionPathGeometry } from './connectionGeometry';
+import {
+  resolveConnectionDirectionLabel,
+  resolveConnectionTypeLabel,
+} from '../../i18n/connectionLabels';
 
 const INLINE_CONNECTION_CONTROL_CLASS = 'w-full rounded px-2 py-1 text-xs outline-none';
 const INLINE_CONNECTION_CONTROL_STYLE: React.CSSProperties = {
@@ -51,7 +55,7 @@ export function InlineConnectionEditor({
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-semibold">{t('panel.connection')}</span>
         <span style={{ color: 'var(--toolbar-fg-secondary)' }}>
-          {sourceNode.type} {'->'} {targetNode.type}
+          {resolveConnectionDirectionLabel(sourceNode, targetNode)}
         </span>
       </div>
 
@@ -80,7 +84,7 @@ export function InlineConnectionEditor({
           >
             {CANVAS_CONNECTION_TYPES.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {resolveConnectionTypeLabel(type)}
               </option>
             ))}
           </select>

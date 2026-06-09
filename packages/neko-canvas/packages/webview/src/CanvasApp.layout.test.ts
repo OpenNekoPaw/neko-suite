@@ -13,6 +13,14 @@ describe('Canvas creative workbench layout boundary', () => {
     'utf8',
   );
   const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
+  const infiniteCanvasSource = readFileSync(
+    resolve(__dirname, 'components/InfiniteCanvas.tsx'),
+    'utf8',
+  );
+  const connectionLayerSource = readFileSync(
+    resolve(__dirname, 'components/connections/ConnectionLayer.tsx'),
+    'utf8',
+  );
   const containerRendererSource = readFileSync(
     resolve(__dirname, 'components/content/ContainerRenderer.tsx'),
     'utf8',
@@ -26,6 +34,41 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/mainClassName="canvas-main-panel"/);
     expect(appSource).toMatch(/className="canvas-main-surface"/);
     expect(appSource).toMatch(/<InfiniteCanvas/);
+  });
+
+  it('keeps CanvasApp subscribed through focused store selectors', () => {
+    expect(appSource).not.toMatch(/useCanvasStore\(\)/);
+    expect(appSource).toMatch(/useCanvasStore\(\(state\) => state\.canvasData\)/);
+    expect(appSource).toMatch(/useRuntimeViewportStore\(\(state\) => state\.viewport\)/);
+  });
+
+  it('keeps transform pointer frames in transient node preview state', () => {
+    expect(appSource).not.toMatch(/state\.moveNode\)/);
+    expect(appSource).not.toMatch(/state\.resizeNode\)/);
+    expect(appSource).not.toMatch(/state\.rotateNode\)/);
+    expect(appSource).not.toMatch(/onNodeDrag=\{/);
+    expect(appSource).not.toMatch(/onNodeResize=\{/);
+    expect(appSource).not.toMatch(/onNodeRotate=\{/);
+    expect(baseNodeSource).not.toMatch(/onDrag:\s*onDrag/);
+    expect(baseNodeSource).not.toMatch(/onResize,\s*disabled/);
+    expect(baseNodeSource).not.toMatch(/onRotate,\s*disabled/);
+    expect(baseNodeSource).toMatch(/onDragEnd:\s*onMove/);
+    expect(baseNodeSource).toMatch(/onResizeEnd/);
+    expect(baseNodeSource).toMatch(/onRotateEnd/);
+  });
+
+  it('keeps derived projection dependencies memoized and degradable', () => {
+    expect(infiniteCanvasSource).toMatch(/const renderedNodes = useMemo/);
+    expect(infiniteCanvasSource).toMatch(/const renderedNodeIds = useMemo/);
+    expect(infiniteCanvasSource).toMatch(/resolveCanvasRenderRefreshDecision/);
+    expect(infiniteCanvasSource).toMatch(/shouldThrottleViewportProjection/);
+    expect(infiniteCanvasSource).toMatch(
+      /freezeProjection=\{renderRefreshDecision\.shouldFreezeConnectionProjection\}/,
+    );
+    expect(connectionLayerSource).toMatch(/freezeProjection\?: boolean/);
+    expect(connectionLayerSource).toMatch(/latestProjectionRef/);
+    expect(appSource).toMatch(/const minimapViewport = useThrottledCanvasViewport\(viewport/);
+    expect(appSource).toMatch(/viewport=\{minimapViewport\}/);
   });
 
   it('keeps canvas overlays and controls inside the main panel surface', () => {

@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import type { CanvasConnection, CanvasNode, PortDefinition } from '@neko/shared';
 import { getDefaultPorts } from '@neko/shared';
 import { getConnectionPathGeometry } from './connectionGeometry';
+import { resolveConnectionTitle } from '../../i18n/connectionLabels';
 
 // =============================================================================
 // Types
@@ -91,7 +92,7 @@ export function Connection({
   onSelect,
 }: ConnectionProps) {
   // Unique ID for arrow marker
-  const markerId = `arrow-${connection.id}`;
+  const markerId = `arrow-${sanitizeSvgId(connection.id)}`;
 
   // Calculate path data
   const pathData = useMemo(
@@ -101,6 +102,7 @@ export function Connection({
 
   const strokeColor = resolveConnectionColor(connection, sourceNode, targetNode);
   const strokeWidth = isSelected ? 2.5 : 1.8;
+  const title = resolveConnectionTitle(connection, sourceNode, targetNode);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -108,7 +110,8 @@ export function Connection({
   };
 
   return (
-    <g className="connection-group">
+    <g className="connection-group" role="img" aria-label={title}>
+      <title>{title}</title>
       {/* Arrow marker definition */}
       <defs>
         <marker
@@ -210,4 +213,8 @@ export function Connection({
       />
     </g>
   );
+}
+
+function sanitizeSvgId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-');
 }

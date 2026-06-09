@@ -359,7 +359,12 @@ function GroupChildSummaryCard({
       </div>
       <div className="flex min-h-0 flex-1 gap-2 bg-white px-2 py-2">
         <div className={getSummaryPreviewWrapperClassName(variant)}>
-          <CardPreviewSlot source={previewSource} title={title} variant="summary-large" />
+          <CardPreviewSlot
+            source={previewSource}
+            title={title}
+            variant="summary-large"
+            interactionRenderMode={context.interactionRenderMode}
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col text-left">
           <div className="line-clamp-3 min-h-[44px] text-[11px] leading-4 text-gray-600">
@@ -482,7 +487,12 @@ function GalleryChildCard({
       onMouseDown={(event) => event.stopPropagation()}
     >
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
-        <CardPreviewSlot source={previewSource} title={title} variant="gallery" />
+        <CardPreviewSlot
+          source={previewSource}
+          title={title}
+          variant="gallery"
+          interactionRenderMode={context.interactionRenderMode}
+        />
         <div className="absolute left-2 top-2 rounded border border-black/10 bg-white/90 px-1.5 py-0.5 text-[10px] leading-none text-gray-600 shadow-sm">
           {resolveGalleryCellOrdinal(parentNode, childNode, index)}
         </div>
@@ -685,7 +695,12 @@ function SceneShotRailCard({
       </div>
       <div className="flex min-h-0 flex-1 gap-2 px-2 py-2">
         <div className="w-[96px] flex-shrink-0">
-          <CardPreviewSlot source={previewSource} title={title} variant="summary-large" />
+          <CardPreviewSlot
+            source={previewSource}
+            title={title}
+            variant="summary-large"
+            interactionRenderMode={context.interactionRenderMode}
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col text-left">
           <div className="line-clamp-3 min-h-[44px] text-[10px] leading-4 text-gray-600">
@@ -808,6 +823,7 @@ function ChildNodeDetailCard({
             source={previewSource}
             title={title}
             variant={variant === 'row' ? 'compact' : variant}
+            interactionRenderMode={context.interactionRenderMode}
           />
         </div>
       ) : null}

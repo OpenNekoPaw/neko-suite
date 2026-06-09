@@ -3,7 +3,7 @@
  * Provides infinite pan/zoom canvas with grid background
  */
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
@@ -16,8 +16,13 @@ import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
+import { useThrottledCanvasViewport } from '../hooks/useThrottledCanvasViewport';
 import { isNodeDrawnInsideContainer } from '../utils/canvasOrganization';
 import { createBuiltInWebviewSubsystemRegistry } from '../subsystems';
+import {
+  resolveCanvasRenderRefreshDecision,
+  type CanvasInteractionPhase,
+} from '../utils/renderRefreshTiering';
 
 // =============================================================================
 // Types
@@ -31,16 +36,8 @@ export interface InfiniteCanvasProps {
   selectedConnectionIds?: string[];
   onViewportChange: (viewport: Partial<ViewportType>) => void;
   onNodeSelect?: (nodeId: string, multi: boolean) => void;
-  /** Called on every mousemove during node drag (real-time store update) */
-  onNodeDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   /** Called on mouseup when node drag ends (final position + history) */
   onNodeMove?: (nodeId: string, position: { x: number; y: number }) => void;
-  /** Called on every mousemove during node resize */
-  onNodeResize?: (
-    nodeId: string,
-    size: { width: number; height: number },
-    position: { x: number; y: number },
-  ) => void;
   /** Called on mouseup when node resize ends */
   onNodeResizeEnd?: (
     nodeId: string,
@@ -48,8 +45,6 @@ export interface InfiniteCanvasProps {
     position: { x: number; y: number },
   ) => void;
   onNodeUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
-  /** Called on every mousemove during node rotation */
-  onNodeRotate?: (nodeId: string, rotation: number) => void;
   /** Called on mouseup when node rotation ends */
   onNodeRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionSelect?: (connectionId: string) => void;
@@ -106,12 +101,9 @@ export function InfiniteCanvas({
   selectedConnectionIds = [],
   onViewportChange,
   onNodeSelect,
-  onNodeDrag,
   onNodeMove,
-  onNodeResize,
   onNodeResizeEnd,
   onNodeUpdateData,
-  onNodeRotate,
   onNodeRotateEnd,
   onConnectionSelect,
   onConnectionUpdate,
@@ -140,6 +132,8 @@ export function InfiniteCanvas({
     useState<NodeTypeDescriptorRegistry>(() =>
       webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
     );
+  const [transformingNodeIds, setTransformingNodeIds] = useState<readonly string[]>([]);
+  const frozenVisibleNodeIdsRef = useRef<readonly string[] | null>(null);
   const activeSubsystemKey = webviewSubsystemRegistryRef.current
     .getActiveSubsystems({ nodes })
     .join('|');
@@ -179,14 +173,94 @@ export function InfiniteCanvas({
     enabled: !viewportState.isPanning && !isDraggingConnection && !isPanMode,
   });
 
+  const interactionPhase: CanvasInteractionPhase =
+    transformingNodeIds.length > 0
+      ? 'transforming'
+      : viewportState.isPanning
+        ? 'fast-viewport'
+        : 'idle';
+  const renderRefreshDecision = useMemo(
+    () =>
+      resolveCanvasRenderRefreshDecision({
+        nodes,
+        connections,
+        phase: interactionPhase,
+      }),
+    [connections, interactionPhase, nodes],
+  );
+  const cullingViewport = useThrottledCanvasViewport(viewport, {
+    enabled: renderRefreshDecision.shouldThrottleViewportProjection,
+    intervalMs: 80,
+  });
+
   // Viewport culling - 只渲染可见节点
   const { visibleNodes, culledCount, totalCount } = useViewportCulling({
     nodes,
-    viewport,
+    viewport: cullingViewport,
     containerWidth: containerSize.width,
     containerHeight: containerSize.height,
     enabled: enableCulling,
   });
+  const renderedNodes = useMemo(
+    () => visibleNodes.filter((node) => !isNodeDrawnInsideContainer(node)),
+    [visibleNodes],
+  );
+  const renderedNodeIds = useMemo(() => renderedNodes.map((node) => node.id), [renderedNodes]);
+
+  useEffect(() => {
+    if (!renderRefreshDecision.shouldFreezeConnectionProjection) {
+      frozenVisibleNodeIdsRef.current = null;
+      return;
+    }
+
+    frozenVisibleNodeIdsRef.current ??= renderedNodeIds;
+  }, [renderRefreshDecision.shouldFreezeConnectionProjection, renderedNodeIds]);
+
+  const connectionVisibleNodeIds = renderRefreshDecision.shouldFreezeConnectionProjection
+    ? (frozenVisibleNodeIdsRef.current ?? renderedNodeIds)
+    : renderedNodeIds;
+  const expandedContainerIds = useMemo(
+    () => (expandedNodeId ? [expandedNodeId] : []),
+    [expandedNodeId],
+  );
+
+  const handleTransformStart = useCallback((nodeId: string) => {
+    setTransformingNodeIds((current) =>
+      current.includes(nodeId) ? current : [...current, nodeId],
+    );
+  }, []);
+
+  const handleTransformEnd = useCallback((nodeId: string) => {
+    setTransformingNodeIds((current) => current.filter((id) => id !== nodeId));
+  }, []);
+
+  const handleNodeMoveEnd = useCallback(
+    (nodeId: string, position: { x: number; y: number }) => {
+      handleTransformEnd(nodeId);
+      onNodeMove?.(nodeId, position);
+    },
+    [handleTransformEnd, onNodeMove],
+  );
+
+  const handleNodeResizeEnd = useCallback(
+    (
+      nodeId: string,
+      size: { width: number; height: number },
+      position: { x: number; y: number },
+    ) => {
+      handleTransformEnd(nodeId);
+      onNodeResizeEnd?.(nodeId, size, position);
+    },
+    [handleTransformEnd, onNodeResizeEnd],
+  );
+
+  const handleNodeRotateEnd = useCallback(
+    (nodeId: string, rotation: number) => {
+      handleTransformEnd(nodeId);
+      onNodeRotateEnd?.(nodeId, rotation);
+    },
+    [handleTransformEnd, onNodeRotateEnd],
+  );
 
   // Update container size on resize
   useEffect(() => {
@@ -313,7 +387,10 @@ export function InfiniteCanvas({
           connections={connections}
           nodes={nodes}
           selectedConnectionIds={selectedConnectionIds}
+          visibleNodeIds={connectionVisibleNodeIds}
+          expandedContainerIds={expandedContainerIds}
           pendingConnection={pendingConnection}
+          freezeProjection={renderRefreshDecision.shouldFreezeConnectionProjection}
           onConnectionSelect={onConnectionSelect}
         />
 
@@ -331,38 +408,37 @@ export function InfiniteCanvas({
         />
 
         {/* Node layer - 使用裁剪后的可见节点; container-managed children are summarized by containers */}
-        {visibleNodes
-          .filter((node) => !isNodeDrawnInsideContainer(node))
-          .map((node) => {
-            const isSelected = selectedNodeIds.includes(node.id);
+        {renderedNodes.map((node) => {
+          const isSelected = selectedNodeIds.includes(node.id);
 
-            return renderNode(nodeRendererRegistry, {
-              node,
-              allNodes: nodes,
-              viewport,
-              isSelected,
-              containerRef: containerRef as React.RefObject<HTMLElement | null>,
-              onSelect: onNodeSelect,
-              onDrag: onNodeDrag,
-              onMove: onNodeMove,
-              onResize: onNodeResize,
-              onResizeEnd: onNodeResizeEnd,
-              onRotate: onNodeRotate,
-              onRotateEnd: onNodeRotateEnd,
-              onUpdateData: onNodeUpdateData,
-              onConnectionStart: startDragConnection,
-              onScriptLoadScenes,
-              onScriptOpen,
-              onScriptNavigateToScene,
-              onDocumentOpen,
-              onCanvasEmbedOpen,
-              onModelCheckInstalled,
-              onRemoveContainerChild,
-              isExpanded: expandedNodeId === node.id,
-              selectedNodeIds,
-              nodeTypeDescriptors: nodeTypeDescriptorRegistry,
-            });
-          })}
+          return renderNode(nodeRendererRegistry, {
+            node,
+            allNodes: nodes,
+            viewport,
+            isSelected,
+            containerRef: containerRef as React.RefObject<HTMLElement | null>,
+            onSelect: onNodeSelect,
+            onTransformStart: handleTransformStart,
+            onMove: handleNodeMoveEnd,
+            onResizeEnd: handleNodeResizeEnd,
+            onRotateEnd: handleNodeRotateEnd,
+            onUpdateData: onNodeUpdateData,
+            onConnectionStart: startDragConnection,
+            interactionRenderMode: renderRefreshDecision.shouldUseHeavyContentShell
+              ? 'shell'
+              : 'full',
+            onScriptLoadScenes,
+            onScriptOpen,
+            onScriptNavigateToScene,
+            onDocumentOpen,
+            onCanvasEmbedOpen,
+            onModelCheckInstalled,
+            onRemoveContainerChild,
+            isExpanded: expandedNodeId === node.id,
+            selectedNodeIds,
+            nodeTypeDescriptors: nodeTypeDescriptorRegistry,
+          });
+        })}
       </CanvasViewport>
 
       {/* Marquee selection rectangle */}
@@ -387,6 +463,8 @@ export function InfiniteCanvas({
           <span>
             {visibleNodes.length} visible / {totalCount} total ({culledCount} culled)
           </span>
+        ) : renderRefreshDecision.shouldThrottleViewportProjection ? (
+          <span>{nodes.length} nodes | throttled viewport projection</span>
         ) : (
           <span>
             {nodes.length} nodes | {connections.length} connections

@@ -190,7 +190,7 @@ export function createContainerComposite(
   return { nodes: nextNodes, changed: true };
 }
 
-function getContainerDescendantIds(nodes: CanvasNode[], containerId: string): string[] {
+export function getContainerDescendantIds(nodes: CanvasNode[], containerId: string): string[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const result: string[] = [];
   const visiting = new Set<string>();

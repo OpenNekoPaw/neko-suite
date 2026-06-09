@@ -7,9 +7,18 @@
  * and index within the same side.
  */
 
+import { useEffect, useMemo, useRef } from 'react';
 import type { CanvasConnection, CanvasNode, PortDefinition } from '@neko/shared';
 import { getDefaultPorts } from '@neko/shared';
 import { Connection } from './Connection';
+import {
+  projectCanvasConnectionView,
+  type CanvasConnectionRenderBounds,
+} from '../../utils/connectionProjection';
+import {
+  resolveAggregateConnectionCountLabel,
+  resolveInternalConnectionCountLabel,
+} from '../../i18n/connectionLabels';
 
 // =============================================================================
 // Types
@@ -19,6 +28,10 @@ export interface ConnectionLayerProps {
   connections: CanvasConnection[];
   nodes: CanvasNode[];
   selectedConnectionIds: string[];
+  visibleNodeIds?: readonly string[];
+  expandedContainerIds?: readonly string[];
+  renderBounds?: CanvasConnectionRenderBounds[];
+  freezeProjection?: boolean;
   pendingConnection?: {
     sourceNodeId: string;
     sourceAnchor: string;
@@ -156,11 +169,35 @@ export function ConnectionLayer({
   connections,
   nodes,
   selectedConnectionIds,
+  visibleNodeIds,
+  expandedContainerIds,
+  renderBounds,
+  freezeProjection = false,
   pendingConnection,
   onConnectionSelect,
 }: ConnectionLayerProps) {
   // Create node lookup map for performance
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const latestProjectionRef = useRef<ReturnType<typeof projectCanvasConnectionView> | null>(null);
+  const projection = useMemo(() => {
+    if (freezeProjection && latestProjectionRef.current) {
+      return latestProjectionRef.current;
+    }
+
+    return projectCanvasConnectionView({
+      nodes,
+      connections,
+      visibleNodeIds,
+      expandedContainerIds,
+      renderBounds,
+    });
+  }, [connections, expandedContainerIds, freezeProjection, nodes, renderBounds, visibleNodeIds]);
+
+  useEffect(() => {
+    if (!freezeProjection) {
+      latestProjectionRef.current = projection;
+    }
+  }, [freezeProjection, projection]);
 
   // Render pending connection preview
   const renderPendingConnection = () => {
@@ -223,22 +260,41 @@ export function ConnectionLayer({
     >
       {/* Offset group to handle coordinate system */}
       <g transform={`translate(${SVG_OFFSET}, ${SVG_OFFSET})`}>
-        {/* Render all connections */}
-        {connections.map((connection) => {
-          const sourceNode = nodeMap.get(connection.sourceId);
-          const targetNode = nodeMap.get(connection.targetId);
-
-          if (!sourceNode || !targetNode) return null;
-
-          return (
+        {projection.directConnections.map((view) => (
+          <Connection
+            key={view.id}
+            connection={view.connection}
+            sourceNode={view.sourceNode}
+            targetNode={view.targetNode}
+            isSelected={selectedConnectionIds.includes(view.connection.id)}
+            onSelect={onConnectionSelect}
+          />
+        ))}
+        {projection.aggregateConnections.map((view) => (
+          <g key={view.id} className="connection-aggregate">
             <Connection
-              key={connection.id}
-              connection={connection}
-              sourceNode={sourceNode}
-              targetNode={targetNode}
-              isSelected={selectedConnectionIds.includes(connection.id)}
-              onSelect={onConnectionSelect}
+              connection={view.connection}
+              sourceNode={view.sourceNode}
+              targetNode={view.targetNode}
+              isSelected={view.underlyingConnectionIds.some((id) =>
+                selectedConnectionIds.includes(id),
+              )}
+              onSelect={() => onConnectionSelect?.(view.underlyingConnectionIds[0] ?? view.id)}
             />
+            {view.count > 1 && (
+              <AggregateConnectionBadge
+                sourceNode={view.sourceNode}
+                targetNode={view.targetNode}
+                count={view.count}
+              />
+            )}
+          </g>
+        ))}
+        {projection.internalSummaries.map((summary) => {
+          const container = nodeMap.get(summary.containerId);
+          if (!container || summary.count === 0) return null;
+          return (
+            <InternalConnectionBadge key={summary.id} node={container} count={summary.count} />
           );
         })}
       </g>
@@ -246,5 +302,89 @@ export function ConnectionLayer({
       {/* Pending connection (outside offset group as it uses mouse coordinates) */}
       {renderPendingConnection()}
     </svg>
+  );
+}
+
+function AggregateConnectionBadge({
+  sourceNode,
+  targetNode,
+  count,
+}: {
+  sourceNode: CanvasNode;
+  targetNode: CanvasNode;
+  count: number;
+}) {
+  const x =
+    (sourceNode.position.x +
+      sourceNode.size.width / 2 +
+      targetNode.position.x +
+      targetNode.size.width / 2) /
+    2;
+  const y =
+    (sourceNode.position.y +
+      sourceNode.size.height / 2 +
+      targetNode.position.y +
+      targetNode.size.height / 2) /
+    2;
+
+  const label = resolveAggregateConnectionCountLabel(count);
+
+  return (
+    <g
+      className="connection-aggregate-badge"
+      role="img"
+      aria-label={label}
+      style={{ pointerEvents: 'none' }}
+    >
+      <title>{label}</title>
+      <circle cx={x} cy={y} r={10} fill="var(--node-bg)" stroke="var(--connection-reference)" />
+      <text
+        x={x}
+        y={y + 3}
+        textAnchor="middle"
+        fill="var(--toolbar-fg)"
+        fontSize={9}
+        fontFamily="var(--vscode-font-family)"
+      >
+        {count}
+      </text>
+    </g>
+  );
+}
+
+function InternalConnectionBadge({ node, count }: { node: CanvasNode; count: number }) {
+  const x = node.position.x + node.size.width - 14;
+  const y = node.position.y + 14;
+  const label = resolveInternalConnectionCountLabel(count);
+
+  return (
+    <g
+      className="connection-internal-badge"
+      role="img"
+      aria-label={label}
+      style={{ pointerEvents: 'none' }}
+    >
+      <title>{label}</title>
+      <rect
+        x={x - 10}
+        y={y - 9}
+        width={20}
+        height={18}
+        rx={4}
+        fill="var(--node-bg)"
+        stroke="var(--connection-default)"
+        opacity={0.95}
+      />
+      <text
+        x={x}
+        y={y + 3}
+        textAnchor="middle"
+        fill="var(--toolbar-fg)"
+        fontSize={9}
+        fontFamily="var(--vscode-font-family)"
+      >
+        {count}
+      </text>
+    </g>
   );
 }

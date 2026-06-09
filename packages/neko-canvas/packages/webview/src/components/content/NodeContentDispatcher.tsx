@@ -100,6 +100,7 @@ function ComposableNodeContent({
     layout: createNodeLayoutContext(node),
     depth: 0,
     previewSurfaceKind: 'inline',
+    interactionRenderMode: context.interactionRenderMode ?? 'full',
     onUpdateBinding: handleUpdateBinding,
     onUpdateNodeData: context.onUpdateData,
     onSelectNode: context.onSelect,
@@ -113,6 +114,7 @@ function ComposableNodeContent({
       isSelected={context.isSelected}
       containerRef={context.containerRef}
       onSelect={context.onSelect}
+      onTransformStart={context.onTransformStart}
       onDrag={context.onDrag}
       onMove={context.onMove}
       onResize={context.onResize}
