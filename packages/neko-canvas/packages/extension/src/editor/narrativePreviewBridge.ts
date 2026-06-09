@@ -26,6 +26,7 @@ import {
   type StoryGenre,
   type VariableEffect,
 } from '@neko/shared';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 
@@ -38,6 +39,107 @@ const NARRATIVE_RUNTIME_CONNECTION_TYPES = new Set<string | undefined>([
   'default',
   'choice',
 ]);
+
+interface NarrativePreviewI18n {
+  readonly title: string;
+  readonly statusWaitingGraph: string;
+  readonly ariaStage: string;
+  readonly ariaStageOverlay: string;
+  readonly ariaPlaybackDetails: string;
+  readonly ariaDetails: string;
+  readonly ariaControls: string;
+  readonly ariaTimeline: string;
+  readonly unitFallback: string;
+  readonly planCanvasPlayback: string;
+  readonly info: string;
+  readonly branches: string;
+  readonly diagnostics: string;
+  readonly noUnitSelected: string;
+  readonly close: string;
+  readonly stageZero: string;
+  readonly previous: string;
+  readonly previousShort: string;
+  readonly play: string;
+  readonly pause: string;
+  readonly next: string;
+  readonly summaryWaitingPlan: string;
+  readonly statusLoadedZeroRuntime: string;
+  readonly statusLoadedRuntime: string;
+  readonly statusLoadedPlaybackPlan: string;
+  readonly statusDiagnostics: string;
+  readonly statusJumpRequest: string;
+  readonly stagePosition: string;
+  readonly noPlayableUnit: string;
+  readonly noPlayableUnitDescription: string;
+  readonly mediaUnavailable: string;
+  readonly mediaUnavailableDescription: string;
+  readonly storyboardShot: string;
+  readonly storyboardShotUnavailableDescription: string;
+  readonly storyboardScene: string;
+  readonly storyboardSceneDescription: string;
+  readonly canvasNode: string;
+  readonly canvasNodeDescription: string;
+  readonly playbackPreviewAlt: string;
+  readonly labelMode: string;
+  readonly labelDuration: string;
+  readonly labelAsset: string;
+  readonly labelShot: string;
+  readonly labelScale: string;
+  readonly labelAction: string;
+  readonly labelDialogue: string;
+  readonly labelScene: string;
+  readonly labelLocation: string;
+  readonly labelTime: string;
+  readonly labelMedia: string;
+  readonly labelMime: string;
+  readonly labelSourceNode: string;
+  readonly labelRenderMode: string;
+  readonly labelResource: string;
+  readonly labelCamera: string;
+  readonly labelAngle: string;
+  readonly labelVoice: string;
+  readonly labelSound: string;
+  readonly labelStatus: string;
+  readonly labelCharacters: string;
+  readonly labelMediaRefs: string;
+  readonly labelImageAsset: string;
+  readonly labelVideoAsset: string;
+  readonly labelScript: string;
+  readonly labelMediaType: string;
+  readonly labelAssetPath: string;
+  readonly labelDocument: string;
+  readonly labelProject: string;
+  readonly labelScenes: string;
+  readonly noBranches: string;
+  readonly noDiagnostics: string;
+  readonly planStoryboardPreview: string;
+  readonly planMediaSequencePreview: string;
+  readonly planNarrativePlaybackPlan: string;
+  readonly shotTitle: string;
+  readonly fallbackUnitTitle: string;
+  readonly bodyShotFallback: string;
+  readonly bodySceneFallback: string;
+  readonly bodyMediaSource: string;
+  readonly bodyMediaFallback: string;
+  readonly bodyNarrativeFallback: string;
+  readonly bodyContainerFallback: string;
+  readonly bodyGenericFallback: string;
+  readonly choiceContinueTo: string;
+  readonly choiceContinue: string;
+  readonly choiceTransition: string;
+  readonly itemCountOne: string;
+  readonly itemCountMany: string;
+  readonly durationSeconds: string;
+  readonly kindNode: string;
+  readonly kindContainer: string;
+  readonly kindMedia: string;
+  readonly kindShot: string;
+  readonly kindScene: string;
+  readonly kindNarrative: string;
+  readonly kindUnit: string;
+  readonly disabledByConfiguration: string;
+  readonly noActiveGraph: string;
+}
 
 export interface NarrativeCanvasSnapshotHost {
   extractNarrativeGraphSnapshot(): NarrativeGraphSnapshot | undefined;
@@ -82,8 +184,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   open(): boolean {
+    const i18n = createNarrativePreviewI18n();
     if (!this.getFeatureToggles().preview) {
-      void handleError(new Error('Narrative Preview is disabled by configuration.'), {
+      void handleError(new Error(i18n.disabledByConfiguration), {
         showToUser: true,
         severity: 'warning',
       });
@@ -92,7 +195,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) {
-      void handleError(new Error('No active Canvas narrative graph is available.'), {
+      void handleError(new Error(i18n.noActiveGraph), {
         showToUser: true,
         severity: 'warning',
       });
@@ -218,9 +321,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return this.panel;
     }
 
+    const i18n = createNarrativePreviewI18n();
     const panel = this.panelFactory.createWebviewPanel(
       'neko.canvasNarrativePreview',
-      'Narrative Preview',
+      i18n.title,
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
@@ -244,7 +348,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       undefined,
       [],
     );
-    panel.webview.html = this.getPreviewHtml(panel.webview, bootstrapMessages);
+    panel.webview.html = this.getPreviewHtml(panel.webview, bootstrapMessages, i18n);
     panel.onDidDispose(() => {
       if (this.panel === panel) {
         this.panel = undefined;
@@ -309,157 +413,201 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private getPreviewHtml(
     webview: vscode.Webview,
     bootstrapMessages: readonly CanvasToPreviewMessage[] = [],
+    i18n: NarrativePreviewI18n = createNarrativePreviewI18n(),
   ): string {
     const nonce = createNonce();
     const bootstrapJson = serializePreviewBootstrapMessages(bootstrapMessages);
+    const i18nJson = serializePreviewJson(i18n);
+    const localeAttr = injectLocaleAttribute();
+    const h = escapeHtml;
     return `<!DOCTYPE html>
-<html lang="en">
+<html ${localeAttr}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:; connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
-  <title>Narrative Preview</title>
+  <title>${h(i18n.title)}</title>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
-    main { min-height: 100vh; display: flex; flex-direction: column; padding: 18px; box-sizing: border-box; gap: 14px; }
+    main { min-height: 100vh; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
     section { width: 100%; box-sizing: border-box; }
-    h1 { margin: 0; font-size: 18px; font-weight: 600; }
-    h2 { margin: 14px 0 10px; font-size: 28px; font-weight: 650; }
+    h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    h2 { margin: 0; font-size: 28px; font-weight: 650; }
     h3 { margin: 0 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; color: var(--vscode-descriptionForeground); letter-spacing: 0; }
     p { margin: 0; color: var(--vscode-descriptionForeground); line-height: 1.5; }
     code { color: var(--vscode-textLink-foreground); }
     button { height: 30px; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); border-radius: 4px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 0 10px; cursor: pointer; }
     button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
     button:disabled { cursor: not-allowed; opacity: 0.45; }
-    .placeholder { max-width: 720px; border: 1px solid var(--vscode-panel-border); padding: 16px; border-radius: 6px; background: var(--vscode-sideBar-background); }
-    .playback-shell { display: none; min-height: calc(100vh - 36px); }
-    .playback-shell[data-visible="true"] { display: flex; flex-direction: column; gap: 14px; }
-    .playback-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 12px; }
-    .playback-heading { min-width: 0; }
-    .playback-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .progress { min-width: 54px; text-align: center; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
-    .playback-clock { display: flex; align-items: center; gap: 4px; min-width: 100px; justify-content: flex-end; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
-    .stage-progress-wrap { display: grid; gap: 6px; }
-    .stage-progress { display: flex; gap: 3px; width: 100%; height: 12px; }
-    .stage-segment { position: relative; min-width: 14px; flex: 1 1 0; overflow: hidden; border: 1px solid var(--vscode-panel-border); border-radius: 3px; background: var(--vscode-button-secondaryBackground); padding: 0; }
+    .placeholder { max-width: 720px; margin: 18px; border: 1px solid var(--vscode-panel-border); padding: 16px; border-radius: 6px; background: var(--vscode-sideBar-background); }
+    .playback-shell { display: none; min-height: 100vh; height: 100vh; }
+    .playback-shell[data-visible="true"] { display: flex; flex-direction: column; }
+    .player-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; justify-content: center; overflow: hidden; background: color-mix(in srgb, var(--vscode-editor-background) 88%, black); }
+    .stage-overlay { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 4; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; }
+    .stage-heading { min-width: 0; display: grid; gap: 4px; max-width: min(680px, 70vw); padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent); backdrop-filter: blur(10px); pointer-events: auto; }
+    .stage-heading-row { min-width: 0; display: flex; align-items: center; gap: 8px; }
+    .stage-kicker { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 0 7px; font-size: 12px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+    .stage-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stage-subtitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .stage-actions { display: flex; align-items: center; gap: 6px; pointer-events: auto; }
+    .stage-actions button { min-width: 30px; width: 30px; padding: 0; background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent); backdrop-filter: blur(10px); }
+    .stage-actions button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    .stage-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 18px; padding: 72px 28px 32px; box-sizing: border-box; }
+    .stage-visual { min-width: 0; width: min(100%, 980px); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .stage-visual img, .stage-visual video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
+    .stage-visual audio { width: min(520px, 100%); }
+    .stage-unavailable { width: min(720px, 100%); border: 1px dashed var(--vscode-panel-border); border-radius: 6px; padding: 22px; box-sizing: border-box; display: grid; gap: 8px; text-align: center; background: color-mix(in srgb, var(--vscode-sideBar-background) 78%, transparent); }
+    .stage-copy { width: min(820px, 100%); display: grid; gap: 10px; }
+    .unit-body { max-height: 26vh; overflow: auto; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 15px; line-height: 1.65; }
+    .stage-details { display: flex; flex-wrap: wrap; gap: 6px; }
+    .stage-detail { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 5px 7px; font-size: 12px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+    .player-controls { flex: 0 0 auto; display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--vscode-panel-border); background: color-mix(in srgb, var(--vscode-editor-background) 94%, black); box-sizing: border-box; }
+    .branch-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .branch-choices:empty { display: none; }
+    .branch-choices button { max-width: min(360px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .timeline-wrap { display: grid; gap: 5px; }
+    .segmented-timeline { display: flex; gap: 3px; width: 100%; height: 12px; }
+    .stage-segment { position: relative; min-width: 14px; flex: 1 1 0; overflow: hidden; border: 1px solid var(--vscode-panel-border); border-radius: 3px; background: var(--vscode-button-secondaryBackground); padding: 0; height: 12px; }
     .stage-segment:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .stage-segment[data-active="true"] { border-color: var(--vscode-focusBorder); }
     .stage-segment[data-done="true"] { border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, var(--vscode-panel-border)); }
     .stage-segment-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); pointer-events: none; }
-    .stage-progress-meta { display: flex; align-items: center; justify-content: space-between; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 4px; }
-    .timeline:empty { display: none; }
-    .timeline button { min-width: 0; width: 100%; height: 28px; padding: 0 6px; border-color: var(--vscode-panel-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .timeline button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-    .timeline button[data-kind="shot"] { border-bottom-color: var(--vscode-charts-blue, #3794ff); }
-    .timeline button[data-kind="media"] { border-bottom-color: var(--vscode-charts-green, #89d185); }
-    .timeline button[data-kind="narrative"] { border-bottom-color: var(--vscode-charts-purple, #b180d7); }
-    .unit-surface { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 14px; align-items: stretch; min-height: 0; }
-    .unit-card { border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-sideBar-background); padding: 28px 34px; box-sizing: border-box; min-width: 0; min-height: 420px; display: flex; flex-direction: column; box-shadow: inset 0 -42px 80px rgba(0, 0, 0, 0.08); }
-    .unit-card[data-kind="shot"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-blue, #3794ff)); }
-    .unit-card[data-kind="media"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-green, #89d185)); }
-    .unit-card[data-kind="narrative"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-purple, #b180d7)); }
-    .unit-stage-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .unit-kind { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
-    .stage-time { color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .unit-body { max-width: 780px; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 16px; line-height: 1.7; }
-    .stage-spacer { flex: 1; min-height: 120px; }
-    .current-stage-progress { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--vscode-sideBar-background) 70%, black); border: 1px solid var(--vscode-panel-border); }
-    .current-stage-progress-fill { width: 0%; height: 100%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
-    .stage-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .unit-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .timeline-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .transport-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+    .playback-controls { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .playback-controls button { min-width: 34px; }
+    .progress { justify-self: start; min-width: 54px; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+    .playback-clock { justify-self: end; display: flex; align-items: center; gap: 4px; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+    .playback-inspector { position: absolute; z-index: 6; top: 56px; right: 12px; bottom: 92px; width: min(360px, calc(100% - 24px)); display: grid; grid-template-rows: auto 1fr; border: 1px solid var(--vscode-panel-border); border-radius: 6px; background: var(--vscode-sideBar-background); box-shadow: 0 18px 58px rgba(0, 0, 0, 0.28); transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; transition: transform 150ms ease, opacity 150ms ease; }
+    .playback-inspector[data-open="true"] { transform: translateX(0); opacity: 1; pointer-events: auto; }
+    .inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--vscode-panel-border); }
+    .inspector-body { min-height: 0; overflow: auto; padding: 12px; display: grid; align-content: start; gap: 14px; }
+    .inspector-section { display: none; }
+    .playback-inspector[data-section="info"] .inspector-info,
+    .playback-inspector[data-section="branches"] .inspector-branches,
+    .playback-inspector[data-section="diagnostics"] .inspector-diagnostics { display: grid; gap: 8px; }
     .unit-meta { display: grid; gap: 6px; }
     .meta-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
-    .choices { display: flex; flex-wrap: wrap; gap: 8px; }
-    .choices:empty { display: none; }
+    .branch-meta { display: grid; gap: 6px; }
+    .branch-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
     .diagnostics { display: grid; gap: 6px; }
     .diagnostics:empty { display: none; }
     .diagnostic { border-left: 3px solid var(--vscode-editorWarning-foreground); padding: 6px 8px; background: var(--vscode-inputValidation-warningBackground, transparent); color: var(--vscode-descriptionForeground); }
     @media (max-width: 760px) {
-      main { padding: 12px; }
-      .playback-toolbar { align-items: flex-start; flex-direction: column; }
-      .playback-controls { flex-wrap: wrap; }
-      .playback-clock { justify-content: flex-start; }
-      .unit-surface { grid-template-columns: 1fr; }
-      .unit-card { min-height: 360px; padding: 22px; }
+      .stage-overlay { align-items: stretch; flex-direction: column; }
+      .stage-heading { max-width: none; }
+      .stage-actions { justify-content: flex-end; }
+      .stage-content { padding: 118px 14px 22px; }
+      .transport-row { grid-template-columns: 1fr; justify-items: center; }
+      .progress, .playback-clock { justify-self: center; }
+      .playback-inspector { top: auto; left: 12px; bottom: 94px; width: auto; max-height: min(62vh, 420px); transform: translateY(calc(100% + 24px)); }
+      .playback-inspector[data-open="true"] { transform: translateY(0); }
     }
   </style>
 </head>
 <body>
   <main>
     <section class="placeholder" id="placeholder">
-      <h1>Narrative Preview</h1>
-      <p id="status">Waiting for Canvas graph...</p>
+      <h1>${h(i18n.title)}</h1>
+      <p id="status">${h(i18n.statusWaitingGraph)}</p>
     </section>
     <section class="playback-shell" id="playback-preview" data-visible="false">
-      <header class="playback-toolbar">
-        <div class="playback-heading">
-          <h1 id="playback-title">Canvas Playback</h1>
-          <p id="playback-summary"></p>
+      <div class="player-stage" id="player-stage" aria-label="${h(i18n.ariaStage)}">
+        <div class="stage-overlay" aria-label="${h(i18n.ariaStageOverlay)}">
+          <div class="stage-heading">
+            <div class="stage-heading-row">
+              <span class="stage-kicker" id="unit-kind">${h(i18n.unitFallback)}</span>
+              <h1 class="stage-title" id="playback-title">${h(i18n.planCanvasPlayback)}</h1>
+            </div>
+            <p class="stage-subtitle" id="playback-summary"></p>
+          </div>
+          <div class="stage-actions" aria-label="${h(i18n.ariaPlaybackDetails)}">
+            <button type="button" id="inspector-info" title="${h(i18n.info)}" aria-label="${h(i18n.info)}">i</button>
+            <button type="button" id="inspector-branches" title="${h(i18n.branches)}" aria-label="${h(i18n.branches)}">?</button>
+            <button type="button" id="inspector-diagnostics" title="${h(i18n.diagnostics)}" aria-label="${h(i18n.diagnostics)}">!</button>
+          </div>
         </div>
-        <div class="playback-controls">
-          <button type="button" id="preview-previous" title="Previous">Previous</button>
-          <button type="button" id="preview-play" title="Play">Play</button>
-          <button type="button" id="preview-next" title="Next">Next</button>
+
+        <article class="stage-content" id="stage-content" data-kind="node" data-render-mode="select-node">
+          <div class="stage-visual" id="stage-visual"></div>
+          <div class="stage-copy">
+            <h2 id="unit-title">${h(i18n.noUnitSelected)}</h2>
+            <p class="unit-body" id="unit-body"></p>
+            <div class="stage-details" id="stage-details"></div>
+          </div>
+        </article>
+
+        <aside class="playback-inspector" id="playback-inspector" data-open="false" data-section="info" aria-label="${h(i18n.ariaDetails)}">
+          <div class="inspector-header">
+            <h3 id="inspector-title">${h(i18n.info)}</h3>
+            <button type="button" id="inspector-close" title="${h(i18n.close)}" aria-label="${h(i18n.close)}">x</button>
+          </div>
+          <div class="inspector-body">
+            <section class="inspector-section inspector-info">
+              <h3>${h(i18n.info)}</h3>
+              <div class="unit-meta" id="unit-meta"></div>
+            </section>
+            <section class="inspector-section inspector-branches">
+              <h3>${h(i18n.branches)}</h3>
+              <div class="branch-meta" id="unit-branch-meta"></div>
+            </section>
+            <section class="inspector-section inspector-diagnostics">
+              <h3>${h(i18n.diagnostics)}</h3>
+              <div class="diagnostics" id="unit-diagnostics"></div>
+            </section>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="player-controls" id="player-controls" aria-label="${h(i18n.ariaControls)}">
+        <div class="branch-choices" id="unit-choices"></div>
+        <div class="timeline-wrap" aria-label="${h(i18n.ariaTimeline)}">
+          <div class="segmented-timeline" id="segmented-timeline"></div>
+          <div class="timeline-meta">
+            <span id="stage-label">${h(i18n.stageZero)}</span>
+            <span id="stage-time-range">0:00 - 0:00</span>
+          </div>
+        </div>
+        <div class="transport-row">
           <span class="progress" id="preview-progress">0/0</span>
+          <div class="playback-controls">
+            <button type="button" id="preview-previous" title="${h(i18n.previous)}" aria-label="${h(i18n.previous)}">${h(i18n.previousShort)}</button>
+            <button type="button" id="preview-play" title="${h(i18n.play)}" aria-label="${h(i18n.play)}">${h(i18n.play)}</button>
+            <button type="button" id="preview-next" title="${h(i18n.next)}" aria-label="${h(i18n.next)}">${h(i18n.next)}</button>
+          </div>
           <span class="playback-clock" id="playback-clock">
             <span id="current-time">0:00</span>
             <span>/</span>
             <span id="total-time">0:00</span>
           </span>
         </div>
-      </header>
-      <div class="stage-progress-wrap" aria-label="Playback stages">
-        <div class="stage-progress" id="stage-progress"></div>
-        <div class="stage-progress-meta">
-          <span id="stage-label">Stage 0</span>
-          <span id="stage-time-range">0:00 - 0:00</span>
-        </div>
-      </div>
-      <nav class="timeline" id="unit-timeline" aria-label="Playback timeline"></nav>
-      <div class="unit-surface">
-        <article class="unit-card" id="unit-card" data-kind="node">
-          <div class="unit-stage-header">
-            <span class="unit-kind" id="unit-kind">unit</span>
-            <span class="stage-time" id="unit-stage-time">0:00</span>
-          </div>
-          <h2 id="unit-title">No unit selected</h2>
-          <p class="unit-body" id="unit-body"></p>
-          <div class="stage-spacer"></div>
-          <div class="current-stage-progress" aria-hidden="true">
-            <div class="current-stage-progress-fill" id="current-stage-progress-fill"></div>
-          </div>
-          <div class="stage-footer">
-            <span id="current-stage-elapsed">0:00</span>
-            <span id="current-stage-duration">0:00</span>
-          </div>
-        </article>
-        <aside class="unit-panel" aria-label="Playback unit details">
-          <section>
-            <h3>Info</h3>
-            <div class="unit-meta" id="unit-meta"></div>
-          </section>
-          <section>
-            <h3>Branches</h3>
-            <div class="choices" id="unit-choices"></div>
-          </section>
-          <section>
-            <h3>Diagnostics</h3>
-            <div class="diagnostics" id="unit-diagnostics"></div>
-          </section>
-        </aside>
-      </div>
+      </footer>
     </section>
   </main>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const DEFAULT_TIMER_MS = 1200;
     const BOOTSTRAP_MESSAGES = ${bootstrapJson};
+    const I18N = ${i18nJson};
+    function t(key, values) {
+      const template = typeof I18N[key] === 'string' ? I18N[key] : key;
+      if (!values || typeof values !== 'object') {
+        return template;
+      }
+      return template.replace(/\\{([a-zA-Z0-9_]+)\\}/g, (_match, name) => {
+        const value = values[name];
+        return value === undefined || value === null ? '' : String(value);
+      });
+    }
+
     const status = document.getElementById('status');
     const placeholder = document.getElementById('placeholder');
     const playbackPreview = document.getElementById('playback-preview');
     const playbackTitle = document.getElementById('playback-title');
     const playbackSummary = document.getElementById('playback-summary');
+    const stageContent = document.getElementById('stage-content');
+    const stageVisual = document.getElementById('stage-visual');
+    const stageDetails = document.getElementById('stage-details');
     const previewPrevious = document.getElementById('preview-previous');
     const previewPlay = document.getElementById('preview-play');
     const previewNext = document.getElementById('preview-next');
@@ -467,19 +615,20 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const playbackClock = document.getElementById('playback-clock');
     const currentTime = document.getElementById('current-time');
     const totalTime = document.getElementById('total-time');
-    const stageProgress = document.getElementById('stage-progress');
+    const segmentedTimeline = document.getElementById('segmented-timeline');
     const stageLabel = document.getElementById('stage-label');
     const stageTimeRange = document.getElementById('stage-time-range');
-    const unitTimeline = document.getElementById('unit-timeline');
-    const unitCard = document.getElementById('unit-card');
     const unitKind = document.getElementById('unit-kind');
-    const unitStageTime = document.getElementById('unit-stage-time');
     const unitTitle = document.getElementById('unit-title');
     const unitBody = document.getElementById('unit-body');
-    const currentStageProgressFill = document.getElementById('current-stage-progress-fill');
-    const currentStageElapsed = document.getElementById('current-stage-elapsed');
-    const currentStageDuration = document.getElementById('current-stage-duration');
+    const playbackInspector = document.getElementById('playback-inspector');
+    const inspectorTitle = document.getElementById('inspector-title');
+    const inspectorInfo = document.getElementById('inspector-info');
+    const inspectorBranches = document.getElementById('inspector-branches');
+    const inspectorDiagnostics = document.getElementById('inspector-diagnostics');
+    const inspectorClose = document.getElementById('inspector-close');
     const unitMeta = document.getElementById('unit-meta');
+    const unitBranchMeta = document.getElementById('unit-branch-meta');
     const unitChoices = document.getElementById('unit-choices');
     const unitDiagnostics = document.getElementById('unit-diagnostics');
 
@@ -526,6 +675,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         setActiveUnit(next.unitId, false, 0);
       }
     });
+    inspectorInfo.addEventListener('click', () => toggleInspector('info'));
+    inspectorBranches.addEventListener('click', () => toggleInspector('branches'));
+    inspectorDiagnostics.addEventListener('click', () => toggleInspector('diagnostics'));
+    inspectorClose.addEventListener('click', () => closeInspector());
 
     window.addEventListener('message', (event) => handleCanvasPreviewMessage(event.data || {}));
     for (const message of BOOTSTRAP_MESSAGES) {
@@ -539,19 +692,31 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           return;
         }
         if (count === 0) {
-          status.textContent = 'Loaded revision ' + message.revision + ' with 0 Narrative Runtime nodes. Storyboard scene/shot and generic Canvas nodes use Canvas Playback Plan preview instead of Narrative Runtime.';
+          status.textContent = t('statusLoadedZeroRuntime', { revision: message.revision });
         } else {
-          status.textContent = 'Loaded revision ' + message.revision + ' with ' + count + ' runtime nodes.';
+          status.textContent = t('statusLoadedRuntime', { revision: message.revision, count });
         }
       } else if (message.type === 'preview:loadPlaybackPlan' || message.type === 'preview:refreshPlaybackPlan') {
         const units = Array.isArray(message.plan?.units) ? message.plan.units : [];
         const diagnostics = Array.isArray(message.plan?.diagnostics) ? message.plan.diagnostics : [];
-        const kinds = Array.from(new Set(units.map((unit) => unit && unit.kind).filter(Boolean))).join(', ');
-        const suffix = diagnostics.length > 0 ? ' Diagnostics: ' + diagnostics.map((item) => item.message).join(' ') : '';
-        status.textContent = 'Loaded Canvas playback plan (' + message.plan.adapterId + ', ' + message.plan.behaviorMode + ') with ' + units.length + ' units' + (kinds ? ' [' + kinds + ']' : '') + '.' + suffix;
+        const kinds = Array.from(new Set(units.map((unit) => unit && unit.kind).filter(Boolean)))
+          .map(formatKindLabel)
+          .join(', ');
+        const suffix = diagnostics.length > 0
+          ? t('statusDiagnostics', { diagnostics: diagnostics.map((item) => item.message).join(' ') })
+          : '';
+        status.textContent = t('statusLoadedPlaybackPlan', {
+          adapterId: message.plan.adapterId,
+          behaviorMode: message.plan.behaviorMode,
+          count: units.length,
+          kindList: kinds ? ' [' + kinds + ']' : '',
+        }) + suffix;
         loadPlaybackPlan(message.plan);
       } else if (message.type === 'preview:jumpTo') {
-        status.textContent = 'Jump request: ' + message.nodeId + ' at revision ' + message.revision + '.';
+        status.textContent = t('statusJumpRequest', {
+          nodeId: message.nodeId,
+          revision: message.revision,
+        });
         if (playbackPlan) {
           const unit = playbackPlan.units.find((candidate) => candidate.sourceNodeId === message.nodeId || candidate.id === message.nodeId);
           if (unit) {
@@ -585,22 +750,24 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       playbackTitle.textContent = formatPlanTitle(playbackPlan);
       playbackSummary.textContent = playbackPlan
         ? playbackPlan.adapterId + ' / ' + playbackPlan.behaviorMode + ' / ' + playbackPlan.advancePolicy
-        : 'Waiting for Canvas playback plan...';
+        : t('summaryWaitingPlan');
       previewProgress.textContent = (index >= 0 ? index + 1 : 0) + '/' + route.length;
       renderPlaybackTime(unit, index);
       previewPrevious.disabled = index <= 0;
       previewNext.disabled = !resolveNextStep();
       previewPlay.disabled = !unit || !canPreviewAutoAdvance();
-      previewPlay.textContent = isPlaying ? 'Pause' : 'Play';
-      unitKind.textContent = unit ? unit.kind : 'unit';
-      unitCard.dataset.kind = unit ? unit.kind : 'node';
-      unitTitle.textContent = unit ? formatUnitTitle(unit, index) : 'No playable unit';
-      unitBody.textContent = unit ? formatUnitBody(unit) : 'This Canvas does not expose a playable unit for the selected preview surface.';
-      renderTimeline();
-      renderStageProgress();
+      previewPlay.textContent = isPlaying ? t('pause') : t('play');
+      previewPlay.setAttribute('aria-label', isPlaying ? t('pause') : t('play'));
+      previewPlay.title = isPlaying ? t('pause') : t('play');
+      unitKind.textContent = unit ? formatKindLabel(unit.kind) : t('unitFallback');
+      stageContent.dataset.kind = unit ? unit.kind : 'node';
+      stageContent.dataset.renderMode = unit ? unit.renderMode : 'select-node';
+      renderStageContent(unit, index);
+      renderSegmentedTimeline();
       renderMeta(unit);
       renderChoices(unit);
       renderDiagnostics(diagnostics);
+      renderInspectorActions();
     }
 
     function renderPlaybackTime(unit, index) {
@@ -610,11 +777,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const absoluteMs = getElapsedBeforeIndex(index) + boundedElapsed;
       currentTime.textContent = formatClockTime(absoluteMs);
       totalTime.textContent = formatClockTime(totalMs);
-      unitStageTime.textContent = formatClockTime(boundedElapsed) + ' / ' + formatClockTime(durationMs);
-      currentStageElapsed.textContent = formatClockTime(boundedElapsed);
-      currentStageDuration.textContent = formatClockTime(durationMs);
-      currentStageProgressFill.style.width = durationMs > 0 ? Math.min(100, (boundedElapsed / durationMs) * 100) + '%' : '0%';
-      stageLabel.textContent = index >= 0 ? 'Stage ' + (index + 1) + ' of ' + route.length : 'Stage 0';
+      stageLabel.textContent = index >= 0
+        ? t('stagePosition', { index: index + 1, total: route.length })
+        : t('stageZero');
       const stageStart = getElapsedBeforeIndex(index);
       stageTimeRange.textContent = index >= 0
         ? formatClockTime(stageStart) + ' - ' + formatClockTime(stageStart + durationMs)
@@ -622,8 +787,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       playbackClock.title = formatClockTime(absoluteMs) + ' / ' + formatClockTime(totalMs);
     }
 
-    function renderStageProgress() {
-      stageProgress.replaceChildren();
+    function renderSegmentedTimeline() {
+      segmentedTimeline.replaceChildren();
       if (!playbackPlan || route.length === 0) {
         return;
       }
@@ -652,32 +817,123 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           stopPlayback();
           setActiveUnit(unit.id, false, 0);
         });
-        stageProgress.appendChild(segment);
+        segmentedTimeline.appendChild(segment);
       });
     }
 
-    function renderTimeline() {
-      unitTimeline.replaceChildren();
-      if (!playbackPlan || route.length === 0) {
+    function renderStageContent(unit, index) {
+      stageVisual.replaceChildren();
+      stageDetails.replaceChildren();
+      unitTitle.textContent = unit ? formatUnitTitle(unit, index) : t('noPlayableUnit');
+      unitBody.textContent = unit ? formatUnitBody(unit) : t('noPlayableUnitDescription');
+      if (!unit) {
+        appendStageUnavailable(t('noPlayableUnit'), t('noPlayableUnitDescription'));
         return;
       }
-      route.forEach((unitId, index) => {
-        const unit = playbackPlan.units.find((candidate) => candidate.id === unitId);
-        if (!unit) {
-          return;
-        }
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.dataset.kind = unit.kind;
-        button.dataset.active = unit.id === activeUnitId ? 'true' : 'false';
-        button.textContent = String(index + 1);
-        button.title = formatUnitTitle(unit, index);
-        button.addEventListener('click', () => {
-          stopPlayback();
-          setActiveUnit(unit.id, false, 0);
-        });
-        unitTimeline.appendChild(button);
-      });
+
+      const metadata = getMetadata(unit);
+      const visual = resolveStageVisual(unit, metadata);
+      if (visual) {
+        appendStageVisual(visual);
+      } else if (unit.kind === 'media' || unit.renderMode === 'media-playback') {
+        appendStageUnavailable(t('mediaUnavailable'), t('mediaUnavailableDescription'));
+      } else if (unit.kind === 'shot') {
+        appendStageUnavailable(t('storyboardShot'), t('storyboardShotUnavailableDescription'));
+      } else if (unit.kind === 'scene') {
+        appendStageUnavailable(t('storyboardScene'), t('storyboardSceneDescription'));
+      } else {
+        appendStageUnavailable(t('canvasNode'), t('canvasNodeDescription'));
+      }
+
+      appendStageDetail(t('labelMode'), unit.renderMode);
+      appendStageDetail(t('labelDuration'), formatDuration(resolveUnitDurationMs(unit.id)));
+      if (unit.assetPath) {
+        appendStageDetail(t('labelAsset'), unit.assetPath);
+      }
+      if (unit.kind === 'shot') {
+        appendStageDetail(t('labelShot'), metadata.shotNumber);
+        appendStageDetail(t('labelScale'), metadata.shotScale);
+        appendStageDetail(t('labelAction'), metadata.characterAction);
+        appendStageDetail(t('labelDialogue'), metadata.dialogue);
+      } else if (unit.kind === 'scene') {
+        appendStageDetail(t('labelScene'), metadata.sceneNumber);
+        appendStageDetail(t('labelLocation'), metadata.location);
+        appendStageDetail(t('labelTime'), metadata.timeOfDay);
+      } else if (unit.kind === 'media') {
+        appendStageDetail(t('labelMedia'), metadata.mediaType);
+        appendStageDetail(t('labelMime'), metadata.mimeType);
+      }
+    }
+
+    function resolveStageVisual(unit, metadata) {
+      const candidate =
+        unit.assetPath ||
+        readString(metadata.previewUrl) ||
+        readString(metadata.posterUrl) ||
+        readString(metadata.thumbnailUrl) ||
+        readString(metadata.generatedImage) ||
+        readNestedString(metadata.generatedAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
+        readNestedString(metadata.generatedVideoAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
+        readString(metadata.assetPath);
+      if (!candidate || !isSafePreviewSource(candidate)) {
+        return undefined;
+      }
+      const mediaType = readString(metadata.mediaType) || inferMediaType(candidate);
+      if (mediaType === 'audio') {
+        return { type: 'audio', source: candidate };
+      }
+      if (mediaType === 'video') {
+        return { type: 'video', source: candidate };
+      }
+      if (mediaType === 'image' || unit.kind === 'shot') {
+        return { type: 'image', source: candidate };
+      }
+      return undefined;
+    }
+
+    function appendStageVisual(visual) {
+      if (visual.type === 'image') {
+        const image = document.createElement('img');
+        image.src = visual.source;
+        image.alt = t('playbackPreviewAlt');
+        stageVisual.appendChild(image);
+        return;
+      }
+      if (visual.type === 'video') {
+        const video = document.createElement('video');
+        video.src = visual.source;
+        video.controls = true;
+        video.playsInline = true;
+        stageVisual.appendChild(video);
+        return;
+      }
+      if (visual.type === 'audio') {
+        const audio = document.createElement('audio');
+        audio.src = visual.source;
+        audio.controls = true;
+        stageVisual.appendChild(audio);
+      }
+    }
+
+    function appendStageUnavailable(title, description) {
+      const box = document.createElement('div');
+      box.className = 'stage-unavailable';
+      const heading = document.createElement('h2');
+      heading.textContent = title;
+      const text = document.createElement('p');
+      text.textContent = description;
+      box.append(heading, text);
+      stageVisual.appendChild(box);
+    }
+
+    function appendStageDetail(label, value) {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+      const detail = document.createElement('span');
+      detail.className = 'stage-detail';
+      detail.textContent = label + ': ' + formatValue(value);
+      stageDetails.appendChild(detail);
     }
 
     function renderMeta(unit) {
@@ -685,45 +941,45 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       if (!unit) {
         return;
       }
-      appendMeta('Source node', unit.sourceNodeId);
-      appendMeta('Render mode', unit.renderMode);
-      appendMeta('Duration', formatDuration(unit.durationMs));
+      appendMeta(t('labelSourceNode'), unit.sourceNodeId);
+      appendMeta(t('labelRenderMode'), unit.renderMode);
+      appendMeta(t('labelDuration'), formatDuration(unit.durationMs));
       if (unit.assetPath) {
-        appendMeta('Asset', unit.assetPath);
+        appendMeta(t('labelAsset'), unit.assetPath);
       }
       if (unit.resourceRef) {
-        appendMeta('Resource', JSON.stringify(unit.resourceRef));
+        appendMeta(t('labelResource'), JSON.stringify(unit.resourceRef));
       }
       const metadata = getMetadata(unit);
       if (unit.kind === 'shot') {
-        appendMetaField(metadata, 'Shot', 'shotNumber');
-        appendMetaField(metadata, 'Scale', 'shotScale');
-        appendMetaField(metadata, 'Camera', 'cameraMovement');
-        appendMetaField(metadata, 'Angle', 'cameraAngle');
-        appendMetaField(metadata, 'Action', 'characterAction');
-        appendMetaField(metadata, 'Dialogue', 'dialogue');
-        appendMetaField(metadata, 'Voice', 'voiceOver');
-        appendMetaField(metadata, 'Sound', 'soundCue');
-        appendMetaField(metadata, 'Status', 'generationStatus');
-        appendMetaValue('Characters', summarizeCharacters(metadata.characters));
-        appendMetaValue('Media refs', summarizeCount(metadata.sourceMediaRefs, metadata.generatedMediaRefs, metadata.mediaRefs));
-        appendMetaValue('Image asset', readNestedString(metadata.generatedAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedImage));
-        appendMetaValue('Video asset', readNestedString(metadata.generatedVideoAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedVideo));
+        appendMetaField(metadata, t('labelShot'), 'shotNumber');
+        appendMetaField(metadata, t('labelScale'), 'shotScale');
+        appendMetaField(metadata, t('labelCamera'), 'cameraMovement');
+        appendMetaField(metadata, t('labelAngle'), 'cameraAngle');
+        appendMetaField(metadata, t('labelAction'), 'characterAction');
+        appendMetaField(metadata, t('labelDialogue'), 'dialogue');
+        appendMetaField(metadata, t('labelVoice'), 'voiceOver');
+        appendMetaField(metadata, t('labelSound'), 'soundCue');
+        appendMetaField(metadata, t('labelStatus'), 'generationStatus');
+        appendMetaValue(t('labelCharacters'), summarizeCharacters(metadata.characters));
+        appendMetaValue(t('labelMediaRefs'), summarizeCount(metadata.sourceMediaRefs, metadata.generatedMediaRefs, metadata.mediaRefs));
+        appendMetaValue(t('labelImageAsset'), readNestedString(metadata.generatedAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedImage));
+        appendMetaValue(t('labelVideoAsset'), readNestedString(metadata.generatedVideoAsset, ['path', 'assetPath', 'id']) || readString(metadata.generatedVideo));
       } else if (unit.kind === 'scene') {
-        appendMetaField(metadata, 'Scene', 'sceneNumber');
-        appendMetaField(metadata, 'Location', 'location');
-        appendMetaField(metadata, 'Time', 'timeOfDay');
-        appendMetaField(metadata, 'Script', 'sourceScriptUri');
+        appendMetaField(metadata, t('labelScene'), 'sceneNumber');
+        appendMetaField(metadata, t('labelLocation'), 'location');
+        appendMetaField(metadata, t('labelTime'), 'timeOfDay');
+        appendMetaField(metadata, t('labelScript'), 'sourceScriptUri');
       } else if (unit.kind === 'media') {
-        appendMetaField(metadata, 'Media type', 'mediaType');
-        appendMetaField(metadata, 'Asset path', 'assetPath');
-        appendMetaField(metadata, 'Duration', 'duration');
-        appendMetaField(metadata, 'MIME', 'mimeType');
+        appendMetaField(metadata, t('labelMediaType'), 'mediaType');
+        appendMetaField(metadata, t('labelAssetPath'), 'assetPath');
+        appendMetaField(metadata, t('labelDuration'), 'duration');
+        appendMetaField(metadata, t('labelMime'), 'mimeType');
       } else {
-        appendMetaField(metadata, 'Script', 'scriptPath');
-        appendMetaField(metadata, 'Document', 'docPath');
-        appendMetaField(metadata, 'Project', 'projectPath');
-        appendMetaValue('Scenes', summarizeArray(metadata.scenes));
+        appendMetaField(metadata, t('labelScript'), 'scriptPath');
+        appendMetaField(metadata, t('labelDocument'), 'docPath');
+        appendMetaField(metadata, t('labelProject'), 'projectPath');
+        appendMetaValue(t('labelScenes'), summarizeArray(metadata.scenes));
       }
     }
 
@@ -747,10 +1003,20 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function renderChoices(unit) {
       unitChoices.replaceChildren();
+      unitBranchMeta.replaceChildren();
       if (!unit) {
         return;
       }
       const choices = getOutgoingTransitions(unit.id);
+      for (const choice of choices) {
+        const item = document.createElement('div');
+        item.className = 'branch-item';
+        item.textContent = t('choiceTransition', {
+          label: formatChoiceLabel(choice),
+          targetUnitId: choice.targetUnitId,
+        });
+        unitBranchMeta.appendChild(item);
+      }
       if (choices.length <= 1) {
         return;
       }
@@ -785,6 +1051,39 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         item.textContent = diagnostic.message || diagnostic.code;
         unitDiagnostics.appendChild(item);
       }
+    }
+
+    function renderInspectorActions() {
+      const diagnostics = Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : [];
+      const unit = getCurrentUnit();
+      const choices = unit ? getOutgoingTransitions(unit.id) : [];
+      inspectorInfo.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'info' ? 'true' : 'false';
+      inspectorBranches.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'branches' ? 'true' : 'false';
+      inspectorDiagnostics.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'diagnostics' ? 'true' : 'false';
+      inspectorBranches.disabled = choices.length === 0;
+      inspectorDiagnostics.disabled = diagnostics.length === 0;
+      inspectorBranches.title = choices.length > 0 ? t('branches') : t('noBranches');
+      inspectorDiagnostics.title = diagnostics.length > 0 ? t('diagnostics') : t('noDiagnostics');
+    }
+
+    function toggleInspector(section) {
+      if (playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === section) {
+        closeInspector();
+        return;
+      }
+      playbackInspector.dataset.open = 'true';
+      playbackInspector.dataset.section = section;
+      inspectorTitle.textContent = section === 'branches'
+        ? t('branches')
+        : section === 'diagnostics'
+          ? t('diagnostics')
+          : t('info');
+      renderInspectorActions();
+    }
+
+    function closeInspector() {
+      playbackInspector.dataset.open = 'false';
+      renderInspectorActions();
     }
 
     function setActiveUnit(unitId, keepPlaying, nextElapsedMs) {
@@ -1000,30 +1299,30 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function formatPlanTitle(plan) {
       if (!plan) {
-        return 'Canvas Playback';
+        return t('planCanvasPlayback');
       }
       if (plan.adapterId === 'storyboard') {
-        return 'Storyboard Preview';
+        return t('planStoryboardPreview');
       }
       if (plan.adapterId === 'media-sequence') {
-        return 'Media Sequence Preview';
+        return t('planMediaSequencePreview');
       }
       if (plan.adapterId === 'narrative') {
-        return 'Narrative Playback Plan';
+        return t('planNarrativePlaybackPlan');
       }
-      return 'Canvas Playback';
+      return t('planCanvasPlayback');
     }
 
     function formatUnitTitle(unit, index) {
       const metadata = getMetadata(unit);
       if (unit.kind === 'shot') {
         const shotNumber = metadata.shotNumber !== undefined ? String(metadata.shotNumber) : String(index + 1);
-        return unit.label || 'Shot ' + shotNumber;
+        return unit.label || t('shotTitle', { shotNumber });
       }
       return (
         unit.label ||
         readFirstString(metadata, ['sceneTitle', 'scriptTitle', 'title', 'name', 'projectTitle', 'docPath', 'assetPath']) ||
-        unit.kind + ' ' + (index + 1)
+        t('fallbackUnitTitle', { kind: formatKindLabel(unit.kind), index: index + 1 })
       );
     }
 
@@ -1034,25 +1333,25 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           readString(metadata.visualDescription) ||
           readString(metadata.generationPrompt) ||
           readString(metadata.dialogue) ||
-          'Storyboard shot playback unit. Use Canvas to edit shot content and route ordering.'
+          t('bodyShotFallback')
         );
       }
       if (unit.kind === 'scene') {
         const location = readString(metadata.location);
         const timeOfDay = readString(metadata.timeOfDay);
-        return [readString(metadata.sceneTitle), location, timeOfDay].filter(Boolean).join(' / ') || 'Storyboard scene playback unit.';
+        return [readString(metadata.sceneTitle), location, timeOfDay].filter(Boolean).join(' / ') || t('bodySceneFallback');
       }
       if (unit.kind === 'media') {
         const source = unit.assetPath || readString(metadata.assetPath) || readNestedString(unit.resourceRef, ['key', 'id', 'path']);
-        return source ? 'Media source: ' + source : 'Media playback unit. Runtime source will be resolved by the host.';
+        return source ? t('bodyMediaSource', { source }) : t('bodyMediaFallback');
       }
       if (unit.kind === 'narrative') {
-        return readString(metadata.content) || readString(metadata.sceneRef) || 'Narrative runtime unit. Interactive rendering remains handled by the Narrative Runtime.';
+        return readString(metadata.content) || readString(metadata.sceneRef) || t('bodyNarrativeFallback');
       }
       if (unit.kind === 'container') {
-        return readFirstString(metadata, ['description', 'sceneTitle', 'label', 'name']) || 'Container playback unit.';
+        return readFirstString(metadata, ['description', 'sceneTitle', 'label', 'name']) || t('bodyContainerFallback');
       }
-      return readFirstString(metadata, ['content', 'description', 'scriptPath', 'docPath', 'modelPath', 'canvasPath', 'projectPath']) || 'Generic Canvas node playback unit.';
+      return readFirstString(metadata, ['content', 'description', 'scriptPath', 'docPath', 'modelPath', 'canvasPath', 'projectPath']) || t('bodyGenericFallback');
     }
 
     function formatChoiceLabel(choice) {
@@ -1060,7 +1359,17 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         return choice.label;
       }
       const target = playbackPlan?.units.find((unit) => unit.id === choice.targetUnitId);
-      return target ? 'Continue to ' + formatUnitTitle(target, route.length) : 'Continue';
+      return target ? t('choiceContinueTo', { title: formatUnitTitle(target, route.length) }) : t('choiceContinue');
+    }
+
+    function formatKindLabel(kind) {
+      if (kind === 'node') return t('kindNode');
+      if (kind === 'container') return t('kindContainer');
+      if (kind === 'media') return t('kindMedia');
+      if (kind === 'shot') return t('kindShot');
+      if (kind === 'scene') return t('kindScene');
+      if (kind === 'narrative') return t('kindNarrative');
+      return kind ? String(kind) : t('kindUnit');
     }
 
     function getMetadata(unit) {
@@ -1096,6 +1405,28 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return undefined;
     }
 
+    function isSafePreviewSource(value) {
+      return (
+        value.startsWith('data:image/') ||
+        value.startsWith('data:audio/') ||
+        value.startsWith('data:video/') ||
+        value.startsWith('blob:') ||
+        value.startsWith('https://') ||
+        value.startsWith('vscode-webview:') ||
+        value.startsWith('vscode-webview-resource:') ||
+        value.startsWith('vscode-resource:') ||
+        value.startsWith('https://vscode-resource.vscode-cdn.net/')
+      );
+    }
+
+    function inferMediaType(value) {
+      const clean = value.split('?')[0].split('#')[0].toLowerCase();
+      if (clean.startsWith('data:image/') || /\\.(png|jpe?g|webp|gif|avif)$/.test(clean)) return 'image';
+      if (clean.startsWith('data:video/') || /\\.(mp4|webm|mov|m4v|mkv)$/.test(clean)) return 'video';
+      if (clean.startsWith('data:audio/') || /\\.(mp3|wav|ogg|flac|m4a|aac)$/.test(clean)) return 'audio';
+      return undefined;
+    }
+
     function summarizeCharacters(value) {
       if (!Array.isArray(value) || value.length === 0) {
         return undefined;
@@ -1121,7 +1452,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           count += value.length;
         }
       }
-      return count > 0 ? count + ' item' + (count === 1 ? '' : 's') : undefined;
+      return count > 0 ? t(count === 1 ? 'itemCountOne' : 'itemCountMany', { count }) : undefined;
     }
 
     function summarizeArray(value) {
@@ -1130,7 +1461,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function formatDuration(value) {
       return typeof value === 'number' && Number.isFinite(value)
-        ? (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) + 's'
+        ? t('durationSeconds', { seconds: (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) })
         : undefined;
     }
 
@@ -1162,6 +1493,173 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 </body>
 </html>`;
   }
+}
+
+function createNarrativePreviewI18n(): NarrativePreviewI18n {
+  const t = (key: string, fallback: string): string => {
+    const localized = vscode.l10n.t(key);
+    return localized === key ? fallback : localized;
+  };
+  return {
+    title: t('neko.canvas.preview.title', 'Canvas Preview'),
+    statusWaitingGraph: t('neko.canvas.preview.statusWaitingGraph', 'Waiting for Canvas graph...'),
+    ariaStage: t('neko.canvas.preview.ariaStage', 'Canvas playback stage'),
+    ariaStageOverlay: t('neko.canvas.preview.ariaStageOverlay', 'Playback stage overlay'),
+    ariaPlaybackDetails: t('neko.canvas.preview.ariaPlaybackDetails', 'Playback details'),
+    ariaDetails: t('neko.canvas.preview.ariaDetails', 'Playback details'),
+    ariaControls: t('neko.canvas.preview.ariaControls', 'Playback controls'),
+    ariaTimeline: t('neko.canvas.preview.ariaTimeline', 'Playback timeline'),
+    unitFallback: t('neko.canvas.preview.unitFallback', 'Unit'),
+    planCanvasPlayback: t('neko.canvas.preview.planCanvasPlayback', 'Canvas Playback'),
+    info: t('neko.canvas.preview.info', 'Info'),
+    branches: t('neko.canvas.preview.branches', 'Branches'),
+    diagnostics: t('neko.canvas.preview.diagnostics', 'Diagnostics'),
+    noUnitSelected: t('neko.canvas.preview.noUnitSelected', 'No unit selected'),
+    close: t('neko.canvas.preview.close', 'Close'),
+    stageZero: t('neko.canvas.preview.stageZero', 'Stage 0'),
+    previous: t('neko.canvas.preview.previous', 'Previous'),
+    previousShort: t('neko.canvas.preview.previousShort', 'Prev'),
+    play: t('neko.canvas.preview.play', 'Play'),
+    pause: t('neko.canvas.preview.pause', 'Pause'),
+    next: t('neko.canvas.preview.next', 'Next'),
+    summaryWaitingPlan: t(
+      'neko.canvas.preview.summaryWaitingPlan',
+      'Waiting for Canvas playback plan...',
+    ),
+    statusLoadedZeroRuntime: t(
+      'neko.canvas.preview.statusLoadedZeroRuntime',
+      'Loaded revision {revision} with 0 Narrative Runtime nodes. Storyboard scene/shot and generic Canvas nodes use Canvas Playback Plan preview instead of Narrative Runtime.',
+    ),
+    statusLoadedRuntime: t(
+      'neko.canvas.preview.statusLoadedRuntime',
+      'Loaded revision {revision} with {count} runtime nodes.',
+    ),
+    statusLoadedPlaybackPlan: t(
+      'neko.canvas.preview.statusLoadedPlaybackPlan',
+      'Loaded Canvas playback plan ({adapterId}, {behaviorMode}) with {count} units{kindList}.',
+    ),
+    statusDiagnostics: t('neko.canvas.preview.statusDiagnostics', ' Diagnostics: {diagnostics}'),
+    statusJumpRequest: t(
+      'neko.canvas.preview.statusJumpRequest',
+      'Jump request: {nodeId} at revision {revision}.',
+    ),
+    stagePosition: t('neko.canvas.preview.stagePosition', 'Stage {index} of {total}'),
+    noPlayableUnit: t('neko.canvas.preview.noPlayableUnit', 'No playable unit'),
+    noPlayableUnitDescription: t(
+      'neko.canvas.preview.noPlayableUnitDescription',
+      'This Canvas does not expose a playable unit for the selected preview surface.',
+    ),
+    mediaUnavailable: t('neko.canvas.preview.mediaUnavailable', 'Media unavailable'),
+    mediaUnavailableDescription: t(
+      'neko.canvas.preview.mediaUnavailableDescription',
+      'A durable media reference exists, but no runtime preview URL is available in this player shell.',
+    ),
+    storyboardShot: t('neko.canvas.preview.storyboardShot', 'Storyboard shot'),
+    storyboardShotUnavailableDescription: t(
+      'neko.canvas.preview.storyboardShotUnavailableDescription',
+      'No generated image or safe preview source is available for this shot yet.',
+    ),
+    storyboardScene: t('neko.canvas.preview.storyboardScene', 'Storyboard scene'),
+    storyboardSceneDescription: t(
+      'neko.canvas.preview.storyboardSceneDescription',
+      'Scene playback is represented by ordered shots or scene metadata.',
+    ),
+    canvasNode: t('neko.canvas.preview.canvasNode', 'Canvas node'),
+    canvasNodeDescription: t(
+      'neko.canvas.preview.canvasNodeDescription',
+      'This unit is shown as a Canvas summary and highlighted in the source editor.',
+    ),
+    playbackPreviewAlt: t('neko.canvas.preview.playbackPreviewAlt', 'Playback preview'),
+    labelMode: t('neko.canvas.preview.labelMode', 'Mode'),
+    labelDuration: t('neko.canvas.preview.labelDuration', 'Duration'),
+    labelAsset: t('neko.canvas.preview.labelAsset', 'Asset'),
+    labelShot: t('neko.canvas.preview.labelShot', 'Shot'),
+    labelScale: t('neko.canvas.preview.labelScale', 'Scale'),
+    labelAction: t('neko.canvas.preview.labelAction', 'Action'),
+    labelDialogue: t('neko.canvas.preview.labelDialogue', 'Dialogue'),
+    labelScene: t('neko.canvas.preview.labelScene', 'Scene'),
+    labelLocation: t('neko.canvas.preview.labelLocation', 'Location'),
+    labelTime: t('neko.canvas.preview.labelTime', 'Time'),
+    labelMedia: t('neko.canvas.preview.labelMedia', 'Media'),
+    labelMime: t('neko.canvas.preview.labelMime', 'MIME'),
+    labelSourceNode: t('neko.canvas.preview.labelSourceNode', 'Source node'),
+    labelRenderMode: t('neko.canvas.preview.labelRenderMode', 'Render mode'),
+    labelResource: t('neko.canvas.preview.labelResource', 'Resource'),
+    labelCamera: t('neko.canvas.preview.labelCamera', 'Camera'),
+    labelAngle: t('neko.canvas.preview.labelAngle', 'Angle'),
+    labelVoice: t('neko.canvas.preview.labelVoice', 'Voice'),
+    labelSound: t('neko.canvas.preview.labelSound', 'Sound'),
+    labelStatus: t('neko.canvas.preview.labelStatus', 'Status'),
+    labelCharacters: t('neko.canvas.preview.labelCharacters', 'Characters'),
+    labelMediaRefs: t('neko.canvas.preview.labelMediaRefs', 'Media refs'),
+    labelImageAsset: t('neko.canvas.preview.labelImageAsset', 'Image asset'),
+    labelVideoAsset: t('neko.canvas.preview.labelVideoAsset', 'Video asset'),
+    labelScript: t('neko.canvas.preview.labelScript', 'Script'),
+    labelMediaType: t('neko.canvas.preview.labelMediaType', 'Media type'),
+    labelAssetPath: t('neko.canvas.preview.labelAssetPath', 'Asset path'),
+    labelDocument: t('neko.canvas.preview.labelDocument', 'Document'),
+    labelProject: t('neko.canvas.preview.labelProject', 'Project'),
+    labelScenes: t('neko.canvas.preview.labelScenes', 'Scenes'),
+    noBranches: t('neko.canvas.preview.noBranches', 'No branches'),
+    noDiagnostics: t('neko.canvas.preview.noDiagnostics', 'No diagnostics'),
+    planStoryboardPreview: t('neko.canvas.preview.planStoryboardPreview', 'Storyboard Preview'),
+    planMediaSequencePreview: t(
+      'neko.canvas.preview.planMediaSequencePreview',
+      'Media Sequence Preview',
+    ),
+    planNarrativePlaybackPlan: t(
+      'neko.canvas.preview.planNarrativePlaybackPlan',
+      'Narrative Playback Plan',
+    ),
+    shotTitle: t('neko.canvas.preview.shotTitle', 'Shot {shotNumber}'),
+    fallbackUnitTitle: t('neko.canvas.preview.fallbackUnitTitle', '{kind} {index}'),
+    bodyShotFallback: t(
+      'neko.canvas.preview.bodyShotFallback',
+      'Storyboard shot playback unit. Use Canvas to edit shot content and route ordering.',
+    ),
+    bodySceneFallback: t(
+      'neko.canvas.preview.bodySceneFallback',
+      'Storyboard scene playback unit.',
+    ),
+    bodyMediaSource: t('neko.canvas.preview.bodyMediaSource', 'Media source: {source}'),
+    bodyMediaFallback: t(
+      'neko.canvas.preview.bodyMediaFallback',
+      'Media playback unit. Runtime source will be resolved by the host.',
+    ),
+    bodyNarrativeFallback: t(
+      'neko.canvas.preview.bodyNarrativeFallback',
+      'Narrative runtime unit. Interactive rendering remains handled by the Narrative Runtime.',
+    ),
+    bodyContainerFallback: t(
+      'neko.canvas.preview.bodyContainerFallback',
+      'Container playback unit.',
+    ),
+    bodyGenericFallback: t(
+      'neko.canvas.preview.bodyGenericFallback',
+      'Generic Canvas node playback unit.',
+    ),
+    choiceContinueTo: t('neko.canvas.preview.choiceContinueTo', 'Continue to {title}'),
+    choiceContinue: t('neko.canvas.preview.choiceContinue', 'Continue'),
+    choiceTransition: t('neko.canvas.preview.choiceTransition', '{label} -> {targetUnitId}'),
+    itemCountOne: t('neko.canvas.preview.itemCountOne', '{count} item'),
+    itemCountMany: t('neko.canvas.preview.itemCountMany', '{count} items'),
+    durationSeconds: t('neko.canvas.preview.durationSeconds', '{seconds}s'),
+    kindNode: t('neko.canvas.preview.kindNode', 'Node'),
+    kindContainer: t('neko.canvas.preview.kindContainer', 'Container'),
+    kindMedia: t('neko.canvas.preview.kindMedia', 'Media'),
+    kindShot: t('neko.canvas.preview.kindShot', 'Shot'),
+    kindScene: t('neko.canvas.preview.kindScene', 'Scene'),
+    kindNarrative: t('neko.canvas.preview.kindNarrative', 'Narrative'),
+    kindUnit: t('neko.canvas.preview.kindUnit', 'Unit'),
+    disabledByConfiguration: t(
+      'neko.canvas.preview.disabledByConfiguration',
+      'Canvas Preview is disabled by configuration.',
+    ),
+    noActiveGraph: t(
+      'neko.canvas.preview.noActiveGraph',
+      'No active Canvas narrative graph is available.',
+    ),
+  };
 }
 
 export function createNarrativeGraphSnapshotFromCanvasData(
@@ -1540,10 +2038,23 @@ function readCanvasMessageRevision(message: CanvasToPreviewMessage): number | un
 }
 
 function serializePreviewBootstrapMessages(messages: readonly CanvasToPreviewMessage[]): string {
-  return JSON.stringify(messages)
+  return serializePreviewJson(messages);
+}
+
+function serializePreviewJson(value: unknown): string {
+  return JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function createNonce(): string {

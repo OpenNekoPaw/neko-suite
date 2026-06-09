@@ -1,7 +1,120 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const testL10nMessages = vi.hoisted(
+  (): Record<string, string> => ({
+    'neko.canvas.preview.title': '画布预览',
+    'neko.canvas.preview.statusWaitingGraph': '等待画布图数据...',
+    'neko.canvas.preview.ariaStage': '画布播放舞台',
+    'neko.canvas.preview.ariaStageOverlay': '播放舞台叠层',
+    'neko.canvas.preview.ariaPlaybackDetails': '播放详情',
+    'neko.canvas.preview.ariaDetails': '播放详情',
+    'neko.canvas.preview.ariaControls': '播放控制',
+    'neko.canvas.preview.ariaTimeline': '播放时间线',
+    'neko.canvas.preview.unitFallback': '单元',
+    'neko.canvas.preview.planCanvasPlayback': '画布播放',
+    'neko.canvas.preview.info': '信息',
+    'neko.canvas.preview.branches': '分支',
+    'neko.canvas.preview.diagnostics': '诊断',
+    'neko.canvas.preview.noUnitSelected': '未选择播放单元',
+    'neko.canvas.preview.close': '关闭',
+    'neko.canvas.preview.stageZero': '阶段 0',
+    'neko.canvas.preview.previous': '上一个',
+    'neko.canvas.preview.previousShort': '上一个',
+    'neko.canvas.preview.play': '播放',
+    'neko.canvas.preview.pause': '暂停',
+    'neko.canvas.preview.next': '下一个',
+    'neko.canvas.preview.summaryWaitingPlan': '等待画布播放计划...',
+    'neko.canvas.preview.statusLoadedZeroRuntime':
+      '已加载修订 {revision}，包含 0 个叙事运行时节点。',
+    'neko.canvas.preview.statusLoadedRuntime': '已加载修订 {revision}，包含 {count} 个运行时节点。',
+    'neko.canvas.preview.statusLoadedPlaybackPlan':
+      '已加载画布播放计划（{adapterId}, {behaviorMode}），包含 {count} 个单元{kindList}。',
+    'neko.canvas.preview.statusDiagnostics': ' 诊断：{diagnostics}',
+    'neko.canvas.preview.statusJumpRequest': '跳转请求：{nodeId}，修订 {revision}。',
+    'neko.canvas.preview.stagePosition': '阶段 {index} / {total}',
+    'neko.canvas.preview.noPlayableUnit': '没有可播放单元',
+    'neko.canvas.preview.noPlayableUnitDescription': '当前画布预览面没有生成可播放单元。',
+    'neko.canvas.preview.mediaUnavailable': '媒体不可用',
+    'neko.canvas.preview.mediaUnavailableDescription':
+      '存在稳定的媒体引用，但当前播放器壳层还没有可用的运行时预览 URL。',
+    'neko.canvas.preview.storyboardShot': '分镜镜头',
+    'neko.canvas.preview.storyboardShotUnavailableDescription':
+      '该镜头还没有生成图片或安全的预览来源。',
+    'neko.canvas.preview.storyboardScene': '分镜场景',
+    'neko.canvas.preview.storyboardSceneDescription': '场景播放由有序镜头或场景元数据表示。',
+    'neko.canvas.preview.canvasNode': '画布节点',
+    'neko.canvas.preview.canvasNodeDescription': '该单元以画布摘要展示，并会在源编辑器中高亮。',
+    'neko.canvas.preview.playbackPreviewAlt': '播放预览',
+    'neko.canvas.preview.labelMode': '模式',
+    'neko.canvas.preview.labelDuration': '时长',
+    'neko.canvas.preview.labelAsset': '素材',
+    'neko.canvas.preview.labelShot': '镜头',
+    'neko.canvas.preview.labelScale': '景别',
+    'neko.canvas.preview.labelAction': '动作',
+    'neko.canvas.preview.labelDialogue': '对白',
+    'neko.canvas.preview.labelScene': '场景',
+    'neko.canvas.preview.labelLocation': '地点',
+    'neko.canvas.preview.labelTime': '时间',
+    'neko.canvas.preview.labelMedia': '媒体',
+    'neko.canvas.preview.labelMime': 'MIME',
+    'neko.canvas.preview.labelSourceNode': '源节点',
+    'neko.canvas.preview.labelRenderMode': '渲染模式',
+    'neko.canvas.preview.labelResource': '资源',
+    'neko.canvas.preview.labelCamera': '镜头运动',
+    'neko.canvas.preview.labelAngle': '机位角度',
+    'neko.canvas.preview.labelVoice': '旁白',
+    'neko.canvas.preview.labelSound': '声音',
+    'neko.canvas.preview.labelStatus': '状态',
+    'neko.canvas.preview.labelCharacters': '角色',
+    'neko.canvas.preview.labelMediaRefs': '媒体引用',
+    'neko.canvas.preview.labelImageAsset': '图片素材',
+    'neko.canvas.preview.labelVideoAsset': '视频素材',
+    'neko.canvas.preview.labelScript': '剧本',
+    'neko.canvas.preview.labelMediaType': '媒体类型',
+    'neko.canvas.preview.labelAssetPath': '素材路径',
+    'neko.canvas.preview.labelDocument': '文档',
+    'neko.canvas.preview.labelProject': '项目',
+    'neko.canvas.preview.labelScenes': '场景',
+    'neko.canvas.preview.noBranches': '没有分支',
+    'neko.canvas.preview.noDiagnostics': '没有诊断',
+    'neko.canvas.preview.planStoryboardPreview': '分镜预览',
+    'neko.canvas.preview.planMediaSequencePreview': '媒体序列预览',
+    'neko.canvas.preview.planNarrativePlaybackPlan': '叙事播放计划',
+    'neko.canvas.preview.shotTitle': '镜头 {shotNumber}',
+    'neko.canvas.preview.fallbackUnitTitle': '{kind} {index}',
+    'neko.canvas.preview.bodyShotFallback': '分镜镜头播放单元。',
+    'neko.canvas.preview.bodySceneFallback': '分镜场景播放单元。',
+    'neko.canvas.preview.bodyMediaSource': '媒体来源：{source}',
+    'neko.canvas.preview.bodyMediaFallback': '媒体播放单元。运行时来源会由宿主解析。',
+    'neko.canvas.preview.bodyNarrativeFallback': '叙事运行时单元。',
+    'neko.canvas.preview.bodyContainerFallback': '容器播放单元。',
+    'neko.canvas.preview.bodyGenericFallback': '通用画布节点播放单元。',
+    'neko.canvas.preview.choiceContinueTo': '继续到 {title}',
+    'neko.canvas.preview.choiceContinue': '继续',
+    'neko.canvas.preview.choiceTransition': '{label} -> {targetUnitId}',
+    'neko.canvas.preview.itemCountOne': '{count} 项',
+    'neko.canvas.preview.itemCountMany': '{count} 项',
+    'neko.canvas.preview.durationSeconds': '{seconds} 秒',
+    'neko.canvas.preview.kindNode': '节点',
+    'neko.canvas.preview.kindContainer': '容器',
+    'neko.canvas.preview.kindMedia': '媒体',
+    'neko.canvas.preview.kindShot': '镜头',
+    'neko.canvas.preview.kindScene': '场景',
+    'neko.canvas.preview.kindNarrative': '叙事',
+    'neko.canvas.preview.kindUnit': '单元',
+    'neko.canvas.preview.disabledByConfiguration': '画布预览已被配置禁用。',
+    'neko.canvas.preview.noActiveGraph': '当前没有可用的画布叙事图。',
+  }),
+);
+
 vi.mock('vscode', () => ({
   ViewColumn: { Beside: 2 },
+  env: {
+    language: 'zh-cn',
+  },
+  l10n: {
+    t: vi.fn((key: string) => testL10nMessages[key] ?? key),
+  },
   window: {
     createWebviewPanel: vi.fn(),
   },
@@ -98,6 +211,7 @@ describe('NarrativePreviewBridge', () => {
 
     expect(bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(1);
+    expect(panelFactory.createdPanels[0]?.title).toBe('画布预览');
     expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
     expect(readBootstrapMessages(panelFactory.createdPanels[0]?.webview.html ?? '')).toEqual([
       expect.objectContaining({
@@ -220,17 +334,70 @@ describe('NarrativePreviewBridge', () => {
     const html = panelFactory.createdPanels[0]?.webview.html ?? '';
 
     expect(html).toContain('id="playback-preview"');
-    expect(html).toContain('id="unit-timeline"');
-    expect(html).toContain('id="stage-progress"');
+    expect(html).toContain('lang="zh-cn" data-vscode-locale="zh-cn"');
+    expect(html).toContain('<title>画布预览</title>');
+    expect(html).toContain('const I18N = ');
+    expect(html).toContain('等待画布图数据...');
+    expect(html).toContain('aria-label="画布播放舞台"');
+    expect(html).toContain('id="player-stage"');
+    expect(html).toContain('id="stage-content"');
+    expect(html).toContain('id="stage-visual"');
+    expect(html).toContain('id="player-controls"');
+    expect(html).toContain('id="segmented-timeline"');
+    expect(html).toContain('class="branch-choices"');
     expect(html).toContain('id="playback-clock"');
-    expect(html).toContain('id="current-stage-progress-fill"');
+    expect(html).toContain('id="playback-inspector"');
+    expect(html).toContain('id="unit-branch-meta"');
     expect(html).toContain('id="unit-meta"');
+    expect(html).not.toContain('id="unit-timeline"');
+    expect(html).not.toContain('id="stage-progress"');
+    expect(html).not.toContain('class="unit-panel"');
+    expect(html).not.toContain('class="playback-toolbar"');
     expect(html).toContain('formatUnitBody');
     expect(html).toContain('formatClockTime');
+    expect(html).toContain('renderStageContent');
+    expect(html).toContain('renderSegmentedTimeline');
+    expect(html).toContain('toggleInspector');
     expect(html).toContain('img-src vscode-webview: data: blob: https:');
     expect(html).toContain('media-src vscode-webview: data: blob: https:');
     expect(html).toContain('canvas:highlightNode');
-    expect(html).toContain('Storyboard Preview');
+    expect(readPreviewI18n(html)).toMatchObject({
+      title: '画布预览',
+      planStoryboardPreview: '分镜预览',
+      play: '播放',
+      diagnostics: '诊断',
+    });
+    expect(html).not.toContain('Storyboard Preview');
+  });
+
+  it('keeps Canvas playback decisions in the player shell without mutating persisted data', () => {
+    const host = createHost(createSnapshot(4), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 3150,
+    });
+
+    expect(bridge.open()).toBe(true);
+    const html = panelFactory.createdPanels[0]?.webview.html ?? '';
+
+    expect(html).toContain("playbackPlan.advancePolicy !== 'media-ended'");
+    expect(html).toContain("playbackPlan.behaviorMode === 'interactive' && transitions.length > 1");
+    expect(html).toContain('segment.addEventListener');
+    expect(html).toContain('setActiveUnit(unit.id, false, 0)');
+    expect(html).toContain('unitChoices.appendChild(button)');
+    expect(html).toContain('canvas:choiceMade');
+    expect(html).toContain("playbackInspector.dataset.open = 'true'");
+    expect(html).toContain("playbackInspector.dataset.open = 'false'");
+    expect(html).toContain('inspectorDiagnostics.disabled = diagnostics.length === 0');
+    expect(html).toContain('mediaUnavailableDescription');
+    expect(html).toContain('存在稳定的媒体引用');
+    expect(html).toContain('isSafePreviewSource');
+    expect(html).not.toContain('node.data.currentTime');
+    expect(html).not.toContain('node.data.route');
+    expect(html).not.toContain('savePlaybackState');
   });
 
   it('keeps storyboard Canvas playback available when narrative snapshot has zero runtime nodes', () => {
@@ -490,18 +657,19 @@ function createPanelFactory(): NarrativePreviewPanelFactory & {
   const createdPanels: ReturnType<typeof createPanel>[] = [];
   return {
     createdPanels,
-    createWebviewPanel: vi.fn(() => {
-      const panel = createPanel();
+    createWebviewPanel: vi.fn((_viewType, title) => {
+      const panel = createPanel(title);
       createdPanels.push(panel);
       return panel as never;
     }),
   };
 }
 
-function createPanel() {
+function createPanel(title: string) {
   const disposeHandlers: Array<() => void> = [];
   let messageHandler: ((message: unknown) => void) | undefined;
   const panel = {
+    title,
     webview: {
       html: '',
       cspSource: 'vscode-webview:',
@@ -532,4 +700,12 @@ function readBootstrapMessages(html: string): unknown[] {
     return [];
   }
   return JSON.parse(match[1]) as unknown[];
+}
+
+function readPreviewI18n(html: string): Record<string, string> {
+  const match = html.match(/const I18N = (.*?);/);
+  if (!match?.[1]) {
+    return {};
+  }
+  return JSON.parse(match[1]) as Record<string, string>;
 }
