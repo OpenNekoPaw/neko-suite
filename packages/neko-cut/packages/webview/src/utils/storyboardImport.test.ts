@@ -70,6 +70,37 @@ describe('storyboard import utilities', () => {
             },
             label: 'Prepared keyframe',
           },
+          referenceDescriptors: [
+            {
+              schemaVersion: 1,
+              kind: 'reference-descriptor',
+              referenceId: 'shot-1:keyframeRefs:0:prepared-shot-1',
+              sourceKind: 'canvas-node',
+              sourceId: 'shot-1',
+              referenceKind: 'custom',
+              role: 'keyframe',
+              modality: 'image',
+              payload: {
+                type: 'custom',
+                data: {
+                  locatorType: 'tool-result',
+                  toolCallId: 'transform-shot-1',
+                  assetIndex: 0,
+                },
+              },
+            },
+            {
+              schemaVersion: 1,
+              kind: 'reference-descriptor',
+              referenceId: 'unsafe',
+              sourceKind: 'canvas-node',
+              sourceId: 'shot-1',
+              referenceKind: 'custom',
+              role: 'keyframe',
+              modality: 'image',
+              payload: { type: 'path', path: 'blob:runtime-preview' },
+            },
+          ],
           label: 'One',
         },
       ],
@@ -85,6 +116,26 @@ describe('storyboard import utilities', () => {
       },
       label: 'Prepared keyframe',
     });
+    expect(payload?.shots[0]?.referenceDescriptors).toEqual([
+      {
+        schemaVersion: 1,
+        kind: 'reference-descriptor',
+        referenceId: 'shot-1:keyframeRefs:0:prepared-shot-1',
+        sourceKind: 'canvas-node',
+        sourceId: 'shot-1',
+        referenceKind: 'custom',
+        role: 'keyframe',
+        modality: 'image',
+        payload: {
+          type: 'custom',
+          data: {
+            locatorType: 'tool-result',
+            toolCallId: 'transform-shot-1',
+            assetIndex: 0,
+          },
+        },
+      },
+    ]);
     expect(payload).not.toBeNull();
     expect(buildStoryboardImageClips(payload!)).toEqual([
       {

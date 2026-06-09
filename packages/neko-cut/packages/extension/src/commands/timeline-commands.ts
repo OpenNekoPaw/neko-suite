@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode';
+import type { ReferenceDescriptor, StoryboardMediaRef } from '@neko/shared';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
@@ -444,6 +445,8 @@ export function registerTimelineCommands(
           id: string;
           shotNumber: number;
           duration: number;
+          preparedKeyframeRef?: StoryboardMediaRef;
+          referenceDescriptors?: readonly ReferenceDescriptor[];
           imagePath?: string;
           imageDataUrl?: string;
           dialogue?: string;

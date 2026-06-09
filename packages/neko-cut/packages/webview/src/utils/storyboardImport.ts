@@ -1,5 +1,7 @@
 import {
   STORYBOARD_TEXT_CUE_KINDS,
+  isReferenceDescriptor,
+  type ReferenceDescriptor,
   type StoryboardMediaRef,
   type StoryboardTextCue,
   type StoryboardVoiceCue,
@@ -10,6 +12,7 @@ export interface CutStoryboardImportShot {
   shotNumber: number;
   duration: number;
   preparedKeyframeRef?: StoryboardMediaRef;
+  referenceDescriptors?: readonly ReferenceDescriptor[];
   imagePath?: string;
   imageDataUrl?: string;
   dialogue?: string;
@@ -167,6 +170,7 @@ function normalizeCutStoryboardImportShot(
   const imagePath = readNonEmptyString(value.imagePath);
   const imageDataUrl = readNonEmptyString(value.imageDataUrl);
   const preparedKeyframeRef = normalizeStoryboardMediaRef(value.preparedKeyframeRef);
+  const referenceDescriptors = normalizeReferenceDescriptors(value.referenceDescriptors);
   const label = readNonEmptyString(value.label) ?? `#${String(shotNumber).padStart(3, '0')}`;
   const dialogue = readNonEmptyString(value.dialogue);
   const voiceOver = readNonEmptyString(value.voiceOver);
@@ -179,6 +183,7 @@ function normalizeCutStoryboardImportShot(
     shotNumber,
     duration,
     ...(preparedKeyframeRef ? { preparedKeyframeRef } : {}),
+    ...(referenceDescriptors.length > 0 ? { referenceDescriptors } : {}),
     ...(imagePath ? { imagePath } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
     ...(dialogue ? { dialogue } : {}),
@@ -188,6 +193,13 @@ function normalizeCutStoryboardImportShot(
     ...(voiceCues.length > 0 ? { voiceCues } : {}),
     label,
   };
+}
+
+function normalizeReferenceDescriptors(value: unknown): readonly ReferenceDescriptor[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): readonly ReferenceDescriptor[] =>
+    isReferenceDescriptor(item) ? [item] : [],
+  );
 }
 
 function normalizeStoryboardMediaRef(value: unknown): StoryboardMediaRef | undefined {
