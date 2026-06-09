@@ -54,12 +54,19 @@ describe('SkillList', () => {
 
     expect(host.textContent).toContain('编排技能');
     expect(host.textContent).toContain('媒体转视频');
-    expect(host.textContent).toContain('漫画转分镜表');
+    expect(host.textContent).not.toContain('漫画转分镜表');
     expect(host.textContent).toContain('内置');
     expect(host.textContent).toContain('编排');
     expect(host.textContent).toContain('快捷动作');
     expect(host.textContent).toContain('视频导出打包');
-    expect(host.querySelectorAll('.skill-mini-card').length).toBe(1);
+    expect(host.querySelectorAll('.skill-row').length).toBe(2);
+
+    act(() => {
+      findButtonByText(host, '子技能（1）')?.click();
+    });
+
+    expect(host.textContent).toContain('漫画转分镜表');
+    expect(host.querySelectorAll('.skill-row').length).toBe(3);
   });
 
   it('filters installed skills by tag', () => {
@@ -81,28 +88,27 @@ describe('SkillList', () => {
     });
 
     expect(host.textContent).toContain('1/3 个技能');
-    act(() => {
-      findButtonByText(host, '显示高级项（1）')?.click();
-    });
     expect(host.textContent).toContain('漫画转分镜表');
     expect(host.textContent).not.toContain('视频导出打包');
   });
 
-  it('shows advanced entries on demand', () => {
+  it('collapses and expands advanced entries on demand', () => {
     const { host } = renderInteractive(
       <SkillList skills={skills} onCommand={vi.fn()} onSkillAction={vi.fn()} />,
     );
 
-    const showAdvanced = findButtonByText(host, '显示高级项（1）');
-    expect(showAdvanced).not.toBeNull();
+    const advancedToggle = findButtonByText(host, '高级项1');
+    expect(advancedToggle).not.toBeNull();
+    expect(advancedToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.textContent).not.toContain('漫画转分镜表');
 
     act(() => {
-      showAdvanced?.click();
+      advancedToggle?.click();
     });
 
-    expect(host.textContent).toContain('隐藏高级项');
-    expect(host.querySelectorAll('.skill-card').length).toBe(1);
-    expect(host.querySelectorAll('.skill-mini-card').length).toBe(2);
+    expect(advancedToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.textContent).toContain('漫画转分镜表');
+    expect(host.querySelectorAll('.skill-row').length).toBe(3);
   });
 
   it('dispatches typed management actions without file paths', () => {
@@ -112,7 +118,7 @@ describe('SkillList', () => {
     );
 
     act(() => {
-      findButtonByText(host, '显示高级项（1）')?.click();
+      findButtonByText(host, '高级项1')?.click();
     });
 
     const forkButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).filter(

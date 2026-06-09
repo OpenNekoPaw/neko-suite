@@ -1,6 +1,6 @@
 import { Badge, Button } from '@neko/ui/primitives';
 import type { SkillCatalogAction, SkillCatalogActionId } from '@neko/shared';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardSkill } from '../types';
 
@@ -22,19 +22,39 @@ interface SkillGroups {
   readonly advanced: readonly DashboardSkill[];
 }
 
+type SkillSectionId = 'orchestrators' | 'standalone' | 'quickActions' | 'advanced';
+
 const MAX_VISIBLE_TAGS = 3;
-const MAX_VISIBLE_CHILDREN = 3;
+const DEFAULT_EXPANDED_SECTIONS: readonly SkillSectionId[] = [
+  'orchestrators',
+  'standalone',
+  'quickActions',
+];
+const ALL_SKILL_SECTION_IDS: readonly SkillSectionId[] = [
+  'orchestrators',
+  'standalone',
+  'quickActions',
+  'advanced',
+];
 
 export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) {
   const { t } = useTranslation();
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<ReadonlySet<SkillSectionId>>(
+    () => new Set(DEFAULT_EXPANDED_SECTIONS),
+  );
+  const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(() => new Set());
   const availableTags = useMemo(() => getAvailableTags(skills), [skills]);
   useEffect(() => {
     if (activeTag !== null && !availableTags.includes(activeTag)) {
       setActiveTag(null);
     }
   }, [activeTag, availableTags]);
+  useEffect(() => {
+    if (activeTag !== null) {
+      setExpandedSections(new Set(ALL_SKILL_SECTION_IDS));
+    }
+  }, [activeTag]);
 
   const visibleSkills = useMemo(
     () =>
@@ -107,26 +127,56 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
             <p className="empty-cell">{t('dashboard.skills.noFilteredResults')}</p>
           ) : null}
           {groups.orchestrators.length > 0 ? (
-            <SkillSection title={t('dashboard.skills.orchestrators')}>
-              <div className="skill-grid">
+            <SkillSection
+              title={t('dashboard.skills.orchestrators')}
+              count={groups.orchestrators.length}
+              expanded={expandedSections.has('orchestrators')}
+              onToggle={() =>
+                setExpandedSections((sections) => toggleSetValue(sections, 'orchestrators'))
+              }
+            >
+              <div className="skill-row-list" role="list">
                 {groups.orchestrators.map((skill) => (
-                  <SkillCard
-                    key={`${skill.extensionId}:${skill.id}:${skill.catalog.source}`}
-                    skill={skill}
-                    children={groups.focusedByParent.get(skill.id) ?? []}
-                    onCommand={onCommand}
-                    onSkillAction={onSkillAction}
-                  />
+                  <Fragment key={getSkillKey(skill)}>
+                    <SkillRow
+                      skill={skill}
+                      childCount={(groups.focusedByParent.get(skill.id) ?? []).length}
+                      childrenExpanded={expandedParents.has(getSkillKey(skill))}
+                      onToggleChildren={() =>
+                        setExpandedParents((parents) => toggleSetValue(parents, getSkillKey(skill)))
+                      }
+                      onCommand={onCommand}
+                      onSkillAction={onSkillAction}
+                    />
+                    {expandedParents.has(getSkillKey(skill))
+                      ? (groups.focusedByParent.get(skill.id) ?? []).map((child) => (
+                          <SkillRow
+                            key={getSkillKey(child)}
+                            skill={child}
+                            density="child"
+                            onCommand={onCommand}
+                            onSkillAction={onSkillAction}
+                          />
+                        ))
+                      : null}
+                  </Fragment>
                 ))}
               </div>
             </SkillSection>
           ) : null}
           {groups.standalone.length > 0 ? (
-            <SkillSection title={t('dashboard.skills.standalone')}>
-              <div className="skill-grid">
+            <SkillSection
+              title={t('dashboard.skills.standalone')}
+              count={groups.standalone.length}
+              expanded={expandedSections.has('standalone')}
+              onToggle={() =>
+                setExpandedSections((sections) => toggleSetValue(sections, 'standalone'))
+              }
+            >
+              <div className="skill-row-list" role="list">
                 {groups.standalone.map((skill) => (
-                  <SkillCard
-                    key={`${skill.extensionId}:${skill.id}:${skill.catalog.source}`}
+                  <SkillRow
+                    key={getSkillKey(skill)}
                     skill={skill}
                     onCommand={onCommand}
                     onSkillAction={onSkillAction}
@@ -136,11 +186,18 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
             </SkillSection>
           ) : null}
           {groups.quickActions.length > 0 ? (
-            <SkillSection title={t('dashboard.skills.quickActions')}>
-              <div className="skill-mini-grid">
+            <SkillSection
+              title={t('dashboard.skills.quickActions')}
+              count={groups.quickActions.length}
+              expanded={expandedSections.has('quickActions')}
+              onToggle={() =>
+                setExpandedSections((sections) => toggleSetValue(sections, 'quickActions'))
+              }
+            >
+              <div className="skill-row-list" role="list">
                 {groups.quickActions.map((skill) => (
-                  <SkillMiniCard
-                    key={`${skill.extensionId}:${skill.id}:${skill.catalog.source}`}
+                  <SkillRow
+                    key={getSkillKey(skill)}
                     skill={skill}
                     onCommand={onCommand}
                     onSkillAction={onSkillAction}
@@ -150,29 +207,26 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
             </SkillSection>
           ) : null}
           {groups.advanced.length > 0 ? (
-            <div className="skill-advanced">
-              <button
-                type="button"
-                className="skill-advanced-toggle"
-                onClick={() => setShowAdvanced((value) => !value)}
-              >
-                {showAdvanced
-                  ? t('dashboard.skills.hideAdvanced')
-                  : t('dashboard.skills.showAdvanced', { count: groups.advanced.length })}
-              </button>
-              {showAdvanced ? (
-                <div className="skill-mini-grid advanced">
-                  {groups.advanced.map((skill) => (
-                    <SkillMiniCard
-                      key={`${skill.extensionId}:${skill.id}:${skill.catalog.source}:advanced`}
-                      skill={skill}
-                      onCommand={onCommand}
-                      onSkillAction={onSkillAction}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <SkillSection
+              title={t('dashboard.skills.advanced')}
+              count={groups.advanced.length}
+              expanded={expandedSections.has('advanced')}
+              onToggle={() =>
+                setExpandedSections((sections) => toggleSetValue(sections, 'advanced'))
+              }
+            >
+              <div className="skill-row-list advanced" role="list">
+                {groups.advanced.map((skill) => (
+                  <SkillRow
+                    key={`${getSkillKey(skill)}:advanced`}
+                    skill={skill}
+                    density="compact"
+                    onCommand={onCommand}
+                    onSkillAction={onSkillAction}
+                  />
+                ))}
+              </div>
+            </SkillSection>
           ) : null}
         </>
       )}
@@ -182,15 +236,32 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
 
 function SkillSection({
   title,
+  count,
+  expanded,
+  onToggle,
   children,
 }: {
   readonly title: string;
+  readonly count: number;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
   readonly children: ReactNode;
 }) {
   return (
     <section className="skill-section">
-      <h3>{title}</h3>
-      {children}
+      <button
+        type="button"
+        className="skill-section-toggle"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        <span className="skill-section-title">
+          <span className="skill-section-caret" aria-hidden="true" />
+          <span>{title}</span>
+        </span>
+        <span className="skill-section-count">{count}</span>
+      </button>
+      {expanded ? children : null}
     </section>
   );
 }
@@ -248,9 +319,12 @@ function groupSkills(skills: readonly DashboardSkill[]): SkillGroups {
   };
 }
 
-interface SkillCardProps {
+interface SkillRowProps {
   readonly skill: DashboardSkill;
-  readonly children?: readonly DashboardSkill[];
+  readonly childCount?: number;
+  readonly childrenExpanded?: boolean;
+  readonly density?: 'default' | 'compact' | 'child';
+  readonly onToggleChildren?: () => void;
   readonly onCommand: (skill: DashboardSkill) => void;
   readonly onSkillAction: (
     skill: DashboardSkill | undefined,
@@ -259,18 +333,31 @@ interface SkillCardProps {
   ) => void;
 }
 
-function SkillCard({ skill, children = [], onCommand, onSkillAction }: SkillCardProps) {
+function SkillRow({
+  skill,
+  childCount = 0,
+  childrenExpanded = false,
+  density = 'default',
+  onToggleChildren,
+  onCommand,
+  onSkillAction,
+}: SkillRowProps) {
   const { t } = useTranslation();
   const visibleTags = getVisibleTags(skill.tags);
   const hiddenTagCount = getHiddenCount(skill.tags, MAX_VISIBLE_TAGS);
-  const visibleChildren = children.slice(0, MAX_VISIBLE_CHILDREN);
-  const hiddenChildCount = Math.max(0, children.length - visibleChildren.length);
+  const rowClassName = density === 'default' ? 'skill-row' : `skill-row ${density}`;
 
   return (
-    <div className="skill-card">
-      <div className="skill-card-top">
-        {skill.icon ? <span className="skill-card-icon">{skill.icon}</span> : null}
-        <div className="skill-card-badges">
+    <div className={rowClassName} role="listitem">
+      <div className="skill-row-main">
+        <div className="skill-row-title">
+          {skill.icon ? <span className="skill-row-icon">{skill.icon}</span> : null}
+          <span className="skill-row-name">{skill.name}</span>
+        </div>
+        <span className="skill-row-desc">{skill.description}</span>
+      </div>
+      <div className="skill-row-meta">
+        <div className="skill-row-badges">
           <Badge className="h-auto rounded-full px-2 py-0.5">
             {t(`dashboard.skills.source.${skill.catalog.source}`)}
           </Badge>
@@ -278,77 +365,8 @@ function SkillCard({ skill, children = [], onCommand, onSkillAction }: SkillCard
             {t(`dashboard.skills.role.${skill.catalog.role}`)}
           </Badge>
         </div>
-      </div>
-      <div className="skill-card-body">
-        <span className="skill-card-name">{skill.name}</span>
-        <span className="skill-card-desc">{skill.description}</span>
-      </div>
-      {visibleTags.length > 0 ? (
-        <div className="skill-card-tags">
-          {visibleTags.map((tag) => (
-            <Badge key={tag} className="h-auto rounded-full px-2 py-0.5">
-              {tag}
-            </Badge>
-          ))}
-          {hiddenTagCount > 0 ? (
-            <Badge className="h-auto rounded-full px-2 py-0.5">+{hiddenTagCount}</Badge>
-          ) : null}
-        </div>
-      ) : null}
-      {children.length > 0 ? (
-        <div className="skill-child-chip-list" aria-label={t('dashboard.skills.childSkills')}>
-          {visibleChildren.map((child) => (
-            <span
-              key={`${child.extensionId}:${child.id}:${child.catalog.source}`}
-              className="skill-child-chip"
-            >
-              {child.name}
-            </span>
-          ))}
-          {hiddenChildCount > 0 ? (
-            <span className="skill-child-chip muted">+{hiddenChildCount}</span>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="skill-card-actions">
-        {getCardActions(skill).map((action) => (
-          <Button
-            key={`${action.id}:${action.targetSource ?? ''}`}
-            className="skill-card-run"
-            size="sm"
-            onClick={() => handleAction(skill, action.id, onCommand, onSkillAction)}
-          >
-            {t(`dashboard.skills.action.${action.id}`)}
-          </Button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SkillMiniCard({ skill, onCommand, onSkillAction }: Omit<SkillCardProps, 'children'>) {
-  const { t } = useTranslation();
-  const visibleTags = getVisibleTags(skill.tags);
-  const hiddenTagCount = getHiddenCount(skill.tags, MAX_VISIBLE_TAGS);
-
-  return (
-    <div className="skill-mini-card">
-      <div className="skill-mini-main">
-        <div className="skill-mini-title">
-          {skill.icon ? <span className="skill-card-icon">{skill.icon}</span> : null}
-          <span className="skill-card-name">{skill.name}</span>
-        </div>
-        <div className="skill-mini-badges">
-          <Badge className="h-auto rounded-full px-2 py-0.5">
-            {t(`dashboard.skills.source.${skill.catalog.source}`)}
-          </Badge>
-          <Badge className="h-auto rounded-full px-2 py-0.5">
-            {t(`dashboard.skills.role.${skill.catalog.role}`)}
-          </Badge>
-        </div>
-        <span className="skill-mini-desc">{skill.description}</span>
         {visibleTags.length > 0 ? (
-          <div className="skill-card-tags">
+          <div className="skill-row-tags">
             {visibleTags.map((tag) => (
               <Badge key={tag} className="h-auto rounded-full px-2 py-0.5">
                 {tag}
@@ -360,11 +378,22 @@ function SkillMiniCard({ skill, onCommand, onSkillAction }: Omit<SkillCardProps,
           </div>
         ) : null}
       </div>
-      <div className="skill-mini-actions">
-        {getCardActions(skill).map((action) => (
+      <div className="skill-row-actions">
+        {childCount > 0 && onToggleChildren ? (
+          <button
+            type="button"
+            className="skill-child-toggle"
+            aria-expanded={childrenExpanded}
+            onClick={onToggleChildren}
+          >
+            <span className="skill-child-toggle-caret" aria-hidden="true" />
+            {t('dashboard.skills.childSkillsWithCount', { count: childCount })}
+          </button>
+        ) : null}
+        {getRowActions(skill).map((action) => (
           <Button
             key={`${action.id}:${action.targetSource ?? ''}`}
-            className="skill-card-run"
+            className="skill-row-action"
             size="sm"
             onClick={() => handleAction(skill, action.id, onCommand, onSkillAction)}
           >
@@ -384,7 +413,7 @@ function getHiddenCount(items: readonly unknown[] | undefined, visibleLimit: num
   return Math.max(0, (items?.length ?? 0) - visibleLimit);
 }
 
-function getCardActions(skill: DashboardSkill): readonly SkillCatalogAction[] {
+function getRowActions(skill: DashboardSkill): readonly SkillCatalogAction[] {
   return skill.catalog.actions.filter(
     (action) =>
       action.id === 'run' ||
@@ -393,6 +422,20 @@ function getCardActions(skill: DashboardSkill): readonly SkillCatalogAction[] {
       action.id === 'fork' ||
       action.id === 'duplicate',
   );
+}
+
+function getSkillKey(skill: DashboardSkill): string {
+  return `${skill.extensionId}:${skill.id}:${skill.catalog.source}`;
+}
+
+function toggleSetValue<T>(values: ReadonlySet<T>, value: T): ReadonlySet<T> {
+  const next = new Set(values);
+  if (next.has(value)) {
+    next.delete(value);
+  } else {
+    next.add(value);
+  }
+  return next;
 }
 
 function handleAction(
