@@ -99,22 +99,34 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return false;
     }
 
-    const panel = this.ensurePanel();
-    this.postFeatureToggles(snapshot.revision);
     const plan = this.host.extractCanvasPlaybackPlan?.();
-    this.postToPreview({
-      type: 'preview:loadGraph',
-      requestId: this.createRequestId('load'),
-      snapshot,
-      revision: snapshot.revision,
-    });
+    const messages: CanvasToPreviewMessage[] = [
+      this.createFeatureTogglesMessage(snapshot.revision),
+      {
+        type: 'preview:loadGraph',
+        requestId: this.createRequestId('load'),
+        snapshot,
+        revision: snapshot.revision,
+      },
+    ];
     if (plan) {
-      this.postToPreview({
+      messages.push({
         type: 'preview:loadPlaybackPlan',
         requestId: this.createRequestId('load-plan'),
         plan,
         revision: snapshot.revision,
       });
+    }
+    const existingPanel = Boolean(this.panel);
+    this.ensurePanel(existingPanel ? [] : messages);
+    if (existingPanel) {
+      for (const message of messages) {
+        this.postToPreview(message);
+      }
+    } else {
+      for (const message of messages) {
+        this.recordPreviewMessageRevision(message);
+      }
     }
     return true;
   }
@@ -195,7 +207,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     panel?.dispose();
   }
 
-  private ensurePanel(): vscode.WebviewPanel {
+  private ensurePanel(
+    bootstrapMessages: readonly CanvasToPreviewMessage[] = [],
+  ): vscode.WebviewPanel {
     if (this.disposed) {
       throw new Error('NarrativePreviewBridge has been disposed.');
     }
@@ -230,7 +244,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       undefined,
       [],
     );
-    panel.webview.html = this.getPreviewHtml(panel.webview);
+    panel.webview.html = this.getPreviewHtml(panel.webview, bootstrapMessages);
     panel.onDidDispose(() => {
       if (this.panel === panel) {
         this.panel = undefined;
@@ -243,10 +257,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   private postToPreview(message: CanvasToPreviewMessage): void {
-    const revision = readCanvasMessageRevision(message);
-    if (revision !== undefined) {
-      this.lastAcceptedPreviewRevision = Math.max(this.lastAcceptedPreviewRevision, revision);
-    }
+    this.recordPreviewMessageRevision(message);
     const panel = this.panel;
     if (!panel) return;
     if (!this.previewWebviewReady) {
@@ -266,12 +277,23 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   private postFeatureToggles(revision: number): void {
-    this.postToPreview({
+    this.postToPreview(this.createFeatureTogglesMessage(revision));
+  }
+
+  private createFeatureTogglesMessage(revision: number): CanvasToPreviewMessage {
+    return {
       type: 'preview:setFeatureToggles',
       requestId: this.createRequestId('toggles'),
       toggles: this.getFeatureToggles(),
       revision,
-    });
+    };
+  }
+
+  private recordPreviewMessageRevision(message: CanvasToPreviewMessage): void {
+    const revision = readCanvasMessageRevision(message);
+    if (revision !== undefined) {
+      this.lastAcceptedPreviewRevision = Math.max(this.lastAcceptedPreviewRevision, revision);
+    }
   }
 
   private isStalePreviewMessage(message: PreviewToCanvasMessage): boolean {
@@ -284,8 +306,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     return `canvas-narrative:${reason}:${this.now()}:${this.requestSequence}`;
   }
 
-  private getPreviewHtml(webview: vscode.Webview): string {
+  private getPreviewHtml(
+    webview: vscode.Webview,
+    bootstrapMessages: readonly CanvasToPreviewMessage[] = [],
+  ): string {
     const nonce = createNonce();
+    const bootstrapJson = serializePreviewBootstrapMessages(bootstrapMessages);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -386,6 +412,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const DEFAULT_TIMER_MS = 1200;
+    const BOOTSTRAP_MESSAGES = ${bootstrapJson};
     const status = document.getElementById('status');
     const placeholder = document.getElementById('placeholder');
     const playbackPreview = document.getElementById('playback-preview');
@@ -443,8 +470,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
     });
 
-    window.addEventListener('message', (event) => {
-      const message = event.data || {};
+    window.addEventListener('message', (event) => handleCanvasPreviewMessage(event.data || {}));
+    for (const message of BOOTSTRAP_MESSAGES) {
+      handleCanvasPreviewMessage(message);
+    }
+
+    function handleCanvasPreviewMessage(message) {
       if (message.type === 'preview:loadGraph' || message.type === 'preview:refresh') {
         const count = Array.isArray(message.snapshot?.nodes) ? message.snapshot.nodes.length : 0;
         if (count === 0 && playbackPlan) {
@@ -474,7 +505,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           }
         }
       }
-    });
+    }
 
     function loadPlaybackPlan(plan) {
       stopPlayback();
@@ -1341,6 +1372,13 @@ function readRevision(message: PreviewToCanvasMessage): number | undefined {
 function readCanvasMessageRevision(message: CanvasToPreviewMessage): number | undefined {
   const value = (message as unknown as { revision?: unknown }).revision;
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function serializePreviewBootstrapMessages(messages: readonly CanvasToPreviewMessage[]): string {
+  return JSON.stringify(messages)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 function createNonce(): string {

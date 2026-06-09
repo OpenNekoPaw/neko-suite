@@ -98,25 +98,31 @@ describe('NarrativePreviewBridge', () => {
 
     expect(bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(1);
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
+    expect(readBootstrapMessages(panelFactory.createdPanels[0]?.webview.html ?? '')).toEqual([
       expect.objectContaining({
         type: 'preview:setFeatureToggles',
         requestId: 'canvas-narrative:toggles:1000:1',
         revision: 1,
         toggles: expect.objectContaining({ preview: true }),
       }),
-    );
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'preview:loadGraph',
         requestId: 'canvas-narrative:load:1000:2',
         revision: 1,
       }),
-    );
+    ]);
 
     expect(bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(1);
     expect(panelFactory.createdPanels[0]?.reveal).toHaveBeenCalledTimes(1);
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:loadGraph',
+        requestId: 'canvas-narrative:load:1000:4',
+        revision: 1,
+      }),
+    );
 
     panelFactory.createdPanels[0]?.dispose();
     expect(bridge.open()).toBe(true);
@@ -136,14 +142,16 @@ describe('NarrativePreviewBridge', () => {
     });
 
     expect(bridge.open()).toBe(true);
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
+    const bootstrapMessages = readBootstrapMessages(
+      panelFactory.createdPanels[0]?.webview.html ?? '',
+    );
+    expect(bootstrapMessages).toEqual([
+      expect.objectContaining({ type: 'preview:setFeatureToggles', revision: 4 }),
       expect.objectContaining({
         type: 'preview:loadGraph',
         requestId: 'canvas-narrative:load:3000:2',
         revision: 4,
       }),
-    );
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'preview:loadPlaybackPlan',
         requestId: 'canvas-narrative:load-plan:3000:3',
@@ -160,7 +168,7 @@ describe('NarrativePreviewBridge', () => {
           ]),
         }),
       }),
-    );
+    ]);
 
     expect(bridge.refresh()).toBe(true);
     expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
@@ -172,7 +180,7 @@ describe('NarrativePreviewBridge', () => {
     );
   });
 
-  it('replays initial preview messages after the Webview reports ready', () => {
+  it('embeds initial preview messages into first-open HTML before Webview readiness', () => {
     const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
     const host = createHost(createSnapshot(6), () => plan);
     const panelFactory = createPanelFactory();
@@ -183,26 +191,19 @@ describe('NarrativePreviewBridge', () => {
 
     expect(bridge.open()).toBe(true);
     const panel = panelFactory.createdPanels[0];
-    expect(panel?.webview.postMessage).toHaveBeenCalledTimes(3);
+    expect(panel?.webview.postMessage).not.toHaveBeenCalled();
+    expect(readBootstrapMessages(panel?.webview.html ?? '')).toEqual([
+      expect.objectContaining({ type: 'preview:setFeatureToggles', revision: 6 }),
+      expect.objectContaining({ type: 'preview:loadGraph', revision: 6 }),
+      expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 6 }),
+    ]);
 
     panel?.webview.receiveMessage({
       type: 'preview:webviewReady',
       requestId: 'ready',
     });
 
-    expect(panel?.webview.postMessage).toHaveBeenCalledTimes(6);
-    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({ type: 'preview:setFeatureToggles', revision: 6 }),
-    );
-    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
-      5,
-      expect.objectContaining({ type: 'preview:loadGraph', revision: 6 }),
-    );
-    expect(panel?.webview.postMessage).toHaveBeenNthCalledWith(
-      6,
-      expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 6 }),
-    );
+    expect(panel?.webview.postMessage).not.toHaveBeenCalled();
   });
 
   it('renders the Canvas playback preview shell instead of a status-only placeholder', () => {
@@ -517,4 +518,12 @@ function createPanel() {
     }),
   };
   return panel;
+}
+
+function readBootstrapMessages(html: string): unknown[] {
+  const match = html.match(/const BOOTSTRAP_MESSAGES = (.*?);/);
+  if (!match?.[1]) {
+    return [];
+  }
+  return JSON.parse(match[1]) as unknown[];
 }
