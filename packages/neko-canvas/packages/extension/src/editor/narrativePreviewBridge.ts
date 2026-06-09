@@ -317,14 +317,14 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:; connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
   <title>Narrative Preview</title>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
     main { min-height: 100vh; display: flex; flex-direction: column; padding: 18px; box-sizing: border-box; gap: 14px; }
     section { width: 100%; box-sizing: border-box; }
     h1 { margin: 0; font-size: 18px; font-weight: 600; }
-    h2 { margin: 10px 0 8px; font-size: 26px; font-weight: 650; }
+    h2 { margin: 14px 0 10px; font-size: 28px; font-weight: 650; }
     h3 { margin: 0 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; color: var(--vscode-descriptionForeground); letter-spacing: 0; }
     p { margin: 0; color: var(--vscode-descriptionForeground); line-height: 1.5; }
     code { color: var(--vscode-textLink-foreground); }
@@ -335,8 +335,18 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .playback-shell { display: none; min-height: calc(100vh - 36px); }
     .playback-shell[data-visible="true"] { display: flex; flex-direction: column; gap: 14px; }
     .playback-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 12px; }
+    .playback-heading { min-width: 0; }
     .playback-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .progress { min-width: 48px; text-align: center; color: var(--vscode-descriptionForeground); }
+    .progress { min-width: 54px; text-align: center; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+    .playback-clock { display: flex; align-items: center; gap: 4px; min-width: 100px; justify-content: flex-end; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+    .stage-progress-wrap { display: grid; gap: 6px; }
+    .stage-progress { display: flex; gap: 3px; width: 100%; height: 12px; }
+    .stage-segment { position: relative; min-width: 14px; flex: 1 1 0; overflow: hidden; border: 1px solid var(--vscode-panel-border); border-radius: 3px; background: var(--vscode-button-secondaryBackground); padding: 0; }
+    .stage-segment:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .stage-segment[data-active="true"] { border-color: var(--vscode-focusBorder); }
+    .stage-segment[data-done="true"] { border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, var(--vscode-panel-border)); }
+    .stage-segment-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); pointer-events: none; }
+    .stage-progress-meta { display: flex; align-items: center; justify-content: space-between; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
     .timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: 4px; }
     .timeline:empty { display: none; }
     .timeline button { min-width: 0; width: 100%; height: 28px; padding: 0 6px; border-color: var(--vscode-panel-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -344,13 +354,19 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .timeline button[data-kind="shot"] { border-bottom-color: var(--vscode-charts-blue, #3794ff); }
     .timeline button[data-kind="media"] { border-bottom-color: var(--vscode-charts-green, #89d185); }
     .timeline button[data-kind="narrative"] { border-bottom-color: var(--vscode-charts-purple, #b180d7); }
-    .unit-surface { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 14px; align-items: stretch; min-height: 0; }
-    .unit-card { border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-sideBar-background); padding: 22px; box-sizing: border-box; min-width: 0; }
-    .unit-card[data-kind="shot"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-blue, #3794ff)); }
-    .unit-card[data-kind="media"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-green, #89d185)); }
-    .unit-card[data-kind="narrative"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 88%, var(--vscode-charts-purple, #b180d7)); }
+    .unit-surface { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 14px; align-items: stretch; min-height: 0; }
+    .unit-card { border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-sideBar-background); padding: 28px 34px; box-sizing: border-box; min-width: 0; min-height: 420px; display: flex; flex-direction: column; box-shadow: inset 0 -42px 80px rgba(0, 0, 0, 0.08); }
+    .unit-card[data-kind="shot"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-blue, #3794ff)); }
+    .unit-card[data-kind="media"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-green, #89d185)); }
+    .unit-card[data-kind="narrative"] { background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-charts-purple, #b180d7)); }
+    .unit-stage-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .unit-kind { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
-    .unit-body { max-width: 780px; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 15px; }
+    .stage-time { color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .unit-body { max-width: 780px; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 16px; line-height: 1.7; }
+    .stage-spacer { flex: 1; min-height: 120px; }
+    .current-stage-progress { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--vscode-sideBar-background) 70%, black); border: 1px solid var(--vscode-panel-border); }
+    .current-stage-progress-fill { width: 0%; height: 100%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
+    .stage-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
     .unit-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
     .unit-meta { display: grid; gap: 6px; }
     .meta-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
@@ -362,7 +378,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     @media (max-width: 760px) {
       main { padding: 12px; }
       .playback-toolbar { align-items: flex-start; flex-direction: column; }
+      .playback-controls { flex-wrap: wrap; }
+      .playback-clock { justify-content: flex-start; }
       .unit-surface { grid-template-columns: 1fr; }
+      .unit-card { min-height: 360px; padding: 22px; }
     }
   </style>
 </head>
@@ -374,7 +393,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     </section>
     <section class="playback-shell" id="playback-preview" data-visible="false">
       <header class="playback-toolbar">
-        <div>
+        <div class="playback-heading">
           <h1 id="playback-title">Canvas Playback</h1>
           <p id="playback-summary"></p>
         </div>
@@ -383,14 +402,37 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           <button type="button" id="preview-play" title="Play">Play</button>
           <button type="button" id="preview-next" title="Next">Next</button>
           <span class="progress" id="preview-progress">0/0</span>
+          <span class="playback-clock" id="playback-clock">
+            <span id="current-time">0:00</span>
+            <span>/</span>
+            <span id="total-time">0:00</span>
+          </span>
         </div>
       </header>
+      <div class="stage-progress-wrap" aria-label="Playback stages">
+        <div class="stage-progress" id="stage-progress"></div>
+        <div class="stage-progress-meta">
+          <span id="stage-label">Stage 0</span>
+          <span id="stage-time-range">0:00 - 0:00</span>
+        </div>
+      </div>
       <nav class="timeline" id="unit-timeline" aria-label="Playback timeline"></nav>
       <div class="unit-surface">
         <article class="unit-card" id="unit-card" data-kind="node">
-          <span class="unit-kind" id="unit-kind">unit</span>
+          <div class="unit-stage-header">
+            <span class="unit-kind" id="unit-kind">unit</span>
+            <span class="stage-time" id="unit-stage-time">0:00</span>
+          </div>
           <h2 id="unit-title">No unit selected</h2>
           <p class="unit-body" id="unit-body"></p>
+          <div class="stage-spacer"></div>
+          <div class="current-stage-progress" aria-hidden="true">
+            <div class="current-stage-progress-fill" id="current-stage-progress-fill"></div>
+          </div>
+          <div class="stage-footer">
+            <span id="current-stage-elapsed">0:00</span>
+            <span id="current-stage-duration">0:00</span>
+          </div>
         </article>
         <aside class="unit-panel" aria-label="Playback unit details">
           <section>
@@ -422,11 +464,21 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const previewPlay = document.getElementById('preview-play');
     const previewNext = document.getElementById('preview-next');
     const previewProgress = document.getElementById('preview-progress');
+    const playbackClock = document.getElementById('playback-clock');
+    const currentTime = document.getElementById('current-time');
+    const totalTime = document.getElementById('total-time');
+    const stageProgress = document.getElementById('stage-progress');
+    const stageLabel = document.getElementById('stage-label');
+    const stageTimeRange = document.getElementById('stage-time-range');
     const unitTimeline = document.getElementById('unit-timeline');
     const unitCard = document.getElementById('unit-card');
     const unitKind = document.getElementById('unit-kind');
+    const unitStageTime = document.getElementById('unit-stage-time');
     const unitTitle = document.getElementById('unit-title');
     const unitBody = document.getElementById('unit-body');
+    const currentStageProgressFill = document.getElementById('current-stage-progress-fill');
+    const currentStageElapsed = document.getElementById('current-stage-elapsed');
+    const currentStageDuration = document.getElementById('current-stage-duration');
     const unitMeta = document.getElementById('unit-meta');
     const unitChoices = document.getElementById('unit-choices');
     const unitDiagnostics = document.getElementById('unit-diagnostics');
@@ -436,12 +488,15 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     let activeUnitId = null;
     let timer = null;
     let isPlaying = false;
+    let elapsedInUnitMs = 0;
+    let playbackStartedAtMs = 0;
+    let playbackStartElapsedMs = 0;
 
     previewPrevious.addEventListener('click', () => {
       stopPlayback();
       const index = getCurrentIndex();
       if (index > 0) {
-        setActiveUnit(route[index - 1], false);
+        setActiveUnit(route[index - 1], false, 0);
       }
     });
     previewPlay.addEventListener('click', () => {
@@ -458,6 +513,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         return;
       }
       isPlaying = true;
+      playbackStartedAtMs = performance.now();
+      playbackStartElapsedMs = elapsedInUnitMs;
       renderPlaybackPlan();
       scheduleNext(unit.id);
     });
@@ -466,7 +523,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const next = resolveNextStep();
       if (next) {
         route = next.route;
-        setActiveUnit(next.unitId, false);
+        setActiveUnit(next.unitId, false, 0);
       }
     });
 
@@ -501,7 +558,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
             stopPlayback();
             const index = route.indexOf(unit.id);
             route = index >= 0 ? route.slice(0, index + 1) : [unit.id];
-            setActiveUnit(unit.id, false);
+            setActiveUnit(unit.id, false, 0);
           }
         }
       }
@@ -512,6 +569,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       playbackPlan = plan;
       route = buildInitialRoute(plan);
       activeUnitId = route[0] || null;
+      elapsedInUnitMs = 0;
+      playbackStartedAtMs = 0;
+      playbackStartElapsedMs = 0;
       placeholder.style.display = 'none';
       playbackPreview.dataset.visible = 'true';
       renderPlaybackPlan();
@@ -527,18 +587,73 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         ? playbackPlan.adapterId + ' / ' + playbackPlan.behaviorMode + ' / ' + playbackPlan.advancePolicy
         : 'Waiting for Canvas playback plan...';
       previewProgress.textContent = (index >= 0 ? index + 1 : 0) + '/' + route.length;
+      renderPlaybackTime(unit, index);
       previewPrevious.disabled = index <= 0;
       previewNext.disabled = !resolveNextStep();
-      previewPlay.disabled = !unit || !canPreviewAutoAdvance() || !resolveNextStep();
+      previewPlay.disabled = !unit || !canPreviewAutoAdvance();
       previewPlay.textContent = isPlaying ? 'Pause' : 'Play';
       unitKind.textContent = unit ? unit.kind : 'unit';
       unitCard.dataset.kind = unit ? unit.kind : 'node';
       unitTitle.textContent = unit ? formatUnitTitle(unit, index) : 'No playable unit';
       unitBody.textContent = unit ? formatUnitBody(unit) : 'This Canvas does not expose a playable unit for the selected preview surface.';
       renderTimeline();
+      renderStageProgress();
       renderMeta(unit);
       renderChoices(unit);
       renderDiagnostics(diagnostics);
+    }
+
+    function renderPlaybackTime(unit, index) {
+      const durationMs = unit ? resolveUnitDurationMs(unit.id) : 0;
+      const boundedElapsed = clampElapsed(elapsedInUnitMs, durationMs);
+      const totalMs = getRouteTotalDurationMs();
+      const absoluteMs = getElapsedBeforeIndex(index) + boundedElapsed;
+      currentTime.textContent = formatClockTime(absoluteMs);
+      totalTime.textContent = formatClockTime(totalMs);
+      unitStageTime.textContent = formatClockTime(boundedElapsed) + ' / ' + formatClockTime(durationMs);
+      currentStageElapsed.textContent = formatClockTime(boundedElapsed);
+      currentStageDuration.textContent = formatClockTime(durationMs);
+      currentStageProgressFill.style.width = durationMs > 0 ? Math.min(100, (boundedElapsed / durationMs) * 100) + '%' : '0%';
+      stageLabel.textContent = index >= 0 ? 'Stage ' + (index + 1) + ' of ' + route.length : 'Stage 0';
+      const stageStart = getElapsedBeforeIndex(index);
+      stageTimeRange.textContent = index >= 0
+        ? formatClockTime(stageStart) + ' - ' + formatClockTime(stageStart + durationMs)
+        : '0:00 - 0:00';
+      playbackClock.title = formatClockTime(absoluteMs) + ' / ' + formatClockTime(totalMs);
+    }
+
+    function renderStageProgress() {
+      stageProgress.replaceChildren();
+      if (!playbackPlan || route.length === 0) {
+        return;
+      }
+      const currentIndex = getCurrentIndex();
+      route.forEach((unitId, index) => {
+        const unit = playbackPlan.units.find((candidate) => candidate.id === unitId);
+        if (!unit) {
+          return;
+        }
+        const segment = document.createElement('button');
+        segment.type = 'button';
+        segment.className = 'stage-segment';
+        segment.dataset.active = index === currentIndex ? 'true' : 'false';
+        segment.dataset.done = index < currentIndex ? 'true' : 'false';
+        segment.title = formatUnitTitle(unit, index) + ' · ' + formatDuration(resolveUnitDurationMs(unit.id));
+        const fill = document.createElement('span');
+        fill.className = 'stage-segment-fill';
+        if (index < currentIndex) {
+          fill.style.width = '100%';
+        } else if (index === currentIndex) {
+          const durationMs = resolveUnitDurationMs(unit.id);
+          fill.style.width = durationMs > 0 ? Math.min(100, (elapsedInUnitMs / durationMs) * 100) + '%' : '0%';
+        }
+        segment.appendChild(fill);
+        segment.addEventListener('click', () => {
+          stopPlayback();
+          setActiveUnit(unit.id, false, 0);
+        });
+        stageProgress.appendChild(segment);
+      });
     }
 
     function renderTimeline() {
@@ -559,7 +674,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         button.title = formatUnitTitle(unit, index);
         button.addEventListener('click', () => {
           stopPlayback();
-          setActiveUnit(unit.id, false);
+          setActiveUnit(unit.id, false, 0);
         });
         unitTimeline.appendChild(button);
       });
@@ -648,7 +763,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           stopPlayback();
           const sourceUnit = getCurrentUnit();
           route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
-          setActiveUnit(choice.targetUnitId, false);
+          setActiveUnit(choice.targetUnitId, false, 0);
           if (sourceUnit) {
             postMessage({
               type: 'canvas:choiceMade',
@@ -672,8 +787,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
     }
 
-    function setActiveUnit(unitId, keepPlaying) {
+    function setActiveUnit(unitId, keepPlaying, nextElapsedMs) {
       activeUnitId = unitId;
+      elapsedInUnitMs = typeof nextElapsedMs === 'number' ? nextElapsedMs : elapsedInUnitMs;
       if (!keepPlaying) {
         isPlaying = false;
       }
@@ -685,6 +801,19 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       clearTimer();
       timer = window.setTimeout(() => {
         timer = null;
+        if (!isPlaying || currentUnitId !== activeUnitId) {
+          return;
+        }
+        const durationMs = resolveUnitDurationMs(currentUnitId);
+        elapsedInUnitMs = clampElapsed(
+          playbackStartElapsedMs + (performance.now() - playbackStartedAtMs),
+          durationMs,
+        );
+        renderPlaybackPlan();
+        if (elapsedInUnitMs < durationMs) {
+          scheduleNext(currentUnitId);
+          return;
+        }
         const next = resolveNextStep();
         if (!next) {
           isPlaying = false;
@@ -693,15 +822,24 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         }
         route = next.route;
         activeUnitId = next.unitId;
+        elapsedInUnitMs = 0;
+        playbackStartedAtMs = performance.now();
+        playbackStartElapsedMs = 0;
         renderPlaybackPlan();
         postPlaybackHighlight();
         if (isPlaying) {
           scheduleNext(next.unitId);
         }
-      }, resolveUnitDurationMs(currentUnitId));
+      }, 100);
     }
 
     function stopPlayback() {
+      if (isPlaying && activeUnitId) {
+        elapsedInUnitMs = clampElapsed(
+          playbackStartElapsedMs + (performance.now() - playbackStartedAtMs),
+          resolveUnitDurationMs(activeUnitId),
+        );
+      }
       isPlaying = false;
       clearTimer();
     }
@@ -794,6 +932,26 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
         ? durationMs
         : DEFAULT_TIMER_MS;
+    }
+
+    function getRouteTotalDurationMs() {
+      return route.reduce((total, unitId) => total + resolveUnitDurationMs(unitId), 0);
+    }
+
+    function getElapsedBeforeIndex(index) {
+      if (index <= 0) {
+        return 0;
+      }
+      return route
+        .slice(0, index)
+        .reduce((total, unitId) => total + resolveUnitDurationMs(unitId), 0);
+    }
+
+    function clampElapsed(value, durationMs) {
+      if (!Number.isFinite(value) || value < 0) {
+        return 0;
+      }
+      return Math.min(value, Math.max(0, durationMs));
     }
 
     function canPreviewAutoAdvance() {
@@ -974,6 +1132,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return typeof value === 'number' && Number.isFinite(value)
         ? (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) + 's'
         : undefined;
+    }
+
+    function formatClockTime(value) {
+      const totalSeconds = Math.max(0, Math.floor((Number.isFinite(value) ? value : 0) / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return minutes + ':' + String(seconds).padStart(2, '0');
     }
 
     function formatValue(value) {

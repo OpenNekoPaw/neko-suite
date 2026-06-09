@@ -221,8 +221,14 @@ describe('NarrativePreviewBridge', () => {
 
     expect(html).toContain('id="playback-preview"');
     expect(html).toContain('id="unit-timeline"');
+    expect(html).toContain('id="stage-progress"');
+    expect(html).toContain('id="playback-clock"');
+    expect(html).toContain('id="current-stage-progress-fill"');
     expect(html).toContain('id="unit-meta"');
     expect(html).toContain('formatUnitBody');
+    expect(html).toContain('formatClockTime');
+    expect(html).toContain('img-src vscode-webview: data: blob: https:');
+    expect(html).toContain('media-src vscode-webview: data: blob: https:');
     expect(html).toContain('canvas:highlightNode');
     expect(html).toContain('Storyboard Preview');
   });
