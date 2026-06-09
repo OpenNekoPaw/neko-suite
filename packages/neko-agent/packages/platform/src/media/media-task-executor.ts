@@ -30,7 +30,10 @@ import type { MediaTaskManagerDeps } from './types';
 import { getLogger } from '../utils/logger';
 import { resolveProvider } from '@neko/ai-sdk';
 import { generateImage, experimental_generateVideo, experimental_generateSpeech } from 'ai';
-import { materializeImageRequestFileUris } from './media-request-assets';
+import {
+  materializeImageRequestFileUris,
+  materializeVideoRequestFileUris,
+} from './media-request-assets';
 import {
   formatMediaGenerationErrorSummary,
   getMediaGenerationHttpStatus,
@@ -385,17 +388,23 @@ export class MediaTaskExecutor {
         const videoModel = resolved.video(model.name);
         if (!videoModel) return null;
 
-        const vidReq = request as VideoGenerationRequest;
+        const vidReq = await materializeVideoRequestFileUris(request as VideoGenerationRequest);
         const resolution = vidReq.resolution
           ? this.parseResolutionToSize(vidReq.resolution)
           : undefined;
+        const prompt = this.buildVideoPrompt(vidReq);
+        const videoProviderOptions = this.buildVideoProviderOptions(vidReq);
 
         const result = await experimental_generateVideo({
           model: videoModel,
-          prompt: vidReq.prompt,
+          prompt,
+          aspectRatio: this.parseAspectRatio(vidReq.aspectRatio),
           resolution,
           duration: vidReq.duration,
           fps: vidReq.fps,
+          ...(Object.keys(videoProviderOptions).length > 0
+            ? { providerOptions: { neko: videoProviderOptions } }
+            : {}),
           abortSignal: context?.signal,
         });
 
@@ -531,6 +540,38 @@ export class MediaTaskExecutor {
     const match = resolution.match(/^(\d+)x(\d+)$/);
     if (match) return resolution as `${number}x${number}`;
     return undefined;
+  }
+
+  private parseAspectRatio(aspectRatio: string | undefined): `${number}:${number}` | undefined {
+    if (!aspectRatio) return undefined;
+    return /^\d+:\d+$/.test(aspectRatio) ? (aspectRatio as `${number}:${number}`) : undefined;
+  }
+
+  private buildVideoPrompt(
+    request: VideoGenerationRequest,
+  ): string | { image: string; text?: string } {
+    const image = request.referenceImageUrl ?? request.referenceImageBase64;
+    return image ? { image, text: request.prompt } : request.prompt;
+  }
+
+  private buildVideoProviderOptions(
+    request: VideoGenerationRequest,
+  ): Record<string, string | number> {
+    const options: Record<string, string | number> = {};
+    if (request.referenceVideoUrl !== undefined) {
+      options['referenceVideoUrl'] = request.referenceVideoUrl;
+    }
+    if (request.startFrameImageBase64 !== undefined)
+      options['startFrameImageBase64'] = request.startFrameImageBase64;
+    if (request.endFrameImageBase64 !== undefined)
+      options['endFrameImageBase64'] = request.endFrameImageBase64;
+    if (request.sourceVideoUrl !== undefined) options['sourceVideoUrl'] = request.sourceVideoUrl;
+    if (request.cameraMovement !== undefined) options['cameraMovement'] = request.cameraMovement;
+    if (request.cameraAngle !== undefined) options['cameraAngle'] = request.cameraAngle;
+    if (request.shotScale !== undefined) options['shotScale'] = request.shotScale;
+    if (request.editInstruction !== undefined) options['editInstruction'] = request.editInstruction;
+    if (request.motionStrength !== undefined) options['motionStrength'] = request.motionStrength;
+    return options;
   }
 
   /**

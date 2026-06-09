@@ -14,6 +14,7 @@ describe('skillCatalogProvider', () => {
       builtinSkills: [
         makeSkill('media-to-video', 'Coordinate media to video.'),
         makeSkill('comic-to-storyboard', 'Analyze comics.'),
+        makeSkill('comic-to-animation', 'Animate comics.'),
         makeSkill('script-generation', 'Write scripts.'),
         makeSkill('script-to-timeline', 'Convert scripts.'),
         makeSkill('video-editing', 'Edit timelines.'),
@@ -22,6 +23,7 @@ describe('skillCatalogProvider', () => {
 
     const media = findSkill(skills, 'media-to-video');
     const comic = findSkill(skills, 'comic-to-storyboard');
+    const comicAnimation = findSkill(skills, 'comic-to-animation');
     const script = findSkill(skills, 'script-generation');
     const scriptToTimeline = findSkill(skills, 'script-to-timeline');
     const videoEditing = findSkill(skills, 'video-editing');
@@ -34,6 +36,13 @@ describe('skillCatalogProvider', () => {
       editable: false,
     });
     expect(comic.catalog).toMatchObject({
+      role: 'focused-skill',
+      source: 'builtin',
+      visibility: 'advanced',
+      groupId: 'media-to-video',
+      parentSkillIds: ['media-to-video'],
+    });
+    expect(comicAnimation.catalog).toMatchObject({
       role: 'focused-skill',
       source: 'builtin',
       visibility: 'advanced',

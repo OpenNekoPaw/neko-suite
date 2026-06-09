@@ -9,13 +9,13 @@
 import { createTool } from '@neko/shared';
 import type {
   GenerationIntent,
-  ImageGenerationRequest,
   IToolRegistry,
   ProviderAdaptationMode,
   ProviderGenerationCapability,
   ToolExecuteOptions,
 } from '@neko/shared';
 import type { MediaGenerationService } from './media-generation-service';
+import type { ImageGenerationRequest } from './types';
 
 interface ImageToolRequestInput {
   readonly args: Record<string, unknown>;
@@ -288,6 +288,9 @@ function readImageReferenceInputs(args: Record<string, unknown>): Record<string,
     ...(readOptionalNumber(args.inpaintStrength) !== undefined
       ? { inpaintStrength: readOptionalNumber(args.inpaintStrength) }
       : {}),
+    ...(readIpAdapterRefs(args.ipAdapterRefs)
+      ? { ipAdapterRefs: readIpAdapterRefs(args.ipAdapterRefs) }
+      : {}),
     ...(readOptionalString(args.editInstruction)
       ? { editInstruction: readOptionalString(args.editInstruction) }
       : {}),
@@ -307,6 +310,47 @@ function readImageControlInputs(args: Record<string, unknown>): Record<string, u
       : {}),
     ...(readOptionalNumber(args.controlStrength) !== undefined
       ? { controlStrength: readOptionalNumber(args.controlStrength) }
+      : {}),
+  };
+}
+
+function readVideoReferenceInputs(args: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...(readOptionalString(args.referenceImageUrl)
+      ? { referenceImageUrl: readOptionalString(args.referenceImageUrl) }
+      : {}),
+    ...(readOptionalString(args.referenceImageUri)
+      ? { referenceImageUri: readOptionalString(args.referenceImageUri) }
+      : {}),
+    ...(readOptionalString(args.referenceImageBase64)
+      ? { referenceImageBase64: readOptionalString(args.referenceImageBase64) }
+      : {}),
+    ...(readOptionalString(args.referenceVideoUrl)
+      ? { referenceVideoUrl: readOptionalString(args.referenceVideoUrl) }
+      : {}),
+    ...(readOptionalString(args.startFrameImageBase64)
+      ? { startFrameImageBase64: readOptionalString(args.startFrameImageBase64) }
+      : {}),
+    ...(readOptionalString(args.endFrameImageBase64)
+      ? { endFrameImageBase64: readOptionalString(args.endFrameImageBase64) }
+      : {}),
+    ...(readOptionalNumber(args.motionStrength) !== undefined
+      ? { motionStrength: readOptionalNumber(args.motionStrength) }
+      : {}),
+    ...(readOptionalString(args.cameraMovement)
+      ? { cameraMovement: readOptionalString(args.cameraMovement) }
+      : {}),
+    ...(readOptionalString(args.cameraAngle)
+      ? { cameraAngle: readOptionalString(args.cameraAngle) }
+      : {}),
+    ...(readOptionalString(args.shotScale)
+      ? { shotScale: readOptionalString(args.shotScale) }
+      : {}),
+    ...(readOptionalString(args.aspectRatio)
+      ? { aspectRatio: readOptionalString(args.aspectRatio) }
+      : {}),
+    ...(readOptionalString(args.editInstruction)
+      ? { editInstruction: readOptionalString(args.editInstruction) }
       : {}),
   };
 }
@@ -339,6 +383,30 @@ function readTransformImageReferenceArgs(args: Record<string, unknown>): Record<
       ? { targetStyle: readOptionalString(args.targetStyle) }
       : {}),
   };
+}
+
+function readIpAdapterRefs(value: unknown): ImageGenerationRequest['ipAdapterRefs'] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const refs = value.flatMap(
+    (item): NonNullable<ImageGenerationRequest['ipAdapterRefs']> =>
+      isIpAdapterRef(item) ? [item] : [],
+  );
+  return refs.length > 0 ? refs : undefined;
+}
+
+function isIpAdapterRef(
+  value: unknown,
+): value is NonNullable<ImageGenerationRequest['ipAdapterRefs']>[number] {
+  if (!isRecord(value) || typeof value['imageBase64'] !== 'string') return false;
+  return (
+    (value['mimeType'] === undefined || typeof value['mimeType'] === 'string') &&
+    (value['strength'] === undefined ||
+      (typeof value['strength'] === 'number' && Number.isFinite(value['strength']))) &&
+    (value['mode'] === undefined ||
+      value['mode'] === 'style' ||
+      value['mode'] === 'subject' ||
+      value['mode'] === 'both')
+  );
 }
 
 function hasResolvedTransformSource(args: Record<string, unknown>): boolean {
@@ -590,6 +658,33 @@ export function registerMediaAgentTools(
             type: 'number',
             description: 'Optional inpaint strength from 0.0 to 1.0',
           },
+          ipAdapterRefs: {
+            type: 'array',
+            description:
+              'Optional host-resolved IP-Adapter image references for subject or style consistency',
+            items: {
+              type: 'object',
+              properties: {
+                imageBase64: {
+                  type: 'string',
+                  description: 'Reference image bytes as base64 without a data: prefix',
+                },
+                mimeType: {
+                  type: 'string',
+                  description: 'Reference image MIME type',
+                },
+                strength: {
+                  type: 'number',
+                  description: 'Influence strength from 0.0 to 1.0',
+                },
+                mode: {
+                  type: 'string',
+                  enum: ['style', 'subject', 'both'],
+                  description: 'Whether the reference should guide style, subject, or both',
+                },
+              },
+            },
+          },
           controlImageUri: {
             type: 'string',
             description: 'Optional host-resolved ControlNet image URI/path',
@@ -740,6 +835,33 @@ export function registerMediaAgentTools(
           inpaintStrength: {
             type: 'number',
             description: 'Optional inpaint strength from 0.0 to 1.0',
+          },
+          ipAdapterRefs: {
+            type: 'array',
+            description:
+              'Optional host-resolved IP-Adapter image references for subject or style consistency',
+            items: {
+              type: 'object',
+              properties: {
+                imageBase64: {
+                  type: 'string',
+                  description: 'Reference image bytes as base64 without a data: prefix',
+                },
+                mimeType: {
+                  type: 'string',
+                  description: 'Reference image MIME type',
+                },
+                strength: {
+                  type: 'number',
+                  description: 'Influence strength from 0.0 to 1.0',
+                },
+                mode: {
+                  type: 'string',
+                  enum: ['style', 'subject', 'both'],
+                  description: 'Whether the reference should guide style, subject, or both',
+                },
+              },
+            },
           },
           referenceBundle: {
             type: 'object',
@@ -970,6 +1092,54 @@ export function registerMediaAgentTools(
             enum: ['24', '30', '60'],
             description: 'Frames per second (default: 24)',
           },
+          aspectRatio: {
+            type: 'string',
+            description: 'Optional target aspect ratio such as 16:9, 9:16, or 1:1',
+          },
+          referenceImageUrl: {
+            type: 'string',
+            description: 'Optional remote reference image URL for image-to-video generation',
+          },
+          referenceImageUri: {
+            type: 'string',
+            description: 'Optional host-resolved local reference image URI/path',
+          },
+          referenceImageBase64: {
+            type: 'string',
+            description: 'Optional reference image bytes as base64 without a data: prefix',
+          },
+          referenceVideoUrl: {
+            type: 'string',
+            description: 'Optional remote reference video URL for video-to-video generation',
+          },
+          startFrameImageBase64: {
+            type: 'string',
+            description: 'Optional first frame image bytes as base64 without a data: prefix',
+          },
+          endFrameImageBase64: {
+            type: 'string',
+            description: 'Optional last frame image bytes as base64 without a data: prefix',
+          },
+          motionStrength: {
+            type: 'number',
+            description: 'Optional motion strength from 0.0 to 1.0',
+          },
+          cameraMovement: {
+            type: 'string',
+            description: 'Optional camera movement directive such as static, pan, or zoom-in',
+          },
+          cameraAngle: {
+            type: 'string',
+            description: 'Optional camera angle directive such as eye-level or low-angle',
+          },
+          shotScale: {
+            type: 'string',
+            description: 'Optional shot scale directive such as CU, MS, LS, or VLS',
+          },
+          editInstruction: {
+            type: 'string',
+            description: 'Optional natural language instruction for video editing or motion',
+          },
         },
         required: [],
       },
@@ -985,6 +1155,7 @@ export function registerMediaAgentTools(
             duration: args.duration as number | undefined,
             resolution: args.resolution as string | undefined,
             fps: args.fps as number | undefined,
+            ...readVideoReferenceInputs(args),
             ...(resolved.metadata
               ? {
                   metadata: withGenerationTargetMetadata(resolved.metadata, {

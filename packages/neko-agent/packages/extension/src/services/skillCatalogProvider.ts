@@ -52,6 +52,7 @@ const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogManifest>> 
     actions: BUILTIN_FORK_ACTIONS,
   },
   'comic-to-storyboard': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
+  'comic-to-animation': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
   'image-to-shot': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
   'storyboard-to-animation-plan': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
   'animation-plan-to-cut': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),

@@ -25,6 +25,7 @@ import {
 } from '../index';
 import {
   animationPlanToCutSkill,
+  comicToAnimationSkill,
   exportVideoPackageSkill,
   getMediaToVideoSkill,
   generatedShotAssemblySkill,
@@ -220,6 +221,7 @@ describe('Builtin Skills', () => {
     it('registers the top-level coordinator and focused sub-skills', () => {
       for (const skill of [
         mediaToVideoSkill,
+        comicToAnimationSkill,
         imageToShotSkill,
         storyboardToAnimationPlanSkill,
         animationPlanToCutSkill,
@@ -238,6 +240,7 @@ describe('Builtin Skills', () => {
       expect(mediaToVideoSkill.referencedSkills).toEqual(
         expect.arrayContaining([
           { id: 'comic-to-storyboard', relationship: 'delegator' },
+          { id: 'comic-to-animation', relationship: 'delegator' },
           { id: 'image-to-shot', relationship: 'delegator' },
           { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
           { id: 'animation-plan-to-cut', relationship: 'delegator' },
@@ -257,6 +260,22 @@ describe('Builtin Skills', () => {
         validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
       });
       expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "StoryboardTable"');
+      expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "AnimationPlan"');
+      expect(storyboardToAnimationPlanSkill.content).toContain('preparedKeyframeRefs');
+      expect(comicToAnimationSkill.referencedSkills).toEqual(
+        expect.arrayContaining([
+          { id: 'media-to-video', relationship: 'collaborator' },
+          { id: 'comic-to-storyboard', relationship: 'delegator' },
+          { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
+        ]),
+      );
+      expect(comicToAnimationSkill.mediaWorkflow).toMatchObject({
+        artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
+        validationRequirements: expect.arrayContaining(['ShotImagePrepPlan']),
+      });
+      expect(comicToAnimationSkill.content).toContain('"domainKind": "AnimationPlan"');
+      expect(comicToAnimationSkill.content).toContain('TransformImage');
+      expect(comicToAnimationSkill.content).toContain('GenerateVideo');
     });
   });
 
@@ -282,6 +301,7 @@ describe('Builtin Skills', () => {
     it('selects Chinese Markdown bodies for media workflow skills', () => {
       const zhSkills = getBuiltinSkills({ locale: 'zh-CN' });
       const zhComic = zhSkills.find((skill) => skill.name === 'comic-to-storyboard');
+      const zhComicAnimation = zhSkills.find((skill) => skill.name === 'comic-to-animation');
       const zhMedia = zhSkills.find((skill) => skill.name === 'media-to-video');
 
       expect(zhComic?.content).toContain('漫画分析');
@@ -301,6 +321,9 @@ describe('Builtin Skills', () => {
       expect(zhMedia?.content).toContain('媒体转视频协调器');
       expect(zhMedia?.content).toContain('结构化产物规则');
       expect(zhMedia?.content).toContain('不要嵌入 base64');
+      expect(zhComicAnimation?.content).toContain('漫画转动画');
+      expect(zhComicAnimation?.content).toContain('AnimationPlan');
+      expect(zhComicAnimation?.content).toContain('GenerateVideo');
     });
 
     it('keeps machine-facing skill contracts stable across locales', () => {

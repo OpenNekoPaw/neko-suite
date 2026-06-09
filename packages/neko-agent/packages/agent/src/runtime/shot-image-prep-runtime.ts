@@ -1,6 +1,11 @@
 import type {
   ArtifactExecutionSummary,
   IToolRegistry,
+  ReferenceDescriptor,
+  ReferenceDiagnostic,
+  ReferenceProviderInput,
+  ReferenceProviderInputKind,
+  ReferenceResolverService,
   ShotImagePrepBatchRequest,
   ShotImagePrepCostEstimate,
   ShotImagePrepDiagnostic,
@@ -10,7 +15,12 @@ import type {
   ToolExecuteOptions,
   ToolResult,
 } from '@neko/shared';
-import { transitionShotImagePrepStatus, validateShotImagePrepPlan } from '@neko/shared';
+import {
+  collectReferencesFromShotImagePrepPlan,
+  createReferenceDiagnostic,
+  transitionShotImagePrepStatus,
+  validateShotImagePrepPlan,
+} from '@neko/shared';
 
 export interface ShotImagePrepRuntimeToolPort {
   readonly get?: IToolRegistry['get'];
@@ -32,6 +42,12 @@ export interface ShotImagePrepToolRequest {
   readonly args: Record<string, unknown>;
 }
 
+export interface ShotImagePrepResolvedReferenceBundle {
+  readonly descriptors: readonly ReferenceDescriptor[];
+  readonly providerInputs: readonly ReferenceProviderInput[];
+  readonly diagnostics: readonly ShotImagePrepDiagnostic[];
+}
+
 export interface ShotImagePrepExecutionInput {
   readonly artifactId: string;
   readonly plan: ShotImagePrepPlan;
@@ -39,6 +55,7 @@ export interface ShotImagePrepExecutionInput {
   readonly availableTools?: readonly ShotImagePrepToolCapability[];
   readonly toolOptions?: ToolExecuteOptions;
   readonly providerId?: string;
+  readonly referenceResolver?: ReferenceResolverService;
 }
 
 export interface ShotImagePrepExecutionResult {
@@ -83,6 +100,7 @@ export interface ExecuteShotImagePrepBatchInput extends ShotImagePrepBatchGateIn
   readonly artifactId: string;
   readonly toolPort?: ShotImagePrepRuntimeToolPort;
   readonly toolOptions?: ToolExecuteOptions;
+  readonly referenceResolver?: ReferenceResolverService;
   readonly signal?: AbortSignal;
 }
 
@@ -255,6 +273,27 @@ export async function executeShotImagePrepPlan(
     });
   }
 
+  const resolvedReferences = await resolveShotImagePrepProviderInputs(input, request.toolName);
+  diagnostics.push(...resolvedReferences.diagnostics);
+  if (resolvedReferences.diagnostics.some((item) => item.severity === 'error')) {
+    return executionResult({
+      input,
+      request,
+      diagnostics,
+      status: 'unavailable',
+      message: 'Shot image prep provider inputs could not be resolved.',
+    });
+  }
+  const executableRequest = {
+    ...request,
+    args: applyResolvedReferencesToToolArgs(
+      request.toolName,
+      request.args,
+      resolvedReferences.descriptors,
+      resolvedReferences.providerInputs,
+    ),
+  };
+
   if (!input.toolPort?.execute) {
     diagnostics.push(
       diagnostic(
@@ -274,8 +313,8 @@ export async function executeShotImagePrepPlan(
   }
 
   const result = await input.toolPort.execute(
-    request.toolName,
-    withProviderId(request.args, input.providerId),
+    executableRequest.toolName,
+    withProviderId(executableRequest.args, input.providerId),
     input.toolOptions,
   );
   if (!result.success) {
@@ -299,6 +338,125 @@ export async function executeShotImagePrepPlan(
       ? 'Shot image prep completed.'
       : (result.error ?? 'Shot image prep failed.'),
   });
+}
+
+export async function resolveShotImagePrepProviderInputs(
+  input: Pick<
+    ShotImagePrepExecutionInput,
+    'artifactId' | 'plan' | 'providerId' | 'referenceResolver'
+  >,
+  toolName: ShotImagePrepToolRequest['toolName'] | 'GenerateVideo',
+): Promise<ShotImagePrepResolvedReferenceBundle> {
+  const collected = collectReferencesFromShotImagePrepPlan(input.plan, {
+    targetCapability: toolName,
+    purpose: 'provider-input',
+    phase: 'preflight',
+  });
+  const diagnostics = collected.diagnostics.map(projectReferenceDiagnosticToShotPrepDiagnostic);
+  if (!input.referenceResolver || diagnostics.some((item) => item.severity === 'error')) {
+    return {
+      descriptors: collected.descriptors,
+      providerInputs: [],
+      diagnostics,
+    };
+  }
+
+  const result = await input.referenceResolver.materialize({
+    requestId: `${input.artifactId}:${input.plan.planId}:${toolName}:provider-input`,
+    purpose: 'provider-input',
+    targetCapability: toolName,
+    references: collected.descriptors,
+    inputKinds: inputKindsForTool(toolName),
+    ...(input.providerId ? { providerId: input.providerId } : {}),
+    metadata: {
+      artifactId: input.artifactId,
+      planId: input.plan.planId,
+      sceneId: input.plan.sceneId,
+      shotId: input.plan.shotId,
+    },
+  });
+
+  return {
+    descriptors: collected.descriptors,
+    providerInputs: result.providerInputs ?? [],
+    diagnostics: [
+      ...diagnostics,
+      ...result.diagnostics.map(projectReferenceDiagnosticToShotPrepDiagnostic),
+      ...entityRepresentationDiagnostics(
+        collected.descriptors,
+        result.providerInputs ?? [],
+        toolName,
+      ),
+      ...diagnosticsForUnsafeProviderInputs(result.providerInputs ?? []),
+    ],
+  };
+}
+
+export function createGenerateVideoReferenceToolArgs(input: {
+  readonly descriptors: readonly ReferenceDescriptor[];
+  readonly providerInputs: readonly ReferenceProviderInput[];
+  readonly args: Record<string, unknown>;
+}): Record<string, unknown> {
+  return applyResolvedReferencesToToolArgs(
+    'GenerateVideo',
+    input.args,
+    input.descriptors,
+    input.providerInputs,
+  );
+}
+
+export function applyResolvedReferencesToToolArgs(
+  toolName: ShotImagePrepToolRequest['toolName'] | 'GenerateVideo',
+  args: Record<string, unknown>,
+  descriptors: readonly ReferenceDescriptor[],
+  providerInputs: readonly ReferenceProviderInput[],
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...args };
+  const inputsByRole = groupProviderInputsByRole(descriptors, providerInputs);
+
+  const sourceInput = firstInputForRoles(inputsByRole, ['source', 'source-panel']);
+  const maskInput = firstInputForRoles(inputsByRole, ['mask']);
+  const referenceInput = firstInputForRoles(inputsByRole, [
+    'subject',
+    'character-reference',
+    'layout',
+    'style',
+    'previous-shot',
+    'reference',
+    'source-panel',
+  ]);
+  const keyframeInput = firstInputForRoles(inputsByRole, ['keyframe', 'output', 'derived']);
+  const ipAdapterRefs = providerInputs
+    .filter((input) => input.inputKind === 'ip-adapter-ref')
+    .map((input) => input.value)
+    .filter(isRecord);
+
+  if (toolName === 'TransformImage') {
+    applyImageInput(next, 'sourceImageUri', 'referenceImageBase64', sourceInput);
+    applyImageInput(next, 'maskUri', 'maskBase64', maskInput);
+    applyImageInput(next, 'referenceImageUri', 'referenceImageBase64', referenceInput);
+    if (ipAdapterRefs.length > 0 && !Array.isArray(next['ipAdapterRefs'])) {
+      next['ipAdapterRefs'] = ipAdapterRefs;
+    }
+    return next;
+  }
+
+  if (toolName === 'GenerateImage') {
+    applyImageInput(
+      next,
+      'referenceImageUri',
+      'referenceImageBase64',
+      referenceInput ?? sourceInput,
+    );
+    applyImageInput(next, 'maskUri', 'maskBase64', maskInput);
+    if (ipAdapterRefs.length > 0 && !Array.isArray(next['ipAdapterRefs'])) {
+      next['ipAdapterRefs'] = ipAdapterRefs;
+    }
+    return next;
+  }
+
+  applyImageInput(next, 'referenceImageUri', 'referenceImageBase64', keyframeInput ?? sourceInput);
+  return next;
 }
 
 export function backfillShotImagePrepOutputRefs(
@@ -578,6 +736,166 @@ function diagnosticsForBudget(
   return [];
 }
 
+function inputKindsForTool(
+  toolName: ShotImagePrepToolRequest['toolName'] | 'GenerateVideo',
+): readonly ReferenceProviderInputKind[] {
+  if (toolName === 'GenerateVideo') return ['video-keyframe-uri', 'image-uri', 'image-base64'];
+  return ['image-uri', 'image-base64', 'mask-uri', 'ip-adapter-ref', 'resource-uri'];
+}
+
+function entityRepresentationDiagnostics(
+  descriptors: readonly ReferenceDescriptor[],
+  providerInputs: readonly ReferenceProviderInput[],
+  toolName: ShotImagePrepToolRequest['toolName'] | 'GenerateVideo',
+): readonly ShotImagePrepDiagnostic[] {
+  if (toolName === 'GenerateVideo') return [];
+  const providerInputReferenceIds = new Set(providerInputs.map((input) => input.referenceId));
+  return descriptors.flatMap((descriptor): readonly ShotImagePrepDiagnostic[] => {
+    if (descriptor.payload.type !== 'entity') return [];
+    const assetRefs = descriptor.payload.assetRefs ?? [];
+    if (assetRefs.length > 0 || providerInputReferenceIds.has(descriptor.referenceId)) return [];
+    return [
+      projectReferenceDiagnosticToShotPrepDiagnostic(
+        createReferenceDiagnostic({
+          code: 'entity-representation-missing',
+          targetCapability: toolName,
+          purpose: 'provider-input',
+          phase: 'preflight',
+          path: ['referenceBundle', descriptor.referenceId],
+        }),
+      ),
+    ];
+  });
+}
+
+function diagnosticsForUnsafeProviderInputs(
+  providerInputs: readonly ReferenceProviderInput[],
+): readonly ShotImagePrepDiagnostic[] {
+  return providerInputs.flatMap((input): readonly ShotImagePrepDiagnostic[] => {
+    if (typeof input.value !== 'string') return [];
+    if (!isUnsafeProviderRuntimeProjection(input.value)) return [];
+    return [
+      diagnostic(
+        'error',
+        'unsafe-runtime-handle',
+        ['providerInputs', input.inputId],
+        'Provider input contains an unsafe runtime handle and cannot be used for shot image prep.',
+      ),
+    ];
+  });
+}
+
+function projectReferenceDiagnosticToShotPrepDiagnostic(
+  item: ReferenceDiagnostic,
+): ShotImagePrepDiagnostic {
+  return {
+    severity: item.severity === 'info' ? 'info' : item.severity,
+    code: shotPrepDiagnosticCodeForReferenceDiagnostic(item),
+    path: item.path,
+    message: item.message,
+    ...(item.expected ? { expected: item.expected } : {}),
+    ...(item.actual !== undefined ? { actual: referenceDiagnosticValue(item.actual) } : {}),
+    ...(item.details ? { details: referenceDiagnosticRecord(item.details) } : {}),
+  };
+}
+
+function shotPrepDiagnosticCodeForReferenceDiagnostic(
+  item: ReferenceDiagnostic,
+): ShotImagePrepDiagnostic['code'] {
+  switch (item.code) {
+    case 'reference-unsafe-runtime-handle':
+      return 'unsafe-runtime-handle';
+    case 'non-serializable-value':
+    case 'oversized-payload':
+      return item.code;
+    case 'provider-input-unavailable':
+    case 'entity-representation-missing':
+      return 'provider-unavailable';
+    case 'reference-unresolved':
+      return 'invalid-source-ref';
+    case 'reference-needs-review':
+    case 'reference-transitional-field':
+      return 'missing-capability';
+    default:
+      return 'invalid-source-ref';
+  }
+}
+
+function groupProviderInputsByRole(
+  descriptors: readonly ReferenceDescriptor[],
+  providerInputs: readonly ReferenceProviderInput[],
+): Map<ReferenceDescriptor['role'], ReferenceProviderInput[]> {
+  const descriptorsById = new Map(
+    descriptors.map((descriptor) => [descriptor.referenceId, descriptor]),
+  );
+  const grouped = new Map<ReferenceDescriptor['role'], ReferenceProviderInput[]>();
+  for (const input of providerInputs) {
+    const role = descriptorsById.get(input.referenceId)?.role ?? 'reference';
+    const current = grouped.get(role) ?? [];
+    current.push(input);
+    grouped.set(role, current);
+  }
+  return grouped;
+}
+
+function firstInputForRoles(
+  inputsByRole: ReadonlyMap<ReferenceDescriptor['role'], readonly ReferenceProviderInput[]>,
+  roles: readonly ReferenceDescriptor['role'][],
+): ReferenceProviderInput | undefined {
+  for (const role of roles) {
+    const input = inputsByRole.get(role)?.[0];
+    if (input) return input;
+  }
+  return undefined;
+}
+
+function applyImageInput(
+  args: Record<string, unknown>,
+  uriField: 'sourceImageUri' | 'referenceImageUri' | 'maskUri',
+  base64Field: 'referenceImageBase64' | 'maskBase64',
+  input: ReferenceProviderInput | undefined,
+): void {
+  if (!input) return;
+  if (input.inputKind === 'image-base64' && typeof input.value === 'string') {
+    if (typeof args[base64Field] !== 'string') args[base64Field] = input.value;
+    return;
+  }
+  if (
+    (input.inputKind === 'image-uri' ||
+      input.inputKind === 'mask-uri' ||
+      input.inputKind === 'video-keyframe-uri' ||
+      input.inputKind === 'resource-uri') &&
+    typeof input.value === 'string' &&
+    typeof args[uriField] !== 'string'
+  ) {
+    args[uriField] = input.value;
+  }
+}
+
+function referenceDiagnosticValue(
+  value: ReferenceDiagnostic['actual'],
+): ShotImagePrepDiagnostic['actual'] {
+  if (value === undefined) return undefined;
+  return isShotImagePrepJsonValue(value) ? value : String(value);
+}
+
+function referenceDiagnosticRecord(
+  value: NonNullable<ReferenceDiagnostic['details']>,
+): NonNullable<ShotImagePrepDiagnostic['details']> {
+  const record: Record<string, NonNullable<ShotImagePrepDiagnostic['details']>[string]> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (isShotImagePrepJsonValue(item)) record[key] = item;
+  }
+  return record;
+}
+
+function isUnsafeProviderRuntimeProjection(value: string): boolean {
+  const trimmed = value.trim();
+  if (/^(?:blob|data|vscode-resource|webview|vscode-webview):/i.test(trimmed)) return true;
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i.test(trimmed)) return true;
+  return false;
+}
+
 function diagnosticsForUnavailableTool(
   plan: ShotImagePrepPlan,
   availableTools: readonly ShotImagePrepToolCapability[],
@@ -668,6 +986,7 @@ async function executePlanWithRetry(
       availableTools: input.availableTools,
       toolOptions: input.toolOptions,
       providerId: input.request.providerId,
+      referenceResolver: input.referenceResolver,
     });
     if (last.result?.success) return last;
     if (!shouldRetry(last, input.request.retryPolicy.retryOn)) return last;
@@ -681,6 +1000,7 @@ async function executePlanWithRetry(
       availableTools: input.availableTools,
       toolOptions: input.toolOptions,
       providerId: input.request.providerId,
+      referenceResolver: input.referenceResolver,
     })
   );
 }
@@ -765,6 +1085,18 @@ function isBackfillOutput(value: unknown): value is ShotImagePrepBackfillOutput 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isShotImagePrepJsonValue(
+  value: unknown,
+): value is NonNullable<ShotImagePrepDiagnostic['actual']> {
+  if (value === null) return true;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return Number.isFinite(value) || typeof value !== 'number';
+  }
+  if (Array.isArray(value)) return value.every(isShotImagePrepJsonValue);
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(isShotImagePrepJsonValue);
 }
 
 function resolveRuntimeTool(

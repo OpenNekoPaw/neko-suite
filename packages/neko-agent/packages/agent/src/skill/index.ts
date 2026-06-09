@@ -78,6 +78,8 @@ export {
   getComicToStoryboardSkill,
   mediaToVideoSkill,
   getMediaToVideoSkill,
+  comicToAnimationSkill,
+  getComicToAnimationSkill,
   imageToShotSkill,
   getImageToShotSkill,
   storyboardToAnimationPlanSkill,

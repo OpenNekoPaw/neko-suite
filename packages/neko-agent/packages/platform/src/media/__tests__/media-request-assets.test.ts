@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { materializeImageRequestFileUris } from '../media-request-assets';
+import {
+  materializeImageRequestFileUris,
+  materializeVideoRequestFileUris,
+} from '../media-request-assets';
 
 describe('media request asset materialization', () => {
   it('reads reference image and mask file URIs into base64 fields', async () => {
@@ -45,5 +48,28 @@ describe('media request asset materialization', () => {
     });
 
     expect(request.controlImageBase64).toBe('already-control-base64');
+  });
+
+  it('reads video reference image file URIs into base64 fields', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'neko-video-assets-'));
+    const referencePath = join(dir, 'video-reference.png');
+    await writeFile(referencePath, Buffer.from('video-reference'));
+
+    const request = await materializeVideoRequestFileUris({
+      prompt: 'animate image',
+      referenceImageUri: pathToFileURL(referencePath).toString(),
+    });
+
+    expect(request.referenceImageBase64).toBe(Buffer.from('video-reference').toString('base64'));
+  });
+
+  it('does not overwrite explicit video reference image base64 values', async () => {
+    const request = await materializeVideoRequestFileUris({
+      prompt: 'animate image',
+      referenceImageUri: '/tmp/does-not-need-to-exist.png',
+      referenceImageBase64: 'already-video-base64',
+    });
+
+    expect(request.referenceImageBase64).toBe('already-video-base64');
   });
 });

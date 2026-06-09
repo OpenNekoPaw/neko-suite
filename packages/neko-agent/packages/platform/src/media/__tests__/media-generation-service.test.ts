@@ -195,6 +195,53 @@ describe('MediaGenerationService', () => {
 
       expect(task.type).toBe('image-to-video');
     });
+
+    it('should detect image-to-video from local or materialized reference image inputs', async () => {
+      const videoModel: Model = {
+        ...mockModel,
+        id: 'sora-model',
+        capabilities: ['image_to_video'],
+      };
+
+      const configManager = {
+        getProvider: () => mockProvider,
+        getProviders: () => [mockProvider],
+        getEnabledProviders: () => [mockProvider],
+        getModel: () => videoModel,
+        getModels: () => [videoModel],
+        getEnabledModels: () => [videoModel],
+        getModelsByProvider: () => [videoModel],
+      } as unknown as ConfigManager;
+
+      const newProviderRegistry = new ProviderRegistry(configManager);
+      const newRoutingManager = new MediaRoutingManager(newProviderRegistry, configManager);
+      const newService = new MediaGenerationService(
+        taskManager,
+        newProviderRegistry,
+        newRoutingManager,
+      );
+
+      await expect(
+        newService.generateVideo({
+          prompt: 'Animate this image',
+          referenceImageBase64: 'base64',
+        }),
+      ).resolves.toMatchObject({ type: 'image-to-video' });
+
+      await expect(
+        newService.generateVideo({
+          prompt: 'Animate this image',
+          referenceImageUri: 'file:///tmp/reference.png',
+        }),
+      ).resolves.toMatchObject({ type: 'image-to-video' });
+
+      await expect(
+        newService.generateVideo({
+          prompt: 'Animate this image',
+          startFrameImageBase64: 'base64',
+        }),
+      ).resolves.toMatchObject({ type: 'image-to-video' });
+    });
   });
 
   describe('generateAudio', () => {

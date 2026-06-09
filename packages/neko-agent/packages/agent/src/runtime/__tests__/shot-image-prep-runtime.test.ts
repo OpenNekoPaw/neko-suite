@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
+  ReferenceDescriptor,
+  ReferenceMaterializationRequest,
+  ReferenceProviderInput,
+  ReferenceResolverService,
   ShotImagePrepBatchRequest,
   ShotImagePrepPlan,
   StoryboardMediaRef,
@@ -7,6 +11,7 @@ import type {
 } from '@neko/shared';
 import {
   backfillShotImagePrepOutputRefs,
+  createGenerateVideoReferenceToolArgs,
   createShotImagePrepToolCapabilities,
   createShotImagePrepToolRequest,
   estimateShotImagePrepCost,
@@ -95,6 +100,165 @@ describe('shot image prep runtime', () => {
       undefined,
     );
     expect(result.summary.status).toBe('succeeded');
+  });
+
+  it('materializes stable refs into TransformImage provider args without persisting them in request', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      success: true,
+      data: { taskId: 'task-1' },
+    });
+    const referenceResolver = resolverWithProviderInputs((request) =>
+      request.references.flatMap((descriptor): readonly ReferenceProviderInput[] => {
+        if (descriptor.role === 'source') {
+          return [
+            {
+              inputId: `${descriptor.referenceId}:image-uri`,
+              referenceId: descriptor.referenceId,
+              inputKind: 'image-uri' as const,
+              value: 'file:///resolved/source-panel-1.png',
+            },
+          ];
+        }
+        if (descriptor.role === 'mask') {
+          return [
+            {
+              inputId: `${descriptor.referenceId}:mask-uri`,
+              referenceId: descriptor.referenceId,
+              inputKind: 'mask-uri' as const,
+              value: 'file:///resolved/speech-mask.png',
+            },
+          ];
+        }
+        if (descriptor.role === 'style') {
+          return [
+            {
+              inputId: `${descriptor.referenceId}:ip-adapter-ref`,
+              referenceId: descriptor.referenceId,
+              inputKind: 'ip-adapter-ref' as const,
+              value: { imageBase64: 'style-ref', mimeType: 'image/png', mode: 'style' },
+            },
+          ];
+        }
+        return [];
+      }),
+    );
+    const plan = makePlan({
+      status: 'approved',
+      maskRefs: [maskRef],
+      referenceBundle: { styleRefs: [styleRef] },
+    });
+
+    const result = await executeShotImagePrepPlan({
+      artifactId: 'artifact-1',
+      plan,
+      availableTools: [transformCapability],
+      toolPort: { execute },
+      referenceResolver,
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      'TransformImage',
+      expect.objectContaining({
+        sourceImageUri: 'file:///resolved/source-panel-1.png',
+        maskUri: 'file:///resolved/speech-mask.png',
+        ipAdapterRefs: [{ imageBase64: 'style-ref', mimeType: 'image/png', mode: 'style' }],
+      }),
+      undefined,
+    );
+    expect(result.request?.args).not.toHaveProperty('sourceImageUri');
+    expect(result.request?.args).not.toHaveProperty('maskUri');
+    expect(result.request?.args).not.toHaveProperty('ipAdapterRefs');
+    expect(JSON.stringify(result.summary)).not.toContain('file:///resolved');
+    expect(result.summary.status).toBe('succeeded');
+  });
+
+  it('blocks provider execution when an entity reference has no usable representation', async () => {
+    const execute = vi.fn();
+    const plan = makePlan({
+      status: 'approved',
+      imageStrategy: 'generate-new',
+      generationPrompt: 'Clean anime keyframe',
+      referenceBundle: {
+        characterRefs: [{ entityRef: { entityId: 'char-1', entityKind: 'character' } }],
+      },
+    });
+
+    const result = await executeShotImagePrepPlan({
+      artifactId: 'artifact-1',
+      plan,
+      availableTools: [
+        {
+          toolName: 'GenerateImage',
+          supportsSourceImage: true,
+          supportsMasks: true,
+          supportsReferences: true,
+        },
+      ],
+      toolPort: { execute },
+      referenceResolver: resolverWithProviderInputs(() => []),
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.summary.status).toBe('unavailable');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'provider-unavailable',
+        message: expect.stringContaining('Entity reference has no usable representation'),
+      }),
+    ]);
+  });
+
+  it('rejects unsafe runtime projections returned by the reference resolver', async () => {
+    const execute = vi.fn();
+    const result = await executeShotImagePrepPlan({
+      artifactId: 'artifact-1',
+      plan: makePlan({ status: 'approved' }),
+      availableTools: [transformCapability],
+      toolPort: { execute },
+      referenceResolver: resolverWithProviderInputs((request) => [
+        {
+          inputId: `${request.references[0]?.referenceId ?? 'ref'}:image-uri`,
+          referenceId: request.references[0]?.referenceId ?? 'ref',
+          inputKind: 'image-uri',
+          value: 'blob:https://webview/source.png',
+        },
+      ]),
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.summary.status).toBe('unavailable');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'unsafe-runtime-handle',
+      }),
+    ]);
+  });
+
+  it('maps prepared keyframe refs into GenerateVideo args at execution handoff time', () => {
+    const descriptor = referenceDescriptor({
+      referenceId: 'prep-1:outputMediaRefs:0',
+      role: 'output',
+    });
+
+    const args = createGenerateVideoReferenceToolArgs({
+      args: { prompt: 'Animate the prepared keyframe' },
+      descriptors: [descriptor],
+      providerInputs: [
+        {
+          inputId: 'prep-1:outputMediaRefs:0:video-keyframe-uri',
+          referenceId: descriptor.referenceId,
+          inputKind: 'video-keyframe-uri',
+          value: 'file:///resolved/keyframe-1.png',
+        },
+      ],
+    });
+
+    expect(args).toEqual({
+      prompt: 'Animate the prepared keyframe',
+      referenceImageUri: 'file:///resolved/keyframe-1.png',
+    });
   });
 
   it('backfills transform lineage as derived stable refs after completion', () => {
@@ -390,3 +554,73 @@ const sourceRef: StoryboardMediaRef = {
   label: 'Panel 1',
   mimeType: 'image/png',
 };
+
+const maskRef: StoryboardMediaRef = {
+  refId: 'mask-1',
+  role: 'mask',
+  locator: {
+    type: 'workspace-path',
+    path: '${PROJECT}/masks/speech-mask.png',
+  },
+  label: 'Speech mask',
+  mimeType: 'image/png',
+};
+
+const styleRef: StoryboardMediaRef = {
+  refId: 'style-1',
+  role: 'reference',
+  locator: {
+    type: 'workspace-path',
+    path: '${PROJECT}/refs/style.png',
+  },
+  label: 'Style ref',
+  mimeType: 'image/png',
+};
+
+function resolverWithProviderInputs(
+  materializeProviderInputs: (
+    request: ReferenceMaterializationRequest,
+  ) => readonly ReferenceProviderInput[],
+): ReferenceResolverService {
+  return {
+    materialize: async (request: ReferenceMaterializationRequest) => ({
+      requestId: request.requestId,
+      status: 'resolved' as const,
+      providerInputs: materializeProviderInputs(request),
+      diagnostics: [],
+    }),
+    resolveBatch: async () => ({
+      batchId: 'unused',
+      status: 'skipped' as const,
+      items: [],
+      summary: {
+        total: 0,
+        resolved: 0,
+        unresolved: 0,
+        partial: 0,
+        skipped: 0,
+        deduplicated: 0,
+      },
+      diagnostics: [],
+    }),
+  };
+}
+
+function referenceDescriptor(overrides: Partial<ReferenceDescriptor> = {}): ReferenceDescriptor {
+  return {
+    schemaVersion: 1,
+    kind: 'reference-descriptor',
+    referenceId: 'ref-1',
+    sourceKind: 'shot-image-prep-plan',
+    sourceId: 'prep-1',
+    referenceKind: 'resource',
+    role: 'source',
+    modality: 'image',
+    payload: {
+      type: 'path',
+      path: '${PROJECT}/keyframe.png',
+      pathKind: 'variable',
+    },
+    ...overrides,
+  };
+}

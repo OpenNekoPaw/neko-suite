@@ -320,6 +320,43 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('passes GenerateVideo image-to-video reference and motion fields to media routing', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('GenerateVideo', {
+      prompt: 'Animate the prepared comic keyframe',
+      referenceImageUri: '${PROJECT}/resolved/keyframe-1.png',
+      aspectRatio: '16:9',
+      motionStrength: 0.4,
+      cameraMovement: 'zoom-in',
+      cameraAngle: 'eye-level',
+      shotScale: 'MS',
+      editInstruction: 'Subtle breathing motion and drifting dust.',
+      duration: 4,
+      resolution: '720p',
+      fps: 24,
+    });
+
+    expect(result.success).toBe(true);
+    expect(media.generateVideo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Animate the prepared comic keyframe',
+        referenceImageUri: '${PROJECT}/resolved/keyframe-1.png',
+        aspectRatio: '16:9',
+        motionStrength: 0.4,
+        cameraMovement: 'zoom-in',
+        cameraAngle: 'eye-level',
+        shotScale: 'MS',
+        editInstruction: 'Subtle breathing motion and drifting dust.',
+        duration: 4,
+        resolution: '720p',
+        fps: 24,
+      }),
+    );
+  });
+
   it('uses runtime media model metadata when GenerateImage omits provider/model args', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();

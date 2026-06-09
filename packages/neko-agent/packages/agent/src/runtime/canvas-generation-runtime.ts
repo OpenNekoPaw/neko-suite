@@ -1,3 +1,5 @@
+import type { ReferenceDescriptor } from '@neko/shared';
+
 export type CanvasPromptRole = 'system' | 'user' | 'assistant';
 
 export interface CanvasPromptMessage {
@@ -421,6 +423,7 @@ export function buildCanvasImageGenerationRequest(
   input: CanvasGenerationInput,
   ipAdapterRefs?: readonly CanvasIpAdapterReference[],
 ): CanvasImageGenerationRequest {
+  const referenceDescriptors = collectCanvasGenerationReferenceDescriptors(input);
   const metadata: Record<string, unknown> = {
     nodeId: input.nodeId,
     sourceNodeId: input.sourceNodeId ?? input.nodeId,
@@ -428,6 +431,9 @@ export function buildCanvasImageGenerationRequest(
   if (input.cellId) metadata['cellId'] = input.cellId;
   if (input.characterIds && input.characterIds.length > 0) {
     metadata['characterIds'] = [...input.characterIds];
+  }
+  if (referenceDescriptors.length > 0) {
+    metadata['referenceDescriptors'] = referenceDescriptors;
   }
 
   const controlMode = normalizeCanvasControlMode(input.controlMode);
@@ -447,6 +453,33 @@ export function buildCanvasImageGenerationRequest(
     ...(input.inpaintStrength !== undefined ? { inpaintStrength: input.inpaintStrength } : {}),
     ...(input.editInstruction ? { editInstruction: input.editInstruction } : {}),
   };
+}
+
+export function collectCanvasGenerationReferenceDescriptors(
+  input: CanvasGenerationInput,
+): readonly ReferenceDescriptor[] {
+  return (input.referenceRefs ?? []).flatMap((ref, index): readonly ReferenceDescriptor[] => {
+    const parsed = parseCanvasReferenceRef(ref);
+    if (!parsed) return [];
+    return [
+      {
+        schemaVersion: 1,
+        kind: 'reference-descriptor',
+        referenceId: `${input.nodeId}:referenceRefs:${index}`,
+        sourceKind: 'canvas-node',
+        sourceId: input.nodeId,
+        referenceKind: 'canvas-node',
+        role: 'reference',
+        modality: 'image',
+        payload: {
+          type: 'canvas-node',
+          nodeId: parsed.nodeId,
+          ...(parsed.cellId ? { cellId: parsed.cellId } : {}),
+        },
+        metadata: { field: 'referenceRefs', index },
+      },
+    ];
+  });
 }
 
 export async function resolveCanvasIpAdapterReferences(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveImageGenerationType } from '../media-generation-kind';
+import { resolveImageGenerationType, resolveVideoGenerationType } from '../media-generation-kind';
 
 describe('media generation type resolution', () => {
   it('uses text-to-image without reference inputs', () => {
@@ -40,5 +40,51 @@ describe('media generation type resolution', () => {
         controlImageUri: 'file:///tmp/control.png',
       }),
     ).toBe('image-to-image');
+  });
+
+  it('uses text-to-video without reference inputs', () => {
+    expect(resolveVideoGenerationType({ prompt: 'animate a cat' })).toBe('text-to-video');
+  });
+
+  it('uses image-to-video for URL, base64, local URI, or first-frame inputs', () => {
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'animate',
+        referenceImageUrl: 'https://example.test/image.png',
+      }),
+    ).toBe('image-to-video');
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'animate',
+        referenceImageBase64: 'base64',
+      }),
+    ).toBe('image-to-video');
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'animate',
+        referenceImageUri: 'file:///tmp/image.png',
+      }),
+    ).toBe('image-to-video');
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'animate',
+        startFrameImageBase64: 'base64',
+      }),
+    ).toBe('image-to-video');
+  });
+
+  it('uses video-to-video for reference or source video inputs', () => {
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'edit',
+        referenceVideoUrl: 'https://example.test/video.mp4',
+      }),
+    ).toBe('video-to-video');
+    expect(
+      resolveVideoGenerationType({
+        prompt: 'edit',
+        sourceVideoUrl: 'https://example.test/source.mp4',
+      }),
+    ).toBe('video-to-video');
   });
 });

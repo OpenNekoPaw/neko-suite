@@ -22,7 +22,7 @@ import { downloadMediaOutputs, type DownloadMediaOptions } from './media-file-do
 import { ProviderRegistry } from '../provider/provider-registry';
 import { MediaRoutingManager } from './routing/media-routing-manager';
 import { createMediaTaskInput } from './media-task-executor';
-import { resolveImageGenerationType } from './media-generation-kind';
+import { resolveImageGenerationType, resolveVideoGenerationType } from './media-generation-kind';
 
 /**
  * Extended task manager interface with updateOutputData support
@@ -72,17 +72,7 @@ export class MediaGenerationService {
    * Generate a video
    */
   async generateVideo(request: VideoGenerationRequest): Promise<MediaTask> {
-    let generationType: MediaGenerationType;
-
-    if (request.referenceVideoUrl) {
-      generationType = 'video-to-video';
-    } else if (request.referenceImageUrl) {
-      generationType = 'image-to-video';
-    } else {
-      generationType = 'text-to-video';
-    }
-
-    return this.submitGeneration(generationType, request);
+    return this.submitGeneration(resolveVideoGenerationType(request), request);
   }
 
   /**

@@ -158,6 +158,10 @@ export interface VideoGenerationRequest extends MediaGenerationRequestBase {
   aspectRatio?: string;
   /** Reference image URL for image-to-video */
   referenceImageUrl?: string;
+  /** Reference image as base64-encoded bytes for image-to-video */
+  referenceImageBase64?: string;
+  /** Reference image local URI/path for image-to-video; host materialization may convert it to base64 */
+  referenceImageUri?: string;
   /** Reference video URL for video-to-video */
   referenceVideoUrl?: string;
   /** Motion strength (0-1) */

@@ -1,7 +1,7 @@
 # ADR: Comic-to-Animation 图像准备与 TransformImage 能力边界
 
 **状态**: Accepted / Partially Implemented (2026-06-07)
-**关联**: `adr-agent-storyboard-table-schema.md` · `adr-composite-artifact-table-protocol.md` · `agent-asset-ref-contract.md` · `agent-media-architecture.md` · `adr-agent-multimodal-perception.md` · `adr-unified-entity-memory-semantic-index.md` · `adr-comic-to-animation-capability-gap.md`
+**关联**: `adr-agent-storyboard-table-schema.md` · `adr-composite-artifact-table-protocol.md` · `agent-asset-ref-contract.md` · `agent-media-architecture.md` · `adr-agent-multimodal-perception.md` · `adr-unified-entity-memory-semantic-index.md` · `adr-comic-to-animation-capability-gap.md` · `adr-canvas-artifact-reference-resolution.md`
 **范围**: `neko-agent` · `neko-canvas` · `neko-cut` · `@neko/shared` · media provider adapters
 
 ---
@@ -272,6 +272,12 @@ interface SceneReferenceRef {
 - 源 panel 参考：当前漫画分格或同页其他分格。
 
 这些参考不应被压成一段自由文本。Prompt 可以描述意图，但稳定引用必须使用 media refs、entity refs、memory refs 或 asset refs。
+
+### 8.1 Canvas / Artifact 引用解析
+
+Shot 图像准备会消费 Canvas 节点、统一实体、Character Memory、PerceptionCard、semantic index 和 generated assets 中的多类引用。引用协议不应只绑定 `ShotNode`；`ShotNode` 是 comic-to-animation 的首个高价值入口，但底层能力应复用通用 Canvas / Artifact stable reference resolver。
+
+详细协议见 `adr-canvas-artifact-reference-resolution.md`。本 ADR 只保留 comic-to-animation 的约束：`referenceBundle`、`sourceMediaRefs`、`maskRefs`、`generatedMediaRefs` 和 Canvas 节点引用都必须保存 stable refs；执行 `GenerateImage` / `TransformImage` / `GenerateVideo` 前，由 Extension Host 将这些 stable refs 解析为 provider 可消费的 URI/base64/ipAdapterRefs/keyframe inputs。
 
 ## 九、与统一实体和 Character Memory 的关系
 
@@ -572,6 +578,8 @@ Profile 负责让结构可注册、可审阅；
 - 接入 panel detection、OCR、对白框 mask、inpaint/outpaint/colorization。
 - 支持 before/after comparison、候选图选择、锁定关键帧。
 - 将角色/场景 reference bundle 与统一实体、Character Memory、媒体语义索引联动。
+- 统一 Canvas `referenceRefs` 与 `ShotImagePrepPlan.referenceBundle` 的 host-side stable ref resolver，将 `StoryboardMediaRef`、`VisualOccurrence.cropRef`、角色/场景/风格 refs、Gallery refs 和通用 Canvas node refs 解析为 provider 可消费的 URI/base64/ipAdapterRefs。
+- 在 ShotNode、GalleryNode、SceneGroupNode、StoryboardNode 和注册实体节点中提供轻量引用摘要：来源图、角色参考、场景参考、上一镜头参考、mask、diagnostic 和已锁定输出状态。
 
 ### P4：长篇一致性与批量生成
 
@@ -603,4 +611,4 @@ Cut 负责视频生成消费
 统一实体/Character Memory 负责长期一致性参考
 ```
 
-当前项目已经具备 `imageStrategy`、`ShotImagePrepPlan`、`comic-shot-asset-prep` profile、`TransformImage` facade 工具注册、纯 runtime 门禁/执行 helper、Canvas 展示和 Cut prepared keyframe handoff。后续应继续补齐真实 OCR/ASR/panel/mask provider、stable ref 到 host URI/base64 的 IO 解析、候选图审阅/锁定 UX 与长篇批量恢复，而不是把所有逻辑继续写死到分镜表或单个生成工具里。
+当前项目已经具备 `imageStrategy`、`ShotImagePrepPlan`、`comic-shot-asset-prep` profile、`TransformImage` facade 工具注册、纯 runtime 门禁/执行 helper、Canvas 展示和 Cut prepared keyframe handoff。后续应继续补齐真实 OCR/ASR/panel/mask provider、通用 Canvas/artifact stable ref 到 host URI/base64/ipAdapterRefs 的 IO 解析、节点引用摘要、候选图审阅/锁定 UX 与长篇批量恢复，而不是把所有逻辑继续写死到分镜表或单个生成工具里。

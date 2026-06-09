@@ -530,12 +530,15 @@ export {
 
 export {
   backfillShotImagePrepOutputRefs,
+  applyResolvedReferencesToToolArgs,
+  createGenerateVideoReferenceToolArgs,
   createShotImagePrepToolCapabilities,
   createShotImagePrepToolRequest,
   estimateShotImagePrepCost,
   executeShotImagePrepBatch,
   executeShotImagePrepPlan,
   gateShotImagePrepBatch,
+  resolveShotImagePrepProviderInputs,
   type ExecuteShotImagePrepBatchInput,
   type ShotImagePrepBackfillCompletion,
   type ShotImagePrepBackfillOutput,
@@ -544,6 +547,7 @@ export {
   type ShotImagePrepBatchGateResult,
   type ShotImagePrepExecutionInput,
   type ShotImagePrepExecutionResult,
+  type ShotImagePrepResolvedReferenceBundle,
   type ShotImagePrepRuntimeToolPort,
   type ShotImagePrepToolCapability,
   type ShotImagePrepToolRequest,

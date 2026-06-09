@@ -5,6 +5,7 @@ import {
   buildCanvasImageGenerationRequest,
   buildCanvasShotPromptMessages,
   buildCanvasShotPromptUserContent,
+  collectCanvasGenerationReferenceDescriptors,
   convertCanvasFileUrlToPath,
   inferCanvasImageMimeType,
   normalizeCanvasControlMode,
@@ -138,6 +139,7 @@ describe('canvas generation runtime', () => {
           controlMode: 'depth',
           controlStrength: 0.7,
           negativePrompt: 'blurry',
+          referenceRefs: ['gallery-1:front'],
         },
         [{ imageBase64: 'ref', mimeType: 'image/png', strength: 0.6, mode: 'both' }],
       ),
@@ -150,6 +152,20 @@ describe('canvas generation runtime', () => {
         sourceNodeId: 'source-1',
         cellId: 'cell-1',
         characterIds: ['char-1'],
+        referenceDescriptors: [
+          {
+            schemaVersion: 1,
+            kind: 'reference-descriptor',
+            referenceId: 'shot-1:referenceRefs:0',
+            sourceKind: 'canvas-node',
+            sourceId: 'shot-1',
+            referenceKind: 'canvas-node',
+            role: 'reference',
+            modality: 'image',
+            payload: { type: 'canvas-node', nodeId: 'gallery-1', cellId: 'front' },
+            metadata: { field: 'referenceRefs', index: 0 },
+          },
+        ],
       },
       style: 'anime',
       negativePrompt: 'blurry',
@@ -157,6 +173,31 @@ describe('canvas generation runtime', () => {
       controlStrength: 0.7,
       ipAdapterRefs: [{ imageBase64: 'ref', mimeType: 'image/png', strength: 0.6, mode: 'both' }],
     });
+  });
+
+  it('collects Canvas generation referenceRefs as stable descriptors only', () => {
+    const descriptors = collectCanvasGenerationReferenceDescriptors({
+      nodeId: 'shot-1',
+      prompt: 'cat detective',
+      referenceRefs: ['gallery-1:front'],
+      ipAdapterRefs: [{ imageBase64: 'runtime-base64' }],
+    });
+
+    expect(descriptors).toEqual([
+      {
+        schemaVersion: 1,
+        kind: 'reference-descriptor',
+        referenceId: 'shot-1:referenceRefs:0',
+        sourceKind: 'canvas-node',
+        sourceId: 'shot-1',
+        referenceKind: 'canvas-node',
+        role: 'reference',
+        modality: 'image',
+        payload: { type: 'canvas-node', nodeId: 'gallery-1', cellId: 'front' },
+        metadata: { field: 'referenceRefs', index: 0 },
+      },
+    ]);
+    expect(JSON.stringify(descriptors)).not.toContain('runtime-base64');
   });
 
   it('selects gallery and shot image sources deterministically', () => {

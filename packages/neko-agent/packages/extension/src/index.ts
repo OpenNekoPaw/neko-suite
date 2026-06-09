@@ -125,6 +125,13 @@ const BUILTIN_SKILL_LOCALES: Readonly<Record<string, SkillLocaleMap>> = {
       tags: ['AI', '漫画', '分镜'],
     },
   },
+  'comic-to-animation': {
+    'zh-cn': {
+      name: '漫画转动画',
+      description: '编排漫画分镜、镜头图像准备、生成审批、Canvas 审阅、Cut 装配和导出交接。',
+      tags: ['AI', '漫画', '动画', '视频'],
+    },
+  },
   'media-to-video': {
     'zh-cn': {
       name: '媒体转视频',

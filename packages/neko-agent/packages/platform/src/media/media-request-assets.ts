@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import type { ImageGenerationRequest } from './types';
+import type { ImageGenerationRequest, VideoGenerationRequest } from './types';
 
 export async function materializeImageRequestFileUris(
   request: ImageGenerationRequest,
@@ -25,6 +25,21 @@ export async function materializeImageRequestFileUris(
     next = {
       ...next,
       controlImageBase64: await readFileAsBase64(request.controlImageUri),
+    };
+  }
+
+  return next;
+}
+
+export async function materializeVideoRequestFileUris(
+  request: VideoGenerationRequest,
+): Promise<VideoGenerationRequest> {
+  let next = request;
+
+  if (request.referenceImageUri && !request.referenceImageBase64) {
+    next = {
+      ...next,
+      referenceImageBase64: await readFileAsBase64(request.referenceImageUri),
     };
   }
 

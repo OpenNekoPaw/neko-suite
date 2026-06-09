@@ -10,8 +10,10 @@ import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
 import { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 import {
   animationPlanToCutSkill,
+  comicToAnimationSkill,
   exportVideoPackageSkill,
   getAnimationPlanToCutSkill,
+  getComicToAnimationSkill,
   getExportVideoPackageSkill,
   getGeneratedShotAssemblySkill,
   getImageToShotSkill,
@@ -36,8 +38,10 @@ export { aiGenerateSkill, aiGenerateToolDefinitions };
 export { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 export {
   animationPlanToCutSkill,
+  comicToAnimationSkill,
   exportVideoPackageSkill,
   getAnimationPlanToCutSkill,
+  getComicToAnimationSkill,
   getExportVideoPackageSkill,
   getGeneratedShotAssemblySkill,
   getImageToShotSkill,
@@ -578,6 +582,7 @@ export const builtinSkills: Skill[] = [
   scriptToTimelineSkill,
   // Multi-modal adaptation
   mediaToVideoSkill,
+  comicToAnimationSkill,
   comicToStoryboardSkill,
   imageToShotSkill,
   storyboardToAnimationPlanSkill,
@@ -607,6 +612,7 @@ export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
     scriptToTimelineSkill,
     // Multi-modal adaptation
     getMediaToVideoSkill(options.locale),
+    getComicToAnimationSkill(options.locale),
     getComicToStoryboardSkill(options.locale),
     getImageToShotSkill(options.locale),
     getStoryboardToAnimationPlanSkill(options.locale),

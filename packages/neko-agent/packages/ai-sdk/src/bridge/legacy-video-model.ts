@@ -15,6 +15,18 @@ import type {
 import type { LegacyMediaAdapter, LegacyAdapterResult, ProviderConfig } from '../types';
 import { pollUntilDone, POLLING_PRESETS } from '../polling';
 
+type LegacyVideoProviderOptions = {
+  referenceVideoUrl?: string;
+  startFrameImageBase64?: string;
+  endFrameImageBase64?: string;
+  sourceVideoUrl?: string;
+  cameraMovement?: string;
+  cameraAngle?: string;
+  shotScale?: string;
+  editInstruction?: string;
+  motionStrength?: number;
+};
+
 export class LegacyVideoModel implements VideoModelV3 {
   readonly specificationVersion = 'v3' as const;
   readonly provider: string;
@@ -58,8 +70,15 @@ export class LegacyVideoModel implements VideoModelV3 {
     if (options.image) {
       if ('url' in options.image) {
         request.referenceImageUrl = options.image.url;
+      } else if (options.image.type === 'file') {
+        request.referenceImageBase64 =
+          typeof options.image.data === 'string'
+            ? options.image.data
+            : Buffer.from(options.image.data).toString('base64');
       }
     }
+
+    Object.assign(request, readLegacyVideoProviderOptions(options.providerOptions?.['neko']));
 
     const model = { name: this.modelId, id: this.modelId };
     const provider = {
@@ -120,4 +139,37 @@ export class LegacyVideoModel implements VideoModelV3 {
       abortSignal,
     );
   }
+}
+
+function readLegacyVideoProviderOptions(value: unknown): LegacyVideoProviderOptions {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    ...(typeof record['referenceVideoUrl'] === 'string'
+      ? { referenceVideoUrl: record['referenceVideoUrl'] }
+      : {}),
+    ...(typeof record['startFrameImageBase64'] === 'string'
+      ? { startFrameImageBase64: record['startFrameImageBase64'] }
+      : {}),
+    ...(typeof record['endFrameImageBase64'] === 'string'
+      ? { endFrameImageBase64: record['endFrameImageBase64'] }
+      : {}),
+    ...(typeof record['sourceVideoUrl'] === 'string'
+      ? { sourceVideoUrl: record['sourceVideoUrl'] }
+      : {}),
+    ...(typeof record['cameraMovement'] === 'string'
+      ? { cameraMovement: record['cameraMovement'] }
+      : {}),
+    ...(typeof record['cameraAngle'] === 'string' ? { cameraAngle: record['cameraAngle'] } : {}),
+    ...(typeof record['shotScale'] === 'string' ? { shotScale: record['shotScale'] } : {}),
+    ...(typeof record['editInstruction'] === 'string'
+      ? { editInstruction: record['editInstruction'] }
+      : {}),
+    ...(typeof record['motionStrength'] === 'number'
+      ? { motionStrength: record['motionStrength'] }
+      : {}),
+  };
 }
