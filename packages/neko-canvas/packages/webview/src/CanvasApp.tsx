@@ -60,6 +60,15 @@ import {
   getViewportCenter as getViewportCenterMath,
 } from './utils/viewportMath';
 import { createCanvasDocumentSaveFingerprint } from './utils/canvasPersistence';
+import {
+  createViewportSnapshotPolicy,
+  type ViewportSnapshotPolicy,
+} from './utils/viewportSnapshotPolicy';
+import {
+  createCanvasViewportSnapshotKey,
+  readCanvasViewportSnapshot,
+  writeCanvasViewportSnapshot,
+} from './utils/viewportWebviewState';
 import { resolveCanvasRenderRefreshDecision } from './utils/renderRefreshTiering';
 import { t } from './i18n';
 import { getLogger } from './utils/logger';
@@ -261,6 +270,7 @@ export function CanvasApp() {
 
   const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
   const isComposingRef = useRef(false);
+  const viewportSnapshotPolicyRef = useRef<ViewportSnapshotPolicy | null>(null);
   const projectionRequestIdRef = useRef(0);
   const projectionResolversRef = useRef(
     new Map<
@@ -436,9 +446,12 @@ export function CanvasApp() {
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
     onCanvasDataLoaded: (data) => {
+      const documentKey = createCanvasViewportSnapshotKey(data);
       seedViewportFromDocument(
-        `${data.name}:${data.version}`,
-        data.viewport ?? DEFAULT_RUNTIME_VIEWPORT,
+        documentKey,
+        readCanvasViewportSnapshot(vscode, documentKey) ??
+          data.viewport ??
+          DEFAULT_RUNTIME_VIEWPORT,
       );
     },
     onAddMediaFromExtension: handleAddMediaFromExtension,
@@ -1008,6 +1021,38 @@ export function CanvasApp() {
   // Keep ref in sync with latest handler (for VSCode message dispatch)
   keyboardActionRef.current = handleKeyboardAction;
 
+  useEffect(() => {
+    if (!vscode || !canvasData) {
+      viewportSnapshotPolicyRef.current?.cancel();
+      viewportSnapshotPolicyRef.current = null;
+      return;
+    }
+
+    const documentKey = createCanvasViewportSnapshotKey(canvasData);
+    viewportSnapshotPolicyRef.current?.cancel();
+    viewportSnapshotPolicyRef.current = createViewportSnapshotPolicy({
+      writer: {
+        writeSnapshot: (snapshot) => writeCanvasViewportSnapshot(vscode, documentKey, snapshot),
+      },
+    });
+
+    return () => {
+      viewportSnapshotPolicyRef.current?.flush('close');
+      viewportSnapshotPolicyRef.current = null;
+    };
+  }, [canvasData, vscode]);
+
+  useEffect(() => {
+    viewportSnapshotPolicyRef.current?.schedule(viewport);
+  }, [viewport]);
+
+  useEffect(() => {
+    if (!vscode) return;
+    const flushViewportSnapshot = () => viewportSnapshotPolicyRef.current?.flush('blur');
+    window.addEventListener('blur', flushViewportSnapshot);
+    return () => window.removeEventListener('blur', flushViewportSnapshot);
+  }, [vscode]);
+
   // =========================================================================
   // Debounced save
   // =========================================================================
@@ -1022,6 +1067,7 @@ export function CanvasApp() {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       lastSavedDataRef.current = currentDataFingerprint;
+      viewportSnapshotPolicyRef.current?.flush('save');
       vscode.postMessage({ type: 'save', data: canvasData });
     }, 300);
     return () => {

@@ -13,6 +13,7 @@ describe('Canvas creative workbench layout boundary', () => {
     'utf8',
   );
   const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
+  const canvasStoreSource = readFileSync(resolve(__dirname, 'stores/canvasStore.ts'), 'utf8');
   const infiniteCanvasSource = readFileSync(
     resolve(__dirname, 'components/InfiniteCanvas.tsx'),
     'utf8',
@@ -46,6 +47,9 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).not.toMatch(/state\.moveNode\)/);
     expect(appSource).not.toMatch(/state\.resizeNode\)/);
     expect(appSource).not.toMatch(/state\.rotateNode\)/);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}moveNode: /m);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}resizeNode: /m);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}rotateNode: /m);
     expect(appSource).not.toMatch(/onNodeDrag=\{/);
     expect(appSource).not.toMatch(/onNodeResize=\{/);
     expect(appSource).not.toMatch(/onNodeRotate=\{/);
@@ -55,6 +59,23 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(baseNodeSource).toMatch(/onDragEnd:\s*onMove/);
     expect(baseNodeSource).toMatch(/onResizeEnd/);
     expect(baseNodeSource).toMatch(/onRotateEnd/);
+  });
+
+  it('keeps selected-node resize handles outside scrollable node content', () => {
+    expect(baseNodeSource).toMatch(/bottom: -8/);
+    expect(baseNodeSource).toMatch(/right: -8/);
+    expect(baseNodeSource).not.toMatch(/bottom: -4/);
+    expect(baseNodeSource).not.toMatch(/right: -4/);
+  });
+
+  it('keeps viewport writes in runtime state and webview snapshots', () => {
+    expect(canvasStoreSource).not.toMatch(/^\s{2}setViewport: /m);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}panCanvas: /m);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}zoomCanvas: /m);
+    expect(canvasStoreSource).not.toMatch(/^\s{2}resetViewport: /m);
+    expect(appSource).toMatch(/createViewportSnapshotPolicy/);
+    expect(appSource).toMatch(/writeCanvasViewportSnapshot/);
+    expect(appSource).toMatch(/readCanvasViewportSnapshot/);
   });
 
   it('keeps derived projection dependencies memoized and degradable', () => {

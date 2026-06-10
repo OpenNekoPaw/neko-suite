@@ -164,13 +164,14 @@ This adds one more explicit runtime layer, but it lowers coupling: document pers
 The initial implementation in `neko-canvas` follows this ADR with the following concrete boundaries:
 
 - Runtime pan/zoom is owned by a Webview-only runtime viewport store. Existing `CanvasData.viewport` is still accepted as an initial seed for compatibility, but runtime viewport movement is excluded from document save fingerprinting and full status sync triggers.
+- Final runtime viewport snapshots are persisted through VS Code Webview state via `acquireVsCodeApi().getState()/setState()`, keyed by a lightweight Canvas snapshot key. Idle is the normal write path; blur, save, and close flush pending writes only. This keeps viewport restoration out of `.nkc` semantic document data.
 - Drag, resize, and rotation use hook-local preview state during pointer movement. Canvas root no longer wires per-frame transform callbacks to the document store; `moveNodeEnd`, `resizeNodeEnd`, and `rotateNodeEnd` are the commit paths and skip unchanged values so history/audit stay gesture-scoped.
 - Large-canvas degradation is implemented through a pure render-refresh decision helper. Viewport-derived culling and MiniMap viewport snapshots use throttled runtime viewport snapshots above the large-canvas threshold. Dense or very large transform interactions may freeze connection projection and reconcile on commit.
 - The grid renderer uses a single `<canvas>` surface instead of regenerating SVG dot elements. Theme tokens are read from computed CSS variables at draw time.
 - Node content context now carries a low-cost interaction render mode. Static node-card previews can render shells during large active interactions and exit shell mode after a maximum duration; video poster previews remain opted out.
+- `CanvasStore` no longer exposes viewport mutation actions or per-frame transform actions. Document state owns committed semantic edits only; viewport and pointer-frame transform previews are owned by runtime stores/hooks.
 
 ## Open Questions
 
-- Should the first implementation use VS Code `workspaceState`, a per-document editor state cache, or both for viewport snapshots?
 - Should default thresholds start at `> 100` nodes for throttled culling and `> 500` nodes for heavy-content freezing, or should they be derived from measured frame time?
 - Which realtime node types beyond video playback and 3D/Live2D previews should opt out of heavy-content freezing?

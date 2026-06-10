@@ -104,14 +104,14 @@ const PORT_DATA_COLORS: Record<string, string> = {
 // =============================================================================
 
 const RESIZE_HANDLES: { handle: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
-  { handle: 'n', cursor: 'ns-resize', style: { top: -4, left: 8, right: 8, height: 8 } },
-  { handle: 's', cursor: 'ns-resize', style: { bottom: -4, left: 8, right: 8, height: 8 } },
-  { handle: 'e', cursor: 'ew-resize', style: { right: -4, top: 8, bottom: 8, width: 8 } },
-  { handle: 'w', cursor: 'ew-resize', style: { left: -4, top: 8, bottom: 8, width: 8 } },
-  { handle: 'ne', cursor: 'nesw-resize', style: { top: -4, right: -4, width: 10, height: 10 } },
-  { handle: 'nw', cursor: 'nesw-resize', style: { top: -4, left: -4, width: 10, height: 10 } },
-  { handle: 'se', cursor: 'nwse-resize', style: { bottom: -4, right: -4, width: 10, height: 10 } },
-  { handle: 'sw', cursor: 'nwse-resize', style: { bottom: -4, left: -4, width: 10, height: 10 } },
+  { handle: 'n', cursor: 'ns-resize', style: { top: -8, left: 10, right: 10, height: 8 } },
+  { handle: 's', cursor: 'ns-resize', style: { bottom: -8, left: 10, right: 10, height: 8 } },
+  { handle: 'e', cursor: 'ew-resize', style: { right: -8, top: 10, bottom: 10, width: 8 } },
+  { handle: 'w', cursor: 'ew-resize', style: { left: -8, top: 10, bottom: 10, width: 8 } },
+  { handle: 'ne', cursor: 'nesw-resize', style: { top: -8, right: -8, width: 12, height: 12 } },
+  { handle: 'nw', cursor: 'nesw-resize', style: { top: -8, left: -8, width: 12, height: 12 } },
+  { handle: 'se', cursor: 'nwse-resize', style: { bottom: -8, right: -8, width: 12, height: 12 } },
+  { handle: 'sw', cursor: 'nwse-resize', style: { bottom: -8, left: -8, width: 12, height: 12 } },
 ];
 
 // =============================================================================

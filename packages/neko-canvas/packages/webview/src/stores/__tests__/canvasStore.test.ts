@@ -184,8 +184,6 @@ describe('canvasStore scene container actions', () => {
   it('records one history and operation entry for completed node transform gestures only', () => {
     useCanvasStore.getState().setCanvasData(createCanvasData([createShotNode('shot-1', 100, 100)]));
 
-    useCanvasStore.getState().moveNode('shot-1', { x: 120, y: 130 });
-
     expect(useHistoryStore.getState().undoStack).toHaveLength(0);
     expect(recordNodeUpdateSpy).not.toHaveBeenCalled();
 
@@ -196,7 +194,7 @@ describe('canvasStore scene container actions', () => {
     expect(recordNodeUpdateSpy).toHaveBeenLastCalledWith(
       'shot-1',
       { position: { x: 160, y: 180 } },
-      { position: { x: 120, y: 130 } },
+      { position: { x: 100, y: 100 } },
     );
 
     useCanvasStore.getState().moveNodeEnd('shot-1', { x: 160, y: 180 });
@@ -726,15 +724,6 @@ describe('canvasStore scene container actions', () => {
     );
 
     let tinyScene = useCanvasStore
-      .getState()
-      .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
-    expect(tinyScene?.size).toEqual({ width: 320, height: 220 });
-
-    useCanvasStore
-      .getState()
-      .resizeNode('tiny-scene', { width: 200, height: 120 }, { x: 120, y: 140 });
-
-    tinyScene = useCanvasStore
       .getState()
       .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
     expect(tinyScene?.size).toEqual({ width: 320, height: 220 });

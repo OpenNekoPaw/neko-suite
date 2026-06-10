@@ -5,7 +5,6 @@ import type {
   CanvasConnection,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
-  CanvasViewport,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasDeriveNodeRequest,
@@ -129,23 +128,14 @@ export interface CanvasStore {
   updateNode: (id: string, updates: Partial<CanvasNode>) => void;
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
   removeNode: (id: string) => void;
-  moveNode: (id: string, position: { x: number; y: number }) => void;
   /** Record history + update position (call on drag end) */
   moveNodeEnd: (id: string, position: { x: number; y: number }) => void;
-  /** Real-time resize update (no history) */
-  resizeNode: (
-    id: string,
-    size: { width: number; height: number },
-    position: { x: number; y: number },
-  ) => void;
   /** Record history + final resize (call on resize end) */
   resizeNodeEnd: (
     id: string,
     size: { width: number; height: number },
     position: { x: number; y: number },
   ) => void;
-  /** Real-time rotation update (no history) */
-  rotateNode: (id: string, rotation: number) => void;
   /** Record history + final rotation (call on rotate end) */
   rotateNodeEnd: (id: string, rotation: number) => void;
   /** Assign existing ShotNodes into a SceneGroupNode and optionally auto-layout them */
@@ -197,12 +187,6 @@ export interface CanvasStore {
   ) => CanvasExtractStructuredContentResult;
   /** Apply Agent-generated text, prompt, or structured content through shared target validation. */
   applyAgentContent: (payload: CanvasAgentContentPayload) => CanvasAgentApplyContentResult | null;
-
-  // ==================== Viewport Actions ====================
-  setViewport: (viewport: Partial<CanvasViewport>) => void;
-  panCanvas: (delta: { x: number; y: number }) => void;
-  zoomCanvas: (zoom: number, center?: { x: number; y: number }) => void;
-  resetViewport: () => void;
 
   // ==================== Selection Actions ====================
   selectNode: (id: string, multi?: boolean) => void;
@@ -664,33 +648,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     useCanvasOperationStore.getState().recordNodeRemove(id, removedNode, removedConnections);
   },
 
-  moveNode: (id, position) => {
-    const { canvasData } = get();
-    if (!canvasData) return;
-
-    // No history recording – called on every mousemove during drag
-    const target = canvasData.nodes.find((n) => n.id === id);
-    if (!target) return;
-
-    if (isContainerNode(target)) {
-      const dx = position.x - target.position.x;
-      const dy = position.y - target.position.y;
-      set({
-        canvasData: {
-          ...canvasData,
-          nodes: translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy }),
-        },
-      });
-    } else {
-      set({
-        canvasData: {
-          ...canvasData,
-          nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
-        },
-      });
-    }
-  },
-
   moveNodeEnd: (id, position) => {
     const { canvasData } = get();
     if (!canvasData) return;
@@ -715,25 +672,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     useCanvasOperationStore
       .getState()
       .recordNodeUpdate(id, { position } as any, { position: oldNode.position } as any);
-  },
-
-  resizeNode: (id, size, position) => {
-    const { canvasData } = get();
-    if (!canvasData) return;
-
-    const target = canvasData.nodes.find((node) => node.id === id);
-    if (!target) return;
-    const clampedSize = clampNodeSize(size, resolveNodeMinSize(target));
-
-    // No history recording – called on every mousemove during resize
-    set({
-      canvasData: {
-        ...canvasData,
-        nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size: clampedSize, position } : node,
-        ),
-      },
-    });
   },
 
   resizeNodeEnd: (id, size, position) => {
@@ -764,19 +702,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         { size: clampedSize, position } as any,
         { size: oldNode.size, position: oldNode.position } as any,
       );
-  },
-
-  rotateNode: (id, rotation) => {
-    const { canvasData } = get();
-    if (!canvasData) return;
-
-    // No history recording – called on every mousemove during rotation
-    set({
-      canvasData: {
-        ...canvasData,
-        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, rotation } : node)),
-      },
-    });
   },
 
   rotateNodeEnd: (id, rotation) => {
@@ -1420,67 +1345,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }
 
     return mutation.result;
-  },
-
-  // ==================== Viewport Actions ====================
-  setViewport: (viewport) => {
-    const { canvasData } = get();
-    if (!canvasData) return;
-
-    set({
-      canvasData: {
-        ...canvasData,
-        viewport: { ...canvasData.viewport, ...viewport } as CanvasViewport,
-      },
-    });
-  },
-
-  panCanvas: (delta) => {
-    const { canvasData } = get();
-    if (!canvasData?.viewport) return;
-
-    set({
-      canvasData: {
-        ...canvasData,
-        viewport: {
-          ...canvasData.viewport,
-          pan: {
-            x: canvasData.viewport.pan.x + delta.x,
-            y: canvasData.viewport.pan.y + delta.y,
-          },
-        },
-      },
-    });
-  },
-
-  zoomCanvas: (zoom, _center) => {
-    const { canvasData } = get();
-    if (!canvasData?.viewport) return;
-
-    // Clamp zoom between 5% and 1600%
-    const clampedZoom = Math.max(0.05, Math.min(16, zoom));
-
-    set({
-      canvasData: {
-        ...canvasData,
-        viewport: {
-          ...canvasData.viewport,
-          zoom: clampedZoom,
-        },
-      },
-    });
-  },
-
-  resetViewport: () => {
-    const { canvasData } = get();
-    if (!canvasData) return;
-
-    set({
-      canvasData: {
-        ...canvasData,
-        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
-      },
-    });
   },
 
   // ==================== Selection Actions ====================

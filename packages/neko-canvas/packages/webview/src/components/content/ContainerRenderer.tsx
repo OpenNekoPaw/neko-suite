@@ -572,6 +572,7 @@ function SceneShotRail({
       <div
         className="relative min-w-0 overflow-x-auto overflow-y-hidden px-2 pb-2 pt-1"
         data-scene-shot-rail="true"
+        data-node-drag-block="true"
         aria-label={t('scene.shotRail')}
       >
         <div className="pointer-events-none absolute left-2 right-2 top-6 h-px bg-gray-200" />

@@ -74,7 +74,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
         onExpand={() => openContentOverlay(node.id)}
       />
       {!isCollapsed && (
-        <div className={bodyClassName}>
+        <div className={bodyClassName} data-node-drag-block="true">
           <ContainerActionBar
             node={node}
             allNodes={context.allNodes}
