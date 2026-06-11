@@ -1,5 +1,6 @@
 import {
   normalizeNarrativePreviewFeatureToggles,
+  resolveEffectiveCanvasPlaybackRoutes,
   type CanvasPlaybackPlan,
   type CanvasPlaybackUnit,
   type CanvasToPreviewMessage,
@@ -183,7 +184,7 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
         nodeIds: route.map((unit) => unit.sourceNodeId),
       });
     }
-    const entryUnit = route[0] ?? plan.units.find((unit) => unit.id === plan.entryUnitIds[0]);
+    const entryUnit = route[0];
     if (entryUnit) {
       this.post({
         type: 'canvas:highlightNode',
@@ -199,26 +200,13 @@ export class DefaultNarrativePreviewController implements NarrativePreviewContro
 }
 
 function resolvePlaybackPlanRoute(plan: CanvasPlaybackPlan): readonly CanvasPlaybackUnit[] {
-  const route: CanvasPlaybackUnit[] = [];
-  const visited = new Set<string>();
   const unitById = new Map(plan.units.map((unit) => [unit.id, unit]));
-  let currentUnitId = plan.entryUnitIds[0];
+  const route = resolveEffectiveCanvasPlaybackRoutes(plan).routes[0];
+  return route ? route.unitIds.map((unitId) => unitById.get(unitId)).filter(isPlaybackUnit) : [];
+}
 
-  while (currentUnitId && !visited.has(currentUnitId) && route.length <= plan.units.length) {
-    visited.add(currentUnitId);
-    const unit = unitById.get(currentUnitId);
-    if (!unit) break;
-    route.push(unit);
-    const next = plan.transitions
-      .filter(
-        (transition) => transition.sourceUnitId === currentUnitId && transition.enabled !== false,
-      )
-      .slice()
-      .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))[0];
-    currentUnitId = next?.targetUnitId;
-  }
-
-  return route;
+function isPlaybackUnit(unit: CanvasPlaybackUnit | undefined): unit is CanvasPlaybackUnit {
+  return Boolean(unit);
 }
 
 function readMessageRevision(message: CanvasToPreviewMessage): number | undefined {

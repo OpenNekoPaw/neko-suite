@@ -5,6 +5,31 @@ import { join } from 'path';
 const panelSource = readFileSync(join(__dirname, '../panels/PreviewPanel.ts'), 'utf-8');
 
 describe('PreviewPanel canvas handoff contracts', () => {
+  it('guards webview messages after the preview panel is disposed', () => {
+    expect(panelSource).toContain('private isDisposed = false;');
+    expect(panelSource).toContain(
+      'this.panel.onDidDispose(() => this.disposePanelResources(false), null, this.disposables);',
+    );
+    expect(panelSource).toContain('public postMessage(message: MessageToWebview): boolean');
+    expect(panelSource).toContain('if (this.isDisposed) {');
+    expect(panelSource).toContain('return false;');
+    expect(panelSource).toContain('isWebviewDisposedError(error)');
+    expect(panelSource).toContain('this.disposePanelResources(false);');
+  });
+
+  it('prevents stale async preview updates from writing to a closed or newer panel state', () => {
+    expect(panelSource).toContain('private updateVersion = 0;');
+    expect(panelSource).toContain('const updateVersion = ++this.updateVersion;');
+    expect(panelSource).toContain(
+      'void this.updateReadinessRows(document, scriptIndex, sceneStates, updateVersion);',
+    );
+    expect(panelSource).toContain('void this.sendCharacterThumbnails(scriptIndex, updateVersion);');
+    expect(panelSource).toContain(
+      'private canApplyUpdate(scriptUri: string, updateVersion: number)',
+    );
+    expect(panelSource).toContain('this.updateVersion === updateVersion');
+  });
+
   it('routes sendToCanvas through storyboard payload import', () => {
     expect(panelSource).toContain('await this.sendSceneToCanvas(scriptIndex, scene);');
     expect(panelSource).toContain('const scopedIndex: NekoStoryScriptIndex = {');

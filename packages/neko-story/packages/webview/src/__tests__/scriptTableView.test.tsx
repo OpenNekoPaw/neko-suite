@@ -54,7 +54,7 @@ const multiSceneIndex: NekoStoryScriptIndex = {
 };
 
 describe('ScriptTableView', () => {
-  it('renders 3-column layout with scene info and characters inline', () => {
+  it('renders table-level workflow layout with scene info, visual references, and issues inline', () => {
     const states: Record<string, StorySceneState> = {
       scene_abc123: {
         sceneId: 'scene_abc123',
@@ -65,19 +65,17 @@ describe('ScriptTableView', () => {
 
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
 
-    // 3 column headers: #, Scene, Status
     expect(screen.getByText('Scene')).toBeInTheDocument();
-    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.getByText('Progress / Issues')).toBeInTheDocument();
 
     // Characters rendered inline within scene column
     expect(screen.getByText('ALICE')).toBeInTheDocument();
     expect(screen.getByText('BOB')).toBeInTheDocument();
 
-    // Unified status: ready + sent → 'Processing'
     expect(screen.getByText('Processing')).toBeInTheDocument();
   });
 
-  it('shows "Start" button for pending scenes', () => {
+  it('keeps pending scenes as row status without a per-scene primary start button', () => {
     const states: Record<string, StorySceneState> = {
       scene_abc123: {
         sceneId: 'scene_abc123',
@@ -88,13 +86,12 @@ describe('ScriptTableView', () => {
 
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
 
-    // Unified status: pending
     expect(screen.getByText('Pending')).toBeInTheDocument();
-    // Single context-driven primary action
-    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Video Generation' })).toBeInTheDocument();
   });
 
-  it('shows "Retry" button for failed scenes', () => {
+  it('keeps retry as a local recovery action in the row menu', () => {
     const states: Record<string, StorySceneState> = {
       scene_abc123: {
         sceneId: 'scene_abc123',
@@ -106,10 +103,13 @@ describe('ScriptTableView', () => {
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
 
     expect(screen.getByText('Needs Attention')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.getByText('Generation failed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Retry' })).toBeInTheDocument();
   });
 
-  it('shows "View" button for completed scenes', () => {
+  it('keeps completed scene view action in the row menu', () => {
     const states: Record<string, StorySceneState> = {
       scene_abc123: {
         sceneId: 'scene_abc123',
@@ -121,7 +121,9 @@ describe('ScriptTableView', () => {
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
 
     expect(screen.getByText('Done')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'View' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Open Canvas' })).toBeInTheDocument();
   });
 
   it('dispatches actions from dropdown menu', () => {
@@ -134,7 +136,7 @@ describe('ScriptTableView', () => {
       },
     };
 
-    renderWithI18n(
+    const { container } = renderWithI18n(
       <ScriptTableView
         scriptIndex={scriptIndex}
         sceneStates={states}
@@ -147,7 +149,7 @@ describe('ScriptTableView', () => {
     expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'generateStoryboard');
   });
 
-  it('dispatches start action for pending scenes', () => {
+  it('dispatches local process action from the row menu for pending scenes', () => {
     const onSceneAction = vi.fn();
     const states: Record<string, StorySceneState> = {
       scene_abc123: {
@@ -157,7 +159,7 @@ describe('ScriptTableView', () => {
       },
     };
 
-    renderWithI18n(
+    const { container } = renderWithI18n(
       <ScriptTableView
         scriptIndex={scriptIndex}
         sceneStates={states}
@@ -165,7 +167,8 @@ describe('ScriptTableView', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Process Scene Only' }));
     expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'startVideoCreation');
   });
 
@@ -181,9 +184,9 @@ describe('ScriptTableView', () => {
     renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} sceneStates={states} />);
 
     expect(screen.getByText('0/1 done')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start All' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send All to Agent' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send All to Canvas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Video Generation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Storyboard Table' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sync to Canvas' })).toBeInTheDocument();
     expect(screen.getByText('All scenes')).toBeInTheDocument();
   });
 
@@ -207,18 +210,18 @@ describe('ScriptTableView', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start All' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Video Generation' }));
     expect(onTableAction).toHaveBeenCalledWith('startVideoCreationAll', {
       sceneIds: ['scene_abc123'],
     });
     expect(onSceneAction).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send All to Agent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Storyboard Table' }));
     expect(onTableAction).toHaveBeenCalledWith('sendToAgentAll', {
       sceneIds: ['scene_abc123'],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send All to Canvas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sync to Canvas' }));
     expect(onTableAction).toHaveBeenCalledWith('sendToCanvasAll', {
       sceneIds: ['scene_abc123'],
     });
@@ -329,7 +332,10 @@ describe('ScriptTableView', () => {
     expect(screen.getByText('Needs Attention')).toBeInTheDocument();
     expect(screen.getByText('BOB is missing a character visual')).toBeInTheDocument();
     expect(screen.getByText('Missing visual')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
+    expect(container.querySelector('img[src="vscode-webview://thumb/alice.png"]')).toBeTruthy();
+    expect(container.querySelector('[data-character-visual-status="missing"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Analyse' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
   });
 
@@ -428,7 +434,8 @@ describe('ScriptTableView', () => {
     );
 
     expect(screen.getByText('Skipped')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Unskip' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
   });
 

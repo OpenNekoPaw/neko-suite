@@ -21,6 +21,7 @@ export const zhCN = {
   'table.header.duration': '时长',
   'table.header.characters': '人物',
   'table.header.status': '状态',
+  'table.header.progressIssues': '进度 / 问题',
   'table.header.action': '操作',
   'tab.screenplay': '剧本预览',
   'tab.table': '分镜表',
@@ -44,6 +45,7 @@ export const zhCN = {
   'table.visualStatus.unresolved': '未绑定',
   'table.visualStatus.stale': '需确认',
   'table.visualStatus.unknown': '未知',
+  'table.visualStatus.referenced': '有引用',
   'table.character.sendToAgent': '发送到 Agent',
   'table.character.missingReason.assetsUnavailable': '资产服务不可用，暂时无法确认人物形象',
   'table.character.missingReason.missingVisual': '缺少可用人物形象',
@@ -56,6 +58,8 @@ export const zhCN = {
   'table.missingInput.duration': '缺少可靠场景时长',
   'table.missingInput.canvasHandoff': '尚未发送到 Canvas',
   'table.canvasProgress': 'Canvas {done}/{total}',
+  'table.shotPlan': '计划 {count} 个镜头',
+  'table.sceneIssues.none': '无阻塞问题',
 
   // Context-driven primary action
   'table.action.start': '开始',
@@ -63,6 +67,7 @@ export const zhCN = {
   'table.action.retry': '重试',
   'table.action.review': '审核',
   'table.action.restore': '恢复',
+  'table.action.startScene': '仅处理本场',
 
   // Dropdown menu items
   'table.action.more': '更多',
@@ -84,6 +89,9 @@ export const zhCN = {
   'table.batch.startSelected': '开始所选',
   'table.batch.sendToAgent': '全部发送到 Agent',
   'table.batch.sendToCanvas': '全部发送到 Canvas',
+  'table.batch.generateStoryboard': '生成整表分镜',
+  'table.batch.syncCanvas': '同步到 Canvas',
+  'table.batch.startVideo': '开始生成视频',
   'table.batch.sendSelectedToAgent': '所选发送到 Agent',
   'table.batch.sendSelectedToCanvas': '所选发送到 Canvas',
 } satisfies MessageBundle;

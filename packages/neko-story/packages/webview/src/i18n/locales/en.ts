@@ -21,6 +21,7 @@ export const en = {
   'table.header.duration': 'Duration',
   'table.header.characters': 'Characters',
   'table.header.status': 'Status',
+  'table.header.progressIssues': 'Progress / Issues',
   'table.header.action': 'Action',
   'tab.screenplay': 'Screenplay',
   'tab.table': 'Breakdown',
@@ -44,6 +45,7 @@ export const en = {
   'table.visualStatus.unresolved': 'Unresolved',
   'table.visualStatus.stale': 'Needs confirmation',
   'table.visualStatus.unknown': 'Unknown',
+  'table.visualStatus.referenced': 'Referenced',
   'table.character.sendToAgent': 'Send to Agent',
   'table.character.missingReason.assetsUnavailable':
     'Asset service is unavailable, so the character visual cannot be confirmed yet',
@@ -59,6 +61,8 @@ export const en = {
   'table.missingInput.duration': 'Reliable scene duration is missing',
   'table.missingInput.canvasHandoff': 'Not sent to Canvas yet',
   'table.canvasProgress': 'Canvas {done}/{total}',
+  'table.shotPlan': '{count} planned shots',
+  'table.sceneIssues.none': 'No blocking issues',
 
   // Context-driven primary action
   'table.action.start': 'Start',
@@ -66,6 +70,7 @@ export const en = {
   'table.action.retry': 'Retry',
   'table.action.review': 'Review',
   'table.action.restore': 'Restore',
+  'table.action.startScene': 'Process Scene Only',
 
   // Dropdown menu items
   'table.action.more': 'More',
@@ -87,6 +92,9 @@ export const en = {
   'table.batch.startSelected': 'Start Selected',
   'table.batch.sendToAgent': 'Send All to Agent',
   'table.batch.sendToCanvas': 'Send All to Canvas',
+  'table.batch.generateStoryboard': 'Generate Storyboard Table',
+  'table.batch.syncCanvas': 'Sync to Canvas',
+  'table.batch.startVideo': 'Start Video Generation',
   'table.batch.sendSelectedToAgent': 'Send Selected to Agent',
   'table.batch.sendSelectedToCanvas': 'Send Selected to Canvas',
 } satisfies MessageBundle;

@@ -84,6 +84,8 @@ export class PreviewPanel implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private updateTimeout: ReturnType<typeof setTimeout> | undefined;
+  private updateVersion = 0;
+  private isDisposed = false;
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -111,7 +113,7 @@ export class PreviewPanel implements vscode.Disposable {
     );
 
     // Handle panel disposal
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+    this.panel.onDidDispose(() => this.disposePanelResources(false), null, this.disposables);
 
     // Track active editor
     this.activeEditor = vscode.window.activeTextEditor;
@@ -186,6 +188,10 @@ export class PreviewPanel implements vscode.Disposable {
   }
 
   private handleMessage(message: MessageFromWebview) {
+    if (this.isDisposed) {
+      return;
+    }
+
     switch (message.type) {
       case 'ready':
         this.updatePreview();
@@ -299,19 +305,29 @@ export class PreviewPanel implements vscode.Disposable {
   }
 
   private scheduleUpdate() {
+    if (this.isDisposed) {
+      return;
+    }
+
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
     }
     this.updateTimeout = setTimeout(() => {
+      this.updateTimeout = undefined;
       this.updatePreview();
     }, 300);
   }
 
   private updatePreview() {
-    if (!this.activeEditor || !this.isStoryDocument(this.activeEditor.document)) {
+    if (
+      this.isDisposed ||
+      !this.activeEditor ||
+      !this.isStoryDocument(this.activeEditor.document)
+    ) {
       return;
     }
 
+    const updateVersion = ++this.updateVersion;
     const text = this.activeEditor.document.getText();
     const document = parse(text);
     const scriptIndex = buildScriptIndex(this.activeEditor.document.uri, document);
@@ -327,64 +343,93 @@ export class PreviewPanel implements vscode.Disposable {
       sceneStates,
     });
 
-    void this.updateReadinessRows(document, scriptIndex, sceneStates);
-    void this.sendCharacterThumbnails(scriptIndex);
+    void this.updateReadinessRows(document, scriptIndex, sceneStates, updateVersion);
+    void this.sendCharacterThumbnails(scriptIndex, updateVersion);
   }
 
   private async updateReadinessRows(
     document: FountainDocument,
     scriptIndex: NekoStoryScriptIndex,
     sceneStates: Record<string, StorySceneState>,
+    updateVersion: number,
   ): Promise<void> {
-    if (!this.activeEditor) {
+    if (this.isDisposed || !this.activeEditor) {
       return;
     }
 
-    const editor = this.activeEditor;
-    const readinessRows = await buildStorySceneVideoReadinessRows({
-      document,
-      scriptIndex,
-      sceneStates,
-      characterRegistry: this.resolveCharacterRegistry(editor.document.uri.toString()),
-      canvasSummary: await this.getCanvasSummary(scriptIndex.uri),
-      thumbnailResolver: async (name, record) =>
-        this.resolveCharacterThumbnail(name, record?.id, false),
-    });
+    try {
+      const editor = this.activeEditor;
+      const canvasSummary = await this.getCanvasSummary(scriptIndex.uri);
+      if (!this.canApplyUpdate(scriptIndex.uri, updateVersion)) {
+        return;
+      }
 
-    if (this.activeEditor?.document.uri.toString() !== scriptIndex.uri) {
-      return;
+      const readinessRows = await buildStorySceneVideoReadinessRows({
+        document,
+        scriptIndex,
+        sceneStates,
+        characterRegistry: this.resolveCharacterRegistry(editor.document.uri.toString()),
+        canvasSummary,
+        thumbnailResolver: async (name, record) => {
+          if (!this.canApplyUpdate(scriptIndex.uri, updateVersion)) {
+            return undefined;
+          }
+          return this.resolveCharacterThumbnail(name, record?.id, false);
+        },
+      });
+
+      if (!this.canApplyUpdate(scriptIndex.uri, updateVersion)) {
+        return;
+      }
+
+      this.readinessRowsByScene.clear();
+      for (const row of readinessRows) {
+        this.readinessRowsByScene.set(row.sceneId, row);
+      }
+
+      this.postMessage({
+        type: 'update',
+        document: this.resolveAssets(document),
+        scriptIndex,
+        sceneStates,
+        readinessRows,
+      });
+    } catch (error) {
+      if (isWebviewDisposedError(error)) {
+        this.disposePanelResources(false);
+        return;
+      }
+
+      void handleError(error, { showToUser: false });
     }
-
-    this.readinessRowsByScene.clear();
-    for (const row of readinessRows) {
-      this.readinessRowsByScene.set(row.sceneId, row);
-    }
-
-    this.postMessage({
-      type: 'update',
-      document: this.resolveAssets(document),
-      scriptIndex,
-      sceneStates,
-      readinessRows,
-    });
   }
 
-  private async sendCharacterThumbnails(scriptIndex: NekoStoryScriptIndex): Promise<void> {
+  private async sendCharacterThumbnails(
+    scriptIndex: NekoStoryScriptIndex,
+    updateVersion: number,
+  ): Promise<void> {
     const names = scriptIndex.characters?.map((c) => c.name) ?? [];
-    if (names.length === 0) return;
+    if (names.length === 0 || !this.canApplyUpdate(scriptIndex.uri, updateVersion)) return;
 
     try {
       const thumbnails: Record<string, string> = {};
       await Promise.allSettled(
         names.slice(0, 30).map(async (name) => {
+          if (!this.canApplyUpdate(scriptIndex.uri, updateVersion)) {
+            return;
+          }
+
           const thumbnailUri = await this.resolveCharacterThumbnail(name, undefined, true);
-          if (thumbnailUri) {
+          if (thumbnailUri && this.canApplyUpdate(scriptIndex.uri, updateVersion)) {
             thumbnails[name] = thumbnailUri;
           }
         }),
       );
 
-      if (Object.keys(thumbnails).length > 0) {
+      if (
+        Object.keys(thumbnails).length > 0 &&
+        this.canApplyUpdate(scriptIndex.uri, updateVersion)
+      ) {
         this.postMessage({ type: 'characterThumbnails', data: thumbnails });
       }
     } catch {
@@ -741,8 +786,31 @@ export class PreviewPanel implements vscode.Disposable {
     });
   }
 
-  public postMessage(message: MessageToWebview) {
-    this.panel.webview.postMessage(message);
+  public postMessage(message: MessageToWebview): boolean {
+    if (this.isDisposed) {
+      return false;
+    }
+
+    try {
+      void this.panel.webview.postMessage(message).then(undefined, (error: unknown) => {
+        if (isWebviewDisposedError(error)) {
+          this.disposePanelResources(false);
+          return;
+        }
+
+        void handleError(error, { showToUser: false });
+      });
+    } catch (error) {
+      if (isWebviewDisposedError(error)) {
+        this.disposePanelResources(false);
+        return false;
+      }
+
+      void handleError(error, { showToUser: false });
+      return false;
+    }
+
+    return true;
   }
 
   private async resolveCharacterThumbnail(
@@ -849,13 +917,26 @@ export class PreviewPanel implements vscode.Disposable {
   }
 
   public dispose() {
+    this.disposePanelResources(true);
+  }
+
+  private disposePanelResources(disposePanel: boolean): void {
+    if (this.isDisposed) {
+      return;
+    }
+
+    this.isDisposed = true;
+    this.updateVersion++;
     PreviewPanel.panels.delete(this);
 
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
+      this.updateTimeout = undefined;
     }
 
-    this.panel.dispose();
+    if (disposePanel) {
+      this.panel.dispose();
+    }
 
     while (this.disposables.length) {
       const disposable = this.disposables.pop();
@@ -865,7 +946,19 @@ export class PreviewPanel implements vscode.Disposable {
     }
   }
 
+  private canApplyUpdate(scriptUri: string, updateVersion: number): boolean {
+    return (
+      !this.isDisposed &&
+      this.updateVersion === updateVersion &&
+      this.activeEditor?.document.uri.toString() === scriptUri
+    );
+  }
+
   private projectLocalResource(source: string, caller: string): string | undefined {
+    if (this.isDisposed) {
+      return undefined;
+    }
+
     return this.localResourceAccess.createSyncProjector(
       this.panel.webview,
       this.panel.webview.options.localResourceRoots ?? [],
@@ -886,6 +979,14 @@ function findActiveCanvasFileUri(): string | undefined {
     }
   }
   return undefined;
+}
+
+function isWebviewDisposedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes('Webview is disposed');
 }
 
 function getNonce(): string {
