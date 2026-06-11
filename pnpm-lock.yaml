@@ -394,9 +394,6 @@ importers:
       '@neko/asset':
         specifier: workspace:*
         version: link:packages/asset
-      '@neko/entity':
-        specifier: workspace:*
-        version: link:../neko-entity
       '@neko/shared':
         specifier: workspace:*
         version: link:../neko-types
