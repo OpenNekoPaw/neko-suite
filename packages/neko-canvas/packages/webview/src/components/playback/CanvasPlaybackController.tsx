@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from '@neko/ui/icons';
 import {
   createCanvasPlaybackPlan,
+  resolveEffectiveCanvasPlaybackRoutes,
   type CanvasPlaybackPlan,
   type CanvasPlaybackTransition,
 } from '@neko/shared';
@@ -260,28 +261,15 @@ export function resolveCanvasPlaybackViewState({
 }
 
 export function buildInitialPlaybackRoute(plan: CanvasPlaybackPlan): readonly string[] {
+  const route = buildDefaultPlaybackPath(plan);
   if (plan.behaviorMode === 'interactive') {
-    return plan.entryUnitIds[0] ? [plan.entryUnitIds[0]] : [];
+    return route[0] ? [route[0]] : [];
   }
-  return buildDefaultPlaybackPath(plan);
+  return route;
 }
 
 export function buildDefaultPlaybackPath(plan: CanvasPlaybackPlan): readonly string[] {
-  const path: string[] = [];
-  const visited = new Set<string>();
-  let current = plan.entryUnitIds[0];
-
-  while (current && !visited.has(current) && path.length <= plan.units.length) {
-    path.push(current);
-    visited.add(current);
-    const next = plan.transitions
-      .filter((transition) => transition.sourceUnitId === current && transition.enabled !== false)
-      .slice()
-      .sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id))[0];
-    current = next?.targetUnitId;
-  }
-
-  return path;
+  return resolveEffectiveCanvasPlaybackRoutes(plan).routes[0]?.unitIds ?? [];
 }
 
 function resolveNextRouteStep(

@@ -109,5 +109,7 @@
   "neko.canvas.preview.kindNarrative": "叙事",
   "neko.canvas.preview.kindUnit": "单元",
   "neko.canvas.preview.disabledByConfiguration": "画布预览已被配置禁用。",
-  "neko.canvas.preview.noActiveGraph": "当前没有可用的画布叙事图。"
+  "neko.canvas.preview.noActiveGraph": "当前没有可用的画布叙事图。",
+  "Invalid Canvas entity route payload.": "无效的画布实体路由参数。",
+  "candidateId is required.": "需要 candidateId。"
 }

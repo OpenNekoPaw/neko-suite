@@ -109,5 +109,7 @@
   "neko.canvas.preview.kindNarrative": "Narrative",
   "neko.canvas.preview.kindUnit": "Unit",
   "neko.canvas.preview.disabledByConfiguration": "Canvas Preview is disabled by configuration.",
-  "neko.canvas.preview.noActiveGraph": "No active Canvas narrative graph is available."
+  "neko.canvas.preview.noActiveGraph": "No active Canvas narrative graph is available.",
+  "Invalid Canvas entity route payload.": "Invalid Canvas entity route payload.",
+  "candidateId is required.": "candidateId is required."
 }

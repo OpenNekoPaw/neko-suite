@@ -49,6 +49,10 @@ const narrativePreviewBridgeSource = readFileSync(
   join(__dirname, '../editor/narrativePreviewBridge.ts'),
   'utf-8',
 );
+const narrativePreviewMediaRuntimeSource = readFileSync(
+  join(__dirname, '../../../webview/src/preview/narrativePreviewMediaRuntime.ts'),
+  'utf-8',
+);
 const operationStoreSource = readFileSync(
   join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
   'utf-8',
@@ -298,14 +302,32 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('projects Canvas playback plans for the Preview panel without persisting runtime URLs', () => {
       expect(providerSource).toContain('extractCanvasPlaybackPlanForPreview(');
+      expect(providerSource).toContain('prepareCanvasDataForPlaybackPreview(');
+      expect(providerSource).toContain('cloneCanvasDataForPlaybackPreview(');
+      expect(providerSource).toContain(
+        'const plan = createCanvasPlaybackPlanFromCanvasData(previewCanvasData, {',
+      );
+      expect(providerSource).toContain(
+        'selectedNodeId: this.readCanvasPlaybackSelectedNodeId(canvasData)',
+      );
+      expect(providerSource).toContain('previewCanvasData,');
       expect(providerSource).toContain('enrichCanvasPlaybackPlanForPreview(');
       expect(providerSource).toContain('resolveCanvasPlaybackUnitPreviewSource(');
       expect(providerSource).toContain('resolveShotPlaybackPreviewSource(');
       expect(providerSource).toContain('resolveMediaPlaybackPreviewSource(');
       expect(providerSource).toContain('previewUrl: previewSource.url');
       expect(providerSource).toContain('previewSourceKind: previewSource.kind');
+      expect(providerSource).toContain('previewPlayableAssetPath: previewSource.playableAssetPath');
+      expect(providerSource).toContain('previewSourceAssetPath: previewSource.source.source');
+      expect(providerSource).toContain(
+        'previewSourceResourceRef: previewSource.source.resourceRef',
+      );
+      expect(providerSource).toContain(
+        'previewSourceDocumentResourceRef: previewSource.source.documentResourceRef',
+      );
       expect(narrativePreviewBridgeSource).toContain('extractCanvasPlaybackPlanForPreview?(');
-      expect(narrativePreviewBridgeSource).toContain('resolveCanvasPlaybackPlanForPreview(');
+      expect(narrativePreviewBridgeSource).toContain('postPreviewSpecificPlaybackPlan(');
+      expect(narrativePreviewBridgeSource).toContain('postCanvasPlaybackPlanToPreview(');
       expect(narrativePreviewBridgeSource).toContain('postPreviewPlaybackPlan(');
     });
 
@@ -354,6 +376,12 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("data['runtimeReferenceImagePath']");
       expect(providerSource).toContain("'neko-canvas.preview-playback-runtime-reference'");
       expect(providerSource).toContain('resolveCanvasPlaybackPreviewSourceCandidate(');
+      expect(providerSource).toContain('resolveMediaPlaybackFilePath(');
+      expect(providerSource).toContain('resolveCanvasPlaybackLocalPreviewPathCandidates(');
+      expect(providerSource).toContain('readRootRelativeCanvasAssetPath(');
+      expect(providerSource).toContain('resolveRootRelativeCanvasAssetPathCandidates(');
+      expect(providerSource).toContain('vscode.workspace.getWorkspaceFolder(documentUri)?.uri');
+      expect(providerSource).toContain('appendExistingCanvasPlaybackPreviewPathCandidate(');
       expect(providerSource).toContain('readFirstPreviewSourceString(');
       expect(providerSource).toContain('...(webview.options.localResourceRoots ?? [])');
       expect(providerSource).toContain('!/vscode-resource\\.vscode-cdn\\.net/i.test(value)');
@@ -378,12 +406,14 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("delete nodeData['referenceImagePath'];");
     });
 
-    it('does not project legacy document cache paths as Canvas previews', () => {
+    it('uses legacy document cache paths only as runtime Preview fallbacks', () => {
       expect(providerSource).not.toContain('markDocumentResourceMigrationFallback');
       expect(providerSource).not.toContain("reason: 'legacy-cache-fallback'");
       expect(providerSource).not.toContain('Using a legacy document cache path');
       expect(providerSource).not.toContain('resolveExistingDocumentResourceRoot');
       expect(providerSource).not.toContain('documentResourceCacheRoots');
+      expect(providerSource).toContain("resourceRef.source.metadata?.['legacyCachePath']");
+      expect(providerSource).toContain('projectDocumentResourcePreviewUrl(');
       expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
       expect(providerSource).toContain("nodeData['documentResourceStatus'] = {");
     });
@@ -430,10 +460,30 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('this.rememberCanvasSnapshot(document, data)');
     });
 
+    it('auto-refreshes open Preview sessions only for semantic Canvas changes', () => {
+      expect(providerSource).toContain('canvasPreviewFingerprintsByDocumentUri');
+      expect(providerSource).toContain('createCanvasPreviewSemanticFingerprint(canvasData)');
+      expect(providerSource).toContain('updateRememberedCanvasSnapshot(');
+      expect(providerSource).toContain('this.refreshNarrativePreview(documentUri)');
+      expect(providerSource).toContain('refreshNarrativePreview(sourceCanvasUri?: string)');
+      expect(providerSource).toContain('this.narrativePreviewBridge.refresh(sourceCanvasUri)');
+      expect(providerSource).toContain(
+        'extractNarrativeGraphSnapshotForSource(documentUri: string)',
+      );
+      expect(providerSource).toContain('CANVAS_PREVIEW_SEMANTIC_FINGERPRINT_KEYS');
+      expect(providerSource).toContain("'nodes'");
+      expect(providerSource).toContain("'connections'");
+      expect(providerSource).toContain("'narrative'");
+      expect(providerSource).not.toContain("'_selection',");
+      expect(providerSource).not.toContain("'viewport',");
+      expect(narrativePreviewBridgeSource).toContain('refresh(sourceCanvasUri?: string)');
+      expect(narrativePreviewBridgeSource).toContain('extractNarrativeGraphSnapshotForSource');
+    });
+
     it('routes revisioned Preview messages through a Canvas-owned bridge', () => {
       expect(providerSource).toContain('private readonly narrativePreviewBridge');
       expect(providerSource).toContain('openNarrativePreview()');
-      expect(providerSource).toContain('refreshNarrativePreview()');
+      expect(providerSource).toContain('refreshNarrativePreview(sourceCanvasUri?: string)');
       expect(providerSource).toContain('jumpNarrativePreviewToNode(nodeId: string)');
       expect(providerSource).toContain('setNarrativePreviewVariables(');
       expect(narrativePreviewBridgeSource).toContain("type: 'preview:loadGraph'");
@@ -446,12 +496,36 @@ describe('canvasEditorProvider message contracts', () => {
       expect(narrativePreviewBridgeSource).toContain('isStalePreviewMessage');
     });
 
+    it('routes Preview highlights back to the source Canvas panel', () => {
+      expect(providerSource).toContain('getNarrativePreviewTargetPanel(');
+      expect(providerSource).toContain('message.sourceCanvasUri');
+      expect(providerSource).toContain(
+        'this.webviewPanelsByDocumentUri.get(message.sourceCanvasUri)',
+      );
+      expect(providerSource).toContain('postNarrativePreviewKeyboardAction(message');
+      expect(providerSource).toContain(
+        'this.postNarrativePreviewKeyboardAction(message, `selectNode:${message.nodeId}`)',
+      );
+      expect(providerSource).toContain('targetPanel.webview.postMessage({');
+      expect(providerSource).toContain("type: 'narrativePreviewCanvasMessage'");
+    });
+
     it('registers the Narrative Preview command without letting Preview read .nkc directly', () => {
       expect(extensionSource).toContain(
         "vscode.commands.registerCommand('neko.canvas.openNarrativePreview'",
       );
       expect(extensionSource).toContain('getNarrativePreviewFeatureToggles().preview');
-      expect(extensionSource).toContain('canvasEditorProvider.openNarrativePreview()');
+      expect(extensionSource).toContain('await canvasEditorProvider.openNarrativePreview()');
+      const canvasActionBranch = providerSource.slice(
+        providerSource.indexOf("case 'canvasAction':"),
+        providerSource.indexOf("case 'save':"),
+      );
+      expect(canvasActionBranch).toContain("message.action === 'openNarrativePreview'");
+      expect(canvasActionBranch).toContain('this.setActiveCanvasEditor(webviewPanel, document);');
+      expect(canvasActionBranch).toContain('await this.openNarrativePreview();');
+      expect(canvasActionBranch).not.toContain(
+        "vscode.commands.executeCommand('neko.canvas.openNarrativePreview')",
+      );
       expect(narrativePreviewBridgeSource).not.toContain('workspace.fs.readFile');
       expect(narrativePreviewBridgeSource).not.toContain('loadNkc(');
     });
@@ -530,7 +604,9 @@ describe('canvasEditorProvider message contracts', () => {
     it('routes toolbar preview, export, and package actions through separate whitelisted paths', () => {
       expect(providerSource).toContain("case 'canvasAction'");
       expect(providerSource).toContain("message.action === 'openNarrativePreview'");
-      expect(providerSource).toContain(
+      expect(providerSource).toContain('this.setActiveCanvasEditor(webviewPanel, document);');
+      expect(providerSource).toContain('await this.openNarrativePreview();');
+      expect(providerSource).not.toContain(
         "vscode.commands.executeCommand('neko.canvas.openNarrativePreview')",
       );
       expect(providerSource).toContain("message.action === 'openExport'");
@@ -557,7 +633,7 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-013: document resource preview variants', () => {
-    it('projects document resource refs directly instead of routing them through preview engine variants', () => {
+    it('projects document resource refs before using authorized local-resource or Preview variant fallbacks', () => {
       expect(providerSource).toContain('VSCodeResourceCacheService');
       expect(providerSource).toContain('LegacyResourceCacheProvider');
       expect(providerSource).toContain('os.homedir() || workspaceRoot');
@@ -581,9 +657,93 @@ describe('canvasEditorProvider message contracts', () => {
 
       const previewResolveBranch = providerSource.slice(
         providerSource.indexOf("case 'preview:resolveVariant':"),
-        providerSource.indexOf('const variantApi = await this.getPreviewVariantApi();'),
+        providerSource.indexOf("case 'preview:delegateAction':"),
       );
-      expect(previewResolveBranch).toContain('this.projectResourceCacheVariant(');
+      expect(previewResolveBranch).toContain(
+        'await this.handlePreviewVariantMessage(message, webviewPanel, document.uri);',
+      );
+      const previewVariantHandler = providerSource.slice(
+        providerSource.indexOf('private async handlePreviewVariantMessage('),
+        providerSource.indexOf('private async materializeCompositeRequestRuntimePaths('),
+      );
+      const documentPreviewProjector = providerSource.slice(
+        providerSource.indexOf('private async projectDocumentResourcePreviewUrl('),
+        providerSource.indexOf('private async materializeDocumentResourcePreview('),
+      );
+      expect(previewVariantHandler).toContain('this.projectDocumentResourcePreviewUrl({');
+      expect(previewVariantHandler).toContain('resourceRef: assetPath ? undefined : resourceRef');
+      expect(documentPreviewProjector).toContain('this.projectResourceCacheVariant(');
+      expect(documentPreviewProjector).toContain(
+        'Document resource cache Preview projection failed; falling back to asset path',
+      );
+      expect(documentPreviewProjector).toContain('this.resolveDocumentResourceAssetPath(');
+      expect(documentPreviewProjector).toContain(
+        'this.resolveCanvasPlaybackLocalPreviewPathCandidates(',
+      );
+      expect(documentPreviewProjector).toContain('this.localResourceAccess.toWebviewUri(');
+      expect(providerSource).toContain('private async resolvePreviewVariantAssetPath(');
+      expect(providerSource).toContain('private isExistingLocalFile(');
+      expect(providerSource).toContain('return fs.statSync(fsPath).isFile();');
+      const playbackShotReferenceProjector = providerSource.slice(
+        providerSource.indexOf("caller: 'neko-canvas.preview-playback-shot-reference'") - 260,
+        providerSource.indexOf("caller: 'neko-canvas.preview-playback-shot-reference'") + 160,
+      );
+      expect(playbackShotReferenceProjector).toContain('documentUri');
+      const playbackMediaResourceProjector = providerSource.slice(
+        providerSource.indexOf("caller: 'neko-canvas.preview-playback-media-resource'") - 260,
+        providerSource.indexOf("caller: 'neko-canvas.preview-playback-media-resource'") + 160,
+      );
+      expect(playbackMediaResourceProjector).toContain('documentUri');
+      const playbackCandidateProjector = providerSource.slice(
+        providerSource.indexOf('private async resolveCanvasPlaybackPreviewSourceCandidate('),
+        providerSource.indexOf('private async resolveCanvasPlaybackLocalPreviewSource('),
+      );
+      expect(playbackCandidateProjector).toContain('documentUri');
+      expect(playbackCandidateProjector).toContain(
+        'resolveCanvasPlaybackPreviewPlayableAssetPath(',
+      );
+      const mediaPlaybackResolver = providerSource.slice(
+        providerSource.indexOf('private async resolveMediaPlaybackFilePath('),
+        providerSource.indexOf('private async handlePreviewVariantMessage('),
+      );
+      expect(mediaPlaybackResolver).toContain('this.resolvePreviewResourceRef');
+      expect(mediaPlaybackResolver).toContain('this.resolveDocumentResourceAssetPath(');
+      expect(mediaPlaybackResolver).toContain('this.resolveResourceRefLocalPreviewPath');
+      expect(mediaPlaybackResolver).toContain(
+        'this.resolveCanvasPlaybackLocalPreviewPathCandidates(',
+      );
+      expect(narrativePreviewBridgeSource).toContain(
+        'documentResourceRef: metadata.previewSourceDocumentResourceRef',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'readonly documentResourceRef?: unknown',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'documentResourceRef: request.documentResourceRef',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'documentResourceRef: player.documentResourceRef',
+      );
+      expect(documentPreviewProjector.indexOf('this.projectResourceCacheVariant(')).toBeLessThan(
+        documentPreviewProjector.indexOf('this.resolveDocumentResourceAssetPath('),
+      );
+      expect(
+        documentPreviewProjector.indexOf('this.resolveDocumentResourceAssetPath('),
+      ).toBeLessThan(documentPreviewProjector.indexOf('this.localResourceAccess.toWebviewUri('));
+      expect(previewVariantHandler).toContain("caller: 'neko-canvas.document-resource-variant'");
+      expect(
+        previewVariantHandler.indexOf('this.projectDocumentResourcePreviewUrl({'),
+      ).toBeLessThan(
+        previewVariantHandler.indexOf('const variantApi = await this.getPreviewVariantApi();'),
+      );
+      expect(previewVariantHandler).toContain('this.resolvePreviewVariantAssetPath(assetPath');
+      expect(previewVariantHandler).not.toContain(
+        'const fsPath = await this.resolveAssetPath(assetPath',
+      );
+      expect(previewVariantHandler).toContain(
+        'Preview variant request did not include a resolvable asset or resource reference.',
+      );
+      expect(previewVariantHandler).toContain("error: 'Preview variant request did not include");
       expect(previewResolveBranch).not.toContain('this.projectLocalResource(');
       expect(previewResolveBranch).not.toContain('registerPreviewAsset');
     });

@@ -6,6 +6,8 @@ import {
   isResourceRef,
   NARRATIVE_RUNTIME_NODE_TYPES,
   normalizeNarrativePreviewFeatureToggles,
+  resolveEffectiveCanvasPlaybackRoutes,
+  type CanvasPlaybackDiagnostic,
   type CanvasPlaybackPlan,
   type CanvasConnection,
   type CanvasData,
@@ -39,6 +41,9 @@ const NARRATIVE_RUNTIME_CONNECTION_TYPES = new Set<string | undefined>([
   'default',
   'choice',
 ]);
+const HOST_PREVIEW_VARIANT_RESPONSE_TIMEOUT_MS = 6500;
+const PREVIEW_WEBVIEW_READY_GRACE_MS = 250;
+const DEFAULT_PREVIEW_STALE_GRACE_MS = 30_000;
 
 interface NarrativePreviewI18n {
   readonly title: string;
@@ -52,8 +57,16 @@ interface NarrativePreviewI18n {
   readonly unitFallback: string;
   readonly planCanvasPlayback: string;
   readonly info: string;
+  readonly route: string;
+  readonly routeTitle: string;
+  readonly missingRouteCandidates: string;
+  readonly missingRouteEntry: string;
+  readonly invalidRoute: string;
+  readonly routeTruncated: string;
   readonly branches: string;
   readonly diagnostics: string;
+  readonly staleSession: string;
+  readonly staleSessionDescription: string;
   readonly noUnitSelected: string;
   readonly close: string;
   readonly stageZero: string;
@@ -151,11 +164,19 @@ interface NarrativePreviewI18n {
 
 export interface NarrativeCanvasSnapshotHost {
   extractNarrativeGraphSnapshot(): NarrativeGraphSnapshot | undefined;
+  extractNarrativeGraphSnapshotForSource?(
+    sourceCanvasUri: string,
+  ): NarrativeGraphSnapshot | undefined;
   extractCanvasPlaybackPlan?(sourceCanvasUri?: string): CanvasPlaybackPlan | undefined;
   extractCanvasPlaybackPlanForPreview?(
     webview: vscode.Webview,
     sourceCanvasUri?: string,
   ): CanvasPlaybackPlan | Promise<CanvasPlaybackPlan | undefined> | undefined;
+  resolveNarrativePreviewVariant?(
+    message: Record<string, unknown>,
+    webviewPanel: vscode.WebviewPanel,
+    sourceCanvasUri?: string,
+  ): boolean | void | Promise<boolean | void>;
   handleNarrativePreviewMediaMessage?(
     message: Record<string, unknown>,
     webviewPanel: vscode.WebviewPanel,
@@ -170,6 +191,7 @@ export interface NarrativePreviewBridgeOptions {
   readonly getFeatureToggles?: () => NarrativePreviewFeatureToggles;
   readonly getMediaRuntimeScriptUri?: (webview: vscode.Webview) => vscode.Uri;
   readonly getWebviewLocalResourceRoots?: (sourceCanvasUri?: string) => readonly vscode.Uri[];
+  readonly staleSessionGraceMs?: number;
   readonly now?: () => number;
 }
 
@@ -182,20 +204,39 @@ export interface NarrativePreviewPanelFactory {
   ): vscode.WebviewPanel;
 }
 
+interface CanvasPreviewSession {
+  readonly sessionId: string;
+  readonly sourceCanvasUri: string;
+  readonly panel: vscode.WebviewPanel;
+  readonly createdAt: number;
+  readonly revision: number;
+  webviewReady: boolean;
+  pendingMessages: CanvasToPreviewMessage[];
+  staleSince?: number;
+  staleTimeout?: ReturnType<typeof setTimeout>;
+  activeRouteId?: string;
+}
+
+interface CanvasPreviewMessageEnvelope {
+  readonly sessionId?: string;
+  readonly sourceCanvasUri?: string;
+  readonly revision?: number;
+}
+
 export class NarrativePreviewBridge implements vscode.Disposable {
-  private panel: vscode.WebviewPanel | undefined;
   private disposed = false;
-  private lastAcceptedPreviewRevision = 0;
-  private previewWebviewReady = false;
-  private pendingPreviewMessages: CanvasToPreviewMessage[] = [];
   private requestSequence = 0;
-  private sourceCanvasUri: string | undefined;
+  private sessionSequence = 0;
+  private activeSessionId: string | undefined;
+  private readonly sessionsByCanvasUri = new Map<string, CanvasPreviewSession>();
+  private readonly sessionsByPanel = new WeakMap<vscode.WebviewPanel, CanvasPreviewSession>();
   private readonly panelFactory: NarrativePreviewPanelFactory;
   private readonly getFeatureToggles: () => NarrativePreviewFeatureToggles;
   private readonly getMediaRuntimeScriptUri: ((webview: vscode.Webview) => vscode.Uri) | undefined;
   private readonly getWebviewLocalResourceRoots:
     | ((sourceCanvasUri?: string) => readonly vscode.Uri[])
     | undefined;
+  private readonly staleSessionGraceMs: number;
   private readonly now: () => number;
 
   constructor(
@@ -207,10 +248,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       options.getFeatureToggles ?? (() => normalizeNarrativePreviewFeatureToggles(undefined));
     this.getMediaRuntimeScriptUri = options.getMediaRuntimeScriptUri;
     this.getWebviewLocalResourceRoots = options.getWebviewLocalResourceRoots;
+    this.staleSessionGraceMs = options.staleSessionGraceMs ?? DEFAULT_PREVIEW_STALE_GRACE_MS;
     this.now = options.now ?? Date.now;
   }
 
-  open(): boolean {
+  async open(): Promise<boolean> {
     const i18n = createNarrativePreviewI18n();
     if (!this.getFeatureToggles().preview) {
       void handleError(new Error(i18n.disabledByConfiguration), {
@@ -229,63 +271,109 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return false;
     }
 
+    const sourceCanvasUri = snapshot.sourceCanvasUri ?? '';
+    const existingSession = this.sessionsByCanvasUri.get(sourceCanvasUri);
+    const session = this.ensureSession(sourceCanvasUri, snapshot.revision, {
+      deferHtml: !existingSession,
+    });
+    this.activeSessionId = session.sessionId;
     const messages: CanvasToPreviewMessage[] = [
-      this.createFeatureTogglesMessage(snapshot.revision),
+      this.createFeatureTogglesMessage(session, snapshot.revision),
       {
         type: 'preview:loadGraph',
         requestId: this.createRequestId('load'),
         snapshot,
         revision: snapshot.revision,
       },
-    ];
-    const sourceCanvasUri = snapshot.sourceCanvasUri;
-    this.sourceCanvasUri = sourceCanvasUri;
-    const fallbackPlan = this.host.extractCanvasPlaybackPlan?.(sourceCanvasUri);
-    if (fallbackPlan) {
-      messages.push({
-        type: 'preview:loadPlaybackPlan',
-        requestId: this.createRequestId('load-plan-fallback'),
-        plan: fallbackPlan,
-        revision: snapshot.revision,
-      });
-    }
-    const existingPanel = Boolean(this.panel);
-    const panel = this.ensurePanel(existingPanel ? [] : messages, sourceCanvasUri);
-    if (!existingPanel) {
-      void this.postPreviewPlaybackPlan(panel.webview, snapshot.revision, 'load', sourceCanvasUri);
+    ].map((message) => this.withSessionEnvelope(message, session, snapshot.revision));
+    if (!existingSession) {
+      const previewPlan = await this.resolveInitialCanvasPlaybackPlanForPreview(
+        session.panel.webview,
+        snapshot.revision,
+        sourceCanvasUri,
+      );
+      if (previewPlan) {
+        messages.push(
+          this.withSessionEnvelope(
+            {
+              type: 'preview:loadPlaybackPlan',
+              requestId: this.createRequestId(
+                previewPlan.source === 'preview' ? 'load-preview-plan' : 'load-plan',
+              ),
+              plan: previewPlan.plan,
+              revision: snapshot.revision,
+            },
+            session,
+            snapshot.revision,
+          ),
+        );
+      }
+      session.panel.webview.html = this.getPreviewHtml(session.panel.webview, messages, i18n);
       for (const message of messages) {
-        this.recordPreviewMessageRevision(message);
+        this.recordPreviewMessageRevision(session, message);
       }
       return true;
     }
 
-    void this.postPreviewPlaybackPlan(panel.webview, snapshot.revision, 'load', sourceCanvasUri);
+    this.postPreviewPlaybackPlan(session, snapshot.revision, 'load');
     for (const message of messages) {
-      this.postToPreview(message);
+      this.postToPreview(session, message);
     }
     return true;
   }
 
-  refresh(): boolean {
+  private async resolveInitialCanvasPlaybackPlanForPreview(
+    webview: vscode.Webview,
+    revision: number,
+    sourceCanvasUri: string | undefined,
+  ): Promise<
+    | {
+        readonly source: 'base' | 'preview';
+        readonly plan: CanvasPlaybackPlan;
+      }
+    | undefined
+  > {
+    if (this.host.extractCanvasPlaybackPlanForPreview) {
+      try {
+        const plan = await this.host.extractCanvasPlaybackPlanForPreview(webview, sourceCanvasUri);
+        if (plan) {
+          return { source: 'preview', plan: prepareCanvasPlaybackPlanForPreview(plan) };
+        }
+      } catch (error) {
+        logger.warn('Failed to prepare initial Canvas playback plan for Preview', {
+          revision,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const basePlan = this.host.extractCanvasPlaybackPlan?.(sourceCanvasUri);
+    return basePlan
+      ? { source: 'base', plan: prepareCanvasPlaybackPlanForPreview(basePlan) }
+      : undefined;
+  }
+
+  refresh(sourceCanvasUri?: string): boolean {
     if (!this.getFeatureToggles().preview) return false;
 
-    const snapshot = this.host.extractNarrativeGraphSnapshot();
+    const snapshot = sourceCanvasUri
+      ? this.host.extractNarrativeGraphSnapshotForSource?.(sourceCanvasUri)
+      : this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
-    this.sourceCanvasUri = snapshot.sourceCanvasUri;
-    if (!this.panel) return false;
-    this.postFeatureToggles(snapshot.revision);
-    this.postToPreview({
+    const resolvedSourceCanvasUri = snapshot.sourceCanvasUri ?? sourceCanvasUri ?? '';
+    if (sourceCanvasUri && resolvedSourceCanvasUri !== sourceCanvasUri) return false;
+    const session = this.sessionsByCanvasUri.get(resolvedSourceCanvasUri);
+    if (!session) return false;
+    this.activeSessionId = session.sessionId;
+    const acceptedSession = this.acceptRevision(session, snapshot.revision);
+    this.postFeatureToggles(acceptedSession, snapshot.revision);
+    this.postToPreview(acceptedSession, {
       type: 'preview:refresh',
       requestId: this.createRequestId('refresh'),
       snapshot,
       revision: snapshot.revision,
     });
-    void this.postPreviewPlaybackPlan(
-      this.panel.webview,
-      snapshot.revision,
-      'refresh',
-      snapshot.sourceCanvasUri,
-    );
+    this.postPreviewPlaybackPlan(acceptedSession, snapshot.revision, 'refresh');
     return true;
   }
 
@@ -294,10 +382,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
-    this.sourceCanvasUri = snapshot.sourceCanvasUri;
-    this.ensurePanel([], snapshot.sourceCanvasUri);
-    this.postFeatureToggles(snapshot.revision);
-    this.postToPreview({
+    const sourceCanvasUri = snapshot.sourceCanvasUri ?? '';
+    const session = this.ensureSession(sourceCanvasUri, snapshot.revision);
+    this.activeSessionId = session.sessionId;
+    const acceptedSession = this.acceptRevision(session, snapshot.revision);
+    this.postFeatureToggles(acceptedSession, snapshot.revision);
+    this.postToPreview(acceptedSession, {
       type: 'preview:jumpTo',
       requestId: this.createRequestId('jump'),
       nodeId,
@@ -311,11 +401,14 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     const snapshot = this.host.extractNarrativeGraphSnapshot();
     if (!snapshot) return false;
-    this.sourceCanvasUri = snapshot.sourceCanvasUri;
-    if (!this.panel) return false;
+    const sourceCanvasUri = snapshot.sourceCanvasUri ?? '';
+    const session = this.sessionsByCanvasUri.get(sourceCanvasUri);
+    if (!session) return false;
+    this.activeSessionId = session.sessionId;
+    const acceptedSession = this.acceptRevision(session, snapshot.revision);
 
-    this.postFeatureToggles(snapshot.revision);
-    this.postToPreview({
+    this.postFeatureToggles(acceptedSession, snapshot.revision);
+    this.postToPreview(acceptedSession, {
       type: 'preview:setVariables',
       requestId: this.createRequestId('variables'),
       variables,
@@ -325,7 +418,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   }
 
   handlePreviewMessage(message: PreviewToCanvasMessage): boolean {
-    if (this.isStalePreviewMessage(message)) {
+    const session = this.resolveSessionForPreviewMessage(message);
+    if (!session) {
+      logger.debug('Dropped Preview-to-Canvas message without matching session', message);
+      return false;
+    }
+    if (this.isStalePreviewMessage(session, message)) {
       logger.debug('Dropped stale Preview-to-Canvas message', message);
       return false;
     }
@@ -334,23 +432,37 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
-    const panel = this.panel;
-    this.panel = undefined;
-    this.previewWebviewReady = false;
-    this.pendingPreviewMessages = [];
-    panel?.dispose();
+    const sessions = [...this.sessionsByCanvasUri.values()];
+    this.sessionsByCanvasUri.clear();
+    this.activeSessionId = undefined;
+    for (const session of sessions) {
+      this.disposeSession(session);
+    }
   }
 
-  private ensurePanel(
-    bootstrapMessages: readonly CanvasToPreviewMessage[] = [],
-    sourceCanvasUri?: string,
-  ): vscode.WebviewPanel {
+  handleCanvasEditorClosed(sourceCanvasUri: string): void {
+    const session = this.sessionsByCanvasUri.get(sourceCanvasUri);
+    if (!session) return;
+    if (!session.panel.visible) {
+      this.disposeSession(session);
+      return;
+    }
+    this.markSessionStale(session);
+  }
+
+  private ensureSession(
+    sourceCanvasUri: string,
+    revision: number,
+    options: { readonly deferHtml?: boolean } = {},
+  ): CanvasPreviewSession {
     if (this.disposed) {
       throw new Error('NarrativePreviewBridge has been disposed.');
     }
-    if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.Beside, true);
-      return this.panel;
+    const existing = this.sessionsByCanvasUri.get(sourceCanvasUri);
+    if (existing) {
+      existing.panel.reveal(vscode.ViewColumn.Beside, true);
+      this.clearSessionStale(existing);
+      return this.acceptRevision(existing, revision);
     }
 
     const i18n = createNarrativePreviewI18n();
@@ -366,17 +478,63 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           : {}),
       },
     );
-    this.previewWebviewReady = false;
-    this.pendingPreviewMessages = [];
+    const session: CanvasPreviewSession = {
+      sessionId: this.createSessionId(),
+      sourceCanvasUri,
+      panel,
+      createdAt: this.now(),
+      revision,
+      webviewReady: false,
+      pendingMessages: [],
+    };
+    this.sessionsByCanvasUri.set(sourceCanvasUri, session);
+    this.sessionsByPanel.set(panel, session);
     panel.webview.onDidReceiveMessage(
       (message) => {
+        const currentSession = this.findSessionById(session.sessionId);
+        if (!currentSession) {
+          logger.debug('Dropped Preview message for disposed session', message);
+          return;
+        }
         if (isPreviewWebviewReadyMessage(message)) {
-          this.previewWebviewReady = true;
-          this.flushPendingPreviewMessages();
+          if (
+            !this.isPreviewRuntimeMessageForSession(message, currentSession, {
+              allowMissingIdentity: true,
+            })
+          ) {
+            logger.debug('Dropped ready message for mismatched Preview session', message);
+            return;
+          }
+          currentSession.webviewReady = true;
+          this.flushPendingPreviewMessages(currentSession);
           return;
         }
         if (isNarrativePreviewMediaMessage(message)) {
-          void this.host.handleNarrativePreviewMediaMessage?.(message, panel, this.sourceCanvasUri);
+          if (
+            !this.isPreviewRuntimeMessageForSession(message, currentSession, {
+              allowMissingIdentity: true,
+            })
+          ) {
+            logger.debug('Dropped media message for mismatched Preview session', message);
+            return;
+          }
+          void this.host.handleNarrativePreviewMediaMessage?.(
+            message,
+            panel,
+            currentSession.sourceCanvasUri,
+          );
+          return;
+        }
+        if (isNarrativePreviewVariantMessage(message)) {
+          if (
+            !this.isPreviewRuntimeMessageForSession(message, currentSession, {
+              allowMissingIdentity: true,
+            })
+          ) {
+            logger.debug('Dropped variant message for mismatched Preview session', message);
+            return;
+          }
+          this.handlePreviewVariantRequest(message, currentSession);
           return;
         }
         const previewMessage = parsePreviewToCanvasMessage(message);
@@ -387,79 +545,268 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       undefined,
       [],
     );
-    panel.webview.html = this.getPreviewHtml(panel.webview, bootstrapMessages, i18n);
+    if (!options.deferHtml) {
+      panel.webview.html = this.getPreviewHtml(panel.webview, [], i18n);
+    }
     panel.onDidDispose(() => {
       void this.host.disposeNarrativePreviewMediaPanel?.(panel);
-      if (this.panel === panel) {
-        this.panel = undefined;
-        this.previewWebviewReady = false;
-        this.pendingPreviewMessages = [];
-        this.sourceCanvasUri = undefined;
+      const current = this.sessionsByPanel.get(panel);
+      if (current) {
+        this.clearSessionStale(current);
+        current.pendingMessages = [];
+        this.sessionsByCanvasUri.delete(current.sourceCanvasUri);
+        if (this.activeSessionId === current.sessionId) {
+          this.activeSessionId = undefined;
+        }
       }
     });
-    this.panel = panel;
-    return panel;
+    return session;
   }
 
-  private postToPreview(message: CanvasToPreviewMessage): void {
-    this.recordPreviewMessageRevision(message);
-    const panel = this.panel;
-    if (!panel) return;
-    if (!this.previewWebviewReady) {
-      this.pendingPreviewMessages.push(message);
+  private markSessionStale(session: CanvasPreviewSession): void {
+    if (session.staleSince !== undefined) {
       return;
     }
-    panel.webview.postMessage(message);
+    session.staleSince = this.now();
+    this.postToPreview(session, {
+      type: 'preview:sessionStale',
+      requestId: this.createRequestId('stale'),
+      revision: session.revision,
+    } as CanvasToPreviewMessage);
+    session.staleTimeout = setTimeout(() => {
+      const current = this.sessionsByCanvasUri.get(session.sourceCanvasUri);
+      if (!current || current.sessionId !== session.sessionId || current.staleSince === undefined) {
+        return;
+      }
+      this.disposeSession(current);
+    }, this.staleSessionGraceMs);
   }
 
-  private flushPendingPreviewMessages(): void {
-    const panel = this.panel;
-    if (!panel || this.pendingPreviewMessages.length === 0) return;
-    const messages = this.pendingPreviewMessages;
-    this.pendingPreviewMessages = [];
+  private clearSessionStale(session: CanvasPreviewSession): void {
+    if (session.staleTimeout) {
+      clearTimeout(session.staleTimeout);
+      session.staleTimeout = undefined;
+    }
+    session.staleSince = undefined;
+  }
+
+  private disposeSession(session: CanvasPreviewSession): void {
+    this.clearSessionStale(session);
+    session.pendingMessages = [];
+    this.sessionsByCanvasUri.delete(session.sourceCanvasUri);
+    if (this.activeSessionId === session.sessionId) {
+      this.activeSessionId = undefined;
+    }
+    session.panel.dispose();
+  }
+
+  private acceptRevision(session: CanvasPreviewSession, revision: number): CanvasPreviewSession {
+    if (revision < session.revision) {
+      return session;
+    }
+    if (revision === session.revision) {
+      return session;
+    }
+    const next: CanvasPreviewSession = {
+      ...session,
+      revision,
+      pendingMessages: session.pendingMessages,
+      webviewReady: session.webviewReady,
+    };
+    this.sessionsByCanvasUri.set(next.sourceCanvasUri, next);
+    this.sessionsByPanel.set(next.panel, next);
+    return next;
+  }
+
+  private postToPreview(session: CanvasPreviewSession, message: CanvasToPreviewMessage): void {
+    this.recordPreviewMessageRevision(session, message);
+    const enveloped = this.withSessionEnvelope(
+      message,
+      session,
+      readCanvasMessageRevision(message),
+    );
+    if (!session.webviewReady) {
+      session.pendingMessages.push(enveloped);
+      this.schedulePendingPreviewMessageFallback(session, enveloped);
+      return;
+    }
+    session.panel.webview.postMessage(enveloped);
+  }
+
+  private schedulePendingPreviewMessageFallback(
+    session: CanvasPreviewSession,
+    message: CanvasToPreviewMessage,
+  ): void {
+    setTimeout(() => {
+      const current = this.sessionsByCanvasUri.get(session.sourceCanvasUri);
+      if (!current || current.sessionId !== session.sessionId || current.webviewReady) {
+        return;
+      }
+      if (!current.pendingMessages.includes(message)) {
+        return;
+      }
+      void current.panel.webview.postMessage(message).then((delivered) => {
+        const latest = this.sessionsByCanvasUri.get(session.sourceCanvasUri);
+        if (
+          !delivered ||
+          !latest ||
+          latest.webviewReady ||
+          latest.sessionId !== session.sessionId
+        ) {
+          return;
+        }
+        const index = latest.pendingMessages.indexOf(message);
+        if (index >= 0) {
+          latest.pendingMessages.splice(index, 1);
+        }
+        latest.webviewReady = true;
+        this.flushPendingPreviewMessages(latest);
+      });
+    }, PREVIEW_WEBVIEW_READY_GRACE_MS);
+  }
+
+  private flushPendingPreviewMessages(session: CanvasPreviewSession): void {
+    if (session.pendingMessages.length === 0) return;
+    const messages = session.pendingMessages;
+    session.pendingMessages = [];
     for (const message of messages) {
-      panel.webview.postMessage(message);
+      session.panel.webview.postMessage(message);
     }
   }
 
-  private postFeatureToggles(revision: number): void {
-    this.postToPreview(this.createFeatureTogglesMessage(revision));
+  private handlePreviewVariantRequest(
+    message: Record<string, unknown>,
+    session: CanvasPreviewSession,
+  ): void {
+    const requestId = typeof message['requestId'] === 'string' ? message['requestId'] : undefined;
+    if (!requestId) {
+      return;
+    }
+    if (!this.host.resolveNarrativePreviewVariant) {
+      void session.panel.webview.postMessage({
+        type: 'preview:variantResolved',
+        requestId,
+        sessionId: session.sessionId,
+        sourceCanvasUri: session.sourceCanvasUri,
+        revision: session.revision,
+        error: 'Preview variant resolution is unavailable for this Canvas host.',
+      });
+      return;
+    }
+
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      logger.warn('Canvas Preview variant request timed out before the host responded', {
+        requestId,
+        sourceId: typeof message['sourceId'] === 'string' ? message['sourceId'] : undefined,
+      });
+      void session.panel.webview.postMessage({
+        type: 'preview:variantResolved',
+        requestId,
+        sessionId: session.sessionId,
+        sourceCanvasUri: session.sourceCanvasUri,
+        revision: session.revision,
+        error: `Preview variant request timed out after ${HOST_PREVIEW_VARIANT_RESPONSE_TIMEOUT_MS}ms.`,
+      });
+    }, HOST_PREVIEW_VARIANT_RESPONSE_TIMEOUT_MS);
+
+    Promise.resolve()
+      .then(() =>
+        this.host.resolveNarrativePreviewVariant?.(message, session.panel, session.sourceCanvasUri),
+      )
+      .then((handled) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeoutId);
+        if (handled === false) {
+          void session.panel.webview.postMessage({
+            type: 'preview:variantResolved',
+            requestId,
+            sessionId: session.sessionId,
+            sourceCanvasUri: session.sourceCanvasUri,
+            revision: session.revision,
+            error: 'Preview variant resolution completed without delivering a response.',
+          });
+        }
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeoutId);
+        logger.warn('Canvas Preview variant host handler failed', {
+          requestId,
+          sourceId: typeof message['sourceId'] === 'string' ? message['sourceId'] : undefined,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        void session.panel.webview.postMessage({
+          type: 'preview:variantResolved',
+          requestId,
+          sessionId: session.sessionId,
+          sourceCanvasUri: session.sourceCanvasUri,
+          revision: session.revision,
+          error: error instanceof Error ? error.message : 'Preview variant resolution failed.',
+        });
+      });
   }
 
-  private createFeatureTogglesMessage(revision: number): CanvasToPreviewMessage {
+  private postFeatureToggles(session: CanvasPreviewSession, revision: number): void {
+    this.postToPreview(session, this.createFeatureTogglesMessage(session, revision));
+  }
+
+  private createFeatureTogglesMessage(
+    session: CanvasPreviewSession,
+    revision: number,
+  ): CanvasToPreviewMessage {
     return {
       type: 'preview:setFeatureToggles',
       requestId: this.createRequestId('toggles'),
       toggles: this.getFeatureToggles(),
       revision,
-    };
+      sessionId: session.sessionId,
+      sourceCanvasUri: session.sourceCanvasUri,
+    } as CanvasToPreviewMessage;
   }
 
-  private async postPreviewPlaybackPlan(
-    webview: vscode.Webview,
+  private postPreviewPlaybackPlan(
+    session: CanvasPreviewSession,
     revision: number,
     mode: 'load' | 'refresh',
-    sourceCanvasUri: string | undefined,
+  ): void {
+    const basePlan = this.host.extractCanvasPlaybackPlan?.(session.sourceCanvasUri);
+    const postedBasePlan = this.postCanvasPlaybackPlanToPreview(session, revision, mode, basePlan, {
+      source: 'base',
+      warnIfUnavailable: !this.host.extractCanvasPlaybackPlanForPreview,
+    });
+
+    if (!this.host.extractCanvasPlaybackPlanForPreview) {
+      return;
+    }
+
+    void this.postPreviewSpecificPlaybackPlan(session, revision, mode, postedBasePlan);
+  }
+
+  private async postPreviewSpecificPlaybackPlan(
+    session: CanvasPreviewSession,
+    revision: number,
+    mode: 'load' | 'refresh',
+    postedBasePlan: boolean,
   ): Promise<void> {
     try {
-      const plan = await this.resolveCanvasPlaybackPlanForPreview(webview, sourceCanvasUri);
-      if (!plan) {
-        logger.warn('Canvas playback plan was unavailable for Preview', { revision, mode });
-        return;
-      }
-      if (this.panel?.webview !== webview || revision < this.lastAcceptedPreviewRevision) {
-        logger.debug('Dropped stale Canvas playback plan for Preview', {
-          revision,
-          mode,
-          lastAcceptedPreviewRevision: this.lastAcceptedPreviewRevision,
-        });
-        return;
-      }
-      this.postToPreview({
-        type: mode === 'load' ? 'preview:loadPlaybackPlan' : 'preview:refreshPlaybackPlan',
-        requestId: this.createRequestId(`${mode}-plan`),
-        plan,
-        revision,
+      const plan = await this.host.extractCanvasPlaybackPlanForPreview?.(
+        session.panel.webview,
+        session.sourceCanvasUri,
+      );
+      this.postCanvasPlaybackPlanToPreview(session, revision, mode, plan, {
+        source: 'preview',
+        warnIfUnavailable: !postedBasePlan,
       });
     } catch (error) {
       logger.warn('Failed to prepare Canvas playback plan for Preview', {
@@ -470,26 +817,139 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
   }
 
-  private async resolveCanvasPlaybackPlanForPreview(
-    webview: vscode.Webview,
-    sourceCanvasUri: string | undefined,
-  ): Promise<CanvasPlaybackPlan | undefined> {
-    return (
-      (await this.host.extractCanvasPlaybackPlanForPreview?.(webview, sourceCanvasUri)) ??
-      this.host.extractCanvasPlaybackPlan?.(sourceCanvasUri)
-    );
+  private postCanvasPlaybackPlanToPreview(
+    session: CanvasPreviewSession,
+    revision: number,
+    mode: 'load' | 'refresh',
+    plan: CanvasPlaybackPlan | undefined,
+    options: {
+      readonly source: 'base' | 'preview';
+      readonly warnIfUnavailable: boolean;
+    },
+  ): boolean {
+    if (!plan) {
+      if (options.warnIfUnavailable) {
+        logger.warn('Canvas playback plan was unavailable for Preview', {
+          revision,
+          mode,
+          source: options.source,
+        });
+      }
+      return false;
+    }
+    const current = this.sessionsByCanvasUri.get(session.sourceCanvasUri);
+    if (!current || current.sessionId !== session.sessionId || revision < current.revision) {
+      logger.debug('Dropped stale Canvas playback plan for Preview', {
+        revision,
+        mode,
+        source: options.source,
+        lastAcceptedPreviewRevision: current?.revision,
+      });
+      return false;
+    }
+    const acceptedSession = this.acceptRevision(current, revision);
+    const previewPlan = prepareCanvasPlaybackPlanForPreview(plan);
+    this.postToPreview(acceptedSession, {
+      type: mode === 'load' ? 'preview:loadPlaybackPlan' : 'preview:refreshPlaybackPlan',
+      requestId: this.createRequestId(
+        options.source === 'preview' ? `${mode}-preview-plan` : `${mode}-plan`,
+      ),
+      plan: previewPlan,
+      revision,
+    });
+    return true;
   }
 
-  private recordPreviewMessageRevision(message: CanvasToPreviewMessage): void {
+  private recordPreviewMessageRevision(
+    session: CanvasPreviewSession,
+    message: CanvasToPreviewMessage,
+  ): void {
     const revision = readCanvasMessageRevision(message);
     if (revision !== undefined) {
-      this.lastAcceptedPreviewRevision = Math.max(this.lastAcceptedPreviewRevision, revision);
+      this.acceptRevision(session, revision);
     }
   }
 
-  private isStalePreviewMessage(message: PreviewToCanvasMessage): boolean {
+  private isStalePreviewMessage(
+    session: CanvasPreviewSession,
+    message: PreviewToCanvasMessage,
+  ): boolean {
     const revision = readRevision(message);
-    return revision !== undefined && revision < this.lastAcceptedPreviewRevision;
+    return revision !== undefined && revision < session.revision;
+  }
+
+  private resolveSessionForPreviewMessage(
+    message: PreviewToCanvasMessage,
+  ): CanvasPreviewSession | undefined {
+    const envelope = readCanvasPreviewEnvelope(message);
+    if (envelope.sessionId || envelope.sourceCanvasUri) {
+      return this.findSessionByEnvelope(envelope);
+    }
+    return this.activeSessionId ? this.findSessionById(this.activeSessionId) : undefined;
+  }
+
+  private isPreviewRuntimeMessageForSession(
+    message: unknown,
+    session: CanvasPreviewSession,
+    options: { readonly allowMissingIdentity?: boolean } = {},
+  ): boolean {
+    const envelope = readCanvasPreviewEnvelope(message);
+    if (!envelope.sessionId && !envelope.sourceCanvasUri) {
+      return options.allowMissingIdentity === true;
+    }
+    if (envelope.sessionId && envelope.sessionId !== session.sessionId) {
+      return false;
+    }
+    if (envelope.sourceCanvasUri && envelope.sourceCanvasUri !== session.sourceCanvasUri) {
+      return false;
+    }
+    if (envelope.revision !== undefined && envelope.revision < session.revision) {
+      return false;
+    }
+    return true;
+  }
+
+  private findSessionByEnvelope(
+    envelope: CanvasPreviewMessageEnvelope,
+  ): CanvasPreviewSession | undefined {
+    if (envelope.sessionId) {
+      const session = this.findSessionById(envelope.sessionId);
+      if (!session) return undefined;
+      if (envelope.sourceCanvasUri && envelope.sourceCanvasUri !== session.sourceCanvasUri) {
+        return undefined;
+      }
+      return session;
+    }
+    return envelope.sourceCanvasUri
+      ? this.sessionsByCanvasUri.get(envelope.sourceCanvasUri)
+      : undefined;
+  }
+
+  private findSessionById(sessionId: string): CanvasPreviewSession | undefined {
+    for (const session of this.sessionsByCanvasUri.values()) {
+      if (session.sessionId === sessionId) {
+        return session;
+      }
+    }
+    return undefined;
+  }
+
+  private withSessionEnvelope<TMessage extends CanvasToPreviewMessage>(
+    message: TMessage,
+    session: CanvasPreviewSession,
+    revision: number | undefined,
+  ): TMessage {
+    return {
+      ...message,
+      sessionId: session.sessionId,
+      sourceCanvasUri: session.sourceCanvasUri,
+      ...(revision !== undefined ? { revision } : {}),
+    } as TMessage;
+  }
+
+  private createSessionId(): string {
+    this.sessionSequence += 1;
+    return `canvas-preview:${this.now()}:${this.sessionSequence}`;
   }
 
   private createRequestId(reason: string): string {
@@ -532,15 +992,21 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .playback-shell[data-visible="true"] { display: flex; flex-direction: column; }
     .player-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; justify-content: center; overflow: hidden; background: color-mix(in srgb, var(--vscode-editor-background) 88%, black); }
     .stage-overlay { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 4; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; }
-    .stage-heading { min-width: 0; display: grid; gap: 4px; max-width: min(680px, 70vw); padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent); backdrop-filter: blur(10px); pointer-events: auto; }
+    .stage-heading { min-width: 0; display: grid; gap: 4px; max-width: min(520px, 58vw); padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent); backdrop-filter: blur(10px); pointer-events: auto; }
     .stage-heading-row { min-width: 0; display: flex; align-items: center; gap: 8px; }
     .stage-kicker { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 0 7px; font-size: 12px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
     .stage-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .stage-subtitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .route-switcher { display: none; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+    .route-switcher[data-visible="true"] { display: flex; }
+    .route-switcher label { flex: 0 0 auto; color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .route-switcher select { min-width: 0; width: min(520px, 100%); height: 26px; border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border)); border-radius: 4px; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); padding: 0 8px; }
+    .session-badge { display: none; align-items: center; min-width: 0; width: fit-content; max-width: 100%; height: 22px; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-panel-border)); border-radius: 4px; padding: 0 7px; color: var(--vscode-inputValidation-warningForeground, var(--vscode-descriptionForeground)); background: var(--vscode-inputValidation-warningBackground, var(--vscode-editor-background)); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-badge[data-visible="true"] { display: inline-flex; }
     .stage-actions { display: flex; align-items: center; gap: 6px; pointer-events: auto; }
     .stage-actions button { min-width: 30px; width: 30px; padding: 0; background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent); backdrop-filter: blur(10px); }
     .stage-actions button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-    .stage-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 18px; padding: 72px 28px 32px; box-sizing: border-box; }
+    .stage-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 18px; padding: 48px 28px 32px; box-sizing: border-box; }
     .stage-visual { min-width: 0; width: min(100%, 980px); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .stage-visual img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
     .stage-media-slot { width: min(100%, 980px); height: min(100%, 62vh); min-height: 220px; display: flex; align-items: stretch; justify-content: center; }
@@ -567,6 +1033,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .stage-details { display: flex; flex-wrap: wrap; gap: 6px; }
     .stage-detail { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 5px 7px; font-size: 12px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
     .player-controls { flex: 0 0 auto; display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--vscode-panel-border); background: color-mix(in srgb, var(--vscode-editor-background) 94%, black); box-sizing: border-box; }
+    .player-controls > .route-switcher { justify-self: center; width: min(720px, 100%); }
+    .player-controls > .route-switcher label { white-space: nowrap; }
+    .player-controls > .route-switcher select { flex: 1 1 auto; }
     .branch-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
     .branch-choices:empty { display: none; }
     .branch-choices button { max-width: min(360px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -602,7 +1071,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       .stage-overlay { align-items: stretch; flex-direction: column; }
       .stage-heading { max-width: none; }
       .stage-actions { justify-content: flex-end; }
-      .stage-content { padding: 118px 14px 22px; }
+      .stage-content { padding: 76px 14px 22px; }
+      .player-controls > .route-switcher { justify-content: flex-start; }
       .transport-row { grid-template-columns: 1fr; justify-items: center; }
       .progress, .playback-clock { justify-self: center; }
       .playback-inspector { top: auto; left: 12px; bottom: 94px; width: auto; max-height: min(62vh, 420px); transform: translateY(calc(100% + 24px)); }
@@ -625,6 +1095,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
               <h1 class="stage-title" id="playback-title">${h(i18n.planCanvasPlayback)}</h1>
             </div>
             <p class="stage-subtitle" id="playback-summary"></p>
+            <span class="session-badge" id="session-badge" data-visible="false" title="${h(i18n.staleSessionDescription)}">${h(i18n.staleSession)}</span>
           </div>
           <div class="stage-actions" aria-label="${h(i18n.ariaPlaybackDetails)}">
             <button type="button" id="inspector-info" title="${h(i18n.info)}" aria-label="${h(i18n.info)}">i</button>
@@ -665,6 +1136,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       </div>
 
       <footer class="player-controls" id="player-controls" aria-label="${h(i18n.ariaControls)}">
+        <div class="route-switcher" id="route-switcher" data-visible="false">
+          <label for="route-select">${h(i18n.route)}</label>
+          <select id="route-select" title="${h(i18n.route)}" aria-label="${h(i18n.route)}"></select>
+        </div>
         <div class="branch-choices" id="unit-choices"></div>
         <div class="timeline-wrap" aria-label="${h(i18n.ariaTimeline)}">
           <div class="segmented-timeline" id="segmented-timeline"></div>
@@ -697,6 +1172,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const DEFAULT_TIMER_MS = 1200;
+    const PREVIEW_VARIANT_TIMEOUT_MS = 5000;
     const BOOTSTRAP_MESSAGES = ${bootstrapJson};
     const I18N = ${i18nJson};
     function t(key, values) {
@@ -715,6 +1191,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const playbackPreview = document.getElementById('playback-preview');
     const playbackTitle = document.getElementById('playback-title');
     const playbackSummary = document.getElementById('playback-summary');
+    const sessionBadge = document.getElementById('session-badge');
+    const routeSwitcher = document.getElementById('route-switcher');
+    const routeSelect = document.getElementById('route-select');
     const stageContent = document.getElementById('stage-content');
     const stageVisual = document.getElementById('stage-visual');
     const stageDetails = document.getElementById('stage-details');
@@ -743,8 +1222,16 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const unitDiagnostics = document.getElementById('unit-diagnostics');
 
     let playbackPlan = null;
+    let effectiveRoutes = [];
+    let routeDiagnostics = [];
+    let activeRouteId = null;
     let route = [];
     let activeUnitId = null;
+    let branchSelections = {};
+    let currentSessionId = null;
+    let currentSourceCanvasUri = null;
+    let currentRevision = null;
+    let isSessionStale = false;
     let timer = null;
     let isPlaying = false;
     let elapsedInUnitMs = 0;
@@ -752,6 +1239,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     let playbackStartElapsedMs = 0;
     let activeMediaSurfaceId = null;
     let renderedStageKey = null;
+    const pendingPreviewVariantRequests = new Map();
+    const resolvedPreviewVariants = new Map();
+    const failedPreviewVariantRequests = new Set();
 
     window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
 
@@ -796,11 +1286,22 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     inspectorBranches.addEventListener('click', () => toggleInspector('branches'));
     inspectorDiagnostics.addEventListener('click', () => toggleInspector('diagnostics'));
     inspectorClose.addEventListener('click', () => closeInspector());
+    routeSelect.addEventListener('change', () => {
+      const routeId = routeSelect.value;
+      if (!routeId || routeId === activeRouteId) {
+        return;
+      }
+      switchActiveRoute(routeId);
+    });
 
     window.addEventListener('message', (event) => {
       const message = event.data || {};
       if (message.type === 'media:probeResult' || message.type === 'media:streamReady') {
         window.__nekoNarrativePreviewMediaRuntime?.handleHostMessage(message);
+        return;
+      }
+      if (message.type === 'preview:variantResolved') {
+        handlePreviewVariantResolved(message);
         return;
       }
       handleCanvasPreviewMessage(message);
@@ -810,7 +1311,15 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function handleCanvasPreviewMessage(message) {
+      updateSessionEnvelopeState(message);
+      if (message.type === 'preview:sessionStale') {
+        isSessionStale = true;
+        sessionBadge.dataset.visible = 'true';
+        return;
+      }
       if (message.type === 'preview:loadGraph' || message.type === 'preview:refresh') {
+        isSessionStale = false;
+        sessionBadge.dataset.visible = 'false';
         const count = Array.isArray(message.snapshot?.nodes) ? message.snapshot.nodes.length : 0;
         if (count === 0 && playbackPlan) {
           return;
@@ -827,7 +1336,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           .map(formatKindLabel)
           .join(', ');
         const suffix = diagnostics.length > 0
-          ? t('statusDiagnostics', { diagnostics: diagnostics.map((item) => item.message).join(' ') })
+          ? t('statusDiagnostics', { diagnostics: diagnostics.map(formatDiagnosticMessage).join(' ') })
           : '';
         status.textContent = t('statusLoadedPlaybackPlan', {
           adapterId: message.plan.adapterId,
@@ -857,12 +1366,18 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       stopPlayback();
       disposeActiveMediaSurface();
       playbackPlan = plan;
+      const routeResolution = resolveEffectiveRoutes(plan);
+      effectiveRoutes = routeResolution.routes;
+      routeDiagnostics = routeResolution.diagnostics;
+      activeRouteId = effectiveRoutes[0]?.id || null;
+      branchSelections = {};
       route = buildInitialRoute(plan);
       activeUnitId = route[0] || null;
       renderedStageKey = null;
       elapsedInUnitMs = 0;
       playbackStartedAtMs = 0;
       playbackStartElapsedMs = 0;
+      clearPreviewVariantState();
       placeholder.style.display = 'none';
       playbackPreview.dataset.visible = 'true';
       renderPlaybackPlan();
@@ -872,7 +1387,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     function renderPlaybackPlan() {
       const unit = getCurrentUnit();
       const index = getCurrentIndex();
-      const diagnostics = Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : [];
+      const diagnostics = [
+        ...(Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : []),
+        ...routeDiagnostics,
+      ];
       playbackTitle.textContent = formatPlanTitle(playbackPlan);
       playbackSummary.textContent = playbackPlan
         ? playbackPlan.adapterId + ' / ' + playbackPlan.behaviorMode + ' / ' + playbackPlan.advancePolicy
@@ -893,11 +1411,28 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         renderStageContent(unit, index);
         renderedStageKey = stageKey;
       }
+      renderRouteSwitcher();
       renderSegmentedTimeline();
       renderMeta(unit);
       renderChoices(unit);
       renderDiagnostics(diagnostics);
       renderInspectorActions();
+    }
+
+    function renderRouteSwitcher() {
+      routeSelect.replaceChildren();
+      if (!effectiveRoutes || effectiveRoutes.length <= 1) {
+        routeSwitcher.dataset.visible = 'false';
+        return;
+      }
+      routeSwitcher.dataset.visible = 'true';
+      for (const candidate of effectiveRoutes) {
+        const option = document.createElement('option');
+        option.value = candidate.id;
+        option.textContent = formatRouteTitle(candidate);
+        routeSelect.appendChild(option);
+      }
+      routeSelect.value = activeRouteId || effectiveRoutes[0]?.id || '';
     }
 
     function renderPlaybackTime(unit, index) {
@@ -969,6 +1504,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const visual = resolveStageVisual(unit, metadata);
       if (visual) {
         appendStageVisual(visual, unit);
+      } else if (requestStageImageVariant(unit, metadata)) {
+        appendStageUnavailable(t('storyboardShot'), t('mediaLoading'));
       } else if (unit.kind === 'media' || unit.renderMode === 'media-playback') {
         appendStageUnavailable(t('mediaUnavailable'), t('mediaUnavailableDescription'));
       } else if (unit.kind === 'shot') {
@@ -1007,6 +1544,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         readString(metadata.posterUrl) ||
         readString(metadata.thumbnailUrl);
       const playbackSource =
+        readString(metadata.previewPlayableAssetPath) ||
         unit.assetPath ||
         readString(metadata.generatedImage) ||
         readNestedString(metadata.generatedAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
@@ -1056,6 +1594,233 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
     }
 
+    function requestStageImageVariant(unit, metadata) {
+      const request = createStageImageVariantRequest(unit, metadata);
+      if (!request) {
+        return false;
+      }
+      const cached = resolvedPreviewVariants.get(request.cacheKey);
+      if (cached) {
+        appendStageVisual({ type: 'image', source: cached }, unit);
+        return true;
+      }
+      if (failedPreviewVariantRequests.has(request.cacheKey)) {
+        return false;
+      }
+      if (pendingPreviewVariantRequests.has(request.cacheKey)) {
+        return true;
+      }
+      const timeoutId = window.setTimeout(() => {
+        const pending = pendingPreviewVariantRequests.get(request.cacheKey);
+        if (!pending || pending.requestId !== request.requestId) {
+          return;
+        }
+        pendingPreviewVariantRequests.delete(request.cacheKey);
+        failedPreviewVariantRequests.add(request.cacheKey);
+        if (getCurrentUnit()?.id === pending.unitId) {
+          renderedStageKey = null;
+          renderPlaybackPlan();
+        }
+      }, PREVIEW_VARIANT_TIMEOUT_MS);
+      pendingPreviewVariantRequests.set(request.cacheKey, {
+        unitId: unit.id,
+        requestId: request.requestId,
+        timeoutId,
+      });
+      vscode.postMessage({
+        type: 'preview:resolveVariant',
+        requestId: request.requestId,
+        sessionId: currentSessionId,
+        sourceCanvasUri: currentSourceCanvasUri,
+        revision: currentRevision,
+        sourceId: unit.id,
+        role: 'thumbnail',
+        mediaType: 'image',
+        ...(request.assetPath ? { assetPath: request.assetPath } : {}),
+        ...(request.documentResourceRef ? { documentResourceRef: request.documentResourceRef } : {}),
+        ...(request.resourceRef ? { resourceRef: request.resourceRef } : {}),
+      });
+      return true;
+    }
+
+    function handlePreviewVariantResolved(message) {
+      const requestId = readString(message.requestId);
+      if (!requestId) {
+        return;
+      }
+      const cacheKey = requestId.replace(/^canvas-playback-preview:variant:/, '');
+      const pending = pendingPreviewVariantRequests.get(cacheKey);
+      if (!pending) {
+        return;
+      }
+      if (pending.requestId !== requestId) {
+        return;
+      }
+      pendingPreviewVariantRequests.delete(cacheKey);
+      window.clearTimeout(pending.timeoutId);
+      const url = readString(message.url);
+      if (url && isSafePreviewSource(url)) {
+        resolvedPreviewVariants.set(cacheKey, url);
+      } else {
+        failedPreviewVariantRequests.add(cacheKey);
+      }
+      if (getCurrentUnit()?.id === pending.unitId) {
+        renderedStageKey = null;
+        renderPlaybackPlan();
+      }
+    }
+
+    function clearPreviewVariantState() {
+      for (const pending of pendingPreviewVariantRequests.values()) {
+        window.clearTimeout(pending.timeoutId);
+      }
+      pendingPreviewVariantRequests.clear();
+      resolvedPreviewVariants.clear();
+      failedPreviewVariantRequests.clear();
+    }
+
+    function createStageImageVariantRequest(unit, metadata) {
+      if (!unit || unit.kind !== 'shot') {
+        return undefined;
+      }
+      const source =
+        readCanvasPreviewSourceCandidate({
+          assetPath: metadata.previewSourceAssetPath,
+          resourceRef: metadata.previewSourceResourceRef,
+          documentResourceRef: metadata.previewSourceDocumentResourceRef,
+        }) ||
+        readSelectedGenerationPreviewSource(metadata) ||
+        readCanvasPreviewSourceCandidate(metadata.generatedImage) ||
+        readCanvasPreviewSourceCandidate(metadata.generatedAsset) ||
+        readFirstStoryboardMediaRefPreviewSource([
+          ...readArray(metadata.generatedMediaRefs),
+          ...readArray(metadata.shotImagePrepPlan?.outputMediaRefs),
+        ]) ||
+        readCanvasPreviewSourceCandidate(metadata.runtimeReferenceImagePath) ||
+        readCanvasPreviewSourceCandidate(metadata.referenceResourceRef) ||
+        readCanvasPreviewSourceCandidate(metadata.referenceImageResourceRef) ||
+        readCanvasPreviewSourceCandidate(metadata.referenceImagePath) ||
+        readFirstStoryboardMediaRefPreviewSource([
+          ...readArray(metadata.sourceMediaRefs),
+          ...readArray(metadata.mediaRefs),
+        ]);
+      if (!source) {
+        return undefined;
+      }
+      const cacheKey = [
+        unit.id,
+        source.assetPath || '',
+        stableStringify(source.documentResourceRef),
+        stableStringify(source.resourceRef),
+      ].join('|');
+      return {
+        ...source,
+        cacheKey,
+        requestId: 'canvas-playback-preview:variant:' + cacheKey,
+      };
+    }
+
+    function readSelectedGenerationPreviewSource(metadata) {
+      const history = readArray(metadata.generationHistory);
+      const selected = history.find((candidate) =>
+        candidate && typeof candidate === 'object' && !Array.isArray(candidate) && candidate.selected === true
+      );
+      return readCanvasPreviewSourceCandidate(selected);
+    }
+
+    function readFirstStoryboardMediaRefPreviewSource(refs) {
+      for (const ref of refs) {
+        const source = readCanvasPreviewSourceCandidate(ref) ||
+          readCanvasPreviewSourceCandidate(ref && typeof ref === 'object' ? ref.locator : undefined);
+        if (source) {
+          return source;
+        }
+      }
+      return undefined;
+    }
+
+    function readCanvasPreviewSourceCandidate(value) {
+      const direct = readString(value);
+      if (direct) {
+        return { assetPath: direct };
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+      }
+      const directResourceRef = readResourceLike(value);
+      const directDocumentResourceRef = readDocumentResourceLike(value);
+      if (directResourceRef || directDocumentResourceRef) {
+        const legacyCachePath = directResourceRef
+          ? readFirstString(directResourceRef.source?.metadata || {}, ['legacyCachePath'])
+          : undefined;
+        return {
+          ...(legacyCachePath ? { assetPath: legacyCachePath } : {}),
+          ...(directResourceRef ? { resourceRef: directResourceRef } : {}),
+          ...(directDocumentResourceRef ? { documentResourceRef: directDocumentResourceRef } : {}),
+        };
+      }
+      const metadata = value.metadata && typeof value.metadata === 'object' && !Array.isArray(value.metadata)
+        ? value.metadata
+        : undefined;
+      const assetRef = value.assetRef && typeof value.assetRef === 'object' && !Array.isArray(value.assetRef)
+        ? value.assetRef
+        : undefined;
+      const resourceRef =
+        readResourceLike(value.resourceRef) ||
+        readResourceLike(value.cacheResourceRef) ||
+        readResourceLike(assetRef?.resourceRef) ||
+        readResourceLike(assetRef?.cacheResourceRef) ||
+        readResourceLike(metadata?.resourceRef) ||
+        readResourceLike(metadata?.cacheResourceRef);
+      const documentResourceRef =
+        readDocumentResourceLike(value.documentResourceRef) ||
+        readDocumentResourceLike(value.referenceImageResourceRef) ||
+        readDocumentResourceLike(value.resourceRef) ||
+        readDocumentResourceLike(assetRef?.documentResourceRef) ||
+        readDocumentResourceLike(metadata?.documentResourceRef) ||
+        readDocumentResourceLike(metadata?.referenceImageResourceRef) ||
+        readDocumentResourceLike(metadata?.resourceRef);
+      const assetPath =
+        readFirstString(value, ['dataUrl', 'sourcePath', 'localPath', 'path', 'assetPath', 'uri', 'filePath', 'previewUrl', 'url', 'src']) ||
+        readFirstString(assetRef || {}, ['dataUrl', 'sourcePath', 'localPath', 'path', 'assetPath', 'uri', 'filePath', 'previewUrl', 'url', 'src']) ||
+        readFirstString(metadata || {}, ['legacyCachePath']);
+      return assetPath || resourceRef || documentResourceRef
+        ? {
+            ...(assetPath ? { assetPath } : {}),
+            ...(resourceRef ? { resourceRef } : {}),
+            ...(documentResourceRef ? { documentResourceRef } : {}),
+          }
+        : undefined;
+    }
+
+    function readResourceLike(value) {
+      return value && typeof value === 'object' && !Array.isArray(value) && typeof value.id === 'string'
+        ? value
+        : undefined;
+    }
+
+    function readDocumentResourceLike(value) {
+      return value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'document-entry' && (
+        value.source !== undefined ||
+        value.cachePath !== undefined ||
+        value.entryPath !== undefined ||
+        value.locator !== undefined
+      )
+        ? value
+        : undefined;
+    }
+
+    function stableStringify(value) {
+      if (!value || typeof value !== 'object') {
+        return '';
+      }
+      try {
+        return JSON.stringify(value, Object.keys(value).sort());
+      } catch {
+        return '';
+      }
+    }
+
     function appendMediaPlaybackSurface(visual, unit) {
       const surfaceId = createMediaSurfaceId(unit);
       activeMediaSurfaceId = surfaceId;
@@ -1084,8 +1849,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         });
         runtime.start({
           surfaceId,
-          assetPath: visual.source || unit.assetPath || readString(metadata.assetPath),
+          assetPath:
+            readString(metadata.previewPlayableAssetPath) ||
+            visual.source ||
+            unit.assetPath ||
+            readString(metadata.assetPath),
           resourceRef: visual.resourceRef || unit.resourceRef,
+          documentResourceRef: metadata.previewSourceDocumentResourceRef,
           mediaType: visual.type,
           startTime: elapsedInUnitMs / 1000,
           autoPlay: isPlaying,
@@ -1286,6 +2056,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         button.addEventListener('click', () => {
           stopPlayback();
           const sourceUnit = getCurrentUnit();
+          if (sourceUnit) {
+            branchSelections = { ...branchSelections, [sourceUnit.id]: choice.id };
+          }
           route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
           setActiveUnit(choice.targetUnitId, false, 0);
           if (sourceUnit) {
@@ -1306,7 +2079,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       for (const diagnostic of diagnostics) {
         const item = document.createElement('div');
         item.className = 'diagnostic';
-        item.textContent = diagnostic.message || diagnostic.code;
+        item.textContent = formatDiagnosticMessage(diagnostic);
         unitDiagnostics.appendChild(item);
       }
     }
@@ -1422,27 +2195,86 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return activeUnitId ? route.indexOf(activeUnitId) : -1;
     }
 
-    function buildInitialRoute(plan) {
-      if (!plan || !Array.isArray(plan.entryUnitIds) || plan.entryUnitIds.length === 0) {
-        return [];
+    function switchActiveRoute(routeId) {
+      const candidate = effectiveRoutes.find((item) => item.id === routeId);
+      if (!candidate) {
+        return;
       }
-      if (plan.behaviorMode === 'interactive') {
-        return [plan.entryUnitIds[0]];
-      }
-      return buildDefaultRoute(plan);
+      stopPlayback();
+      disposeActiveMediaSurface();
+      activeRouteId = candidate.id;
+      branchSelections = {};
+      route = buildRouteFromCandidate(playbackPlan, candidate);
+      activeUnitId = route[0] || null;
+      renderedStageKey = null;
+      elapsedInUnitMs = 0;
+      playbackStartedAtMs = 0;
+      playbackStartElapsedMs = 0;
+      renderPlaybackPlan();
+      postPlaybackHighlight();
     }
 
-    function buildDefaultRoute(plan) {
-      const output = [];
-      const visited = new Set();
-      let current = plan.entryUnitIds[0];
-      while (current && !visited.has(current) && output.length <= plan.units.length) {
-        output.push(current);
-        visited.add(current);
-        const next = getOutgoingTransitions(current)[0];
-        current = next && next.targetUnitId;
+    function buildInitialRoute(plan) {
+      const activeRoute = effectiveRoutes.find((candidate) => candidate.id === activeRouteId) || effectiveRoutes[0];
+      if (activeRoute) {
+        return buildRouteFromCandidate(plan, activeRoute);
       }
-      return output;
+      return [];
+    }
+
+    function buildRouteFromCandidate(plan, candidate) {
+      if (!candidate || !Array.isArray(candidate.unitIds) || candidate.unitIds.length === 0) {
+        return [];
+      }
+      const units = new Set((plan?.units || []).map((unit) => unit.id));
+      const routeIds = candidate.unitIds.filter((unitId) => units.has(unitId));
+      if (plan?.behaviorMode === 'interactive') {
+        return routeIds[0] ? [routeIds[0]] : [];
+      }
+      return routeIds;
+    }
+
+    function resolveEffectiveRoutes(plan) {
+      if (!plan) {
+        return { routes: [], diagnostics: [] };
+      }
+      if (Array.isArray(plan.routeCandidates)) {
+        if (plan.routeCandidates.length === 0) {
+          return {
+            routes: [],
+            diagnostics: [{
+              code: 'playback-missing-route',
+              severity: 'warning',
+              message: t('missingRouteCandidates'),
+            }],
+          };
+        }
+        return {
+          routes: normalizeRouteCandidates(plan.routeCandidates, plan),
+          diagnostics: [],
+        };
+      }
+      return {
+        routes: [],
+        diagnostics: [{
+          code: 'playback-missing-route',
+          severity: 'warning',
+          message: t('missingRouteEntry'),
+        }],
+      };
+    }
+
+    function normalizeRouteCandidates(candidates, plan) {
+      const unitIds = new Set((plan.units || []).map((unit) => unit.id));
+      return candidates
+        .filter((candidate) => candidate && typeof candidate.id === 'string' && typeof candidate.entryUnitId === 'string')
+        .map((candidate) => ({
+          ...candidate,
+          unitIds: Array.isArray(candidate.unitIds)
+            ? candidate.unitIds.filter((unitId) => unitIds.has(unitId))
+            : [],
+        }))
+        .filter((candidate) => candidate.unitIds.length > 0 && unitIds.has(candidate.entryUnitId));
     }
 
     function resolveNextStep() {
@@ -1551,11 +2383,28 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function postMessage(message) {
-      vscode.postMessage(message);
+      vscode.postMessage({
+        ...message,
+        sessionId: currentSessionId,
+        sourceCanvasUri: currentSourceCanvasUri,
+        revision: currentRevision,
+      });
     }
 
     function createRequestId(reason) {
       return 'canvas-playback-preview:' + reason + ':' + Date.now();
+    }
+
+    function updateSessionEnvelopeState(message) {
+      if (typeof message.sessionId === 'string') {
+        currentSessionId = message.sessionId;
+      }
+      if (typeof message.sourceCanvasUri === 'string') {
+        currentSourceCanvasUri = message.sourceCanvasUri;
+      }
+      if (typeof message.revision === 'number' && Number.isFinite(message.revision)) {
+        currentRevision = message.revision;
+      }
     }
 
     function formatPlanTitle(plan) {
@@ -1572,6 +2421,37 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         return t('planNarrativePlaybackPlan');
       }
       return t('planCanvasPlayback');
+    }
+
+    function formatRouteTitle(candidate) {
+      if (!candidate) {
+        return t('route');
+      }
+      const title = typeof candidate.title === 'string' && candidate.title.length > 0
+        ? candidate.title
+        : candidate.id;
+      const count = Array.isArray(candidate.unitIds) ? candidate.unitIds.length : 0;
+      return t('routeTitle', {
+        title,
+        sourceKind: candidate.sourceKind || 'entry',
+        count,
+      });
+    }
+
+    function formatDiagnosticMessage(diagnostic) {
+      if (!diagnostic || typeof diagnostic !== 'object') {
+        return '';
+      }
+      if (diagnostic.code === 'playback-missing-route') {
+        return t('missingRouteEntry');
+      }
+      if (diagnostic.code === 'playback-invalid-route') {
+        return t('invalidRoute');
+      }
+      if (diagnostic.code === 'playback-route-truncated') {
+        return t('routeTruncated');
+      }
+      return diagnostic.message || diagnostic.code || '';
     }
 
     function formatUnitTitle(unit, index) {
@@ -1676,7 +2556,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         value.startsWith('vscode-webview:') ||
         value.startsWith('vscode-webview-resource:') ||
         value.startsWith('vscode-resource:') ||
-        value.startsWith('https://vscode-resource.vscode-cdn.net/')
+        (value.startsWith('https://') && value.includes('vscode-resource.vscode-cdn.net/'))
       );
     }
 
@@ -1779,8 +2659,28 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
     unitFallback: t('neko.canvas.preview.unitFallback', 'Unit'),
     planCanvasPlayback: t('neko.canvas.preview.planCanvasPlayback', 'Canvas Playback'),
     info: t('neko.canvas.preview.info', 'Info'),
+    route: t('neko.canvas.preview.route', 'Route'),
+    routeTitle: t('neko.canvas.preview.routeTitle', '{title} · {sourceKind} · {count} units'),
+    missingRouteCandidates: t(
+      'neko.canvas.preview.missingRouteCandidates',
+      'Playback plan has no route candidates.',
+    ),
+    missingRouteEntry: t(
+      'neko.canvas.preview.missingRouteEntry',
+      'Playback plan has no playable route entry.',
+    ),
+    invalidRoute: t('neko.canvas.preview.invalidRoute', 'Playback route candidate is invalid.'),
+    routeTruncated: t(
+      'neko.canvas.preview.routeTruncated',
+      'Some playback routes were hidden because the route list exceeded the Preview limit.',
+    ),
     branches: t('neko.canvas.preview.branches', 'Branches'),
     diagnostics: t('neko.canvas.preview.diagnostics', 'Diagnostics'),
+    staleSession: t('neko.canvas.preview.staleSession', 'Source Canvas closed'),
+    staleSessionDescription: t(
+      'neko.canvas.preview.staleSessionDescription',
+      'This Preview is still visible, but its source Canvas editor has been closed.',
+    ),
     noUnitSelected: t('neko.canvas.preview.noUnitSelected', 'No unit selected'),
     close: t('neko.canvas.preview.close', 'Close'),
     stageZero: t('neko.canvas.preview.stageZero', 'Stage 0'),
@@ -1946,6 +2846,43 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
   };
 }
 
+function prepareCanvasPlaybackPlanForPreview(plan: CanvasPlaybackPlan): CanvasPlaybackPlan {
+  const routeResolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+  const diagnostics = mergeCanvasPlaybackDiagnostics(plan.diagnostics, routeResolution.diagnostics);
+  return {
+    ...plan,
+    routeCandidates: routeResolution.routes,
+    diagnostics,
+  };
+}
+
+function mergeCanvasPlaybackDiagnostics(
+  baseDiagnostics: readonly CanvasPlaybackDiagnostic[],
+  routeDiagnostics: readonly CanvasPlaybackDiagnostic[],
+): readonly CanvasPlaybackDiagnostic[] {
+  if (routeDiagnostics.length === 0) return baseDiagnostics;
+  const seen = new Set(baseDiagnostics.map(getCanvasPlaybackDiagnosticKey));
+  const merged: CanvasPlaybackDiagnostic[] = [...baseDiagnostics];
+  for (const diagnostic of routeDiagnostics) {
+    const key = getCanvasPlaybackDiagnosticKey(diagnostic);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(diagnostic);
+  }
+  return merged;
+}
+
+function getCanvasPlaybackDiagnosticKey(diagnostic: CanvasPlaybackDiagnostic): string {
+  return [
+    diagnostic.code,
+    diagnostic.severity,
+    diagnostic.message,
+    diagnostic.adapterId ?? '',
+    diagnostic.nodeId ?? '',
+    diagnostic.connectionId ?? '',
+  ].join('|');
+}
+
 export function createNarrativeGraphSnapshotFromCanvasData(
   canvas: CanvasData | Record<string, unknown>,
   options: {
@@ -1994,23 +2931,44 @@ export function parsePreviewToCanvasMessage(value: unknown): PreviewToCanvasMess
   if (!isRecord(value) || typeof value['type'] !== 'string') return undefined;
   const requestId = typeof value['requestId'] === 'string' ? value['requestId'] : undefined;
   if (!requestId) return undefined;
+  const envelope = readCanvasPreviewEnvelope(value);
 
   switch (value['type']) {
     case 'canvas:highlightNode': {
       const nodeId = typeof value['nodeId'] === 'string' ? value['nodeId'] : undefined;
-      return nodeId ? { type: 'canvas:highlightNode', requestId, nodeId } : undefined;
+      return nodeId
+        ? ({
+            type: 'canvas:highlightNode',
+            requestId,
+            nodeId,
+            ...envelope,
+          } as PreviewToCanvasMessage)
+        : undefined;
     }
     case 'canvas:highlightPath': {
       const nodeIds = Array.isArray(value['nodeIds'])
         ? value['nodeIds'].filter((nodeId): nodeId is string => typeof nodeId === 'string')
         : undefined;
-      return nodeIds ? { type: 'canvas:highlightPath', requestId, nodeIds } : undefined;
+      return nodeIds
+        ? ({
+            type: 'canvas:highlightPath',
+            requestId,
+            nodeIds,
+            ...envelope,
+          } as PreviewToCanvasMessage)
+        : undefined;
     }
     case 'canvas:choiceMade': {
       const fromNodeId = typeof value['fromNodeId'] === 'string' ? value['fromNodeId'] : undefined;
       const toNodeId = typeof value['toNodeId'] === 'string' ? value['toNodeId'] : undefined;
       return fromNodeId && toNodeId
-        ? { type: 'canvas:choiceMade', requestId, fromNodeId, toNodeId }
+        ? ({
+            type: 'canvas:choiceMade',
+            requestId,
+            fromNodeId,
+            toNodeId,
+            ...envelope,
+          } as PreviewToCanvasMessage)
         : undefined;
     }
     default:
@@ -2033,6 +2991,14 @@ function isNarrativePreviewMediaMessage(value: unknown): value is Record<string,
     value['type'] === 'media:pause' ||
     value['type'] === 'media:resume' ||
     value['type'] === 'media:stop'
+  );
+}
+
+function isNarrativePreviewVariantMessage(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    value['type'] === 'preview:resolveVariant' &&
+    typeof value['requestId'] === 'string'
   );
 }
 
@@ -2325,14 +3291,28 @@ function isStringValue(value: unknown): value is string {
   return typeof value === 'string';
 }
 
+function readCanvasPreviewEnvelope(value: unknown): CanvasPreviewMessageEnvelope {
+  if (!isRecord(value)) return {};
+  const sessionId = typeof value['sessionId'] === 'string' ? value['sessionId'] : undefined;
+  const sourceCanvasUri =
+    typeof value['sourceCanvasUri'] === 'string' ? value['sourceCanvasUri'] : undefined;
+  const revision =
+    typeof value['revision'] === 'number' && Number.isFinite(value['revision'])
+      ? value['revision']
+      : undefined;
+  return {
+    ...(sessionId ? { sessionId } : {}),
+    ...(sourceCanvasUri ? { sourceCanvasUri } : {}),
+    ...(revision !== undefined ? { revision } : {}),
+  };
+}
+
 function readRevision(message: PreviewToCanvasMessage): number | undefined {
-  const value = (message as unknown as { revision?: unknown }).revision;
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return readCanvasPreviewEnvelope(message).revision;
 }
 
 function readCanvasMessageRevision(message: CanvasToPreviewMessage): number | undefined {
-  const value = (message as unknown as { revision?: unknown }).revision;
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return readCanvasPreviewEnvelope(message).revision;
 }
 
 function serializePreviewBootstrapMessages(messages: readonly CanvasToPreviewMessage[]): string {

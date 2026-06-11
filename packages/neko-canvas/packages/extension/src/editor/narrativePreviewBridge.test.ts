@@ -13,8 +13,16 @@ const testL10nMessages = vi.hoisted(
     'neko.canvas.preview.unitFallback': '单元',
     'neko.canvas.preview.planCanvasPlayback': '画布播放',
     'neko.canvas.preview.info': '信息',
+    'neko.canvas.preview.route': '路线',
+    'neko.canvas.preview.routeTitle': '{title} · {sourceKind} · {count} 单元',
+    'neko.canvas.preview.missingRouteCandidates': '播放计划没有路线候选。',
+    'neko.canvas.preview.missingRouteEntry': '播放计划没有可播放路线入口。',
+    'neko.canvas.preview.invalidRoute': '播放路线候选无效。',
+    'neko.canvas.preview.routeTruncated': '部分播放路线因超过预览上限而隐藏。',
     'neko.canvas.preview.branches': '分支',
     'neko.canvas.preview.diagnostics': '诊断',
+    'neko.canvas.preview.staleSession': '源画布已关闭',
+    'neko.canvas.preview.staleSessionDescription': '预览仍可见，但源画布编辑器已经关闭。',
     'neko.canvas.preview.noUnitSelected': '未选择播放单元',
     'neko.canvas.preview.close': '关闭',
     'neko.canvas.preview.stageZero': '阶段 0',
@@ -161,7 +169,7 @@ import type {
 } from '@neko/shared';
 
 describe('createNarrativeGraphSnapshotFromCanvasData', () => {
-  it('extracts runtime nodes, edges, metadata, variables, scene refs, and character bindings', () => {
+  it('extracts runtime nodes, edges, metadata, variables, scene refs, and character bindings', async () => {
     const canvas = createCanvasData();
     const snapshot = createNarrativeGraphSnapshotFromCanvasData(canvas, {
       revision: 7,
@@ -227,7 +235,7 @@ describe('createNarrativeGraphSnapshotFromCanvasData', () => {
 });
 
 describe('NarrativePreviewBridge', () => {
-  it('opens, reveals, closes, and reopens a Preview panel without retaining disposed panels', () => {
+  it('opens, reveals, closes, and reopens a Preview panel without retaining disposed panels', async () => {
     const host = createHost(createSnapshot(1));
     const panelFactory = createPanelFactory();
     const bridge = new NarrativePreviewBridge(host, {
@@ -235,7 +243,7 @@ describe('NarrativePreviewBridge', () => {
       now: () => 1000,
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(1);
     expect(panelFactory.createdPanels[0]?.title).toBe('画布预览');
     expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
@@ -260,7 +268,7 @@ describe('NarrativePreviewBridge', () => {
       requestId: 'ready-open',
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(1);
     expect(panelFactory.createdPanels[0]?.reveal).toHaveBeenCalledTimes(1);
     expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
@@ -272,7 +280,7 @@ describe('NarrativePreviewBridge', () => {
     );
 
     panelFactory.createdPanels[0]?.dispose();
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     expect(panelFactory.createdPanels).toHaveLength(2);
 
     bridge.dispose();
@@ -288,7 +296,7 @@ describe('NarrativePreviewBridge', () => {
       now: () => 3000,
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     const bootstrapMessages = readBootstrapMessages(
       panelFactory.createdPanels[0]?.webview.html ?? '',
     );
@@ -301,20 +309,7 @@ describe('NarrativePreviewBridge', () => {
       }),
       expect.objectContaining({
         type: 'preview:loadPlaybackPlan',
-        requestId: 'canvas-narrative:load-plan-fallback:3000:3',
-        revision: 4,
-      }),
-    ]);
-    await waitForMicrotasks();
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
-    panelFactory.createdPanels[0]?.webview.receiveMessage({
-      type: 'preview:webviewReady',
-      requestId: 'ready-plan',
-    });
-    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'preview:loadPlaybackPlan',
-        requestId: 'canvas-narrative:load-plan:3000:4',
+        requestId: 'canvas-narrative:load-plan:3000:3',
         revision: 4,
         plan: expect.objectContaining({
           adapterId: 'storyboard',
@@ -328,14 +323,20 @@ describe('NarrativePreviewBridge', () => {
           ]),
         }),
       }),
-    );
+    ]);
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
+    panelFactory.createdPanels[0]?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-plan',
+    });
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).not.toHaveBeenCalled();
 
     expect(bridge.refresh()).toBe(true);
     await waitForMicrotasks();
     expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'preview:refreshPlaybackPlan',
-        requestId: 'canvas-narrative:refresh-plan:3000:7',
+        requestId: 'canvas-narrative:refresh-plan:3000:6',
         revision: 4,
       }),
     );
@@ -350,24 +351,48 @@ describe('NarrativePreviewBridge', () => {
       now: () => 3200,
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     const panel = panelFactory.createdPanels[0];
-    expect(panel?.webview.postMessage).not.toHaveBeenCalled();
     expect(readBootstrapMessages(panel?.webview.html ?? '')).toEqual([
       expect.objectContaining({ type: 'preview:setFeatureToggles', revision: 6 }),
       expect.objectContaining({ type: 'preview:loadGraph', revision: 6 }),
       expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 6 }),
     ]);
 
-    await waitForMicrotasks();
     expect(panel?.webview.postMessage).not.toHaveBeenCalled();
     panel?.webview.receiveMessage({
       type: 'preview:webviewReady',
       requestId: 'ready',
     });
-    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 6 }),
-    );
+    expect(panel?.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('falls back to posting the playback plan when the Preview ready message is missed', async () => {
+    vi.useFakeTimers();
+    try {
+      const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+      const host = createHost(createSnapshot(7), () => plan);
+      const panelFactory = createPanelFactory();
+      const bridge = new NarrativePreviewBridge(host, {
+        panelFactory,
+        now: () => 3300,
+      });
+
+      expect(await bridge.open()).toBe(true);
+      const panel = panelFactory.createdPanels[0];
+      expect(readBootstrapMessages(panel?.webview.html ?? '')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'preview:loadPlaybackPlan', revision: 7 }),
+        ]),
+      );
+      expect(panel?.webview.postMessage).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(250);
+
+      expect(panel?.webview.postMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('resolves Preview-specific playback plans against the Preview webview', async () => {
@@ -397,36 +422,96 @@ describe('NarrativePreviewBridge', () => {
       now: () => 3300,
     });
 
-    expect(bridge.open()).toBe(true);
-    await waitForMicrotasks();
+    expect(await bridge.open()).toBe(true);
     const panel = panelFactory.createdPanels[0];
-    panel?.webview.receiveMessage({
-      type: 'preview:webviewReady',
-      requestId: 'ready-preview-plan',
-    });
+    expect(readBootstrapMessages(panel?.webview.html ?? '')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'preview:loadPlaybackPlan',
+          requestId: 'canvas-narrative:load-preview-plan:3300:3',
+          plan: expect.objectContaining({
+            units: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'shot-a1',
+                metadata: expect.objectContaining({
+                  previewUrl: 'vscode-webview://preview/shot-a1.png',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      ]),
+    );
 
     expect(host.extractCanvasPlaybackPlanForPreview).toHaveBeenCalledWith(
       panel?.webview,
       'file:///story/branch.nkc',
     );
-    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'preview:loadPlaybackPlan',
-        plan: expect.objectContaining({
-          units: expect.arrayContaining([
-            expect.objectContaining({
-              id: 'shot-a1',
-              metadata: expect.objectContaining({
-                previewUrl: 'vscode-webview://preview/shot-a1.png',
-              }),
-            }),
-          ]),
-        }),
-      }),
-    );
+    expect(panel?.webview.postMessage).not.toHaveBeenCalled();
   });
 
-  it('renders the Canvas playback preview shell instead of a status-only placeholder', () => {
+  it('generates Preview-specific plans and resource roots per session webview', async () => {
+    const basePlan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+    let snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const panelFactory = createPanelFactory();
+    const previewPlan = vi.fn(async (webview: unknown, sourceCanvasUri?: string) => ({
+      ...basePlan,
+      metadata: {
+        ...(basePlan.metadata ?? {}),
+        sourceCanvasName: sourceCanvasUri ?? 'missing',
+        webviewTag: webview === panelFactory.createdPanels[0]?.webview ? 'a' : 'b',
+      },
+    }));
+    const host = createHost(
+      () => snapshot,
+      () => basePlan,
+      previewPlan,
+    );
+    const getWebviewLocalResourceRoots = vi.fn((sourceCanvasUri?: string) => [
+      { toString: () => `root:${sourceCanvasUri ?? 'none'}` },
+    ]) as unknown as (sourceCanvasUri?: string) => readonly never[];
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      getWebviewLocalResourceRoots,
+      now: () => 3310,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    snapshot = createSnapshot(1, 'file:///story/b.nkc');
+    expect(await bridge.open()).toBe(true);
+
+    expect(panelFactory.createdPanels).toHaveLength(2);
+    expect(getWebviewLocalResourceRoots).toHaveBeenNthCalledWith(1, 'file:///story/a.nkc');
+    expect(getWebviewLocalResourceRoots).toHaveBeenNthCalledWith(2, 'file:///story/b.nkc');
+    expect(previewPlan).toHaveBeenNthCalledWith(
+      1,
+      panelFactory.createdPanels[0]?.webview,
+      'file:///story/a.nkc',
+    );
+    expect(previewPlan).toHaveBeenNthCalledWith(
+      2,
+      panelFactory.createdPanels[1]?.webview,
+      'file:///story/b.nkc',
+    );
+    expect(
+      readBootstrapMessages(panelFactory.createdPanels[0]?.webview.html ?? '').find(
+        (message): message is { readonly plan: CanvasPlaybackPlan } =>
+          typeof message === 'object' &&
+          message !== null &&
+          (message as { readonly type?: unknown }).type === 'preview:loadPlaybackPlan',
+      )?.plan.metadata,
+    ).toMatchObject({ sourceCanvasName: 'file:///story/a.nkc', webviewTag: 'a' });
+    expect(
+      readBootstrapMessages(panelFactory.createdPanels[1]?.webview.html ?? '').find(
+        (message): message is { readonly plan: CanvasPlaybackPlan } =>
+          typeof message === 'object' &&
+          message !== null &&
+          (message as { readonly type?: unknown }).type === 'preview:loadPlaybackPlan',
+      )?.plan.metadata,
+    ).toMatchObject({ sourceCanvasName: 'file:///story/b.nkc', webviewTag: 'b' });
+  });
+
+  it('renders the Canvas playback preview shell instead of a status-only placeholder', async () => {
     const host = createHost(createSnapshot(4), () =>
       createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
     );
@@ -441,7 +526,7 @@ describe('NarrativePreviewBridge', () => {
       now: () => 3100,
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     const html = panelFactory.createdPanels[0]?.webview.html ?? '';
 
     expect(html).toContain('id="playback-preview"');
@@ -459,6 +544,10 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('class="branch-choices"');
     expect(html).toContain('id="playback-clock"');
     expect(html).toContain('id="playback-inspector"');
+    expect(html).toContain('id="session-badge"');
+    expect(html).toContain('源画布已关闭');
+    expect(html).toContain("message.type === 'preview:sessionStale'");
+    expect(html).toContain("sessionBadge.dataset.visible = 'true'");
     expect(html).toContain('id="unit-branch-meta"');
     expect(html).toContain('id="unit-meta"');
     expect(html).not.toContain('id="unit-timeline"');
@@ -470,6 +559,28 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('renderStageContent');
     expect(html).toContain('renderSegmentedTimeline');
     expect(html).toContain('toggleInspector');
+    expect(html).toContain('formatDiagnosticMessage');
+    expect(html).toContain('playback-invalid-route');
+    expect(html).toContain('playback-route-truncated');
+    expect(html).toContain('requestStageImageVariant');
+    expect(html).toContain('PREVIEW_VARIANT_TIMEOUT_MS');
+    expect(html).toContain('window.setTimeout');
+    expect(html).toContain('window.clearTimeout(pending.timeoutId)');
+    expect(html).toContain('clearPreviewVariantState');
+    expect(html).toContain("type: 'preview:resolveVariant'");
+    expect(html).toContain("message.type === 'preview:variantResolved'");
+    expect(html).toContain('const directDocumentResourceRef = readDocumentResourceLike(value)');
+    expect(html).toContain('readSelectedGenerationPreviewSource');
+    expect(html).toContain('metadata.previewPlayableAssetPath');
+    expect(html).toContain('previewSourceAssetPath');
+    expect(html).toContain('previewSourceResourceRef');
+    expect(html).toContain('previewSourceDocumentResourceRef');
+    expect(html).toContain('referenceImageResourceRef');
+    expect(html).toContain(
+      "readFirstString(directResourceRef.source?.metadata || {}, ['legacyCachePath'])",
+    );
+    expect(html).toContain("readFirstString(metadata || {}, ['legacyCachePath'])");
+    expect(html).toContain("value.includes('vscode-resource.vscode-cdn.net/')");
     expect(html).toContain('img-src vscode-webview: data: blob: https:');
     expect(html).toContain('media-src vscode-webview: data: blob: https:');
     expect(html).toContain('__nekoNarrativePreviewMediaRuntime');
@@ -481,12 +592,17 @@ describe('NarrativePreviewBridge', () => {
       title: '画布预览',
       planStoryboardPreview: '分镜预览',
       play: '播放',
+      route: '路线',
+      missingRouteEntry: '播放计划没有可播放路线入口。',
+      invalidRoute: '播放路线候选无效。',
+      routeTruncated: '部分播放路线因超过预览上限而隐藏。',
       diagnostics: '诊断',
+      staleSession: '源画布已关闭',
     });
     expect(html).not.toContain('Storyboard Preview');
   });
 
-  it('keeps Canvas playback decisions in the player shell without mutating persisted data', () => {
+  it('keeps Canvas playback decisions in the player shell without mutating persisted data', async () => {
     const host = createHost(createSnapshot(4), () =>
       createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
     );
@@ -496,7 +612,7 @@ describe('NarrativePreviewBridge', () => {
       now: () => 3150,
     });
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     const html = panelFactory.createdPanels[0]?.webview.html ?? '';
 
     expect(html).toContain("playbackPlan.advancePolicy !== 'media-ended'");
@@ -516,7 +632,69 @@ describe('NarrativePreviewBridge', () => {
     expect(html).not.toContain('savePlaybackState');
   });
 
-  it('routes Preview media playback messages to the host instead of narrative message parsing', () => {
+  it('renders route switching as Preview runtime state backed by shared effective routes', async () => {
+    const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+    const host = createHost(createSnapshot(4), () => plan);
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 3160,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    const html = panelFactory.createdPanels[0]?.webview.html ?? '';
+    const bootstrapPlan = readBootstrapMessages(html).find(
+      (message): message is { readonly plan: CanvasPlaybackPlan } =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { readonly type?: unknown }).type === 'preview:loadPlaybackPlan',
+    )?.plan;
+
+    expect(bootstrapPlan?.routeCandidates?.length).toBeGreaterThan(0);
+    expect(html).toContain('id="route-switcher"');
+    expect(html).toContain('id="route-select"');
+    expect(html).toContain('.player-controls > .route-switcher');
+    expect(html).toContain('路线');
+    const routeSwitcherIndex = html.indexOf('<div class="route-switcher" id="route-switcher"');
+    const playerControlsIndex = html.indexOf(
+      '<footer class="player-controls" id="player-controls"',
+    );
+    const timelineIndex = html.indexOf('<div class="timeline-wrap"', playerControlsIndex);
+    const stageHeadingIndex = html.indexOf('<div class="stage-heading">');
+    const stageActionsIndex = html.indexOf('<div class="stage-actions"', stageHeadingIndex);
+    expect(playerControlsIndex).toBeGreaterThan(-1);
+    expect(timelineIndex).toBeGreaterThan(playerControlsIndex);
+    expect(stageHeadingIndex).toBeGreaterThan(-1);
+    expect(stageActionsIndex).toBeGreaterThan(stageHeadingIndex);
+    expect(routeSwitcherIndex).toBeGreaterThan(playerControlsIndex);
+    expect(routeSwitcherIndex).toBeLessThan(timelineIndex);
+    expect(html.slice(stageHeadingIndex, stageActionsIndex)).not.toContain('id="route-switcher"');
+    expect(html.slice(stageHeadingIndex, stageActionsIndex)).not.toContain('id="route-select"');
+    expect(html).toContain('let effectiveRoutes = []');
+    expect(html).toContain('let activeRouteId = null');
+    expect(html).toContain('let branchSelections = {}');
+    expect(html).toContain('routeSelect.addEventListener');
+    expect(html).toContain('switchActiveRoute(routeId)');
+    expect(html).toContain("routeSwitcher.dataset.visible = 'false'");
+    expect(html).toContain("routeSwitcher.dataset.visible = 'true'");
+    expect(html).toContain('function switchActiveRoute(routeId)');
+    expect(html).toContain('disposeActiveMediaSurface()');
+    expect(html).toContain('branchSelections = {}');
+    expect(html).toContain('route = buildRouteFromCandidate(playbackPlan, candidate)');
+    expect(html).toContain('elapsedInUnitMs = 0');
+    expect(html).toContain(
+      'branchSelections = { ...branchSelections, [sourceUnit.id]: choice.id }',
+    );
+    expect(html).toContain(
+      'appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId)',
+    );
+    expect(html).not.toContain('function buildLegacyRouteCandidate');
+    expect(html).not.toContain('function buildDefaultRoute');
+    expect(html).not.toContain('node.data.activeRouteId');
+    expect(html).not.toContain('node.data.branchSelections');
+  });
+
+  it('routes Preview media playback messages to the host instead of narrative message parsing', async () => {
     const host = createHost(createSnapshot(9), () =>
       createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
     );
@@ -535,7 +713,7 @@ describe('NarrativePreviewBridge', () => {
       },
     );
 
-    expect(bridge.open()).toBe(true);
+    expect(await bridge.open()).toBe(true);
     const panel = panelFactory.createdPanels[0];
     panel?.webview.receiveMessage({
       type: 'media:probe',
@@ -558,7 +736,265 @@ describe('NarrativePreviewBridge', () => {
     expect(disposeMediaPanel).toHaveBeenCalledWith(panel);
   });
 
-  it('keeps storyboard Canvas playback available when narrative snapshot has zero runtime nodes', () => {
+  it('scopes media messages, variant requests, and cleanup to the owning Preview session', async () => {
+    let snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const host = createHost(
+      () => snapshot,
+      () => createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const mediaHandler = vi.fn();
+    const variantHandler = vi.fn();
+    const disposeMediaPanel = vi.fn();
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        handleNarrativePreviewMediaMessage: mediaHandler,
+        resolveNarrativePreviewVariant: variantHandler,
+        disposeNarrativePreviewMediaPanel: disposeMediaPanel,
+      },
+      {
+        panelFactory,
+        now: () => 9150,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const firstPanel = panelFactory.createdPanels[0];
+    const firstSessionId = readBootstrapMessages(firstPanel?.webview.html ?? '').find(
+      isPreviewLoadGraphMessage,
+    )?.sessionId;
+
+    snapshot = createSnapshot(1, 'file:///story/b.nkc');
+    expect(await bridge.open()).toBe(true);
+    const secondPanel = panelFactory.createdPanels[1];
+    const secondSessionId = readBootstrapMessages(secondPanel?.webview.html ?? '').find(
+      isPreviewLoadGraphMessage,
+    )?.sessionId;
+
+    firstPanel?.webview.receiveMessage({
+      type: 'media:probe',
+      requestId: 'media-a',
+      sessionId: firstSessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+      nodeId: 'preview-media:shot-a1',
+      assetPath: 'media/a.mov',
+      mediaType: 'video',
+    });
+    secondPanel?.webview.receiveMessage({
+      type: 'preview:resolveVariant',
+      requestId: 'variant-b',
+      sessionId: secondSessionId,
+      sourceCanvasUri: 'file:///story/b.nkc',
+      revision: 1,
+      sourceId: 'shot-b1',
+      role: 'thumbnail',
+      mediaType: 'image',
+    });
+    secondPanel?.webview.receiveMessage({
+      type: 'preview:resolveVariant',
+      requestId: 'variant-wrong',
+      sessionId: firstSessionId,
+      sourceCanvasUri: 'file:///story/b.nkc',
+      revision: 1,
+      sourceId: 'shot-b2',
+      role: 'thumbnail',
+      mediaType: 'image',
+    });
+    await waitForMicrotasks();
+
+    expect(mediaHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'media-a' }),
+      firstPanel,
+      'file:///story/a.nkc',
+    );
+    expect(variantHandler).toHaveBeenCalledTimes(1);
+    expect(variantHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'variant-b' }),
+      secondPanel,
+      'file:///story/b.nkc',
+    );
+
+    firstPanel?.dispose();
+    expect(disposeMediaPanel).toHaveBeenCalledTimes(1);
+    expect(disposeMediaPanel).toHaveBeenCalledWith(firstPanel);
+    expect(secondPanel?.dispose).not.toHaveBeenCalled();
+  });
+
+  it('routes Preview image variant requests to the host instead of narrative message parsing', async () => {
+    const host = createHost(createSnapshot(10), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const variantHandler = vi.fn();
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        resolveNarrativePreviewVariant: variantHandler,
+      },
+      {
+        panelFactory,
+        now: () => 9200,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    panel?.webview.receiveMessage({
+      type: 'preview:resolveVariant',
+      requestId: 'variant-1',
+      sourceId: 'shot-a1',
+      role: 'thumbnail',
+      mediaType: 'image',
+      documentResourceRef: {
+        kind: 'document-entry',
+        documentId: 'doc-1',
+        entryId: 'page-1',
+        mediaType: 'image',
+      },
+    });
+    await waitForMicrotasks();
+
+    expect(variantHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:resolveVariant',
+        requestId: 'variant-1',
+        sourceId: 'shot-a1',
+      }),
+      panel,
+      'file:///story/branch.nkc',
+    );
+    expect(host.postNarrativePreviewCanvasMessage).not.toHaveBeenCalled();
+  });
+
+  it('replies with a variant error when the host variant handler fails', async () => {
+    const host = createHost(createSnapshot(10), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        resolveNarrativePreviewVariant: vi.fn(() => {
+          throw new Error('cache unavailable');
+        }),
+      },
+      {
+        panelFactory,
+        now: () => 9300,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    panel?.webview.receiveMessage({
+      type: 'preview:resolveVariant',
+      requestId: 'variant-error-1',
+      sourceId: 'shot-a1',
+      role: 'thumbnail',
+      mediaType: 'image',
+    });
+    await waitForMicrotasks();
+
+    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:variantResolved',
+        requestId: 'variant-error-1',
+        error: 'cache unavailable',
+        sessionId: expect.stringMatching(/^canvas-preview:/),
+        sourceCanvasUri: 'file:///story/branch.nkc',
+        revision: 10,
+      }),
+    );
+  });
+
+  it('replies with a variant error when the host handler reports no delivered response', async () => {
+    const host = createHost(createSnapshot(10), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        resolveNarrativePreviewVariant: vi.fn(async () => false),
+      },
+      {
+        panelFactory,
+        now: () => 9350,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    panel?.webview.receiveMessage({
+      type: 'preview:resolveVariant',
+      requestId: 'variant-undelivered-1',
+      sourceId: 'shot-a1',
+      role: 'thumbnail',
+      mediaType: 'image',
+    });
+    await waitForMicrotasks();
+    await waitForMicrotasks();
+
+    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:variantResolved',
+        requestId: 'variant-undelivered-1',
+        error: 'Preview variant resolution completed without delivering a response.',
+        sessionId: expect.stringMatching(/^canvas-preview:/),
+        sourceCanvasUri: 'file:///story/branch.nkc',
+        revision: 10,
+      }),
+    );
+  });
+
+  it('replies with a variant timeout when the host variant handler never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const host = createHost(createSnapshot(10), () =>
+        createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+      );
+      const panelFactory = createPanelFactory();
+      const bridge = new NarrativePreviewBridge(
+        {
+          ...host,
+          resolveNarrativePreviewVariant: vi.fn(() => new Promise<void>(() => undefined)),
+        },
+        {
+          panelFactory,
+          now: () => 9400,
+        },
+      );
+
+      expect(await bridge.open()).toBe(true);
+      const panel = panelFactory.createdPanels[0];
+      panel?.webview.receiveMessage({
+        type: 'preview:resolveVariant',
+        requestId: 'variant-timeout-1',
+        sourceId: 'shot-a1',
+        role: 'thumbnail',
+        mediaType: 'image',
+      });
+
+      await vi.advanceTimersByTimeAsync(6500);
+
+      expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'preview:variantResolved',
+          requestId: 'variant-timeout-1',
+          error: 'Preview variant request timed out after 6500ms.',
+          sessionId: expect.stringMatching(/^canvas-preview:/),
+          sourceCanvasUri: 'file:///story/branch.nkc',
+          revision: 10,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps storyboard Canvas playback available when narrative snapshot has zero runtime nodes', async () => {
     const canvas = createStoryboardCanvasData();
     const snapshot = createNarrativeGraphSnapshotFromCanvasData(canvas, { revision: 5 });
     const plan = createCanvasPlaybackPlanFromCanvasData(canvas);
@@ -577,7 +1013,7 @@ describe('NarrativePreviewBridge', () => {
     );
   });
 
-  it('creates Canvas playback plans when snapshots omit the connections array', () => {
+  it('creates Canvas playback plans when snapshots omit the connections array', async () => {
     const canvas = createStoryboardCanvasData();
     const { connections: _connections, ...withoutConnections } = canvas;
 
@@ -592,7 +1028,7 @@ describe('NarrativePreviewBridge', () => {
     });
   });
 
-  it('drops stale Preview-to-Canvas messages after newer revisions are posted', () => {
+  it('drops stale Preview-to-Canvas messages after newer revisions are posted', async () => {
     let revision = 2;
     const host = createHost(() => createSnapshot(revision));
     const panelFactory = createPanelFactory();
@@ -601,7 +1037,7 @@ describe('NarrativePreviewBridge', () => {
       now: () => 2000,
     });
 
-    bridge.open();
+    await bridge.open();
     panelFactory.createdPanels[0]?.webview.receiveMessage({
       type: 'preview:webviewReady',
       requestId: 'ready-stale-test',
@@ -642,7 +1078,255 @@ describe('NarrativePreviewBridge', () => {
     );
   });
 
-  it('hard gates panel creation when Narrative Preview is disabled', () => {
+  it('reuses the same Preview session for one Canvas and creates distinct sessions for different Canvases', async () => {
+    let snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const host = createHost(() => snapshot);
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 5100,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    const firstSessionId = readBootstrapMessages(
+      panelFactory.createdPanels[0]?.webview.html ?? '',
+    ).find(isPreviewLoadGraphMessage)?.sessionId;
+    panelFactory.createdPanels[0]?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-a',
+      sessionId: firstSessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+    });
+
+    snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    expect(await bridge.open()).toBe(true);
+    expect(panelFactory.createdPanels).toHaveLength(1);
+    expect(panelFactory.createdPanels[0]?.reveal).toHaveBeenCalledTimes(1);
+
+    snapshot = createSnapshot(1, 'file:///story/b.nkc');
+    expect(await bridge.open()).toBe(true);
+    expect(panelFactory.createdPanels).toHaveLength(2);
+    const secondSessionId = readBootstrapMessages(
+      panelFactory.createdPanels[1]?.webview.html ?? '',
+    ).find(isPreviewLoadGraphMessage)?.sessionId;
+
+    expect(firstSessionId).toMatch(/^canvas-preview:/);
+    expect(secondSessionId).toMatch(/^canvas-preview:/);
+    expect(secondSessionId).not.toBe(firstSessionId);
+  });
+
+  it('isolates Preview-to-Canvas messages by session identity and revision', async () => {
+    let snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const host = createHost(() => snapshot);
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 5200,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    const firstSessionId = readBootstrapMessages(
+      panelFactory.createdPanels[0]?.webview.html ?? '',
+    ).find(isPreviewLoadGraphMessage)?.sessionId;
+    panelFactory.createdPanels[0]?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-a',
+      sessionId: firstSessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+    });
+
+    snapshot = createSnapshot(2, 'file:///story/b.nkc');
+    expect(await bridge.open()).toBe(true);
+    const secondSessionId = readBootstrapMessages(
+      panelFactory.createdPanels[1]?.webview.html ?? '',
+    ).find(isPreviewLoadGraphMessage)?.sessionId;
+    panelFactory.createdPanels[1]?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-b',
+      sessionId: secondSessionId,
+      sourceCanvasUri: 'file:///story/b.nkc',
+      revision: 2,
+    });
+
+    snapshot = createSnapshot(3, 'file:///story/b.nkc');
+    expect(bridge.refresh()).toBe(true);
+
+    expect(
+      bridge.handlePreviewMessage({
+        type: 'canvas:highlightNode',
+        requestId: 'wrong-session',
+        nodeId: 'scene-a',
+        sessionId: firstSessionId,
+        sourceCanvasUri: 'file:///story/b.nkc',
+        revision: 3,
+      } as PreviewToCanvasMessage),
+    ).toBe(false);
+    expect(host.postNarrativePreviewCanvasMessage).not.toHaveBeenCalled();
+
+    expect(
+      bridge.handlePreviewMessage({
+        type: 'canvas:highlightNode',
+        requestId: 'stale',
+        nodeId: 'scene-a',
+        sessionId: secondSessionId,
+        sourceCanvasUri: 'file:///story/b.nkc',
+        revision: 2,
+      } as PreviewToCanvasMessage),
+    ).toBe(false);
+    expect(host.postNarrativePreviewCanvasMessage).not.toHaveBeenCalled();
+
+    expect(
+      bridge.handlePreviewMessage({
+        type: 'canvas:highlightNode',
+        requestId: 'current',
+        nodeId: 'scene-a',
+        sessionId: secondSessionId,
+        sourceCanvasUri: 'file:///story/b.nkc',
+        revision: 3,
+      } as PreviewToCanvasMessage),
+    ).toBe(true);
+    expect(host.postNarrativePreviewCanvasMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'current',
+        sessionId: secondSessionId,
+        sourceCanvasUri: 'file:///story/b.nkc',
+        revision: 3,
+      }),
+    );
+  });
+
+  it('refreshes the Preview session for the requested source Canvas instead of the active Canvas', async () => {
+    let activeSnapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const snapshotsBySource = new Map<string, NarrativeGraphSnapshot>([
+      ['file:///story/a.nkc', activeSnapshot],
+    ]);
+    const plan = createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData());
+    const host = {
+      ...createHost(
+        () => activeSnapshot,
+        () => plan,
+      ),
+      extractNarrativeGraphSnapshotForSource: vi.fn((sourceCanvasUri: string) =>
+        snapshotsBySource.get(sourceCanvasUri),
+      ),
+    };
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 5250,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    const firstSessionId = readBootstrapMessages(
+      panelFactory.createdPanels[0]?.webview.html ?? '',
+    ).find(isPreviewLoadGraphMessage)?.sessionId;
+    panelFactory.createdPanels[0]?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-a',
+      sessionId: firstSessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+    });
+
+    activeSnapshot = createSnapshot(1, 'file:///story/b.nkc');
+    snapshotsBySource.set('file:///story/b.nkc', activeSnapshot);
+    expect(await bridge.open()).toBe(true);
+
+    snapshotsBySource.set('file:///story/a.nkc', createSnapshot(2, 'file:///story/a.nkc'));
+    expect(bridge.refresh('file:///story/a.nkc')).toBe(true);
+
+    expect(host.extractNarrativeGraphSnapshotForSource).toHaveBeenCalledWith('file:///story/a.nkc');
+    expect(panelFactory.createdPanels[0]?.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'preview:refreshPlaybackPlan',
+        sessionId: firstSessionId,
+        sourceCanvasUri: 'file:///story/a.nkc',
+        revision: 2,
+      }),
+    );
+    expect(panelFactory.createdPanels[1]?.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:refreshPlaybackPlan',
+        sourceCanvasUri: 'file:///story/a.nkc',
+      }),
+    );
+  });
+
+  it('marks visible Preview sessions stale and expires them after the grace period', async () => {
+    vi.useFakeTimers();
+    try {
+      const host = createHost(createSnapshot(1, 'file:///story/a.nkc'), () =>
+        createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+      );
+      const disposeMediaPanel = vi.fn();
+      const panelFactory = createPanelFactory();
+      const bridge = new NarrativePreviewBridge(
+        { ...host, disposeNarrativePreviewMediaPanel: disposeMediaPanel },
+        {
+          panelFactory,
+          staleSessionGraceMs: 1000,
+          now: () => 5300,
+        },
+      );
+
+      expect(await bridge.open()).toBe(true);
+      const panel = panelFactory.createdPanels[0];
+      panel?.webview.receiveMessage({
+        type: 'preview:webviewReady',
+        requestId: 'ready-stale',
+      });
+
+      bridge.handleCanvasEditorClosed('file:///story/a.nkc');
+
+      expect(panel?.dispose).not.toHaveBeenCalled();
+      expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'preview:sessionStale',
+          sessionId: expect.stringMatching(/^canvas-preview:/),
+          sourceCanvasUri: 'file:///story/a.nkc',
+          revision: 1,
+        }),
+      );
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(panel?.dispose).toHaveBeenCalledTimes(1);
+      expect(disposeMediaPanel).toHaveBeenCalledWith(panel);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disposes hidden Preview sessions immediately when the source Canvas editor closes', async () => {
+    const host = createHost(createSnapshot(1, 'file:///story/a.nkc'), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const disposeMediaPanel = vi.fn();
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      { ...host, disposeNarrativePreviewMediaPanel: disposeMediaPanel },
+      {
+        panelFactory,
+        now: () => 5400,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    panel?.setVisible(false);
+
+    bridge.handleCanvasEditorClosed('file:///story/a.nkc');
+
+    expect(panel?.dispose).toHaveBeenCalledTimes(1);
+    expect(disposeMediaPanel).toHaveBeenCalledWith(panel);
+    expect(panel?.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'preview:sessionStale' }),
+    );
+  });
+
+  it('hard gates panel creation when Narrative Preview is disabled', async () => {
     const host = createHost(createSnapshot(1));
     const panelFactory = createPanelFactory();
     const bridge = new NarrativePreviewBridge(host, {
@@ -657,12 +1341,12 @@ describe('NarrativePreviewBridge', () => {
       }),
     });
 
-    expect(bridge.open()).toBe(false);
+    expect(await bridge.open()).toBe(false);
     expect(panelFactory.createdPanels).toHaveLength(0);
     expect(host.extractNarrativeGraphSnapshot).not.toHaveBeenCalled();
   });
 
-  it('parses typed Preview-to-Canvas messages and rejects malformed payloads', () => {
+  it('parses typed Preview-to-Canvas messages and rejects malformed payloads', async () => {
     expect(
       parsePreviewToCanvasMessage({
         type: 'canvas:choiceMade',
@@ -759,10 +1443,13 @@ function createConnection(
   };
 }
 
-function createSnapshot(revision: number): NarrativeGraphSnapshot {
+function createSnapshot(
+  revision: number,
+  sourceCanvasUri = 'file:///story/branch.nkc',
+): NarrativeGraphSnapshot {
   return createNarrativeGraphSnapshotFromCanvasData(createCanvasData(), {
     revision,
-    sourceCanvasUri: 'file:///story/branch.nkc',
+    sourceCanvasUri,
   });
 }
 
@@ -860,8 +1547,15 @@ function createPanelFactory(): NarrativePreviewPanelFactory & {
 function createPanel(title: string) {
   const disposeHandlers: Array<() => void> = [];
   let messageHandler: ((message: unknown) => void) | undefined;
+  let visible = true;
   const panel = {
     title,
+    get visible() {
+      return visible;
+    },
+    setVisible: vi.fn((nextVisible: boolean) => {
+      visible = nextVisible;
+    }),
     webview: {
       html: '',
       cspSource: 'vscode-webview:',
@@ -903,4 +1597,14 @@ function readPreviewI18n(html: string): Record<string, string> {
     return {};
   }
   return JSON.parse(match[1]) as Record<string, string>;
+}
+
+function isPreviewLoadGraphMessage(
+  message: unknown,
+): message is { readonly type: 'preview:loadGraph'; readonly sessionId?: string } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    (message as { readonly type?: unknown }).type === 'preview:loadGraph'
+  );
 }

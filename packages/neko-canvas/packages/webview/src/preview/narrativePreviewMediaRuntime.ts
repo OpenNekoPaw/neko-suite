@@ -17,6 +17,7 @@ interface PreviewMediaStartRequest {
   readonly surfaceId: string;
   readonly assetPath?: string;
   readonly resourceRef?: unknown;
+  readonly documentResourceRef?: unknown;
   readonly mediaType: PreviewMediaType;
   readonly startTime?: number;
   readonly autoPlay?: boolean;
@@ -66,6 +67,7 @@ interface PlayerState {
   readonly label?: string;
   assetPath?: string;
   resourceRef?: unknown;
+  documentResourceRef?: unknown;
   videoClient?: H264StreamClient;
   audioClient?: AudioStreamClient;
   scheduler?: FrameScheduler;
@@ -248,6 +250,7 @@ function start(request: PreviewMediaStartRequest): void {
   }
   player.assetPath = request.assetPath;
   player.resourceRef = request.resourceRef;
+  player.documentResourceRef = request.documentResourceRef;
   player.shouldPlayWhenReady = request.autoPlay === true;
   player.waitingForStream = true;
   player.message.textContent = player.labels.preparing;
@@ -258,6 +261,7 @@ function start(request: PreviewMediaStartRequest): void {
     nodeId: request.surfaceId,
     assetPath: request.assetPath,
     resourceRef: request.resourceRef,
+    documentResourceRef: request.documentResourceRef,
     mediaType: request.mediaType,
   });
 }
@@ -361,6 +365,7 @@ function handleProbeResult(message: PreviewMediaProbeResultMessage): void {
     nodeId: surfaceId,
     assetPath: player.assetPath,
     resourceRef: player.resourceRef,
+    documentResourceRef: player.documentResourceRef,
     mediaInfo,
     mediaType: player.mediaType,
     startTime: player.currentTime,

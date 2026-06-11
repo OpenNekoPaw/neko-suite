@@ -579,7 +579,7 @@ function registerCommands(
         return;
       }
 
-      const opened = canvasEditorProvider.openNarrativePreview();
+      const opened = await canvasEditorProvider.openNarrativePreview();
       if (!opened) {
         await handleError(new Error('Open a Canvas narrative graph before opening Preview.'), {
           showToUser: true,
