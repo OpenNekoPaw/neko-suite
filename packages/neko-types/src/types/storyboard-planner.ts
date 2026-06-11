@@ -1,5 +1,10 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
-import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
+import type {
+  StoryboardMediaRef,
+  StoryboardTextCue,
+  StoryboardValidationDiagnostic,
+  StoryboardVoiceCue,
+} from './storyboard-table';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { NekoStoryScriptIndex } from './extension-api';
 import type { ResourceRef } from './resource-cache';
@@ -81,6 +86,7 @@ export interface CanvasStoryboardPayload {
   readonly mode: StoryboardImportMode;
   readonly sourceScriptUri: string;
   readonly scenes: readonly CanvasStoryboardScenePlan[];
+  readonly diagnostics?: readonly StoryboardValidationDiagnostic[];
 }
 
 export interface ApplyCanvasStoryboardOptions {

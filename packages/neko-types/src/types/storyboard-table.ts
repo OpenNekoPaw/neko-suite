@@ -165,6 +165,7 @@ export type StoryboardShotCharacterRole = 'primary' | 'secondary' | 'background'
 export interface StoryboardShotCharacter {
   readonly characterId?: string;
   readonly entityRef?: CreativeEntityRef;
+  readonly candidateId?: string;
   readonly name: string;
   readonly role?: StoryboardShotCharacterRole;
   readonly action?: string;
@@ -1843,6 +1844,7 @@ function projectStoryboardCharactersToCanvas(
   return (characters ?? []).map((character) => ({
     ...(character.characterId ? { characterId: character.characterId } : {}),
     ...(character.entityRef ? { entityRef: character.entityRef } : {}),
+    ...(character.candidateId ? { candidateId: character.candidateId } : {}),
     characterName: character.name,
     ...(character.role ? { role: character.role } : {}),
     ...(character.action ? { action: character.action } : {}),
@@ -2301,12 +2303,14 @@ function normalizeCharacters(
       [...path, index, 'entityRef'],
       diagnostics,
     );
+    const candidateId = readTrimmedString(record['candidateId']);
     return [
       {
         ...(readTrimmedString(record['characterId'])
           ? { characterId: readTrimmedString(record['characterId']) }
           : {}),
         ...(entityRef ? { entityRef } : {}),
+        ...(candidateId ? { candidateId } : {}),
         name,
         ...(role ? { role } : {}),
         ...(readTrimmedString(record['action'])

@@ -1,7 +1,9 @@
 import type {
+  CreativeEntityChangedRef,
   CreativeEntityKind,
   CreativeEntityStatus,
   EntityAssetBindingRole,
+  EntityAssetBindingAvailability,
   EntityAssetBindingSource,
   EntityAssetBindingStatus,
   EntityAssetRequirementSource,
@@ -13,6 +15,7 @@ import type {
 } from './creative-entity-asset-composition';
 import {
   ENTITY_ASSET_BINDING_ROLES,
+  isCreativeEntityChangedRef,
   isRepresentationKind,
 } from './creative-entity-asset-composition';
 import {
@@ -70,6 +73,10 @@ export type DashboardCreativeEntityAction =
   | 'show-representation-package'
   | 'apply-sync-suggestion'
   | 'ignore-sync-suggestion'
+  | 'rebind-orphaned-binding'
+  | 'locate-binding-source'
+  | 'archive-binding'
+  | 'cleanup-suggested-orphan'
   | 'character-dialogue'
   | 'embody-character'
   | 'accept-memory-review'
@@ -191,6 +198,7 @@ export interface DashboardCreativeEntityRow {
   readonly missingRepresentationKinds?: readonly RepresentationKind[];
   readonly visualDraftCount?: number;
   readonly syncSuggestionCount?: number;
+  readonly orphanedBindingCount?: number;
   readonly freshness: ProjectIndexFreshness;
   readonly actions: readonly DashboardCreativeEntityActionDescriptor[];
   readonly searchText: string;
@@ -219,6 +227,8 @@ export interface DashboardCreativeEntityBindingSummary {
   readonly role: EntityAssetBindingRole;
   readonly assetRef: string;
   readonly status: EntityAssetBindingStatus;
+  readonly availability: EntityAssetBindingAvailability;
+  readonly orphanedAt?: string;
   readonly source: EntityAssetBindingSource;
   readonly isDefault: boolean;
   readonly confidence?: number;
@@ -312,6 +322,7 @@ export interface DashboardCreativeEntityEvent {
   readonly source: string;
   readonly ref?: DashboardCreativeEntityRef;
   readonly row?: DashboardCreativeEntityRow;
+  readonly changedRefs?: readonly CreativeEntityChangedRef[];
   readonly freshness: ProjectIndexFreshness;
 }
 
@@ -392,6 +403,10 @@ export const DASHBOARD_CREATIVE_ENTITY_ACTIONS: readonly DashboardCreativeEntity
   'show-representation-package',
   'apply-sync-suggestion',
   'ignore-sync-suggestion',
+  'rebind-orphaned-binding',
+  'locate-binding-source',
+  'archive-binding',
+  'cleanup-suggested-orphan',
   'character-dialogue',
   'embody-character',
   'accept-memory-review',
@@ -617,6 +632,8 @@ export function isDashboardCreativeEntityRow(value: unknown): value is Dashboard
     (value['visualDraftCount'] === undefined || isNonNegativeNumber(value['visualDraftCount'])) &&
     (value['syncSuggestionCount'] === undefined ||
       isNonNegativeNumber(value['syncSuggestionCount'])) &&
+    (value['orphanedBindingCount'] === undefined ||
+      isNonNegativeNumber(value['orphanedBindingCount'])) &&
     isProjectIndexFreshness(value['freshness']) &&
     Array.isArray(value['actions']) &&
     value['actions'].every(isDashboardCreativeEntityActionDescriptor) &&
@@ -647,6 +664,8 @@ export function isDashboardCreativeEntityBindingSummary(
     isEntityAssetBindingRole(value['role']) &&
     isSafeDashboardAssetRef(value['assetRef']) &&
     isBindingStatus(value['status']) &&
+    isBindingAvailability(value['availability']) &&
+    (value['orphanedAt'] === undefined || typeof value['orphanedAt'] === 'string') &&
     isBindingSource(value['source']) &&
     typeof value['isDefault'] === 'boolean' &&
     (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
@@ -793,6 +812,9 @@ export function isDashboardCreativeEntityEvent(
     isNonEmptyString(value['source']) &&
     (value['ref'] === undefined || isDashboardCreativeEntityRef(value['ref'])) &&
     (value['row'] === undefined || isDashboardCreativeEntityRow(value['row'])) &&
+    (value['changedRefs'] === undefined ||
+      (Array.isArray(value['changedRefs']) &&
+        value['changedRefs'].every(isCreativeEntityChangedRef))) &&
     isProjectIndexFreshness(value['freshness'])
   );
 }
@@ -961,6 +983,10 @@ function isEntityAssetBindingRole(value: unknown): value is EntityAssetBindingRo
 
 function isBindingStatus(value: unknown): value is EntityAssetBindingStatus {
   return value === 'suggested' || value === 'confirmed' || value === 'rejected';
+}
+
+function isBindingAvailability(value: unknown): value is EntityAssetBindingAvailability {
+  return value === 'active' || value === 'orphaned' || value === 'archived';
 }
 
 function isBindingSource(value: unknown): value is EntityAssetBindingSource {

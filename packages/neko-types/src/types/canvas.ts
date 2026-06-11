@@ -420,6 +420,8 @@ export interface ShotCharacter {
   characterName: string;
   /** Stable creative entity identity when the character is resolved. */
   entityRef?: CreativeEntityRef;
+  /** Stable unresolved entity candidate identity used for later confirmation backfill. */
+  candidateId?: string;
   /** Shot-local participation role such as primary, secondary, or background. */
   role?: string;
   /** Shot-local character action used by storyboard and generation projections. */

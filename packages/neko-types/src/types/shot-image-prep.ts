@@ -80,6 +80,20 @@ export type ShotImagePrepFailurePolicy = (typeof SHOT_IMAGE_PREP_FAILURE_POLICIE
 
 export type ShotImagePrepProfileActionId = (typeof SHOT_IMAGE_PREP_PROFILE_ACTIONS)[number];
 
+export type ShotImageRegenerationRecommendationDecision =
+  | 'not-needed'
+  | 'transform-source'
+  | 'regenerate'
+  | 'blocked'
+  | 'unknown';
+
+export interface ShotImageRegenerationRecommendation {
+  readonly decision: ShotImageRegenerationRecommendationDecision;
+  readonly label: string;
+  readonly reason: string;
+  readonly confidence?: number;
+}
+
 export type ShotImagePrepDiagnosticCode =
   | 'invalid-root'
   | 'invalid-schema-version'
@@ -257,6 +271,7 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
       cellType: 'tags',
       required: true,
     },
+    { columnId: 'regenerationRecommendation', cellType: 'status', required: false },
     { columnId: 'textRemoval', cellType: 'status', required: false },
     {
       columnId: 'maskRefs',
@@ -296,7 +311,14 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
   fieldGroups: [
     {
       groupId: 'shot-core',
-      fieldIds: ['shotId', 'sourcePanel', 'imageStrategy', 'operationPlan', 'status'],
+      fieldIds: [
+        'shotId',
+        'sourcePanel',
+        'imageStrategy',
+        'operationPlan',
+        'regenerationRecommendation',
+        'status',
+      ],
     },
     {
       groupId: 'prep-inputs',
@@ -329,6 +351,7 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
       enumValues: ['reuse-original', 'use-as-reference', 'generate-new', 'transform-original'],
     },
     { columnId: 'operationPlan', cellType: 'tags', required: true },
+    { columnId: 'regenerationRecommendation', cellType: 'status', required: false },
     { columnId: 'textRemoval', cellType: 'status', required: false },
     {
       columnId: 'maskRefs',
@@ -484,6 +507,67 @@ export function transitionShotImagePrepStatus(
   }
 }
 
+export function projectShotImageRegenerationRecommendation(
+  plan: Pick<ShotImagePrepPlan, 'diagnostics' | 'imageStrategy' | 'operationPlan' | 'status'>,
+): ShotImageRegenerationRecommendation {
+  const blockingDiagnostic = plan.diagnostics?.find((item) => item.severity === 'error');
+  if (blockingDiagnostic) {
+    return {
+      decision: 'blocked',
+      label: 'Needs input before image prep',
+      reason: blockingDiagnostic.message,
+      confidence: 1,
+    };
+  }
+
+  if (plan.imageStrategy === 'generate-new' || hasOperation(plan, 'redraw', 'generate-keyframe')) {
+    return {
+      decision: 'regenerate',
+      label: 'Recommend regenerating storyboard image',
+      reason:
+        plan.imageStrategy === 'generate-new'
+          ? 'The shot is planned as a new image instead of a source-panel transform.'
+          : 'The operation plan creates a new keyframe or redraw.',
+      confidence: 0.9,
+    };
+  }
+
+  if (
+    plan.imageStrategy === 'transform-original' ||
+    hasOperation(
+      plan,
+      'remove-text',
+      'inpaint',
+      'outpaint',
+      'colorize',
+      'upscale',
+      'style-normalize',
+    )
+  ) {
+    return {
+      decision: 'transform-source',
+      label: 'Recommend editing source image',
+      reason: 'The shot can preserve source composition through image transform operations.',
+      confidence: 0.85,
+    };
+  }
+
+  if (plan.imageStrategy === 'reuse-original') {
+    return {
+      decision: 'not-needed',
+      label: 'Reuse source image',
+      reason: 'The shot is planned to reuse the original panel with minimal preparation.',
+      confidence: 0.8,
+    };
+  }
+
+  return {
+    decision: 'unknown',
+    label: 'Review image prep recommendation',
+    reason: `No deterministic recommendation is available for status ${plan.status}.`,
+  };
+}
+
 function deriveShotImagePrepPlanFromShot(input: {
   readonly scene: StoryboardSceneRow;
   readonly shot: StoryboardShotRow;
@@ -497,6 +581,7 @@ function deriveShotImagePrepPlanFromShot(input: {
   const referenceBundle = buildReferenceBundle(input.shot);
   const maskRefs = sourceMediaRefs.filter((ref) => ref.role === 'mask');
   const perceptionCardRefs = readPerceptionRefs(input.shot);
+  const operationPlan = defaultOperationsForStrategy(input.shot.imageStrategy);
   if (sourceBacked && sourceMediaRefs.length === 0) {
     diagnostics.push(
       diagnostic(
@@ -527,7 +612,7 @@ function deriveShotImagePrepPlanFromShot(input: {
     shotId,
     sourceMediaRefs,
     imageStrategy: input.shot.imageStrategy,
-    operationPlan: defaultOperationsForStrategy(input.shot.imageStrategy),
+    operationPlan,
     ...(referenceBundle ? { referenceBundle } : {}),
     ...(input.shot.visualStyle ? { targetStyle: input.shot.visualStyle } : {}),
     ...(input.shot.generationPrompt ? { generationPrompt: input.shot.generationPrompt } : {}),
@@ -537,7 +622,17 @@ function deriveShotImagePrepPlanFromShot(input: {
     status: diagnostics.some((item) => item.severity === 'error') ? 'needs-approval' : 'planned',
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };
-  return { plan, diagnostics };
+  const recommendation = projectShotImageRegenerationRecommendation(plan);
+  return {
+    plan: {
+      ...plan,
+      metadata: {
+        ...(plan.metadata ?? {}),
+        regenerationRecommendation: recommendationToJson(recommendation),
+      },
+    },
+    diagnostics,
+  };
 }
 
 function defaultOperationsForStrategy(
@@ -553,6 +648,24 @@ function defaultOperationsForStrategy(
     case 'generate-new':
       return ['generate-keyframe'];
   }
+}
+
+function hasOperation(
+  plan: Pick<ShotImagePrepPlan, 'operationPlan'>,
+  ...operations: readonly ShotImagePrepOperation[]
+): boolean {
+  return operations.some((operation) => plan.operationPlan.includes(operation));
+}
+
+function recommendationToJson(
+  recommendation: ShotImageRegenerationRecommendation,
+): ShotImagePrepJsonRecord {
+  return {
+    decision: recommendation.decision,
+    label: recommendation.label,
+    reason: recommendation.reason,
+    ...(recommendation.confidence !== undefined ? { confidence: recommendation.confidence } : {}),
+  };
 }
 
 function buildReferenceBundle(shot: StoryboardShotRow): ShotReferenceBundle | undefined {
@@ -586,10 +699,12 @@ function readPerceptionRefs(shot: StoryboardShotRow): readonly PerceptionCardRef
 }
 
 function projectPlanToRow(plan: ShotImagePrepPlan): GenericTableRow {
+  const recommendation = projectShotImageRegenerationRecommendation(plan);
   const cells: Record<string, GenericTableCell> = {
     shotId: { type: 'string', value: plan.shotId },
     imageStrategy: { type: 'enum', value: plan.imageStrategy },
     operationPlan: { type: 'tags', value: plan.operationPlan },
+    regenerationRecommendation: { type: 'status', value: recommendation.label },
     status: { type: 'status', value: plan.status },
   };
   const sourcePanel = mediaRefToMediaItem(plan.sourceMediaRefs.find((ref) => ref.role !== 'mask'));
@@ -626,6 +741,7 @@ function projectPlanToRow(plan: ShotImagePrepPlan): GenericTableRow {
       sceneId: plan.sceneId,
       shotId: plan.shotId,
       status: plan.status,
+      regenerationRecommendation: recommendationToJson(recommendation),
     },
   };
 }
@@ -642,6 +758,11 @@ function comicShotAssetPrepColumns(): readonly GenericTableColumn[] {
       enumValues: ['reuse-original', 'use-as-reference', 'generate-new', 'transform-original'],
     },
     { columnId: 'operationPlan', label: 'Operations', cellType: 'tags', required: true },
+    {
+      columnId: 'regenerationRecommendation',
+      label: 'Image Recommendation',
+      cellType: 'status',
+    },
     { columnId: 'textRemoval', label: 'Text', cellType: 'status' },
     {
       columnId: 'maskRefs',

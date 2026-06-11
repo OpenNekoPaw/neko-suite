@@ -1003,6 +1003,7 @@ describe('storyboard table contract', () => {
                 {
                   characterId: 'char-rin',
                   entityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  candidateId: 'candidate-rin',
                   name: 'Rin',
                   role: 'primary',
                   action: 'Looks up',
@@ -1086,6 +1087,7 @@ describe('storyboard table contract', () => {
                 {
                   characterId: 'char-rin',
                   entityRef: { entityId: 'char-rin', entityKind: 'character' },
+                  candidateId: 'candidate-rin',
                   characterName: 'Rin',
                   role: 'primary',
                   action: 'Looks up',
@@ -1199,6 +1201,52 @@ describe('storyboard table contract', () => {
         },
       ],
     });
+  });
+
+  it('normalizes and projects shot character candidate ids without requiring entity refs', () => {
+    const result = normalizeStoryboardTable({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Candidate projection',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'Rin enters.',
+                characterAction: 'Rin enters.',
+                imageStrategy: 'generate-new',
+                characters: [
+                  {
+                    characterName: 'Rin',
+                    candidateId: ' candidate-rin ',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.table?.scenes[0]?.shots[0]?.characters).toEqual([
+      {
+        candidateId: 'candidate-rin',
+        name: 'Rin',
+      },
+    ]);
+    expect(
+      projectStoryboardTableToCanvasPayload(result.table!).scenes[0]?.shotPlans[0]?.characters,
+    ).toEqual([
+      {
+        candidateId: 'candidate-rin',
+        characterName: 'Rin',
+      },
+    ]);
   });
 
   it('uses canvas fallback image resolvers when a semantic shot has no media refs', () => {

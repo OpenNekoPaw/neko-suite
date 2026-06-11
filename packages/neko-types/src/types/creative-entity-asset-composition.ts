@@ -71,6 +71,12 @@ export type CreativeEntityCandidateStatus =
   | 'dismissed'
   | 'merged';
 
+export type CreativeEntityCandidateIdentityBasis =
+  | 'user-named'
+  | 'placeholder'
+  | 'visual'
+  | 'asset';
+
 export interface CreativeEntityCandidateProvenance {
   readonly providerId: string;
   readonly sourceKind: CreativeEntitySourceKind;
@@ -87,6 +93,7 @@ export interface CreativeEntityCandidate {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly status: CreativeEntityCandidateStatus;
+  readonly identityBasis: CreativeEntityCandidateIdentityBasis;
   readonly confidence?: number;
   readonly provenance: readonly CreativeEntityCandidateProvenance[];
   readonly sourceRefs: readonly string[];
@@ -108,6 +115,7 @@ export type CreativeEntityLifecycleAction =
   | 'reject-candidate'
   | 'dismiss-candidate'
   | 'merge-candidate'
+  | 'name-candidate'
   | 'rename'
   | 'update-display-name'
   | 'add-alias'
@@ -119,6 +127,9 @@ export type CreativeEntityLifecycleAction =
   | 'bind'
   | 'unbind'
   | 'set-default-binding'
+  | 'mark-binding-orphaned'
+  | 'restore-binding'
+  | 'archive-binding'
   | 'update-requirement'
   | 'update-visual-draft'
   | 'apply-sync-suggestion'
@@ -231,6 +242,8 @@ export type EntityAssetBindingRole =
 
 export type EntityAssetBindingStatus = 'suggested' | 'confirmed' | 'rejected';
 
+export type EntityAssetBindingAvailability = 'active' | 'orphaned' | 'archived';
+
 export type EntityAssetBindingSource =
   | 'user'
   | 'importer'
@@ -247,6 +260,8 @@ export interface EntityAssetBinding {
   readonly role: EntityAssetBindingRole;
   readonly isDefault?: boolean;
   readonly status: EntityAssetBindingStatus;
+  readonly availability: EntityAssetBindingAvailability;
+  readonly orphanedAt?: string;
   readonly source: EntityAssetBindingSource;
   readonly confidence?: number;
   readonly updatedAt: string;
@@ -534,12 +549,22 @@ export const CREATIVE_ENTITY_CANDIDATE_STATUSES: readonly CreativeEntityCandidat
   'merged',
 ] as const;
 
+export const CREATIVE_ENTITY_CANDIDATE_IDENTITY_BASES: readonly CreativeEntityCandidateIdentityBasis[] =
+  ['user-named', 'placeholder', 'visual', 'asset'] as const;
+
+export const ENTITY_ASSET_BINDING_AVAILABILITIES: readonly EntityAssetBindingAvailability[] = [
+  'active',
+  'orphaned',
+  'archived',
+] as const;
+
 export const CREATIVE_ENTITY_LIFECYCLE_ACTIONS: readonly CreativeEntityLifecycleAction[] = [
   'create',
   'confirm-candidate',
   'reject-candidate',
   'dismiss-candidate',
   'merge-candidate',
+  'name-candidate',
   'rename',
   'update-display-name',
   'add-alias',
@@ -551,6 +576,9 @@ export const CREATIVE_ENTITY_LIFECYCLE_ACTIONS: readonly CreativeEntityLifecycle
   'bind',
   'unbind',
   'set-default-binding',
+  'mark-binding-orphaned',
+  'restore-binding',
+  'archive-binding',
   'update-requirement',
   'update-visual-draft',
   'apply-sync-suggestion',
@@ -575,6 +603,12 @@ export function isCreativeEntityCandidateStatus(
   return includesString(CREATIVE_ENTITY_CANDIDATE_STATUSES, value);
 }
 
+export function isCreativeEntityCandidateIdentityBasis(
+  value: unknown,
+): value is CreativeEntityCandidateIdentityBasis {
+  return includesString(CREATIVE_ENTITY_CANDIDATE_IDENTITY_BASES, value);
+}
+
 export function isCreativeEntityLifecycleAction(
   value: unknown,
 ): value is CreativeEntityLifecycleAction {
@@ -591,6 +625,12 @@ export function isAssetRefScheme(value: unknown): value is AssetRefScheme {
 
 export function isEntityAssetBindingRole(value: unknown): value is EntityAssetBindingRole {
   return includesString(ENTITY_ASSET_BINDING_ROLES, value);
+}
+
+export function isEntityAssetBindingAvailability(
+  value: unknown,
+): value is EntityAssetBindingAvailability {
+  return includesString(ENTITY_ASSET_BINDING_AVAILABILITIES, value);
 }
 
 export function isRepresentationFileRole(value: unknown): value is RepresentationFileRole {
@@ -658,6 +698,8 @@ export function isCreativeEntityCandidate(value: unknown): value is CreativeEnti
     isCreativeEntityKind(value['kind']) &&
     typeof value['name'] === 'string' &&
     isCreativeEntityCandidateStatus(value['status']) &&
+    (value['identityBasis'] === undefined ||
+      isCreativeEntityCandidateIdentityBasis(value['identityBasis'])) &&
     (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
     (value['aliases'] === undefined ||
       (Array.isArray(value['aliases']) &&
@@ -764,6 +806,9 @@ export function isEntityAssetBinding(value: unknown): value is EntityAssetBindin
     typeof value['assetRef'] === 'string' &&
     isEntityAssetBindingRole(value['role']) &&
     isEntityAssetBindingStatus(value['status']) &&
+    (value['availability'] === undefined ||
+      isEntityAssetBindingAvailability(value['availability'])) &&
+    (value['orphanedAt'] === undefined || typeof value['orphanedAt'] === 'string') &&
     isEntityAssetBindingSource(value['source']) &&
     typeof value['updatedAt'] === 'string'
   );
@@ -776,6 +821,40 @@ export function isEntityAssetBindingFile(value: unknown): value is EntityAssetBi
     Array.isArray(value['bindings']) &&
     value['bindings'].every((binding) => isEntityAssetBinding(binding))
   );
+}
+
+export function withCreativeEntityCandidateDefaults(
+  candidate: CreativeEntityCandidate,
+): CreativeEntityCandidate {
+  return {
+    ...candidate,
+    identityBasis: candidate.identityBasis ?? 'user-named',
+  };
+}
+
+export function withCreativeEntityCandidateFileDefaults(
+  file: CreativeEntityCandidateFile,
+): CreativeEntityCandidateFile {
+  return {
+    version: 1,
+    candidates: file.candidates.map((candidate) => withCreativeEntityCandidateDefaults(candidate)),
+  };
+}
+
+export function withEntityAssetBindingDefaults(binding: EntityAssetBinding): EntityAssetBinding {
+  return {
+    ...binding,
+    availability: binding.availability ?? 'active',
+  };
+}
+
+export function withEntityAssetBindingFileDefaults(
+  file: EntityAssetBindingFile,
+): EntityAssetBindingFile {
+  return {
+    version: 1,
+    bindings: file.bindings.map((binding) => withEntityAssetBindingDefaults(binding)),
+  };
 }
 
 export function isVisualIdentityDraftFile(value: unknown): value is VisualIdentityDraftFile {
@@ -811,7 +890,7 @@ function isEntityAssetBindingSource(value: unknown): value is EntityAssetBinding
   );
 }
 
-function isVisualIdentityDraft(value: unknown): value is VisualIdentityDraft {
+export function isVisualIdentityDraft(value: unknown): value is VisualIdentityDraft {
   if (!isRecord(value)) return false;
   return (
     typeof value['id'] === 'string' &&

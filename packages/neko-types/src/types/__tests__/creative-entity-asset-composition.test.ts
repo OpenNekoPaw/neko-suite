@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_REPRESENTATION_FALLBACKS,
+  ENTITY_ASSET_BINDING_AVAILABILITIES,
   REPRESENTATION_FILE_ROLES,
   WELL_KNOWN_VISUAL_FACT_KEYS,
+  CREATIVE_ENTITY_CANDIDATE_IDENTITY_BASES,
   isCreativeEntity,
   isCreativeEntityCandidate,
   isCreativeEntityCandidateFile,
+  isCreativeEntityCandidateIdentityBasis,
   isAssetRefScheme,
   isCreativeEntityChangeEvent,
   isCreativeEntityKind,
@@ -13,6 +16,7 @@ import {
   isCreativeEntityProviderStatus,
   isCreativeEntityRef,
   isEntityAssetBinding,
+  isEntityAssetBindingAvailability,
   isEntityAssetBindingFile,
   isEntityAssetBindingRole,
   isEntityAssetRequirementFile,
@@ -20,6 +24,10 @@ import {
   isRepresentationFileRole,
   isRepresentationKind,
   isVisualIdentityDraftFile,
+  withCreativeEntityCandidateDefaults,
+  withCreativeEntityCandidateFileDefaults,
+  withEntityAssetBindingDefaults,
+  withEntityAssetBindingFileDefaults,
   type VisualFactKey,
 } from '../creative-entity-asset-composition';
 
@@ -65,6 +73,17 @@ describe('creative entity asset composition contracts', () => {
     expect(isEntityAssetBindingRole('portrait')).toBe(true);
     expect(isEntityAssetBindingRole('puppet-bone')).toBe(true);
     expect(isEntityAssetBindingRole('video')).toBe(false);
+    expect(CREATIVE_ENTITY_CANDIDATE_IDENTITY_BASES).toEqual([
+      'user-named',
+      'placeholder',
+      'visual',
+      'asset',
+    ]);
+    expect(isCreativeEntityCandidateIdentityBasis('visual')).toBe(true);
+    expect(isCreativeEntityCandidateIdentityBasis('filename')).toBe(false);
+    expect(ENTITY_ASSET_BINDING_AVAILABILITIES).toEqual(['active', 'orphaned', 'archived']);
+    expect(isEntityAssetBindingAvailability('orphaned')).toBe(true);
+    expect(isEntityAssetBindingAvailability('missing')).toBe(false);
   });
 
   it('validates creative entity lifecycle, candidates, and project fact contracts', () => {
@@ -202,6 +221,7 @@ describe('creative entity asset composition contracts', () => {
             assetRef: 'project://assets/linxia',
             role: 'puppet-bone',
             status: 'confirmed',
+            availability: 'active',
             source: 'user',
             updatedAt: '2026-05-10T00:00:00.000Z',
           },
@@ -249,5 +269,51 @@ describe('creative entity asset composition contracts', () => {
       expect.arrayContaining(['hair', 'eye_color', 'skin_tone', 'height', 'scar']),
     );
     expect(custom).toBe('tattoo_style');
+  });
+
+  it('applies backward-compatible defaults for old candidates and bindings', () => {
+    const oldCandidate = {
+      id: 'candidate:story:character:xiaoju',
+      kind: 'character',
+      name: '小橘',
+      status: 'open',
+      provenance: [
+        {
+          providerId: 'neko-story',
+          sourceKind: 'story',
+        },
+      ],
+      sourceRefs: [],
+    };
+    const oldBinding = {
+      id: 'binding-1',
+      entityId: 'char_linxia',
+      entityKind: 'character',
+      assetRef: 'project://assets/linxia',
+      role: 'portrait',
+      status: 'confirmed',
+      source: 'user',
+      updatedAt: '2026-05-10T00:00:00.000Z',
+    };
+
+    expect(isCreativeEntityCandidate(oldCandidate)).toBe(true);
+    expect(isCreativeEntityCandidateFile({ version: 1, candidates: [oldCandidate] })).toBe(true);
+    expect(isEntityAssetBinding(oldBinding)).toBe(true);
+    expect(isEntityAssetBindingFile({ version: 1, bindings: [oldBinding] })).toBe(true);
+
+    if (!isCreativeEntityCandidate(oldCandidate) || !isEntityAssetBinding(oldBinding)) {
+      throw new Error('Fixture should pass backward-compatible guards.');
+    }
+
+    expect(withCreativeEntityCandidateDefaults(oldCandidate).identityBasis).toBe('user-named');
+    expect(
+      withCreativeEntityCandidateFileDefaults({ version: 1, candidates: [oldCandidate] })
+        .candidates[0]?.identityBasis,
+    ).toBe('user-named');
+    expect(withEntityAssetBindingDefaults(oldBinding).availability).toBe('active');
+    expect(
+      withEntityAssetBindingFileDefaults({ version: 1, bindings: [oldBinding] }).bindings[0]
+        ?.availability,
+    ).toBe('active');
   });
 });

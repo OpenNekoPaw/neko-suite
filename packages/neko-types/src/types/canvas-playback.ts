@@ -102,6 +102,10 @@ export interface CanvasPlaybackTransition {
 export type CanvasPlaybackDiagnosticCode =
   | 'playback-missing-entry'
   | 'playback-missing-unit'
+  | 'playback-missing-route'
+  | 'playback-invalid-route'
+  | 'playback-route-truncated'
+  | 'playback-route-cycle'
   | 'playback-unsupported-graph'
   | 'playback-dangling-node'
   | 'playback-dangling-connection'
@@ -119,6 +123,30 @@ export interface CanvasPlaybackDiagnostic {
   readonly connectionId?: string;
 }
 
+export type CanvasPlaybackRouteSourceKind =
+  | 'selection'
+  | 'entry'
+  | 'container'
+  | 'scene'
+  | 'component'
+  | 'single-unit';
+
+export interface CanvasPlaybackRouteCandidate {
+  readonly id: string;
+  readonly title: string;
+  readonly entryUnitId: string;
+  readonly unitIds: readonly string[];
+  readonly sourceKind: CanvasPlaybackRouteSourceKind;
+  readonly sourceNodeId?: string;
+  readonly totalDurationMs?: number;
+  readonly diagnostics?: readonly CanvasPlaybackDiagnostic[];
+}
+
+export interface CanvasPlaybackRouteResolution {
+  readonly routes: readonly CanvasPlaybackRouteCandidate[];
+  readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
+}
+
 export interface CanvasPlaybackPlan {
   readonly adapterId: ResolvedCanvasPlaybackAdapterId;
   readonly requestedAdapterId: CanvasPlaybackAdapterId;
@@ -127,6 +155,7 @@ export interface CanvasPlaybackPlan {
   readonly entryUnitIds: readonly string[];
   readonly units: readonly CanvasPlaybackUnit[];
   readonly transitions: readonly CanvasPlaybackTransition[];
+  readonly routeCandidates?: readonly CanvasPlaybackRouteCandidate[];
   readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
   readonly metadata: CanvasSerializableRecord;
 }
@@ -165,6 +194,8 @@ interface AdapterProjection {
   readonly diagnostics?: readonly CanvasPlaybackDiagnostic[];
 }
 
+type CanvasPlaybackRouteGraph = Pick<AdapterProjection, 'units' | 'transitions'>;
+
 interface CanvasPlaybackAdapter {
   readonly id: ResolvedCanvasPlaybackAdapterId;
   readonly canHandle: (context: PlaybackProjectionContext) => boolean;
@@ -178,6 +209,7 @@ const PLAYABLE_CONNECTION_TYPES = new Set<string | undefined>([
   'choice',
 ]);
 const NARRATIVE_RUNTIME_NODE_TYPE_SET = new Set<string>(NARRATIVE_RUNTIME_NODE_TYPES);
+const DEFAULT_CANVAS_PLAYBACK_ROUTE_CANDIDATE_CAP = 50;
 
 export function normalizeCanvasPlaybackMetadata(
   canvas: Pick<CanvasData, 'playback'> | Record<string, unknown>,
@@ -268,6 +300,49 @@ export function resolveCanvasPlaybackBehavior(
   };
 }
 
+export function resolveEffectiveCanvasPlaybackRoutes(
+  plan: CanvasPlaybackPlan,
+  options: { readonly maxRoutes?: number } = {},
+): CanvasPlaybackRouteResolution {
+  const maxRoutes = normalizeRouteCandidateCap(options.maxRoutes);
+  if (plan.routeCandidates !== undefined) {
+    if (plan.routeCandidates.length === 0) {
+      return {
+        routes: [],
+        diagnostics: [
+          playbackRouteDiagnostic(
+            plan,
+            'playback-missing-route',
+            'warning',
+            'Playback plan has no route candidates.',
+          ),
+        ],
+      };
+    }
+    return limitCanvasPlaybackRouteCandidates(
+      validateAndSortCanvasPlaybackRouteCandidates(plan.routeCandidates, plan),
+      plan,
+      maxRoutes,
+    );
+  }
+
+  const route = deriveLegacyCanvasPlaybackRoute(plan);
+  if (!route) {
+    return {
+      routes: [],
+      diagnostics: [
+        playbackRouteDiagnostic(
+          plan,
+          'playback-missing-route',
+          'warning',
+          'Playback plan has no playable route entry.',
+        ),
+      ],
+    };
+  }
+  return { routes: [route], diagnostics: [...(route.diagnostics ?? [])] };
+}
+
 export function createCanvasPlaybackPlan(input: CreateCanvasPlaybackPlanInput): CanvasPlaybackPlan {
   const metadata = normalizeCanvasPlaybackMetadata(input.canvas);
   const requestedAdapterId = input.adapterId ?? metadata.adapterId;
@@ -298,6 +373,12 @@ export function createCanvasPlaybackPlan(input: CreateCanvasPlaybackPlanInput): 
   const units = projection.units.map((unit) =>
     terminalUnitIds.has(unit.id) || unit.terminal ? { ...unit, terminal: true } : unit,
   );
+  const transitions = projection.transitions;
+  const routeCandidates = createCanvasPlaybackRouteCandidates(context, {
+    units,
+    transitions,
+    entryUnitIds: projection.entryUnitIds,
+  });
 
   return {
     adapterId,
@@ -306,7 +387,8 @@ export function createCanvasPlaybackPlan(input: CreateCanvasPlaybackPlanInput): 
     advancePolicy: behavior.advancePolicy,
     entryUnitIds: projection.entryUnitIds,
     units,
-    transitions: projection.transitions,
+    transitions,
+    routeCandidates,
     diagnostics,
     metadata: { sourceCanvasName: input.canvas.name },
   };
@@ -545,6 +627,413 @@ function outgoingNodeTransitions(
     );
 }
 
+function createCanvasPlaybackRouteCandidates(
+  context: PlaybackProjectionContext,
+  projection: Pick<AdapterProjection, 'units' | 'transitions' | 'entryUnitIds'>,
+): readonly CanvasPlaybackRouteCandidate[] {
+  if (projection.units.length === 0) return [];
+  const unitById = new Map(projection.units.map((unit) => [unit.id, unit]));
+  const candidates: CanvasPlaybackRouteCandidate[] = [];
+  const seenRouteKeys = new Set<string>();
+
+  const addRoute = (
+    sourceKind: CanvasPlaybackRouteSourceKind,
+    entryUnitId: string | undefined,
+    routeId: string,
+    title?: string,
+    sourceNodeId?: string,
+  ) => {
+    if (!entryUnitId || !unitById.has(entryUnitId)) return;
+    const routePath = buildDefaultCanvasPlaybackRoutePath(projection, entryUnitId);
+    const unitIds = routePath.unitIds;
+    if (unitIds.length === 0) return;
+    const routeKey = `${entryUnitId}:${unitIds.join('>')}`;
+    if (seenRouteKeys.has(routeKey)) return;
+    seenRouteKeys.add(routeKey);
+    const entryUnit = unitById.get(entryUnitId);
+    candidates.push({
+      id: routeId,
+      title: title ?? entryUnit?.label ?? entryUnitId,
+      entryUnitId,
+      unitIds,
+      sourceKind,
+      ...((sourceNodeId ?? entryUnit?.sourceNodeId)
+        ? { sourceNodeId: sourceNodeId ?? entryUnit?.sourceNodeId }
+        : {}),
+      totalDurationMs: resolveRouteDurationMs(unitIds, projection),
+      ...(routePath.cycleUnitId
+        ? {
+            diagnostics: [
+              playbackRouteDiagnostic(
+                context,
+                'playback-route-cycle',
+                'warning',
+                `Playback route "${routeId}" stopped before repeated unit "${routePath.cycleUnitId}".`,
+                sourceNodeId ?? entryUnit?.sourceNodeId,
+              ),
+            ],
+          }
+        : {}),
+    });
+  };
+
+  if (context.selectedNodeId) {
+    const selectedNode = context.nodeById.get(context.selectedNodeId);
+    const selectedUnit =
+      projection.units.find(
+        (unit) =>
+          unit.sourceNodeId === context.selectedNodeId || unit.id === context.selectedNodeId,
+      ) ??
+      (selectedNode && isContainerNode(selectedNode)
+        ? findFirstPlaybackUnitForContainer(context, selectedNode, projection.units)
+        : undefined);
+    addRoute(
+      'selection',
+      selectedUnit?.id,
+      `selection:${selectedUnit?.id ?? context.selectedNodeId}`,
+      selectedNode ? readNodeLabel(selectedNode) : selectedUnit?.label,
+      context.selectedNodeId,
+    );
+  }
+
+  for (const entryUnitId of projection.entryUnitIds) {
+    addRoute('entry', entryUnitId, `entry:${entryUnitId}`);
+  }
+
+  for (const sourceNode of context.canvas.nodes) {
+    if (!isContainerNode(sourceNode)) continue;
+    const unit = findFirstPlaybackUnitForContainer(context, sourceNode, projection.units);
+    if (!unit) continue;
+    const sourceKind: CanvasPlaybackRouteSourceKind =
+      sourceNode.type === 'scene' ? 'scene' : 'container';
+    addRoute(
+      sourceKind,
+      unit.id,
+      `${sourceKind}:${sourceNode.id}`,
+      readNodeLabel(sourceNode) ?? unit.label,
+      sourceNode.id,
+    );
+  }
+
+  for (const entryUnitId of findConnectedComponentEntryUnitIds(projection)) {
+    addRoute('component', entryUnitId, `component:${entryUnitId}`);
+  }
+
+  if (projection.units.length === 1) {
+    const unit = projection.units[0];
+    if (unit) {
+      addRoute('single-unit', unit.id, `single-unit:${unit.id}`);
+    }
+  }
+
+  return candidates;
+}
+
+function findFirstPlaybackUnitForContainer(
+  context: PlaybackProjectionContext,
+  container: CanvasNode,
+  units: readonly CanvasPlaybackUnit[],
+): CanvasPlaybackUnit | undefined {
+  const childIds = new Set(collectContainerDescendantNodeIds(context, container));
+  return units.find((unit) => childIds.has(unit.sourceNodeId));
+}
+
+function collectContainerDescendantNodeIds(
+  context: PlaybackProjectionContext,
+  container: CanvasNode,
+  visited: ReadonlySet<string> = new Set(),
+): readonly string[] {
+  if (visited.has(container.id)) return [];
+  const nextVisited = new Set(visited);
+  nextVisited.add(container.id);
+  const output: string[] = [];
+  for (const childId of getContainerChildIds(container)) {
+    output.push(childId);
+    const child = context.nodeById.get(childId);
+    if (child && isContainerNode(child)) {
+      output.push(...collectContainerDescendantNodeIds(context, child, nextVisited));
+    }
+  }
+  return output;
+}
+
+function buildDefaultCanvasPlaybackRoutePath(
+  graph: CanvasPlaybackRouteGraph,
+  entryUnitId: string,
+): { readonly unitIds: readonly string[]; readonly cycleUnitId?: string } {
+  const unitIds: string[] = [];
+  const visited = new Set<string>();
+  const playableUnitIds = new Set(graph.units.map((unit) => unit.id));
+  let current: string | undefined = entryUnitId;
+  while (current && !visited.has(current) && unitIds.length <= graph.units.length) {
+    if (!playableUnitIds.has(current)) break;
+    unitIds.push(current);
+    visited.add(current);
+    const next: CanvasPlaybackTransition | undefined = getSortedOutgoingPlaybackTransitions(
+      graph,
+      current,
+    )[0];
+    current = next?.targetUnitId;
+  }
+  return current && visited.has(current) ? { unitIds, cycleUnitId: current } : { unitIds };
+}
+
+function getSortedOutgoingPlaybackTransitions(
+  graph: Pick<CanvasPlaybackRouteGraph, 'transitions'>,
+  unitId: string,
+): readonly CanvasPlaybackTransition[] {
+  return graph.transitions
+    .filter((transition) => transition.sourceUnitId === unitId && transition.enabled !== false)
+    .slice()
+    .sort(compareCanvasPlaybackTransitions);
+}
+
+function findConnectedComponentEntryUnitIds(
+  projection: Pick<AdapterProjection, 'units' | 'transitions'>,
+): readonly string[] {
+  const unitIds = new Set(projection.units.map((unit) => unit.id));
+  const visited = new Set<string>();
+  const adjacency = new Map<string, Set<string>>();
+  for (const unitId of unitIds) {
+    adjacency.set(unitId, new Set());
+  }
+  for (const transition of projection.transitions) {
+    if (!unitIds.has(transition.sourceUnitId) || !unitIds.has(transition.targetUnitId)) continue;
+    adjacency.get(transition.sourceUnitId)?.add(transition.targetUnitId);
+    adjacency.get(transition.targetUnitId)?.add(transition.sourceUnitId);
+  }
+
+  const entries: string[] = [];
+  for (const unit of projection.units) {
+    if (visited.has(unit.id)) continue;
+    const component = collectPlaybackComponent(unit.id, adjacency, visited);
+    const componentSet = new Set(component);
+    const zeroIncoming = component.find(
+      (unitId) =>
+        !projection.transitions.some(
+          (transition) =>
+            transition.targetUnitId === unitId && componentSet.has(transition.sourceUnitId),
+        ),
+    );
+    entries.push(zeroIncoming ?? component[0] ?? unit.id);
+  }
+  return entries;
+}
+
+function collectPlaybackComponent(
+  startUnitId: string,
+  adjacency: ReadonlyMap<string, ReadonlySet<string>>,
+  visited: Set<string>,
+): readonly string[] {
+  const output: string[] = [];
+  const queue = [startUnitId];
+  while (queue.length > 0) {
+    const unitId = queue.shift();
+    if (!unitId || visited.has(unitId)) continue;
+    visited.add(unitId);
+    output.push(unitId);
+    for (const next of adjacency.get(unitId) ?? []) {
+      if (!visited.has(next)) queue.push(next);
+    }
+  }
+  return output;
+}
+
+function validateAndSortCanvasPlaybackRouteCandidates(
+  routes: readonly CanvasPlaybackRouteCandidate[],
+  plan: CanvasPlaybackPlan,
+): CanvasPlaybackRouteResolution {
+  const unitIds = new Set(plan.units.map((unit) => unit.id));
+  const diagnostics: CanvasPlaybackDiagnostic[] = [];
+  const seenRouteIds = new Set<string>();
+  const validRoutes: Array<{
+    readonly route: CanvasPlaybackRouteCandidate;
+    readonly index: number;
+  }> = [];
+
+  for (const [index, route] of routes.entries()) {
+    const routeDiagnostics: CanvasPlaybackDiagnostic[] = [];
+    if (!route.id) {
+      routeDiagnostics.push(
+        playbackRouteDiagnostic(
+          plan,
+          'playback-invalid-route',
+          'warning',
+          'Playback route candidate is missing an id.',
+          route.sourceNodeId,
+        ),
+      );
+    } else if (seenRouteIds.has(route.id)) {
+      routeDiagnostics.push(
+        playbackRouteDiagnostic(
+          plan,
+          'playback-invalid-route',
+          'warning',
+          `Playback route candidate "${route.id}" is duplicated.`,
+          route.sourceNodeId,
+        ),
+      );
+    }
+    if (!unitIds.has(route.entryUnitId)) {
+      routeDiagnostics.push(
+        playbackRouteDiagnostic(
+          plan,
+          'playback-missing-entry',
+          'warning',
+          `Playback route "${route.id || route.entryUnitId}" entry "${route.entryUnitId}" is not a playable unit.`,
+          route.sourceNodeId,
+        ),
+      );
+    }
+    const usableUnitIds = route.unitIds.filter((unitId) => unitIds.has(unitId));
+    if (usableUnitIds.length === 0) {
+      routeDiagnostics.push(
+        playbackRouteDiagnostic(
+          plan,
+          'playback-missing-unit',
+          'warning',
+          `Playback route "${route.id || route.entryUnitId}" has no playable units.`,
+          route.sourceNodeId,
+        ),
+      );
+    }
+    diagnostics.push(...routeDiagnostics, ...(route.diagnostics ?? []));
+    if (routeDiagnostics.length > 0 || !route.id || seenRouteIds.has(route.id)) {
+      continue;
+    }
+    seenRouteIds.add(route.id);
+    validRoutes.push({
+      index,
+      route: {
+        ...route,
+        unitIds: usableUnitIds,
+        totalDurationMs: route.totalDurationMs ?? resolveRouteDurationMs(usableUnitIds, plan),
+      },
+    });
+  }
+
+  return {
+    routes: validRoutes
+      .slice()
+      .sort(compareIndexedCanvasPlaybackRouteCandidates)
+      .map((entry) => entry.route),
+    diagnostics,
+  };
+}
+
+function limitCanvasPlaybackRouteCandidates(
+  resolution: CanvasPlaybackRouteResolution,
+  plan: CanvasPlaybackPlan,
+  maxRoutes: number,
+): CanvasPlaybackRouteResolution {
+  if (resolution.routes.length <= maxRoutes) return resolution;
+  const truncatedCount = resolution.routes.length - maxRoutes;
+  return {
+    routes: resolution.routes.slice(0, maxRoutes),
+    diagnostics: [
+      ...resolution.diagnostics,
+      playbackRouteDiagnostic(
+        plan,
+        'playback-route-truncated',
+        'info',
+        `Playback route candidates exceeded the limit of ${maxRoutes}; ${truncatedCount} routes were omitted.`,
+      ),
+    ],
+  };
+}
+
+function deriveLegacyCanvasPlaybackRoute(
+  plan: CanvasPlaybackPlan,
+): CanvasPlaybackRouteCandidate | undefined {
+  const firstEntryUnitId = plan.entryUnitIds[0];
+  if (!firstEntryUnitId) return undefined;
+  const routePath = buildDefaultCanvasPlaybackRoutePath(plan, firstEntryUnitId);
+  const unitIds = routePath.unitIds;
+  if (unitIds.length === 0) return undefined;
+  const entryUnit = plan.units.find((unit) => unit.id === firstEntryUnitId);
+  return {
+    id: `legacy-entry:${firstEntryUnitId}`,
+    title: entryUnit?.label ?? firstEntryUnitId,
+    entryUnitId: firstEntryUnitId,
+    unitIds,
+    sourceKind: 'entry',
+    ...(entryUnit?.sourceNodeId ? { sourceNodeId: entryUnit.sourceNodeId } : {}),
+    totalDurationMs: resolveRouteDurationMs(unitIds, plan),
+    ...(routePath.cycleUnitId
+      ? {
+          diagnostics: [
+            playbackRouteDiagnostic(
+              plan,
+              'playback-route-cycle',
+              'warning',
+              `Playback route "legacy-entry:${firstEntryUnitId}" stopped before repeated unit "${routePath.cycleUnitId}".`,
+              entryUnit?.sourceNodeId,
+            ),
+          ],
+        }
+      : {}),
+  };
+}
+
+function compareCanvasPlaybackTransitions(
+  left: CanvasPlaybackTransition,
+  right: CanvasPlaybackTransition,
+): number {
+  return firstNonZero([left.priority - right.priority, left.id.localeCompare(right.id)]);
+}
+
+function compareIndexedCanvasPlaybackRouteCandidates(
+  left: { readonly route: CanvasPlaybackRouteCandidate; readonly index: number },
+  right: { readonly route: CanvasPlaybackRouteCandidate; readonly index: number },
+): number {
+  return firstNonZero([
+    routeSourceKindOrder(left.route.sourceKind) - routeSourceKindOrder(right.route.sourceKind),
+    left.index - right.index,
+    left.route.title.localeCompare(right.route.title),
+    left.route.entryUnitId.localeCompare(right.route.entryUnitId),
+    left.route.id.localeCompare(right.route.id),
+  ]);
+}
+
+function routeSourceKindOrder(kind: CanvasPlaybackRouteSourceKind): number {
+  switch (kind) {
+    case 'selection':
+      return 0;
+    case 'entry':
+      return 1;
+    case 'scene':
+      return 2;
+    case 'container':
+      return 3;
+    case 'component':
+      return 4;
+    case 'single-unit':
+      return 5;
+  }
+}
+
+function resolveRouteDurationMs(
+  unitIds: readonly string[],
+  graph: Pick<CanvasPlaybackRouteGraph, 'units'>,
+): number | undefined {
+  let total = 0;
+  let hasDuration = false;
+  for (const unitId of unitIds) {
+    const durationMs = graph.units.find((unit) => unit.id === unitId)?.durationMs;
+    if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0) {
+      total += durationMs;
+      hasDuration = true;
+    }
+  }
+  return hasDuration ? total : undefined;
+}
+
+function normalizeRouteCandidateCap(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : DEFAULT_CANVAS_PLAYBACK_ROUTE_CANDIDATE_CAP;
+}
+
 function finalizeProjectionEntries(
   context: PlaybackProjectionContext,
   projection: AdapterProjection,
@@ -702,6 +1191,12 @@ function isRuntimeOnlyMetadataKey(key: string): boolean {
     normalized === 'webviewurl' ||
     normalized === 'previewuri' ||
     normalized === 'previewurl' ||
+    normalized === 'previewsessionid' ||
+    normalized === 'activerouteid' ||
+    normalized === 'branchselections' ||
+    normalized === 'routecandidates' ||
+    normalized === 'mediahandles' ||
+    normalized === 'activemediasurfaceid' ||
     normalized === 'proxypath' ||
     normalized.endsWith('token')
   );
@@ -1004,6 +1499,22 @@ function diagnostic(
     adapterId: context.adapterId,
     ...(nodeId ? { nodeId } : {}),
     ...(connectionId ? { connectionId } : {}),
+  };
+}
+
+function playbackRouteDiagnostic(
+  plan: Pick<CanvasPlaybackPlan, 'adapterId'>,
+  code: CanvasPlaybackDiagnosticCode,
+  severity: CanvasPlaybackDiagnostic['severity'],
+  message: string,
+  nodeId?: string,
+): CanvasPlaybackDiagnostic {
+  return {
+    code,
+    severity,
+    message,
+    adapterId: plan.adapterId,
+    ...(nodeId ? { nodeId } : {}),
   };
 }
 

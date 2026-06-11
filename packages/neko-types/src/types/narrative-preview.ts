@@ -114,6 +114,9 @@ export interface NarrativeGraphSnapshot {
 
 export interface NarrativeMessageEnvelope {
   readonly requestId: string;
+  readonly sessionId?: string;
+  readonly sourceCanvasUri?: string;
+  readonly revision?: number;
 }
 
 export type CanvasToPreviewMessage = NarrativeMessageEnvelope &

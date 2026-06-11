@@ -159,6 +159,12 @@ describe('storyboardPlanner', () => {
                     },
                   },
                 ],
+                characters: [
+                  {
+                    characterName: 'Mika',
+                    candidateId: 'candidate-mika',
+                  },
+                ],
               },
               ...payload.scenes[0]!.shotPlans.slice(1),
             ],
@@ -221,6 +227,12 @@ describe('storyboardPlanner', () => {
             toolCallId: 'readimage-current-result',
             assetIndex: 0,
           },
+        },
+      ],
+      characters: [
+        {
+          characterName: 'Mika',
+          candidateId: 'candidate-mika',
         },
       ],
     });

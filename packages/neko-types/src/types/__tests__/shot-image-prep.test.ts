@@ -5,6 +5,7 @@ import {
   COMIC_SHOT_ASSET_PREP_PROFILE,
   buildComicShotAssetPrepTable,
   deriveShotImagePrepPlansFromStoryboard,
+  projectShotImageRegenerationRecommendation,
   transitionShotImagePrepStatus,
   validateShotImagePrepPlan,
   type ShotImagePrepPlan,
@@ -126,9 +127,22 @@ describe('shot image prep contracts', () => {
 
     expect(result).toEqual({ ok: true, diagnostics: [] });
     expect(table.columns.map((column) => column.columnId)).toEqual(
-      expect.arrayContaining(['shotId', 'imageStrategy', 'operationPlan', 'status']),
+      expect.arrayContaining([
+        'shotId',
+        'imageStrategy',
+        'operationPlan',
+        'regenerationRecommendation',
+        'status',
+      ]),
     );
     expect(table.rows[0]?.cells['status']).toEqual({ type: 'status', value: 'planned' });
+    expect(table.rows[0]?.cells['regenerationRecommendation']).toEqual({
+      type: 'status',
+      value: 'Recommend editing source image',
+    });
+    expect(table.rows[0]?.metadata?.['regenerationRecommendation']).toMatchObject({
+      decision: 'transform-source',
+    });
   });
 
   it('diagnoses malformed prep profile tables', () => {
@@ -216,12 +230,66 @@ describe('shot image prep contracts', () => {
       imageStrategy: 'transform-original',
       operationPlan: ['crop-panel', 'remove-text', 'inpaint'],
       perceptionCardRefs: [{ assetId: 'asset-panel-1', cacheKey: 'panel-v1' }],
+      metadata: {
+        regenerationRecommendation: {
+          decision: 'transform-source',
+        },
+      },
     });
     expect(result.plans[1]).toMatchObject({
       shotId: 'shot-generate',
       imageStrategy: 'generate-new',
       sourceMediaRefs: [],
       operationPlan: ['generate-keyframe'],
+      metadata: {
+        regenerationRecommendation: {
+          decision: 'regenerate',
+        },
+      },
+    });
+  });
+
+  it('projects image regeneration recommendations from prep strategy and diagnostics', () => {
+    expect(projectShotImageRegenerationRecommendation(makePlan())).toMatchObject({
+      decision: 'transform-source',
+    });
+    expect(
+      projectShotImageRegenerationRecommendation(
+        makePlan({
+          imageStrategy: 'generate-new',
+          sourceMediaRefs: [],
+          operationPlan: ['generate-keyframe'],
+        }),
+      ),
+    ).toMatchObject({
+      decision: 'regenerate',
+    });
+    expect(
+      projectShotImageRegenerationRecommendation(
+        makePlan({
+          imageStrategy: 'reuse-original',
+          operationPlan: ['crop-panel'],
+        }),
+      ),
+    ).toMatchObject({
+      decision: 'not-needed',
+    });
+    expect(
+      projectShotImageRegenerationRecommendation(
+        makePlan({
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'provider-unavailable',
+              path: ['providerId'],
+              message: 'Provider unavailable.',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      decision: 'blocked',
+      reason: 'Provider unavailable.',
     });
   });
 

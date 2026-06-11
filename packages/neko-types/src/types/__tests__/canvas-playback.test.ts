@@ -5,6 +5,7 @@ import {
   getCanvasPlaybackEdgeOverride,
   getCanvasPlaybackNodeOverride,
   normalizeCanvasPlaybackMetadata,
+  resolveEffectiveCanvasPlaybackRoutes,
   sortCanvasPlaybackConnections,
   sortCanvasPlaybackContainerChildren,
 } from '../canvas-playback';
@@ -184,6 +185,20 @@ describe('canvas playback contracts', () => {
       ['shot-a1', 'shot-a2'],
       ['shot-a2', 'shot-b1'],
     ]);
+    expect(plan.routeCandidates).toEqual([
+      expect.objectContaining({
+        id: 'selection:shot-a1',
+        sourceKind: 'selection',
+        entryUnitId: 'shot-a1',
+        unitIds: ['shot-a1', 'shot-a2', 'shot-b1'],
+      }),
+      expect.objectContaining({
+        id: 'scene:scene-b',
+        sourceKind: 'scene',
+        entryUnitId: 'shot-b1',
+        unitIds: ['shot-b1'],
+      }),
+    ]);
   });
 
   it('supports explicit adapter overrides in mixed graphs', () => {
@@ -201,6 +216,68 @@ describe('canvas playback contracts', () => {
     expect(autoPlan.units.map((unit) => unit.id)).toEqual(['shot-a']);
     expect(narrativePlan.adapterId).toBe('narrative');
     expect(narrativePlan.units.map((unit) => unit.id)).toEqual(['start', 'narrative-scene']);
+  });
+
+  it('generates route candidates for explicit entries and disconnected components', () => {
+    const data = canvas(
+      [
+        media('media-a', 'assets/a.mp4'),
+        media('media-b', 'assets/b.mp4'),
+        media('media-c', 'assets/c.mp4'),
+      ],
+      [connection('a-b', 'media-a', 'media-b', 'sequence')],
+    );
+    data.playback = {
+      version: 1,
+      adapterId: 'media-sequence',
+      entryIds: ['media-c'],
+    };
+
+    const plan = createCanvasPlaybackPlan({ canvas: data });
+    const routeResolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(plan.routeCandidates?.map((route) => [route.id, route.sourceKind])).toEqual([
+      ['entry:media-c', 'entry'],
+      ['component:media-a', 'component'],
+    ]);
+    expect(routeResolution.routes.map((route) => route.id)).toEqual([
+      'entry:media-c',
+      'component:media-a',
+    ]);
+  });
+
+  it('prioritizes selected container routes by using its first playable child unit', () => {
+    const data = canvas([
+      scene('scene-a', ['shot-a1', 'shot-a2'], 1),
+      shot('shot-a1', 1, 'scene-a'),
+      shot('shot-a2', 2, 'scene-a'),
+    ]);
+
+    const plan = createCanvasPlaybackPlan({ canvas: data, selectedNodeId: 'scene-a' });
+    const routeResolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(routeResolution.routes[0]).toMatchObject({
+      id: 'selection:shot-a1',
+      title: 'scene-a',
+      sourceKind: 'selection',
+      sourceNodeId: 'scene-a',
+      entryUnitId: 'shot-a1',
+      unitIds: ['shot-a1', 'shot-a2'],
+    });
+  });
+
+  it('generates a single-unit route for a selected playable node', () => {
+    const data = canvas([shot('shot-a', 1)]);
+
+    const plan = createCanvasPlaybackPlan({ canvas: data, selectedNodeId: 'shot-a' });
+
+    expect(plan.routeCandidates?.map((route) => [route.id, route.sourceKind])).toEqual([
+      ['selection:shot-a', 'selection'],
+    ]);
+    expect(resolveEffectiveCanvasPlaybackRoutes(plan).routes[0]).toMatchObject({
+      entryUnitId: 'shot-a',
+      unitIds: ['shot-a'],
+    });
   });
 
   it('projects generic containers and node connections without mutating canvas data', () => {
@@ -278,6 +355,12 @@ describe('canvas playback contracts', () => {
             },
           ],
           runtimeReferenceImagePath: 'blob:runtime-reference',
+          previewSessionId: 'session-runtime',
+          activeRouteId: 'route-runtime',
+          branchSelections: { 'shot-a': 'choice-b' },
+          routeCandidates: [{ id: 'runtime-route' }],
+          mediaHandles: ['handle-runtime'],
+          activeMediaSurfaceId: 'surface-runtime',
           generatedImage: 'blob:runtime-image',
           generatedVideoAsset: {
             id: 'video-1',
@@ -320,6 +403,10 @@ describe('canvas playback contracts', () => {
     expect(JSON.stringify(unit)).not.toContain('blob:runtime');
     expect(JSON.stringify(unit)).not.toContain('data:image/png');
     expect(JSON.stringify(unit)).not.toContain('runtimeReferenceImagePath');
+    expect(JSON.stringify(unit)).not.toContain('session-runtime');
+    expect(JSON.stringify(unit)).not.toContain('route-runtime');
+    expect(JSON.stringify(unit)).not.toContain('choice-b');
+    expect(JSON.stringify(unit)).not.toContain('handle-runtime');
   });
 
   it('does not persist runtime URLs in media playback units', () => {
@@ -344,6 +431,202 @@ describe('canvas playback contracts', () => {
     expect(JSON.stringify(plan)).not.toContain('blob:vscode-runtime-url');
     expect(plan.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'playback-missing-media-source',
+    );
+  });
+
+  it('resolves explicit route candidates before legacy entry routes', () => {
+    const plan = {
+      ...createCanvasPlaybackPlan({
+        canvas: canvas(
+          [media('media-a', 'assets/a.mp4'), media('media-b', 'assets/b.mp4')],
+          [connection('media-link', 'media-a', 'media-b', 'sequence')],
+        ),
+        adapterId: 'media-sequence',
+      }),
+      routeCandidates: [
+        {
+          id: 'route-b',
+          title: 'Route B',
+          entryUnitId: 'media-b',
+          unitIds: ['media-b'],
+          sourceKind: 'entry' as const,
+          sourceNodeId: 'media-b',
+        },
+      ],
+    };
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(resolution.routes).toEqual([
+      expect.objectContaining({
+        id: 'route-b',
+        entryUnitId: 'media-b',
+        unitIds: ['media-b'],
+      }),
+    ]);
+    expect(resolution.diagnostics).toEqual([]);
+  });
+
+  it('diagnoses explicitly empty route candidates', () => {
+    const plan = {
+      ...createCanvasPlaybackPlan({ canvas: canvas([media('media-a', 'assets/a.mp4')]) }),
+      routeCandidates: [],
+    };
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(resolution.routes).toEqual([]);
+    expect(resolution.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'playback-missing-route',
+        severity: 'warning',
+      }),
+    ]);
+  });
+
+  it('derives a legacy route from the first entry when route candidates are absent', () => {
+    const { routeCandidates: _routeCandidates, ...plan } = createCanvasPlaybackPlan({
+      canvas: canvas(
+        [media('media-a', 'assets/a.mp4'), media('media-b', 'assets/b.mp4')],
+        [connection('media-link', 'media-a', 'media-b', 'sequence')],
+      ),
+      adapterId: 'media-sequence',
+    });
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(resolution.routes).toEqual([
+      expect.objectContaining({
+        id: 'legacy-entry:media-a',
+        entryUnitId: 'media-a',
+        unitIds: ['media-a', 'media-b'],
+        sourceKind: 'entry',
+      }),
+    ]);
+    expect(resolution.diagnostics).toEqual([]);
+  });
+
+  it('reports a diagnostic when default route traversal reaches a cycle', () => {
+    const plan = createCanvasPlaybackPlan({
+      canvas: canvas(
+        [media('media-a', 'assets/a.mp4'), media('media-b', 'assets/b.mp4')],
+        [
+          connection('media-a-b', 'media-a', 'media-b', 'sequence'),
+          connection('media-b-a', 'media-b', 'media-a', 'sequence'),
+        ],
+      ),
+      adapterId: 'media-sequence',
+    });
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(resolution.routes[0]).toMatchObject({
+      id: 'entry:media-a',
+      entryUnitId: 'media-a',
+      unitIds: ['media-a', 'media-b'],
+    });
+    expect(resolution.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'playback-route-cycle',
+        severity: 'warning',
+      }),
+    ]);
+  });
+
+  it('sorts route candidates deterministically and filters invalid routes', () => {
+    const basePlan = createCanvasPlaybackPlan({
+      canvas: canvas([media('media-a', 'assets/a.mp4'), media('media-b', 'assets/b.mp4')]),
+      adapterId: 'media-sequence',
+    });
+    const plan = {
+      ...basePlan,
+      routeCandidates: [
+        {
+          id: 'single',
+          title: 'Single',
+          entryUnitId: 'media-b',
+          unitIds: ['media-b'],
+          sourceKind: 'single-unit' as const,
+        },
+        {
+          id: 'selection',
+          title: 'Selection',
+          entryUnitId: 'media-a',
+          unitIds: ['media-a'],
+          sourceKind: 'selection' as const,
+        },
+        {
+          id: 'missing',
+          title: 'Missing',
+          entryUnitId: 'missing',
+          unitIds: ['missing'],
+          sourceKind: 'entry' as const,
+        },
+      ],
+    };
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(resolution.routes.map((route) => route.id)).toEqual(['selection', 'single']);
+    expect(resolution.diagnostics).toEqual([
+      expect.objectContaining({ code: 'playback-missing-entry' }),
+      expect.objectContaining({ code: 'playback-missing-unit' }),
+    ]);
+  });
+
+  it('caps route candidates and reports truncation diagnostics', () => {
+    const data = canvas(
+      Array.from({ length: 4 }, (_, index) => media(`media-${index + 1}`, `assets/${index}.mp4`)),
+    );
+    const basePlan = createCanvasPlaybackPlan({ canvas: data, adapterId: 'media-sequence' });
+    const plan = {
+      ...basePlan,
+      routeCandidates: basePlan.units.map((unit) => ({
+        id: `route:${unit.id}`,
+        title: unit.id,
+        entryUnitId: unit.id,
+        unitIds: [unit.id],
+        sourceKind: 'component' as const,
+        sourceNodeId: unit.sourceNodeId,
+      })),
+    };
+
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan, { maxRoutes: 2 });
+
+    expect(resolution.routes).toHaveLength(2);
+    expect(resolution.routes.map((route) => route.id)).toEqual(['route:media-1', 'route:media-2']);
+    expect(resolution.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'playback-route-truncated',
+        severity: 'info',
+      }),
+    ]);
+  });
+
+  it('caps generated route candidates after deterministic ordering', () => {
+    const data = canvas(
+      Array.from({ length: 4 }, (_, index) =>
+        baseNode(`note-${index + 1}`, 'annotation', {
+          data: { label: `Note ${index + 1}` },
+        }),
+      ),
+    );
+
+    const plan = createCanvasPlaybackPlan({ canvas: data, adapterId: 'generic' });
+    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan, { maxRoutes: 2 });
+
+    expect(plan.routeCandidates?.map((route) => route.id)).toEqual([
+      'entry:note-1',
+      'component:note-2',
+      'component:note-3',
+      'component:note-4',
+    ]);
+    expect(resolution.routes.map((route) => route.id)).toEqual([
+      'entry:note-1',
+      'component:note-2',
+    ]);
+    expect(resolution.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      'playback-route-truncated',
     );
   });
 });
