@@ -4,6 +4,7 @@ import { join } from 'path';
 
 const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
 const capabilitySource = readFileSync(join(__dirname, '../agentCapabilityProvider.ts'), 'utf-8');
+const providerSource = readFileSync(join(__dirname, '../editor/canvasEditorProvider.ts'), 'utf-8');
 
 describe('canvas storyboard import contracts', () => {
   it('exports a storyboard import API on NekoCanvasAPI implementation', () => {
@@ -48,5 +49,28 @@ describe('canvas storyboard import contracts', () => {
 
   it('routes agent storyboard import through the canvas storyboard API', () => {
     expect(capabilitySource).toContain('api.storyboard.import(payload, { startX, startY })');
+  });
+
+  it('keeps storyboard import free of automatic entity subgraph projection', () => {
+    const importStart = extensionSource.indexOf('async function importStoryboardToCanvas');
+    const importEnd = extensionSource.indexOf(
+      'async function ensureCanvasEditorForStoryboardImport',
+    );
+    const importBody = extensionSource.slice(importStart, importEnd);
+
+    expect(importBody).toContain('return applyStoryboardPayloadToCanvas(api, payload, options);');
+    expect(importBody).not.toContain("type: 'entity'");
+    expect(importBody).not.toContain("type: 'representation-slot'");
+    expect(importBody).not.toContain("type: 'occurrence'");
+    expect(importBody).not.toContain("type: 'generated-asset'");
+  });
+
+  it('subscribes and backfills candidate confirmations into open storyboard shots', () => {
+    expect(providerSource).toContain('subscribeToEntityChangeEvents');
+    expect(providerSource).toContain("'neko.entity.getDashboardCreativeEntitySource'");
+    expect(providerSource).toContain('readCreativeEntityChangedRefs(event)');
+    expect(providerSource).toContain('this.applyEntityCandidateBackfill(changedRefs)');
+    expect(providerSource).toContain("message.type === 'entity.confirmCandidate'");
+    expect(providerSource).toContain('this.applyEntityCandidateBackfill([');
   });
 });

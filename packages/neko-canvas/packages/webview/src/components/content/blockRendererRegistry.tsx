@@ -11,6 +11,12 @@ import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '
 import { NodeCard } from './node-card';
 import { t } from '../../i18n';
 import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
+import { projectShotCharacterEntityReference } from './shotEntityReference';
+import {
+  confirmCanvasEntityCandidate,
+  inspectCanvasEntity,
+  requestCanvasEntitySummary,
+} from './canvasEntityRouteClient';
 
 const FORM_CONTROL_CLASS =
   'min-w-0 rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)] disabled:bg-gray-100 disabled:text-gray-500';
@@ -241,7 +247,7 @@ function renderCollectionBlock(context: BlockRendererContext): React.ReactNode {
         items.map((item, index) => (
           <div
             key={getCollectionItemKey(item, index)}
-            className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 p-1.5"
+            className="min-w-0 rounded border border-[var(--node-border)] bg-white/80 p-1.5"
           >
             {renderCollectionItem(context.block, item, index)}
           </div>
@@ -558,10 +564,21 @@ function renderStructuredCollectionItem(
       },
     ];
   });
+  const entityReference =
+    block.id === 'shot-characters' ? projectShotCharacterEntityReference(item, t) : undefined;
 
   return (
-    <div className="min-w-0 space-y-1">
-      <div className="truncate text-xs font-medium text-[var(--node-fg)]">{label}</div>
+    <div
+      className="min-w-0 space-y-1"
+      data-entity-reference-state={entityReference?.state}
+      title={entityReference?.title}
+    >
+      <div className="flex min-w-0 items-center gap-1">
+        <div className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--node-fg)]">
+          {label}
+        </div>
+        {entityReference ? renderEntityReferenceActions(entityReference) : null}
+      </div>
       {fields.length > 0 ? (
         <dl className="space-y-1">
           {fields.map((field) => (
@@ -593,6 +610,207 @@ function renderStructuredCollectionItem(
       )}
     </div>
   );
+}
+
+function renderEntityReferenceActions(
+  reference: ReturnType<typeof projectShotCharacterEntityReference>,
+): React.ReactNode {
+  return <EntityReferenceActions reference={reference} />;
+}
+
+function EntityReferenceActions({
+  reference,
+}: {
+  readonly reference: ReturnType<typeof projectShotCharacterEntityReference>;
+}): React.ReactNode {
+  const [summary, setSummary] = React.useState<
+    | {
+        readonly status: string;
+        readonly displayName: string;
+        readonly metadata?: Record<string, string | undefined>;
+      }
+    | undefined
+  >(undefined);
+  const [summaryMessage, setSummaryMessage] = React.useState<string | undefined>(undefined);
+  const badgeClass = entityReferenceBadgeClass(reference.state);
+  const title = summary
+    ? formatEntitySummaryTitle(summary.displayName, summary.metadata)
+    : reference.title;
+  const canRequestSummary =
+    reference.entityRef !== undefined || reference.candidateId !== undefined;
+  const requestSummary = () => {
+    if (summary || summaryMessage || !canRequestSummary) return;
+    void requestCanvasEntitySummary({
+      ...(reference.entityRef ? { entityRef: reference.entityRef } : {}),
+      ...(reference.candidateId ? { candidateId: reference.candidateId } : {}),
+    }).then((response) => {
+      if (response.summary) {
+        setSummary(response.summary);
+        return;
+      }
+      if (response.message) {
+        setSummaryMessage(response.message);
+      }
+    });
+  };
+  return (
+    <div
+      className="group/entity-ref relative flex flex-shrink-0 items-center gap-1"
+      title={title}
+      onFocus={requestSummary}
+      onMouseEnter={requestSummary}
+    >
+      <span
+        className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase ${badgeClass}`}
+        data-entity-reference-badge={reference.state}
+      >
+        {reference.label}
+      </span>
+      <ConfirmCandidateButton reference={reference} />
+      {canRequestSummary ? (
+        <button
+          type="button"
+          className="rounded border border-[var(--node-border)] px-1 text-[10px] text-[var(--node-fg)] hover:bg-white/10"
+          title={t('entity.inspect')}
+          onClick={(event) => {
+            event.stopPropagation();
+            void inspectCanvasEntity({
+              ...(reference.entityRef ? { entityRef: reference.entityRef } : {}),
+              ...(reference.candidateId ? { candidateId: reference.candidateId } : {}),
+            });
+          }}
+        >
+          ↗
+        </button>
+      ) : null}
+      <EntityReferenceHoverCard
+        reference={reference}
+        summary={summary}
+        summaryMessage={summaryMessage}
+      />
+    </div>
+  );
+}
+
+function EntityReferenceHoverCard({
+  reference,
+  summary,
+  summaryMessage,
+}: {
+  readonly reference: ReturnType<typeof projectShotCharacterEntityReference>;
+  readonly summary:
+    | {
+        readonly status: string;
+        readonly displayName: string;
+        readonly metadata?: Record<string, string | undefined>;
+      }
+    | undefined;
+  readonly summaryMessage?: string;
+}): React.ReactNode {
+  const summaryText = summary ? readEntitySummaryText(summary.metadata) : undefined;
+  return (
+    <div
+      className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden w-64 rounded border border-[var(--node-border)] bg-[var(--node-bg)] p-2 text-left shadow-xl group-hover/entity-ref:block group-focus-within/entity-ref:block"
+      data-entity-hover-card={reference.state}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate text-xs font-semibold text-[var(--node-fg)]">
+          {summary?.displayName ?? reference.title}
+        </div>
+        <span
+          className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase ${entityReferenceBadgeClass(
+            reference.state,
+          )}`}
+        >
+          {reference.label}
+        </span>
+      </div>
+      <div className="mt-1 text-[10px] uppercase text-[var(--node-fg-secondary)]">
+        {entityReferenceStatusLabel(summary?.status ?? reference.state)}
+      </div>
+      <div className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--node-fg-secondary)]">
+        {summaryText ?? summaryMessage ?? reference.title}
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-[10px] text-[var(--node-fg-secondary)]">
+        {reference.entityRef ? (
+          <span className="truncate">{reference.entityRef.entityId}</span>
+        ) : null}
+        {reference.candidateId ? <span className="truncate">{reference.candidateId}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmCandidateButton({
+  reference,
+}: {
+  readonly reference: ReturnType<typeof projectShotCharacterEntityReference>;
+}): React.ReactNode {
+  if (!reference.candidateId || reference.state !== 'candidate') return null;
+  const candidateId = reference.candidateId;
+  return (
+    <button
+      type="button"
+      className="rounded border border-[var(--node-border)] px-1 text-[10px] text-[var(--node-fg)] hover:bg-white/10"
+      title={t('entity.confirmCandidate')}
+      onClick={(event) => {
+        event.stopPropagation();
+        void confirmCanvasEntityCandidate({ candidateId });
+      }}
+    >
+      ✓
+    </button>
+  );
+}
+
+function formatEntitySummaryTitle(
+  displayName: string,
+  metadata: Record<string, string | undefined> | undefined,
+): string {
+  const summary = readEntitySummaryText(metadata);
+  return summary ? `${displayName}: ${summary}` : displayName;
+}
+
+function readEntitySummaryText(
+  metadata: Record<string, string | undefined> | undefined,
+): string | undefined {
+  return (
+    metadata?.['appearanceSummary'] ?? metadata?.['visualSummary'] ?? metadata?.['appearanceNotes']
+  );
+}
+
+function entityReferenceBadgeClass(
+  state: ReturnType<typeof projectShotCharacterEntityReference>['state'],
+): string {
+  switch (state) {
+    case 'confirmed':
+      return 'bg-emerald-500/20 text-emerald-200';
+    case 'candidate':
+      return 'bg-amber-500/20 text-amber-200';
+    case 'ambiguous':
+      return 'bg-rose-500/20 text-rose-200';
+    case 'orphaned':
+      return 'bg-orange-500/20 text-orange-200';
+    case 'unlinked':
+      return 'bg-white/10 text-[var(--node-fg-secondary)]';
+  }
+}
+
+function entityReferenceStatusLabel(state: string): string {
+  switch (state) {
+    case 'confirmed':
+      return t('entity.reference.confirmed');
+    case 'candidate':
+      return t('entity.reference.candidate');
+    case 'ambiguous':
+      return t('entity.reference.ambiguous');
+    case 'orphaned':
+      return t('entity.reference.broken');
+    case 'unlinked':
+      return t('entity.reference.unlinked');
+    default:
+      return state;
+  }
 }
 
 function readCollectionItemPath(item: unknown, path: string | undefined): string | undefined {

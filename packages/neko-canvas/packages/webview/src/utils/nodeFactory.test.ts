@@ -231,16 +231,10 @@ describe('nodeFactory composable presets', () => {
     expect(
       node.content?.sections?.find((section) => section.id === 'shot-generation'),
     ).toMatchObject({
-      defaultCollapsed: false,
-      metadata: {
-        defaultExpandedSurfaces: ['overlay'],
-      },
+      defaultCollapsed: true,
     });
     expect(node.content?.sections?.find((section) => section.id === 'shot-media')).toMatchObject({
       defaultCollapsed: true,
-      metadata: {
-        defaultExpandedSurfaces: ['overlay'],
-      },
     });
     expect(node.preview).toMatchObject({
       title: 'Shot 7',

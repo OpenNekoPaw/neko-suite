@@ -3,6 +3,7 @@ import { summarizeReferencesFromCanvasNode } from '@neko/shared';
 import type {
   CardActionDescriptor,
   CardBadge,
+  CardPreviewSource,
   NodeCardPolicy,
   NodeCardPolicyRegistry,
 } from './types';
@@ -119,63 +120,7 @@ export const mediaCardPolicy: NodeCardPolicy = {
 
 export const shotCardPolicy: NodeCardPolicy = {
   nodeType: 'shot',
-  resolvePreviewSource: (node) => {
-    const selected = findSelectedGenerationCandidate(node);
-    const generatedImage = readString(node.data, 'generatedImage');
-    const runtimeReferenceImagePath = readString(node.data, 'runtimeReferenceImagePath');
-    const referenceImagePath = readString(node.data, 'referenceImagePath');
-    const sourceRole: CanvasPreviewRole =
-      selected || generatedImage ? 'generation-candidate' : 'image';
-    const referenceImageResourceRef =
-      selected || generatedImage ? undefined : readReferenceImageResourceRef(node);
-    const referenceResourceRef =
-      selected || generatedImage ? undefined : readReferenceResourceRef(node);
-    const sourcePath =
-      selected?.dataUrl ??
-      generatedImage ??
-      runtimeReferenceImagePath ??
-      (referenceImageResourceRef ? undefined : referenceImagePath);
-    const resolverPath =
-      referenceImageResourceRef || referenceResourceRef
-        ? undefined
-        : (sourcePath ?? referenceImagePath);
-    const directVariantPath =
-      sourcePath && (selected || generatedImage || isSafeWebviewUrl(sourcePath))
-        ? sourcePath
-        : undefined;
-    const variants = directVariantPath
-      ? [
-          {
-            id: selected?.id ?? (generatedImage ? 'generated-image' : 'reference-image'),
-            role: sourceRole,
-            sourcePath: directVariantPath,
-            selected: true,
-          },
-        ]
-      : undefined;
-
-    return {
-      renderForm: 'asset-thumbnail',
-      aspectRatio: '3/2',
-      source: createAssetPreviewDescriptor({
-        id: `node-card:${node.id}:shot`,
-        role: sourceRole,
-        path: directVariantPath ? undefined : resolverPath,
-        mediaType: referenceImageResourceRef || referenceResourceRef ? 'image' : undefined,
-        title: resolveShotTitle(node),
-        metadata:
-          referenceImageResourceRef || referenceResourceRef
-            ? {
-                ...(referenceImageResourceRef
-                  ? { documentResourceRef: referenceImageResourceRef }
-                  : {}),
-                ...(referenceResourceRef ? { resourceRef: referenceResourceRef } : {}),
-              }
-            : undefined,
-        variants,
-      }),
-    };
-  },
+  resolvePreviewSource: resolveShotPreviewSource,
   resolveTitle: (node, parent) => resolvePlacementTitle(node, parent) ?? resolveShotTitle(node),
   resolveSubtitle: (node) => createSubtitle(readRecord(node.data)['visualDescription']),
   resolveBadges: (node) => {
@@ -207,6 +152,74 @@ export const shotCardPolicy: NodeCardPolicy = {
     },
   ],
 };
+
+export function resolveShotPreviewSource(node: CanvasNode): CardPreviewSource {
+  const selected = findSelectedGenerationCandidate(node);
+  const generatedImage = readString(node.data, 'generatedImage');
+  const generatedAssetPath = readString(readRecord(node.data)['generatedAsset'], 'path');
+  const runtimeReferenceImagePath = readString(node.data, 'runtimeReferenceImagePath');
+  const referenceImagePath = readString(node.data, 'referenceImagePath');
+  const sourceRole: CanvasPreviewRole =
+    selected || generatedImage || generatedAssetPath ? 'generation-candidate' : 'image';
+  const referenceImageResourceRef =
+    selected || generatedImage || generatedAssetPath
+      ? undefined
+      : readReferenceImageResourceRef(node);
+  const referenceResourceRef =
+    selected || generatedImage || generatedAssetPath ? undefined : readReferenceResourceRef(node);
+  const sourcePath =
+    selected?.dataUrl ??
+    generatedImage ??
+    generatedAssetPath ??
+    runtimeReferenceImagePath ??
+    (referenceImageResourceRef ? undefined : referenceImagePath);
+  const resolverPath =
+    referenceImageResourceRef || referenceResourceRef
+      ? undefined
+      : (sourcePath ?? referenceImagePath);
+  const directVariantPath =
+    sourcePath && (selected || generatedImage || generatedAssetPath || isSafeWebviewUrl(sourcePath))
+      ? sourcePath
+      : undefined;
+  const variants = directVariantPath
+    ? [
+        {
+          id:
+            selected?.id ??
+            (generatedImage
+              ? 'generated-image'
+              : generatedAssetPath
+                ? 'generated-asset'
+                : 'reference-image'),
+          role: sourceRole,
+          sourcePath: directVariantPath,
+          selected: true,
+        },
+      ]
+    : undefined;
+
+  return {
+    renderForm: 'asset-thumbnail',
+    aspectRatio: '3/2',
+    source: createAssetPreviewDescriptor({
+      id: `node-card:${node.id}:shot`,
+      role: sourceRole,
+      path: directVariantPath ? undefined : resolverPath,
+      mediaType: referenceImageResourceRef || referenceResourceRef ? 'image' : undefined,
+      title: resolveShotTitle(node),
+      metadata:
+        referenceImageResourceRef || referenceResourceRef
+          ? {
+              ...(referenceImageResourceRef
+                ? { documentResourceRef: referenceImageResourceRef }
+                : {}),
+              ...(referenceResourceRef ? { resourceRef: referenceResourceRef } : {}),
+            }
+          : undefined,
+      variants,
+    }),
+  };
+}
 
 export const annotationCardPolicy: NodeCardPolicy = {
   nodeType: 'annotation',

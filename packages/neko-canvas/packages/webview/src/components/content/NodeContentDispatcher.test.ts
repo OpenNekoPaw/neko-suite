@@ -1,9 +1,16 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
 import { ContainerRenderer } from './ContainerRenderer';
 import { createNodeCollapseUpdate, NodeContentDispatcher } from './NodeContentDispatcher';
+import {
+  filterSceneShotTableRows,
+  projectSceneShotTableRows,
+  resolveSceneShotTableColumns,
+} from './creatorPresentation';
+import { resolveShotPreviewSource } from './node-card';
 import type { NodeContentRenderContext } from './types';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
@@ -285,7 +292,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Legacy path');
   });
 
-  it('keeps shot overlay metadata visible alongside bounded reference previews', () => {
+  it('keeps shot overlay details collapsed behind creator-facing preview defaults', () => {
     const node = {
       ...buildCanvasNode({
         type: 'shot',
@@ -386,36 +393,176 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
+    expect(markup).toContain('data-container-section-id="shot-root"');
+    expect(markup).toContain('data-container-section-fill="natural"');
     expect(markup).toContain('max-h-[52vh]');
     expect(markup).toContain('object-contain');
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
-    expect(markup).toContain('data-content-block-id="shot-characters"');
-    expect(markup).toContain('燈神');
-    expect(markup).toContain('primary');
-    expect(markup).toContain('stares forward');
-    expect(markup).toContain('entity-genie');
-    expect(markup).toContain('blue aura and gold cuffs');
-    expect(markup).toContain('same lamp glow as prior shot');
-    expect(markup).toContain('data-content-block-id="shot-text-cues"');
-    expect(markup).toContain('backgroundText');
-    expect(markup).toContain('page-header');
-    expect(markup).toContain('0.93');
-    expect(markup).toContain('data-content-block-id="shot-voice-cues"');
-    expect(markup).toContain('triumphant');
-    expect(markup).toContain('voice-genie');
-    expect(markup).toContain('data-content-block-id="shot-dialogue"');
-    expect(markup).toContain('那一願望實現囉！');
-    expect(markup).toContain('data-content-block-id="shot-voice-over"');
-    expect(markup).toContain('A promise becomes visible.');
-    expect(markup).toContain('data-content-block-id="shot-sound-cue"');
-    expect(markup).toContain('rushing light');
-    expect(markup).toContain('data-content-block-id="shot-generation-prompt"');
-    expect(markup).toContain('Animate the manga panel with drifting smoke and lamp glow.');
-    expect(markup).toContain('data-content-block-id="shot-generated-video-prompt"');
-    expect(markup).toContain('Video prompt: smoke curls around the genie.');
-    expect(markup).toContain('data-content-block-id="shot-source-media-refs"');
-    expect(markup).toContain('readimage-current-result');
-    expect(markup).toContain('P11');
+    expect(markup).toContain('data-container-section-id="shot-controls"');
+    expect(markup).toContain('data-container-section-id="shot-visual"');
+    expect(markup).toContain('data-container-section-id="shot-characters-section"');
+    expect(markup).toContain('data-container-section-id="shot-text-cues-section"');
+    expect(markup).toContain('data-container-section-id="shot-voice-cues-section"');
+    expect(markup).toContain('data-container-section-id="shot-audio"');
+    expect(markup).toContain('Controls');
+    expect(markup).toContain('Visual');
+    expect(markup).toContain('Characters');
+    expect(markup).toContain('Text Cues');
+    expect(markup).toContain('Voice Cues');
+    expect(markup).toContain('Audio');
+    expect(markup).not.toContain('data-content-block-id="shot-status"');
+    expect(markup).not.toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).not.toContain('data-content-block-id="shot-character-action"');
+    expect(markup).not.toContain('data-content-block-id="shot-characters"');
+    expect(markup).not.toContain('primary');
+    expect(markup).not.toContain('stares forward');
+    expect(markup).not.toContain('entity-genie');
+    expect(markup).not.toContain('blue aura and gold cuffs');
+    expect(markup).not.toContain('same lamp glow as prior shot');
+    expect(markup).not.toContain('data-content-block-id="shot-text-cues"');
+    expect(markup).not.toContain('backgroundText');
+    expect(markup).not.toContain('page-header');
+    expect(markup).not.toContain('0.93');
+    expect(markup).not.toContain('data-content-block-id="shot-voice-cues"');
+    expect(markup).not.toContain('triumphant');
+    expect(markup).not.toContain('voice-genie');
+    expect(markup).not.toContain('data-content-block-id="shot-dialogue"');
+    expect(markup).not.toContain('那一願望實現囉！');
+    expect(markup).not.toContain('data-content-block-id="shot-voice-over"');
+    expect(markup).not.toContain('A promise becomes visible.');
+    expect(markup).not.toContain('data-content-block-id="shot-sound-cue"');
+    expect(markup).not.toContain('rushing light');
+    expect(markup).toContain('Generation');
+    expect(markup).toContain('Media');
+    expect(markup).not.toContain('data-content-block-id="shot-generation-prompt"');
+    expect(markup).not.toContain('Animate the manga panel with drifting smoke and lamp glow.');
+    expect(markup).not.toContain('data-content-block-id="shot-generated-video-prompt"');
+    expect(markup).not.toContain('Video prompt: smoke curls around the genie.');
+    expect(markup).not.toContain('data-content-block-id="shot-source-media-refs"');
+    expect(markup).not.toContain('readimage-current-result');
+    expect(markup).not.toContain('P11');
+  });
+
+  it('renders shot character entity reference states inline', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 16,
+          duration: 3,
+          visualDescription: 'Four characters cross the frame.',
+          characterAction: 'They cross the frame.',
+          characters: [
+            {
+              characterName: 'Confirmed',
+              entityRef: { entityId: 'entity-confirmed', entityKind: 'character' },
+            },
+            {
+              characterName: 'Candidate',
+              candidateId: 'candidate-character',
+            },
+            {
+              characterName: 'Unlinked',
+            },
+            {
+              characterName: 'Ambiguous',
+              candidateId: 'candidate-ambiguous',
+              diagnostics: [
+                {
+                  code: 'backfill-target-not-found',
+                  details: { reason: 'candidate-ambiguous' },
+                },
+              ],
+            },
+            {
+              characterName: 'Broken',
+              entityRef: { entityId: 'entity-broken', entityKind: 'character' },
+              defaultRepresentation: {
+                role: 'portrait',
+                assetRef: 'project://assets/missing',
+                availability: 'orphaned',
+              },
+            },
+          ],
+        },
+      }),
+      id: 'shot-entity-states',
+    } as CanvasNode;
+    const content = node.content;
+    if (!content) {
+      throw new Error('Expected shot content');
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ContainerRenderer, {
+        section: content,
+        context: createCanvasContentRenderContext(node),
+      }),
+    );
+
+    expect(markup).toContain('data-entity-reference-state="confirmed"');
+    expect(markup).toContain('data-entity-reference-state="candidate"');
+    expect(markup).toContain('data-entity-reference-state="unlinked"');
+    expect(markup).toContain('data-entity-reference-state="ambiguous"');
+    expect(markup).toContain('data-entity-reference-state="orphaned"');
+    expect(markup).toContain('data-entity-reference-badge="confirmed"');
+    expect(markup).toContain('data-entity-reference-badge="candidate"');
+    expect(markup).toContain('data-entity-reference-badge="unlinked"');
+    expect(markup).toContain('data-entity-reference-badge="ambiguous"');
+    expect(markup).toContain('data-entity-reference-badge="orphaned"');
+    expect(markup).toContain('data-entity-hover-card="confirmed"');
+    expect(markup).toContain('data-entity-hover-card="candidate"');
+    expect(markup).toContain('data-entity-hover-card="orphaned"');
+    expect(markup).toContain('title="Inspect entity"');
+    expect(markup).toContain('title="Confirm candidate"');
+    expect(markup).toContain('Confirmed');
+    expect(markup).toContain('Candidate');
+    expect(markup).toContain('Broken');
+  });
+
+  it('localizes shot entity reference action titles', () => {
+    setLocale('zh-cn');
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 17,
+          duration: 3,
+          visualDescription: 'A candidate waits for review.',
+          characterAction: 'Candidate waits.',
+          characters: [
+            {
+              characterName: '候选角色',
+              candidateId: 'candidate-character',
+            },
+          ],
+        },
+      }),
+      id: 'shot-entity-i18n',
+    } as CanvasNode;
+    const content = node.content;
+    if (!content) {
+      throw new Error('Expected shot content');
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ContainerRenderer, {
+        section: content,
+        context: createCanvasContentRenderContext(node),
+      }),
+    );
+
+    expect(markup).toContain('title="检查实体"');
+    expect(markup).toContain('title="确认候选"');
+    expect(markup).toContain('候选');
+    expect(markup).toContain('候选角色 已关联到候选 candidate-character。');
+    expect(markup).not.toContain('>candidate<');
   });
 
   it('localizes composable shot control values', () => {
@@ -542,7 +689,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('UNSUPPORTED');
   });
 
-  it('renders scene shot children as a single horizontal progress rail', () => {
+  it('renders scene shot children as a default storyboard table', () => {
     const scene = {
       ...buildCanvasNode({
         type: 'scene',
@@ -579,24 +726,25 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
-    expect(markup).toContain('Shot 1');
     expect(markup).toContain('Assign selected');
     expect(markup).toContain('Auto layout');
     expect(markup).toContain('data-child-slot-id="scene-children"');
     expect(markup).toContain('data-child-slot-variant="summary-large"');
-    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
-    expect(markup).toContain('data-child-slot-card-height="210"');
-    expect(markup).toContain('data-child-slot-card-max-height="210"');
-    expect(markup).toContain('data-scene-shot-rail="true"');
-    expect(markup).toContain('data-scene-shot-card-id="shot-1"');
-    expect(markup).toContain('data-scene-shot-card-layout="rail"');
-    expect(markup).toContain('data-scene-shot-card-height="210px"');
-    expect(markup).toContain('Shot progress');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-table"');
+    expect(markup).toContain('data-scene-review-surface="true"');
+    expect(markup).toContain('data-scene-view-mode="storyboard-table"');
+    expect(markup).toContain('data-scene-shot-table="true"');
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
+    expect(markup).toContain('data-scene-shot-table-column="visual-action"');
+    expect(markup).toContain('Storyboard Table');
+    expect(markup).toContain('Creative View');
+    expect(markup).toContain('Visual / Action');
+    expect(markup).toContain('Dialogue / SFX');
     expect(markup).toContain('Train door');
-    expect(markup).toContain('Detail');
+    expect(markup).toContain('data-scene-cell-text-bounded="true"');
+    expect(markup).not.toContain('data-scene-shot-rail="true"');
     expect(markup).not.toContain('data-child-card-layout="detail"');
     expect(markup).not.toContain('data-child-detail-id="shot-1"');
-    expect(markup).not.toContain('Visual');
     expect(markup).not.toContain('data-node-card-id="shot-1"');
     expect(markup).not.toContain('Legacy path');
   });
@@ -633,15 +781,53 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('data-child-slot-id="scene-children"');
-    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
-    expect(markup).toContain('data-scene-shot-card-id="shot-parent-linked"');
-    expect(markup).toContain('Shot 7');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-table"');
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-parent-linked"');
+    expect(markup).toContain('data-scene-shot-table-cell="shot"');
     expect(markup).toContain('Visible through parentId');
     expect(markup).not.toContain('No shots');
     expect(markup).not.toContain('Legacy path');
   });
 
-  it('keeps scene shot rail horizontal when a scene container is narrow', () => {
+  it('keeps generic detail-card child slots scrollable in constrained containers', () => {
+    const parent = {
+      ...buildCanvasNode({
+        type: 'table',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'table.basic',
+        data: { label: 'Detail Grid', columnCount: 2, rowCount: 2 },
+      }),
+      id: 'table-detail-cards',
+      container: { policy: 'table', childIds: ['note-detail'] },
+    } as CanvasNode;
+    const child = {
+      ...buildCanvasNode({
+        type: 'annotation',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        data: { content: 'Scrollable child summary' },
+      }),
+      id: 'note-detail',
+      parentId: 'table-detail-cards',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(parent, [parent, child]),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-child-slot-id="table-children"');
+    expect(markup).toContain('data-child-slot-kind="detail-cards"');
+    expect(markup).toContain('data-child-slot-overflow="scroll"');
+    expect(markup).toContain('flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto');
+    expect(markup).toContain('Scrollable child summary');
+    expect(markup).not.toContain('Legacy path');
+  });
+
+  it('keeps scene storyboard table horizontally scrollable when a scene container is narrow', () => {
     const scene = {
       ...buildCanvasNode({
         type: 'scene',
@@ -678,18 +864,172 @@ describe('NodeContentDispatcher', () => {
 
     expect(markup).toContain('data-node-density="compact"');
     expect(markup).toContain('data-child-slot-variant="summary-large"');
-    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
-    expect(markup).toContain('data-child-slot-card-height="150"');
-    expect(markup).toContain('data-child-slot-card-max-height="210"');
-    expect(markup).toContain('data-scene-shot-rail="true"');
-    expect(markup).toContain('overflow-x-auto');
-    expect(markup).toContain('flex-nowrap');
-    expect(markup).toContain('data-scene-shot-card-id="shot-1"');
-    expect(markup).toContain('data-scene-shot-card-id="shot-2"');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-table"');
+    expect(markup).toContain('data-child-slot-card-height="180"');
+    expect(markup).toContain('data-child-slot-card-max-height="280"');
+    expect(markup).toContain('data-scene-shot-table="true"');
+    expect(markup).toContain('overflow-auto');
+    expect(markup).toContain('min-width:1432px');
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-2"');
     expect(markup).toContain('Beat 1');
     expect(markup).toContain('Beat 2');
     expect(markup).not.toContain('data-child-card-layout="detail"');
+    expect(markup).not.toContain('data-scene-shot-rail="true"');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('projects scene shot table rows in canonical child order with default review columns', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Projection', sceneNumber: 8 },
+      }),
+      id: 'scene-projection',
+      container: { policy: 'scene', childIds: ['shot-b', 'shot-a'] },
+    } as CanvasNode;
+    const shotA = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          duration: 2.5,
+          visualDescription: 'Second row visual',
+          characterAction: 'turns',
+          characters: [{ characterName: 'Mika', role: 'primary' }],
+          dialogue: 'We start now.',
+          sceneTags: ['interior'],
+          generationStatus: 'done',
+          generatedImage: 'data:image/png;base64,done',
+        },
+      }),
+      id: 'shot-a',
+      parentId: 'scene-projection',
+    } as CanvasNode;
+    const shotB = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 2,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          duration: 4,
+          visualDescription: 'First row visual',
+          cameraMovement: 'dolly-in',
+          generationStatus: 'idle',
+          continuityDiagnostics: [{ code: 'gap', message: 'Missing entrance beat' }],
+        },
+      }),
+      id: 'shot-b',
+      parentId: 'scene-projection',
+    } as CanvasNode;
+
+    const rows = projectSceneShotTableRows(scene, [shotB, shotA]);
+
+    expect(rows.map((row) => row.id)).toEqual(['shot-b', 'shot-a']);
+    expect(rows[0]?.visualAction).toBe('First row visual');
+    expect(rows[0]?.camera).toContain('dolly-in');
+    expect(rows[0]?.diagnosticCount).toBe(1);
+    expect(rows[1]?.duration).toBe('2.5s');
+    expect(rows[1]?.characters).toBe('Mika');
+    expect(rows[1]?.hasImage).toBe(true);
+    expect(resolveSceneShotTableColumns('creator-review')).toEqual([
+      'shot',
+      'image',
+      'duration',
+      'camera',
+      'visual-action',
+      'characters',
+      'dialogue-sfx',
+      'tags-style',
+      'status',
+    ]);
+    expect(filterSceneShotTableRows(rows, 'missing-image').map((row) => row.id)).toEqual([
+      'shot-b',
+    ]);
+    expect(filterSceneShotTableRows(rows, 'has-diagnostics').map((row) => row.id)).toEqual([
+      'shot-b',
+    ]);
+  });
+
+  it('reuses shot preview-source behavior for scene table generated and referenced images', () => {
+    const generatedShot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          visualDescription: 'Generated',
+          generationHistory: [
+            {
+              id: 'candidate-selected',
+              dataUrl: 'data:image/png;base64,selected',
+              selected: true,
+            },
+          ],
+        },
+      }),
+      id: 'shot-generated',
+    } as CanvasNode;
+    const referencedShot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          visualDescription: 'Referenced',
+          referenceImagePath: 'data:image/png;base64,reference',
+        },
+      }),
+      id: 'shot-reference',
+    } as CanvasNode;
+
+    const generatedSource = resolveShotPreviewSource(generatedShot);
+    const referencedSource = resolveShotPreviewSource(referencedShot);
+
+    expect(generatedSource.renderForm).toBe('asset-thumbnail');
+    expect(
+      generatedSource.renderForm === 'asset-thumbnail'
+        ? generatedSource.source.variants?.[0]?.sourcePath
+        : undefined,
+    ).toBe('data:image/png;base64,selected');
+    expect(referencedSource.renderForm).toBe('asset-thumbnail');
+    expect(
+      referencedSource.renderForm === 'asset-thumbnail'
+        ? referencedSource.source.variants?.[0]?.sourcePath
+        : undefined,
+    ).toBe('data:image/png;base64,reference');
+  });
+
+  it('keeps creator presentation runtime state out of Canvas data writers', () => {
+    const projectionSource = readFileSync(
+      new URL('./creatorPresentation.ts', import.meta.url),
+      'utf8',
+    );
+    const rendererSource = readFileSync(
+      new URL('./ContainerRenderer.tsx', import.meta.url),
+      'utf8',
+    );
+
+    expect(projectionSource).not.toContain('runtimeUrl');
+    expect(projectionSource).not.toContain('objectUrl');
+    expect(projectionSource).not.toContain('objectURL');
+    expect(projectionSource).not.toContain('cachePath');
+    expect(projectionSource).not.toContain('updateNodeData');
+    expect(rendererSource).not.toContain('asWebviewUri');
+    expect(rendererSource).not.toContain('tableScroll');
+    expect(rendererSource).not.toContain('activeRowFocus');
   });
 
   it('renders migrated gallery container with childSlots layout', () => {
@@ -847,6 +1187,10 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-id="gallery-children"');
     expect(markup).toContain('data-child-slot-kind="gallery-grid"');
     expect(markup).toContain('data-child-slot-variant="gallery"');
+    expect(markup).toContain('data-gallery-review-surface="true"');
+    expect(markup).toContain('data-gallery-review-mode="visual-grid"');
+    expect(markup).toContain('Visual Grid');
+    expect(markup).toContain('Review List');
     expect(markup).toContain('data-child-slot-card-height="240"');
     expect(markup).toContain('data-gallery-child-card-id="media-front"');
     expect(markup).toContain('data-gallery-child-card-layout="visual-grid"');
@@ -901,6 +1245,10 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Review Group');
     expect(markup).toContain('data-child-slot-id="group-children"');
     expect(markup).toContain('data-child-slot-kind="group-summary"');
+    expect(markup).toContain('data-group-review-surface="true"');
+    expect(markup).toContain('data-group-review-mode="overview"');
+    expect(markup).toContain('Overview');
+    expect(markup).toContain('Type list');
     expect(markup).toContain('data-child-slot-variant="row"');
     expect(markup).toContain('data-child-slot-card-height="148"');
     expect(markup).toContain('data-group-child-card-id="note-1"');
@@ -1057,5 +1405,24 @@ function createOverlayRenderContext(node: CanvasNode): NodeContentRenderContext 
     },
     depth: 0,
     previewSurfaceKind: 'overlay',
+  };
+}
+
+function createCanvasContentRenderContext(node: CanvasNode): NodeContentRenderContext {
+  return {
+    node,
+    allNodes: [node],
+    selectedNodeIds: [node.id],
+    isSelected: true,
+    isExpanded: true,
+    layout: {
+      width: 720,
+      height: 420,
+      density: 'expanded',
+      surface: 'canvas',
+      overflow: 'scroll',
+    },
+    depth: 0,
+    previewSurfaceKind: 'inline',
   };
 }

@@ -49,6 +49,7 @@ export {
   fallbackCardPolicy,
   getNodeCardPolicy,
   mediaCardPolicy,
+  resolveShotPreviewSource,
   shotCardPolicy,
   textCardPolicy,
 } from './policies';

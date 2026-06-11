@@ -17,7 +17,20 @@ import {
   NODE_CARD_ACTION_DISPATCHER,
   readNumber,
   readString,
+  resolveShotPreviewSource,
 } from './node-card';
+import type {
+  CreatorSceneViewMode,
+  SceneShotTableColumnId,
+  SceneShotTableColumnProfileId,
+  SceneShotTableFilterId,
+  SceneShotTableRow,
+} from './creatorPresentation';
+import {
+  filterSceneShotTableRows,
+  projectSceneShotTableRows,
+  resolveSceneShotTableColumns,
+} from './creatorPresentation';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useClipboardStore } from '../../stores/clipboardStore';
 import { useHistoryStore } from '../../stores/historyStore';
@@ -45,6 +58,59 @@ const INLINE_TEXT_OWNED_KEYS = [
   'ArrowLeft',
   'ArrowRight',
 ] as const;
+const SCENE_TOOL_SELECT_CLASS =
+  'min-w-0 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-700 outline-none focus:border-[var(--node-selected)]';
+
+const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
+  shot: 'scene.column.shot',
+  image: 'scene.column.image',
+  duration: 'scene.column.duration',
+  camera: 'scene.column.camera',
+  'visual-action': 'scene.column.visualAction',
+  characters: 'scene.column.characters',
+  'dialogue-sfx': 'scene.column.dialogueSfx',
+  'tags-style': 'scene.column.tagsStyle',
+  status: 'scene.column.status',
+  'character-description': 'scene.column.characterDescription',
+  'character-reference': 'scene.column.characterReference',
+  'reference-image': 'scene.column.referenceImage',
+  'storyboard-prompt': 'scene.column.storyboardPrompt',
+  'video-camera-prompt': 'scene.column.videoCameraPrompt',
+  'image-strategy': 'scene.column.imageStrategy',
+  'media-refs': 'scene.column.mediaRefs',
+  diagnostics: 'scene.column.diagnostics',
+};
+
+const SCENE_TABLE_COLUMN_WIDTHS: Record<SceneShotTableColumnId, number> = {
+  shot: 96,
+  image: 128,
+  duration: 88,
+  camera: 150,
+  'visual-action': 260,
+  characters: 160,
+  'dialogue-sfx': 220,
+  'tags-style': 180,
+  status: 150,
+  'character-description': 220,
+  'character-reference': 180,
+  'reference-image': 190,
+  'storyboard-prompt': 260,
+  'video-camera-prompt': 260,
+  'image-strategy': 160,
+  'media-refs': 220,
+  diagnostics: 240,
+};
+
+const SCENE_FILTER_OPTIONS = [
+  { id: 'all', label: 'scene.filterAll' },
+  { id: 'missing-image', label: 'scene.filterMissingImage' },
+  { id: 'missing-dialogue', label: 'scene.filterMissingDialogue' },
+  { id: 'failed-generation', label: 'scene.filterFailedGeneration' },
+  { id: 'ungenerated', label: 'scene.filterUngenerated' },
+  { id: 'has-diagnostics', label: 'scene.filterHasDiagnostics' },
+  { id: 'current-character', label: 'scene.filterCurrentCharacter' },
+  { id: 'current-scene-tag', label: 'scene.filterCurrentSceneTag' },
+] as const satisfies readonly { id: SceneShotTableFilterId; label: string }[];
 
 export function ContainerRenderer({ section, context }: ContainerRendererProps) {
   const blockRendererRegistry = useMemo(() => createBuiltInBlockRendererRegistry(), []);
@@ -69,9 +135,14 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
   }
 
   const sectionCollapsible = section.collapsible === true;
+  const sectionFillMode = resolveSectionFillMode(section, context);
 
   return (
-    <div className={getSectionClassName(section.layout, shouldFillSection(section, context))}>
+    <div
+      className={getSectionClassName(section.layout, sectionFillMode)}
+      data-container-section-id={section.id}
+      data-container-section-fill={sectionFillMode}
+    >
       {section.title &&
         (sectionCollapsible ? (
           <button
@@ -118,7 +189,7 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
             return (
               <div
                 key={slot.id}
-                className={getChildSlotFrameClassName(presentation)}
+                className={getChildSlotFrameClassName(presentation, context.layout.surface)}
                 data-child-slot-id={slot.id}
                 data-child-slot-variant={slotLayout.cardVariant}
                 data-child-slot-kind={presentation}
@@ -162,6 +233,15 @@ function renderChildSlotContent({
   slotLayout: ChildSlotLayout;
 }): React.ReactNode {
   switch (presentation) {
+    case 'scene-shot-table':
+      return (
+        <SceneShotReviewSurface
+          parentNode={parentNode}
+          childNodes={childNodes}
+          context={context}
+          slotLayout={slotLayout}
+        />
+      );
     case 'scene-shot-rail':
       return (
         <SceneShotRail
@@ -173,38 +253,20 @@ function renderChildSlotContent({
       );
     case 'group-summary':
       return (
-        <ChildSummaryGrid
-          className={slotLayout.className}
-          style={slotLayout.style}
+        <GroupReviewSurface
+          parentNode={parentNode}
           childNodes={childNodes}
-          renderChild={(child) => (
-            <GroupChildSummaryCard
-              key={child.id}
-              parentNode={parentNode}
-              childNode={child}
-              context={context}
-              variant={slotLayout.cardVariant}
-              style={slotLayout.cardStyle}
-            />
-          )}
+          context={context}
+          slotLayout={slotLayout}
         />
       );
     case 'gallery-grid':
       return (
-        <ChildSummaryGrid
-          className={slotLayout.className}
-          style={slotLayout.style}
+        <GalleryReviewSurface
+          parentNode={parentNode}
           childNodes={childNodes}
-          renderChild={(child, index) => (
-            <GalleryChildCard
-              key={child.id}
-              parentNode={parentNode}
-              childNode={child}
-              index={index}
-              context={context}
-              style={slotLayout.cardStyle}
-            />
-          )}
+          context={context}
+          slotLayout={slotLayout}
         />
       );
     case 'detail-cards':
@@ -242,6 +304,735 @@ function ChildSummaryGrid({
   return (
     <div className={className} style={style}>
       {childNodes.map((child, index) => renderChild(child, index))}
+    </div>
+  );
+}
+
+function GalleryReviewSurface({
+  parentNode,
+  childNodes,
+  context,
+  slotLayout,
+}: {
+  parentNode: CanvasNode;
+  childNodes: readonly CanvasNode[];
+  context: ContainerRendererProps['context'];
+  slotLayout: ChildSlotLayout;
+}): React.ReactNode {
+  const [mode, setMode] = useState<'visual-grid' | 'review-list'>('visual-grid');
+
+  return (
+    <div
+      className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-2 overflow-hidden"
+      data-gallery-review-surface="true"
+      data-gallery-review-mode={mode}
+    >
+      <div className="flex min-w-0 items-center gap-1.5 px-2 text-[11px] text-gray-600">
+        <div
+          className="flex flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-white"
+          role="group"
+          aria-label={t('gallery.viewMode')}
+        >
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(mode === 'visual-grid')}
+            onClick={() => setMode('visual-grid')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('gallery.visualGrid')}
+          </button>
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(mode === 'review-list')}
+            onClick={() => setMode('review-list')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('gallery.reviewList')}
+          </button>
+        </div>
+        <span className="ml-auto flex-shrink-0 text-[10px] text-gray-500">
+          {t('gallery.viewCountCompact', { count: childNodes.length })}
+        </span>
+      </div>
+      {mode === 'review-list' ? (
+        <GalleryReviewList parentNode={parentNode} childNodes={childNodes} />
+      ) : (
+        <ChildSummaryGrid
+          className={slotLayout.className}
+          style={slotLayout.style}
+          childNodes={childNodes}
+          renderChild={(child, index) => (
+            <GalleryChildCard
+              key={child.id}
+              parentNode={parentNode}
+              childNode={child}
+              index={index}
+              context={context}
+              style={slotLayout.cardStyle}
+            />
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function GalleryReviewList({
+  parentNode,
+  childNodes,
+}: {
+  parentNode: CanvasNode;
+  childNodes: readonly CanvasNode[];
+}): React.ReactNode {
+  return (
+    <div
+      className="min-h-0 min-w-0 flex-1 basis-0 overflow-auto px-2 pb-2"
+      data-gallery-review-list="true"
+    >
+      <table className="min-w-[720px] table-fixed border-collapse text-left text-[11px] text-gray-700">
+        <colgroup>
+          <col style={{ width: 72 }} />
+          <col style={{ width: 160 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 260 }} />
+          <col style={{ width: 108 }} />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase tracking-normal text-gray-500">
+          <tr>
+            <th className="border border-gray-200 px-2 py-1.5 font-medium">
+              {t('gallery.column.order')}
+            </th>
+            <th className="border border-gray-200 px-2 py-1.5 font-medium">
+              {t('gallery.column.label')}
+            </th>
+            <th className="border border-gray-200 px-2 py-1.5 font-medium">
+              {t('gallery.column.status')}
+            </th>
+            <th className="border border-gray-200 px-2 py-1.5 font-medium">
+              {t('gallery.column.prompt')}
+            </th>
+            <th className="border border-gray-200 px-2 py-1.5 font-medium">
+              {t('gallery.column.reference')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {childNodes.map((childNode, index) => {
+            const placement = readChildPlacementMetadata(parentNode, childNode.id);
+            const prompt =
+              readString(placement, 'prompt') ?? resolveChildSummaryText(childNode, undefined);
+            const status =
+              readString(placement, 'generationStatus') ??
+              readString(childNode.data, 'generationStatus');
+            return (
+              <tr key={childNode.id} data-gallery-review-row-id={childNode.id} className="bg-white">
+                <td className="border border-gray-200 px-2 py-2 align-top">
+                  {resolveGalleryCellOrdinal(parentNode, childNode, index)}
+                </td>
+                <td className="border border-gray-200 px-2 py-2 align-top">
+                  <BoundedSceneCellText
+                    value={
+                      readString(placement, 'label') ?? childNode.preview?.title ?? childNode.id
+                    }
+                    fallback={t('scene.valueUnavailable')}
+                  />
+                </td>
+                <td className="border border-gray-200 px-2 py-2 align-top">
+                  <BoundedSceneCellText
+                    value={status ? resolveCanvasStatusLabel(status) : ''}
+                    fallback={t('scene.valueUnavailable')}
+                  />
+                </td>
+                <td className="border border-gray-200 px-2 py-2 align-top">
+                  <BoundedSceneCellText value={prompt} fallback={t('scene.valueUnavailable')} />
+                </td>
+                <td className="border border-gray-200 px-2 py-2 align-top">
+                  <BoundedSceneCellText
+                    value={childNode.id}
+                    fallback={t('scene.valueUnavailable')}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function GroupReviewSurface({
+  parentNode,
+  childNodes,
+  context,
+  slotLayout,
+}: {
+  parentNode: CanvasNode;
+  childNodes: readonly CanvasNode[];
+  context: ContainerRendererProps['context'];
+  slotLayout: ChildSlotLayout;
+}): React.ReactNode {
+  const [mode, setMode] = useState<'overview' | 'type-list'>('overview');
+  const typeCounts = useMemo(() => summarizeChildTypeCounts(childNodes), [childNodes]);
+
+  return (
+    <div
+      className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-2 overflow-hidden"
+      data-group-review-surface="true"
+      data-group-review-mode={mode}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 text-[11px] text-gray-600">
+        <div
+          className="flex flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-white"
+          role="group"
+          aria-label={t('group.viewMode')}
+        >
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(mode === 'overview')}
+            onClick={() => setMode('overview')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('group.overview')}
+          </button>
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(mode === 'type-list')}
+            onClick={() => setMode('type-list')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('group.typeList')}
+          </button>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1">
+          {typeCounts.map((entry) => (
+            <span key={entry.type} className={getChildBadgeClassName('info')}>
+              {resolveNodeTypeLabelByType(entry.type)}: {entry.count}
+            </span>
+          ))}
+        </div>
+      </div>
+      {mode === 'type-list' ? (
+        <GroupTypeList childNodes={childNodes} />
+      ) : (
+        <ChildSummaryGrid
+          className={slotLayout.className}
+          style={slotLayout.style}
+          childNodes={childNodes}
+          renderChild={(child) => (
+            <GroupChildSummaryCard
+              key={child.id}
+              parentNode={parentNode}
+              childNode={child}
+              context={context}
+              variant={slotLayout.cardVariant}
+              style={slotLayout.cardStyle}
+            />
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function GroupTypeList({ childNodes }: { childNodes: readonly CanvasNode[] }): React.ReactNode {
+  const groups = useMemo(() => groupChildrenByType(childNodes), [childNodes]);
+  return (
+    <div
+      className="min-h-0 min-w-0 flex-1 basis-0 overflow-auto px-2 pb-2 text-[11px] text-gray-700"
+      data-group-type-list="true"
+    >
+      {groups.map((group) => (
+        <section key={group.type} className="mb-2 rounded border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 bg-gray-50 px-2 py-1 font-medium">
+            {group.type} · {group.children.length}
+          </div>
+          <div className="divide-y divide-gray-100">
+            {group.children.map((child) => (
+              <div key={child.id} className="flex min-w-0 gap-2 px-2 py-1.5">
+                <span className="w-24 flex-shrink-0 truncate text-gray-500">{child.type}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {child.preview?.title ?? resolveChildSummaryText(child, child.preview?.subtitle)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SceneShotReviewSurface({
+  parentNode,
+  childNodes,
+  context,
+  slotLayout,
+}: {
+  parentNode: CanvasNode;
+  childNodes: readonly CanvasNode[];
+  context: ContainerRendererProps['context'];
+  slotLayout: ChildSlotLayout;
+}): React.ReactNode {
+  const [viewMode, setViewMode] = useState<CreatorSceneViewMode>('storyboard-table');
+  const [columnProfileId, setColumnProfileId] =
+    useState<SceneShotTableColumnProfileId>('creator-review');
+  const [filterId, setFilterId] = useState<SceneShotTableFilterId>('all');
+  const [currentCharacterFilter, setCurrentCharacterFilter] = useState<string | undefined>();
+  const [currentSceneTagFilter, setCurrentSceneTagFilter] = useState<string | undefined>();
+  const [sortId, setSortId] = useState<'scene-order' | 'status'>('scene-order');
+  const rows = useMemo(
+    () => projectSceneShotTableRows(parentNode, childNodes),
+    [childNodes, parentNode],
+  );
+  const activeColumns = useMemo(
+    () => resolveSceneShotTableColumns(columnProfileId),
+    [columnProfileId],
+  );
+  const characterFilterOptions = useMemo(
+    () => uniqueDisplayStrings(rows.flatMap((row) => row.characterNames)),
+    [rows],
+  );
+  const sceneTagFilterOptions = useMemo(
+    () => uniqueDisplayStrings(rows.flatMap((row) => row.sceneTags)),
+    [rows],
+  );
+  const visibleRows = useMemo(() => {
+    const filtered = filterSceneShotTableRows(rows, filterId, {
+      currentCharacter: currentCharacterFilter ?? characterFilterOptions[0],
+      currentSceneTag: currentSceneTagFilter ?? sceneTagFilterOptions[0],
+    });
+    if (sortId === 'status') {
+      return [...filtered].sort((left, right) => left.status.localeCompare(right.status));
+    }
+    return filtered;
+  }, [
+    characterFilterOptions,
+    currentCharacterFilter,
+    currentSceneTagFilter,
+    filterId,
+    rows,
+    sceneTagFilterOptions,
+    sortId,
+  ]);
+
+  return (
+    <div
+      className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-2 overflow-hidden"
+      data-scene-review-surface="true"
+      data-scene-view-mode={viewMode}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 text-[11px] text-gray-600">
+        <div
+          className="flex flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-white"
+          role="group"
+          aria-label={t('scene.viewMode')}
+        >
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(viewMode === 'storyboard-table')}
+            onClick={() => setViewMode('storyboard-table')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('scene.storyboardTable')}
+          </button>
+          <button
+            type="button"
+            className={getSceneToolButtonClassName(viewMode === 'creative-view')}
+            onClick={() => setViewMode('creative-view')}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {t('scene.creativeView')}
+          </button>
+        </div>
+        {viewMode === 'storyboard-table' ? (
+          <>
+            <label className="flex min-w-[112px] items-center gap-1">
+              <span className="text-gray-500">{t('scene.fields')}</span>
+              <select
+                className={SCENE_TOOL_SELECT_CLASS}
+                value={columnProfileId}
+                onChange={(event) =>
+                  setColumnProfileId(event.target.value as SceneShotTableColumnProfileId)
+                }
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <option value="creator-review">{t('scene.profileCreatorReview')}</option>
+                <option value="professional">{t('scene.profileProfessional')}</option>
+              </select>
+            </label>
+            <label className="flex min-w-[128px] items-center gap-1">
+              <span className="text-gray-500">{t('scene.filter')}</span>
+              <select
+                className={SCENE_TOOL_SELECT_CLASS}
+                value={filterId}
+                onChange={(event) => setFilterId(event.target.value as SceneShotTableFilterId)}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                {SCENE_FILTER_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {t(option.label)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {filterId === 'current-character' ? (
+              <label className="flex min-w-[128px] items-center gap-1">
+                <span className="text-gray-500">{t('scene.character')}</span>
+                <select
+                  className={SCENE_TOOL_SELECT_CLASS}
+                  value={currentCharacterFilter ?? characterFilterOptions[0] ?? ''}
+                  onChange={(event) => setCurrentCharacterFilter(event.target.value || undefined)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  {characterFilterOptions.length === 0 ? (
+                    <option value="">{t('scene.valueUnavailable')}</option>
+                  ) : (
+                    characterFilterOptions.map((character) => (
+                      <option key={character} value={character}>
+                        {character}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+            ) : null}
+            {filterId === 'current-scene-tag' ? (
+              <label className="flex min-w-[128px] items-center gap-1">
+                <span className="text-gray-500">{t('scene.tag')}</span>
+                <select
+                  className={SCENE_TOOL_SELECT_CLASS}
+                  value={currentSceneTagFilter ?? sceneTagFilterOptions[0] ?? ''}
+                  onChange={(event) => setCurrentSceneTagFilter(event.target.value || undefined)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  {sceneTagFilterOptions.length === 0 ? (
+                    <option value="">{t('scene.valueUnavailable')}</option>
+                  ) : (
+                    sceneTagFilterOptions.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+            ) : null}
+            <label className="flex min-w-[112px] items-center gap-1">
+              <span className="text-gray-500">{t('scene.sort')}</span>
+              <select
+                className={SCENE_TOOL_SELECT_CLASS}
+                value={sortId}
+                onChange={(event) => setSortId(event.target.value as 'scene-order' | 'status')}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <option value="scene-order">{t('scene.sortSceneOrder')}</option>
+                <option value="status">{t('scene.sortStatus')}</option>
+              </select>
+            </label>
+            <span className="ml-auto flex-shrink-0 text-[10px] text-gray-500">
+              {t('scene.shotCountCompact', { count: visibleRows.length })}
+            </span>
+          </>
+        ) : null}
+      </div>
+      {viewMode === 'creative-view' ? (
+        <SceneShotRail
+          parentNode={parentNode}
+          childNodes={childNodes}
+          context={context}
+          slotLayout={slotLayout}
+        />
+      ) : (
+        <SceneShotTable
+          parentNode={parentNode}
+          rows={visibleRows}
+          columns={activeColumns}
+          context={context}
+        />
+      )}
+    </div>
+  );
+}
+
+function SceneShotTable({
+  parentNode,
+  rows,
+  columns,
+  context,
+}: {
+  parentNode: CanvasNode;
+  rows: readonly SceneShotTableRow[];
+  columns: readonly SceneShotTableColumnId[];
+  context: ContainerRendererProps['context'];
+}): React.ReactNode {
+  if (rows.length === 0) {
+    return (
+      <div
+        className="mx-2 flex min-h-[120px] items-center justify-center rounded border border-dashed border-gray-200 bg-white/70 px-3 py-4 text-xs text-gray-500"
+        data-scene-shot-table-empty="true"
+      >
+        {t('scene.tableEmpty')}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-h-0 min-w-0 flex-1 basis-0 overflow-auto px-2 pb-2"
+      data-scene-shot-table="true"
+      data-node-drag-block="true"
+    >
+      <table
+        className="table-fixed border-collapse text-left text-[11px] text-gray-700"
+        style={{ minWidth: resolveSceneTableMinWidth(columns) }}
+      >
+        <colgroup>
+          {columns.map((columnId) => (
+            <col key={columnId} style={{ width: SCENE_TABLE_COLUMN_WIDTHS[columnId] }} />
+          ))}
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase tracking-normal text-gray-500">
+          <tr>
+            {columns.map((columnId) => (
+              <th
+                key={columnId}
+                className="border border-gray-200 px-2 py-1.5 font-medium"
+                data-scene-shot-table-column={columnId}
+              >
+                {t(SCENE_COLUMN_LABELS[columnId])}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <SceneShotTableRowView
+              key={row.id}
+              parentNode={parentNode}
+              row={row}
+              columns={columns}
+              context={context}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SceneShotTableRowView({
+  parentNode,
+  row,
+  columns,
+  context,
+}: {
+  parentNode: CanvasNode;
+  row: SceneShotTableRow;
+  columns: readonly SceneShotTableColumnId[];
+  context: ContainerRendererProps['context'];
+}): React.ReactNode {
+  const isSelected = context.selectedNodeIds.includes(row.node.id);
+  const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === row.node.id);
+  const handleSelect = useCallback(
+    (event: React.MouseEvent) => {
+      context.onSelectNode?.(row.node.id, event.shiftKey || event.metaKey);
+    },
+    [context, row.node.id],
+  );
+  const handleOpenDetails = useCallback(() => {
+    dispatchNodeCardAction(NODE_CARD_ACTION_DISPATCHER, 'open-content-overlay', {
+      nodeId: row.node.id,
+      node: row.node,
+      parentNodeId: parentNode.id,
+      canvasStore: useCanvasStore.getState(),
+      historyStore: useHistoryStore.getState(),
+      clipboardStore: useClipboardStore.getState(),
+      postMessage: (message) => getGlobalVSCodeApi()?.postMessage(message),
+    });
+  }, [parentNode.id, row.node]);
+
+  return (
+    <tr
+      className={
+        isSelected || isPlaybackActive
+          ? 'bg-blue-50 outline outline-1 outline-[var(--node-selected)]'
+          : 'bg-white hover:bg-gray-50'
+      }
+      data-scene-shot-table-row-id={row.id}
+      data-playback-active={isPlaybackActive ? 'true' : undefined}
+      onClick={handleSelect}
+      onDoubleClick={handleOpenDetails}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      {columns.map((columnId) => (
+        <td
+          key={columnId}
+          className={getSceneTableCellClassName(columnId)}
+          data-scene-shot-table-cell={columnId}
+        >
+          {renderSceneShotTableCell(columnId, row, {
+            context,
+            onOpenDetails: handleOpenDetails,
+          })}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+function renderSceneShotTableCell(
+  columnId: SceneShotTableColumnId,
+  row: SceneShotTableRow,
+  options: {
+    context: ContainerRendererProps['context'];
+    onOpenDetails: () => void;
+  },
+): React.ReactNode {
+  switch (columnId) {
+    case 'shot':
+      return (
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-1 text-left text-[12px] font-medium text-gray-900 hover:text-blue-700"
+          title={t('scene.openShotDetail')}
+          onClick={(event) => {
+            event.stopPropagation();
+            options.onOpenDetails();
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] leading-none text-white">
+            {row.ordinal}
+          </span>
+          <span className="truncate">{row.shotNumber}</span>
+        </button>
+      );
+    case 'image':
+      return <SceneShotTableImageCell row={row} context={options.context} />;
+    case 'duration':
+      return <BoundedSceneCellText value={row.duration} fallback={t('scene.valueUnavailable')} />;
+    case 'camera':
+      return <BoundedSceneCellText value={row.camera} fallback={t('scene.valueUnavailable')} />;
+    case 'visual-action':
+      return (
+        <BoundedSceneCellText value={row.visualAction} fallback={t('scene.shotVisualFallback')} />
+      );
+    case 'characters':
+      return (
+        <BoundedSceneCellText value={row.characters} fallback={t('preset.shot.noCharacters')} />
+      );
+    case 'dialogue-sfx':
+      return <BoundedSceneCellText value={row.dialogueSfx} fallback={t('scene.noDialogue')} />;
+    case 'tags-style':
+      return <BoundedSceneCellText value={row.tagsStyle} fallback={t('scene.valueUnavailable')} />;
+    case 'status':
+      return <SceneShotStatusCell row={row} />;
+    case 'character-description':
+      return (
+        <BoundedSceneCellText
+          value={row.characterDescription}
+          fallback={t('scene.valueUnavailable')}
+        />
+      );
+    case 'character-reference':
+      return (
+        <BoundedSceneCellText
+          value={row.characterReference}
+          fallback={t('scene.valueUnavailable')}
+        />
+      );
+    case 'reference-image':
+      return (
+        <BoundedSceneCellText value={row.referenceImage} fallback={t('scene.imageUnavailable')} />
+      );
+    case 'storyboard-prompt':
+      return (
+        <BoundedSceneCellText value={row.storyboardPrompt} fallback={t('scene.valueUnavailable')} />
+      );
+    case 'video-camera-prompt':
+      return (
+        <BoundedSceneCellText
+          value={row.videoCameraPrompt}
+          fallback={t('scene.valueUnavailable')}
+        />
+      );
+    case 'image-strategy':
+      return (
+        <BoundedSceneCellText value={row.imageStrategy} fallback={t('scene.valueUnavailable')} />
+      );
+    case 'media-refs':
+      return <BoundedSceneCellText value={row.mediaRefs} fallback={t('scene.valueUnavailable')} />;
+    case 'diagnostics':
+      return (
+        <BoundedSceneCellText value={row.diagnostics} fallback={t('preset.shot.noDiagnostics')} />
+      );
+  }
+}
+
+function SceneShotTableImageCell({
+  row,
+  context,
+}: {
+  row: SceneShotTableRow;
+  context: ContainerRendererProps['context'];
+}): React.ReactNode {
+  const previewSource = resolveShotPreviewSource(row.node);
+  if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
+    return (
+      <div className="flex h-[72px] w-[108px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400">
+        {t('scene.imageUnavailable')}
+      </div>
+    );
+  }
+  return (
+    <div className="h-[72px] w-[108px] overflow-hidden rounded border border-gray-200 bg-gray-50">
+      <CardPreviewSlot
+        source={previewSource}
+        title={row.shotNumber}
+        variant="summary-large"
+        interactionRenderMode={context.interactionRenderMode}
+      />
+    </div>
+  );
+}
+
+function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
+  const status = row.generationStatus ? resolveCanvasStatusLabel(row.generationStatus) : undefined;
+  const tone =
+    row.diagnosticCount > 0 || !row.hasImage
+      ? 'warning'
+      : row.generationStatus === 'error'
+        ? 'error'
+        : 'neutral';
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className={getSceneStatusBadgeClassName(tone)}>
+        {status ?? t('scene.statusUngenerated')}
+      </span>
+      {!row.hasImage ? (
+        <span className="text-[10px] text-amber-700">{t('scene.missingImage')}</span>
+      ) : null}
+      {!row.hasDialogue ? (
+        <span className="text-[10px] text-gray-500">{t('scene.missingDialogue')}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function BoundedSceneCellText({
+  value,
+  fallback,
+}: {
+  value: string;
+  fallback: string;
+}): React.ReactNode {
+  return (
+    <div
+      className="max-h-[5.25rem] min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
+      data-scene-cell-text-bounded="true"
+    >
+      {value || <span className="text-gray-400">{fallback}</span>}
     </div>
   );
 }
@@ -996,6 +1787,39 @@ function getSceneShotRailCardClassName(isSelected: boolean, isPlaybackActive = f
     : `${base} border-gray-200 hover:border-blue-300`;
 }
 
+function getSceneToolButtonClassName(active: boolean): string {
+  const base = 'px-2 py-1 text-[11px] leading-none transition-colors';
+  return active
+    ? `${base} bg-blue-600 text-white`
+    : `${base} bg-white text-gray-600 hover:bg-gray-50`;
+}
+
+function getSceneTableCellClassName(columnId: SceneShotTableColumnId): string {
+  const base = 'align-top border border-gray-200 px-2 py-2';
+  if (columnId === 'image') {
+    return `${base} bg-white`;
+  }
+  if (columnId === 'shot' || columnId === 'status') {
+    return `${base} bg-white`;
+  }
+  return `${base} bg-white`;
+}
+
+function getSceneStatusBadgeClassName(tone: 'error' | 'warning' | 'neutral'): string {
+  const base = 'inline-flex w-fit rounded border px-1.5 py-0.5 text-[10px] leading-none';
+  if (tone === 'error') {
+    return `${base} border-red-200 bg-red-50 text-red-700`;
+  }
+  if (tone === 'warning') {
+    return `${base} border-amber-200 bg-amber-50 text-amber-700`;
+  }
+  return `${base} border-gray-200 bg-gray-50 text-gray-600`;
+}
+
+function resolveSceneTableMinWidth(columns: readonly SceneShotTableColumnId[]): number {
+  return columns.reduce((total, columnId) => total + SCENE_TABLE_COLUMN_WIDTHS[columnId], 0);
+}
+
 function getGroupSummaryCardClassName(
   variant: NodeCardVariant,
   isSelected: boolean,
@@ -1023,24 +1847,38 @@ function getSummaryPreviewWrapperClassName(variant: NodeCardVariant): string {
   return 'w-[112px] flex-shrink-0';
 }
 
-function getChildSlotFrameClassName(presentation: ChildSlotPresentation): string {
+function getChildSlotFrameClassName(
+  presentation: ChildSlotPresentation,
+  surface: ContainerRendererProps['context']['layout']['surface'],
+): string {
   if (presentation === 'scene-shot-rail') {
     return 'flex min-h-0 min-w-0 flex-shrink-0 flex-col gap-1.5';
+  }
+  if (presentation === 'scene-shot-table') {
+    return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-hidden';
+  }
+  if (surface === 'overlay') {
+    return 'flex min-h-0 min-w-0 flex-col gap-1.5 overflow-visible';
   }
   if (presentation === 'group-summary' || presentation === 'gallery-grid') {
     return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto';
   }
-  return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5';
+  return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto';
 }
 
-type ChildSlotPresentation = 'scene-shot-rail' | 'group-summary' | 'gallery-grid' | 'detail-cards';
+type ChildSlotPresentation =
+  | 'scene-shot-table'
+  | 'scene-shot-rail'
+  | 'group-summary'
+  | 'gallery-grid'
+  | 'detail-cards';
 
 function resolveChildSlotPresentation(
   node: CanvasNode,
   slot: ChildNodeSlot,
 ): ChildSlotPresentation {
   if (node.type === 'scene' && (slot.summaryRole === 'node-summary' || slot.layout === 'grid')) {
-    return 'scene-shot-rail';
+    return 'scene-shot-table';
   }
   if (node.type === 'gallery' && slot.layout === 'gallery') {
     return 'gallery-grid';
@@ -1196,9 +2034,39 @@ function badgeToneForStatus(status: string): CardBadge['tone'] {
 }
 
 function resolveNodeTypeLabel(node: CanvasNode): string {
-  const key = node.type === 'scene' ? 'node.sceneGroup' : `node.${node.type}`;
+  return resolveNodeTypeLabelByType(node.type);
+}
+
+function resolveNodeTypeLabelByType(nodeType: CanvasNode['type']): string {
+  const key = nodeType === 'scene' ? 'node.sceneGroup' : `node.${nodeType}`;
   const label = t(key);
-  return label === key ? node.type : label;
+  return label === key ? nodeType : label;
+}
+
+function summarizeChildTypeCounts(
+  childNodes: readonly CanvasNode[],
+): readonly { readonly type: CanvasNode['type']; readonly count: number }[] {
+  const counts = new Map<CanvasNode['type'], number>();
+  for (const child of childNodes) {
+    counts.set(child.type, (counts.get(child.type) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([type, count]) => ({ type, count }));
+}
+
+function groupChildrenByType(
+  childNodes: readonly CanvasNode[],
+): readonly { readonly type: CanvasNode['type']; readonly children: readonly CanvasNode[] }[] {
+  const groups = new Map<CanvasNode['type'], CanvasNode[]>();
+  for (const child of childNodes) {
+    const group = groups.get(child.type) ?? [];
+    group.push(child);
+    groups.set(child.type, group);
+  }
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([type, children]) => ({ type, children }));
 }
 
 function truncateSummary(value: string): string {
@@ -1256,6 +2124,17 @@ function shouldFillSection(
   );
 }
 
+function resolveSectionFillMode(
+  section: ContainerRendererProps['section'],
+  context: ContainerRendererProps['context'],
+): 'fill' | 'natural' {
+  if (context.layout.surface === 'overlay' && !shouldFillSection(section, context)) {
+    return 'natural';
+  }
+
+  return shouldFillSection(section, context) ? 'fill' : 'natural';
+}
+
 function isStretchBlock(block: CanvasBlock): boolean {
   return block.kind === 'textarea' || block.kind === 'editable-text';
 }
@@ -1268,6 +2147,10 @@ function resolveDefaultCollapsed(
     return false;
   }
 
+  if (shouldCollapseSectionBySurface(section, context.layout.surface)) {
+    return true;
+  }
+
   return section.defaultCollapsed ?? false;
 }
 
@@ -1276,6 +2159,14 @@ function shouldExpandSectionBySurface(
   surface: ContainerRendererProps['context']['layout']['surface'],
 ): boolean {
   const surfaces = section.metadata?.['defaultExpandedSurfaces'];
+  return Array.isArray(surfaces) && surfaces.includes(surface);
+}
+
+function shouldCollapseSectionBySurface(
+  section: ContainerRendererProps['section'],
+  surface: ContainerRendererProps['context']['layout']['surface'],
+): boolean {
+  const surfaces = section.metadata?.['defaultCollapsedSurfaces'];
   return Array.isArray(surfaces) && surfaces.includes(surface);
 }
 
@@ -1312,6 +2203,12 @@ function resolveSlotChildIds(
 
 function uniqueStrings(values: readonly string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function uniqueDisplayStrings(values: readonly string[]): string[] {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+  ).sort((left, right) => left.localeCompare(right));
 }
 
 interface InlineEditableField {
@@ -1369,6 +2266,15 @@ function resolveChildSlotLayout(
   presentation: ChildSlotPresentation,
 ): ChildSlotLayout {
   const cardMetrics = resolveChildCardMetrics(layout, presentation);
+
+  if (presentation === 'scene-shot-table') {
+    return {
+      className: 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden',
+      cardVariant: 'summary-large',
+      cardStyle: createCardHeightStyle(cardMetrics),
+      ...cardMetrics,
+    };
+  }
 
   if (presentation === 'scene-shot-rail') {
     return {
@@ -1462,20 +2368,35 @@ function resolveChildCardMetrics(
   );
   const expanded = layout.surface === 'overlay' || layout.density === 'expanded';
   const minCardHeight =
-    presentation === 'gallery-grid' ? 170 : presentation === 'scene-shot-rail' ? 150 : 148;
+    presentation === 'gallery-grid'
+      ? 170
+      : presentation === 'scene-shot-table'
+        ? 180
+        : presentation === 'scene-shot-rail'
+          ? 150
+          : 148;
   const maxCardHeight =
     presentation === 'gallery-grid'
       ? expanded
         ? 300
         : 240
-      : presentation === 'scene-shot-rail'
+      : presentation === 'scene-shot-table'
         ? expanded
-          ? 240
-          : 210
-        : expanded
-          ? 260
-          : 220;
-  const visibleRows = presentation === 'scene-shot-rail' ? 1 : expanded ? 2 : 1;
+          ? 360
+          : 280
+        : presentation === 'scene-shot-rail'
+          ? expanded
+            ? 240
+            : 210
+          : expanded
+            ? 260
+            : 220;
+  const visibleRows =
+    presentation === 'scene-shot-rail' || presentation === 'scene-shot-table'
+      ? 1
+      : expanded
+        ? 2
+        : 1;
   const targetHeight = Math.floor(heightBudget / visibleRows);
   return {
     cardHeight: clampNumber(targetHeight, minCardHeight, maxCardHeight),
@@ -1488,7 +2409,13 @@ function resolveContainerChromeHeight(
   presentation: ChildSlotPresentation,
 ): number {
   const base = layout.surface === 'overlay' ? 172 : 126;
-  return presentation === 'scene-shot-rail' ? base + 26 : base;
+  if (presentation === 'scene-shot-rail') {
+    return base + 26;
+  }
+  if (presentation === 'scene-shot-table') {
+    return base + 42;
+  }
+  return base;
 }
 
 function createCardHeightStyle(metrics: {
@@ -1532,8 +2459,8 @@ function isSectionVisible(
   );
 }
 
-function getSectionClassName(layout: string | undefined, fill: boolean): string {
-  const fillClass = fill ? ' flex-1 basis-0' : '';
+function getSectionClassName(layout: string | undefined, fillMode: 'fill' | 'natural'): string {
+  const fillClass = fillMode === 'fill' ? ' flex-1 basis-0' : '';
   switch (layout) {
     case 'row':
       return 'flex min-w-0 flex-row gap-2 overflow-x-auto overflow-y-hidden p-2';

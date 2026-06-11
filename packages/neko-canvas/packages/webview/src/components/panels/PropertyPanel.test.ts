@@ -63,6 +63,14 @@ describe('PropertyPanel node properties registry', () => {
             message: 'Cost is unknown.',
           },
         ],
+        metadata: {
+          regenerationRecommendation: {
+            decision: 'transform-source',
+            label: 'Recommend editing source image',
+            reason: 'The shot can preserve source composition through image transform operations.',
+            confidence: 0.85,
+          },
+        },
         status: 'needs-approval',
       },
       visualOccurrences: [
@@ -143,6 +151,7 @@ describe('PropertyPanel node properties registry', () => {
     expect(fieldPaths).toContain('/dialogue');
     expect(fieldPaths).toContain('/shotImagePrepPlan/status');
     expect(fieldPaths).toContain('/shotImagePrepPlan/imageStrategy');
+    expect(fieldPaths).toContain('/shotImagePrepPlan/metadata/regenerationRecommendation/label');
     expect(fieldPaths).toContain('/shotImagePrepPlan/operationPlan');
     expect(collectionPaths).toContain('/characters');
     expect(collectionPaths).toContain('/textCues');

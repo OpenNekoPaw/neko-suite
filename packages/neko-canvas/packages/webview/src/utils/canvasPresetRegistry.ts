@@ -76,8 +76,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
       sections: [
         {
           id: 'shot-controls',
+          title: 'preset.shot.controlsSection',
           layout: 'row',
           visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             fieldBlock('shot-status', 'status', '/generationStatus', 'preset.shot.status'),
             selectBlock('shot-scale', '/shotScale', SHOT_SCALE_OPTIONS, 'preset.shot.scale'),
@@ -128,6 +132,9 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'shot-visual',
           title: 'preset.shot.visualSection',
           layout: 'stack',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             fieldBlock(
               'shot-visual-description',
@@ -151,6 +158,9 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'shot-characters-section',
           title: 'preset.shot.charactersSection',
           layout: 'stack',
+          collapsible: true,
+          defaultCollapsed: false,
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             readonlyCollectionBlock(
               'shot-characters',
@@ -201,6 +211,8 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
+          defaultCollapsed: false,
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             readonlyCollectionBlock(
               'shot-text-cues',
@@ -263,6 +275,8 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
+          defaultCollapsed: false,
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             readonlyCollectionBlock(
               'shot-voice-cues',
@@ -326,9 +340,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           visibleWhen: 'selected',
           collapsible: true,
           defaultCollapsed: false,
-          metadata: {
-            defaultExpandedSurfaces: ['overlay'],
-          },
+          metadata: { defaultCollapsedSurfaces: ['overlay'] },
           blocks: [
             fieldBlock('shot-dialogue', 'textarea', '/dialogue', 'preset.shot.dialogue'),
             fieldBlock('shot-voice-over', 'textarea', '/voiceOver', 'preset.shot.voiceOver'),
@@ -341,10 +353,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
-          defaultCollapsed: false,
-          metadata: {
-            defaultExpandedSurfaces: ['overlay'],
-          },
+          defaultCollapsed: true,
           blocks: [
             fieldBlock(
               'shot-generation-prompt',
@@ -372,10 +381,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
-          defaultCollapsed: false,
-          metadata: {
-            defaultExpandedSurfaces: ['overlay'],
-          },
+          defaultCollapsed: true,
           blocks: [
             readonlyFieldBlock(
               'shot-image-prep-status',
@@ -388,6 +394,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
               'input',
               '/shotImagePrepPlan/imageStrategy',
               'preset.shot.imagePrepStrategy',
+            ),
+            readonlyFieldBlock(
+              'shot-image-prep-regeneration-recommendation',
+              'input',
+              '/shotImagePrepPlan/metadata/regenerationRecommendation/label',
+              'preset.shot.regenerationRecommendation',
             ),
             readonlyFieldBlock(
               'shot-image-prep-edit',
@@ -511,10 +523,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           collapsible: true,
-          defaultCollapsed: false,
-          metadata: {
-            defaultExpandedSurfaces: ['overlay'],
-          },
+          defaultCollapsed: true,
           blocks: [
             readonlyCollectionBlock(
               'shot-visual-occurrences',
@@ -707,9 +716,6 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           visibleWhen: 'selected',
           collapsible: true,
           defaultCollapsed: true,
-          metadata: {
-            defaultExpandedSurfaces: ['overlay'],
-          },
           blocks: [
             readonlyCollectionBlock(
               'shot-source-media-refs',
