@@ -32,8 +32,26 @@ import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
   isDashboardCharacterRoleWorkflowScopeRef,
 } from '@neko/shared/types/dashboard-creative-entity';
+import { DefaultAssetRefResolver } from '../core/assetRefs';
 import type { CreativeEntityService } from '../core/CreativeEntityService';
 import type { EntityDisposable } from '../core/ports';
+
+const ASSET_REF_VALIDATOR = new DefaultAssetRefResolver();
+
+export type EntityDashboardTranslate = (
+  message: string,
+  ...args: readonly (string | number | boolean)[]
+) => string;
+
+function defaultTranslate(
+  message: string,
+  ...args: readonly (string | number | boolean)[]
+): string {
+  return args.reduce<string>(
+    (text, arg, index) => text.replace(new RegExp(`\\{${index}\\}`, 'g'), String(arg)),
+    message,
+  );
+}
 
 export interface EntityDashboardSourceOptions {
   readonly projectRoot: string;
@@ -46,6 +64,10 @@ export interface EntityDashboardSourceOptions {
     | 'rejectCandidate'
     | 'dismissCandidate'
     | 'mergeCandidateIntoExisting'
+    | 'markBindingsOrphaned'
+    | 'restoreOrphanedBindings'
+    | 'archiveBindings'
+    | 'upsertBinding'
     | 'renameEntity'
     | 'addAlias'
     | 'removeAlias'
@@ -64,6 +86,7 @@ export interface EntityDashboardSourceOptions {
   };
   readonly executeCommand?: (command: string, ...args: unknown[]) => Promise<unknown>;
   readonly now?: () => string;
+  readonly translate?: EntityDashboardTranslate;
 }
 
 type ReviewableCharacterObservation = CharacterObservation & {
@@ -76,6 +99,10 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
   readonly sourceDisplayName = 'Neko Entity';
 
   constructor(private readonly options: EntityDashboardSourceOptions) {}
+
+  private get translate(): EntityDashboardTranslate {
+    return this.options.translate ?? defaultTranslate;
+  }
 
   get capabilities(): DashboardCreativeEntitySource['capabilities'] {
     const memoryActions: readonly DashboardEntityMemoryReviewAction[] = this.options.characterMemory
@@ -117,8 +144,10 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       this.options.service.drafts.list(),
     ]);
     const rows = [
-      ...entities.map((entity) => projectEntityRow(entity, bindings, requirements, drafts)),
-      ...candidates.map(projectCandidateRow),
+      ...entities.map((entity) =>
+        projectEntityRow(entity, bindings, requirements, drafts, this.translate),
+      ),
+      ...candidates.map((candidate) => projectCandidateRow(candidate, this.translate)),
     ].sort(compareRows);
     const updatedAt = this.now();
     return {
@@ -146,7 +175,7 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       const candidate = (await this.options.service.listCandidates()).find(
         (item) => item.id === ref.sourceEntityId,
       );
-      return candidate ? projectCandidateDetail(candidate) : undefined;
+      return candidate ? projectCandidateDetail(candidate, this.translate) : undefined;
     }
 
     const entityId = ref.entityId ?? ref.sourceEntityId.replace(/^entity:/, '');
@@ -158,14 +187,25 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       this.options.service.drafts.list(),
     ]);
     const memoryReviews = await this.projectMemoryReviews(entity);
-    return projectEntityDetail(entity, bindings, requirements, drafts, memoryReviews);
+    return projectEntityDetail(
+      entity,
+      bindings,
+      requirements,
+      drafts,
+      memoryReviews,
+      this.translate,
+    );
   }
 
   async executeAction(
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (request.source !== this.source) {
-      return { ok: false, message: `Unsupported source: ${request.source}`, ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('Unsupported source: {0}', request.source),
+        ref: request.ref,
+      };
     }
     const candidateId = request.ref?.sourceEntityId.startsWith('candidate:')
       ? request.ref.sourceEntityId
@@ -187,19 +227,46 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
         case 'supersede-memory-review':
           return this.executeMemoryReviewAction(request.action, request);
         case 'confirm-candidate':
-          if (!candidateId) return { ok: false, message: 'No candidate ref is available.' };
+          if (!candidateId) {
+            return {
+              ok: false,
+              message: this.translate('No candidate ref is available.'),
+              ref: request.ref,
+            };
+          }
           await this.options.service.confirmCandidate({ candidateId });
           return { ok: true, refresh: true, ref: request.ref };
         case 'edit-aliases':
           return this.executeAliasAction(entityId, request);
         case 'dismiss-requirement':
-          if (!candidateId) return { ok: false, message: 'No candidate ref is available.' };
+          if (!candidateId) {
+            return {
+              ok: false,
+              message: this.translate('No candidate ref is available.'),
+              ref: request.ref,
+            };
+          }
           await this.options.service.dismissCandidate(candidateId);
           return { ok: true, refresh: true, ref: request.ref };
+        case 'archive-binding':
+          return this.executeArchiveBindingAction(request);
+        case 'cleanup-suggested-orphan':
+          return this.executeCleanupSuggestedOrphanAction(request);
+        case 'rebind-orphaned-binding':
+          return this.executeRebindOrphanedBindingAction(request);
+        case 'locate-binding-source':
+          return {
+            ok: false,
+            message: this.translate(
+              '{0} requires an asset picker or file reveal provider.',
+              request.action,
+            ),
+            ref: request.ref,
+          };
         default:
           return {
             ok: false,
-            message: `Unsupported action: ${request.action}`,
+            message: this.translate('Unsupported action: {0}', request.action),
             ref: request.ref,
           };
       }
@@ -217,20 +284,28 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: '缺少创作实体引用。' };
+      return { ok: false, message: this.translate('Missing creative entity ref.') };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: '只有角色实体支持角色对话。',
+        message: this.translate('Only character entities support Character Dialogue.'),
         ref: request.ref,
       };
     }
     if (!entityId) {
-      return { ok: false, message: '缺少可用的角色实体引用。', ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('No usable character entity ref is available.'),
+        ref: request.ref,
+      };
     }
     if (!this.options.executeCommand) {
-      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('No Agent command executor is available.'),
+        ref: request.ref,
+      };
     }
 
     const mode = readNpcMode(request.payload);
@@ -258,24 +333,28 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: '缺少创作实体引用。' };
+      return { ok: false, message: this.translate('Missing creative entity ref.') };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: '只有角色实体支持角色工作流。',
+        message: this.translate('Only character entities support character workflows.'),
         ref: request.ref,
       };
     }
     if (!entityId) {
       return {
         ok: false,
-        message: '缺少可用的角色实体引用。',
+        message: this.translate('No usable character entity ref is available.'),
         ref: request.ref,
       };
     }
     if (!this.options.executeCommand) {
-      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('No Agent command executor is available.'),
+        ref: request.ref,
+      };
     }
 
     const workflowRequest: NpcAgentWorkflowRequest = {
@@ -310,10 +389,16 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     entityId: string | undefined,
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
-    if (!entityId) return { ok: false, message: 'No entity ref is available.', ref: request.ref };
+    if (!entityId) {
+      return {
+        ok: false,
+        message: this.translate('No entity ref is available.'),
+        ref: request.ref,
+      };
+    }
     const alias = typeof request.payload?.['alias'] === 'string' ? request.payload['alias'] : '';
     if (!alias.trim()) {
-      return { ok: false, message: 'Alias is required.', ref: request.ref };
+      return { ok: false, message: this.translate('Alias is required.'), ref: request.ref };
     }
     const remove = request.payload?.['remove'] === true;
     if (remove) {
@@ -321,6 +406,86 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     } else {
       await this.options.service.addAlias(entityId, alias);
     }
+    return { ok: true, refresh: true, ref: request.ref };
+  }
+
+  private async executeArchiveBindingAction(
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    const bindingId = readStringPayload(request.payload, 'bindingId');
+    if (!bindingId) {
+      return {
+        ok: false,
+        message: this.translate('Binding id is required.'),
+        ref: request.ref,
+      };
+    }
+    await this.options.service.archiveBindings({ bindingIds: [bindingId] });
+    return { ok: true, refresh: true, ref: request.ref };
+  }
+
+  private async executeRebindOrphanedBindingAction(
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    const bindingId = readStringPayload(request.payload, 'bindingId');
+    const assetRef = readStringPayload(request.payload, 'assetRef');
+    if (!bindingId || !assetRef) {
+      return {
+        ok: false,
+        message: this.translate('Rebind requires bindingId and assetRef payload fields.'),
+        ref: request.ref,
+      };
+    }
+    const validation = ASSET_REF_VALIDATOR.validate(assetRef);
+    if (!validation.valid) {
+      return {
+        ok: false,
+        message: validation.reason ?? this.translate('Invalid assetRef.'),
+        ref: request.ref,
+      };
+    }
+    const binding = (await this.options.service.bindings.list()).find(
+      (item) => item.id === bindingId,
+    );
+    if (!binding) {
+      return {
+        ok: false,
+        message: this.translate('Binding was not found.'),
+        ref: request.ref,
+      };
+    }
+    const { orphanedAt: _orphanedAt, ...rest } = binding;
+    await this.options.service.upsertBinding({
+      ...rest,
+      assetRef,
+      availability: 'active',
+      updatedAt: this.now(),
+    });
+    return { ok: true, refresh: true, ref: request.ref };
+  }
+
+  private async executeCleanupSuggestedOrphanAction(
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    const bindingId = readStringPayload(request.payload, 'bindingId');
+    if (!bindingId) {
+      return {
+        ok: false,
+        message: this.translate('Binding id is required.'),
+        ref: request.ref,
+      };
+    }
+    if (!this.options.executeCommand) {
+      return {
+        ok: false,
+        message: this.translate('No facade command executor is available.'),
+        ref: request.ref,
+      };
+    }
+    await this.options.executeCommand('neko.entity.unbindAsset', {
+      projectRoot: this.options.projectRoot,
+      bindingId,
+    });
     return { ok: true, refresh: true, ref: request.ref };
   }
 
@@ -344,22 +509,30 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     if (!this.options.characterMemory) {
       return {
         ok: false,
-        message: 'Character memory review is not available.',
+        message: this.translate('Character memory review is not available.'),
         ref: request.ref,
       };
     }
     const reviewId = request.memoryReviewId;
     if (!reviewId) {
-      return { ok: false, message: 'No memory review id is available.', ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('No memory review id is available.'),
+        ref: request.ref,
+      };
     }
     const memory = await this.options.characterMemory.store.load(this.options.characterMemory.path);
     if (!memory) {
-      return { ok: false, message: 'Character memory file is not available.', ref: request.ref };
+      return {
+        ok: false,
+        message: this.translate('Character memory file is not available.'),
+        ref: request.ref,
+      };
     }
     if (!memory.ledger.observations.some((observation) => observation.observationId === reviewId)) {
       return {
         ok: false,
-        message: `Character memory review was not found: ${reviewId}`,
+        message: this.translate('Character memory review was not found: {0}', reviewId),
         ref: request.ref,
       };
     }
@@ -395,10 +568,14 @@ function projectEntityRow(
   bindings: readonly EntityAssetBinding[],
   requirements: readonly EntityAssetRequirement[],
   drafts: readonly VisualIdentityDraft[],
+  translate: EntityDashboardTranslate,
 ): DashboardCreativeEntityRow {
   const entityBindings = bindings.filter(
     (binding) => binding.entityId === entity.id && binding.entityKind === entity.kind,
   );
+  const orphanedBindingCount = entityBindings.filter(
+    (binding) => binding.availability === 'orphaned',
+  ).length;
   const entityRequirements = requirements.filter(
     (requirement) =>
       requirement.entityId === entity.id &&
@@ -421,33 +598,45 @@ function projectEntityRow(
     defaultBindingRoles: entityBindings
       .filter((binding) => binding.isDefault)
       .map((binding) => binding.role),
+    ...(orphanedBindingCount > 0 ? { orphanedBindingCount } : {}),
     missingRepresentationKinds: Array.from(
       new Set(entityRequirements.flatMap((requirement) => requirement.requiredKinds)),
     ).sort(),
     visualDraftCount: entityDrafts.length,
     freshness: 'fresh',
-    actions: entityActions(entity.kind, 'row'),
+    actions: entityActions(entity.kind, 'row', orphanedBindingCount, [], translate),
     searchText: [label, entity.canonicalName, ...entity.aliases, entity.kind, entity.status].join(
       ' ',
     ),
   };
 }
 
-function projectCandidateRow(candidate: CreativeEntityCandidate): DashboardCreativeEntityRow {
+function projectCandidateRow(
+  candidate: CreativeEntityCandidate,
+  translate: EntityDashboardTranslate,
+): DashboardCreativeEntityRow {
+  const pendingName = candidate.identityBasis !== 'user-named';
+  const label = pendingName ? pendingNameLabel(candidate, translate) : candidate.name;
   return {
     ref: candidateRef(candidate),
-    label: candidate.name,
+    label,
     kind: candidate.kind,
     status: 'candidate',
     sourceKind: 'script',
     aliases: candidate.aliases ?? [],
-    summary: 'Creative entity candidate',
+    summary: pendingName
+      ? translate('Pending name · {0} candidate', candidate.identityBasis)
+      : translate('Creative entity candidate'),
     occurrenceCount: candidate.sourceRefs.length,
     freshness: 'fresh',
-    actions: candidateActions(candidate.kind),
-    searchText: [candidate.name, ...(candidate.aliases ?? []), candidate.kind, 'candidate'].join(
-      ' ',
-    ),
+    actions: candidateActions(candidate.kind, translate),
+    searchText: [
+      label,
+      candidate.name,
+      ...(candidate.aliases ?? []),
+      candidate.kind,
+      'candidate',
+    ].join(' '),
   };
 }
 
@@ -457,6 +646,7 @@ function projectEntityDetail(
   requirements: readonly EntityAssetRequirement[],
   drafts: readonly VisualIdentityDraft[],
   memoryReviews?: readonly DashboardEntityMemoryReviewItem[],
+  translate: EntityDashboardTranslate = defaultTranslate,
 ): DashboardCreativeEntityDetail {
   const ref = entityRef(entity);
   const bindingSummaries = bindings
@@ -466,6 +656,8 @@ function projectEntityDetail(
       role: binding.role,
       assetRef: binding.assetRef,
       status: binding.status,
+      availability: binding.availability,
+      orphanedAt: binding.orphanedAt,
       source: binding.source,
       isDefault: binding.isDefault === true,
       confidence: binding.confidence,
@@ -516,19 +708,33 @@ function projectEntityDetail(
     syncSuggestions: [],
     ...(memoryReviews ? { memoryReviews } : {}),
     freshness: 'fresh',
-    actions: entityActions(entity.kind, 'detail'),
+    actions: entityActions(
+      entity.kind,
+      'detail',
+      bindingSummaries.filter((binding) => binding.availability === 'orphaned').length,
+      bindingSummaries,
+      translate,
+    ),
   };
 }
 
-function projectCandidateDetail(candidate: CreativeEntityCandidate): DashboardCreativeEntityDetail {
+function projectCandidateDetail(
+  candidate: CreativeEntityCandidate,
+  translate: EntityDashboardTranslate,
+): DashboardCreativeEntityDetail {
+  const pendingName = candidate.identityBasis !== 'user-named';
   return {
     ref: candidateRef(candidate),
-    label: candidate.name,
+    label: pendingName ? pendingNameLabel(candidate, translate) : candidate.name,
     kind: candidate.kind,
     status: 'candidate',
     sourceKind: 'script',
     aliases: candidate.aliases ?? [],
-    metadata: candidate.metadata,
+    metadata: {
+      ...(candidate.metadata ?? {}),
+      identityBasis: candidate.identityBasis,
+      ...(pendingName ? { namingState: 'pending-name' } : {}),
+    },
     relationships: [],
     occurrences: candidate.sourceRefs.map((sourceRef) => ({
       source: 'script',
@@ -552,7 +758,7 @@ function projectCandidateDetail(candidate: CreativeEntityCandidate): DashboardCr
     visualDrafts: [],
     syncSuggestions: [],
     freshness: 'fresh',
-    actions: candidateActions(candidate.kind),
+    actions: candidateActions(candidate.kind, translate),
   };
 }
 
@@ -577,6 +783,13 @@ function candidateRef(candidate: CreativeEntityCandidate): DashboardCreativeEnti
 function entityActions(
   kind: CreativeEntity['kind'],
   surface: 'row' | 'detail',
+  orphanedBindingCount = 0,
+  bindings: readonly {
+    readonly id: string;
+    readonly status: EntityAssetBinding['status'];
+    readonly availability: EntityAssetBinding['availability'];
+  }[] = [],
+  translate: EntityDashboardTranslate = defaultTranslate,
 ): DashboardCreativeEntityRow['actions'] {
   const actions: DashboardCreativeEntityRow['actions'] = [
     { id: 'show-detail', label: 'Show detail' },
@@ -584,20 +797,25 @@ function entityActions(
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'refresh', label: 'Refresh' },
   ];
-  return kind === 'character'
-    ? [
-        actions[0],
-        { id: 'character-dialogue', label: 'Character Dialogue' },
-        ...(surface === 'detail' ? characterRoleWorkflowActions() : []),
-        ...actions.slice(1),
-      ].filter(
-        (action): action is DashboardCreativeEntityRow['actions'][number] => action !== undefined,
-      )
-    : actions;
+  const orphanActions =
+    orphanedBindingCount > 0 ? orphanedBindingActions(surface, bindings, translate) : [];
+  const baseActions =
+    kind === 'character'
+      ? [
+          actions[0],
+          { id: 'character-dialogue', label: 'Character Dialogue' },
+          ...(surface === 'detail' ? characterRoleWorkflowActions() : []),
+          ...actions.slice(1),
+        ].filter(
+          (action): action is DashboardCreativeEntityRow['actions'][number] => action !== undefined,
+        )
+      : actions;
+  return [...baseActions, ...orphanActions];
 }
 
 function candidateActions(
   kind: CreativeEntityCandidate['kind'],
+  translate: EntityDashboardTranslate = defaultTranslate,
 ): DashboardCreativeEntityRow['actions'] {
   const characterActions = kind === 'character' ? characterRoleWorkflowActions() : [];
   return [
@@ -606,12 +824,55 @@ function candidateActions(
       id: 'character-dialogue',
       label: 'Character Dialogue',
       disabled: kind !== 'character',
-      ...(kind !== 'character' ? { reason: '只有角色候选项支持角色对话。' } : {}),
+      ...(kind !== 'character'
+        ? { reason: translate('Only character candidates support Character Dialogue.') }
+        : {}),
     },
     ...characterActions,
     { id: 'confirm-candidate', label: 'Confirm candidate' },
     { id: 'dismiss-requirement', label: 'Dismiss' },
   ];
+}
+
+function orphanedBindingActions(
+  surface: 'row' | 'detail',
+  bindings: readonly {
+    readonly id: string;
+    readonly status: EntityAssetBinding['status'];
+    readonly availability: EntityAssetBinding['availability'];
+  }[],
+  translate: EntityDashboardTranslate,
+): DashboardCreativeEntityRow['actions'] {
+  const orphaned = bindings.filter((binding) => binding.availability === 'orphaned');
+  const confirmed = orphaned.find((binding) => binding.status === 'confirmed');
+  const suggested = orphaned.find((binding) => binding.status === 'suggested');
+  return [
+    { id: 'rebind-orphaned-binding', label: 'Rebind orphaned asset' },
+    { id: 'locate-binding-source', label: 'Locate source' },
+    {
+      id: 'archive-binding',
+      label: surface === 'detail' ? 'Archive orphaned binding' : 'Archive orphan',
+      ...(confirmed ? { reason: translate('Confirmed orphan: {0}', confirmed.id) } : {}),
+    },
+    ...(suggested
+      ? [
+          {
+            id: 'cleanup-suggested-orphan' as const,
+            label: 'Cleanup suggested orphan',
+            reason: translate('Suggested orphan: {0}', suggested.id),
+          },
+        ]
+      : []),
+  ];
+}
+
+function pendingNameLabel(
+  candidate: CreativeEntityCandidate,
+  translate: EntityDashboardTranslate,
+): string {
+  return candidate.name.trim()
+    ? translate('{0} (pending name)', candidate.name)
+    : translate('Unnamed candidate');
 }
 
 function characterRoleWorkflowActions(
@@ -727,6 +988,14 @@ function updateMemoryReviewStatus(
 function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {
   const mode = payload?.['mode'];
   return isNpcTestMode(mode) ? mode : undefined;
+}
+
+function readStringPayload(
+  payload: DashboardCreativeEntityActionRequest['payload'],
+  key: string,
+): string | undefined {
+  const value = payload?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function readNpcWorkflowScopes(payload: DashboardCreativeEntityActionRequest['payload']) {

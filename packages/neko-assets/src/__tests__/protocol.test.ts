@@ -111,6 +111,25 @@ describe('extension.ts -- no cloud sync TreeDataProvider (NKAS-002)', () => {
   });
 });
 
+describe('extension.ts -- entity integration boundary', () => {
+  it('does not import entity implementation modules from neko-assets', () => {
+    expect(extensionSource).not.toContain('@neko/entity/host-vscode');
+    expect(extensionSource).not.toContain('@neko/dashboard');
+    expect(extensionSource).not.toContain('@neko/canvas');
+    expect(extensionSource).not.toContain('@neko/agent');
+    expect(extensionSource).not.toContain('@neko/story');
+  });
+
+  it('registers Entity Browser and bound entity inspection commands', () => {
+    expect(declaredCommands).toContain('neko.entityBrowser.inspect');
+    expect(declaredCommands).toContain('neko.entityBrowser.createCandidate');
+    expect(declaredCommands).toContain('neko.assets.inspectBoundCreativeEntity');
+    expect(extensionSource).toContain("'neko.entityBrowser'");
+    expect(extensionSource).toContain('ENTITY_FACADE_COMMANDS.inspectEntity');
+    expect(extensionSource).toContain('ENTITY_FACADE_COMMANDS.proposeCandidate');
+  });
+});
+
 describe('extension.ts -- registerLegacyCommands function exists', () => {
   it('defines registerLegacyCommands as a function', () => {
     expect(extensionSource).toMatch(/function registerLegacyCommands/);

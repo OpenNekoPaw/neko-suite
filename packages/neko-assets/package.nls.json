@@ -3,6 +3,8 @@
   "neko.assetManager.assets": "Assets",
   "neko.assetManager.history": "History",
   "neko.assetManager.historyTitle": "Asset History",
+  "neko.entityBrowser.name": "Entities",
+  "neko.entityBrowser.contextualTitle": "Creative Entities",
   "neko.assetManager.cloudSync": "Cloud Sync",
   "neko.assetManager.cloudSyncTitle": "Cloud Sync Status",
   "neko.views.mediaLibraries.name": "Media Libraries",
@@ -54,5 +56,12 @@
   "neko.assets.directory.reveal": "Reveal in Finder",
   "neko.assets.recentEntity.addToTimeline": "Add to Timeline",
   "neko.assets.recentEntity.addToCanvas": "Add to Canvas",
-  "neko.assets.addToAgent": "Add to Agent"
+  "neko.assets.addToAgent": "Add to Agent",
+  "neko.entityBrowser.refresh": "Refresh Entities",
+  "neko.entityBrowser.inspect": "Inspect Entity",
+  "neko.entityBrowser.rename": "Rename Entity",
+  "neko.entityBrowser.editAppearance": "Edit Appearance",
+  "neko.entityBrowser.openDashboard": "Open in Dashboard",
+  "neko.entityBrowser.createCandidate": "Create Entity Candidate",
+  "neko.assets.inspectBoundCreativeEntity": "Inspect Bound Creative Entity"
 }

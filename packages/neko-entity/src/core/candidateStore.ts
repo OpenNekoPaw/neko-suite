@@ -1,9 +1,15 @@
 import type {
   CreativeEntityCandidate,
   CreativeEntityCandidateFile,
+  CreativeEntityCandidateIdentityBasis,
   CreativeEntityKind,
 } from '@neko/shared';
-import { isCreativeEntityCandidate, isCreativeEntityCandidateFile } from '@neko/shared';
+import {
+  isCreativeEntityCandidate,
+  isCreativeEntityCandidateFile,
+  withCreativeEntityCandidateDefaults,
+  withCreativeEntityCandidateFileDefaults,
+} from '@neko/shared';
 import type { EntityRuntimePorts } from './ports';
 import { SerialEntityRuntimeLock, nowFromPorts } from './ports';
 import { buildEntityId, normalizeAliasList } from './adapters';
@@ -19,6 +25,7 @@ export interface CreateEntityCandidateInput {
   readonly kind: CreativeEntityKind;
   readonly name: string;
   readonly aliases?: readonly string[];
+  readonly identityBasis?: CreativeEntityCandidateIdentityBasis;
   readonly confidence?: number;
   readonly provenance: CreativeEntityCandidate['provenance'];
   readonly sourceRefs?: readonly string[];
@@ -39,7 +46,7 @@ export class EntityCandidateStore {
   async load(): Promise<CreativeEntityCandidateFile> {
     const parsed = await this.options.ports.files.readJson(this.filePath);
     if (isCreativeEntityCandidateFile(parsed)) {
-      return parsed;
+      return withCreativeEntityCandidateFileDefaults(parsed);
     }
     if (parsed !== undefined) {
       this.options.ports.logger?.warn('Ignoring malformed creative entity candidate file', {
@@ -97,6 +104,7 @@ export class EntityCandidateStore {
           ...(existing.metadata ?? {}),
           ...(input.metadata ?? {}),
         },
+        identityBasis: input.identityBasis ?? existing.identityBasis,
         updatedAt: now,
       };
       await this.upsert(candidate);
@@ -109,6 +117,7 @@ export class EntityCandidateStore {
       name: input.name,
       aliases: normalizeAliasList(input.aliases ?? []),
       status: 'open',
+      identityBasis: input.identityBasis ?? 'user-named',
       ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
       provenance: input.provenance,
       sourceRefs:
@@ -140,7 +149,7 @@ export class EntityCandidateStore {
       version: 1,
       candidates: [
         ...file.candidates.filter((existing) => existing.id !== candidate.id),
-        candidate,
+        withCreativeEntityCandidateDefaults(candidate),
       ].sort(compareCandidates),
     }));
   }
@@ -177,7 +186,10 @@ export class EntityCandidateStore {
     return this.lock.withLock(this.filePath, async () => {
       const current = await this.load();
       const next = operation(current);
-      await this.options.ports.files.writeJson(this.filePath, next);
+      await this.options.ports.files.writeJson(
+        this.filePath,
+        withCreativeEntityCandidateFileDefaults(next),
+      );
       return next;
     });
   }

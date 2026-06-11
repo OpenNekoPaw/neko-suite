@@ -34,6 +34,7 @@ const rows: readonly DashboardCreativeEntityRow[] = [
     status: 'candidate',
     sourceKind: 'script',
     defaultBindingRoles: ['reference'],
+    orphanedBindingCount: 1,
     freshness: 'fresh',
     actions: [{ id: 'show-detail', label: 'Show detail' }],
     searchText: '阿灰 candidate reference',
@@ -65,6 +66,15 @@ describe('creative entity table state', () => {
   it('filters missing material and binding states', () => {
     expect(baseFilter({ missingFilter: 'missing' }).map((row) => row.label)).toEqual(['小橘']);
     expect(baseFilter({ bindingFilter: 'bound' }).map((row) => row.label)).toEqual(['阿灰']);
+    expect(baseFilter({ bindingFilter: 'orphaned' }).map((row) => row.label)).toEqual(['阿灰']);
+  });
+
+  it('prioritizes orphaned bindings when sorting by binding state', () => {
+    expect(baseFilter({ sortKey: 'bindings' }).map((row) => row.label)).toEqual([
+      '阿灰',
+      '咖啡店',
+      '小橘',
+    ]);
   });
 
   it('sorts deterministically by status with stable tie breakers', () => {

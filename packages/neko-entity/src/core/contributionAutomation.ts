@@ -2,6 +2,7 @@ import type {
   CharacterObservation,
   CreativeEntity,
   CreativeEntityCandidate,
+  CreativeEntityCandidateIdentityBasis,
   CreativeEntityCandidateProvenance,
   CreativeEntityKind,
   CreativeEntityRef,
@@ -47,6 +48,7 @@ interface CandidateSeed {
   readonly name: string;
   readonly kind: CreativeEntityKind;
   readonly aliases: readonly string[];
+  readonly identityBasis: CreativeEntityCandidateIdentityBasis;
   readonly confidence?: number;
   readonly provenance: readonly CreativeEntityCandidateProvenance[];
   readonly sourceRefs: readonly string[];
@@ -113,6 +115,7 @@ export class EntityContributionAutomationService {
       kind: seed.kind,
       name: matchedCandidate?.name ?? seed.name,
       aliases: matchedCandidate ? aliasesForMatchedCandidate(seed, matchedCandidate) : seed.aliases,
+      identityBasis: seed.identityBasis,
       confidence: seed.confidence,
       provenance: seed.provenance,
       sourceRefs: seed.sourceRefs,
@@ -156,6 +159,7 @@ export class EntityContributionAutomationService {
     const candidates = await this.service.listCandidates('open');
     return candidates.find((candidate) => {
       if (candidate.kind !== seed.kind) return false;
+      if (candidate.identityBasis !== 'user-named') return false;
       const candidateNames = [candidate.name, ...(candidate.aliases ?? [])].map(normalizedName);
       return candidateNames.some((name) => names.includes(name));
     });
@@ -189,6 +193,7 @@ function seedFromCandidate(
     name: candidate.name,
     kind: candidate.kind,
     aliases: candidate.aliases ?? [],
+    identityBasis: candidate.identityBasis ?? 'user-named',
     confidence: candidate.confidence,
     provenance:
       candidate.provenance.length > 0
@@ -232,6 +237,7 @@ function seedFromObservation(
     name,
     kind,
     aliases: [],
+    identityBasis: readCandidateIdentityBasis(observation.candidate),
     confidence,
     provenance: [
       {
@@ -271,6 +277,8 @@ function addSeed(seeds: Map<string, CandidateSeed>, seed: CandidateSeed): void {
   seeds.set(key, {
     ...existing,
     aliases: normalizeAliasList([...existing.aliases, ...seed.aliases]),
+    identityBasis:
+      existing.identityBasis === seed.identityBasis ? existing.identityBasis : 'user-named',
     confidence: maxConfidence([existing.confidence, seed.confidence]),
     provenance: mergeProvenance(existing.provenance, seed.provenance),
     sourceRefs: uniqueStrings([...existing.sourceRefs, ...seed.sourceRefs]),
@@ -374,4 +382,22 @@ function readStringArray(value: unknown): readonly string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+function readCandidateIdentityBasis(
+  candidate: Pick<CreativeEntityCandidate, 'id' | 'name' | 'kind' | 'confidence'> | undefined,
+): CreativeEntityCandidateIdentityBasis {
+  if (!isRecord(candidate)) return 'user-named';
+  const record: Record<string, unknown> = candidate;
+  const value = record['identityBasis'];
+  return value === 'placeholder' ||
+    value === 'visual' ||
+    value === 'asset' ||
+    value === 'user-named'
+    ? value
+    : 'user-named';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

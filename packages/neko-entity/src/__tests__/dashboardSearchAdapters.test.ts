@@ -15,7 +15,7 @@ import { EntityDashboardCreativeEntitySource } from '../dashboard/source';
 import { createEntitySearchAdapter } from '../projections';
 import { createEntitySearchAdapter as createEntitySearchAdapterCompat } from '../search';
 import { MemoryEntityFileStore, createFixedClock } from '../testing';
-import { resolveCharacterMemoryPath } from '../core/paths';
+import { resolveCharacterMemoryPath, resolveEntityAssetBindingsPath } from '../core/paths';
 
 const projectRoot = '/workspace/neko-test';
 const now = '2026-05-18T00:00:00.000Z';
@@ -331,6 +331,13 @@ describe('neko-entity dashboard and search adapters', () => {
       name: '钥匙',
       provenance: [{ providerId: 'neko-story', sourceKind: 'story' }],
     });
+    await service.proposeCandidate({
+      id: 'candidate:visual:key-shadow',
+      kind: 'object',
+      name: '钥匙',
+      identityBasis: 'visual',
+      provenance: [{ providerId: 'neko-canvas', sourceKind: 'canvas' }],
+    });
     const adapter = createEntitySearchAdapter({ projectRoot, service });
 
     const result = await adapter.query(
@@ -347,7 +354,140 @@ describe('neko-entity dashboard and search adapters', () => {
     ]);
     await expect(
       adapter.query({ text: '', kinds: ['entity-candidate'], projectRoot }, { projectRoot }),
+    ).resolves.toEqual([
+      expect.objectContaining({ kind: 'entity-candidate', label: '钥匙' }),
+      expect.objectContaining({ kind: 'entity-candidate', label: '钥匙 (pending name)' }),
+    ]);
+    await expect(
+      adapter.query({ text: '钥匙', kinds: ['entity-candidate'], projectRoot }, { projectRoot }),
     ).resolves.toEqual([expect.objectContaining({ kind: 'entity-candidate', label: '钥匙' })]);
+  });
+
+  it('projects orphaned bindings separately from binding review status', async () => {
+    const files = new MemoryEntityFileStore();
+    const service = new CreativeEntityService({
+      projectRoot,
+      ports: { files, clock: createFixedClock(now) },
+    });
+    await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
+    await service.upsertBinding({
+      id: 'binding-portrait',
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+      assetRef: 'project://assets/missing-portrait',
+      role: 'portrait',
+      status: 'confirmed',
+      availability: 'orphaned',
+      orphanedAt: '2026-06-10T01:00:00.000Z',
+      source: 'user',
+      updatedAt: now,
+    });
+    const source = new EntityDashboardCreativeEntitySource({
+      projectRoot,
+      service,
+      now: () => now,
+    });
+    const ref = {
+      source: 'neko-entity',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character' as const,
+    };
+
+    const snapshot = await source.getSnapshot();
+    const detail = await source.getDetail(ref);
+
+    expect(snapshot.rows.find((row) => row.label === '小橘')).toEqual(
+      expect.objectContaining({
+        orphanedBindingCount: 1,
+        actions: expect.arrayContaining([
+          expect.objectContaining({ id: 'rebind-orphaned-binding' }),
+          expect.objectContaining({ id: 'archive-binding' }),
+        ]),
+      }),
+    );
+    expect(detail?.bindings).toEqual([
+      expect.objectContaining({
+        id: 'binding-portrait',
+        status: 'confirmed',
+        availability: 'orphaned',
+      }),
+    ]);
+
+    await expect(
+      source.executeAction({
+        source: 'neko-entity',
+        ref,
+        action: 'rebind-orphaned-binding',
+        payload: {
+          bindingId: 'binding-portrait',
+          assetRef: 'project://assets/new-portrait',
+        },
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: true }));
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.objectContaining({
+          id: 'binding-portrait',
+          assetRef: 'project://assets/new-portrait',
+          status: 'confirmed',
+          availability: 'active',
+        }),
+      ],
+    });
+  });
+
+  it('rejects invalid orphan rebind asset refs without mutating bindings', async () => {
+    const files = new MemoryEntityFileStore();
+    const service = new CreativeEntityService({
+      projectRoot,
+      ports: { files, clock: createFixedClock(now) },
+    });
+    await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
+    await service.upsertBinding({
+      id: 'binding-portrait',
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+      assetRef: 'project://assets/missing-portrait',
+      role: 'portrait',
+      status: 'confirmed',
+      availability: 'orphaned',
+      source: 'user',
+      updatedAt: now,
+    });
+    const source = new EntityDashboardCreativeEntitySource({
+      projectRoot,
+      service,
+      now: () => now,
+    });
+
+    await expect(
+      source.executeAction({
+        source: 'neko-entity',
+        ref: {
+          source: 'neko-entity',
+          sourceEntityId: 'entity:char_xiaoju',
+          entityId: 'char_xiaoju',
+          entityKind: 'character',
+        },
+        action: 'rebind-orphaned-binding',
+        payload: {
+          bindingId: 'binding-portrait',
+          assetRef: '/tmp/new-portrait.png',
+        },
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: false }));
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.objectContaining({
+          id: 'binding-portrait',
+          assetRef: 'project://assets/missing-portrait',
+          availability: 'orphaned',
+        }),
+      ],
+    });
   });
 
   it('keeps the legacy search entrypoint as a projection compatibility alias', () => {

@@ -7,7 +7,7 @@ import type {
 export type CreativeEntityKindFilter = DashboardCreativeEntityKind | 'all';
 export type CreativeEntityStatusFilter = DashboardCreativeEntityLifecycleStatus | 'all';
 export type CreativeEntityMissingFilter = 'all' | 'missing' | 'complete';
-export type CreativeEntityBindingFilter = 'all' | 'bound' | 'unbound';
+export type CreativeEntityBindingFilter = 'all' | 'bound' | 'unbound' | 'orphaned';
 export type CreativeEntitySortKey = 'status' | 'kind' | 'label' | 'missing' | 'bindings';
 
 export interface CreativeEntityTableOptions {
@@ -36,7 +36,9 @@ export function filterAndSortCreativeEntities(
     .filter((row) => {
       if (options.bindingFilter === 'all') return true;
       const hasBinding = (row.defaultBindingRoles?.length ?? 0) > 0;
-      return options.bindingFilter === 'bound' ? hasBinding : !hasBinding;
+      if (options.bindingFilter === 'bound') return hasBinding;
+      if (options.bindingFilter === 'unbound') return !hasBinding;
+      return (row.orphanedBindingCount ?? 0) > 0;
     })
     .filter((row) => {
       if (!normalizedQuery) return true;
@@ -81,7 +83,10 @@ function comparePrimary(
         (b.missingRepresentationKinds?.length ?? 0) - (a.missingRepresentationKinds?.length ?? 0)
       );
     case 'bindings':
-      return (b.defaultBindingRoles?.length ?? 0) - (a.defaultBindingRoles?.length ?? 0);
+      return (
+        (b.orphanedBindingCount ?? 0) - (a.orphanedBindingCount ?? 0) ||
+        (b.defaultBindingRoles?.length ?? 0) - (a.defaultBindingRoles?.length ?? 0)
+      );
   }
 }
 

@@ -69,6 +69,7 @@ describe('NpcProfileAssembler', () => {
           assetRef: 'project://assets/xiaoju-portrait',
           role: 'portrait',
           status: 'confirmed',
+          availability: 'active',
           source: 'user',
           isDefault: true,
           updatedAt: '2026-06-01T00:00:00.000Z',
@@ -166,6 +167,7 @@ describe('NpcProfileAssembler', () => {
           assetRef: 'project://assets/xiaoju-voice',
           role: 'voice',
           status: 'confirmed',
+          availability: 'active',
           source: 'user',
           updatedAt: '2026-06-01T00:00:00.000Z',
         } satisfies EntityAssetBinding,
@@ -246,6 +248,7 @@ describe('NpcProfileAssembler', () => {
       name: '小橘',
       aliases: ['Xiaoju'],
       status: 'open',
+      identityBasis: 'user-named',
       provenance: [
         {
           providerId: 'neko-story',

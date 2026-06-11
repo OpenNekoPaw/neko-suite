@@ -24,16 +24,18 @@ import {
   buildCancelEntityBindingPlan,
   buildDeleteAssetPlan,
   buildRepresentationPackageDetail,
-  parseProjectAssetEntityId,
 } from '@neko/asset';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
 import * as os from 'os';
 import {
+  ENTITY_FACADE_COMMANDS,
   detectMediaType,
+  isEntityFacadeAssetReverseLookupResult,
   resolveStorageLayout,
   migrateStorageLayout,
   parseEntityUri,
+  type CreativeEntityKind,
   type ResourceVariantRequest,
 } from '@neko/shared';
 import type { ImportedAssetDescriptor } from '@neko/shared';
@@ -45,6 +47,10 @@ import { AssetHealthMonitor, createFileAccessChecker } from './services/AssetHea
 import { MediaLibrarySettingsService } from './services/MediaLibrarySettingsService';
 import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProvider';
 import { AssetManagerTreeProvider, type AssetTreeItem } from './providers/AssetManagerTreeProvider';
+import {
+  EntityBrowserEntityItem,
+  EntityBrowserTreeProvider,
+} from './providers/EntityBrowserTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
 import {
   MediaLibraryTreeProvider,
@@ -58,12 +64,6 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import {
-  CharacterRegistryService,
-  createVSCodeEntityServices,
-  resolveCharacterRegistryPath,
-  type EntityAssetBindingService,
-} from '@neko/entity/host-vscode';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { openAssetPreview } from './utils/preview';
@@ -71,6 +71,10 @@ import { createNekoAssetsCapabilityProvider } from './agentCapabilityProvider';
 import { MediaImportDispatcher } from './services/ImportDispatcher';
 import { ProjectAssetDependencyManifestService } from './services/ProjectAssetDependencyManifestService';
 import { CharacterAssetExportService } from './services/CharacterAssetExportService';
+import {
+  createEntityFacadeReaders,
+  type EntityFacadeReaders,
+} from './services/EntityFacadeReaders';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 const logger = getLogger('Extension');
@@ -90,6 +94,7 @@ let healthMonitor: AssetHealthMonitor | null = null;
 let entityChangeEmitter: import('vscode').EventEmitter<void> | null = null;
 let dependencyManifestService: ProjectAssetDependencyManifestService | null = null;
 let characterAssetExportService: CharacterAssetExportService | null = null;
+let entityFacadeReaders: EntityFacadeReaders | null = null;
 const runningTasks = new Set<Promise<void>>();
 
 function trackExtensionTask(label: string, task: PromiseLike<unknown>): void {
@@ -232,7 +237,7 @@ export async function activate(
           },
         },
       });
-      const entityServices = createVSCodeEntityServices({ projectRoot: workspaceRoot });
+      entityFacadeReaders = createEntityFacadeReaders({ projectRoot: workspaceRoot });
       characterAssetExportService = new CharacterAssetExportService({
         fs: {
           readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
@@ -250,10 +255,8 @@ export async function activate(
           },
         },
         library,
-        characters: {
-          list: () => entityServices.store.loadCharacters().then((file) => file.characters),
-        },
-        bindings: entityServices.bindings,
+        characters: entityFacadeReaders.characters,
+        bindings: entityFacadeReaders.bindings,
       });
 
       // Initialize AssetDiffService with Git integration
@@ -287,6 +290,7 @@ export async function activate(
     // 3. Register Activity Bar tree views
     const assetManagerProvider = new AssetManagerTreeProvider(library, thumbnailService!);
     const assetHistoryProvider = new AssetHistoryTreeProvider(library, thumbnailService!);
+    const entityBrowserProvider = new EntityBrowserTreeProvider();
 
     const assetManagerTree = vscode.window.createTreeView('neko.assetManager', {
       treeDataProvider: assetManagerProvider,
@@ -297,8 +301,13 @@ export async function activate(
       vscode.window.createTreeView('neko.assetHistory', {
         treeDataProvider: assetHistoryProvider,
       }),
+      vscode.window.createTreeView('neko.entityBrowser', {
+        treeDataProvider: entityBrowserProvider,
+        showCollapseAll: true,
+      }),
       assetManagerProvider,
       assetHistoryProvider,
+      entityBrowserProvider,
     );
 
     // Refresh tree views when library changes
@@ -306,8 +315,10 @@ export async function activate(
       vscode.commands.registerCommand('neko.assets.refreshViews', () => {
         assetManagerProvider.refresh();
         assetHistoryProvider.refresh();
+        entityBrowserProvider.refresh();
       }),
     );
+    registerEntityBrowserCommands(context, entityBrowserProvider);
 
     // Register asset manager context menu commands (entity/variant CRUD)
     registerAssetManagerCommands(
@@ -516,8 +527,8 @@ export async function activate(
       if (!wsRoot) return undefined;
 
       try {
-        const registry = new CharacterRegistryService(resolveCharacterRegistryPath(wsRoot));
-        const record = await registry.resolveByName(name);
+        const readers = entityFacadeReaders ?? createEntityFacadeReaders({ projectRoot: wsRoot });
+        const record = await readers.characters.resolveByName(name);
         if (!record) return undefined;
 
         const assetIds = [
@@ -562,6 +573,9 @@ export async function activate(
     vscode.commands.registerCommand('neko.assets.getMediaLibraryRoots', () =>
       api.getMediaLibraryRoots(),
     ),
+    vscode.commands.registerCommand('neko.assets.resolveProjectAssetRefs', async (input: unknown) =>
+      resolveProjectAssetRefsForCommand(input, library, workspaceRoot),
+    ),
   );
 
   try {
@@ -578,6 +592,54 @@ export async function activate(
 
   logger.info('Extension activated, API exported');
   return api;
+}
+
+async function resolveProjectAssetRefsForCommand(
+  input: unknown,
+  lib: AssetLibrary | null,
+  workspaceRoot: string | undefined,
+): Promise<readonly { readonly assetRef: string; readonly uris: readonly vscode.Uri[] }[]> {
+  if (!lib || !isProjectAssetRefResolveRequest(input)) return [];
+  if (workspaceRoot && input.projectRoot !== workspaceRoot) return [];
+  const output: { assetRef: string; uris: vscode.Uri[] }[] = [];
+  for (const assetRef of input.assetRefs) {
+    const assetEntityId = parseProjectAssetEntityIdFromRef(assetRef);
+    if (!assetEntityId) continue;
+    const entity = await lib.getEntity(assetEntityId);
+    if (!entity) continue;
+    const uris = collectEntityFilePaths(entity)
+      .map((storedPath) => vscode.Uri.file(lib.resolvePath(storedPath)))
+      .filter(
+        (uri, index, values) => values.findIndex((item) => item.fsPath === uri.fsPath) === index,
+      );
+    output.push({ assetRef, uris });
+  }
+  return output;
+}
+
+function collectEntityFilePaths(entity: import('@neko/shared').AssetEntity): readonly string[] {
+  return entity.variants.flatMap((variant) => [
+    ...(variant.thumbnailPath ? [variant.thumbnailPath] : []),
+    ...variant.files.map((file) => file.path),
+  ]);
+}
+
+function parseProjectAssetEntityIdFromRef(assetRef: string): string | undefined {
+  const prefix = 'project://assets/';
+  if (!assetRef.startsWith(prefix)) return undefined;
+  const raw = assetRef.slice(prefix.length).split('?')[0];
+  return raw ? decodeURIComponent(raw) : undefined;
+}
+
+function isProjectAssetRefResolveRequest(
+  value: unknown,
+): value is { readonly projectRoot: string; readonly assetRefs: readonly string[] } {
+  return (
+    isRecord(value) &&
+    typeof value['projectRoot'] === 'string' &&
+    Array.isArray(value['assetRefs']) &&
+    value['assetRefs'].every((item) => typeof item === 'string')
+  );
 }
 
 // =============================================================================
@@ -625,18 +687,18 @@ function registerAssetManagerCommands(
     return lib.resolvePath(storedPath);
   }
 
-  function getBindingService(): EntityAssetBindingService | undefined {
+  function getFacadeReaders(): EntityFacadeReaders | undefined {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    return workspaceRoot
-      ? createVSCodeEntityServices({ projectRoot: workspaceRoot }).bindings
-      : undefined;
+    if (!workspaceRoot) return undefined;
+    if (!entityFacadeReaders) {
+      entityFacadeReaders = createEntityFacadeReaders({ projectRoot: workspaceRoot });
+    }
+    return entityFacadeReaders;
   }
 
   async function listBindingsForAsset(entityId: string) {
-    const bindingService = getBindingService();
-    if (!bindingService) return [];
-    const bindings = await bindingService.list();
-    return bindings.filter((binding) => parseProjectAssetEntityId(binding.assetRef) === entityId);
+    const readers = getFacadeReaders();
+    return readers ? readers.bindings.listForProjectAsset(entityId) : [];
   }
 
   // --- entity commands -------------------------------------------------------
@@ -801,8 +863,6 @@ function registerAssetManagerCommands(
     vscode.commands.registerCommand('neko.assets.entity.cancelBinding', async (item?: unknown) => {
       const entity = getEntity(item);
       if (!entity) return;
-      const bindingService = getBindingService();
-      if (!bindingService) return;
       const bindings = await listBindingsForAsset(entity.id);
       if (bindings.length === 0) {
         vscode.window.showInformationMessage(`No entity binding points to "${entity.name}".`);
@@ -829,7 +889,10 @@ function registerAssetManagerCommands(
       if (confirm !== 'Cancel Binding') return;
 
       try {
-        await bindingService.remove(plan.bindingId);
+        await vscode.commands.executeCommand(ENTITY_FACADE_COMMANDS.unbindAsset, {
+          projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          bindingId: plan.bindingId,
+        });
         entityChangeEmitter?.fire();
         refresh();
       } catch (error) {
@@ -1099,6 +1162,156 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
       exportCharacterPack(input),
     ),
   );
+}
+
+function registerEntityBrowserCommands(
+  context: vscode.ExtensionContext,
+  entityBrowserProvider: EntityBrowserTreeProvider,
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.entityBrowser.refresh', () => {
+      entityBrowserProvider.refresh();
+    }),
+    vscode.commands.registerCommand('neko.entityBrowser.inspect', async (item?: unknown) => {
+      if (item instanceof EntityBrowserEntityItem) {
+        await entityBrowserProvider.inspect(item);
+      }
+    }),
+    vscode.commands.registerCommand('neko.entityBrowser.rename', async (item?: unknown) => {
+      if (!(item instanceof EntityBrowserEntityItem) || !item.item.entityRef) return;
+      await vscode.commands.executeCommand(ENTITY_FACADE_COMMANDS.triggerBindingWidgetAction, {
+        context: {
+          surface: 'treeview',
+          projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        },
+        action: 'rename-entity',
+        entityRef: item.item.entityRef,
+      });
+      entityBrowserProvider.refresh();
+    }),
+    vscode.commands.registerCommand('neko.entityBrowser.editAppearance', async (item?: unknown) => {
+      if (!(item instanceof EntityBrowserEntityItem) || !item.item.entityRef) return;
+      await vscode.commands.executeCommand(ENTITY_FACADE_COMMANDS.triggerBindingWidgetAction, {
+        context: {
+          surface: 'treeview',
+          projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        },
+        action: 'update-metadata',
+        entityRef: item.item.entityRef,
+      });
+      entityBrowserProvider.refresh();
+    }),
+    vscode.commands.registerCommand('neko.entityBrowser.openDashboard', async (item?: unknown) => {
+      if (!(item instanceof EntityBrowserEntityItem)) return;
+      await vscode.commands.executeCommand(ENTITY_FACADE_COMMANDS.triggerBindingWidgetAction, {
+        context: {
+          surface: 'treeview',
+          projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        },
+        action: 'open-dashboard',
+        ...(item.item.entityRef ? { entityRef: item.item.entityRef } : {}),
+        ...(item.item.candidateId ? { candidateId: item.item.candidateId } : {}),
+      });
+    }),
+    vscode.commands.registerCommand('neko.entityBrowser.createCandidate', async () => {
+      const name = await vscode.window.showInputBox({
+        title: 'Create entity candidate',
+        prompt: 'Enter the entity name.',
+        validateInput: (value) => (value.trim().length > 0 ? undefined : 'Name is required.'),
+      });
+      if (!name) return;
+      const kind = await pickCreativeEntityKind();
+      if (!kind) return;
+      const projectRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const candidate = await vscode.commands.executeCommand<unknown>(
+        ENTITY_FACADE_COMMANDS.proposeCandidate,
+        {
+          ...(projectRoot ? { projectRoot } : {}),
+          candidate: {
+            kind,
+            name: name.trim(),
+            provenance: [
+              {
+                providerId: 'neko-assets',
+                sourceKind: 'asset',
+                label: 'Entity Browser',
+              },
+            ],
+          },
+        },
+      );
+      entityBrowserProvider.refresh();
+      if (candidate && typeof candidate === 'object' && 'id' in candidate) {
+        vscode.window.showInformationMessage(`Created entity candidate: ${name.trim()}`);
+      }
+    }),
+    vscode.commands.registerCommand(
+      'neko.assets.inspectBoundCreativeEntity',
+      async (item?: unknown) => {
+        const assetRef = readAssetRefFromAssetItem(item);
+        if (!assetRef) {
+          vscode.window.showInformationMessage('No asset reference is available.');
+          return;
+        }
+        const result = await vscode.commands.executeCommand<unknown>(
+          ENTITY_FACADE_COMMANDS.findEntitiesByAsset,
+          {
+            projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            assetRef,
+          },
+        );
+        if (!isEntityFacadeAssetReverseLookupResult(result) || result.entities.length === 0) {
+          vscode.window.showInformationMessage('No bound creative entity is available.');
+          return;
+        }
+        const selected =
+          result.entities.length === 1
+            ? result.entities[0]
+            : await vscode.window
+                .showQuickPick(
+                  result.entities.map((entry) => ({
+                    label: entry.label,
+                    description: entry.role,
+                    detail: entry.entityRef.entityId,
+                    entry,
+                  })),
+                  { title: 'Inspect bound creative entity' },
+                )
+                .then((picked) => picked?.entry);
+        if (!selected) return;
+        await vscode.commands.executeCommand(ENTITY_FACADE_COMMANDS.inspectEntity, {
+          projectRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          entityRef: selected.entityRef,
+          context: { surface: 'assets', assetRef },
+        });
+      },
+    ),
+  );
+}
+
+async function pickCreativeEntityKind(): Promise<CreativeEntityKind | undefined> {
+  const picked = await vscode.window.showQuickPick(
+    [
+      { label: 'Character', kind: 'character' as const },
+      { label: 'Location', kind: 'location' as const },
+      { label: 'Object', kind: 'object' as const },
+      { label: 'Scene', kind: 'scene' as const },
+      { label: 'Style', kind: 'style' as const },
+    ],
+    {
+      title: 'Entity kind',
+      placeHolder: 'Select the kind for this candidate',
+    },
+  );
+  return picked?.kind;
+}
+
+function readAssetRefFromAssetItem(item: unknown): string | undefined {
+  if (item && typeof item === 'object' && 'entity' in item) {
+    const entity = (item as { readonly entity?: { readonly id?: unknown } }).entity;
+    return typeof entity?.id === 'string' ? `project://assets/${entity.id}` : undefined;
+  }
+  return undefined;
 }
 
 async function exportNkEntity(input: unknown): Promise<unknown> {

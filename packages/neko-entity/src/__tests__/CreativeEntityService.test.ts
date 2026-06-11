@@ -210,6 +210,7 @@ describe('CreativeEntityService', () => {
             assetRef: 'project://assets/dupe',
             role: 'portrait',
             status: 'confirmed',
+            availability: 'active',
             source: 'user',
             updatedAt: now,
           },
@@ -247,5 +248,155 @@ describe('CreativeEntityService', () => {
         metadata: expect.objectContaining({ mergedIntoEntityId: 'char_xiaoju' }),
       }),
     );
+  });
+
+  it('marks, restores, and archives bindings without changing review status', async () => {
+    const files = new MemoryEntityFileStore({
+      [resolveCharacterRegistryPath(projectRoot)]: {
+        version: 1,
+        characters: [
+          {
+            id: 'char_xiaoju',
+            canonicalName: '小橘',
+            aliases: [],
+            status: 'confirmed',
+          },
+        ],
+      },
+      [resolveEntityAssetBindingsPath(projectRoot)]: {
+        version: 1,
+        bindings: [
+          {
+            id: 'binding-portrait',
+            entityId: 'char_xiaoju',
+            entityKind: 'character',
+            assetRef: 'project://assets/xiaoju-portrait',
+            role: 'portrait',
+            status: 'confirmed',
+            availability: 'active',
+            source: 'user',
+            updatedAt: now,
+          },
+        ],
+      },
+    });
+    const events = { emit: vi.fn() };
+    const service = new CreativeEntityService({
+      projectRoot,
+      ports: { files, clock: createFixedClock(now), events },
+    });
+
+    const orphaned = await service.markBindingsOrphaned({
+      bindingIds: ['binding-portrait'],
+      orphanedAt: '2026-06-10T01:00:00.000Z',
+    });
+
+    expect(orphaned).toEqual(
+      expect.objectContaining({
+        action: 'mark-binding-orphaned',
+        changedRefs: [
+          expect.objectContaining({
+            kind: 'binding',
+            id: 'binding-portrait',
+            entityRef: expect.objectContaining({ entityId: 'char_xiaoju' }),
+          }),
+        ],
+      }),
+    );
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.objectContaining({
+          id: 'binding-portrait',
+          status: 'confirmed',
+          availability: 'orphaned',
+          orphanedAt: '2026-06-10T01:00:00.000Z',
+        }),
+      ],
+    });
+
+    await service.restoreOrphanedBindings({ bindingIds: ['binding-portrait'] });
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.not.objectContaining({
+          orphanedAt: expect.any(String),
+        }),
+      ],
+    });
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.objectContaining({
+          status: 'confirmed',
+          availability: 'active',
+        }),
+      ],
+    });
+
+    await service.archiveBindings({ bindingIds: ['binding-portrait'] });
+    expect(files.get(resolveEntityAssetBindingsPath(projectRoot))).toEqual({
+      version: 1,
+      bindings: [
+        expect.objectContaining({
+          status: 'confirmed',
+          availability: 'archived',
+        }),
+      ],
+    });
+    expect(events.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'mark-binding-orphaned' }),
+    );
+    expect(events.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'restore-binding' }),
+    );
+    expect(events.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'archive-binding' }),
+    );
+  });
+
+  it('names anonymous candidates after duplicate checks', async () => {
+    const files = new MemoryEntityFileStore({
+      [resolveCharacterRegistryPath(projectRoot)]: {
+        version: 1,
+        characters: [
+          {
+            id: 'char_existing',
+            canonicalName: '既存',
+            aliases: [],
+            status: 'confirmed',
+          },
+        ],
+      },
+    });
+    const service = new CreativeEntityService({
+      projectRoot,
+      ports: { files, clock: createFixedClock(now) },
+    });
+    const candidate = await service.proposeCandidate({
+      id: 'candidate:visual:1',
+      kind: 'character',
+      name: '',
+      identityBasis: 'visual',
+      provenance: [{ providerId: 'canvas', sourceKind: 'canvas' }],
+    });
+
+    await expect(
+      service.nameCandidate({ candidateId: candidate.id, name: '既存' }),
+    ).rejects.toThrow(/already exists/);
+
+    await service.nameCandidate({ candidateId: candidate.id, name: '新角色', aliases: ['Shin'] });
+
+    expect(files.get(resolveEntityCandidateFilePath(projectRoot))).toEqual({
+      version: 1,
+      candidates: [
+        expect.objectContaining({
+          id: candidate.id,
+          name: '新角色',
+          aliases: ['Shin'],
+          identityBasis: 'user-named',
+        }),
+      ],
+    });
   });
 });

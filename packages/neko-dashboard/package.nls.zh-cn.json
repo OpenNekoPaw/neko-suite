@@ -1,4 +1,8 @@
 {
+  "neko.dashboard.container.title": "Neko 仪表盘",
+  "neko.entityInspector.name": "实体检查器",
+  "neko.entity.inspectEntity.title": "检查实体",
+  "neko.entityInspector.autoFollow.description": "在短暂防抖后自动跟随创意工具发出的显式实体焦点信号。",
   "neko.dashboard.show.title": "显示仪表盘",
   "neko.dashboard.showOnStartup.description": "当工作区包含 Neko 项目文件或 .neko 目录时自动显示 Neko 仪表盘。"
 }

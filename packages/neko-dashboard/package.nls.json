@@ -1,4 +1,8 @@
 {
+  "neko.dashboard.container.title": "Neko Dashboard",
+  "neko.entityInspector.name": "Entity Inspector",
+  "neko.entity.inspectEntity.title": "Inspect Entity",
+  "neko.entityInspector.autoFollow.description": "Automatically follow explicit entity focus signals from creative tools after a short debounce.",
   "neko.dashboard.show.title": "Show Dashboard",
   "neko.dashboard.showOnStartup.description": "Automatically show the Neko Dashboard when a workspace contains Neko project files or a .neko directory."
 }

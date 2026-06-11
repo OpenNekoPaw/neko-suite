@@ -45,5 +45,16 @@
   "neko.assets.directory.reveal": "Reveal in Finder",
   "neko.assets.recentEntity.addToTimeline": "Add to Timeline",
   "neko.assets.recentEntity.addToCanvas": "Add to Canvas",
-  "neko.assets.addToAgent": "Add to Agent"
+  "neko.assets.addToAgent": "Add to Agent",
+  "Inspect Entity": "Inspect Entity",
+  "Entity source unavailable": "Entity source unavailable",
+  "Characters": "Characters",
+  "Locations": "Locations",
+  "Objects": "Objects",
+  "Scenes": "Scenes",
+  "Styles": "Styles",
+  "Candidates": "Candidates",
+  "{0} (pending name)": "{0} (pending name)",
+  "Unnamed candidate": "Unnamed candidate",
+  "Pending name · {0} candidate": "Pending name · {0} candidate"
 }

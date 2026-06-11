@@ -55,6 +55,7 @@ const detail: DashboardCreativeEntityDetail = {
       role: 'portrait',
       assetRef: 'project://assets/xiaoju',
       status: 'confirmed',
+      availability: 'active',
       source: 'user',
       isDefault: true,
       updatedAt: '2026-05-18T00:00:00.000Z',
@@ -66,6 +67,7 @@ const detail: DashboardCreativeEntityDetail = {
       role: 'portrait',
       assetRef: 'project://assets/xiaoju',
       status: 'confirmed',
+      availability: 'active',
       source: 'user',
       isDefault: true,
       updatedAt: '2026-05-18T00:00:00.000Z',
@@ -185,6 +187,7 @@ describe('CreativeEntitiesSection', () => {
     expect(html).not.toContain('验证角色');
     expect(html).not.toContain('完善设定');
     expect(html).toContain('project://assets/xiaoju');
+    expect(html).toContain('已确认');
     expect(html).toContain('记忆审阅');
     expect(html).toContain('小橘穿着橙色外套。');
     expect(html).toContain('待审阅');
@@ -267,6 +270,91 @@ describe('CreativeEntitiesSection', () => {
     });
   });
 
+  it('renders orphaned binding availability and delegates binding-scoped actions with ids', () => {
+    const onAction = vi.fn();
+    const orphanedDetail: DashboardCreativeEntityDetail = {
+      ...detail,
+      bindings: [
+        {
+          ...detail.bindings[0]!,
+          id: 'binding-missing-portrait',
+          assetRef: 'project://assets/missing-portrait',
+          availability: 'orphaned',
+          orphanedAt: '2026-06-10T01:00:00.000Z',
+        },
+      ],
+      defaults: [
+        {
+          ...detail.defaults[0]!,
+          id: 'binding-missing-portrait',
+          assetRef: 'project://assets/missing-portrait',
+          availability: 'orphaned',
+          orphanedAt: '2026-06-10T01:00:00.000Z',
+        },
+      ],
+      actions: [
+        ...detail.actions,
+        { id: 'rebind-orphaned-binding', label: 'Rebind orphaned asset' },
+        { id: 'locate-binding-source', label: 'Locate source' },
+        { id: 'archive-binding', label: 'Archive orphaned binding' },
+      ],
+    };
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [{ ...row, orphanedBindingCount: 1 }],
+          selectedRef: row.ref,
+          detail: orphanedDetail,
+        }}
+        onSelect={vi.fn()}
+        onAction={onAction}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(host.textContent).toContain('1 个断开');
+    expect(host.textContent).toContain('已断开');
+    expect(host.textContent).toContain('断开时间：2026-06-10T01:00:00.000Z');
+    expect(host.textContent).toContain('重新绑定');
+    expect(host.textContent).not.toContain('Rebind orphaned asset');
+
+    const rebindInput = host.querySelector<HTMLInputElement>('input[aria-label="新素材引用"]');
+    expect(rebindInput).not.toBeNull();
+    const rebindButton = findButtonByText(host, '重新绑定');
+    expect(rebindButton).not.toBeNull();
+    expect(rebindButton?.disabled).toBe(true);
+    act(() => {
+      setInputValue(rebindInput, 'project://assets/new-portrait');
+    });
+    expect(rebindButton?.disabled).toBe(false);
+    act(() => {
+      rebindButton?.click();
+    });
+
+    const archiveButton = findButtonByText(host, '归档绑定');
+    expect(archiveButton).not.toBeNull();
+    act(() => {
+      archiveButton?.click();
+    });
+
+    expect(onAction).toHaveBeenNthCalledWith(1, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'rebind-orphaned-binding',
+      payload: {
+        bindingId: 'binding-missing-portrait',
+        assetRef: 'project://assets/new-portrait',
+      },
+    });
+    expect(onAction).toHaveBeenNthCalledWith(2, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'archive-binding',
+      payload: { bindingId: 'binding-missing-portrait' },
+    });
+  });
+
   function renderInteractive(element: React.ReactElement): { host: HTMLDivElement } {
     i18nService.setLocale('zh-cn');
     const host = document.createElement('div');
@@ -291,4 +379,12 @@ function findButtonByText(host: HTMLElement, label: string): HTMLButtonElement |
       (button) => button.textContent?.trim() === label,
     ) ?? null
   );
+}
+
+function setInputValue(input: HTMLInputElement | null, value: string): void {
+  if (!input) return;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }

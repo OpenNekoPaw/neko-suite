@@ -10,6 +10,8 @@ import {
   isEntityAssetBindingFile,
   isEntityAssetRequirementFile,
   isVisualIdentityDraftFile,
+  withEntityAssetBindingDefaults,
+  withEntityAssetBindingFileDefaults,
 } from '@neko/shared';
 import type { EntityRuntimePorts } from './ports';
 import { SerialEntityRuntimeLock } from './ports';
@@ -44,7 +46,9 @@ export class EntityAssetBindingService {
 
   async load(): Promise<EntityAssetBindingFile> {
     const parsed = await this.options.ports.files.readJson(this.filePath);
-    return isEntityAssetBindingFile(parsed) ? parsed : createEmptyEntityAssetBindingFile();
+    return isEntityAssetBindingFile(parsed)
+      ? withEntityAssetBindingFileDefaults(parsed)
+      : createEmptyEntityAssetBindingFile();
   }
 
   async save(file: EntityAssetBindingFile): Promise<void> {
@@ -63,14 +67,18 @@ export class EntityAssetBindingService {
   async upsert(binding: EntityAssetBinding): Promise<EntityAssetBindingFile> {
     return this.mutate((file) => ({
       version: 1,
-      bindings: [...file.bindings.filter((candidate) => candidate.id !== binding.id), binding].sort(
-        compareBindings,
-      ),
+      bindings: [
+        ...file.bindings.filter((candidate) => candidate.id !== binding.id),
+        withEntityAssetBindingDefaults(binding),
+      ].sort(compareBindings),
     }));
   }
 
   async setDefault(binding: EntityAssetBinding): Promise<EntityAssetBindingFile> {
-    const nextBinding: EntityAssetBinding = { ...binding, isDefault: true };
+    const nextBinding: EntityAssetBinding = withEntityAssetBindingDefaults({
+      ...binding,
+      isDefault: true,
+    });
     return this.mutate((file) => ({
       version: 1,
       bindings: [
@@ -94,7 +102,9 @@ export class EntityAssetBindingService {
   async replaceAll(bindings: readonly EntityAssetBinding[]): Promise<EntityAssetBindingFile> {
     const next: EntityAssetBindingFile = {
       version: 1,
-      bindings: [...bindings].sort(compareBindings),
+      bindings: bindings
+        .map((binding) => withEntityAssetBindingDefaults(binding))
+        .sort(compareBindings),
     };
     await this.save(next);
     return next;
@@ -114,7 +124,9 @@ export class EntityAssetBindingService {
   private async write(file: EntityAssetBindingFile): Promise<void> {
     await this.options.ports.files.writeJson(this.filePath, {
       version: 1,
-      bindings: [...file.bindings].sort(compareBindings),
+      bindings: file.bindings
+        .map((binding) => withEntityAssetBindingDefaults(binding))
+        .sort(compareBindings),
     });
   }
 }

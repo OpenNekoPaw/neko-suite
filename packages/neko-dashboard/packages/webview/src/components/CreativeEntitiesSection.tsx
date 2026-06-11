@@ -4,6 +4,7 @@ import {
   DASHBOARD_CREATIVE_ENTITY_LIFECYCLE_STATUSES,
   type DashboardCreativeEntityAction,
   type DashboardCreativeEntityActionRequest,
+  type DashboardCreativeEntityBindingSummary,
   type DashboardCreativeEntityDetail,
   type DashboardCreativeEntityRef,
   type DashboardCreativeEntityRow,
@@ -121,6 +122,7 @@ export function CreativeEntitiesSection({
             { value: 'all', label: t('creativeEntities.allBindingStates') },
             { value: 'bound', label: t('creativeEntities.hasDefaultBinding') },
             { value: 'unbound', label: t('creativeEntities.noDefaultBinding') },
+            { value: 'orphaned', label: t('creativeEntities.orphanedBindings') },
           ]}
           onValueChange={(value) => setBindingFilter(value as CreativeEntityBindingFilter)}
         />
@@ -163,6 +165,7 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
             <th>{t('creativeEntities.column.status')}</th>
             <th>{t('creativeEntities.column.missing')}</th>
             <th>{t('creativeEntities.column.defaults')}</th>
+            <th>{t('creativeEntities.column.orphans')}</th>
             <th>{t('creativeEntities.column.drafts')}</th>
           </tr>
         </thead>
@@ -194,13 +197,14 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
                 <td>{t(`creativeEntities.status.${row.status}`)}</td>
                 <td>{formatList(row.missingRepresentationKinds, t)}</td>
                 <td>{formatList(row.defaultBindingRoles, t)}</td>
+                <td>{formatOrphanCount(row.orphanedBindingCount, t)}</td>
                 <td>{row.visualDraftCount ?? 0}</td>
               </tr>
             );
           })}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="empty-cell">
+              <td colSpan={7} className="empty-cell">
                 {t('creativeEntities.empty')}
               </td>
             </tr>
@@ -251,10 +255,7 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
         title={t('creativeEntities.detail.defaultBindings')}
         value={formatBindings(detail.defaults, t)}
       />
-      <DetailBlock
-        title={t('creativeEntities.detail.allBindings')}
-        value={formatBindings(detail.bindings, t)}
-      />
+      <BindingList detail={detail} onAction={onAction} />
       <DetailBlock
         title={t('creativeEntities.detail.missingRequirements')}
         value={formatRequirements(detail, t)}
@@ -266,12 +267,173 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
       <MemoryReviews detail={detail} onAction={onAction} />
       <SyncSuggestions detail={detail} onAction={onAction} />
       <div className="detail-actions">
-        {detail.actions.map((action) => (
-          <ActionButton key={action.id} detail={detail} action={action.id} onAction={onAction} />
-        ))}
+        {detail.actions
+          .filter((action) => !isBindingScopedAction(action.id))
+          .map((action) => (
+            <ActionButton key={action.id} detail={detail} action={action.id} onAction={onAction} />
+          ))}
       </div>
     </aside>
   );
+}
+
+function BindingList({
+  detail,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  if (detail.bindings.length === 0) {
+    return (
+      <DetailBlock
+        title={t('creativeEntities.detail.allBindings')}
+        value={t('creativeEntities.detail.none')}
+      />
+    );
+  }
+  const orphaned = detail.bindings.filter((binding) => binding.availability === 'orphaned');
+  const orderedBindings =
+    orphaned.length > 0
+      ? [...orphaned, ...detail.bindings.filter((binding) => binding.availability !== 'orphaned')]
+      : detail.bindings;
+  return (
+    <div className="detail-block">
+      <div className="detail-block-title">{t('creativeEntities.detail.allBindings')}</div>
+      <div className="detail-list">
+        {orderedBindings.map((binding) => (
+          <BindingListItem key={binding.id} detail={detail} binding={binding} onAction={onAction} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BindingListItem({
+  detail,
+  binding,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly binding: DashboardCreativeEntityBindingSummary;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  const orphaned = binding.availability === 'orphaned';
+  const [nextAssetRef, setNextAssetRef] = useState('');
+  return (
+    <div className="detail-list-item">
+      <div>
+        <div>{formatBinding(binding, t)}</div>
+        {binding.orphanedAt ? (
+          <div className="muted-line">
+            {t('creativeEntities.binding.orphanedAt', { date: binding.orphanedAt })}
+          </div>
+        ) : null}
+      </div>
+      {orphaned ? (
+        <div className="button-row">
+          <input
+            aria-label={t('creativeEntities.binding.rebindAssetRef')}
+            placeholder={t('creativeEntities.binding.rebindAssetRef')}
+            value={nextAssetRef}
+            onChange={(event) => setNextAssetRef(event.target.value)}
+          />
+          <Button
+            size="xs"
+            variant="secondary"
+            disabled={!nextAssetRef.trim()}
+            onClick={() =>
+              onAction({
+                source: detail.ref.source,
+                ref: detail.ref,
+                action: 'rebind-orphaned-binding',
+                payload: {
+                  bindingId: binding.id,
+                  assetRef: nextAssetRef.trim(),
+                },
+              })
+            }
+          >
+            {t('creativeEntities.action.rebind-orphaned-binding')}
+          </Button>
+          <BindingActionButton
+            detail={detail}
+            binding={binding}
+            action="locate-binding-source"
+            onAction={onAction}
+          />
+          <BindingActionButton
+            detail={detail}
+            binding={binding}
+            action="archive-binding"
+            onAction={onAction}
+          />
+          {binding.status === 'suggested' ? (
+            <BindingActionButton
+              detail={detail}
+              binding={binding}
+              action="cleanup-suggested-orphan"
+              onAction={onAction}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BindingActionButton({
+  detail,
+  binding,
+  action,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly binding: DashboardCreativeEntityBindingSummary;
+  readonly action: DashboardCreativeEntityAction;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      size="xs"
+      variant="secondary"
+      onClick={() =>
+        onAction({
+          source: detail.ref.source,
+          ref: detail.ref,
+          action,
+          payload: bindingActionPayload(action, binding),
+        })
+      }
+    >
+      {t(`creativeEntities.action.${action}`)}
+    </Button>
+  );
+}
+
+function bindingActionPayload(
+  action: DashboardCreativeEntityAction,
+  binding: DashboardCreativeEntityBindingSummary,
+): Record<string, unknown> {
+  return {
+    bindingId: binding.id,
+    ...(action === 'locate-binding-source' ? { assetRef: binding.assetRef } : {}),
+  };
+}
+
+function isBindingScopedAction(action: DashboardCreativeEntityAction): boolean {
+  switch (action) {
+    case 'rebind-orphaned-binding':
+    case 'locate-binding-source':
+    case 'archive-binding':
+    case 'cleanup-suggested-orphan':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function MemoryReviews({
@@ -506,9 +668,29 @@ function formatBindings(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   if (bindings.length === 0) return t('creativeEntities.detail.none');
-  return bindings
-    .map((binding) => `${translateEnumValue(binding.role, t)}: ${binding.assetRef}`)
-    .join('; ');
+  return bindings.map((binding) => formatBinding(binding, t)).join('; ');
+}
+
+function formatBinding(
+  binding: DashboardCreativeEntityBindingSummary,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const availability =
+    binding.availability === 'active'
+      ? ''
+      : ` · ${t(`creativeEntities.availability.${binding.availability}`)}`;
+  return `${translateEnumValue(binding.role, t)}: ${binding.assetRef} · ${t(
+    `creativeEntities.bindingStatus.${binding.status}`,
+  )}${availability}`;
+}
+
+function formatOrphanCount(
+  count: number | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return count && count > 0
+    ? t('creativeEntities.orphanedBindingCount', { count })
+    : t('creativeEntities.detail.none');
 }
 
 function formatRequirements(

@@ -102,6 +102,51 @@ describe('EntityContributionAutomationService', () => {
     });
   });
 
+  it('does not merge name-based contributions into non-user-named candidates', async () => {
+    const files = new MemoryEntityFileStore();
+    const entityService = createEntityService(files);
+    const existing = await entityService.proposeCandidate({
+      id: 'candidate:visual:face-1',
+      kind: 'character',
+      name: '少年',
+      identityBasis: 'visual',
+      provenance: [
+        {
+          providerId: 'neko-canvas',
+          sourceKind: 'canvas',
+          sourceRef: 'canvas://shot-1/face-1',
+        },
+      ],
+    });
+    const automation = new EntityContributionAutomationService(entityService);
+
+    const result = await automation.processContribution(
+      makeContribution({
+        entityCandidates: [makeCandidate({ name: '少年', confidence: 0.91 })],
+      }),
+    );
+
+    expect(result.decisions).toEqual([
+      expect.objectContaining({
+        kind: 'created-candidate',
+        candidateId: 'candidate:character:char_少年',
+      }),
+    ]);
+    expect(files.get(resolveEntityCandidateFilePath(projectRoot))).toEqual({
+      version: 1,
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          id: existing.id,
+          identityBasis: 'visual',
+        }),
+        expect.objectContaining({
+          id: 'candidate:character:char_少年',
+          identityBasis: 'user-named',
+        }),
+      ]),
+    });
+  });
+
   it('creates reviewable candidates by default without confirming characters.json', async () => {
     const files = new MemoryEntityFileStore();
     const service = createAutomation(files);
@@ -234,6 +279,7 @@ function makeCandidate(
     kind: 'character',
     name,
     status: 'open',
+    identityBasis: 'user-named',
     aliases: [],
     confidence: 0.8,
     provenance: [

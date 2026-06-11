@@ -69,6 +69,11 @@
           "id": "neko.assetHistory",
           "name": "%neko.assetManager.history%",
           "contextualTitle": "%neko.assetManager.historyTitle%"
+        },
+        {
+          "id": "neko.entityBrowser",
+          "name": "%neko.entityBrowser.name%",
+          "contextualTitle": "%neko.entityBrowser.contextualTitle%"
         }
       ]
     },
@@ -303,6 +308,48 @@
         "title": "%neko.assets.addToAgent%",
         "category": "Neko Assets",
         "icon": "$(comment-add)"
+      },
+      {
+        "command": "neko.entityBrowser.refresh",
+        "title": "%neko.entityBrowser.refresh%",
+        "category": "Neko Assets",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "neko.entityBrowser.inspect",
+        "title": "%neko.entityBrowser.inspect%",
+        "category": "Neko Assets",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "neko.entityBrowser.rename",
+        "title": "%neko.entityBrowser.rename%",
+        "category": "Neko Assets",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "neko.entityBrowser.editAppearance",
+        "title": "%neko.entityBrowser.editAppearance%",
+        "category": "Neko Assets",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "neko.entityBrowser.openDashboard",
+        "title": "%neko.entityBrowser.openDashboard%",
+        "category": "Neko Assets",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "neko.entityBrowser.createCandidate",
+        "title": "%neko.entityBrowser.createCandidate%",
+        "category": "Neko Assets",
+        "icon": "$(add)"
+      },
+      {
+        "command": "neko.assets.inspectBoundCreativeEntity",
+        "title": "%neko.assets.inspectBoundCreativeEntity%",
+        "category": "Neko Assets",
+        "icon": "$(inspect)"
       }
     ],
     "menus": {
@@ -321,6 +368,16 @@
           "command": "neko.assets.searchMediaLibrary",
           "when": "view == neko.mediaLibraries",
           "group": "overflow"
+        },
+        {
+          "command": "neko.entityBrowser.refresh",
+          "when": "view == neko.entityBrowser",
+          "group": "navigation"
+        },
+        {
+          "command": "neko.entityBrowser.createCandidate",
+          "when": "view == neko.entityBrowser",
+          "group": "navigation@2"
         },
         {
           "command": "neko.assets.validateAll",
@@ -405,6 +462,11 @@
           "group": "1_preview@4"
         },
         {
+          "command": "neko.assets.inspectBoundCreativeEntity",
+          "when": "viewItem == entity",
+          "group": "1_preview@5"
+        },
+        {
           "command": "neko.assets.entity.rename",
           "when": "viewItem == entity",
           "group": "2_modify@1"
@@ -473,6 +535,26 @@
           "command": "neko.assets.addToAgent",
           "when": "viewItem =~ /^mediaLibrary:file:/",
           "group": "5_agent@1"
+        },
+        {
+          "command": "neko.entityBrowser.inspect",
+          "when": "viewItem == entityBrowser:entity || viewItem == entityBrowser:candidate",
+          "group": "inline"
+        },
+        {
+          "command": "neko.entityBrowser.rename",
+          "when": "viewItem == entityBrowser:entity",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "neko.entityBrowser.editAppearance",
+          "when": "viewItem == entityBrowser:entity",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "neko.entityBrowser.openDashboard",
+          "when": "viewItem == entityBrowser:entity || viewItem == entityBrowser:candidate",
+          "group": "3_open@1"
         }
       ],
       "explorer/context": [
@@ -541,7 +623,6 @@
   },
   "dependencies": {
     "@neko/asset": "workspace:*",
-    "@neko/entity": "workspace:*",
     "@neko/shared": "workspace:*",
     "adm-zip": "^0.5.16"
   },

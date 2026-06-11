@@ -114,6 +114,7 @@ export class StoryEntityProviderAdapter implements CreativeEntityProvider {
       name: input.name,
       aliases: input.aliases ?? [],
       status: 'open',
+      identityBasis: 'user-named',
       ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
       provenance: [
         {

@@ -29,15 +29,59 @@
   "activationEvents": [
     "onCommand:neko.dashboard.show",
     "onCommand:neko.dashboard.getCreativeEntityState",
+    "onCommand:neko.entity.inspectEntity",
+    "onCommand:neko.entityInspector.follow",
+    "onCommand:neko.entity.addAlias",
+    "onCommand:neko.entity.bindAsset",
+    "onCommand:neko.entity.confirmCandidate",
+    "onCommand:neko.entity.dismissCandidate",
+    "onCommand:neko.entity.getEntity",
+    "onCommand:neko.entity.getEntityDetail",
+    "onCommand:neko.entity.listCandidates",
+    "onCommand:neko.entity.listEntities",
+    "onCommand:neko.entity.mergeCandidate",
+    "onCommand:neko.entity.proposeCandidate",
+    "onCommand:neko.entity.rejectCandidate",
+    "onCommand:neko.entity.removeAlias",
+    "onCommand:neko.entity.renameEntity",
+    "onCommand:neko.entity.resolveByName",
+    "onCommand:neko.entity.setDefaultBinding",
+    "onCommand:neko.entity.triggerBindingWidgetAction",
+    "onCommand:neko.entity.updateMetadata",
+    "onCommand:neko.entity.upsertVisualDraft",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neko-dashboard",
+          "title": "%neko.dashboard.container.title%",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "views": {
+      "neko-dashboard": [
+        {
+          "id": "neko.entityInspector",
+          "name": "%neko.entityInspector.name%",
+          "contextualTitle": "%neko.entityInspector.name%"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "neko.dashboard.show",
         "title": "%neko.dashboard.show.title%",
         "icon": "$(dashboard)",
+        "category": "Neko"
+      },
+      {
+        "command": "neko.entity.inspectEntity",
+        "title": "%neko.entity.inspectEntity.title%",
+        "icon": "$(inspect)",
         "category": "Neko"
       }
     ],
@@ -48,6 +92,11 @@
           "type": "boolean",
           "default": false,
           "description": "%neko.dashboard.showOnStartup.description%"
+        },
+        "neko.entityInspector.autoFollow": {
+          "type": "boolean",
+          "default": false,
+          "description": "%neko.entityInspector.autoFollow.description%"
         }
       }
     },

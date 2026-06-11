@@ -78,6 +78,17 @@ export interface MergeEntitiesInput {
   readonly targetEntityId: string;
 }
 
+export interface EntityAssetBindingLifecycleInput {
+  readonly bindingIds: readonly string[];
+  readonly orphanedAt?: string;
+}
+
+export interface NameEntityCandidateInput {
+  readonly candidateId: string;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+}
+
 export class CreativeEntityService {
   private generation = 0;
   readonly store: ProjectEntityStore;
@@ -423,6 +434,118 @@ export class CreativeEntityService {
     ]);
   }
 
+  async unbindAsset(bindingId: string): Promise<CreativeEntityOperationResult> {
+    const binding = (await this.bindings.list()).find((candidate) => candidate.id === bindingId);
+    await this.bindings.remove(bindingId);
+    const entity = binding ? await this.store.get(binding.entityId) : undefined;
+    return this.result('unbind', entity ? [entity] : [], [
+      {
+        kind: 'binding',
+        id: bindingId,
+        ...(binding
+          ? {
+              entityRef: {
+                entityId: binding.entityId,
+                entityKind: binding.entityKind,
+                projectRoot: this.options.projectRoot,
+              },
+            }
+          : {}),
+        factRef: resolveEntityAssetBindingsPath(this.options.projectRoot),
+      },
+    ]);
+  }
+
+  async markBindingsOrphaned(
+    input: EntityAssetBindingLifecycleInput,
+  ): Promise<CreativeEntityOperationResult> {
+    return this.updateBindingAvailability('mark-binding-orphaned', input.bindingIds, (binding) => {
+      if (binding.availability === 'orphaned') return binding;
+      return {
+        ...binding,
+        availability: 'orphaned',
+        orphanedAt: input.orphanedAt ?? nowFromPorts(this.options.ports),
+        updatedAt: nowFromPorts(this.options.ports),
+      };
+    });
+  }
+
+  async restoreOrphanedBindings(
+    input: EntityAssetBindingLifecycleInput,
+  ): Promise<CreativeEntityOperationResult> {
+    return this.updateBindingAvailability('restore-binding', input.bindingIds, (binding) => {
+      if (binding.availability !== 'orphaned') return binding;
+      const { orphanedAt: _orphanedAt, ...rest } = binding;
+      return {
+        ...rest,
+        availability: 'active',
+        updatedAt: nowFromPorts(this.options.ports),
+      };
+    });
+  }
+
+  async archiveBindings(
+    input: EntityAssetBindingLifecycleInput,
+  ): Promise<CreativeEntityOperationResult> {
+    return this.updateBindingAvailability('archive-binding', input.bindingIds, (binding) => {
+      if (binding.availability === 'archived') return binding;
+      const { orphanedAt: _orphanedAt, ...rest } = binding;
+      return {
+        ...rest,
+        availability: 'archived',
+        updatedAt: nowFromPorts(this.options.ports),
+      };
+    });
+  }
+
+  async nameCandidate(input: NameEntityCandidateInput): Promise<CreativeEntityOperationResult> {
+    const candidate = await this.candidates.get(input.candidateId);
+    if (!candidate) {
+      throw new Error(`Unknown creative entity candidate: ${input.candidateId}`);
+    }
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error('Candidate name cannot be empty.');
+    }
+    const existingEntity = await this.resolveByName(name, candidate.kind);
+    if (existingEntity) {
+      throw new Error(`Creative entity name already exists: ${name}`);
+    }
+    const normalizedTarget = name.toLocaleLowerCase();
+    const openCandidates = await this.candidates.list('open');
+    const duplicateCandidate = openCandidates.find((item) => {
+      if (item.id === candidate.id || item.kind !== candidate.kind) return false;
+      if (item.identityBasis !== 'user-named') return false;
+      const names = [item.name, ...(item.aliases ?? [])].map((value) => value.toLocaleLowerCase());
+      return names.includes(normalizedTarget);
+    });
+    if (duplicateCandidate) {
+      throw new Error(`Creative entity candidate name already exists: ${name}`);
+    }
+
+    const updated = await this.candidates.update(candidate.id, (current) => ({
+      ...current,
+      name,
+      aliases: normalizeAliasList([...(current.aliases ?? []), ...(input.aliases ?? [])]),
+      identityBasis: 'user-named',
+      updatedAt: nowFromPorts(this.options.ports),
+    }));
+    if (!updated) {
+      throw new Error(`Unknown creative entity candidate: ${input.candidateId}`);
+    }
+    return this.result(
+      'name-candidate',
+      [],
+      [
+        {
+          kind: 'candidate',
+          id: candidate.id,
+          factRef: resolveEntityCandidateFilePath(this.options.projectRoot),
+        },
+      ],
+    );
+  }
+
   async upsertRequirement(
     requirement: EntityAssetRequirement,
   ): Promise<CreativeEntityOperationResult> {
@@ -493,6 +616,50 @@ export class CreativeEntityService {
     const next: CreativeEntity = { ...entity, status };
     await this.store.upsert(next);
     return this.result(action, [next], [entityChangedRef(next, this.factRefForEntity(next))]);
+  }
+
+  private async updateBindingAvailability(
+    action: 'mark-binding-orphaned' | 'restore-binding' | 'archive-binding',
+    bindingIds: readonly string[],
+    operation: (binding: EntityAssetBinding) => EntityAssetBinding,
+  ): Promise<CreativeEntityOperationResult> {
+    const idSet = new Set(bindingIds);
+    const bindings = await this.bindings.list();
+    const changed: EntityAssetBinding[] = [];
+    const nextBindings = bindings.map((binding) => {
+      if (!idSet.has(binding.id)) return binding;
+      const next = operation(binding);
+      if (next !== binding) {
+        changed.push(next);
+      }
+      return next;
+    });
+    if (changed.length > 0) {
+      await this.bindings.replaceAll(nextBindings);
+    }
+    const entities = await this.entitiesForBindings(changed);
+    return this.result(
+      action,
+      entities,
+      changed.map((binding) => bindingChangedRef(binding, this.options.projectRoot)),
+    );
+  }
+
+  private async entitiesForBindings(
+    bindings: readonly EntityAssetBinding[],
+  ): Promise<readonly CreativeEntity[]> {
+    const entities: CreativeEntity[] = [];
+    const seen = new Set<string>();
+    for (const binding of bindings) {
+      const key = `${binding.entityKind}:${binding.entityId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entity = await this.store.get(binding.entityId);
+      if (entity) {
+        entities.push(entity);
+      }
+    }
+    return entities;
   }
 
   private async requireEntity(id: string): Promise<CreativeEntity> {
@@ -620,6 +787,22 @@ function entityChangedRef(entity: CreativeEntity, factRef: string): CreativeEnti
     id: entity.id,
     entityRef: { entityId: entity.id, entityKind: entity.kind },
     factRef,
+  };
+}
+
+function bindingChangedRef(
+  binding: EntityAssetBinding,
+  projectRoot: string,
+): CreativeEntityChangedRef {
+  return {
+    kind: 'binding',
+    id: binding.id,
+    entityRef: {
+      entityId: binding.entityId,
+      entityKind: binding.entityKind,
+      projectRoot,
+    },
+    factRef: resolveEntityAssetBindingsPath(projectRoot),
   };
 }
 

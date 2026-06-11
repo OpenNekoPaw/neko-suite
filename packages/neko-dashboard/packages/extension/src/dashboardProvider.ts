@@ -106,6 +106,10 @@ export class DashboardProvider implements vscode.Disposable {
     );
   }
 
+  getCreativeEntityAggregator(): CreativeEntitySourceAggregator {
+    return this.creativeEntityAggregator;
+  }
+
   async show(): Promise<void> {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.One);

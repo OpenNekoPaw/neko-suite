@@ -9,6 +9,13 @@ import type {
 import type { CreativeEntityService } from '../core/CreativeEntityService';
 
 export {
+  projectEntityBindingAvailability,
+  projectEntityBindingAvailabilityText,
+  type EntityBindingAvailabilityProjection,
+  type EntityBindingAvailabilityProjectionInput,
+} from './bindingAvailabilityProjection';
+
+export {
   NpcProfileAssembler,
   type AssembleNpcProfileInput,
   type NpcProfileAssemblerReaders,
@@ -53,12 +60,14 @@ class EntitySearchAdapter implements ProjectSearchAdapter {
       this.options.service.list(),
       this.options.service.listCandidates('open'),
     ]);
+    const text = query.text.trim().toLocaleLowerCase();
     const items = [
       ...entities.map((entity) => entityToSearchItem(entity, this.options.projectRoot)),
-      ...candidates.map((candidate) => candidateToSearchItem(candidate, this.options.projectRoot)),
+      ...candidates
+        .filter((candidate) => !text || candidate.identityBasis === 'user-named')
+        .map((candidate) => candidateToSearchItem(candidate, this.options.projectRoot)),
     ];
     const allowedKinds = query.kinds ? new Set(query.kinds) : undefined;
-    const text = query.text.trim().toLocaleLowerCase();
     return items
       .filter((item) => !allowedKinds || allowedKinds.has(item.kind))
       .filter((item) => !text || item.searchText.toLocaleLowerCase().includes(text))
@@ -113,14 +122,22 @@ function candidateToSearchItem(
   return {
     id: `candidate:${candidate.kind}:${candidate.id}`,
     kind: 'entity-candidate',
-    label: candidate.name,
-    description: `${candidate.kind} candidate`,
+    label:
+      candidate.identityBasis === 'user-named' ? candidate.name : pendingCandidateLabel(candidate),
+    description:
+      candidate.identityBasis === 'user-named'
+        ? `${candidate.kind} candidate`
+        : `${candidate.kind} candidate · pending name`,
     source: {
       partition: 'creative-entities',
       sourceId: 'neko-entity',
       sourceKind: 'candidate',
       refId: candidate.id,
-      metadata: { entityKind: candidate.kind, status: candidate.status },
+      metadata: {
+        entityKind: candidate.kind,
+        status: candidate.status,
+        identityBasis: candidate.identityBasis,
+      },
     },
     projectRoot,
     canonicalName: candidate.name,
@@ -134,6 +151,13 @@ function candidateToSearchItem(
     ].join(' '),
     navigationData: { candidateId: candidate.id, kind: candidate.kind, source: 'neko-entity' },
     freshness: 'fresh',
-    metadata: candidate.metadata,
+    metadata: {
+      ...(candidate.metadata ?? {}),
+      identityBasis: candidate.identityBasis,
+    },
   };
+}
+
+function pendingCandidateLabel(candidate: CreativeEntityCandidate): string {
+  return candidate.name.trim() ? `${candidate.name} (pending name)` : 'Unnamed candidate';
 }
