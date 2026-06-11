@@ -4,7 +4,7 @@
 - **Date**: 2026-05-11
 - **Scope**: neko-canvas webview (`packages/neko-canvas/packages/webview/`); future `@neko/shared` promotion path documented in §5.3
 - **Refines**: `adr-canvas-block-container.md` (Block + Container primitive architecture)
-- **Related**: `adr-canvas-preview-boundary.md` (preview roles & runtime URL boundary), `canvas-agent-integration.md` (agent tool surface)
+- **Related**: `adr-canvas-preview-boundary.md` (preview roles & runtime URL boundary), `canvas-agent-integration.md` (agent tool surface), `adr-canvas-creator-facing-presentation.md` (creator-facing review/detail surfaces)
 - **OpenSpec Change**: `canvas-generic-container-card`
 
 ---
@@ -754,6 +754,14 @@ Shot inline data URLs are stored in role-matched `variants[].sourcePath` within 
 ### 4.3 Consistent with existing `NodePreviewDescriptor`
 
 The shared type layer (`canvas-layered.ts:232`) defines `NodePreviewDescriptor` with `title`, `subtitle`, `role`, `badges`, `thumbnailVariantId`, `capabilities`. `NodeCardPolicy` mirrors this shape on the metadata side. On the preview side, `CardPreviewSource` adds the card-specific `renderForm` selection while delegating asset resolution to the existing `PreviewSourceDescriptor` + `PreviewResolver` pipeline.
+
+### 4.4 Provides the Presentation Primitive for Creator-Facing Views
+
+This ADR defines the generic container/card primitives used by creator-facing
+review and detail surfaces. The product information architecture for scene
+storyboard tables, shot detail slimming, view switching, field profiles, and
+other container-specific creator surfaces is intentionally specified in
+`adr-canvas-creator-facing-presentation.md`.
 
 ---
 
