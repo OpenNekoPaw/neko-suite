@@ -51,7 +51,12 @@ export const comicToStoryboardSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['comic', 'document', 'image-sequence'],
-    producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+    producedArtifacts: [
+      'CompositeArtifact',
+      'GenericTable',
+      'StoryboardTable',
+      'EntityMemoryContribution',
+    ],
     artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
     referencedCapabilities: [
       'comic-image-prep-pipeline',

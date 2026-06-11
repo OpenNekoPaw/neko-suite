@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ToolCall } from '@neko-agent/types';
+import { isEntityMemoryContribution } from '@neko/shared';
+import { parseCompositeContentJson, type ContentBlock, type ToolCall } from '@neko-agent/types';
 import { projectCompositeBlockRichContent } from '../composite-content-presenter';
 import { projectStoryboardTableTransferPayload } from '../storyboard-transfer-presenter';
 
@@ -179,6 +180,132 @@ describe('composite content presenter', () => {
         ],
       },
     });
+  });
+
+  it('projects composite artifact storyboard, entity contribution, and source images together', () => {
+    const contribution = {
+      contributionId: 'contribution-page-1',
+      sourcePackage: 'neko-agent',
+      sourceRef: { kind: 'tool-result', toolCallId: 'read-doc', assetIndex: 0 },
+      reviewPolicy: 'requires-user-review',
+      entityCandidates: [
+        {
+          id: 'candidate-rin',
+          kind: 'character',
+          name: 'Rin',
+          status: 'open',
+          identityBasis: 'user-named',
+          provenance: [
+            {
+              providerId: 'neko-agent',
+              sourceKind: 'agent',
+              sourceRef: 'read-doc#0',
+            },
+          ],
+          sourceRefs: ['read-doc#0'],
+        },
+      ],
+    };
+    const composites = parseCompositeContentJson(
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'composite-artifact',
+        artifactId: 'artifact-storyboard',
+        title: 'Comic artifact',
+        extensions: {
+          'neko.entityMemoryContributionPayload': contribution,
+        },
+        blocks: [
+          {
+            blockId: 'storyboard-domain',
+            kind: 'domain',
+            title: 'Storyboard Payload',
+            domainKind: 'StoryboardTable',
+            schemaVersion: 1,
+            payload: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Opening',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'Page 1',
+                  shots: [
+                    {
+                      shotNumber: 1,
+                      duration: 3,
+                      visualDescription: 'Panel action and composition.',
+                      characterAction: 'Rin enters the frame.',
+                      imageStrategy: 'use-as-reference',
+                      sourceMediaRefs: [
+                        {
+                          refId: 'source-panel-1',
+                          role: 'source',
+                          locator: {
+                            type: 'tool-result',
+                            toolCallId: 'read-doc',
+                            assetIndex: 0,
+                          },
+                          label: 'Original panel',
+                          mimeType: 'image/jpeg',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const composite = composites[0];
+    if (!composite) throw new Error('expected composite');
+
+    const projection = projectCompositeBlockRichContent({
+      composite,
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  path: '/cache/page-1.jpg',
+                  webviewUri: 'webview://page-1.jpg',
+                  label: 'Page 1',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      expect.objectContaining({
+        locator: { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 0 },
+      }),
+    ]);
+    expect(projection.data.entityMemoryContribution).toMatchObject({
+      contributionId: 'contribution-page-1',
+      entityCandidates: [expect.objectContaining({ id: 'candidate-rin' })],
+    });
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        src: 'webview://page-1.jpg',
+        localPath: '/cache/page-1.jpg',
+        role: 'source',
+      }),
+    ]);
   });
 
   it('keeps page aliases bound to stable document resources when transferring inferred storyboard refs', () => {
@@ -739,6 +866,125 @@ describe('composite content presenter', () => {
         referenceResourceRef: page7CacheRef,
       },
     ]);
+  });
+
+  it('infers reviewable entity memory contribution from character analysis tables', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Opening',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Page 1',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: '瑞德 watches the gate.',
+                  characterAction: '瑞德 hesitates before running.',
+                  imageStrategy: 'generate-new',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: '主要角色观察',
+            content: [
+              '| 角色 | 当前证据支撑的观察 |',
+              '| --- | --- |',
+              '| 瑞德 | 红色围巾，面对门口时显得犹豫。 |',
+              '| 众人 | 背景里围观，没有单一身份。 |',
+            ].join('\n'),
+          },
+        ],
+      },
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    const contribution = projection.data.entityMemoryContribution;
+    expect(isEntityMemoryContribution(contribution)).toBe(true);
+    expect(contribution?.reviewPolicy).toBe('requires-user-review');
+    expect(contribution?.metadata).toMatchObject({
+      inferredFrom: 'character-analysis-table',
+      source: 'agent-rich-content-fallback',
+      rowCount: 2,
+    });
+    expect(contribution?.entityCandidates).toEqual([
+      expect.objectContaining({
+        kind: 'character',
+        name: '瑞德',
+        status: 'open',
+        identityBasis: 'user-named',
+      }),
+    ]);
+    expect(contribution?.characterObservations).toEqual([
+      expect.objectContaining({
+        reviewStatus: 'needs-review',
+        candidateId: contribution?.entityCandidates?.[0]?.id,
+        dimensions: [
+          expect.objectContaining({
+            dimension: 'appearance',
+            value: '红色围巾，面对门口时显得犹豫。',
+          }),
+        ],
+      }),
+    ]);
+    expect(contribution?.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'character-analysis-row-not-entity',
+        details: expect.objectContaining({ name: '众人' }),
+      }),
+    ]);
+
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    expect(payload).toMatchObject({
+      kind: 'canvasStoryboard',
+      entityMemoryContribution: contribution,
+    });
+  });
+
+  it('prefers structured entity memory contribution over character analysis fallback', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Opening',
+        extensions: {
+          'neko.entityMemoryContributionPayload': {
+            contributionId: 'explicit-contribution',
+            sourcePackage: 'neko-agent',
+            sourceRef: { kind: 'manual', label: 'explicit payload' },
+            reviewPolicy: 'requires-user-review',
+          },
+        },
+        sections: [
+          {
+            heading: '主要角色观察',
+            content: [
+              '| 角色 | 当前证据支撑的观察 |',
+              '| --- | --- |',
+              '| 瑞德 | 红色围巾。 |',
+            ].join('\n'),
+          },
+        ],
+      },
+    });
+
+    expect(projection.data.entityMemoryContribution).toMatchObject({
+      contributionId: 'explicit-contribution',
+      sourceRef: { kind: 'manual', label: 'explicit payload' },
+    });
+    expect(projection.data.entityMemoryContribution?.metadata).toBeUndefined();
   });
 
   it('uses model-authored page alias fields to infer storyboard media refs', () => {

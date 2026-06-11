@@ -170,6 +170,31 @@ Done.`);
         kind: 'composite-artifact',
         artifactId: 'artifact-storyboard',
         title: 'Comic artifact',
+        extensions: {
+          'neko.entityMemoryContributionPayload': {
+            contributionId: 'contribution-page-1',
+            sourcePackage: 'neko-agent',
+            sourceRef: { kind: 'tool-result', toolCallId: 'read-doc', assetIndex: 0 },
+            reviewPolicy: 'requires-user-review',
+            entityCandidates: [
+              {
+                id: 'candidate-rin',
+                kind: 'character',
+                name: 'Rin',
+                status: 'open',
+                identityBasis: 'user-named',
+                provenance: [
+                  {
+                    providerId: 'neko-agent',
+                    sourceKind: 'agent',
+                    sourceRef: 'read-doc#0',
+                  },
+                ],
+                sourceRefs: ['read-doc#0'],
+              },
+            ],
+          },
+        },
         blocks: [
           {
             blockId: 'storyboard-domain',
@@ -222,11 +247,120 @@ Done.`);
         kind: 'storyboard-table',
         title: 'Opening',
       },
+      extensions: {
+        'neko.entityMemoryContributionPayload': {
+          contributionId: 'contribution-page-1',
+        },
+      },
       sections: [
         {
           heading: 'Page 1 / Shot 1',
           content: 'Panel action and composition.',
           layout: 'table-row',
+          mediaRefs: [
+            {
+              toolCallId: 'read-doc',
+              assetIndex: 0,
+              caption: 'Original panel',
+              role: 'source',
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('extracts composite artifacts from json fences while preserving entity extensions and media refs', () => {
+    const result = extractCompositeContentBlocks(`Summary.
+
+\`\`\`json
+{
+  "schemaVersion": 1,
+  "kind": "composite-artifact",
+  "artifactId": "artifact-storyboard",
+  "title": "Comic artifact",
+  "extensions": {
+    "neko.entityMemoryContributionPayload": {
+      "contributionId": "contribution-page-1",
+      "sourcePackage": "neko-agent",
+      "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc", "assetIndex": 0 },
+      "reviewPolicy": "requires-user-review",
+      "entityCandidates": [
+        {
+          "id": "candidate-rin",
+          "kind": "character",
+          "name": "Rin",
+          "status": "open",
+          "identityBasis": "user-named",
+          "provenance": [
+            {
+              "providerId": "neko-agent",
+              "sourceKind": "agent",
+              "sourceRef": "read-doc#0"
+            }
+          ],
+          "sourceRefs": ["read-doc#0"]
+        }
+      ]
+    }
+  },
+  "blocks": [
+    {
+      "blockId": "storyboard-domain",
+      "kind": "domain",
+      "title": "Storyboard Payload",
+      "domainKind": "StoryboardTable",
+      "schemaVersion": 1,
+      "payload": {
+        "schemaVersion": 1,
+        "kind": "storyboard-table",
+        "title": "Opening",
+        "scenes": [
+          {
+            "sceneId": "scene-1",
+            "sceneTitle": "Page 1",
+            "shots": [
+              {
+                "shotNumber": 1,
+                "duration": 3,
+                "visualDescription": "Panel action and composition.",
+                "characterAction": "Rin enters the frame.",
+                "imageStrategy": "use-as-reference",
+                "sourceMediaRefs": [
+                  {
+                    "refId": "source-panel-1",
+                    "role": "source",
+                    "locator": {
+                      "type": "tool-result",
+                      "toolCallId": "read-doc",
+                      "assetIndex": 0
+                    },
+                    "label": "Original panel",
+                    "mimeType": "image/jpeg"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+\`\`\`
+
+Done.`);
+
+    expect(result.text).toBe('Summary.\n\nDone.');
+    expect(result.composites[0]).toMatchObject({
+      template: 'storyboard-table',
+      extensions: {
+        'neko.entityMemoryContributionPayload': {
+          contributionId: 'contribution-page-1',
+        },
+      },
+      sections: [
+        {
           mediaRefs: [
             {
               toolCallId: 'read-doc',

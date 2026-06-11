@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isEntityMemoryContribution,
   projectCompositeArtifactToCanvasStoryboardPayload,
   projectCompositeArtifactToCutStoryboardPayload,
   validateCompositeArtifact,
   type ArtifactProfileDescriptor,
   type CompositeArtifact,
+  type CompositeArtifactBlock,
+  type CompositeArtifactDomainBlock,
 } from '@neko/shared';
 import { createAgentCapabilityInjectionRuntime } from '../../../runtime/agent-capability-injection-runtime';
 import sampleArtifact from '../samples/comic-to-animation-composite-artifact.json';
@@ -84,6 +87,51 @@ describe('comic-to-animation composite artifact sample', () => {
     });
 
     expect(result).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('keeps machine-readable entity contribution mapped to storyboard characters', () => {
+    const artifact = sampleArtifact as CompositeArtifact;
+    const contribution = artifact.extensions?.['neko.entityMemoryContributionPayload'];
+
+    expect(isEntityMemoryContribution(contribution)).toBe(true);
+    if (!isEntityMemoryContribution(contribution)) return;
+
+    const storyboardBlock = artifact.blocks.find(isStoryboardTableDomainBlock);
+    expect(storyboardBlock).toBeDefined();
+    const storyboardPayload = storyboardBlock?.payload;
+    expect(isStoryboardTablePayload(storyboardPayload)).toBe(true);
+    if (!isStoryboardTablePayload(storyboardPayload)) return;
+    const storyboardCharacter = storyboardPayload.scenes[0]?.shots?.[0]?.characters?.[0];
+
+    expect(storyboardCharacter).toMatchObject({
+      characterId: 'char-rin',
+      name: 'Rin',
+    });
+    expect(contribution.entityCandidates?.[0]).toMatchObject({
+      id: 'candidate-char-rin',
+      identityBasis: 'user-named',
+      metadata: expect.objectContaining({
+        storyboardCharacterId: 'char-rin',
+        characterId: 'char-rin',
+      }),
+    });
+    expect(contribution.characterObservations?.[0]).toMatchObject({
+      candidateId: 'candidate-char-rin',
+      provenance: {
+        metadata: expect.objectContaining({
+          storyboardCharacterId: 'char-rin',
+          shotId: 'shot-1',
+          shotNumber: 1,
+          characterIndex: 0,
+        }),
+      },
+      extensions: {
+        'neko.storyboardEntityMapping': expect.objectContaining({
+          storyboardCharacterId: 'char-rin',
+          shotId: 'shot-1',
+        }),
+      },
+    });
   });
 
   it('keeps suggested execution actions unavailable without provider registration', () => {
@@ -224,3 +272,27 @@ describe('comic-to-animation composite artifact sample', () => {
     });
   });
 });
+
+function isStoryboardTableDomainBlock(
+  block: CompositeArtifactBlock,
+): block is CompositeArtifactDomainBlock {
+  return block.kind === 'domain' && block.domainKind === 'StoryboardTable';
+}
+
+function isStoryboardTablePayload(value: unknown): value is {
+  readonly scenes: readonly {
+    readonly shots?: readonly {
+      readonly characters?: readonly {
+        readonly characterId?: string;
+        readonly name?: string;
+      }[];
+    }[];
+  }[];
+} {
+  if (!isRecord(value) || !Array.isArray(value['scenes'])) return false;
+  return true;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

@@ -54,13 +54,18 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - For visible speech bubbles, keep legacy `dialogue` for compatibility and add `voiceCues[]` when speaker or delivery can be inferred. A voice cue may include `cueId`, `kind`, `text`, `speakerName`, `speakerCharacterId`, `speakerEntityRef`, `emotion`, `delivery`, `voiceAssetId`, and `sourceRefId`. The voice cue should mirror the speaker binding from the corresponding dialogue text cue.
 - Do not invent `voiceAssetId`. Use it only if a real bound voice representation is available in the provided context.
 - When you extract durable character evidence, include a complete `EntityMemoryContribution` payload in `extensions["neko.entityMemoryContributionPayload"]`; the runtime uses that protocol to check existing entities, merge open candidates, or create reviewable candidates.
+- Keep the entity contribution separate from the storyboard while giving both sides stable mapping keys. Each recurring storyboard character should have a stable `characters[].characterId`, and each related candidate/observation should mirror `storyboardCharacterId`, `characterId`, `shotId`, `shotNumber`, `characterIndex`, and `sourceRef` in candidate metadata, observation provenance metadata, or `extensions["neko.storyboardEntityMapping"]` when available.
+- Use mapping keys in this priority order: `storyboardCharacterId`, then `shotId + characterId`, then provenance/source refs, then `name` only as a last fallback. If same-name characters or candidates are ambiguous, keep them separate and add a review diagnostic such as `candidate-ambiguous`; do not auto-merge by name.
+- Use `entityCandidates[]` when a reviewable unified entity should be proposed. Set `identityBasis: "user-named"` only for user-provided or source-explicit names; use `identityBasis: "visual"` for visual-only recurring figures so name-based matching can safely ignore them.
 - If useful, include a review-only `GenericTable` block with `profile: "character-memory-review"` for draft `CharacterObservation` rows. The table is only a review projection; do not rely on the table alone for entity automation.
+- If you output "Character Observations", "Character and Relationship Changes", or any character analysis table, mirror the durable rows into `extensions["neko.entityMemoryContributionPayload"]`; if you cannot construct a complete contribution payload, label the table as non-persistent analysis so users do not mistake it for unified entity input.
 - These observations are suggestions for review, not confirmed character facts. Do not directly confirm entities or accepted observations from this skill.
 
 ### Shot Image Prep Profile
 
 - When the user is aiming for comic-to-animation, prepare for a separate reviewable `comic-shot-asset-prep` table/profile after the StoryboardTable is valid.
 - The prep profile is a plan projection, not an execution result. Fill `ShotImagePrepPlan`-compatible fields conservatively: `shotId`, `sceneId`, `imageStrategy`, `sourceMediaRefs`, `operationPlan`, `generationPrompt`, `editInstruction`, `maskRefs`, `referenceBundle`, `perceptionCardRefs`, `status`, and `diagnostics` when evidence exists.
+- Include `metadata.regenerationRecommendation` for each prep plan when image evidence is analyzed. Use it only as a review hint: `decision: "regenerate"` for new/recomposed keyframes, `decision: "transform-source"` for source-preserving edits, `decision: "not-needed"` for reuse, and `decision: "blocked"` when missing evidence or provider constraints prevent a reliable recommendation.
 - Choose `TransformImage` semantics for source-bound edits: crop panel, remove text, inpaint speech bubbles, outpaint to aspect ratio, colorize, upscale, or style-normalize while preserving the source composition.
 - Choose `GenerateImage` semantics for new or re-composed keyframes: missing transition shots, unusable panels, first-pass character/scene reference images, or shots where the source panel is only a reference.
 - Always keep reference images as stable refs in `referenceBundle` or `sourceMediaRefs`. Do not rely only on prompt prose for character, scene, style, or previous-shot continuity.
@@ -113,6 +118,37 @@ This skill stops at analysis and storyboard planning. It does not generate image
       "sourcePackage": "neko-agent",
       "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc-call-id", "assetIndex": 0 },
       "reviewPolicy": "requires-user-review",
+      "entityCandidates": [
+        {
+          "id": "candidate-story-character-1",
+          "kind": "character",
+          "name": "Character name",
+          "status": "open",
+          "identityBasis": "user-named",
+          "confidence": 0.8,
+          "provenance": [
+            {
+              "providerId": "neko-agent",
+              "sourceKind": "agent",
+              "sourceRef": "read-doc-call-id#asset-0#panel-P1",
+              "label": "story-character-1",
+              "confidence": 0.8,
+              "metadata": {
+                "storyboardCharacterId": "story-character-1",
+                "shotId": "scene-1-shot-1",
+                "shotNumber": 1,
+                "characterIndex": 0
+              }
+            }
+          ],
+          "sourceRefs": ["read-doc-call-id#asset-0#panel-P1"],
+          "metadata": {
+            "storyboardCharacterId": "story-character-1",
+            "characterId": "story-character-1",
+            "sourceRef": "read-doc-call-id#asset-0#panel-P1"
+          }
+        }
+      ],
       "characterObservations": [
         {
           "observationId": "obs-page-1-panel-1-character-1",
@@ -125,9 +161,16 @@ This skill stops at analysis and storyboard planning. It does not generate image
           "provenance": {
             "source": "comic",
             "providerId": "neko-agent",
-            "toolCallId": "read-doc-call-id"
+            "toolCallId": "read-doc-call-id",
+            "metadata": {
+              "storyboardCharacterId": "story-character-1",
+              "shotId": "scene-1-shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0
+            }
           },
           "reviewStatus": "needs-review",
+          "candidateId": "candidate-story-character-1",
           "mention": {
             "mentionId": "mention-page-1-panel-1-character-1",
             "kind": "visual",
@@ -141,7 +184,16 @@ This skill stops at analysis and storyboard planning. It does not generate image
               "confidence": 0.8
             }
           ],
-          "confidence": 0.8
+          "confidence": 0.8,
+          "extensions": {
+            "neko.storyboardEntityMapping": {
+              "storyboardCharacterId": "story-character-1",
+              "shotId": "scene-1-shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0,
+              "sourceRef": "read-doc-call-id#asset-0#panel-P1"
+            }
+          }
         }
       ]
     }
@@ -177,6 +229,7 @@ This skill stops at analysis and storyboard planning. It does not generate image
                 "visualDescription": "Panel action and composition",
                 "characters": [
                   {
+                    "characterId": "story-character-1",
                     "name": "Character name",
                     "role": "primary",
                     "action": "Visible action",

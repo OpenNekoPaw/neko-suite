@@ -6,6 +6,7 @@
 
 import type {
   AgentContextType,
+  ArtifactExtensionMap,
   MessageAttachment,
   PerceptionCard,
   StoryboardTable,
@@ -74,6 +75,7 @@ export interface CompositeSection {
   readonly content?: string;
   readonly mediaRefs?: readonly MediaRef[];
   readonly layout?: 'inline' | 'grid' | 'table-row';
+  readonly extensions?: ArtifactExtensionMap;
 }
 
 export interface CompositeBlockData {
@@ -82,6 +84,7 @@ export interface CompositeBlockData {
   readonly storyboardTable?: StoryboardTable;
   readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnostic[];
   readonly sections: readonly CompositeSection[];
+  readonly extensions?: ArtifactExtensionMap;
 }
 
 /**

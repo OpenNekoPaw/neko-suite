@@ -400,13 +400,6 @@ export async function executeAgentTurn<
   const ambientCanvas = input.getAmbientCanvas?.(input.conversationId) ?? [];
   const agentRunner = input.agentManager.getOrCreate(input.conversationId);
 
-  hydrateAgentHistoryIfNeeded({
-    conversationId: input.conversationId,
-    agentRunner,
-    agentManager: input.agentManager,
-    conversations: input.conversations,
-  });
-
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
     baseSystemPrompt:
@@ -440,6 +433,13 @@ export async function executeAgentTurn<
     workspaceRoot: turnConfig.workspaceRoot,
     conversationId: turnConfig.conversationId,
     ...(input.taskManager ? { taskManager: input.taskManager } : {}),
+  });
+
+  hydrateAgentHistoryIfNeeded({
+    conversationId: input.conversationId,
+    agentRunner,
+    agentManager: input.agentManager,
+    conversations: input.conversations,
   });
 
   synchronizeAgentTurnSkillState(agentRunner, input.activeSkill ?? null);
@@ -603,8 +603,10 @@ function hydrateAgentHistoryIfNeeded<
   readonly agentManager: AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner>;
   readonly conversations: AgentTurnConversationStore<THistoryMessage>;
 }): void {
+  const agentHistory = input.agentRunner.getHistory();
   const hydrationPlan = buildAgentHistoryHydrationPlan({
-    agentHistoryLength: input.agentRunner.getHistory().length,
+    agentHistory: projectHydrationCandidateHistory(agentHistory),
+    agentHistoryLength: agentHistory.length,
     conversationMessageCount: input.conversations.getConversationMessageCount(input.conversationId),
     fullHistory: input.conversations.getFullHistory(input.conversationId),
   });
@@ -612,6 +614,24 @@ function hydrateAgentHistoryIfNeeded<
   if (hydrationPlan.kind === 'load-history') {
     input.agentManager.loadHistoryWithContext(input.conversationId, hydrationPlan.historyToLoad);
   }
+}
+
+function projectHydrationCandidateHistory(
+  history: readonly unknown[],
+): readonly { readonly role: 'system' | 'user' | 'assistant' | 'tool' }[] | undefined {
+  const projected = history.filter(isHydrationCandidateMessage);
+  return projected.length === history.length ? projected : undefined;
+}
+
+function isHydrationCandidateMessage(
+  value: unknown,
+): value is { readonly role: 'system' | 'user' | 'assistant' | 'tool' } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const role = (value as { readonly role?: unknown }).role;
+  return role === 'system' || role === 'user' || role === 'assistant' || role === 'tool';
 }
 
 function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(

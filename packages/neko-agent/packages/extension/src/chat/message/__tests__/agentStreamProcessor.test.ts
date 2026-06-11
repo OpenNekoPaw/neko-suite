@@ -364,6 +364,114 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('automates entity memory contributions embedded in json fenced composite artifacts', async () => {
+      const contribution = makeEntityMemoryContribution();
+      const automation = {
+        processContribution: vi.fn().mockResolvedValue({
+          contributionId: contribution.contributionId,
+          decisions: [
+            {
+              kind: 'matched-candidate',
+              name: '少年英雄',
+              candidateId: 'candidate:character:char_少年英雄',
+            },
+          ],
+        }),
+      };
+      processor = new AgentStreamProcessor({
+        entityMemoryContributionAutomation: automation,
+      });
+      const text =
+        '分析完成。\n\n```json\n' +
+        JSON.stringify({
+          schemaVersion: 1,
+          kind: 'composite-artifact',
+          artifactId: 'comic-storyboard-plan',
+          profile: 'comic-to-animation-plan',
+          title: 'Comic Storyboard Plan',
+          extensions: {
+            'neko.entityMemoryContributionPayload': contribution,
+          },
+          blocks: [
+            {
+              blockId: 'storyboard-domain',
+              kind: 'domain',
+              domainKind: 'StoryboardTable',
+              schemaVersion: 1,
+              payload: {
+                schemaVersion: 1,
+                kind: 'storyboard-table',
+                title: 'Storyboard',
+                scenes: [
+                  {
+                    sceneId: 'scene-1',
+                    sceneTitle: 'Page 1',
+                    shots: [
+                      {
+                        shotNumber: 1,
+                        duration: 3,
+                        visualDescription: 'Panel action.',
+                        characterAction: 'Hero enters.',
+                        imageStrategy: 'use-as-reference',
+                        sourceMediaRefs: [
+                          {
+                            refId: 'source-panel-1',
+                            role: 'source',
+                            locator: {
+                              type: 'tool-result',
+                              toolCallId: 'tc-memory',
+                              assetIndex: 0,
+                            },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }) +
+        '\n```';
+
+      const result = await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc-memory',
+              name: 'ReadImage',
+              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-memory',
+              success: true,
+              data: { imagePaths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          { type: 'text', content: text },
+          { type: 'done' },
+        ]),
+        callbacks,
+      );
+
+      expect(automation.processContribution).toHaveBeenCalledWith({
+        contribution,
+        toolCallId: 'tc-memory',
+        sourceArtifactId: 'comic-storyboard-plan',
+      });
+      expect(result.collectedToolCalls[0]!.result?.data).toMatchObject({
+        entityMemoryAutomation: {
+          contributionId: 'contribution-page-1',
+        },
+      });
+    });
+
     it('projects document image paths to webview URIs only for webview delivery', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),

@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import type { AgentProjectFileCandidate, AgentProjectFileSearchPlan } from '@neko/agent/runtime';
 import { detectMediaType, isDocumentFile, isMediaFile } from '@neko/shared';
+import { createWorkspaceMentionIgnoreFilter } from './workspaceIgnoreFilter';
 
 export async function searchVSCodeProjectFiles(
   plan: AgentProjectFileSearchPlan,
@@ -19,21 +20,40 @@ export async function searchVSCodeProjectFiles(
     plan.excludePattern,
     plan.limit,
   );
+  const filters = await Promise.all(
+    workspaceFolders.map(async (folder) => ({
+      folder,
+      filter: await createWorkspaceMentionIgnoreFilter(folder.uri.fsPath),
+    })),
+  );
 
-  return files.map((file) => {
-    const relativePath = vscode.workspace.asRelativePath(file);
-    const mediaType =
-      !isWorkspaceCodeFile(relativePath) &&
-      (isMediaFile(relativePath) || isDocumentFile(relativePath))
-        ? detectMediaType(relativePath)
-        : undefined;
-    return {
-      relativePath,
-      source: 'workspace',
-      icon: iconForWorkspaceFile(relativePath, mediaType),
-      ...(mediaType ? { mediaType } : {}),
-    };
-  });
+  return files
+    .filter((file) => !isIgnoredWorkspaceFile(file, filters))
+    .map((file) => {
+      const relativePath = vscode.workspace.asRelativePath(file);
+      const mediaType =
+        !isWorkspaceCodeFile(relativePath) &&
+        (isMediaFile(relativePath) || isDocumentFile(relativePath))
+          ? detectMediaType(relativePath)
+          : undefined;
+      return {
+        relativePath,
+        source: 'workspace',
+        icon: iconForWorkspaceFile(relativePath, mediaType),
+        ...(mediaType ? { mediaType } : {}),
+      };
+    });
+}
+
+function isIgnoredWorkspaceFile(
+  file: vscode.Uri,
+  filters: readonly {
+    readonly folder: vscode.WorkspaceFolder;
+    readonly filter: Awaited<ReturnType<typeof createWorkspaceMentionIgnoreFilter>>;
+  }[],
+): boolean {
+  const entry = filters.find(({ folder }) => file.fsPath.startsWith(folder.uri.fsPath));
+  return entry?.filter.isIgnored(file) ?? false;
 }
 
 function iconForWorkspaceFile(

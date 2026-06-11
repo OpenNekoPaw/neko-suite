@@ -196,6 +196,84 @@ describe('PluginTransferBridge', () => {
       }),
     );
   });
+
+  it('processes storyboard entity contribution before Canvas import', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ ok: true });
+    const processContribution = vi.fn().mockResolvedValue({
+      contributionId: 'contribution-1',
+      decisions: [
+        {
+          kind: 'created-candidate',
+          name: 'Rin',
+          candidateId: 'candidate:character:rin',
+          storyboardCharacterId: 'story-char-rin',
+        },
+      ],
+    });
+
+    await sendGeneratedAssetToPlugin(
+      'canvas',
+      undefined,
+      undefined,
+      {
+        kind: 'canvasStoryboard',
+        storyboard: {
+          mode: 'semantic',
+          sourceScriptUri: 'agent://storyboard-table',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Opening',
+              sceneNumber: 1,
+              shotPlans: [
+                {
+                  shotNumber: 1,
+                  duration: 3,
+                  visualDescription: 'Rin enters.',
+                  characters: [{ characterId: 'story-char-rin', characterName: 'Rin' }],
+                  shotScale: 'MS',
+                  characterAction: 'Rin enters.',
+                  emotion: [],
+                  sceneTags: [],
+                },
+              ],
+            },
+          ],
+        },
+        entityMemoryContribution: {
+          contributionId: 'contribution-1',
+          sourcePackage: 'neko-agent',
+          sourceRef: { kind: 'tool-result', toolCallId: 'tool-1' },
+          reviewPolicy: 'source-approved',
+        },
+      },
+      {
+        workspaceRoot: '/workspace',
+        executeCommand,
+        entityMemoryContributionAutomation: { processContribution },
+      },
+    );
+
+    expect(processContribution).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      'neko.canvas.importStoryboard',
+      expect.objectContaining({
+        scenes: [
+          expect.objectContaining({
+            shotPlans: [
+              expect.objectContaining({
+                characters: [
+                  expect.objectContaining({
+                    candidateId: 'candidate:character:rin',
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+  });
 });
 
 function createDeps(input: {

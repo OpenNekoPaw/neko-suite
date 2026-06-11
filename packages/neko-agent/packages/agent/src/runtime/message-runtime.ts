@@ -34,6 +34,7 @@ import {
   createPlanModeIdcMetadata,
   mergeIdcExecutionMetadata,
 } from '../session/idc-execution-metadata';
+import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../input/mention-excludes';
 import {
   extractFileReferencePaths,
   type AgentBase64ImageAttachment,
@@ -359,6 +360,7 @@ export interface AgentHistoryHydrationPlanInput<TMessage> {
   readonly agentHistoryLength: number;
   readonly conversationMessageCount: number;
   readonly fullHistory: readonly TMessage[];
+  readonly agentHistory?: readonly AgentHistoryHydrationCandidateMessage[];
 }
 
 export type AgentHistoryHydrationPlan<TMessage> =
@@ -370,6 +372,10 @@ export type AgentHistoryHydrationPlan<TMessage> =
       readonly kind: 'skip';
       readonly reason: 'agent-history-not-empty' | 'conversation-too-short' | 'empty-history';
     };
+
+export interface AgentHistoryHydrationCandidateMessage {
+  readonly role: 'system' | 'user' | 'assistant' | 'tool';
+}
 
 export interface AgentProviderCandidate {
   readonly id: string;
@@ -818,7 +824,7 @@ export function buildAgentProjectFileSearchPlan(
   const filter = normalizeProjectFileFilter(input.filter);
   return {
     includePattern: filter ? `**/*${filter}*` : '**/*',
-    excludePattern: '**/node_modules/**,**/.git/**,**/dist/**,**/build/**',
+    excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
     limit: input.limit ?? 30,
   };
 }
@@ -1111,8 +1117,16 @@ export function selectAgentTurnProvider<TProvider extends AgentProviderCandidate
 export function shouldHydrateAgentHistory(input: {
   readonly agentHistoryLength: number;
   readonly conversationMessageCount: number;
+  readonly agentHistory?: readonly AgentHistoryHydrationCandidateMessage[];
 }): boolean {
-  return input.agentHistoryLength === 0 && input.conversationMessageCount > 1;
+  const hasOnlySystemPrompt =
+    input.agentHistoryLength === 1 &&
+    input.agentHistory?.length === 1 &&
+    input.agentHistory[0]?.role === 'system';
+
+  return (
+    (input.agentHistoryLength === 0 || hasOnlySystemPrompt) && input.conversationMessageCount > 1
+  );
 }
 
 export function getAgentHistoryToHydrate<TMessage>(fullHistory: readonly TMessage[]): TMessage[] {
@@ -1122,11 +1136,11 @@ export function getAgentHistoryToHydrate<TMessage>(fullHistory: readonly TMessag
 export function buildAgentHistoryHydrationPlan<TMessage>(
   input: AgentHistoryHydrationPlanInput<TMessage>,
 ): AgentHistoryHydrationPlan<TMessage> {
-  if (input.agentHistoryLength > 0) {
+  if (!shouldHydrateAgentHistory(input)) {
+    if (input.conversationMessageCount <= 1) {
+      return { kind: 'skip', reason: 'conversation-too-short' };
+    }
     return { kind: 'skip', reason: 'agent-history-not-empty' };
-  }
-  if (input.conversationMessageCount <= 1) {
-    return { kind: 'skip', reason: 'conversation-too-short' };
   }
 
   const historyToLoad = getAgentHistoryToHydrate(input.fullHistory);

@@ -20,6 +20,7 @@ import type {
 import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
   STORYBOARD_TEXT_CUE_KINDS,
+  isEntityMemoryContribution,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
@@ -1520,12 +1521,19 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
 
   if (value.kind === 'canvasStoryboard') {
     if (!isCanvasStoryboardPayload(value.storyboard)) return null;
+    const entityMemoryContribution =
+      value.entityMemoryContribution === undefined
+        ? undefined
+        : isEntityMemoryContribution(value.entityMemoryContribution)
+          ? value.entityMemoryContribution
+          : null;
     const target = parseOptionalPluginTransferTargetRef(value.target);
     const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-    if (target === null || provenance === null) return null;
+    if (entityMemoryContribution === null || target === null || provenance === null) return null;
     return {
       kind: 'canvasStoryboard',
       storyboard: value.storyboard,
+      ...(entityMemoryContribution !== undefined ? { entityMemoryContribution } : {}),
       ...(target !== undefined ? { target } : {}),
       ...(provenance !== undefined ? { provenance } : {}),
     };

@@ -309,6 +309,99 @@
     }
   ],
   "extensions": {
+    "neko.entityMemoryContributionPayload": {
+      "contributionId": "sample-comic-character-memory",
+      "sourcePackage": "neko-agent",
+      "sourceRef": {
+        "kind": "tool-result",
+        "toolCallId": "read-comic",
+        "assetIndex": 0
+      },
+      "reviewPolicy": "requires-user-review",
+      "entityCandidates": [
+        {
+          "id": "candidate-char-rin",
+          "kind": "character",
+          "name": "Rin",
+          "status": "open",
+          "identityBasis": "user-named",
+          "confidence": 0.82,
+          "provenance": [
+            {
+              "providerId": "neko-agent",
+              "sourceKind": "agent",
+              "sourceRef": "read-comic#asset-0#panel-1",
+              "label": "char-rin",
+              "confidence": 0.82,
+              "metadata": {
+                "storyboardCharacterId": "char-rin",
+                "shotId": "shot-1",
+                "shotNumber": 1,
+                "characterIndex": 0
+              }
+            }
+          ],
+          "sourceRefs": ["read-comic#asset-0#panel-1"],
+          "metadata": {
+            "storyboardCharacterId": "char-rin",
+            "characterId": "char-rin",
+            "sourceRef": "read-comic#asset-0#panel-1"
+          }
+        }
+      ],
+      "characterObservations": [
+        {
+          "observationId": "obs-rin-shot-1",
+          "sourceRef": {
+            "kind": "tool-result",
+            "toolCallId": "read-comic",
+            "assetIndex": 0,
+            "range": { "shotId": "shot-1", "panelId": "panel-1" }
+          },
+          "provenance": {
+            "source": "comic",
+            "providerId": "neko-agent",
+            "toolCallId": "read-comic",
+            "metadata": {
+              "storyboardCharacterId": "char-rin",
+              "shotId": "shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0
+            }
+          },
+          "reviewStatus": "needs-review",
+          "candidateId": "candidate-char-rin",
+          "mention": {
+            "mentionId": "mention-rin-shot-1",
+            "kind": "visual",
+            "candidateName": "Rin",
+            "confidence": 0.82
+          },
+          "dimensions": [
+            {
+              "dimension": "appearance",
+              "value": "Short dark hair, hooded jacket, messenger bag.",
+              "confidence": 0.82
+            },
+            {
+              "dimension": "voice",
+              "value": "Urgent shouted delivery.",
+              "confidence": 0.7
+            }
+          ],
+          "confidence": 0.82,
+          "extensions": {
+            "neko.storyboardEntityMapping": {
+              "storyboardCharacterId": "char-rin",
+              "shotId": "shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0,
+              "sourceRef": "read-comic#asset-0#panel-1"
+            }
+          }
+        }
+      ]
+    },
     "neko.sample": {
       "scenario": "comic-to-animation",
       "reviewOnly": true

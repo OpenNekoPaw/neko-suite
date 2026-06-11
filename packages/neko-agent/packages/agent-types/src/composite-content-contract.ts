@@ -2,6 +2,8 @@ import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
 import {
   hasBlockingStoryboardDiagnostics,
   normalizeStoryboardTable,
+  type ArtifactExtensionMap,
+  type ArtifactJsonValue,
   type StoryboardMediaRef,
   type StoryboardTable,
   type StoryboardValidationDiagnostic,
@@ -27,7 +29,7 @@ const STORYBOARD_DOMAIN_KIND = 'StoryboardTable';
 const LEGACY_STORYBOARD_DOMAIN_KIND = 'StoryboardTableV1';
 
 const COMPOSITE_CONTENT_FENCE_PATTERN =
-  /```(?:neko-composite|neko-composite-json)\s*\n([\s\S]*?)```/g;
+  /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
 
 export function extractCompositeContentBlocks(markdown: string): CompositeContentExtraction {
   const composites: CompositeBlockData[] = [];
@@ -107,6 +109,7 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
     ...(semanticStoryboard?.diagnostics && semanticStoryboard.diagnostics.length > 0
       ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
       : {}),
+    ...projectExtensions(value.extensions),
     sections: normalizedSections,
   };
 }
@@ -129,6 +132,7 @@ function normalizeArtifactBackedStoryboardBlock(
     semanticStoryboard.diagnostics,
   );
   if (sections.length === 0) return null;
+  const extensions = mergeExtensions(value.extensions, storyboardBlock.extensions);
 
   return {
     template: 'storyboard-table',
@@ -137,6 +141,7 @@ function normalizeArtifactBackedStoryboardBlock(
     ...(semanticStoryboard.diagnostics.length > 0
       ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
       : {}),
+    ...projectExtensions(extensions),
     sections,
   };
 }
@@ -252,6 +257,7 @@ function normalizeCompositeSection(value: unknown): CompositeSection | null {
     ...(content ? { content } : {}),
     ...(mediaRefs && mediaRefs.length > 0 ? { mediaRefs } : {}),
     ...(layout ? { layout } : {}),
+    ...projectExtensions(value.extensions),
   };
 }
 
@@ -280,6 +286,49 @@ function readString(record: Record<string, unknown>, key: string): string | unde
 
 function readNonNegativeInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function projectExtensions(value: unknown): { readonly extensions?: ArtifactExtensionMap } {
+  const extensions = normalizeArtifactExtensionMap(value);
+  return extensions ? { extensions } : {};
+}
+
+function mergeExtensions(first: unknown, second: unknown): ArtifactExtensionMap | undefined {
+  const normalizedFirst = normalizeArtifactExtensionMap(first);
+  const normalizedSecond = normalizeArtifactExtensionMap(second);
+  if (!normalizedFirst) return normalizedSecond;
+  if (!normalizedSecond) return normalizedFirst;
+  return { ...normalizedFirst, ...normalizedSecond };
+}
+
+function normalizeArtifactExtensionMap(value: unknown): ArtifactExtensionMap | undefined {
+  if (!isRecord(value)) return undefined;
+  const result: Record<`neko.${string}`, ArtifactJsonValue> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isArtifactExtensionKey(key) || !isArtifactJsonValue(entry)) continue;
+    result[key] = entry;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function isArtifactExtensionKey(value: string): value is `neko.${string}` {
+  return value.startsWith('neko.');
+}
+
+function isArtifactJsonValue(value: unknown): value is ArtifactJsonValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isArtifactJsonValue);
+  }
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(isArtifactJsonValue);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

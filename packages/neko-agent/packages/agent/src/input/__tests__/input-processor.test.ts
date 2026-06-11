@@ -237,6 +237,49 @@ describe('InputProcessor', () => {
       );
     });
 
+    it('should exclude workspace runtime and cache directories by default', async () => {
+      const mockReader = createMockFileReader({
+        '.neko/logs/events.jsonl': 'runtime log',
+        '.cache/generated.json': 'cache payload',
+        'src/cacheable.ts': 'source code',
+      });
+
+      const processor = createInputProcessor({
+        workspaceRoot: '/workspace',
+        fileReader: mockReader,
+        includeLineNumbers: false,
+      });
+
+      const result = await processor.process(
+        'Check @.neko/logs/events.jsonl @.cache/generated.json @src/cacheable.ts',
+      );
+
+      expect(result.errors.map((error) => error.reference)).toEqual([
+        '@.neko/logs/events.jsonl',
+        '@.cache/generated.json',
+      ]);
+      expect(result.fileReferences.find((r) => r.path === 'src/cacheable.ts')?.content).toBe(
+        'source code',
+      );
+    });
+
+    it('should match excluded directories by path segment', async () => {
+      const mockReader = createMockFileReader({
+        'src/building.ts': 'source code',
+      });
+
+      const processor = createInputProcessor({
+        workspaceRoot: '/workspace',
+        fileReader: mockReader,
+        includeLineNumbers: false,
+      });
+
+      const result = await processor.process('Check @src/building.ts');
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.fileReferences[0]?.content).toBe('source code');
+    });
+
     it('should handle line range', async () => {
       const mockReader = createMockFileReader({
         'src/index.ts': 'line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10',

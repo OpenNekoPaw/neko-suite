@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../../input/mention-excludes';
 import {
   appendAmbientCanvasSystemPrompt,
   buildAgentAssistantMessageFromStream,
@@ -536,7 +537,7 @@ describe('message runtime helpers', () => {
   it('builds a project file search plan for the host adapter', () => {
     expect(buildAgentProjectFileSearchPlan({ filter: 'app', limit: 12 })).toEqual({
       includePattern: '**/*app*',
-      excludePattern: '**/node_modules/**,**/.git/**,**/dist/**,**/build/**',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
       limit: 12,
     });
   });
@@ -661,7 +662,7 @@ describe('message runtime helpers', () => {
     });
     expect(searchProjectFiles).toHaveBeenCalledWith({
       includePattern: '**/*app*',
-      excludePattern: '**/node_modules/**,**/.git/**,**/dist/**,**/build/**',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
       limit: 30,
     });
   });
@@ -939,6 +940,13 @@ describe('message runtime helpers', () => {
     expect(shouldHydrateAgentHistory({ agentHistoryLength: 1, conversationMessageCount: 2 })).toBe(
       false,
     );
+    expect(
+      shouldHydrateAgentHistory({
+        agentHistoryLength: 1,
+        conversationMessageCount: 2,
+        agentHistory: [{ role: 'system' }],
+      }),
+    ).toBe(true);
     expect(getAgentHistoryToHydrate(['user', 'assistant', 'current'])).toEqual([
       'user',
       'assistant',
@@ -946,6 +954,17 @@ describe('message runtime helpers', () => {
     expect(
       buildAgentHistoryHydrationPlan({
         agentHistoryLength: 0,
+        conversationMessageCount: 3,
+        fullHistory: ['user', 'assistant', 'current'],
+      }),
+    ).toEqual({
+      kind: 'load-history',
+      historyToLoad: ['user', 'assistant'],
+    });
+    expect(
+      buildAgentHistoryHydrationPlan({
+        agentHistoryLength: 1,
+        agentHistory: [{ role: 'system' }],
         conversationMessageCount: 3,
         fullHistory: ['user', 'assistant', 'current'],
       }),

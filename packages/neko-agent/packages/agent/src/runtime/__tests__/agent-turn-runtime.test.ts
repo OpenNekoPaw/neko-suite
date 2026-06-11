@@ -141,6 +141,32 @@ describe('executeAgentTurn', () => {
     ]);
   });
 
+  it('hydrates history after runner configuration creates the session', async () => {
+    const calls: string[] = [];
+    const agentRunner = createAgentRunner({
+      history: [{ role: 'system', content: 'base system prompt' }],
+    });
+    vi.mocked(agentRunner.configure).mockImplementation(async () => {
+      calls.push('configure');
+    });
+    const { input } = createBaseInput({
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(() => {
+          calls.push('load-history');
+        }),
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(calls).toEqual(['configure', 'load-history']);
+    expect(input.agentManager.loadHistoryWithContext).toHaveBeenCalledWith('conv-1', [
+      { role: 'user', content: 'previous request' },
+      { role: 'assistant', content: 'previous answer' },
+    ]);
+  });
+
   it('configures the runner with turn model, execution metadata, and conversation scope', async () => {
     const { input, agentRunner } = createBaseInput({
       chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },

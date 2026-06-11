@@ -198,6 +198,9 @@ export function projectStoryboardTableTransferPayload(
             resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
         },
       ),
+      ...(data.entityMemoryContribution
+        ? { entityMemoryContribution: data.entityMemoryContribution }
+        : {}),
     };
   }
   if (hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) return null;

@@ -19,7 +19,12 @@ import {
   HostContentIngestService,
   type ContentIngestService,
 } from '@neko/shared/vscode/extension';
+import type {
+  EntityMemoryContributionAutomationPort,
+  EntityMemoryContributionAutomationResult,
+} from '../chat/message/entityMemoryContributionAutomation';
 import { getLogger, handleError } from '../base';
+import { StoryboardDeliveryService } from './storyboardDeliveryService';
 
 const logger = getLogger('PluginTransferBridge');
 const CANVAS_TARGET = 'canvas';
@@ -37,6 +42,8 @@ export interface PluginTransferBridgeDeps {
   readonly ingestService?: ContentIngestService;
   readonly pathResolver?: PathResolver;
   readonly executeCommand?: typeof vscode.commands.executeCommand;
+  readonly entityMemoryContributionAutomation?: EntityMemoryContributionAutomationPort;
+  readonly entityContributionTimeoutMs?: number;
 }
 
 /**
@@ -145,7 +152,51 @@ async function prepareTransferPayload(
     return { ...payload, assets };
   }
 
+  if (payload.kind === 'canvasStoryboard' && payload.entityMemoryContribution) {
+    const delivery = new StoryboardDeliveryService({
+      entityAutomation:
+        deps.entityMemoryContributionAutomation ??
+        createVSCodeEntityMemoryContributionAutomation(deps),
+      ...(deps.entityContributionTimeoutMs !== undefined
+        ? { defaultTimeoutMs: deps.entityContributionTimeoutMs }
+        : {}),
+    });
+    const result = await delivery.prepare({
+      payload: payload.storyboard,
+      entityContribution: {
+        contribution: payload.entityMemoryContribution,
+        ...(payload.provenance?.toolCallId ? { toolCallId: payload.provenance.toolCallId } : {}),
+      },
+    });
+    return {
+      ...payload,
+      storyboard: result.payload,
+    };
+  }
+
   return payload;
+}
+
+function createVSCodeEntityMemoryContributionAutomation(
+  deps: PluginTransferBridgeDeps,
+): EntityMemoryContributionAutomationPort {
+  return {
+    async processContribution({ contribution }) {
+      const projectRoot = deps.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const executeCommand = deps.executeCommand ?? vscode.commands.executeCommand;
+      return executeCommand<EntityMemoryContributionAutomationResult | undefined>(
+        'neko.entity.processMemoryContribution',
+        {
+          ...(projectRoot ? { projectRoot } : {}),
+          contribution,
+          options: {
+            mode: 'candidate',
+            defaultKind: 'character',
+          },
+        },
+      );
+    },
+  };
 }
 
 async function promoteCanvasAsset(

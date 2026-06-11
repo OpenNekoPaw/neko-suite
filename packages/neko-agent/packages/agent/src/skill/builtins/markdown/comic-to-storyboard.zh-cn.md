@@ -54,13 +54,18 @@
 - 可见对白保留 legacy `dialogue` 以兼容旧链路；能判断说话者或语气时，再添加 `voiceCues[]`。voice cue 可包含 `cueId`、`kind`、`text`、`speakerName`、`speakerCharacterId`、`speakerEntityRef`、`emotion`、`delivery`、`voiceAssetId`、`sourceRefId`。voice cue 应与对应 dialogue text cue 的 speaker 绑定保持一致。
 - 不要编造 `voiceAssetId`。只有上下文已有真实绑定语音表示时才填写。
 - 当提取可持久化人物证据时，必须在 `extensions["neko.entityMemoryContributionPayload"]` 中放入完整 `EntityMemoryContribution` payload；运行时会用这个协议检查已存在实体、合并 open candidate 或创建待审阅候选。
+- 实体贡献与分镜保持独立，但两边必须有稳定映射键。每个重复出现的分镜人物都应有稳定 `characters[].characterId`；相关 candidate/observation 应在 candidate metadata、observation provenance metadata 或 `extensions["neko.storyboardEntityMapping"]` 中镜像 `storyboardCharacterId`、`characterId`、`shotId`、`shotNumber`、`characterIndex`、`sourceRef`。
+- 映射键优先级为：`storyboardCharacterId`，其次 `shotId + characterId`，其次 provenance/source refs，最后才是 `name` fallback。同名人物或候选有歧义时，保留为不同候选并添加 `candidate-ambiguous` 之类的审阅诊断；不要按名字自动合并。
+- 需要提出可审阅统一实体时，使用 `entityCandidates[]`。只有用户提供或来源明确命名时才设置 `identityBasis: "user-named"`；仅凭视觉重复识别的人物使用 `identityBasis: "visual"`，让名称匹配链路可以安全跳过。
 - 如有必要，可添加一个 review-only `GenericTable` block，使用 `profile: "character-memory-review"` 输出草稿 `CharacterObservation` 行。表格只是审阅投影，不要只依赖表格触发实体自动化。
+- 如果输出“主要角色观察”“角色与关系变化”或任何角色分析表，必须同步镜像为 `extensions["neko.entityMemoryContributionPayload"]`；如果暂时无法构造完整贡献 payload，应把表格明确标注为非持久分析，不要让用户误以为已进入统一实体。
 - 这些观察只是待审阅建议，不是已确认人物事实。本 Skill 不直接确认实体，也不直接写 accepted observation。
 
 ### 镜头图像准备 Profile
 
 - 当目标是 comic-to-animation 时，在 StoryboardTable 合法之后，准备一个独立、可审阅的 `comic-shot-asset-prep` 表/profile。
 - prep profile 是计划投影，不是执行结果。按证据保守填写兼容 `ShotImagePrepPlan` 的字段：`shotId`、`sceneId`、`imageStrategy`、`sourceMediaRefs`、`operationPlan`、`generationPrompt`、`editInstruction`、`maskRefs`、`referenceBundle`、`perceptionCardRefs`、`status` 和 `diagnostics`。
+- 分析图像证据后，为每个 prep plan 填写 `metadata.regenerationRecommendation`。它只作为审阅提示：新图/重构关键帧使用 `decision: "regenerate"`；保留源构图的编辑使用 `decision: "transform-source"`；复用源图使用 `decision: "not-needed"`；证据缺失或 provider 限制导致无法可靠建议时使用 `decision: "blocked"`。
 - 源图绑定编辑使用 `TransformImage` 语义：裁切分格、去除文字、对白框 inpaint、扩图到目标画幅、上色、放大或统一风格，并尽量保持源构图。
 - 新图或重构关键帧使用 `GenerateImage` 语义：补转场镜头、源 panel 不可用、首次生成角色/场景参考图，或源 panel 只作为参考而不保留原构图。
 - 角色、场景、风格和前后镜头连续性必须尽量使用 `referenceBundle` 或 `sourceMediaRefs` 中的 stable ref，不要只写在 prompt 文本里。
@@ -113,6 +118,37 @@
       "sourcePackage": "neko-agent",
       "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc-call-id", "assetIndex": 0 },
       "reviewPolicy": "requires-user-review",
+      "entityCandidates": [
+        {
+          "id": "candidate-story-character-1",
+          "kind": "character",
+          "name": "Character name",
+          "status": "open",
+          "identityBasis": "user-named",
+          "confidence": 0.8,
+          "provenance": [
+            {
+              "providerId": "neko-agent",
+              "sourceKind": "agent",
+              "sourceRef": "read-doc-call-id#asset-0#panel-P1",
+              "label": "story-character-1",
+              "confidence": 0.8,
+              "metadata": {
+                "storyboardCharacterId": "story-character-1",
+                "shotId": "scene-1-shot-1",
+                "shotNumber": 1,
+                "characterIndex": 0
+              }
+            }
+          ],
+          "sourceRefs": ["read-doc-call-id#asset-0#panel-P1"],
+          "metadata": {
+            "storyboardCharacterId": "story-character-1",
+            "characterId": "story-character-1",
+            "sourceRef": "read-doc-call-id#asset-0#panel-P1"
+          }
+        }
+      ],
       "characterObservations": [
         {
           "observationId": "obs-page-1-panel-1-character-1",
@@ -125,9 +161,16 @@
           "provenance": {
             "source": "comic",
             "providerId": "neko-agent",
-            "toolCallId": "read-doc-call-id"
+            "toolCallId": "read-doc-call-id",
+            "metadata": {
+              "storyboardCharacterId": "story-character-1",
+              "shotId": "scene-1-shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0
+            }
           },
           "reviewStatus": "needs-review",
+          "candidateId": "candidate-story-character-1",
           "mention": {
             "mentionId": "mention-page-1-panel-1-character-1",
             "kind": "visual",
@@ -141,7 +184,16 @@
               "confidence": 0.8
             }
           ],
-          "confidence": 0.8
+          "confidence": 0.8,
+          "extensions": {
+            "neko.storyboardEntityMapping": {
+              "storyboardCharacterId": "story-character-1",
+              "shotId": "scene-1-shot-1",
+              "shotNumber": 1,
+              "characterIndex": 0,
+              "sourceRef": "read-doc-call-id#asset-0#panel-P1"
+            }
+          }
         }
       ]
     }
@@ -177,6 +229,7 @@
                 "visualDescription": "Panel action and composition",
                 "characters": [
                   {
+                    "characterId": "story-character-1",
                     "name": "Character name",
                     "role": "primary",
                     "action": "Visible action",

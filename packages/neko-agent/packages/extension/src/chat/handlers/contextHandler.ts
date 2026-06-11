@@ -42,8 +42,8 @@ export class ContextHandler {
         void webview.postMessage(message);
       },
       ...(this.deps.agentManager
-        ? { getTokenCount: (id: string) => this.deps.agentManager!.getContextTokenCount(id) }
-        : {}),
+        ? { getTokenCount: (id: string) => this.getContextTokenCount(id) }
+        : { getTokenCount: (id: string) => this.getPersistedConversationTokenCount(id) }),
       onMissingConversationId: () => {
         logger.warn('Rejected getTokenCount without conversationId');
       },
@@ -67,4 +67,31 @@ export class ContextHandler {
       },
     });
   }
+
+  private getContextTokenCount(conversationId: string): number {
+    const runtimeTokenCount = this.deps.agentManager?.getContextTokenCount(conversationId) ?? 0;
+    if (Number.isFinite(runtimeTokenCount) && runtimeTokenCount > 0) {
+      return runtimeTokenCount;
+    }
+    return this.getPersistedConversationTokenCount(conversationId);
+  }
+
+  private getPersistedConversationTokenCount(conversationId: string): number {
+    const conversation = this.deps.conversations.get(conversationId);
+    const storedTokenCount = conversation?.tokenCount;
+    if (Number.isFinite(storedTokenCount) && storedTokenCount > 0) {
+      return storedTokenCount;
+    }
+
+    return (
+      conversation?.messages.reduce(
+        (sum, message) => sum + estimateMessageTokenCount(message.content),
+        0,
+      ) ?? 0
+    );
+  }
+}
+
+function estimateMessageTokenCount(content: string): number {
+  return Math.ceil(content.length / 4);
 }

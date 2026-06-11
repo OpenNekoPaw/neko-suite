@@ -10,15 +10,18 @@ import type {
   StoryboardMediaRef,
   StoryboardValidationDiagnostic,
   DocumentArchiveResourceRef,
+  EntityMemoryContribution,
   ResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
 import {
+  isEntityMemoryContribution,
   isResourceRef,
   normalizeStoryboardTable,
   parseDocumentArchiveResourceRef,
 } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import { inferEntityMemoryContributionFromCharacterAnalysis } from './entity-memory-contribution-inference';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
 
@@ -72,6 +75,7 @@ export interface CompositeRichContentData {
   readonly title?: string;
   readonly plugins?: PluginsAvailable;
   readonly storyboardTable?: StoryboardTable;
+  readonly entityMemoryContribution?: EntityMemoryContribution;
   readonly storyboardDiagnostics?: readonly CompositeStoryboardDiagnostic[];
   readonly sections: readonly ResolvedCompositeSection[];
   readonly diagnostics: readonly CompositeMediaDiagnostic[];
@@ -188,6 +192,7 @@ export function projectCompositeBlockRichContent(
     ...(input.composite.title ? { title: input.composite.title } : {}),
     ...(input.plugins ? { plugins: input.plugins } : {}),
     ...(storyboardTable ? { storyboardTable } : {}),
+    ...resolveEntityMemoryContribution(input.composite),
     ...mergeStoryboardDiagnostics(input.composite.storyboardDiagnostics, diagnostics),
     sections,
     diagnostics,
@@ -202,6 +207,26 @@ export function projectCompositeBlockRichContent(
     case 'report':
       return { kind: 'asset-gallery', data: { ...base, template: input.composite.template } };
   }
+}
+
+function resolveEntityMemoryContribution(composite: CompositeBlockData): {
+  readonly entityMemoryContribution?: EntityMemoryContribution;
+} {
+  const candidates: readonly unknown[] = [
+    composite.extensions?.['neko.entityMemoryContribution'],
+    composite.extensions?.['neko.entityMemoryContributionPayload'],
+    ...composite.sections.flatMap((section) => [
+      section.extensions?.['neko.entityMemoryContribution'],
+      section.extensions?.['neko.entityMemoryContributionPayload'],
+    ]),
+  ];
+  const contribution = candidates.find((candidate): candidate is EntityMemoryContribution =>
+    isEntityMemoryContribution(candidate),
+  );
+  if (contribution) return { entityMemoryContribution: contribution };
+
+  const inferredContribution = inferEntityMemoryContributionFromCharacterAnalysis(composite);
+  return inferredContribution ? { entityMemoryContribution: inferredContribution } : {};
 }
 
 function normalizeCompositeStoryboardTable(

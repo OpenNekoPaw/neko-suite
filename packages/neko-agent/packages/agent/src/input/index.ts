@@ -10,6 +10,12 @@ export { InputProcessor, createInputProcessor } from './input-processor';
 export { NodeFileReader, createNodeFileReader } from './node-file-reader';
 
 export {
+  DEFAULT_MENTION_EXCLUDED_DIRECTORIES,
+  DEFAULT_MENTION_EXCLUDE_GLOB,
+  isMentionExcludedPath,
+} from './mention-excludes';
+
+export {
   VSCodeFileReader,
   createVSCodeFileReader,
   type VSCodeWorkspaceAPI,

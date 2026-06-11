@@ -12,6 +12,7 @@ function createMockWebview() {
 function createMockConversations() {
   return {
     getActiveId: vi.fn().mockReturnValue('conv-1'),
+    get: vi.fn().mockReturnValue(undefined),
   };
 }
 
@@ -75,6 +76,49 @@ describe('ContextHandler', () => {
         type: 'contextTokenCount',
         conversationId: 'conv-1',
         tokenCount: 1500,
+      });
+    });
+
+    it('should fall back to persisted conversation token count when runtime is empty', () => {
+      agentManager.getContextTokenCount.mockReturnValue(0);
+      conversations.get.mockReturnValue({
+        tokenCount: 256,
+        messages: [{ id: 'm1', role: 'user', content: 'ignored', timestamp: 1 }],
+      });
+      handler = new ContextHandler({
+        conversations: conversations as any,
+        agentManager: agentManager as any,
+      });
+
+      handler.getTokenCount(webview as any, 'conv-1');
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'contextTokenCount',
+        conversationId: 'conv-1',
+        tokenCount: 256,
+      });
+    });
+
+    it('should estimate persisted messages when stored token count is zero', () => {
+      agentManager.getContextTokenCount.mockReturnValue(0);
+      conversations.get.mockReturnValue({
+        tokenCount: 0,
+        messages: [
+          { id: 'm1', role: 'user', content: '12345678', timestamp: 1 },
+          { id: 'm2', role: 'assistant', content: '1234', timestamp: 2 },
+        ],
+      });
+      handler = new ContextHandler({
+        conversations: conversations as any,
+        agentManager: agentManager as any,
+      });
+
+      handler.getTokenCount(webview as any, 'conv-1');
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'contextTokenCount',
+        conversationId: 'conv-1',
+        tokenCount: 3,
       });
     });
 

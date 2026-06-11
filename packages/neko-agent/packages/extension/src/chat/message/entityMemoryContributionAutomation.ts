@@ -16,6 +16,13 @@ export interface EntityMemoryContributionAutomationDecision {
   readonly entityRef?: unknown;
   readonly candidateId?: string;
   readonly reason?: string;
+  readonly storyboardCharacterId?: string;
+  readonly characterId?: string;
+  readonly shotId?: string;
+  readonly shotNumber?: number;
+  readonly characterIndex?: number;
+  readonly sourceRef?: string;
+  readonly provenance?: Record<string, unknown>;
 }
 
 export interface EntityMemoryContributionAutomationResult {
@@ -291,7 +298,7 @@ function readArtifactFromTransfer(
 
 function parseCompositeJsonFenceCandidates(markdown: string): readonly unknown[] {
   const candidates: unknown[] = [];
-  const pattern = /```(?:neko-composite|neko-composite-json)\s*\n([\s\S]*?)```/g;
+  const pattern = /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
   for (const match of markdown.matchAll(pattern)) {
     const rawJson = match[1];
     if (!rawJson) {

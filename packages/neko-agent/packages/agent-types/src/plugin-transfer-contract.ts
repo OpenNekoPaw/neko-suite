@@ -3,6 +3,7 @@ import type {
   CanvasAgentTargetRef,
   CanvasStoryboardPayload,
   DocumentArchiveResourceRef,
+  EntityMemoryContribution,
   ResourceRef,
   StoryboardTextCue,
   StoryboardVoiceCue,
@@ -96,6 +97,7 @@ export type PluginTransferPayload =
   | {
       readonly kind: 'canvasStoryboard';
       readonly storyboard: CanvasStoryboardPayload;
+      readonly entityMemoryContribution?: EntityMemoryContribution;
       readonly target?: PluginTransferTargetRef;
       readonly provenance?: PluginTransferProvenance;
     }

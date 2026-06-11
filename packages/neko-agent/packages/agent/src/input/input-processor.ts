@@ -18,6 +18,7 @@ import type {
   IInputProcessor,
 } from './types';
 import { createNodeFileReader } from './node-file-reader';
+import { DEFAULT_MENTION_EXCLUDED_DIRECTORIES, isMentionExcludedPath } from './mention-excludes';
 
 // =============================================================================
 // Constants
@@ -28,18 +29,6 @@ const DEFAULT_MAX_FILE_SIZE = 1024 * 1024;
 
 /** Default max files to process */
 const DEFAULT_MAX_FILES = 20;
-
-/** Default exclude patterns */
-const DEFAULT_EXCLUDE_PATTERNS = [
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  '.next',
-  '__pycache__',
-  '.venv',
-  'venv',
-];
 
 /** Language hints by extension */
 const LANGUAGE_HINTS: Record<string, string> = {
@@ -99,7 +88,7 @@ export class InputProcessor implements IInputProcessor {
       maxFileSize: options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE,
       maxFiles: options.maxFiles ?? DEFAULT_MAX_FILES,
       allowedExtensions: options.allowedExtensions ?? [],
-      excludePatterns: options.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS,
+      excludePatterns: options.excludePatterns ?? [...DEFAULT_MENTION_EXCLUDED_DIRECTORIES],
       includeLineNumbers: options.includeLineNumbers ?? true,
       includeLanguageHints: options.includeLanguageHints ?? true,
       fileReader: options.fileReader ?? createNodeFileReader(options.workspaceRoot),
@@ -371,8 +360,7 @@ export class InputProcessor implements IInputProcessor {
   }
 
   private _shouldExclude(filePath: string): boolean {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    return this._options.excludePatterns.some((pattern) => normalizedPath.includes(pattern));
+    return isMentionExcludedPath(filePath, this._options.excludePatterns);
   }
 }
 
