@@ -304,6 +304,7 @@ function deleteSelectedRegion(store: SketchStore): boolean {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.deleteFramebuffer(fbo);
 
+  store.setLayers(updateLayerById(store.layers, activeLayerId, (item) => ({ ...item })));
   store.markDirty();
   return true;
 }

@@ -4,7 +4,7 @@
  * Assembles the sketch editor layout:
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import {
   isEditableTarget,
   isKeyboardFocusMessage,
@@ -36,7 +36,10 @@ import {
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
-import { getSketchKeyboardAction } from './utils/sketch-keyboard-shortcuts';
+import {
+  handleSketchKeyboardEvent,
+  SKETCH_KEYBOARD_EVENT_LISTENER_OPTIONS,
+} from './utils/sketch-keyboard-handler';
 import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
 import { createTextureStampAssetFromBase64 } from './brush';
 import { exportLayerImageDataBase64 } from './utils/layer-export';
@@ -122,22 +125,23 @@ export function App() {
 
   // Drag-over visual state
   const [isDragOver, setIsDragOver] = useState(false);
+  const keyboardRootRef = useRef<HTMLDivElement | null>(null);
 
   const {
     isResizing: isHResizing,
-    containerRef: rootRef,
+    containerRef: sidebarResizeRef,
     handleProps: sidebarResizeHandleProps,
-  } = useResizable<HTMLDivElement>({
+  } = useResizable<HTMLElement>({
     edge: 'right',
     mode: 'pixel',
     size: sidebarWidth,
     onSizeChange: setSidebarWidth,
   });
   const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
-    rootRef,
+    keyboardRootRef,
     false,
   );
-  useReportWebviewKeyboardFocus(rootRef, vscode);
+  useReportWebviewKeyboardFocus(keyboardRootRef, vscode);
 
   useEffect(() => {
     vscode.postMessage({
@@ -168,19 +172,16 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (isKeyboardFocusedRef.current === false) {
-        return;
-      }
-      const action = getSketchKeyboardAction(event);
-      if (!action) {
-        return;
-      }
-      event.preventDefault();
-      dispatchKeyboardAction(action, store.getState(), vscode);
+      handleSketchKeyboardEvent(event, {
+        isKeyboardFocused: isKeyboardFocusedRef.current || document.hasFocus(),
+        clearTextSelection: () => window.getSelection()?.removeAllRanges(),
+        dispatch: (action) => dispatchKeyboardAction(action, store.getState(), vscode),
+      });
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, SKETCH_KEYBOARD_EVENT_LISTENER_OPTIONS);
+    return () =>
+      window.removeEventListener('keydown', handleKeyDown, SKETCH_KEYBOARD_EVENT_LISTENER_OPTIONS);
   }, [store, isKeyboardFocusedRef]);
 
   useEffect(() => aiSessionStore.subscribe(setAIRuns), []);
@@ -581,6 +582,7 @@ export function App() {
   return (
     <I18nProvider service={i18nService}>
       <div
+        ref={keyboardRootRef}
         className="flex flex-col h-screen w-screen overflow-hidden relative"
         data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
       >
@@ -605,79 +607,76 @@ export function App() {
           bodyClassName="sketch-workbench-body"
           mainClassName="sketch-main-panel"
           mainKind="drawing-canvas"
+          rightPanelClassName="sketch-right-sidebar-host"
           leftRail={<Toolbar onOpenExport={handleOpenExport} onOpenPackage={handleOpenPackage} />}
           main={
-            <div ref={rootRef} className="sketch-canvas-container">
+            <div className="sketch-canvas-container">
               <SketchCanvas isKeyboardFocusedRef={isKeyboardFocusedRef} />
             </div>
           }
           rightPanel={
             showSidebar ? (
-              <>
+              <aside
+                id="sketch-right-sidebar"
+                ref={sidebarResizeRef}
+                className="sketch-right-sidebar"
+                style={{ width: sidebarWidth }}
+                data-resizing={isHResizing ? 'true' : 'false'}
+              >
                 <ResizeHandle
                   handleProps={sidebarResizeHandleProps}
-                  className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
-                    isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
-                  }`}
+                  className="sketch-right-sidebar-resize-handle"
                 />
-                <div
-                  id="sketch-right-sidebar"
-                  className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
-                  style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
-                >
-                  <div className="flex flex-col h-full overflow-y-auto">
-                    <CollapsiblePanel
-                      titleKey={
-                        activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'
-                      }
-                    >
-                      <BrushPanel />
+                <div className="sketch-right-sidebar-stack">
+                  <CollapsiblePanel
+                    titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}
+                  >
+                    <BrushPanel />
+                  </CollapsiblePanel>
+                  {activeTool === 'shape' && (
+                    <CollapsiblePanel titleKey="sketch.panel.vector">
+                      <VectorToolbar />
                     </CollapsiblePanel>
-                    {activeTool === 'shape' && (
-                      <CollapsiblePanel titleKey="sketch.panel.vector">
-                        <VectorToolbar />
-                      </CollapsiblePanel>
-                    )}
-                    {activeTool === 'fill' && (
-                      <CollapsiblePanel titleKey="sketch.panel.fill">
-                        <FillPanel />
-                      </CollapsiblePanel>
-                    )}
-                    <CollapsiblePanel titleKey="sketch.panel.palette">
-                      <PalettePanel />
+                  )}
+                  {activeTool === 'fill' && (
+                    <CollapsiblePanel titleKey="sketch.panel.fill">
+                      <FillPanel />
                     </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
-                      <PerspectiveGridPanel />
+                  )}
+                  <CollapsiblePanel titleKey="sketch.panel.palette">
+                    <PalettePanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
+                    <PerspectiveGridPanel />
+                  </CollapsiblePanel>
+                  {hasAvailableSketchAIOperations(featureFlags) && (
+                    <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
+                      <AIPanel
+                        operationAvailability={featureFlags.aiOps.operations}
+                        onOpenAgent={handleOpenAgentForAI}
+                      />
                     </CollapsiblePanel>
-                    {hasAvailableSketchAIOperations(featureFlags) && (
-                      <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
-                        <AIPanel
-                          operationAvailability={featureFlags.aiOps.operations}
-                          onOpenAgent={handleOpenAgentForAI}
-                        />
-                      </CollapsiblePanel>
-                    )}
-                    <CollapsiblePanel titleKey="sketch.panel.layers">
-                      <LayerPanel />
-                    </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
-                      <FilterPanel />
-                    </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
-                      <FrameControls />
-                    </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
-                      <SpriteSheetPlayer />
-                    </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
-                      <ParticlePanel />
-                    </CollapsiblePanel>
-                    <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
-                      <ScenePanel />
-                    </CollapsiblePanel>
-                  </div>
+                  )}
+                  <CollapsiblePanel titleKey="sketch.panel.layers">
+                    <LayerPanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
+                    <FilterPanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
+                    <FrameControls />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
+                    <SpriteSheetPlayer />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
+                    <ParticlePanel />
+                  </CollapsiblePanel>
+                  <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
+                    <ScenePanel />
+                  </CollapsiblePanel>
                 </div>
-              </>
+              </aside>
             ) : undefined
           }
           bottomPanel={
