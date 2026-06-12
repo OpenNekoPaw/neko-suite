@@ -1,7 +1,11 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasNode, ContainerSection, FieldBinding } from '@neko/shared';
-import { getDefaultCanvasNodePresetName, writeFieldBinding } from '@neko/shared';
+import {
+  getDefaultCanvasNodePresetName,
+  projectCanvasShotPrompt,
+  writeFieldBinding,
+} from '@neko/shared';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { ContainerRenderer } from '../content/ContainerRenderer';
 import { ContainerActionBar, readNumber, readString } from '../content/node-card';
@@ -244,7 +248,7 @@ function ShotCreatorOverlayBody({
             </div>
           </section>
           <section className="min-w-0" data-shot-creator-summary="true">
-            <ShotCreatorSummary node={node} />
+            <ShotCreatorSummary node={node} onUpdateData={onUpdateData} />
           </section>
           <details className="min-w-0 xl:col-span-2" data-shot-creator-details="true">
             <summary className="cursor-pointer select-none rounded border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50">
@@ -308,7 +312,13 @@ function useShotOverlayRenderContext({
   };
 }
 
-function ShotCreatorSummary({ node }: { node: CanvasNode }) {
+function ShotCreatorSummary({
+  node,
+  onUpdateData,
+}: {
+  node: CanvasNode;
+  onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+}) {
   const data = readRecordValue(node.data);
   const camera = joinDisplayValues([
     readString(data, 'shotScale'),
@@ -351,6 +361,102 @@ function ShotCreatorSummary({ node }: { node: CanvasNode }) {
         label={t('scene.column.dialogueSfx')}
         value={audio}
         className="md:col-span-2"
+      />
+      <ShotCreatorPromptEditor node={node} onUpdateData={onUpdateData} className="md:col-span-2" />
+    </div>
+  );
+}
+
+function ShotCreatorPromptEditor({
+  node,
+  onUpdateData,
+  className,
+}: {
+  node: CanvasNode;
+  onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  className?: string;
+}) {
+  const projection = projectCanvasShotPrompt(node);
+  const prompt = projection?.prompt ?? '';
+  const isCustom = projection?.source === 'generationPrompt';
+  const [draft, setDraft] = useState(prompt);
+  const skipNextCommitRef = useRef(false);
+
+  useEffect(() => {
+    setDraft(prompt);
+  }, [prompt]);
+
+  const commitDraft = useCallback(() => {
+    if (skipNextCommitRef.current) {
+      skipNextCommitRef.current = false;
+      return;
+    }
+    const nextPrompt = draft.trim();
+    if (nextPrompt === prompt.trim()) return;
+    onUpdateData?.(node.id, { generationPrompt: nextPrompt || undefined });
+  }, [draft, node.id, onUpdateData, prompt]);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.currentTarget.blur();
+      }
+      if (event.key === 'Escape') {
+        skipNextCommitRef.current = true;
+        setDraft(prompt);
+        event.currentTarget.blur();
+      }
+    },
+    [prompt],
+  );
+
+  const handleKeyboardEvent = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation();
+  }, []);
+
+  return (
+    <div className={`min-w-0 ${className ?? ''}`} data-shot-creator-prompt="true">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="text-[11px] text-gray-500">{t('content.overlayShotPrompt')}</div>
+        <span
+          className="rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-500"
+          data-shot-creator-prompt-source={projection?.source ?? 'empty'}
+        >
+          {isCustom
+            ? t('content.overlayShotPromptCustom')
+            : t('content.overlayShotPromptAssembled')}
+        </span>
+      </div>
+      <textarea
+        value={draft}
+        rows={4}
+        placeholder={t('content.overlayShotPromptPlaceholder')}
+        onInput={(event) => setDraft(event.currentTarget.value)}
+        onBlur={commitDraft}
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyboardEvent}
+        onKeyPress={handleKeyboardEvent}
+        onMouseDown={(event) => event.stopPropagation()}
+        {...getKeyboardBoundaryMetadata({
+          scope: 'text-input',
+          ownerId: `shot-creator-prompt:${node.id}`,
+          ownedKeys: [
+            'Backspace',
+            'Delete',
+            'Enter',
+            'Escape',
+            'Space',
+            'Tab',
+            'ArrowUp',
+            'ArrowDown',
+            'ArrowLeft',
+            'ArrowRight',
+          ],
+        })}
+        className="min-h-[5.5rem] w-full resize-y rounded border border-gray-200 bg-white px-2 py-1.5 text-[12px] leading-5 text-gray-900 outline-none focus:border-blue-400"
       />
     </div>
   );

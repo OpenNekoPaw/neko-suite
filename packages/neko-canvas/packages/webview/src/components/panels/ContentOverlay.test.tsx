@@ -3,7 +3,7 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasData, CanvasNode } from '@neko/shared';
 import { ContentOverlay } from './ContentOverlay';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -85,9 +85,119 @@ describe('ContentOverlay', () => {
     expect(host.textContent).toContain('The creator-facing summary stays readable.');
     expect(host.textContent).toContain('Lead (primary)');
     expect(host.textContent).toContain('The useful content stays visible.');
+    expect(host.querySelector('[data-shot-creator-prompt="true"]')).not.toBeNull();
+    expect(
+      host
+        .querySelector('[data-shot-creator-prompt-source]')
+        ?.getAttribute('data-shot-creator-prompt-source'),
+    ).toBe('generationPrompt');
+    expect(host.textContent).toContain('Custom override');
+    expect(host.querySelector('textarea')?.value).toBe(
+      'Machine-facing prompt should stay behind details.',
+    );
     expect(host.querySelector('[data-content-block-id="shot-visual-description"]')).toBeNull();
     expect(host.querySelector('[data-content-block-id="shot-generation-prompt"]')).toBeNull();
-    expect(host.textContent).not.toContain('Machine-facing prompt should stay behind details.');
+  });
+
+  it('shows an assembled prompt in the creator summary when no custom prompt is set', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          duration: 1,
+          visualDescription: 'White title page with calligraphy.',
+          characterAction: 'No character action.',
+          characters: [],
+          emotion: ['mysterious'],
+          sceneTags: ['opening'],
+          visualStyle: 'minimal ink',
+          soundCue: 'soft ambient tone',
+          referenceImagePath: 'data:image/png;base64,reference',
+        },
+      }),
+      id: 'shot-overlay-assembled-prompt',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    expect(
+      host
+        .querySelector('[data-shot-creator-prompt-source]')
+        ?.getAttribute('data-shot-creator-prompt-source'),
+    ).toBe('assembled');
+    expect(host.textContent).toContain('Assembled from fields');
+    expect(host.querySelector('textarea')?.value).toContain('White title page with calligraphy.');
+    expect(host.querySelector('textarea')?.value).toContain('Style: minimal ink');
+    expect(host.querySelector('textarea')?.value).toContain('Sound: soft ambient tone');
+  });
+
+  it('commits prompt edits as generationPrompt and cancels Escape edits', async () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 3,
+          visualDescription: 'Field assembled prompt.',
+          referenceImagePath: 'data:image/png;base64,reference',
+        },
+      }),
+      id: 'shot-overlay-edit-prompt',
+    } as CanvasNode;
+
+    const updateNodeData = vi.fn();
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+      updateNodeData,
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const textarea = host.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+
+    await act(async () => {
+      setTextareaValue(textarea!, 'Custom title prompt');
+      textarea!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      textarea!.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+
+    expect(updateNodeData).toHaveBeenCalledWith(node.id, {
+      generationPrompt: 'Custom title prompt',
+    });
+
+    updateNodeData.mockClear();
+
+    await act(async () => {
+      setTextareaValue(textarea!, 'Should not commit');
+      textarea!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      textarea!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+      textarea!.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+
+    expect(updateNodeData).not.toHaveBeenCalled();
   });
 
   it('keeps scene storyboard table visible in fullscreen overlay', () => {
@@ -147,4 +257,9 @@ function createCanvasData(nodes: CanvasNode[]): CanvasData {
     nodes,
     connections: [],
   };
+}
+
+function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  setter?.call(textarea, value);
 }

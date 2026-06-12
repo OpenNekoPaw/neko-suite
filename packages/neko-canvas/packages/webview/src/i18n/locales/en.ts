@@ -213,6 +213,10 @@ export const en = {
   'content.children': 'Children',
   'content.depthLimitReached': 'Content depth limit reached',
   'content.overlayShotDetails': 'Edit details and advanced metadata',
+  'content.overlayShotPrompt': 'Generation prompt',
+  'content.overlayShotPromptAssembled': 'Assembled from fields',
+  'content.overlayShotPromptCustom': 'Custom override',
+  'content.overlayShotPromptPlaceholder': 'Describe what this shot should generate...',
 
   // Property panel
   'panel.properties': 'Properties',

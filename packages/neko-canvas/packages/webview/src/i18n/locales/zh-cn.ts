@@ -212,6 +212,10 @@ export const zhCN = {
   'content.children': '子节点',
   'content.depthLimitReached': '内容层级已达到上限',
   'content.overlayShotDetails': '编辑详情与高级元数据',
+  'content.overlayShotPrompt': '生成提示词',
+  'content.overlayShotPromptAssembled': '由字段组装',
+  'content.overlayShotPromptCustom': '自定义覆盖',
+  'content.overlayShotPromptPlaceholder': '描述这个镜头要生成的内容...',
 
   // Property panel
   'panel.properties': '属性',
