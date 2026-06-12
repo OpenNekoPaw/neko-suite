@@ -11,20 +11,27 @@ This skill stops at analysis and storyboard planning. It does not generate image
 1. Request comic images from the user when none are available.
    - For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
    - Prefer mode="manifest" to inspect page/chapter count, then mode="range" with image_path_limit for the pages being analyzed.
+   - When the document or image batch exposes a stable source ref and range, call QuerySemanticCoverage before expensive page or panel analysis. Reuse fresh matched ranges as context, analyze only missing or stale ranges, and include coverage diagnostics in the notes.
+   - If no stable source ref or locator is available, continue with normal ReadDocument/ReadImage analysis and state that semantic coverage reuse was unavailable for that input.
+   - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Semantic reuse must come through QuerySemanticCoverage or another host facade.
    - Use ReadDocument.imageInfo for width, height, mimeType, byteSize, and aspect ratio. Do not run Python/PIL, file, sips, identify, unzip, unrar, 7z, or other external commands just to probe image metadata.
    - Choose exactly one vision analysis tool for the same page/batch: use ReadImage with mode="vision" when ReadDocument already returned imagePaths/images; use ReadDocumentImage with mode="vision" only when you still have document locators/page indexes and need the tool to resolve them to images.
    - Do not call ReadDocumentImage after ReadImage for the same image, and do not call ReadDocumentImage just because ReadDocument already returned imagePaths.
    - Use that single vision call before making claims about characters, dialogue/OCR, panel count, actions, or camera.
+   - When the requested page set is larger than the vision tool can inspect in one call, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
 2. Analyze panel layout with vision capabilities:
    - Identify reading order: left-to-right, right-to-left, or vertical webtoon.
+   - Check image orientation and whether the page needs rotation before reading order or panel order can be trusted.
    - Detect panel boundaries and composition.
    - Count panels.
+   - Treat one page or one image as a possible source for multiple storyboard shots. Do not collapse multiple panels into a single shot only because they came from the same image file.
 3. Before structuring the storyboard, build an image index and panel mapping:
    - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label.
    - Record the alias scope for each batch (`toolCallId`, source document id, or `aliasScope`). Aliases such as `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
    - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
    - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.
    - Multiple shots may explicitly reference the same page image, but explain the panel/page mapping in `label`, `decisionReason`, or `extensions["neko.mangaToVideo"]`; include panel/crop/bbox when crop information is available.
+   - Add shot-level `extensions["neko.comicImageAudit"]` when evidence shows image handling will be needed later. Use it only as reviewable evidence for later prep, for example `orientation`, `panelCount`, `derivedShotCount`, `requiresRotation`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `requiresOutpaint`, `requiresColorize`, `requiresUpscale`, `requiresStyleNormalize`, `sourceImageGroupId`, `sourcePageRefId`, `sourcePanelId`, and `notes`.
 4. Extract visible content per panel:
    - Setting, characters, actions, expressions, poses.
    - Speech bubble text and OCR, classified by text role.
@@ -41,39 +48,16 @@ This skill stops at analysis and storyboard planning. It does not generate image
 3. Use `CompositeArtifact` as the outer payload: `schemaVersion: 1`, `kind: "composite-artifact"`, `profile: "comic-to-animation-plan"`, `artifactId`, `title`, and `blocks[]`.
 4. Put the storyboard itself in a `domain` block with `domainKind: "StoryboardTable"` and a StoryboardTable `payload` using `schemaVersion: 1`, `kind: "storyboard-table"`, `profile: "manga-to-video"`, `title`, `scenes[]`, and `shots[]`.
 
-### Progressive Character Memory
+### Character and Text Cues
 
-- Extract character observations incrementally from the current source only. Do not claim you have fully solved long-form identity unless prior project evidence is present.
-- When identity is known, include `characters[].entityRef` or `characters[].characterId`; when identity is uncertain, keep the display `name` and add review diagnostics instead of inventing an entity id.
-- In `characters[]`, include `role`, `action`, `emotion`, `continuityNotes`, and `appearanceNotes` only when the panel evidence supports them.
-- In character memory rows, emit only dimensions supported by direct source evidence. Do not guess low-evidence traits such as species, gender, occupation, age, relationship, or voice; omit them or surface a review diagnostic instead.
-- Extract character information separately in `characters[]` and bind text to characters through cue speaker fields. Do not rely on narrative prose inside `visualDescription` or `characterAction` as the only character record.
-- For every visible OCR/text fragment that matters to animation or review, add `textCues[]` with `cueId`, `kind`, `text`, and `sourceRefId` when available. Supported text cue kinds are `dialogue`, `narration`, `caption`, `sfx`, `backgroundText`, and `unknown`.
-- Only character speech bubbles or clearly spoken off-panel lines may become `textCues[].kind: "dialogue"` and legacy `dialogue`. Narration boxes should use `textCues[].kind: "narration"` and `voiceOver` only when they should be voiced. Caption/card text should use `caption`. Sound-effect lettering should use `sfx` and may also populate `soundCue`. Signs, posters, phone screens, and environmental text should use `backgroundText`. Use `unknown` when the text role is visible but ambiguous.
-- For dialogue text cues, bind the speaker when supported by panel evidence: set `speakerName` and, when known, `speakerCharacterId` and/or `speakerEntityRef`. The `speakerCharacterId` must match a character in `characters[]`; `speakerEntityRef.entityId` must match the same entity when present. If the speaker is uncertain, keep the text cue but omit ids and add the uncertainty under `extensions["neko.textCueReview"]`.
-- For visible speech bubbles, keep legacy `dialogue` for compatibility and add `voiceCues[]` when speaker or delivery can be inferred. A voice cue may include `cueId`, `kind`, `text`, `speakerName`, `speakerCharacterId`, `speakerEntityRef`, `emotion`, `delivery`, `voiceAssetId`, and `sourceRefId`. The voice cue should mirror the speaker binding from the corresponding dialogue text cue.
-- Do not invent `voiceAssetId`. Use it only if a real bound voice representation is available in the provided context.
-- When you extract durable character evidence, include a complete `EntityMemoryContribution` payload in `extensions["neko.entityMemoryContributionPayload"]`; the runtime uses that protocol to check existing entities, merge open candidates, or create reviewable candidates.
-- Keep the entity contribution separate from the storyboard while giving both sides stable mapping keys. Each recurring storyboard character should have a stable `characters[].characterId`, and each related candidate/observation should mirror `storyboardCharacterId`, `characterId`, `shotId`, `shotNumber`, `characterIndex`, and `sourceRef` in candidate metadata, observation provenance metadata, or `extensions["neko.storyboardEntityMapping"]` when available.
-- Use mapping keys in this priority order: `storyboardCharacterId`, then `shotId + characterId`, then provenance/source refs, then `name` only as a last fallback. If same-name characters or candidates are ambiguous, keep them separate and add a review diagnostic such as `candidate-ambiguous`; do not auto-merge by name.
-- Use `entityCandidates[]` when a reviewable unified entity should be proposed. Set `identityBasis: "user-named"` only for user-provided or source-explicit names; use `identityBasis: "visual"` for visual-only recurring figures so name-based matching can safely ignore them.
-- If useful, include a review-only `GenericTable` block with `profile: "character-memory-review"` for draft `CharacterObservation` rows. The table is only a review projection; do not rely on the table alone for entity automation.
-- If you output "Character Observations", "Character and Relationship Changes", or any character analysis table, mirror the durable rows into `extensions["neko.entityMemoryContributionPayload"]`; if you cannot construct a complete contribution payload, label the table as non-persistent analysis so users do not mistake it for unified entity input.
-- These observations are suggestions for review, not confirmed character facts. Do not directly confirm entities or accepted observations from this skill.
-
-### Shot Image Prep Profile
-
-- When the user is aiming for comic-to-animation, prepare for a separate reviewable `comic-shot-asset-prep` table/profile after the StoryboardTable is valid.
-- The prep profile is a plan projection, not an execution result. Fill `ShotImagePrepPlan`-compatible fields conservatively: `shotId`, `sceneId`, `imageStrategy`, `sourceMediaRefs`, `operationPlan`, `generationPrompt`, `editInstruction`, `maskRefs`, `referenceBundle`, `perceptionCardRefs`, `status`, and `diagnostics` when evidence exists.
-- Include `metadata.regenerationRecommendation` for each prep plan when image evidence is analyzed. Use it only as a review hint: `decision: "regenerate"` for new/recomposed keyframes, `decision: "transform-source"` for source-preserving edits, `decision: "not-needed"` for reuse, and `decision: "blocked"` when missing evidence or provider constraints prevent a reliable recommendation.
-- Choose `TransformImage` semantics for source-bound edits: crop panel, remove text, inpaint speech bubbles, outpaint to aspect ratio, colorize, upscale, or style-normalize while preserving the source composition.
-- Choose `GenerateImage` semantics for new or re-composed keyframes: missing transition shots, unusable panels, first-pass character/scene reference images, or shots where the source panel is only a reference.
-- Always keep reference images as stable refs in `referenceBundle` or `sourceMediaRefs`. Do not rely only on prompt prose for character, scene, style, or previous-shot continuity.
-- Use character references only when they point to known `CreativeEntityRef` character ids or reviewable candidates from entity memory contribution. Do not create confirmed entities from the prep plan.
-- Use scene references only when there is a known scene/location entity or a clear source evidence ref. Omit low-confidence guesses.
-- Report missing perception, missing mask, unresolved provider, unsafe ref, or uncertain character/scene binding as diagnostics instead of inventing outputs.
-- Do not claim a transformed, cleaned, colored, or generated keyframe exists until a runtime/tool result has returned stable `outputMediaRefs` or `generatedMediaRefs`.
-- Skill content may request the `comic-shot-asset-prep` profile and describe field-filling tendencies, but it does not register runtime capabilities, bypass validators, approve costs, or execute GenerateImage/TransformImage.
+- Extract shot-local character appearances in `characters[]` when visible. Keep this as storyboard evidence only; do not create or confirm project entities from this skill.
+- Give recurring storyboard characters stable `characterId` values within the StoryboardTable when the same visual identity clearly repeats.
+- Include `role`, `action`, `emotion`, `continuityNotes`, and `appearanceNotes` only when panel evidence supports them.
+- For every visible OCR/text fragment that matters to review, add `textCues[]` with `cueId`, `kind`, `text`, and `sourceRefId` when available. Supported text cue kinds are `dialogue`, `narration`, `caption`, `sfx`, `backgroundText`, and `unknown`.
+- Only character speech bubbles or clearly spoken off-panel lines may become `textCues[].kind: "dialogue"` and legacy `dialogue`. Narration boxes should use `narration`, caption/card text should use `caption`, sound-effect lettering should use `sfx`, and environmental text should use `backgroundText`.
+- Bind dialogue speaker fields when supported by panel evidence: `speakerName` and, when known within the storyboard, `speakerCharacterId`.
+- Do not output unified-entity contribution payloads, entity-candidate schemas, image-prep profiles, regeneration recommendations, or image generation/edit plans from this skill. Those belong to comic-to-animation or later entity/image-prep stages after the StoryboardTable is valid.
+- When missing or stale ranges are newly analyzed and produce reusable OCR, text cues, or character evidence, keep that evidence source-located in the StoryboardTable and hand off durable semantic contribution work to comic-to-animation or a host contribution tool. Do not persist prompt context as a cache.
 
 ## StoryboardTable Rules
 
@@ -90,9 +74,10 @@ This skill stops at analysis and storyboard planning. It does not generate image
 - Every shot must include `shotNumber`, `duration`, `visualDescription`, `characterAction`, and `imageStrategy`.
 - When OCR text is present, include `textCues[]` to classify it before summarizing it into `dialogue`, `voiceOver`, or `soundCue`.
 - Do not put narration, caption boxes, SFX lettering, or background text into `dialogue`.
-- Do not leave dialogue speaker binding implicit when the panel shows the speaker. Bind dialogue through `textCues[].speakerName` plus `speakerCharacterId`/`speakerEntityRef` when known.
+- Do not leave dialogue speaker binding implicit when the panel shows the speaker. Bind dialogue through `textCues[].speakerName` plus `speakerCharacterId` when known within the storyboard.
 - Choose `imageStrategy`: `reuse-original`, `use-as-reference`, `generate-new`, or `transform-original`.
 - Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
+- When a page image must be rotated or split into panels, keep the original page image in `sourceMediaRefs`, create one shot per panel or camera beat, and record the page/panel mapping in `extensions["neko.comicImageAudit"]`. Do not claim rotated, cropped, colored, inpainted, or outpainted images exist before a later tool actually creates them.
 - Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
 - Only write plan fields. Do not claim images have already been generated until a runtime/tool result exists.
 - For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the tool-result call id / batch id and asset index exposed by the tool result. Prefer the real runtime `toolCallId`; if the tool result does not expose a separate runtime id but explicitly gives a current-result batch id such as `readimage-current-result`, use that batch id exactly and map `assetIndex` to the real returned order. Do not invent a tool name, alias, or label such as `ReadImage.front10pages`.
@@ -112,92 +97,6 @@ This skill stops at analysis and storyboard planning. It does not generate image
   "artifactId": "comic-storyboard-plan",
   "profile": "comic-to-animation-plan",
   "title": "Comic Storyboard Plan",
-  "extensions": {
-    "neko.entityMemoryContributionPayload": {
-      "contributionId": "comic-page-1-character-memory",
-      "sourcePackage": "neko-agent",
-      "sourceRef": { "kind": "tool-result", "toolCallId": "read-doc-call-id", "assetIndex": 0 },
-      "reviewPolicy": "requires-user-review",
-      "entityCandidates": [
-        {
-          "id": "candidate-story-character-1",
-          "kind": "character",
-          "name": "Character name",
-          "status": "open",
-          "identityBasis": "user-named",
-          "confidence": 0.8,
-          "provenance": [
-            {
-              "providerId": "neko-agent",
-              "sourceKind": "agent",
-              "sourceRef": "read-doc-call-id#asset-0#panel-P1",
-              "label": "story-character-1",
-              "confidence": 0.8,
-              "metadata": {
-                "storyboardCharacterId": "story-character-1",
-                "shotId": "scene-1-shot-1",
-                "shotNumber": 1,
-                "characterIndex": 0
-              }
-            }
-          ],
-          "sourceRefs": ["read-doc-call-id#asset-0#panel-P1"],
-          "metadata": {
-            "storyboardCharacterId": "story-character-1",
-            "characterId": "story-character-1",
-            "sourceRef": "read-doc-call-id#asset-0#panel-P1"
-          }
-        }
-      ],
-      "characterObservations": [
-        {
-          "observationId": "obs-page-1-panel-1-character-1",
-          "sourceRef": {
-            "kind": "tool-result",
-            "toolCallId": "read-doc-call-id",
-            "assetIndex": 0,
-            "range": { "panelId": "P1" }
-          },
-          "provenance": {
-            "source": "comic",
-            "providerId": "neko-agent",
-            "toolCallId": "read-doc-call-id",
-            "metadata": {
-              "storyboardCharacterId": "story-character-1",
-              "shotId": "scene-1-shot-1",
-              "shotNumber": 1,
-              "characterIndex": 0
-            }
-          },
-          "reviewStatus": "needs-review",
-          "candidateId": "candidate-story-character-1",
-          "mention": {
-            "mentionId": "mention-page-1-panel-1-character-1",
-            "kind": "visual",
-            "candidateName": "Character name",
-            "confidence": 0.8
-          },
-          "dimensions": [
-            {
-              "dimension": "appearance",
-              "value": "Bounded visual traits from this panel",
-              "confidence": 0.8
-            }
-          ],
-          "confidence": 0.8,
-          "extensions": {
-            "neko.storyboardEntityMapping": {
-              "storyboardCharacterId": "story-character-1",
-              "shotId": "scene-1-shot-1",
-              "shotNumber": 1,
-              "characterIndex": 0,
-              "sourceRef": "read-doc-call-id#asset-0#panel-P1"
-            }
-          }
-        }
-      ]
-    }
-  },
   "blocks": [
     {
       "blockId": "summary",
@@ -246,7 +145,7 @@ This skill stops at analysis and storyboard planning. It does not generate image
                     "kind": "dialogue",
                     "text": "OCR dialogue if present",
                     "speakerName": "Character name",
-                    "speakerCharacterId": "character-id-if-known",
+                    "speakerCharacterId": "story-character-1",
                     "sourceRefId": "source-panel-1",
                     "confidence": 0.8
                   },
@@ -255,16 +154,6 @@ This skill stops at analysis and storyboard planning. It does not generate image
                     "kind": "sfx",
                     "text": "Visible SFX lettering",
                     "sourceRefId": "source-panel-1"
-                  }
-                ],
-                "voiceCues": [
-                  {
-                    "cueId": "scene-1-shot-1-dialogue-1",
-                    "kind": "dialogue",
-                    "text": "OCR dialogue if present",
-                    "speakerName": "Character name",
-                    "emotion": "visible emotion",
-                    "delivery": "shouting/whispering/neutral if visible"
                   }
                 ],
                 "soundCue": "SFX if present",
@@ -314,18 +203,6 @@ This skill stops at analysis and storyboard planning. It does not generate image
 ```
 
 Legacy bare `template: "storyboard-table"` payloads may be read for compatibility, but new outputs should use the CompositeArtifact envelope above.
-
-## Profile Composition Guidance
-
-Treat profile field templates as composable field groups, not as one fixed universal table. Pick the smallest field set needed for the current stage:
-
-- Panel/shot review: `shotId`, `sourcePanel`, `visualDescription`, `dialogue`, and review status.
-- Character continuity: add `characters` only when character identity, role, emotion, action, or costume continuity affects the next step.
-- Text/OCR review: add `textCues` only when OCR, narration, SFX lettering, background text, or speaker binding matters to animation or review.
-- Camera/motion planning: add camera, duration, motion, and generation-planning fields only when preparing animation or generation.
-- Media generation prep: add `motionPlan`, `sourceMediaRefs`, `imageStrategy`, and safe resource refs backed by real tool results.
-
-Do not include every possible field just because another profile might use it later. Profile descriptors are structural constraints for validation and rendering; they do not grant Canvas, Cut, generation, or execution capability.
 
 ## Profile Field Templates
 

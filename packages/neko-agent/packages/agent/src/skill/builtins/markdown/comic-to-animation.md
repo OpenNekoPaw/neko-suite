@@ -8,17 +8,21 @@ This is not a hardcoded pipeline. Choose the smallest next skill or tool based o
 
 1. If no validated storyboard exists, activate `comic-to-storyboard` first.
 2. If a `CompositeArtifact` with a `domainKind: "StoryboardTable"` block already exists, validate it and do not rewrite it unless diagnostics require repair.
-3. For animation readiness, require or derive a reviewable `comic-shot-asset-prep` projection backed by `ShotImagePrepPlan` records.
-4. Ask for approval before bulk image prep, colorization, text removal, video generation, TTS, destructive Cut changes, or export.
-5. Route source-bound panel edits through `TransformImage` only when a host-resolved source image URI/base64 is available; stable refs alone are lineage metadata until host IO resolves them.
-6. Route new or recomposed keyframes through `GenerateImage` with source refs, character refs, scene refs, and style refs when available.
-7. Route animation clips through `GenerateVideo` only after the keyframe/source image refs are real generated assets or host-resolved image-to-video inputs.
-8. Send to Canvas or Cut only after the structured payload validates and the target capability exists.
+3. Before long comic/document/video/audio re-analysis, call `QuerySemanticCoverage` when stable source refs and ranges are available. Reuse fresh matched ranges as context and schedule tools only for missing or stale ranges.
+4. If no stable source ref exists, continue with normal tool analysis and include an explicit diagnostic that semantic coverage reuse was unavailable.
+5. For animation readiness, require or derive a reviewable `comic-shot-asset-prep` projection backed by `ShotImagePrepPlan` records.
+6. Before deriving or updating `ShotImagePrepPlan` records, audit each source comic image/page for orientation, panel boundaries, one-page-to-many-shot mapping, text/SFX removal, missing background or margins, inpaint completion, outpaint expansion, monochrome-to-color needs, upscaling, and style normalization.
+7. Ask for approval before bulk image prep, page/panel splitting, rotation, colorization, text removal, inpaint/outpaint, video generation, TTS, destructive Cut changes, or export.
+8. Route source-bound panel edits through `TransformImage` only when a host-resolved source image URI/base64 is available; stable refs alone are lineage metadata until host IO resolves them.
+9. Route new or recomposed keyframes through `GenerateImage` with source refs, character refs, scene refs, and style refs when available.
+10. Route animation clips through `GenerateVideo` only after the keyframe/source image refs are real generated assets or host-resolved image-to-video inputs.
+11. Send to Canvas or Cut only after the structured payload validates and the target capability exists.
 
 ## Structured Artifact Rules
 
 - Markdown is presentation only. Storyboards, shot image prep, animation plans, generated media refs, Canvas payloads, Cut payloads, and execution summaries must be validated structured payloads.
 - When producing or repairing the storyboard from comic evidence, emit one `CompositeArtifact` with both the `StoryboardTable` domain block and `extensions["neko.entityMemoryContributionPayload"]`. The contribution payload is the machine-readable unified entity input; review tables are optional projections only.
+- When missing/stale semantic ranges are newly analyzed, emit reusable evidence as structured `MediaTextSegment`, `MediaSemanticIndex`, `EntityMemoryContribution`, or reviewable artifact payloads with source refs, ranges, confidence, and provenance. Do not persist prompt context, cache file paths, Webview URIs, or provider runtime handles.
 - Keep storyboard and entity memory independent but cross-referenceable. `StoryboardTable` owns shot order and shot-local character appearances. `EntityMemoryContribution` owns reviewable entity/candidate evidence. Link them with stable ids and metadata, not by nesting entity facts into Canvas or storyboard ownership.
 - Give every recurring storyboard character a stable `characterId` that is reused across shots when the visual identity is the same. Prefer ids such as `story-char-rin` over display names alone.
 - For every durable character candidate/observation, mirror the storyboard mapping keys in `EntityMemoryContribution.entityCandidates[].metadata`, `characterObservations[].extensions["neko.storyboardEntityMapping"]`, and/or `characterObservations[].provenance.metadata`: `storyboardCharacterId`, `characterId`, `shotId`, `shotNumber`, `characterIndex`, and `sourceRef` when available.
@@ -26,8 +30,11 @@ This is not a hardcoded pipeline. Choose the smallest next skill or tool based o
 - Use `entityCandidates[]` for reviewable unified entities. Set `identityBasis: "user-named"` only when a user-provided or source-explicit name identifies the candidate; use `identityBasis: "visual"` for visual-only recurring figures and avoid name-based matching claims for them.
 - Use actual tool-result, generated-asset, canvas-node, or workspace-safe refs for media. Do not invent ids.
 - Do not embed base64, blob URLs, localhost URLs, Webview URIs, provider-temporary handles, or absolute local cache paths in persistent artifacts.
+- Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, or provider-private payloads. Semantic evidence reuse must come from `QuerySemanticCoverage` or another host-mediated facade.
 - Keep `StoryboardTable` as the semantic shot plan. Keep `ShotImagePrepPlan` as image-prep intent and status. Keep generated media refs as tool-backed outputs.
 - When image analysis suggests whether the storyboard image should be regenerated, express that in `ShotImagePrepPlan.metadata.regenerationRecommendation`. This is a review signal only; it never approves or executes GenerateImage/TransformImage by itself.
+- When image analysis finds comic-page handling needs, express them in `ShotImagePrepPlan.operationPlan` and `metadata.imageAudit`. Use `rotate` for page orientation fixes, `split-panels` when one source image/page maps to multiple shots, `remove-text` for dialogue/SFX cleanup, `inpaint` for completion after text removal or missing areas, `outpaint` for expanded storyboard framing, `colorize` for monochrome-to-color animation, `upscale` for low-resolution panels, and `style-normalize` for consistency.
+- A single source image may create multiple storyboard shots and multiple shot image prep rows. Each row should keep the same source page/image ref when it comes from that page, with panel identity in `sourceMediaRefs[].label`, `decisionReason`, or `metadata.imageAudit`; do not advance to the next image by row order.
 
 ## Storyboard And Entity Output Contract
 
@@ -196,7 +203,7 @@ Minimal mapping example:
 
 - Comic evidence and OCR: `comic-to-storyboard`.
 - Motion, camera, image/video prompt, continuity, and generation readiness: `storyboard-to-animation-plan`.
-- Source panel cleanup, inpaint/outpaint/colorize/upscale/style-normalize: `comic-shot-asset-prep` plus `TransformImage`.
+- Source orientation fixes, panel splitting, cleanup, inpaint/outpaint/colorize/upscale/style-normalize: `comic-shot-asset-prep` plus `TransformImage`.
 - Missing/recomposed keyframes and reference sheets: `GenerateImage`.
 - Regeneration recommendation display: `ShotImagePrepPlan.metadata.regenerationRecommendation` and the `comic-shot-asset-prep` review table.
 - Image-to-video or text-to-video clips: `GenerateVideo`.

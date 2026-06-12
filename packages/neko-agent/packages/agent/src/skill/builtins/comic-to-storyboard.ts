@@ -1,7 +1,7 @@
 /**
  * Comic to Storyboard Skill - Convert manga/comic pages to structured storyboards
  *
- * Provides comic panel analysis, OCR, character tracking, and artifact-backed StoryboardTable output.
+ * Provides comic panel analysis, OCR, shot-local character cues, and artifact-backed StoryboardTable output.
  * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
  */
 
@@ -36,6 +36,7 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.READ_IMAGE,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+    TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
   ],
@@ -51,18 +52,9 @@ export const comicToStoryboardSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['comic', 'document', 'image-sequence'],
-    producedArtifacts: [
-      'CompositeArtifact',
-      'GenericTable',
-      'StoryboardTable',
-      'EntityMemoryContribution',
-    ],
-    artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-    referencedCapabilities: [
-      'comic-image-prep-pipeline',
-      'canvas.importStoryboard',
-      'cut.importStoryboard',
-    ],
+    producedArtifacts: ['CompositeArtifact', 'StoryboardTable'],
+    artifactProfiles: ['comic-to-animation-plan'],
+    referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
     suggestedProjectors: [
       'projector:comic-shot-plan-to-storyboard',
       'projector:storyboard-to-canvas',
@@ -71,8 +63,12 @@ export const comicToStoryboardSkill: Skill = {
     tags: ['comic', 'manga', 'storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
-    validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
-    optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE],
+    validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
+    optionalTools: [
+      TOOL_NAMES_SYSTEM.READ_IMAGE,
+      TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+      TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
+    ],
   },
 };
 

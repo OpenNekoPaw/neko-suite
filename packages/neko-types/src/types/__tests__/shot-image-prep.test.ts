@@ -120,6 +120,7 @@ describe('shot image prep contracts', () => {
       profiles: [COMIC_SHOT_ASSET_PREP_PROFILE],
       persisted: true,
       resolvedSchemaRefs: [
+        'neko.shot-image-prep.image-audit',
         'neko.shot-image-prep.mask-refs',
         'neko.shot-image-prep.reference-bundle',
       ],
@@ -131,6 +132,7 @@ describe('shot image prep contracts', () => {
         'shotId',
         'imageStrategy',
         'operationPlan',
+        'imageAudit',
         'regenerationRecommendation',
         'status',
       ]),
@@ -175,6 +177,7 @@ describe('shot image prep contracts', () => {
         profiles: [COMIC_SHOT_ASSET_PREP_PROFILE],
         persisted: true,
         resolvedSchemaRefs: [
+          'neko.shot-image-prep.image-audit',
           'neko.shot-image-prep.mask-refs',
           'neko.shot-image-prep.reference-bundle',
         ],
@@ -209,6 +212,22 @@ describe('shot image prep contracts', () => {
         }),
       ]),
     );
+  });
+
+  it('accepts comic page normalization and panel splitting operations', () => {
+    const plan = makePlan({
+      operationPlan: [
+        'crop-panel',
+        'rotate',
+        'split-panels',
+        'remove-text',
+        'inpaint',
+        'outpaint',
+        'colorize',
+      ],
+    });
+
+    expect(validateShotImagePrepPlan(plan)).toEqual({ ok: true, diagnostics: [] });
   });
 
   it('derives prep plans from storyboard shots without mutating storyboard data', () => {
@@ -246,6 +265,53 @@ describe('shot image prep contracts', () => {
           decision: 'regenerate',
         },
       },
+    });
+  });
+
+  it('derives comic image audit operations from storyboard extensions', () => {
+    const result = deriveShotImagePrepPlansFromStoryboard({
+      table: makeStoryboardWithComicImageAudit(),
+      storyboardId: 'storyboard-1',
+    });
+
+    expect(result.plans).toHaveLength(1);
+    expect(result.plans[0]).toMatchObject({
+      shotId: 'shot-audit',
+      imageStrategy: 'transform-original',
+      operationPlan: [
+        'crop-panel',
+        'rotate',
+        'split-panels',
+        'remove-text',
+        'inpaint',
+        'outpaint',
+        'colorize',
+        'upscale',
+      ],
+      metadata: {
+        imageAudit: {
+          orientation: 'rotate-90',
+          panelCount: 3,
+          derivedShotCount: 3,
+          requiresSplit: true,
+          requiresColorize: true,
+          requiresOutpaint: true,
+          sourceImageGroupId: 'page-1',
+          sourcePageRefId: 'page-1-image',
+        },
+        regenerationRecommendation: {
+          decision: 'transform-source',
+        },
+      },
+    });
+    expect(buildComicShotAssetPrepTable(result.plans).rows[0]?.cells['imageAudit']).toEqual({
+      type: 'json',
+      value: expect.objectContaining({
+        orientation: 'rotate-90',
+        panelCount: 3,
+        derivedShotCount: 3,
+      }),
+      schemaRef: 'neko.shot-image-prep.image-audit',
     });
   });
 
@@ -387,6 +453,47 @@ function makeStoryboard(): StoryboardTable {
             characterAction: 'The city appears.',
             imageStrategy: 'generate-new',
             generationPrompt: 'wide city establishing shot',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function makeStoryboardWithComicImageAudit(): StoryboardTable {
+  return {
+    schemaVersion: 1,
+    kind: 'storyboard-table',
+    profile: 'manga-to-video',
+    title: 'Comic shot audit',
+    scenes: [
+      {
+        sceneId: 'scene-1',
+        sceneTitle: 'Page 1',
+        shots: [
+          {
+            shotId: 'shot-audit',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'Panel needs rotation, split, cleanup, color, and expansion.',
+            characterAction: 'Rin turns toward the light.',
+            imageStrategy: 'transform-original',
+            sourceMediaRefs: [sourceRef],
+            extensions: {
+              'neko.comicImageAudit': {
+                orientation: 'rotate-90',
+                panelCount: 3,
+                derivedShotCount: 3,
+                requiresSplit: true,
+                requiresTextRemoval: true,
+                requiresInpaint: true,
+                requiresOutpaint: true,
+                requiresColorize: true,
+                requiredOperations: ['upscale', 'unknown-operation'],
+                sourceImageGroupId: 'page-1',
+                sourcePageRefId: 'page-1-image',
+              },
+            },
           },
         ],
       },

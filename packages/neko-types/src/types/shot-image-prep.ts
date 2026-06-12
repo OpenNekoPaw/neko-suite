@@ -28,6 +28,8 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE_VERSION = 1 as const;
 
 export const SHOT_IMAGE_PREP_OPERATIONS = [
   'crop-panel',
+  'rotate',
+  'split-panels',
   'remove-text',
   'inpaint',
   'outpaint',
@@ -36,6 +38,16 @@ export const SHOT_IMAGE_PREP_OPERATIONS = [
   'style-normalize',
   'redraw',
   'generate-keyframe',
+] as const;
+
+export const SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY = 'neko.comicImageAudit' as const;
+
+export const SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_ORIENTATIONS = [
+  'ok',
+  'rotate-90',
+  'rotate-180',
+  'rotate-270',
+  'unknown',
 ] as const;
 
 export const SHOT_IMAGE_PREP_STATUSES = [
@@ -79,6 +91,9 @@ export type ShotImagePrepRetryReason = (typeof SHOT_IMAGE_PREP_RETRY_REASONS)[nu
 export type ShotImagePrepFailurePolicy = (typeof SHOT_IMAGE_PREP_FAILURE_POLICIES)[number];
 
 export type ShotImagePrepProfileActionId = (typeof SHOT_IMAGE_PREP_PROFILE_ACTIONS)[number];
+
+export type ShotImagePrepComicImageAuditOrientation =
+  (typeof SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_ORIENTATIONS)[number];
 
 export type ShotImageRegenerationRecommendationDecision =
   | 'not-needed'
@@ -272,6 +287,12 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
       required: true,
     },
     { columnId: 'regenerationRecommendation', cellType: 'status', required: false },
+    {
+      columnId: 'imageAudit',
+      cellType: 'json',
+      required: false,
+      schemaRef: 'neko.shot-image-prep.image-audit',
+    },
     { columnId: 'textRemoval', cellType: 'status', required: false },
     {
       columnId: 'maskRefs',
@@ -317,6 +338,7 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
         'imageStrategy',
         'operationPlan',
         'regenerationRecommendation',
+        'imageAudit',
         'status',
       ],
     },
@@ -352,6 +374,12 @@ export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
     },
     { columnId: 'operationPlan', cellType: 'tags', required: true },
     { columnId: 'regenerationRecommendation', cellType: 'status', required: false },
+    {
+      columnId: 'imageAudit',
+      cellType: 'json',
+      required: false,
+      schemaRef: 'neko.shot-image-prep.image-audit',
+    },
     { columnId: 'textRemoval', cellType: 'status', required: false },
     {
       columnId: 'maskRefs',
@@ -536,6 +564,8 @@ export function projectShotImageRegenerationRecommendation(
     plan.imageStrategy === 'transform-original' ||
     hasOperation(
       plan,
+      'rotate',
+      'split-panels',
       'remove-text',
       'inpaint',
       'outpaint',
@@ -581,7 +611,13 @@ function deriveShotImagePrepPlanFromShot(input: {
   const referenceBundle = buildReferenceBundle(input.shot);
   const maskRefs = sourceMediaRefs.filter((ref) => ref.role === 'mask');
   const perceptionCardRefs = readPerceptionRefs(input.shot);
-  const operationPlan = defaultOperationsForStrategy(input.shot.imageStrategy);
+  const comicImageAudit = readComicImageAudit(input.shot);
+  const operationPlan = mergeShotImagePrepOperations(
+    defaultOperationsForStrategy(input.shot.imageStrategy),
+    sourceBacked || sourceMediaRefs.length > 0
+      ? operationsFromComicImageAudit(comicImageAudit)
+      : [],
+  );
   if (sourceBacked && sourceMediaRefs.length === 0) {
     diagnostics.push(
       diagnostic(
@@ -623,13 +659,14 @@ function deriveShotImagePrepPlanFromShot(input: {
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };
   const recommendation = projectShotImageRegenerationRecommendation(plan);
+  const metadata: ShotImagePrepJsonRecord = {
+    ...(comicImageAudit ? { imageAudit: comicImageAudit } : {}),
+    regenerationRecommendation: recommendationToJson(recommendation),
+  };
   return {
     plan: {
       ...plan,
-      metadata: {
-        ...(plan.metadata ?? {}),
-        regenerationRecommendation: recommendationToJson(recommendation),
-      },
+      metadata,
     },
     diagnostics,
   };
@@ -648,6 +685,75 @@ function defaultOperationsForStrategy(
     case 'generate-new':
       return ['generate-keyframe'];
   }
+}
+
+const SHOT_IMAGE_PREP_OPERATION_ORDER: readonly ShotImagePrepOperation[] = [
+  'crop-panel',
+  'rotate',
+  'split-panels',
+  'remove-text',
+  'inpaint',
+  'outpaint',
+  'colorize',
+  'upscale',
+  'style-normalize',
+  'redraw',
+  'generate-keyframe',
+] as const;
+
+function mergeShotImagePrepOperations(
+  ...operationGroups: readonly (readonly ShotImagePrepOperation[])[]
+): readonly ShotImagePrepOperation[] {
+  const selected = new Set<ShotImagePrepOperation>();
+  for (const operations of operationGroups) {
+    for (const operation of operations) {
+      selected.add(operation);
+    }
+  }
+  return SHOT_IMAGE_PREP_OPERATION_ORDER.filter((operation) => selected.has(operation));
+}
+
+function operationsFromComicImageAudit(
+  audit: ShotImagePrepJsonRecord | undefined,
+): readonly ShotImagePrepOperation[] {
+  if (!audit) return [];
+  const operations: ShotImagePrepOperation[] = [];
+  const orientation = audit['orientation'];
+  if (
+    audit['requiresRotation'] === true ||
+    orientation === 'rotate-90' ||
+    orientation === 'rotate-180' ||
+    orientation === 'rotate-270'
+  ) {
+    operations.push('rotate');
+  }
+  if (
+    audit['requiresSplit'] === true ||
+    positiveNumberValue(audit, 'panelCount') > 1 ||
+    positiveNumberValue(audit, 'derivedShotCount') > 1
+  ) {
+    operations.push('split-panels');
+  }
+  if (audit['requiresTextRemoval'] === true) operations.push('remove-text');
+  if (audit['requiresInpaint'] === true) operations.push('inpaint');
+  if (audit['requiresOutpaint'] === true) operations.push('outpaint');
+  if (audit['requiresColorize'] === true) operations.push('colorize');
+  if (audit['requiresUpscale'] === true) operations.push('upscale');
+  if (audit['requiresStyleNormalize'] === true) operations.push('style-normalize');
+  if (audit['requiresRedraw'] === true) operations.push('redraw');
+  if (audit['requiresKeyframeGeneration'] === true) operations.push('generate-keyframe');
+  const requiredOperations = audit['requiredOperations'];
+  if (Array.isArray(requiredOperations)) {
+    for (const operation of requiredOperations) {
+      if (isShotImagePrepOperation(operation)) operations.push(operation);
+    }
+  }
+  return mergeShotImagePrepOperations(operations);
+}
+
+function positiveNumberValue(record: ShotImagePrepJsonRecord, key: string): number {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function hasOperation(
@@ -698,6 +804,88 @@ function readPerceptionRefs(shot: StoryboardShotRow): readonly PerceptionCardRef
   );
 }
 
+function readComicImageAudit(shot: StoryboardShotRow): ShotImagePrepJsonRecord | undefined {
+  const extension = shot.extensions?.[SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY];
+  if (!isRecord(extension)) return undefined;
+
+  const audit: Record<string, ShotImagePrepJsonValue> = {};
+  copyString(extension, audit, 'sourceImageGroupId');
+  copyString(extension, audit, 'sourcePageRefId');
+  copyString(extension, audit, 'sourcePanelId');
+  copyString(extension, audit, 'panelId');
+  copyString(extension, audit, 'notes');
+  copyComicImageAuditOrientation(extension, audit);
+  copyPositiveNumber(extension, audit, 'panelCount');
+  copyPositiveNumber(extension, audit, 'derivedShotCount');
+  copyBoolean(extension, audit, 'requiresRotation');
+  copyBoolean(extension, audit, 'requiresSplit');
+  copyBoolean(extension, audit, 'requiresTextRemoval');
+  copyBoolean(extension, audit, 'requiresInpaint');
+  copyBoolean(extension, audit, 'requiresOutpaint');
+  copyBoolean(extension, audit, 'requiresColorize');
+  copyBoolean(extension, audit, 'requiresUpscale');
+  copyBoolean(extension, audit, 'requiresStyleNormalize');
+  copyBoolean(extension, audit, 'requiresRedraw');
+  copyBoolean(extension, audit, 'requiresKeyframeGeneration');
+  const cropBBox = extension['cropBBox'];
+  if (isRecord(cropBBox) && isJsonValue(cropBBox)) audit['cropBBox'] = cropBBox;
+  const requiredOperations = extension['requiredOperations'];
+  if (Array.isArray(requiredOperations)) {
+    const operations = requiredOperations.filter(isShotImagePrepOperation);
+    if (operations.length > 0) audit['requiredOperations'] = operations;
+  }
+
+  return Object.keys(audit).length > 0 ? audit : undefined;
+}
+
+function copyString(
+  source: Record<string, unknown>,
+  target: Record<string, ShotImagePrepJsonValue>,
+  key: string,
+): void {
+  const value = source[key];
+  if (typeof value === 'string' && value.trim().length > 0) {
+    target[key] = value;
+  }
+}
+
+function copyBoolean(
+  source: Record<string, unknown>,
+  target: Record<string, ShotImagePrepJsonValue>,
+  key: string,
+): void {
+  const value = source[key];
+  if (typeof value === 'boolean') {
+    target[key] = value;
+  }
+}
+
+function copyPositiveNumber(
+  source: Record<string, unknown>,
+  target: Record<string, ShotImagePrepJsonValue>,
+  key: string,
+): void {
+  const value = source[key];
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    target[key] = value;
+  }
+}
+
+function copyComicImageAuditOrientation(
+  source: Record<string, unknown>,
+  target: Record<string, ShotImagePrepJsonValue>,
+): void {
+  const value = source['orientation'];
+  if (
+    typeof value === 'string' &&
+    SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_ORIENTATIONS.includes(
+      value as ShotImagePrepComicImageAuditOrientation,
+    )
+  ) {
+    target['orientation'] = value;
+  }
+}
+
 function projectPlanToRow(plan: ShotImagePrepPlan): GenericTableRow {
   const recommendation = projectShotImageRegenerationRecommendation(plan);
   const cells: Record<string, GenericTableCell> = {
@@ -709,6 +897,14 @@ function projectPlanToRow(plan: ShotImagePrepPlan): GenericTableRow {
   };
   const sourcePanel = mediaRefToMediaItem(plan.sourceMediaRefs.find((ref) => ref.role !== 'mask'));
   if (sourcePanel) cells['sourcePanel'] = { type: 'media-preview', value: sourcePanel };
+  const imageAudit = readImageAuditMetadata(plan);
+  if (imageAudit) {
+    cells['imageAudit'] = {
+      type: 'json',
+      value: imageAudit,
+      schemaRef: 'neko.shot-image-prep.image-audit',
+    };
+  }
   if (plan.maskRefs && plan.maskRefs.length > 0) {
     cells['maskRefs'] = { type: 'json', value: { refs: plan.maskRefs.map(mediaRefToJson) } };
   }
@@ -742,8 +938,14 @@ function projectPlanToRow(plan: ShotImagePrepPlan): GenericTableRow {
       shotId: plan.shotId,
       status: plan.status,
       regenerationRecommendation: recommendationToJson(recommendation),
+      ...(imageAudit ? { imageAudit } : {}),
     },
   };
+}
+
+function readImageAuditMetadata(plan: ShotImagePrepPlan): ArtifactJsonValue | undefined {
+  const imageAudit = plan.metadata?.['imageAudit'];
+  return imageAudit !== undefined && isJsonValue(imageAudit) ? imageAudit : undefined;
 }
 
 function comicShotAssetPrepColumns(): readonly GenericTableColumn[] {
@@ -762,6 +964,12 @@ function comicShotAssetPrepColumns(): readonly GenericTableColumn[] {
       columnId: 'regenerationRecommendation',
       label: 'Image Recommendation',
       cellType: 'status',
+    },
+    {
+      columnId: 'imageAudit',
+      label: 'Image Audit',
+      cellType: 'json',
+      schemaRef: 'neko.shot-image-prep.image-audit',
     },
     { columnId: 'textRemoval', label: 'Text', cellType: 'status' },
     {
