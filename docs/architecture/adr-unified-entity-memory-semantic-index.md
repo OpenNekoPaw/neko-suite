@@ -45,6 +45,7 @@ Neko Suite 应采用：
 4. 各子包可以动态贡献实体候选、人物观察、媒体文本段和语义标签，但确认、合并、冲突处理必须经过 review/approval。
 5. 工程文件可以保存语义 sidecar / index；原始媒体文件默认不被修改。
 6. 子包对协议的支持应通过 capability registry typed facets 声明，而不是 Agent 或 Skill 硬编码。
+7. Agent 应感知语义缓存状态并基于缓存编排增量分析，但不拥有缓存存储、失效、索引或 confirmed fact 写入。
 
 ---
 
@@ -75,6 +76,8 @@ Neko Suite 应采用：
 - `EntityMemoryContribution`：子包贡献信封。
 
 子包只提交 contribution，不直接调用其他子包内部 API，也不直接写确认事实。
+
+Agent / Skill 只通过 semantic cache / project search / entity facade 查询和提交 contribution，不读取 `.neko/.cache`、`.neko/semantic-index` 的具体文件布局，也不持有索引 manifest schema。缓存写入、失效、重建、FTS/vector 投影和 provider 版本管理由对应 host service 拥有。
 
 ### 3.3 是否易于扩展与测试？
 
@@ -215,7 +218,7 @@ interface MediaTextSegment {
 
 V1 不要求一次性实现完整类型，但方向应明确：OCR/字幕/ASR 的结果必须是可引用 segment，而不是散落在 Agent 文本里。
 
-`MediaTextSegment.provenance.sourceKind` 应与 `CharacterObservation.provenance.source` 使用同一组来源词汇，或在 validator 中提供显式映射。推荐映射如下：
+`MediaTextSegment.provenance.sourceKind` 必须与 `CharacterObservation.provenance.source` 使用同一组来源词汇，或在共享 validator 中提供显式映射。该映射是 P0 契约，不是 UI 文案建议；所有子包 contribution 必须通过同一组 guard / validator，避免各包发明新的 `sourceKind` 字符串。推荐映射如下：
 
 | Media text 来源 | `sourceKind` / observation source | 推荐 `CharacterMemorySourceRef` |
 |---|---|---|
@@ -232,7 +235,20 @@ V1 不要求一次性实现完整类型，但方向应明确：OCR/字幕/ASR �
 
 `sourceKind` 是来源分类和审阅排序信号，不是稳定身份。稳定身份必须由 `sourceRef` 和 `range` 承担。
 
-`MediaTextRange` 在 V1 复用并扩展 `CharacterMemorySourceRange`，保持 story、comic、video、audio、document、canvas、cut 等证据可用同一套字段表达。它是扁平结构，字段较多但多数场景只会使用其中少数几个。P0 validator 应根据 `sourceRef.kind` 检查有效字段组合；如果长期出现大量无效组合或字段歧义，再升级为按 `sourceRef.kind` 区分的 discriminated union。
+`MediaTextRange` 在 V1 复用并扩展 `CharacterMemorySourceRange`，保持 story、comic、video、audio、document、canvas、cut 等证据可用同一套字段表达。它是扁平结构，字段较多但多数场景只会使用其中少数几个。P0 validator 必须根据 `sourceRef.kind` 检查有效字段组合，并把无效组合作为契约错误或显式 downgrade warning 返回；如果长期出现大量无效组合或字段歧义，再升级为按 `sourceRef.kind` 区分的 discriminated union。
+
+P0 validator matrix 的最低要求：
+
+| `sourceRef.kind` | 允许的 range 字段方向 |
+|---|---|
+| `story` | scene / shot / line 范围 |
+| `document` | line / document asset 范围 |
+| `canvas-node` | node / asset / bounding box |
+| `cut-range` | scene / shot / time range |
+| `artifact-resource` / `generated-asset` / `tool-result` | 保留弹性，但仍必须通过 safe refs、bounded JSON 和 provenance 检查 |
+| `manual` | scene / shot / asset 辅助定位 |
+
+现有实现已在 `@neko/shared` 的 media semantic index validator 中收敛了 `sourceKind` 映射和 range-field compatibility，后续 PR 应把这些 guard 作为唯一入口扩展，而不是在 Agent、Canvas 或 Dashboard 内复制判断逻辑。
 
 ### 4.4 PerceptionCard 与语义索引的关系
 
@@ -451,6 +467,78 @@ Vision LLM OCR / VLM 可以在以下情况介入：
 
 ---
 
+## 6.5 Agent 对语义缓存的感知边界
+
+结论：**Agent 应感知和使用语义缓存，但不拥有语义缓存。**
+
+长篇文档和漫画分段分析时，Agent 需要在分析前查询已有 evidence，避免跨会话重复分析。例如会话 A 已分析某漫画前 10 页并产生人物候选、外观观察和 OCR/text segments；会话 B 继续分析后 10 页时，应先查询同一 `sourceRef` 的语义覆盖情况，复用前 10 页 fresh evidence，只对缺失或 stale 的页段执行新分析。
+
+推荐数据流：
+
+```text
+ReadDocument manifest/range
+  -> query semantic cache / project search by sourceRef + locator range
+  -> classify coverage: fresh / stale / missing / partial / failed
+  -> inject known candidates, observations and text segments into analysis context
+  -> analyze only missing or stale ranges
+  -> emit MediaSemanticIndex / EntityMemoryContribution with provenance
+  -> review / merge / confirm through entity and dashboard workflows
+```
+
+Agent 负责：
+
+- 查询已有语义 evidence、候选实体、人物观察和 range coverage。
+- 基于 freshness、confidence、source priority 和 skill 目标决定复用、补分析或请求重分析。
+- 将新分析结果作为 `MediaSemanticIndex`、`MediaTextSegment`、`EntityMention`、`CharacterObservation` 或 `EntityMemoryContribution` 提交给 host service。
+- 在用户界面和 review artifact 中标注哪些内容来自缓存、哪些内容来自本轮分析、哪些页段缺失或 stale。
+
+Agent 不负责：
+
+- 扫描或解析 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store 的内部文件。
+- 管理 cache manifest、原子写入、GC、quota、文件 watcher、embedding 重建或 provider 版本迁移。
+- 直接修改 confirmed entity、`EntityAssetBinding`、accepted character memory 或原始媒体 metadata。
+- 持久化 prompt、LLM 上下文、scratch path、Webview URI、blob URL、base64 或 provider 临时句柄作为语义缓存。
+
+语义缓存键必须稳定且可失效，至少包含：
+
+```text
+sourceRef / sourceDocumentId / source hash
+  + locator / pageIndex / entryPath / panelId / timeRange
+  + contentFingerprint
+  + analysisKind
+  + skillId / skillVersion
+  + providerId / modelVersion
+  + schemaVersion
+```
+
+如果缓存命中但版本、source fingerprint 或 provider 能力不匹配，应返回 `stale` 或 `partial`，由 Agent 决定是否继续使用旧 evidence 作为弱上下文、后台重建，或要求立即重分析。
+
+P1 开始前必须先交付 semantic coverage facade 的最小 DTO schema，否则 Agent 集成会被迫绕过抽象。最小接口应覆盖：
+
+```ts
+interface SemanticCoverageQuery {
+  sourceRef: MediaSemanticSourceRef;
+  range?: MediaTextRange;
+  analysisKind: 'ocr' | 'asr' | 'subtitle' | 'vision' | 'entity-mention' | 'character-observation' | 'storyboard';
+  skillId?: string;
+  skillVersion?: string;
+  providerId?: string;
+  schemaVersion?: number;
+}
+
+interface SemanticCoverageResult {
+  coverage: 'fresh' | 'stale' | 'missing' | 'partial' | 'failed';
+  freshness: 'fresh' | 'stale' | 'building' | 'partial' | 'failed';
+  matchedRanges?: readonly MediaTextRange[];
+  staleReasons?: readonly string[];
+  diagnostics?: readonly ContributionDiagnostic[];
+}
+```
+
+该 DTO 是 host-mediated contract；Agent 可以据此规划增量分析，但不能从结果反推或读取缓存文件布局。
+
+---
+
 ## 七、工程文件和媒体文件中的语义信息
 
 ### 7.1 是否需要
@@ -489,6 +577,8 @@ Vision LLM OCR / VLM 可以在以下情况介入：
 - SQLite / FTS / vector index 只作为 `.neko/.cache/` 下的派生缓存或查询投影。
 - `CharacterEvidenceLedger`、`MediaSemanticIndex`、entity bindings 和 text segments 可以进入 Tier 1 查询缓存，但写入路径必须先落 SSOT，再由 watcher / indexer 重建缓存。
 - cache DB 损坏、缺失或版本不匹配时可删除重建，不应丢失人物记忆或语义证据。
+
+实现时应避免为 semantic sidecar 和 structured persistence 各建一套 JSON-to-SQLite / JSON-to-FTS 投影管线。推荐由同一个 project index coordinator 或等价 neutral host service 接收 source changed / sidecar changed / provider refreshed 事件，再统一触发 search、FTS、vector、RAG 等可重建投影。领域包可以贡献 provider，但不应各自维护互相不可见的 watcher/indexer。
 
 ### 7.3 什么时候可以写进媒体包
 
@@ -564,15 +654,20 @@ Storyboard shot / Canvas node / Cut cue
 
 ### P0: 契约收敛
 
+- 明确 P0 架构方向：`MediaSemanticIndex` 的 SSOT 是工程 sidecar / JSON 事实，`project-cache-search-service` 负责只读 searchable projection、freshness 和可重建缓存；Agent 不拥有索引 schema。
+- 明确 P0 facade 归属方向：semantic coverage query 走 `neko-search` host-mediated facade 或等价 neutral host service；`neko-agent` 只能作为消费者和 tool bridge，不成为 cache coordinator。
 - 明确 `EntityMemoryContribution` 共享类型。
 - 明确 `MediaTextSegment` / `MediaSemanticIndex` 最小类型。
 - 将 `ContentStableSourceRef`、`CharacterMemorySourceRef`、PerceptionCard asset refs、`MediaTextSegment.sourceRef` 的语义对齐。
 - 定义 `MediaBoundingBox`、`PerceptionCardRef` 和 `sourceKind -> CharacterObservation.provenance.source` 映射。
+- 定义并强制使用共享 sourceKind / range validator matrix：`MediaTextSegment.provenance.sourceKind`、`CharacterObservation.provenance.source`、`sourceRef.kind` 和 range 字段组合必须由 `@neko/shared` validator 判定。
 - 定义 contribution validator：safe refs、bounded JSON、confidence、review policy。
 - 明确 `reviewPolicy` 只设置默认审阅入口，不授予 accepted 写入权限。
 
 ### P1: Agent 与 Dashboard 审阅
 
+- 在 Agent 集成前交付 semantic coverage facade DTO schema，至少支持 sourceRef + range + analysisKind 查询，并返回 coverage、freshness、stale reasons 和 diagnostics。
+- Agent 在长文档 / 漫画 / 视频分段分析前必须通过 host facade 查询 semantic coverage，复用 fresh evidence，只补分析 missing / stale ranges。
 - Agent 将 OCR/ASR/漫画分析结果投影为 review artifact。
 - Dashboard 提供统一 review surface：accept / reject / conflict / supersede。
 - Dashboard Webview 只发送 `DashboardCreativeEntityActionRequest` + `memoryReviewId`；具体写入由拥有该实体的 `DashboardCreativeEntitySource` 执行。
@@ -589,6 +684,8 @@ Storyboard shot / Canvas node / Cut cue
 ### P3: 语义索引与检索
 
 - `.neko/semantic-index` 支持分页和按 asset/source 查询。
+- Semantic cache / project search facade 返回 range coverage、freshness、provider/schema version 和 diagnostics，供 Agent 做增量分析编排；Agent 不读取缓存文件。
+- Semantic sidecar、CharacterEvidenceLedger、entity binding 和 project facts 的缓存投影应收敛到统一 project index coordinator / neutral host service，避免多套 watcher/indexer 并行写 SQLite / FTS / vector cache。
 - 本地 OCR provider 支持 image/comic/document-page/video-frame 的 on-demand 与 idle extraction，并输出 `MediaTextSegment(kind="ocr")`。
 - OCR/ASR/subtitle extraction 支持 idle/on-demand；本地 OCR 为第一层默认文本提取，Vision LLM OCR 为增强/兜底 provider。
 - embedding/vector/RAG 作为 optional provider capability，不进入基础必需路径。
@@ -598,10 +695,11 @@ Storyboard shot / Canvas node / Cut cue
 
 ## 十一、开放问题
 
-1. `MediaSemanticIndex` 是否应作为 `project-cache-search-service` 的 typed projection，还是独立 `.neko/semantic-index`？
+1. `MediaSemanticIndex` 的 P0 方向已确定为 `.neko/semantic-index` / 工程 sidecar SSOT + `project-cache-search-service` typed projection；仍需细化 sidecar 分页、文件命名、watcher invalidation 和 migration。
 2. OCR/ASR 文本的语言检测、分词和 embedding 是否由 runtime-media、agent platform，还是 search provider 负责？本地 OCR provider 应先输出语言/置信度的基础字段，后续分词和 embedding 可由 search/index provider 接管。
 3. GeneratedAsset 的 semantic sidecar 是否应进入 asset package 标准格式？
 4. `MediaSemanticIndex` 与 `PerceptionCard` 的重建策略应由哪个服务触发：perception pipeline、asset indexer，还是 project cache coordinator？
+5. Semantic coverage facade 的 P0 方向已确定为 neutral host-mediated service，优先由 `neko-search` host integration 暴露 coverage / freshness / diagnostics；仍需决定是否拆出独立 `neko-semantic-cache` 包。边界要求不变：Agent 只消费 host-mediated DTO，不拥有缓存 schema。
 
 ---
 
@@ -615,6 +713,6 @@ Storyboard shot / Canvas node / Cut cue
 - `CharacterMemory` 做可审阅证据层。
 - OCR、字幕、ASR、PerceptionCard 的可索引投影进入媒体语义索引。
 - 子包通过 capability typed facets 动态贡献证据。
-- Agent 编排提取和 review artifact。
+- Agent 感知语义缓存 coverage，编排增量提取和 review artifact，但不拥有缓存存储或 confirmed fact 写入。
 - Dashboard / 用户确认后才写入长期实体和记忆。
 - 工程保存语义 sidecar，原始媒体文件保持干净。

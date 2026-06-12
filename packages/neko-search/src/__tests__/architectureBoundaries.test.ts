@@ -34,6 +34,24 @@ describe('neko-search architecture boundaries', () => {
     expect(source).not.toContain('search-index.json');
     expect(source).not.toContain('media-metadata.json');
   });
+
+  it('keeps Agent and Webview consumers behind the semantic coverage facade', () => {
+    const consumerRoots = [
+      resolve(packageRoot, '../neko-agent/packages/agent/src'),
+      resolve(packageRoot, '../neko-agent/packages/extension/src'),
+      resolve(packageRoot, '../neko-agent/packages/webview/src'),
+    ];
+    const files = consumerRoots.flatMap((root) => listTypeScriptFiles(root));
+
+    for (const file of files) {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf8'));
+      expect(source, relative(packageRoot, file)).not.toContain('.neko/semantic-index');
+      expect(source, relative(packageRoot, file)).not.toMatch(/semantic.*\.neko\/\.cache/i);
+      expect(source, relative(packageRoot, file)).not.toMatch(
+        /semantic.*(sqlite|vector-store|fts-index)/i,
+      );
+    }
+  });
 });
 
 function listTypeScriptFiles(dir: string): string[] {
@@ -43,4 +61,8 @@ function listTypeScriptFiles(dir: string): string[] {
     if (entry.isDirectory()) return listTypeScriptFiles(entryPath);
     return entry.name.endsWith('.ts') ? [entryPath] : [];
   });
+}
+
+function stripTypeScriptComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }

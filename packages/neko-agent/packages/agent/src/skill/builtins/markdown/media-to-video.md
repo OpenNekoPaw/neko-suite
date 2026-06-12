@@ -18,6 +18,7 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 - Markdown is presentation only. For storyboard, animation, Canvas, Cut, generated media, or execution summaries, emit validated structured payloads.
 - Use actual tool-result or generated-asset references for media. Do not invent ids.
 - Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.
+- Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Use QuerySemanticCoverage when a focused skill needs semantic evidence reuse for stable source ranges.
 - Ask for approval before bulk generation, colorization, destructive timeline replacement, or long export unless the user explicitly requested automatic execution and policy allows it.
 
 ## Related Skill Selection
@@ -31,4 +32,4 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 
 ## Tool Use
 
-Use ReadDocument, ReadImage, or ReadDocumentImage for evidence. Use generation tools only after approval. Use Canvas/Cut tools only after the structured payload validates and the target capability exists.
+Use QuerySemanticCoverage before expensive long-range analysis when stable source refs and ranges are available. Use ReadDocument, ReadImage, or ReadDocumentImage for missing/stale evidence. Use generation tools only after approval. Use Canvas/Cut tools only after the structured payload validates and the target capability exists.

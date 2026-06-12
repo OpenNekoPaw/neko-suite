@@ -434,6 +434,16 @@ export function validateMediaTextSegment(
   return validationResult(diagnostics, options);
 }
 
+export function validateMediaTextRangeForSourceRef(
+  range: unknown,
+  sourceRef: unknown,
+  options: MediaSemanticValidationOptions = {},
+): MediaSemanticValidationResult {
+  const diagnostics: MediaSemanticDiagnostic[] = [];
+  validateTextRange(range, sourceRef, [], diagnostics, options);
+  return validationResult(diagnostics, options);
+}
+
 export function validateEntityMemoryContribution(
   value: unknown,
   options: MediaSemanticValidationOptions = {},

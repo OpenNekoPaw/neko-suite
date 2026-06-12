@@ -230,6 +230,7 @@ export const TOOL_NAMES_SYSTEM = {
   READ_DOCUMENT: 'ReadDocument',
   READ_IMAGE: 'ReadImage',
   READ_DOCUMENT_IMAGE: 'ReadDocumentImage',
+  QUERY_SEMANTIC_COVERAGE: 'QuerySemanticCoverage',
   // Core file tools (registered by agent core, not extension)
   READ: 'Read',
   WRITE: 'Write',

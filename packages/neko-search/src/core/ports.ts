@@ -1,4 +1,9 @@
-import type { ProjectSearchQuery, ProjectSearchQueryContext } from '@neko/shared';
+import type {
+  ProjectSearchQuery,
+  ProjectSearchQueryContext,
+  ProjectSemanticCoverageQuery,
+  ProjectSemanticCoverageResult,
+} from '@neko/shared';
 
 export interface ProjectSearchDisposable {
   dispose(): void;
@@ -8,6 +13,15 @@ export type ProjectSearchEvent<T> = (listener: (event: T) => void) => ProjectSea
 
 export interface ProjectSearchLogger {
   warn(message: string, metadata?: Record<string, unknown>): void;
+}
+
+export interface ProjectSemanticCoverageProvider {
+  readonly providerId: string;
+  querySemanticCoverage(
+    query: ProjectSemanticCoverageQuery,
+    context: ProjectSearchQueryContext,
+  ): Promise<ProjectSemanticCoverageResult>;
+  dispose?(): void;
 }
 
 export type ProjectSearchContextResolver = (

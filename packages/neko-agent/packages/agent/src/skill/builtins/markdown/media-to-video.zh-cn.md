@@ -18,6 +18,7 @@
 - Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。
 - 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
 - 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。
+- 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。聚焦 Skill 需要复用稳定来源范围的语义证据时，使用 QuerySemanticCoverage。
 - 批量生成、上色、破坏性替换时间线或长时间导出前必须请求用户确认，除非用户明确要求自动执行且策略允许。
 
 ## 相关 Skill 选择
@@ -31,4 +32,4 @@
 
 ## 工具使用
 
-用 ReadDocument、ReadImage 或 ReadDocumentImage 获取证据。只有在用户确认后再使用生成工具。只有结构化 payload 校验通过且目标能力存在时，才使用 Canvas/Cut 工具。
+当存在稳定 source ref 和 range 时，在昂贵的长范围分析前先使用 QuerySemanticCoverage。missing/stale 证据再通过 ReadDocument、ReadImage 或 ReadDocumentImage 获取。只有在用户确认后再使用生成工具。只有结构化 payload 校验通过且目标能力存在时，才使用 Canvas/Cut 工具。

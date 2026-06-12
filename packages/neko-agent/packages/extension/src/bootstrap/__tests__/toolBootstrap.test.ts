@@ -37,6 +37,7 @@ describe('toolBootstrap', () => {
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT);
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
+    expect(registered).toContain(TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE);
   });
 
   it('skips already registered extension tools on re-registration', () => {
@@ -64,6 +65,7 @@ describe('toolBootstrap', () => {
           TOOL_NAMES_SYSTEM.READ_DOCUMENT,
           TOOL_NAMES_SYSTEM.READ_IMAGE,
           TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+          TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
         ],
         loadingTier: 'resident',
         alwaysActive: true,

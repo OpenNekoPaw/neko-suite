@@ -1,6 +1,7 @@
 export {
   PROJECT_SEARCH_QUERY_COMMAND,
   PROJECT_SEARCH_REFRESH_COMMAND,
+  PROJECT_SEARCH_SEMANTIC_COVERAGE_COMMAND,
   registerProjectSearchService,
   registerProjectSearchWatchers,
 } from './commands';
@@ -15,4 +16,8 @@ export {
   resolveProjectSearchContext,
   type VSCodeProjectSearchContextResolverOptions,
 } from './projectResolver';
+export {
+  createVSCodeSemanticCoverageProvider,
+  type VSCodeSemanticCoverageProviderOptions,
+} from './semanticCoverageProvider';
 export { queryProjectGlobalSearch } from './globalSearch';

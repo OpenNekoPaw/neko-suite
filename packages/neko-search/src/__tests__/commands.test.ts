@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { registerProjectSearchService } from '../host-vscode/commands';
+import type { ProjectSemanticCoverageQuery } from '@neko/shared';
+import {
+  PROJECT_SEARCH_SEMANTIC_COVERAGE_COMMAND,
+  registerProjectSearchService,
+} from '../host-vscode/commands';
 
 vi.mock('vscode', async () => await import('../testing/vscode'));
 vi.mock('../host-vscode/compatAdapters', () => ({
@@ -126,6 +130,47 @@ describe('project search commands', () => {
 
     service.dispose();
   });
+
+  it('registers semantic coverage command through the host facade and sanitizes invalid provider output', async () => {
+    const context = { subscriptions: [] as { dispose(): void }[] } as vscode.ExtensionContext;
+    const query = makeCoverageQuery();
+    const service = registerProjectSearchService(context, {
+      resolvePath: async (filePath) => filePath,
+      semanticCoverageProviders: [
+        {
+          providerId: 'semantic.sidecar',
+          querySemanticCoverage: vi.fn(async () => ({
+            query,
+            coverage: 'fresh' as const,
+            freshness: 'fresh' as const,
+            provider: {
+              providerId: 'semantic.sidecar',
+              sourceIdentity: '/workspace/.neko/semantic-index/comic/page-1.json',
+            },
+            projectRoot: '/workspace',
+          })),
+        },
+      ],
+    });
+    const command = commandHandler(PROJECT_SEARCH_SEMANTIC_COVERAGE_COMMAND);
+
+    expect(command).toBeDefined();
+    const result = await command?.(query);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        coverage: 'failed',
+        freshness: 'failed',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'semantic-coverage-invalid-provider-result' }),
+        ]),
+        projectRoot: '/workspace',
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain('/workspace/.neko/semantic-index');
+
+    service.dispose();
+  });
 });
 
 function setWorkspaceFolders(
@@ -155,4 +200,27 @@ function watcherForPattern(pattern: string): {
 
 function isUriLike(value: unknown): value is { readonly fsPath?: string } {
   return typeof value === 'object' && value !== null && 'fsPath' in value;
+}
+
+function commandHandler(commandId: string): ((...args: unknown[]) => Promise<unknown>) | undefined {
+  return vi
+    .mocked(vscode.commands.registerCommand)
+    .mock.calls.find((call) => call[0] === commandId)?.[1] as
+    | ((...args: unknown[]) => Promise<unknown>)
+    | undefined;
+}
+
+function makeCoverageQuery(): ProjectSemanticCoverageQuery {
+  return {
+    sourceRef: {
+      kind: 'document',
+      source: { kind: 'file', projectRelativePath: 'docs/comic.pdf' },
+    },
+    range: {
+      startLine: 1,
+      endLine: 10,
+    },
+    analysisKind: 'ocr',
+    projectRoot: '/workspace',
+  };
 }

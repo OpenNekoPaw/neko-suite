@@ -98,15 +98,15 @@ export interface BatchExecutionRuntimeBackfillInput {
   readonly diagnostics?: readonly ComicAnimationDiagnostic[];
 }
 
-export interface ComicAnimationSidecarPaths {
-  readonly semanticIndexRoot: '${PROJECT}/.neko/semantic-index';
-  readonly memoryRoot: '${PROJECT}/.neko/memory';
-  readonly runsRoot: '${PROJECT}/.neko/runs';
-  readonly cacheRoot: '${PROJECT}/.neko/.cache';
-}
+export type ComicAnimationSemanticRecordKind =
+  | 'semantic-evidence'
+  | 'memory-fact'
+  | 'run-artifact'
+  | 'approval-record'
+  | 'batch-summary';
 
-export interface ComicAnimationSidecarRecord {
-  readonly path: string;
+export interface ComicAnimationSemanticRecord {
+  readonly semanticKey: string;
   readonly recordKind:
     | 'semantic-evidence'
     | 'memory-fact'
@@ -116,23 +116,18 @@ export interface ComicAnimationSidecarRecord {
   readonly content: unknown;
 }
 
-export interface ComicAnimationSidecarPort {
-  read(path: string): Promise<unknown | undefined>;
-  write(record: ComicAnimationSidecarRecord): Promise<void>;
-  exists(path: string): Promise<boolean>;
+export interface ComicAnimationSemanticStorePort {
+  read(semanticKey: string): Promise<unknown | undefined>;
+  write(record: ComicAnimationSemanticRecord): Promise<void>;
+  exists(semanticKey: string): Promise<boolean>;
 }
 
 export interface ComicAnimationCacheProjectionPort {
-  rebuildFromSidecars(records: readonly ComicAnimationSidecarRecord[]): Promise<void> | void;
+  rebuildFromSemanticRecords(
+    records: readonly ComicAnimationSemanticRecord[],
+  ): Promise<void> | void;
   clearCache?(): Promise<void> | void;
 }
-
-export const COMIC_ANIMATION_SIDECAR_PATHS: ComicAnimationSidecarPaths = {
-  semanticIndexRoot: '${PROJECT}/.neko/semantic-index',
-  memoryRoot: '${PROJECT}/.neko/memory',
-  runsRoot: '${PROJECT}/.neko/runs',
-  cacheRoot: '${PROJECT}/.neko/.cache',
-};
 
 export function createDefaultComicAnimationPerceptionFacets(): readonly PerceptionCapabilityFacet[] {
   return [
@@ -442,33 +437,32 @@ export function backfillBatchExecutionPlanFromSummary(input: BatchExecutionRunti
   };
 }
 
-export function createComicAnimationSidecarRecord(input: {
-  readonly recordKind: ComicAnimationSidecarRecord['recordKind'];
+export function createComicAnimationSemanticRecord(input: {
+  readonly recordKind: ComicAnimationSemanticRecord['recordKind'];
   readonly id: string;
   readonly content: unknown;
-}): ComicAnimationSidecarRecord {
-  const root = sidecarRootForRecordKind(input.recordKind);
+}): ComicAnimationSemanticRecord {
   return {
     recordKind: input.recordKind,
-    path: `${root}/${sanitizePathPart(input.id)}.json`,
+    semanticKey: `${input.recordKind}:${sanitizePathPart(input.id)}`,
     content: input.content,
   };
 }
 
-export async function writeComicAnimationSidecarFirst(input: {
-  readonly sidecar: ComicAnimationSidecarPort;
+export async function writeComicAnimationSemanticRecordFirst(input: {
+  readonly semanticStore: ComicAnimationSemanticStorePort;
   readonly projection?: ComicAnimationCacheProjectionPort;
-  readonly record: ComicAnimationSidecarRecord;
+  readonly record: ComicAnimationSemanticRecord;
 }): Promise<void> {
-  await input.sidecar.write(input.record);
-  await input.projection?.rebuildFromSidecars([input.record]);
+  await input.semanticStore.write(input.record);
+  await input.projection?.rebuildFromSemanticRecords([input.record]);
 }
 
-export async function rebuildComicAnimationCacheFromSidecars(input: {
-  readonly sidecarRecords: readonly ComicAnimationSidecarRecord[];
+export async function rebuildComicAnimationProjectionFromSemanticRecords(input: {
+  readonly semanticRecords: readonly ComicAnimationSemanticRecord[];
   readonly projection: ComicAnimationCacheProjectionPort;
 }): Promise<void> {
-  await input.projection.rebuildFromSidecars(input.sidecarRecords);
+  await input.projection.rebuildFromSemanticRecords(input.semanticRecords);
 }
 
 function shouldScheduleTask(task: IndexTaskState, refresh?: boolean): boolean {
@@ -576,19 +570,6 @@ function mapBatchPlanStatusToExecutionStatus(
     case 'queued':
     case 'running':
       return 'partial';
-  }
-}
-
-function sidecarRootForRecordKind(kind: ComicAnimationSidecarRecord['recordKind']): string {
-  switch (kind) {
-    case 'semantic-evidence':
-      return COMIC_ANIMATION_SIDECAR_PATHS.semanticIndexRoot;
-    case 'memory-fact':
-      return COMIC_ANIMATION_SIDECAR_PATHS.memoryRoot;
-    case 'run-artifact':
-    case 'approval-record':
-    case 'batch-summary':
-      return COMIC_ANIMATION_SIDECAR_PATHS.runsRoot;
   }
 }
 

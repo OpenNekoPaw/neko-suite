@@ -53,7 +53,10 @@ import { registerEntityContributionAutomationCommand } from '@neko/entity/host-v
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
-import { registerProjectSearchService } from '@neko/search/host-vscode';
+import {
+  createVSCodeSemanticCoverageProvider,
+  registerProjectSearchService,
+} from '@neko/search/host-vscode';
 import { resolveDocumentPath } from './services/documentPathResolver';
 import { createAgentProjectSearchAdapters } from './services/agentProjectSearchAdapters';
 import { getSkillFileService } from './services/SkillFileService';
@@ -264,6 +267,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     adapters: createAgentProjectSearchAdapters({
       logger: projectSearchLogger,
     }),
+    semanticCoverageProviders: [
+      createVSCodeSemanticCoverageProvider({
+        logger: projectSearchLogger,
+      }),
+    ],
   });
   context.subscriptions.push(
     registerEntityContributionAutomationCommand({

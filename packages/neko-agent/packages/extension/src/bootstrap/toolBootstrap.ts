@@ -35,6 +35,7 @@ import { getEngineClientProvider } from '../services/engineClientProvider';
 import { createReadDocumentTool } from '../tools/readDocumentTool';
 import { createReadDocumentImageTool } from '../tools/readDocumentImageTool';
 import { createReadImageTool } from '../tools/readImageTool';
+import { createSemanticCoverageTool } from '../tools/semanticCoverageTool';
 
 /**
  * Register neko-agent's own meta-tools.
@@ -71,6 +72,7 @@ export function registerExtensionTools(
       resourceCache: documentResourceCache,
       resolveResourceScope: resolveDocumentResourceScope,
     }),
+    createSemanticCoverageTool(),
   );
   for (const tool of tools) {
     if (!toolRegistry.get?.(tool.name)) {
@@ -89,6 +91,7 @@ export function registerExtensionToolGroups(toolGroupRegistry: IToolGroupRegistr
       TOOL_NAMES_SYSTEM.READ_DOCUMENT,
       TOOL_NAMES_SYSTEM.READ_IMAGE,
       TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+      TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     ],
     alwaysActive: true,
     priority: 100,

@@ -12,11 +12,20 @@ import {
   isProjectSearchProviderCapabilities,
   isProjectSearchQuery,
   isProjectSearchScopeKind,
+  isProjectSemanticCoverageAnalysisKind,
+  isProjectSemanticCoverageQuery,
+  isProjectSemanticCoverageResult,
+  isProjectSemanticCoverageStaleReason,
+  isProjectSemanticCoverageStatus,
   isProjectSemanticProviderMetadata,
   projectCharacterObservationToSearchItem,
   projectMediaSemanticIndexToSearchItems,
+  validateProjectSemanticCoverageQuery,
+  validateProjectSemanticCoverageResult,
   type ProjectSearchItem,
   type ProjectSearchQuery,
+  type ProjectSemanticCoverageQuery,
+  type ProjectSemanticCoverageResult,
 } from '../project-cache-search';
 import { createResourceFingerprint, createResourceRef } from '../resource-cache';
 
@@ -338,4 +347,165 @@ describe('project cache/search contracts', () => {
     expect(canSemanticIndexingWorkBlockProjectOpen('sidecar-projection')).toBe(false);
     expect(canSemanticIndexingWorkBlockProjectOpen('embedding')).toBe(false);
   });
+
+  it('validates semantic coverage enum-like fields', () => {
+    expect(isProjectSemanticCoverageStatus('fresh')).toBe(true);
+    expect(isProjectSemanticCoverageStatus('unknown')).toBe(false);
+    expect(isProjectSemanticCoverageAnalysisKind('ocr')).toBe(true);
+    expect(isProjectSemanticCoverageAnalysisKind('workflow-route')).toBe(false);
+    expect(isProjectSemanticCoverageStaleReason('schema-version')).toBe(true);
+    expect(isProjectSemanticCoverageStaleReason('local-cache-row')).toBe(false);
+  });
+
+  it('accepts semantic coverage queries and results without cache internals', () => {
+    const query = makeCoverageQuery();
+    const result: ProjectSemanticCoverageResult = {
+      query,
+      coverage: 'partial',
+      freshness: 'partial',
+      matchedRanges: [
+        {
+          coverage: 'fresh',
+          freshness: 'fresh',
+          sourceRef: query.sourceRef,
+          range: {
+            startLine: 1,
+            endLine: 10,
+          },
+          segmentIds: ['segment-1'],
+          evidenceIds: ['evidence-1'],
+          provider: {
+            providerId: 'semantic-index.local',
+            schemaVersion: '1',
+            skillId: 'comic-to-storyboard',
+            skillVersion: '2026-06-11',
+          },
+        },
+        {
+          coverage: 'missing',
+          freshness: 'stale',
+          range: {
+            startLine: 11,
+            endLine: 20,
+          },
+          staleReasons: ['range-partial'],
+          diagnostics: [
+            {
+              severity: 'info',
+              code: 'semantic-coverage-missing-range',
+              message: 'Pages 11-20 need normal tool analysis.',
+            },
+          ],
+        },
+      ],
+      staleReasons: ['range-partial'],
+      diagnostics: [
+        {
+          severity: 'info',
+          code: 'semantic-coverage-partial',
+          message: 'Fresh evidence exists for part of the requested range.',
+        },
+      ],
+      provider: {
+        providerId: 'semantic-index.local',
+        schemaVersion: '1',
+      },
+      projectRoot: '/workspace',
+      generation: 7,
+    };
+
+    expect(validateProjectSemanticCoverageQuery(query)).toEqual([]);
+    expect(isProjectSemanticCoverageQuery(query)).toBe(true);
+    expect(validateProjectSemanticCoverageResult(result)).toEqual([]);
+    expect(isProjectSemanticCoverageResult(result)).toBe(true);
+  });
+
+  it('rejects invalid semantic coverage range/source combinations', () => {
+    const diagnostics = validateProjectSemanticCoverageQuery({
+      ...makeCoverageQuery(),
+      sourceRef: {
+        kind: 'document',
+        source: { kind: 'file', projectRelativePath: 'docs/comic.pdf' },
+      },
+      range: {
+        pageId: 'page-1',
+        panelId: 'panel-1',
+      },
+    });
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'invalid-range', path: ['range', 'pageId'] }),
+        expect.objectContaining({ code: 'invalid-range', path: ['range', 'panelId'] }),
+      ]),
+    );
+    expect(isProjectSemanticCoverageQuery({ ...makeCoverageQuery(), analysisKind: 'route' })).toBe(
+      false,
+    );
+  });
+
+  it('rejects semantic coverage cache paths and runtime handles', () => {
+    const badQuery = {
+      ...makeCoverageQuery(),
+      sourceRef: {
+        kind: 'legacy-cache-path',
+        cachePath: '${PROJECT}/.neko/.cache/semantic/pages.json',
+      },
+    };
+    const badResult = {
+      query: makeCoverageQuery(),
+      coverage: 'fresh',
+      freshness: 'fresh',
+      provider: {
+        providerId: 'semantic-index.local',
+        sourceIdentity: '${PROJECT}/.neko/semantic-index/comic/page-1.json',
+      },
+    };
+
+    expect(validateProjectSemanticCoverageQuery(badQuery).map((item) => item.code)).toEqual(
+      expect.arrayContaining(['invalid-source-ref', 'unsafe-runtime-handle']),
+    );
+    expect(validateProjectSemanticCoverageResult(badResult).map((item) => item.code)).toEqual(
+      expect.arrayContaining(['invalid-provider', 'unsafe-runtime-handle']),
+    );
+    expect(
+      validateProjectSemanticCoverageResult({
+        query: makeCoverageQuery(),
+        coverage: 'fresh',
+        freshness: 'fresh',
+        matchedRanges: [
+          {
+            coverage: 'fresh',
+            freshness: 'fresh',
+            diagnostics: [
+              {
+                severity: 'warning',
+                code: 'provider-private',
+                message: 'bad',
+                details: { uri: 'vscode-webview-resource://panel' },
+              },
+            ],
+          },
+        ],
+      }).map((item) => item.code),
+    ).toContain('invalid-matched-ranges');
+  });
 });
+
+function makeCoverageQuery(): ProjectSemanticCoverageQuery {
+  return {
+    sourceRef: {
+      kind: 'document',
+      source: { kind: 'file', projectRelativePath: 'docs/comic.pdf' },
+    },
+    range: {
+      startLine: 1,
+      endLine: 20,
+    },
+    analysisKind: 'ocr',
+    skillId: 'comic-to-storyboard',
+    skillVersion: '2026-06-11',
+    schemaVersion: '1',
+    projectRoot: '/workspace',
+  };
+}

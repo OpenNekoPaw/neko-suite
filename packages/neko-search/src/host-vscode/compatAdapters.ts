@@ -403,12 +403,14 @@ class AssetLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
           variants.map((variant) => variant.name ?? ''),
           variants.flatMap((variant) => variant.files.map((file) => file.name ?? file.path ?? '')),
           variants.flatMap((variant) =>
-            variant.files.flatMap((file) => [
-              file.characterAsset?.assetDimension,
-              file.characterAsset?.mediaKind,
-              file.characterAsset?.storageMode,
-              file.characterAsset?.bundleLocator?.fragmentRef,
-            ]),
+            variant.files.flatMap((file) =>
+              compactStrings([
+                file.characterAsset?.assetDimension,
+                file.characterAsset?.mediaKind,
+                file.characterAsset?.storageMode,
+                file.characterAsset?.bundleLocator?.fragmentRef,
+              ]),
+            ),
           ),
         ]),
         navigationData: {
@@ -933,6 +935,10 @@ function readStringArray(value: unknown): readonly string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
     : [];
+}
+
+function compactStrings(values: readonly (string | undefined)[]): readonly string[] {
+  return values.filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 function readAssetMediaType(value: unknown): AssetMediaType | undefined {

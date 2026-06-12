@@ -1,13 +1,18 @@
 import * as vscode from 'vscode';
+import {
+  validateProjectSemanticCoverageQuery,
+  validateProjectSemanticCoverageResult,
+} from '@neko/shared';
 import type {
   ProjectIndexChangedRef,
   ProjectIndexUpdateReason,
   ProjectSearchAdapter,
   ProjectSearchPartitionKind,
   ProjectSearchQuery,
+  ProjectSemanticCoverageQuery,
 } from '@neko/shared';
 import { ProjectCacheSearchService } from '../core/ProjectCacheSearchService';
-import type { ProjectSearchLogger } from '../core/ports';
+import type { ProjectSearchLogger, ProjectSemanticCoverageProvider } from '../core/ports';
 import { createCompatibilityProjectSearchAdapters } from './compatAdapters';
 import {
   createVSCodeProjectSearchContextResolver,
@@ -16,6 +21,7 @@ import {
 
 export const PROJECT_SEARCH_QUERY_COMMAND = 'neko.projectSearch.query';
 export const PROJECT_SEARCH_REFRESH_COMMAND = 'neko.projectSearch.refresh';
+export const PROJECT_SEARCH_SEMANTIC_COVERAGE_COMMAND = 'neko.projectSearch.querySemanticCoverage';
 const TEXT_DOCUMENT_REFRESH_DEBOUNCE_MS = 400;
 const FILE_WATCHER_REFRESH_DEBOUNCE_MS = 300;
 
@@ -26,6 +32,7 @@ export function registerProjectSearchService(
     readonly resolvePath?: (filePath: string) => Promise<string>;
     readonly logger?: ProjectSearchLogger;
     readonly adapters?: readonly ProjectSearchAdapter[];
+    readonly semanticCoverageProviders?: readonly ProjectSemanticCoverageProvider[];
   } = {},
 ): ProjectCacheSearchService {
   const service = ProjectCacheSearchService.create({
@@ -38,6 +45,9 @@ export function registerProjectSearchService(
   for (const adapter of adapters) {
     context.subscriptions.push(service.registerAdapter(adapter));
   }
+  for (const provider of options.semanticCoverageProviders ?? []) {
+    context.subscriptions.push(service.registerSemanticCoverageProvider(provider));
+  }
 
   const watcherDisposables = registerProjectSearchWatchers(context, service);
 
@@ -47,6 +57,33 @@ export function registerProjectSearchService(
     vscode.commands.registerCommand(
       PROJECT_SEARCH_QUERY_COMMAND,
       async (query: ProjectSearchQuery) => service.query(query),
+    ),
+    vscode.commands.registerCommand(
+      PROJECT_SEARCH_SEMANTIC_COVERAGE_COMMAND,
+      async (query: ProjectSemanticCoverageQuery) => {
+        const queryDiagnostics = validateProjectSemanticCoverageQuery(query);
+        if (queryDiagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+          return {
+            query,
+            coverage: 'failed',
+            freshness: 'failed',
+            diagnostics: queryDiagnostics,
+          };
+        }
+        const result = await service.querySemanticCoverage(query);
+        const resultDiagnostics = validateProjectSemanticCoverageResult(result);
+        if (resultDiagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+          return {
+            query,
+            coverage: 'failed',
+            freshness: 'failed',
+            diagnostics: resultDiagnostics,
+            ...(result.projectRoot ? { projectRoot: result.projectRoot } : {}),
+            ...(result.generation !== undefined ? { generation: result.generation } : {}),
+          };
+        }
+        return result;
+      },
     ),
     vscode.commands.registerCommand(
       PROJECT_SEARCH_REFRESH_COMMAND,

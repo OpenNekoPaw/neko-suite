@@ -3,16 +3,26 @@
 // =============================================================================
 
 import {
+  isContentSourceRef,
+  isWebviewLikeRuntimeValue,
+  type ContentSourceRef,
+} from './content-access';
+import {
+  isResourceRef,
   isResourceCacheStatus,
   isResourceVariantRef,
   type ResourceCacheStatus,
   type ResourceVariantRef,
 } from './resource-cache';
-import type {
-  MediaSemanticIndex,
-  MediaTextSegment,
-  MediaTextSourceKind,
-  MediaTextSegmentKind,
+import {
+  validateMediaTextRangeForSourceRef,
+  type ContributionDiagnostic,
+  type MediaSemanticIndex,
+  type MediaSemanticSourceRef,
+  type MediaTextRange,
+  type MediaTextSegment,
+  type MediaTextSourceKind,
+  type MediaTextSegmentKind,
 } from './media-semantic-index';
 import type { CharacterObservation } from './character-memory';
 
@@ -40,6 +50,28 @@ export type ProjectSearchPartitionKind =
   | 'character-memory';
 
 export type ProjectIndexFreshness = 'fresh' | 'stale' | 'building' | 'partial' | 'failed';
+
+export type ProjectSemanticCoverageStatus = 'fresh' | 'stale' | 'missing' | 'partial' | 'failed';
+
+export type ProjectSemanticCoverageAnalysisKind =
+  | 'ocr'
+  | 'asr'
+  | 'subtitle'
+  | 'vision'
+  | 'entity-mention'
+  | 'character-observation'
+  | 'storyboard';
+
+export type ProjectSemanticCoverageStaleReason =
+  | 'provider-version'
+  | 'schema-version'
+  | 'source-fingerprint'
+  | 'skill-version'
+  | 'missing-provider'
+  | 'index-stale'
+  | 'range-partial'
+  | 'cache-rebuilding'
+  | 'provider-failed';
 
 export type ProjectIndexPartitionStatus =
   | 'idle'
@@ -80,6 +112,9 @@ export interface ProjectSemanticProviderMetadata {
   readonly chunkingVersion?: string;
   readonly sourceIdentity?: string;
   readonly indexVersion?: string;
+  readonly schemaVersion?: string;
+  readonly skillId?: string;
+  readonly skillVersion?: string;
 }
 
 export interface ProjectSearchProviderCapabilities {
@@ -223,6 +258,44 @@ export interface ProjectSearchResult {
   readonly generation?: number;
 }
 
+export interface ProjectSemanticCoverageQuery {
+  readonly sourceRef: MediaSemanticSourceRef;
+  readonly range?: MediaTextRange;
+  readonly analysisKind: ProjectSemanticCoverageAnalysisKind;
+  readonly skillId?: string;
+  readonly skillVersion?: string;
+  readonly providerId?: string;
+  readonly schemaVersion?: string;
+  readonly projectRoot?: string;
+  readonly contextFilePath?: string;
+  readonly contextUri?: string;
+}
+
+export interface ProjectSemanticCoverageMatchedRange {
+  readonly range?: MediaTextRange;
+  readonly coverage: ProjectSemanticCoverageStatus;
+  readonly freshness: ProjectIndexFreshness;
+  readonly sourceRef?: MediaSemanticSourceRef;
+  readonly evidenceIds?: readonly string[];
+  readonly segmentIds?: readonly string[];
+  readonly observationIds?: readonly string[];
+  readonly provider?: ProjectSemanticProviderMetadata;
+  readonly staleReasons?: readonly ProjectSemanticCoverageStaleReason[];
+  readonly diagnostics?: readonly ContributionDiagnostic[];
+}
+
+export interface ProjectSemanticCoverageResult {
+  readonly query: ProjectSemanticCoverageQuery;
+  readonly coverage: ProjectSemanticCoverageStatus;
+  readonly freshness: ProjectIndexFreshness;
+  readonly matchedRanges?: readonly ProjectSemanticCoverageMatchedRange[];
+  readonly staleReasons?: readonly ProjectSemanticCoverageStaleReason[];
+  readonly diagnostics?: readonly ContributionDiagnostic[];
+  readonly provider?: ProjectSemanticProviderMetadata;
+  readonly projectRoot?: string;
+  readonly generation?: number;
+}
+
 export interface ProjectIndexChangedRef {
   readonly kind: ProjectSearchItemKind | ProjectSearchPartitionKind | 'file' | 'settings';
   readonly id?: string;
@@ -330,6 +403,38 @@ export const PROJECT_INDEX_FRESHNESS_VALUES: readonly ProjectIndexFreshness[] = 
   'failed',
 ] as const;
 
+export const PROJECT_SEMANTIC_COVERAGE_STATUSES: readonly ProjectSemanticCoverageStatus[] = [
+  'fresh',
+  'stale',
+  'missing',
+  'partial',
+  'failed',
+] as const;
+
+export const PROJECT_SEMANTIC_COVERAGE_ANALYSIS_KINDS: readonly ProjectSemanticCoverageAnalysisKind[] =
+  [
+    'ocr',
+    'asr',
+    'subtitle',
+    'vision',
+    'entity-mention',
+    'character-observation',
+    'storyboard',
+  ] as const;
+
+export const PROJECT_SEMANTIC_COVERAGE_STALE_REASONS: readonly ProjectSemanticCoverageStaleReason[] =
+  [
+    'provider-version',
+    'schema-version',
+    'source-fingerprint',
+    'skill-version',
+    'missing-provider',
+    'index-stale',
+    'range-partial',
+    'cache-rebuilding',
+    'provider-failed',
+  ] as const;
+
 export const PROJECT_INDEX_PARTITION_STATUS_VALUES: readonly ProjectIndexPartitionStatus[] = [
   'idle',
   'loading',
@@ -418,6 +523,24 @@ export function isProjectIndexFreshness(value: unknown): value is ProjectIndexFr
   return includesString(PROJECT_INDEX_FRESHNESS_VALUES, value);
 }
 
+export function isProjectSemanticCoverageStatus(
+  value: unknown,
+): value is ProjectSemanticCoverageStatus {
+  return includesString(PROJECT_SEMANTIC_COVERAGE_STATUSES, value);
+}
+
+export function isProjectSemanticCoverageAnalysisKind(
+  value: unknown,
+): value is ProjectSemanticCoverageAnalysisKind {
+  return includesString(PROJECT_SEMANTIC_COVERAGE_ANALYSIS_KINDS, value);
+}
+
+export function isProjectSemanticCoverageStaleReason(
+  value: unknown,
+): value is ProjectSemanticCoverageStaleReason {
+  return includesString(PROJECT_SEMANTIC_COVERAGE_STALE_REASONS, value);
+}
+
 export function isProjectIndexPartitionStatus(
   value: unknown,
 ): value is ProjectIndexPartitionStatus {
@@ -467,11 +590,15 @@ export function isProjectSemanticProviderMetadata(
 ): value is ProjectSemanticProviderMetadata {
   if (!isRecord(value) || typeof value['providerId'] !== 'string') return false;
   return (
+    isSafeSemanticCoverageValue(value) &&
     optionalString(value['model']) &&
     optionalString(value['modelVersion']) &&
     optionalString(value['chunkingVersion']) &&
     optionalString(value['sourceIdentity']) &&
-    optionalString(value['indexVersion'])
+    optionalString(value['indexVersion']) &&
+    optionalString(value['schemaVersion']) &&
+    optionalString(value['skillId']) &&
+    optionalString(value['skillVersion'])
   );
 }
 
@@ -506,6 +633,200 @@ export function isProjectSearchQuery(value: unknown): value is ProjectSearchQuer
     optionalProjectSearchScopes(value['scopes']) &&
     optionalNumber(value['limit']) &&
     optionalFreshnessPolicy(value['freshness'])
+  );
+}
+
+export function validateProjectSemanticCoverageQuery(
+  value: unknown,
+): readonly ContributionDiagnostic[] {
+  const diagnostics: ContributionDiagnostic[] = [];
+  if (!isRecord(value)) {
+    return [
+      coverageDiagnostic(
+        'error',
+        'invalid-semantic-coverage-query',
+        'Semantic coverage query must be an object.',
+      ),
+    ];
+  }
+  if (!isStableSemanticSourceRef(value['sourceRef'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-source-ref',
+        'Semantic coverage requires a stable source reference.',
+        ['sourceRef'],
+      ),
+    );
+  }
+  if (!isProjectSemanticCoverageAnalysisKind(value['analysisKind'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-analysis-kind',
+        'Unsupported semantic coverage analysis kind.',
+        ['analysisKind'],
+        {
+          expected: PROJECT_SEMANTIC_COVERAGE_ANALYSIS_KINDS.join(', '),
+        },
+      ),
+    );
+  }
+  if (value['range'] !== undefined) {
+    const rangeValidation = validateMediaTextRangeForSourceRef(value['range'], value['sourceRef']);
+    diagnostics.push(
+      ...rangeValidation.diagnostics.map((diagnostic) =>
+        coverageDiagnostic(
+          diagnostic.severity,
+          diagnostic.code,
+          diagnostic.message,
+          ['range', ...diagnostic.path],
+          {
+            ...(diagnostic.expected ? { expected: diagnostic.expected } : {}),
+            ...(diagnostic.actual !== undefined ? { actual: diagnostic.actual } : {}),
+            ...(diagnostic.details ? { details: diagnostic.details } : {}),
+          },
+        ),
+      ),
+    );
+  }
+  for (const field of [
+    'skillId',
+    'skillVersion',
+    'providerId',
+    'schemaVersion',
+    'projectRoot',
+    'contextFilePath',
+    'contextUri',
+  ] as const) {
+    if (!optionalString(value[field])) {
+      diagnostics.push(
+        coverageDiagnostic(
+          'error',
+          'invalid-required-field',
+          `${field} must be a string when provided.`,
+          [field],
+        ),
+      );
+    }
+  }
+  if (!isSafeSemanticCoverageValue(value)) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'unsafe-runtime-handle',
+        'Semantic coverage query cannot expose cache paths or runtime handles.',
+      ),
+    );
+  }
+  return diagnostics;
+}
+
+export function validateProjectSemanticCoverageResult(
+  value: unknown,
+): readonly ContributionDiagnostic[] {
+  const diagnostics: ContributionDiagnostic[] = [];
+  if (!isRecord(value)) {
+    return [
+      coverageDiagnostic(
+        'error',
+        'invalid-semantic-coverage-result',
+        'Semantic coverage result must be an object.',
+      ),
+    ];
+  }
+  diagnostics.push(...validateProjectSemanticCoverageQuery(value['query']));
+  if (!isProjectSemanticCoverageStatus(value['coverage'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-coverage-status',
+        'Unsupported semantic coverage status.',
+        ['coverage'],
+      ),
+    );
+  }
+  if (!isProjectIndexFreshness(value['freshness'])) {
+    diagnostics.push(
+      coverageDiagnostic('error', 'invalid-freshness', 'Unsupported freshness value.', [
+        'freshness',
+      ]),
+    );
+  }
+  if (!optionalCoverageMatchedRanges(value['matchedRanges'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-matched-ranges',
+        'Semantic coverage matched ranges must use shared DTOs.',
+        ['matchedRanges'],
+      ),
+    );
+  }
+  if (!optionalCoverageStaleReasons(value['staleReasons'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-stale-reason',
+        'Semantic coverage stale reasons must use shared codes.',
+        ['staleReasons'],
+      ),
+    );
+  }
+  if (!optionalContributionDiagnostics(value['diagnostics'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-diagnostics',
+        'Semantic coverage diagnostics must be serializable contribution diagnostics.',
+        ['diagnostics'],
+      ),
+    );
+  }
+  if (!optionalProjectSemanticProviderMetadata(value['provider'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-provider',
+        'Semantic coverage provider metadata is invalid.',
+        ['provider'],
+      ),
+    );
+  }
+  if (!optionalString(value['projectRoot']) || !optionalNumber(value['generation'])) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'invalid-required-field',
+        'Semantic coverage projectRoot and generation must use shared DTO shapes.',
+      ),
+    );
+  }
+  if (!isSafeSemanticCoverageValue(value)) {
+    diagnostics.push(
+      coverageDiagnostic(
+        'error',
+        'unsafe-runtime-handle',
+        'Semantic coverage result cannot expose cache paths or runtime handles.',
+      ),
+    );
+  }
+  return diagnostics;
+}
+
+export function isProjectSemanticCoverageQuery(
+  value: unknown,
+): value is ProjectSemanticCoverageQuery {
+  return validateProjectSemanticCoverageQuery(value).every(
+    (diagnostic) => diagnostic.severity !== 'error',
+  );
+}
+
+export function isProjectSemanticCoverageResult(
+  value: unknown,
+): value is ProjectSemanticCoverageResult {
+  return validateProjectSemanticCoverageResult(value).every(
+    (diagnostic) => diagnostic.severity !== 'error',
   );
 }
 
@@ -694,6 +1015,68 @@ function optionalProjectSemanticProviderMetadata(value: unknown): boolean {
   return value === undefined || isProjectSemanticProviderMetadata(value);
 }
 
+function optionalCoverageMatchedRanges(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isProjectSemanticCoverageMatchedRange(item)))
+  );
+}
+
+function isProjectSemanticCoverageMatchedRange(
+  value: unknown,
+): value is ProjectSemanticCoverageMatchedRange {
+  if (!isRecord(value)) return false;
+  return (
+    isProjectSemanticCoverageStatus(value['coverage']) &&
+    isProjectIndexFreshness(value['freshness']) &&
+    (value['range'] === undefined ||
+      validateMediaTextRangeForSourceRef(value['range'], value['sourceRef']).ok) &&
+    (value['sourceRef'] === undefined || isStableSemanticSourceRef(value['sourceRef'])) &&
+    optionalStringArray(value['evidenceIds']) &&
+    optionalStringArray(value['segmentIds']) &&
+    optionalStringArray(value['observationIds']) &&
+    optionalProjectSemanticProviderMetadata(value['provider']) &&
+    optionalCoverageStaleReasons(value['staleReasons']) &&
+    optionalContributionDiagnostics(value['diagnostics']) &&
+    isSafeSemanticCoverageValue(value)
+  );
+}
+
+function optionalCoverageStaleReasons(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isProjectSemanticCoverageStaleReason(item)))
+  );
+}
+
+function optionalContributionDiagnostics(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isContributionDiagnosticLike(item)))
+  );
+}
+
+function isContributionDiagnosticLike(value: unknown): value is ContributionDiagnostic {
+  if (!isRecord(value)) return false;
+  return (
+    isDiagnosticSeverity(value['severity']) &&
+    typeof value['code'] === 'string' &&
+    typeof value['message'] === 'string' &&
+    (value['path'] === undefined ||
+      (Array.isArray(value['path']) &&
+        value['path'].every(
+          (segment) => typeof segment === 'string' || typeof segment === 'number',
+        ))) &&
+    (value['sourceRef'] === undefined || isRecord(value['sourceRef'])) &&
+    optionalJsonRecord(value['details']) &&
+    isSafeSemanticCoverageValue(value)
+  );
+}
+
+function isDiagnosticSeverity(value: unknown): value is ContributionDiagnostic['severity'] {
+  return value === 'error' || value === 'warning' || value === 'info' || value === 'suggestion';
+}
+
 function isProjectSearchScope(value: unknown): value is ProjectSearchScope {
   return (
     isRecord(value) &&
@@ -718,6 +1101,10 @@ function optionalStringArray(value: unknown): boolean {
   );
 }
 
+function optionalJsonRecord(value: unknown): boolean {
+  return value === undefined || (isRecord(value) && isJsonValue(value));
+}
+
 function optionalBoolean(value: unknown): boolean {
   return value === undefined || typeof value === 'boolean';
 }
@@ -728,6 +1115,101 @@ function optionalNumber(value: unknown): boolean {
 
 function includesString<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === 'string' && values.includes(value as T);
+}
+
+function isStableSemanticSourceRef(value: unknown): value is MediaSemanticSourceRef {
+  if (!isContentSourceRef(value)) return false;
+  return !isCacheOrRuntimeSemanticSourceRef(value);
+}
+
+function isCacheOrRuntimeSemanticSourceRef(ref: ContentSourceRef): boolean {
+  if (ref.kind === 'runtime' || ref.kind === 'legacy-cache-path') return true;
+  if (isResourceRef(ref) && ref.scope === 'extension-private') return true;
+  return !isSafeSemanticCoverageValue(ref);
+}
+
+function isSafeSemanticCoverageValue(value: unknown): boolean {
+  if (!isJsonValue(value)) return false;
+  return findUnsafeSemanticCoverageValue(value) === undefined;
+}
+
+function findUnsafeSemanticCoverageValue(value: JsonValue): string | undefined {
+  if (typeof value === 'string') {
+    return isUnsafeSemanticCoverageString(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const unsafe = findUnsafeSemanticCoverageValue(item);
+      if (unsafe) return unsafe;
+    }
+    return undefined;
+  }
+  if (isRecord(value)) {
+    for (const item of Object.values(value)) {
+      const unsafe = findUnsafeSemanticCoverageValue(item);
+      if (unsafe) return unsafe;
+    }
+  }
+  return undefined;
+}
+
+function isUnsafeSemanticCoverageString(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    isWebviewLikeRuntimeValue(trimmed) ||
+    trimmed.startsWith('vscode-webview://') ||
+    trimmed.startsWith('file://') ||
+    trimmed.startsWith('sqlite://') ||
+    trimmed.startsWith('fts://') ||
+    trimmed.startsWith('vector://') ||
+    trimmed.startsWith('scratch://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.includes('/.neko/.cache') ||
+    trimmed.includes('\\.neko\\.cache') ||
+    trimmed.includes('/.neko/semantic-index') ||
+    trimmed.includes('\\.neko\\semantic-index') ||
+    trimmed.includes('.sqlite') ||
+    trimmed.includes('.db') ||
+    trimmed.includes('vector-store') ||
+    trimmed.includes('fts-index') ||
+    trimmed.includes('provider-private')
+  );
+}
+
+function coverageDiagnostic(
+  severity: ContributionDiagnostic['severity'],
+  code: string,
+  message: string,
+  path: readonly (string | number)[] = [],
+  details?: Record<string, string | number | boolean | null | readonly JsonValue[] | JsonRecord>,
+): ContributionDiagnostic {
+  return {
+    severity,
+    code,
+    message,
+    ...(path.length > 0 ? { path } : {}),
+    ...(details ? { details } : {}),
+  };
+}
+
+type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonRecord;
+
+type JsonRecord = {
+  readonly [key: string]: JsonValue;
+};
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return typeof value !== 'number' || Number.isFinite(value);
+  }
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (isRecord(value)) return Object.values(value).every(isJsonValue);
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

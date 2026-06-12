@@ -17,6 +17,14 @@ describe('project cache/search architecture guards', () => {
     expect(source).not.toContain('media-metadata.json');
   });
 
+  it('registers semantic coverage through the host facade provider', () => {
+    const source = readRepoFile('packages/neko-agent/packages/extension/src/index.ts');
+
+    expect(source).toContain('createVSCodeSemanticCoverageProvider');
+    expect(source).toContain('semanticCoverageProviders');
+    expect(source).toContain('registerProjectSearchService');
+  });
+
   it('keeps Webview mention UI free of cache file paths and filesystem APIs', () => {
     const source = readRepoFile(
       'packages/neko-agent/packages/webview/src/components/ChatView/InputArea/MentionMenu.tsx',

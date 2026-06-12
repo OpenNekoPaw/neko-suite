@@ -14,6 +14,10 @@ export {
   writeProjectSearchCacheManifest,
 } from './cacheManifest';
 export {
+  aggregateProjectSemanticCoverage,
+  type ProjectSemanticCoverageAggregationInput,
+} from './semanticCoverage';
+export {
   projectSearchItemToGlobalSearchItem,
   projectSearchResultToGlobalSearchResult,
   toProjectGlobalSearchQuery,
@@ -28,4 +32,5 @@ export type {
   ProjectSearchEvent,
   ProjectSearchLogger,
   ProjectSearchRuntimePorts,
+  ProjectSemanticCoverageProvider,
 } from './ports';

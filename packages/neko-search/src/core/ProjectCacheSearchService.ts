@@ -6,12 +6,15 @@ import type {
   ProjectSearchPartitionKind,
   ProjectSearchQuery,
   ProjectSearchResult,
+  ProjectSemanticCoverageQuery,
+  ProjectSemanticCoverageResult,
 } from '@neko/shared';
 import { ProjectIndexCoordinator } from './ProjectIndexCoordinator';
 import type {
   ProjectSearchDisposable,
   ProjectSearchEvent,
   ProjectSearchRuntimePorts,
+  ProjectSemanticCoverageProvider,
 } from './ports';
 
 export class ProjectCacheSearchService implements ProjectSearchDisposable {
@@ -29,6 +32,12 @@ export class ProjectCacheSearchService implements ProjectSearchDisposable {
     return this.coordinator.registerAdapter(adapter);
   }
 
+  registerSemanticCoverageProvider(
+    provider: ProjectSemanticCoverageProvider,
+  ): ProjectSearchDisposable {
+    return this.coordinator.registerSemanticCoverageProvider(provider);
+  }
+
   async ensureInitialized(projectRoot?: string): Promise<void> {
     await this.coordinator.ensureInitialized(projectRoot);
   }
@@ -43,6 +52,12 @@ export class ProjectCacheSearchService implements ProjectSearchDisposable {
       freshness: result.freshness,
       generation: result.generation,
     };
+  }
+
+  async querySemanticCoverage(
+    query: ProjectSemanticCoverageQuery,
+  ): Promise<ProjectSemanticCoverageResult> {
+    return this.coordinator.querySemanticCoverage(query);
   }
 
   async refresh(

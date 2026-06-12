@@ -15,16 +15,16 @@ import {
 import {
   backfillBatchExecutionPlanFromSummary,
   createAssetIndexingBatchExecutionPlan,
-  createComicAnimationSidecarRecord,
+  createComicAnimationSemanticRecord,
   createDefaultComicAnimationPerceptionFacets,
   createMentionResolverContinuityContext,
   createShotImagePrepBatchExecutionPlan,
   isIndexedRangeTaskStale,
   planComicAnimationIndexingTasks,
   queryStoryContinuitySnapshot,
-  rebuildComicAnimationCacheFromSidecars,
+  rebuildComicAnimationProjectionFromSemanticRecords,
   registerComicAnimationAsset,
-  writeComicAnimationSidecarFirst,
+  writeComicAnimationSemanticRecordFirst,
 } from '../comic-animation-indexing-runtime';
 
 describe('comic animation indexing runtime', () => {
@@ -154,8 +154,8 @@ describe('comic animation indexing runtime', () => {
     expect(result.summary.metadata).toEqual(expect.objectContaining({ succeeded: 1, failed: 1 }));
   });
 
-  it('writes sidecars before rebuilding cache projections and cache deletion keeps evidence', async () => {
-    const record = createComicAnimationSidecarRecord({
+  it('writes semantic records before rebuilding cache projections and cache deletion keeps evidence', async () => {
+    const record = createComicAnimationSemanticRecord({
       recordKind: 'semantic-evidence',
       id: 'asset-page-1/index',
       content: { assetId: 'asset-page-1' },
@@ -164,27 +164,27 @@ describe('comic animation indexing runtime', () => {
     const rebuild = vi.fn(async () => undefined);
     const clearCache = vi.fn(async () => undefined);
 
-    await writeComicAnimationSidecarFirst({
-      sidecar: {
+    await writeComicAnimationSemanticRecordFirst({
+      semanticStore: {
         read: async () => undefined,
         write,
         exists: async () => true,
       },
       projection: {
-        rebuildFromSidecars: rebuild,
+        rebuildFromSemanticRecords: rebuild,
         clearCache,
       },
       record,
     });
     await clearCache();
-    await rebuildComicAnimationCacheFromSidecars({
-      sidecarRecords: [record],
+    await rebuildComicAnimationProjectionFromSemanticRecords({
+      semanticRecords: [record],
       projection: {
-        rebuildFromSidecars: rebuild,
+        rebuildFromSemanticRecords: rebuild,
       },
     });
 
-    expect(record.path).toBe('${PROJECT}/.neko/semantic-index/asset-page-1-index.json');
+    expect(record.semanticKey).toBe('semantic-evidence:asset-page-1-index');
     expect(write).toHaveBeenCalledBefore(rebuild);
     expect(clearCache).toHaveBeenCalled();
     expect(rebuild).toHaveBeenLastCalledWith([record]);

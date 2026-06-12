@@ -9,16 +9,24 @@ import type {
   ProjectSearchPartitionStatusSnapshot,
   ProjectSearchQuery,
   ProjectSearchQueryContext,
+  ProjectSemanticCoverageQuery,
+  ProjectSemanticCoverageResult,
 } from '@neko/shared';
 import { matchesProjectSearchItem, rankProjectSearchItems } from './normalization';
 import { DEFAULT_PROJECT_SEARCH_PORTS } from './defaults';
-import type { ProjectSearchDisposable, ProjectSearchRuntimePorts } from './ports';
+import type {
+  ProjectSearchDisposable,
+  ProjectSearchRuntimePorts,
+  ProjectSemanticCoverageProvider,
+} from './ports';
+import { aggregateProjectSemanticCoverage } from './semanticCoverage';
 import { SimpleEventEmitter } from './simpleEventEmitter';
 
 const DEFAULT_LIMIT = 50;
 
 export class ProjectIndexCoordinator implements ProjectSearchDisposable {
   private readonly adapters = new Map<ProjectSearchPartitionKind, ProjectSearchAdapter>();
+  private readonly coverageProviders = new Map<string, ProjectSemanticCoverageProvider>();
   private readonly initializedProjects = new Set<string>();
   private readonly disposables: ProjectSearchDisposable[] = [];
   private generation = 0;
@@ -42,6 +50,22 @@ export class ProjectIndexCoordinator implements ProjectSearchDisposable {
           this.adapters.delete(adapter.partition);
         }
         adapter.dispose?.();
+      },
+    };
+  }
+
+  registerSemanticCoverageProvider(
+    provider: ProjectSemanticCoverageProvider,
+  ): ProjectSearchDisposable {
+    const previous = this.coverageProviders.get(provider.providerId);
+    previous?.dispose?.();
+    this.coverageProviders.set(provider.providerId, provider);
+    return {
+      dispose: () => {
+        if (this.coverageProviders.get(provider.providerId) === provider) {
+          this.coverageProviders.delete(provider.providerId);
+        }
+        provider.dispose?.();
       },
     };
   }
@@ -117,6 +141,48 @@ export class ProjectIndexCoordinator implements ProjectSearchDisposable {
     };
   }
 
+  async querySemanticCoverage(
+    query: ProjectSemanticCoverageQuery,
+  ): Promise<ProjectSemanticCoverageResult> {
+    const context = await this.resolveContext({
+      text: '',
+      mode: 'agent-tool',
+      projectRoot: query.projectRoot,
+      contextFilePath: query.contextFilePath,
+      contextUri: query.contextUri,
+    });
+    const projectRoot = context.projectRoot;
+    if (!projectRoot) {
+      return {
+        query,
+        coverage: 'failed',
+        freshness: 'failed',
+        staleReasons: ['missing-provider'],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'semantic-coverage-missing-project-root',
+            message: 'Semantic coverage requires a resolved project context.',
+          },
+        ],
+        generation: this.generation,
+      };
+    }
+
+    await this.ensureInitialized(projectRoot);
+    const providers = this.selectSemanticCoverageProviders(query);
+    const settled = await Promise.allSettled(
+      providers.map((provider) => provider.querySemanticCoverage(query, context)),
+    );
+    return aggregateProjectSemanticCoverage({
+      query,
+      context,
+      generation: this.generation,
+      providerResults: settled,
+      providerIds: providers.map((provider) => provider.providerId),
+    });
+  }
+
   async refresh(
     projectRoot: string,
     reason: ProjectIndexUpdateReason,
@@ -155,6 +221,10 @@ export class ProjectIndexCoordinator implements ProjectSearchDisposable {
       adapter.dispose?.();
     }
     this.adapters.clear();
+    for (const provider of this.coverageProviders.values()) {
+      provider.dispose?.();
+    }
+    this.coverageProviders.clear();
     this.initializedProjects.clear();
   }
 
@@ -166,6 +236,14 @@ export class ProjectIndexCoordinator implements ProjectSearchDisposable {
       if (kinds.size === 0) return true;
       return partitionMayReturnKind(adapter.partition, kinds);
     });
+  }
+
+  private selectSemanticCoverageProviders(
+    query: ProjectSemanticCoverageQuery,
+  ): ProjectSemanticCoverageProvider[] {
+    const providers = [...this.coverageProviders.values()];
+    if (!query.providerId) return providers;
+    return providers.filter((provider) => provider.providerId === query.providerId);
   }
 
   private emitChange(
