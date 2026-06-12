@@ -124,3 +124,60 @@ The system SHALL report complete unknown node types as warnings in normal load m
 #### Scenario: Strict validation rejects unknown node
 - **WHEN** strict validation is requested for a Canvas with an unknown node type
 - **THEN** validation reports the unknown node as an error
+
+### Requirement: Relationship rendering consumes projected relationship views
+The system SHALL keep relationship data in top-level Canvas connections while renderers consume a projected relationship view whenever organization membership hides, summarizes, or locally expands contained nodes.
+
+#### Scenario: Hidden organization child does not leak raw edge
+- **WHEN** a node is hidden from the top-level node layer because it is drawn inside a container
+- **THEN** the top-level connection renderer does not draw a raw line to that hidden node and instead uses the projected direct, aggregate, internal, or hidden state
+
+#### Scenario: Relationship source of truth remains top-level
+- **WHEN** a connection is aggregated or hidden in the rendered view
+- **THEN** the underlying real connection remains stored in top-level `CanvasData.connections` with its original endpoint IDs unless a typed relationship mutation changes it
+
+#### Scenario: Local container view can expose internal relationships
+- **WHEN** a container renderer exposes a focused local editing surface for its children
+- **THEN** it may render projected internal relationships for those children without moving connection ownership into the container node content
+
+### Requirement: Layer validation distinguishes organization and relationship failures
+The system SHALL report organization membership failures separately from relationship endpoint, projection, and connection-order failures.
+
+#### Scenario: Parent child mismatch reports organization diagnostic
+- **WHEN** a child parent ID and container child list disagree
+- **THEN** validation reports an organization consistency diagnostic
+
+#### Scenario: Dangling connection reports relationship diagnostic
+- **WHEN** a connection endpoint references a missing node
+- **THEN** validation reports a relationship endpoint diagnostic
+
+#### Scenario: Unsupported connection-order sync reports policy diagnostic
+- **WHEN** a container policy requests a connection-order synchronization mode that is unsupported for the involved connection semantic kind
+- **THEN** validation reports a policy diagnostic and leaves real connections unchanged
+
+### Requirement: Playback metadata is an extension layer over the layered node model
+The system SHALL treat playback metadata as an optional extension layer that references spatial, content, organization, and relationship data through IDs and endpoint contracts. Playback metadata MUST NOT redefine the authority of node position, content ownership, container membership, or top-level connections.
+
+#### Scenario: Playback order does not change canvas coordinates
+- **WHEN** a node has playback order metadata
+- **THEN** its `position`, `size`, `zIndex`, and parent membership remain unchanged
+
+#### Scenario: Playback role does not replace node type
+- **WHEN** a node has playback role `start` or `end`
+- **THEN** the node's Canvas node type remains unchanged and adapter-specific node types such as `narrative-start` retain their existing semantics
+
+#### Scenario: Playback references relationship data by ID
+- **WHEN** a playback plan includes a transition derived from a Canvas connection
+- **THEN** the plan references the source connection ID and does not embed a duplicate authoritative connection object inside the node
+
+### Requirement: Playback projection preserves layered validation invariants
+The system SHALL validate playback projections against existing layered node invariants. Projection MUST report diagnostics for dangling source nodes, invalid container references, or dangling connection endpoints instead of repairing the base graph implicitly.
+
+#### Scenario: Missing playback source node is diagnosed
+- **WHEN** playback metadata references an entry node ID that is absent from the Canvas node list
+- **THEN** projection reports a typed diagnostic and does not create a synthetic base node
+
+#### Scenario: Dangling connection endpoint is not followed
+- **WHEN** a playable connection references a missing source or target node
+- **THEN** playback projection excludes that transition and reports a diagnostic
+

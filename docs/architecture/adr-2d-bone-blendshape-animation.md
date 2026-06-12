@@ -98,6 +98,32 @@ OpenSpec change `implement-2d-bone-blendshape-animation` 已落地本 ADR 的大
 
 Neko Native Puppet 是主格式，Live2D 是输入格式，不是长期运行时核心。
 
+### Live2D SDK 与 Runtime Adapter 边界
+
+> **结论：runtime-puppet 可以忽略 Live2D SDK/Core 的运行时支持，但不能忽略 Live2D 生态的导入、转换、预览与可选高保真播放需求。**
+
+`runtime-puppet` 的职责保持为 Neko 原生 2D 角色运行时：Bone2D、BlendShape、ControlDriver、AnimationClip2D、ExpressionPreset、SpringBone2D、IK、导出与实时流。它不直接链接 Live2D Cubism Core，也不把 Cubism 参数/Deformer 作为内部 SSOT。
+
+需要高保真 Cubism 播放时，采用独立 `Live2dRuntimeAdapter`（或后续 `runtime-live2d-adapter`）：
+
+| 层 | 是否依赖 Live2D SDK/Core | 职责 |
+|---|---:|---|
+| `runtime-puppet` | 否 | Neko 原生 `.nkp` v2 / `.nkentity` v2 执行、编辑、导出、流式渲染 |
+| MOC3 import converter | 否（clean-room parser） | `.model3.json` / `.moc3` / `.zip` 读取，转换为 Bone2D + BlendShape + metadata |
+| `Live2dRuntimeAdapter` | 可选 | 使用 Cubism SDK/Core 做原生 Cubism 高保真播放、校验对比或兼容预览 |
+| `runtime-stage` | 否（只依赖 adapter 合同） | 把 Live2D actor 作为一种 StageActor 调度，统一输入、事件、对话、session |
+| Export / Compositor | 否（只消费帧/层） | 消费 adapter 或 puppet 产出的 GpuLayer / frame stream |
+
+边界规则：
+
+1. 开源核心不内置 Cubism Core；Live2D 官方说明 SDK 下载需同意 Proprietary / Open Software License，Cubism Core 不发布在 GitHub、随官方 SDK 包分发（见 [Cubism SDK license terms](https://www.live2d.com/en/sdk/about/) 与 [Cubism Core manual](https://docs.live2d.com/en/cubism-sdk-manual/cubism-core/)），因此必须作为可选 adapter、feature gate 或用户自带依赖处理。
+2. `runtime-puppet` 不新增 Cubism 专属组件。Cubism 参数进入 Neko 后应映射为标准 face controls、BlendShape weight、ControlDriver 或 source metadata。
+3. `Live2dRuntimeAdapter` 不拥有 Neko 角色事实来源；它只执行外部 Live2D bundle 或提供转换质量基准。
+4. Stage 同场景可以混用 2D Native Puppet、3D Scene Actor、Live2D Adapter Actor、Spine Adapter Actor，但它们通过 `StageActor` / `StageBinding` / `StageEvent` 对齐，而不是互相调用内部服务。
+5. 若用户要编辑并长期维护角色，应导入/转换为 `.nkp` v2；若用户要保持 Cubism 原貌表演，可选择 adapter 路径，但编辑能力受 SDK 与格式限制。
+
+这与 Unity 的常见处理方式一致：Unity 项目通常通过 Cubism SDK for Unity 作为组件/插件运行 Live2D，而不是把 Live2D 数据模型改造成 Unity 自身 Animator 的内部格式。Neko 的差异是需要创作闭环和开源核心可维护性，因此默认将 Live2D 降为导入转换源，可选 adapter 只服务兼容和高保真播放。
+
 ### 核心方案：骨骼（身体）+ BlendShape（面部）+ Control Driver（三层模型）
 
 > **骨骼处理结构化运动（肢体、姿态），BlendShape 处理有机形变（表情、口型），Control Driver 处理上层语义参数到骨骼/BlendShape 的显式映射。默认管线先 BlendShape 后 Skinning，表情跟随骨骼运动。**

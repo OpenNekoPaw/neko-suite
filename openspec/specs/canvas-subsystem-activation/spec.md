@@ -2,7 +2,6 @@
 
 ## Purpose
 Defines how Canvas activates built-in storyboard, narrative, behavior, entity, and memory subsystems from actual node types while keeping shared manifests pure and Webview runtime registrations lazy-loaded.
-
 ## Requirements
 ### Requirement: Canvas subsystem manifests are pure shared contracts
 The system SHALL define built-in Canvas subsystem manifests as serializable shared contracts that contain trigger node types, connection type descriptors, validation rule descriptors, auto-arrange strategy identifiers, Agent tool descriptors, and metadata defaults. Manifest contracts MUST NOT contain React components, VSCode API types, predicate functions, layout algorithms, or other runtime-only objects.
@@ -27,10 +26,10 @@ The Canvas Webview SHALL load subsystem runtime registrations separately from sh
 - **THEN** Extension Host behavior remains driven by the manifest and does not import those runtime modules
 
 ### Requirement: Canvas activates subsystems by node type
-The Canvas Webview SHALL activate built-in subsystems by scanning actual node types in the opened Canvas file and by checking newly added or removed nodes at runtime. A subsystem MUST become active when at least one trigger node type is present and MUST deactivate its UI/controller state when the last trigger node is removed.
+The Canvas Webview SHALL activate built-in subsystems by scanning actual node types in the opened Canvas file and by checking newly added or removed nodes at runtime. A subsystem MUST become active when at least one trigger node type is present and MUST deactivate its UI/controller state when the last trigger node is removed. The narrative subsystem trigger set MUST include `narrative-start`, `choice`, `merge`, `narrative-scene`, `narrative-note`, and `narrative-ending`.
 
 #### Scenario: Narrative subsystem activates from Choice node
-- **WHEN** a Canvas contains a `choice`, `merge`, `narrative-scene`, or `narrative-note` node
+- **WHEN** a Canvas contains a `narrative-start`, `choice`, `merge`, `narrative-scene`, `narrative-note`, or `narrative-ending` node
 - **THEN** the narrative subsystem is active and its renderers, connection rules, metadata defaults, panels, and playback controls become available as applicable
 
 #### Scenario: Subsystem UI deactivates after last trigger node is removed
@@ -77,3 +76,39 @@ The Canvas Webview SHALL provide UI slots for subsystem-provided node library gr
 #### Scenario: Floating panel host avoids unused subsystem state
 - **WHEN** a floating panel component is rendered
 - **THEN** the host passes only the declared floating-panel props and does not thread active subsystem state through frame internals unless a panel contract requires it
+
+### Requirement: Subsystem playback controllers can delegate to shared playback plans
+The Canvas Webview SHALL allow subsystem playback controllers to delegate route construction and execution state to the shared Canvas playback layer. Subsystem activation MUST still be driven by shared manifests and Webview runtime registrations, and Extension Host behavior MUST NOT depend on Webview playback controller components.
+
+#### Scenario: Narrative controller uses narrative adapter
+- **WHEN** the narrative subsystem is active and playback starts from narrative runtime nodes
+- **THEN** the Webview can run playback through the narrative adapter while preserving the existing narrative subsystem activation rules
+
+#### Scenario: Storyboard playback does not require narrative subsystem
+- **WHEN** a Canvas contains `scene` and `shot` nodes but no narrative runtime nodes
+- **THEN** storyboard playback can become available without activating narrative-specific renderers or panels
+
+### Requirement: Canvas shell exposes one active playback surface
+The Canvas shell SHALL arbitrate playback controls so that at most one playback controller is active at a time, even when multiple subsystems or adapters can interpret the current Canvas.
+
+#### Scenario: Multiple adapters match selected graph
+- **WHEN** both narrative and generic adapters can produce playback plans for the current selection
+- **THEN** the shell selects one active playback mode by explicit user choice or adapter priority and keeps other controllers inactive
+
+#### Scenario: Active controller changes safely
+- **WHEN** the user switches from storyboard playback to narrative playback
+- **THEN** the current playback session stops or pauses before the new controller becomes active
+
+### Requirement: Narrative activation and traversal node sets are separate
+The Canvas subsystem model SHALL expose separate constants or descriptors for narrative subsystem activation nodes and narrative runtime traversal nodes. Activation MUST include editor-only narrative nodes; traversal MUST include only playable runtime nodes.
+
+#### Scenario: Narrative note activates but does not traverse
+- **WHEN** a Canvas contains `narrative-note` and no playable narrative traversal nodes
+- **THEN** the narrative subsystem can activate for node editing and note rendering
+- **THEN** traversal APIs return no playable narrative path through the note
+
+#### Scenario: Start and ending participate in traversal
+- **WHEN** a Canvas contains `narrative-start`, `narrative-scene`, `choice`, `merge`, and `narrative-ending` nodes connected as a valid graph
+- **THEN** traversal APIs include those node types in successors, default path resolution, cycle checks, and terminal analysis
+- **THEN** they continue to exclude `narrative-note` from runtime traversal
+

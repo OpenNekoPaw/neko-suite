@@ -2,7 +2,7 @@
 
 ## 状态
 
-Proposed (2026-06-01, updated 2026-06-06)
+Proposed (2026-06-01, updated 2026-06-13)
 
 ## 范围
 
@@ -18,6 +18,7 @@ Neko Suite 已进入多包并行演进阶段。当前仓库同时存在：
 2. 部分功能已迁移到共享包或独立 provider，但旧 shim 仍保留。
 3. 多个 Webview / Extension 包重复实现 logger、error handler、HTML / nonce、local runtime helpers。
 4. `knip` 已作为 unused code / dependency drift 检查工具接入，但仍有 Vite multi-entry、runtime-loaded module、barrel export 等静态分析假阳性。
+5. 部分活跃业务代码功能正确、仍被使用，但位于错误层级；这类债务不是死代码，也不是传统 deprecated surface，需要单独跟踪。
 
 清理目标不是简单减少行数，而是降低维护分叉、避免重复注册、减少错误 auto-import 路径，并让清理动作可验证、可回滚。
 
@@ -54,6 +55,55 @@ rg -n "TODO\\(P[0-2]\\)|FIXME|HACK" packages \
 | migration / compatibility shim | 未被新代码引用不代表可删 | 必须确认迁移窗口和旧数据兼容要求 |
 
 ## 当前事实
+
+### 2026-06-12 neko-agent 补充审计
+
+对 `packages/neko-agent/` 全部 TS 文件的补充扫描结论：**没有大量死代码，也没有大面积腐烂；主要风险不是残留代码本身，而是部分活跃业务代码放错层，详见 `adr-agent-host-boundary-review.md`。**
+
+扫描结果分四类：
+
+| 类别 | 数量 / 范围 | 判断 |
+|------|-------------|------|
+| projectSearch 兼容 shim | `extension/src/services/projectSearch/` 下 8 个 re-export shim 文件 | `@neko/search` 抽取后的转发层；内部 import 迁完即可删除，P1 |
+| AI SDK Legacy Bridge | `ai-sdk/src/bridge/{index,legacy-image-model,legacy-speech-model,legacy-video-model}.ts` | 当前仍在使用，不能直接删；需要按 provider 制定 sunset 计划 |
+| `@deprecated` 兼容入口 | 6 处 | 大多是跨包/消息兼容；保留但需下次 breaking change 计划 |
+| fallback / bridge / 注释残留 | fallback 约 423 处、bridge 约 292 处、注释掉代码 0、dead conditional 0、生产 hack 0 | 绝大多数是运行时弹性和通信桥接，不按死代码处理 |
+
+其中 `packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts` 属于新增分类：活跃领域逻辑放错层。它不是 unused/deprecated 代码，而是 Webview 侧生成可持久化实体记忆贡献，应作为 LCD-011 跟踪。
+
+可立即处理的 projectSearch shim 文件：
+
+- `packages/neko-agent/packages/extension/src/services/projectSearch/cacheManifest.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/normalization.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/projectResolver.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/ProjectCacheSearchService.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/compatAdapters.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/commands.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/index.ts`
+- `packages/neko-agent/packages/extension/src/services/projectSearch/ProjectIndexCoordinator.ts`
+
+当前仍需保留的 AI SDK legacy bridge 调用链：
+
+```text
+platform/src/media/media-task-executor.ts
+  -> tryAISDK()
+  -> resolveProvider()
+  -> createLegacyBridgeProvider()
+  -> legacy image / speech / video model wrappers
+```
+
+原因：fal.ai / DashScope / Kling 等 provider 尚未全部具备原生 AI SDK provider 支持，仍需通过 `LegacyMediaAdapter` 桥接。该桥接必须建立 provider 级 sunset 表，而不是整体删除。
+
+确认存在的 `@deprecated` 兼容入口：
+
+| 位置 | 内容 | 处理 |
+|------|------|------|
+| `packages/neko-agent/packages/agent-types/src/message.ts` | `toolCalls?` 字段，派生自 `contentBlocks[].toolCall` | 保留到消息协议 breaking change |
+| `packages/neko-agent/packages/agent-types/src/message.ts` | `thinking?` 字段，legacy 兼容 | 保留到消息协议 breaking change |
+| `packages/neko-agent/packages/platform/src/types/prompt.ts` | deprecated re-export module | 下次 breaking change 删除，调用方改从 `@neko/shared` 导入 |
+| `packages/neko-agent/packages/platform/src/types/task.ts` | deprecated re-export module | 下次 breaking change 删除，调用方改从 `@neko/shared` 导入 |
+| `packages/neko-agent/packages/platform/src/types/adapter.ts` | `LegacyToolCall`，应使用 `LLMToolCall` | 保留到 adapter contract breaking change |
+| `packages/neko-agent/packages/agent/src/skill/tool-group-registry.ts` | `triggerKeywords()` 永远返回空数组 | 保留兼容，下一次 skill/tool-group API cleanup 删除 |
 
 ### 死代码与依赖漂移
 
@@ -140,6 +190,7 @@ rg -n "TODO\\(P[0-2]\\)|FIXME|HACK" packages \
 | Canonical compatibility | 为已发布文件格式、用户数据或跨包契约保留 | `neko-types` migrator、proto legacy fields、market deprecation status | 保留，补测试和注释 |
 | Migration adapter | 新旧架构过渡期间保留 | Agent projectSearch shim、AI SDK legacy bridge、Engine legacy encode path | 设 sunset 条件，迁完删除 |
 | Stray legacy surface | 已有替代入口但旧入口仍可被误用 | `@neko/shared/components` React UI、重复工具注册路径 | 建 guardrail，禁止新增，逐步删除 |
+| Misplaced domain logic | 活跃代码功能正确但位于错误层级，且影响领域状态或后续 Agent 决策 | Webview 生成 `EntityMemoryContribution`、Extension 派生 evidence locator | 迁到 runtime/domain owner；Host/UI 只保留 adapter 或展示投影 |
 
 ### TODO / FIXME 分布
 
@@ -209,6 +260,16 @@ Rust 中使用 `#[deprecated(note = "...")]` 时，同样应说明替代路径�
 
 ## 重点清理路线
 
+### 跨 ADR 执行顺序
+
+本 ADR 与 `adr-agent-host-boundary-review.md` 共同约束 `neko-agent` 后续治理。执行顺序如下：
+
+1. 先做本 ADR Phase 1 中的低风险清理：删除 `projectSearch` shim、修正内部 imports、清理明确 unused dependency，并跑对应验证。
+2. 再做 `adr-agent-host-boundary-review.md` 的迁移目标 1-4：将 Character Dialogue、Entity Memory contribution inference、Character Evidence、Project Search 聚合规则迁到 runtime/domain owner。
+3. 最后做本 ADR Phase 3 的结构性收敛：统一 Agent 工具注册到 CapabilityProvider，并删除 legacy centralized tool path。
+
+约束：第 2 步迁移期间，新增 runtime service 或 tool surface 不得注册到 legacy tool path。若短期无法接入 CapabilityProvider，必须显式标注 `TODO(P1)`、owner、删除条件和测试保护，避免 boundary migration 之后继续制造新的双轨。
+
 ### Phase 0: 修正静态分析基线
 
 目标：让 `pnpm check:unused` 报告更可信。
@@ -247,17 +308,17 @@ Rust 中使用 `#[deprecated(note = "...")]` 时，同样应说明替代路径�
 | id | 稳定编号 |
 | package | 所属包 |
 | file | 入口文件 |
-| kind | compatibility / migration-adapter / stray-surface |
+| kind | compatibility / migration-adapter / stray-surface / misplaced-domain-logic |
 | replacement | 替代入口 |
 | owner | 负责包 |
 | removeAfter | 日期、版本或前置条件 |
 | tests | 保护测试 |
 
-首批纳入（2026-06-06 更新）：
+首批纳入（2026-06-13 更新）：
 
 | id | 包 | 入口 | 分类 | 替代/删除条件 | 状态 |
 |----|----|------|------|---------------|------|
-| LCD-001 | `neko-agent` | `packages/extension/src/services/projectSearch/*` | migration-adapter | internal imports 全部迁到 `@neko/search` 后删除 | 开放（7 × P2 TODO 仍存在） |
+| LCD-001 | `neko-agent` | `packages/extension/src/services/projectSearch/*` | migration-adapter | internal imports 全部迁到 `@neko/search` 后删除 | P1，可立即删除 8 个 shim 并改 import |
 | LCD-002 | `neko-agent` | legacy tool registration path / `puppetFaceTools.ts` | stray-surface | per-package CapabilityProvider 完全覆盖并通过 duplicate guard | 开放 |
 | LCD-003 | `neko-types` | `src/components/index.ts` | stray-surface | Agent-safe file-drop / icon strategy 完成后删除 React UI legacy exports | 开放 |
 | LCD-004 | `neko-engine` | legacy CPU / encode-only preview pipeline | migration-adapter | Engine pipeline sink / preview provider 完成后删除 | 开放（8 × P2 TODO） |
@@ -265,6 +326,19 @@ Rust 中使用 `#[deprecated(note = "...")]` 时，同样应说明替代路径�
 | LCD-006 | `neko-canvas` | legacy anchors / group childIds | canonical compatibility | `.nkc` schema migration 和 fixtures 确认后删除 fallback | 开放 |
 | LCD-007 | `neko-agent` / `neko-dashboard` | `SkillFileService` + dashboard `SkillList` skill catalog 旧协议 | migration-adapter | `skillCatalogProvider` + `skillCatalogActions` 完全替代 `SkillFileService` 的 skill CRUD 后删除旧路径 | 进行中（2026-06-06 开发中） |
 | LCD-008 | `neko-types` | `skill.ts` SDD metadata deprecated 字段 | canonical compatibility | 确认所有 skill 文件已迁移到新 metadata schema 后删除旧字段 | 开放 |
+| LCD-009 | `neko-agent` | `packages/ai-sdk/src/bridge/*` | migration-adapter | fal.ai / DashScope / Kling 等媒体 provider 迁到原生 AI SDK provider 后删除对应 legacy wrapper；见下方 provider 级 sunset 表 | 开放 |
+| LCD-010 | `neko-agent` | `agent-types/src/message.ts` legacy fields + `platform/src/types/{prompt,task,adapter}.ts` + `skill/tool-group-registry.ts` | canonical compatibility | 下一次消息协议 / platform types / skill API breaking change 时删除 | 开放 |
+| LCD-011 | `neko-agent` | `packages/webview/src/presenters/entity-memory-contribution-inference.ts` | misplaced-domain-logic | 将 Markdown table parsing、entity candidate inference、observation dimension inference、confidence scoring、可持久化 `EntityMemoryContribution` 生成迁到 `@neko/agent` 或 `@neko/entity`；Webview 只渲染 runtime/domain 返回的预览和确认状态 | P1，高风险层级越界 |
+
+#### LCD-009 provider 级 sunset 表
+
+以下状态以仓库内当前实现为准；外部 provider 路线图不作为删除依据。删除必须由本仓库的 resolver、adapter、任务执行测试共同证明。
+
+| Provider | 当前路径 | 仓库内原生 AI SDK 支持状态 | 迁移条件 | Sunset 触发 |
+|----------|----------|----------------------------|----------|-------------|
+| fal.ai (`fal`) | `FalMediaAdapter` -> `createLegacyBridgeProvider()` -> legacy image wrapper | `resolveProvider()` 未原生处理 `fal`；仅 `newapi/generic` image model 对兼容代理保留 fal.ai 扩展参数透传 | 直接 `fal` provider 具备 AI SDK model，或明确要求用户通过 `newapi/generic` 配置 fal.ai 兼容代理；必须覆盖 queue polling、`Key` auth、ControlNet / IP-Adapter / image edit 参数、结果归一化和取消/失败路径 | `resolveProvider('fal')` 不再依赖 legacy adapter，`FalMediaAdapter` 对已支持任务无运行时调用，相关 bridge tests 替换为 native provider tests |
+| DashScope (`dashscope`) | `DashScopeMediaAdapter` -> `createLegacyBridgeProvider()` -> legacy image/video wrapper | `resolveProvider()` 未原生处理 `dashscope` | 原生 AI SDK provider 或兼容 provider 覆盖 Qwen image、Wan video、异步 task status、结果下载/归一化、失败重试语义 | `resolveProvider('dashscope')` 不再进入 legacy bridge，DashScope media smoke / unit tests 走 native provider path |
+| Kling (`kling`) | `OpenAICompatMediaAdapter` 作为 builtin adapter -> `createLegacyBridgeProvider()` | `resolveProvider()` 未原生处理 `kling`；代码上可通过 `newapi/generic` 原生 provider path 表达部分 OpenAI-compatible 场景，但 `kling` provider type 仍落入 bridge | 将 `kling` provider type 映射到 `createNewAPIProvider()` 或要求配置为 `generic/newapi`；必须验证 image/video endpoint、provider options、异步状态和错误归一化 | `resolveProvider('kling')` 不再调用 `createLegacyBridgeProvider()`，adapter registry 不再需要为 `kling` 保留独立 legacy builtin，Kling contract tests 走 native path |
 
 ### Phase 3: 结构性冗余收敛
 
@@ -334,6 +408,15 @@ pnpm build
 所有清理都必须维护 Neko Suite 的核心架构约束：Protobuf / Rust engine 是跨层契约与计算权威，Webview 不直接访问 VSCode / Node.js，Extension 不引 React，L0 / L1 / L2 依赖方向不反转。
 
 ## 变更日志
+
+### 2026-06-13 neko-agent 补充治理
+
+**主要变化**：
+
+1. 新增 `Misplaced domain logic` 债务分类，覆盖活跃业务代码放错层但不属于 dead/deprecated 的场景。
+2. 新增 LCD-011，跟踪 `entity-memory-contribution-inference.ts` 在 Webview 侧生成可持久化实体记忆贡献的问题。
+3. 为 LCD-009 增加 provider 级 sunset 表，明确 fal.ai、DashScope、Kling 的当前路径、迁移条件和删除触发。
+4. 明确本 ADR 与 `adr-agent-host-boundary-review.md` 的执行顺序：先 Phase 1 清理，再做 boundary migration，最后做 Phase 3 工具注册双轨收敛。
 
 ### 2026-06-06 第二次审计
 

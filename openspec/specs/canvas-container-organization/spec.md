@@ -164,3 +164,79 @@ The system SHALL expose read-only queries that return container child IDs, accep
 #### Scenario: Agent chooses target slot
 - **WHEN** a container exposes named slots or ordered insertion positions
 - **THEN** the query result includes stable slot or position references that Agent may use in a follow-up transfer target
+
+### Requirement: Container membership actions preserve relationship connections
+The system SHALL treat container add, remove, move, and reorder actions as organization mutations that do not create, delete, or retarget real relationship connections unless an explicit delete-subtree or connection-order synchronization policy requires it.
+
+#### Scenario: Move child into container preserves connections
+- **WHEN** a node with existing real connections is moved into a container
+- **THEN** the node receives the container parent ID, the container child list includes the node, and the node's existing real connections remain persisted unchanged
+
+#### Scenario: Move child out of container preserves connections
+- **WHEN** a node is released from a container without deleting the node
+- **THEN** the child parent ID is cleared, the container child list removes the node, and the node's real connections remain persisted unchanged
+
+#### Scenario: Reorder child does not rewrite unrelated edges
+- **WHEN** a container child is reordered under a policy that does not explicitly synchronize connection order
+- **THEN** only the container child order changes and unrelated relationship edges remain unchanged
+
+### Requirement: Container deletion applies explicit connection cleanup semantics
+The system SHALL clean up real connections according to the deletion policy applied to the container operation.
+
+#### Scenario: Delete node removes node edges
+- **WHEN** a node is deleted
+- **THEN** all real connections where the node is source or target are removed
+
+#### Scenario: Release children preserves child edges
+- **WHEN** a container is deleted with release-children semantics
+- **THEN** children are released, real connections to or from the deleted container are removed, and real connections between released children or from released children to external nodes are preserved
+
+#### Scenario: Delete subtree removes descendant edges
+- **WHEN** a container is deleted with delete-subtree semantics
+- **THEN** the container, descendants, and all real connections touching any removed node are removed
+
+### Requirement: Container insertion order is explicit and stable
+The system SHALL insert moved or newly created children at a deterministic container order position based on an explicit insertion index, target slot, or drop-position derivation, falling back to append when no position is available.
+
+#### Scenario: Drop position derives insertion order
+- **WHEN** a node is moved into a container and the UI can derive an insertion index from the drop position
+- **THEN** the node is inserted at that index in the container child order
+
+#### Scenario: No insertion hint appends
+- **WHEN** a node is moved into a container without a valid insertion index or target slot
+- **THEN** the node is appended to the end of the container child order
+
+#### Scenario: Moving between containers clears old parent
+- **WHEN** a node moves from one container to another
+- **THEN** the old container removes the child ID, the new container inserts the child ID once, and the child parent ID points only to the new container
+
+### Requirement: Playback consumes container order without changing containment
+The system SHALL allow playback projection to consume container child order, child placement order, and layout intent as route hints. Playback MUST NOT infer containment from visual position or connections, and MUST NOT mutate `parentId` or `container.childIds` while constructing a playback plan.
+
+#### Scenario: Playback reads child order
+- **WHEN** playback starts from a Scene or Group container
+- **THEN** it reads direct children from canonical container membership and orders them through playback ordering rules
+
+#### Scenario: Playback does not adopt nearby nodes
+- **WHEN** an unparented node visually overlaps a container during playback projection
+- **THEN** the node is not treated as a child unless container membership explicitly references it
+
+#### Scenario: Playback plan construction is side-effect free
+- **WHEN** a playback adapter projects a container subtree
+- **THEN** the Canvas node list, container child IDs, parent IDs, and connections remain unchanged
+
+### Requirement: Container expansion strategy is playback metadata
+The system SHALL represent container playback expansion as playback metadata or adapter default behavior, not as a container policy mutation. Supported expansion strategies MUST include `self`, `children`, and `recursive`.
+
+#### Scenario: Scene defaults to children expansion
+- **WHEN** storyboard playback starts from a Scene without an explicit expansion override
+- **THEN** the adapter expands the Scene to its ordered child Shot units
+
+#### Scenario: Group can play as self
+- **WHEN** generic playback starts from a Group with expansion `self`
+- **THEN** playback creates a unit for the Group itself instead of expanding direct children
+
+#### Scenario: Recursive expansion respects cycle validation
+- **WHEN** playback recursively expands nested containers
+- **THEN** projection relies on valid container organization and reports diagnostics rather than traversing an invalid cycle
+

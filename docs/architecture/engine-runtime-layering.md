@@ -79,6 +79,19 @@ Runtime 负责：
 
 这些 runtime 未来**可能**独立成应用，但不应在架构未稳定前就过早拆成多个 sidecar。
 
+### 决策 5：2D / 3D 是通用能力层，puppet / scene / adapter 是领域实现层
+
+`2D`、`3D` 不应直接成为新的顶层产品名或 crate 名。它们是能力维度：坐标、渲染、动画、输入、导出、资产语义可以按 2D/3D 划分；但运行时包应按领域模型命名。
+
+| 层级 | 示例 | 说明 |
+|---|---|---|
+| 通用能力 | 2D / 3D / audio / media / device / ML | 横切能力维度，适合作为 trait、schema、tool domain、UI 分类 |
+| 原生 Runtime | `runtime-puppet`、`runtime-scene` | Neko 拥有数据模型、编辑合同、测试和导出路径 |
+| 可选 Adapter | `Live2dRuntimeAdapter`、`SpineRuntimeAdapter`、Blender/format adapter | 面向第三方格式或 SDK，按 feature/license 隔离 |
+| 编排 Runtime | `runtime-stage` | 把 2D/3D/native/adapter actor 组织成可互动场景 |
+
+因此，不建议把现有 `runtime-puppet` / `runtime-scene` 重命名为 `runtime-2d` / `runtime-3d`。对外可以暴露“2D 能力”“3D 能力”，内部仍保留更精确的领域边界。
+
 ---
 
 ## 三、目标分层模型
@@ -98,6 +111,7 @@ Runtime 负责：
 │ Runtime Packages                                            │
 │ runtime-media   runtime-puppet  runtime-scene               │
 │ runtime-format  runtime-device  runtime-ml                  │
+│ runtime-stage   runtime-live2d-adapter? runtime-spine-adapter?│
 │ runtime-game    runtime-sim     runtime-xr    (future)      │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -147,6 +161,13 @@ packages/neko-engine/packages/
 | `runtime-docs` | `runtime-format` | 覆盖范围更广（格式探测 + 文档预览 + 格式转换），与 FormatRegistry 对齐 |
 | `engine-host-api` | `host-api` | 三段 crate 名过长且 `engine-` 前缀冗余（已在 neko-engine workspace 内） |
 
+补充命名原则：
+
+- `runtime-puppet` 表示 Neko 原生 2D 角色 runtime，不等于所有 2D 能力。
+- `runtime-scene` 表示 3D 场景/模型 runtime，不等于所有 3D 能力。
+- `Live2dRuntimeAdapter` / `SpineRuntimeAdapter` 是第三方生态 adapter，不应并入 `runtime-puppet` core。
+- `runtime-stage` 是互动舞台编排层，不能被 `scene` 或 `puppet` 替代。
+
 ### 4.3 engine-kernel 拆分分析
 
 > **重要发现**：对 engine-kernel 的 service 实现进行深度依赖分析后，发现大部分 service（Video/Audio/Timeline/Export/Effects/Image）与 GPU/Decoder/Encoder 基础设施深度耦合。直接拆出 runtime-video 会导致循环依赖或需要引入复杂抽象层。因此采用**渐进策略**：先拆可独立的，再逐步解耦。
@@ -190,6 +211,8 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 | Video | 是 | 否 | 与 GPU 合成、导出、时间线、预览链路强耦合 |
 | 2D | 是 | 否 | 与资产、预览、导出共享宿主更高效 |
 | 3D | 是 | 否 | 与视频/合成链路共享 GPU 与输出模型 |
+| Stage | 是 | 否 | 互动语义、actor、trigger、session 需统一编排，但初期可共用 Host、GPU、设备与流式输出 |
+| Live2D / Spine Adapter | 是（可选） | 否 | 许可证、格式和 SDK 隔离；通过 adapter 合同接入 stage/compositor，不成为 core runtime |
 | Format | 是 | 否 | 更像兼容层与预览层，不需要独立主循环 |
 | Device | 是 | 否 | 是共享横切层，应由 Host 统一管理 |
 | ML | 是 | 否 | 与模型注册、资产处理、导出链路紧密集成 |
@@ -202,6 +225,7 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 
 | Runtime | 单独包 | 单独应用（当前） | 单独应用（未来） | 触发条件 |
 |--------|--------|----------------|----------------|---------|
+| Stage | 是 | 否 | 可能需要 | 互动场景出现独立帧循环、低延迟输入、多人同步或长时会话隔离 |
 | Game | 是 | 否 | 可能需要 | 独立帧循环、物理时钟、网络同步、低延迟输入 |
 | Simulation | 是 | 否 | 可能需要 | 长时间步进、可暂停/回放、批量仿真、服务端运行 |
 | XR / VR | 是 | 否 | 可能需要 | OpenXR 设备栈、超低延迟、空间追踪、平台权限隔离 |
@@ -325,6 +349,8 @@ engine-kernel 长期保留：GPU/Codec/Decoder/Encoder/Domain 原语/JVI/Telemet
 - 每个 runtime 都单独一个 sidecar
 - 每个 runtime 都单独一个仓库
 - 把 `Puppet / Scene / Video / Device / Format / ML` 都拆成多个独立应用
+- 把 `runtime-puppet` 重命名成泛化的 `runtime-2d`，或把 Live2D/Spine SDK 直接塞进 puppet core
+- 让 `runtime-scene` 承担 runtime-stage 的剧情、actor、trigger、session 编排职责
 
 这会带来：
 

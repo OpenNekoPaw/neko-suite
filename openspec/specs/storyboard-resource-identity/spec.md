@@ -2,7 +2,6 @@
 
 ## Purpose
 Define stable storyboard media identity across Agent, Canvas, document readers, and resource cache surfaces. This capability separates durable source references from runtime preview handles so storyboard image binding can survive cache regeneration, extension boundaries, and repeated document reads.
-
 ## Requirements
 ### Requirement: Storyboard media identity uses stable refs
 The system SHALL represent cross-surface storyboard media identity with stable resource references, document source locators, or tool-result locators that can resolve to stable resource references. Runtime cache paths, Webview URIs, blob URLs, object URLs, and extension-private scratch paths MUST NOT be used as the primary identity for new Agent-to-Canvas storyboard media.
@@ -74,3 +73,23 @@ The system SHALL support legacy cache path payloads only as migration input. New
 - **WHEN** Agent creates a new storyboard transfer after this change
 - **THEN** the transfer contains stable refs or scoped tool-result locators for document images
 - **THEN** it does not use `document-image-cache` as the cross-package identity channel
+
+### Requirement: Storyboard local media refs use shared path semantics
+Storyboard, Story, and Agent-to-Canvas payloads that include local media paths SHALL apply the shared workspace-relative media path contract when stable resource refs are not available.
+
+#### Scenario: Storyboard shot references workspace image
+- **WHEN** a storyboard shot references `cases/panel-01.png`
+- **AND** the receiving Canvas document belongs to a workspace containing that file
+- **THEN** Canvas resolves the reference against the receiving document's owning workspace context
+- **AND** the saved Canvas data keeps the durable workspace-relative media ref rather than a runtime preview URL.
+
+#### Scenario: Storyboard prefers stable resource ref over path fallback
+- **WHEN** a storyboard shot contains both a stable resource reference and a local path fallback
+- **THEN** consumers prefer the stable resource reference for durable identity
+- **AND** the local path fallback is resolved through workspace-relative media path semantics only if the stable reference cannot be materialized.
+
+#### Scenario: Story preview does not fabricate absolute roots
+- **WHEN** Story or storyboard preview receives a local media path without a variable prefix
+- **THEN** it resolves the path through the source document workspace context
+- **AND** it does not fabricate `/cases/...` as an absolute filesystem path.
+

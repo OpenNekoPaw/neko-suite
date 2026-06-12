@@ -39,6 +39,7 @@ Neko Suite 是深度集成于 VS Code 的创意工作套件，核心挑战是在
 │  engine-kernel:   wgpu GPU · FFmpeg 编解码 · 动画 · GPU Skinning · 导出 · 缓存 │
 │  runtime-scene:  3D 场景 ECS（bevy_ecs + glTF/VRM + IK + Blend）  │
 │  runtime-puppet: 2D Native Puppet ECS（Bone2D + BlendShape + MOC3 导入兼容）│
+│  runtime-stage:  互动舞台编排（规划：Actor / Trigger / Session） │
 │  host-http:   axum HTTP/WebSocket 服务（统一端口）             │
 │  host-napi:   Node.js N-API 绑定                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -344,6 +345,7 @@ Extension Host
 | 2D 能力                 | _已内化_                                                                                                                      | neko-sketch（绘画）+ neko-puppet（`.nkp` v2 native Bone2D + BlendShape 骨骼动画，独立子插件）；runtime-puppet（bevy_ecs native 2D puppet runtime + MOC3/Live2D 导入转换兼容）；`.nkentity` v2 `puppet-bone` 绑定；Agent/资产/导出首版；WS 实时流供 neko-live |
 | Live Compositor         | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md)                         | neko-live 通过 `ViewportShell` 消费引擎 Live Compositor H.264 合成流；设备只暴露授权 `sourceRef`，本地 R3F/Puppet/canvas 路径仅作为 non-authoritative fallback                                                                                               |
 | 角色编辑                | _已内化_                                                                                                                      | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑                                                                                                                      |
+| 互动舞台 / Stage Runtime | [architecture/adr-engine-bevy-gap-analysis.md](./docs/architecture/adr-engine-bevy-gap-analysis.md) · [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | `runtime-stage` 是规划中的可互动场景编排层：把 story/entity/canvas/agent/assets 投影为 StageActor、Trigger、Dialogue、Behavior、Session；不替代 `runtime-scene`、`runtime-puppet` 或 Live Compositor |
 | 面板放置策略            | [architecture/panel-placement.md](./docs/architecture/panel-placement.md)                                                     | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突                                                                                                                                                                                 |
 | 外部设备访问            | [architecture/device-access.md](./docs/architecture/device-access.md)                                                         | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs）                                                                                                                                                              |
 | Engine 插件化（RFC）    | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md)                                                 | 能力插件化而非内核插件化；优先开放 shader/model/format/device/exporter/connector 等受控扩展点；市场负责分发，Engine Host 负责激活                                                                                                                            |
