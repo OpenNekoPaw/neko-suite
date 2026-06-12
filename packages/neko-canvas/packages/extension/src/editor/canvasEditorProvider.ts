@@ -35,6 +35,7 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createCanvasStoryboardExecutionSummary,
   extractCanvasNodeGenerationLineage,
+  projectCanvasShotPrompt,
   getPanoramicPreviewRoute,
   inferCanvasDocumentType,
   inferCanvasDroppedAssetKind,
@@ -353,48 +354,7 @@ function extractShotPromptFields(node: CanvasNode):
       cameraAngle?: string;
     }
   | undefined {
-  if (node.type !== 'shot') return undefined;
-  const data = node.data as {
-    visualDescription?: unknown;
-    shotScale?: unknown;
-    cameraMovement?: unknown;
-    cameraAngle?: unknown;
-    characterAction?: unknown;
-    emotion?: unknown;
-    sceneTags?: unknown;
-    characters?: Array<{ characterName?: unknown; emotion?: unknown }>;
-  };
-  const parts: string[] = [];
-  if (typeof data.visualDescription === 'string' && data.visualDescription.trim()) {
-    parts.push(data.visualDescription.trim());
-  }
-  if (Array.isArray(data.characters) && data.characters.length > 0) {
-    const names = data.characters
-      .map((c) => (typeof c?.characterName === 'string' ? c.characterName : ''))
-      .filter((n) => n.length > 0);
-    if (names.length > 0) parts.push(`Characters: ${names.join(', ')}`);
-  }
-  if (typeof data.characterAction === 'string' && data.characterAction.trim()) {
-    parts.push(`Action: ${data.characterAction.trim()}`);
-  }
-  if (Array.isArray(data.emotion) && data.emotion.length > 0) {
-    const emotions = data.emotion.filter((e): e is string => typeof e === 'string' && e.length > 0);
-    if (emotions.length > 0) parts.push(`Emotion: ${emotions.join(', ')}`);
-  }
-  if (Array.isArray(data.sceneTags) && data.sceneTags.length > 0) {
-    const tags = data.sceneTags.filter((t): t is string => typeof t === 'string' && t.length > 0);
-    if (tags.length > 0) parts.push(`Tags: ${tags.join(', ')}`);
-  }
-  const result: {
-    prompt: string;
-    shotScale?: string;
-    cameraMovement?: string;
-    cameraAngle?: string;
-  } = { prompt: parts.join('. ') };
-  if (typeof data.shotScale === 'string') result.shotScale = data.shotScale;
-  if (typeof data.cameraMovement === 'string') result.cameraMovement = data.cameraMovement;
-  if (typeof data.cameraAngle === 'string') result.cameraAngle = data.cameraAngle;
-  return result;
+  return projectCanvasShotPrompt(node);
 }
 
 /**

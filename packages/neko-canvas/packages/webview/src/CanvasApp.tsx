@@ -6,6 +6,7 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
+import { projectCanvasShotPrompt } from '@neko/shared';
 import type {
   CanvasData,
   CanvasDroppedAsset,
@@ -87,6 +88,10 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
 const logger = getLogger('CanvasApp');
+
+function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
+  return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
+}
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: unknown) => void;
@@ -749,8 +754,7 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    const data = node?.data as Record<string, unknown> | undefined;
-    openGenerationPanel(nodeId, undefined, (data?.['visualDescription'] as string) ?? '');
+    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node));
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Batch-generate all selected ShotNodes via Agent */
@@ -776,9 +780,9 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    const data = node?.data as Record<string, unknown> | undefined;
-    const prompt = (data?.['visualDescription'] as string) ?? '';
-    openGenerationPanel(nodeId, undefined, prompt, { generateVideo: true });
+    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node), {
+      generateVideo: true,
+    });
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Open GenerationPromptPanel with ControlNet pre-selected */
@@ -786,9 +790,9 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    const data = node?.data as Record<string, unknown> | undefined;
-    const prompt = (data?.['visualDescription'] as string) ?? '';
-    openGenerationPanel(nodeId, undefined, prompt, { controlMode: 'depth' });
+    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node), {
+      controlMode: 'depth',
+    });
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Open the selected ShotNode's generated image in neko-sketch for editing */
