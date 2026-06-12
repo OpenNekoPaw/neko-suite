@@ -34,7 +34,11 @@ export {
 } from './canvasTimelineSync';
 export {
   extractCanvasNodeGenerationLineage,
+  projectCanvasShotPrompt,
+  projectShotDataPrompt,
   type CanvasGenerationLineage,
+  type CanvasShotPromptProjectableData,
+  type CanvasShotPromptProjection,
 } from './canvasGeneration';
 export {
   buildEntityAssetRequirementsFromGeneratedMediaLineage,

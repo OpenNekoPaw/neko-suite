@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractCanvasNodeGenerationLineage } from '../canvasGeneration';
+import { extractCanvasNodeGenerationLineage, projectCanvasShotPrompt } from '../canvasGeneration';
 import type { GalleryCanvasNode, ShotCanvasNode, TextCanvasNode } from '../../types/canvas';
 
 describe('extractCanvasNodeGenerationLineage', () => {
@@ -71,6 +71,76 @@ describe('extractCanvasNodeGenerationLineage', () => {
 
     expect(extractCanvasNodeGenerationLineage(node)).toEqual({
       sourceNodeId: 'text-1',
+    });
+  });
+});
+
+describe('projectCanvasShotPrompt', () => {
+  it('assembles a creator-facing prompt from durable shot fields', () => {
+    const node: ShotCanvasNode = {
+      id: 'shot-assembled',
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      size: { width: 100, height: 100 },
+      zIndex: 1,
+      data: {
+        shotNumber: 1,
+        duration: 3,
+        visualDescription: 'A quiet hallway',
+        characters: [{ characterName: 'Alice' }],
+        shotScale: 'MS',
+        cameraMovement: 'dolly-in',
+        cameraAngle: 'low-angle',
+        characterAction: 'opens a glowing door',
+        emotion: ['uncertain'],
+        sceneTags: ['night'],
+        visualStyle: 'ink wash',
+        vfx: ['soft mist'],
+        dialogue: 'Is anyone there?',
+        soundCue: 'distant hum',
+        generationStatus: 'idle',
+        generationHistory: [],
+      },
+    };
+
+    expect(projectCanvasShotPrompt(node)).toEqual({
+      prompt:
+        'A quiet hallway. Characters: Alice. Action: opens a glowing door. Emotion: uncertain. Tags: night. Style: ink wash. VFX: soft mist. Dialogue: "Is anyone there?". Sound: distant hum',
+      source: 'assembled',
+      shotScale: 'MS',
+      cameraMovement: 'dolly-in',
+      cameraAngle: 'low-angle',
+    });
+  });
+
+  it('uses generationPrompt as an explicit generation override', () => {
+    const node: ShotCanvasNode = {
+      id: 'shot-custom',
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      size: { width: 100, height: 100 },
+      zIndex: 1,
+      data: {
+        shotNumber: 1,
+        duration: 3,
+        visualDescription: 'Field description',
+        generationPrompt: 'Custom prompt wins',
+        characters: [],
+        shotScale: 'CU',
+        characterAction: '',
+        emotion: [],
+        sceneTags: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      },
+    };
+
+    expect(projectCanvasShotPrompt(node)).toEqual({
+      prompt: 'Custom prompt wins',
+      source: 'generationPrompt',
+      shotScale: 'CU',
+      cameraMovement: undefined,
+      cameraAngle: undefined,
     });
   });
 });
