@@ -352,7 +352,7 @@ export function activate(context: vscode.ExtensionContext) {
             sceneIds: targetSceneIds,
             workflowIntent: 'full-video-creation',
             intent:
-              '请基于剧本中的所有场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
+              '请基于剧本中的所有场景启动标准视频创作流程：由 Agent 根据剧情节奏预估分镜时长、镜头数量和镜头设计，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
           });
           if (!allScenesPayload) {
             void handleError(new Error('没有可派发的场景'), {

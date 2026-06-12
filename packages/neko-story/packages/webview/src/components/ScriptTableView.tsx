@@ -13,11 +13,10 @@ import type {
   NekoStoryScriptIndex,
   StoryCharacterVisualReadiness,
   StoryCharacterVisualStatus,
-  StoryCreatorStatus,
   StoryMissingInput,
   StorySceneVideoReadiness,
 } from '@neko/shared';
-import { Badge, Button, IconButton } from '@neko/ui/primitives';
+import { Button, IconButton } from '@neko/ui/primitives';
 import { SendIcon, MoreHorizontalIcon } from '@neko/ui/icons';
 import type {
   StorySceneAction,
@@ -25,7 +24,6 @@ import type {
   StoryTableAction,
   StoryTableActionScope,
 } from '../types';
-import { formatDurationShort } from '../utils/sceneBreakdown';
 import { useTranslation } from '../i18n/I18nContext';
 
 type TranslationFn = ReturnType<typeof useTranslation>['t'];
@@ -48,46 +46,18 @@ const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
 };
 
 // =============================================================================
-// Unified status mapping (creator perspective)
+// Workflow state helpers
 // =============================================================================
 
-type CreatorStatus = StoryCreatorStatus;
-
-function deriveCreatorStatus(state: StorySceneState): CreatorStatus {
-  const { agentStatus, canvasStatus, generationStatus } = state;
-
-  if (agentStatus === 'skipped' || canvasStatus === 'skipped') return 'skipped';
-
-  if (
-    agentStatus === 'failed' ||
-    generationStatus === 'partial-fail' ||
-    agentStatus === 'review' ||
-    agentStatus === 'prompt-review' ||
-    agentStatus === 'pilot-review'
-  ) {
-    return 'attention';
-  }
-
-  if (
-    (agentStatus === 'timeline-arranged' || agentStatus === 'sent') &&
-    (canvasStatus === 'sent' || canvasStatus === 'opened')
-  ) {
-    return 'done';
-  }
-
-  if (
-    agentStatus === 'parsing' ||
-    agentStatus === 'generating' ||
-    generationStatus === 'generating' ||
-    canvasStatus === 'queued' ||
-    canvasStatus === 'sent'
-  ) {
-    return 'processing';
-  }
-
-  if (agentStatus === 'ready') return 'processing';
-
-  return 'pending';
+function isSceneSkipped(
+  state: StorySceneState,
+  readiness: StorySceneVideoReadiness | undefined,
+): boolean {
+  return (
+    readiness?.creatorStatus === 'skipped' ||
+    state.agentStatus === 'skipped' ||
+    state.canvasStatus === 'skipped'
+  );
 }
 
 function getStatusDetail(state: StorySceneState, t: TranslationFn): string | undefined {
@@ -101,39 +71,8 @@ function getStatusDetail(state: StorySceneState, t: TranslationFn): string | und
   ) {
     return t('table.status.detail.review');
   }
-  if (state.agentStatus === 'parsing' || state.agentStatus === 'ready') {
-    return t('table.status.detail.analyzing');
-  }
-  if (state.agentStatus === 'generating' || state.generationStatus === 'generating') {
-    return t('table.status.detail.generating');
-  }
-  if (state.canvasStatus === 'queued' || state.canvasStatus === 'sent') {
-    return t('table.status.detail.sending');
-  }
   return undefined;
 }
-
-function getReadinessStatusDetail(
-  readiness: StorySceneVideoReadiness | undefined,
-  state: StorySceneState,
-  t: TranslationFn,
-): string | undefined {
-  const missing = readiness?.missingInputs
-    .filter((input) => input.severity !== 'info')
-    .map((input) => translateMissingInputLabel(input, t));
-  if (missing && missing.length > 0) {
-    return missing.slice(0, 3).join('\n');
-  }
-  return getStatusDetail(state, t);
-}
-
-const STATUS_PALETTE = {
-  pending: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
-  processing: { bg: '#3b82f620', fg: '#3b82f6' },
-  attention: { bg: '#f59e0b20', fg: '#f59e0b' },
-  done: { bg: '#16a34a20', fg: '#16a34a' },
-  skipped: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
-} as const;
 
 const VISUAL_STATUS_PALETTE: Record<
   StoryCharacterVisualStatus,
@@ -171,38 +110,6 @@ function Th({ children, width }: { children: React.ReactNode; width?: string }) 
     >
       {children}
     </th>
-  );
-}
-
-function StatusBadge({
-  status,
-  label,
-  title,
-}: {
-  status: CreatorStatus;
-  label: string;
-  title?: string;
-}) {
-  const palette = STATUS_PALETTE[status];
-  return (
-    <Badge
-      title={title}
-      tone={status === 'done' ? 'success' : status === 'attention' ? 'warning' : 'neutral'}
-      style={{
-        display: 'inline-block',
-        padding: '1px 8px',
-        borderRadius: 3,
-        whiteSpace: 'nowrap',
-        backgroundColor: palette.bg,
-        color: palette.fg,
-        fontSize: 10,
-        lineHeight: '16px',
-        opacity: status === 'skipped' ? 0.6 : 1,
-        cursor: title ? 'help' : undefined,
-      }}
-    >
-      {label}
-    </Badge>
   );
 }
 
@@ -577,16 +484,13 @@ function getSceneProgressLabel(
     });
   }
 
-  if (readiness?.recommendedShotCount) {
-    return t('table.shotPlan', { count: readiness.recommendedShotCount });
-  }
-
   return undefined;
 }
 
 function getSceneIssueLabels(
   readiness: StorySceneVideoReadiness | undefined,
   state: StorySceneState,
+  skipped: boolean,
   t: TranslationFn,
 ): readonly string[] {
   const missingInputs =
@@ -595,6 +499,14 @@ function getSceneIssueLabels(
       .map((input) => translateMissingInputLabel(input, t)) ?? [];
   if (missingInputs.length > 0) {
     return missingInputs;
+  }
+
+  if (skipped) {
+    return [t('table.sceneIssues.skipped')];
+  }
+
+  if (readiness?.readinessStatus === 'failed') {
+    return [t('table.status.detail.failed')];
   }
 
   const statusDetail = getStatusDetail(state, t);
@@ -635,17 +547,10 @@ const SceneRow = memo(function SceneRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
-  const creatorStatus = readiness?.creatorStatus ?? deriveCreatorStatus(state);
-  const isSkipped = creatorStatus === 'skipped';
+  const isSkipped = isSceneSkipped(state, readiness);
   const progressLabel = getSceneProgressLabel(readiness, t);
-  const issueLabels = getSceneIssueLabels(readiness, state, t);
-  const statusDetail = [
-    getReadinessStatusDetail(readiness, state, t),
-    progressLabel,
-    ...issueLabels,
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const issueLabels = getSceneIssueLabels(readiness, state, isSkipped, t);
+  const sceneMetaTitle = [progressLabel, ...issueLabels].filter(Boolean).join('\n');
 
   const displayNumber = scene.sceneNumber
     ? `#${scene.sceneNumber}`
@@ -682,7 +587,7 @@ const SceneRow = memo(function SceneRow({
   // Dropdown items vary by state
   const menuItems = useMemo<DropdownMenuItem[]>(() => {
     const items: DropdownMenuItem[] = [];
-    if (creatorStatus !== 'skipped') {
+    if (!isSkipped) {
       if (isActionAllowed('analyze')) {
         items.push({ label: t('table.action.analyze'), onClick: () => fire('analyze') });
       }
@@ -715,11 +620,9 @@ const SceneRow = memo(function SceneRow({
       });
     }
     return items;
-  }, [t, fire, creatorStatus, isSkipped, isActionAllowed]);
+  }, [t, fire, isSkipped, isActionAllowed]);
 
   const handleCloseMenu = useCallback(() => setMenuOpen(false), []);
-
-  const statusLabel = t(`table.status.${creatorStatus}` as Parameters<TranslationFn>[0]);
 
   return (
     <tr
@@ -769,12 +672,50 @@ const SceneRow = memo(function SceneRow({
         </span>
       </td>
 
-      {/* Scene info (title + summary only) */}
+      {/* Scene info */}
       <td style={CELL_STYLE}>
-        <div style={{ lineHeight: '22px' }}>
-          <span style={{ fontWeight: 500, fontSize: 13, color: 'var(--vscode-foreground)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 8,
+            lineHeight: '22px',
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              fontWeight: 500,
+              fontSize: 13,
+              color: 'var(--vscode-foreground)',
+            }}
+          >
             {scene.sceneTitle}
           </span>
+          <IconButton
+            ref={moreButtonRef}
+            label={t('table.action.more')}
+            icon={<MoreHorizontalIcon size={14} />}
+            size="xs"
+            variant="secondary"
+            className="h-[18px] w-5 flex-shrink-0"
+            style={{
+              borderRadius: 3,
+              border: '1px solid var(--vscode-panel-border)',
+              color: 'var(--vscode-descriptionForeground)',
+              fontSize: 11,
+              lineHeight: 1,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            title={t('table.action.more')}
+          />
+          {menuOpen && (
+            <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
+          )}
         </div>
         {scene.actionSummary && (
           <div
@@ -793,20 +734,35 @@ const SceneRow = memo(function SceneRow({
             {scene.actionSummary}
           </div>
         )}
-      </td>
-
-      {/* Duration */}
-      <td style={{ ...CELL_STYLE, width: 64, textAlign: 'right' }}>
-        <span
-          style={{
-            fontFamily: 'monospace',
-            fontSize: 11,
-            color: 'var(--vscode-descriptionForeground)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {formatDurationShort(scene.estimatedDuration)}
-        </span>
+        {(progressLabel || issueLabels.length > 0) && (
+          <div
+            title={sceneMetaTitle || undefined}
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+              marginTop: 4,
+              fontSize: 10,
+              lineHeight: '14px',
+            }}
+          >
+            {progressLabel && (
+              <span style={{ color: 'var(--vscode-descriptionForeground)', opacity: 0.85 }}>
+                {progressLabel}
+              </span>
+            )}
+            {issueLabels.slice(0, 2).map((label) => (
+              <span key={label} style={{ color: 'var(--vscode-descriptionForeground)' }}>
+                {label}
+              </span>
+            ))}
+            {issueLabels.length > 2 && (
+              <span style={{ color: 'var(--vscode-descriptionForeground)', opacity: 0.75 }}>
+                +{issueLabels.length - 2}
+              </span>
+            )}
+          </div>
+        )}
       </td>
 
       {/* Characters */}
@@ -862,76 +818,6 @@ const SceneRow = memo(function SceneRow({
           </span>
         )}
       </td>
-
-      {/* Progress, issues, and local recovery actions */}
-      <td style={{ ...CELL_STYLE, width: 200 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          {/* Unified status badge */}
-          <StatusBadge status={creatorStatus} label={statusLabel} title={statusDetail} />
-
-          {/* More menu trigger */}
-          <IconButton
-            ref={moreButtonRef}
-            label={t('table.action.more')}
-            icon={<MoreHorizontalIcon size={14} />}
-            size="xs"
-            variant="secondary"
-            className="h-[18px] w-5 flex-shrink-0"
-            style={{
-              borderRadius: 3,
-              border: '1px solid var(--vscode-panel-border)',
-              color: 'var(--vscode-descriptionForeground)',
-              fontSize: 11,
-              lineHeight: 1,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-            title={t('table.action.more')}
-          />
-          {menuOpen && (
-            <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
-          )}
-        </div>
-        {progressLabel && (
-          <div
-            style={{
-              marginTop: 5,
-              fontSize: 10,
-              lineHeight: '14px',
-              color: 'var(--vscode-descriptionForeground)',
-            }}
-          >
-            {progressLabel}
-          </div>
-        )}
-        {issueLabels.length > 0 ? (
-          <div
-            style={{
-              marginTop: 5,
-              fontSize: 10,
-              lineHeight: '14px',
-              color: 'var(--vscode-descriptionForeground)',
-              maxWidth: 210,
-            }}
-            title={issueLabels.join('\n')}
-          >
-            {issueLabels.slice(0, 2).join(' · ')}
-          </div>
-        ) : (
-          <div
-            style={{
-              marginTop: 5,
-              fontSize: 10,
-              lineHeight: '14px',
-              color: 'var(--vscode-descriptionForeground)',
-            }}
-          >
-            {t('table.sceneIssues.none')}
-          </div>
-        )}
-      </td>
     </tr>
   );
 });
@@ -961,32 +847,15 @@ export function ScriptTableView({
     return rows;
   }, [readinessRows]);
 
-  const { totalDuration, doneCount, hasCharacters } = useMemo(() => {
-    if (!scriptIndex) return { totalDuration: 0, doneCount: 0, hasCharacters: false };
-    let duration = 0;
-    let done = 0;
+  const hasCharacters = useMemo(() => {
+    if (!scriptIndex) return false;
     let chars = false;
     for (const scene of scriptIndex.scenes) {
       const readiness = readinessByScene.get(scene.sceneId);
-      duration += readiness?.estimatedDuration ?? scene.estimatedDuration;
       if ((readiness?.characters.length ?? scene.sceneCharacters.length) > 0) chars = true;
-      const st = sceneStates[scene.sceneId];
-      const creatorStatus = readiness?.creatorStatus ?? (st ? deriveCreatorStatus(st) : 'pending');
-      if (creatorStatus === 'done') done++;
     }
-    return { totalDuration: duration, doneCount: done, hasCharacters: chars };
-  }, [scriptIndex, sceneStates, readinessByScene]);
-
-  const pendingSceneIds = useMemo(() => {
-    if (!scriptIndex) return [];
-    return scriptIndex.scenes.flatMap((scene) => {
-      const st = sceneStates[scene.sceneId];
-      if (!st || deriveCreatorStatus(st) === 'pending') {
-        return [scene.sceneId];
-      }
-      return [];
-    });
-  }, [scriptIndex, sceneStates]);
+    return chars;
+  }, [scriptIndex, readinessByScene]);
 
   useEffect(() => {
     if (!scriptIndex) {
@@ -1003,10 +872,6 @@ export function ScriptTableView({
   );
   const selectedSceneIdSet = useMemo(() => new Set(selectedSceneIds), [selectedSceneIds]);
   const actionSceneIds = selectedSceneIds.length > 0 ? selectedSceneIds : allSceneIds;
-  const selectedPendingSceneIds = pendingSceneIds.filter((sceneId) =>
-    selectedSceneIdSet.has(sceneId),
-  );
-  const startSceneIds = selectedSceneIds.length > 0 ? selectedPendingSceneIds : pendingSceneIds;
   const allSelected = allSceneIds.length > 0 && selectedSceneIds.length === allSceneIds.length;
   const partiallySelected = selectedSceneIds.length > 0 && !allSelected;
 
@@ -1026,22 +891,9 @@ export function ScriptTableView({
     [allSceneIds],
   );
 
-  const handleBatchStart = useCallback(() => {
-    if (!scriptIndex || !onTableAction) return;
-    if (startSceneIds.length === 0) return;
-    onTableAction('startVideoCreationAll', {
-      sceneIds: startSceneIds,
-    });
-  }, [scriptIndex, startSceneIds, onTableAction]);
-
   const handleSendTableToAgent = useCallback(() => {
     if (!scriptIndex || !onTableAction) return;
     onTableAction('sendToAgentAll', { sceneIds: actionSceneIds });
-  }, [scriptIndex, actionSceneIds, onTableAction]);
-
-  const handleSendTableToCanvas = useCallback(() => {
-    if (!scriptIndex || !onTableAction) return;
-    onTableAction('sendToCanvasAll', { sceneIds: actionSceneIds });
   }, [scriptIndex, actionSceneIds, onTableAction]);
 
   if (!scriptIndex) {
@@ -1091,37 +943,15 @@ export function ScriptTableView({
         {hasCharacters && (
           <span>{t('table.characters', { count: scriptIndex.characters.length })}</span>
         )}
-        <span>{t('table.totalDuration', { duration: formatDurationShort(totalDuration) })}</span>
-        <span style={{ opacity: 0.7 }}>|</span>
-        <StatusBadge
-          status={doneCount === total ? 'done' : doneCount > 0 ? 'processing' : 'pending'}
-          label={t('table.summary.progress', { done: doneCount, total })}
-        />
         <span>{actionScopeLabel}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           <SecondaryActionButton
             label={
               selectedSceneIds.length > 0
                 ? t('table.batch.sendSelectedToAgent')
-                : t('table.batch.generateStoryboard')
+                : t('table.batch.sendTableToAgent')
             }
             onClick={handleSendTableToAgent}
-          />
-          <SecondaryActionButton
-            label={
-              selectedSceneIds.length > 0
-                ? t('table.batch.sendSelectedToCanvas')
-                : t('table.batch.syncCanvas')
-            }
-            onClick={handleSendTableToCanvas}
-          />
-          <SecondaryActionButton
-            label={
-              selectedSceneIds.length > 0
-                ? t('table.batch.startSelected')
-                : t('table.batch.startVideo')
-            }
-            onClick={handleBatchStart}
           />
         </div>
       </div>
@@ -1145,9 +975,7 @@ export function ScriptTableView({
             </Th>
             <Th width="52px">#</Th>
             <Th>{t('table.header.scene')}</Th>
-            <Th width="64px">{t('table.header.duration')}</Th>
             <Th width="160px">{t('table.header.characters')}</Th>
-            <Th width="200px">{t('table.header.progressIssues')}</Th>
           </tr>
         </thead>
         <tbody>

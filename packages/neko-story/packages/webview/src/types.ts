@@ -174,7 +174,7 @@ export type StorySceneAction =
   | 'generateCurrentScene'
   | 'retryFailed';
 
-export type StoryTableAction = 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll';
+export type StoryTableAction = 'sendToAgentAll';
 
 export interface StoryTableActionScope {
   readonly sceneIds?: readonly string[];

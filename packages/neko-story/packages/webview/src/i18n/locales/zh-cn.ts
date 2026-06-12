@@ -16,27 +16,12 @@ export const zhCN = {
   'table.noScenes': '未找到场景标题（以 INT./EXT. 开头的行）',
   'table.scenes': '{count} 个场景',
   'table.characters': '{count} 个角色',
-  'table.totalDuration': '预计总时长 {duration}',
   'table.header.scene': '场景',
-  'table.header.duration': '时长',
   'table.header.characters': '人物',
-  'table.header.status': '状态',
-  'table.header.progressIssues': '进度 / 问题',
-  'table.header.action': '操作',
   'tab.screenplay': '剧本预览',
   'tab.table': '分镜表',
 
-  // Unified 5-state (creator perspective)
-  'table.status.pending': '待开始',
-  'table.status.processing': '处理中',
-  'table.status.attention': '需关注',
-  'table.status.done': '已完成',
-  'table.status.skipped': '已跳过',
-
-  // Hover detail for processing/attention states
-  'table.status.detail.analyzing': '正在分析…',
-  'table.status.detail.generating': '正在生成…',
-  'table.status.detail.sending': '正在派发…',
+  // Blocking details surfaced from Agent / Canvas state
   'table.status.detail.failed': '生成失败',
   'table.status.detail.review': '需要审核',
   'table.visualStatus.bound': '已绑定',
@@ -58,8 +43,7 @@ export const zhCN = {
   'table.missingInput.duration': '缺少可靠场景时长',
   'table.missingInput.canvasHandoff': '尚未发送到 Canvas',
   'table.canvasProgress': 'Canvas {done}/{total}',
-  'table.shotPlan': '计划 {count} 个镜头',
-  'table.sceneIssues.none': '无阻塞问题',
+  'table.sceneIssues.skipped': '已跳过',
 
   // Context-driven primary action
   'table.action.start': '开始',
@@ -80,18 +64,10 @@ export const zhCN = {
   'table.action.restart': '重新开始',
 
   // Summary bar
-  'table.summary.progress': '{done}/{total} 已完成',
   'table.selection.all': '全部场景',
   'table.selection.selected': '已选 {count} 个',
   'table.selection.allRows': '选择全部场景',
   'table.selection.row': '选择 {scene}',
-  'table.batch.startAll': '全部开始',
-  'table.batch.startSelected': '开始所选',
-  'table.batch.sendToAgent': '全部发送到 Agent',
-  'table.batch.sendToCanvas': '全部发送到 Canvas',
-  'table.batch.generateStoryboard': '生成整表分镜',
-  'table.batch.syncCanvas': '同步到 Canvas',
-  'table.batch.startVideo': '开始生成视频',
+  'table.batch.sendTableToAgent': '发送整表到 Agent',
   'table.batch.sendSelectedToAgent': '所选发送到 Agent',
-  'table.batch.sendSelectedToCanvas': '所选发送到 Canvas',
 } satisfies MessageBundle;

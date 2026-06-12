@@ -16,27 +16,12 @@ export const en = {
   'table.noScenes': 'No scene headings found (lines starting with INT./EXT.)',
   'table.scenes': '{count} scenes',
   'table.characters': '{count} characters',
-  'table.totalDuration': 'Est. total {duration}',
   'table.header.scene': 'Scene',
-  'table.header.duration': 'Duration',
   'table.header.characters': 'Characters',
-  'table.header.status': 'Status',
-  'table.header.progressIssues': 'Progress / Issues',
-  'table.header.action': 'Action',
   'tab.screenplay': 'Screenplay',
   'tab.table': 'Breakdown',
 
-  // Unified 5-state (creator perspective)
-  'table.status.pending': 'Pending',
-  'table.status.processing': 'Processing',
-  'table.status.attention': 'Needs Attention',
-  'table.status.done': 'Done',
-  'table.status.skipped': 'Skipped',
-
-  // Hover detail for processing/attention states
-  'table.status.detail.analyzing': 'Analysing…',
-  'table.status.detail.generating': 'Generating…',
-  'table.status.detail.sending': 'Sending to canvas…',
+  // Blocking details surfaced from Agent / Canvas state
   'table.status.detail.failed': 'Generation failed',
   'table.status.detail.review': 'Needs review',
   'table.visualStatus.bound': 'Bound',
@@ -61,8 +46,7 @@ export const en = {
   'table.missingInput.duration': 'Reliable scene duration is missing',
   'table.missingInput.canvasHandoff': 'Not sent to Canvas yet',
   'table.canvasProgress': 'Canvas {done}/{total}',
-  'table.shotPlan': '{count} planned shots',
-  'table.sceneIssues.none': 'No blocking issues',
+  'table.sceneIssues.skipped': 'Skipped',
 
   // Context-driven primary action
   'table.action.start': 'Start',
@@ -83,18 +67,10 @@ export const en = {
   'table.action.restart': 'Restart',
 
   // Summary bar
-  'table.summary.progress': '{done}/{total} done',
   'table.selection.all': 'All scenes',
   'table.selection.selected': '{count} selected',
   'table.selection.allRows': 'Select all scenes',
   'table.selection.row': 'Select {scene}',
-  'table.batch.startAll': 'Start All',
-  'table.batch.startSelected': 'Start Selected',
-  'table.batch.sendToAgent': 'Send All to Agent',
-  'table.batch.sendToCanvas': 'Send All to Canvas',
-  'table.batch.generateStoryboard': 'Generate Storyboard Table',
-  'table.batch.syncCanvas': 'Sync to Canvas',
-  'table.batch.startVideo': 'Start Video Generation',
+  'table.batch.sendTableToAgent': 'Send Table to Agent',
   'table.batch.sendSelectedToAgent': 'Send Selected to Agent',
-  'table.batch.sendSelectedToCanvas': 'Send Selected to Canvas',
 } satisfies MessageBundle;

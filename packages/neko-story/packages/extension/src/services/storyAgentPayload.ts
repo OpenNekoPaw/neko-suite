@@ -1,6 +1,7 @@
 import type {
   AgentContextPayload,
   NekoStoryScriptIndex,
+  StoryMissingInput,
   StorySceneVideoReadiness,
   StoryTableAgentContextData,
 } from '@neko/shared';
@@ -13,6 +14,45 @@ export interface BuildStoryTableAgentPayloadInput {
   readonly readinessRows?: readonly StorySceneVideoReadiness[];
   readonly workflowIntent: NonNullable<StoryTableAgentContextData['workflowIntent']>;
   readonly intent: string;
+}
+
+interface AgentSceneContext {
+  readonly sceneId: string;
+  readonly sceneTitle: string;
+  readonly sceneNumber?: string | null;
+  readonly location: string;
+  readonly timeOfDay: string | null;
+  readonly lineRange: { readonly start: number; readonly end: number };
+  readonly summary: string;
+  readonly characters: readonly string[];
+}
+
+interface AgentScriptIndexContext {
+  readonly uri: string;
+  readonly total_lines: number;
+  readonly scenes: readonly AgentSceneContext[];
+  readonly characters: NekoStoryScriptIndex['characters'];
+}
+
+interface AgentReadinessContext {
+  readonly sceneId: string;
+  readonly readinessStatus: StorySceneVideoReadiness['readinessStatus'];
+  readonly creatorStatus: StorySceneVideoReadiness['creatorStatus'];
+  readonly missingInputs: readonly StoryMissingInput[];
+  readonly characters: readonly {
+    readonly name: string;
+    readonly characterId?: string;
+    readonly status: string;
+    readonly assetEntityIds?: readonly string[];
+    readonly generatedAssetIds?: readonly string[];
+  }[];
+  readonly canvasSummary?: {
+    readonly sceneNodeId: string;
+    readonly shotCount: number;
+    readonly generatedShotCount: number;
+    readonly failedShotCount: number;
+    readonly status: string;
+  };
 }
 
 export function buildStoryTableAgentPayload(
@@ -29,6 +69,14 @@ export function buildStoryTableAgentPayload(
   const readinessRows = (input.readinessRows ?? []).filter((row) =>
     selectedSceneIds.includes(row.sceneId),
   );
+  const sceneContexts = scenes.map(toAgentSceneContext);
+  const scriptIndexContext: AgentScriptIndexContext = {
+    uri: input.scriptIndex.uri,
+    total_lines: input.scriptIndex.total_lines,
+    scenes: sceneContexts,
+    characters: input.scriptIndex.characters,
+  };
+  const readinessContexts = readinessRows.map(toAgentReadinessContext);
   const title = createTableLabel(input.scriptPath, scenes.length);
   const contextText = JSON.stringify(
     {
@@ -37,40 +85,8 @@ export function buildStoryTableAgentPayload(
       sourceScriptUri: input.sourceScriptUri,
       workflowIntent: input.workflowIntent,
       sceneIds: selectedSceneIds,
-      scenes: scenes.map((scene) => ({
-        sceneId: scene.sceneId,
-        sceneTitle: scene.sceneTitle,
-        sceneNumber: scene.sceneNumber,
-        location: scene.location,
-        timeOfDay: scene.timeOfDay,
-        lineRange: { start: scene.line_start, end: scene.line_end },
-        summary: scene.actionSummary,
-        estimatedDuration: scene.estimatedDuration,
-        recommendedShotCount: estimateRecommendedShotCount(scene.estimatedDuration),
-        characters: scene.sceneCharacters,
-      })),
-      readinessRows: readinessRows.map((row) => ({
-        sceneId: row.sceneId,
-        readinessStatus: row.readinessStatus,
-        creatorStatus: row.creatorStatus,
-        missingInputs: row.missingInputs,
-        characters: row.characters.map((character) => ({
-          name: character.name,
-          characterId: character.characterId,
-          status: character.status,
-          assetEntityIds: character.assetEntityIds,
-          generatedAssetIds: character.generatedAssetIds,
-        })),
-        canvasSummary: row.canvasSummary
-          ? {
-              sceneNodeId: row.canvasSummary.sceneNodeId,
-              shotCount: row.canvasSummary.shotCount,
-              generatedShotCount: row.canvasSummary.generatedShotCount,
-              failedShotCount: row.canvasSummary.failedShotCount,
-              status: row.canvasSummary.status,
-            }
-          : undefined,
-      })),
+      scenes: sceneContexts,
+      readinessRows: readinessContexts,
     },
     null,
     2,
@@ -80,8 +96,7 @@ export function buildStoryTableAgentPayload(
     scriptPath: input.scriptPath,
     sourceScriptUri: input.sourceScriptUri,
     sceneIds: selectedSceneIds,
-    scriptIndex: input.scriptIndex,
-    readinessRows,
+    scriptIndex: scriptIndexContext,
     selectedText: contextText,
     workflowIntent: input.workflowIntent,
   };
@@ -111,9 +126,40 @@ function createTableLabel(scriptPath: string, sceneCount: number): string {
   return `${basename} - ${sceneCount} scenes`;
 }
 
-function estimateRecommendedShotCount(duration: number): number {
-  if (!Number.isFinite(duration) || duration <= 0) {
-    return 1;
-  }
-  return Math.max(1, Math.min(12, Math.round(duration / 5)));
+function toAgentSceneContext(scene: NekoStoryScriptIndex['scenes'][number]): AgentSceneContext {
+  return {
+    sceneId: scene.sceneId,
+    sceneTitle: scene.sceneTitle,
+    sceneNumber: scene.sceneNumber,
+    location: scene.location,
+    timeOfDay: scene.timeOfDay,
+    lineRange: { start: scene.line_start, end: scene.line_end },
+    summary: scene.actionSummary,
+    characters: scene.sceneCharacters,
+  };
+}
+
+function toAgentReadinessContext(row: StorySceneVideoReadiness): AgentReadinessContext {
+  return {
+    sceneId: row.sceneId,
+    readinessStatus: row.readinessStatus,
+    creatorStatus: row.creatorStatus,
+    missingInputs: row.missingInputs,
+    characters: row.characters.map((character) => ({
+      name: character.name,
+      characterId: character.characterId,
+      status: character.status,
+      assetEntityIds: character.assetEntityIds,
+      generatedAssetIds: character.generatedAssetIds,
+    })),
+    canvasSummary: row.canvasSummary
+      ? {
+          sceneNodeId: row.canvasSummary.sceneNodeId,
+          shotCount: row.canvasSummary.shotCount,
+          generatedShotCount: row.canvasSummary.generatedShotCount,
+          failedShotCount: row.canvasSummary.failedShotCount,
+          status: row.canvasSummary.status,
+        }
+      : undefined,
+  };
 }
