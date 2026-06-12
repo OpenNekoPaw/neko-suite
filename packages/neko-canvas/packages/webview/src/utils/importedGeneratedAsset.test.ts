@@ -191,6 +191,21 @@ describe('imported generated asset normalization', () => {
     });
   });
 
+  it('uses originalPath as the durable path and webview URI as runtime path for plain imports', () => {
+    const asset = normalizeImportedGeneratedAsset({
+      path: 'https://file+.vscode-resource.vscode-cdn.net/repo/cases/test.mp3',
+      originalPath: '/repo/cases/test.mp3',
+      type: 'audio',
+    });
+
+    if (!asset) throw new Error('expected normalized asset');
+
+    expect(getImportedGeneratedAssetNodeInput(asset)).toEqual({
+      assetPath: '/repo/cases/test.mp3',
+      runtimeAssetPath: 'https://file+.vscode-resource.vscode-cdn.net/repo/cases/test.mp3',
+    });
+  });
+
   it('preserves explicit asset names over derived file names', () => {
     expect(
       normalizeImportedGeneratedAsset({

@@ -1080,6 +1080,18 @@ export class EngineClient {
     return this.pathResolver.resolve(source);
   }
 
+  private resolveExecutionSource(source: string, label: string): string {
+    const resolved = this.resolveSource(source);
+    assertResolvedEngineExecutionSource(resolved, label);
+    return resolved;
+  }
+
+  private resolveLocalFileSource(source: string, label: string): string {
+    const resolved = this.resolveSource(source);
+    assertResolvedEngineLocalFileSource(resolved, label);
+    return resolved;
+  }
+
   // =========================================================================
   // URL helpers
   // =========================================================================
@@ -1229,10 +1241,11 @@ export class EngineClient {
    * Transforms the Rust nested response (videoStreams/audioStreams) into flat ProbeResult.
    */
   async probe(group: 'videos' | 'audios', source: string): Promise<ProbeResult> {
+    const resolvedSource = this.resolveExecutionSource(source, `${group}:probe`);
     const resp = await this.dispatch({
       group,
       action: 'probe',
-      options: { source },
+      options: { source: resolvedSource },
     });
     this.assertOk(resp, `${group}:probe`);
 
@@ -1261,10 +1274,11 @@ export class EngineClient {
    * Unwraps nested Rust response and downmixes multi-channel peaks to mono.
    */
   async waveform(source: string, opts?: { peaksPerSecond?: number }): Promise<WaveformResult> {
+    const resolvedSource = this.resolveExecutionSource(source, 'audios:waveform');
     const resp = await this.dispatch({
       group: 'audios',
       action: 'waveform',
-      options: { ...sourceOptions(source), ...opts },
+      options: { ...sourceOptions(resolvedSource), ...opts },
     });
     this.assertOk(resp, 'audios:waveform');
 
@@ -1294,11 +1308,12 @@ export class EngineClient {
     duration: number,
     opts?: { format?: string; sampleRate?: number; channels?: number },
   ): Promise<ArrayBuffer | null> {
+    const resolvedSource = this.resolveExecutionSource(source, 'audios:segment');
     const resp = await this.dispatch({
       group: 'audios',
       action: 'segment',
       options: {
-        source,
+        source: resolvedSource,
         start,
         duration,
         format: opts?.format ?? 'wav',
@@ -1355,11 +1370,13 @@ export class EngineClient {
     time: number,
     opts?: { quality?: number; format?: string; width?: number; height?: number },
   ): Promise<ArrayBuffer | null> {
+    const resolvedSource =
+      typeof source === 'string' ? this.resolveExecutionSource(source, 'videos:capture') : source;
     const resp = await this.dispatch({
       group: 'videos',
       action: 'capture',
       options: {
-        ...sourceOptions(source),
+        ...sourceOptions(resolvedSource),
         time,
         quality: opts?.quality ?? 85,
         format: opts?.format ?? 'jpeg',
@@ -1387,11 +1404,13 @@ export class EngineClient {
     source: string | FileSourceRef,
     opts?: { quality?: number; format?: string; width?: number; height?: number },
   ): Promise<ArrayBuffer | null> {
+    const resolvedSource =
+      typeof source === 'string' ? this.resolveExecutionSource(source, 'images:capture') : source;
     const resp = await this.dispatch({
       group: 'images',
       action: 'capture',
       options: {
-        ...sourceOptions(source),
+        ...sourceOptions(resolvedSource),
         quality: opts?.quality ?? 85,
         format: opts?.format ?? 'jpeg',
         ...(opts?.width != null && { width: opts.width }),
@@ -1414,10 +1433,11 @@ export class EngineClient {
    * Returns sorted array of keyframe timestamps in seconds.
    */
   async getKeyframes(source: string): Promise<number[]> {
+    const resolvedSource = this.resolveExecutionSource(source, 'videos:keyframes');
     const resp = await this.dispatch({
       group: 'videos',
       action: 'keyframes',
-      options: { source },
+      options: { source: resolvedSource },
     });
 
     if (resp.status === 'error') return [];
@@ -1454,10 +1474,12 @@ export class EngineClient {
     source: string | FileSourceRef,
     opts?: Record<string, unknown>,
   ): Promise<StreamHandle> {
+    const resolvedSource =
+      typeof source === 'string' ? this.resolveExecutionSource(source, `${group}:stream`) : source;
     const resp = await this.dispatch({
       group,
       action: 'stream',
-      options: { ...sourceOptions(source), ...opts },
+      options: { ...sourceOptions(resolvedSource), ...opts },
     });
     this.assertOk(resp, `${group}:stream`);
 
@@ -1514,10 +1536,11 @@ export class EngineClient {
    * Returns integrated LUFS, true peak, loudness range, and recommended gain.
    */
   async analyzeLoudness(source: string, targetLufs: number = -14): Promise<LoudnessAnalysis> {
+    const resolvedSource = this.resolveExecutionSource(source, 'audios:analyze_loudness');
     const resp = await this.dispatch({
       group: 'audios',
       action: 'analyze_loudness',
-      options: { source, targetLufs },
+      options: { source: resolvedSource, targetLufs },
     });
     this.assertOk(resp, 'audios:analyze_loudness');
     return resp.data as LoudnessAnalysis;
@@ -1537,10 +1560,11 @@ export class EngineClient {
     thresholdDbfs: number = -40,
     minDuration: number = 0.5,
   ): Promise<SilenceAnalysis> {
+    const resolvedSource = this.resolveExecutionSource(source, 'audios:detect_silence');
     const resp = await this.dispatch({
       group: 'audios',
       action: 'detect_silence',
-      options: { source, thresholdDbfs, minDuration },
+      options: { source: resolvedSource, thresholdDbfs, minDuration },
     });
     this.assertOk(resp, 'audios:detect_silence');
     return resp.data as SilenceAnalysis;
@@ -1636,10 +1660,12 @@ export class EngineClient {
    * Returns the scene snapshot with all nodes and animations.
    */
   async loadModel(source: string | FileSourceRef): Promise<SceneSnapshot> {
+    const resolvedSource =
+      typeof source === 'string' ? this.resolveExecutionSource(source, 'scenes:load') : source;
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'load',
-      options: sourceOptions(source),
+      options: sourceOptions(resolvedSource),
     });
     this.assertOk(resp, 'scenes:load');
     return normalizeSceneSnapshot(resp.data);
@@ -2043,7 +2069,9 @@ export class EngineClient {
    */
   async loadPuppetSource(source: string | FileSourceRef): Promise<Record<string, unknown>> {
     const options =
-      typeof source === 'string' ? { source: this.resolveSource(source) } : { sourceRef: source };
+      typeof source === 'string'
+        ? { source: this.resolveExecutionSource(source, 'puppets:load_source') }
+        : { sourceRef: source };
     const resp = await this.dispatch({
       group: 'puppets',
       action: 'load_source',
@@ -2906,10 +2934,11 @@ export class EngineClient {
    * the entry count and optional title/author from EPUB OPF.
    */
   async probeDocument(source: string): Promise<DocumentProbeResult> {
+    const resolvedSource = this.resolveLocalFileSource(source, 'documents:probe');
     const resp = await this.dispatch({
       group: 'documents',
       action: 'probe',
-      options: { source },
+      options: { source: resolvedSource },
     });
     this.assertOk(resp, 'documents:probe');
     return resp.data as DocumentProbeResult;
@@ -2920,7 +2949,7 @@ export class EngineClient {
    * Returns an opaque token used for subsequent `readDocumentRange` / `readDocumentEntry` calls.
    */
   async registerDocument(source: string): Promise<string> {
-    const resolved = this.resolveSource(source);
+    const resolved = this.resolveLocalFileSource(source, 'previews:register-token');
     const resp = await this.dispatch({
       group: 'previews',
       action: 'register-token',
@@ -3021,12 +3050,21 @@ export class EngineClient {
   async registerFile(request: RegisterFileRequest | string): Promise<RegisteredFile> {
     const normalized =
       typeof request === 'string'
-        ? { filePath: this.resolveSource(request), purpose: 'preview' as FileAccessPurpose }
+        ? {
+            filePath: this.resolveLocalFileSource(request, 'files:register'),
+            purpose: 'preview' as FileAccessPurpose,
+          }
         : {
             ...request,
-            filePath: request.filePath ? this.resolveSource(request.filePath) : request.filePath,
-            source: request.source ? this.resolveSource(request.source) : request.source,
-            path: request.path ? this.resolveSource(request.path) : request.path,
+            filePath: request.filePath
+              ? this.resolveLocalFileSource(request.filePath, 'files:register')
+              : request.filePath,
+            source: request.source
+              ? this.resolveLocalFileSource(request.source, 'files:register')
+              : request.source,
+            path: request.path
+              ? this.resolveLocalFileSource(request.path, 'files:register')
+              : request.path,
           };
     const resp = await this.dispatch({
       group: 'files',
@@ -3063,10 +3101,11 @@ export class EngineClient {
 
   /** Resolve and authorize a local path without registering a token. */
   async resolveFile(source: string): Promise<{ path: string }> {
+    const resolvedSource = this.resolveLocalFileSource(source, 'files:resolve');
     const resp = await this.dispatch({
       group: 'files',
       action: 'resolve',
-      options: { source: this.resolveSource(source) },
+      options: { source: resolvedSource },
     });
     this.assertOk(resp, 'files:resolve');
     return resp.data as { path: string };
@@ -3196,6 +3235,45 @@ function encodeEntryPath(entryPath: string): string {
 
 function sourceOptions(source: string | FileSourceRef): Record<string, unknown> {
   return typeof source === 'string' ? { source } : { sourceRef: source };
+}
+
+function assertResolvedEngineExecutionSource(source: string, label: string): void {
+  if (isRemoteUrl(source) || isAbsoluteLocalPath(source)) return;
+  if (hasPathVariableSyntax(source)) {
+    throw new Error(
+      `${label} requires host-resolved media source; unresolved path variables require source document context: ${source}`,
+    );
+  }
+  throw new Error(
+    `${label} requires host-resolved media source; workspace-relative paths require source document context: ${source}`,
+  );
+}
+
+function assertResolvedEngineLocalFileSource(source: string, label: string): void {
+  if (isAbsoluteLocalPath(source)) return;
+  if (isRemoteUrl(source)) {
+    throw new Error(`${label} requires a resolved local file path, received remote URL: ${source}`);
+  }
+  if (hasPathVariableSyntax(source)) {
+    throw new Error(
+      `${label} requires host-resolved local file path; unresolved path variables require source document context: ${source}`,
+    );
+  }
+  throw new Error(
+    `${label} requires host-resolved local file path; workspace-relative paths require source document context: ${source}`,
+  );
+}
+
+function isRemoteUrl(source: string): boolean {
+  return /^https?:\/\//i.test(source);
+}
+
+function isAbsoluteLocalPath(source: string): boolean {
+  return source.startsWith('/') || /^[A-Za-z]:[\\/]/.test(source) || source.startsWith('\\\\');
+}
+
+function hasPathVariableSyntax(source: string): boolean {
+  return /^\/?\$\{[^}]+\}/.test(source);
 }
 
 /**

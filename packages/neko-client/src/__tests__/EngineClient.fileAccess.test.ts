@@ -125,31 +125,39 @@ describe('EngineClient file access helpers', () => {
     fetchMock.mockRestore();
   });
 
-  it('keeps relative file paths unchanged when a path resolver is configured', async () => {
-    const registered: RegisteredFile = {
-      token: 'token-4',
-      fileSizeBytes: 64,
-      mimeType: 'application/epub+zip',
-      purpose: 'document',
-      rangeUrl: '/v1/files/token-4',
-      entryBaseUrl: '/v1/files/token-4/entries/',
-      resourceBaseUrl: '/v1/files/token-4/resources/',
-    };
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(dispatchResponse(registered));
+  it('rejects workspace-relative file access before engine dispatch', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
     const client = new EngineClient(3456);
     client.setPathResolver(new PathResolver(new Map([['A', '/library']])));
 
-    await client.registerFile({ filePath: 'books/book.epub', purpose: 'document' });
+    await expect(
+      client.registerFile({ filePath: 'books/book.epub', purpose: 'document' }),
+    ).rejects.toThrow('workspace-relative paths require source document context');
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(lastDispatchBody()).toEqual(
-      expect.objectContaining({
-        group: 'files',
-        action: 'register',
-        options: { filePath: 'books/book.epub', purpose: 'document' },
-      }),
+    fetchMock.mockRestore();
+  });
+
+  it('rejects unresolved file access variables before engine dispatch', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const client = new EngineClient(3456);
+
+    await expect(
+      client.registerFile({ filePath: '${MISSING}/book.epub', purpose: 'document' }),
+    ).rejects.toThrow('unresolved path variables require source document context');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockRestore();
+  });
+
+  it('rejects workspace-relative media execution sources before engine dispatch', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const client = new EngineClient(3456);
+
+    await expect(client.probe('videos', 'cases/1080P.mp4')).rejects.toThrow(
+      'workspace-relative paths require source document context',
     );
+    expect(fetchMock).not.toHaveBeenCalled();
 
     fetchMock.mockRestore();
   });

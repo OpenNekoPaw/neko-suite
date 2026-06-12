@@ -59,7 +59,12 @@ export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
-  onAddMediaFromExtension: (mediaType: string, uri: string, name: string) => void;
+  onAddMediaFromExtension: (
+    mediaType: string,
+    uri: string,
+    name: string,
+    options?: { runtimeAssetPath?: string; originalPath?: string },
+  ) => void;
   onImportGeneratedAsset?: (asset: ImportedGeneratedAssetPayload) => void;
   onDropAssets: (assets: CanvasDroppedAsset[]) => void;
   /** Called when generation status/image arrives from the extension scheduler */
@@ -306,6 +311,14 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               message.mediaType as string,
               message.uri as string,
               message.name as string,
+              {
+                ...(typeof message.runtimeAssetPath === 'string'
+                  ? { runtimeAssetPath: message.runtimeAssetPath }
+                  : {}),
+                ...(typeof message.originalPath === 'string'
+                  ? { originalPath: message.originalPath }
+                  : {}),
+              },
             );
             break;
           case 'importGeneratedAsset': {

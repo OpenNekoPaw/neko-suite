@@ -19,6 +19,7 @@ import {
   PreviewVariantResourceCacheProvider,
   ResourceCacheContentAccessProvider,
   ThumbnailResourceCacheProvider,
+  createVSCodeWorkspaceMediaPathContext,
   createProjectSnapshotPackage,
   hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
@@ -54,6 +55,9 @@ import {
   NEKO_EXTENSION_IDS,
   normalizeNarrativePreviewFeatureToggles,
   PathResolver,
+  contractWorkspaceMediaPath,
+  createWorkspaceMediaPathCandidates,
+  resolveWorkspaceMediaPath,
   summarizeCanvasSubsystems,
   resolveStorageLayout,
 } from '@neko/shared';
@@ -192,6 +196,15 @@ function isCanvasEditorLevelKeyboardAction(action: string): boolean {
 
 function readPlaybackMediaType(value: unknown): PlaybackMediaType {
   return value === 'video' || value === 'audio' ? value : 'auto';
+}
+
+function isWorkspaceScopedVariablePath(value: string): boolean {
+  return (
+    value === '${WORKSPACE}' ||
+    value.startsWith('${WORKSPACE}/') ||
+    value === '${PROJECT}' ||
+    value.startsWith('${PROJECT}/')
+  );
 }
 
 function createWorkspacePathResolver(workspaceRoot: string): PathResolver {
@@ -544,8 +557,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           'assets',
           'narrative-preview-media-runtime.js',
         ),
-      getWebviewLocalResourceRoots: (sourceCanvasUri?: string) =>
-        this.getNarrativePreviewLocalResourceRoots(sourceCanvasUri),
+      getWebviewOptions: (sourceCanvasUri?: string) => ({
+        localResourceRoots: [...this.getNarrativePreviewLocalResourceRoots(sourceCanvasUri)],
+      }),
     });
     this.localResourceAccess = createDefaultLocalResourceAccessService({
       extensionUri: context.extensionUri,
@@ -992,7 +1006,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const previewCanvasData = this.cloneCanvasDataForPlaybackPreview(canvasData);
     await this.localResourceAccess.configureWebview(webview, {
       enableScripts: true,
-      extraRoots: this.getDocumentLocalResourceRoots(documentUri),
+      extraRoots: this.getCanvasLocalResourceRoots(documentUri),
     });
     return previewCanvasData;
   }
@@ -1028,7 +1042,37 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const documentUri = sourceCanvasUri
       ? vscode.Uri.parse(sourceCanvasUri)
       : this.activeDocument?.uri;
-    if (!documentUri) return;
+    logger.debug(
+      `Canvas Preview media host request: ${JSON.stringify({
+        type: typeof message.type === 'string' ? message.type : undefined,
+        nodeId: typeof message.nodeId === 'string' ? message.nodeId : undefined,
+        assetPath: typeof message.assetPath === 'string' ? message.assetPath : undefined,
+        sourceCanvasUri,
+        documentUri: documentUri?.toString(),
+      })}`,
+    );
+    if (!documentUri) {
+      const response = {
+        nodeId: message.nodeId,
+        ...this.readNarrativePreviewSessionEnvelope(message),
+      };
+      if (message.type === 'media:probe') {
+        await this.postMediaPlaybackResponse(webviewPanel, {
+          type: 'media:probeResult',
+          ...response,
+          error: 'Preview media playback requires an active Canvas document or source Canvas URI.',
+        });
+        return;
+      }
+      if (message.type === 'media:play') {
+        await this.postMediaPlaybackResponse(webviewPanel, {
+          type: 'media:streamReady',
+          ...response,
+          error: 'Preview media playback requires an active Canvas document or source Canvas URI.',
+        });
+      }
+      return;
+    }
     await this.handleMediaPlaybackMessage(message, webviewPanel, documentUri);
   }
 
@@ -1153,7 +1197,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
     await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      extraRoots: this.getDocumentLocalResourceRoots(document.uri),
+      extraRoots: this.getCanvasLocalResourceRoots(document.uri),
     });
 
     webviewPanel.webview.onDidReceiveMessage(
@@ -2051,13 +2095,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!assetPath && !resourceRef) break;
 
         try {
-          // Resolve to filesystem path (handles webview URIs, absolute, and relative paths)
           const fsPath = resourceRef
             ? await this.resolveResourceRefLocalPreviewPath(
                 resourceRef,
                 'neko-canvas.open-media-preview',
               )
-            : await this.resolveAssetPath(assetPath!, document.uri);
+            : await this.resolveCanvasMediaLocalFilePath(
+                assetPath!,
+                document.uri,
+                'neko-canvas.open-media-preview',
+              );
           const fileUri = vscode.Uri.file(fsPath);
 
           const ext = fsPath.split('.').pop()?.toLowerCase() ?? '';
@@ -2154,7 +2201,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'pickMedia': {
         // Open file picker for media files
-        const mediaType = message.mediaType as string;
+        const mediaType =
+          message.mediaType === 'video' || message.mediaType === 'audio'
+            ? message.mediaType
+            : 'image';
         const filters: Record<string, string[]> = {};
         switch (mediaType) {
           case 'image':
@@ -2176,20 +2226,23 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         if (uris && uris.length > 0) {
           const uri = uris[0];
-          await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
-          // Convert to webview URI so the webview can access the file
-          const webviewUri = this.projectLocalResource(
+          const fileName = uri.path.split('/').pop() || 'media';
+          const mediaAsset = await this.createMediaDroppedAsset(
             webviewPanel.webview,
             uri.fsPath,
             'neko-canvas.pick-media',
+            document.uri,
+            fileName,
+            mediaType,
           );
-          if (!webviewUri) break;
-          const name = uri.path.split('/').pop() || 'media';
+          if (!mediaAsset) break;
           webviewPanel.webview.postMessage({
             type: 'addMedia',
             mediaType,
-            uri: webviewUri,
-            name,
+            uri: mediaAsset.path,
+            runtimeAssetPath: mediaAsset.runtimeAssetPath,
+            originalPath: mediaAsset.originalPath,
+            name: mediaAsset.name,
           });
         }
         break;
@@ -2241,16 +2294,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const mediaType = inferCanvasMediaType(fileName);
           if (!mediaType) break;
 
-          await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
-          const webviewUri = this.projectLocalResource(
+          const mediaAsset = await this.createMediaDroppedAsset(
             webviewPanel.webview,
             uri.fsPath,
             'neko-canvas.pick-media-file',
+            document.uri,
+            fileName,
+            mediaType,
           );
-          if (webviewUri) {
+          if (mediaAsset) {
             webviewPanel.webview.postMessage({
               type: 'dropAssets',
-              assets: [{ kind: 'media', path: webviewUri, name: fileName, mediaType }],
+              assets: [mediaAsset],
             });
           }
         }
@@ -2412,15 +2467,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           if (assetKind === 'media') {
             const mediaType = inferCanvasMediaType(fileName);
             if (mediaType) {
-              await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
-              const webviewUri = this.projectLocalResource(
+              asset = await this.createMediaDroppedAsset(
                 webviewPanel.webview,
                 uri.fsPath,
                 'neko-canvas.pick-file',
+                document.uri,
+                fileName,
+                mediaType,
               );
-              if (webviewUri) {
-                asset = { kind: 'media', path: webviewUri, name: fileName, mediaType };
-              }
             }
           } else {
             const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
@@ -2579,7 +2633,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                 resourceRef,
                 'neko-canvas.media-capture-frame',
               )
-            : await this.resolveAssetPath(assetPath!, document.uri);
+            : await this.resolveCanvasMediaLocalFilePath(
+                assetPath!,
+                document.uri,
+                'neko-canvas.media-capture-frame',
+              );
           const playback = await this.getMediaPlayback();
           if (!playback) {
             webviewPanel.webview.postMessage({
@@ -2610,7 +2668,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!assetPath) break;
         let assetId: string | null = null;
         try {
-          const filePath = await this.resolveAssetPath(assetPath, document.uri);
+          const filePath = await this.resolveCanvasMediaLocalFilePath(
+            assetPath,
+            document.uri,
+            'neko-canvas.media-panoramic-thumbnail',
+          );
           const route = getPanoramicPreviewRoute({
             filePath,
             mediaType: message.mediaType as string | undefined,
@@ -2764,19 +2826,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               const mediaType = inferCanvasMediaType(fileName);
               if (!mediaType) continue;
 
-              await this.addFeatureRoot(webviewPanel.webview, path.dirname(fileUri.fsPath));
-              const webviewUri = this.projectLocalResource(
+              const mediaAsset = await this.createMediaDroppedAsset(
                 webviewPanel.webview,
                 fileUri.fsPath,
                 'neko-canvas.drop-file',
-              );
-              if (!webviewUri) continue;
-              resolvedAssets.push({
-                kind: 'media',
-                path: webviewUri,
-                name: fileName,
+                document.uri,
+                fileName,
                 mediaType,
-              });
+              );
+              if (!mediaAsset) continue;
+              resolvedAssets.push(mediaAsset);
               continue;
             }
 
@@ -3237,42 +3296,83 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   /** Resolve asset path (PathVariable, webview URI, relative, or absolute) to absolute filesystem path */
   private async resolveAssetPath(assetPath: string, documentUri: vscode.Uri): Promise<string> {
-    // PathVariable: ${VAR}/rest → absolute
-    if (assetPath.startsWith('${')) {
-      try {
-        const resolved = await vscode.commands.executeCommand<string>(
-          'neko.assets.resolvePath',
-          assetPath,
-        );
-        if (resolved) return resolved;
-      } catch {
-        // neko-assets not active
-      }
-      return assetPath;
-    }
+    const source = assetPath.trim();
     // Handle webview URIs (https://file+.vscode-resource.vscode-cdn.net/path/to/file)
-    const vscodeResourcePath = this.resolveVSCodeResourceUriPath(assetPath);
+    const vscodeResourcePath = this.resolveVSCodeResourceUriPath(source);
     if (vscodeResourcePath) {
       return vscodeResourcePath;
     }
     try {
-      const uri = vscode.Uri.parse(assetPath);
+      const uri = vscode.Uri.parse(source);
       if (uri.scheme === 'file') {
         return uri.fsPath;
       }
       if (uri.scheme && !/^[A-Za-z]$/.test(uri.scheme)) {
-        return assetPath;
+        return source;
       }
     } catch {
       // Fall through to local path handling.
     }
-    // Absolute filesystem path
-    if (assetPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(assetPath)) {
-      return assetPath;
+
+    if (source.startsWith('${') && !isWorkspaceScopedVariablePath(source)) {
+      try {
+        const resolved = await vscode.commands.executeCommand<string>(
+          'neko.assets.resolvePath',
+          source,
+        );
+        if (resolved && !resolved.startsWith('${')) return resolved;
+      } catch {
+        // neko-assets not active
+      }
     }
-    // Relative path — resolve against document's directory
+
+    const resolved = resolveWorkspaceMediaPath({
+      source,
+      context: this.createCanvasWorkspaceMediaPathContext(documentUri),
+      fileExists: (filePath) => this.isExistingLocalFile(filePath),
+    });
+    if (resolved.status === 'resolved-local') {
+      return resolved.path;
+    }
+
+    const planned = createWorkspaceMediaPathCandidates(
+      source,
+      this.createCanvasWorkspaceMediaPathContext(documentUri),
+    );
+    const candidate = planned.candidates[0]?.path;
+    if (
+      candidate &&
+      (planned.classification.kind === 'variable' ||
+        (planned.classification.kind === 'workspace-relative' &&
+          !source.startsWith('../') &&
+          source !== '..'))
+    ) {
+      return candidate;
+    }
+    if (planned.classification.kind === 'absolute-local') {
+      return source;
+    }
+    // Legacy fallback: older Canvas files stored paths relative to the .nkc directory.
     const docDir = vscode.Uri.joinPath(documentUri, '..');
-    return vscode.Uri.joinPath(docDir, assetPath).fsPath;
+    return vscode.Uri.joinPath(docDir, source).fsPath;
+  }
+
+  private resolveWorkspaceVariableAssetPath(
+    assetPath: string,
+    documentUri: vscode.Uri,
+  ): string | undefined {
+    return this.resolveWorkspaceVariableAssetPathCandidates(assetPath, documentUri)[0];
+  }
+
+  private resolveWorkspaceVariableAssetPathCandidates(
+    assetPath: string,
+    documentUri: vscode.Uri,
+  ): readonly string[] {
+    if (!isWorkspaceScopedVariablePath(assetPath)) return [];
+    return createWorkspaceMediaPathCandidates(
+      assetPath,
+      this.createCanvasWorkspaceMediaPathContext(documentUri),
+    ).candidates.map((candidate) => candidate.path);
   }
 
   private resolveVSCodeResourceUriPath(value: string): string | undefined {
@@ -3339,34 +3439,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             'neko-canvas.media-probe',
           );
           if (!filePath) {
-            webviewPanel.webview.postMessage({
+            await this.postMediaPlaybackResponse(webviewPanel, {
               type: 'media:probeResult',
               nodeId: message.nodeId,
+              ...this.readNarrativePreviewSessionEnvelope(message),
               error: 'Media source could not be resolved to a local file path.',
             });
             break;
           }
           const playback = await this.getMediaPlayback();
           if (!playback) {
-            webviewPanel.webview.postMessage({
+            await this.postMediaPlaybackResponse(webviewPanel, {
               type: 'media:probeResult',
               nodeId: message.nodeId,
+              ...this.readNarrativePreviewSessionEnvelope(message),
               error: 'Media engine not available',
             });
             break;
           }
           const mediaInfo = await playback.probeMedia(filePath, mediaType);
-          webviewPanel.webview.postMessage({
+          await this.postMediaPlaybackResponse(webviewPanel, {
             type: 'media:probeResult',
             nodeId: message.nodeId,
+            ...this.readNarrativePreviewSessionEnvelope(message),
             mediaInfo,
             port: playback.port,
           });
         } catch (error) {
           logger.error(`Probe failed: ${error}`);
-          webviewPanel.webview.postMessage({
+          await this.postMediaPlaybackResponse(webviewPanel, {
             type: 'media:probeResult',
             nodeId: message.nodeId,
+            ...this.readNarrativePreviewSessionEnvelope(message),
             error: error instanceof Error ? error.message : 'Probe failed',
           });
         }
@@ -3378,7 +3482,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const startTime = (message.startTime as number) ?? 0;
         const speed = (message.speed as number) ?? 1.0;
         const mediaType = readPlaybackMediaType(message.mediaType);
-        if (!mediaInfo) break;
+        if (!mediaInfo) {
+          await this.postMediaPlaybackResponse(webviewPanel, {
+            type: 'media:streamReady',
+            nodeId: message.nodeId,
+            ...this.readNarrativePreviewSessionEnvelope(message),
+            error: 'Media playback requires probe metadata before stream creation.',
+          });
+          break;
+        }
         try {
           const filePath = await this.resolveMediaPlaybackFilePath(
             message,
@@ -3386,18 +3498,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             'neko-canvas.media-play',
           );
           if (!filePath) {
-            webviewPanel.webview.postMessage({
+            await this.postMediaPlaybackResponse(webviewPanel, {
               type: 'media:streamReady',
               nodeId: message.nodeId,
+              ...this.readNarrativePreviewSessionEnvelope(message),
               error: 'Media source could not be resolved to a local file path.',
             });
             break;
           }
           const playback = await this.getMediaPlayback();
           if (!playback) {
-            webviewPanel.webview.postMessage({
+            await this.postMediaPlaybackResponse(webviewPanel, {
               type: 'media:streamReady',
               nodeId: message.nodeId,
+              ...this.readNarrativePreviewSessionEnvelope(message),
               error: 'Media engine not available',
             });
             break;
@@ -3419,10 +3533,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             startTime,
             speed,
           });
+          if (!handle.videoStreamUrl && !handle.audioStreamUrl) {
+            await this.postMediaPlaybackResponse(webviewPanel, {
+              type: 'media:streamReady',
+              nodeId: message.nodeId,
+              ...this.readNarrativePreviewSessionEnvelope(message),
+              error: 'Media stream could not be created for this source.',
+            });
+            break;
+          }
           panelStreams.set(nodeId, handle);
-          webviewPanel.webview.postMessage({
+          await this.postMediaPlaybackResponse(webviewPanel, {
             type: 'media:streamReady',
             nodeId: message.nodeId,
+            ...this.readNarrativePreviewSessionEnvelope(message),
             videoStreamUrl: handle.videoStreamUrl,
             audioStreamUrl: handle.audioStreamUrl,
             videoStreamId: handle.videoStreamId,
@@ -3430,9 +3554,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             mediaInfo,
           });
         } catch (error) {
-          webviewPanel.webview.postMessage({
+          await this.postMediaPlaybackResponse(webviewPanel, {
             type: 'media:streamReady',
             nodeId: message.nodeId,
+            ...this.readNarrativePreviewSessionEnvelope(message),
             error: error instanceof Error ? error.message : 'Play failed',
           });
         }
@@ -3482,6 +3607,26 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
   }
 
+  private async postMediaPlaybackResponse(
+    webviewPanel: vscode.WebviewPanel,
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    logger.debug(
+      `Canvas Preview media host response: ${JSON.stringify({
+        type: message.type,
+        nodeId: message.nodeId,
+        error: message.error,
+        hasMediaInfo: Boolean(message.mediaInfo),
+        hasVideoStreamUrl: Boolean(message.videoStreamUrl),
+        hasAudioStreamUrl: Boolean(message.audioStreamUrl),
+      })}`,
+    );
+    const delivered = await webviewPanel.webview.postMessage(message);
+    if (!delivered) {
+      throw new Error('Media playback response could not be delivered to the Preview webview.');
+    }
+  }
+
   private async resolveMediaPlaybackFilePath(
     message: Record<string, unknown>,
     documentUri: vscode.Uri,
@@ -3523,6 +3668,25 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       documentUri,
     );
     return candidates[0];
+  }
+
+  private async resolveCanvasMediaLocalFilePath(
+    assetPath: string,
+    documentUri: vscode.Uri,
+    caller: string,
+  ): Promise<string> {
+    const candidates = await this.resolveCanvasPlaybackLocalPreviewPathCandidates(
+      assetPath,
+      documentUri,
+    );
+    const existing = candidates[0];
+    if (existing) {
+      return existing;
+    }
+
+    throw new Error(
+      `Media source could not be resolved to an existing local file for ${caller}: ${assetPath}`,
+    );
   }
 
   private resolvePreviewResourceRef(
@@ -3694,13 +3858,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       if (node['type'] !== 'media') continue;
 
-      for (const key of ['assetPath', 'thumbnailPath'] as const) {
+      for (const [key, runtimeKey] of [
+        ['assetPath', 'runtimeAssetPath'],
+        ['thumbnailPath', 'runtimeThumbnailPath'],
+      ] as const) {
         const value = nodeData[key];
         if (typeof value !== 'string' || !value) continue;
         try {
-          const fsPath = await this.resolveAssetPath(value, documentUri);
-          const uri = this.projectLocalResource(webview, fsPath, 'neko-canvas.load-node-media');
-          if (uri) nodeData[key] = uri;
+          const uri = await this.projectCanvasMediaLocalFile(
+            webview,
+            value,
+            documentUri,
+            'neko-canvas.load-node-media',
+          );
+          if (uri) {
+            nodeData[runtimeKey] = uri;
+          }
         } catch {
           // leave as-is if resolution fails
         }
@@ -3719,6 +3892,54 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       webview.options.localResourceRoots ?? [],
       { caller },
     )(source);
+  }
+
+  private async projectCanvasMediaLocalFile(
+    webview: vscode.Webview,
+    source: string,
+    documentUri: vscode.Uri,
+    caller: string,
+  ): Promise<string | undefined> {
+    for (const fsPath of await this.resolveCanvasPlaybackLocalPreviewPathCandidates(
+      source,
+      documentUri,
+    )) {
+      const projection = await this.localResourceAccess.toWebviewUri(webview, fsPath, {
+        caller,
+        extraRoots: [
+          ...(webview.options.localResourceRoots ?? []),
+          ...this.getCanvasLocalResourceRoots(documentUri),
+          vscode.Uri.file(path.dirname(fsPath)),
+        ],
+      });
+      if (projection.ok) {
+        return projection.uri;
+      }
+    }
+    return undefined;
+  }
+
+  private async createMediaDroppedAsset(
+    webview: vscode.Webview,
+    fsPath: string,
+    caller: string,
+    documentUri: vscode.Uri,
+    fileName: string,
+    mediaType: 'image' | 'video' | 'audio',
+  ): Promise<Extract<CanvasDroppedAsset, { kind: 'media' }> | undefined> {
+    await this.addFeatureRoot(webview, path.dirname(fsPath));
+    const runtimeAssetPath = this.projectLocalResource(webview, fsPath, caller);
+    if (!runtimeAssetPath) {
+      return undefined;
+    }
+    return {
+      kind: 'media',
+      path: await this.contractAssetPath(fsPath, documentUri),
+      originalPath: fsPath,
+      runtimeAssetPath,
+      name: fileName,
+      mediaType,
+    };
   }
 
   private async addFeatureRoot(webview: vscode.Webview, rootPath: string): Promise<void> {
@@ -3791,7 +4012,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           extraRoots: input.documentUri
             ? [
                 ...(input.webview.options.localResourceRoots ?? []),
-                ...this.getDocumentLocalResourceRoots(input.documentUri),
+                ...this.getCanvasLocalResourceRoots(input.documentUri),
               ]
             : input.webview.options.localResourceRoots,
         });
@@ -4067,6 +4288,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       caller: 'neko-canvas.preview-playback-shot-reference',
     });
     if (projected) {
+      const referenceImagePath = this.readPreviewSourceString(data['referenceImagePath']);
+      const playableAssetPath = await this.resolveCanvasPlaybackPreviewPlayableAssetPath(
+        {
+          ...(referenceImagePath ? { source: referenceImagePath } : {}),
+          ...(referenceImageResourceRef ? { documentResourceRef: referenceImageResourceRef } : {}),
+          ...(resourceRef ? { resourceRef } : {}),
+        },
+        resourceRef,
+        documentUri,
+        'neko-canvas.preview-playback-shot-reference',
+      );
       return {
         url: projected,
         kind: 'reference-image',
@@ -4075,6 +4307,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           ...(resourceRef ? { resourceRef } : {}),
           ...(referenceImageResourceRef ? { documentResourceRef: referenceImageResourceRef } : {}),
         },
+        playableAssetPath,
       };
     }
 
@@ -4215,6 +4448,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       caller: 'neko-canvas.preview-playback-media-resource',
     });
     if (projected) {
+      const mediaAssetPath = this.readPreviewSourceString(data['assetPath']);
+      const playableAssetPath = await this.resolveCanvasPlaybackPreviewPlayableAssetPath(
+        {
+          ...(mediaAssetPath ? { source: mediaAssetPath } : {}),
+          ...(documentResourceRef ? { documentResourceRef } : {}),
+          ...(resourceRef ? { resourceRef } : {}),
+        },
+        resourceRef,
+        documentUri,
+        'neko-canvas.preview-playback-media-resource',
+      );
       return {
         url: projected,
         kind: 'media-asset',
@@ -4223,6 +4467,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           ...(resourceRef ? { resourceRef } : {}),
           ...(documentResourceRef ? { documentResourceRef } : {}),
         },
+        playableAssetPath,
       };
     }
     const asset = await this.resolveCanvasPlaybackPreviewSourceCandidate(
@@ -4345,7 +4590,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         caller,
         extraRoots: [
           ...(webview.options.localResourceRoots ?? []),
-          ...this.getDocumentLocalResourceRoots(documentUri),
+          ...this.getCanvasLocalResourceRoots(documentUri),
         ],
       });
       if (projected.ok) {
@@ -4374,7 +4619,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       for (const fsPath of localCandidates) {
         if (
           await this.localResourceAccess.isAuthorizedPath(fsPath, {
-            extraRoots: this.getDocumentLocalResourceRoots(documentUri),
+            extraRoots: this.getCanvasLocalResourceRoots(documentUri),
           })
         ) {
           return fsPath;
@@ -4404,6 +4649,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     documentUri: vscode.Uri,
   ): Promise<readonly string[]> {
     const candidates: string[] = [];
+    for (const resolved of this.resolveWorkspaceMediaPathExistingCandidates(source, documentUri)) {
+      this.appendExistingCanvasPlaybackPreviewPathCandidate(candidates, resolved);
+    }
     try {
       this.appendExistingCanvasPlaybackPreviewPathCandidate(
         candidates,
@@ -4412,10 +4660,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     } catch (error) {
       logger.warn(`Preview playback source path resolution failed: ${error}`);
     }
+    const workspaceRelativePath = this.readWorkspaceRelativeCanvasAssetPath(source);
+    if (workspaceRelativePath) {
+      for (const resolved of this.resolveRootRelativeCanvasAssetPathCandidates(
+        workspaceRelativePath,
+        documentUri,
+      )) {
+        this.appendExistingCanvasPlaybackPreviewPathCandidate(candidates, resolved);
+      }
+    }
     const projectRelativePath = this.readRootRelativeCanvasAssetPath(source);
     if (projectRelativePath) {
       for (const resolved of this.resolveRootRelativeCanvasAssetPathCandidates(
         projectRelativePath,
+        documentUri,
+      )) {
+        this.appendExistingCanvasPlaybackPreviewPathCandidate(candidates, resolved);
+      }
+      const normalizedProjectRelativePath =
+        this.normalizeWorkspaceRelativeCanvasAssetPath(projectRelativePath);
+      if (normalizedProjectRelativePath && normalizedProjectRelativePath !== projectRelativePath) {
+        for (const resolved of this.resolveRootRelativeCanvasAssetPathCandidates(
+          normalizedProjectRelativePath,
+          documentUri,
+        )) {
+          this.appendExistingCanvasPlaybackPreviewPathCandidate(candidates, resolved);
+        }
+      }
+    }
+    const documentRelativePath = this.readSlashPrefixedDocumentRelativeCanvasAssetPath(source);
+    if (documentRelativePath) {
+      for (const resolved of this.resolveDocumentRelativeCanvasAssetPathCandidates(
+        documentRelativePath,
         documentUri,
       )) {
         this.appendExistingCanvasPlaybackPreviewPathCandidate(candidates, resolved);
@@ -4442,24 +4718,41 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     projectRelativePath: string,
     documentUri: vscode.Uri,
   ): readonly string[] {
-    const candidates: string[] = [];
-    const append = (root: vscode.Uri | undefined): void => {
-      if (!root || root.scheme !== 'file') return;
-      const resolved = path.join(root.fsPath, projectRelativePath);
-      if (!candidates.includes(resolved)) {
-        candidates.push(resolved);
-      }
-    };
+    return createWorkspaceMediaPathCandidates(
+      projectRelativePath,
+      this.createCanvasWorkspaceMediaPathContext(documentUri),
+    ).candidates.map((candidate) => candidate.path);
+  }
 
-    append(vscode.workspace.getWorkspaceFolder(documentUri)?.uri);
-    for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      append(folder.uri);
+  private resolveDocumentRelativeCanvasAssetPathCandidates(
+    documentRelativePath: string,
+    documentUri: vscode.Uri,
+  ): readonly string[] {
+    if (documentUri.scheme !== 'file') {
+      return [];
     }
-    if (documentUri.scheme === 'file') {
-      append(vscode.Uri.file(path.dirname(documentUri.fsPath)));
-    }
+    return [path.normalize(path.join(path.dirname(documentUri.fsPath), documentRelativePath))];
+  }
 
-    return candidates;
+  private createCanvasWorkspaceMediaPathContext(documentUri: vscode.Uri) {
+    return createVSCodeWorkspaceMediaPathContext({
+      documentUri,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      allowedRoots: this.getCanvasLocalResourceRoots(documentUri).map((root) => root.fsPath),
+    });
+  }
+
+  private resolveWorkspaceMediaPathExistingCandidates(
+    source: string,
+    documentUri: vscode.Uri,
+  ): readonly string[] {
+    const planned = createWorkspaceMediaPathCandidates(
+      source,
+      this.createCanvasWorkspaceMediaPathContext(documentUri),
+    );
+    return planned.candidates
+      .map((candidate) => candidate.path)
+      .filter((candidate) => this.isExistingLocalFile(candidate));
   }
 
   private appendExistingCanvasPlaybackPreviewPathCandidate(
@@ -4491,8 +4784,49 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return trimmed.length > 0 ? trimmed : undefined;
   }
 
+  private readSlashPrefixedDocumentRelativeCanvasAssetPath(source: string): string | undefined {
+    if (!source.startsWith('/') || source.startsWith('//') || fs.existsSync(source)) {
+      return undefined;
+    }
+    const trimmed = source.replace(/^\/+/, '');
+    return trimmed.startsWith('../') || trimmed === '..' ? trimmed : undefined;
+  }
+
   private getDocumentLocalResourceRoots(documentUri: vscode.Uri): readonly vscode.Uri[] {
     return documentUri.scheme === 'file' ? [vscode.Uri.file(path.dirname(documentUri.fsPath))] : [];
+  }
+
+  private getCanvasLocalResourceRoots(documentUri: vscode.Uri): readonly vscode.Uri[] {
+    const roots: vscode.Uri[] = [];
+    for (const root of this.getCanvasWorkspaceRoots(documentUri)) {
+      roots.push(root);
+    }
+    for (const root of this.getDocumentLocalResourceRoots(documentUri)) {
+      if (!roots.some((item) => item.fsPath === root.fsPath)) {
+        roots.push(root);
+      }
+    }
+    return roots;
+  }
+
+  private getCanvasWorkspaceRoots(documentUri: vscode.Uri): readonly vscode.Uri[] {
+    const roots: vscode.Uri[] = [];
+    const append = (root: vscode.Uri | undefined): void => {
+      if (!root || root.scheme !== 'file') return;
+      if (!roots.some((item) => item.fsPath === root.fsPath)) {
+        roots.push(root);
+      }
+    };
+
+    append(this.getOwningCanvasWorkspaceRoot(documentUri));
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      append(folder.uri);
+    }
+    return roots;
+  }
+
+  private getOwningCanvasWorkspaceRoot(documentUri: vscode.Uri): vscode.Uri | undefined {
+    return vscode.workspace.getWorkspaceFolder(documentUri)?.uri;
   }
 
   private getNarrativePreviewLocalResourceRoots(
@@ -4500,7 +4834,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): readonly vscode.Uri[] {
     const roots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
     if (sourceCanvasUri) {
-      roots.push(...this.getDocumentLocalResourceRoots(vscode.Uri.parse(sourceCanvasUri)));
+      roots.push(...this.getCanvasLocalResourceRoots(vscode.Uri.parse(sourceCanvasUri)));
     }
     return roots;
   }
@@ -4587,6 +4921,26 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return record['cacheResourceRef'];
     }
     return undefined;
+  }
+
+  private readWorkspaceRelativeCanvasAssetPath(source: string): string | undefined {
+    if (
+      !source ||
+      source.startsWith('/') ||
+      source.startsWith('//') ||
+      source.startsWith('${') ||
+      /^[A-Za-z]:[\\/]/.test(source) ||
+      /^[A-Za-z][A-Za-z\d+.-]*:/.test(source)
+    ) {
+      return undefined;
+    }
+    return this.normalizeWorkspaceRelativeCanvasAssetPath(source);
+  }
+
+  private normalizeWorkspaceRelativeCanvasAssetPath(source: string): string | undefined {
+    const normalized = source.replace(/\\/g, '/').replace(/^\.\/+/, '');
+    const workspaceRelative = normalized.replace(/^(?:\.\.\/)+/, '');
+    return workspaceRelative.length > 0 ? workspaceRelative : undefined;
   }
 
   private readPreviewDocumentResourceRef(
@@ -4852,31 +5206,78 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       if (node['type'] !== 'media') continue;
 
+      const assetPath = typeof nodeData['assetPath'] === 'string' ? nodeData['assetPath'] : '';
+      const runtimeAssetPath =
+        typeof nodeData['runtimeAssetPath'] === 'string' ? nodeData['runtimeAssetPath'] : '';
       delete nodeData['runtimeAssetPath'];
       delete nodeData['runtimeThumbnailPath'];
       delete nodeData['documentResourceStatus'];
       if (isDocumentArchiveResourceRef(nodeData['documentResourceRef'])) {
         continue;
       }
-      if (typeof nodeData['assetPath'] !== 'string') continue;
 
-      const assetPath = nodeData['assetPath'] as string;
-      // Resolve to absolute first (handle webview URIs, relative, etc.)
-      const absolutePath = await this.resolveAssetPath(assetPath, documentUri);
+      if (!assetPath && !runtimeAssetPath) continue;
+      if (this.isReusableCanvasPlaybackPreviewSource(assetPath)) continue;
+
+      const absolutePath = await this.resolveCanvasMediaPathForSave(
+        assetPath,
+        runtimeAssetPath,
+        documentUri,
+      );
+      if (!absolutePath) continue;
       // Contract to portable path
       nodeData['assetPath'] = await this.contractAssetPath(absolutePath, documentUri);
     }
   }
 
+  private async resolveCanvasMediaPathForSave(
+    assetPath: string,
+    runtimeAssetPath: string,
+    documentUri: vscode.Uri,
+  ): Promise<string | undefined> {
+    const assetCandidates = assetPath
+      ? await this.resolveCanvasPlaybackLocalPreviewPathCandidates(assetPath, documentUri)
+      : [];
+    if (assetCandidates[0]) {
+      return assetCandidates[0];
+    }
+
+    const runtimeCandidates = runtimeAssetPath
+      ? await this.resolveCanvasPlaybackLocalPreviewPathCandidates(runtimeAssetPath, documentUri)
+      : [];
+    if (runtimeCandidates[0]) {
+      return runtimeCandidates[0];
+    }
+
+    return assetPath ? this.resolveAssetPath(assetPath, documentUri) : undefined;
+  }
+
   /** Contract absolute path to portable path for storage */
   private async contractAssetPath(absolutePath: string, documentUri: vscode.Uri): Promise<string> {
-    // Try PathVariable first (for external paths)
+    const contractedWorkspacePath = contractWorkspaceMediaPath(
+      absolutePath,
+      this.createCanvasWorkspaceMediaPathContext(documentUri),
+    );
+    if (contractedWorkspacePath.format === 'workspace-relative') {
+      return contractedWorkspacePath.path;
+    }
+    if (
+      contractedWorkspacePath.format === 'variable' &&
+      !isWorkspaceScopedVariablePath(contractedWorkspacePath.path)
+    ) {
+      return contractedWorkspacePath.path;
+    }
+
+    // Try PathVariable for external paths. WORKSPACE/PROJECT are document-scoped in Canvas,
+    // so they are intentionally not persisted as global asset-library contractions.
     try {
       const contracted = await vscode.commands.executeCommand<string>(
         'neko.assets.contractPath',
         absolutePath,
       );
-      if (contracted && contracted.startsWith('${')) return contracted;
+      if (contracted && contracted.startsWith('${') && !isWorkspaceScopedVariablePath(contracted)) {
+        return contracted;
+      }
     } catch {
       // neko-assets not active
     }
@@ -4884,6 +5285,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     // Fallback: relative to document directory
     const docDir = path.dirname(documentUri.fsPath);
     return path.relative(docDir, absolutePath).split(path.sep).join('/');
+  }
+
+  private contractWorkspaceAssetPath(
+    absolutePath: string,
+    documentUri: vscode.Uri,
+  ): string | undefined {
+    const owningRoot = this.getOwningCanvasWorkspaceRoot(documentUri);
+    if (!owningRoot) {
+      return undefined;
+    }
+    const rootPath = owningRoot.fsPath;
+    if (absolutePath !== rootPath && !absolutePath.startsWith(`${rootPath}${path.sep}`)) {
+      return undefined;
+    }
+    const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join('/');
+    return relativePath || undefined;
   }
 
   // ===========================================================================

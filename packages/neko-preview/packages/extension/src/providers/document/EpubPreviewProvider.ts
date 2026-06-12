@@ -110,7 +110,9 @@ export class EpubPreviewProvider implements vscode.CustomReadonlyEditorProvider,
       context: this._context,
       onReady: async () => {
         try {
-          const { url, token } = await previewFileServer.registerEpub(filePath);
+          const { url, token } = await previewFileServer.registerEpub(filePath, {
+            sourceDocumentUri: document.uri,
+          });
           this.tokens.set(key, token);
 
           await webviewPanel.webview.postMessage({

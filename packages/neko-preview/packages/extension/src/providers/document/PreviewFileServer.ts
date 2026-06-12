@@ -18,6 +18,7 @@ import { getLogger } from '../../utils/logger';
 import {
   getPreviewAllowedRoots,
   hasPathVariable,
+  type PreviewPathResolutionOptions,
   resolvePreviewPath,
 } from './workspacePathResolver';
 
@@ -52,8 +53,11 @@ class PreviewFileServer {
    * Resolve path variables via neko-assets command.
    * Throws UnresolvedPathVariableError if the variable cannot be expanded.
    */
-  private async resolvePath(filePath: string): Promise<string> {
-    const resolved = await resolvePreviewPath(filePath);
+  private async resolvePath(
+    filePath: string,
+    options?: PreviewPathResolutionOptions,
+  ): Promise<string> {
+    const resolved = await resolvePreviewPath(filePath, options);
     if (!hasPathVariable(resolved)) {
       if (resolved !== filePath) {
         logger.info(`Resolved path: ${filePath} → ${resolved}`);
@@ -149,8 +153,11 @@ class PreviewFileServer {
    *          (Range-capable; suitable for PDF / CBZ).
    * @throws if the engine is not available.
    */
-  async registerFile(filePath: string): Promise<{ url: string; token: string }> {
-    const resolved = await this.resolvePath(filePath);
+  async registerFile(
+    filePath: string,
+    options?: PreviewPathResolutionOptions,
+  ): Promise<{ url: string; token: string }> {
+    const resolved = await this.resolvePath(filePath, options);
     const registered = await this.registerEngineFile(resolved, 'document');
     const { token } = registered;
     const port = await this.getPort();
@@ -169,8 +176,11 @@ class PreviewFileServer {
    *
    * @returns `{ url: 'http://127.0.0.1:{port}/v1/preview/epub/{token}/', token }`
    */
-  async registerEpub(filePath: string): Promise<{ url: string; token: string }> {
-    const resolved = await this.resolvePath(filePath);
+  async registerEpub(
+    filePath: string,
+    options?: PreviewPathResolutionOptions,
+  ): Promise<{ url: string; token: string }> {
+    const resolved = await this.resolvePath(filePath, options);
     const registered = await this.registerEngineFile(resolved, 'document');
     const { token } = registered;
     const port = await this.getPort();
@@ -186,12 +196,17 @@ class PreviewFileServer {
    * Binary preview probes should use this instead of VSCode or Node file APIs so
    * local file access stays behind the neko-engine token boundary.
    */
-  async readRange(filePath: string, start: number, end: number): Promise<ArrayBuffer> {
+  async readRange(
+    filePath: string,
+    start: number,
+    end: number,
+    options?: PreviewPathResolutionOptions,
+  ): Promise<ArrayBuffer> {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
       throw new Error(`Invalid preview file byte range: ${start}-${end}`);
     }
 
-    const resolved = await this.resolvePath(filePath);
+    const resolved = await this.resolvePath(filePath, options);
     return this.withClientRetry((client) =>
       client.withRegisteredFile({ filePath: resolved, purpose: 'document' }, (registered) =>
         client.readFileRange(registered.token, start, end),
@@ -207,8 +222,9 @@ class PreviewFileServer {
   async withEpubEntryReader<T>(
     filePath: string,
     task: (readEntry: (entryPath: string) => Promise<ArrayBuffer>) => Promise<T>,
+    options?: PreviewPathResolutionOptions,
   ): Promise<T> {
-    const { token } = await this.registerEpub(filePath);
+    const { token } = await this.registerEpub(filePath, options);
     try {
       return await task((entryPath) => this.readRegisteredEpubEntry(token, entryPath));
     } finally {
@@ -217,8 +233,12 @@ class PreviewFileServer {
   }
 
   /** Read one EPUB/ZIP entry through neko-engine. */
-  async readEpubEntry(filePath: string, entryPath: string): Promise<ArrayBuffer> {
-    return this.withEpubEntryReader(filePath, (readEntry) => readEntry(entryPath));
+  async readEpubEntry(
+    filePath: string,
+    entryPath: string,
+    options?: PreviewPathResolutionOptions,
+  ): Promise<ArrayBuffer> {
+    return this.withEpubEntryReader(filePath, (readEntry) => readEntry(entryPath), options);
   }
 
   /**

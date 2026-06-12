@@ -60,9 +60,9 @@ export function getImportedGeneratedAssetNodeInput(
   asset: ImportedGeneratedAssetPayload,
 ): ImportedGeneratedAssetNodeInput {
   const hasLinkedResource = Boolean(asset.documentResourceRef || asset.resourceRef);
-  const runtimeAssetPath = hasLinkedResource ? readSafeRuntimeImportPath(asset.path) : undefined;
+  const runtimeAssetPath = readSafeRuntimeImportPath(asset.path);
   return {
-    assetPath: hasLinkedResource ? '' : asset.path,
+    assetPath: hasLinkedResource ? '' : (asset.originalPath ?? asset.path),
     ...(runtimeAssetPath ? { runtimeAssetPath } : {}),
     ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
     ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),

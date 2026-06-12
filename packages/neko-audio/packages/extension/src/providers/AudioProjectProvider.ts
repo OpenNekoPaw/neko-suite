@@ -26,6 +26,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import type {
   AudioAnalyzeRequestMessage,
@@ -40,9 +41,15 @@ import type {
   TimelineElement,
 } from '@neko/shared';
 import {
+  contractWorkspaceMediaPath,
+  resolveWorkspaceMediaPath,
+  type WorkspaceMediaPathContext,
+} from '@neko/shared';
+import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
   createProjectSnapshotPackage,
+  createVSCodeWorkspaceMediaPathContext,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
@@ -87,6 +94,24 @@ function isAudioElementWithSrc(element: TimelineElement): element is AudioElemen
   return element.type === 'audio' && typeof element.src === 'string';
 }
 
+function isExistingLocalFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isPathAuthorized(filePath: string, roots: readonly string[] | undefined): boolean {
+  if (!roots || roots.length === 0) return true;
+  return roots.some((root) => isPathInsideOrEqual(filePath, root));
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
 function createProjectSnapshotOperation(): AudioProjectEditOperation {
   return {
     type: 'batch',
@@ -120,6 +145,14 @@ function createImportBatchOperation(
     meta: createImportOperationMeta('Import audio files'),
     payload: { operations },
   };
+}
+
+interface AudioWorkspacePathCommandContext {
+  readonly sourceDocumentUri?: string;
+  readonly documentPath?: string;
+  readonly owningWorkspaceRoot?: string;
+  readonly workspaceRoots?: readonly string[];
+  readonly allowedRoots?: readonly string[];
 }
 
 // =============================================================================
@@ -250,7 +283,7 @@ export class AudioProjectProvider
     if (!cached) return;
 
     // Normalize paths for portable .nka files
-    const normalized = await this.normalizePathsForSave(cached, document.uri.fsPath);
+    const normalized = await this.normalizePathsForSave(cached, document.uri);
     const content = await this.serializeProjectForSave(document.uri, normalized);
     if (content === null) return;
     await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
@@ -271,7 +304,7 @@ export class AudioProjectProvider
     const cached = this._projectDataCache.get(docKey);
     if (!cached) return;
 
-    const normalized = await this.normalizePathsForSave(cached, destination.fsPath);
+    const normalized = await this.normalizePathsForSave(cached, destination);
     const content = await this.serializeProjectForSave(document.uri, normalized);
     if (content === null) return;
     await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
@@ -875,7 +908,7 @@ export class AudioProjectProvider
             const cached = this._projectDataCache.get(docKey);
             const sourceBytes = cached
               ? Buffer.from(
-                  saveNka(await this.normalizePathsForSave(cached, document.uri.fsPath)),
+                  saveNka(await this.normalizePathsForSave(cached, document.uri)),
                   'utf-8',
                 )
               : undefined;
@@ -1055,7 +1088,8 @@ export class AudioProjectProvider
             if (isAudioElementWithSrc(element)) {
               const src = element.src;
               try {
-                const waveform = await this._audioService.getWaveform(src);
+                const waveformSource = await this.resolveProjectSourcePath(src, nkaUri);
+                const waveform = await this._audioService.getWaveform(waveformSource);
                 if (waveform) {
                   waveforms[element.id] = waveform;
                 }
@@ -1099,7 +1133,7 @@ export class AudioProjectProvider
 
   private async resolveAudioPath(nkaUri: vscode.Uri): Promise<string | null> {
     const fromCache = this.resolveAudioPathFromCache(nkaUri);
-    if (fromCache) return fromCache;
+    if (fromCache) return this.resolveProjectSourcePath(fromCache, nkaUri);
 
     // Fallback: read from disk
     try {
@@ -1110,7 +1144,7 @@ export class AudioProjectProvider
       for (const track of parsed.tracks) {
         for (const element of track.elements) {
           if (isAudioElementWithSrc(element)) {
-            return element.src;
+            return this.resolveProjectSourcePath(element.src, nkaUri);
           }
         }
       }
@@ -1129,7 +1163,7 @@ export class AudioProjectProvider
       throw new Error('No audio project data is loaded');
     }
     const projectDir = path.dirname(nkaUri.fsPath);
-    const resolvedSources = await this.resolveProjectSources(cached, projectDir);
+    const resolvedSources = await this.resolveProjectSources(cached, nkaUri);
 
     const result = buildMixConfig(cached, {
       projectDir,
@@ -1141,44 +1175,46 @@ export class AudioProjectProvider
 
   private async resolveProjectSources(
     project: AudioProjectData,
-    projectDir: string,
+    nkaUri: vscode.Uri,
   ): Promise<Map<string, string>> {
     const resolved = new Map<string, string>();
     for (const track of project.tracks) {
       for (const element of track.elements) {
         if (isAudioElementWithSrc(element)) {
-          resolved.set(element.src, await this.resolveProjectSourcePath(element.src, projectDir));
+          resolved.set(element.src, await this.resolveProjectSourcePath(element.src, nkaUri));
         }
       }
     }
     return resolved;
   }
 
-  private async resolveProjectSourcePath(src: string, projectDir: string): Promise<string> {
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-      return src;
-    }
+  private async resolveProjectSourcePath(src: string, nkaUri: vscode.Uri): Promise<string> {
+    const context = this.createWorkspaceMediaPathContext(nkaUri);
 
-    if (src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src)) {
-      return src;
-    }
-
-    if (/^\/?\$\{[^}]+\}/.test(src)) {
-      try {
-        const resolved = await vscode.commands.executeCommand<string>(
-          'neko.assets.resolvePath',
-          src,
-        );
-        if (typeof resolved === 'string' && resolved.length > 0 && resolved !== src) {
-          return resolved;
-        }
-      } catch (error) {
-        logger.warn(`Unable to resolve audio source variable path: ${src}`, error);
+    try {
+      const resolved = await vscode.commands.executeCommand<string>(
+        'neko.assets.resolvePath',
+        src,
+        this.createWorkspacePathCommandContext(nkaUri, context),
+      );
+      if (typeof resolved === 'string' && resolved.length > 0 && resolved !== src) {
+        return resolved;
       }
-      return src;
+    } catch (error) {
+      logger.warn(`Unable to resolve audio source path through assets service: ${src}`, error);
     }
 
-    return path.resolve(projectDir, src);
+    const resolved = resolveWorkspaceMediaPath({
+      source: src,
+      context,
+      fileExists: isExistingLocalFile,
+      isPathAuthorized: (filePath) => isPathAuthorized(filePath, context.allowedRoots),
+    });
+    if (resolved.status === 'resolved-local') return resolved.path;
+    if (resolved.status === 'remote') return resolved.url;
+
+    const diagnostic = resolved.diagnostics[resolved.diagnostics.length - 1];
+    throw new Error(diagnostic?.message ?? `Unable to resolve audio source: ${src}`);
   }
 
   private logMixWarnings(warnings: MixConfigWarning[]): void {
@@ -1336,9 +1372,9 @@ export class AudioProjectProvider
    */
   private async normalizePathsForSave(
     project: AudioProjectData,
-    projectFilePath: string,
+    projectUri: vscode.Uri,
   ): Promise<AudioProjectData> {
-    const baseDir = path.dirname(projectFilePath);
+    const context = this.createWorkspaceMediaPathContext(projectUri);
     const normalized = structuredClone(project);
 
     for (const track of normalized.tracks) {
@@ -1350,8 +1386,9 @@ export class AudioProjectProvider
             const contracted = await vscode.commands.executeCommand<string>(
               'neko.assets.contractPath',
               element.src,
+              this.createWorkspacePathCommandContext(projectUri, context),
             );
-            if (contracted && contracted.startsWith('${')) {
+            if (contracted && !path.isAbsolute(contracted)) {
               portable = contracted;
             }
           } catch {
@@ -1359,7 +1396,8 @@ export class AudioProjectProvider
           }
 
           if (!portable) {
-            portable = path.relative(baseDir, element.src).split(path.sep).join('/');
+            const contracted = contractWorkspaceMediaPath(element.src, context);
+            portable = contracted.path;
           }
 
           element.src = portable;
@@ -1368,6 +1406,31 @@ export class AudioProjectProvider
     }
 
     return normalized;
+  }
+
+  private createWorkspaceMediaPathContext(nkaUri: vscode.Uri): WorkspaceMediaPathContext {
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+    const context = createVSCodeWorkspaceMediaPathContext({
+      documentUri: nkaUri,
+      workspaceFolders,
+    });
+    return {
+      ...context,
+      allowedRoots: context.allowedRoots ?? context.workspaceRoots ?? [],
+    };
+  }
+
+  private createWorkspacePathCommandContext(
+    nkaUri: vscode.Uri,
+    context: WorkspaceMediaPathContext,
+  ): AudioWorkspacePathCommandContext {
+    return {
+      sourceDocumentUri: nkaUri.toString(),
+      documentPath: nkaUri.fsPath,
+      ...(context.owningWorkspaceRoot ? { owningWorkspaceRoot: context.owningWorkspaceRoot } : {}),
+      ...(context.workspaceRoots ? { workspaceRoots: context.workspaceRoots } : {}),
+      ...(context.allowedRoots ? { allowedRoots: context.allowedRoots } : {}),
+    };
   }
 
   private async serializeProjectForSave(

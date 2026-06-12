@@ -377,10 +377,28 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("'neko-canvas.preview-playback-runtime-reference'");
       expect(providerSource).toContain('resolveCanvasPlaybackPreviewSourceCandidate(');
       expect(providerSource).toContain('resolveMediaPlaybackFilePath(');
+      expect(providerSource).toContain('resolveCanvasMediaLocalFilePath(');
       expect(providerSource).toContain('resolveCanvasPlaybackLocalPreviewPathCandidates(');
+      expect(providerSource).toContain('createVSCodeWorkspaceMediaPathContext');
+      expect(providerSource).toContain('createCanvasWorkspaceMediaPathContext(');
+      expect(providerSource).toContain('createWorkspaceMediaPathCandidates(');
+      expect(providerSource).toContain('resolveWorkspaceMediaPath({');
       expect(providerSource).toContain('readRootRelativeCanvasAssetPath(');
+      expect(providerSource).toContain('readWorkspaceRelativeCanvasAssetPath(');
+      expect(providerSource).toContain('normalizeWorkspaceRelativeCanvasAssetPath(');
+      expect(providerSource).toContain('readSlashPrefixedDocumentRelativeCanvasAssetPath(');
       expect(providerSource).toContain('resolveRootRelativeCanvasAssetPathCandidates(');
+      expect(providerSource).toContain('resolveDocumentRelativeCanvasAssetPathCandidates(');
+      expect(providerSource).toContain("trimmed.startsWith('../')");
+      expect(providerSource).toContain('projectCanvasMediaLocalFile(');
+      expect(providerSource).toContain('getCanvasLocalResourceRoots(');
+      expect(providerSource).toContain(
+        'extraRoots: this.getCanvasLocalResourceRoots(document.uri)',
+      );
       expect(providerSource).toContain('vscode.workspace.getWorkspaceFolder(documentUri)?.uri');
+      expect(providerSource).toContain(
+        'for (const folder of vscode.workspace.workspaceFolders ?? [])',
+      );
       expect(providerSource).toContain('appendExistingCanvasPlaybackPreviewPathCandidate(');
       expect(providerSource).toContain('readFirstPreviewSourceString(');
       expect(providerSource).toContain('...(webview.options.localResourceRoots ?? [])');
@@ -712,9 +730,61 @@ describe('canvasEditorProvider message contracts', () => {
       expect(mediaPlaybackResolver).toContain(
         'this.resolveCanvasPlaybackLocalPreviewPathCandidates(',
       );
+      const mediaPlaybackHandler = providerSource.slice(
+        providerSource.indexOf('private async handleMediaPlaybackMessage('),
+        providerSource.indexOf('private async resolveMediaPlaybackFilePath('),
+      );
+      expect(mediaPlaybackHandler).toContain(
+        '...this.readNarrativePreviewSessionEnvelope(message)',
+      );
+      expect(mediaPlaybackHandler).toContain('Media stream could not be created for this source.');
+      expect(providerSource).toContain('private async postMediaPlaybackResponse(');
+      expect(mediaPlaybackHandler).toContain(
+        'await this.postMediaPlaybackResponse(webviewPanel, {',
+      );
+      expect(providerSource).toContain(
+        'Media playback response could not be delivered to the Preview webview.',
+      );
+      const canvasLoadNormalizer = providerSource.slice(
+        providerSource.indexOf('private async normalizeCanvasPathsForLoad('),
+        providerSource.indexOf('private projectLocalResource('),
+      );
+      expect(canvasLoadNormalizer).toContain('this.projectCanvasMediaLocalFile(');
+      expect(canvasLoadNormalizer).toContain("['assetPath', 'runtimeAssetPath']");
+      expect(canvasLoadNormalizer).toContain("['thumbnailPath', 'runtimeThumbnailPath']");
+      expect(canvasLoadNormalizer).toContain('nodeData[runtimeKey] = uri;');
+      expect(canvasLoadNormalizer).not.toContain('nodeData[key] = uri;');
+      expect(canvasLoadNormalizer).not.toContain('this.resolveAssetPath(value');
+      const canvasMediaProjector = providerSource.slice(
+        providerSource.indexOf('private async projectCanvasMediaLocalFile('),
+        providerSource.indexOf('private async addFeatureRoot('),
+      );
+      expect(canvasMediaProjector).toContain(
+        'this.resolveCanvasPlaybackLocalPreviewPathCandidates(',
+      );
+      expect(canvasMediaProjector).toContain('this.localResourceAccess.toWebviewUri(');
+      expect(canvasMediaProjector).toContain('...this.getCanvasLocalResourceRoots(documentUri)');
+      const openMediaPreviewBranch = providerSource.slice(
+        providerSource.indexOf("case 'openMediaPreview':"),
+        providerSource.indexOf("case 'preview:resolveVariant':"),
+      );
+      expect(openMediaPreviewBranch).toContain('this.resolveCanvasMediaLocalFilePath(');
+      expect(openMediaPreviewBranch).not.toContain('await this.resolveAssetPath(assetPath!');
+      const captureFrameBranch = providerSource.slice(
+        providerSource.indexOf("case 'media:captureFrame':"),
+        providerSource.indexOf("case 'media:requestPanoramicThumbnail':"),
+      );
+      expect(captureFrameBranch).toContain('this.resolveCanvasMediaLocalFilePath(');
+      expect(captureFrameBranch).not.toContain('await this.resolveAssetPath(assetPath!');
+      const panoramicThumbnailBranch = providerSource.slice(
+        providerSource.indexOf("case 'media:requestPanoramicThumbnail':"),
+        providerSource.indexOf('private requestId = 0;'),
+      );
+      expect(panoramicThumbnailBranch).toContain('this.resolveCanvasMediaLocalFilePath(');
       expect(narrativePreviewBridgeSource).toContain(
         'documentResourceRef: metadata.previewSourceDocumentResourceRef',
       );
+      expect(narrativePreviewBridgeSource).toContain('readString(metadata.previewSourceAssetPath)');
       expect(narrativePreviewMediaRuntimeSource).toContain(
         'readonly documentResourceRef?: unknown',
       );
@@ -724,6 +794,61 @@ describe('canvasEditorProvider message contracts', () => {
       expect(narrativePreviewMediaRuntimeSource).toContain(
         'documentResourceRef: player.documentResourceRef',
       );
+      expect(narrativePreviewBridgeSource).toContain(
+        'HOST_PREVIEW_MEDIA_RESPONSE_TIMEOUT_MS = 10_000',
+      );
+      expect(narrativePreviewBridgeSource).toContain('handlePreviewMediaRequest(');
+      expect(narrativePreviewBridgeSource).toContain(
+        'Preview media playback is unavailable for this Canvas host.',
+      );
+      expect(narrativePreviewBridgeSource).toContain('mediaProbeTimeout');
+      expect(narrativePreviewBridgeSource).toContain('mediaStreamTimeout');
+      expect(providerSource).toContain(
+        'Media playback requires probe metadata before stream creation.',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'HOST_MEDIA_RESPONSE_TIMEOUT_MS = 10_000',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain('scheduleHostResponseTimeout(');
+      expect(narrativePreviewMediaRuntimeSource).toContain('clearHostResponseTimeout(');
+      expect(narrativePreviewMediaRuntimeSource).toContain('probeTimeout');
+      expect(narrativePreviewMediaRuntimeSource).toContain('streamTimeout');
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'lastStartRequest?: PreviewMediaStartRequest',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        'probeMediaInfo?: Record<string, unknown>',
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain('function requestMediaStream(player');
+      expect(narrativePreviewMediaRuntimeSource).toContain('if (player.shouldPlayWhenReady) {');
+      expect(narrativePreviewMediaRuntimeSource).toContain("player.root.dataset.state = 'ready'");
+      expect(narrativePreviewMediaRuntimeSource.indexOf('function handleProbeResult')).toBeLessThan(
+        narrativePreviewMediaRuntimeSource.indexOf('function requestMediaStream'),
+      );
+      const runtimeProbeResultHandler = narrativePreviewMediaRuntimeSource.slice(
+        narrativePreviewMediaRuntimeSource.indexOf('function handleProbeResult'),
+        narrativePreviewMediaRuntimeSource.indexOf('function requestMediaStream'),
+      );
+      expect(runtimeProbeResultHandler).not.toContain("type: 'media:play'");
+      expect(narrativePreviewMediaRuntimeSource).toContain('shouldRestartMediaProbe(player)');
+      expect(narrativePreviewMediaRuntimeSource).toContain("player.root.dataset.state === 'error'");
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        "type PreviewMediaRuntimeEventType = 'ready' | 'timeUpdate' | 'ended' | 'error'",
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain("new CustomEvent('neko-preview-media'");
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        "dispatchMediaRuntimeEvent(player, 'ended')",
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        "dispatchMediaRuntimeEvent(player, 'error'",
+      );
+      expect(narrativePreviewMediaRuntimeSource).toContain(
+        "dispatchMediaRuntimeEvent(player, 'timeUpdate')",
+      );
+      expect(narrativePreviewBridgeSource).toContain(
+        "window.addEventListener('neko-preview-media'",
+      );
+      expect(narrativePreviewBridgeSource).toContain('advanceAfterCurrentUnit()');
       expect(documentPreviewProjector.indexOf('this.projectResourceCacheVariant(')).toBeLessThan(
         documentPreviewProjector.indexOf('this.resolveDocumentResourceAssetPath('),
       );
@@ -746,6 +871,31 @@ describe('canvasEditorProvider message contracts', () => {
       expect(previewVariantHandler).toContain("error: 'Preview variant request did not include");
       expect(previewResolveBranch).not.toContain('this.projectLocalResource(');
       expect(previewResolveBranch).not.toContain('registerPreviewAsset');
+    });
+
+    it('keeps Canvas media import storage paths separate from runtime webview URLs', () => {
+      expect(providerSource).toContain('private async createMediaDroppedAsset(');
+      expect(providerSource).toContain('runtimeAssetPath,');
+      expect(providerSource).toContain('originalPath: fsPath');
+      expect(providerSource).toContain('path: await this.contractAssetPath(fsPath, documentUri)');
+      expect(providerSource).toContain("'neko-canvas.pick-media'");
+      expect(providerSource).toContain("'neko-canvas.pick-media-file'");
+      expect(providerSource).toContain("'neko-canvas.pick-file'");
+      expect(providerSource).toContain("'neko-canvas.drop-file'");
+      expect(providerSource).toContain('resolveCanvasMediaPathForSave(');
+      expect(providerSource).toContain('resolveWorkspaceVariableAssetPathCandidates(');
+      expect(providerSource).toContain('contractWorkspaceMediaPath(');
+      expect(providerSource).toContain('contractWorkspaceAssetPath(');
+      expect(providerSource).toContain('getOwningCanvasWorkspaceRoot(');
+      expect(providerSource).toContain('isWorkspaceScopedVariablePath(');
+      expect(providerSource).toContain('return relativePath || undefined;');
+      expect(providerSource).not.toContain(
+        'return relativePath ? `\\${WORKSPACE}/${relativePath}`',
+      );
+      expect(providerSource).toContain('this.createCanvasWorkspaceMediaPathContext(documentUri)');
+      expect(canvasAppSource).toContain('runtimeAssetPath: options.runtimeAssetPath');
+      expect(canvasAppSource).toContain('runtimeAssetPath: asset.runtimeAssetPath');
+      expect(webviewSource).toContain('message.runtimeAssetPath');
     });
   });
 

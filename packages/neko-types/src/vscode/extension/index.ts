@@ -161,6 +161,11 @@ export type {
   SourceFileContentAccessProviderOptions,
   VideoProxyContentAccessProviderOptions,
 } from './content-access-providers';
+export {
+  createVSCodeWorkspaceMediaPathContext,
+  createVSCodeWorkspacePathResolver,
+} from './workspace-media-path';
+export type { VSCodeWorkspaceMediaPathContextInput } from './workspace-media-path';
 
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {

@@ -42,6 +42,7 @@ const NARRATIVE_RUNTIME_CONNECTION_TYPES = new Set<string | undefined>([
   'choice',
 ]);
 const HOST_PREVIEW_VARIANT_RESPONSE_TIMEOUT_MS = 6500;
+const HOST_PREVIEW_MEDIA_RESPONSE_TIMEOUT_MS = 10_000;
 const PREVIEW_WEBVIEW_READY_GRACE_MS = 250;
 const DEFAULT_PREVIEW_STALE_GRACE_MS = 30_000;
 
@@ -88,6 +89,8 @@ interface NarrativePreviewI18n {
   readonly mediaUnavailableDescription: string;
   readonly mediaLoading: string;
   readonly mediaPreparing: string;
+  readonly mediaProbeTimeout: string;
+  readonly mediaStreamTimeout: string;
   readonly storyboardShot: string;
   readonly storyboardShotUnavailableDescription: string;
   readonly storyboardScene: string;
@@ -190,7 +193,9 @@ export interface NarrativePreviewBridgeOptions {
   readonly panelFactory?: NarrativePreviewPanelFactory;
   readonly getFeatureToggles?: () => NarrativePreviewFeatureToggles;
   readonly getMediaRuntimeScriptUri?: (webview: vscode.Webview) => vscode.Uri;
-  readonly getWebviewLocalResourceRoots?: (sourceCanvasUri?: string) => readonly vscode.Uri[];
+  readonly getWebviewOptions?: (
+    sourceCanvasUri?: string,
+  ) => Partial<vscode.WebviewPanelOptions & vscode.WebviewOptions>;
   readonly staleSessionGraceMs?: number;
   readonly now?: () => number;
 }
@@ -233,8 +238,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private readonly panelFactory: NarrativePreviewPanelFactory;
   private readonly getFeatureToggles: () => NarrativePreviewFeatureToggles;
   private readonly getMediaRuntimeScriptUri: ((webview: vscode.Webview) => vscode.Uri) | undefined;
-  private readonly getWebviewLocalResourceRoots:
-    | ((sourceCanvasUri?: string) => readonly vscode.Uri[])
+  private readonly getWebviewOptions:
+    | ((sourceCanvasUri?: string) => Partial<vscode.WebviewPanelOptions & vscode.WebviewOptions>)
     | undefined;
   private readonly staleSessionGraceMs: number;
   private readonly now: () => number;
@@ -247,7 +252,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     this.getFeatureToggles =
       options.getFeatureToggles ?? (() => normalizeNarrativePreviewFeatureToggles(undefined));
     this.getMediaRuntimeScriptUri = options.getMediaRuntimeScriptUri;
-    this.getWebviewLocalResourceRoots = options.getWebviewLocalResourceRoots;
+    this.getWebviewOptions = options.getWebviewOptions;
     this.staleSessionGraceMs = options.staleSessionGraceMs ?? DEFAULT_PREVIEW_STALE_GRACE_MS;
     this.now = options.now ?? Date.now;
   }
@@ -473,9 +478,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        ...(this.getWebviewLocalResourceRoots
-          ? { localResourceRoots: [...this.getWebviewLocalResourceRoots(sourceCanvasUri)] }
-          : {}),
+        ...(this.getWebviewOptions ? this.getWebviewOptions(sourceCanvasUri) : {}),
       },
     );
     const session: CanvasPreviewSession = {
@@ -491,8 +494,28 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     this.sessionsByPanel.set(panel, session);
     panel.webview.onDidReceiveMessage(
       (message) => {
+        if (isPreviewWebviewReadyMessage(message) || isNarrativePreviewMediaMessage(message)) {
+          logger.debug('Canvas Preview runtime message received', {
+            type: isRecord(message) ? message['type'] : undefined,
+            sessionId: isRecord(message) ? message['sessionId'] : undefined,
+            sourceCanvasUri: isRecord(message) ? message['sourceCanvasUri'] : undefined,
+            revision: isRecord(message) ? message['revision'] : undefined,
+            nodeId: isRecord(message) ? message['nodeId'] : undefined,
+            assetPath: isRecord(message) ? message['assetPath'] : undefined,
+          });
+        }
         const currentSession = this.findSessionById(session.sessionId);
         if (!currentSession) {
+          if (isNarrativePreviewMediaMessage(message)) {
+            this.postPreviewMediaError(
+              session,
+              message,
+              new Error(
+                'Preview media playback session is no longer attached to a Canvas. Reopen the Canvas Preview.',
+              ),
+            );
+            return;
+          }
           logger.debug('Dropped Preview message for disposed session', message);
           return;
         }
@@ -513,16 +536,18 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           if (
             !this.isPreviewRuntimeMessageForSession(message, currentSession, {
               allowMissingIdentity: true,
+              allowStaleRevision: true,
             })
           ) {
             logger.debug('Dropped media message for mismatched Preview session', message);
+            this.postPreviewMediaError(
+              currentSession,
+              message,
+              new Error('Preview media request does not belong to this Preview session.'),
+            );
             return;
           }
-          void this.host.handleNarrativePreviewMediaMessage?.(
-            message,
-            panel,
-            currentSession.sourceCanvasUri,
-          );
+          this.handlePreviewMediaRequest(message, currentSession);
           return;
         }
         if (isNarrativePreviewVariantMessage(message)) {
@@ -757,6 +782,105 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       });
   }
 
+  private handlePreviewMediaRequest(
+    message: Record<string, unknown>,
+    session: CanvasPreviewSession,
+  ): void {
+    if (!this.host.handleNarrativePreviewMediaMessage) {
+      this.postPreviewMediaError(
+        session,
+        message,
+        new Error('Preview media playback is unavailable for this Canvas host.'),
+      );
+      return;
+    }
+
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      logger.warn('Canvas Preview media request timed out before the host responded', {
+        sessionId: session.sessionId,
+        sourceCanvasUri: session.sourceCanvasUri,
+        mediaMessageType:
+          isRecord(message) && typeof message['type'] === 'string' ? message['type'] : undefined,
+        nodeId: typeof message['nodeId'] === 'string' ? message['nodeId'] : undefined,
+      });
+      this.postPreviewMediaError(
+        session,
+        message,
+        new Error(
+          `Preview media request timed out after ${HOST_PREVIEW_MEDIA_RESPONSE_TIMEOUT_MS}ms.`,
+        ),
+      );
+    }, HOST_PREVIEW_MEDIA_RESPONSE_TIMEOUT_MS);
+
+    Promise.resolve()
+      .then(() =>
+        this.host.handleNarrativePreviewMediaMessage?.(
+          message,
+          session.panel,
+          session.sourceCanvasUri,
+        ),
+      )
+      .then(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeoutId);
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeoutId);
+        logger.warn('Canvas Preview media host handler failed', {
+          sessionId: session.sessionId,
+          sourceCanvasUri: session.sourceCanvasUri,
+          mediaMessageType:
+            isRecord(message) && typeof message['type'] === 'string' ? message['type'] : undefined,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.postPreviewMediaError(session, message, error);
+      });
+  }
+
+  private postPreviewMediaError(
+    session: CanvasPreviewSession,
+    message: Record<string, unknown>,
+    error: unknown,
+  ): void {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error || 'Preview media playback failed.');
+    const nodeId = message['nodeId'];
+    const responseEnvelope = {
+      sessionId: session.sessionId,
+      sourceCanvasUri: session.sourceCanvasUri,
+      revision: session.revision,
+    };
+    if (message['type'] === 'media:probe') {
+      void session.panel.webview.postMessage({
+        type: 'media:probeResult',
+        nodeId,
+        error: errorMessage,
+        ...responseEnvelope,
+      });
+      return;
+    }
+    if (message['type'] === 'media:play') {
+      void session.panel.webview.postMessage({
+        type: 'media:streamReady',
+        nodeId,
+        error: errorMessage,
+        ...responseEnvelope,
+      });
+    }
+  }
+
   private postFeatureToggles(session: CanvasPreviewSession, revision: number): void {
     this.postToPreview(session, this.createFeatureTogglesMessage(session, revision));
   }
@@ -891,7 +1015,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   private isPreviewRuntimeMessageForSession(
     message: unknown,
     session: CanvasPreviewSession,
-    options: { readonly allowMissingIdentity?: boolean } = {},
+    options: {
+      readonly allowMissingIdentity?: boolean;
+      readonly allowStaleRevision?: boolean;
+    } = {},
   ): boolean {
     const envelope = readCanvasPreviewEnvelope(message);
     if (!envelope.sessionId && !envelope.sourceCanvasUri) {
@@ -903,7 +1030,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     if (envelope.sourceCanvasUri && envelope.sourceCanvasUri !== session.sourceCanvasUri) {
       return false;
     }
-    if (envelope.revision !== undefined && envelope.revision < session.revision) {
+    if (
+      options.allowStaleRevision !== true &&
+      envelope.revision !== undefined &&
+      envelope.revision < session.revision
+    ) {
       return false;
     }
     return true;
@@ -1010,8 +1141,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .stage-visual { min-width: 0; width: min(100%, 980px); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .stage-visual img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
     .stage-media-slot { width: min(100%, 980px); height: min(100%, 62vh); min-height: 220px; display: flex; align-items: stretch; justify-content: center; }
-    .neko-preview-media-player { width: 100%; min-height: 220px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; color: var(--vscode-foreground); }
-    .neko-preview-media-title { color: var(--vscode-descriptionForeground); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .neko-preview-media-player { width: 100%; height: 100%; min-height: 220px; display: grid; grid-template-rows: minmax(0, 1fr); color: var(--vscode-foreground); }
+    .neko-preview-media-title { display: none; }
     .neko-preview-media-viewport { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: #000; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
     .neko-preview-video-surface { width: 100%; height: 100%; display: block; object-fit: contain; }
     .neko-preview-media-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.42; pointer-events: none; }
@@ -1022,7 +1153,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .neko-preview-audio-visualization span { width: 7px; height: var(--bar-height); border-radius: 3px 3px 0 0; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); opacity: 0.72; transform-origin: bottom; animation: neko-preview-audio-bar 0.8s ease-in-out infinite; animation-delay: var(--bar-delay); }
     .neko-preview-media-player[data-state="error"] .neko-preview-audio-visualization span,
     .neko-preview-media-player[data-state="loading"] .neko-preview-audio-visualization span { animation-play-state: paused; opacity: 0.32; }
-    .neko-preview-media-controls { display: grid; grid-template-columns: auto minmax(80px, 1fr) auto; align-items: center; gap: 8px; }
+    .neko-preview-media-controls { display: none; }
     .neko-preview-media-controls button { min-width: 54px; }
     .neko-preview-media-progress { width: 100%; accent-color: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
     .neko-preview-media-time { color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1239,11 +1370,16 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     let playbackStartElapsedMs = 0;
     let activeMediaSurfaceId = null;
     let renderedStageKey = null;
+    let mediaSurfaceGeneration = 0;
+    const mediaRuntimeDurationsMs = new Map();
+    const pendingPreviewMediaMessages = [];
     const pendingPreviewVariantRequests = new Map();
     const resolvedPreviewVariants = new Map();
     const failedPreviewVariantRequests = new Set();
 
-    window.__nekoNarrativePreviewPostMessage = (message) => vscode.postMessage(message);
+    window.__nekoNarrativePreviewPostMessage = (message) => {
+      postPreviewMediaMessage(message);
+    };
 
     previewPrevious.addEventListener('click', () => {
       stopPlayback();
@@ -1305,6 +1441,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         return;
       }
       handleCanvasPreviewMessage(message);
+    });
+    window.addEventListener('neko-preview-media', (event) => {
+      handlePreviewMediaRuntimeEvent(event);
     });
     for (const message of BOOTSTRAP_MESSAGES) {
       handleCanvasPreviewMessage(message);
@@ -1377,6 +1516,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       elapsedInUnitMs = 0;
       playbackStartedAtMs = 0;
       playbackStartElapsedMs = 0;
+      mediaRuntimeDurationsMs.clear();
       clearPreviewVariantState();
       placeholder.style.display = 'none';
       playbackPreview.dataset.visible = 'true';
@@ -1408,8 +1548,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       stageContent.dataset.renderMode = unit ? unit.renderMode : 'select-node';
       const stageKey = unit ? unit.id + ':' + index : 'none';
       if (stageKey !== renderedStageKey) {
-        renderStageContent(unit, index);
         renderedStageKey = stageKey;
+        renderStageContent(unit, index);
       }
       renderRouteSwitcher();
       renderSegmentedTimeline();
@@ -1452,6 +1592,40 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       playbackClock.title = formatClockTime(absoluteMs) + ' / ' + formatClockTime(totalMs);
     }
 
+    function handlePreviewMediaRuntimeEvent(event) {
+      const detail = event && typeof event === 'object' && event.detail && typeof event.detail === 'object'
+        ? event.detail
+        : {};
+      if (detail.surfaceId !== activeMediaSurfaceId) {
+        return;
+      }
+      const unit = getCurrentUnit();
+      if (!unit || createMediaSurfaceId(unit) !== detail.surfaceId) {
+        return;
+      }
+      const durationSeconds = readFiniteNumber(detail.duration);
+      if (durationSeconds !== undefined && durationSeconds > 0) {
+        mediaRuntimeDurationsMs.set(unit.id, durationSeconds * 1000);
+      }
+      const currentSeconds = readFiniteNumber(detail.currentTime);
+      if (currentSeconds !== undefined) {
+        elapsedInUnitMs = clampElapsed(currentSeconds * 1000, resolveUnitDurationMs(unit.id));
+      }
+      if (detail.type === 'ready' || detail.type === 'timeUpdate') {
+        renderPlaybackPlan();
+        return;
+      }
+      if (detail.type === 'ended') {
+        advanceAfterCurrentUnit();
+        return;
+      }
+      if (detail.type === 'error') {
+        isPlaying = false;
+        clearTimer();
+        renderPlaybackPlan();
+      }
+    }
+
     function renderSegmentedTimeline() {
       segmentedTimeline.replaceChildren();
       if (!playbackPlan || route.length === 0) {
@@ -1487,8 +1661,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function renderStageContent(unit, index) {
-      const nextMediaSurfaceId = unit ? createMediaSurfaceId(unit) : null;
-      if (activeMediaSurfaceId && activeMediaSurfaceId !== nextMediaSurfaceId) {
+      mediaSurfaceGeneration += 1;
+      if (activeMediaSurfaceId) {
         disposeActiveMediaSurface();
       }
       stageVisual.replaceChildren();
@@ -1545,11 +1719,12 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         readString(metadata.thumbnailUrl);
       const playbackSource =
         readString(metadata.previewPlayableAssetPath) ||
-        unit.assetPath ||
+        readString(metadata.previewSourceAssetPath) ||
         readString(metadata.generatedImage) ||
         readNestedString(metadata.generatedAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
         readNestedString(metadata.generatedVideoAsset, ['url', 'sourcePath', 'previewUrl', 'dataUrl', 'path', 'assetPath']) ||
-        readString(metadata.assetPath);
+        readString(metadata.assetPath) ||
+        unit.assetPath;
       const displaySource = safeVisualSource && isSafePreviewSource(safeVisualSource) ? safeVisualSource : undefined;
       const playableSource = playbackSource || displaySource;
       if (!displaySource && !playableSource && !unit.resourceRef) {
@@ -1823,6 +1998,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function appendMediaPlaybackSurface(visual, unit) {
       const surfaceId = createMediaSurfaceId(unit);
+      const surfaceGeneration = mediaSurfaceGeneration;
       activeMediaSurfaceId = surfaceId;
       const slot = document.createElement('div');
       slot.className = 'stage-media-slot';
@@ -1831,6 +2007,14 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const label = formatUnitTitle(unit, getCurrentIndex());
       const durationMs = resolveUnitDurationMs(unit.id);
       ensureMediaRuntime(() => {
+        if (
+          surfaceGeneration !== mediaSurfaceGeneration ||
+          activeMediaSurfaceId !== surfaceId ||
+          getCurrentUnit()?.id !== unit.id ||
+          !slot.isConnected
+        ) {
+          return;
+        }
         const runtime = window.__nekoNarrativePreviewMediaRuntime;
         runtime.mount({
           surfaceId,
@@ -1845,15 +2029,18 @@ export class NarrativePreviewBridge implements vscode.Disposable {
             pause: t('pause'),
             loading: t('mediaLoading'),
             preparing: t('mediaPreparing'),
+            probeTimeout: t('mediaProbeTimeout'),
+            streamTimeout: t('mediaStreamTimeout'),
           },
         });
         runtime.start({
           surfaceId,
           assetPath:
             readString(metadata.previewPlayableAssetPath) ||
+            readString(metadata.previewSourceAssetPath) ||
             visual.source ||
-            unit.assetPath ||
-            readString(metadata.assetPath),
+            readString(metadata.assetPath) ||
+            unit.assetPath,
           resourceRef: visual.resourceRef || unit.resourceRef,
           documentResourceRef: metadata.previewSourceDocumentResourceRef,
           mediaType: visual.type,
@@ -1879,6 +2066,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       if (!activeMediaSurfaceId) {
         return;
       }
+      mediaSurfaceGeneration += 1;
       window.__nekoNarrativePreviewMediaRuntime?.dispose(activeMediaSurfaceId);
       activeMediaSurfaceId = null;
     }
@@ -2062,7 +2250,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
           setActiveUnit(choice.targetUnitId, false, 0);
           if (sourceUnit) {
-            postMessage({
+            postPreviewHostMessage({
               type: 'canvas:choiceMade',
               requestId: createRequestId('choice'),
               fromNodeId: sourceUnit.sourceNodeId,
@@ -2128,6 +2316,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function scheduleNext(currentUnitId) {
+      if (playbackPlan?.advancePolicy === 'media-ended') {
+        return;
+      }
       clearTimer();
       timer = window.setTimeout(() => {
         timer = null;
@@ -2144,23 +2335,33 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           scheduleNext(currentUnitId);
           return;
         }
-        const next = resolveNextStep();
-        if (!next) {
-          isPlaying = false;
-          renderPlaybackPlan();
-          return;
-        }
-        route = next.route;
-        activeUnitId = next.unitId;
-        elapsedInUnitMs = 0;
-        playbackStartedAtMs = performance.now();
-        playbackStartElapsedMs = 0;
-        renderPlaybackPlan();
-        postPlaybackHighlight();
-        if (isPlaying) {
-          scheduleNext(next.unitId);
-        }
+        advanceAfterCurrentUnit();
       }, 100);
+    }
+
+    function advanceAfterCurrentUnit() {
+      const next = resolveNextStep();
+      if (!next) {
+        isPlaying = false;
+        clearTimer();
+        renderPlaybackPlan();
+        return;
+      }
+      route = next.route;
+      activeUnitId = next.unitId;
+      elapsedInUnitMs = 0;
+      playbackStartedAtMs = performance.now();
+      playbackStartElapsedMs = 0;
+      const shouldContinue = isPlaying && canPreviewAutoAdvance();
+      if (!shouldContinue) {
+        isPlaying = false;
+        clearTimer();
+      }
+      renderPlaybackPlan();
+      postPlaybackHighlight();
+      if (shouldContinue) {
+        scheduleNext(next.unitId);
+      }
     }
 
     function stopPlayback() {
@@ -2320,6 +2521,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     }
 
     function resolveUnitDurationMs(unitId) {
+      const runtimeDurationMs = mediaRuntimeDurationsMs.get(unitId);
+      if (typeof runtimeDurationMs === 'number' && Number.isFinite(runtimeDurationMs) && runtimeDurationMs >= 0) {
+        return runtimeDurationMs;
+      }
       const durationMs = playbackPlan?.units.find((unit) => unit.id === unitId)?.durationMs;
       return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
         ? durationMs
@@ -2357,7 +2562,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         return false;
       }
       const unit = getCurrentUnit();
-      return Boolean(unit && typeof unit.durationMs === 'number' && Number.isFinite(unit.durationMs));
+      return Boolean(unit && (unit.kind === 'media' || unit.renderMode === 'media-playback'));
     }
 
     function postPlaybackHighlight() {
@@ -2365,7 +2570,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       if (!unit) {
         return;
       }
-      postMessage({
+      postPreviewHostMessage({
         type: 'canvas:highlightNode',
         requestId: createRequestId('node'),
         nodeId: unit.sourceNodeId,
@@ -2374,7 +2579,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         .map((unitId) => playbackPlan?.units.find((candidate) => candidate.id === unitId)?.sourceNodeId)
         .filter(Boolean);
       if (nodeIds.length > 0) {
-        postMessage({
+        postPreviewHostMessage({
           type: 'canvas:highlightPath',
           requestId: createRequestId('path'),
           nodeIds,
@@ -2382,13 +2587,50 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
     }
 
-    function postMessage(message) {
+    function postPreviewHostMessage(message) {
       vscode.postMessage({
         ...message,
         sessionId: currentSessionId,
         sourceCanvasUri: currentSourceCanvasUri,
         revision: currentRevision,
       });
+    }
+
+    function postPreviewMediaMessage(message) {
+      const payload = removeUndefinedFields(message && typeof message === 'object' ? message : {});
+      if (!isSessionEnvelopeReady()) {
+        pendingPreviewMediaMessages.push(payload);
+        return;
+      }
+      postPreviewHostMessage(payload);
+    }
+
+    function flushPendingPreviewMediaMessages() {
+      if (!isSessionEnvelopeReady() || pendingPreviewMediaMessages.length === 0) {
+        return;
+      }
+      const messages = pendingPreviewMediaMessages.splice(0);
+      for (const message of messages) {
+        postPreviewHostMessage(message);
+      }
+    }
+
+    function isSessionEnvelopeReady() {
+      return (
+        typeof currentSessionId === 'string' &&
+        typeof currentSourceCanvasUri === 'string' &&
+        currentRevision !== null
+      );
+    }
+
+    function removeUndefinedFields(value) {
+      const cleaned = {};
+      for (const [key, item] of Object.entries(value || {})) {
+        if (item !== undefined) {
+          cleaned[key] = item;
+        }
+      }
+      return cleaned;
     }
 
     function createRequestId(reason) {
@@ -2405,6 +2647,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       if (typeof message.revision === 'number' && Number.isFinite(message.revision)) {
         currentRevision = message.revision;
       }
+      flushPendingPreviewMediaMessages();
     }
 
     function formatPlanTitle(plan) {
@@ -2531,6 +2774,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 
     function readString(value) {
       return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+    }
+
+    function readFiniteNumber(value) {
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
     }
 
     function readNestedString(source, fields) {
@@ -2723,6 +2970,14 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
     ),
     mediaLoading: t('neko.canvas.preview.mediaLoading', 'Loading media stream...'),
     mediaPreparing: t('neko.canvas.preview.mediaPreparing', 'Preparing media stream...'),
+    mediaProbeTimeout: t(
+      'neko.canvas.preview.mediaProbeTimeout',
+      'Media probe timed out. Check that the source file is still available.',
+    ),
+    mediaStreamTimeout: t(
+      'neko.canvas.preview.mediaStreamTimeout',
+      'Media stream timed out. Check the media engine connection.',
+    ),
     storyboardShot: t('neko.canvas.preview.storyboardShot', 'Storyboard shot'),
     storyboardShotUnavailableDescription: t(
       'neko.canvas.preview.storyboardShotUnavailableDescription',

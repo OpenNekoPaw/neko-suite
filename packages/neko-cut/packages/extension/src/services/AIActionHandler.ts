@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { EngineClient } from '@neko/neko-client';
 import type { TimelineElement } from '@neko/shared';
+import { resolveMediaPath } from './tools/helpers';
 import { getLogger, getService } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import type { VideoEditorModel } from '../editor/video/videoEditorModel';
@@ -159,7 +160,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing upscale...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -183,7 +184,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing denoise...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -204,7 +205,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing enhance (upscale + denoise)...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -232,7 +233,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing transcription...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -252,7 +253,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing subtitle generation...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -280,7 +281,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     this.sendProgress(ctx, 10, 'Preparing silence detection...');
 
-    const inputPath = this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
+    const inputPath = await this.resolveElementSourcePath(ctx.elementIds[0], ctx.params);
     if (!inputPath) {
       return this.sendResult(ctx, false, undefined, 'Could not resolve element source file');
     }
@@ -540,25 +541,21 @@ export class AIActionHandler implements vscode.Disposable {
    *   2. Lookup element by ID from the active VideoEditorModel
    *   3. Project directory fallback (from _documentUri)
    */
-  private resolveElementSourcePath(
+  private async resolveElementSourcePath(
     elementId: string | undefined,
     params?: Record<string, unknown>,
-  ): string | null {
+  ): Promise<string | null> {
     // 1. Explicit sourcePath from caller
     const explicit = params?.['sourcePath'];
     if (typeof explicit === 'string' && explicit.length > 0) {
-      return explicit;
+      return this.resolveMediaSource(explicit);
     }
 
     // 2. Lookup element src from project data
     if (elementId) {
       const src = this.findElementSrc(elementId);
       if (src) {
-        // Resolve relative paths against the project file directory
-        if (!path.isAbsolute(src) && this._documentUri) {
-          return path.resolve(path.dirname(this._documentUri.fsPath), src);
-        }
-        return src;
+        return this.resolveMediaSource(src);
       }
     }
 
@@ -567,6 +564,15 @@ export class AIActionHandler implements vscode.Disposable {
       return path.dirname(this._documentUri.fsPath);
     }
     return null;
+  }
+
+  private async resolveMediaSource(source: string): Promise<string> {
+    if (!this._documentUri) return source;
+    return resolveMediaPath(source, path.dirname(this._documentUri.fsPath), undefined, {
+      documentUri: this._documentUri,
+      projectFilePath: this._documentUri.fsPath,
+      fileExists: (filePath) => fs.existsSync(filePath) && fs.statSync(filePath).isFile(),
+    });
   }
 
   /**

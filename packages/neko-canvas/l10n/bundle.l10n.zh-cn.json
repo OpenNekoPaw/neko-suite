@@ -44,6 +44,8 @@
   "neko.canvas.preview.noPlayableUnitDescription": "当前画布预览面没有生成可播放单元。",
   "neko.canvas.preview.mediaUnavailable": "媒体不可用",
   "neko.canvas.preview.mediaUnavailableDescription": "存在稳定的媒体引用，但当前播放器壳层还没有可用的运行时预览 URL。",
+  "neko.canvas.preview.mediaProbeTimeout": "媒体探测超时，请检查源文件是否仍可访问。",
+  "neko.canvas.preview.mediaStreamTimeout": "媒体流创建超时，请检查媒体引擎连接。",
   "neko.canvas.preview.storyboardShot": "分镜镜头",
   "neko.canvas.preview.storyboardShotUnavailableDescription": "该镜头还没有生成图片或安全的预览来源。",
   "neko.canvas.preview.storyboardScene": "分镜场景",

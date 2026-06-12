@@ -36,18 +36,15 @@ describe('PreviewPanel canvas handoff contracts', () => {
     expect(panelSource).toContain("'neko.canvas.importStoryboard'");
   });
 
-  it('routes table actions through table-scoped Agent and Canvas handoffs', () => {
+  it('routes table actions through table-scoped Agent handoff only', () => {
     expect(panelSource).toContain("type: 'tableAction'");
+    expect(panelSource).toContain("action: 'sendToAgentAll';");
     expect(panelSource).toContain('void this.handleTableAction(message.action, message.scope);');
-    expect(panelSource).toContain(
-      "await vscode.commands.executeCommand('neko.story.startVideoCreation', { sceneIds });",
-    );
     expect(panelSource).toContain(
       "await this.sendTableToAgent(scriptIndex, sceneIds, 'storyboard-only');",
     );
-    expect(panelSource).toContain(
-      'const imported = await this.sendScenesToCanvas(scriptIndex, sceneIds);',
-    );
+    expect(panelSource).not.toContain("action: 'startVideoCreationAll'");
+    expect(panelSource).not.toContain("action: 'sendToCanvasAll'");
     expect(panelSource).toContain('buildStoryTableAgentPayload({');
   });
 
@@ -89,5 +86,12 @@ describe('PreviewPanel canvas handoff contracts', () => {
     expect(panelSource).toContain('thumbnailRef: readiness?.thumbnailUri');
     expect(panelSource).toContain('readinessStatus: readiness?.status');
     expect(panelSource).toContain('missingInputs');
+  });
+
+  it('resolves note asset refs through the workspace media path contract', () => {
+    expect(panelSource).toContain('resolveWorkspaceMediaPath({');
+    expect(panelSource).toContain('createVSCodeWorkspaceMediaPathContext({');
+    expect(panelSource).toContain('source: note.assetRef.path');
+    expect(panelSource).not.toContain('path.join(docDir, note.assetRef.path)');
   });
 });

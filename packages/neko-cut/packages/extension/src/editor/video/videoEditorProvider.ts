@@ -16,6 +16,7 @@ import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
 import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
+import { resolveMediaPath } from '../../services/tools/helpers';
 import type { DashboardExportServiceEntry } from '../../services/dashboardTaskSource';
 import { ExportPresetService } from '../../services/ExportPresetService';
 import { getService, getLogger } from '../../base';
@@ -330,7 +331,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     if (client && !reusingExport) {
       exportService?.dispose();
       const jviDir = path.dirname(document.uri.fsPath);
-      exportService = new ExportService(client, jviDir);
+      exportService = new ExportService(client, jviDir, {}, document.uri);
       this.exportServices.set(docUri, exportService);
       this.onDidRegisterExportServiceEmitter.fire({ documentUri: docUri, service: exportService });
     }
@@ -658,11 +659,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           try {
             const fs = await import('fs');
 
-            // Resolve relative paths based on .nkv file location
-            if (!path.isAbsolute(filePath)) {
-              const jviDir = path.dirname(document.uri.fsPath);
-              absolutePath = path.join(jviDir, filePath);
-            }
+            const jviDir = path.dirname(document.uri.fsPath);
+            absolutePath = await resolveMediaPath(filePath, jviDir, undefined, {
+              documentUri: document.uri,
+              projectFilePath: document.uri.fsPath,
+            });
 
             exists = fs.existsSync(absolutePath);
           } catch (error) {

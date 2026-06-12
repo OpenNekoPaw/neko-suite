@@ -15,6 +15,10 @@ export interface DroppedMediaCanvasAsset {
   name: string;
   path: string;
   mediaType: 'image' | 'video' | 'audio';
+  /** Runtime-only safe URL for immediate webview display/playback. */
+  runtimeAssetPath?: string;
+  /** Original local file path, kept for compatibility with import payloads. */
+  originalPath?: string;
 }
 
 export interface DroppedScriptCanvasAsset {

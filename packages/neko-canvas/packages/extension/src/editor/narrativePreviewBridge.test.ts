@@ -47,6 +47,8 @@ const testL10nMessages = vi.hoisted(
       '存在稳定的媒体引用，但当前播放器壳层还没有可用的运行时预览 URL。',
     'neko.canvas.preview.mediaLoading': '正在加载媒体流...',
     'neko.canvas.preview.mediaPreparing': '正在准备媒体流...',
+    'neko.canvas.preview.mediaProbeTimeout': '媒体探测超时，请检查源文件是否仍可访问。',
+    'neko.canvas.preview.mediaStreamTimeout': '媒体流创建超时，请检查媒体引擎连接。',
     'neko.canvas.preview.storyboardShot': '分镜镜头',
     'neko.canvas.preview.storyboardShotUnavailableDescription':
       '该镜头还没有生成图片或安全的预览来源。',
@@ -467,12 +469,12 @@ describe('NarrativePreviewBridge', () => {
       () => basePlan,
       previewPlan,
     );
-    const getWebviewLocalResourceRoots = vi.fn((sourceCanvasUri?: string) => [
-      { toString: () => `root:${sourceCanvasUri ?? 'none'}` },
-    ]) as unknown as (sourceCanvasUri?: string) => readonly never[];
+    const getWebviewOptions = vi.fn((sourceCanvasUri?: string) => ({
+      localResourceRoots: [{ toString: () => `root:${sourceCanvasUri ?? 'none'}` }],
+    })) as unknown as (sourceCanvasUri?: string) => Record<string, unknown>;
     const bridge = new NarrativePreviewBridge(host, {
       panelFactory,
-      getWebviewLocalResourceRoots,
+      getWebviewOptions,
       now: () => 3310,
     });
 
@@ -481,8 +483,8 @@ describe('NarrativePreviewBridge', () => {
     expect(await bridge.open()).toBe(true);
 
     expect(panelFactory.createdPanels).toHaveLength(2);
-    expect(getWebviewLocalResourceRoots).toHaveBeenNthCalledWith(1, 'file:///story/a.nkc');
-    expect(getWebviewLocalResourceRoots).toHaveBeenNthCalledWith(2, 'file:///story/b.nkc');
+    expect(getWebviewOptions).toHaveBeenNthCalledWith(1, 'file:///story/a.nkc');
+    expect(getWebviewOptions).toHaveBeenNthCalledWith(2, 'file:///story/b.nkc');
     expect(previewPlan).toHaveBeenNthCalledWith(
       1,
       panelFactory.createdPanels[0]?.webview,
@@ -557,8 +559,21 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('formatUnitBody');
     expect(html).toContain('formatClockTime');
     expect(html).toContain('renderStageContent');
+    expect(html.indexOf('renderedStageKey = stageKey;')).toBeLessThan(
+      html.indexOf('renderStageContent(unit, index);'),
+    );
     expect(html).toContain('renderSegmentedTimeline');
     expect(html).toContain('toggleInspector');
+    expect(html).toContain('.neko-preview-media-controls { display: none; }');
+    expect(html).toContain("window.addEventListener('neko-preview-media'");
+    expect(html).toContain('handlePreviewMediaRuntimeEvent(event)');
+    expect(html).toContain("detail.type === 'ended'");
+    expect(html).toContain('advanceAfterCurrentUnit()');
+    expect(html).toContain('mediaRuntimeDurationsMs.set(unit.id, durationSeconds * 1000)');
+    expect(html).toContain('let mediaSurfaceGeneration = 0;');
+    expect(html).toContain('const surfaceGeneration = mediaSurfaceGeneration;');
+    expect(html).toContain('surfaceGeneration !== mediaSurfaceGeneration');
+    expect(html).toContain('!slot.isConnected');
     expect(html).toContain('formatDiagnosticMessage');
     expect(html).toContain('playback-invalid-route');
     expect(html).toContain('playback-route-truncated');
@@ -573,6 +588,7 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('readSelectedGenerationPreviewSource');
     expect(html).toContain('metadata.previewPlayableAssetPath');
     expect(html).toContain('previewSourceAssetPath');
+    expect(html).toContain('readString(metadata.previewSourceAssetPath)');
     expect(html).toContain('previewSourceResourceRef');
     expect(html).toContain('previewSourceDocumentResourceRef');
     expect(html).toContain('referenceImageResourceRef');
@@ -616,6 +632,8 @@ describe('NarrativePreviewBridge', () => {
     const html = panelFactory.createdPanels[0]?.webview.html ?? '';
 
     expect(html).toContain("playbackPlan.advancePolicy !== 'media-ended'");
+    expect(html).toContain("playbackPlan?.advancePolicy === 'media-ended'");
+    expect(html).toContain("unit.kind === 'media' || unit.renderMode === 'media-playback'");
     expect(html).toContain("playbackPlan.behaviorMode === 'interactive' && transitions.length > 1");
     expect(html).toContain('segment.addEventListener');
     expect(html).toContain('setActiveUnit(unit.id, false, 0)');
@@ -721,6 +739,7 @@ describe('NarrativePreviewBridge', () => {
       assetPath: 'media/clip.mov',
       mediaType: 'video',
     });
+    await waitForMicrotasks();
 
     expect(mediaHandler).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -734,6 +753,220 @@ describe('NarrativePreviewBridge', () => {
 
     panel?.dispose();
     expect(disposeMediaPanel).toHaveBeenCalledWith(panel);
+  });
+
+  it('injects the active session envelope into Preview media runtime messages', () => {
+    const host = createHost(createSnapshot(9), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 9130,
+    });
+
+    return bridge.open().then((opened) => {
+      expect(opened).toBe(true);
+      const html = panelFactory.createdPanels[0]?.webview.html ?? '';
+      expect(html).toContain('window.__nekoNarrativePreviewPostMessage = (message) => {');
+      expect(html).toContain('postPreviewMediaMessage(message);');
+      expect(html).toContain('const pendingPreviewMediaMessages = [];');
+      expect(html).toContain(
+        "const payload = removeUndefinedFields(message && typeof message === 'object' ? message : {});",
+      );
+      expect(html).toContain('pendingPreviewMediaMessages.push(payload);');
+      expect(html).toContain('function flushPendingPreviewMediaMessages()');
+      expect(html).toContain('flushPendingPreviewMediaMessages();');
+      expect(html).toContain('function removeUndefinedFields(value)');
+      expect(html).toContain('function postPreviewHostMessage(message)');
+      expect(html).toContain('postPreviewHostMessage(payload);');
+      expect(html).not.toContain('function postMessage(message)');
+      expect(html).toContain('sessionId: currentSessionId');
+      expect(html).toContain('sourceCanvasUri: currentSourceCanvasUri');
+      expect(html).toContain('revision: currentRevision');
+    });
+  });
+
+  it('replies with a media error when the Preview host has no media handler', async () => {
+    const host = createHost(createSnapshot(9), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(host, {
+      panelFactory,
+      now: () => 9140,
+    });
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    panel?.webview.receiveMessage({
+      type: 'media:probe',
+      nodeId: 'preview-media:clip',
+      assetPath: 'cases/1080P.mp4',
+      mediaType: 'video',
+    });
+
+    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'media:probeResult',
+        nodeId: 'preview-media:clip',
+        error: 'Preview media playback is unavailable for this Canvas host.',
+        sessionId: expect.stringMatching(/^canvas-preview:/),
+        sourceCanvasUri: 'file:///story/branch.nkc',
+        revision: 9,
+      }),
+    );
+  });
+
+  it('replies with a media timeout when the host media handler never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const host = createHost(createSnapshot(9), () =>
+        createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+      );
+      const panelFactory = createPanelFactory();
+      const bridge = new NarrativePreviewBridge(
+        {
+          ...host,
+          handleNarrativePreviewMediaMessage: vi.fn(() => new Promise<void>(() => undefined)),
+        },
+        {
+          panelFactory,
+          now: () => 9145,
+        },
+      );
+
+      expect(await bridge.open()).toBe(true);
+      const panel = panelFactory.createdPanels[0];
+      panel?.webview.receiveMessage({
+        type: 'media:play',
+        nodeId: 'preview-media:clip',
+        assetPath: 'cases/1080P.mp4',
+        mediaType: 'video',
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'media:streamReady',
+          nodeId: 'preview-media:clip',
+          error: 'Preview media request timed out after 10000ms.',
+          sessionId: expect.stringMatching(/^canvas-preview:/),
+          sourceCanvasUri: 'file:///story/branch.nkc',
+          revision: 9,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('routes media messages from an older Preview revision to the current session host', async () => {
+    let snapshot = createSnapshot(1, 'file:///story/a.nkc');
+    const host = createHost(
+      () => snapshot,
+      () => createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const mediaHandler = vi.fn();
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        handleNarrativePreviewMediaMessage: mediaHandler,
+      },
+      {
+        panelFactory,
+        now: () => 9148,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    const sessionId = readBootstrapMessages(panel?.webview.html ?? '').find(
+      isPreviewLoadGraphMessage,
+    )?.sessionId;
+
+    panel?.webview.receiveMessage({
+      type: 'preview:webviewReady',
+      requestId: 'ready-media-revision',
+      sessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+    });
+    snapshot = createSnapshot(2, 'file:///story/a.nkc');
+    expect(await bridge.open()).toBe(true);
+
+    panel?.webview.receiveMessage({
+      type: 'media:probe',
+      requestId: 'media-old-revision',
+      sessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+      nodeId: 'preview-media:clip',
+      assetPath: 'cases/1080P.mp4',
+      mediaType: 'video',
+    });
+    await waitForMicrotasks();
+
+    expect(mediaHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'media:probe',
+        requestId: 'media-old-revision',
+        revision: 1,
+      }),
+      panel,
+      'file:///story/a.nkc',
+    );
+  });
+
+  it('replies with a media error when a Preview media message targets a detached session', async () => {
+    const host = createHost(createSnapshot(1, 'file:///story/a.nkc'), () =>
+      createCanvasPlaybackPlanFromCanvasData(createStoryboardCanvasData()),
+    );
+    const mediaHandler = vi.fn();
+    const panelFactory = createPanelFactory();
+    const bridge = new NarrativePreviewBridge(
+      {
+        ...host,
+        handleNarrativePreviewMediaMessage: mediaHandler,
+      },
+      {
+        panelFactory,
+        now: () => 9149,
+      },
+    );
+
+    expect(await bridge.open()).toBe(true);
+    const panel = panelFactory.createdPanels[0];
+    const sessionId = readBootstrapMessages(panel?.webview.html ?? '').find(
+      isPreviewLoadGraphMessage,
+    )?.sessionId;
+    bridge.dispose();
+
+    panel?.webview.receiveMessage({
+      type: 'media:probe',
+      requestId: 'media-detached',
+      sessionId,
+      sourceCanvasUri: 'file:///story/a.nkc',
+      revision: 1,
+      nodeId: 'preview-media:clip',
+      assetPath: 'cases/1080P.mp4',
+      mediaType: 'video',
+    });
+
+    expect(mediaHandler).not.toHaveBeenCalled();
+    expect(panel?.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'media:probeResult',
+        nodeId: 'preview-media:clip',
+        sessionId,
+        sourceCanvasUri: 'file:///story/a.nkc',
+        revision: 1,
+        error:
+          'Preview media playback session is no longer attached to a Canvas. Reopen the Canvas Preview.',
+      }),
+    );
   });
 
   it('scopes media messages, variant requests, and cleanup to the owning Preview session', async () => {

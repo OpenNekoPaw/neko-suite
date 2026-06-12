@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type {
   ProjectData,
   TimelineElement,
@@ -9,12 +9,33 @@ import type {
 import {
   toRelativeIfAbsolute,
   normalizePathsForSave,
+  resolveMediaPath,
   findElement,
   updateElementAt,
   removeElementAt,
   getLegacyKeyframes,
   normalizePercent,
 } from '../helpers';
+
+vi.mock('vscode', () => ({
+  Uri: {
+    file: (filePath: string) => ({
+      scheme: 'file',
+      fsPath: filePath,
+      path: filePath,
+      toString: () => `file://${filePath}`,
+    }),
+  },
+  workspace: {
+    workspaceFolders: [
+      { uri: { fsPath: '/workspace/a' }, name: 'a', index: 0 },
+      { uri: { fsPath: '/workspace/b' }, name: 'b', index: 1 },
+    ],
+  },
+  commands: {
+    executeCommand: vi.fn(async () => null),
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -28,7 +49,7 @@ function makeElement(overrides: Partial<MediaElement> & { id: string }): MediaEl
     startTime: 0,
     trimStart: 0,
     trimEnd: 0,
-    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
     opacity: 1,
     blendMode: 'normal',
     effects: [],
@@ -145,47 +166,56 @@ describe('toRelativeIfAbsolute', () => {
 // ---------------------------------------------------------------------------
 
 describe('normalizePathsForSave', () => {
-  it('returns project unchanged when projectFilePath is undefined', () => {
+  it('returns project unchanged when projectFilePath is undefined', async () => {
     const project = makeProject([]);
-    const result = normalizePathsForSave(project);
+    const result = await normalizePathsForSave(project);
     expect(result).toBe(project); // same reference
   });
 
-  it('converts absolute src paths to relative', () => {
+  it('converts absolute src paths to relative', async () => {
     const el = makeElement({ id: 'e1', src: '/home/user/project/assets/clip.mp4' });
     const project = makeProject([makeTrack([el])]);
-    const result = normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     const resultEl = result.tracks[0]!.elements[0]! as unknown as { src: string };
     expect(resultEl.src).toBe('assets/clip.mp4');
   });
 
-  it('leaves already-relative src paths unchanged', () => {
+  it('contracts absolute workspace media to owning workspace relative paths', async () => {
+    const el = makeElement({ id: 'e1', src: '/workspace/b/cases/clip.mp4' });
+    const project = makeProject([makeTrack([el])]);
+    const result = await normalizePathsForSave(project, '/workspace/b/projects/cut/project.nkv');
+    const resultEl = result.tracks[0]!.elements[0]! as unknown as { src: string };
+
+    expect(resultEl.src).toBe('cases/clip.mp4');
+  });
+
+  it('leaves already-relative src paths unchanged', async () => {
     const el = makeElement({ id: 'e1', src: 'assets/clip.mp4' });
     const project = makeProject([makeTrack([el])]);
-    const result = normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     const resultEl = result.tracks[0]!.elements[0]! as unknown as { src: string };
     expect(resultEl.src).toBe('assets/clip.mp4');
   });
 
-  it('leaves elements without src unchanged (text element)', () => {
+  it('leaves elements without src unchanged (text element)', async () => {
     const textEl = makeTextElement({ id: 'e1' });
     const project = makeProject([makeTrack([textEl])]);
-    const result = normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     const resultEl = result.tracks[0]!.elements[0]! as TextElement;
     expect(resultEl.type).toBe('text');
     // Text element should be returned as-is (no src mutation)
     expect((resultEl as unknown as { src?: string }).src).toBeUndefined();
   });
 
-  it('does not mutate the original project', () => {
+  it('does not mutate the original project', async () => {
     const el = makeElement({ id: 'e1', src: '/home/user/project/assets/clip.mp4' });
     const project = makeProject([makeTrack([el])]);
     const originalSrc = (project.tracks[0]!.elements[0]! as MediaElement).src;
-    normalizePathsForSave(project, '/home/user/project/project.neko');
+    await normalizePathsForSave(project, '/home/user/project/project.neko');
     expect((project.tracks[0]!.elements[0]! as MediaElement).src).toBe(originalSrc);
   });
 
-  it('handles multiple tracks and elements', () => {
+  it('handles multiple tracks and elements', async () => {
     const e1 = makeElement({ id: 'e1', src: '/home/user/project/a.mp4' });
     const e2 = makeElement({ id: 'e2', src: '/home/user/project/sub/b.mp4' });
     const e3 = makeTextElement({ id: 'e3' });
@@ -193,15 +223,52 @@ describe('normalizePathsForSave', () => {
       makeTrack([e1], { id: 'track-1' }),
       makeTrack([e2, e3], { id: 'track-2' }),
     ]);
-    const result = normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     expect((result.tracks[0]!.elements[0]! as unknown as { src: string }).src).toBe('a.mp4');
     expect((result.tracks[1]!.elements[0]! as unknown as { src: string }).src).toBe('sub/b.mp4');
   });
 
-  it('handles empty tracks array', () => {
+  it('handles empty tracks array', async () => {
     const project = makeProject([]);
-    const result = normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     expect(result.tracks).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveMediaPath
+// ---------------------------------------------------------------------------
+
+describe('resolveMediaPath', () => {
+  it('resolves project media from the owning workspace root before document directory', async () => {
+    const result = await resolveMediaPath(
+      'cases/clip.mp4',
+      '/workspace/b/projects/cut',
+      undefined,
+      {
+        projectFilePath: '/workspace/b/projects/cut/project.nkv',
+        fileExists: (filePath) =>
+          filePath === '/workspace/a/cases/clip.mp4' ||
+          filePath === '/workspace/b/cases/clip.mp4' ||
+          filePath === '/workspace/b/projects/cut/cases/clip.mp4',
+      },
+    );
+
+    expect(result).toBe('/workspace/b/cases/clip.mp4');
+  });
+
+  it('keeps legacy document-relative fallback when workspace candidate is missing', async () => {
+    const result = await resolveMediaPath(
+      '../cases/clip.mp4',
+      '/workspace/b/projects/cut',
+      undefined,
+      {
+        projectFilePath: '/workspace/b/projects/cut/project.nkv',
+        fileExists: (filePath) => filePath === '/workspace/b/projects/cases/clip.mp4',
+      },
+    );
+
+    expect(result).toBe('/workspace/b/projects/cases/clip.mp4');
   });
 });
 

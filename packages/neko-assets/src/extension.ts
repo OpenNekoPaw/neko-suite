@@ -13,6 +13,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import {
   AssetLibrary,
@@ -30,12 +31,15 @@ import type { IFileSystem } from '@neko/asset';
 import * as os from 'os';
 import {
   ENTITY_FACADE_COMMANDS,
+  contractWorkspaceMediaPath,
   detectMediaType,
   isEntityFacadeAssetReverseLookupResult,
+  resolveWorkspaceMediaPath,
   resolveStorageLayout,
   migrateStorageLayout,
   parseEntityUri,
   type CreativeEntityKind,
+  type WorkspaceMediaPathContext,
   type ResourceVariantRequest,
 } from '@neko/shared';
 import type { ImportedAssetDescriptor } from '@neko/shared';
@@ -59,6 +63,7 @@ import {
 import { VscodeGitService } from './services/VscodeGitService';
 import {
   createVSCodeLogger,
+  createVSCodeWorkspaceMediaPathContext,
   createFileThumbnailResourceRef,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
@@ -96,6 +101,14 @@ let dependencyManifestService: ProjectAssetDependencyManifestService | null = nu
 let characterAssetExportService: CharacterAssetExportService | null = null;
 let entityFacadeReaders: EntityFacadeReaders | null = null;
 const runningTasks = new Set<Promise<void>>();
+
+interface AssetWorkspacePathCommandContext {
+  readonly sourceDocumentUri?: string;
+  readonly documentPath?: string;
+  readonly owningWorkspaceRoot?: string;
+  readonly workspaceRoots?: readonly string[];
+  readonly allowedRoots?: readonly string[];
+}
 
 function trackExtensionTask(label: string, task: PromiseLike<unknown>): void {
   const tracked = Promise.resolve(task).catch((error) => {
@@ -1098,9 +1111,17 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
           const workspaceFolderPaths = (vscode.workspace.workspaceFolders ?? []).map(
             (folder) => folder.uri.fsPath,
           );
+          const owningWorkspaceRoot = findOwningWorkspaceRoot(
+            uri,
+            vscode.workspace.workspaceFolders ?? [],
+          );
           await dispatcher.importFile({
             sourcePath: uri.fsPath,
+            owningWorkspaceRoot,
             workspaceFolderPaths,
+            pathVariables: mediaSettingsService
+              ? await mediaSettingsService.getPathVariableMap()
+              : undefined,
           });
           vscode.window.showInformationMessage(
             `Imported media asset: ${path.basename(uri.fsPath)}`,
@@ -1497,6 +1518,93 @@ function createMediaImportDispatcher(): MediaImportDispatcher {
       registerImportedAsset: registerImportedAssetDescriptor,
     },
   });
+}
+
+function findOwningWorkspaceRoot(
+  uri: vscode.Uri,
+  workspaceFolders: readonly vscode.WorkspaceFolder[],
+): string | undefined {
+  if (uri.scheme !== 'file') return workspaceFolders[0]?.uri.fsPath;
+  return workspaceFolders
+    .map((folder) => folder.uri.fsPath)
+    .filter((root) => isPathInsideOrEqual(uri.fsPath, root))
+    .sort((left, right) => right.length - left.length)[0];
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+async function createAssetsWorkspaceMediaPathContext(
+  commandContext: AssetWorkspacePathCommandContext,
+): Promise<WorkspaceMediaPathContext> {
+  const sourceDocumentUri = readCommandContextDocumentUri(commandContext);
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  const pathVariables = mediaSettingsService
+    ? await mediaSettingsService.getPathVariableMap()
+    : new Map<string, string>();
+  if (commandContext.owningWorkspaceRoot) {
+    pathVariables.set('WORKSPACE', commandContext.owningWorkspaceRoot);
+    pathVariables.set('PROJECT', commandContext.owningWorkspaceRoot);
+  }
+  const workspaceRoots =
+    commandContext.workspaceRoots ?? workspaceFolders.map((folder) => folder.uri.fsPath);
+  const allowedRoots = commandContext.allowedRoots ?? [
+    ...workspaceRoots,
+    ...[...pathVariables.entries()]
+      .filter(([variable]) => variable !== 'WORKSPACE' && variable !== 'PROJECT')
+      .map(([, root]) => root),
+  ];
+
+  return {
+    ...createVSCodeWorkspaceMediaPathContext({
+      documentUri: sourceDocumentUri,
+      workspaceFolders,
+      pathVariables,
+      allowedRoots,
+    }),
+    ...(commandContext.documentPath
+      ? { documentDir: path.dirname(commandContext.documentPath) }
+      : {}),
+    ...(commandContext.owningWorkspaceRoot
+      ? {
+          owningWorkspaceRoot: commandContext.owningWorkspaceRoot,
+          pathVariables,
+        }
+      : {}),
+    workspaceRoots,
+    allowedRoots,
+  };
+}
+
+function readCommandContextDocumentUri(
+  commandContext: AssetWorkspacePathCommandContext,
+): vscode.Uri | undefined {
+  if (commandContext.sourceDocumentUri) {
+    try {
+      return vscode.Uri.parse(commandContext.sourceDocumentUri);
+    } catch {
+      // Fall through to documentPath.
+    }
+  }
+  return commandContext.documentPath ? vscode.Uri.file(commandContext.documentPath) : undefined;
+}
+
+function isExistingLocalFile(filePath: string): boolean {
+  try {
+    return fsSync.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isAuthorizedLocalPath(
+  filePath: string,
+  allowedRoots: readonly string[] | undefined,
+): boolean {
+  if (!allowedRoots || allowedRoots.length === 0) return true;
+  return allowedRoots.some((root) => isPathInsideOrEqual(filePath, root));
 }
 
 async function registerImportedAssetDescriptor(descriptor: ImportedAssetDescriptor): Promise<void> {
@@ -2214,18 +2322,47 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 
   // Contract absolute path → portable path (${VAR}/rest or relative)
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.assets.contractPath', (absolutePath: string) => {
-      if (!library) return absolutePath;
-      return library.contractPath(absolutePath);
-    }),
+    vscode.commands.registerCommand(
+      'neko.assets.contractPath',
+      async (absolutePath: string, commandContext?: AssetWorkspacePathCommandContext) => {
+        if (commandContext) {
+          const pathContext = await createAssetsWorkspaceMediaPathContext(commandContext);
+          const contracted = contractWorkspaceMediaPath(absolutePath, pathContext);
+          if (
+            contracted.format === 'workspace-relative' ||
+            contracted.format === 'variable' ||
+            contracted.format === 'remote-url'
+          ) {
+            return contracted.path;
+          }
+        }
+        if (!library) return absolutePath;
+        return library.contractPath(absolutePath);
+      },
+    ),
   );
 
   // Resolve portable path → absolute path
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.assets.resolvePath', (storedPath: string) => {
-      if (!library) return storedPath;
-      return library.resolvePath(storedPath);
-    }),
+    vscode.commands.registerCommand(
+      'neko.assets.resolvePath',
+      async (storedPath: string, commandContext?: AssetWorkspacePathCommandContext) => {
+        if (commandContext) {
+          const pathContext = await createAssetsWorkspaceMediaPathContext(commandContext);
+          const resolved = resolveWorkspaceMediaPath({
+            source: storedPath,
+            context: pathContext,
+            fileExists: isExistingLocalFile,
+            isPathAuthorized: (filePath) =>
+              isAuthorizedLocalPath(filePath, pathContext.allowedRoots),
+          });
+          if (resolved.status === 'resolved-local') return resolved.path;
+          if (resolved.status === 'remote') return resolved.url;
+        }
+        if (!library) return storedPath;
+        return library.resolvePath(storedPath);
+      },
+    ),
   );
 }
 

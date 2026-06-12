@@ -21,7 +21,12 @@ import {
   type ActionRequest,
   type ActionResponse,
 } from '@neko/neko-client';
-import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
+import {
+  createCutWorkspaceMediaPathContext,
+  isExistingLocalFile,
+  resolveMediaPath as resolveMediaPathHelper,
+  resolveProjectMediaSourcesForRuntime,
+} from './tools/helpers';
 import type {
   MediaRequest,
   MediaResponse,
@@ -36,6 +41,7 @@ import type {
   RenderCompositeFrameResponse,
   CompatibleModeRequest,
   CompatibleModeResponse,
+  ProjectData,
 } from '@neko/shared';
 import { getLogger } from '../base';
 
@@ -56,6 +62,7 @@ interface EditorStreamProjectData {
 
 export class MediaService implements vscode.Disposable {
   private readonly documentDir: string | undefined;
+  private readonly documentUri: vscode.Uri | undefined;
   private readonly mediaPlayback: MediaPlaybackService;
   private disposed = false;
 
@@ -69,6 +76,7 @@ export class MediaService implements vscode.Disposable {
     private readonly client: EngineClient,
     documentUri?: vscode.Uri,
   ) {
+    this.documentUri = documentUri;
     this.documentDir = documentUri ? path.dirname(documentUri.fsPath) : undefined;
     this.mediaPlayback = new MediaPlaybackService(this.client);
   }
@@ -484,7 +492,8 @@ export class MediaService implements vscode.Disposable {
       return;
     }
 
-    logger.info('Creating editor-level stream, baseDir:', this.documentDir);
+    logger.info('Creating editor-level stream, baseDir:', this.getRuntimeMediaBaseDir());
+    const runtimeProjectData = await this.resolveProjectDataForRuntime(projectData);
 
     const result = await this.dispatch({
       group: 'timelines',
@@ -496,9 +505,9 @@ export class MediaService implements vscode.Disposable {
         fps: projectData.fps,
         startTime: 0,
         paused: true,
-        baseDir: this.documentDir ?? undefined,
+        baseDir: this.getRuntimeMediaBaseDir(),
       },
-      body: projectData,
+      body: runtimeProjectData,
     });
 
     const data = result.data as Record<string, unknown>;
@@ -609,7 +618,7 @@ export class MediaService implements vscode.Disposable {
         action: 'applyOperation',
         options: {
           streamId: this._activeVideoStreamId,
-          baseDir: this.documentDir ?? undefined,
+          baseDir: this.getRuntimeMediaBaseDir(),
         },
         body: payload.operation,
       });
@@ -621,16 +630,17 @@ export class MediaService implements vscode.Disposable {
       }
     } else if (type === 'media:frameServer:projectPlayback:update') {
       if (!this._activeVideoStreamId) return;
-      const payload = msg.payload as { projectData: unknown };
+      const payload = msg.payload as { projectData: EditorStreamProjectData };
+      const runtimeProjectData = await this.resolveProjectDataForRuntime(payload.projectData);
 
       await this.dispatch({
         group: 'streams',
         action: 'update',
         options: {
           streamId: this._activeVideoStreamId,
-          baseDir: this.documentDir ?? undefined,
+          baseDir: this.getRuntimeMediaBaseDir(),
         },
-        body: payload.projectData,
+        body: runtimeProjectData,
       });
     } else if (type === 'media:frameServer:projectPlayback:speed') {
       if (!this._activeVideoStreamId) return;
@@ -911,7 +921,33 @@ export class MediaService implements vscode.Disposable {
    */
   private async resolveMediaPath(mediaPath: string): Promise<string> {
     const baseDir = this.documentDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
-    return resolveMediaPathHelper(mediaPath, baseDir);
+    return resolveMediaPathHelper(mediaPath, baseDir, undefined, {
+      ...(this.documentUri
+        ? { documentUri: this.documentUri, projectFilePath: this.documentUri.fsPath }
+        : {}),
+      fileExists: isExistingLocalFile,
+    });
+  }
+
+  private getRuntimeMediaBaseDir(): string | undefined {
+    if (!this.documentDir) return undefined;
+    const context = createCutWorkspaceMediaPathContext(this.documentDir, {
+      ...(this.documentUri
+        ? { documentUri: this.documentUri, projectFilePath: this.documentUri.fsPath }
+        : {}),
+    });
+    return context.owningWorkspaceRoot ?? this.documentDir;
+  }
+
+  private async resolveProjectDataForRuntime<T extends EditorStreamProjectData>(
+    projectData: T,
+  ): Promise<T> {
+    if (!this.documentUri?.fsPath || !this.documentDir) return projectData;
+    return (await resolveProjectMediaSourcesForRuntime(
+      projectData as unknown as ProjectData,
+      this.documentUri.fsPath,
+      { documentUri: this.documentUri, fileExists: isExistingLocalFile },
+    )) as unknown as T;
   }
 
   /**

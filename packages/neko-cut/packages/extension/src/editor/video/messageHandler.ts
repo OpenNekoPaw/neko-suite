@@ -24,7 +24,11 @@ import {
   type EditOperation,
 } from '@neko/shared';
 import { getLogger } from '../../base';
-import { normalizePathsForSave, resolveMediaPath } from '../../services/tools/helpers';
+import {
+  isExistingLocalFile,
+  normalizePathsForSave,
+  resolveMediaPath,
+} from '../../services/tools/helpers';
 import { AIActionHandler } from '../../services/AIActionHandler';
 
 const logger = getLogger('MessageHandler');
@@ -205,7 +209,9 @@ export class MessageHandler {
    */
   private async handleSave(content: ProjectData): Promise<void> {
     try {
-      const normalizedContent = await normalizePathsForSave(content, this.model.uri.fsPath);
+      const normalizedContent = await normalizePathsForSave(content, this.model.uri.fsPath, {
+        documentUri: this.model.uri,
+      });
       const success = await this.model.updateProjectData(normalizedContent);
       if (success) {
         this.webview.postMessage({ type: 'saved' });
@@ -223,7 +229,11 @@ export class MessageHandler {
    */
   private async resolveStoredMediaPath(filePath: string): Promise<string> {
     const jviDir = path.dirname(this.model.uri.fsPath);
-    return resolveMediaPath(filePath, jviDir);
+    return resolveMediaPath(filePath, jviDir, undefined, {
+      documentUri: this.model.uri,
+      projectFilePath: this.model.uri.fsPath,
+      fileExists: isExistingLocalFile,
+    });
   }
 
   private async resolveEngineFileAccessPath(filePath: string): Promise<string> {

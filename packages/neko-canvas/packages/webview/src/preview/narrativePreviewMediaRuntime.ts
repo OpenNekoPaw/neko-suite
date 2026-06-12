@@ -50,6 +50,8 @@ interface PreviewMediaRuntimeApi {
   handleHostMessage(message: unknown): void;
 }
 
+type PreviewMediaRuntimeEventType = 'ready' | 'timeUpdate' | 'ended' | 'error';
+
 interface PlayerState {
   readonly surfaceId: string;
   readonly mediaType: PreviewMediaType;
@@ -65,6 +67,8 @@ interface PlayerState {
   readonly labels: NormalizedPreviewMediaLabels;
   readonly posterUrl?: string;
   readonly label?: string;
+  lastStartRequest?: PreviewMediaStartRequest;
+  probeMediaInfo?: Record<string, unknown>;
   assetPath?: string;
   resourceRef?: unknown;
   documentResourceRef?: unknown;
@@ -72,6 +76,8 @@ interface PlayerState {
   audioClient?: AudioStreamClient;
   scheduler?: FrameScheduler;
   animationFrameId?: number;
+  requestTimeoutId?: number;
+  pendingRequestStage?: 'probe' | 'stream';
   currentTime: number;
   duration: number;
   fps: number;
@@ -90,6 +96,8 @@ interface PreviewMediaLabels {
   readonly pause?: string;
   readonly loading?: string;
   readonly preparing?: string;
+  readonly probeTimeout?: string;
+  readonly streamTimeout?: string;
 }
 
 interface NormalizedPreviewMediaLabels {
@@ -97,6 +105,8 @@ interface NormalizedPreviewMediaLabels {
   readonly pause: string;
   readonly loading: string;
   readonly preparing: string;
+  readonly probeTimeout: string;
+  readonly streamTimeout: string;
 }
 
 declare global {
@@ -113,7 +123,10 @@ const DEFAULT_LABELS: NormalizedPreviewMediaLabels = {
   pause: 'Pause',
   loading: 'Loading media stream...',
   preparing: 'Preparing media stream...',
+  probeTimeout: 'Media probe timed out.',
+  streamTimeout: 'Media stream timed out.',
 };
+const HOST_MEDIA_RESPONSE_TIMEOUT_MS = 10_000;
 const players = new Map<string, PlayerState>();
 
 function createRuntime(): PreviewMediaRuntimeApi {
@@ -248,6 +261,8 @@ function start(request: PreviewMediaStartRequest): void {
   if (!player) {
     return;
   }
+  player.lastStartRequest = request;
+  player.probeMediaInfo = undefined;
   player.assetPath = request.assetPath;
   player.resourceRef = request.resourceRef;
   player.documentResourceRef = request.documentResourceRef;
@@ -255,6 +270,7 @@ function start(request: PreviewMediaStartRequest): void {
   player.waitingForStream = true;
   player.message.textContent = player.labels.preparing;
   player.root.dataset.state = 'loading';
+  scheduleHostResponseTimeout(player, 'probe');
   renderPlayer(player);
   postHostMessage({
     type: 'media:probe',
@@ -281,8 +297,23 @@ function pause(surfaceId: string): void {
 function resume(surfaceId: string): void {
   const player = players.get(surfaceId);
   if (!player) return;
-  player.isPlaying = true;
   player.shouldPlayWhenReady = true;
+  if (player.waitingForStream) {
+    renderPlayer(player);
+    return;
+  }
+  if (shouldRestartMediaProbe(player)) {
+    const request = player.lastStartRequest;
+    if (request) {
+      start({ ...request, autoPlay: true, startTime: player.currentTime });
+    }
+    return;
+  }
+  if (!player.videoClient && !player.audioClient) {
+    requestMediaStream(player);
+    return;
+  }
+  player.isPlaying = true;
   player.audioClient?.resume();
   player.playStartTime = player.currentTime;
   player.playWallTime = performance.now();
@@ -290,6 +321,16 @@ function resume(surfaceId: string): void {
   postHostMessage({ type: 'media:resume', nodeId: surfaceId });
   schedulePlaybackLoop(player);
   renderPlayer(player);
+}
+
+function shouldRestartMediaProbe(player: PlayerState): boolean {
+  if (player.waitingForStream) {
+    return false;
+  }
+  if (player.root.dataset.state === 'error') {
+    return true;
+  }
+  return !player.probeMediaInfo && !player.videoClient && !player.audioClient;
 }
 
 function seek(surfaceId: string, time: number): void {
@@ -342,11 +383,16 @@ function handleProbeResult(message: PreviewMediaProbeResultMessage): void {
   const surfaceId = typeof message.nodeId === 'string' ? message.nodeId : undefined;
   const player = surfaceId ? players.get(surfaceId) : undefined;
   if (!player) return;
+  clearHostResponseTimeout(player, 'probe');
   if (message.error) {
     showError(player, String(message.error));
     return;
   }
+  player.waitingForStream = true;
+  player.message.textContent = player.labels.preparing;
+  player.root.dataset.state = 'loading';
   const mediaInfo = isRecord(message.mediaInfo) ? message.mediaInfo : {};
+  player.probeMediaInfo = mediaInfo;
   const duration = readNumber(mediaInfo.duration);
   if (duration !== undefined && duration > 0) {
     player.duration = duration;
@@ -358,11 +404,37 @@ function handleProbeResult(message: PreviewMediaProbeResultMessage): void {
   player.height = height ?? player.height;
   player.fps = fps ?? player.fps;
   player.progress.max = String(Math.max(player.duration, 0.1));
+  if (player.shouldPlayWhenReady) {
+    requestMediaStream(player);
+    return;
+  }
+  player.waitingForStream = false;
+  player.message.textContent = '';
+  player.root.dataset.state = 'ready';
   renderPlayer(player);
+  dispatchMediaRuntimeEvent(player, 'ready');
+}
 
+function requestMediaStream(player: PlayerState): void {
+  const mediaInfo = player.probeMediaInfo;
+  if (!mediaInfo) {
+    const request = player.lastStartRequest;
+    if (request) {
+      start({ ...request, autoPlay: true, startTime: player.currentTime });
+      return;
+    }
+    showError(player, player.labels.preparing);
+    return;
+  }
+  player.shouldPlayWhenReady = true;
+  player.waitingForStream = true;
+  player.message.textContent = player.labels.preparing;
+  player.root.dataset.state = 'loading';
+  scheduleHostResponseTimeout(player, 'stream');
+  renderPlayer(player);
   postHostMessage({
     type: 'media:play',
-    nodeId: surfaceId,
+    nodeId: player.surfaceId,
     assetPath: player.assetPath,
     resourceRef: player.resourceRef,
     documentResourceRef: player.documentResourceRef,
@@ -377,6 +449,7 @@ function handleStreamReady(message: PreviewMediaStreamReadyMessage): void {
   const surfaceId = typeof message.nodeId === 'string' ? message.nodeId : undefined;
   const player = surfaceId ? players.get(surfaceId) : undefined;
   if (!player) return;
+  clearHostResponseTimeout(player, 'stream');
   if (message.error) {
     showError(player, String(message.error));
     return;
@@ -429,6 +502,7 @@ function handleStreamReady(message: PreviewMediaStreamReadyMessage): void {
     postHostMessage({ type: 'media:pause', nodeId: player.surfaceId });
   }
   renderPlayer(player);
+  dispatchMediaRuntimeEvent(player, 'ready');
 }
 
 function handleVideoFrame(player: PlayerState, frame: VideoFrame): void {
@@ -466,6 +540,7 @@ function schedulePlaybackLoop(player: PlayerState): void {
       player.isPlaying = false;
       player.scheduler?.flush();
       renderPlayer(player);
+      dispatchMediaRuntimeEvent(player, 'ended');
       postHostMessage({ type: 'media:stop', nodeId: player.surfaceId });
       return;
     }
@@ -488,6 +563,7 @@ function renderPlayer(player: PlayerState): void {
   player.playButton.disabled = player.waitingForStream;
   player.progress.value = String(clamp(player.currentTime, 0, player.duration));
   player.time.textContent = `${formatTime(player.currentTime)} / ${formatTime(player.duration)}`;
+  dispatchMediaRuntimeEvent(player, 'timeUpdate');
 }
 
 function drawVideoFrame(player: PlayerState, frame: VideoFrame): void {
@@ -510,6 +586,7 @@ function drawVideoFrame(player: PlayerState, frame: VideoFrame): void {
 }
 
 function teardownStreams(player: PlayerState): void {
+  clearHostResponseTimeout(player);
   cancelPlayerFrame(player);
   player.scheduler?.dispose();
   player.videoClient?.dispose();
@@ -536,6 +613,52 @@ function showError(player: PlayerState, message: string): void {
   player.root.dataset.state = 'error';
   player.message.textContent = message;
   renderPlayer(player);
+  dispatchMediaRuntimeEvent(player, 'error', { error: message });
+}
+
+function dispatchMediaRuntimeEvent(
+  player: PlayerState,
+  type: PreviewMediaRuntimeEventType,
+  extra: Record<string, unknown> = {},
+): void {
+  window.dispatchEvent(
+    new CustomEvent('neko-preview-media', {
+      detail: {
+        type,
+        surfaceId: player.surfaceId,
+        mediaType: player.mediaType,
+        currentTime: player.currentTime,
+        duration: player.duration,
+        isPlaying: player.isPlaying,
+        waitingForStream: player.waitingForStream,
+        ...extra,
+      },
+    }),
+  );
+}
+
+function scheduleHostResponseTimeout(player: PlayerState, stage: 'probe' | 'stream'): void {
+  clearHostResponseTimeout(player);
+  player.pendingRequestStage = stage;
+  player.requestTimeoutId = window.setTimeout(() => {
+    if (player.pendingRequestStage !== stage) {
+      return;
+    }
+    showError(player, stage === 'probe' ? player.labels.probeTimeout : player.labels.streamTimeout);
+  }, HOST_MEDIA_RESPONSE_TIMEOUT_MS);
+}
+
+function clearHostResponseTimeout(player: PlayerState, stage?: 'probe' | 'stream'): void {
+  if (stage && player.pendingRequestStage !== stage) {
+    return;
+  }
+  if (player.requestTimeoutId !== undefined) {
+    window.clearTimeout(player.requestTimeoutId);
+    player.requestTimeoutId = undefined;
+  }
+  if (!stage || player.pendingRequestStage === stage) {
+    player.pendingRequestStage = undefined;
+  }
 }
 
 function postHostMessage(message: Record<string, unknown>): void {
@@ -548,6 +671,8 @@ function normalizeLabels(labels: PreviewMediaLabels | undefined): NormalizedPrev
     pause: readLabel(labels?.pause) ?? DEFAULT_LABELS.pause,
     loading: readLabel(labels?.loading) ?? DEFAULT_LABELS.loading,
     preparing: readLabel(labels?.preparing) ?? DEFAULT_LABELS.preparing,
+    probeTimeout: readLabel(labels?.probeTimeout) ?? DEFAULT_LABELS.probeTimeout,
+    streamTimeout: readLabel(labels?.streamTimeout) ?? DEFAULT_LABELS.streamTimeout,
   };
 }
 

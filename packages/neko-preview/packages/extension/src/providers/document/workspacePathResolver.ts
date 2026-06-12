@@ -1,9 +1,16 @@
+import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as vscode from 'vscode';
-import { PathResolver, type PathVariableMap } from '@neko/shared';
+import {
+  PathResolver,
+  resolveWorkspaceMediaPath,
+  type PathVariableMap,
+  type WorkspaceMediaPathContext,
+} from '@neko/shared';
+import { createVSCodeWorkspaceMediaPathContext } from '@neko/shared/vscode/extension';
 import { getLogger } from '../../utils/logger';
 
 interface MediaLibraryEntry {
@@ -24,6 +31,11 @@ interface ResolvedMediaLibraryRoot {
   variable?: string;
   path: string;
   workspaceRoot: string;
+}
+
+export interface PreviewPathResolutionOptions {
+  readonly sourceDocumentUri?: vscode.Uri;
+  readonly allowedRoots?: readonly string[];
 }
 
 const logger = getLogger('WorkspacePathResolver');
@@ -102,6 +114,11 @@ async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
   const mediaRoots = await loadWorkspaceMediaLibraryRoots();
   const firstWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   return buildWorkspacePathVariables(mediaRoots, firstWorkspaceRoot);
+}
+
+async function loadWorkspacePathVariablesForRoot(workspaceRoot?: string): Promise<PathVariableMap> {
+  const mediaRoots = await loadWorkspaceMediaLibraryRoots();
+  return buildWorkspacePathVariables(mediaRoots, workspaceRoot);
 }
 
 function expandHomeDir(filePath: string): string {
@@ -188,7 +205,43 @@ export async function getPreviewAllowedRoots(): Promise<string[]> {
   return [...roots];
 }
 
-export async function resolveWorkspacePath(filePath: string): Promise<string> {
+async function createPreviewWorkspaceMediaPathContext(
+  options?: PreviewPathResolutionOptions,
+): Promise<WorkspaceMediaPathContext> {
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  const provisionalContext = createVSCodeWorkspaceMediaPathContext({
+    documentUri: options?.sourceDocumentUri,
+    workspaceFolders,
+    allowedRoots: options?.allowedRoots ?? (await getPreviewAllowedRoots()),
+  });
+  const pathVariables = await loadWorkspacePathVariablesForRoot(
+    provisionalContext.owningWorkspaceRoot,
+  );
+  return createVSCodeWorkspaceMediaPathContext({
+    documentUri: options?.sourceDocumentUri,
+    workspaceFolders,
+    pathVariables,
+    allowedRoots: options?.allowedRoots ?? (await getPreviewAllowedRoots()),
+  });
+}
+
+export async function resolveWorkspacePath(
+  filePath: string,
+  options?: PreviewPathResolutionOptions,
+): Promise<string> {
+  if (options?.sourceDocumentUri) {
+    const context = await createPreviewWorkspaceMediaPathContext(options);
+    const resolved = resolveWorkspaceMediaPath({
+      source: filePath,
+      context,
+      fileExists: (candidate) => fileExists(candidate),
+      isPathAuthorized: (candidate) => isPathAuthorized(candidate, context.allowedRoots),
+    });
+    if (resolved.status === 'resolved-local') return resolved.path;
+    if (resolved.status === 'remote') return resolved.url;
+    return filePath;
+  }
+
   const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
   if (workspaceFolders.length === 0) {
     return filePath;
@@ -203,7 +256,17 @@ export async function resolveWorkspacePath(filePath: string): Promise<string> {
   return path.resolve(workspaceFolders[0]!.uri.fsPath, localPath);
 }
 
-export async function resolvePreviewPath(filePath: string): Promise<string> {
+export async function resolvePreviewPath(
+  filePath: string,
+  options?: PreviewPathResolutionOptions,
+): Promise<string> {
+  if (options?.sourceDocumentUri) {
+    const resolved = await resolveWorkspacePath(filePath, options);
+    if (resolved !== filePath || !hasPathVariable(filePath)) {
+      return resolved;
+    }
+  }
+
   try {
     const resolved = await vscode.commands.executeCommand<string>(
       'neko.assets.resolvePath',
@@ -216,5 +279,23 @@ export async function resolvePreviewPath(filePath: string): Promise<string> {
     // neko-assets not active
   }
 
-  return resolveWorkspacePath(filePath);
+  return resolveWorkspacePath(filePath, options);
+}
+
+function fileExists(filePath: string): boolean {
+  try {
+    return fsSync.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isPathAuthorized(filePath: string, allowedRoots: readonly string[] | undefined): boolean {
+  if (!allowedRoots || allowedRoots.length === 0) return true;
+  return allowedRoots.some((root) => isPathInsideOrEqual(filePath, root));
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }

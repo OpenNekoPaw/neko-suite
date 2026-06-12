@@ -23,6 +23,7 @@ vi.mock('vscode', () => ({
   commands: { executeCommand },
   window: { showWarningMessage },
   workspace: { workspaceFolders },
+  extensions: { getExtension: vi.fn() },
   env: { language: 'en' },
   EventEmitter: vi.fn(),
 }));
@@ -50,7 +51,10 @@ import {
   previewFileServer,
   UnresolvedPathVariableError,
 } from '../providers/document/PreviewFileServer';
-import { getPreviewAllowedRoots } from '../providers/document/workspacePathResolver';
+import {
+  getPreviewAllowedRoots,
+  resolvePreviewPath,
+} from '../providers/document/workspacePathResolver';
 
 beforeEach(() => {
   executeCommand.mockReset();
@@ -214,6 +218,44 @@ describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
 });
 
 describe('PreviewFileServer path resolution fallback', () => {
+  it('resolves relative preview paths from the source document owning workspace', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-preview-path-'));
+    const workspaceA = path.join(root, 'workspace-a');
+    const workspaceB = path.join(root, 'workspace-b');
+    fs.mkdirSync(path.join(workspaceB, 'cases'), { recursive: true });
+    fs.writeFileSync(path.join(workspaceB, 'cases', 'book.epub'), '');
+    workspaceFolders.push({ uri: { fsPath: workspaceA } }, { uri: { fsPath: workspaceB } });
+    executeCommand.mockResolvedValueOnce(undefined);
+    readFile.mockImplementation(async (filePath: string) => {
+      if (
+        filePath === path.join(workspaceA, 'neko/settings.json') ||
+        filePath === path.join(workspaceB, 'neko/settings.json')
+      ) {
+        return JSON.stringify({ mediaLibraries: [] });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+
+    try {
+      await expect(
+        resolvePreviewPath('cases/book.epub', {
+          sourceDocumentUri: {
+            scheme: 'file',
+            fsPath: path.join(workspaceB, 'books/source.nkc'),
+            path: path.join(workspaceB, 'books/source.nkc'),
+            toString: () => `file://${path.join(workspaceB, 'books/source.nkc')}`,
+          } as never,
+        }),
+      ).resolves.toBe(path.join(workspaceB, 'cases/book.epub'));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('falls back to workspace media library settings when neko-assets does not resolve', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
     executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');

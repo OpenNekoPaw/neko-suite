@@ -2,13 +2,17 @@
  * Pure helper functions for timeline tool operations.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   PathResolver,
+  contractWorkspaceMediaPath,
+  resolveWorkspaceMediaPath,
   type ProjectData,
   type TimelineElement,
   type TimelineTrack,
+  type WorkspaceMediaPathContext,
 } from '@neko/shared';
 
 // =============================================================================
@@ -75,22 +79,58 @@ export function createElement(fields: Record<string, unknown>): TimelineElement 
 // Portable Path Utilities (PathVariable integration)
 // =============================================================================
 
+export interface CutMediaPathContextOptions {
+  readonly projectFilePath?: string;
+  readonly documentUri?: vscode.Uri;
+  readonly owningWorkspaceRoot?: string;
+  readonly workspaceRoots?: readonly string[];
+  readonly allowedRoots?: readonly string[];
+  readonly fileExists?: (filePath: string) => boolean;
+}
+
+interface AssetPathCommandContext {
+  readonly sourceDocumentUri?: string;
+  readonly documentPath?: string;
+  readonly owningWorkspaceRoot?: string;
+  readonly workspaceRoots?: readonly string[];
+  readonly allowedRoots?: readonly string[];
+}
+
 /**
  * Contract an absolute path to a portable path for storage.
  *
  * Priority:
  * 1. PathVariable: /Volumes/NAS/footage/clip.mp4 → ${FOOTAGE}/clip.mp4
- * 2. Relative to project dir: /project/assets/clip.mp4 → assets/clip.mp4
+ * 2. Workspace-relative: /project/assets/clip.mp4 → assets/clip.mp4
+ * 3. Legacy document-relative fallback.
  */
-async function contractPath(absolutePath: string, baseDir: string): Promise<string> {
+async function contractPath(
+  absolutePath: string,
+  baseDir: string,
+  options: CutMediaPathContextOptions = {},
+): Promise<string> {
+  const context = createCutWorkspaceMediaPathContext(baseDir, options);
+  const commandContext = createAssetPathCommandContext(context, options);
+
   try {
     const contracted = await vscode.commands.executeCommand<string>(
       'neko.assets.contractPath',
       absolutePath,
+      commandContext,
     );
-    if (contracted && contracted.startsWith('${')) return contracted;
+    if (contracted && !path.isAbsolute(contracted)) return contracted;
   } catch {
     // neko-assets not active, fallback to relative
+  }
+
+  const contracted = contractWorkspaceMediaPath(absolutePath, context);
+  if (
+    contracted.format === 'workspace-relative' ||
+    contracted.format === 'variable' ||
+    contracted.format === 'remote-url' ||
+    contracted.format === 'document-relative'
+  ) {
+    return contracted.path;
   }
 
   let relativePath = path.relative(baseDir, absolutePath);
@@ -108,40 +148,52 @@ export async function resolveMediaPath(
   storedPath: string,
   baseDir: string,
   resolver?: PathResolver,
+  options: CutMediaPathContextOptions = {},
 ): Promise<string> {
-  // If resolver is provided, use it directly (no async VSCode command needed)
+  const context = createCutWorkspaceMediaPathContext(baseDir, options);
+  const commandContext = createAssetPathCommandContext(context, options);
+
+  try {
+    const resolved = await vscode.commands.executeCommand<string>(
+      'neko.assets.resolvePath',
+      storedPath,
+      commandContext,
+    );
+    if (resolved && resolved !== storedPath) {
+      return resolved;
+    }
+  } catch {
+    // neko-assets not active
+  }
+
+  const planned = resolveWorkspaceMediaPath({
+    source: storedPath,
+    context,
+    fileExists: options.fileExists,
+    isPathAuthorized: (filePath) => isPathAuthorized(filePath, context.allowedRoots),
+  });
+
+  if (planned.status === 'resolved-local') return planned.path;
+  if (planned.status === 'remote') return planned.url;
+
+  // If resolver is provided, use it as a final compatibility path-variable source.
   if (resolver) {
     const result = resolver.resolveSource(storedPath, baseDir);
-    return result.type === 'local' ? result.path : storedPath;
-  }
-
-  // PathVariable: ${VAR}/rest → absolute (via neko-assets command)
-  if (storedPath.startsWith('${')) {
-    try {
-      const resolved = await vscode.commands.executeCommand<string>(
-        'neko.assets.resolvePath',
-        storedPath,
-      );
-      if (resolved) return resolved;
-    } catch {
-      // neko-assets not active
+    if (result.type === 'remote') return result.url;
+    if (!result.path.includes('${') && (path.isAbsolute(result.path) || isRemoteUrl(result.path))) {
+      return result.path;
     }
-    return storedPath;
   }
 
-  // Absolute path: return as-is
-  if (path.isAbsolute(storedPath)) return storedPath;
+  const diagnostic = planned.diagnostics[planned.diagnostics.length - 1];
+  throw new Error(
+    diagnostic?.message ?? `Unable to resolve media path with project context: ${storedPath}`,
+  );
+}
 
-  // Relative path: resolve against base dir with traversal protection
-  const resolved = path.resolve(baseDir, storedPath);
-  const normalized = path.normalize(resolved);
-  if (
-    !normalized.startsWith(path.normalize(baseDir) + path.sep) &&
-    normalized !== path.normalize(baseDir)
-  ) {
-    throw new Error(`Path traversal blocked: "${storedPath}" resolves outside project directory`);
-  }
-  return normalized;
+export function toRelativeIfAbsolute(filePath: string, baseDir: string): string {
+  if (!path.isAbsolute(filePath)) return filePath;
+  return path.relative(baseDir, filePath).split(path.sep).join('/');
 }
 
 /**
@@ -154,10 +206,12 @@ export async function resolveMediaPath(
 export async function normalizePathsForSave(
   project: ProjectData,
   projectFilePath?: string,
+  options: CutMediaPathContextOptions = {},
 ): Promise<ProjectData> {
   if (!projectFilePath) return project;
 
   const baseDir = path.dirname(projectFilePath);
+  const contextOptions = { ...options, projectFilePath };
 
   const tracks = await Promise.all(
     project.tracks.map(async (track) => ({
@@ -172,7 +226,7 @@ export async function normalizePathsForSave(
             typeof element.src === 'string' &&
             path.isAbsolute(element.src)
           ) {
-            const portable = await contractPath(element.src, baseDir);
+            const portable = await contractPath(element.src, baseDir, contextOptions);
             return { ...element, src: portable } as TimelineElement;
           }
           return element;
@@ -182,6 +236,129 @@ export async function normalizePathsForSave(
   );
 
   return { ...project, tracks };
+}
+
+export async function resolveProjectMediaSourcesForRuntime(
+  project: ProjectData,
+  projectFilePath: string,
+  options: CutMediaPathContextOptions = {},
+): Promise<ProjectData> {
+  const baseDir = path.dirname(projectFilePath);
+  const contextOptions = { ...options, projectFilePath };
+
+  const tracks = await Promise.all(
+    project.tracks.map(async (track) => ({
+      ...track,
+      elements: await Promise.all(
+        track.elements.map(async (element) => {
+          if (
+            (element.type === 'media' ||
+              element.type === 'audio' ||
+              element.type === 'scene3d' ||
+              element.type === 'puppet') &&
+            typeof element.src === 'string' &&
+            !isRemoteUrl(element.src)
+          ) {
+            const resolved = await resolveMediaPath(
+              element.src,
+              baseDir,
+              undefined,
+              contextOptions,
+            );
+            return { ...element, src: resolved } as TimelineElement;
+          }
+          return element;
+        }),
+      ),
+    })),
+  );
+
+  return { ...project, tracks };
+}
+
+export function createCutWorkspaceMediaPathContext(
+  baseDir: string,
+  options: CutMediaPathContextOptions = {},
+): WorkspaceMediaPathContext {
+  const documentPath = options.projectFilePath ?? options.documentUri?.fsPath;
+  const documentDir = documentPath ? path.dirname(documentPath) : baseDir;
+  const workspaceRoots =
+    options.workspaceRoots ??
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ??
+    [];
+  const owningWorkspaceRoot =
+    options.owningWorkspaceRoot ??
+    findOwningWorkspaceRoot(documentPath ?? documentDir, workspaceRoots) ??
+    workspaceRoots[0];
+  const pathVariables = new Map<string, string>();
+  if (owningWorkspaceRoot) {
+    pathVariables.set('WORKSPACE', owningWorkspaceRoot);
+    pathVariables.set('PROJECT', owningWorkspaceRoot);
+  }
+  const allowedRoots = uniquePaths([
+    ...(options.allowedRoots ?? []),
+    ...workspaceRoots,
+    ...(documentDir ? [documentDir] : []),
+  ]);
+
+  return {
+    ...(options.documentUri ? { sourceDocumentUri: options.documentUri.toString() } : {}),
+    ...(owningWorkspaceRoot ? { owningWorkspaceRoot } : {}),
+    workspaceRoots,
+    documentDir,
+    pathVariables,
+    allowedRoots,
+  };
+}
+
+function createAssetPathCommandContext(
+  context: WorkspaceMediaPathContext,
+  options: CutMediaPathContextOptions,
+): AssetPathCommandContext {
+  const documentPath = options.projectFilePath ?? options.documentUri?.fsPath;
+  return {
+    ...(context.sourceDocumentUri ? { sourceDocumentUri: context.sourceDocumentUri } : {}),
+    ...(documentPath ? { documentPath } : {}),
+    ...(context.owningWorkspaceRoot ? { owningWorkspaceRoot: context.owningWorkspaceRoot } : {}),
+    ...(context.workspaceRoots ? { workspaceRoots: context.workspaceRoots } : {}),
+    ...(options.allowedRoots ? { allowedRoots: options.allowedRoots } : {}),
+  };
+}
+
+function findOwningWorkspaceRoot(
+  documentPath: string | undefined,
+  workspaceRoots: readonly string[],
+): string | undefined {
+  if (!documentPath) return undefined;
+  return workspaceRoots
+    .filter((root) => isPathInsideOrEqual(documentPath, root))
+    .sort((left, right) => right.length - left.length)[0];
+}
+
+export function isExistingLocalFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isPathAuthorized(filePath: string, roots: readonly string[] | undefined): boolean {
+  if (!roots || roots.length === 0) return true;
+  return roots.some((root) => isPathInsideOrEqual(filePath, root));
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function isRemoteUrl(source: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(source) && !/^[A-Za-z]:[\\/]/.test(source);
+}
+
+function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths.filter(Boolean).map((value) => path.normalize(value)))];
 }
 
 export function findElement(

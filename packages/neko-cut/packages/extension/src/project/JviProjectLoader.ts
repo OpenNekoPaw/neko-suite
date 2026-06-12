@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveWorkspaceMediaPath, type WorkspaceMediaPathContext } from '@neko/shared';
 
 // =============================================================================
 // Track Layer Types (for export)
@@ -152,11 +153,17 @@ interface AudioDefaults {
 export class JviProjectLoader {
   private _projectPath: string;
   private _projectDir: string;
+  private _workspaceContext: WorkspaceMediaPathContext;
   private _project: JviProject | null = null;
 
-  constructor(projectPath: string) {
+  constructor(projectPath: string, workspaceContext?: WorkspaceMediaPathContext) {
     this._projectPath = projectPath;
     this._projectDir = path.dirname(projectPath);
+    this._workspaceContext = workspaceContext ?? {
+      documentDir: this._projectDir,
+      workspaceRoots: [],
+      allowedRoots: [this._projectDir],
+    };
   }
 
   /**
@@ -186,9 +193,20 @@ export class JviProjectLoader {
    * Resolve a relative path to absolute
    */
   resolvePath(relativePath: string): string {
-    if (path.isAbsolute(relativePath)) {
-      return relativePath;
-    }
+    const resolved = resolveWorkspaceMediaPath({
+      source: relativePath,
+      context: this._workspaceContext,
+      fileExists: (filePath) => {
+        try {
+          return fs.statSync(filePath).isFile();
+        } catch {
+          return false;
+        }
+      },
+    });
+    if (resolved.status === 'resolved-local') return resolved.path;
+    if (resolved.status === 'remote') return resolved.url;
+    if (path.isAbsolute(relativePath)) return relativePath;
     return path.join(this._projectDir, relativePath);
   }
 

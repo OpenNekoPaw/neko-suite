@@ -97,7 +97,12 @@ function shouldProbeImageMetadata(filePath: string): boolean {
 
 async function readMetadataPrefix(uri: vscode.Uri): Promise<string | undefined> {
   try {
-    const bytes = await previewFileServer.readRange(uri.fsPath, 0, GPANO_METADATA_PREFIX_BYTES - 1);
+    const bytes = await previewFileServer.readRange(
+      uri.fsPath,
+      0,
+      GPANO_METADATA_PREFIX_BYTES - 1,
+      { sourceDocumentUri: uri },
+    );
     return Buffer.from(bytes).toString('utf8');
   } catch {
     return undefined;

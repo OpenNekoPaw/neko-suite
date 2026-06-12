@@ -21,7 +21,12 @@ import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import { createServiceId } from '../base';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
-import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
+import {
+  isExistingLocalFile,
+  normalizePathsForSave,
+  resolveMediaPath as resolveMediaPathHelper,
+  toRelativeIfAbsolute,
+} from './tools/helpers';
 import type { ProxyManifest, ProxyEntry, ProxyStatus } from '@neko/shared';
 
 // =============================================================================
@@ -67,6 +72,8 @@ export interface ProxyGenerateResult {
 export class ProxyService implements vscode.Disposable {
   private manifest: ProxyManifest = { version: 1, proxies: {} };
   private projectDir: string | undefined;
+  private projectFilePath: string | undefined;
+  private documentUri: vscode.Uri | undefined;
   private activeGenerations = 0;
   private readonly queue: Array<() => Promise<void>> = [];
   private disposed = false;
@@ -83,8 +90,13 @@ export class ProxyService implements vscode.Disposable {
   /**
    * Initialize with project directory and load manifest
    */
-  async initialize(projectDir: string): Promise<void> {
+  async initialize(
+    projectDir: string,
+    context?: { readonly projectFilePath?: string; readonly documentUri?: vscode.Uri },
+  ): Promise<void> {
     this.projectDir = projectDir;
+    this.projectFilePath = context?.projectFilePath;
+    this.documentUri = context?.documentUri;
     await this.loadManifest();
   }
 
@@ -307,7 +319,7 @@ export class ProxyService implements vscode.Disposable {
 
     // Update manifest: generating
     this.updateEntry(resourceId, {
-      source: path.relative(this.projectDir!, absoluteSource),
+      source: await this.contractSourcePath(absoluteSource),
       proxy: proxyRelative,
       sourceSize,
       sourceModified,
@@ -347,7 +359,7 @@ export class ProxyService implements vscode.Disposable {
 
       // Update manifest: ready
       this.updateEntry(resourceId, {
-        source: path.relative(this.projectDir!, absoluteSource),
+        source: await this.contractSourcePath(absoluteSource),
         proxy: proxyRelative,
         sourceSize,
         sourceModified,
@@ -365,7 +377,7 @@ export class ProxyService implements vscode.Disposable {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
       this.updateEntry(resourceId, {
-        source: path.relative(this.projectDir!, absoluteSource),
+        source: await this.contractSourcePath(absoluteSource),
         proxy: proxyRelative,
         sourceSize,
         sourceModified,
@@ -452,7 +464,70 @@ export class ProxyService implements vscode.Disposable {
   }
 
   private async resolveMediaPath(mediaPath: string): Promise<string> {
-    return resolveMediaPathHelper(mediaPath, this.projectDir ?? '');
+    return resolveMediaPathHelper(mediaPath, this.projectDir ?? '', undefined, {
+      ...(this.projectFilePath ? { projectFilePath: this.projectFilePath } : {}),
+      ...(this.documentUri ? { documentUri: this.documentUri } : {}),
+      fileExists: isExistingLocalFile,
+    });
+  }
+
+  private async contractSourcePath(absoluteSource: string): Promise<string> {
+    if (!this.projectFilePath) {
+      return toRelativeIfAbsolute(absoluteSource, this.projectDir!);
+    }
+    const normalizedProject = await normalizePathsForSave(
+      {
+        version: '1',
+        name: 'Proxy manifest contraction',
+        resolution: { width: 1, height: 1 },
+        fps: 1,
+        tracks: [
+          {
+            id: 'track',
+            name: 'Proxy',
+            type: 'video',
+            elements: [
+              {
+                id: 'source',
+                name: 'Source',
+                type: 'media',
+                src: absoluteSource,
+                mediaType: 'video',
+                startTime: 0,
+                duration: 1,
+                trimStart: 0,
+                trimEnd: 0,
+                transform: {
+                  x: 0,
+                  y: 0,
+                  scaleX: 1,
+                  scaleY: 1,
+                  rotation: 0,
+                  anchorX: 0.5,
+                  anchorY: 0.5,
+                },
+                opacity: 1,
+                blendMode: 'normal',
+                effects: [],
+                muted: false,
+                hidden: false,
+                locked: false,
+              },
+            ],
+            muted: false,
+            locked: false,
+            hidden: false,
+            isMain: true,
+          },
+        ],
+      },
+      this.projectFilePath,
+      this.documentUri ? { documentUri: this.documentUri } : {},
+    );
+    const first = normalizedProject.tracks[0]?.elements[0];
+    return typeof first === 'object' && first && 'src' in first && typeof first.src === 'string'
+      ? first.src
+      : toRelativeIfAbsolute(absoluteSource, this.projectDir!);
   }
 
   private async dispatch(req: ActionRequest): Promise<ActionResponse> {

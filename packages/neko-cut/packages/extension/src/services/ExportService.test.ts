@@ -9,6 +9,12 @@ vi.mock('vscode', () => ({
     fire = vi.fn((_value?: T) => undefined);
     dispose = vi.fn();
   },
+  workspace: {
+    workspaceFolders: [
+      { uri: { fsPath: '/workspace/a' }, name: 'a', index: 0 },
+      { uri: { fsPath: '/workspace/project' }, name: 'project', index: 1 },
+    ],
+  },
 }));
 
 describe('ExportService', () => {
@@ -100,6 +106,49 @@ describe('ExportService', () => {
     });
   });
 
+  it('resolves workspace-relative media from the owning workspace before final export', async () => {
+    const requests: ContentAccessRequest[] = [];
+    const dispatched: ActionRequest[] = [];
+    const service = new ExportService(
+      createEngineClient(dispatched),
+      '/workspace/project/edit',
+      {
+        fileExists: (filePath) => filePath === '/workspace/project/cases/clip.mp4',
+        contentAccess: {
+          registerProvider: vi.fn(),
+          resolve: async (request) => {
+            requests.push(request);
+            return {
+              status: 'ready',
+              request,
+              localPath: '/workspace/project/cases/clip.mp4',
+            } satisfies ContentAccessResult;
+          },
+        },
+      },
+      {
+        scheme: 'file',
+        fsPath: '/workspace/project/edit/project.nkv',
+        toString: () => 'file:///workspace/project/edit/project.nkv',
+      } as never,
+    );
+
+    await service.startExport(createProject('cases/clip.mp4'), {
+      outputPath: '/exports/final.mp4',
+      format: 'mp4',
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      quality: 'high',
+      audioBitrate: 192_000,
+    });
+
+    expect(requests[0]).toMatchObject({
+      intent: 'final-export',
+      ref: { kind: 'file', path: '/workspace/project/cases/clip.mp4' },
+    });
+  });
+
   it('stages completed export outputs through the ingest boundary', async () => {
     const staged: string[] = [];
     const service = new ExportService(createEngineClient([]), '/workspace/project', {
@@ -161,7 +210,15 @@ function createProject(src: string): ProjectData {
             duration: 1,
             trimStart: 0,
             trimEnd: 0,
-            transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+            transform: {
+              x: 0,
+              y: 0,
+              scaleX: 1,
+              scaleY: 1,
+              rotation: 0,
+              anchorX: 0.5,
+              anchorY: 0.5,
+            },
             opacity: 1,
             blendMode: 'normal',
             effects: [],

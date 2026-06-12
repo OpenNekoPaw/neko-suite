@@ -19,8 +19,10 @@ interface CacheEntry {
 export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
   private readonly cache = new Map<string, CacheEntry>();
 
-  private async resolveFilePath(filePath: string): Promise<string> {
-    return resolvePreviewPath(filePath);
+  private async resolveFilePath(filePath: string, documentUri?: vscode.Uri): Promise<string> {
+    return resolvePreviewPath(filePath, {
+      sourceDocumentUri: documentUri,
+    });
   }
 
   async provideDocumentSymbols(
@@ -28,7 +30,7 @@ export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
     token: vscode.CancellationToken,
   ): Promise<vscode.DocumentSymbol[]> {
     const sourcePath = document.uri.fsPath;
-    const path = await this.resolveFilePath(sourcePath);
+    const path = await this.resolveFilePath(sourcePath, document.uri);
 
     // Check cache validity
     const stat = await fs.stat(path).catch(() => null);
@@ -62,8 +64,12 @@ export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
 // Helpers
 // =============================================================================
 
-function readEpubToc(filePath: string): Promise<TocEntry[]> {
-  return previewFileServer.withEpubEntryReader(filePath, readEpubTocFromEntries);
+function readEpubToc(filePath: string, documentUri?: vscode.Uri): Promise<TocEntry[]> {
+  return previewFileServer.withEpubEntryReader(
+    filePath,
+    readEpubTocFromEntries,
+    documentUri ? { sourceDocumentUri: documentUri } : undefined,
+  );
 }
 
 function buildSymbolTree(entries: TocEntry[]): vscode.DocumentSymbol[] {

@@ -15,7 +15,11 @@ import type {
   ImportPlanInput,
   ImportResult,
 } from '@neko/shared';
-import { normalizeBundleEntryPath, validateBundleArchiveMetadata } from '@neko/shared';
+import {
+  contractWorkspaceMediaPath,
+  normalizeBundleEntryPath,
+  validateBundleArchiveMetadata,
+} from '@neko/shared';
 
 interface ZipEntryLike {
   readonly entryName: string;
@@ -179,7 +183,11 @@ export class MediaImportDispatcher {
           sourceHash,
           metadata: {
             originalSourcePath: plan.sourcePath,
+            durableProjectRef: plan.projectRef,
             ...(plan.action === 'copy' ? { importDestination: puppetPath } : {}),
+            ...(plan.action === 'copy'
+              ? { importDestinationRef: this.projectRefForSource(input, puppetPath) }
+              : {}),
           },
         },
       ];
@@ -206,7 +214,11 @@ export class MediaImportDispatcher {
         sourceHash,
         metadata: {
           originalSourcePath: plan.sourcePath,
+          durableProjectRef: plan.projectRef,
           ...(plan.action === 'copy' ? { importDestination: modelPath } : {}),
+          ...(plan.action === 'copy'
+            ? { importDestinationRef: this.projectRefForSource(input, modelPath) }
+            : {}),
         },
       },
     ];
@@ -274,7 +286,9 @@ export class MediaImportDispatcher {
         sourceHash,
         metadata: {
           originalSourcePath: sourcePath,
+          durableProjectRef: this.projectRefForSource(input, modelPath),
           importDestination: targetDir,
+          importDestinationRef: this.projectRefForSource(input, targetDir),
           files,
         },
       },
@@ -319,6 +333,7 @@ export class MediaImportDispatcher {
             sourceHash,
             metadata: {
               originalSourcePath: path.resolve(input.sourcePath),
+              durableProjectRef: bundlePlan.projectRef,
             },
           },
         ];
@@ -363,18 +378,20 @@ export class MediaImportDispatcher {
   }
 
   private projectRefForSource(input: ImportPlanInput, filePath: string): string {
-    const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
-    const basePath = documentPath
-      ? path.dirname(documentPath)
-      : input.workspaceFolderPaths[0]
-        ? path.resolve(input.workspaceFolderPaths[0])
-        : path.dirname(filePath);
+    const workspaceContext = createImportWorkspaceMediaPathContext(input);
+    const contracted = contractWorkspaceMediaPath(path.resolve(filePath), workspaceContext);
+    if (contracted.format === 'workspace-relative' || contracted.format === 'variable') {
+      return contracted.path;
+    }
+
+    const basePath = resolveImportFallbackBasePath(input, filePath);
     return formatProjectRef(path.relative(basePath, filePath));
   }
 
   private importRoot(input: ImportPlanInput, kindDir: 'models' | 'puppets'): string {
     const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
     const workspaceRoot =
+      input.owningWorkspaceRoot ??
       (documentPath
         ? findContainingWorkspaceFolder(documentPath, input.workspaceFolderPaths)
         : input.workspaceFolderPaths[0]) ??
@@ -489,11 +506,54 @@ function loadAdmZipConstructor(): ZipConstructor {
 }
 
 function isWorkspaceReadable(input: ImportPlanInput, sourcePath: string): boolean {
+  return getReadableImportRoots(input).some((root) => isPathInsideOrEqual(sourcePath, root));
+}
+
+function getReadableImportRoots(input: ImportPlanInput): string[] {
   const roots = [
+    ...(input.owningWorkspaceRoot ? [input.owningWorkspaceRoot] : []),
     ...(input.documentPath ? [path.dirname(path.resolve(input.documentPath))] : []),
     ...input.workspaceFolderPaths.map((folderPath) => path.resolve(folderPath)),
+    ...[...(input.pathVariables?.entries() ?? [])]
+      .filter(([variable]) => variable !== 'WORKSPACE' && variable !== 'PROJECT')
+      .map(([, root]) => path.resolve(root)),
   ];
-  return roots.some((root) => isPathInsideOrEqual(sourcePath, root));
+  return uniquePaths(roots);
+}
+
+function createImportWorkspaceMediaPathContext(input: ImportPlanInput) {
+  const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
+  const workspaceRoots = input.workspaceFolderPaths.map((folderPath) => path.resolve(folderPath));
+  const owningWorkspaceRoot =
+    input.owningWorkspaceRoot ??
+    (documentPath ? findContainingWorkspaceFolder(documentPath, workspaceRoots) : undefined) ??
+    workspaceRoots[0];
+  const pathVariables = new Map(input.pathVariables ?? []);
+  if (owningWorkspaceRoot) {
+    pathVariables.set('WORKSPACE', owningWorkspaceRoot);
+    pathVariables.set('PROJECT', owningWorkspaceRoot);
+  }
+  return {
+    ...(documentPath ? { sourceDocumentUri: `file://${documentPath}` } : {}),
+    ...(owningWorkspaceRoot ? { owningWorkspaceRoot } : {}),
+    workspaceRoots,
+    ...(documentPath ? { documentDir: path.dirname(documentPath) } : {}),
+    pathVariables,
+    allowedRoots: [
+      ...workspaceRoots,
+      ...[...pathVariables.entries()]
+        .filter(([variable]) => variable !== 'WORKSPACE' && variable !== 'PROJECT')
+        .map(([, root]) => root),
+    ],
+  };
+}
+
+function resolveImportFallbackBasePath(input: ImportPlanInput, filePath: string): string {
+  const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
+  if (documentPath) return path.dirname(documentPath);
+  if (input.owningWorkspaceRoot) return path.resolve(input.owningWorkspaceRoot);
+  if (input.workspaceFolderPaths[0]) return path.resolve(input.workspaceFolderPaths[0]);
+  return path.dirname(filePath);
 }
 
 function findContainingWorkspaceFolder(
@@ -509,6 +569,18 @@ function findContainingWorkspaceFolder(
 function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
   const relativePath = path.relative(rootPath, candidatePath);
   return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function uniquePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of paths) {
+    const normalized = path.resolve(item);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
 }
 
 function formatProjectRef(relativePath: string): string {

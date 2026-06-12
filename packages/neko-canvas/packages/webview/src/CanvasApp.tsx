@@ -350,8 +350,15 @@ export function CanvasApp() {
   });
 
   const handleAddMediaFromExtension = useCallback(
-    (mediaType: string, uri: string, name: string) => {
-      addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name);
+    (
+      mediaType: string,
+      uri: string,
+      name: string,
+      options?: { runtimeAssetPath?: string; originalPath?: string },
+    ) => {
+      addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name, {
+        ...(options?.runtimeAssetPath ? { runtimeAssetPath: options.runtimeAssetPath } : {}),
+      });
     },
     [addMediaAt, getViewportCenter],
   );
@@ -477,7 +484,9 @@ export function CanvasApp() {
         const dropPos = { x: pos.x + offset, y: pos.y + offset };
         switch (asset.kind) {
           case 'media':
-            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name);
+            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name, {
+              ...(asset.runtimeAssetPath ? { runtimeAssetPath: asset.runtimeAssetPath } : {}),
+            });
             break;
           case 'script':
             addScriptAt(dropPos, asset.path, asset.title);

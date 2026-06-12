@@ -60,7 +60,9 @@ export class CbzPreviewProvider implements vscode.CustomReadonlyEditorProvider, 
       context: this._context,
       onReady: async () => {
         try {
-          const { url, token } = await previewFileServer.registerFile(filePath);
+          const { url, token } = await previewFileServer.registerFile(filePath, {
+            sourceDocumentUri: document.uri,
+          });
           this.tokens.set(filePath, token);
 
           await webviewPanel.webview.postMessage({

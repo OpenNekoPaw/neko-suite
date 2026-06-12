@@ -1,4 +1,5 @@
 import type { BundleEntryLocator, MediaAssetStorageMode } from './bundle-locator';
+import type { PathVariableMap } from '../path';
 
 // =============================================================================
 // Unified Media Import Contracts
@@ -30,7 +31,9 @@ export interface ImportedAssetDescriptor {
 export interface ImportPlanInput {
   readonly sourcePath: string;
   readonly documentPath?: string;
+  readonly owningWorkspaceRoot?: string;
   readonly workspaceFolderPaths: readonly string[];
+  readonly pathVariables?: PathVariableMap | ReadonlyMap<string, string>;
 }
 
 export type ImportPlan =

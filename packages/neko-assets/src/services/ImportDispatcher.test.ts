@@ -69,6 +69,67 @@ describe('MediaImportDispatcher', () => {
     });
   });
 
+  it('stores workspace source imports as owning-workspace-relative durable refs', () => {
+    const dispatcher = new MediaImportDispatcher({
+      fs: createFs({ '/repo-b/cases/hero.glb': new Uint8Array([1]) }),
+      commands: createCommandBus(),
+    });
+
+    expect(
+      dispatcher.planImport({
+        sourcePath: '/repo-b/cases/hero.glb',
+        documentPath: '/repo-b/scenes/shot.nkm',
+        owningWorkspaceRoot: '/repo-b',
+        workspaceFolderPaths: ['/repo-a', '/repo-b'],
+      }),
+    ).toMatchObject({
+      action: 'useSource',
+      sourcePath: '/repo-b/cases/hero.glb',
+      projectRef: 'cases/hero.glb',
+    });
+  });
+
+  it('stores copied imports as owning-workspace-relative destination refs', () => {
+    const dispatcher = new MediaImportDispatcher({
+      fs: createFs({ '/external/hero.glb': new Uint8Array([1]) }),
+      commands: createCommandBus(),
+    });
+
+    expect(
+      dispatcher.planImport({
+        sourcePath: '/external/hero.glb',
+        documentPath: '/repo-b/scenes/shot.nkm',
+        owningWorkspaceRoot: '/repo-b',
+        workspaceFolderPaths: ['/repo-a', '/repo-b'],
+      }),
+    ).toMatchObject({
+      action: 'copy',
+      targetPath: '/repo-b/.neko/imports/models/hero.glb',
+      projectRef: '.neko/imports/models/hero.glb',
+    });
+  });
+
+  it('preserves linked external media-library imports as variable durable refs', () => {
+    const dispatcher = new MediaImportDispatcher({
+      fs: createFs({ '/Volumes/media/models/hero.glb': new Uint8Array([1]) }),
+      commands: createCommandBus(),
+    });
+
+    expect(
+      dispatcher.planImport({
+        sourcePath: '/Volumes/media/models/hero.glb',
+        documentPath: '/repo/scenes/shot.nkm',
+        owningWorkspaceRoot: '/repo',
+        workspaceFolderPaths: ['/repo'],
+        pathVariables: new Map([['MEDIA', '/Volumes/media']]),
+      }),
+    ).toMatchObject({
+      action: 'useSource',
+      sourcePath: '/Volumes/media/models/hero.glb',
+      projectRef: '${MEDIA}/models/hero.glb',
+    });
+  });
+
   it('extracts glTF ZIPs under .neko/imports/models with zip-slip protection', async () => {
     const commands = createCommandBus();
     const fs = createFs({ '/downloads/hero.zip': new Uint8Array([9]) });

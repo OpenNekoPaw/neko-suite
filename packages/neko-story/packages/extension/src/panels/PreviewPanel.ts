@@ -1,10 +1,16 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
-import { createStoryboardPayload } from '@neko/shared';
+import {
+  createStoryboardPayload,
+  resolveWorkspaceMediaPath,
+  type WorkspaceMediaPathContext,
+} from '@neko/shared';
 import {
   createDefaultLocalResourceAccessService,
+  createVSCodeWorkspaceMediaPathContext,
   injectLocaleAttribute,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
@@ -57,7 +63,7 @@ type MessageFromWebview =
     }
   | {
       type: 'tableAction';
-      action: 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll';
+      action: 'sendToAgentAll';
       scope?: { sceneIds?: readonly string[]; includeSkipped?: boolean };
     }
   | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
@@ -552,7 +558,7 @@ export class PreviewPanel implements vscode.Disposable {
   }
 
   private async handleTableAction(
-    action: 'startVideoCreationAll' | 'sendToAgentAll' | 'sendToCanvasAll',
+    action: 'sendToAgentAll',
     scope?: { sceneIds?: readonly string[]; includeSkipped?: boolean },
   ): Promise<void> {
     const editor = this.activeEditor;
@@ -572,52 +578,34 @@ export class PreviewPanel implements vscode.Disposable {
       return;
     }
 
-    if (action === 'startVideoCreationAll') {
-      await vscode.commands.executeCommand('neko.story.startVideoCreation', { sceneIds });
-      return;
-    }
-
     if (action === 'sendToAgentAll') {
       await this.sendTableToAgent(scriptIndex, sceneIds, 'storyboard-only');
-      return;
-    }
-
-    if (action === 'sendToCanvasAll') {
-      const canvasFileUri = findActiveCanvasFileUri();
-      const imported = await this.sendScenesToCanvas(scriptIndex, sceneIds);
-      if (imported) {
-        for (const importedScene of imported) {
-          this.sceneStateStore.recordCanvasImport(
-            editor.document.uri,
-            scriptIndex,
-            importedScene,
-            {},
-            canvasFileUri,
-          );
-        }
-      } else {
-        for (const sceneId of sceneIds) {
-          this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
-            canvasStatus: 'sent',
-          });
-        }
-      }
     }
   }
 
   /** Walk elements and inject resolvedUri for notes with assetRef */
   private resolveAssets(doc: FountainDocument): FountainDocument {
     if (!this.activeEditor) return doc;
-    const docDir = path.dirname(this.activeEditor.document.uri.fsPath);
+    const pathContext = this.createStoryWorkspaceMediaPathContext(this.activeEditor.document.uri);
 
     const elements = doc.elements.map((el) => {
       if (el.type !== 'note') return el;
       const note = el as Note;
       if (!note.assetRef) return el;
 
-      const assetPath = path.isAbsolute(note.assetRef.path)
-        ? note.assetRef.path
-        : path.join(docDir, note.assetRef.path);
+      const resolved = resolveWorkspaceMediaPath({
+        source: note.assetRef.path,
+        context: pathContext,
+        fileExists: isExistingLocalFile,
+        isPathAuthorized: (filePath) => isPathAuthorized(filePath, pathContext.allowedRoots),
+      });
+      const assetPath =
+        resolved.status === 'resolved-local'
+          ? resolved.path
+          : resolved.status === 'remote'
+            ? resolved.url
+            : undefined;
+      if (!assetPath) return el;
 
       const resolvedUri = this.projectLocalResource(assetPath, 'neko-story.note-asset');
       if (!resolvedUri) return el;
@@ -753,8 +741,8 @@ export class PreviewPanel implements vscode.Disposable {
       workflowIntent,
       intent:
         workflowIntent === 'full-video-creation'
-          ? '请基于整张分镜表启动标准视频创作流程。'
-          : '请基于整张分镜表生成 storyboard 计划，并准备发送到 Canvas。',
+          ? '请基于整张分镜表启动标准视频创作流程，并由 Agent 根据剧情节奏预估分镜时长、镜头数量和下游步骤。'
+          : '请基于整张分镜表生成 storyboard 计划，由 Agent 根据剧情节奏预估分镜时长、镜头数量和镜头设计，并建议下一步发送到 Canvas、视频生成或其他子包。',
     });
     if (!payload) return;
 
@@ -965,6 +953,35 @@ export class PreviewPanel implements vscode.Disposable {
       { caller },
     )(source);
   }
+
+  private createStoryWorkspaceMediaPathContext(documentUri: vscode.Uri): WorkspaceMediaPathContext {
+    const context = createVSCodeWorkspaceMediaPathContext({
+      documentUri,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+    });
+    return {
+      ...context,
+      allowedRoots: context.allowedRoots ?? context.workspaceRoots ?? [],
+    };
+  }
+}
+
+function isExistingLocalFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isPathAuthorized(filePath: string, roots: readonly string[] | undefined): boolean {
+  if (!roots || roots.length === 0) return true;
+  return roots.some((root) => isPathInsideOrEqual(filePath, root));
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }
 
 function findActiveCanvasFileUri(): string | undefined {

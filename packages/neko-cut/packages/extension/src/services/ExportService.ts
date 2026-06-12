@@ -56,6 +56,7 @@ export interface ExportConfig {
 export interface ExportServiceOptions {
   readonly contentAccess?: ContentAccessService;
   readonly contentIngest?: ContentIngestService;
+  readonly fileExists?: (filePath: string) => boolean;
 }
 
 /** Per-job info tracked by the service */
@@ -178,6 +179,7 @@ export class ExportService implements vscode.Disposable {
     private readonly client: EngineClient,
     private readonly documentDir: string,
     private readonly options: ExportServiceOptions = {},
+    private readonly documentUri?: vscode.Uri,
   ) {}
 
   // =========================================================================
@@ -961,7 +963,12 @@ export class ExportService implements vscode.Disposable {
    * Resolve a media path to absolute (relative to .nkv document dir)
    */
   private async resolveMediaPath(mediaPath: string, config: ExportConfig): Promise<string> {
-    const resolvedPath = await resolveMediaPathHelper(mediaPath, this.documentDir);
+    const resolvedPath = await resolveMediaPathHelper(mediaPath, this.documentDir, undefined, {
+      ...(this.documentUri
+        ? { documentUri: this.documentUri, projectFilePath: this.documentUri.fsPath }
+        : {}),
+      ...(this.options.fileExists ? { fileExists: this.options.fileExists } : {}),
+    });
     const contentAccess =
       this.options.contentAccess ?? createExportContentAccessService(this.documentDir);
     const result = await contentAccess.resolve({

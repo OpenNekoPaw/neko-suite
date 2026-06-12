@@ -12,26 +12,26 @@ describe('media import contracts', () => {
       {
         action: 'useSource',
         sourcePath: '/workspace/hero.glb',
-        projectRef: './hero.glb',
+        projectRef: 'hero.glb',
       },
       {
         action: 'copy',
         sourcePath: '/external/hero.glb',
         targetPath: '/workspace/assets/hero.glb',
         targetDir: '/workspace/assets',
-        projectRef: './assets/hero.glb',
+        projectRef: 'assets/hero.glb',
       },
       {
         action: 'bundle-memory',
         sourcePath: '/external/sakura.zip',
-        bundlePath: './imports/sakura.zip',
-        projectRef: './imports/sakura.zip#avatars/sakura/model3.json',
+        bundlePath: 'imports/sakura.zip',
+        projectRef: 'imports/sakura.zip#avatars/sakura/model3.json',
       },
       {
         action: 'extract',
         sourcePath: '/external/model.zip',
         targetDir: '/workspace/.neko/imports/models/model',
-        projectRef: './.neko/imports/models/model/scene.gltf',
+        projectRef: '.neko/imports/models/model/scene.gltf',
       },
     ];
 
