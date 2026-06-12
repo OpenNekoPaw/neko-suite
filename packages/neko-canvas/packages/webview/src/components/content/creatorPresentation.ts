@@ -80,6 +80,7 @@ export const DEFAULT_SCENE_SHOT_TABLE_COLUMNS = [
   'characters',
   'dialogue-sfx',
   'tags-style',
+  'storyboard-prompt',
   'status',
 ] as const satisfies readonly SceneShotTableColumnId[];
 
@@ -87,7 +88,6 @@ export const PROFESSIONAL_SCENE_SHOT_TABLE_COLUMNS = [
   'character-description',
   'character-reference',
   'reference-image',
-  'storyboard-prompt',
   'video-camera-prompt',
   'image-strategy',
   'media-refs',

@@ -869,7 +869,8 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:1432px');
+    expect(markup).toContain('min-width:1692px');
+    expect(markup).toContain('data-scene-shot-table-column="storyboard-prompt"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-2"');
     expect(markup).toContain('Beat 1');
@@ -905,6 +906,7 @@ describe('NodeContentDispatcher', () => {
           characters: [{ characterName: 'Mika', role: 'primary' }],
           dialogue: 'We start now.',
           sceneTags: ['interior'],
+          generationPrompt: 'Mika turns toward the neon window, storyboard frame',
           generationStatus: 'done',
           generatedImage: 'data:image/png;base64,done',
         },
@@ -939,6 +941,7 @@ describe('NodeContentDispatcher', () => {
     expect(rows[0]?.diagnosticCount).toBe(1);
     expect(rows[1]?.duration).toBe('2.5s');
     expect(rows[1]?.characters).toBe('Mika');
+    expect(rows[1]?.storyboardPrompt).toBe('Mika turns toward the neon window, storyboard frame');
     expect(rows[1]?.hasImage).toBe(true);
     expect(resolveSceneShotTableColumns('creator-review')).toEqual([
       'shot',
@@ -949,6 +952,7 @@ describe('NodeContentDispatcher', () => {
       'characters',
       'dialogue-sfx',
       'tags-style',
+      'storyboard-prompt',
       'status',
     ]);
     expect(filterSceneShotTableRows(rows, 'missing-image').map((row) => row.id)).toEqual([
