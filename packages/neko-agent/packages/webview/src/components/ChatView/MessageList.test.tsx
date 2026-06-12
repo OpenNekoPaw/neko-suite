@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '@/components/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
@@ -104,6 +104,34 @@ describe('MessageList auto-scroll lifecycle', () => {
 
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
+
+  it('renders final content before collapsed process records', () => {
+    virtualItems = [
+      { index: 0, key: 'final-content', start: 0 },
+      { index: 1, key: 'process-records', start: 80 },
+    ];
+
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessageWithFinalContentAndProcessRecords()]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.getByText('Final storyboard summary.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Process records/ })).toBeTruthy();
+    expect(screen.queryByText('Analyze source pages.')).toBeNull();
+    expect(screen.queryByText('ReadDocument')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Process records/ }));
+
+    expect(screen.getByText(/Analyze source pages/)).toBeTruthy();
+    expect(screen.getByText('ReadDocument')).toBeTruthy();
+  });
 });
 
 function renderWithI18n(node: React.ReactElement) {
@@ -177,6 +205,31 @@ function createCompositeStoryboardMessage(): Message {
             },
           ],
         },
+      },
+    ],
+  };
+}
+
+function createMessageWithFinalContentAndProcessRecords(): Message {
+  return {
+    id: 'message-with-process',
+    role: 'assistant',
+    content: '',
+    timestamp: 1_717_200_000_000,
+    contentBlocks: [
+      {
+        id: 'thinking-1',
+        type: 'thinking',
+        timestamp: 1,
+        thinking: 'Analyze source pages.',
+        isThinkingComplete: true,
+      },
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      {
+        id: 'text-1',
+        type: 'text',
+        timestamp: 20,
+        content: 'Final storyboard summary.',
       },
     ],
   };

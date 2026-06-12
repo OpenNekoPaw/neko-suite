@@ -5,6 +5,7 @@ import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
+import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
 import { MessageActions } from '@/components/ChatView/MessageActions';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
@@ -17,6 +18,7 @@ import {
   selectMessageTaskWorkItems,
 } from '@/components/AgentWorkItem';
 import {
+  projectContentBlocksDisplay,
   projectContentBlocksUi,
   type ContentBlockUiProjection,
 } from '@/presenters/content-block-presenter';
@@ -277,9 +279,11 @@ function AssistantContentBlocks({
       pluginsAvailable,
     );
 
+    const displayProjection = projectContentBlocksDisplay(projections);
+
     return (
       <div className="space-y-2">
-        {projections.map((projection) => (
+        {displayProjection.primaryProjections.map((projection) => (
           <ContentBlockRenderer
             key={projection.id}
             projection={projection}
@@ -297,6 +301,15 @@ function AssistantContentBlocks({
             onRejectAllPlanSteps={onRejectAllPlanSteps}
           />
         ))}
+        {displayProjection.processGroup && (
+          <ProcessRecordsGroup
+            processGroup={displayProjection.processGroup}
+            conversationId={conversationId}
+            workItemIds={message.workItemIds}
+            siblingBlocks={message.contentBlocks}
+            isStreaming={isStreaming ?? false}
+          />
+        )}
       </div>
     );
   }

@@ -83,6 +83,12 @@ export const chat = {
   'chat.toolCall.args': '参数',
   'chat.toolCall.success': '成功',
   'chat.toolCall.failed': '失败',
+  'chat.processRecords.title': '过程记录',
+  'chat.processRecords.show': '展开',
+  'chat.processRecords.hide': '收起',
+  'chat.processRecords.steps': '{count} 步',
+  'chat.processRecords.tools': '{count} 次工具调用',
+  'chat.processRecords.thinking': '{count} 段思考',
 
   'chat.diff.accept': '接受',
   'chat.diff.reject': '拒绝',

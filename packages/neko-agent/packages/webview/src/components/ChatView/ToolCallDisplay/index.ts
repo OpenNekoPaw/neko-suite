@@ -4,4 +4,4 @@
 
 export { ToolCallDisplay } from './ToolCallDisplay';
 export { ToolCallGroupDisplay } from './ToolCallGroupDisplay';
-export { SuccessIcon, ErrorIcon, ToolLoadingSpinner } from './icons';
+export { ChevronIcon, SuccessIcon, ErrorIcon, ToolLoadingSpinner } from './icons';

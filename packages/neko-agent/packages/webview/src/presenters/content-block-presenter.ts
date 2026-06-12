@@ -103,6 +103,20 @@ export type ContentBlockUiProjection =
   | CompositeContentBlockProjection
   | EmptyContentBlockProjection;
 
+export interface ContentBlockProcessGroupProjection {
+  id: string;
+  projections: ContentBlockUiProjection[];
+  blockCount: number;
+  toolCallCount: number;
+  thinkingCount: number;
+  isStreaming: boolean;
+}
+
+export interface ContentBlocksDisplayProjection {
+  primaryProjections: ContentBlockUiProjection[];
+  processGroup: ContentBlockProcessGroupProjection | null;
+}
+
 export interface ProjectContentBlockUiInput {
   block: ContentBlock;
   siblingBlocks?: readonly ContentBlock[];
@@ -118,7 +132,7 @@ interface ContentBlockHeaderMetadata {
   tone: ContentBlockHeaderTone;
 }
 
-const NON_COLLAPSIBLE_TOOL_NAMES = new Set(['ReadImage', 'ReadDocumentImage']);
+const USER_FACING_TOOL_NAMES = new Set(['ReadImage', 'ReadDocumentImage']);
 
 const CONTENT_BLOCK_HEADER_METADATA: Record<ContentBlock['type'], ContentBlockHeaderMetadata> = {
   thinking: {
@@ -245,6 +259,44 @@ export function projectContentBlocksUi(
   return aggregateConsecutiveToolProjections(projections);
 }
 
+export function projectContentBlocksDisplay(
+  projections: readonly ContentBlockUiProjection[],
+): ContentBlocksDisplayProjection {
+  const hasPrimaryResult = projections.some(isPrimaryResultProjection);
+  if (!hasPrimaryResult) {
+    return {
+      primaryProjections: [...projections],
+      processGroup: null,
+    };
+  }
+
+  const processProjections = projections.filter(isCollapsibleProcessProjection);
+  if (processProjections.length === 0) {
+    return {
+      primaryProjections: [...projections],
+      processGroup: null,
+    };
+  }
+
+  return {
+    primaryProjections: projections.filter(
+      (projection) => !isCollapsibleProcessProjection(projection),
+    ),
+    processGroup: {
+      id: `${processProjections[0]?.id ?? 'assistant'}-process-records`,
+      projections: processProjections,
+      blockCount: processProjections.length,
+      toolCallCount: processProjections.reduce(
+        (count, projection) => count + countProjectionToolCalls(projection),
+        0,
+      ),
+      thinkingCount: processProjections.filter((projection) => projection.renderKind === 'thinking')
+        .length,
+      isStreaming: processProjections.some(isStreamingProjection),
+    },
+  };
+}
+
 export function formatContentBlockTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], {
@@ -320,6 +372,60 @@ function aggregateConsecutiveToolProjections(
   return aggregated;
 }
 
+function isPrimaryResultProjection(projection: ContentBlockUiProjection): boolean {
+  switch (projection.renderKind) {
+    case 'markdown':
+      return projection.content.trim().length > 0;
+    case 'composite':
+    case 'diff':
+    case 'plan':
+      return true;
+    case 'thinking':
+    case 'tool':
+    case 'toolGroup':
+    case 'empty':
+      return false;
+  }
+}
+
+function isCollapsibleProcessProjection(projection: ContentBlockUiProjection): boolean {
+  switch (projection.renderKind) {
+    case 'thinking':
+      return true;
+    case 'tool':
+      return isCollapsibleToolCall(projection.toolCall);
+    case 'toolGroup':
+      return projection.toolCalls.every(isCollapsibleToolCall);
+    case 'markdown':
+    case 'diff':
+    case 'plan':
+    case 'composite':
+    case 'empty':
+      return false;
+  }
+}
+
+function isCollapsibleToolCall(toolCall: ToolCall): boolean {
+  if (USER_FACING_TOOL_NAMES.has(toolCall.name)) return false;
+  if (toolCall.pendingConfirmation === true) return false;
+  if (!toolCall.result || toolCall.result.success !== true) return false;
+  if ((toolCall.result.attachments?.length ?? 0) > 0) return false;
+  if ((toolCall.result.perceptionCards?.length ?? 0) > 0) return false;
+  if ((toolCall.result.artifacts?.length ?? 0) > 0) return false;
+  return true;
+}
+
+function countProjectionToolCalls(projection: ContentBlockUiProjection): number {
+  if (projection.renderKind === 'tool') return 1;
+  if (projection.renderKind === 'toolGroup') return projection.count;
+  return 0;
+}
+
+function isStreamingProjection(projection: ContentBlockUiProjection): boolean {
+  if (projection.header.showStreamingBadge || projection.parentIsStreaming) return true;
+  return projection.renderKind === 'thinking' && projection.isThinkingComplete === false;
+}
+
 function projectToolGroup(
   projections: readonly ToolContentBlockProjection[],
 ): ToolGroupContentBlockProjection {
@@ -352,7 +458,7 @@ function projectToolGroup(
 function isAggregatableTool(projection: ToolContentBlockProjection): boolean {
   const toolCall = projection.toolCall;
   return (
-    !NON_COLLAPSIBLE_TOOL_NAMES.has(toolCall.name) &&
+    !USER_FACING_TOOL_NAMES.has(toolCall.name) &&
     toolCall.pendingConfirmation !== true &&
     toolCall.result?.success === true &&
     getToolTargetLabel(toolCall) !== null

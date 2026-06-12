@@ -84,6 +84,12 @@ export const chat = {
   'chat.toolCall.args': 'Args',
   'chat.toolCall.success': 'Success',
   'chat.toolCall.failed': 'Failed',
+  'chat.processRecords.title': 'Process records',
+  'chat.processRecords.show': 'Show',
+  'chat.processRecords.hide': 'Hide',
+  'chat.processRecords.steps': '{count} step(s)',
+  'chat.processRecords.tools': '{count} tool call(s)',
+  'chat.processRecords.thinking': '{count} thinking block(s)',
 
   'chat.diff.accept': 'Accept',
   'chat.diff.reject': 'Reject',

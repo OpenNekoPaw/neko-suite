@@ -1,15 +1,22 @@
 import type { ContentBlock, Message } from '@/components/types';
 import {
+  projectContentBlocksDisplay,
   projectContentBlocksUi,
+  type ContentBlockProcessGroupProjection,
   type ContentBlockUiProjection,
 } from '@/presenters/content-block-presenter';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
-export type MessageListItemKind = 'message' | 'content_block' | 'thinking_indicator';
+export type MessageListItemKind =
+  | 'message'
+  | 'content_block'
+  | 'process_group'
+  | 'thinking_indicator';
 
 export type MessageListProjectionItem =
   | MessageListMessageItemProjection
   | MessageListContentBlockItemProjection
+  | MessageListProcessGroupItemProjection
   | MessageListThinkingItemProjection;
 
 export interface MessageListMessageItemProjection {
@@ -28,6 +35,17 @@ export interface MessageListContentBlockItemProjection {
   siblingBlocks: ContentBlock[];
   isFirst: boolean;
   isLast: boolean;
+  isStreaming: boolean;
+  ownerMessageId: string;
+  estimatedHeight: number;
+}
+
+export interface MessageListProcessGroupItemProjection {
+  kind: 'process_group';
+  messageId: string;
+  workItemIds?: string[];
+  processGroup: ContentBlockProcessGroupProjection;
+  siblingBlocks: ContentBlock[];
   isStreaming: boolean;
   ownerMessageId: string;
   estimatedHeight: number;
@@ -94,7 +112,9 @@ export function projectMessageListItems(
         options.plugins,
       );
 
-      contentBlockProjections.forEach((projection, blockIndex) => {
+      const displayProjection = projectContentBlocksDisplay(contentBlockProjections);
+
+      displayProjection.primaryProjections.forEach((projection, blockIndex) => {
         items.push({
           kind: 'content_block',
           messageId: message.id,
@@ -108,6 +128,19 @@ export function projectMessageListItems(
           estimatedHeight: estimateContentBlockProjectionHeight(projection),
         });
       });
+
+      if (displayProjection.processGroup) {
+        items.push({
+          kind: 'process_group',
+          messageId: message.id,
+          workItemIds: message.workItemIds,
+          processGroup: displayProjection.processGroup,
+          siblingBlocks: message.contentBlocks ?? [],
+          isStreaming: message.isStreaming ?? false,
+          ownerMessageId: message.id,
+          estimatedHeight: estimateProcessGroupHeight(displayProjection.processGroup),
+        });
+      }
     } else {
       items.push({
         kind: 'message',
@@ -143,6 +176,10 @@ export function findMessageListStreamingItemIndex(
 
 export function estimateMessageListItemHeight(item: MessageListProjectionItem | undefined): number {
   return item?.estimatedHeight ?? MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT;
+}
+
+function estimateProcessGroupHeight(group: ContentBlockProcessGroupProjection): number {
+  return group.isStreaming ? 64 : 44;
 }
 
 function estimateContentBlockProjectionHeight(projection: ContentBlockUiProjection): number {

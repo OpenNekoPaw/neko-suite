@@ -87,6 +87,44 @@ describe('MessageItem tool aggregation', () => {
 
     expect(screen.getAllByText('ReadDocument')).toHaveLength(3);
   });
+
+  it('collapses process records after final assistant content', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          {
+            id: 'thinking-1',
+            type: 'thinking',
+            timestamp: 1,
+            thinking: 'Analyze source pages.',
+            isThinkingComplete: true,
+          },
+          toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+          {
+            id: 'text-1',
+            type: 'text',
+            timestamp: 20,
+            content: 'Final storyboard summary.',
+          },
+        ],
+      }),
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    expect(screen.getByText('Final storyboard summary.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /chat.processRecords.title/ })).toBeTruthy();
+    expect(screen.queryByText('ReadDocument')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /chat.processRecords.title/ }));
+
+    expect(screen.getByText(/Analyze source pages/)).toBeTruthy();
+    expect(screen.getByText('ReadDocument')).toBeTruthy();
+  });
 });
 
 function renderMessageItem(input: { message: Message; identities: MessageIdentityMap }) {

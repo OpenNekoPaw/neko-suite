@@ -10,6 +10,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Message } from '@/components/types';
 import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
+import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
@@ -153,6 +154,15 @@ export function MessageList({
                     projection={item.projection}
                     isFirst={item.isFirst}
                     isLast={item.isLast}
+                    isStreaming={item.isStreaming}
+                    conversationId={activeConversationId}
+                    workItemIds={item.workItemIds}
+                    siblingBlocks={item.siblingBlocks}
+                    assistantIdentity={identities.assistant}
+                  />
+                ) : item.kind === 'process_group' ? (
+                  <ProcessRecordsGroup
+                    processGroup={item.processGroup}
                     isStreaming={item.isStreaming}
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}
