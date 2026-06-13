@@ -78,11 +78,17 @@ describe('agent event stream runtime processor', () => {
       isThinkingComplete: true,
     });
     expect(result.contentBlocks.at(1)).toMatchObject({ type: 'text', isStreaming: false });
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'streamComplete',
-      conversationId: 'conv-1',
-      messageId: 'msg-stream',
-    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'streamComplete',
+        conversationId: 'conv-1',
+        messageId: 'msg-stream',
+        contentBlocks: expect.arrayContaining([
+          expect.objectContaining({ type: 'thinking' }),
+          expect.objectContaining({ type: 'text' }),
+        ]),
+      }),
+    );
     expect(postMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'contextTokenCount',
@@ -115,7 +121,7 @@ describe('agent event stream runtime processor', () => {
           observerInput = input;
           return unsubscribe;
         },
-        createFallbackProgress: (task) => ({
+        createRecoveryProgress: (task) => ({
           id: task.id,
           status: 'processing',
           progress: 1,
@@ -183,7 +189,7 @@ describe('agent event stream runtime processor', () => {
       postMessage: () => undefined,
       backgroundTasks: {
         observeProgress,
-        createFallbackProgress: (task: SourceTask) => ({
+        createRecoveryProgress: (task: SourceTask) => ({
           id: task.id,
           status: 'processing',
           progress: 1,

@@ -20,6 +20,7 @@ import { AgentExecutor, type AgentExecutorOptions } from '../executor/agent-exec
 import { initializeSession, type SessionCallbacks } from '../session/agent-session-initializer';
 import type { AgentSessionConfig } from '../session/types';
 import { SkillInjectionCoordinator } from '../skill/skill-injection-coordinator';
+import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { ISystemPromptComposer } from '../prompt/system-prompt-composer-types';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 
@@ -326,6 +327,7 @@ describe('SkillInjectionCoordinator: multi-track atomicity', () => {
       syncSystemPrompt: () => {
         syncCalls.push(++callCount);
       },
+      skillInjectionModule: new SkillInjectionModule(),
     });
 
     // Apply
@@ -364,6 +366,7 @@ describe('SkillInjectionCoordinator: multi-track atomicity', () => {
       promptComposer: composer,
       getPermissionHooks: () => permission,
       syncSystemPrompt: vi.fn(),
+      skillInjectionModule: new SkillInjectionModule(),
     });
 
     expect(() =>

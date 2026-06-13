@@ -54,7 +54,7 @@ describe('SkillRegistryPopulator', () => {
     expect(registry.getSkillByCommand('fix')?.supportsArguments).toBe(true);
   });
 
-  it('restores fallback skills when managed disk entries disappear', () => {
+  it('restores previous skills when managed disk entries disappear', () => {
     const registry = new SkillRegistry();
     const populator = new SkillRegistryPopulator();
     const builtin = makeSkill('shared', 'builtin');

@@ -202,7 +202,7 @@ describe('TaskManager Persistence', () => {
       );
     });
 
-    it('falls back to IDC task id provenance when the payload binding is corrupted', async () => {
+    it('ignores corrupted IDC payload bindings during provenance cleanup', async () => {
       await storage.save(
         toSerializableIdcProjectedTask({
           id: 'idc:run-restore:item-1',
@@ -256,12 +256,11 @@ describe('TaskManager Persistence', () => {
 
       const deletedIds = await manager.clearIdcProjectedTasksForRun('run-restore', 111);
 
-      expect(deletedIds).toEqual(
-        expect.arrayContaining(['idc:run-restore:item-1', 'idc:run-restore:item-corrupt']),
-      );
-      expect(deletedIds).toHaveLength(2);
+      expect(deletedIds).toEqual(['idc:run-restore:item-1']);
       expect(await storage.load('idc:run-restore:item-1')).toBeUndefined();
-      expect(await storage.load('idc:run-restore:item-corrupt')).toBeUndefined();
+      expect(await storage.load('idc:run-restore:item-corrupt')).toEqual(
+        expect.objectContaining({ id: 'idc:run-restore:item-corrupt' }),
+      );
       expect(await storage.load('idc:run-restore:item-2')).toEqual(
         expect.objectContaining({ id: 'idc:run-restore:item-2' }),
       );

@@ -170,7 +170,7 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
       return {
         ...base,
         kind: 'autoheal',
-        label: `Substitute: ${event.fallback}`,
+        label: `Substitute: ${event.substitute}`,
         runId: event.runId,
       };
     case EXECUTION_CHANNELS.AUTOHEAL_L4_TRIGGERED:

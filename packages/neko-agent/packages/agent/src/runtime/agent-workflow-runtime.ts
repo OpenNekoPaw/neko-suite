@@ -1,10 +1,6 @@
 import type {
   AgentWorkflowDefinition,
   AgentWorkflowIdentity,
-  AgentLegacyWorkflowAdapterDeprecation,
-  AgentLegacyWorkflowNodeMapping,
-  AgentLegacyWorkflowTelemetry,
-  AgentLegacyWorkflowValidationDiagnostic,
   AgentWorkflowNode,
   AgentWorkflowProjection,
   AgentWorkflowRun,
@@ -42,30 +38,6 @@ export interface AgentWorkflowRuntime {
   fail(runId: string, error: { readonly code: string; readonly message: string }): AgentWorkflowRun;
   toIdentity(runId: string, nodeId?: string): AgentWorkflowIdentity | undefined;
   listRuns(conversationId?: string): AgentWorkflowRun[];
-}
-
-export interface AgentLegacyWorkflowAdapterUsageInput {
-  readonly deprecation?: AgentLegacyWorkflowAdapterDeprecation;
-  readonly workflowDefinitionCandidate?: AgentWorkflowDefinition;
-  readonly nodeMapping?: readonly AgentLegacyWorkflowNodeMapping[];
-  readonly usedAt?: number;
-}
-
-export interface AgentLegacyWorkflowSunsetPolicy {
-  readonly now?: number;
-  readonly sunsetGateEnabled?: boolean;
-  readonly compatibilityApprovalIds?: readonly string[];
-  readonly isNewWorkflow?: boolean;
-}
-
-export interface AgentLegacyWorkflowUsageRecorder {
-  record(input: AgentLegacyWorkflowAdapterUsageInput): AgentLegacyWorkflowTelemetry;
-  get(adapterId: string): AgentLegacyWorkflowTelemetry | undefined;
-  list(): readonly AgentLegacyWorkflowTelemetry[];
-  validate(
-    input: AgentLegacyWorkflowAdapterUsageInput,
-    policy?: AgentLegacyWorkflowSunsetPolicy,
-  ): readonly AgentLegacyWorkflowValidationDiagnostic[];
 }
 
 export const IDC_WORKFLOW_DEFINITION_ID = 'neko.workflow.idc.v1';
@@ -139,10 +111,6 @@ export function buildWorkflowIdentity(input: {
     workflowRunId: input.runId,
     ...(input.nodeId ? { workflowNodeId: input.nodeId } : {}),
   };
-}
-
-export function createLegacyWorkflowUsageRecorder(): AgentLegacyWorkflowUsageRecorder {
-  return new DefaultLegacyWorkflowUsageRecorder();
 }
 
 class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
@@ -385,130 +353,4 @@ function assertValidWorkflowTransition(
     const fromLabel = fromNodeId ?? '<start>';
     throw new Error(`Workflow transition is not allowed: ${fromLabel} -> ${toNodeId}`);
   }
-}
-
-class DefaultLegacyWorkflowUsageRecorder implements AgentLegacyWorkflowUsageRecorder {
-  private readonly telemetryByAdapterId = new Map<string, AgentLegacyWorkflowTelemetry>();
-
-  record(input: AgentLegacyWorkflowAdapterUsageInput): AgentLegacyWorkflowTelemetry {
-    const diagnostics = this.validate(input, { sunsetGateEnabled: false });
-    const blocking = diagnostics.find((diagnostic) => diagnostic.severity === 'failure');
-    if (blocking) {
-      throw new Error(blocking.message);
-    }
-
-    const deprecation = input.deprecation;
-    if (!deprecation) {
-      throw new Error('Legacy workflow adapter metadata is required.');
-    }
-
-    const previous = this.telemetryByAdapterId.get(deprecation.adapterId);
-    const nodeMapping = input.nodeMapping ?? [];
-    const unmappedStepIds = nodeMapping
-      .filter((mapping) => !mapping.workflowNodeId)
-      .map((mapping) => mapping.legacyStepId);
-    const missingMigrationReasons = Array.from(
-      new Set(
-        nodeMapping
-          .map((mapping) => mapping.missingMigrationReason)
-          .filter((reason): reason is string => Boolean(reason)),
-      ),
-    );
-    const telemetry: AgentLegacyWorkflowTelemetry = {
-      adapterId: deprecation.adapterId,
-      deprecation,
-      ...(input.workflowDefinitionCandidate
-        ? { workflowDefinitionCandidate: input.workflowDefinitionCandidate }
-        : {}),
-      nodeMapping,
-      unmappedStepIds,
-      missingMigrationReasons,
-      usageCount: (previous?.usageCount ?? 0) + 1,
-      lastUsedAt: input.usedAt ?? Date.now(),
-    };
-    this.telemetryByAdapterId.set(deprecation.adapterId, telemetry);
-    return telemetry;
-  }
-
-  get(adapterId: string): AgentLegacyWorkflowTelemetry | undefined {
-    return this.telemetryByAdapterId.get(adapterId);
-  }
-
-  list(): readonly AgentLegacyWorkflowTelemetry[] {
-    return Array.from(this.telemetryByAdapterId.values());
-  }
-
-  validate(
-    input: AgentLegacyWorkflowAdapterUsageInput,
-    policy: AgentLegacyWorkflowSunsetPolicy = {},
-  ): readonly AgentLegacyWorkflowValidationDiagnostic[] {
-    const deprecation = input.deprecation;
-    if (!deprecation) {
-      return [
-        {
-          code: 'missing-deprecation-metadata',
-          severity: 'failure',
-          message: 'Legacy workflow adapter must include deprecation metadata.',
-        },
-      ];
-    }
-
-    const diagnostics: AgentLegacyWorkflowValidationDiagnostic[] =
-      validateLegacyWorkflowDeprecationDates(deprecation);
-    const expired = isLegacyWorkflowAdapterExpired(deprecation, policy.now ?? Date.now());
-    const approved = policy.compatibilityApprovalIds?.includes(deprecation.adapterId) ?? false;
-    if (expired && !approved) {
-      diagnostics.push({
-        code: 'legacy-adapter-expired',
-        severity: deprecation.severityAfterSunset,
-        adapterId: deprecation.adapterId,
-        message: `Legacy workflow adapter ${deprecation.adapterId} expired; use ${deprecation.workflowNativeReplacement}.`,
-      });
-    }
-
-    if (policy.sunsetGateEnabled && policy.isNewWorkflow && !input.workflowDefinitionCandidate) {
-      diagnostics.push({
-        code: 'new-pipeline-only-workflow',
-        severity: 'failure',
-        adapterId: deprecation.adapterId,
-        message:
-          'New multi-step agent workflows must provide an AgentWorkflowDefinition or workflow node profile.',
-      });
-    }
-
-    return diagnostics;
-  }
-}
-
-function isLegacyWorkflowAdapterExpired(
-  deprecation: AgentLegacyWorkflowAdapterDeprecation,
-  now: number,
-): boolean {
-  const expiresAt = Date.parse(`${deprecation.allowedCompatibilityWindow.expiresAt}T00:00:00.000Z`);
-  if (Number.isNaN(expiresAt)) {
-    return false;
-  }
-  const today = new Date(now);
-  const validationDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  return expiresAt < validationDay;
-}
-
-function validateLegacyWorkflowDeprecationDates(
-  deprecation: AgentLegacyWorkflowAdapterDeprecation,
-): AgentLegacyWorkflowValidationDiagnostic[] {
-  const diagnostics: AgentLegacyWorkflowValidationDiagnostic[] = [];
-  for (const [field, value] of [
-    ['allowedCompatibilityWindow.startsAt', deprecation.allowedCompatibilityWindow.startsAt],
-    ['allowedCompatibilityWindow.expiresAt', deprecation.allowedCompatibilityWindow.expiresAt],
-  ] as const) {
-    if (Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))) {
-      diagnostics.push({
-        code: 'invalid-deprecation-date',
-        severity: 'failure',
-        adapterId: deprecation.adapterId,
-        message: `Legacy workflow adapter ${deprecation.adapterId} has invalid ${field}.`,
-      });
-    }
-  }
-  return diagnostics;
 }

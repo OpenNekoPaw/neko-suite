@@ -119,7 +119,7 @@ describe('idc-runtime-state-reader', () => {
     });
   });
 
-  it('accepts legacy string feedback guidance snapshots during restore', () => {
+  it('ignores string feedback guidance snapshots during restore', () => {
     const state = parseIdcRuntimeState(
       JSON.stringify({
         stage: {
@@ -136,9 +136,7 @@ describe('idc-runtime-state-reader', () => {
       }),
     );
 
-    expect(state?.feedback.pendingGuidance).toEqual({
-      content: '- Retry once after repairing the draft.',
-    });
+    expect(state?.feedback.pendingGuidance).toBeNull();
   });
 
   it('reads pending approval snapshots from idc-runtime.json', async () => {

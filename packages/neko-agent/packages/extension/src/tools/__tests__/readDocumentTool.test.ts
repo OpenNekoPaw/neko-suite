@@ -276,16 +276,12 @@ describe('createReadDocumentTool', () => {
             }),
             cacheResourceRef: expect.objectContaining({
               provider: 'document-archive',
-              source: expect.objectContaining({
-                metadata: expect.objectContaining({
-                  legacyCachePath: '/workspace/.neko/.cache/resources/documents/page.png',
-                }),
-              }),
             }),
           }),
         ],
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('legacyCachePath');
   });
 
   it('marks no-workspace document image refs as extension-private and non-portable', async () => {

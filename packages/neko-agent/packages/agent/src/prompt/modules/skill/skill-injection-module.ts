@@ -1,14 +1,6 @@
 /**
- * SkillInjectionModule — reference PromptModule implementation wrapping the
- * prompt-section responsibility currently held by SkillInjectionCoordinator
- * (Track A). This is the first concrete Module and proves the interface shape
- * against a real writer.
- *
- * PR1 scope: the module exists as a reference implementation with unit tests
- * that confirm its output byte-for-byte matches the legacy `composer.setSection`
- * call in SkillInjectionCoordinator. It is NOT yet wired into the coordinator's
- * runtime path — that migration happens in PR2 together with the other five
- * setSection writers so that the whole prompt layer switches over atomically.
+ * SkillInjectionModule — PromptModule implementation for the skill injection
+ * section owned by SkillInjectionCoordinator Track A.
  *
  * Why not async I/O: the module's render() is a pure projection of the stored
  * SkillInjection + ctx; it performs no I/O. The PromptModule interface marks
@@ -27,7 +19,7 @@ import type {
  * null when no skill is active.
  */
 export class SkillInjectionModule implements PromptModule {
-  /** Static manifest — priority mirrors the legacy `priority: 50` in the coordinator. */
+  /** Static manifest for the skill injection prompt section. */
   readonly manifest: PromptModuleManifest = {
     id: 'skill.injection',
     layers: ['skill'],
@@ -63,9 +55,8 @@ export class SkillInjectionModule implements PromptModule {
    * - no injection is set
    * - ctx.activeSkillName does not match the injection's name (stale ctx)
    *
-   * The sectionId preserves the existing `skill:${name}` format used by
-   * SkillInjectionCoordinator so a future migration produces byte-identical
-   * composer output.
+   * The sectionId preserves the existing `skill:${name}` runtime contract used
+   * by SkillInjectionCoordinator.
    */
   async render(ctx: PromptContext): Promise<readonly PromptModuleSection[] | null> {
     return this.renderSync(ctx);
@@ -73,7 +64,7 @@ export class SkillInjectionModule implements PromptModule {
 
   /**
    * Sync variant for callers that can avoid the microtask. Used by the
-   * coordinator's dual-path (PR2) so that apply() can remain synchronous.
+   * coordinator so apply() can remain synchronous.
    */
   renderSync(ctx: PromptContext): readonly PromptModuleSection[] | null {
     if (!this._injection) return null;

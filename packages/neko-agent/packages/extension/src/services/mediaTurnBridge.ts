@@ -67,7 +67,7 @@ export class MediaTurnBridge {
                 conversationId: runtimeInput.conversationId,
                 createTaskView: (task) =>
                   this.deps.mediaDeliveryHost.createTaskView(input.webview, task),
-                createFallbackTaskView: (task) => createMediaTaskView(task),
+                createRecoveryTaskView: (task) => createMediaTaskView(task),
                 onTaskCreated: ({ conversationId, task, mediaTask }) =>
                   runtimeInput.onTaskCreated({
                     conversationId,
@@ -99,14 +99,14 @@ export class MediaTurnBridge {
                   conversationId,
                   mediaTask,
                   error,
-                  fallbackTask,
+                  recoveryTask,
                 }) => {
                   runtimeInput.onProgressDeliveryError?.({
                     taskId,
                     conversationId,
                     sourceTask: mediaTask,
                     error,
-                    ...(fallbackTask ? { fallbackTask } : {}),
+                    ...(recoveryTask ? { recoveryTask } : {}),
                   });
                 },
               }),

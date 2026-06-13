@@ -62,13 +62,13 @@ export interface MediaTurnProgressErrorEvent<TTaskView> {
   readonly conversationId: string;
   readonly mediaTask: MediaTask;
   readonly error: unknown;
-  readonly fallbackTask?: TTaskView;
+  readonly recoveryTask?: TTaskView;
 }
 
 export interface RunMediaTurnInput<TTaskView> extends SubmitMediaTurnInput {
   readonly media: MediaGenerationService;
   readonly createTaskView: (task: MediaTask) => TTaskView | Promise<TTaskView>;
-  readonly createFallbackTaskView?: (task: MediaTask) => TTaskView;
+  readonly createRecoveryTaskView?: (task: MediaTask) => TTaskView;
   readonly onTaskCreated: (event: MediaTurnDeliveryEvent<TTaskView>) => void | Promise<void>;
   readonly onTaskProgress: (event: MediaTurnDeliveryEvent<TTaskView>) => void | Promise<void>;
   readonly onIgnoredConversationTask?: (event: MediaTurnIgnoredTaskEvent) => void;
@@ -86,7 +86,7 @@ export interface ObserveMediaTaskProgressInput<TTaskView> {
   readonly taskId: string;
   readonly conversationId?: string;
   readonly createTaskView: (task: MediaTask) => TTaskView | Promise<TTaskView>;
-  readonly createFallbackTaskView?: (task: MediaTask) => TTaskView;
+  readonly createRecoveryTaskView?: (task: MediaTask) => TTaskView;
   readonly onTaskProgress: (event: MediaTurnDeliveryEvent<TTaskView>) => void | Promise<void>;
   readonly onIgnoredConversationTask?: (event: MediaTurnIgnoredTaskEvent) => void;
   readonly onProgressDeliveryError?: (event: MediaTurnProgressErrorEvent<TTaskView>) => void;
@@ -96,7 +96,7 @@ export interface ObserveMediaTaskProgressInput<TTaskView> {
 export async function runMediaTurn<TTaskView>(
   input: RunMediaTurnInput<TTaskView>,
 ): Promise<RunMediaTurnResult> {
-  const { media, createTaskView, createFallbackTaskView, conversationId } = input;
+  const { media, createTaskView, createRecoveryTaskView, conversationId } = input;
   const task = await submitMediaTurn(media, input);
 
   await input.onTaskCreated({
@@ -138,18 +138,18 @@ export async function runMediaTurn<TTaskView>(
     try {
       await deliverProgress(updated);
     } catch (error) {
-      const fallbackTask = createFallbackTaskView?.(updated);
+      const recoveryTask = createRecoveryTaskView?.(updated);
       input.onProgressDeliveryError?.({
         taskId: updated.id,
         conversationId: conversationId ?? '',
         mediaTask: updated,
         error,
-        ...(fallbackTask ? { fallbackTask } : {}),
+        ...(recoveryTask ? { recoveryTask } : {}),
       });
-      if (fallbackTask) {
+      if (recoveryTask) {
         void input.onTaskProgress({
           conversationId: conversationId ?? '',
-          task: fallbackTask,
+          task: recoveryTask,
           mediaTask: updated,
         });
       }
@@ -185,7 +185,7 @@ export async function runMediaTurn<TTaskView>(
 export function observeMediaTaskProgress<TTaskView>(
   input: ObserveMediaTaskProgressInput<TTaskView>,
 ): () => void {
-  const { media, taskId, conversationId, createTaskView, createFallbackTaskView } = input;
+  const { media, taskId, conversationId, createTaskView, createRecoveryTaskView } = input;
   let terminalDelivered = false;
   let unsubscribe: () => void = () => undefined;
 
@@ -223,18 +223,18 @@ export function observeMediaTaskProgress<TTaskView>(
     try {
       await deliverProgress(updated);
     } catch (error) {
-      const fallbackTask = createFallbackTaskView?.(updated);
+      const recoveryTask = createRecoveryTaskView?.(updated);
       input.onProgressDeliveryError?.({
         taskId: updated.id,
         conversationId: conversationId ?? '',
         mediaTask: updated,
         error,
-        ...(fallbackTask ? { fallbackTask } : {}),
+        ...(recoveryTask ? { recoveryTask } : {}),
       });
-      if (fallbackTask) {
+      if (recoveryTask) {
         void input.onTaskProgress({
           conversationId: conversationId ?? '',
-          task: fallbackTask,
+          task: recoveryTask,
           mediaTask: updated,
         });
       }

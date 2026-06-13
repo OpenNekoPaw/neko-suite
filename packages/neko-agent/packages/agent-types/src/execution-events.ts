@@ -143,7 +143,7 @@ export interface ExecutionAutohealL2DegradeEvent extends ExecutionAutohealEventB
 
 export interface ExecutionAutohealL3SubstituteEvent extends ExecutionAutohealEventBase {
   channel: typeof EXECUTION_CHANNELS.AUTOHEAL_L3_SUBSTITUTE;
-  fallback: string;
+  substitute: string;
 }
 
 export interface ExecutionAutohealL4TriggeredEvent extends ExecutionAutohealEventBase {

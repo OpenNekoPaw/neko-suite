@@ -53,7 +53,7 @@ packages/
 │   ├── context/      分层上下文管理 + token 预算 + 对话压缩
 │   ├── permission/   工具权限（plan/ask/auto 三模式）
 │   ├── hooks/        可组合中间件（ExecutorHooks + factory）
-│   ├── hook-loader/  用户自定义 Hook 加载器（.hook/ 目录）
+│   ├── hook-loader/  Settings hooks + .neko/hooks Markdown hook catalog
 │   ├── prompt/       SystemPromptComposer + Builder（多语言）
 │   ├── runtime/      统一 runtime bootstrap 契约 + helper
 │   ├── plan/         Plan 管理器
@@ -75,7 +75,7 @@ packages/
 │   ├── bootstrap/    服务初始化 + ServiceCollection
 │   ├── chat/         ChatViewProvider + Webview 消息 Router + 专用桥接 Handler
 │   ├── chat/message/ AgentMessageTurnHandler + AgentTurnBridge + AgentStreamProcessor
-│   ├── ai/           AgentRunner（薄包装）+ AgentManager（runtime 多会话池）+ HookManager
+│   ├── ai/           AgentRunner（薄包装）+ AgentManager（runtime 多会话池）
 │   ├── services/     ConfigBridge + SkillFileService + HookFileService
 │   ├── editor/       EditorModel + EditorRegistry
 │   └── tools/        扩展工具注册（NekoCut/NekoCanvas 桥接）

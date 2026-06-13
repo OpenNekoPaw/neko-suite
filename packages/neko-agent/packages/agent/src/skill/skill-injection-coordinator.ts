@@ -58,14 +58,10 @@ export interface SkillInjectionCoordinatorDeps {
   toolSetActivator?: IToolSetActivator;
 
   /**
-   * Optional: when supplied, Track A goes through this module instead of a
-   * direct `composer.setSection` call. The module owns the format contract
-   * (id `skill:${name}`, layer `skill`, priority 50, content verbatim) so
-   * later refactors that move this writer under the orchestrator don't
-   * change the wire output. Byte-identical to the legacy path; see
-   * `skill-injection-module.test.ts` for the equivalence assertion.
+   * Track A writer. The module owns the prompt section contract
+   * (id `skill:${name}`, layer `skill`, priority 50, content verbatim).
    */
-  skillInjectionModule?: SkillInjectionModule;
+  skillInjectionModule: SkillInjectionModule;
 
   /**
    * When false, `apply()` becomes a no-op — skills can still be matched and
@@ -153,10 +149,7 @@ export class SkillInjectionCoordinator {
       this._removeInternal(this._activeInjection.name);
     }
 
-    // Track A: Add prompt section (always first — rollback if subsequent
-    // tracks fail). When a SkillInjectionModule is wired we go through it so
-    // the format lives in one place; otherwise we fall back to the direct
-    // setSection call. Both paths are byte-identical by design.
+    // Track A: Add prompt section first so later track failures can roll it back.
     this._writeTrackASection(injection);
     this._deps.syncSystemPrompt();
 
@@ -303,7 +296,7 @@ export class SkillInjectionCoordinator {
       activeSkillName: this._activeInjection?.name,
     });
 
-    // Track A: Remove prompt section (via module when wired).
+    // Track A: Remove prompt section through the module-owned section contract.
     this._clearTrackASection(name);
     this._deps.syncSystemPrompt();
 
@@ -341,52 +334,36 @@ export class SkillInjectionCoordinator {
   }
 
   // ---------------------------------------------------------------------------
-  // Track A helpers (PR3a: SkillInjectionModule path + legacy fallback)
+  // Track A helpers
   // ---------------------------------------------------------------------------
 
   /**
-   * Write the Track A prompt section for an active injection. Goes through
-   * SkillInjectionModule when `deps.skillInjectionModule` is supplied; else
-   * falls back to the legacy direct-setSection call. Both paths produce a
-   * byte-identical section (id `skill:${name}`, layer `skill`, priority 50,
-   * content = injection.systemPrompt) — verified by the equivalence test in
-   * `skill-injection-module.test.ts`.
+   * Write the Track A prompt section for an active injection through the
+   * SkillInjectionModule-owned section projection.
    */
   private _writeTrackASection(injection: SkillInjection): void {
     const mod = this._deps.skillInjectionModule;
-    if (mod) {
-      mod.setInjection(injection);
-      const sections = mod.renderSync(this._buildMinimalCtx(injection.name));
-      if (sections) {
-        for (const s of sections) {
-          this._deps.promptComposer.setSection({
-            id: s.sectionId,
-            layer: s.layer,
-            content: s.content,
-            priority: s.priority ?? 50,
-            ...(s.cacheControl && { cacheControl: s.cacheControl }),
-          });
-        }
+    mod.setInjection(injection);
+    const sections = mod.renderSync(this._buildMinimalCtx(injection.name));
+    if (sections) {
+      for (const s of sections) {
+        this._deps.promptComposer.setSection({
+          id: s.sectionId,
+          layer: s.layer,
+          content: s.content,
+          priority: s.priority ?? 50,
+          ...(s.cacheControl && { cacheControl: s.cacheControl }),
+        });
       }
-      return;
     }
-    // Legacy direct-write path.
-    this._deps.promptComposer.setSection({
-      id: `skill:${injection.name}`,
-      layer: 'skill',
-      content: injection.systemPrompt,
-      priority: 50,
-    });
   }
 
   /**
-   * Clear the Track A prompt section for a named injection. Mirrors the
-   * module write: when the module is wired we also clear its internal
-   * state so it won't re-render stale content on the next apply / cache
-   * hit; always removes the composer section under `skill:${name}`.
+   * Clear the Track A prompt section for a named injection. Mirrors the module
+   * write by clearing module state and removing the composer section.
    */
   private _clearTrackASection(name: string): void {
-    this._deps.skillInjectionModule?.setInjection(null);
+    this._deps.skillInjectionModule.setInjection(null);
     this._deps.promptComposer.removeSection(`skill:${name}`);
   }
 

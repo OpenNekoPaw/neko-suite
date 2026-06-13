@@ -132,7 +132,7 @@ export function projectChatWorkspaceModelState(
   const selectedContextWindow = resolveSelectedContextWindow({
     selectedModel: input.selectedModel,
     availableModels,
-    fallbackContextWindow: input.fallbackContextWindow,
+    defaultContextWindow: input.defaultContextWindow,
   });
   let activeMediaModel: ChatModelOption | undefined;
   let agentMediaModels: AgentMediaModelSelections | undefined;
@@ -325,21 +325,21 @@ function normalizeChatModelOptions(
 function resolveSelectedContextWindow(input: {
   selectedModel: string;
   availableModels: readonly ChatModelOption[];
-  fallbackContextWindow: number;
+  defaultContextWindow: number;
 }): number {
-  const fallbackContextWindow =
-    Number.isFinite(input.fallbackContextWindow) && input.fallbackContextWindow > 0
-      ? input.fallbackContextWindow
+  const defaultContextWindow =
+    Number.isFinite(input.defaultContextWindow) && input.defaultContextWindow > 0
+      ? input.defaultContextWindow
       : 8192;
 
   if (input.selectedModel === 'auto') {
-    return fallbackContextWindow;
+    return defaultContextWindow;
   }
 
   const selected = input.availableModels.find((model) => model.id === input.selectedModel);
   return selected?.contextWindow && selected.contextWindow > 0
     ? selected.contextWindow
-    : fallbackContextWindow;
+    : defaultContextWindow;
 }
 
 function isAgentMediaCategory(category: unknown): category is AgentMediaModelCategory {

@@ -34,5 +34,5 @@ export function buildMediaTaskDeliverySettingsPlan(
 }
 
 function resolveProjectGeneratedDir(workspaceRoot: string): string {
-  return resolveStorageLayout(workspaceRoot, workspaceRoot).project.cache.generated;
+  return resolveStorageLayout(workspaceRoot, workspaceRoot).project.local.cache.generated;
 }

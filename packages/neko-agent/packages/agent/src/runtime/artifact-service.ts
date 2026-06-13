@@ -211,10 +211,7 @@ class WorkspaceArtifactService implements IArtifactService {
       return [];
     }
 
-    const entries = await readArtifactRestoreEntriesWithLegacyFallback(
-      this._paths.cache('artifactIndex'),
-      readFile,
-    );
+    const entries = await readArtifactRestoreEntries(this._paths.cache('artifactIndex'), readFile);
     if (!entries || entries.length === 0) {
       return [];
     }
@@ -490,33 +487,6 @@ async function readArtifactRestoreEntries(
     logger.warn(`artifact index read failed: ${String(error)}`);
     return null;
   }
-}
-
-async function readArtifactRestoreEntriesWithLegacyFallback(
-  filePath: string,
-  readFile: NonNullable<ArtifactServiceFsOps['readFile']>,
-): Promise<readonly ArtifactRestoreIndexEntry[] | null> {
-  const entries = await readArtifactRestoreEntries(filePath, readFile);
-  if (entries && entries.length > 0) {
-    return entries;
-  }
-
-  const legacyFilePath = toLegacyArtifactIndexPath(filePath);
-  if (!legacyFilePath || legacyFilePath === filePath) {
-    return entries;
-  }
-  return readArtifactRestoreEntries(legacyFilePath, readFile);
-}
-
-function toLegacyArtifactIndexPath(filePath: string): string | null {
-  const marker = '/.neko/.cache/';
-  const markerIndex = filePath.lastIndexOf(marker);
-  if (markerIndex < 0) {
-    return null;
-  }
-  return `${filePath.slice(0, markerIndex)}/.neko/cache/${filePath.slice(
-    markerIndex + marker.length,
-  )}`;
 }
 
 function parseArtifactRestoreEntries(raw: string): readonly ArtifactRestoreIndexEntry[] | null {

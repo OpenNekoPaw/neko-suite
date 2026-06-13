@@ -13,17 +13,27 @@ describe('conversation-record-projector', () => {
           role: 'assistant',
           content: 'I read the file.',
           timestamp: 1,
-          toolCalls: [
+          contentBlocks: [
             {
-              id: 'tool-1',
-              name: 'read_file',
-              arguments: { path: '/tmp/a.ts' },
-              result: { success: true, data: 'content' },
+              id: 'block-tool-1',
+              type: 'tool_call',
+              timestamp: 1,
+              toolCall: {
+                id: 'tool-1',
+                name: 'read_file',
+                arguments: { path: '/tmp/a.ts' },
+                result: { success: true, data: 'content' },
+              },
             },
             {
-              id: 'tool-2',
-              name: 'write_file',
-              arguments: { path: '/tmp/b.ts' },
+              id: 'block-tool-2',
+              type: 'tool_call',
+              timestamp: 2,
+              toolCall: {
+                id: 'tool-2',
+                name: 'write_file',
+                arguments: { path: '/tmp/b.ts' },
+              },
             },
           ],
         },
@@ -90,12 +100,17 @@ describe('conversation-record-projector', () => {
             role: 'assistant',
             content: 'Done.',
             timestamp: 2,
-            toolCalls: [
+            contentBlocks: [
               {
-                id: 'tool-1',
-                name: 'read_file',
-                arguments: { path: 'a.ts' },
-                result: { success: true, data: { ok: true } },
+                id: 'block-tool-1',
+                type: 'tool_call',
+                timestamp: 2,
+                toolCall: {
+                  id: 'tool-1',
+                  name: 'read_file',
+                  arguments: { path: 'a.ts' },
+                  result: { success: true, data: { ok: true } },
+                },
               },
             ],
           },

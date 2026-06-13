@@ -44,7 +44,7 @@ export interface AgentStreamBackgroundTaskProgressErrorEvent<
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
   readonly error: unknown;
-  readonly fallbackTask?: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
+  readonly recoveryTask?: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
 }
 
 export interface ObserveAgentStreamBackgroundTaskProgressInput<
@@ -54,7 +54,7 @@ export interface ObserveAgentStreamBackgroundTaskProgressInput<
   readonly taskId: string;
   readonly conversationId: string;
   readonly unsubscribeOnIgnoredConversation: boolean;
-  readonly createFallbackTaskView: (
+  readonly createRecoveryTaskView: (
     task: TSourceTask,
   ) => AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
   readonly createTaskView: (
@@ -84,7 +84,7 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   readonly observeProgress?: (
     input: ObserveAgentStreamBackgroundTaskProgressInput<TSourceTask, TDeliveryPlan>,
   ) => void | (() => void);
-  readonly createFallbackProgress: (task: TSourceTask) => BackgroundTaskProgressPatch;
+  readonly createRecoveryProgress: (task: TSourceTask) => BackgroundTaskProgressPatch;
   readonly createProgressDelivery: (
     task: TSourceTask,
     context: AgentStreamBackgroundTaskDeliveryContext,
@@ -150,8 +150,8 @@ export function startAgentStreamBackgroundTaskObserver<
     taskId: start.taskId,
     conversationId: input.conversationId,
     unsubscribeOnIgnoredConversation: true,
-    createFallbackTaskView: (task) => ({
-      progress: input.createFallbackProgress(task),
+    createRecoveryTaskView: (task) => ({
+      progress: input.createRecoveryProgress(task),
     }),
     createTaskView: (task) => input.createProgressDelivery(task, context),
     onIgnoredConversationTask: input.onIgnoredConversationTask,

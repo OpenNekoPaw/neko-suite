@@ -47,7 +47,7 @@ Guidelines:
 - Read files to understand context
 - Provide concise summaries of findings
 - Report file paths and line numbers`,
-    allowedTools: ['Grep', 'Glob', 'Read', 'ListDirectory'],
+    toolPolicy: { kind: 'allow-list', tools: ['Grep', 'Glob', 'Read', 'ListDirectory'] },
     defaultModelTier: 'fast',
     defaultMaxIterations: 15,
   },
@@ -59,7 +59,7 @@ Guidelines:
 - Use glob to find files by pattern
 - Use list_directory to explore structure
 - Provide clear file organization summaries`,
-    allowedTools: ['Glob', 'Read', 'ListDirectory'],
+    toolPolicy: { kind: 'allow-list', tools: ['Glob', 'Read', 'ListDirectory'] },
     defaultModelTier: 'fast',
     defaultMaxIterations: 10,
   },
@@ -72,7 +72,7 @@ Guidelines:
 - Read test files to understand coverage
 - Report failures with clear explanations
 - Suggest fixes for failing tests`,
-    allowedTools: ['Bash', 'Read', 'Glob'],
+    toolPolicy: { kind: 'allow-list', tools: ['Bash', 'Read', 'Glob'] },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
@@ -85,7 +85,7 @@ Guidelines:
 - Write well-structured markdown
 - Follow project documentation conventions
 - Keep documentation focused and accurate`,
-    allowedTools: ['Read', 'Write', 'Edit', 'Glob'],
+    toolPolicy: { kind: 'allow-list', tools: ['Read', 'Write', 'Edit', 'Glob'] },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 15,
   },
@@ -98,7 +98,7 @@ Guidelines:
 - Be concise and efficient
 - Report results clearly
 - If you cannot complete the task, explain why`,
-    allowedTools: [], // Empty means all tools allowed
+    toolPolicy: { kind: 'all' },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
@@ -112,7 +112,6 @@ Guidelines:
 - Treat suggested profile facts as uncertain and avoid inventing certainty.
 - Do not claim access to project files, tools, global memory, or hidden story context.
 - If the profile lacks an answer, respond within the character's uncertainty.`,
-    allowedTools: [],
     toolPolicy: { kind: 'none' },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 12,
@@ -553,24 +552,13 @@ Focus on completing this specific task efficiently and report your findings clea
     return tools;
   }
 
-  /**
-   * Resolve explicit tool policy while preserving legacy allowedTools behavior.
-   */
   private resolveToolPolicy(
     config: SubAgentConfig,
     preset: SpecializedAgentPreset,
     toolSkillTools: string[],
   ): AgentToolPolicy {
     const policy = config.toolPolicy ?? preset.toolPolicy;
-
-    if (policy) {
-      return this.mergeToolPolicyWithToolSkills(policy, toolSkillTools);
-    }
-
-    const baseAllowedTools = config.allowedTools ?? preset.allowedTools;
-    const allowedTools = this.mergeAllowedTools(baseAllowedTools, toolSkillTools);
-
-    return allowedTools.length > 0 ? { kind: 'allow-list', tools: allowedTools } : { kind: 'all' };
+    return this.mergeToolPolicyWithToolSkills(policy, toolSkillTools);
   }
 
   /**
@@ -610,29 +598,22 @@ Focus on completing this specific task efficiently and report your findings clea
   }
 
   /**
-   * Merge allowed tools from different sources.
-   *
-   * Legacy empty allowedTools means all tools allowed.
+   * Merge allow-listed tools from different sources.
    */
   private mergeAllowedTools(
     baseTools: readonly string[],
     toolSkillTools: readonly string[],
   ): string[] {
-    // If no base tools specified (empty array means all tools allowed for 'general' type)
-    // and no toolskill tools, return empty (all tools allowed)
     if (baseTools.length === 0 && toolSkillTools.length === 0) {
       return [];
     }
 
-    // Merge and deduplicate
     const merged = new Set<string>();
 
-    // Add base tools
     for (const tool of baseTools) {
       merged.add(tool);
     }
 
-    // Add toolskill tools
     for (const tool of toolSkillTools) {
       merged.add(tool);
     }

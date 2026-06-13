@@ -118,11 +118,6 @@ export type {
 export type {
   AgentWorkflowDefinition,
   AgentWorkflowIdentity,
-  AgentLegacyWorkflowAdapterDeprecation,
-  AgentLegacyWorkflowAdapterSeverityAfterSunset,
-  AgentLegacyWorkflowNodeMapping,
-  AgentLegacyWorkflowTelemetry,
-  AgentLegacyWorkflowValidationDiagnostic,
   AgentWorkflowNode,
   AgentWorkflowNodeKind,
   AgentWorkflowProjection,

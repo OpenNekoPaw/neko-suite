@@ -681,10 +681,10 @@ function extractDocumentFilePath(result: Record<string, unknown>): string | null
 }
 
 function resolveDocumentThumbnailFilePath(
-  fallback: string,
+  defaultFilePath: string,
   resourceRef: DocumentArchiveResourceRef | undefined,
 ): string {
-  return resourceRef?.source.filePath ?? fallback;
+  return resourceRef?.source.filePath ?? defaultFilePath;
 }
 
 function resolveDocumentThumbnailSource(

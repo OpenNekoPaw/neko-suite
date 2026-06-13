@@ -9,9 +9,8 @@
  * - **Non-blocking**: the watcher fires *after* the file is on disk. Invalid
  *   frontmatter does not un-write the file; it emits an `artifact.invalid`
  *   event so the narrator + agent can surface a hint on the next turn.
- * - **Debounced**: 300ms, mirroring `HookLoader.watchDirectory()` so rapid
- *   rewrites (e.g. editor auto-save during AI authoring) collapse to one
- *   event per file.
+ * - **Debounced**: 300ms, so rapid rewrites (e.g. editor auto-save during AI
+ *   authoring) collapse to one event per file.
  * - **Pure event side** only — the watcher does not read the IdcRunStore or
  *   inject runId into files. Caller supplies `getRunId()` so the emitted event
  *   can carry the current run for correlation. Returns 'unknown' placeholder
@@ -67,7 +66,7 @@ export interface ArtifactWatcherConfig {
   getRunId: () => string | null;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
-  /** Debounce window (ms). Defaults to 300, matches HookLoader. */
+  /** Debounce window (ms). Defaults to 300. */
   debounceMs?: number;
   /** FS ops injection. Defaults to node fs. */
   fsOps?: ArtifactWatcherFsOps;

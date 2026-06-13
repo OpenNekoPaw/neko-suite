@@ -304,7 +304,7 @@ describe('config message presenter', () => {
         },
       ],
       selectedModel: 'openai:gpt-4.1',
-      fallbackContextWindow: 8192,
+      defaultContextWindow: 8192,
       sessionMode: 'agent',
       mediaModelSelection: {
         image: 'flux:pro',
@@ -330,12 +330,12 @@ describe('config message presenter', () => {
     expect(projection.selectedContextWindow).toBe(200000);
   });
 
-  it('projects direct media mode active model and default model list fallback', () => {
+  it('projects direct media mode active model and default model list', () => {
     expect(
       projectChatWorkspaceModelState({
         chatModelOptions: [],
         selectedModel: 'auto',
-        fallbackContextWindow: 4096,
+        defaultContextWindow: 4096,
         sessionMode: 'agent',
         mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
       }),
@@ -357,7 +357,7 @@ describe('config message presenter', () => {
         },
       ],
       selectedModel: 'missing:model',
-      fallbackContextWindow: 16384,
+      defaultContextWindow: 16384,
       sessionMode: 'video',
       mediaModelSelection: { image: 'none', video: 'runway:gen-4', audio: 'none' },
     });

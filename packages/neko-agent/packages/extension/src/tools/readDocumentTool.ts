@@ -82,7 +82,7 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
           type: 'string',
           enum: ['content', 'manifest', 'range', 'next'],
           description:
-            'Read mode. content preserves legacy full read; manifest returns structure; range reads a semantic locator; next continues a batch cursor.',
+            'Read mode. content returns full document text; manifest returns structure; range reads a semantic locator; next continues a batch cursor.',
         },
         source: {
           type: 'object',
@@ -348,10 +348,10 @@ async function withCacheResourceRef(
   resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<DocumentImageInfoWithCacheResourceRef> {
-  const legacyRef = normalizeLegacyResourceRef(image);
-  if (!legacyRef) return image;
+  const archiveRef = normalizeDocumentArchiveResourceRef(image);
+  if (!archiveRef) return image;
   const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
-    legacyRef,
+    archiveRef,
     resolveResourceScope?.() ?? 'project',
   );
   const materializedPath = await materializeDocumentResource(
@@ -361,7 +361,7 @@ async function withCacheResourceRef(
   );
   const nextPath = materializedPath ?? image.path;
   const resourceRef = {
-    ...legacyRef,
+    ...archiveRef,
     ...(nextPath ? { cachePath: nextPath } : {}),
   };
   const nextCacheResourceRef =
@@ -374,9 +374,9 @@ async function withCacheResourceRef(
     runtimePath: image.runtimePath ?? image.path,
     runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
     alias: image.alias ?? formatDocumentImageAlias(image.locator),
-    aliasScope: image.aliasScope ?? formatDocumentAliasScope(legacyRef),
-    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(legacyRef.source),
-    entryPath: image.entryPath ?? legacyRef.entryPath,
+    aliasScope: image.aliasScope ?? formatDocumentAliasScope(archiveRef),
+    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(archiveRef.source),
+    entryPath: image.entryPath ?? archiveRef.entryPath,
     portableForTransfer: nextCacheResourceRef.scope === 'project',
     ...(nextCacheResourceRef.scope === 'project'
       ? {}
@@ -407,7 +407,7 @@ async function materializeDocumentResource(
     );
     return result.status === 'ready' ? result.absolutePath : undefined;
   } catch {
-    // The document result still carries the stable ref; Canvas can materialize through legacy metadata.
+    // The document result still carries the stable ref; Canvas can materialize it later.
     return undefined;
   }
 }
@@ -437,7 +437,7 @@ function enrichRuntimeDocumentImageInfo(
   });
 }
 
-function normalizeLegacyResourceRef(
+function normalizeDocumentArchiveResourceRef(
   image: DocumentImageInfo,
 ): DocumentArchiveResourceRef | undefined {
   if (!image.resourceRef) return undefined;
@@ -455,8 +455,8 @@ function inferDocumentImageRuntimeKind(
   return 'scratch-cache';
 }
 
-function formatDocumentImageAlias(locator: DocumentLocator | undefined, fallbackIndex = 0): string {
-  if (!locator) return `image_${fallbackIndex + 1}`;
+function formatDocumentImageAlias(locator: DocumentLocator | undefined, defaultIndex = 0): string {
+  if (!locator) return `image_${defaultIndex + 1}`;
   switch (locator.kind) {
     case 'page':
       return `page_${locator.pageNumber}`;
@@ -467,7 +467,7 @@ function formatDocumentImageAlias(locator: DocumentLocator | undefined, fallback
     case 'region':
       return `page_${locator.pageNumber}_region`;
     case 'text-range':
-      return `image_${fallbackIndex + 1}`;
+      return `image_${defaultIndex + 1}`;
   }
 }
 
@@ -619,13 +619,18 @@ function readNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function readBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
+function readBoolean(value: unknown, defaultValue: boolean): boolean {
+  return typeof value === 'boolean' ? value : defaultValue;
 }
 
-function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+function readBoundedInteger(
+  value: unknown,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
-    return fallback;
+    return defaultValue;
   }
   return Math.max(min, Math.min(max, value));
 }

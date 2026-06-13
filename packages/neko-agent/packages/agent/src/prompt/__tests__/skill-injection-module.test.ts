@@ -1,10 +1,8 @@
 /**
  * Tests for SkillInjectionModule — the reference PromptModule implementation.
  *
- * Critical invariant: the module's output must be byte-for-byte identical to
- * what SkillInjectionCoordinator's legacy composer.setSection call produces.
- * When PR2 migrates the coordinator, this equivalence guarantees zero diff in
- * the composed system prompt.
+ * Critical invariant: the module owns the canonical skill prompt section
+ * contract consumed by SkillInjectionCoordinator Track A.
  */
 import { describe, it, expect } from 'vitest';
 import { SkillInjectionModule } from '../modules/skill/skill-injection-module';
@@ -47,7 +45,7 @@ describe('SkillInjectionModule', () => {
     expect(result).toBeNull();
   });
 
-  it('renders a single section matching the legacy coordinator format', async () => {
+  it('renders a single section matching the coordinator section contract', async () => {
     const mod = new SkillInjectionModule();
     mod.setInjection(makeInjection({ name: 'commit-helper', systemPrompt: 'HELP' }));
     const sections = await mod.render(makeCtx({ activeSkillName: 'commit-helper' }));
@@ -91,23 +89,12 @@ describe('SkillInjectionModule', () => {
     expect(cacheKey!(makeCtx())).toBeNull();
   });
 
-  it('module output, when written to composer, matches legacy setSection output', () => {
+  it('module output writes the expected section into the composer', () => {
     const injection = makeInjection({
       name: 'commit-helper',
       systemPrompt: 'You are a commit message helper.',
     });
 
-    // Path A: legacy direct setSection (mirrors current SkillInjectionCoordinator).
-    const legacy = new SystemPromptComposer();
-    legacy.setBase('BASE_CONTENT');
-    legacy.setSection({
-      id: `skill:${injection.name}`,
-      layer: 'skill',
-      content: injection.systemPrompt,
-      priority: 50,
-    });
-
-    // Path B: Module-produced section, written via same setSection API.
     const viaModule = new SystemPromptComposer();
     viaModule.setBase('BASE_CONTENT');
     const mod = new SkillInjectionModule();
@@ -122,6 +109,12 @@ describe('SkillInjectionModule', () => {
       });
     }
 
-    expect(viaModule.compose()).toBe(legacy.compose());
+    expect(viaModule.getSection('skill:commit-helper')).toMatchObject({
+      id: 'skill:commit-helper',
+      layer: 'skill',
+      content: 'You are a commit message helper.',
+      priority: 50,
+    });
+    expect(viaModule.compose()).toContain('You are a commit message helper.');
   });
 });

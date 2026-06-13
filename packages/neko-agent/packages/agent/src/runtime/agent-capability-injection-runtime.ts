@@ -878,9 +878,9 @@ function collectSemanticFacetActionIds(
     .map((facet) => facet.id);
 }
 
-function normalizeRetentionLimit(value: number | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (!Number.isFinite(value) || value < 0) return fallback;
+function normalizeRetentionLimit(value: number | undefined, defaultValue: number): number {
+  if (value === undefined) return defaultValue;
+  if (!Number.isFinite(value) || value < 0) return defaultValue;
   return Math.floor(value);
 }
 

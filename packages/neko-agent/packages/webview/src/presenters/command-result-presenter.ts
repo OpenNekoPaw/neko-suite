@@ -191,8 +191,12 @@ function readConversationSummaries(
     .filter((item): item is { title: string; messageCount: number } => item !== null);
 }
 
-function readDisplayString(data: Record<string, unknown>, key: string, fallback: string): string {
-  return readString(data, key) || fallback;
+function readDisplayString(
+  data: Record<string, unknown>,
+  key: string,
+  defaultValue: string,
+): string {
+  return readString(data, key) || defaultValue;
 }
 
 function readString(data: Record<string, unknown>, key: string): string | undefined {
@@ -200,9 +204,9 @@ function readString(data: Record<string, unknown>, key: string): string | undefi
   return typeof value === 'string' ? value : undefined;
 }
 
-function readNumber(data: Record<string, unknown>, key: string, fallback: number): number {
+function readNumber(data: Record<string, unknown>, key: string, defaultValue: number): number {
   const value = data[key];
-  return typeof value === 'number' ? value : fallback;
+  return typeof value === 'number' ? value : defaultValue;
 }
 
 function readBoolean(data: Record<string, unknown> | undefined, key: string): boolean | undefined {

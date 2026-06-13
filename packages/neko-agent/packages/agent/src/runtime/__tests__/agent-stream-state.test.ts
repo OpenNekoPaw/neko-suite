@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isEntityMemoryContribution } from '@neko/shared';
 import {
   applyAgentStreamEventToState,
   createAgentStreamMessageId,
@@ -151,6 +152,32 @@ describe('agent stream state reducer', () => {
         },
       },
     ]);
+  });
+
+  it('projects character analysis table contribution payloads before Webview rendering', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(
+      state,
+      {
+        type: 'text',
+        content:
+          'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","title":"Opening","sections":[{"heading":"主要角色观察","content":"| 角色 | 当前证据支撑的观察 |\\n| --- | --- |\\n| 瑞德 | 红色围巾。 |"}]}\n```',
+      },
+      { now: () => 10 },
+    );
+
+    finalizeAgentStreamProjectionState(state);
+
+    const composite = state.contentBlocks.find((block) => block.type === 'composite')?.composite;
+    const contribution = composite?.extensions?.['neko.entityMemoryContributionPayload'];
+    expect(isEntityMemoryContribution(contribution)).toBe(true);
+    expect(contribution).toMatchObject({
+      contributionId: 'character-analysis-opening',
+      sourcePackage: 'neko-agent',
+      reviewPolicy: 'requires-user-review',
+      entityCandidates: [expect.objectContaining({ name: '瑞德' })],
+    });
   });
 
   it('applies delayed tool result backfill to collected calls and blocks', () => {

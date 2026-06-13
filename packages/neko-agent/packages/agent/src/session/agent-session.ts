@@ -3052,10 +3052,10 @@ function readSceneIndexesFromToolArguments(
     .filter((sceneIndex): sceneIndex is number => sceneIndex !== null);
 }
 
-function readSceneIndex(scene: Record<string, unknown>, fallback: number): number | null {
+function readSceneIndex(scene: Record<string, unknown>, defaultIndex: number): number | null {
   const explicit = scene['index'] ?? scene['sceneIndex'];
   if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.floor(explicit);
-  return fallback;
+  return defaultIndex;
 }
 
 function readToolArgumentTimeRange(

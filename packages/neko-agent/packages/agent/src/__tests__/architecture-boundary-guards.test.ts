@@ -21,6 +21,37 @@ describe('agent architecture boundary guards', () => {
     expect(source).not.toMatch(/require\(['"]vscode['"]\)/);
   });
 
+  it('keeps Webview projection code from generating durable entity memory contributions', () => {
+    const sourceFiles = listFiles(webviewSrc)
+      .filter(
+        (file) =>
+          (file.endsWith('.ts') || file.endsWith('.tsx')) &&
+          !isTestFile(file) &&
+          !relative(webviewSrc, file).includes('__tests__/'),
+      )
+      .map((file) => ({
+        file,
+        source: readFileSync(file, 'utf-8'),
+      }));
+
+    const violations = sourceFiles.flatMap(({ file, source }) => {
+      const relativePath = relative(repoRoot, file);
+      const patterns = [
+        /inferEntityMemoryContribution/i,
+        /\bconst\s+DEFAULT_CONFIDENCE\s*=/,
+        /character-analysis-row-not-entity/,
+        /\bsourcePackage\s*:\s*['"][^'"]+['"]/,
+        /\breviewPolicy\s*:\s*['"][^'"]+['"]/,
+        /\bEntityMemoryContribution\s*=\s*\{/,
+      ];
+      return patterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps runtime collaborators independent from VSCode, React, Webview, and Extension modules', () => {
     const collaboratorFiles = [
       join(agentSrc, 'session/session-persistence.ts'),
@@ -28,6 +59,8 @@ describe('agent architecture boundary guards', () => {
       join(agentSrc, 'session/session-artifact-facade.ts'),
       join(agentSrc, 'session/feedback-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
+      join(agentSrc, 'artifact/entity-memory-contribution-inference.ts'),
+      join(agentSrc, 'runtime/character-dialogue-runtime.ts'),
     ];
     const source = collaboratorFiles.map((file) => readFileSync(file, 'utf-8')).join('\n');
 
@@ -74,6 +107,41 @@ describe('agent architecture boundary guards', () => {
     expect(source).not.toMatch(
       /from\s+['"][^'"]*session\/(?:session-persistence|idc-run-lifecycle|session-artifact-facade|feedback-runtime-bridge|prompt-runtime-facade)['"]/,
     );
+  });
+
+  it('keeps Agent Extension from re-owning project search aggregation policy', () => {
+    const sourceFiles = listFiles(extensionSrc)
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        file,
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+
+    const shimImportViolations = sourceFiles.flatMap(({ file, source }) =>
+      [...source.matchAll(/from\s+['"]([^'"]*services\/projectSearch[^'"]*)['"]/g)].map(
+        (match) => `${relative(repoRoot, file)} -> ${match[1]}`,
+      ),
+    );
+    expect(shimImportViolations).toEqual([]);
+
+    const adapterPath = join(extensionSrc, 'services/agentProjectSearchAdapters.ts');
+    const adapterSource = stripTypeScriptComments(readFileSync(adapterPath, 'utf-8'));
+    const forbiddenLocalPolicyHelpers = [
+      /\bfunction\s+dedupeCreativeEntityItems\b/,
+      /\bfunction\s+dedupeKeyForProjectSearchItem\b/,
+      /\bfunction\s+shouldPreferProjectSearchItem\b/,
+      /\bfunction\s+aggregateCreativeEntityStatus\b/,
+      /\bfunction\s+aggregateItemFreshness\b/,
+      /\bfunction\s+aggregateStateFreshness\b/,
+      /\bfunction\s+dashboardRowToSearchItem\b/,
+      /\bfunction\s+extractLineBasedScriptCharacters\b/,
+      /\bfunction\s+scriptCandidateToSearchItem\b/,
+    ];
+    const policyViolations = forbiddenLocalPolicyHelpers
+      .filter((pattern) => pattern.test(adapterSource))
+      .map((pattern) => `${relative(repoRoot, adapterPath)} matches ${pattern}`);
+
+    expect(policyViolations).toEqual([]);
   });
 
   it('reports new AgentSession fields that directly own runtime subdomain state', () => {
@@ -251,6 +319,10 @@ function readSourceFiles(dir: string, include: (file: string) => boolean): strin
     .filter(include)
     .map((file) => readFileSync(file, 'utf-8'))
     .join('\n');
+}
+
+function stripTypeScriptComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
 function listFiles(dir: string): string[] {

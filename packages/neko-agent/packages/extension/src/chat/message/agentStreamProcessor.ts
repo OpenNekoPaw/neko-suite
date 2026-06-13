@@ -153,7 +153,7 @@ export class AgentStreamProcessor {
                   taskId: input.taskId,
                   conversationId: input.conversationId,
                   unsubscribeOnIgnoredConversation: input.unsubscribeOnIgnoredConversation,
-                  createFallbackTaskView: (task) => input.createFallbackTaskView(task),
+                  createRecoveryTaskView: (task) => input.createRecoveryTaskView(task),
                   createTaskView: (task) => input.createTaskView(task),
                   onIgnoredConversationTask: ({ taskId, conversationId, mediaTask }) => {
                     input.onIgnoredConversationTask?.({
@@ -167,14 +167,14 @@ export class AgentStreamProcessor {
                     conversationId,
                     mediaTask,
                     error,
-                    fallbackTask,
+                    recoveryTask,
                   }) => {
                     input.onProgressDeliveryError?.({
                       taskId,
                       conversationId,
                       sourceTask: mediaTask,
                       error,
-                      ...(fallbackTask ? { fallbackTask } : {}),
+                      ...(recoveryTask ? { recoveryTask } : {}),
                     });
                   },
                   onTaskProgress: ({ conversationId, task, mediaTask }) =>
@@ -186,7 +186,7 @@ export class AgentStreamProcessor {
                 }),
             }
           : {}),
-        createFallbackProgress: (task) => createMediaTaskProgressView({ task }),
+        createRecoveryProgress: (task) => createMediaTaskProgressView({ task }),
         createProgressDelivery: async (task, context) => {
           const delivery = await this.mediaDeliveryHost.createProgressViewDelivery(
             webview,
@@ -215,7 +215,7 @@ export class AgentStreamProcessor {
         shouldForgetSubscriptionAfterProgressDelivery: (progress) =>
           Boolean(progress.deliveryPlan?.shouldUnsubscribe),
         shouldForgetSubscriptionAfterProgressError: (event) =>
-          Boolean(event.fallbackTask?.deliveryPlan?.shouldUnsubscribe),
+          Boolean(event.recoveryTask?.deliveryPlan?.shouldUnsubscribe),
         onIgnoredConversationTask: ({ taskId }) => {
           logger.warn('Ignoring background task progress for a different conversation', {
             taskId,

@@ -109,7 +109,7 @@ export class ConversationManager {
       conversation.title = this.generateTitle(message.content);
     }
 
-    if (message.role === 'assistant' && message.toolCalls?.some((toolCall) => !toolCall.result)) {
+    if (message.role === 'assistant' && hasPendingToolCall(message)) {
       conversation.resumable = true;
     }
 
@@ -140,8 +140,7 @@ export class ConversationManager {
     );
 
     const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
-    conversation.resumable =
-      lastAssistant?.toolCalls?.some((toolCall) => !toolCall.result) ?? false;
+    conversation.resumable = lastAssistant ? hasPendingToolCall(lastAssistant) : false;
 
     this.markDirty(id);
     this.scheduleSave();
@@ -354,4 +353,12 @@ export class ConversationManager {
 
 function estimateMessageTokenCount(content: string): number {
   return Math.ceil(content.length / 4);
+}
+
+function hasPendingToolCall(message: Message): boolean {
+  return (
+    message.contentBlocks?.some(
+      (block) => block.type === 'tool_call' && block.toolCall && !block.toolCall.result,
+    ) ?? false
+  );
 }

@@ -22,7 +22,7 @@ export default defineConfig({
       // Handler and processor tests use vi.mock('vscode') and are included below.
       'packages/extension/src/ai/**/*.test.ts',
       'packages/extension/src/chat/chatProvider.test.ts',
-      // Platform task-manager was deprecated and moved to @neko/agent
+      // Platform task-manager was  and moved to @neko/agent
       'packages/platform/src/task/__test__/**',
       // media-generation-service depends on deprecated task-manager path
       'packages/platform/src/media/__tests__/media-generation-service.test.ts',

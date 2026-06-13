@@ -27,7 +27,7 @@ import {
   parseDocumentSourceRef,
 } from '@neko/shared';
 import type { AgentPhase } from './phase';
-import type { Message } from './message';
+import type { ContentBlock, Message } from './message';
 import type { Plan } from './plan';
 import type { ConfiguredProvider } from './provider';
 import type {
@@ -391,6 +391,7 @@ export interface StreamCompleteMessage {
   type: 'streamComplete';
   conversationId: string;
   messageId?: string;
+  contentBlocks?: readonly ContentBlock[];
 }
 
 export interface StreamThinkingMessage {
@@ -924,11 +925,15 @@ export function buildStreamTextMessage(input: {
 export function buildStreamCompleteMessage(input: {
   readonly conversationId: string;
   readonly messageId?: string;
+  readonly contentBlocks?: readonly ContentBlock[];
 }): StreamCompleteMessage {
   return {
     type: 'streamComplete',
     conversationId: input.conversationId,
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+    ...(input.contentBlocks && input.contentBlocks.length > 0
+      ? { contentBlocks: input.contentBlocks }
+      : {}),
   };
 }
 

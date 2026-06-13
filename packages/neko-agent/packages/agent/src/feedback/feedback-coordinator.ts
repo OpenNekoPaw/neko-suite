@@ -833,7 +833,7 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
               guidanceKinds.add(decision.signalKind);
               guidanceBlocks.push(
                 `Repair the failed tool step for ${decision.toolName}. ` +
-                  `Diagnose the error "${decision.error}" and choose a safer fallback if needed.`,
+                  `Diagnose the error "${decision.error}" and choose a safer substitute if needed.`,
               );
               break;
             }

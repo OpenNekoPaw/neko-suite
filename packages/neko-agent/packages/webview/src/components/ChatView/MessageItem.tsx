@@ -18,6 +18,7 @@ import {
   selectMessageTaskWorkItems,
 } from '@/components/AgentWorkItem';
 import {
+  deriveToolCallsFromContentBlocks,
   projectContentBlocksDisplay,
   projectContentBlocksUi,
   type ContentBlockUiProjection,
@@ -275,7 +276,7 @@ function AssistantContentBlocks({
       isStreaming,
       undefined,
       message.contentBlocks,
-      message.toolCalls,
+      deriveToolCallsFromContentBlocks(message.contentBlocks),
       pluginsAvailable,
     );
 

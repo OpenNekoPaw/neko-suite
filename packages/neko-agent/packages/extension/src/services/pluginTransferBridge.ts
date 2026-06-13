@@ -220,10 +220,9 @@ async function promoteCanvasAsset(
 
   const ingestService =
     deps.ingestService ?? createGeneratedOutputIngestService(workspaceRoot, deps.pathResolver);
-  const generatedDir = path.join(
-    resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot).project.cache.generated,
-    mediaDir(asset),
-  );
+  const generatedCacheDir = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot)
+    .project.local.cache.generated;
+  const generatedDir = path.join(generatedCacheDir, mediaDir(asset));
   const result = await ingestService.ingest({
     mode: 'generated-output',
     sourcePath: asset.path,

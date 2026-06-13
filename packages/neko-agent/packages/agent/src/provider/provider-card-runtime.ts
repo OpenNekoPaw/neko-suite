@@ -51,7 +51,8 @@ export async function registerRuntimeProviderCardDirectories(
         options,
         registerDirectory,
         layer: 'project',
-        root: resolveStorageLayout(options.workspaceRoot, options.homeDir).project.providerCards,
+        root: resolveStorageLayout(options.workspaceRoot, options.homeDir).project.facts
+          .providerCards,
         recursive: false,
         sourceRefPrefix: '.neko/providers',
       })

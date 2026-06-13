@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillInjectionCoordinator } from '../skill-injection-coordinator';
 import type { SkillInjectionCoordinatorDeps } from '../skill-injection-coordinator';
+import { SkillInjectionModule } from '../../prompt/modules/skill/skill-injection-module';
 import type { SkillInjection } from '@neko/shared';
 
 // =============================================================================
@@ -28,6 +29,7 @@ function createMockDeps() {
     syncSystemPrompt: () => {
       syncCalls++;
     },
+    skillInjectionModule: new SkillInjectionModule(),
   };
 
   return {
@@ -287,11 +289,11 @@ describe('SkillInjectionCoordinator', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // PR3a: SkillInjectionModule integration
+  // SkillInjectionModule integration
   //
-  // These tests exercise the Track A path through the module instead of the
-  // legacy direct setSection call. They use a real SystemPromptComposer so
-  // we can assert byte-identical output between the two paths.
+  // These tests exercise the canonical Track A path through the module. They
+  // use a real SystemPromptComposer so we can assert the module-owned section
+  // contract is written into the composer.
   // ---------------------------------------------------------------------------
 
   describe('with SkillInjectionModule', () => {
@@ -304,8 +306,6 @@ describe('SkillInjectionCoordinator', () => {
 
     beforeEach(async () => {
       const { SystemPromptComposer } = await import('../../prompt/system-prompt-composer');
-      const { SkillInjectionModule } =
-        await import('../../prompt/modules/skill/skill-injection-module');
       realComposer = new SystemPromptComposer();
       moduleInstance = new SkillInjectionModule();
       realPermissionHooks = createMockPermissionHooks();
@@ -332,25 +332,10 @@ describe('SkillInjectionCoordinator', () => {
       expect(moduleInstance.getInjection()).toBeNull();
     });
 
-    it('module path and legacy path produce byte-identical composed output', async () => {
+    it('module path composes the expected skill section output', async () => {
       const { SystemPromptComposer } = await import('../../prompt/system-prompt-composer');
-      const { SkillInjectionModule } =
-        await import('../../prompt/modules/skill/skill-injection-module');
       const injection = createInjection({ name: 'cut', systemPrompt: 'CUT_PROMPT' });
 
-      // Legacy coordinator (no module dep).
-      const legacyComposer = new SystemPromptComposer();
-      legacyComposer.setBase('BASE');
-      const legacyPermission = createMockPermissionHooks();
-      const legacyCoord = new SkillInjectionCoordinator({
-        promptComposer: legacyComposer,
-        getPermissionHooks: () =>
-          legacyPermission as unknown as import('../../permission/permission-manager-types').IPermissionManager,
-        syncSystemPrompt: () => {},
-      });
-      legacyCoord.apply(injection);
-
-      // Module coordinator.
       const modComposer = new SystemPromptComposer();
       modComposer.setBase('BASE');
       const modInstance = new SkillInjectionModule();
@@ -364,7 +349,13 @@ describe('SkillInjectionCoordinator', () => {
       });
       modCoord.apply(injection);
 
-      expect(modComposer.compose()).toBe(legacyComposer.compose());
+      expect(modComposer.getSection('skill:cut')).toMatchObject({
+        id: 'skill:cut',
+        layer: 'skill',
+        content: 'CUT_PROMPT',
+        priority: 50,
+      });
+      expect(modComposer.compose()).toContain('CUT_PROMPT');
     });
 
     it('apply → apply (switching skills) swaps the section and module state', () => {

@@ -17,7 +17,7 @@ export interface ChatMessage {
   content: string | ContentPart[];
   name?: string;
   toolCallId?: string;
-  toolCalls?: ToolCall[];
+  toolCalls?: LLMToolCall[];
 }
 
 /**
@@ -58,11 +58,6 @@ export interface LLMToolCall {
     arguments: string;
   };
 }
-
-/**
- * @deprecated Use LLMToolCall instead. Kept for backward compatibility.
- */
-export type ToolCall = LLMToolCall;
 
 /**
  * Chat request options

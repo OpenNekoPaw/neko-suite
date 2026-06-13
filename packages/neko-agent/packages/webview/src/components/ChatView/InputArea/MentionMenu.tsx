@@ -25,53 +25,53 @@ const KIND_ICONS: Record<string, string> = {
 };
 
 const KIND_SECTION_LABELS: Record<MentionItem['kind'], MentionLocalizedLabel> = {
-  file: { key: 'chat.input.mentionSections.file', fallback: 'Files' },
-  asset: { key: 'chat.input.mentionSections.asset', fallback: 'Assets' },
-  media: { key: 'chat.input.mentionSections.media', fallback: 'Media Library' },
-  entity: { key: 'chat.input.mentionSections.entity', fallback: 'Entities' },
-  'canvas-node': { key: 'chat.input.mentionSections.canvasNode', fallback: 'Canvas nodes' },
-  character: { key: 'chat.input.mentionSections.character', fallback: 'Characters' },
-  scene: { key: 'chat.input.mentionSections.scene', fallback: 'Scenes' },
+  file: { key: 'chat.input.mentionSections.file', defaultText: 'Files' },
+  asset: { key: 'chat.input.mentionSections.asset', defaultText: 'Assets' },
+  media: { key: 'chat.input.mentionSections.media', defaultText: 'Media Library' },
+  entity: { key: 'chat.input.mentionSections.entity', defaultText: 'Entities' },
+  'canvas-node': { key: 'chat.input.mentionSections.canvasNode', defaultText: 'Canvas nodes' },
+  character: { key: 'chat.input.mentionSections.character', defaultText: 'Characters' },
+  scene: { key: 'chat.input.mentionSections.scene', defaultText: 'Scenes' },
 };
 
 const MEDIA_TYPE_TAG_LABELS: Record<
   NonNullable<MentionItem['mediaType']>,
   MentionLocalizedLabel
 > = {
-  video: { key: 'chat.input.mentionTags.media.video', fallback: 'Video' },
-  audio: { key: 'chat.input.mentionTags.media.audio', fallback: 'Audio' },
-  image: { key: 'chat.input.mentionTags.media.image', fallback: 'Image' },
-  sequence: { key: 'chat.input.mentionTags.media.sequence', fallback: 'Sequence' },
-  text: { key: 'chat.input.mentionTags.media.text', fallback: 'Text' },
-  document: { key: 'chat.input.mentionTags.media.document', fallback: 'Document' },
+  video: { key: 'chat.input.mentionTags.media.video', defaultText: 'Video' },
+  audio: { key: 'chat.input.mentionTags.media.audio', defaultText: 'Audio' },
+  image: { key: 'chat.input.mentionTags.media.image', defaultText: 'Image' },
+  sequence: { key: 'chat.input.mentionTags.media.sequence', defaultText: 'Sequence' },
+  text: { key: 'chat.input.mentionTags.media.text', defaultText: 'Text' },
+  document: { key: 'chat.input.mentionTags.media.document', defaultText: 'Document' },
 };
 
 const SOURCE_TAG_LABELS: Record<NonNullable<MentionItem['source']>, MentionLocalizedLabel> = {
-  workspace: { key: 'chat.input.mentionTags.source.workspace', fallback: 'Workspace' },
-  'asset-library': { key: 'chat.input.mentionTags.source.assetLibrary', fallback: 'Assets' },
-  'media-library': { key: 'chat.input.mentionTags.source.mediaLibrary', fallback: 'Media' },
-  'entity-graph': { key: 'chat.input.mentionTags.source.entityGraph', fallback: 'Entity' },
-  story: { key: 'chat.input.mentionTags.source.story', fallback: 'Story' },
-  canvas: { key: 'chat.input.mentionTags.source.canvas', fallback: 'Canvas' },
+  workspace: { key: 'chat.input.mentionTags.source.workspace', defaultText: 'Workspace' },
+  'asset-library': { key: 'chat.input.mentionTags.source.assetLibrary', defaultText: 'Assets' },
+  'media-library': { key: 'chat.input.mentionTags.source.mediaLibrary', defaultText: 'Media' },
+  'entity-graph': { key: 'chat.input.mentionTags.source.entityGraph', defaultText: 'Entity' },
+  story: { key: 'chat.input.mentionTags.source.story', defaultText: 'Story' },
+  canvas: { key: 'chat.input.mentionTags.source.canvas', defaultText: 'Canvas' },
 };
 
 const KIND_TAG_LABELS: Record<MentionItem['kind'], MentionLocalizedLabel> = {
-  file: { key: 'chat.input.mentionTags.kind.file', fallback: 'File' },
-  asset: { key: 'chat.input.mentionTags.kind.asset', fallback: 'Asset' },
-  media: { key: 'chat.input.mentionTags.kind.media', fallback: 'Media' },
-  entity: { key: 'chat.input.mentionTags.kind.entity', fallback: 'Entity' },
-  'canvas-node': { key: 'chat.input.mentionTags.kind.canvasNode', fallback: 'Canvas' },
-  character: { key: 'chat.input.mentionTags.kind.character', fallback: 'Character' },
-  scene: { key: 'chat.input.mentionTags.kind.scene', fallback: 'Scene' },
+  file: { key: 'chat.input.mentionTags.kind.file', defaultText: 'File' },
+  asset: { key: 'chat.input.mentionTags.kind.asset', defaultText: 'Asset' },
+  media: { key: 'chat.input.mentionTags.kind.media', defaultText: 'Media' },
+  entity: { key: 'chat.input.mentionTags.kind.entity', defaultText: 'Entity' },
+  'canvas-node': { key: 'chat.input.mentionTags.kind.canvasNode', defaultText: 'Canvas' },
+  character: { key: 'chat.input.mentionTags.kind.character', defaultText: 'Character' },
+  scene: { key: 'chat.input.mentionTags.kind.scene', defaultText: 'Scene' },
 };
 
 const ENTITY_TYPE_TAG_LABELS: Record<string, MentionLocalizedLabel> = {
-  asset: { key: 'chat.input.mentionTags.entity.asset', fallback: 'Asset' },
-  character: { key: 'chat.input.mentionTags.entity.character', fallback: 'Character' },
-  scene: { key: 'chat.input.mentionTags.entity.scene', fallback: 'Scene' },
-  shot: { key: 'chat.input.mentionTags.entity.shot', fallback: 'Shot' },
-  canvas: { key: 'chat.input.mentionTags.entity.canvas', fallback: 'Canvas' },
-  'canvas-node': { key: 'chat.input.mentionTags.entity.canvasNode', fallback: 'Canvas node' },
+  asset: { key: 'chat.input.mentionTags.entity.asset', defaultText: 'Asset' },
+  character: { key: 'chat.input.mentionTags.entity.character', defaultText: 'Character' },
+  scene: { key: 'chat.input.mentionTags.entity.scene', defaultText: 'Scene' },
+  shot: { key: 'chat.input.mentionTags.entity.shot', defaultText: 'Shot' },
+  canvas: { key: 'chat.input.mentionTags.entity.canvas', defaultText: 'Canvas' },
+  'canvas-node': { key: 'chat.input.mentionTags.entity.canvasNode', defaultText: 'Canvas node' },
 };
 
 const MENTION_KIND_ORDER: MentionItem['kind'][] = [
@@ -93,7 +93,7 @@ interface MentionSection {
 
 interface MentionLocalizedLabel {
   key?: string;
-  fallback: string;
+  defaultText: string;
 }
 
 interface MentionBadgeProjection {
@@ -315,7 +315,7 @@ function buildMentionSections(items: MentionItem[]): MentionSection[] {
     if (sectionItems.length === 0) continue;
     sections.push({
       kind,
-      label: KIND_SECTION_LABELS[kind] ?? { fallback: kind },
+      label: KIND_SECTION_LABELS[kind] ?? { defaultText: kind },
       items: sectionItems,
       startIndex,
     });
@@ -355,16 +355,16 @@ function getMentionBadgeLabel(item: MentionItem): MentionLocalizedLabel | undefi
 
 function getMentionEntityTypeLabel(entityType: string): MentionLocalizedLabel {
   const normalized = entityType.toLowerCase();
-  return ENTITY_TYPE_TAG_LABELS[normalized] ?? { fallback: entityType };
+  return ENTITY_TYPE_TAG_LABELS[normalized] ?? { defaultText: entityType };
 }
 
 function resolveMentionLabel(
   label: MentionLocalizedLabel,
   translate: (key: string) => string,
 ): string {
-  if (!label.key) return label.fallback;
+  if (!label.key) return label.defaultText;
   const translated = translate(label.key);
-  return translated === label.key ? label.fallback : translated;
+  return translated === label.key ? label.defaultText : translated;
 }
 
 function getMentionGlyph(item: MentionItem, isSelected: boolean): MentionGlyphProjection {

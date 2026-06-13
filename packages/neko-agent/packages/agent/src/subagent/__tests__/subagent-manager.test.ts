@@ -231,26 +231,27 @@ describe('SubAgentManager', () => {
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file']);
     });
 
-    it('should preserve legacy allowedTools filtering behavior', async () => {
+    it('should let config toolPolicy override the preset policy', async () => {
       const config = createTestConfig({
-        id: 'legacy-allowed-tools-agent',
-        allowedTools: ['grep'],
+        id: 'tool-policy-override-agent',
+        type: 'general',
+        toolPolicy: { kind: 'allow-list', tools: ['grep'] },
       });
 
       await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('legacy-allowed-tools-agent', 5000);
+      await manager.getResult('tool-policy-override-agent', 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['grep']);
     });
 
-    it('should preserve legacy empty allowedTools as allow-all behavior', async () => {
+    it('should use the preset toolPolicy when config omits one', async () => {
       const config = createTestConfig({
-        id: 'legacy-empty-allowed-tools-agent',
-        allowedTools: [],
+        id: 'preset-tool-policy-agent',
+        type: 'general',
       });
 
       await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('legacy-empty-allowed-tools-agent', 5000);
+      await manager.getResult('preset-tool-policy-agent', 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
     });
@@ -428,7 +429,7 @@ describe('SPECIALIZED_PRESETS', () => {
     for (const [type, preset] of Object.entries(SPECIALIZED_PRESETS)) {
       expect(preset.description).toBeTruthy();
       expect(preset.systemPrompt).toBeTruthy();
-      expect(Array.isArray(preset.allowedTools)).toBe(true);
+      expect(['none', 'all', 'allow-list']).toContain(preset.toolPolicy.kind);
       expect(['fast', 'balanced', 'powerful']).toContain(preset.defaultModelTier);
       expect(preset.defaultMaxIterations).toBeGreaterThan(0);
     }
@@ -670,7 +671,7 @@ describe('SubAgentManager - ToolSkill Injection', () => {
   it('should add tools from ToolSkills to allowed tools', async () => {
     const config = createTestConfig({
       id: 'toolskill-test',
-      type: 'code-search', // Has preset allowedTools: ['grep', 'glob', 'read_file', 'list_directory']
+      type: 'code-search',
       toolSkills: ['git-operations'],
     });
 
@@ -691,7 +692,7 @@ describe('SubAgentManager - ToolSkill Injection', () => {
   it('should merge tools from multiple ToolSkills', async () => {
     const config = createTestConfig({
       id: 'multi-toolskill-test',
-      type: 'general', // Empty allowedTools means all tools
+      type: 'general',
       toolSkills: ['git-operations', 'file-editing'],
     });
 

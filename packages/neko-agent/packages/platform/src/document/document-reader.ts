@@ -1115,49 +1115,25 @@ function extractFDXScenes(doc: unknown): Array<{ text: string }> {
 
 function resolvePdfReader(moduleValue: unknown): PdfReader | null {
   const modernConstructor = readFunctionProperty(moduleValue, 'PDFParse');
-  if (modernConstructor) {
-    return async (buffer) => {
-      const PdfParser = modernConstructor as unknown as PdfParserConstructor;
-      const parser = new PdfParser({ data: buffer });
-      try {
-        const textResult = await parser.getText();
-        const infoResult = await readPdfInfo(parser);
-        const metadata = isRecord(infoResult?.info) ? infoResult.info : undefined;
-        const pageCount = readNumber(infoResult?.total) ?? readNumber(textResult.total);
-
-        return {
-          text: typeof textResult.text === 'string' ? textResult.text : '',
-          ...(pageCount !== undefined ? { pageCount } : {}),
-          ...(metadata ? { metadata } : {}),
-        };
-      } finally {
-        await parser.destroy().catch(() => undefined);
-      }
-    };
-  }
-
-  const legacyParser =
-    typeof moduleValue === 'function'
-      ? moduleValue
-      : isRecord(moduleValue) && typeof moduleValue['default'] === 'function'
-        ? moduleValue['default']
-        : null;
-
-  if (!legacyParser) {
-    return null;
-  }
+  if (!modernConstructor) return null;
 
   return async (buffer) => {
-    const result = await legacyParser(buffer);
-    const resultRecord = isRecord(result) ? result : {};
-    const metadata = isRecord(resultRecord['info']) ? resultRecord['info'] : undefined;
-    const pageCount = readNumber(resultRecord['numpages']);
+    const PdfParser = modernConstructor as unknown as PdfParserConstructor;
+    const parser = new PdfParser({ data: buffer });
+    try {
+      const textResult = await parser.getText();
+      const infoResult = await readPdfInfo(parser);
+      const metadata = isRecord(infoResult?.info) ? infoResult.info : undefined;
+      const pageCount = readNumber(infoResult?.total) ?? readNumber(textResult.total);
 
-    return {
-      text: typeof resultRecord['text'] === 'string' ? resultRecord['text'] : '',
-      ...(pageCount !== undefined ? { pageCount } : {}),
-      ...(metadata ? { metadata } : {}),
-    };
+      return {
+        text: typeof textResult.text === 'string' ? textResult.text : '',
+        ...(pageCount !== undefined ? { pageCount } : {}),
+        ...(metadata ? { metadata } : {}),
+      };
+    } finally {
+      await parser.destroy().catch(() => undefined);
+    }
   };
 }
 
@@ -1170,22 +1146,6 @@ async function readPdfInfo(parser: PdfParserInstance): Promise<PdfInfoResult | u
 }
 
 function resolveOfficeReader(moduleValue: unknown): OfficeReader | null {
-  const legacyParser = readFunctionProperty(moduleValue, 'parseOfficeAsync');
-  if (legacyParser) {
-    return async (filePath) => {
-      const text = String(await legacyParser(filePath));
-      const slideCount = estimateSlideCount(text);
-      return {
-        text,
-        pageCount: slideCount,
-        metadata: {
-          format: readDocumentFormat(filePath, 'pptx'),
-          slideCount,
-        },
-      };
-    };
-  }
-
   const parser =
     readFunctionProperty(moduleValue, 'parseOffice') ??
     readNestedFunctionProperty(moduleValue, 'OfficeParser', 'parseOffice') ??
@@ -1259,9 +1219,9 @@ function readNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function readDocumentFormat(filePath: string, fallback: string): string {
+function readDocumentFormat(filePath: string, defaultFormat: string): string {
   const ext = path.extname(filePath).toLowerCase();
-  return ext.length > 1 ? ext.slice(1) : fallback;
+  return ext.length > 1 ? ext.slice(1) : defaultFormat;
 }
 
 function readFunctionProperty(value: unknown, property: string): UnknownFunction | null {

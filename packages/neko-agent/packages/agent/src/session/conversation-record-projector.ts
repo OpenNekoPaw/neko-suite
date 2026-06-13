@@ -1,4 +1,4 @@
-import type { Message } from '@neko-agent/types';
+import type { Message, ToolCall } from '@neko-agent/types';
 import type { ConversationRecord, ConversationSource } from './conversation-record';
 import type { AgentHistoryWithToolContextMessage } from './history-hydration';
 import { hydrateAgentHistoryWithToolResults } from './history-hydration';
@@ -74,14 +74,15 @@ export function projectConversationMessagesToAgentHistory(
       continue;
     }
 
-    if (message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0) {
-      const toolCalls = message.toolCalls.map((toolCall) => ({
+    const messageToolCalls = extractMessageToolCalls(message);
+    if (message.role === 'assistant' && messageToolCalls.length > 0) {
+      const toolCalls = messageToolCalls.map((toolCall) => ({
         id: toolCall.id,
         name: toolCall.name,
         arguments: toolCall.arguments,
       }));
 
-      const toolResults = message.toolCalls.flatMap((toolCall) => {
+      const toolResults = messageToolCalls.flatMap((toolCall) => {
         if (!toolCall.result) {
           return [];
         }
@@ -111,4 +112,12 @@ export function projectConversationMessagesToAgentHistory(
   }
 
   return result;
+}
+
+function extractMessageToolCalls(message: Message): ToolCall[] {
+  return (
+    message.contentBlocks
+      ?.map((block) => (block.type === 'tool_call' ? block.toolCall : undefined))
+      .filter((toolCall): toolCall is ToolCall => toolCall !== undefined) ?? []
+  );
 }

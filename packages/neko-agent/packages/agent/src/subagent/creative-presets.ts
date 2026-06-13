@@ -54,16 +54,19 @@ Guidelines:
 - Provide detailed generation prompts with style, mood, composition notes
 - Review generated results against the creative vision
 - Suggest iterative refinements when quality doesn't meet standards`,
-    allowedTools: [
-      'Read',
-      'Write',
-      'Grep',
-      'Glob',
-      'GenerateImage',
-      'GenerateVideo',
-      'GetTimelineInfo',
-      'GetContext',
-    ],
+    toolPolicy: {
+      kind: 'allow-list',
+      tools: [
+        'Read',
+        'Write',
+        'Grep',
+        'Glob',
+        'GenerateImage',
+        'GenerateVideo',
+        'GetTimelineInfo',
+        'GetContext',
+      ],
+    },
     defaultModelTier: 'powerful',
     defaultMaxIterations: 25,
   },
@@ -85,14 +88,10 @@ Guidelines:
 - Ensure visual continuity between shots in a sequence
 - Describe compositions using professional cinematography terminology
 - Consider aspect ratio and framing for the target output format`,
-    allowedTools: [
-      'Read',
-      'Grep',
-      'GenerateImage',
-      'GenerateVideo',
-      'GetTimelineInfo',
-      'GetContext',
-    ],
+    toolPolicy: {
+      kind: 'allow-list',
+      tools: ['Read', 'Grep', 'GenerateImage', 'GenerateVideo', 'GetTimelineInfo', 'GetContext'],
+    },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
@@ -114,16 +113,19 @@ Guidelines:
 - Ensure audio timing aligns with visual cues and transitions
 - Consider dynamic range and frequency balance for the mix
 - Suggest music transitions that support the narrative flow`,
-    allowedTools: [
-      'Read',
-      'Grep',
-      'GenerateAudio',
-      'GenerateMusic',
-      'CreateAudio',
-      'SynthesizeSpeech',
-      'GetTimelineInfo',
-      'GetContext',
-    ],
+    toolPolicy: {
+      kind: 'allow-list',
+      tools: [
+        'Read',
+        'Grep',
+        'GenerateAudio',
+        'GenerateMusic',
+        'CreateAudio',
+        'SynthesizeSpeech',
+        'GetTimelineInfo',
+        'GetContext',
+      ],
+    },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
@@ -146,19 +148,22 @@ Guidelines:
 - Ensure audio levels are balanced and properly timed
 - Handle multi-track editing efficiently
 - Report timeline state clearly after modifications`,
-    allowedTools: [
-      'Read',
-      'Write',
-      'Grep',
-      'GetTimelineInfo',
-      'UpdateTimeline',
-      'AddTrack',
-      'AddClip',
-      'MoveClip',
-      'TrimClip',
-      'AddTransition',
-      'GetContext',
-    ],
+    toolPolicy: {
+      kind: 'allow-list',
+      tools: [
+        'Read',
+        'Write',
+        'Grep',
+        'GetTimelineInfo',
+        'UpdateTimeline',
+        'AddTrack',
+        'AddClip',
+        'MoveClip',
+        'TrimClip',
+        'AddTransition',
+        'GetContext',
+      ],
+    },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 30,
   },
@@ -180,16 +185,19 @@ Guidelines:
 - Create generation prompts for VFX elements with precise specifications
 - Consider render performance and output quality tradeoffs
 - Provide clear descriptions of applied effects and their parameters`,
-    allowedTools: [
-      'Read',
-      'Grep',
-      'GenerateImage',
-      'GenerateVideo',
-      'ApplyEffect',
-      'RenderScene',
-      'GetTimelineInfo',
-      'GetContext',
-    ],
+    toolPolicy: {
+      kind: 'allow-list',
+      tools: [
+        'Read',
+        'Grep',
+        'GenerateImage',
+        'GenerateVideo',
+        'ApplyEffect',
+        'RenderScene',
+        'GetTimelineInfo',
+        'GetContext',
+      ],
+    },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
   },
@@ -211,7 +219,7 @@ Guidelines:
 - Provide concrete, actionable recommendations for fixes
 - Use QualityCheck for individual scene evaluation
 - Use QualityCheckConsistency for cross-scene consistency analysis`,
-    allowedTools: ['QualityCheck', 'QualityCheckConsistency'],
+    toolPolicy: { kind: 'allow-list', tools: ['QualityCheck', 'QualityCheckConsistency'] },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 10,
   },

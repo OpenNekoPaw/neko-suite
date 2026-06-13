@@ -992,8 +992,6 @@ export function buildAgentAssistantMessageFromStream(
     role: 'assistant',
     content: buildAgentAssistantStreamContent(stream),
     timestamp: input.timestamp,
-    thinking: stream.accumulatedThinking || undefined,
-    toolCalls: stream.collectedToolCalls.length > 0 ? [...stream.collectedToolCalls] : undefined,
     contentBlocks: stream.contentBlocks.length > 0 ? [...stream.contentBlocks] : undefined,
     ...(stream.hasError ? { isError: true } : {}),
   };

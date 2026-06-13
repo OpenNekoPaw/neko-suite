@@ -95,6 +95,7 @@ export interface StreamingCompleteProjectionInput {
   messages: readonly Message[];
   streamingMessageId: string | null;
   messageId?: string;
+  contentBlocks?: readonly ContentBlock[];
 }
 
 export interface MessageCancelledProjectionInput {
@@ -150,7 +151,6 @@ export function projectToolCallIntoMessages(
           timestamp,
           isStreaming: true,
           contentBlocks: blocks,
-          toolCalls: deriveToolCalls(blocks),
         },
       ],
     };
@@ -167,7 +167,6 @@ export function projectToolCallIntoMessages(
     return {
       ...message,
       contentBlocks,
-      toolCalls: deriveToolCalls(contentBlocks),
     };
   });
 
@@ -236,7 +235,6 @@ export function projectToolResultIntoMessages(
     return {
       ...message,
       contentBlocks: contentBlocksWithPlan,
-      toolCalls: deriveToolCalls(contentBlocksWithPlan),
       workItemIds: nextWorkItemIds,
     };
   });
@@ -312,7 +310,6 @@ export function projectToolConfirmationIntoMessages(
     return {
       ...message,
       contentBlocks,
-      toolCalls: deriveToolCalls(contentBlocks),
     };
   });
 
@@ -410,8 +407,6 @@ export function projectStreamingThinkingIntoMessages(
           id: newMessageId,
           role: 'assistant',
           content: '',
-          thinking: content,
-          isThinkingComplete: false,
           timestamp,
           isStreaming: true,
           contentBlocks: [
@@ -442,8 +437,6 @@ export function projectStreamingThinkingIntoMessages(
 
     return {
       ...message,
-      thinking: (message.thinking ?? '') + content,
-      isThinkingComplete: false,
       contentBlocks: contentBlocks.map((block) =>
         block.id === blockId ? { ...block, thinking: (block.thinking ?? '') + content } : block,
       ),
@@ -471,7 +464,9 @@ export function projectStreamingCompleteIntoMessages(
     if (message.id !== targetMessageId) return message;
 
     updated = true;
-    return completeStreamingMessage(message);
+    return input.contentBlocks && input.contentBlocks.length > 0
+      ? completeStreamingMessageWithContentBlocks(message, input.contentBlocks)
+      : completeStreamingMessage(message);
   });
 
   return {
@@ -639,18 +634,30 @@ function findOrCreateStreamingContentBlock(
 }
 
 function completeStreamingMessage(message: Message): Message {
-  const contentBlocks = (message.contentBlocks ?? []).flatMap((block) =>
-    completeStreamingContentBlock(block),
+  return completeStreamingMessageWithContentBlocks(
+    message,
+    (message.contentBlocks ?? []).flatMap((block) => completeStreamingContentBlock(block)),
   );
+}
+
+function completeStreamingMessageWithContentBlocks(
+  message: Message,
+  contentBlocks: readonly ContentBlock[],
+): Message {
+  const completedBlocks = contentBlocks.map((block) => ({
+    ...block,
+    isStreaming: false,
+    isThinkingComplete: block.type === 'thinking' ? true : block.isThinkingComplete,
+  }));
 
   return {
     ...message,
     isStreaming: false,
-    content: contentBlocks
+    content: completedBlocks
       .filter((block) => block.type === 'text')
       .map((block) => block.content ?? '')
       .join(''),
-    contentBlocks,
+    contentBlocks: completedBlocks,
   };
 }
 
@@ -734,8 +741,7 @@ function findTargetMessageForToolResult(
     const message = messages[index];
     if (
       message?.role === 'assistant' &&
-      (message.contentBlocks?.some((block) => block.type === 'tool_call') ||
-        Boolean(message.toolCalls?.length))
+      message.contentBlocks?.some((block) => block.type === 'tool_call')
     ) {
       return index;
     }
@@ -745,11 +751,10 @@ function findTargetMessageForToolResult(
 }
 
 function findMessageIndexByToolCallId(messages: readonly Message[], toolCallId: string): number {
-  return messages.findIndex(
-    (message) =>
-      message.contentBlocks?.some(
-        (block) => block.type === 'tool_call' && block.toolCall?.id === toolCallId,
-      ) || message.toolCalls?.some((toolCall) => toolCall.id === toolCallId),
+  return messages.findIndex((message) =>
+    message.contentBlocks?.some(
+      (block) => block.type === 'tool_call' && block.toolCall?.id === toolCallId,
+    ),
   );
 }
 
@@ -772,7 +777,6 @@ function findToolCallForResult(
     ...(message?.contentBlocks
       ?.map((block) => (block.type === 'tool_call' ? block.toolCall : undefined))
       .filter((toolCall): toolCall is ToolCall => toolCall !== undefined) ?? []),
-    ...(message?.toolCalls ?? []),
   ];
   if (toolCallId) {
     return toolCalls.find((toolCall) => toolCall.id === toolCallId);

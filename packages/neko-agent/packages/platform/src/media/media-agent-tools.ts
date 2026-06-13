@@ -87,16 +87,16 @@ function resolveNativeGenerationIntent(
   negativePrompt: string | undefined,
   details: Record<string, unknown>,
 ): ResolvedGenerationPrompt {
-  const fallbackPrompt = composeGenerationIntentPrompt(intent);
+  const defaultPrompt = composeGenerationIntentPrompt(intent);
   return {
-    prompt: fallbackPrompt,
+    prompt: defaultPrompt,
     ...(negativePrompt ? { negativePrompt } : {}),
     ...(providerId ? { providerId } : {}),
     metadata: buildProviderAdaptationMetadata({
       mode: details.mode === 'agentic' ? 'agentic' : 'native',
       source: intent.source,
       extractedIntent: intent,
-      providerPrompt: fallbackPrompt,
+      providerPrompt: defaultPrompt,
       riskFlags: typeof details.reason === 'string' ? [details.reason] : [],
     }),
   };
@@ -210,11 +210,11 @@ function resolveToolMediaTarget(
   args: Record<string, unknown>,
   options: ToolExecuteOptions | undefined,
   category: 'image' | 'video' | 'audio' | 'music',
-  fallbackCategory?: 'audio',
+  secondaryCategory?: 'audio',
 ): { providerId?: string; modelId?: string } {
   const runtimeTarget =
     readRuntimeMediaModel(options, category) ??
-    (fallbackCategory ? readRuntimeMediaModel(options, fallbackCategory) : undefined);
+    (secondaryCategory ? readRuntimeMediaModel(options, secondaryCategory) : undefined);
 
   return {
     providerId: readOptionalString(args.providerId) ?? runtimeTarget?.providerId,

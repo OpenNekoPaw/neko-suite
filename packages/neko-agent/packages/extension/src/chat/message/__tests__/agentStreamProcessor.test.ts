@@ -116,6 +116,47 @@ describe('AgentStreamProcessor', () => {
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('streaming', undefined);
     });
 
+    it('posts runtime-projected entity memory contribution payloads on stream completion', async () => {
+      const events = toAsyncIterable([
+        {
+          type: 'text',
+          content:
+            'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","title":"Opening","sections":[{"heading":"主要角色观察","content":"| 角色 | 当前证据支撑的观察 |\\n| --- | --- |\\n| 瑞德 | 红色围巾。 |"}]}\n```',
+        },
+        { type: 'done' },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+      const composite = result.contentBlocks.find((block) => block.type === 'composite')?.composite;
+      const contribution = composite?.extensions?.['neko.entityMemoryContributionPayload'] as
+        | EntityMemoryContribution
+        | undefined;
+
+      expect(contribution).toMatchObject({
+        contributionId: 'character-analysis-opening',
+        sourcePackage: 'neko-agent',
+        reviewPolicy: 'requires-user-review',
+        entityCandidates: [expect.objectContaining({ name: '瑞德' })],
+      });
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'streamComplete',
+          contentBlocks: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'composite',
+              composite: expect.objectContaining({
+                extensions: expect.objectContaining({
+                  'neko.entityMemoryContributionPayload': expect.objectContaining({
+                    contributionId: 'character-analysis-opening',
+                  }),
+                }),
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+
     it('should mark thinking complete when text starts', async () => {
       const events = toAsyncIterable([
         { type: 'thinking_content', thinking: 'Thinking...' },
@@ -1172,48 +1213,6 @@ describe('AgentStreamProcessor', () => {
       processor.updateToolResultWithUrls('conv-1', 'task-1', ['/path/to/file.png']);
     });
 
-    it('should update tool results matching taskId in toolCalls', () => {
-      const messages = [
-        {
-          toolCalls: [
-            {
-              id: 'tc-1',
-              result: {
-                success: true,
-                data: { taskId: 'task-1', backgroundMode: true },
-              },
-            },
-          ],
-        },
-      ];
-      const conversations = {
-        get: vi.fn().mockReturnValue({ messages }),
-        updateMessagesForConversation: vi.fn(),
-      };
-
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
-      processor.updateToolResultWithUrls('conv-1', 'task-1', ['/output/file.png']);
-
-      expect(conversations.updateMessagesForConversation).toHaveBeenCalledWith(
-        'conv-1',
-        expect.arrayContaining([
-          expect.objectContaining({
-            toolCalls: expect.arrayContaining([
-              expect.objectContaining({
-                result: expect.objectContaining({
-                  data: expect.objectContaining({
-                    status: 'completed',
-                    url: '/output/file.png',
-                    urls: ['/output/file.png'],
-                  }),
-                }),
-              }),
-            ]),
-          }),
-        ]),
-      );
-    });
-
     it('should update tool results matching taskId in contentBlocks', () => {
       const messages = [
         {
@@ -1247,12 +1246,17 @@ describe('AgentStreamProcessor', () => {
     it('should not update when taskId does not match', () => {
       const messages = [
         {
-          toolCalls: [
+          contentBlocks: [
             {
-              id: 'tc-1',
-              result: {
-                success: true,
-                data: { taskId: 'task-99', backgroundMode: true },
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-1',
+                name: 'generate',
+                arguments: {},
+                result: {
+                  success: true,
+                  data: { taskId: 'task-99', backgroundMode: true },
+                },
               },
             },
           ],

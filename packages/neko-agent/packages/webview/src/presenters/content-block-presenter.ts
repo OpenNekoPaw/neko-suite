@@ -240,7 +240,7 @@ export function projectContentBlocksUi(
   parentIsStreaming = false,
   formatTimestamp?: (timestamp: number) => string,
   siblingBlocks: readonly ContentBlock[] | undefined = blocks,
-  toolCalls?: readonly ToolCall[],
+  toolCalls: readonly ToolCall[] | undefined = deriveToolCallsFromContentBlocks(siblingBlocks),
   plugins?: PluginsAvailable,
 ): ContentBlockUiProjection[] {
   if (!blocks || blocks.length === 0) return [];
@@ -257,6 +257,16 @@ export function projectContentBlocksUi(
   );
 
   return aggregateConsecutiveToolProjections(projections);
+}
+
+export function deriveToolCallsFromContentBlocks(
+  blocks: readonly ContentBlock[] | undefined,
+): ToolCall[] {
+  return (
+    blocks
+      ?.map((block) => (block.type === 'tool_call' ? block.toolCall : undefined))
+      .filter((toolCall): toolCall is ToolCall => toolCall !== undefined) ?? []
+  );
 }
 
 export function projectContentBlocksDisplay(

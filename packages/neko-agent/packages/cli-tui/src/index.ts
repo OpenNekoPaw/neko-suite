@@ -29,9 +29,6 @@ export {
   getUserConfigPath,
   getWorkspaceConfigDir,
   getWorkspaceConfigPath,
-  getGlobalConfigDir,
-  getGlobalConfigPath,
-  getProjectConfigPath,
 } from './core/config';
 
 // Platform Bootstrap

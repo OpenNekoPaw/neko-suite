@@ -42,7 +42,7 @@ describe('agent stream task observer runtime', () => {
         observerInput = input;
         return unsubscribe;
       },
-      createFallbackProgress: (task) => ({
+      createRecoveryProgress: (task) => ({
         id: task.id,
         status: 'processing',
         progress: 1,
@@ -93,7 +93,7 @@ describe('agent stream task observer runtime', () => {
       observeProgress: (input) => {
         observerInput = input;
       },
-      createFallbackProgress: (task) => ({
+      createRecoveryProgress: (task) => ({
         id: task.id,
         status: 'processing',
         progress: 1,
@@ -145,7 +145,9 @@ describe('agent stream task observer runtime', () => {
     expect(persistResultUrls).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       taskId: 'task-1',
+      toolCallId: 'tool-1',
       urls: ['/tmp/cat.png'],
+      deliveryPlan: { kind: 'plan' },
     });
   });
 
@@ -162,7 +164,7 @@ describe('agent stream task observer runtime', () => {
       observeProgress: (input) => {
         observerInput = input;
       },
-      createFallbackProgress: (task) => ({
+      createRecoveryProgress: (task) => ({
         id: task.id,
         status: 'processing',
         progress: 1,
@@ -213,7 +215,7 @@ describe('agent stream task observer runtime', () => {
         },
       },
       postMessage: vi.fn(),
-      createFallbackProgress: () => ({
+      createRecoveryProgress: () => ({
         id: 'task-1',
         status: 'processing',
         progress: 1,

@@ -15,7 +15,7 @@ describe('DocumentResourceCacheProvider', () => {
     identity: { fileId: 'comic-v1', sizeBytes: 1024, mtimeMs: 42 },
   };
 
-  it('creates stable resource refs from archive refs with legacy cache metadata', () => {
+  it('creates stable resource refs from archive refs without embedding cache paths', () => {
     const ref = createDocumentResourceRefFromArchiveRef({
       kind: 'document-entry',
       source,
@@ -30,8 +30,8 @@ describe('DocumentResourceCacheProvider', () => {
     expect(ref.source.kind).toBe('document');
     expect(ref.source.metadata).toMatchObject({
       format: 'epub',
-      legacyCachePath: '/tmp/page-1.jpg',
     });
+    expect(ref.source.metadata).not.toHaveProperty('legacyCachePath');
     expect(ref.locator).toMatchObject({
       kind: 'document',
       entryPath: 'OPS/page-1.jpg',

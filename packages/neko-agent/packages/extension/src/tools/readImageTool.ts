@@ -590,10 +590,15 @@ function createVisionPreprocessPolicy(
   };
 }
 
-function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+function readBoundedInteger(
+  value: unknown,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number {
   return typeof value === 'number' && Number.isInteger(value)
     ? Math.max(min, Math.min(max, value))
-    : fallback;
+    : defaultValue;
 }
 
 function readString(value: unknown): string | undefined {

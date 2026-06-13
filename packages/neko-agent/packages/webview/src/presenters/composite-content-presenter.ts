@@ -21,7 +21,6 @@ import {
   parseDocumentArchiveResourceRef,
 } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
-import { inferEntityMemoryContributionFromCharacterAnalysis } from './entity-memory-contribution-inference';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
 
@@ -223,10 +222,7 @@ function resolveEntityMemoryContribution(composite: CompositeBlockData): {
   const contribution = candidates.find((candidate): candidate is EntityMemoryContribution =>
     isEntityMemoryContribution(candidate),
   );
-  if (contribution) return { entityMemoryContribution: contribution };
-
-  const inferredContribution = inferEntityMemoryContributionFromCharacterAnalysis(composite);
-  return inferredContribution ? { entityMemoryContribution: inferredContribution } : {};
+  return contribution ? { entityMemoryContribution: contribution } : {};
 }
 
 function normalizeCompositeStoryboardTable(

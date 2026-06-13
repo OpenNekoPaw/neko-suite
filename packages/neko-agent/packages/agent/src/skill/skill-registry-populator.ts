@@ -47,7 +47,7 @@ export interface SkillRegistryPopulationSummary {
 
 export class SkillRegistryPopulator {
   private readonly managedDiskSkillNames = new Set<string>();
-  private readonly managedDiskSkillFallbacks = new Map<string, Skill>();
+  private readonly managedDiskSkillRestores = new Map<string, Skill>();
 
   populate(input: SkillRegistryPopulateInput): SkillRegistryPopulationSummary {
     const builtins = input.builtinSkills ?? builtinSkills;
@@ -114,39 +114,39 @@ export class SkillRegistryPopulator {
   }
 
   private registerManagedSkill(registry: SkillRegistry, skill: Skill): void {
-    this.rememberManagedSkillFallback(registry, skill.name);
+    this.rememberManagedSkillRestore(registry, skill.name);
     registry.registerSkill(skill);
     this.managedDiskSkillNames.add(skill.name);
   }
 
   private registerManagedLazySkill(registry: SkillRegistry, lazySkill: LazySkill): void {
-    this.rememberManagedSkillFallback(registry, lazySkill.name);
+    this.rememberManagedSkillRestore(registry, lazySkill.name);
     registry.registerLazySkill(lazySkill);
     this.managedDiskSkillNames.add(lazySkill.name);
   }
 
-  private rememberManagedSkillFallback(registry: SkillRegistry, skillName: string): void {
-    if (this.managedDiskSkillFallbacks.has(skillName)) {
+  private rememberManagedSkillRestore(registry: SkillRegistry, skillName: string): void {
+    if (this.managedDiskSkillRestores.has(skillName)) {
       return;
     }
 
     const existing = registry.getSkill(skillName);
     if (existing) {
-      this.managedDiskSkillFallbacks.set(skillName, existing);
+      this.managedDiskSkillRestores.set(skillName, existing);
     }
   }
 
   private clearManagedDiskSkills(registry: SkillRegistry): void {
     for (const skillName of this.managedDiskSkillNames) {
-      const fallback = this.managedDiskSkillFallbacks.get(skillName);
-      if (fallback) {
-        registry.registerSkill(fallback);
+      const restoredSkill = this.managedDiskSkillRestores.get(skillName);
+      if (restoredSkill) {
+        registry.registerSkill(restoredSkill);
       } else {
         registry.unregisterSkill(skillName);
       }
     }
 
     this.managedDiskSkillNames.clear();
-    this.managedDiskSkillFallbacks.clear();
+    this.managedDiskSkillRestores.clear();
   }
 }

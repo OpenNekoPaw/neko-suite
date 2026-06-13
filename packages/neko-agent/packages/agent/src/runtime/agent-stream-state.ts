@@ -8,6 +8,7 @@ import {
 } from '@neko-agent/types';
 import type { AgentEvent } from '../session';
 import { createPlanContentBlockFromToolResultData } from '../plan';
+import { maybeAttachInferredEntityMemoryContribution } from '../artifact/entity-memory-contribution-inference';
 import { applyToolResultBackfillToResult } from './tool-result-backfill';
 
 export interface CollectedToolCall {
@@ -115,6 +116,7 @@ export type AgentStreamWebviewMessage =
       type: 'streamComplete';
       conversationId: string;
       messageId: string;
+      contentBlocks?: readonly ContentBlock[];
     }
   | {
       type: 'contextTokenCount';
@@ -310,6 +312,19 @@ export function finalizeAgentStreamProjectionState(
   state.currentTextBlockId = null;
   state.currentThinkingBlockId = null;
   return state;
+}
+
+export function buildStreamCompleteProjectionMessage(input: {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly contentBlocks: readonly ContentBlock[];
+}): AgentStreamWebviewMessage {
+  return {
+    type: 'streamComplete',
+    conversationId: input.conversationId,
+    messageId: input.messageId,
+    ...(input.contentBlocks.length > 0 ? { contentBlocks: input.contentBlocks } : {}),
+  };
 }
 
 function applyThinkingContent(
@@ -520,7 +535,7 @@ function finalizeTextContentBlock(block: ContentBlock): ContentBlock[] {
       id: `${block.id}-composite-${index + 1}`,
       type: 'composite' as const,
       timestamp: block.timestamp,
-      composite,
+      composite: maybeAttachInferredEntityMemoryContribution(composite),
     })),
   );
   return nextBlocks;

@@ -27,13 +27,11 @@
 import type { IdcStage } from '@neko-agent/types';
 
 // =============================================================================
-// L2 modes — reused from mode-activation-matrix.ts
+// L2 modes
 // =============================================================================
 
 /**
- * L2 execution modes. Structurally identical to the legacy L2Mode in
- * mode-activation-matrix.ts; re-declared here to keep stage logic independent
- * of the deprecated primitive module.
+ * L2 execution modes for IDC stage activation.
  */
 export type StageMode = 'plan' | 'ask' | 'auto';
 

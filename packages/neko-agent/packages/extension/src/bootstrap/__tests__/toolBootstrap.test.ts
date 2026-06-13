@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TOOL_NAMES_SYSTEM } from '@neko/shared';
-import { registerExtensionToolGroups, registerExtensionTools } from '../toolBootstrap';
+import {
+  LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA,
+  registerExtensionToolGroups,
+  registerExtensionTools,
+} from '../toolBootstrap';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
@@ -38,6 +42,9 @@ describe('toolBootstrap', () => {
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
     expect(registered).toContain(TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE);
+    expect(new Set(registered)).toEqual(
+      new Set(LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA.map((entry) => entry.toolName)),
+    );
   });
 
   it('skips already registered extension tools on re-registration', () => {
@@ -72,5 +79,29 @@ describe('toolBootstrap', () => {
         enabled: true,
       }),
     );
+  });
+
+  it('documents every remaining centralized tool with LCD lifecycle metadata', () => {
+    expect(LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS,
+          kind: 'agent-owned-meta-tool',
+          lcdId: 'LCD-002',
+        }),
+        expect.objectContaining({
+          toolName: TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+          kind: 'compatibility-bridge',
+          lcdId: 'LCD-002',
+        }),
+      ]),
+    );
+
+    for (const entry of LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA) {
+      expect(entry.owner).toBeTruthy();
+      expect(entry.replacement).toBeTruthy();
+      expect(entry.removeAfter).toBeTruthy();
+      expect(entry.tests.length).toBeGreaterThan(0);
+    }
   });
 });

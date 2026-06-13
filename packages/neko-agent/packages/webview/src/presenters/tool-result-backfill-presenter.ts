@@ -10,7 +10,7 @@ import type {
   ToolResultBackfillDiagnostic,
 } from '@neko/shared';
 import { DEFAULT_TOOL_RESULT_BACKFILL_OVERWRITE_KEYS } from '@neko/shared';
-import { deriveToolCalls, updateToolCallInBlocks } from './message-presenter';
+import { updateToolCallInBlocks } from './message-presenter';
 
 export interface ToolResultBackfillMessageProjectionInput {
   readonly messages: readonly Message[];
@@ -59,7 +59,6 @@ export function projectToolResultBackfillIntoMessages(
     return {
       ...message,
       contentBlocks,
-      toolCalls: deriveToolCalls(contentBlocks),
     };
   });
 

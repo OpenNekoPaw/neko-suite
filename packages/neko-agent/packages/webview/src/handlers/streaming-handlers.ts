@@ -76,6 +76,7 @@ const handleStreamComplete: MessageHandler<'streamComplete'> = (
       messages: msgs,
       streamingMessageId: streamingId,
       messageId: message.messageId,
+      contentBlocks: message.contentBlocks,
     });
 
     return {

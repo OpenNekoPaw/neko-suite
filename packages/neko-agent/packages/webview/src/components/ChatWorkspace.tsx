@@ -219,7 +219,7 @@ export function ChatWorkspace({
   } = projectChatWorkspaceModelState({
     chatModelOptions: settings.chatModelOptions,
     selectedModel,
-    fallbackContextWindow: settings.maxTokens,
+    defaultContextWindow: settings.maxTokens,
     sessionMode,
     mediaModelSelection,
   });

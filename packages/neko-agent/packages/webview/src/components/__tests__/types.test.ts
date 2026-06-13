@@ -33,23 +33,27 @@ describe('types validation', () => {
       expect(typeof message.timestamp).toBe('number');
     });
 
-    it('should accept valid assistant message with tool calls', () => {
+    it('should accept valid assistant message with content block tool calls', () => {
       const message: Message = {
         id: '456',
         role: 'assistant',
         content: 'Let me help you',
         timestamp: Date.now(),
-        toolCalls: [
+        contentBlocks: [
           {
-            id: 'tc1',
-            name: 'read_file',
-            arguments: { path: '/test.txt' },
+            id: 'block-tc1',
+            type: 'tool_call',
+            timestamp: Date.now(),
+            toolCall: {
+              id: 'tc1',
+              name: 'read_file',
+              arguments: { path: '/test.txt' },
+            },
           },
         ],
         isStreaming: false,
       };
-      expect(message.toolCalls).toBeDefined();
-      expect(message.toolCalls?.length).toBe(1);
+      expect(message.contentBlocks?.[0]?.toolCall?.id).toBe('tc1');
       expect(message.isStreaming).toBe(false);
     });
 

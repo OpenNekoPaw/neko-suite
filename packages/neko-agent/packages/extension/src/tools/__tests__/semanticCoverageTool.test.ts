@@ -75,8 +75,9 @@ describe('semantic coverage tool', () => {
   it('falls back clearly when stable source refs are missing', async () => {
     const toolResult = (await executeSemanticCoverageQuery({
       sourceRef: {
-        kind: 'legacy-cache-path',
-        cachePath: '${PROJECT}/.neko/.cache/document/page-1.json',
+        kind: 'runtime',
+        runtimeKind: 'cache-path',
+        value: '${PROJECT}/.neko/.cache/document/page-1.json',
       },
       analysisKind: 'ocr',
       range: { startLine: 1, endLine: 10 },

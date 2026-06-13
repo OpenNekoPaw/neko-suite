@@ -37,6 +37,78 @@ import { createReadDocumentImageTool } from '../tools/readDocumentImageTool';
 import { createReadImageTool } from '../tools/readImageTool';
 import { createSemanticCoverageTool } from '../tools/semanticCoverageTool';
 
+export interface LegacyCentralizedToolRegistrationMetadata {
+  readonly toolName: string;
+  readonly kind: 'agent-owned-meta-tool' | 'compatibility-bridge';
+  readonly owner: string;
+  readonly replacement: string;
+  readonly removeAfter: string;
+  readonly lcdId: string;
+  readonly tests: readonly string[];
+}
+
+export const LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA: readonly LegacyCentralizedToolRegistrationMetadata[] =
+  [
+    {
+      toolName: TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS,
+      kind: 'agent-owned-meta-tool',
+      owner: 'neko-agent-extension',
+      replacement: 'Agent-owned plugin skill catalogue meta-tool',
+      removeAfter: 'Keep while Agent owns cross-extension skill catalogue discovery.',
+      lcdId: 'LCD-002',
+      tests: [
+        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
+      ],
+    },
+    {
+      toolName: TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+      kind: 'compatibility-bridge',
+      owner: 'neko-agent-extension',
+      replacement: 'Document capability provider or runtime document reader bridge',
+      removeAfter:
+        'Remove once document reading is exposed through an AgentCapabilityProvider path.',
+      lcdId: 'LCD-002',
+      tests: [
+        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
+      ],
+    },
+    {
+      toolName: TOOL_NAMES_SYSTEM.READ_IMAGE,
+      kind: 'compatibility-bridge',
+      owner: 'neko-agent-extension',
+      replacement: 'Image/document capability provider or runtime media reader bridge',
+      removeAfter: 'Remove once image reading is exposed through an AgentCapabilityProvider path.',
+      lcdId: 'LCD-002',
+      tests: [
+        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
+      ],
+    },
+    {
+      toolName: TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+      kind: 'compatibility-bridge',
+      owner: 'neko-agent-extension',
+      replacement: 'Document image capability provider or runtime document reader bridge',
+      removeAfter:
+        'Remove once document image reading is exposed through an AgentCapabilityProvider path.',
+      lcdId: 'LCD-002',
+      tests: [
+        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
+      ],
+    },
+    {
+      toolName: TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
+      kind: 'compatibility-bridge',
+      owner: 'neko-agent-extension',
+      replacement: '@neko/search semantic coverage provider capability path',
+      removeAfter:
+        'Remove once semantic coverage querying is exposed through package capability provider metadata.',
+      lcdId: 'LCD-002',
+      tests: [
+        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
+      ],
+    },
+  ];
+
 /**
  * Register neko-agent's own meta-tools.
  * Domain tools are now registered by sub-packages via CapabilityProvider.

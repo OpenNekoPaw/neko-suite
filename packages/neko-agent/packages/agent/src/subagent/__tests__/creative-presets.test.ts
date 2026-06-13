@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from '../creative-presets';
+import type { AgentToolPolicy } from '../types';
 
 // =============================================================================
 // Tests
@@ -24,8 +25,11 @@ describe('CREATIVE_PRESETS', () => {
     for (const [type, preset] of Object.entries(CREATIVE_PRESETS)) {
       expect(preset.description, `${type} missing description`).toBeTruthy();
       expect(preset.systemPrompt, `${type} missing systemPrompt`).toBeTruthy();
-      expect(Array.isArray(preset.allowedTools), `${type} allowedTools not array`).toBe(true);
-      expect(preset.allowedTools.length, `${type} has no allowed tools`).toBeGreaterThan(0);
+      expect(preset.toolPolicy.kind, `${type} invalid tool policy`).toBe('allow-list');
+      expect(
+        getAllowListTools(preset.toolPolicy).length,
+        `${type} has no allowed tools`,
+      ).toBeGreaterThan(0);
       expect(['fast', 'balanced', 'powerful'], `${type} invalid modelTier`).toContain(
         preset.defaultModelTier,
       );
@@ -38,14 +42,14 @@ describe('CREATIVE_PRESETS', () => {
   });
 
   it('editor should have timeline tools', () => {
-    const editorTools = CREATIVE_PRESETS.editor.allowedTools;
+    const editorTools = getAllowListTools(CREATIVE_PRESETS.editor.toolPolicy);
     expect(editorTools).toContain('GetTimelineInfo');
     expect(editorTools).toContain('AddClip');
     expect(editorTools).toContain('AddTransition');
   });
 
   it('composer should have audio generation tools', () => {
-    const composerTools = CREATIVE_PRESETS.composer.allowedTools;
+    const composerTools = getAllowListTools(CREATIVE_PRESETS.composer.toolPolicy);
     expect(composerTools).toContain('GenerateAudio');
     expect(composerTools).toContain('GenerateMusic');
     expect(composerTools).toContain('SynthesizeSpeech');
@@ -54,10 +58,20 @@ describe('CREATIVE_PRESETS', () => {
   it('all presets except quality-checker should include GetContext tool', () => {
     for (const [type, preset] of Object.entries(CREATIVE_PRESETS)) {
       if (type === 'quality-checker') continue;
-      expect(preset.allowedTools, `${type} missing GetContext`).toContain('GetContext');
+      expect(getAllowListTools(preset.toolPolicy), `${type} missing GetContext`).toContain(
+        'GetContext',
+      );
     }
   });
 });
+
+function getAllowListTools(policy: AgentToolPolicy): readonly string[] {
+  if (policy.kind !== 'allow-list') {
+    throw new Error(`Expected allow-list policy, got ${policy.kind}`);
+  }
+
+  return policy.tools;
+}
 
 describe('isCreativeAgentType', () => {
   it('should return true for creative types', () => {

@@ -133,7 +133,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个
 | `context/` | ContextManager + TokenBudgetManager + ConversationCompressor |
 | `permission/` | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式） |
 | `hooks/` | ExecutorHooks + composeHooks + factory |
-| `hook-loader/` | HookLoader — 用户自定义 Hook 加载（.hook/ 目录，IHookFileSystem/IHookCompiler 接口） |
+| `hook-loader/` | SettingsHookLoader + Markdown hook catalog（`.neko/settings.json` 执行 hooks，`.neko/hooks/*.md` 配置展示） |
 | `prompt/` | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md） |
 | `runtime/` | 统一 runtime bootstrap 契约（workflow/artifact/capability/feedback）+ `createAgentSessionWithRuntime()` |
 | `plan/` | Plan 管理器 + Markdown 解析 |
@@ -175,7 +175,7 @@ LLM 适配和媒体生成服务。62 个源文件。
 所有 AI 功能委托给 `@neko/agent` 和 `@neko/platform`。Extension 只负责：
 - VSCode EventEmitter 桥接
 - postMessage 消息路由
-- 文件系统操作（IFileReader/IHookFileSystem 的 VSCode 实现）
+- 文件系统操作（IFileReader 与 HookFileService 的 VSCode 实现）
 - Webview 生命周期管理
 
 | 模块 | 职责 |
@@ -183,7 +183,7 @@ LLM 适配和媒体生成服务。62 个源文件。
 | `bootstrap/` | 服务初始化 + ServiceCollection 组装 |
 | `chat/` | ChatViewProvider + Webview 消息 Router + 专用桥接 Handler（task/skill/plan/settings/context/conversation/file/integration/slashCommand） |
 | `chat/message/` | AgentMessageTurnHandler（消息回合桥接）+ AgentTurnBridge + AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor |
-| `ai/` | AgentRunner（薄包装 AgentSessionRunner）+ AgentManager（多会话池委托 @neko/agent/runtime）+ HookManager（VSCode hook 文件适配）+ AgentContext |
+| `ai/` | AgentRunner（薄包装 AgentSessionRunner）+ AgentManager（多会话池委托 @neko/agent/runtime）+ AgentContext |
 | `services/` | ConfigBridge（配置消息路由）+ SkillFileService/HookFileService（文件监听）+ ConnectionStateManager |
 | `editor/` | EditorModel + EditorRegistry（活动编辑器抽象） |
 | `tools/` | 扩展工具注册（NekoCut/NekoCanvas/NekoStory API 桥接） |

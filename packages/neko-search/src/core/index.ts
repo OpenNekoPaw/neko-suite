@@ -9,6 +9,13 @@ export {
   rankProjectSearchItems,
 } from './normalization';
 export {
+  aggregateProjectSearchFreshnessValues,
+  aggregateProjectSearchItemsFreshness,
+  aggregateProjectSearchPartitionStatus,
+  dedupeCreativeEntityProjectSearchItems,
+  type ProjectSearchPartitionStatusAggregationOptions,
+} from './aggregation';
+export {
   DebouncedProjectCacheWriter,
   readProjectSearchCacheManifest,
   writeProjectSearchCacheManifest,

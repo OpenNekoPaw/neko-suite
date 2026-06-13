@@ -73,10 +73,6 @@ export type IdcStage = 'draft' | 'plan' | 'apply';
 
 /**
  * Classification of the upcoming work. Drives the stage-planner's skip logic.
- *
- * Kept structurally compatible with the legacy `TaskShape` in primitive.ts so
- * the same ActivationClassifier output can feed both planners during the
- * migration window.
  */
 export type StageTaskShape =
   /** Read-only / low-risk tool call (no approval needed). */

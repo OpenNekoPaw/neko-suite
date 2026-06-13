@@ -22,6 +22,17 @@ export {
   type NpcProfileAssetMetadata,
   type NpcProfileAssemblyResult,
 } from './npcProfileAssembler';
+export {
+  dashboardCreativeEntityRowToProjectSearchItem,
+  dashboardCreativeEntityRowsToProjectSearchItems,
+  dashboardCreativeEntityStateFreshnessValues,
+  extractLineBasedScriptCharacters,
+  extractScriptCharacterCandidates,
+  scriptCharacterCandidateToProjectSearchItem,
+  type ContextScriptEntitySearchItemOptions,
+  type ScriptEntityCandidate,
+  type StoryScriptParser,
+} from './projectSearch';
 
 export interface EntitySearchAdapterOptions {
   readonly projectRoot: string;

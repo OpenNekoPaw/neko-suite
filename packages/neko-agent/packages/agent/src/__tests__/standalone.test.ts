@@ -60,10 +60,10 @@ import {
   MemoryHooks,
   composeHooks,
 
-  // Hook Loader
-  HookLoader,
-  HOOK_DIRECTORIES,
-  DEFAULT_HOOK_METADATA,
+  // Hook Loading
+  SettingsHookLoader,
+  createHookFileRuntime,
+  HOOK_MARKDOWN_FILE_EXTENSION,
 } from '../index';
 
 function createMockProjectMemory(content: string | null): IProjectMemoryManager {
@@ -139,10 +139,10 @@ describe('Standalone Mode', () => {
       expect(composeHooks).toBeDefined();
     });
 
-    it('should export hook-loader components', () => {
-      expect(HookLoader).toBeDefined();
-      expect(HOOK_DIRECTORIES).toBeDefined();
-      expect(DEFAULT_HOOK_METADATA).toBeDefined();
+    it('should export hook loading components', () => {
+      expect(SettingsHookLoader).toBeDefined();
+      expect(createHookFileRuntime).toBeDefined();
+      expect(HOOK_MARKDOWN_FILE_EXTENSION).toBe('.md');
     });
   });
 
@@ -313,11 +313,9 @@ describe('Standalone Mode', () => {
     });
   });
 
-  describe('Hook Loader', () => {
-    it('should have correct default values', () => {
-      expect(HOOK_DIRECTORIES.project).toBe('.hook');
-      expect(DEFAULT_HOOK_METADATA.enabled).toBe(true);
-      expect(DEFAULT_HOOK_METADATA.priority).toBe(100);
+  describe('Hook Loading', () => {
+    it('should expose markdown hook file defaults', () => {
+      expect(HOOK_MARKDOWN_FILE_EXTENSION).toBe('.md');
     });
   });
 

@@ -47,13 +47,6 @@ describe('message presenter', () => {
               },
             },
           ],
-          toolCalls: [
-            {
-              id: 'tool-1',
-              name: 'GenerateImage',
-              arguments: { prompt: 'cat' },
-            },
-          ],
         },
       ],
     });
@@ -404,8 +397,6 @@ describe('message presenter', () => {
       messages: [
         {
           id: 'msg-1',
-          thinking: 'Thinking more',
-          isThinkingComplete: false,
           contentBlocks: [
             {
               id: 'block-thinking-msg-1',
@@ -530,6 +521,62 @@ describe('message presenter', () => {
     ]);
   });
 
+  it('uses runtime-projected composite content blocks when streaming completes', () => {
+    const created = projectStreamingTextIntoMessages({
+      messages: [],
+      streamingMessageId: null,
+      messageId: 'msg-1',
+      content:
+        'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"主要角色观察","content":"| 角色 | 观察 |\\n| --- | --- |\\n| 瑞德 | 红色围巾。 |"}]}\n```',
+      now: () => 1000,
+    });
+
+    const completed = projectStreamingCompleteIntoMessages({
+      messages: created.messages,
+      streamingMessageId: 'msg-1',
+      contentBlocks: [
+        {
+          id: 'block-msg-1',
+          type: 'text',
+          timestamp: 1000,
+          content: 'Storyboard',
+          isStreaming: false,
+        },
+        {
+          id: 'block-msg-1-composite-1',
+          type: 'composite',
+          timestamp: 1000,
+          composite: {
+            template: 'storyboard-table',
+            extensions: {
+              'neko.entityMemoryContributionPayload': {
+                contributionId: 'character-analysis-opening',
+                sourcePackage: 'neko-agent',
+                sourceRef: { kind: 'manual', label: 'Agent character analysis: Opening' },
+                reviewPolicy: 'requires-user-review',
+              },
+            },
+            sections: [
+              {
+                heading: '主要角色观察',
+                content: '| 角色 | 观察 |\n| --- | --- |\n| 瑞德 | 红色围巾。 |',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(completed.messages[0]?.contentBlocks?.[1]?.composite).toMatchObject({
+      extensions: {
+        'neko.entityMemoryContributionPayload': {
+          contributionId: 'character-analysis-opening',
+          reviewPolicy: 'requires-user-review',
+        },
+      },
+    });
+  });
+
   it('appends queued system messages', () => {
     expect(
       projectQueuedMessageIntoMessages({
@@ -573,7 +620,6 @@ function createToolMessages(
           toolCall,
         },
       ],
-      toolCalls: [toolCall],
       ...overrides,
     },
   ];

@@ -24,10 +24,6 @@ import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types'
 import type { ModelTierResolver } from '../subagent';
 import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
 
-export interface AgentRuntimeHookSource {
-  getHooks(): readonly ExecutorHooks[];
-}
-
 export interface AgentRuntimeHostBindings {
   readonly createService: () => IService;
   readonly toolRegistry: IToolRegistry;
@@ -48,7 +44,6 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly thinkingBudget?: number;
   readonly executionMode?: ExecutionMode;
   readonly hooks?: readonly ExecutorHooks[];
-  readonly hookSource?: AgentRuntimeHookSource;
   readonly workspaceRoot?: string;
   readonly taskManager?: IRuntimeTaskManager;
   readonly conversationId?: string;
@@ -147,7 +142,7 @@ function resolveCapabilityPromptFragments(
 }
 
 function resolveHooks(
-  input: Pick<AgentRuntimeSessionAssemblyInput, 'hooks' | 'hookSource'>,
+  input: Pick<AgentRuntimeSessionAssemblyInput, 'hooks'>,
 ): readonly ExecutorHooks[] {
-  return input.hooks ?? input.hookSource?.getHooks() ?? [];
+  return input.hooks ?? [];
 }

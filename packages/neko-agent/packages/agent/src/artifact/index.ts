@@ -41,6 +41,12 @@ export {
 } from './character-memory-artifact';
 
 export {
+  findProjectedEntityMemoryContribution,
+  inferEntityMemoryContributionFromCharacterAnalysis,
+  maybeAttachInferredEntityMemoryContribution,
+} from './entity-memory-contribution-inference';
+
+export {
   buildShotImagePrepReviewArtifact,
   buildStoryboardShotImagePrepReviewArtifact,
   type ShotImagePrepArtifactInput,

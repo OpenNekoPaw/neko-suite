@@ -4,8 +4,7 @@
  * See: docs/architecture/agent-unified-workflow.md §3 (entry rules), §4 (stages)
  *
  * Responsibility: for one ReAct round, decide which IDC stages to activate,
- * given L2 mode + task shape + entry signal. Mirrors the shape of the legacy
- * `plan()` in activation-planner.ts so consumers can switch incrementally.
+ * given L2 mode + task shape + entry signal.
  *
  * Pure: no side effects, no clock reads (caller supplies `now`), no I/O.
  *

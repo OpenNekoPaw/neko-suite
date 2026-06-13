@@ -487,20 +487,20 @@ function clampLookbackLimit(
   requested: StoryContinuityLookbackLimit,
   max: StoryContinuityLookbackLimit,
 ): Required<StoryContinuityLookbackLimit> {
-  const fallback = defaultContinuityLookbackLimit();
+  const defaults = defaultContinuityLookbackLimit();
   return {
-    boundary: requested.boundary ?? fallback.boundary,
+    boundary: requested.boundary ?? defaults.boundary,
     maxEvents: Math.min(
-      requested.maxEvents ?? fallback.maxEvents,
-      max.maxEvents ?? fallback.maxEvents,
+      requested.maxEvents ?? defaults.maxEvents,
+      max.maxEvents ?? defaults.maxEvents,
     ),
     maxCharacterStates: Math.min(
-      requested.maxCharacterStates ?? fallback.maxCharacterStates,
-      max.maxCharacterStates ?? fallback.maxCharacterStates,
+      requested.maxCharacterStates ?? defaults.maxCharacterStates,
+      max.maxCharacterStates ?? defaults.maxCharacterStates,
     ),
     maxConstraints: Math.min(
-      requested.maxConstraints ?? fallback.maxConstraints,
-      max.maxConstraints ?? fallback.maxConstraints,
+      requested.maxConstraints ?? defaults.maxConstraints,
+      max.maxConstraints ?? defaults.maxConstraints,
     ),
   };
 }

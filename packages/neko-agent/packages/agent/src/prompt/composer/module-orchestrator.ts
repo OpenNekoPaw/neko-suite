@@ -15,7 +15,7 @@
  *
  * Coexists with existing `composer.setSection(...)` callers: sections written by
  * modules use ids tracked in `_ownedByModule` and removed only by the orchestrator;
- * sections written directly by legacy callers are untouched.
+ * sections written directly by external callers are untouched.
  */
 import type { ISystemPromptComposer } from '../system-prompt-composer-types';
 import type { PromptContext } from '../context';

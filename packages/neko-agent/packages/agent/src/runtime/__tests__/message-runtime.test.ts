@@ -714,6 +714,17 @@ describe('message runtime helpers', () => {
               content: 'Done',
               isStreaming: false,
             },
+            {
+              id: 'block-tool-call-1',
+              type: 'tool_call',
+              timestamp: 124,
+              toolCall: {
+                id: 'call-1',
+                name: 'read_file',
+                arguments: { path: 'src/app.ts' },
+                result: { success: true, data: { ok: true } },
+              },
+            },
           ],
         },
       }),
@@ -722,15 +733,6 @@ describe('message runtime helpers', () => {
       role: 'assistant',
       content: 'Done',
       timestamp: 123,
-      thinking: 'Thinking',
-      toolCalls: [
-        {
-          id: 'call-1',
-          name: 'read_file',
-          arguments: { path: 'src/app.ts' },
-          result: { success: true, data: { ok: true } },
-        },
-      ],
       contentBlocks: [
         {
           id: 'block-1',
@@ -738,6 +740,17 @@ describe('message runtime helpers', () => {
           timestamp: 123,
           content: 'Done',
           isStreaming: false,
+        },
+        {
+          id: 'block-tool-call-1',
+          type: 'tool_call',
+          timestamp: 124,
+          toolCall: {
+            id: 'call-1',
+            name: 'read_file',
+            arguments: { path: 'src/app.ts' },
+            result: { success: true, data: { ok: true } },
+          },
         },
       ],
     });

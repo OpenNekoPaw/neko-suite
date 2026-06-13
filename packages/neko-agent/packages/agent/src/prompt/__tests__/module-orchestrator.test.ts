@@ -132,8 +132,8 @@ describe('ModuleOrchestrator', () => {
     const cache = new PromptSectionCache();
     const orch = new ModuleOrchestrator(registry, composer, cache);
 
-    // Legacy direct setSection call — not owned by any module.
-    composer.setSection({ id: 'legacy:foo', layer: 'environment', content: 'LEGACY' });
+    // Manual direct setSection call — not owned by any module.
+    composer.setSection({ id: 'manual:foo', layer: 'environment', content: 'MANUAL' });
 
     const mod = makeModule('m', {
       render: async () => [{ sectionId: 'm:foo', layer: 'skill', content: 'MOD' }],
@@ -141,10 +141,10 @@ describe('ModuleOrchestrator', () => {
     registry.register(mod);
     await orch.applyOne(mod, minimalCtx());
 
-    // Re-render cycles should leave legacy section alone.
+    // Re-render cycles should leave manually owned sections alone.
     await orch.applyOne(mod, minimalCtx());
-    expect(composer.hasSection('legacy:foo')).toBe(true);
-    expect(composer.getSection('legacy:foo')?.content).toBe('LEGACY');
+    expect(composer.hasSection('manual:foo')).toBe(true);
+    expect(composer.getSection('manual:foo')?.content).toBe('MANUAL');
   });
 
   it('null render result clears prior sections without writing new ones', async () => {

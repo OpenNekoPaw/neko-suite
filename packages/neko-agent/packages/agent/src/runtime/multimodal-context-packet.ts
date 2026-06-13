@@ -927,9 +927,9 @@ function normalizeArtifactType(
 
 function normalizeEvidenceModality(
   value: string | undefined,
-  fallback: AgentGeneratedArtifactProjection['type'],
+  defaultType: AgentGeneratedArtifactProjection['type'],
 ): AgentMediaModality {
-  const candidate = value ?? fallback;
+  const candidate = value ?? defaultType;
   switch (candidate) {
     case 'text':
     case 'image':

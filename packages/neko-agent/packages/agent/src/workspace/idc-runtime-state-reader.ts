@@ -176,11 +176,6 @@ function toPendingApprovalSnapshot(value: unknown): PendingApprovalSnapshot | nu
 }
 
 function toPersistedFeedbackGuidance(value: unknown): PersistedFeedbackGuidanceSnapshot | null {
-  const legacyContent = asNullableString(value)?.trim();
-  if (legacyContent) {
-    return { content: legacyContent };
-  }
-
   const entry = asRecord(value);
   if (!entry) {
     return null;

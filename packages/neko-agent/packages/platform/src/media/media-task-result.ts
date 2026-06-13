@@ -41,7 +41,7 @@ export async function finalizeCompletedMediaTaskOutputs(
   input: FinalizeCompletedMediaTaskOutputsInput,
 ): Promise<FinalizedMediaTaskOutputs> {
   const outputs = input.task.outputs ?? [];
-  const fallback = {
+  const remoteOnlyResult = {
     resultUrls: outputs.map((output) => output.url).filter(Boolean),
     thumbnailUrl: outputs[0]?.url,
     generatedAssets: [],
@@ -53,7 +53,7 @@ export async function finalizeCompletedMediaTaskOutputs(
     !input.outputDir ||
     !input.saveOutputs
   ) {
-    return fallback;
+    return remoteOnlyResult;
   }
 
   try {
@@ -61,7 +61,7 @@ export async function finalizeCompletedMediaTaskOutputs(
       transcodeFile: input.transcodeFile,
     });
     if (localPaths.length === 0) {
-      return fallback;
+      return remoteOnlyResult;
     }
 
     const generatedAssets = buildGeneratedMediaAssets({
@@ -88,6 +88,6 @@ export async function finalizeCompletedMediaTaskOutputs(
     };
   } catch (error) {
     input.logger?.warn?.('Failed to save generated media outputs', error);
-    return fallback;
+    return remoteOnlyResult;
   }
 }

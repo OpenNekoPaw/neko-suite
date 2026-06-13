@@ -26,7 +26,6 @@ const MAX_COMPOSITE_SECTIONS = 200;
 const MAX_SECTION_MEDIA_REFS = 12;
 const MAX_STORYBOARD_DIAGNOSTIC_SECTIONS = 8;
 const STORYBOARD_DOMAIN_KIND = 'StoryboardTable';
-const LEGACY_STORYBOARD_DOMAIN_KIND = 'StoryboardTableV1';
 
 const COMPOSITE_CONTENT_FENCE_PATTERN =
   /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
@@ -95,11 +94,11 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
       : undefined;
   const title = readString(value, 'title') ?? semanticStoryboard?.table?.title;
   const sections = normalizeCompositeSections(value.sections);
-  const fallbackSections =
+  const projectedSections =
     template === 'storyboard-table'
-      ? createStoryboardFallbackSections(semanticStoryboard?.table, semanticStoryboard?.diagnostics)
+      ? createStoryboardDisplaySections(semanticStoryboard?.table, semanticStoryboard?.diagnostics)
       : [];
-  const normalizedSections = sections.length > 0 ? sections : fallbackSections;
+  const normalizedSections = sections.length > 0 ? sections : projectedSections;
   if (normalizedSections.length === 0) return null;
 
   return {
@@ -127,7 +126,7 @@ function normalizeArtifactBackedStoryboardBlock(
     readString(storyboardBlock, 'title') ??
     readString(value, 'title') ??
     semanticStoryboard.table?.title;
-  const sections = createStoryboardFallbackSections(
+  const sections = createStoryboardDisplaySections(
     semanticStoryboard.table,
     semanticStoryboard.diagnostics,
   );
@@ -150,8 +149,7 @@ function isStoryboardDomainBlock(value: unknown): value is Record<string, unknow
   return (
     isRecord(value) &&
     value.kind === 'domain' &&
-    (value.domainKind === STORYBOARD_DOMAIN_KIND ||
-      value.domainKind === LEGACY_STORYBOARD_DOMAIN_KIND) &&
+    value.domainKind === STORYBOARD_DOMAIN_KIND &&
     value.payload !== undefined
   );
 }
@@ -164,7 +162,7 @@ function normalizeCompositeSections(value: unknown): readonly CompositeSection[]
   });
 }
 
-function createStoryboardFallbackSections(
+function createStoryboardDisplaySections(
   table: StoryboardTable | undefined,
   diagnostics: readonly StoryboardValidationDiagnostic[] | undefined,
 ): readonly CompositeSection[] {
@@ -174,7 +172,7 @@ function createStoryboardFallbackSections(
         heading: `${scene.sceneTitle} / Shot ${shot.shotNumber}`,
         content: shot.visualDescription,
         layout: 'table-row' as const,
-        mediaRefs: projectStoryboardMediaRefsToLegacy(collectStoryboardShotMediaRefs(shot)),
+        mediaRefs: projectStoryboardMediaRefsToComposite(collectStoryboardShotMediaRefs(shot)),
       })),
     );
   }
@@ -221,7 +219,7 @@ function dedupeStoryboardMediaRefs(
   return refs;
 }
 
-function projectStoryboardMediaRefsToLegacy(
+function projectStoryboardMediaRefsToComposite(
   mediaRefs: StoryboardTable['scenes'][number]['shots'][number]['mediaRefs'],
 ): readonly MediaRef[] | undefined {
   const refs = (mediaRefs ?? []).flatMap((mediaRef) => {

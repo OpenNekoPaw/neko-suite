@@ -60,9 +60,6 @@ export type ModelTier = 'fast' | 'balanced' | 'powerful';
 
 /**
  * Explicit runtime tool access policy for SubAgents.
- *
- * Legacy `allowedTools: []` keeps its historical meaning of "no filter".
- * Use `toolPolicy: { kind: 'none' }` when a session must receive zero tools.
  */
 export type AgentToolPolicy =
   | { readonly kind: 'none' }
@@ -103,14 +100,7 @@ export interface SubAgentConfig {
   prompt: string;
   /** Run mode */
   runMode: SubAgentRunMode;
-  /**
-   * Legacy allow-list compatibility field.
-   *
-   * Empty arrays are preserved as historical allow-all behavior. New
-   * isolation-sensitive flows should use `toolPolicy` instead.
-   */
-  allowedTools?: string[];
-  /** Explicit runtime tool policy. Takes precedence over `allowedTools`. */
+  /** Explicit runtime tool policy. */
   toolPolicy?: AgentToolPolicy;
   /** System prompt override */
   systemPrompt?: string;
@@ -150,7 +140,7 @@ export interface SubAgentConfig {
 
   /**
    * ToolSkills to activate for SubAgent
-   * Tools from these skills will be added to allowedTools
+   * Tools from these skills will be merged into allow-list tool policies.
    * @example ["git-operations", "file-editing"]
    */
   toolSkills?: string[];
@@ -180,10 +170,8 @@ export interface SpecializedAgentPreset {
   description: string;
   /** System prompt template */
   systemPrompt: string;
-  /** Allowed tools for this preset */
-  allowedTools: string[];
-  /** Explicit runtime tool policy for presets that need unambiguous behavior */
-  toolPolicy?: AgentToolPolicy;
+  /** Explicit runtime tool policy */
+  toolPolicy: AgentToolPolicy;
   /** Default model tier */
   defaultModelTier: ModelTier;
   /** Default max iterations */

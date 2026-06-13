@@ -395,6 +395,20 @@ describe('TaskManager', () => {
         },
       });
       await manager.upsertIdcProjectedTask({
+        id: 'idc:run-1:item-no-start',
+        status: 'completed',
+        progress: 100,
+        createdAt: 13,
+        updatedAt: 23,
+        content: 'Untimed run task',
+        binding: {
+          source: 'idc',
+          runId: 'run-1',
+          checklistId: 'task-untimed',
+          itemId: 'item-no-start',
+        },
+      });
+      await manager.upsertIdcProjectedTask({
         id: 'idc:run-2:item-1',
         status: 'completed',
         progress: 100,
@@ -415,6 +429,9 @@ describe('TaskManager', () => {
       expect(await manager.get('idc:run-1:item-1')).toBeUndefined();
       expect(await manager.get('idc:run-1:item-2')).toEqual(
         expect.objectContaining({ id: 'idc:run-1:item-2' }),
+      );
+      expect(await manager.get('idc:run-1:item-no-start')).toEqual(
+        expect.objectContaining({ id: 'idc:run-1:item-no-start' }),
       );
       expect(await manager.get('idc:run-2:item-1')).toEqual(
         expect.objectContaining({ id: 'idc:run-2:item-1' }),

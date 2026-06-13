@@ -13,7 +13,7 @@
  * Note: "ToolGroup" and "ToolSet" are aliases (IToolSetRegistry = IToolGroupRegistry).
  */
 
-import type { ToolGroup, ToolGroupMatch, IToolGroupRegistry, LoadingTier } from '@neko/shared';
+import type { ToolGroup, IToolGroupRegistry, LoadingTier } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import { resolveToolGroupTier } from '../tools/tier-resolver';
 
@@ -89,17 +89,6 @@ export class ToolGroupRegistry implements IToolGroupRegistry {
    */
   listEnabled(): ToolGroup[] {
     return this.list().filter((g) => g.enabled);
-  }
-
-  /**
-   * Match ToolGroups by user input.
-   *
-   * @deprecated triggerKeywords have been removed. This method always returns an
-   * empty array. Tool set discovery is now handled by the LLM via GetContext
-   * meta-tool. Will be removed in a future major version.
-   */
-  match(_input: string): ToolGroupMatch[] {
-    return [];
   }
 
   /**

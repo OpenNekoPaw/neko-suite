@@ -45,7 +45,7 @@ export interface AgentMediaTurnProgressErrorEvent<
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
   readonly error: unknown;
-  readonly fallbackTask?: TTaskView;
+  readonly recoveryTask?: TTaskView;
 }
 
 export interface AgentMediaTurnExecutionInput<
@@ -81,9 +81,7 @@ export interface RunAgentMediaTurnForWebviewInput<
   ) => Promise<unknown>;
   readonly postMessage: (message: AgentMediaTurnRuntimeMessage) => void;
   readonly persistErrorMessage?: (message: Message) => void;
-  readonly buildErrorMessageInput?: (
-    message: string,
-  ) => BuildAgentErrorAssistantMessageInput;
+  readonly buildErrorMessageInput?: (message: string) => BuildAgentErrorAssistantMessageInput;
   readonly unavailableMessage?: string;
   readonly failureMessage?: string;
   readonly onExecutionError?: (error: unknown) => void;
@@ -106,12 +104,11 @@ export async function runAgentMediaTurnForWebview<
   input: RunAgentMediaTurnForWebviewInput<TTaskView, TSourceTask>,
 ): Promise<RunAgentMediaTurnForWebviewResult> {
   const publishErrorMessage = (message: string): void => {
-    const errorMessageInput =
-      input.buildErrorMessageInput?.(message) ?? {
-        id: `media-error-${Date.now()}`,
-        timestamp: Date.now(),
-        message,
-      };
+    const errorMessageInput = input.buildErrorMessageInput?.(message) ?? {
+      id: `media-error-${Date.now()}`,
+      timestamp: Date.now(),
+      message,
+    };
     input.persistErrorMessage?.(buildAgentErrorAssistantMessage(errorMessageInput));
     input.postMessage(
       buildErrorMessage({

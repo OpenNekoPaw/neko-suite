@@ -306,13 +306,13 @@ async function withCacheResourceRef(
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<DocumentImageInfoWithCacheResourceRef> {
   if (!image.resourceRef) return image;
-  const legacyRef = {
+  const archiveRef = {
     ...image.resourceRef,
     ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
   };
   const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
-    legacyRef,
+    archiveRef,
     resolveResourceScope?.() ?? 'project',
   );
   const materializedPath = await materializeDocumentResource(
@@ -322,7 +322,7 @@ async function withCacheResourceRef(
   );
   const nextPath = materializedPath ?? image.path;
   const resourceRef = {
-    ...legacyRef,
+    ...archiveRef,
     ...(nextPath ? { cachePath: nextPath } : {}),
   };
   const nextCacheResourceRef =
@@ -335,9 +335,9 @@ async function withCacheResourceRef(
     runtimePath: image.runtimePath ?? image.path,
     runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
     alias: image.alias ?? formatDocumentImageAlias(image.locator),
-    aliasScope: image.aliasScope ?? formatDocumentAliasScope(legacyRef),
-    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(legacyRef.source),
-    entryPath: image.entryPath ?? legacyRef.entryPath,
+    aliasScope: image.aliasScope ?? formatDocumentAliasScope(archiveRef),
+    sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(archiveRef.source),
+    entryPath: image.entryPath ?? archiveRef.entryPath,
     portableForTransfer: nextCacheResourceRef.scope === 'project',
     ...(nextCacheResourceRef.scope === 'project'
       ? {}
@@ -472,10 +472,15 @@ function readAnalysisKind(value: unknown): ReadImageAnalysisKind {
     : 'describe';
 }
 
-function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
+function readBoundedInteger(
+  value: unknown,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number {
   return typeof value === 'number' && Number.isInteger(value)
     ? Math.max(min, Math.min(max, value))
-    : fallback;
+    : defaultValue;
 }
 
 function readString(value: unknown): string | undefined {

@@ -887,7 +887,7 @@ function isIdcProjectedTaskBoundToRun(
     }
 
     const idBinding = getIdcProjectedTaskRunBinding(task);
-    return idBinding?.runStartedAt === undefined || idBinding.runStartedAt === runStartedAt;
+    return idBinding?.runId === runId && idBinding.runStartedAt === runStartedAt;
   }
 
   const binding = getIdcProjectedTaskRunBinding(task);
@@ -898,8 +898,5 @@ function isIdcProjectedTaskBoundToRun(
     return true;
   }
 
-  // Legacy payloads written before provenance tagging only carry runId.
-  // We still clear them during run cleanup to avoid leaking stale task views
-  // after restore, while newer payloads get exact runId+startedAt matching.
-  return binding.runStartedAt === undefined || binding.runStartedAt === runStartedAt;
+  return binding.runStartedAt === runStartedAt;
 }

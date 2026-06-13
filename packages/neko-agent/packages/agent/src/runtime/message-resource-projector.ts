@@ -57,28 +57,6 @@ export function projectMessageForResourceDisplay(
 ): Message {
   const projectedMessage = { ...message };
 
-  if (message.toolCalls && message.toolCalls.length > 0) {
-    projectedMessage.toolCalls = message.toolCalls.map((toolCall) => {
-      const projectedArguments = projectResourceValue(toolCall.arguments, options);
-      const projectedResultData = toolCall.result?.data
-        ? projectResourceValue(toolCall.result.data, options)
-        : undefined;
-
-      return {
-        ...toolCall,
-        arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
-        ...(projectedResultData !== undefined && toolCall.result
-          ? {
-              result: {
-                ...toolCall.result,
-                data: projectedResultData,
-              },
-            }
-          : {}),
-      };
-    });
-  }
-
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
       const toolCall = block.type === 'tool_call' ? block.toolCall : undefined;
@@ -127,26 +105,9 @@ export function updateBackgroundTaskToolResultUrls(
   let updated = false;
 
   const nextMessages = messages.map((message) => {
-    if (!message.toolCalls && !message.contentBlocks) return message;
+    if (!message.contentBlocks) return message;
 
     const projectedMessage = { ...message };
-
-    if (message.toolCalls) {
-      projectedMessage.toolCalls = message.toolCalls.map((toolCall) => {
-        if (!toolCall.result?.data || !isMatchingBackgroundTaskData(toolCall.result.data, taskId)) {
-          return toolCall;
-        }
-
-        updated = true;
-        return {
-          ...toolCall,
-          result: {
-            ...toolCall.result,
-            data: completeBackgroundTaskData(toolCall.result.data, urls),
-          },
-        };
-      });
-    }
 
     if (message.contentBlocks) {
       projectedMessage.contentBlocks = message.contentBlocks.map((block) => {

@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { Prompt } from '@neko/shared';
 import { PromptManager } from '../prompt-manager';
-import type { Prompt } from '../../types/prompt';
 
 describe('PromptManager', () => {
   let manager: PromptManager;

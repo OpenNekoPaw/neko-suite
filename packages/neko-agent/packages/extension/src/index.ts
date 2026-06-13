@@ -6,7 +6,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as fs from 'node:fs/promises';
 import {
   ServiceCollection,
   setGlobalServices,
@@ -21,12 +20,7 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import {
-  withTimeout,
-  type ISkillProvider,
-  type SkillLocalizedText,
-  migrateStorageLayout,
-} from '@neko/shared';
+import { withTimeout, type ISkillProvider, type SkillLocalizedText } from '@neko/shared';
 import { getBuiltinSkills } from '@neko/agent/skill';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
@@ -206,7 +200,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
-  await migrateLegacyWorkspaceCache(logger);
 
   // Initialize service collection
   const services = new ServiceCollection();
@@ -335,36 +328,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
       return skillCatalogProvider.getSkills();
     },
   };
-}
-
-async function migrateLegacyWorkspaceCache(
-  logger: ReturnType<typeof createVSCodeLogger>,
-): Promise<void> {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!workspaceRoot) {
-    return;
-  }
-  try {
-    const migrated = await migrateStorageLayout(workspaceRoot, {
-      exists: async (p) => {
-        try {
-          await fs.access(p);
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      rename: (oldPath, newPath) => fs.rename(oldPath, newPath),
-      mkdir: (p, opts) => fs.mkdir(p, opts).then(() => undefined),
-      copy: (oldPath, newPath) => fs.cp(oldPath, newPath, { recursive: true, force: false }),
-      rm: (p, opts) => fs.rm(p, opts),
-    });
-    if (migrated.length > 0) {
-      logger.info(`Storage migration: ${migrated.join('; ')}`);
-    }
-  } catch (error) {
-    logger.warn('Storage migration failed (non-fatal):', error);
-  }
 }
 
 /**

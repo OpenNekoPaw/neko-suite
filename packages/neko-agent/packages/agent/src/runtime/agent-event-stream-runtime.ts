@@ -2,6 +2,7 @@ import type { AgentPhase, TaskCreatedMessage, TaskUpdatedMessage } from '@neko-a
 import type { AgentEvent } from '../session/types';
 import {
   applyAgentStreamEventToState,
+  buildStreamCompleteProjectionMessage,
   createAgentStreamMessageId,
   createAgentStreamProjectionState,
   finalizeAgentStreamProjectionState,
@@ -30,10 +31,10 @@ export interface AgentEventStreamRuntimeBackgroundTasks<
   readonly observeProgress?: (
     input: ObserveAgentStreamBackgroundTaskProgressInput<TSourceTask, TDeliveryPlan>,
   ) => void | (() => void);
-  readonly createFallbackProgress: StartAgentStreamBackgroundTaskObserverInput<
+  readonly createRecoveryProgress: StartAgentStreamBackgroundTaskObserverInput<
     TSourceTask,
     TDeliveryPlan
-  >['createFallbackProgress'];
+  >['createRecoveryProgress'];
   readonly createProgressDelivery: StartAgentStreamBackgroundTaskObserverInput<
     TSourceTask,
     TDeliveryPlan
@@ -96,6 +97,9 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         plan: stateUpdate.plan,
       });
       for (const message of messages) {
+        if (message.type === 'streamComplete') {
+          continue;
+        }
         input.postMessage(message);
       }
 
@@ -105,6 +109,13 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     }
 
     finalizeAgentStreamProjectionState(streamState);
+    input.postMessage(
+      buildStreamCompleteProjectionMessage({
+        conversationId: input.conversationId,
+        messageId: streamingMessageId,
+        contentBlocks: streamState.contentBlocks,
+      }),
+    );
 
     return {
       accumulatedResponse: streamState.accumulatedResponse,
@@ -161,7 +172,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         input.postMessage(message);
       },
       observeProgress: backgroundTasks.observeProgress,
-      createFallbackProgress: backgroundTasks.createFallbackProgress,
+      createRecoveryProgress: backgroundTasks.createRecoveryProgress,
       createProgressDelivery: async (task, context) => {
         const progress = await backgroundTasks.createProgressDelivery(task, context);
         if (backgroundTasks.shouldForgetSubscriptionAfterProgressDelivery?.(progress)) {

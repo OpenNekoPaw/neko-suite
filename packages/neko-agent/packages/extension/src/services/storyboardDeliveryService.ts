@@ -204,7 +204,7 @@ function matchDecisionToLocation(
   const nameMatches = locations.filter(
     (location) => normalizeName(location.character.characterName) === normalizeName(name),
   );
-  return selectSingleMatch(nameMatches, decisionIndex, diagnostics, 'name-fallback');
+  return selectSingleMatch(nameMatches, decisionIndex, diagnostics, 'name-match');
 }
 
 function matchByStoryboardCharacterId(
@@ -251,7 +251,7 @@ function selectSingleMatch(
   matches: readonly ShotCharacterLocation[],
   decisionIndex: number,
   diagnostics: StoryboardValidationDiagnostic[],
-  strategy: 'stable-key' | 'name-fallback',
+  strategy: 'stable-key' | 'name-match',
 ): ShotCharacterLocation | undefined {
   if (matches.length === 1) return matches[0];
   if (matches.length === 0) {
@@ -273,7 +273,7 @@ function selectSingleMatch(
       [],
       'Entity decision matched multiple storyboard characters; no automatic reference was written.',
       {
-        reason: strategy === 'name-fallback' ? 'candidate-ambiguous' : 'ambiguous-stable-key',
+        reason: strategy === 'name-match' ? 'candidate-ambiguous' : 'ambiguous-stable-key',
         decisionIndex,
       },
     ),

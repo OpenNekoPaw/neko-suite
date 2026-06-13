@@ -93,20 +93,16 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     expect(config.operationToolAdapterRegistry?.list()).toEqual(expect.any(Array));
   });
 
-  it('uses hookSource only when explicit hooks are not provided', () => {
+  it('passes explicit executor hooks through to the session factory config', () => {
     const explicitHooks = [{ name: 'explicit' }] as unknown as readonly ExecutorHooks[];
-    const sourceHooks = [{ name: 'source' }] as unknown as readonly ExecutorHooks[];
-    const hookSource = { getHooks: vi.fn(() => sourceHooks) };
 
     const config = buildAgentRuntimeSessionFactoryConfig({
       createService,
       toolRegistry: createToolRegistry(),
       hooks: explicitHooks,
-      hookSource,
     });
 
     expect(config.hooks).toBe(explicitHooks);
-    expect(hookSource.getHooks).not.toHaveBeenCalled();
   });
 
   it('guards capability prompt fragment resolution failures', () => {

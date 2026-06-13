@@ -7,10 +7,8 @@
  * `orchestrator.applyOne(...)`. The module itself is a pure projection —
  * it does no I/O and is event-driven.
  *
- * Equivalence with legacy path: the produced section matches the format
- * previously written directly via `composer.setSection` in
- * agent-session-initializer.ts (id `memory:project`, layer `environment`,
- * priority 60, heading `## Project Memory`).
+ * Section contract: id `memory:project`, layer `environment`, priority 60,
+ * heading `## Project Memory`.
  */
 import type {
   PromptModule,

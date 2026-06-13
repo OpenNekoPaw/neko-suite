@@ -43,7 +43,7 @@ export interface MessageModelProjection {
 export interface ChatWorkspaceModelStateInput {
   chatModelOptions: readonly ChatModelOption[];
   selectedModel: string;
-  fallbackContextWindow: number;
+  defaultContextWindow: number;
   sessionMode: AgentSessionMode;
   mediaModelSelection: Readonly<MediaModelSelectionState>;
 }

@@ -151,7 +151,7 @@ describe('work-item-message-presenter', () => {
         },
         {
           id: 'msg-2',
-          toolCalls: [{ id: 'tool-2' }],
+          contentBlocks: [{ type: 'tool_call', toolCall: { id: 'tool-2' } }],
           workItemIds: ['sub-existing'],
         },
       ],
@@ -166,14 +166,16 @@ describe('work-item-message-presenter', () => {
       },
       {
         id: 'msg-2',
-        toolCalls: [{ id: 'tool-2' }],
+        contentBlocks: [{ type: 'tool_call', toolCall: { id: 'tool-2' } }],
         workItemIds: ['sub-existing', 'sub-1'],
       },
     ]);
   });
 
   it('does not attach work item ids when the parent tool call is absent', () => {
-    const messages = [{ id: 'msg-1', toolCalls: [{ id: 'tool-1' }] }];
+    const messages = [
+      { id: 'msg-1', contentBlocks: [{ type: 'tool_call', toolCall: { id: 'tool-1' } }] },
+    ];
 
     expect(
       attachWorkItemToMessageByToolCall(messages, {

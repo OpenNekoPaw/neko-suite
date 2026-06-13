@@ -29,7 +29,6 @@ import {
 } from '@neko/shared/config/config-reader.ts';
 import { getEnvKeyMap } from '@neko/shared';
 
-// Re-export path utilities for backward compatibility
 export {
   getUserConfigDir,
   getUserConfigPath,
@@ -37,11 +36,6 @@ export {
   getWorkspaceConfigPath,
   getConfigLocations,
 };
-
-// Legacy aliases
-export const getGlobalConfigDir = getUserConfigDir;
-export const getGlobalConfigPath = getUserConfigPath;
-export const getProjectConfigPath = getWorkspaceConfigPath;
 
 // =============================================================================
 // Environment Variable Handling

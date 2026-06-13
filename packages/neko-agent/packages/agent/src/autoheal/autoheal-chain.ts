@@ -226,7 +226,7 @@ class AutohealChain implements IAutohealChain {
         this._eventBus.emit({
           channel: EXECUTION_CHANNELS.AUTOHEAL_L3_SUBSTITUTE,
           ...base,
-          fallback: noteOf(outcome) ?? 'substitute considered',
+          substitute: noteOf(outcome) ?? 'substitute considered',
         });
         break;
       case 4:

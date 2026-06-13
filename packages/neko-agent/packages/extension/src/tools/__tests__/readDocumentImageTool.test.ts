@@ -158,11 +158,6 @@ describe('createReadDocumentImageTool', () => {
                 provider: 'document-archive',
                 kind: 'document',
                 locator: expect.objectContaining({ entryPath: 'OPS/page-2.png' }),
-                source: expect.objectContaining({
-                  metadata: expect.objectContaining({
-                    legacyCachePath: '/workspace/.neko/.cache/resources/documents/page.png',
-                  }),
-                }),
               }),
             }),
             cacheResourceRef: expect.objectContaining({
@@ -173,6 +168,7 @@ describe('createReadDocumentImageTool', () => {
         ],
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('legacyCachePath');
     expect(readFile).toHaveBeenCalledWith('/workspace/.neko/.cache/resources/documents/page.png');
     expect(resourceCache.resolve).toHaveBeenCalledWith(
       expect.objectContaining({

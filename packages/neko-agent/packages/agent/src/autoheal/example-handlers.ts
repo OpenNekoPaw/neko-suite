@@ -14,7 +14,7 @@
  * Contract for outcome.note when resolution === 'healed':
  *   - L2 degrade:    `"degrade:<knob>=<newValue>"` — runner tweaks the
  *                    named arg before retrying the same tool.
- *   - L3 substitute: `"substitute:<fallbackToolName>"` — runner swaps
+ *   - L3 substitute: `"substitute:<substituteToolName>"` — runner swaps
  *                    the tool name, keeping args compatible.
  *   - L4 subagent:   `"subagent:<actions>"` — runner deserialises a
  *                    structured action list from context (handler sets
@@ -91,14 +91,14 @@ export function createResolutionDegradeHandler(
 }
 
 // =============================================================================
-// L3 — Substitute with a fallback tool
+// L3 — Substitute with another tool
 // =============================================================================
 
 export interface SubstituteConfig {
   /**
-   * Map from failed tool name → fallback tool name. The handler checks
+   * Map from failed tool name → substitute tool name. The handler checks
    * `failure.subject` (a `tool:<name>` kind or bare tool name) against
-   * the map and, on hit, emits a `substitute:<fallback>` note.
+   * the map and, on hit, emits a `substitute:<tool>` note.
    */
   map: ReadonlyMap<string, string> | Readonly<Record<string, string>>;
   /**
@@ -113,7 +113,7 @@ const DEFAULT_SUBSTITUTE_TRIGGERS = ['tool_unavailable', 'deprecated', 'unsuppor
 
 /**
  * L3 substitute handler. Matches the failing tool name against a
- * user-supplied fallback map; on a hit it emits `substitute:<fallback>`
+ * user-supplied substitute map; on a hit it emits `substitute:<tool>`
  * so the runner can swap endpoints without re-planning.
  *
  * Usage:
@@ -137,14 +137,14 @@ export function createSubstituteHandler(config: SubstituteConfig): AutohealHandl
       };
     }
     const bareName = _bareToolName(failure.subject);
-    const fallback = mapGet(bareName);
-    if (!fallback) {
+    const substitute = mapGet(bareName);
+    if (!substitute) {
       return { resolution: 'aborted', level: 3, reason: 'unsubstitutable' };
     }
     return {
       resolution: 'healed',
       level: 3,
-      note: `substitute:${fallback}`,
+      note: `substitute:${substitute}`,
     };
   };
 }

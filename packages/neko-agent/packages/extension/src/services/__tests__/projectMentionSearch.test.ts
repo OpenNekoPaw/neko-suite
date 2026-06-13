@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { PROJECT_SEARCH_QUERY_COMMAND } from '@neko/search/host-vscode';
 import { searchProjectMentionCandidates } from '../projectMentionSearch';
-import { PROJECT_SEARCH_QUERY_COMMAND } from '../projectSearch/commands';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 

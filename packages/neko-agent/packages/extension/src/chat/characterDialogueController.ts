@@ -31,7 +31,6 @@ import type {
 } from '@neko/shared';
 import {
   CHARACTER_ROLE_TEST_ARTIFACT_DIR,
-  NPC_TRANSCRIPT_ARTIFACT_VERSION,
   isCreativeEntityRef,
   isNpcSerializableValue,
 } from '@neko/shared';
@@ -44,6 +43,9 @@ import {
 } from '@neko/shared/types/dashboard-creative-entity';
 import {
   CharacterDialogueSession,
+  createDefaultCharacterDialogueSessionId,
+  createCharacterDialogueRuntimeService,
+  createFallbackCharacterDialogueEvaluationReport,
   projectCharacterDialogueTranscriptToChatMessages,
   type CharacterDialogueResponder,
 } from '@neko/agent/runtime';
@@ -256,6 +258,7 @@ const logger = getLogger('CharacterDialogueController');
 export class CharacterDialogueController implements vscode.Disposable {
   private readonly sessions = new Map<string, CharacterDialogueSession>();
   private readonly sessionProjectRoots = new Map<string, string>();
+  private readonly pendingRouteAbortControllers = new Map<string, AbortController>();
   private readonly deps: CharacterDialogueControllerDeps;
 
   constructor(deps: CharacterDialogueControllerDeps) {
@@ -286,25 +289,25 @@ export class CharacterDialogueController implements vscode.Disposable {
       return null;
     }
 
-    const profile = await this.prepareProfileForLaunch({
+    const runtime = this.createRuntimeService();
+    const preparedProfile = await runtime.prepareProfileForLaunch({
       profile: assembly.profile,
       projectRoot,
       request,
     });
-    if (!profile) return null;
+    if (preparedProfile.status === 'cancelled') {
+      this.postGlobalError(preparedProfile.message);
+      return null;
+    }
+    const profile = preparedProfile.profile;
 
     const mode = request.mode ?? 'roleplay';
-    const sessionId =
-      this.deps.createSessionId?.(entityRef) ?? createCharacterDialogueSessionId(entityRef);
-    const session = new CharacterDialogueSession({
-      id: sessionId,
+    const session = runtime.createSession({
       entityRef,
-      profileSnapshot: profile,
+      profile,
       mode,
-      responder: this.createResponder(),
-      now: this.now,
-      ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
     });
+    const sessionId = session.id;
     this.sessions.set(sessionId, session);
     this.sessionProjectRoots.set(sessionId, projectRoot);
 
@@ -346,13 +349,23 @@ export class CharacterDialogueController implements vscode.Disposable {
     }
 
     webview?.postMessage(buildThinkingMessage(sessionId));
+    const routeAbortController = new AbortController();
+    this.pendingRouteAbortControllers.set(sessionId, routeAbortController);
 
     try {
-      const turnEvidence = await this.loadTurnEvidence({
-        session,
-        query: trimmed,
-        mode: 'character-dialogue',
-      });
+      const projectRoot =
+        this.sessionProjectRoots.get(session.id) ??
+        session.entityRef.projectRoot ??
+        this.deps.getProjectRoot();
+      const turnEvidence = projectRoot
+        ? await this.createRuntimeService().loadTurnEvidence({
+            session,
+            projectRoot,
+            query: trimmed,
+            mode: 'character-dialogue',
+          })
+        : undefined;
+      assertCharacterDialogueRouteNotAborted(routeAbortController.signal);
       const turn = await session.sendUserMessage(trimmed, {
         ...(turnEvidence ? { turnEvidence } : {}),
       });
@@ -376,6 +389,10 @@ export class CharacterDialogueController implements vscode.Disposable {
           message: error instanceof Error ? error.message : String(error),
         }),
       );
+    } finally {
+      if (this.pendingRouteAbortControllers.get(sessionId) === routeAbortController) {
+        this.pendingRouteAbortControllers.delete(sessionId);
+      }
     }
 
     return true;
@@ -384,6 +401,7 @@ export class CharacterDialogueController implements vscode.Disposable {
   cancel(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
+    this.pendingRouteAbortControllers.get(sessionId)?.abort();
     session.cancel();
     return true;
   }
@@ -399,12 +417,13 @@ export class CharacterDialogueController implements vscode.Disposable {
 
     const projectRoot = session.entityRef.projectRoot ?? this.deps.getProjectRoot();
     const initialArtifact = session.toArtifact();
+    const runtime = this.createRuntimeService();
     const artifact =
       projectRoot && reason !== 'disposed'
-        ? await this.evaluateArtifact(initialArtifact, projectRoot)
+        ? await runtime.evaluateArtifact({ artifact: initialArtifact, projectRoot })
         : initialArtifact;
     const saved = projectRoot
-      ? await this.maybeSaveArtifact({
+      ? await runtime.maybeSaveArtifact({
           artifact,
           projectRoot,
           reason,
@@ -460,25 +479,44 @@ export class CharacterDialogueController implements vscode.Disposable {
       return { applied: false, message: 'Open a workspace before applying character suggestions.' };
     }
 
-    const confirmed =
-      (await this.deps.confirmSuggestionApply?.({
-        suggestion: input.suggestion,
-        projectRoot: resolvedProjectRoot,
-      })) ?? false;
-    if (!confirmed) {
-      return { applied: false, message: 'Character suggestion was not confirmed.' };
-    }
+    return this.createRuntimeService().applySuggestionWithConfirmation({
+      suggestion: input.suggestion,
+      projectRoot: resolvedProjectRoot,
+    });
+  }
 
-    return (
-      this.deps.applySuggestion?.({
-        suggestion: input.suggestion,
-        projectRoot: resolvedProjectRoot,
-      }) ??
-      defaultApplyCharacterSuggestion({
-        suggestion: input.suggestion,
-        projectRoot: resolvedProjectRoot,
-      })
-    );
+  private createRuntimeService() {
+    return createCharacterDialogueRuntimeService({
+      ports: {
+        createResponder: () => this.createResponder(),
+        createEvidenceLoader: (projectRoot) => this.getEvidenceLoader(projectRoot),
+        selectEvidenceBudget: (mode) => defaultCharacterEvidenceBudgetForMode(mode),
+        chooseThinProfileAction: async (profileInput) =>
+          (await this.deps.chooseThinProfileAction?.(profileInput)) ??
+          (await defaultChooseThinProfileAction(profileInput.profile)),
+        enrichProfile: async (profileInput) =>
+          (await this.deps.enrichProfile?.(profileInput)) ??
+          (await this.createDefaultProfileEnrichment(profileInput)),
+        promptUserSupplement: (supplementInput) =>
+          this.deps.promptUserSupplement?.(supplementInput),
+        evaluateTranscript: async (evaluationInput) =>
+          (await this.deps.evaluateTranscript?.(evaluationInput)) ??
+          (await this.createDefaultEvaluationReport(evaluationInput.artifact)),
+        chooseSavePolicy: async (saveInput) =>
+          (await this.deps.chooseSavePolicy?.(saveInput)) ??
+          (await defaultChooseTranscriptSavePolicy(saveInput)),
+        saveTranscriptArtifact: (saveInput) =>
+          (this.deps.saveTranscriptArtifact ?? defaultSaveTranscriptArtifact)(saveInput),
+        confirmSuggestionApply: async (suggestionInput) =>
+          (await this.deps.confirmSuggestionApply?.(suggestionInput)) ?? false,
+        applySuggestion: (suggestionInput) =>
+          (this.deps.applySuggestion ?? defaultApplyCharacterSuggestion)(suggestionInput),
+      },
+      now: this.now,
+      ...(this.deps.createSessionId ? { createSessionId: this.deps.createSessionId } : {}),
+      ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
+      logger: this.deps.logger ?? logger,
+    });
   }
 
   createSkillPrimitivePorts(
@@ -536,41 +574,20 @@ export class CharacterDialogueController implements vscode.Disposable {
       runHeadlessDialogueProbe: async (probeInput) => {
         const projectRoot = resolveProjectRoot(probeInput.entityRef);
         const entityRef = this.normalizeEntityRef(probeInput.entityRef, projectRoot);
-        const session = new CharacterDialogueSession({
-          id: this.deps.createSessionId?.(entityRef) ?? createCharacterDialogueSessionId(entityRef),
+        return this.createRuntimeService().runHeadlessDialogueProbe({
+          ...probeInput,
           entityRef,
-          profileSnapshot: probeInput.profile,
-          mode: probeInput.mode ?? 'roleplay',
-          responder: this.createResponder(),
-          now: this.now,
-          ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
+          projectRoot,
         });
-        try {
-          for (const message of probeInput.messages) {
-            const turnEvidence = await this.safeLoadEvidence({
-              entityRef,
-              mode: 'character-validation',
-              query: message,
-              projectRoot,
-              budget: defaultCharacterEvidenceBudgetForMode('character-validation'),
-              transcript: session.getTranscript(),
-            });
-            await session.sendUserMessage(message, {
-              ...(turnEvidence ? { turnEvidence } : {}),
-            });
-          }
-          return session.toArtifact();
-        } finally {
-          session.dispose();
-        }
       },
       evaluateTranscript: async (evaluationInput) => {
-        const artifact = await this.evaluateArtifact(
-          evaluationInput.artifact,
-          evaluationInput.projectRoot,
-        );
+        const artifact = await this.createRuntimeService().evaluateArtifact({
+          artifact: evaluationInput.artifact,
+          projectRoot: evaluationInput.projectRoot,
+        });
         return (
-          artifact.evaluation ?? createFallbackCharacterRoleEvaluationReport(artifact, this.now())
+          artifact.evaluation ??
+          createFallbackCharacterDialogueEvaluationReport(artifact, this.now())
         );
       },
       saveArtifact: async (saveInput) => {
@@ -615,70 +632,6 @@ export class CharacterDialogueController implements vscode.Disposable {
     });
   }
 
-  private async prepareProfileForLaunch(input: {
-    readonly profile: NpcProfileSource;
-    readonly projectRoot: string;
-    readonly request: NpcTestBenchLaunchRequest;
-  }): Promise<NpcProfileSource | null> {
-    if (input.profile.sparsity !== 'thin') {
-      return input.profile;
-    }
-
-    const action = await this.resolveThinProfileAction(input);
-    if (action === 'start-now') {
-      return input.profile;
-    }
-
-    if (action === 'enrich-project') {
-      const enriched =
-        (await this.deps.enrichProfile?.(input)) ??
-        (await this.createDefaultProfileEnrichment(input));
-      return enriched.profile;
-    }
-
-    const supplement = await this.deps.promptUserSupplement?.({
-      projectRoot: input.projectRoot,
-      profile: input.profile,
-    });
-    if (supplement === undefined) {
-      this.postGlobalError('角色对话已取消：未补充角色资料。');
-      return null;
-    }
-    return appendUserSupplement(input.profile, supplement);
-  }
-
-  private async resolveThinProfileAction(input: {
-    readonly profile: NpcProfileSource;
-    readonly projectRoot: string;
-    readonly request: NpcTestBenchLaunchRequest;
-  }): Promise<NpcThinProfileAction> {
-    const enrichment = input.request.enrichment ?? defaultEnrichmentForSource(input.request.source);
-    switch (enrichment) {
-      case 'skip':
-        return 'start-now';
-      case 'auto':
-        return 'enrich-project';
-      case 'manual':
-        return 'manual-supplement';
-      case 'ask':
-      case undefined:
-        return (
-          (await this.deps.chooseThinProfileAction?.(input)) ??
-          (await defaultChooseThinProfileAction(input.profile))
-        );
-    }
-  }
-
-  private async evaluateArtifact(
-    artifact: NpcTranscriptArtifact,
-    projectRoot: string,
-  ): Promise<NpcTranscriptArtifact> {
-    const evaluation =
-      (await this.deps.evaluateTranscript?.({ artifact, projectRoot })) ??
-      (await this.createDefaultEvaluationReport(artifact));
-    return { ...artifact, evaluation };
-  }
-
   private async createDefaultEvaluationReport(
     artifact: NpcTranscriptArtifact,
   ): Promise<NpcEvaluationReport> {
@@ -716,7 +669,7 @@ export class CharacterDialogueController implements vscode.Disposable {
       }
     }
 
-    return createFallbackCharacterRoleEvaluationReport(artifact, this.now());
+    return createFallbackCharacterDialogueEvaluationReport(artifact, this.now());
   }
 
   private async createDefaultProfileEnrichment(
@@ -729,23 +682,6 @@ export class CharacterDialogueController implements vscode.Disposable {
       now: this.now,
       logger: this.deps.logger ?? logger,
     });
-  }
-
-  private async maybeSaveArtifact(input: {
-    readonly artifact: NpcTranscriptArtifact;
-    readonly projectRoot: string;
-    readonly reason: NpcSessionExitReason;
-  }): Promise<NpcTranscriptArtifactSaveResult | null> {
-    const policy =
-      (await this.deps.chooseSavePolicy?.(input)) ??
-      (await defaultChooseTranscriptSavePolicy(input));
-    if (policy === 'never') {
-      return null;
-    }
-
-    const save =
-      this.deps.saveTranscriptArtifact ?? ((saveInput) => defaultSaveTranscriptArtifact(saveInput));
-    return save({ artifact: input.artifact, projectRoot: input.projectRoot });
   }
 
   dispose(): void {
@@ -766,41 +702,6 @@ export class CharacterDialogueController implements vscode.Disposable {
         chatModel: this.deps.getSelectedChatModel?.(),
       })
     );
-  }
-
-  private async loadTurnEvidence(input: {
-    readonly session: CharacterDialogueSession;
-    readonly query: string;
-    readonly mode: 'character-dialogue' | 'character-validation';
-  }): Promise<CharacterEvidenceBundle | undefined> {
-    const projectRoot =
-      this.sessionProjectRoots.get(input.session.id) ??
-      input.session.entityRef.projectRoot ??
-      this.deps.getProjectRoot();
-    if (!projectRoot) return undefined;
-    return this.safeLoadEvidence({
-      entityRef: this.normalizeEntityRef(input.session.entityRef, projectRoot),
-      mode: input.mode,
-      query: input.query,
-      projectRoot,
-      budget: defaultCharacterEvidenceBudgetForMode(input.mode),
-      transcript: input.session.getTranscript(),
-    });
-  }
-
-  private async safeLoadEvidence(
-    request: CharacterEvidenceRequest,
-  ): Promise<CharacterEvidenceBundle | undefined> {
-    try {
-      return await this.getEvidenceLoader(request.projectRoot).loadEvidence(request);
-    } catch (error) {
-      (this.deps.logger ?? logger).warn('Character evidence loading failed; continuing turn', {
-        entityId: request.entityRef.entityId,
-        mode: request.mode,
-        error,
-      });
-      return undefined;
-    }
   }
 
   private getEvidenceLoader(projectRoot: string): CharacterEvidenceLoader {
@@ -1967,6 +1868,12 @@ function formatCharacterRoleModelError(error: unknown): string {
     .join('; ');
 }
 
+function assertCharacterDialogueRouteNotAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new Error('aborted');
+  }
+}
+
 export function projectCharacterDialogueSession(
   session: Pick<
     CharacterDialogueSession,
@@ -2114,69 +2021,6 @@ async function defaultChooseThinProfileAction(
   return picked?.action ?? 'start-now';
 }
 
-function defaultEnrichmentForSource(
-  source: NpcTestBenchLaunchRequest['source'],
-): NpcTestBenchLaunchRequest['enrichment'] | undefined {
-  return source === 'dashboard' ? 'skip' : undefined;
-}
-
-function appendUserSupplement(profile: NpcProfileSource, supplement: string): NpcProfileSource {
-  const trimmed = supplement.trim();
-  if (!trimmed) {
-    return profile;
-  }
-  return {
-    ...profile,
-    facts: [
-      ...profile.facts,
-      {
-        key: 'userSupplement.notes',
-        value: trimmed,
-        source: 'user-supplement',
-        authority: 'suggested',
-      },
-    ],
-    userSupplements: [profile.userSupplements, trimmed]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .join('\n'),
-  };
-}
-
-function createFallbackCharacterRoleEvaluationReport(
-  artifact: NpcTranscriptArtifact,
-  createdAt: string,
-): NpcEvaluationReport {
-  const hasNpcReply = artifact.transcript.some((message) => message.role === 'npc');
-  const hasUserTurn = artifact.transcript.some((message) => message.role === 'user');
-  return {
-    version: NPC_TRANSCRIPT_ARTIFACT_VERSION,
-    createdAt,
-    entityRef: artifact.entityRef,
-    summary: hasNpcReply
-      ? 'Character Dialogue transcript captured for project-scoped validation.'
-      : 'Character Dialogue transcript has no character response to evaluate yet.',
-    scores: [
-      {
-        dimension: 'persona-consistency',
-        score: hasNpcReply ? 0.5 : 0,
-        summary: hasNpcReply ? 'Manual review required.' : 'No character response was captured.',
-      },
-      {
-        dimension: 'dialogue-voice-fit',
-        score: hasUserTurn && hasNpcReply ? 0.5 : 0,
-        summary: 'Fallback evaluation did not infer voice changes.',
-      },
-      {
-        dimension: 'knowledge-boundary',
-        score: 1,
-        summary: 'Fallback evaluation found no automated knowledge leakage evidence.',
-      },
-    ],
-    findings: [],
-    suggestions: [],
-  };
-}
-
 async function defaultChooseTranscriptSavePolicy(
   input: NpcSavePolicyInput,
 ): Promise<NpcTranscriptSavePolicy> {
@@ -2252,8 +2096,7 @@ export function summarizeCharacterProfile(profile: NpcProfileSource): string {
 }
 
 export function createCharacterDialogueSessionId(entityRef: CreativeEntityRef): string {
-  const suffix = Date.now().toString(36);
-  return `npc-${entityRef.entityId}-${suffix}`;
+  return createDefaultCharacterDialogueSessionId(entityRef);
 }
 
 export function extractResponseText(response: ServiceResponse): string {

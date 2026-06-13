@@ -568,7 +568,7 @@ export async function runAgentWithContext(
 }
 
 function resolveCliGeneratedOutputDir(workDir: string): string {
-  return resolveStorageLayout(workDir, workDir).project.cache.generated;
+  return resolveStorageLayout(workDir, workDir).project.local.cache.generated;
 }
 
 /**

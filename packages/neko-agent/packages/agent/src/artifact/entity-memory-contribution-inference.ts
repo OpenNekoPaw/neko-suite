@@ -1,4 +1,5 @@
 import type {
+  ArtifactJsonValue,
   CharacterMemoryJsonRecord,
   CharacterMemorySourceRef,
   CharacterObservation,
@@ -8,7 +9,7 @@ import type {
   EntityMemoryContribution,
 } from '@neko/shared';
 import { isEntityMemoryContribution } from '@neko/shared';
-import type { CompositeBlockData, CompositeSection } from '@/components/types';
+import type { CompositeBlockData, CompositeSection } from '@neko-agent/types';
 
 interface CharacterAnalysisRow {
   readonly sectionIndex: number;
@@ -22,6 +23,11 @@ interface MarkdownTable {
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
 }
+
+const ENTITY_MEMORY_CONTRIBUTION_EXTENSION_KEYS = [
+  'neko.entityMemoryContribution',
+  'neko.entityMemoryContributionPayload',
+] as const;
 
 const CHARACTER_ANALYSIS_HEADING_PATTERN =
   /(?:主要角色观察|角色与关系变化|角色分析|人物观察|人物关系变化|character\s+observations?|character\s+(?:and\s+)?relationship\s+changes?)/iu;
@@ -42,6 +48,8 @@ const DEFAULT_CONFIDENCE = 0.62;
 export function inferEntityMemoryContributionFromCharacterAnalysis(
   composite: CompositeBlockData,
 ): EntityMemoryContribution | undefined {
+  if (findProjectedEntityMemoryContribution(composite)) return undefined;
+
   const rows = collectCharacterAnalysisRows(composite.sections);
   if (rows.length === 0) return undefined;
 
@@ -173,12 +181,45 @@ export function inferEntityMemoryContributionFromCharacterAnalysis(
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
     metadata: {
       inferredFrom: 'character-analysis-table',
-      source: 'agent-rich-content-fallback',
+      source: 'agent-runtime-composite-projection',
       rowCount: rows.length,
     },
   };
 
   return isEntityMemoryContribution(contribution) ? contribution : undefined;
+}
+
+export function maybeAttachInferredEntityMemoryContribution(
+  composite: CompositeBlockData,
+): CompositeBlockData {
+  if (findProjectedEntityMemoryContribution(composite)) return composite;
+
+  const contribution = inferEntityMemoryContributionFromCharacterAnalysis(composite);
+  if (!contribution) return composite;
+
+  return {
+    ...composite,
+    extensions: {
+      ...(composite.extensions ?? {}),
+      'neko.entityMemoryContributionPayload': toArtifactJsonValue(contribution),
+    },
+  };
+}
+
+export function findProjectedEntityMemoryContribution(
+  composite: CompositeBlockData,
+): EntityMemoryContribution | undefined {
+  const candidates: readonly unknown[] = [
+    composite.extensions?.['neko.entityMemoryContribution'],
+    composite.extensions?.['neko.entityMemoryContributionPayload'],
+    ...composite.sections.flatMap((section) => [
+      section.extensions?.['neko.entityMemoryContribution'],
+      section.extensions?.['neko.entityMemoryContributionPayload'],
+    ]),
+  ];
+  return candidates.find((candidate): candidate is EntityMemoryContribution =>
+    isEntityMemoryContribution(candidate),
+  );
 }
 
 function collectCharacterAnalysisRows(
@@ -327,6 +368,38 @@ function createInferenceSourceRef(composite: CompositeBlockData): CharacterMemor
       ? `Agent character analysis: ${composite.title}`
       : 'Agent character analysis',
   };
+}
+
+function toArtifactJsonValue(value: unknown): ArtifactJsonValue {
+  if (isArtifactJsonPrimitive(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toArtifactJsonValue(item));
+  }
+  if (isRecord(value)) {
+    const record: Record<string, ArtifactJsonValue> = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      if (entryValue !== undefined) {
+        record[key] = toArtifactJsonValue(entryValue);
+      }
+    }
+    return record;
+  }
+  return null;
+}
+
+function isArtifactJsonPrimitive(value: unknown): value is string | number | boolean | null {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function slugifyIdentifier(value: string): string {

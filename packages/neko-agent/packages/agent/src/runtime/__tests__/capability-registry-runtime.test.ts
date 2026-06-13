@@ -55,4 +55,87 @@ describe('CapabilityRegistryRuntime', () => {
     expect(toolRegistry.get('RemovedTool')).toBeUndefined();
     expect(disposed).toHaveBeenCalledTimes(1);
   });
+
+  it('records duplicate provider id diagnostics before replacing the provider', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+
+    runtime.registerProvider(createProvider('neko.duplicate', [createTool('FirstTool')]), {
+      extensionContext: {},
+    });
+    runtime.registerProvider(createProvider('neko.duplicate', [createTool('SecondTool')]), {
+      extensionContext: {},
+    });
+
+    expect(runtime.getDiagnostics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'extension.capability.provider.duplicate-id',
+          reason: 'duplicate-provider-id',
+          context: expect.objectContaining({
+            providerId: 'neko.duplicate',
+            existingProviderId: 'neko.duplicate',
+            conflictingProviderId: 'neko.duplicate',
+          }),
+        }),
+      ]),
+    );
+    expect(toolRegistry.get('FirstTool')).toBeUndefined();
+    expect(toolRegistry.get('SecondTool')).toBeDefined();
+  });
+
+  it('records duplicate canonical tool diagnostics with both conflicting providers', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+
+    runtime.registerProvider(createProvider('neko.story', [createTool('GenerateScene')]), {
+      extensionContext: {},
+    });
+    runtime.registerProvider(createProvider('neko.canvas', [createTool('GenerateScene')]), {
+      extensionContext: {},
+    });
+
+    expect(runtime.getDiagnostics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'extension.capability.tool.name-collision',
+          reason: 'provider-name-collision',
+          context: expect.objectContaining({
+            capabilityKind: 'tool',
+            name: 'GenerateScene',
+            providerId: 'neko.canvas',
+            existingOwner: 'neko.story',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('records conflicting short names across provider namespaces', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+
+    runtime.registerProvider(createProvider('neko.story', [createTool('story.GenerateScene')]), {
+      extensionContext: {},
+    });
+    runtime.registerProvider(createProvider('neko.canvas', [createTool('canvas.GenerateScene')]), {
+      extensionContext: {},
+    });
+
+    expect(runtime.getDiagnostics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'extension.capability.tool.short-name-collision',
+          reason: 'conflicting-short-name',
+          context: expect.objectContaining({
+            name: 'canvas.GenerateScene',
+            shortName: 'generatescene',
+            providerId: 'neko.canvas',
+            existingOwner: 'neko.story',
+            existingToolName: 'story.GenerateScene',
+          }),
+        }),
+      ]),
+    );
+  });
 });

@@ -139,17 +139,12 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
-  /** @deprecated Derived from contentBlocks[].toolCall — do not update directly */
-  toolCalls?: ToolCall[];
   isStreaming?: boolean;
   attachments?: MessageAttachment[];
   /** Lightweight context references attached when the user sent this message */
   contextReferences?: MessageContextReference[];
   /** Associated unified work item IDs (media tasks, tool background tasks, subagents) */
   workItemIds?: string[];
-  /** AI thinking process (legacy, for backward compatibility) */
-  thinking?: string;
-  isThinkingComplete?: boolean;
   /** Message feedback */
   feedback?: 'positive' | 'negative';
   editedAt?: number;
@@ -162,7 +157,7 @@ export interface Message {
   isQueued?: boolean;
   /**
    * Sequential content blocks for chronological rendering (assistant messages only).
-   * When present, render these instead of the legacy fields.
+   * Assistant tool calls and thinking content are represented here.
    */
   contentBlocks?: ContentBlock[];
 }

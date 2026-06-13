@@ -430,7 +430,13 @@ describe('document-reader runtime', () => {
       createDeps({
         loadModule: createModuleLoader((packageName) => {
           if (packageName === 'officeparser') {
-            return { parseOfficeAsync: async () => 'Slide text' };
+            return {
+              parseOffice: async () => ({
+                type: 'pptx',
+                metadata: { title: 'Deck' },
+                toText: () => 'Slide text',
+              }),
+            };
           }
           if (packageName === 'xlsx') {
             return {

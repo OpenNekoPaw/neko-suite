@@ -37,7 +37,6 @@ export interface ProjectBackgroundTaskToolResultInput {
 export interface WorkItemMessageLinkTarget {
   id: string;
   workItemIds?: string[];
-  toolCalls?: Array<{ id?: string | null }>;
   contentBlocks?: Array<{
     type?: string;
     toolCall?: { id?: string | null };
@@ -397,7 +396,6 @@ export function attachWorkItemToMessageByToolCall<TMessage extends WorkItemMessa
 
 function messageHasToolCall(message: WorkItemMessageLinkTarget, toolCallId: string): boolean {
   return Boolean(
-    message.toolCalls?.some((toolCall) => toolCall.id === toolCallId) ||
     message.contentBlocks?.some(
       (block) => block.type === 'tool_call' && block.toolCall?.id === toolCallId,
     ),

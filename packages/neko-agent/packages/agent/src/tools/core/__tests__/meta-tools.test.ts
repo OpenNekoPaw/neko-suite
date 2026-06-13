@@ -130,7 +130,6 @@ function createGroupRegistryMock(): IToolGroupRegistry {
     get: vi.fn(),
     list: vi.fn(() => []),
     listEnabled: vi.fn(() => []),
-    match: vi.fn(() => []),
     getActiveTools: vi.fn(() => []),
     getDefaultTools: vi.fn(() => []),
     getGroupsForTool: vi.fn(() => []),

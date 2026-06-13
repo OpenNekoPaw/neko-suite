@@ -1,7 +1,7 @@
 import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { Platform } from '@neko/platform';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
-import type { AgentRuntimeHookSource, ProviderExpressionTargetConfig } from '@neko/agent/runtime';
+import type { ProviderExpressionTargetConfig } from '@neko/agent/runtime';
 import type { ExecutionMode, IRuntimeTaskManager, ToolCategoryRegistry } from '@neko/agent';
 
 export type { ExecutionMode, AgentEvent, AgentEventType } from '@neko/agent';
@@ -57,12 +57,6 @@ export interface IAgentConfig {
    * - auto: Auto execute
    */
   executionMode?: ExecutionMode;
-
-  /**
-   * Hook source for custom hooks from .hook/ directory.
-   * Extension hosts may pass HookManager; runtime only needs getHooks().
-   */
-  hookManager?: AgentRuntimeHookSource;
 
   /**
    * Tool category registry for three-layer injection.

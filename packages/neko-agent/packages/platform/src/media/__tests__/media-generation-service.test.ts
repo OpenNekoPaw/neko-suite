@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Task } from '@neko/shared';
 import { MediaGenerationService } from '../media-generation-service';
 import { MediaRoutingManager } from '../routing/media-routing-manager';
 import { MediaTaskExecutor } from '../media-task-executor';
@@ -12,7 +13,6 @@ import { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 import { OpenAICompatMediaAdapter } from '../adapters/openai-compat-media-adapter';
 import type { Provider, Model } from '../../types/provider';
-import type { Task } from '../../types/task';
 
 describe('MediaGenerationService', () => {
   let service: MediaGenerationService;

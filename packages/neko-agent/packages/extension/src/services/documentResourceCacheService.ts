@@ -4,7 +4,6 @@ import { resolveStorageLayout } from '@neko/shared';
 import type { DocumentSourceRef } from '@neko/shared';
 import {
   createDefaultLocalResourceAccessService,
-  LegacyResourceCacheProvider,
   VSCodeResourceCacheService,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
@@ -47,7 +46,6 @@ export function createDocumentResourceCacheService(
           readEntry: readZipBackedDocumentEntry,
         },
       }),
-      new LegacyResourceCacheProvider(),
     ],
     logger,
   });

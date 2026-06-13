@@ -88,7 +88,7 @@ function StoryboardTableRendererComponent({
       {storyboardRows.length > 0 ? (
         <SemanticStoryboardTable rows={storyboardRows} />
       ) : (
-        <LegacyStoryboardRows sections={data.sections} />
+        <ProjectedStoryboardRows sections={data.sections} />
       )}
       <Diagnostics diagnostics={data.diagnostics} aggregate />
     </div>
@@ -254,8 +254,8 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
   const tags = formatList(shot.sceneTags);
   const vfx = formatList(shot.vfx);
   const dialogue = formatStoryboardTextAndVoice(shot, t);
-  const legacyAudio = formatUncoveredLegacyAudio(shot, t);
-  const cueDisplay = compactStrings([dialogue, legacyAudio]).join('\n');
+  const supplementalAudio = formatSupplementalAudio(shot, t);
+  const cueDisplay = compactStrings([dialogue, supplementalAudio]).join('\n');
   const style = compactStrings([
     shot.visualStyle ? `${t('chat.storyboardTable.labels.style')}: ${shot.visualStyle}` : undefined,
     vfx ? `${t('chat.storyboardTable.labels.vfx')}: ${vfx}` : undefined,
@@ -308,7 +308,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
         {characters || '-'}
       </TableCell>
       <TableCell className="min-w-[180px] whitespace-pre-wrap break-words">
-        {cueDisplay || legacyAudio || '-'}
+        {cueDisplay || supplementalAudio || '-'}
       </TableCell>
       <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
         {style || '-'}
@@ -353,7 +353,7 @@ const STORYBOARD_TABLE_COLUMNS = [
 
 const STORYBOARD_TABLE_COLUMN_COUNT = STORYBOARD_TABLE_COLUMNS.length;
 
-function LegacyStoryboardRows({ sections }: { sections: readonly ResolvedCompositeSection[] }) {
+function ProjectedStoryboardRows({ sections }: { sections: readonly ResolvedCompositeSection[] }) {
   return (
     <div className="divide-y divide-[var(--agent-divider)]">
       {sections.map((section) => (
@@ -462,7 +462,7 @@ function formatStoryboardTextCue(cue: StoryboardTextCue, t: (key: string) => str
   ]).join(' ');
 }
 
-function formatUncoveredLegacyAudio(
+function formatSupplementalAudio(
   shot: StoryboardShotRow,
   t: (key: string) => string,
 ): string | undefined {

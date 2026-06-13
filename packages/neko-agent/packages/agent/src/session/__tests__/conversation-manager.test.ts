@@ -51,7 +51,14 @@ describe('ConversationManager', () => {
       role: 'assistant',
       content: '',
       timestamp: 1,
-      toolCalls: [{ id: 'tool-1', name: 'read_file', arguments: {} }],
+      contentBlocks: [
+        {
+          id: 'block-tool-1',
+          type: 'tool_call',
+          timestamp: 1,
+          toolCall: { id: 'tool-1', name: 'read_file', arguments: {} },
+        },
+      ],
     });
 
     expect(manager.get(id)?.resumable).toBe(true);
@@ -67,12 +74,17 @@ describe('ConversationManager', () => {
       role: 'assistant',
       content: 'I read the file.',
       timestamp: 1,
-      toolCalls: [
+      contentBlocks: [
         {
-          id: 'tool-1',
-          name: 'read_file',
-          arguments: { path: '/tmp/a.ts' },
-          result: { success: true, data: 'content' },
+          id: 'block-tool-1',
+          type: 'tool_call',
+          timestamp: 1,
+          toolCall: {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: { path: '/tmp/a.ts' },
+            result: { success: true, data: 'content' },
+          },
         },
       ],
     });

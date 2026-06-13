@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { isEntityMemoryContribution } from '@neko/shared';
 import { parseCompositeContentJson, type ContentBlock, type ToolCall } from '@neko-agent/types';
 import { projectCompositeBlockRichContent } from '../composite-content-presenter';
 import { projectStoryboardTableTransferPayload } from '../storyboard-transfer-presenter';
@@ -868,7 +867,7 @@ describe('composite content presenter', () => {
     ]);
   });
 
-  it('infers reviewable entity memory contribution from character analysis tables', () => {
+  it('does not infer durable entity memory contribution from character analysis tables in Webview', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'storyboard-table',
@@ -911,50 +910,14 @@ describe('composite content presenter', () => {
     if (projection.kind !== 'storyboard-table') {
       throw new Error('expected storyboard table projection');
     }
-    const contribution = projection.data.entityMemoryContribution;
-    expect(isEntityMemoryContribution(contribution)).toBe(true);
-    expect(contribution?.reviewPolicy).toBe('requires-user-review');
-    expect(contribution?.metadata).toMatchObject({
-      inferredFrom: 'character-analysis-table',
-      source: 'agent-rich-content-fallback',
-      rowCount: 2,
-    });
-    expect(contribution?.entityCandidates).toEqual([
-      expect.objectContaining({
-        kind: 'character',
-        name: '瑞德',
-        status: 'open',
-        identityBasis: 'user-named',
-      }),
-    ]);
-    expect(contribution?.characterObservations).toEqual([
-      expect.objectContaining({
-        reviewStatus: 'needs-review',
-        candidateId: contribution?.entityCandidates?.[0]?.id,
-        dimensions: [
-          expect.objectContaining({
-            dimension: 'appearance',
-            value: '红色围巾，面对门口时显得犹豫。',
-          }),
-        ],
-      }),
-    ]);
-    expect(contribution?.diagnostics).toEqual([
-      expect.objectContaining({
-        severity: 'warning',
-        code: 'character-analysis-row-not-entity',
-        details: expect.objectContaining({ name: '众人' }),
-      }),
-    ]);
+    expect(projection.data.entityMemoryContribution).toBeUndefined();
 
     const payload = projectStoryboardTableTransferPayload(projection.data);
-    expect(payload).toMatchObject({
-      kind: 'canvasStoryboard',
-      entityMemoryContribution: contribution,
-    });
+    expect(payload).toMatchObject({ kind: 'canvasStoryboard' });
+    expect(payload).not.toHaveProperty('entityMemoryContribution');
   });
 
-  it('prefers structured entity memory contribution over character analysis fallback', () => {
+  it('projects structured entity memory contribution provided by runtime or domain', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'storyboard-table',

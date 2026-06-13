@@ -113,21 +113,13 @@ describe('message resource projector', () => {
     });
   });
 
-  it('projects tool result payloads in legacy toolCalls and content blocks', () => {
+  it('projects tool result payloads in content blocks', () => {
     const messages: Message[] = [
       {
         id: 'msg-1',
         role: 'assistant',
         content: '',
         timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'GenerateImage',
-            arguments: {},
-            result: { success: true, data: { url: '/tmp/legacy.png' } },
-          },
-        ],
         contentBlocks: [
           {
             id: 'block-1',
@@ -151,17 +143,6 @@ describe('message resource projector', () => {
     ).toEqual([
       {
         ...messages[0],
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'GenerateImage',
-            arguments: {},
-            result: {
-              success: true,
-              data: { url: 'webview:///tmp/legacy.png', localPath: '/tmp/legacy.png' },
-            },
-          },
-        ],
         contentBlocks: [
           {
             id: 'block-1',
@@ -182,20 +163,13 @@ describe('message resource projector', () => {
     ]);
   });
 
-  it('projects tool argument payloads in legacy toolCalls and content blocks', () => {
+  it('projects tool argument payloads in content blocks', () => {
     const messages: Message[] = [
       {
         id: 'msg-1',
         role: 'assistant',
         content: '',
         timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'ReadImage',
-            arguments: { image_paths: ['/tmp/legacy-page.jpg'] },
-          },
-        ],
         contentBlocks: [
           {
             id: 'block-1',
@@ -218,16 +192,6 @@ describe('message resource projector', () => {
     ).toEqual([
       {
         ...messages[0],
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'ReadImage',
-            arguments: {
-              image_paths: ['/tmp/legacy-page.jpg'],
-              imagePathWebviewUris: ['webview:///tmp/legacy-page.jpg'],
-            },
-          },
-        ],
         contentBlocks: [
           {
             id: 'block-1',
@@ -280,17 +244,6 @@ describe('message resource projector', () => {
         role: 'assistant',
         content: '',
         timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'GenerateImage',
-            arguments: {},
-            result: {
-              success: true,
-              data: { taskId: 'task-1', backgroundMode: true, status: 'running' },
-            },
-          },
-        ],
         contentBlocks: [
           {
             id: 'block-1',
@@ -313,15 +266,6 @@ describe('message resource projector', () => {
     const result = updateBackgroundTaskToolResultUrls(messages, 'task-1', ['/tmp/output.png']);
 
     expect(result.updated).toBe(true);
-    expect(result.messages[0]?.toolCalls?.[0]?.result?.data).toEqual({
-      taskId: 'task-1',
-      backgroundMode: true,
-      status: 'completed',
-      url: '/tmp/output.png',
-      urls: ['/tmp/output.png'],
-      localPath: '/tmp/output.png',
-      localPaths: ['/tmp/output.png'],
-    });
     expect(result.messages[0]?.contentBlocks?.[0]?.toolCall?.result?.data).toEqual({
       taskId: 'task-1',
       backgroundMode: true,
@@ -340,14 +284,7 @@ describe('message resource projector', () => {
         role: 'assistant',
         content: '',
         timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tool-1',
-            name: 'GenerateImage',
-            arguments: {},
-            result: { success: true, data: { taskId: 'other', backgroundMode: true } },
-          },
-        ],
+        contentBlocks: [],
       },
     ];
 

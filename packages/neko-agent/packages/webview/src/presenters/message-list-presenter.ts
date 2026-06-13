@@ -1,5 +1,6 @@
 import type { ContentBlock, Message } from '@/components/types';
 import {
+  deriveToolCallsFromContentBlocks,
   projectContentBlocksDisplay,
   projectContentBlocksUi,
   type ContentBlockProcessGroupProjection,
@@ -108,7 +109,7 @@ export function projectMessageListItems(
         message.isStreaming ?? false,
         undefined,
         message.contentBlocks,
-        message.toolCalls,
+        undefined,
         options.plugins,
       );
 
@@ -212,8 +213,10 @@ function estimateMessageHeight(message: Message): number {
   const contentLines = Math.ceil((message.content?.length ?? 0) / 60);
   const attachmentHeight = (message.attachments?.length ?? 0) * 100;
   const contextRefHeight = (message.contextReferences?.length ?? 0) > 0 ? 28 : 0;
-  const toolCallHeight = (message.toolCalls?.length ?? 0) * 60;
-  const thinkingHeight = message.thinking ? 100 : 0;
+  const toolCallHeight = deriveToolCallsFromContentBlocks(message.contentBlocks).length * 60;
+  const thinkingHeight = message.contentBlocks?.some((block) => block.type === 'thinking')
+    ? 100
+    : 0;
 
   return Math.max(
     MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT,
