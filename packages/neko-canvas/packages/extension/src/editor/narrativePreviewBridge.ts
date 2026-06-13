@@ -55,7 +55,7 @@ interface NarrativePreviewI18n {
   readonly ariaDetails: string;
   readonly ariaControls: string;
   readonly ariaTimeline: string;
-  readonly unitFallback: string;
+  readonly defaultUnitLabel: string;
   readonly planCanvasPlayback: string;
   readonly info: string;
   readonly route: string;
@@ -140,14 +140,14 @@ interface NarrativePreviewI18n {
   readonly planMediaSequencePreview: string;
   readonly planNarrativePlaybackPlan: string;
   readonly shotTitle: string;
-  readonly fallbackUnitTitle: string;
-  readonly bodyShotFallback: string;
-  readonly bodySceneFallback: string;
+  readonly defaultUnitTitle: string;
+  readonly defaultShotBody: string;
+  readonly defaultSceneBody: string;
   readonly bodyMediaSource: string;
-  readonly bodyMediaFallback: string;
-  readonly bodyNarrativeFallback: string;
-  readonly bodyContainerFallback: string;
-  readonly bodyGenericFallback: string;
+  readonly defaultMediaBody: string;
+  readonly defaultNarrativeBody: string;
+  readonly defaultContainerBody: string;
+  readonly defaultGenericBody: string;
   readonly choiceContinueTo: string;
   readonly choiceContinue: string;
   readonly choiceTransition: string;
@@ -652,13 +652,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     );
     if (!session.webviewReady) {
       session.pendingMessages.push(enveloped);
-      this.schedulePendingPreviewMessageFallback(session, enveloped);
+      this.schedulePendingPreviewMessageRetry(session, enveloped);
       return;
     }
     session.panel.webview.postMessage(enveloped);
   }
 
-  private schedulePendingPreviewMessageFallback(
+  private schedulePendingPreviewMessageRetry(
     session: CanvasPreviewSession,
     message: CanvasToPreviewMessage,
   ): void {
@@ -1222,7 +1222,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         <div class="stage-overlay" aria-label="${h(i18n.ariaStageOverlay)}">
           <div class="stage-heading">
             <div class="stage-heading-row">
-              <span class="stage-kicker" id="unit-kind">${h(i18n.unitFallback)}</span>
+              <span class="stage-kicker" id="unit-kind">${h(i18n.defaultUnitLabel)}</span>
               <h1 class="stage-title" id="playback-title">${h(i18n.planCanvasPlayback)}</h1>
             </div>
             <p class="stage-subtitle" id="playback-summary"></p>
@@ -1543,7 +1543,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       previewPlay.textContent = isPlaying ? t('pause') : t('play');
       previewPlay.setAttribute('aria-label', isPlaying ? t('pause') : t('play'));
       previewPlay.title = isPlaying ? t('pause') : t('play');
-      unitKind.textContent = unit ? formatKindLabel(unit.kind) : t('unitFallback');
+      unitKind.textContent = unit ? formatKindLabel(unit.kind) : t('defaultUnitLabel');
       stageContent.dataset.kind = unit ? unit.kind : 'node';
       stageContent.dataset.renderMode = unit ? unit.renderMode : 'select-node';
       const stageKey = unit ? unit.id + ':' + index : 'none';
@@ -2692,7 +2692,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       return (
         unit.label ||
         readFirstString(metadata, ['sceneTitle', 'scriptTitle', 'title', 'name', 'projectTitle', 'docPath', 'assetPath']) ||
-        t('fallbackUnitTitle', { kind: formatKindLabel(unit.kind), index: index + 1 })
+        t('defaultUnitTitle', { kind: formatKindLabel(unit.kind), index: index + 1 })
       );
     }
 
@@ -2703,25 +2703,25 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           readString(metadata.visualDescription) ||
           readString(metadata.generationPrompt) ||
           readString(metadata.dialogue) ||
-          t('bodyShotFallback')
+          t('defaultShotBody')
         );
       }
       if (unit.kind === 'scene') {
         const location = readString(metadata.location);
         const timeOfDay = readString(metadata.timeOfDay);
-        return [readString(metadata.sceneTitle), location, timeOfDay].filter(Boolean).join(' / ') || t('bodySceneFallback');
+        return [readString(metadata.sceneTitle), location, timeOfDay].filter(Boolean).join(' / ') || t('defaultSceneBody');
       }
       if (unit.kind === 'media') {
         const source = unit.assetPath || readString(metadata.assetPath) || readNestedString(unit.resourceRef, ['key', 'id', 'path']);
-        return source ? t('bodyMediaSource', { source }) : t('bodyMediaFallback');
+        return source ? t('bodyMediaSource', { source }) : t('defaultMediaBody');
       }
       if (unit.kind === 'narrative') {
-        return readString(metadata.content) || readString(metadata.sceneRef) || t('bodyNarrativeFallback');
+        return readString(metadata.content) || readString(metadata.sceneRef) || t('defaultNarrativeBody');
       }
       if (unit.kind === 'container') {
-        return readFirstString(metadata, ['description', 'sceneTitle', 'label', 'name']) || t('bodyContainerFallback');
+        return readFirstString(metadata, ['description', 'sceneTitle', 'label', 'name']) || t('defaultContainerBody');
       }
-      return readFirstString(metadata, ['content', 'description', 'scriptPath', 'docPath', 'modelPath', 'canvasPath', 'projectPath']) || t('bodyGenericFallback');
+      return readFirstString(metadata, ['content', 'description', 'scriptPath', 'docPath', 'modelPath', 'canvasPath', 'projectPath']) || t('defaultGenericBody');
     }
 
     function formatChoiceLabel(choice) {
@@ -2876,9 +2876,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
 }
 
 function createNarrativePreviewI18n(): NarrativePreviewI18n {
-  const t = (key: string, fallback: string): string => {
+  const t = (key: string, defaultText: string): string => {
     const localized = vscode.l10n.t(key);
-    return localized === key ? fallback : localized;
+    return localized === key ? defaultText : localized;
   };
   return {
     title: t('neko.canvas.preview.title', 'Canvas Preview'),
@@ -2889,7 +2889,7 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
     ariaDetails: t('neko.canvas.preview.ariaDetails', 'Playback details'),
     ariaControls: t('neko.canvas.preview.ariaControls', 'Playback controls'),
     ariaTimeline: t('neko.canvas.preview.ariaTimeline', 'Playback timeline'),
-    unitFallback: t('neko.canvas.preview.unitFallback', 'Unit'),
+    defaultUnitLabel: t('neko.canvas.preview.defaultUnitLabel', 'Unit'),
     planCanvasPlayback: t('neko.canvas.preview.planCanvasPlayback', 'Canvas Playback'),
     info: t('neko.canvas.preview.info', 'Info'),
     route: t('neko.canvas.preview.route', 'Route'),
@@ -3037,30 +3037,24 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
       'Narrative Playback Plan',
     ),
     shotTitle: t('neko.canvas.preview.shotTitle', 'Shot {shotNumber}'),
-    fallbackUnitTitle: t('neko.canvas.preview.fallbackUnitTitle', '{kind} {index}'),
-    bodyShotFallback: t(
-      'neko.canvas.preview.bodyShotFallback',
+    defaultUnitTitle: t('neko.canvas.preview.defaultUnitTitle', '{kind} {index}'),
+    defaultShotBody: t(
+      'neko.canvas.preview.defaultShotBody',
       'Storyboard shot playback unit. Use Canvas to edit shot content and route ordering.',
     ),
-    bodySceneFallback: t(
-      'neko.canvas.preview.bodySceneFallback',
-      'Storyboard scene playback unit.',
-    ),
+    defaultSceneBody: t('neko.canvas.preview.defaultSceneBody', 'Storyboard scene playback unit.'),
     bodyMediaSource: t('neko.canvas.preview.bodyMediaSource', 'Media source: {source}'),
-    bodyMediaFallback: t(
-      'neko.canvas.preview.bodyMediaFallback',
+    defaultMediaBody: t(
+      'neko.canvas.preview.defaultMediaBody',
       'Media playback unit. Runtime source will be resolved by the host.',
     ),
-    bodyNarrativeFallback: t(
-      'neko.canvas.preview.bodyNarrativeFallback',
+    defaultNarrativeBody: t(
+      'neko.canvas.preview.defaultNarrativeBody',
       'Narrative runtime unit. Interactive rendering remains handled by the Narrative Runtime.',
     ),
-    bodyContainerFallback: t(
-      'neko.canvas.preview.bodyContainerFallback',
-      'Container playback unit.',
-    ),
-    bodyGenericFallback: t(
-      'neko.canvas.preview.bodyGenericFallback',
+    defaultContainerBody: t('neko.canvas.preview.defaultContainerBody', 'Container playback unit.'),
+    defaultGenericBody: t(
+      'neko.canvas.preview.defaultGenericBody',
       'Generic Canvas node playback unit.',
     ),
     choiceContinueTo: t('neko.canvas.preview.choiceContinueTo', 'Continue to {title}'),
