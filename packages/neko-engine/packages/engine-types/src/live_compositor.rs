@@ -61,7 +61,7 @@ pub enum LiveCompositorBlendMode {
 /// Policy for unsupported or temporarily unavailable layer sources.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum LiveCompositorFallbackPolicy {
+pub enum LiveCompositorSourceUnavailablePolicy {
     Exclude,
     Substitute,
     HoldLastFrame,
@@ -130,7 +130,7 @@ pub enum LiveCompositorDiagnosticCode {
     StaleRevision,
     LatencyBudgetExceeded,
     LatencyUnavailable,
-    FallbackNonAuthoritative,
+    PreviewNonAuthoritative,
 }
 
 /// Latency sample kind for live compositor smoke tests and parity gates.
@@ -216,7 +216,7 @@ pub struct LiveCompositorLayer {
     pub z_index: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locked: Option<bool>,
-    pub fallback_policy: LiveCompositorFallbackPolicy,
+    pub source_unavailable_policy: LiveCompositorSourceUnavailablePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
 }
@@ -244,7 +244,7 @@ pub struct LiveCompositorLayerPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locked: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fallback_policy: Option<LiveCompositorFallbackPolicy>,
+    pub source_unavailable_policy: Option<LiveCompositorSourceUnavailablePolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
 }

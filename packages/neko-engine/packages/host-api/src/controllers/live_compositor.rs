@@ -1012,8 +1012,8 @@ fn apply_layer_patch(layer: &mut LiveCompositorLayer, patch: LiveCompositorLayer
     if let Some(locked) = patch.locked {
         layer.locked = Some(locked);
     }
-    if let Some(fallback_policy) = patch.fallback_policy {
-        layer.fallback_policy = fallback_policy;
+    if let Some(source_unavailable_policy) = patch.source_unavailable_policy {
+        layer.source_unavailable_policy = source_unavailable_policy;
     }
     if let Some(metadata) = patch.metadata {
         layer.metadata = Some(metadata);

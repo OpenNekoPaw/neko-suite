@@ -8,9 +8,9 @@
 use neko_engine_gpu::{BlendMode, Transform2D};
 use neko_engine_types::{
     LiveCompositorBlendMode, LiveCompositorDiagnostic, LiveCompositorDiagnosticCode,
-    LiveCompositorDiagnosticSeverity, LiveCompositorFallbackPolicy, LiveCompositorLayer,
-    LiveCompositorLayerRole, LiveCompositorScene, LiveCompositorSourceKind,
-    LiveCompositorSourceRef,
+    LiveCompositorDiagnosticSeverity, LiveCompositorLayer, LiveCompositorLayerRole,
+    LiveCompositorScene, LiveCompositorSourceKind, LiveCompositorSourceRef,
+    LiveCompositorSourceUnavailablePolicy,
 };
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -309,9 +309,9 @@ fn unsupported_adaptation(
     retryable: bool,
 ) -> SourceAdaptation {
     SourceAdaptation {
-        status: fallback_status(layer.fallback_policy),
-        diagnostic_overlay: layer.fallback_policy
-            == LiveCompositorFallbackPolicy::DiagnosticOverlay,
+        status: source_unavailable_status(layer.source_unavailable_policy),
+        diagnostic_overlay: layer.source_unavailable_policy
+            == LiveCompositorSourceUnavailablePolicy::DiagnosticOverlay,
         diagnostics: vec![LiveCompositorDiagnostic {
             id: format!("diag-adapter-{}-{}", layer.id, source.source_id),
             code,
@@ -324,26 +324,31 @@ fn unsupported_adaptation(
             route_id: None,
             retryable: Some(retryable),
             details: Some(json!({
-                "fallbackPolicy": layer.fallback_policy,
-                "adapterStatus": fallback_status_name(fallback_status(layer.fallback_policy))
+                "sourceUnavailablePolicy": layer.source_unavailable_policy,
+                "adapterStatus": adapter_status_name(source_unavailable_status(
+                    layer.source_unavailable_policy,
+                ))
             })),
         }],
     }
 }
 
-fn fallback_status(fallback_policy: LiveCompositorFallbackPolicy) -> LiveCompositorAdapterStatus {
-    match fallback_policy {
-        LiveCompositorFallbackPolicy::DiagnosticOverlay
-        | LiveCompositorFallbackPolicy::Substitute => {
+fn source_unavailable_status(
+    policy: LiveCompositorSourceUnavailablePolicy,
+) -> LiveCompositorAdapterStatus {
+    match policy {
+        LiveCompositorSourceUnavailablePolicy::DiagnosticOverlay
+        | LiveCompositorSourceUnavailablePolicy::Substitute => {
             LiveCompositorAdapterStatus::DiagnosticOverlay
         }
-        LiveCompositorFallbackPolicy::Exclude | LiveCompositorFallbackPolicy::HoldLastFrame => {
+        LiveCompositorSourceUnavailablePolicy::Exclude
+        | LiveCompositorSourceUnavailablePolicy::HoldLastFrame => {
             LiveCompositorAdapterStatus::Unsupported
         }
     }
 }
 
-fn fallback_status_name(status: LiveCompositorAdapterStatus) -> &'static str {
+fn adapter_status_name(status: LiveCompositorAdapterStatus) -> &'static str {
     match status {
         LiveCompositorAdapterStatus::Ready => "ready",
         LiveCompositorAdapterStatus::DiagnosticOverlay => "diagnostic-overlay",
@@ -561,7 +566,8 @@ mod tests {
         model_layer.source.source_id = "source-model".to_string();
         model_layer.source.kind = LiveCompositorSourceKind::Model;
         model_layer.source.entity_ref = None;
-        model_layer.fallback_policy = LiveCompositorFallbackPolicy::DiagnosticOverlay;
+        model_layer.source_unavailable_policy =
+            LiveCompositorSourceUnavailablePolicy::DiagnosticOverlay;
         scene.layers.push(model_layer);
         scene.sources.push(LiveCompositorSourceRef {
             source_id: "source-model".to_string(),
@@ -581,7 +587,8 @@ mod tests {
         scene_layer.source.kind = LiveCompositorSourceKind::Scene;
         scene_layer.source.entity_ref = None;
         scene_layer.source.scene_ref = None;
-        scene_layer.fallback_policy = LiveCompositorFallbackPolicy::DiagnosticOverlay;
+        scene_layer.source_unavailable_policy =
+            LiveCompositorSourceUnavailablePolicy::DiagnosticOverlay;
         scene.layers.push(scene_layer);
         scene.sources.push(LiveCompositorSourceRef {
             source_id: "source-scene".to_string(),
