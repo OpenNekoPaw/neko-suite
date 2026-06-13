@@ -231,7 +231,11 @@ mod tests {
         assert_eq!(fixture.ack_event.applied_seq, Some(42));
 
         assert_eq!(
-            fixture.error_event.error.as_ref().map(|error| error.code.as_str()),
+            fixture
+                .error_event
+                .error
+                .as_ref()
+                .map(|error| error.code.as_str()),
             Some("revisionConflict")
         );
 
@@ -240,10 +244,19 @@ mod tests {
         assert_eq!(fixture.frame_meta.revision, 11);
         assert_eq!(fixture.frame_meta.scene_revision, Some(11));
         assert_eq!(fixture.frame_meta.applied_seq, 42);
-        assert_eq!(fixture.frame_meta.view_transform, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(
+            fixture.frame_meta.view_transform,
+            [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        );
         assert_eq!(fixture.metadata_event.message_type, "viewportMetadata");
-        assert_eq!(fixture.metadata_event.transport, ViewportMetadataTransport::SceneControl);
-        assert_eq!(fixture.metadata_event.cadence, ViewportMetadataCadence::AckCorrelated);
+        assert_eq!(
+            fixture.metadata_event.transport,
+            ViewportMetadataTransport::SceneControl
+        );
+        assert_eq!(
+            fixture.metadata_event.cadence,
+            ViewportMetadataCadence::AckCorrelated
+        );
         assert_eq!(fixture.metadata_event.revision, 11);
         assert_eq!(fixture.metadata_event.applied_seq, 42);
         assert_eq!(fixture.metadata_event.meta, fixture.frame_meta);

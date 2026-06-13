@@ -1549,7 +1549,6 @@ mod tests {
 
     #[test]
     fn export_uses_engine_evaluated_animation_pose() {
-        use crate::access::RawWorldAccess;
         use crate::components::{
             AnimationChannel, AnimationClipData, AnimationProperty, AnimationTarget,
             GlobalTransform, NodeName, SceneNodeId, SceneRoot, Transform,
@@ -1558,7 +1557,7 @@ mod tests {
 
         let mut scene = BevySceneWorld::new();
         {
-            let ecs = scene.ecs_world_mut_raw();
+            let ecs = scene.test_world_mut();
             ecs.spawn((
                 SceneNodeId("node_0".to_string()),
                 NodeName("Animated Node".to_string()),
@@ -1595,7 +1594,13 @@ mod tests {
         let meshes = HashMap::new();
         let glb = export_glb(&nodes, &meshes, &AssetDatabase::default(), None, None).unwrap();
         let root = parse_glb_json(&glb);
-        assert_json_array_approx(&root["nodes"][0]["translation"], &[0.25, 0.0, 0.0]);
+        let animated_node = root["nodes"]
+            .as_array()
+            .expect("nodes array")
+            .iter()
+            .find(|node| node["name"] == "Animated Node")
+            .expect("animated node export");
+        assert_json_array_approx(&animated_node["translation"], &[0.25, 0.0, 0.0]);
     }
 
     fn parse_glb_json(glb: &[u8]) -> serde_json::Value {

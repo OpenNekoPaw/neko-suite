@@ -461,10 +461,7 @@ mod tests {
         let fixture = fixture();
         let scene = fixture.scene;
 
-        assert_eq!(
-            scene.contract_version,
-            LIVE_COMPOSITOR_CONTRACT_VERSION
-        );
+        assert_eq!(scene.contract_version, LIVE_COMPOSITOR_CONTRACT_VERSION);
         assert!(scene.has_supported_contract_version());
         assert_eq!(scene.scene_id, "live-scene-main");
         assert_eq!(scene.viewport_id.as_deref(), Some("viewport-live-main"));

@@ -548,11 +548,7 @@ fn scene_contract_fixture_roundtrips_snapshot_and_delta() {
         "characterRegion"
     );
     assert_eq!(
-        roundtripped
-            .environment_diagnostics
-            .as_ref()
-            .unwrap()[0]
-            .code,
+        roundtripped.environment_diagnostics.as_ref().unwrap()[0].code,
         "environment.loadPending"
     );
 }

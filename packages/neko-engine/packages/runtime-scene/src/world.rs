@@ -4,9 +4,9 @@
 
 use crate::access::{
     BeginModelingSession, CommitModelingSession, CreativeAccess, DataAccess, ProceduralSceneEntity,
-    ProceduralSceneEntitySpec, RawWorldAccess, SceneCommandBatch, SceneEntityFilter,
-    SceneExportRef, SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction,
-    SceneRenderExtractor, SerializedSceneEntities,
+    ProceduralSceneEntitySpec, SceneCommandBatch, SceneEntityFilter, SceneExportRef,
+    SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction, SceneRenderExtractor,
+    SerializedSceneEntities,
 };
 use crate::animation_blend::{
     SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneBlendLayerInfo,
@@ -450,6 +450,11 @@ impl BevySceneWorld {
         &self.default_procedural_meshes
     }
 
+    #[cfg(test)]
+    pub(crate) fn test_world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
+
     fn write_playback_state(
         &mut self,
         clip_name: &str,
@@ -779,13 +784,6 @@ impl DataAccess for BevySceneWorld {
         self.world
             .resource_mut::<ModelingSessionManager>()
             .apply_brush_patch(patch)
-    }
-}
-
-#[allow(deprecated)]
-impl RawWorldAccess for BevySceneWorld {
-    fn ecs_world_mut_raw(&mut self) -> &mut World {
-        &mut self.world
     }
 }
 
@@ -1597,7 +1595,7 @@ mod tests {
     fn load_model_replaces_existing_scene_entities() {
         let mut scene = BevySceneWorld::new();
         {
-            let ecs = scene.ecs_world_mut_raw();
+            let ecs = &mut scene.world;
             ecs.spawn((
                 SceneNodeId("template_humanoid".to_string()),
                 NodeName("Template Humanoid".to_string()),
@@ -1696,7 +1694,7 @@ mod tests {
     fn tick_writes_engine_playback_state_and_evaluated_pose() {
         let mut scene = BevySceneWorld::new();
         let (root, target) = {
-            let ecs = scene.ecs_world_mut_raw();
+            let ecs = &mut scene.world;
             let target = ecs
                 .spawn((
                     SceneNodeId("node_0".to_string()),
@@ -1723,7 +1721,7 @@ mod tests {
 
         scene.tick("Move", 1.25);
 
-        let ecs = scene.ecs_world_mut_raw();
+        let ecs = &mut scene.world;
         let state = ecs
             .get::<SceneAnimationPlaybackState>(root)
             .expect("playback state is stored in ECS");
@@ -1740,7 +1738,7 @@ mod tests {
     fn snapshot_includes_local_and_world_mesh_bounds() {
         let mut scene = BevySceneWorld::new();
         {
-            let ecs = scene.ecs_world_mut_raw();
+            let ecs = &mut scene.world;
             ecs.spawn((
                 SceneNodeId("node_0".to_string()),
                 NodeName("Mesh".to_string()),
@@ -1761,7 +1759,7 @@ mod tests {
                 },
             ));
         }
-        systems::transform_propagation(scene.ecs_world_mut_raw());
+        systems::transform_propagation(&mut scene.world);
 
         let snapshot = scene.get_snapshot();
         let node = snapshot

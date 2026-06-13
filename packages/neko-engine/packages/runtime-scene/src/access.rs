@@ -194,15 +194,6 @@ pub struct CommitModelingSession {
 }
 
 #[allow(dead_code)]
-#[deprecated(
-    since = "0.0.0",
-    note = "Migration-only escape hatch; use CreativeAccess or DataAccess typed methods"
-)]
-pub(crate) trait RawWorldAccess {
-    fn ecs_world_mut_raw(&mut self) -> &mut World;
-}
-
-#[allow(dead_code)]
 pub(crate) fn snapshot_from_world(world: &mut dyn SceneWorld) -> SceneSnapshot {
     world.get_snapshot()
 }

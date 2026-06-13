@@ -188,13 +188,17 @@ mod tests {
 
     #[test]
     fn model_preview_fixture_roundtrips_state_payload() {
-        let fixture =
-            include_str!("../../../../neko-types/src/types/__fixtures__/model-ai-preview-scene-modes-v1.json");
+        let fixture = include_str!(
+            "../../../../neko-types/src/types/__fixtures__/model-ai-preview-scene-modes-v1.json"
+        );
         let fixture: Fixture = serde_json::from_str(fixture).expect("fixture should deserialize");
 
         assert_eq!(fixture.request.mode_id, CharacterPreviewModeId::VoicePack);
         assert_eq!(fixture.camera_reset.mode_id, CharacterPreviewModeId::Face);
-        assert_eq!(fixture.playback_command.mode_id, CharacterPreviewModeId::Motion);
+        assert_eq!(
+            fixture.playback_command.mode_id,
+            CharacterPreviewModeId::Motion
+        );
         assert_eq!(fixture.state.character_id, "character-a");
         assert_eq!(fixture.state.mode_id, CharacterPreviewModeId::VoicePack);
         assert_eq!(fixture.state.status, CharacterPreviewStateStatus::Applied);

@@ -2529,8 +2529,9 @@ mod tests {
             event: SceneCommandEvent::UpdateViewportSettings {
                 scene_id: Some("scene-a".to_string()),
                 viewport_id: "main".to_string(),
-                settings_json: r#"{"renderMode":"clay","helperPassesEnabled":false,"showGrid":false}"#
-                    .to_string(),
+                settings_json:
+                    r#"{"renderMode":"clay","helperPassesEnabled":false,"showGrid":false}"#
+                        .to_string(),
             },
         };
 
@@ -2758,7 +2759,10 @@ mod tests {
         );
         let _ = service.prepare_shared_extract_for_test().unwrap();
         assert_eq!(service.latest_render_snapshot_generation(), first.0);
-        assert_eq!(service.pop_export_render_snapshot_generation().unwrap(), None);
+        assert_eq!(
+            service.pop_export_render_snapshot_generation().unwrap(),
+            None
+        );
     }
 
     #[test]

@@ -979,7 +979,12 @@ mod tests {
                 art_mesh.position_index_sources_begin,
                 art_mesh.position_index_sources_count,
             );
-            rasterize_mesh(&mut image, &vertices, &triangles, color_for_mesh(mesh_index));
+            rasterize_mesh(
+                &mut image,
+                &vertices,
+                &triangles,
+                color_for_mesh(mesh_index),
+            );
         }
         image
     }
@@ -1074,9 +1079,7 @@ mod tests {
                 let w0 = edge(b, c, p);
                 let w1 = edge(c, a, p);
                 let w2 = edge(a, b, p);
-                if (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0)
-                    || (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0)
-                {
+                if (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0) || (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0) {
                     image.set_pixel(x, y, color);
                 }
             }

@@ -3,7 +3,6 @@
 use crate::animation::{AnimationClipInfo, ParameterCurveInfo};
 use crate::moc3;
 use crate::world::{DeformedMesh, PuppetDelta, PuppetSnapshot, PuppetWorld};
-use bevy_ecs::prelude::World;
 use serde::{Deserialize, Serialize};
 
 /// User-intent access surface for puppet editor operations.
@@ -35,13 +34,4 @@ pub struct SerializedPuppetEntities {
 pub struct PuppetAnimationTracks {
     pub clip_name: String,
     pub tracks: Vec<ParameterCurveInfo>,
-}
-
-#[allow(dead_code)]
-#[deprecated(
-    since = "0.0.0",
-    note = "Migration-only escape hatch; use CreativeAccess or DataAccess typed methods"
-)]
-pub(crate) trait RawWorldAccess {
-    fn ecs_world_mut_raw(&mut self) -> &mut World;
 }

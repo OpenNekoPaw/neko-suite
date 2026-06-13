@@ -996,7 +996,10 @@ pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> Scene
         .environment
         .then(|| world.resource::<SceneEnvironmentState>().current.clone());
     let environment_diagnostics = if dirty.environment {
-        world.resource::<SceneEnvironmentState>().diagnostics.clone()
+        world
+            .resource::<SceneEnvironmentState>()
+            .diagnostics
+            .clone()
     } else {
         Vec::new()
     };

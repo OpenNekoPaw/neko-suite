@@ -4,8 +4,7 @@
 //! Mirrors runtime-scene's SceneWorld pattern.
 
 use crate::access::{
-    CreativeAccess, DataAccess, PuppetAnimationTracks, PuppetEntityFilter, RawWorldAccess,
-    SerializedPuppetEntities,
+    CreativeAccess, DataAccess, PuppetAnimationTracks, PuppetEntityFilter, SerializedPuppetEntities,
 };
 use crate::animation::{
     AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo,
@@ -282,7 +281,9 @@ impl BevyPuppetWorld {
 
     fn root_format(&mut self) -> Option<String> {
         let root = self.find_root()?;
-        self.world.get::<PuppetFormat>(root).map(puppet_format_label)
+        self.world
+            .get::<PuppetFormat>(root)
+            .map(puppet_format_label)
     }
 }
 
@@ -353,13 +354,6 @@ impl DataAccess for BevyPuppetWorld {
 
     fn tick_data(&mut self, delta_ms: f32) -> PuppetDelta {
         self.tick(delta_ms)
-    }
-}
-
-#[allow(deprecated)]
-impl RawWorldAccess for BevyPuppetWorld {
-    fn ecs_world_mut_raw(&mut self) -> &mut World {
-        &mut self.world
     }
 }
 
@@ -1356,7 +1350,9 @@ mod tests {
     #[test]
     fn native_snapshot_reports_explicit_format() {
         let mut world = BevyPuppetWorld::new();
-        let snapshot = world.load_native_project(&minimal_native_project()).unwrap();
+        let snapshot = world
+            .load_native_project(&minimal_native_project())
+            .unwrap();
 
         assert_eq!(snapshot.format.as_deref(), Some("native"));
     }
