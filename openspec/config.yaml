@@ -1,13 +1,13 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context shown to AI when creating OpenSpec artifacts.
+# Keep detailed project development principles in project.md so proposal/design/spec/task
+# instructions all share one source of truth.
+context: |
+  Read and follow openspec/project.md before creating or updating proposal,
+  design, specs, or tasks artifacts. It defines Neko Suite's architecture
+  boundaries, contract-first workflow, ADR-derived development principles,
+  risk levels, validation expectations, and domain-specific constraints.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

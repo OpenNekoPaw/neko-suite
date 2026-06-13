@@ -39,9 +39,22 @@ Proposed (2026-06-12, updated 2026-06-13)
 
 ## 当前判断
 
-结论：**Agent/runtime 承接了一部分业务；Extension 层已经局部越过桥接边界，成为桥接 + 业务编排 + 部分领域规则的混合层；Webview 大体仍是 UI 层，但已存在一个确认的高危越界点，会生成持久化实体记忆贡献。**
+结论：**原始审计判断成立；`implement-agent-boundary-cleanup` 已完成首批收口，当前风险从“业务逻辑已放错层”转为“防止回流并继续拆剩余 host adapter 厚度”。**
 
 这不是全线违背架构，也不是大面积死代码问题。相关代码大多是活跃、可测试、功能正确的实现；核心风险在于业务逻辑位置错误。若继续以当前形态添加功能，Extension 会变成新的业务宿主，Webview 也可能继续进入持久化领域数据链，最终削弱 CLI / TUI / 测试运行时复用能力。
+
+### 2026-06-13 实施更新
+
+OpenSpec change `implement-agent-boundary-cleanup` 已完成以下边界迁移和 guardrail：
+
+| 原风险面 | 当前实现状态 |
+|----------|--------------|
+| `characterDialogueController.ts` 默认业务策略 | profile enrichment、evaluation、fallback report、suggestion policy、headless probe orchestration 等已迁到 `@neko/agent/runtime` 的 `character-dialogue-runtime`；Extension 保留 VSCode/Webview/tab/QuickPick/file adapter |
+| Webview `entity-memory-contribution-inference.ts` | Webview 侧文件已删除；Markdown 表格解析、实体候选/观察维度/置信度和 reviewable contribution 构造迁到 `@neko/agent/artifact`；Webview 只渲染 runtime projection |
+| `characterEvidenceLoader.ts` evidence 策略 | locator collection、story-scene 派生、freshness、relevance、trimming 和 omission metadata 已迁到 runtime evidence strategy；Extension 保留 VSCode command/file/Story API reader |
+| `agentProjectSearchAdapters.ts` 搜索聚合策略 | creative entity dedupe、partition status/freshness 聚合迁到 `@neko/search/core`；Dashboard row projection 和 script role candidate extraction 迁到 `@neko/entity/projections` |
+| projectSearch shim | Agent Extension `services/projectSearch/*` shim 已删除，import 改到 `@neko/search/host-vscode` |
+| guardrail | `pnpm check:agent-boundaries` 现在校验 Webview durable contribution、Agent-local projectSearch shim、Extension search aggregation helper、LCD register、legacy centralized tool metadata 和 compatibility exception 生命周期 |
 
 ## 证据
 
@@ -49,7 +62,7 @@ Proposed (2026-06-12, updated 2026-06-13)
 
 Webview 目前没有明显直接导入 `vscode`、`@neko/agent`、`@neko/platform` 的越界模式，整体仍以组件、handler、presenter 和 Zustand 状态为主。
 
-但 `packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts` 已确认不是单纯 UI presenter。它从 Markdown 表格推断实体候选、角色观察维度和置信度，并生成 `EntityMemoryContribution` 写入持久化实体记忆。该结果会影响 Agent 后续对角色的认知，因此属于 Webview 层高危越界。
+历史高危点 `packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts` 已迁出 Webview。当前 guard 禁止 Webview 重新生成 durable `EntityMemoryContribution`、默认置信度或 review policy。
 
 ### Agent / runtime
 
@@ -70,9 +83,9 @@ Extension 层出现明显偏厚文件：
 
 | 文件 | 风险 |
 |------|------|
-| `packages/neko-agent/packages/extension/src/chat/characterDialogueController.ts` | 包含角色对话启动、thin profile 策略、profile enrichment、transcript evaluation、fallback report、suggestion apply、headless probe 等业务流程 |
-| `packages/neko-agent/packages/extension/src/evidence/characterEvidenceLoader.ts` | 除 VSCode command / file access 外，还负责 evidence locator 收集、freshness 策略、窗口裁剪、Story scene locator 派生 |
-| `packages/neko-agent/packages/extension/src/services/agentProjectSearchAdapters.ts` | 除 VSCode command 桥接外，还负责 creative entity 搜索聚合、候选提取、dedupe、freshness/status 聚合 |
+| `packages/neko-agent/packages/extension/src/chat/characterDialogueController.ts` | 已接入 `character-dialogue-runtime`；仍需持续防止 controller 重新累积默认业务策略 |
+| `packages/neko-agent/packages/extension/src/evidence/characterEvidenceLoader.ts` | 已瘦身为 VSCode command / file / Story API adapter；runtime evidence strategy 拥有 reusable policy |
+| `packages/neko-agent/packages/extension/src/services/agentProjectSearchAdapters.ts` | 已瘦身为 VSCode command / file / Story API adapter composition；search/entity 包拥有聚合和候选语义 |
 
 这些文件虽然大量使用依赖注入，测试性较好，但职责已经超过 Extension Host 的理想边界。
 
@@ -80,10 +93,10 @@ Extension 层出现明显偏厚文件：
 
 | 文件 | 行数 | 合规职责 | 越界职责 | 严重度 |
 |------|------|----------|----------|--------|
-| `packages/neko-agent/packages/extension/src/chat/characterDialogueController.ts` | 2,333 | postMessage、Disposable、QuickPick、文件读写、命令注册、Tab 状态管理 | LLM profile enrichment、transcript evaluation、fallback report、suggestion policy、headless probe、evidence 加载、NPC fact inference | 高 |
-| `packages/neko-agent/packages/extension/src/evidence/characterEvidenceLoader.ts` | 1,021 | VSCode 文件读取、VSCode command 调用、Extension API 发现、factory 隔离 VSCode 依赖 | Story scene locator 派生、窗口裁剪策略、relevance scoring、freshness 处理 | 中 |
-| `packages/neko-agent/packages/extension/src/services/agentProjectSearchAdapters.ts` | 916 | VSCode command 调用、workspace 文件读取、Extension API 发现 | creative entity 去重、freshness 优先策略、多源状态聚合、脚本角色候选解析 | 高 |
-| `packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts` | 347 | 无明确 UI-only 职责 | Markdown 表格解析、实体候选推断、观察维度推断、置信度打分、持久化实体记忆贡献生成 | 高 |
+| `packages/neko-agent/packages/extension/src/chat/characterDialogueController.ts` | 原 2,333 | postMessage、Disposable、QuickPick、文件读写、命令注册、Tab 状态管理 | 已迁出主要默认策略到 runtime；剩余风险是 controller 回流 | 已收口，继续 guard |
+| `packages/neko-agent/packages/extension/src/evidence/characterEvidenceLoader.ts` | 原 1,021 | VSCode 文件读取、VSCode command 调用、Extension API 发现、factory 隔离 VSCode 依赖 | 已迁出 story-scene locator、裁剪、relevance、freshness | 已收口 |
+| `packages/neko-agent/packages/extension/src/services/agentProjectSearchAdapters.ts` | 原 916 | VSCode command 调用、workspace 文件读取、Extension API 发现 | 已迁出 creative entity 去重、freshness/status、脚本角色候选解析 | 已收口 |
+| `packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts` | 原 347 | 无明确 UI-only 职责 | 已删除；domain/runtime 生成 reviewable contribution | 已收口 |
 
 `characterDialogueController.ts` 的 `createSkillPrimitivePorts()` 实际暴露了 assembler、evidence、headless probe、evaluation、save、apply 等端口清单；这些端口本身说明对应能力应成为 runtime service，而不应由 Extension controller 拥有默认业务实现。
 
@@ -153,7 +166,7 @@ Extension 可以提供 adapter，但默认不写业务默认实现。若确需�
 
 ### 3. 优先迁移目标
 
-执行顺序需与 `adr-code-debt-cleanup-strategy.md` 对齐：先完成 cleanup strategy Phase 1 的 `projectSearch` shim 删除和依赖清理，再执行以下边界迁移目标 1-4，最后推进 cleanup strategy Phase 3 的 Agent 工具注册双轨收敛。边界迁移期间不得把新 runtime service 注册到 legacy tool path；如短期无法接入 CapabilityProvider，必须带 `TODO(P1)`、owner、删除条件和测试保护。
+执行关系需与 `adr-code-debt-cleanup-strategy.md` 对齐：先完成 cleanup strategy Phase 1 中的 `projectSearch` shim 删除和相关 imports 修正，再执行以下边界迁移目标 1-4。cleanup strategy Phase 3 的 Agent 工具注册双轨收敛与这些边界迁移没有代码级阻塞依赖，可并行推进。边界迁移期间若新增 runtime service 或 tool surface，不得新增 legacy tool path 注册；应优先接入 CapabilityProvider，或带 `TODO(P1)`、owner、删除条件和测试保护。
 
 按风险和复用价值，优先迁移：
 
@@ -223,17 +236,13 @@ pnpm --dir packages/neko-agent/packages/webview build
 ## 残余风险
 
 - 角色对话相关功能仍可能继续向 Extension 增长，形成新的 God Controller。
-- Evidence / Project Search 规则若不迁到 domain package，CLI/TUI 无法复用同等能力。
-- Webview presenter 已有业务兜底进入持久实体记忆链，需优先迁移，否则会破坏 “Webview 只做 UI” 的边界并影响 Agent 后续认知。
-- AI SDK legacy bridge 和 projectSearch compat shim 仍需按 `adr-code-debt-cleanup-strategy.md` 独立跟踪。
+- Evidence / Project Search 已完成首批迁移；后续新增规则仍需默认进入 runtime/domain package。
+- Webview durable entity memory inference 已迁出；残余风险是新 presenter 重新生成持久领域事实。
+- AI SDK legacy bridge 仍需按 `adr-code-debt-cleanup-strategy.md` 的 LCD-009 provider sunset 表跟踪。
 
 ## 后续任务建议
 
-1. 先完成 `adr-code-debt-cleanup-strategy.md` Phase 1：删除 `projectSearch` shim、修正 imports、清理明确 unused dependency。
-2. 为 Character Dialogue runtime 增加 host-agnostic service/port。
-3. 将 `characterDialogueController.ts` 拆成 VSCode adapter + runtime orchestrator。
-4. 将 `entity-memory-contribution-inference.ts` 的持久记忆贡献生成迁到 `@neko/agent` 或 `@neko/entity`。
-5. 将 Character Evidence locator / trimming 策略迁到 `@neko/agent/runtime`。
-6. 将 creative entity project search 聚合迁到 `@neko/search` 或 `@neko/entity`。
-7. 给 Webview presenter 增加 guard：禁止生成可持久化领域事实，除非调用共享 contract projector。
-8. 最后推进 cleanup strategy Phase 3：Agent 工具注册统一到 CapabilityProvider，并删除 legacy centralized tool path。
+1. 继续拆 `agentTurnBridge` / `AgentRunnerPort` 等已续期 compatibility exception，避免 2026-07-04 后阻断 `check:agent-boundaries`。
+2. 新增角色、证据、搜索、实体记忆能力时，先建 runtime/domain service，再接 Extension/Webview adapter。
+3. 保持 `pnpm check:agent-boundaries` 为边界和 LCD metadata 的必跑门禁。
+4. AI SDK legacy bridge 按 LCD-009 provider 行逐个 sunset，不做整体删除。

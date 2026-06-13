@@ -1,0 +1,917 @@
+#!/usr/bin/env node
+
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+
+const repoRoot = process.cwd();
+const ledgerPath = 'docs/architecture/code-debt-surface-ledger.json';
+
+const terms = ['legacy', 'fallback', 'deprecated'];
+const requiredSemanticClasses = [
+  'delete-now',
+  'migrate-now',
+  'current-bridge',
+  'runtime-resilience',
+  'boundary-canonicalizer',
+  'presentation-default',
+  'domain-status',
+  'generated-source',
+  'test-only',
+  'false-positive-word',
+];
+const allowedSemanticClasses = new Set([...requiredSemanticClasses, 'needs-review']);
+const allowedStatuses = new Set(['active', 'planned', 'removed']);
+const allowedActions = new Set([
+  'delete',
+  'migrate',
+  'preserve',
+  'rename',
+  'defer',
+  'model-entrypoint',
+  'review',
+]);
+const requiredLedgerEntryFields = [
+  'id',
+  'package',
+  'surface',
+  'semanticClass',
+  'action',
+  'status',
+  'owner',
+  'replacement',
+  'removeCondition',
+  'validation',
+];
+
+const excludedDirectories = new Set([
+  '.git',
+  '.turbo',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+]);
+const includedExtensions = new Set(['.ts', '.tsx']);
+const args = new Set(process.argv.slice(2));
+
+if (args.has('--help') || args.has('-h')) {
+  printHelp();
+  process.exit(0);
+}
+
+if (args.has('--self-test')) {
+  runSelfTest();
+  process.exit(0);
+}
+
+const packageRoots = collectPackageRoots();
+const files = walkSourceFiles(repoRoot);
+const matches = scanFiles(files);
+const report = buildReport(matches, files);
+
+if (args.has('--validate-ledger')) {
+  const result = validateLedger(report);
+  if (args.has('--json')) {
+    console.log(JSON.stringify({ report, validation: result }, null, 2));
+  } else {
+    printValidation(result);
+  }
+  process.exit(result.errors.length > 0 ? 1 : 0);
+}
+
+if (args.has('--json')) {
+  console.log(JSON.stringify(report, null, 2));
+} else {
+  printHumanReport(report);
+}
+
+function printHelp() {
+  console.log(`Usage: node scripts/check-legacy-debt-surfaces.mjs [--json] [--validate-ledger] [--self-test]
+
+Scans TypeScript sources for legacy/fallback/deprecated cleanup surfaces.
+
+Scopes:
+  allSource      *.ts and *.tsx files, excluding generated build output directories
+  nonTestSource  allSource minus __tests__, *.test.*, and *.spec.* files
+
+Excluded directories:
+  ${[...excludedDirectories].sort().join(', ')}
+`);
+}
+
+function collectPackageRoots() {
+  const roots = [];
+  const packagesDir = resolve(repoRoot, 'packages');
+  if (existsSync(packagesDir)) {
+    for (const packageJsonPath of walkPackageJsonFiles(packagesDir)) {
+      try {
+        const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        roots.push({
+          dir: dirname(packageJsonPath),
+          relDir: toRepoPath(dirname(packageJsonPath)),
+          name: typeof pkg.name === 'string' ? pkg.name : toRepoPath(dirname(packageJsonPath)),
+        });
+      } catch {
+        roots.push({
+          dir: dirname(packageJsonPath),
+          relDir: toRepoPath(dirname(packageJsonPath)),
+          name: toRepoPath(dirname(packageJsonPath)),
+        });
+      }
+    }
+  }
+  roots.sort((a, b) => b.relDir.length - a.relDir.length);
+  return roots;
+}
+
+function walkPackageJsonFiles(root) {
+  const results = [];
+  for (const entry of safeReadDir(root)) {
+    if (excludedDirectories.has(entry.name)) {
+      continue;
+    }
+    const absolute = join(root, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...walkPackageJsonFiles(absolute));
+    } else if (entry.isFile() && entry.name === 'package.json') {
+      results.push(absolute);
+    }
+  }
+  return results;
+}
+
+function walkSourceFiles(root) {
+  const results = [];
+  for (const entry of safeReadDir(root)) {
+    if (excludedDirectories.has(entry.name)) {
+      continue;
+    }
+    const absolute = join(root, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...walkSourceFiles(absolute));
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (includedExtensions.has(extname(entry.name))) {
+      results.push(absolute);
+    }
+  }
+  return results.sort((a, b) => toRepoPath(a).localeCompare(toRepoPath(b)));
+}
+
+function safeReadDir(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function scanFiles(sourceFiles) {
+  const results = [];
+  const termPattern = new RegExp(terms.join('|'), 'gi');
+
+  for (const file of sourceFiles) {
+    const relPath = toRepoPath(file);
+    let content = '';
+    try {
+      content = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const lines = content.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? '';
+      termPattern.lastIndex = 0;
+      let match = termPattern.exec(line);
+      while (match !== null) {
+        const term = match[0].toLowerCase();
+        results.push({
+          file: relPath,
+          packageName: getPackageName(file),
+          lineNumber: index + 1,
+          term,
+          text: line.trim(),
+          isTest: isTestPath(relPath),
+          semanticClass: classifySurface(relPath, line, term),
+        });
+        match = termPattern.exec(line);
+      }
+    }
+  }
+
+  return results;
+}
+
+function buildReport(allMatches, sourceFiles) {
+  const allFiles = sourceFiles.map(toRepoPath);
+  const nonTestFiles = allFiles.filter((file) => !isTestPath(file));
+  const nonTestMatches = allMatches.filter((match) => !match.isTest);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    scanner: {
+      command: 'node scripts/check-legacy-debt-surfaces.mjs',
+      terms,
+      includedExtensions: [...includedExtensions].sort(),
+      excludedDirectories: [...excludedDirectories].sort(),
+      nonTestExclusions: ['**/__tests__/**', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+      ledgerPath,
+    },
+    scopes: {
+      allSource: summarizeScope(allMatches, allFiles),
+      nonTestSource: summarizeScope(nonTestMatches, nonTestFiles),
+    },
+    semanticClasses: {
+      allSource: summarizeSemanticClasses(allMatches),
+      nonTestSource: summarizeSemanticClasses(nonTestMatches),
+    },
+    hotspots: {
+      packages: topRows(groupMatches(nonTestMatches, (match) => match.packageName), 20),
+      files: topRows(groupMatches(nonTestMatches, (match) => match.file), 40),
+    },
+    examples: representativeExamples(nonTestMatches, 30),
+    cleanupCandidates: cleanupCandidates(nonTestMatches),
+  };
+}
+
+function summarizeScope(scopeMatches, scopeFiles) {
+  return {
+    filesScanned: scopeFiles.length,
+    filesWithMatches: new Set(scopeMatches.map((match) => match.file)).size,
+    occurrences: scopeMatches.length,
+    termCounts: countTerms(scopeMatches),
+  };
+}
+
+function summarizeSemanticClasses(scopeMatches) {
+  const classes = {};
+  for (const semanticClass of [...requiredSemanticClasses, 'needs-review']) {
+    classes[semanticClass] = {
+      occurrences: 0,
+      termCounts: emptyTermCounts(),
+      files: 0,
+      examples: [],
+    };
+  }
+
+  const filesByClass = new Map();
+  for (const match of scopeMatches) {
+    const bucket = classes[match.semanticClass] ?? classes['needs-review'];
+    bucket.occurrences += 1;
+    bucket.termCounts[match.term] += 1;
+    if (!filesByClass.has(match.semanticClass)) {
+      filesByClass.set(match.semanticClass, new Set());
+    }
+    filesByClass.get(match.semanticClass).add(match.file);
+    if (bucket.examples.length < 5) {
+      bucket.examples.push(formatExample(match));
+    }
+  }
+
+  for (const [semanticClass, files] of filesByClass.entries()) {
+    classes[semanticClass].files = files.size;
+  }
+
+  return classes;
+}
+
+function groupMatches(scopeMatches, keyFn) {
+  const groups = new Map();
+  for (const match of scopeMatches) {
+    const key = keyFn(match);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        occurrences: 0,
+        termCounts: emptyTermCounts(),
+        files: new Set(),
+        semanticClasses: new Map(),
+        examples: [],
+      });
+    }
+    const group = groups.get(key);
+    group.occurrences += 1;
+    group.termCounts[match.term] += 1;
+    group.files.add(match.file);
+    group.semanticClasses.set(match.semanticClass, (group.semanticClasses.get(match.semanticClass) ?? 0) + 1);
+    if (group.examples.length < 3) {
+      group.examples.push(formatExample(match));
+    }
+  }
+
+  return [...groups.values()].map((group) => ({
+    key: group.key,
+    occurrences: group.occurrences,
+    termCounts: group.termCounts,
+    files: group.files.size,
+    semanticClasses: Object.fromEntries([...group.semanticClasses.entries()].sort((a, b) => b[1] - a[1])),
+    examples: group.examples,
+  }));
+}
+
+function topRows(rows, limit) {
+  return rows.sort((a, b) => b.occurrences - a.occurrences || a.key.localeCompare(b.key)).slice(0, limit);
+}
+
+function representativeExamples(scopeMatches, limit) {
+  const examples = [];
+  const seen = new Set();
+  for (const match of scopeMatches) {
+    const key = `${match.semanticClass}:${match.term}:${match.file}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    examples.push(formatExample(match));
+    if (examples.length >= limit) {
+      break;
+    }
+  }
+  return examples;
+}
+
+function cleanupCandidates(scopeMatches) {
+  const byFile = groupMatches(
+    scopeMatches.filter((match) =>
+      ['delete-now', 'migrate-now', 'boundary-canonicalizer', 'presentation-default', 'needs-review'].includes(
+        match.semanticClass,
+      ),
+    ),
+    (match) => match.file,
+  );
+  return topRows(byFile, 30);
+}
+
+function countTerms(scopeMatches) {
+  const counts = emptyTermCounts();
+  for (const match of scopeMatches) {
+    counts[match.term] += 1;
+  }
+  return counts;
+}
+
+function emptyTermCounts() {
+  return Object.fromEntries(terms.map((term) => [term, 0]));
+}
+
+function formatExample(match) {
+  return {
+    file: match.file,
+    line: match.lineNumber,
+    term: match.term,
+    semanticClass: match.semanticClass,
+    text: match.text.length > 220 ? `${match.text.slice(0, 217)}...` : match.text,
+  };
+}
+
+function classifySurface(file, line, term) {
+  const lowerFile = file.toLowerCase();
+  const lowerLine = line.toLowerCase();
+
+  if (isTestPath(file)) {
+    return 'test-only';
+  }
+  if (isGeneratedPath(file)) {
+    return 'generated-source';
+  }
+  if (containsAny(lowerLine, ['false positive', 'knip', 'dynamic import']) && term !== 'fallback') {
+    return 'false-positive-word';
+  }
+  if (isDomainDeprecatedSurface(lowerFile, lowerLine, term)) {
+    return 'domain-status';
+  }
+  if (isDeleteNowSurface(lowerFile, lowerLine)) {
+    return 'delete-now';
+  }
+  if (isCurrentBridgeSurface(lowerFile, lowerLine)) {
+    return 'current-bridge';
+  }
+  if (isBoundaryCanonicalizerSurface(lowerFile, lowerLine)) {
+    return 'boundary-canonicalizer';
+  }
+  if (term === 'fallback' && isRuntimeResilienceSurface(lowerFile, lowerLine)) {
+    return 'runtime-resilience';
+  }
+  if (term === 'fallback' && isPresentationDefaultSurface(lowerFile, lowerLine)) {
+    return 'presentation-default';
+  }
+  if (isMigrateNowSurface(lowerLine, term)) {
+    return 'migrate-now';
+  }
+
+  return 'needs-review';
+}
+
+function isGeneratedPath(file) {
+  return (
+    file.includes('/generated/') ||
+    file.endsWith('.engine.ts') ||
+    file.includes('/proto/') ||
+    file.includes('/__generated__/')
+  );
+}
+
+function isDomainDeprecatedSurface(lowerFile, lowerLine, term) {
+  if (term !== 'deprecated') {
+    return false;
+  }
+  return (
+    containsAny(lowerFile, ['/market', '/entity', '/dashboard']) ||
+    containsAny(lowerLine, ['deprecated status', "status: 'deprecated'", '"deprecated"', "'deprecated'", 'deprecated:'])
+  );
+}
+
+function isDeleteNowSurface(lowerFile, lowerLine) {
+  return (
+    containsAny(lowerLine, ['delete-now', 'dead code', 'unused file', 'remove this shim', 're-export shim']) ||
+    lowerFile.endsWith('/components/content/index.ts')
+  );
+}
+
+function isCurrentBridgeSurface(lowerFile, lowerLine) {
+  return (
+    containsAny(lowerFile, ['/bridge/', 'bridge.ts', 'adapter.ts', 'capabilityprovider.ts']) ||
+    containsAny(lowerLine, ['bridge', 'adapter', 'compatibility adapter', 'legacy bridge', 'provider resolver'])
+  );
+}
+
+function isBoundaryCanonicalizerSurface(lowerFile, lowerLine) {
+  return (
+    containsAny(lowerFile, ['migrator', 'normalization', 'normalizer', 'resource-cache-provider']) ||
+    containsAny(lowerLine, [
+      'canonical',
+      'canonicalize',
+      'compat',
+      'compatibility',
+      'convert',
+      'legacy field',
+      'migrat',
+      'normalize',
+      'old format',
+    ])
+  );
+}
+
+function isRuntimeResilienceSurface(lowerFile, lowerLine) {
+  return (
+    containsAny(lowerFile, ['engineclient', 'socket', 'service', 'provider', 'runtime', 'renderer', 'reader']) ||
+    containsAny(lowerLine, [
+      'catch',
+      'cancel',
+      'codec',
+      'download',
+      'error',
+      'fail',
+      'fallbackpolicy',
+      'fallback-non-authoritative',
+      'file',
+      'gpu',
+      'hold-last-frame',
+      'media',
+      'missing',
+      'model',
+      'network',
+      'native',
+      'not available',
+      'not found',
+      'permission',
+      'provider',
+      'retry',
+      'sharp',
+      'timeout',
+      'unavailable',
+      'wasm',
+    ])
+  );
+}
+
+function isPresentationDefaultSurface(lowerFile, lowerLine) {
+  return (
+    containsAny(lowerFile, ['webview', 'component', 'presenter', 'view', 'i18n']) ||
+    containsAny(lowerLine, [
+      'className',
+      'color',
+      'default',
+      'dimension',
+      'display',
+      'empty',
+      'height',
+      'label',
+      'placeholder',
+      'render',
+      'text',
+      'title',
+      'unknown',
+      'width',
+    ])
+  );
+}
+
+function isMigrateNowSurface(lowerLine, term) {
+  if (term === 'deprecated') {
+    return true;
+  }
+  return containsAny(lowerLine, ['alias', 'compat', 'legacy', 'migrat', 'old', '@deprecated']);
+}
+
+function containsAny(value, needles) {
+  return needles.some((needle) => value.includes(needle));
+}
+
+function isTestPath(file) {
+  return (
+    file.includes('/__tests__/') ||
+    file.includes('/__mocks__/') ||
+    /\.(test|spec)\.tsx?$/.test(basename(file))
+  );
+}
+
+function getPackageName(file) {
+  const relFile = toRepoPath(file);
+  for (const root of packageRoots) {
+    if (relFile === root.relDir || relFile.startsWith(`${root.relDir}/`)) {
+      return root.name;
+    }
+  }
+  return 'repo-root';
+}
+
+function validateLedger(report) {
+  const errors = [];
+  const warnings = [];
+  const absoluteLedgerPath = resolve(repoRoot, ledgerPath);
+
+  if (!existsSync(absoluteLedgerPath)) {
+    return {
+      ledgerPath,
+      errors: [`Missing cleanup ledger: ${ledgerPath}`],
+      warnings,
+      checkedEntries: 0,
+    };
+  }
+
+  let ledger;
+  try {
+    ledger = JSON.parse(readFileSync(absoluteLedgerPath, 'utf8'));
+  } catch (error) {
+    return {
+      ledgerPath,
+      errors: [`Invalid JSON in ${ledgerPath}: ${error instanceof Error ? error.message : String(error)}`],
+      warnings,
+      checkedEntries: 0,
+    };
+  }
+
+  validateLedgerRoot(ledger, errors);
+  const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
+  const entriesById = new Map();
+
+  for (const entry of entries) {
+    validateLedgerEntry(entry, errors, warnings);
+    if (typeof entry?.id === 'string') {
+      if (entriesById.has(entry.id)) {
+        errors.push(`Duplicate ledger entry id: ${entry.id}`);
+      }
+      entriesById.set(entry.id, entry);
+    }
+  }
+
+  validateRequiredCoverage(ledger, entriesById, report, errors, warnings);
+  validateRemovedStalePatterns(entries, errors);
+  addCoverageWarnings(report, entries, warnings);
+
+  return {
+    ledgerPath,
+    errors,
+    warnings,
+    checkedEntries: entries.length,
+  };
+}
+
+function validateLedgerRoot(ledger, errors) {
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) {
+    errors.push('Ledger root must be a JSON object.');
+    return;
+  }
+  if (ledger.schemaVersion !== 1) {
+    errors.push('Ledger schemaVersion must be 1.');
+  }
+  if (ledger.scope !== 'non-agent') {
+    errors.push('Ledger scope must be "non-agent".');
+  }
+  if (!ledger.semanticClasses || typeof ledger.semanticClasses !== 'object' || Array.isArray(ledger.semanticClasses)) {
+    errors.push('Ledger semanticClasses must be an object.');
+  } else {
+    for (const semanticClass of requiredSemanticClasses) {
+      if (!ledger.semanticClasses[semanticClass]) {
+        errors.push(`Ledger semanticClasses is missing ${semanticClass}.`);
+      }
+    }
+  }
+  if (!Array.isArray(ledger.entries)) {
+    errors.push('Ledger entries must be an array.');
+  }
+}
+
+function validateLedgerEntry(entry, errors, warnings) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    errors.push('Ledger entry must be an object.');
+    return;
+  }
+
+  const id = typeof entry.id === 'string' ? entry.id : '<missing-id>';
+  for (const field of requiredLedgerEntryFields) {
+    if (entry[field] === undefined || entry[field] === null || entry[field] === '') {
+      errors.push(`${id}: missing required field ${field}.`);
+    }
+  }
+
+  if (!allowedSemanticClasses.has(entry.semanticClass)) {
+    errors.push(`${id}: invalid semanticClass ${String(entry.semanticClass)}.`);
+  }
+  if (!allowedStatuses.has(entry.status)) {
+    errors.push(`${id}: invalid status ${String(entry.status)}.`);
+  }
+  if (!allowedActions.has(entry.action)) {
+    errors.push(`${id}: invalid action ${String(entry.action)}.`);
+  }
+  if (typeof entry.package === 'string' && entry.package.includes('neko-agent')) {
+    errors.push(`${id}: non-Agent ledger must not own Agent package entries.`);
+  }
+
+  if (!Array.isArray(entry.paths) || entry.paths.length === 0) {
+    errors.push(`${id}: paths must be a non-empty array.`);
+  }
+
+  if (!entry.validation || !Array.isArray(entry.validation.commands) || entry.validation.commands.length === 0) {
+    errors.push(`${id}: validation.commands must be a non-empty array.`);
+  }
+
+  if (entry.status === 'active' && entry.semanticClass !== 'runtime-resilience') {
+    if (typeof entry.removeCondition !== 'string' || entry.removeCondition.trim().length < 8) {
+      errors.push(`${id}: active non-resilience entry must have a specific removeCondition.`);
+    }
+  }
+
+  for (const path of Array.isArray(entry.paths) ? entry.paths : []) {
+    if (typeof path !== 'string') {
+      errors.push(`${id}: every path must be a string.`);
+      continue;
+    }
+    if (path.startsWith('packages/neko-agent/')) {
+      errors.push(`${id}: Agent path belongs in agent-code-debt-lcd-register.json, not ${ledgerPath}.`);
+    }
+    if (entry.status !== 'removed' && !path.includes('*') && !existsSync(resolve(repoRoot, path))) {
+      warnings.push(`${id}: path does not currently exist: ${path}`);
+    }
+  }
+}
+
+function validateRequiredCoverage(ledger, entriesById, report, errors, warnings) {
+  const requiredCoverage = Array.isArray(ledger.requiredCoverage) ? ledger.requiredCoverage : [];
+  const nonTestFiles = new Set(collectFilesWithTermMatches(false));
+
+  for (const coverage of requiredCoverage) {
+    const id = coverage?.id ?? '<missing-coverage-id>';
+    const entry = entriesById.get(coverage?.ledgerEntryId);
+    if (!entry) {
+      errors.push(`${id}: requiredCoverage references missing ledger entry ${String(coverage?.ledgerEntryId)}.`);
+      continue;
+    }
+    if (entry.status === 'removed' && coverage.allowRemovedEntry !== true) {
+      errors.push(`${id}: requiredCoverage cannot point at removed ledger entry ${entry.id}.`);
+    }
+    if (typeof coverage.pathPattern !== 'string') {
+      errors.push(`${id}: requiredCoverage.pathPattern must be a string.`);
+      continue;
+    }
+
+    const matchedFiles = [...nonTestFiles].filter((file) => matchesGlob(file, coverage.pathPattern));
+    if (
+      coverage.requiredWhileMatched !== false &&
+      matchedFiles.length === 0 &&
+      !(entry.status === 'removed' && coverage.allowRemovedEntry === true)
+    ) {
+      warnings.push(`${id}: required coverage pattern currently has no matches: ${coverage.pathPattern}`);
+    }
+
+    const entryPaths = Array.isArray(entry.paths) ? entry.paths : [];
+    const covered = entryPaths.some((path) => matchesGlob(coverage.pathPattern, path) || matchesGlob(path, coverage.pathPattern));
+    if (!covered) {
+      errors.push(`${id}: ledger entry ${entry.id} does not list coverage path ${coverage.pathPattern}.`);
+    }
+  }
+}
+
+function validateRemovedStalePatterns(entries, errors) {
+  for (const entry of entries) {
+    if (entry?.status !== 'removed') {
+      continue;
+    }
+    for (const stalePattern of Array.isArray(entry.stalePatterns) ? entry.stalePatterns : []) {
+      const pattern = stalePattern?.pattern;
+      const paths = stalePattern?.paths;
+      if (typeof pattern !== 'string' || !Array.isArray(paths) || paths.length === 0) {
+        errors.push(`${entry.id}: removed entries with stalePatterns need pattern and paths.`);
+        continue;
+      }
+      const regex = new RegExp(pattern, 'i');
+      for (const pathPattern of paths) {
+        for (const file of walkSourceFiles(repoRoot)) {
+          const relFile = toRepoPath(file);
+          if (!matchesGlob(relFile, pathPattern)) {
+            continue;
+          }
+          const content = readFileSync(file, 'utf8');
+          if (regex.test(content)) {
+            errors.push(`${entry.id}: stale pattern ${pattern} still appears in ${relFile}.`);
+          }
+        }
+      }
+    }
+  }
+}
+
+function collectFilesWithTermMatches(includeTests) {
+  const matchedFiles = [];
+  const termPattern = new RegExp(terms.join('|'), 'i');
+  for (const file of walkSourceFiles(repoRoot)) {
+    const relFile = toRepoPath(file);
+    if (!includeTests && isTestPath(relFile)) {
+      continue;
+    }
+    const content = readFileSync(file, 'utf8');
+    if (termPattern.test(content)) {
+      matchedFiles.push(relFile);
+    }
+  }
+  return matchedFiles;
+}
+
+function addCoverageWarnings(report, entries, warnings) {
+  const coveredPatterns = entries.flatMap((entry) => (Array.isArray(entry.paths) ? entry.paths : []));
+  for (const row of report.cleanupCandidates.slice(0, 12)) {
+    if (row.key.startsWith('packages/neko-agent/')) {
+      continue;
+    }
+    const covered = coveredPatterns.some((pattern) => matchesGlob(row.key, pattern));
+    if (!covered && row.occurrences >= 10) {
+      warnings.push(`High-volume cleanup candidate lacks ledger path coverage: ${row.key} (${row.occurrences})`);
+    }
+  }
+}
+
+function matchesGlob(value, glob) {
+  if (glob === value) {
+    return true;
+  }
+  const regex = globToRegExp(glob);
+  return regex.test(value);
+}
+
+function globToRegExp(glob) {
+  let pattern = '';
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index];
+    const next = glob[index + 1];
+    if (char === '*') {
+      if (next === '*') {
+        const afterDoubleStar = glob[index + 2];
+        if (afterDoubleStar === '/') {
+          pattern += '(?:.*/)?';
+          index += 2;
+        } else {
+          pattern += '.*';
+          index += 1;
+        }
+      } else {
+        pattern += '[^/]*';
+      }
+      continue;
+    }
+    if ('\\^$+?.()|{}[]'.includes(char)) {
+      pattern += `\\${char}`;
+    } else {
+      pattern += char;
+    }
+  }
+  return new RegExp(`^${pattern}$`);
+}
+
+function printHumanReport(report) {
+  console.log('Legacy debt surface scan');
+  console.log('');
+  console.log(`Generated: ${report.generatedAt}`);
+  console.log(`Terms: ${report.scanner.terms.join(', ')}`);
+  console.log(`Extensions: ${report.scanner.includedExtensions.join(', ')}`);
+  console.log(`Excluded directories: ${report.scanner.excludedDirectories.join(', ')}`);
+  console.log(`Non-test exclusions: ${report.scanner.nonTestExclusions.join(', ')}`);
+  console.log('');
+  printScope('All source', report.scopes.allSource);
+  printScope('Non-test source', report.scopes.nonTestSource);
+  console.log('');
+  printSemanticClassSummary(report.semanticClasses.nonTestSource);
+  console.log('');
+  printHotspots('Top package hotspots', report.hotspots.packages, 12);
+  console.log('');
+  printHotspots('Top file hotspots', report.hotspots.files, 20);
+  console.log('');
+  console.log('Representative examples');
+  for (const example of report.examples.slice(0, 12)) {
+    console.log(`- ${example.file}:${example.line} [${example.semanticClass}/${example.term}] ${example.text}`);
+  }
+}
+
+function printScope(label, scope) {
+  console.log(`${label}: ${scope.occurrences} occurrences in ${scope.filesWithMatches}/${scope.filesScanned} files`);
+  console.log(`  legacy=${scope.termCounts.legacy}, fallback=${scope.termCounts.fallback}, deprecated=${scope.termCounts.deprecated}`);
+}
+
+function printSemanticClassSummary(classes) {
+  console.log('Semantic classes (non-test source)');
+  for (const semanticClass of [...requiredSemanticClasses, 'needs-review']) {
+    const row = classes[semanticClass];
+    console.log(
+      `- ${semanticClass}: ${row.occurrences} occurrences, ${row.files} files ` +
+        `(legacy=${row.termCounts.legacy}, fallback=${row.termCounts.fallback}, deprecated=${row.termCounts.deprecated})`,
+    );
+  }
+}
+
+function printHotspots(title, rows, limit) {
+  console.log(title);
+  for (const row of rows.slice(0, limit)) {
+    console.log(
+      `- ${row.key}: ${row.occurrences} ` +
+        `(legacy=${row.termCounts.legacy}, fallback=${row.termCounts.fallback}, deprecated=${row.termCounts.deprecated})`,
+    );
+  }
+}
+
+function printValidation(result) {
+  console.log(`Cleanup ledger validation: ${result.errors.length === 0 ? 'passed' : 'failed'}`);
+  console.log(`Ledger: ${result.ledgerPath}`);
+  console.log(`Entries checked: ${result.checkedEntries}`);
+  if (result.errors.length > 0) {
+    console.log('');
+    console.log('Errors');
+    for (const error of result.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+  if (result.warnings.length > 0) {
+    console.log('');
+    console.log('Warnings');
+    for (const warning of result.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
+}
+
+function runSelfTest() {
+  const cases = [
+    {
+      value: classifySurface('packages/neko-types/src/generated/timeline.engine.ts', 'legacy field', 'legacy'),
+      expected: 'generated-source',
+    },
+    {
+      value: classifySurface('packages/neko-market/packages/core/src/status.ts', "status: 'deprecated'", 'deprecated'),
+      expected: 'domain-status',
+    },
+    {
+      value: classifySurface('packages/neko-preview/packages/webview/src/Viewer.tsx', 'const fallbackLabel = "Open";', 'fallback'),
+      expected: 'presentation-default',
+    },
+    {
+      value: classifySurface('packages/neko-client/src/EngineClient.ts', 'fallback to cpu when gpu fails', 'fallback'),
+      expected: 'runtime-resilience',
+    },
+    {
+      value: classifySurface('knip.config.ts', "'@img/sharp-wasm32', // Sharp WASM fallback", 'fallback'),
+      expected: 'runtime-resilience',
+    },
+    {
+      value: matchesGlob('packages/neko-types/src/types/storyboard-table.ts', 'packages/neko-types/src/types/*.ts'),
+      expected: true,
+    },
+  ];
+
+  const failures = cases.filter((testCase) => testCase.value !== testCase.expected);
+  if (failures.length > 0) {
+    console.error('Self-test failed');
+    for (const failure of failures) {
+      console.error(`Expected ${String(failure.expected)}, received ${String(failure.value)}`);
+    }
+    process.exit(1);
+  }
+  console.log(`Self-test passed (${cases.length} cases)`);
+}
+
+function toRepoPath(path) {
+  return relative(repoRoot, path).split(sep).join('/');
+}

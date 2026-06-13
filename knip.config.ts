@@ -1,6 +1,10 @@
 import type { KnipConfig } from 'knip';
 
 const config: KnipConfig = {
+  entry: [
+    'scripts/check-3d-route-a-boundaries.mjs',
+    'scripts/scene-render-diagnostics.mjs',
+  ],
   exclude: [
     // Type-only exports in app code create too much noise for this monorepo.
     // We keep knip focused on runtime dead code and dependency drift.
@@ -101,7 +105,17 @@ const config: KnipConfig = {
         'mammoth',
         'officeparser',
         'pdf-parse',
+        // Loaded via runtime import() in platform document readers.
+        // Knip cannot follow these dynamic parser backends from the extension package manifest.
+        'epub2',
+        'fast-xml-parser',
+        'node-fetch',
+        'node-unrar-js',
+        'xlsx',
       ],
+    },
+    'packages/neko-agent/packages/cli-tui': {
+      entry: ['build-neko.ts'],
     },
     'packages/neko-agent/packages/webview': {
       ignore: [
@@ -115,6 +129,10 @@ const config: KnipConfig = {
     'packages/neko-agent/test-utils': {},
     'packages/neko-canvas/packages/extension': {},
     'packages/neko-canvas/packages/webview': {
+      entry: [
+        'src/main.tsx',
+        'src/preview/narrativePreviewMediaRuntime.ts',
+      ],
       ignore: [
         // Barrel exports
         'src/types/index.ts',
@@ -134,7 +152,7 @@ const config: KnipConfig = {
     },
     'packages/neko-tools/packages/extension': {},
     'packages/neko-tools/packages/webview': {
-      entry: ['src/mediaDiff.tsx'],
+      entry: ['src/mediaDiff.tsx', 'src/assetDiff.tsx'],
       ignore: [
         // Barrel exports and internal utilities
         'src/components/MediaDiff/streaming/index.ts',

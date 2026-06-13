@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const repoRoot = process.cwd();
@@ -30,10 +30,13 @@ const compatibilityExceptions = [
     owner: 'neko-agent-runtime',
     tracking: 'openspec:harden-neko-agent-runtime-workflow-closure:2',
     introducedAt: '2026-05-04',
-    expiresAt: '2026-06-04',
+    previousExpiresAt: '2026-06-04',
+    expiresAt: '2026-07-04',
     sunsetMilestone: 'runtime-workflow-closure',
     replacement: 'AgentTurnHostAdapters + runAgentTurnForWebviewRuntime',
     severityAfterExpiry: 'failure',
+    renewalRationale:
+      'Boundary cleanup moved character dialogue, evidence, entity contribution, and search policy first; turn bridge host adapter closure remains a follow-up under the same runtime workflow closure milestone.',
   },
   {
     id: 'agent-runner-vscode-event-compat',
@@ -43,10 +46,13 @@ const compatibilityExceptions = [
     owner: 'neko-agent-runtime',
     tracking: 'openspec:harden-neko-agent-runtime-workflow-closure:2',
     introducedAt: '2026-05-04',
-    expiresAt: '2026-06-04',
+    previousExpiresAt: '2026-06-04',
+    expiresAt: '2026-07-04',
     sunsetMilestone: 'runner-adapter-closure',
     replacement: 'AgentRunnerPort + onDidRunnerEvent bridge',
     severityAfterExpiry: 'failure',
+    renewalRationale:
+      'Capability and boundary guardrails are landing in this change; AgentRunnerPort closure still needs a focused adapter migration and must remain tracked as a failing exception after the renewed milestone.',
   },
   {
     id: 'skill-file-service-watcher-adapter',
@@ -127,6 +133,57 @@ const requiredCompatibilityExceptionFields = [
 ];
 
 const compatibilityExceptionExpirySeverities = new Set(['failure', 'warning']);
+const lcdRegisterPath = 'docs/architecture/agent-code-debt-lcd-register.json';
+const lcdCategories = new Set([
+  'confirmed-dead-code',
+  'static-analysis-false-positive',
+  'canonical-compatibility',
+  'migration-adapter',
+  'stray-surface',
+  'misplaced-domain-logic',
+  'runtime-fallback-resilience',
+]);
+const lcdSemanticClasses = new Set([
+  'delete-now',
+  'migrate-now',
+  'current-bridge',
+  'runtime-resilience',
+  'boundary-canonicalizer',
+  'test-only',
+  'domain-status',
+  'false-positive-word',
+]);
+const lcdStatuses = new Set(['active', 'removed', 'planned']);
+const requiredLcdEntryFields = [
+  'id',
+  'package',
+  'surface',
+  'kind',
+  'semanticClass',
+  'status',
+  'owner',
+  'replacement',
+  'removeAfter',
+];
+const requiredLcdProviderSunsetFields = [
+  'provider',
+  'providerType',
+  'taskFamilies',
+  'resolverPath',
+  'nativeSupportStatus',
+  'migrationConditions',
+  'removalTrigger',
+  'protectingTests',
+];
+const requiredLegacyToolMetadataFields = [
+  'toolName',
+  'kind',
+  'owner',
+  'replacement',
+  'removeAfter',
+  'lcdId',
+  'tests',
+];
 
 const runnerIndividualEventProperties = [
   'onDidStart',
@@ -223,21 +280,36 @@ function runBoundaryCheck() {
       const content = readFileSync(file, 'utf8');
       findings.push(...findImportViolations(scope, file, content));
       findings.push(...findRunnerIndividualEventUsageViolations(scope, file, content));
+      findings.push(...findWebviewReExportShimViolations(scope, file, content));
     }
   }
+  findings.push(...findLegacyCentralizedToolRegistrationViolations());
 
   const compatibility = evaluateCompatibilityExceptions(compatibilityExceptions, {
     validationDate: new Date(),
   });
+  const lcdRegister = evaluateLcdRegister(loadLcdRegister(), {
+    registerPath: lcdRegisterPath,
+  });
   const blockingCompatibilityFindings = compatibility.findings.filter(
     (finding) => finding.severity === 'failure',
   );
+  const blockingLcdFindings = lcdRegister.findings.filter(
+    (finding) => finding.severity === 'failure',
+  );
   const result = {
-    status: findings.length > 0 || blockingCompatibilityFindings.length > 0 ? 'failed' : 'passed',
+    status:
+      findings.length > 0 ||
+      blockingCompatibilityFindings.length > 0 ||
+      blockingLcdFindings.length > 0
+        ? 'failed'
+        : 'passed',
     checkedFiles,
     scopes: Object.keys(packageRoots),
     compatibilityExceptions: compatibility.exceptions,
     compatibilityFindings: compatibility.findings,
+    lcdRegister: lcdRegister.summary,
+    lcdFindings: lcdRegister.findings,
     findings,
   };
 
@@ -305,6 +377,13 @@ function runSelfTest() {
       content: 'this.onDidStopEmitter.fire();\n',
       expectedRuleIds: [],
     },
+    {
+      name: 'webview pure re-export shim fails',
+      scope: 'webview',
+      file: fakeFile('webview', 'src/utils/message-helpers.ts'),
+      content: "export { addToolCallBlock } from '../presenters/message-presenter';\n",
+      expectedRuleIds: ['webview-no-re-export-compat-shim'],
+    },
   ];
 
   const failures = [];
@@ -312,6 +391,7 @@ function runSelfTest() {
     const violations = [
       ...findImportViolations(testCase.scope, testCase.file, testCase.content),
       ...findRunnerIndividualEventUsageViolations(testCase.scope, testCase.file, testCase.content),
+      ...findWebviewReExportShimViolations(testCase.scope, testCase.file, testCase.content),
     ];
     const actualIds = [...new Set(violations.map((violation) => violation.ruleId))].sort();
     const expectedIds = [...testCase.expectedRuleIds].sort();
@@ -421,9 +501,68 @@ function runSelfTest() {
     }
   }
 
+  const lcdCases = [
+    {
+      name: 'LCD entry without owner fails',
+      register: createSelfTestLcdRegister([
+        {
+          id: 'LCD-TEST-001',
+          package: 'neko-agent',
+          surface: 'test surface',
+          kind: 'migration-adapter',
+          status: 'active',
+          replacement: 'test replacement',
+          removeAfter: 'test removal',
+          tests: ['pnpm check:agent-boundaries'],
+        },
+      ]),
+      expectedCodes: ['missing-lcd-metadata'],
+    },
+    {
+      name: 'LCD-009 without provider sunset rows fails',
+      register: createSelfTestLcdRegister([
+        createSelfTestLcdEntry({
+          id: 'LCD-009',
+          surface: 'packages/neko-agent/packages/ai-sdk/src/bridge/*',
+          kind: 'migration-adapter',
+          status: 'active',
+          sunsetProviders: [],
+        }),
+      ]),
+      expectedCodes: ['missing-provider-sunset'],
+    },
+    {
+      name: 'valid LCD register passes metadata validation',
+      register: createSelfTestLcdRegister([
+        createSelfTestLcdEntry({
+          id: 'LCD-TEST-002',
+          status: 'removed',
+        }),
+      ]),
+      expectedCodes: [],
+    },
+  ];
+
+  for (const testCase of lcdCases) {
+    const evaluated = evaluateLcdRegister(testCase.register, {
+      registerPath: 'self-test-lcd-register.json',
+      skipTestFileExistence: true,
+    });
+    const actualCodes = [...new Set(evaluated.findings.map((finding) => finding.code))].sort();
+    const expectedCodes = [...testCase.expectedCodes].sort();
+    if (JSON.stringify(actualCodes) !== JSON.stringify(expectedCodes)) {
+      failures.push({
+        name: testCase.name,
+        expectedCodes,
+        actualCodes,
+        evaluated,
+      });
+    }
+  }
+
   const result = {
     status: failures.length > 0 ? 'failed' : 'passed',
-    cases: importCases.length + compatibilityCases.length,
+    cases: importCases.length + compatibilityCases.length + lcdCases.length,
     failures,
   };
 
@@ -549,6 +688,240 @@ function evaluateCompatibilityExceptions(exceptions, options) {
   };
 }
 
+function loadLcdRegister() {
+  const absolutePath = resolve(repoRoot, lcdRegisterPath);
+  try {
+    return JSON.parse(readFileSync(absolutePath, 'utf8'));
+  } catch (error) {
+    return {
+      __loadError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function evaluateLcdRegister(register, options = {}) {
+  const findings = [];
+  const entries = Array.isArray(register?.entries) ? register.entries : [];
+  const registerPath = options.registerPath ?? lcdRegisterPath;
+
+  if (register?.__loadError) {
+    findings.push({
+      code: 'lcd-register-load-failed',
+      severity: 'failure',
+      file: registerPath,
+      reason: register.__loadError,
+    });
+  }
+
+  if (!Array.isArray(register?.categories)) {
+    findings.push({
+      code: 'missing-lcd-categories',
+      severity: 'failure',
+      file: registerPath,
+      reason: 'LCD register must list approved cleanup categories.',
+    });
+  } else {
+    const missingCategories = Array.from(lcdCategories).filter(
+      (category) => !register.categories.includes(category),
+    );
+    if (missingCategories.length > 0) {
+      findings.push({
+        code: 'missing-lcd-category',
+        severity: 'failure',
+        file: registerPath,
+        missingCategories,
+      });
+    }
+  }
+
+  if (!Array.isArray(register?.semanticClasses)) {
+    findings.push({
+      code: 'missing-lcd-semantic-classes',
+      severity: 'failure',
+      file: registerPath,
+      reason: 'LCD register must list approved prelaunch cleanup semantic classes.',
+    });
+  } else {
+    const missingSemanticClasses = Array.from(lcdSemanticClasses).filter(
+      (semanticClass) => !register.semanticClasses.includes(semanticClass),
+    );
+    if (missingSemanticClasses.length > 0) {
+      findings.push({
+        code: 'missing-lcd-semantic-class',
+        severity: 'failure',
+        file: registerPath,
+        missingSemanticClasses,
+      });
+    }
+  }
+
+  const seenIds = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const id = hasNonEmptyString(entry?.id) ? entry.id : `lcd-entry-${index + 1}`;
+    const missingFields = requiredLcdEntryFields.filter((field) => {
+      if (field === 'tests') return false;
+      return !hasNonEmptyString(entry?.[field]);
+    });
+    if (!Array.isArray(entry?.tests) || entry.tests.length === 0) {
+      missingFields.push('tests');
+    }
+
+    if (missingFields.length > 0) {
+      findings.push({
+        code: 'missing-lcd-metadata',
+        severity: 'failure',
+        id,
+        missingFields,
+        reason: 'LCD entries must include lifecycle metadata.',
+      });
+    }
+
+    if (seenIds.has(id)) {
+      findings.push({
+        code: 'duplicate-lcd-id',
+        severity: 'failure',
+        id,
+        reason: 'LCD ids must be unique.',
+      });
+    }
+    seenIds.add(id);
+
+    if (hasNonEmptyString(entry?.kind) && !lcdCategories.has(entry.kind)) {
+      findings.push({
+        code: 'invalid-lcd-kind',
+        severity: 'failure',
+        id,
+        kind: entry.kind,
+      });
+    }
+
+    if (hasNonEmptyString(entry?.semanticClass) && !lcdSemanticClasses.has(entry.semanticClass)) {
+      findings.push({
+        code: 'invalid-lcd-semantic-class',
+        severity: 'failure',
+        id,
+        semanticClass: entry.semanticClass,
+      });
+    }
+
+    if (hasNonEmptyString(entry?.status) && !lcdStatuses.has(entry.status)) {
+      findings.push({
+        code: 'invalid-lcd-status',
+        severity: 'failure',
+        id,
+        status: entry.status,
+      });
+    }
+
+    if (!options.skipTestFileExistence && Array.isArray(entry?.tests)) {
+      findings.push(...findMissingLcdTestFiles(id, entry.tests));
+    }
+
+    if (id === 'LCD-009') {
+      findings.push(...evaluateLcdProviderSunsetRows(entry));
+    }
+  }
+
+  return {
+    summary: {
+      registerPath,
+      schemaVersion: register?.schemaVersion ?? null,
+      owner: register?.owner ?? null,
+      entryCount: entries.length,
+      activeEntryCount: entries.filter((entry) => entry.status === 'active').length,
+    },
+    findings,
+  };
+}
+
+function evaluateLcdProviderSunsetRows(entry) {
+  const findings = [];
+  const rows = Array.isArray(entry?.sunsetProviders) ? entry.sunsetProviders : [];
+  const requiredProviderTypes = ['fal', 'dashscope', 'kling'];
+
+  if (rows.length === 0) {
+    findings.push({
+      code: 'missing-provider-sunset',
+      severity: 'failure',
+      id: entry?.id ?? 'LCD-009',
+      reason: 'LCD-009 must include provider-level sunset rows.',
+    });
+    return findings;
+  }
+
+  const rowTypes = rows.map((row) => row.providerType);
+  const missingProviders = requiredProviderTypes.filter((providerType) => !rowTypes.includes(providerType));
+  if (missingProviders.length > 0) {
+    findings.push({
+      code: 'missing-provider-sunset',
+      severity: 'failure',
+      id: entry?.id ?? 'LCD-009',
+      missingProviders,
+    });
+  }
+
+  for (const [index, row] of rows.entries()) {
+    const providerType = hasNonEmptyString(row?.providerType)
+      ? row.providerType
+      : `provider-row-${index + 1}`;
+    const missingFields = requiredLcdProviderSunsetFields.filter((field) => {
+      const value = row?.[field];
+      return Array.isArray(value) ? value.length === 0 : !hasNonEmptyString(value);
+    });
+    if (missingFields.length > 0) {
+      findings.push({
+        code: 'missing-provider-sunset-metadata',
+        severity: 'failure',
+        id: entry?.id ?? 'LCD-009',
+        providerType,
+        missingFields,
+      });
+    }
+  }
+
+  return findings;
+}
+
+function findMissingLcdTestFiles(id, tests) {
+  return tests.flatMap((testCommand) => {
+    if (!hasNonEmptyString(testCommand)) {
+      return [
+        {
+          code: 'invalid-lcd-test',
+          severity: 'failure',
+          id,
+          testCommand,
+        },
+      ];
+    }
+
+    const referencedFiles = extractRepoFileReferences(testCommand);
+    return referencedFiles
+      .filter((file) => !existsSync(resolve(repoRoot, file)))
+      .map((file) => ({
+        code: 'missing-lcd-test-file',
+        severity: 'failure',
+        id,
+        file,
+        testCommand,
+      }));
+  });
+}
+
+function extractRepoFileReferences(value) {
+  const commandDir = value.match(/(?:^|\s)--dir\s+([^\s]+)/)?.[1]?.replace(/\/+$/g, '');
+  const matches = value.match(/(?:^|\s)(packages\/[^\s]+|scripts\/[^\s]+|docs\/[^\s]+)/g) ?? [];
+  return matches
+    .map((match) => match.trim())
+    .map((file) => file.replace(/[),.;]+$/g, ''))
+    .map((file) => {
+      if (existsSync(resolve(repoRoot, file))) return file;
+      if (commandDir && file.startsWith('packages/')) return `${commandDir}/${file}`;
+      return file;
+    })
+    .filter((file) => /\.[A-Za-z0-9]+$/.test(file));
+}
+
 function getCompatibilityExceptionExpiryStatus(exception, validationDate) {
   if (!hasNonEmptyString(exception.expiresAt)) {
     return hasNonEmptyString(exception.sunsetMilestone) ? 'milestone-only' : 'missing-expiry';
@@ -590,6 +963,32 @@ function createSelfTestCompatibilityException(overrides) {
     sunsetMilestone: 'self-test',
     replacement: 'self-test replacement',
     severityAfterExpiry: 'failure',
+    ...overrides,
+  };
+}
+
+function createSelfTestLcdRegister(entries) {
+  return {
+    schemaVersion: 1,
+    owner: 'self-test',
+    categories: Array.from(lcdCategories),
+    semanticClasses: Array.from(lcdSemanticClasses),
+    entries,
+  };
+}
+
+function createSelfTestLcdEntry(overrides) {
+  return {
+    id: 'LCD-TEST',
+    package: 'neko-agent',
+    surface: 'test surface',
+    kind: 'migration-adapter',
+    semanticClass: 'current-bridge',
+    status: 'active',
+    owner: 'neko-agent-runtime',
+    replacement: 'test replacement',
+    removeAfter: 'test condition',
+    tests: ['pnpm check:agent-boundaries'],
     ...overrides,
   };
 }
@@ -640,6 +1039,136 @@ function findRunnerIndividualEventUsageViolations(scope, file, content) {
     });
   }
   return violations;
+}
+
+function findWebviewReExportShimViolations(scope, file, content) {
+  if (scope !== 'webview') {
+    return [];
+  }
+
+  const relativeFile = relative(repoRoot, file);
+  if (relativeFile.includes('/__tests__/') || /\.test\.(ts|tsx|js|jsx)$/.test(relativeFile)) {
+    return [];
+  }
+  if (!isWebviewCompatibilityShimCandidate(relativeFile)) {
+    return [];
+  }
+
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('//'));
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const withoutBlockComments = lines.filter(
+    (line) => !line.startsWith('/**') && !line.startsWith('*') && !line.startsWith('*/'),
+  );
+  if (withoutBlockComments.length === 0) {
+    return [];
+  }
+
+  const joined = withoutBlockComments.join('\n');
+  const exportFromStatements = joined.match(/\bexport\s+(?:type\s+)?(?:\{[\s\S]*?\}|\*)\s+from\s+['"][^'"]+['"]\s*;?/g) ?? [];
+  const normalizedExports = exportFromStatements
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalizedContent = joined.replace(/\s+/g, ' ').trim();
+
+  if (exportFromStatements.length > 0 && normalizedExports === normalizedContent) {
+    return [
+      {
+        ruleId: 'webview-no-re-export-compat-shim',
+        file: relativeFile,
+        reason:
+          'Webview compatibility files that only re-export canonical presenters or helpers must be deleted; import the canonical module directly.',
+      },
+    ];
+  }
+
+  return [];
+}
+
+function isWebviewCompatibilityShimCandidate(relativeFile) {
+  const basename = relativeFile.split('/').pop() ?? '';
+  if (/compat|legacy|helpers?|extractors?|constants?/i.test(basename)) {
+    return true;
+  }
+  return [
+    'packages/neko-agent/packages/webview/src/utils/message-helpers.ts',
+    'packages/neko-agent/packages/webview/src/components/ChatView/ToolCallDisplay/media-extractors.ts',
+    'packages/neko-agent/packages/webview/src/components/ChatView/ToolCallDisplay/tool-constants.ts',
+  ].includes(relativeFile);
+}
+
+function findLegacyCentralizedToolRegistrationViolations() {
+  const file = resolve(repoRoot, 'packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts');
+  const content = readFileSync(file, 'utf8');
+  const relativeFile = relative(repoRoot, file);
+  const metadataBlock = content.match(
+    /LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA[\s\S]*?\n\s*\];/,
+  )?.[0];
+  if (!metadataBlock) {
+    return [
+      {
+        ruleId: 'extension-legacy-tools-require-lcd-metadata',
+        file: relativeFile,
+        reason: 'toolBootstrap must declare lifecycle metadata for remaining centralized tools.',
+      },
+    ];
+  }
+
+  const metadataToolNames = [...metadataBlock.matchAll(/toolName:\s*([^,\n]+)/g)].map((match) =>
+    normalizeToolNameExpression(match[1] ?? ''),
+  );
+  const toolArrayBlock = content.match(/const tools =[\s\S]*?;\n\s*for \(const tool of tools\)/)?.[0] ?? '';
+  const registeredToolNames = [
+    ...toolArrayBlock.matchAll(/createPluginSkillDiscoveryTools\(/g),
+  ].map(() => 'TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS');
+  registeredToolNames.push(
+    ...[...toolArrayBlock.matchAll(/create(ReadDocumentTool|ReadImageTool|ReadDocumentImageTool|SemanticCoverageTool)\(/g)]
+      .map((match) => {
+        const factory = match[1];
+        if (factory === 'ReadDocumentTool') return 'TOOL_NAMES_SYSTEM.READ_DOCUMENT';
+        if (factory === 'ReadImageTool') return 'TOOL_NAMES_SYSTEM.READ_IMAGE';
+        if (factory === 'ReadDocumentImageTool') return 'TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE';
+        if (factory === 'SemanticCoverageTool') return 'TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE';
+        return '';
+      })
+      .filter(Boolean),
+  );
+
+  const findings = [];
+  for (const toolName of registeredToolNames) {
+    if (!metadataToolNames.includes(toolName)) {
+      findings.push({
+        ruleId: 'extension-legacy-tools-require-lcd-metadata',
+        file: relativeFile,
+        specifier: toolName,
+        reason:
+          'Remaining centralized Extension tools must be documented as agent-owned meta-tools or compatibility bridges with LCD metadata.',
+      });
+    }
+  }
+
+  for (const field of requiredLegacyToolMetadataFields) {
+    if (!new RegExp(`\\b${field}\\s*:`).test(metadataBlock)) {
+      findings.push({
+        ruleId: 'extension-legacy-tools-require-lcd-metadata',
+        file: relativeFile,
+        specifier: field,
+        reason: 'Legacy centralized tool metadata is missing a lifecycle field.',
+      });
+    }
+  }
+
+  return findings;
+}
+
+function normalizeToolNameExpression(value) {
+  return value.trim().replace(/[,\s]+$/g, '');
 }
 
 function extractImportSpecifiers(content) {
