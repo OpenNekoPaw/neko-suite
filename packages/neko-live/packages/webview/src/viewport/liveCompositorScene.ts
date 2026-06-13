@@ -26,7 +26,7 @@ export function createDefaultLiveCompositorScene(
   const now = options.now ?? Date.now();
   const sources: LiveCompositorSourceRef[] = [backgroundSource()];
   const layers: LiveCompositorLayer[] = [backgroundLayer()];
-  const diagnostics: LiveCompositorDiagnostic[] = [fallbackDiagnostic(now)];
+  const diagnostics: LiveCompositorDiagnostic[] = [localPreviewDiagnostic(now)];
 
   const avatarSource = createAvatarSource(options.avatarUrl, options.avatarType);
   if (avatarSource) {
@@ -143,7 +143,7 @@ function backgroundLayer(): LiveCompositorLayer {
     blendMode: 'normal',
     visible: true,
     zIndex: 0,
-    fallbackPolicy: 'substitute',
+    sourceUnavailablePolicy: 'substitute',
   };
 }
 
@@ -181,7 +181,7 @@ function avatarLayer(source: LiveCompositorSourceRef): LiveCompositorLayer {
     blendMode: 'normal',
     visible: true,
     zIndex: 20,
-    fallbackPolicy: 'hold-last-frame',
+    sourceUnavailablePolicy: 'hold-last-frame',
   };
 }
 
@@ -219,7 +219,7 @@ function cameraLayer(source: LiveCompositorSourceRef): LiveCompositorLayer {
     blendMode: 'normal',
     visible: true,
     zIndex: 10,
-    fallbackPolicy: 'diagnostic-overlay',
+    sourceUnavailablePolicy: 'diagnostic-overlay',
   };
 }
 
@@ -248,7 +248,7 @@ function trackingOverlayLayer(source: LiveCompositorSourceRef): LiveCompositorLa
     blendMode: 'alpha',
     visible: true,
     zIndex: 90,
-    fallbackPolicy: 'exclude',
+    sourceUnavailablePolicy: 'exclude',
   };
 }
 
@@ -289,12 +289,12 @@ function outputRoutes(now: number): LiveOutputRoute[] {
   ];
 }
 
-function fallbackDiagnostic(now: number): LiveCompositorDiagnostic {
+function localPreviewDiagnostic(now: number): LiveCompositorDiagnostic {
   return {
-    id: 'diag-fallback-local-preview',
-    code: 'fallback-non-authoritative',
+    id: 'diag-local-preview',
+    code: 'preview-non-authoritative',
     severity: 'info',
-    message: 'Local Webview preview remains available only as a non-authoritative fallback.',
+    message: 'Local Webview preview remains available only as a non-authoritative preview.',
     timestamp: now,
   };
 }

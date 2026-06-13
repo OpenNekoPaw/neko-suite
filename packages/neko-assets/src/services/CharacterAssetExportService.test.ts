@@ -192,7 +192,7 @@ describe('CharacterAssetExportService', () => {
     });
   });
 
-  it('exports .nkentity v2 metadata for native puppet bindings and legacy fallback refs', async () => {
+  it('exports .nkentity v2 metadata for native puppet bindings and optional Live2D bindings', async () => {
     const fs = createFs();
     const service = createService(fs, {
       assetEntities: nativePuppetAssetEntities(),
@@ -214,7 +214,6 @@ describe('CharacterAssetExportService', () => {
           implementedBlendShapes: ['jawOpen', 'mouthSmileLeft'],
           animationModel: 'bone-blendshape',
           sourceKind: 'live2d-bundle',
-          legacyFallbackRef: 'project://assets/asset-sakura-live2d',
         },
       },
       bindings: [
@@ -257,9 +256,7 @@ describe('CharacterAssetExportService', () => {
 
     const entries = [...(writtenZips[0]?.entries.keys() ?? [])];
     const entityBytes = writtenZips[0]?.entries.get('entity.nkentity');
-    const packagedEntity = entityBytes
-      ? JSON.parse(entityBytes.toString('utf-8'))
-      : undefined;
+    const packagedEntity = entityBytes ? JSON.parse(entityBytes.toString('utf-8')) : undefined;
     expect(entries).toEqual(
       expect.arrayContaining([
         'assets/asset-sakura-native/manifest.json',
@@ -281,11 +278,20 @@ describe('CharacterAssetExportService', () => {
     expect(packagedEntity).toMatchObject({
       version: 2,
       metadata: {
-        nativePuppet: { legacyFallbackRef: './assets/asset-sakura-live2d/manifest.json' },
+        nativePuppet: {
+          animationModel: 'bone-blendshape',
+          sourceKind: 'live2d-bundle',
+        },
       },
       bindings: [
-        expect.objectContaining({ role: 'live2d', ref: './assets/asset-sakura-live2d/manifest.json' }),
-        expect.objectContaining({ role: 'puppet-bone', ref: './assets/asset-sakura-native/manifest.json' }),
+        expect.objectContaining({
+          role: 'live2d',
+          ref: './assets/asset-sakura-live2d/manifest.json',
+        }),
+        expect.objectContaining({
+          role: 'puppet-bone',
+          ref: './assets/asset-sakura-native/manifest.json',
+        }),
       ],
     });
   });
@@ -452,7 +458,6 @@ function nativePuppetAssetEntities(): readonly AssetEntity[] {
         implementedBlendShapes: ['jawOpen', 'mouthSmileLeft'],
         animationModel: 'bone-blendshape',
         sourceKind: 'live2d-bundle',
-        legacyFallbackRef: 'project://assets/asset-sakura-live2d',
       },
     }),
     assetEntity({
@@ -563,7 +568,9 @@ function assetEntity(input: {
   readonly filePath: string;
   readonly mediaKind: 'puppet-model' | 'puppet-motion';
   readonly dimension: 'model' | 'motion';
-  readonly characterAsset?: Partial<AssetEntity['variants'][number]['files'][number]['characterAsset']>;
+  readonly characterAsset?: Partial<
+    AssetEntity['variants'][number]['files'][number]['characterAsset']
+  >;
 }): AssetEntity {
   return {
     id: input.id,

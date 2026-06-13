@@ -254,7 +254,7 @@ export const EpubViewer: FC = () => {
     return Math.max(1, Math.ceil(el.getBoundingClientRect().height));
   }, []);
 
-  const getFallbackChapterHeight = useCallback((): number => {
+  const getEstimatedChapterHeight = useCallback((): number => {
     const viewportHeight = waterfallContainerRef.current?.clientHeight ?? window.innerHeight;
     const measuredAverage = average(chapterHeightsRef.current.values());
     const estimatedHeight =
@@ -265,9 +265,9 @@ export const EpubViewer: FC = () => {
 
   const getChapterPlaceholderHeight = useCallback(
     (index: number): number => {
-      return chapterHeightsRef.current.get(index) ?? getFallbackChapterHeight();
+      return chapterHeightsRef.current.get(index) ?? getEstimatedChapterHeight();
     },
-    [getFallbackChapterHeight],
+    [getEstimatedChapterHeight],
   );
 
   const commitChapterHeight = useCallback(
@@ -429,7 +429,7 @@ export const EpubViewer: FC = () => {
         const book = bookRef.current;
         const measureContainer = measureContainerRef.current;
         if (!book || !measureContainer || sessionId !== measurementSessionRef.current) {
-          return getFallbackChapterHeight();
+          return getEstimatedChapterHeight();
         }
 
         try {
@@ -448,14 +448,14 @@ export const EpubViewer: FC = () => {
           article.style.margin = '0 auto';
 
           const html = await entry.section.render(book.load.bind(book));
-          if (sessionId !== measurementSessionRef.current) return getFallbackChapterHeight();
+          if (sessionId !== measurementSessionRef.current) return getEstimatedChapterHeight();
 
           article.innerHTML = html;
           rewriteSectionResources(article, entry.section.url ?? '');
           measureContainer.appendChild(article);
 
           await waitForChapterResources(article);
-          if (sessionId !== measurementSessionRef.current) return getFallbackChapterHeight();
+          if (sessionId !== measurementSessionRef.current) return getEstimatedChapterHeight();
 
           const measuredHeight = commitChapterHeight(
             entry.index,
@@ -466,7 +466,7 @@ export const EpubViewer: FC = () => {
           return measuredHeight;
         } catch (err) {
           logger.error(`Failed to measure chapter ${entry.index}:`, err);
-          return chapterHeightsRef.current.get(entry.index) ?? getFallbackChapterHeight();
+          return chapterHeightsRef.current.get(entry.index) ?? getEstimatedChapterHeight();
         } finally {
           entry.section.unload();
           if (measureContainerRef.current === measureContainer) {
@@ -489,7 +489,7 @@ export const EpubViewer: FC = () => {
     },
     [
       commitChapterHeight,
-      getFallbackChapterHeight,
+      getEstimatedChapterHeight,
       measureRenderedChapterHeight,
       rewriteSectionResources,
       updateWaterfallPageMetrics,
@@ -507,11 +507,7 @@ export const EpubViewer: FC = () => {
       initPersistedStore(m.payload as Record<string, unknown>);
       notifySubscribers();
     } else if (msg.type === 'document:data') {
-      if ('url' in msg.payload && msg.payload.url) {
-        void loadEpubFromUrl(msg.payload.url);
-      } else if (msg.payload.data) {
-        void loadEpub(msg.payload.data);
-      }
+      void loadEpubFromUrl(msg.payload.url);
     } else if (msg.type === 'epub:navigate') {
       const href = (msg as { type: string; payload: { href: string } }).payload.href;
       if (loadingRef.current) {
@@ -827,33 +823,6 @@ export const EpubViewer: FC = () => {
         setLoading(false);
         loadingRef.current = false;
         // Restore persisted chapter position
-        restoreChapter();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-        loadingRef.current = false;
-      }
-    },
-    [initBook, restoreChapter],
-  );
-
-  /** Legacy: load EPUB from base64 string (fallback). */
-  const loadEpub = useCallback(
-    async (base64Data: string) => {
-      try {
-        setLoading(true);
-        loadingRef.current = true;
-        setError(null);
-
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-
-        const book = ePub(bytes.buffer as ArrayBuffer);
-        bookRef.current = book;
-        await initBook(book);
-        setLoading(false);
-        loadingRef.current = false;
         restoreChapter();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));

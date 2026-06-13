@@ -28,7 +28,7 @@ export const en = {
   'recording.noCanvas': 'No rendering canvas available',
   'recording.captureFailed': 'Canvas capture failed',
   'devices.bound': 'Devices: {devices}',
-  'diagnostics.localFallback':
+  'diagnostics.localPreview':
     'Local preview only. Engine compositor stream is unavailable, so this is not output truth.',
   'diagnostics.compositorUnavailable': 'Engine compositor stream unavailable',
 

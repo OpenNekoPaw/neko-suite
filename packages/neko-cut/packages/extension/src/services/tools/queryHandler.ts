@@ -92,7 +92,7 @@ export class QueryHandler implements IToolHandler {
       if (element.effects.length > 0) info.effects = element.effects;
       if (element.transitionIn) info.transitionIn = element.transitionIn;
       if (element.transitionOut) info.transitionOut = element.transitionOut;
-      if (element.keyframes) info.keyframes = element.keyframes;
+      if (element.animTransform) info.animTransform = element.animTransform;
 
       return { success: true, data: info };
     }

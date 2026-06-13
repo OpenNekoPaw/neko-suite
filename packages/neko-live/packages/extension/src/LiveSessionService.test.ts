@@ -129,7 +129,7 @@ describe('LiveSessionService', () => {
     ).toThrow('Device role camera requires camera');
   });
 
-  it('labels webview canvas recording as local fallback diagnostics', async () => {
+  it('labels webview canvas recording as local preview diagnostics', async () => {
     const service = new LiveSessionService({
       logger: createLogger(),
       getEngineClient: async () => undefined,
@@ -137,14 +137,14 @@ describe('LiveSessionService', () => {
       ensureDeviceManager: async () => undefined,
     });
 
-    await service.startRecording({ includeAudio: false, authority: 'local-fallback' });
+    await service.startRecording({ includeAudio: false, authority: 'local-preview' });
 
     expect(service.getSnapshot().recording).toMatchObject({
       active: true,
-      authority: 'local-fallback',
+      authority: 'local-preview',
       diagnostics: [
         expect.objectContaining({
-          code: 'fallback-non-authoritative',
+          code: 'preview-non-authoritative',
           severity: 'warning',
         }),
       ],
@@ -153,8 +153,8 @@ describe('LiveSessionService', () => {
     const result = await service.stopRecording();
 
     expect(result).toMatchObject({
-      authority: 'local-fallback',
-      diagnostics: ['fallback-non-authoritative'],
+      authority: 'local-preview',
+      diagnostics: ['preview-non-authoritative'],
     });
   });
 });

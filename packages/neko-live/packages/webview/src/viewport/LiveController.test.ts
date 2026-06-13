@@ -214,7 +214,7 @@ describe('LiveController', () => {
     expect(controller.getToolbarExtensions()[1]?.degradedReason).toBe('command-rejected');
   });
 
-  it('surfaces unsupported output route diagnostics without treating fallback recording as authoritative', async () => {
+  it('surfaces unsupported output route diagnostics without treating local preview recording as authoritative', async () => {
     const scene = createDefaultLiveCompositorScene({ now: 1000 });
     const client = liveClientMock(scene);
     const onError = vi.fn();
@@ -242,17 +242,17 @@ describe('LiveController', () => {
     );
     expect(controller.getToolbarExtensions()[2]?.value).toBe('route-monitor');
     expect(scene.diagnostics).toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: 'fallback-non-authoritative' })]),
+      expect.arrayContaining([expect.objectContaining({ code: 'preview-non-authoritative' })]),
     );
   });
 
-  it('keeps compositor and fallback visual paths isolated', () => {
+  it('keeps compositor and local preview paths isolated', () => {
     expect(
       selectLiveVisualPath({
         compositorStatus: 'active',
         hasController: true,
         hasAvatar: true,
-        fallbackEnabled: true,
+        localPreviewEnabled: true,
       }),
     ).toBe('compositor');
     expect(
@@ -260,15 +260,15 @@ describe('LiveController', () => {
         compositorStatus: 'unavailable',
         hasController: true,
         hasAvatar: true,
-        fallbackEnabled: true,
+        localPreviewEnabled: true,
       }),
-    ).toBe('local-fallback');
+    ).toBe('local-preview');
     expect(
       selectLiveVisualPath({
         compositorStatus: 'unavailable',
         hasController: false,
         hasAvatar: false,
-        fallbackEnabled: true,
+        localPreviewEnabled: true,
       }),
     ).toBe('empty');
   });

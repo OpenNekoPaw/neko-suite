@@ -14,7 +14,6 @@
 import type { ElementTransform } from './animation';
 import type { ColorCorrection } from './colorCorrection';
 import type { MaskInstance } from './mask';
-import type { KeyframeTrack } from './keyframe';
 import type { BlendModeType, ElementTransition } from '@neko/shared';
 
 // =============================================================================
@@ -75,8 +74,6 @@ export interface ElementEditState {
   colorCorrection?: ColorCorrection;
   /** Mask instances — pending engine support */
   masks?: MaskInstance[];
-  /** Legacy keyframe animations — pending migration to engine keyframes */
-  keyframes?: KeyframeTrack[];
 }
 
 /** Default edit state for a new element */

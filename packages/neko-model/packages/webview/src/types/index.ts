@@ -34,7 +34,7 @@ export type ExtensionMessage =
   | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown }
   | { type: 'liveExpressions'; expressions: Partial<Record<VRMExpressionPreset, number>> }
   | { type: 'environmentPlacement'; placement: EnvironmentPlacement }
-  | { type: 'environmentCommand'; patch: EnvironmentPatch; legacyPlacement?: EnvironmentPlacement }
+  | { type: 'environmentCommand'; patch: EnvironmentPatch; placement: EnvironmentPlacement }
   | { type: 'keyframeTracks'; tracks: EditorKeyframeTrack[] }
   | { type: 'keyframeAdded'; trackProperty: string; keyframeId: string }
   | { type: 'keyframeRemoved'; trackProperty: string; keyframeId: string };

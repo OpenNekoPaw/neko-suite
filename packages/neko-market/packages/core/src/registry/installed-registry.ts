@@ -9,25 +9,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
   AssetManifest,
-  AssetTypeMetadata,
-  BundleMetadata,
-  EndpointMetadata,
-  IdentityMetadata,
-  MediaMetadata,
-  ModelMetadata,
-  PluginMetadata,
-  PluginPermission,
-  PresetMetadata,
-  ProviderMetadata,
-  ShaderMetadata,
-  SkillMetadata,
-  StarterMetadata,
   InstalledPackage,
   InstalledPackageRefState,
   InstalledRegistryData,
-  MediaKind,
 } from '@neko/shared';
-import { getLegacyAssetTypeMigration, isAssetType, isPluginPermission } from '@neko/shared';
+import { isAssetType } from '@neko/shared';
 
 export interface RemovedReferenceState {
   packageId: string;
@@ -40,22 +26,6 @@ export interface RemovedReferenceState {
 // =============================================================================
 
 const REGISTRY_VERSION = 1;
-
-const MEDIA_KINDS: readonly MediaKind[] = [
-  'video',
-  'audio',
-  'image',
-  'sequence',
-  '3d-model',
-  'model-3d',
-  'model-motion',
-  'model-config',
-  'puppet-model',
-  'puppet-motion',
-  'puppet-config',
-  'voice-pack',
-  'document',
-] as const;
 
 // =============================================================================
 // Implementation
@@ -274,43 +244,83 @@ function migrateInstalledRegistryData(value: unknown): InstalledRegistryData {
     return { version: REGISTRY_VERSION, packages: {}, refs: {} };
   }
 
-  const parsedVersion = typeof value['version'] === 'number' ? value['version'] : 0;
+  const parsedVersion = typeof value['version'] === 'number' ? value['version'] : undefined;
+  if (parsedVersion === undefined || parsedVersion < REGISTRY_VERSION) {
+    return { version: REGISTRY_VERSION, packages: {}, refs: {} };
+  }
   if (parsedVersion > REGISTRY_VERSION) {
     throw new UnsupportedInstalledRegistryVersionError(parsedVersion);
   }
 
-  let data = normalizeLegacyRegistryData(value, parsedVersion);
-  if (parsedVersion < 1) {
-    data = migrateV0ToV1(data);
-  }
-  data = backfillV1RecordDefaults(data);
+  const data = backfillV1RecordDefaults(readRegistryData(value, parsedVersion));
   data.version = REGISTRY_VERSION;
   return data;
 }
 
-function normalizeLegacyRegistryData(
-  value: Record<string, unknown>,
-  version: number,
-): InstalledRegistryData {
-  const packages = isRecord(value['packages'])
-    ? (value['packages'] as Record<string, InstalledPackage>)
-    : {};
+function readRegistryData(value: Record<string, unknown>, version: number): InstalledRegistryData {
+  const packages = readInstalledPackageRecords(value['packages']);
   const refs = isRecord(value['refs'])
     ? (value['refs'] as Record<string, InstalledPackageRefState>)
     : {};
   return { version, packages, refs };
 }
 
-function migrateV0ToV1(data: InstalledRegistryData): InstalledRegistryData {
-  data.refs ??= {};
-  return backfillV1RecordDefaults(data);
+function readInstalledPackageRecords(value: unknown): Record<string, InstalledPackage> {
+  if (!isRecord(value)) return {};
+
+  const packages: Record<string, InstalledPackage> = {};
+  for (const [packageId, entry] of Object.entries(value)) {
+    const normalized = readInstalledPackageRecord(packageId, entry);
+    if (normalized) {
+      packages[packageId] = normalized;
+    }
+  }
+  return packages;
+}
+
+function readInstalledPackageRecord(
+  expectedPackageId: string,
+  value: unknown,
+): InstalledPackage | undefined {
+  if (!isRecord(value)) return undefined;
+  const manifest = readCanonicalInstalledManifest(value['manifest']);
+  if (!manifest) return undefined;
+
+  const type = value['type'] ?? manifest.type;
+  if (!isAssetType(type) || type !== manifest.type) return undefined;
+  if (typeof value['version'] !== 'string' || value['version'].length === 0) return undefined;
+  if (typeof value['installedAt'] !== 'number' || !Number.isFinite(value['installedAt'])) {
+    return undefined;
+  }
+  if (typeof value['installedPath'] !== 'string' || value['installedPath'].length === 0) {
+    return undefined;
+  }
+  if (typeof value['packageId'] !== 'string' || value['packageId'].length === 0) {
+    return undefined;
+  }
+  if (value['packageId'] !== expectedPackageId) return undefined;
+
+  return {
+    ...(value as InstalledPackage),
+    packageId: value['packageId'],
+    version: value['version'],
+    type,
+    installedAt: value['installedAt'],
+    installedPath: value['installedPath'],
+    manifest,
+    enabled: value['enabled'] === undefined ? true : value['enabled'] === true,
+  };
+}
+
+function readCanonicalInstalledManifest(value: unknown): AssetManifest | undefined {
+  if (!isRecord(value) || !isAssetType(value['type'])) return undefined;
+  return value as AssetManifest;
 }
 
 function backfillV1RecordDefaults(data: InstalledRegistryData): InstalledRegistryData {
   data.refs ??= {};
   for (const [packageId, pkg] of Object.entries(data.packages)) {
     pkg.packageId ||= packageId;
-    migrateLegacyPackageType(pkg);
     pkg.enabled ??= true;
     pkg.requested ??= true;
     pkg.status ??= 'active';
@@ -343,218 +353,6 @@ function inferInstalledPackageSource(pkg: InstalledPackage): InstalledPackage['s
     return { kind: 'ai-generated', path: pkg.installedPath };
   }
   return { kind: 'market', path: pkg.installedPath };
-}
-
-function migrateLegacyPackageType(pkg: InstalledPackage): void {
-  const legacyType = getLegacyPackageType(pkg);
-  if (!legacyType) return;
-
-  const migration = getLegacyAssetTypeMigration(legacyType);
-  if (!migration) return;
-
-  pkg.type = migration.type;
-  pkg.manifest = migrateLegacyManifestType(pkg.manifest, migration.type, migration.metadataPatch);
-}
-
-function getLegacyPackageType(pkg: InstalledPackage): string | undefined {
-  if (typeof pkg.type === 'string' && !isAssetType(pkg.type)) return pkg.type;
-  const manifestType = (pkg.manifest as { type?: unknown } | undefined)?.type;
-  if (typeof manifestType === 'string' && !isAssetType(manifestType)) return manifestType;
-  return undefined;
-}
-
-function migrateLegacyManifestType(
-  manifest: AssetManifest,
-  type: AssetManifest['type'],
-  metadataPatch: { type: AssetTypeMetadata['type']; data?: Record<string, unknown> },
-): AssetManifest {
-  return {
-    ...manifest,
-    type,
-    typeMetadata: buildMigratedTypeMetadata(manifest, metadataPatch),
-  };
-}
-
-function buildMigratedTypeMetadata(
-  manifest: AssetManifest,
-  metadataPatch: { type: AssetTypeMetadata['type']; data?: Record<string, unknown> },
-): AssetTypeMetadata {
-  const currentMetadata = isRecord((manifest as { typeMetadata?: unknown }).typeMetadata)
-    ? (manifest as { typeMetadata: Record<string, unknown> }).typeMetadata
-    : undefined;
-  const currentData = isRecord(currentMetadata?.['data']) ? currentMetadata['data'] : {};
-  const patchData = metadataPatch.data ?? {};
-  const data = { ...currentData, ...patchData };
-
-  switch (metadataPatch.type) {
-    case 'media': {
-      const mediaKind = readEnum(data['mediaKind'], MEDIA_KINDS, 'image');
-      const mediaData: MediaMetadata = {
-        mediaKind,
-        fileSize: readNumber(data['fileSize'], 0),
-      };
-      return { type: 'media', data: mediaData };
-    }
-    case 'starter':
-      return {
-        type: 'starter',
-        data: {
-          targetEditor: readEnum(
-            data['targetEditor'],
-            ['cut', 'canvas', 'model', 'sketch', 'puppet', 'story'] as const,
-            'cut',
-          ),
-        } satisfies StarterMetadata,
-      };
-    case 'identity':
-      return {
-        type: 'identity',
-        data: {
-          identityKind: readEnum(
-            data['identityKind'],
-            ['character', 'location', 'object', 'style'] as const,
-            'character',
-          ),
-          identityId: readString(data['identityId'], manifest.id),
-          forms: [],
-        } satisfies IdentityMetadata,
-      };
-    case 'model':
-      return {
-        type: 'model',
-        data: {
-          modelKind: readEnum(data['modelKind'], ['base', 'lora', 'embedding'] as const, 'base'),
-          framework: readEnum(
-            data['framework'],
-            ['onnx', 'pytorch', 'safetensors', 'gguf'] as const,
-            'onnx',
-          ),
-          task: readString(data['task'], 'unknown'),
-          size: readNumber(data['size'], 0),
-          quantization: readOptionalString(data['quantization']),
-          minVram: readOptionalNumber(data['minVram']),
-          architecture: readOptionalString(data['architecture']),
-          baseModel: readOptionalString(data['baseModel']),
-        } satisfies ModelMetadata,
-      };
-    case 'endpoint':
-      return {
-        type: 'endpoint',
-        data: {
-          provider: readEnum(
-            data['provider'],
-            ['openai', 'anthropic', 'google', 'azure', 'ollama', 'comfyui', 'custom'] as const,
-            'custom',
-          ),
-          capabilities: readStringArray(data['capabilities']),
-          endpointTemplate: readString(data['endpointTemplate'], ''),
-          credentialSchema: { fields: [] },
-          modelIds: readStringArray(data['modelIds']),
-        } satisfies EndpointMetadata,
-      };
-    case 'provider':
-      return {
-        type: 'provider',
-        data: {
-          providerId: readString(data['providerId'], manifest.id),
-          capabilities: readStringArray(data['capabilities']),
-          modelIds: readStringArray(data['modelIds']),
-          cardSchemaVersion: readOptionalString(data['cardSchemaVersion']),
-        } satisfies ProviderMetadata,
-      };
-    case 'skill':
-      return {
-        type: 'skill',
-        data: {
-          domain: readStringArray(data['domain']),
-          toolSets: readStringArray(data['toolSets']),
-          mcpServers: readStringArray(data['mcpServers']),
-        } satisfies SkillMetadata,
-      };
-    case 'plugin':
-      return {
-        type: 'plugin',
-        data: {
-          entryPoint: readString(data['entryPoint'], ''),
-          apiVersion: readString(data['apiVersion'], '1'),
-          permissions: readPluginPermissions(data['permissions']),
-          networkHosts: readStringArray(data['networkHosts']),
-          engineRequirements: {
-            minVersion: readString(
-              isRecord(data['engineRequirements'])
-                ? data['engineRequirements']['minVersion']
-                : undefined,
-              '1.0',
-            ),
-            targetTriple: readString(
-              isRecord(data['engineRequirements'])
-                ? data['engineRequirements']['targetTriple']
-                : undefined,
-              'unknown-unknown-unknown',
-            ),
-            runtimeArtifacts: ['cdylib'],
-          },
-        } satisfies PluginMetadata,
-      };
-    case 'shader':
-      return {
-        type: 'shader',
-        data: {
-          shaderKind: readEnum(data['shaderKind'], ['standalone', 'preset'] as const, 'standalone'),
-          language: readEnum(data['language'], ['wgsl', 'glsl'] as const, 'wgsl'),
-          stage: readEnum(data['stage'], ['vertex', 'fragment', 'compute'] as const, 'fragment'),
-          inputs: [],
-          preview: readOptionalString(data['preview']),
-          compatibleWith: readStringArray(data['compatibleWith']),
-        } satisfies ShaderMetadata,
-      };
-    case 'preset':
-      return {
-        type: 'preset',
-        data: {
-          presetKind: readString(data['presetKind'], 'theme'),
-          targetApp: readOptionalString(data['targetApp']),
-        } satisfies PresetMetadata,
-      };
-    case 'bundle':
-      return {
-        type: 'bundle',
-        data: {
-          installPolicy: readEnum(data['installPolicy'], ['all', 'pick'] as const, 'all'),
-          recommended: readStringArray(data['recommended']),
-        } satisfies BundleMetadata,
-      };
-  }
-}
-
-function readString(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
-}
-
-function readOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function readNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function readOptionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-}
-
-function readPluginPermissions(value: unknown): PluginPermission[] {
-  return Array.isArray(value) ? value.filter(isPluginPermission) : [];
-}
-
-function readEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

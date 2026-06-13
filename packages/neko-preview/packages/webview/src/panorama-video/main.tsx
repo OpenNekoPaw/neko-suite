@@ -18,11 +18,11 @@ function PanoramaVideoApp(): JSX.Element {
   const [playing, setPlaying] = useState(false);
   const [connected, setConnected] = useState(false);
   const [webglAvailable, setWebglAvailable] = useState(false);
-  const [flatFallback, setFlatFallback] = useState(false);
+  const [flatPreviewActive, setFlatPreviewActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fallbackCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const flatPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<PanoramicVideoRenderer | null>(null);
   const clientRef = useRef<H264StreamClient | null>(null);
   const audioClientRef = useRef<AudioStreamClient | null>(null);
@@ -44,7 +44,7 @@ function PanoramaVideoApp(): JSX.Element {
       rendererRef.current = renderer;
       setWebglAvailable(true);
     } else {
-      setFlatFallback(true);
+      setFlatPreviewActive(true);
     }
     return () => {
       renderer.dispose();
@@ -58,7 +58,7 @@ function PanoramaVideoApp(): JSX.Element {
       frame.close();
       return;
     }
-    const canvas = fallbackCanvasRef.current;
+    const canvas = flatPreviewCanvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context) {
       frame.close();
@@ -69,7 +69,7 @@ function PanoramaVideoApp(): JSX.Element {
       canvas.height = frame.displayHeight;
     }
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
-    setFlatFallback(true);
+    setFlatPreviewActive(true);
     frame.close();
   }, []);
 
@@ -239,10 +239,10 @@ function PanoramaVideoApp(): JSX.Element {
             className={webglAvailable ? 'panorama-canvas' : 'panorama-canvas is-hidden'}
           />
           <canvas
-            ref={fallbackCanvasRef}
-            className={flatFallback ? 'panorama-canvas' : 'panorama-canvas is-hidden'}
+            ref={flatPreviewCanvasRef}
+            className={flatPreviewActive ? 'panorama-canvas' : 'panorama-canvas is-hidden'}
           />
-          {flatFallback ? <div className="fallback-badge">Flat fallback</div> : null}
+          {flatPreviewActive ? <div className="fallback-badge">Flat preview</div> : null}
         </div>
       </section>
       <aside className="panorama-inspector">

@@ -21,9 +21,7 @@ import type {
   DocumentContextData,
   DocumentExcerpt,
   DocumentFormat,
-  DocumentLocator,
   DocumentRange,
-  DocumentRegion,
   DocumentSourceRef,
 } from '@neko/shared';
 import type { PreviewEntry } from '../../utils/html';
@@ -140,8 +138,6 @@ export async function setupDocumentWebview(
           ).payload;
           const normalizedContentKind = contentKind ?? inferContentKind(text, imageData);
           const source = buildDocumentSourceRef(filePath, entry);
-          const normalizedLocator =
-            locator ?? buildLegacyLocator(context?.page, context?.chapter, context?.region);
           const normalizedExcerpt =
             excerpt ?? buildDocumentExcerpt(normalizedContentKind, text, imageData);
           const label = buildLabel(fileName, context?.page, context?.chapter);
@@ -154,14 +150,10 @@ export async function setupDocumentWebview(
             contentKind: normalizedContentKind,
             context,
             source,
-            locator: normalizedLocator,
-            range:
-              range ??
-              (normalizedLocator
-                ? {
-                    locator: normalizedLocator,
-                  }
-                : undefined),
+            locator,
+            range: range ?? {
+              locator,
+            },
             excerpt: normalizedExcerpt,
           };
           const payload: AgentContextPayload = {
@@ -241,36 +233,6 @@ function detectPreviewDocumentFormat(filePath: string, entry: PreviewEntry): Doc
   }
   const ext = filePath.split('.').pop()?.toLowerCase();
   return ext === 'doc' ? 'doc' : 'unknown';
-}
-
-function buildLegacyLocator(
-  pageNumber: number | undefined,
-  chapterTitle: string | undefined,
-  region: DocumentRegion | undefined,
-): DocumentLocator | undefined {
-  if (pageNumber !== undefined && region) {
-    return {
-      kind: 'region',
-      pageNumber,
-      pageIndex: Math.max(0, pageNumber - 1),
-      region,
-    };
-  }
-  if (pageNumber !== undefined) {
-    return {
-      kind: 'page',
-      pageNumber,
-      pageIndex: Math.max(0, pageNumber - 1),
-    };
-  }
-  if (chapterTitle) {
-    return {
-      kind: 'chapter',
-      chapterHref: chapterTitle,
-      title: chapterTitle,
-    };
-  }
-  return undefined;
 }
 
 function buildDocumentExcerpt(

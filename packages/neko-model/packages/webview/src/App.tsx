@@ -545,7 +545,7 @@ export function App(): React.JSX.Element {
           }
           break;
         case 'environmentCommand':
-          setEnvironmentPlacement(message.legacyPlacement ?? null);
+          setEnvironmentPlacement(message.placement);
           sendSceneCommandFromStore(
             'environment-set',
             message.patch as unknown as Record<string, unknown>,

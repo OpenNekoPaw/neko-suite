@@ -19,8 +19,7 @@ import type {
 export interface DocumentDataMessage {
   type: 'document:data';
   payload: {
-    data?: string;
-    url?: string;
+    url: string;
     fileName?: string;
     fileSize?: number;
   };
@@ -86,7 +85,7 @@ export interface DocumentSendToAiMessage {
       region?: DocumentRegion;
     };
     source?: DocumentSourceRef;
-    locator?: DocumentLocator;
+    locator: DocumentLocator;
     range?: DocumentRange;
     excerpt?: DocumentExcerpt;
   };

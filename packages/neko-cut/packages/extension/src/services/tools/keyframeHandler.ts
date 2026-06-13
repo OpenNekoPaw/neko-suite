@@ -1,26 +1,28 @@
 /**
  * Handler for keyframe operations:
- * GetKeyframes, AddKeyframe, UpdateKeyframe, RemoveKeyframe, AddAudioKeyframe.
+ * GetKeyframes, AddKeyframe, UpdateKeyframe, RemoveKeyframe.
  */
 
-import type { ProjectData } from '@neko/shared';
-import type { IToolHandler, ToolApplyResult } from './types';
 import {
-  findElement,
-  updateElementAt,
-  mergeElement,
-  getLegacyKeyframes,
-  type LegacyKeyframe,
-} from './helpers';
+  applyOperation,
+  createMeta,
+  generateId,
+  type EasingType,
+  type Keyframe,
+  type ProjectData,
+} from '@neko/shared';
+import type { IToolHandler, ToolApplyResult } from './types';
+import { findElement, type ToolElement } from './helpers';
+
+type AnimatablePropertyTrack = {
+  readonly baseValue: number;
+  readonly keyframes: readonly Keyframe[];
+};
+
+type TransformKeyframeRoot = Record<string, AnimatablePropertyTrack>;
 
 export class KeyframeHandler implements IToolHandler {
-  readonly toolNames = [
-    'GetKeyframes',
-    'AddKeyframe',
-    'UpdateKeyframe',
-    'RemoveKeyframe',
-    'AddAudioKeyframe',
-  ] as const;
+  readonly toolNames = ['GetKeyframes', 'AddKeyframe', 'UpdateKeyframe', 'RemoveKeyframe'] as const;
 
   apply(project: ProjectData, toolName: string, params: Record<string, unknown>): ToolApplyResult {
     switch (toolName) {
@@ -32,8 +34,6 @@ export class KeyframeHandler implements IToolHandler {
         return this.updateKeyframe(project, params);
       case 'RemoveKeyframe':
         return this.removeKeyframe(project, params);
-      case 'AddAudioKeyframe':
-        return this.addAudioKeyframe(project, params);
       default:
         return { success: false, error: `Unknown tool: ${toolName}` };
     }
@@ -46,7 +46,7 @@ export class KeyframeHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const keyframes = getLegacyKeyframes(found.element);
+    const keyframes = getTransformKeyframes(found.element);
     const result = property ? { [property]: keyframes[property] || [] } : keyframes;
 
     return { success: true, data: { elementId, keyframes: result } };
@@ -64,34 +64,32 @@ export class KeyframeHandler implements IToolHandler {
     if (!elementId || !property || time === undefined || value === undefined) {
       return { success: false, error: 'elementId, property, time, and value are required' };
     }
+    if (!isFiniteNumber(value)) {
+      return { success: false, error: 'value must be a finite number' };
+    }
 
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const keyframes = { ...getLegacyKeyframes(found.element) };
-    const propertyKeyframes = [...(keyframes[property] || [])];
-
-    const keyframeId = `kf-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-    const keyframe: LegacyKeyframe = {
+    const canonicalProperty = normalizeTransformProperty(property);
+    const keyframeId = `kf-${generateId()}`;
+    const keyframe: Keyframe = {
       id: keyframeId,
       time,
       value,
-      easing: easing || 'linear',
+      easing: readEasing(easing),
     };
 
-    const insertIndex = propertyKeyframes.findIndex((kf) => kf.time > time);
-    if (insertIndex === -1) propertyKeyframes.push(keyframe);
-    else propertyKeyframes.splice(insertIndex, 0, keyframe);
-
-    keyframes[property] = propertyKeyframes;
-
-    const updatedElement = mergeElement(found.element, { keyframes });
-    const updatedProject = updateElementAt(
-      project,
-      found.trackIndex,
-      found.elementIndex,
-      updatedElement,
-    );
+    const updatedProject = applyOperation(project, {
+      type: 'keyframe.add',
+      meta: createMeta('ai', `Add ${canonicalProperty} keyframe`),
+      payload: {
+        trackId: found.track.id,
+        elementId,
+        target: { kind: 'transform', property: canonicalProperty },
+        keyframe,
+      },
+    });
 
     return {
       success: true,
@@ -111,42 +109,40 @@ export class KeyframeHandler implements IToolHandler {
 
     if (!elementId || !keyframeId)
       return { success: false, error: 'elementId and keyframeId are required' };
+    if (value !== undefined && !isFiniteNumber(value)) {
+      return { success: false, error: 'value must be a finite number' };
+    }
 
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const keyframes = { ...getLegacyKeyframes(found.element) };
-    let updated = false;
+    const match = findTransformKeyframe(found.element, keyframeId);
+    if (!match) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    for (const prop of Object.keys(keyframes)) {
-      const propKeyframes = [...(keyframes[prop] ?? [])];
-      const idx = propKeyframes.findIndex((kf) => kf.id === keyframeId);
-      if (idx === -1) continue;
+    const updates: Partial<Keyframe> = {};
+    if (time !== undefined) updates.time = time;
+    if (value !== undefined) updates.value = value;
+    if (easing !== undefined) updates.easing = readEasing(easing);
 
-      const next = { ...propKeyframes[idx]! };
-      if (time !== undefined) next.time = time;
-      if (value !== undefined) next.value = value;
-      if (easing !== undefined) next.easing = easing;
-
-      propKeyframes[idx] = next;
-      if (time !== undefined) {
-        propKeyframes.sort((a, b) => a.time - b.time);
-      }
-
-      keyframes[prop] = propKeyframes;
-      updated = true;
-      break;
-    }
-
-    if (!updated) return { success: false, error: `Keyframe not found: ${keyframeId}` };
-
-    const updatedElement = mergeElement(found.element, { keyframes });
-    const updatedProject = updateElementAt(
-      project,
-      found.trackIndex,
-      found.elementIndex,
-      updatedElement,
-    );
+    const updatedProject = applyOperation(project, {
+      type: 'keyframe.update',
+      meta: createMeta('ai', `Update ${match.property} keyframe`),
+      payload: {
+        trackId: found.track.id,
+        elementId,
+        target: { kind: 'transform', property: match.property },
+        keyframeId,
+        keyframeTime: match.keyframe.time,
+        updates,
+      },
+      before: {
+        updates: {
+          ...(time !== undefined ? { time: match.keyframe.time } : {}),
+          ...(value !== undefined ? { value: match.keyframe.value } : {}),
+          ...(easing !== undefined ? { easing: match.keyframe.easing } : {}),
+        },
+      },
+    });
     return {
       success: true,
       data: { keyframeId, message: 'Keyframe updated successfully' },
@@ -162,78 +158,84 @@ export class KeyframeHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    const keyframes = { ...getLegacyKeyframes(found.element) };
-    let removed = false;
+    const match = findTransformKeyframe(found.element, keyframeId);
+    if (!match) return { success: false, error: `Keyframe not found: ${keyframeId}` };
 
-    for (const prop of Object.keys(keyframes)) {
-      const before = keyframes[prop] ?? [];
-      const after = before.filter((kf) => kf.id !== keyframeId);
-      if (after.length !== before.length) {
-        keyframes[prop] = after;
-        removed = true;
-        break;
-      }
-    }
-
-    if (!removed) return { success: false, error: `Keyframe not found: ${keyframeId}` };
-
-    const updatedElement = mergeElement(found.element, { keyframes });
-    const updatedProject = updateElementAt(
-      project,
-      found.trackIndex,
-      found.elementIndex,
-      updatedElement,
-    );
+    const updatedProject = applyOperation(project, {
+      type: 'keyframe.remove',
+      meta: createMeta('ai', `Remove ${match.property} keyframe`),
+      payload: {
+        trackId: found.track.id,
+        elementId,
+        target: { kind: 'transform', property: match.property },
+        keyframeId,
+        keyframeTime: match.keyframe.time,
+      },
+      before: {
+        keyframe: match.keyframe,
+        index: match.index,
+      },
+    });
     return { success: true, data: { message: 'Keyframe removed successfully' }, updatedProject };
   }
+}
 
-  private addAudioKeyframe(project: ProjectData, params: Record<string, unknown>): ToolApplyResult {
-    const { elementId, property, time, value, easing } = params as {
-      elementId?: string;
-      property?: string;
-      time?: number;
-      value?: number;
-      easing?: string;
-    };
+function normalizeTransformProperty(property: string): string {
+  return property.startsWith('transform.') ? property : `transform.${property}`;
+}
 
-    if (!elementId || !property || time === undefined || value === undefined) {
-      return { success: false, error: 'elementId, property, time, and value are required' };
-    }
-
-    const validProperties = ['volume', 'pan'];
-    if (!validProperties.includes(property)) {
-      return {
-        success: false,
-        error: `Invalid property: ${property}. Valid: ${validProperties.join(', ')}`,
-      };
-    }
-
-    const found = findElement(project, elementId);
-    if (!found) return { success: false, error: `Element not found: ${elementId}` };
-
-    const audioKeyframes = { ...(found.element.audioKeyframes || {}) } as Record<string, unknown[]>;
-    const propertyKeyframes = [...(audioKeyframes[property] || [])];
-
-    const keyframeId = `akf-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-    const keyframe = { id: keyframeId, time, value, easing: easing || 'linear' };
-
-    const insertIndex = propertyKeyframes.findIndex((kf) => (kf as { time?: number }).time! > time);
-    if (insertIndex === -1) propertyKeyframes.push(keyframe);
-    else propertyKeyframes.splice(insertIndex, 0, keyframe);
-
-    audioKeyframes[property] = propertyKeyframes;
-
-    const updatedElement = mergeElement(found.element, { audioKeyframes });
-    const updatedProject = updateElementAt(
-      project,
-      found.trackIndex,
-      found.elementIndex,
-      updatedElement,
-    );
-    return {
-      success: true,
-      data: { keyframeId, message: 'Audio keyframe added successfully' },
-      updatedProject,
-    };
+function getTransformKeyframes(element: ToolElement): Record<string, readonly Keyframe[]> {
+  const root = readAnimRoot(element, 'animTransform');
+  const result: Record<string, readonly Keyframe[]> = {};
+  for (const [property, track] of Object.entries(root)) {
+    result[property] = track.keyframes;
+    result[`transform.${property}`] = track.keyframes;
   }
+  return result;
+}
+
+function findTransformKeyframe(
+  element: ToolElement,
+  keyframeId: string,
+): { readonly property: string; readonly keyframe: Keyframe; readonly index: number } | undefined {
+  const root = readAnimRoot(element, 'animTransform');
+  for (const [property, track] of Object.entries(root)) {
+    const index = track.keyframes.findIndex((keyframe) => keyframe.id === keyframeId);
+    const keyframe = track.keyframes[index];
+    if (keyframe) {
+      return { property: `transform.${property}`, keyframe, index };
+    }
+  }
+  return undefined;
+}
+
+function readAnimRoot(element: ToolElement, key: string): TransformKeyframeRoot {
+  const value = (element as unknown as Record<string, unknown>)[key];
+  if (!isTransformKeyframeRoot(value)) {
+    return {};
+  }
+  return value;
+}
+
+function isTransformKeyframeRoot(value: unknown): value is TransformKeyframeRoot {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(isAnimatablePropertyTrack);
+}
+
+function isAnimatablePropertyTrack(value: unknown): value is AnimatablePropertyTrack {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as { baseValue?: unknown; keyframes?: unknown };
+  return typeof candidate.baseValue === 'number' && Array.isArray(candidate.keyframes);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function readEasing(value: string | undefined): EasingType {
+  return (value || 'linear') as EasingType;
 }

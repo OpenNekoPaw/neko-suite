@@ -269,10 +269,10 @@ function statsForMemory(
 function statsFor(
   diagnostics: readonly RenderFrameDiagnostics[],
   primary: keyof RenderFrameDiagnostics,
-  fallback?: keyof RenderFrameDiagnostics,
+  secondary?: keyof RenderFrameDiagnostics,
 ): PerformanceWindowStats {
   const values = diagnostics
-    .map((entry) => readFiniteMetric(entry, primary, fallback))
+    .map((entry) => readFiniteMetric(entry, primary, secondary))
     .filter((value): value is number => value !== undefined);
   if (values.length === 0) {
     return emptyStats();
@@ -289,18 +289,20 @@ function statsFor(
 function readFiniteMetric(
   diagnostics: RenderFrameDiagnostics,
   primary: keyof RenderFrameDiagnostics,
-  fallback?: keyof RenderFrameDiagnostics,
+  secondary?: keyof RenderFrameDiagnostics,
 ): number | undefined {
   const value = diagnostics[primary];
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
     return value;
   }
-  if (!fallback) {
+  if (!secondary) {
     return undefined;
   }
-  const fallbackValue = diagnostics[fallback];
-  return typeof fallbackValue === 'number' && Number.isFinite(fallbackValue) && fallbackValue >= 0
-    ? fallbackValue
+  const secondaryValue = diagnostics[secondary];
+  return typeof secondaryValue === 'number' &&
+    Number.isFinite(secondaryValue) &&
+    secondaryValue >= 0
+    ? secondaryValue
     : undefined;
 }
 

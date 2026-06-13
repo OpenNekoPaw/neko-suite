@@ -15,7 +15,7 @@ import type { LiveExtensionMessage } from './types/messages';
 import { vscode } from './vscode-api';
 import { CanvasRecorder } from './recording/CanvasRecorder';
 import { t } from './i18n';
-import { NEKO_LIVE_RENDERER_FALLBACK_ENABLED } from './rendererMigration';
+import { NEKO_LIVE_LOCAL_PREVIEW_ENABLED } from './rendererMigration';
 import {
   LiveCompositorCanvas,
   type LiveCompositorCanvasHandle,
@@ -27,7 +27,7 @@ import {
   createDefaultLiveCompositorScene,
 } from './viewport/liveCompositorScene';
 import { selectLiveVisualPath, type LiveCompositorStatus } from './viewport/liveVisualPath';
-import { LiveLocalFallbackSurface } from './viewport/LiveLocalFallbackSurface';
+import { LiveLocalPreviewSurface } from './viewport/LiveLocalPreviewSurface';
 
 const canvasRecorder = new CanvasRecorder();
 
@@ -82,7 +82,7 @@ export function App() {
     compositorStatus,
     hasController: liveController !== null,
     hasAvatar: avatarUrl !== null,
-    fallbackEnabled: NEKO_LIVE_RENDERER_FALLBACK_ENABLED,
+    localPreviewEnabled: NEKO_LIVE_LOCAL_PREVIEW_ENABLED,
   });
 
   useEffect(() => {
@@ -264,7 +264,7 @@ export function App() {
       // Canvas capture started — tell extension host to start audio + progress timer
       setRecordingState('recording');
       setRecordingElapsed(0);
-      vscode.postMessage({ type: 'startRecording', includeAudio, authority: 'local-fallback' });
+      vscode.postMessage({ type: 'startRecording', includeAudio, authority: 'local-preview' });
     },
     [setRecordingState, setRecordingElapsed],
   );
@@ -401,8 +401,8 @@ export function App() {
             onToolbarAction={handleLiveToolbarAction}
             onContextMenuAction={handleLiveMenuAction}
           />
-        ) : visualPath === 'local-fallback' ? (
-          <LiveLocalFallbackSurface avatarType={avatarType ?? undefined} />
+        ) : visualPath === 'local-preview' ? (
+          <LiveLocalPreviewSurface avatarType={avatarType ?? undefined} />
         ) : (
           <EmptyState />
         )}

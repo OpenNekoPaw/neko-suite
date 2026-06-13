@@ -234,11 +234,6 @@
         "category": "NekoCut: Audio"
       },
       {
-        "command": "neko.audio.addKeyframe",
-        "title": "%neko.audio.addKeyframe.title%",
-        "category": "NekoCut: Audio"
-      },
-      {
         "command": "neko.animation.add",
         "title": "%neko.animation.add.title%",
         "category": "NekoCut: Animation"

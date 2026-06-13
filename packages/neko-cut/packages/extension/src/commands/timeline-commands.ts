@@ -295,14 +295,6 @@ export function registerTimelineCommands(
     ),
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.audio.addKeyframe',
-      (params: { elementId: string; property: 'volume' | 'pan'; time: number; value: number }) =>
-        executeTool('AddAudioKeyframe', params),
-    ),
-  );
-
   // Track Properties Command
   context.subscriptions.push(
     vscode.commands.registerCommand(

@@ -13,7 +13,6 @@ import {
   findElement,
   updateElementAt,
   removeElementAt,
-  getLegacyKeyframes,
   normalizePercent,
 } from '../helpers';
 
@@ -240,7 +239,7 @@ describe('normalizePathsForSave', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolveMediaPath', () => {
-  it('resolves project media from the owning workspace root before document directory', async () => {
+  it('resolves project media from the owning workspace root', async () => {
     const result = await resolveMediaPath(
       'cases/clip.mp4',
       '/workspace/b/projects/cut',
@@ -257,18 +256,13 @@ describe('resolveMediaPath', () => {
     expect(result).toBe('/workspace/b/cases/clip.mp4');
   });
 
-  it('keeps legacy document-relative fallback when workspace candidate is missing', async () => {
-    const result = await resolveMediaPath(
-      '../cases/clip.mp4',
-      '/workspace/b/projects/cut',
-      undefined,
-      {
+  it('rejects document-relative project media when no workspace candidate exists', async () => {
+    await expect(
+      resolveMediaPath('../cases/clip.mp4', '/workspace/b/projects/cut', undefined, {
         projectFilePath: '/workspace/b/projects/cut/project.nkv',
         fileExists: (filePath) => filePath === '/workspace/b/projects/cases/clip.mp4',
-      },
-    );
-
-    expect(result).toBe('/workspace/b/projects/cases/clip.mp4');
+      }),
+    ).rejects.toThrow('No existing local file matched the media path candidates.');
   });
 });
 
@@ -456,69 +450,6 @@ describe('removeElementAt', () => {
     const result = removeElementAt(project, 0, 0);
     expect(result.tracks).toHaveLength(2);
     expect(result.tracks[1]!.elements).toHaveLength(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getLegacyKeyframes
-// ---------------------------------------------------------------------------
-
-describe('getLegacyKeyframes', () => {
-  it('returns keyframes object when present', () => {
-    const keyframes = {
-      opacity: [{ id: 'k1', time: 0, value: 1, easing: 'linear' }],
-    };
-    const el = { ...makeElement({ id: 'e1' }), keyframes } as unknown as TimelineElement;
-    const result = getLegacyKeyframes(el);
-    expect(result).toBe(keyframes);
-  });
-
-  it('returns empty object when keyframes is undefined', () => {
-    const el = makeElement({ id: 'e1' });
-    expect(getLegacyKeyframes(el)).toEqual({});
-  });
-
-  it('returns empty object when keyframes is null', () => {
-    const el = { ...makeElement({ id: 'e1' }), keyframes: null } as unknown as TimelineElement;
-    expect(getLegacyKeyframes(el)).toEqual({});
-  });
-
-  it('returns empty object when keyframes is an array', () => {
-    const el = { ...makeElement({ id: 'e1' }), keyframes: [] } as unknown as TimelineElement;
-    expect(getLegacyKeyframes(el)).toEqual({});
-  });
-
-  it('returns empty object when keyframes is a primitive', () => {
-    const el = { ...makeElement({ id: 'e1' }), keyframes: 42 } as unknown as TimelineElement;
-    expect(getLegacyKeyframes(el)).toEqual({});
-  });
-
-  it('returns empty object when keyframes is a string', () => {
-    const el = {
-      ...makeElement({ id: 'e1' }),
-      keyframes: 'not an object',
-    } as unknown as TimelineElement;
-    expect(getLegacyKeyframes(el)).toEqual({});
-  });
-
-  it('handles keyframes with multiple properties', () => {
-    const keyframes = {
-      opacity: [{ id: 'k1', time: 0, value: 0, easing: 'linear' }],
-      scale: [
-        { id: 'k2', time: 0, value: 1, easing: 'ease-in' },
-        { id: 'k3', time: 1, value: 2, easing: 'ease-out' },
-      ],
-    };
-    const el = { ...makeElement({ id: 'e1' }), keyframes } as unknown as TimelineElement;
-    const result = getLegacyKeyframes(el);
-    expect(Object.keys(result)).toHaveLength(2);
-    expect(result['scale']).toHaveLength(2);
-  });
-
-  it('returns empty object for empty keyframes object', () => {
-    const el = { ...makeElement({ id: 'e1' }), keyframes: {} } as unknown as TimelineElement;
-    const result = getLegacyKeyframes(el);
-    expect(result).toEqual({});
   });
 });
 

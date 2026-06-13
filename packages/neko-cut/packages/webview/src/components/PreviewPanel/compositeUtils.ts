@@ -45,23 +45,11 @@ export type PausedPreviewOverlayElement =
       zIndex: number;
     };
 
-function getLegacyCompatibleTransition(
+function getElementTransition(
   element: EditorElement,
   key: 'transitionIn' | 'transitionOut',
 ): EditorElement['transitionIn'] | EditorElement['transitionOut'] | undefined {
-  if (key === 'transitionIn') {
-    return (
-      element.transitionIn ??
-      (element as EditorElement & { inTransition?: EditorElement['transitionIn'] }).inTransition ??
-      undefined
-    );
-  }
-
-  return (
-    element.transitionOut ??
-    (element as EditorElement & { outTransition?: EditorElement['transitionOut'] }).outTransition ??
-    undefined
-  );
+  return element[key];
 }
 
 function getCompositeSourceTime(element: EditorElement, time: number): number {
@@ -231,8 +219,8 @@ export function buildCompositeLayers(project: ProjectData, time: number): Compos
       .sort((a, b) => a.startTime - b.startTime)
       .map((e) => {
         const editorElement = e as EditorElement;
-        const transitionIn = getLegacyCompatibleTransition(editorElement, 'transitionIn');
-        const transitionOut = getLegacyCompatibleTransition(editorElement, 'transitionOut');
+        const transitionIn = getElementTransition(editorElement, 'transitionIn');
+        const transitionOut = getElementTransition(editorElement, 'transitionOut');
 
         return {
           id: e.id,

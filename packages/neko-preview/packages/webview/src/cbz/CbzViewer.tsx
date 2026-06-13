@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
-import { type Entry, BlobReader, BlobWriter, ZipReader, HttpReader } from '@zip.js/zip.js';
+import { type Entry, BlobWriter, ZipReader, HttpReader } from '@zip.js/zip.js';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
 import { DocumentContextMenu, useDocumentContextActions } from '../shared/DocumentContextMenu';
@@ -96,11 +96,7 @@ export const CbzViewer: FC = () => {
       initPersistedStore(m.payload as Record<string, unknown>);
       notifySubscribers();
     } else if (msg.type === 'document:data') {
-      if ('url' in msg.payload && msg.payload.url) {
-        void loadCbzFromUrl(msg.payload.url as string);
-      } else if (msg.payload.data) {
-        void loadCbz(msg.payload.data as string);
-      }
+      void loadCbzFromUrl(msg.payload.url);
     } else if (msg.type === 'document:navigate') {
       const locator = msg.payload.locator;
       const pageNumber =
@@ -126,41 +122,6 @@ export const CbzViewer: FC = () => {
       setError(null);
 
       const reader = new ZipReader(new HttpReader(url, { useRangeHeader: true }));
-      const entries = await reader.getEntries();
-      await reader.close();
-
-      const filtered = entries
-        .filter((e) => !e.directory && IMAGE_EXTENSIONS.test(e.filename))
-        .sort((a, b) => naturalSort(a.filename, b.filename));
-
-      setImageEntries(filtered);
-      setPageCache(new Map());
-      setImageHeights(new Map());
-      const saved = persistedPageRef.current;
-      const restoredPage = saved >= 0 && saved < filtered.length ? saved : 0;
-      setCurrentPage(restoredPage);
-      decodingRef.current.clear();
-      setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setLoading(false);
-    }
-  }, []);
-
-  /** Load CBZ from base64 data (legacy fallback). */
-  const loadCbz = useCallback(async (base64Data: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const blob = new Blob([bytes], { type: 'application/zip' });
-      const reader = new ZipReader(new BlobReader(blob));
       const entries = await reader.getEntries();
       await reader.close();
 
@@ -235,12 +196,12 @@ export const CbzViewer: FC = () => {
 
     const containerRect = scrollContainer.getBoundingClientRect();
     const anchorY = containerRect.top + containerRect.height / 3;
-    let fallbackPage: number | null = null;
+    let firstVisiblePage: number | null = null;
 
     for (const [idx, el] of pageRefsMap.current) {
       const rect = el.getBoundingClientRect();
-      if (fallbackPage == null && rect.bottom >= containerRect.top) {
-        fallbackPage = idx;
+      if (firstVisiblePage == null && rect.bottom >= containerRect.top) {
+        firstVisiblePage = idx;
       }
       if (rect.top <= anchorY && rect.bottom >= anchorY) {
         if (idx !== persistedPageRef.current) {
@@ -250,8 +211,8 @@ export const CbzViewer: FC = () => {
       }
     }
 
-    if (fallbackPage != null && fallbackPage !== persistedPageRef.current) {
-      setCurrentPage(fallbackPage);
+    if (firstVisiblePage != null && firstVisiblePage !== persistedPageRef.current) {
+      setCurrentPage(firstVisiblePage);
     }
   }, [setCurrentPage]);
 

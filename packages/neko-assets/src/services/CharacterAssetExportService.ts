@@ -214,7 +214,9 @@ export class CharacterAssetExportService {
       files: [{ path: outputPath, role: 'model', mediaKind: 'puppet-model', dimension: 'model' }],
       diagnostics:
         sourcePath === outputPath
-          ? ['Native puppet export rewrote the requested output path; original import sources were not mutated.']
+          ? [
+              'Native puppet export rewrote the requested output path; original import sources were not mutated.',
+            ]
           : ['Native puppet export copied .nkp v2 data without mutating original import sources.'],
     };
   }
@@ -511,7 +513,6 @@ function chooseCharacterAssetMetadata(
       readonly implementedBlendShapes?: readonly string[];
       readonly animationModel?: 'bone-blendshape' | 'moc3-parameter';
       readonly sourceKind?: string;
-      readonly legacyFallbackRef?: string;
     }
   | undefined {
   const candidates =
@@ -581,7 +582,6 @@ function createBindingMetadata(
         readonly implementedBlendShapes?: readonly string[];
         readonly animationModel?: 'bone-blendshape' | 'moc3-parameter';
         readonly sourceKind?: string;
-        readonly legacyFallbackRef?: string;
       }
     | undefined,
 ): Record<string, unknown> {
@@ -596,7 +596,6 @@ function createBindingMetadata(
       : {}),
     ...(metadata?.animationModel ? { animationModel: metadata.animationModel } : {}),
     ...(metadata?.sourceKind ? { sourceKind: metadata.sourceKind } : {}),
-    ...(metadata?.legacyFallbackRef ? { legacyFallbackRef: metadata.legacyFallbackRef } : {}),
   };
 }
 
@@ -611,7 +610,6 @@ function collectNativePuppetMetadata(
   const blendshapeStandard = readString(metadata, 'blendshapeStandard');
   const implementedBlendShapes = readStringArray(metadata, 'implementedBlendShapes');
   const sourceKind = readString(metadata, 'sourceKind');
-  const legacyFallbackRef = findLegacyFallbackRef(bindings) ?? readString(metadata, 'legacyFallbackRef');
   return {
     ...(rigTemplate ? { rigTemplate } : {}),
     ...(blendshapeStandard ? { blendshapeStandard } : {}),
@@ -620,7 +618,6 @@ function collectNativePuppetMetadata(
       readAnimationModel(metadata, 'animationModel') ??
       (nativeBinding.mediaKind === 'puppet-model' ? 'bone-blendshape' : undefined),
     ...(sourceKind ? { sourceKind } : {}),
-    ...(legacyFallbackRef ? { legacyFallbackRef } : {}),
   };
 }
 
@@ -657,10 +654,6 @@ function readAnimationModel(
 ): NkEntityNativePuppetMetadata['animationModel'] | undefined {
   const value = metadata[key];
   return value === 'bone-blendshape' || value === 'moc3-parameter' ? value : undefined;
-}
-
-function findLegacyFallbackRef(bindings: readonly NkEntityBinding[]): string | undefined {
-  return bindings.find((binding) => binding.role === 'live2d')?.ref;
 }
 
 function rebasePackagedEntityMetadata(
@@ -716,7 +709,11 @@ function buildSpineJson(project: NkpNativeProjectData, name: string): Record<str
               track.bone,
               {
                 ...(track.positionKeys
-                  ? { translate: track.positionKeys.map((key) => keyframeVec2(key.timeMs, key.value)) }
+                  ? {
+                      translate: track.positionKeys.map((key) =>
+                        keyframeVec2(key.timeMs, key.value),
+                      ),
+                    }
                   : {}),
                 ...(track.rotationKeys
                   ? {
@@ -881,7 +878,12 @@ function buildSpineDeformTimeline(
             track.blendshape,
             track.weightKeys.map((key) => ({
               time: key.timeMs / 1000,
-              vertices: buildBlendShapeVertices(project, layer.mesh.id, track.blendshape, key.value),
+              vertices: buildBlendShapeVertices(
+                project,
+                layer.mesh.id,
+                track.blendshape,
+                key.value,
+              ),
             })),
           ]),
         ),

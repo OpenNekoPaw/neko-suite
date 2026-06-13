@@ -15,8 +15,8 @@ describe('neko-live viewport architecture boundaries', () => {
     expect(offenders.map((filePath) => relative(WEBVIEW_SRC.pathname, filePath))).toEqual([]);
   });
 
-  it('keeps local R3F and puppet renderers behind the live fallback surface', () => {
-    const allowed = new Set(['viewport/LiveLocalFallbackSurface.tsx']);
+  it('keeps local R3F and puppet renderers behind the live local preview surface', () => {
+    const allowed = new Set(['viewport/LiveLocalPreviewSurface.tsx']);
     const offenders = sourceFiles(WEBVIEW_SRC.pathname).filter((filePath) => {
       const relativePath = relative(WEBVIEW_SRC.pathname, filePath);
       if (relativePath === 'viewport/liveArchitectureBoundary.test.ts') return false;

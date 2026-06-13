@@ -399,13 +399,13 @@ function normalizeConfidence(value: unknown): number | undefined {
 function findStructuredCue(
   shot: CutStoryboardImportShot,
   kind: StoryboardVoiceCue['kind'],
-  legacyText?: string,
+  summaryText?: string,
 ): StoryboardVoiceCue | undefined {
   const matchingKind = shot.voiceCues?.filter((cue) => cue.kind === kind) ?? [];
-  const normalizedLegacyText = normalizeCueTextForMatching(legacyText);
-  if (normalizedLegacyText) {
+  const normalizedSummaryText = normalizeCueTextForMatching(summaryText);
+  if (normalizedSummaryText) {
     const matchingText = matchingKind.find(
-      (cue) => normalizeCueTextForMatching(cue.text) === normalizedLegacyText,
+      (cue) => normalizeCueTextForMatching(cue.text) === normalizedSummaryText,
     );
     if (matchingText) return matchingText;
   }

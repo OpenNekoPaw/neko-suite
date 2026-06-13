@@ -269,7 +269,7 @@ describe('storyboard import utilities', () => {
     ]);
   });
 
-  it('keeps additional structured cues when legacy dialogue is present', () => {
+  it('keeps additional structured cues when summary dialogue is present', () => {
     const payload = normalizeCutStoryboardImportPayload({
       projectName: 'Opening',
       shots: [
@@ -320,7 +320,7 @@ describe('storyboard import utilities', () => {
     ]);
   });
 
-  it('merges legacy dialogue with the structured cue whose text matches first', () => {
+  it('merges summary dialogue with the structured cue whose text matches first', () => {
     const payload = normalizeCutStoryboardImportPayload({
       projectName: 'Opening',
       shots: [

@@ -40,10 +40,10 @@ export interface LiveSessionSnapshot {
 
 export type LiveScenePatch = Partial<LiveSceneSnapshot>;
 
-export type LiveRecordingAuthority = 'compositor' | 'local-fallback';
+export type LiveRecordingAuthority = 'compositor' | 'local-preview';
 
 export interface LiveRecordingDiagnostic {
-  readonly code: 'fallback-non-authoritative' | 'compositor-recording-unavailable';
+  readonly code: 'preview-non-authoritative' | 'compositor-recording-unavailable';
   readonly severity: 'info' | 'warning';
   readonly message: string;
   readonly timestamp: number;
@@ -74,7 +74,7 @@ export class LiveSessionService implements vscode.Disposable {
   private readonly listeners = new Set<(event: LiveSessionEvent) => void>();
   private snapshot: LiveSessionSnapshot = {
     scene: {},
-    recording: { active: false, authority: 'local-fallback', diagnostics: [] },
+    recording: { active: false, authority: 'local-preview', diagnostics: [] },
     deviceBindings: {},
   };
 
@@ -114,8 +114,8 @@ export class LiveSessionService implements vscode.Disposable {
       ...this.snapshot,
       recording: {
         active: true,
-        authority: options.authority ?? 'local-fallback',
-        diagnostics: recordingDiagnostics(options.authority ?? 'local-fallback'),
+        authority: options.authority ?? 'local-preview',
+        diagnostics: recordingDiagnostics(options.authority ?? 'local-preview'),
       },
     };
     this.emit({ type: 'snapshot', snapshot: this.getSnapshot() });
@@ -278,13 +278,16 @@ function createCompositorSourceRef(
   };
 }
 
-function recordingDiagnostics(authority: LiveRecordingAuthority): readonly LiveRecordingDiagnostic[] {
+function recordingDiagnostics(
+  authority: LiveRecordingAuthority,
+): readonly LiveRecordingDiagnostic[] {
   if (authority === 'compositor') return [];
   return [
     {
-      code: 'fallback-non-authoritative',
+      code: 'preview-non-authoritative',
       severity: 'warning',
-      message: 'Webview canvas recording is a local fallback and is excluded from compositor parity.',
+      message:
+        'Webview canvas recording is a local preview and is excluded from compositor parity.',
       timestamp: Date.now(),
     },
   ];

@@ -1234,7 +1234,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     void this.postToPanel(panel, generation, {
       type: 'environmentCommand',
       patch,
-      legacyPlacement: placement,
+      placement,
     });
   }
 

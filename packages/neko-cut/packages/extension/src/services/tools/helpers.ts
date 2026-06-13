@@ -23,19 +23,17 @@ import {
  * Runtime element shape as seen by tool handlers.
  *
  * ProjectData from the webview stores EditorElement objects which carry
- * UI extension fields (colorCorrection, masks, keyframes, etc.) alongside
+ * UI extension fields (animTransform, colorCorrection, masks, etc.) alongside
  * engine-aligned TimelineElement fields. This type makes those runtime
  * fields visible to handlers without importing webview-internal types.
  */
 export interface ToolElementExtensions {
+  /** Animatable transform tracks (UI-only, pending engine support) */
+  animTransform?: Record<string, unknown>;
   /** Color correction settings (UI-only, not engine field) */
   colorCorrection?: Record<string, unknown>;
   /** Mask instances (UI-only, pending engine support) */
   masks?: Array<Record<string, unknown>>;
-  /** Legacy keyframe animations (UI-only, pending engine migration) */
-  keyframes?: Record<string, unknown>;
-  /** Audio keyframe animations (UI-only) */
-  audioKeyframes?: Record<string, unknown[]>;
 }
 
 /** TimelineElement with optional UI extension fields visible at runtime */
@@ -102,7 +100,6 @@ interface AssetPathCommandContext {
  * Priority:
  * 1. PathVariable: /Volumes/NAS/footage/clip.mp4 → ${FOOTAGE}/clip.mp4
  * 2. Workspace-relative: /project/assets/clip.mp4 → assets/clip.mp4
- * 3. Legacy document-relative fallback.
  */
 async function contractPath(
   absolutePath: string,
@@ -127,8 +124,7 @@ async function contractPath(
   if (
     contracted.format === 'workspace-relative' ||
     contracted.format === 'variable' ||
-    contracted.format === 'remote-url' ||
-    contracted.format === 'document-relative'
+    contracted.format === 'remote-url'
   ) {
     return contracted.path;
   }
@@ -417,17 +413,6 @@ export function removeElementAt(
   const updatedTracks = [...project.tracks];
   updatedTracks[trackIndex] = updatedTrack;
   return { ...project, tracks: updatedTracks };
-}
-
-// Legacy keyframe structure compatible with webview Record format
-export type LegacyKeyframe = { id: string; time: number; value: unknown; easing: string };
-
-export function getLegacyKeyframes(element: ToolElement): Record<string, LegacyKeyframe[]> {
-  const keyframes = element.keyframes;
-  if (!keyframes || typeof keyframes !== 'object' || Array.isArray(keyframes)) {
-    return {};
-  }
-  return keyframes as Record<string, LegacyKeyframe[]>;
 }
 
 export function normalizePercent(value: number | undefined, fallback: number): number {

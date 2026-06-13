@@ -33,11 +33,7 @@ export const DocxViewer: FC = () => {
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
-      if ('url' in msg.payload && msg.payload.url) {
-        void loadDocxFromUrl(msg.payload.url as string);
-      } else if (msg.payload.data) {
-        void loadDocx(msg.payload.data as string);
-      }
+      void loadDocxFromUrl(msg.payload.url);
     }
   });
 
@@ -74,25 +70,6 @@ export const DocxViewer: FC = () => {
         });
       }
       setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setLoading(false);
-    }
-  }, []);
-
-  /** Legacy: load DOCX from base64 data. */
-  const loadDocx = useCallback(async (base64Data: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      await renderDocx(bytes.buffer as ArrayBuffer);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);

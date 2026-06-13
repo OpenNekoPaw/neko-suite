@@ -144,8 +144,7 @@ describe('InstalledRegistry', () => {
       expect(registry.get('nonexistent')).toBeUndefined();
     });
 
-    it('should backfill enabled=true for old records without enabled field', async () => {
-      // Simulate old data without enabled field
+    it('should backfill enabled=true for current records without enabled field', async () => {
       const { writeFile, mkdir: mkdirP } = await import('node:fs/promises');
       await mkdirP(testDir, { recursive: true });
       await writeFile(
@@ -174,8 +173,8 @@ describe('InstalledRegistry', () => {
     });
   });
 
-  describe('version migration', () => {
-    it('migrates legacy records without version into v1 shape', async () => {
+  describe('registry version handling', () => {
+    it('does not migrate records without a registry version', async () => {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(
         registryFile,
@@ -196,11 +195,37 @@ describe('InstalledRegistry', () => {
       const registry = new InstalledRegistry(registryFile);
       await registry.load();
 
-      expect(registry.get('@test/legacy')).toMatchObject({
-        packageId: '@test/legacy',
-        enabled: true,
-        requested: true,
-        status: 'active',
+      expect(registry.get('@test/legacy')).toBeUndefined();
+      expect(registry.list()).toEqual([]);
+    });
+
+    it('drops v1 records without canonical packageId', async () => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(
+        registryFile,
+        JSON.stringify({
+          version: 1,
+          packages: {
+            '@test/missing-id': {
+              version: '1.0.0',
+              type: 'skill',
+              installedAt: Date.now(),
+              installedPath: '/missing-id/path',
+              manifest: mockManifest,
+            },
+            '@test/skill-1': mockPackage,
+          },
+        }),
+        'utf-8',
+      );
+
+      const registry = new InstalledRegistry(registryFile);
+      await registry.load();
+
+      expect(registry.get('@test/missing-id')).toBeUndefined();
+      expect(registry.get('@test/skill-1')).toMatchObject({
+        packageId: '@test/skill-1',
+        type: 'skill',
       });
     });
 
@@ -221,48 +246,40 @@ describe('InstalledRegistry', () => {
       await expect(registry.load()).rejects.toThrow('Unsupported installed registry version');
     });
 
-    it.each([
-      ['video', 'media', { type: 'media', data: { mediaKind: 'video' } }],
-      ['audio', 'media', { type: 'media', data: { mediaKind: 'audio' } }],
-      ['ai-model', 'model', { type: 'model', data: { modelKind: 'base' } }],
-      ['lora', 'model', { type: 'model', data: { modelKind: 'lora' } }],
-      ['template', 'preset', { type: 'preset', data: { presetKind: 'theme' } }],
-      ['provider-card', 'provider', { type: 'provider', data: {} }],
-    ])(
-      'migrates legacy installed AssetType %s to v4 %s',
-      async (legacyType, expectedType, expectedMetadata) => {
-        const { writeFile } = await import('node:fs/promises');
-        await writeFile(
-          registryFile,
-          JSON.stringify({
-            packages: {
-              '@test/legacy': {
-                packageId: '@test/legacy',
-                version: '1.0.0',
-                type: legacyType,
-                installedAt: Date.now(),
-                installedPath: '/legacy/path',
-                manifest: {
-                  ...mockManifest,
-                  id: '@test/legacy',
-                  type: legacyType,
-                  typeMetadata: undefined,
-                },
+    it('drops v1 installed records that use non-canonical asset types', async () => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(
+        registryFile,
+        JSON.stringify({
+          version: 1,
+          packages: {
+            '@test/legacy': {
+              packageId: '@test/legacy',
+              version: '1.0.0',
+              type: 'video',
+              installedAt: Date.now(),
+              installedPath: '/legacy/path',
+              manifest: {
+                ...mockManifest,
+                id: '@test/legacy',
+                type: 'video',
               },
             },
-          }),
-          'utf-8',
-        );
+            '@test/skill-1': mockPackage,
+          },
+        }),
+        'utf-8',
+      );
 
-        const registry = new InstalledRegistry(registryFile);
-        await registry.load();
+      const registry = new InstalledRegistry(registryFile);
+      await registry.load();
 
-        const pkg = registry.get('@test/legacy');
-        expect(pkg?.type).toBe(expectedType);
-        expect(pkg?.manifest.type).toBe(expectedType);
-        expect(pkg?.manifest.typeMetadata).toMatchObject(expectedMetadata);
-      },
-    );
+      expect(registry.get('@test/legacy')).toBeUndefined();
+      expect(registry.get('@test/skill-1')).toMatchObject({
+        packageId: '@test/skill-1',
+        type: 'skill',
+      });
+    });
   });
 
   describe('bundle references', () => {

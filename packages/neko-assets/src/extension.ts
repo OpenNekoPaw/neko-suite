@@ -36,7 +36,6 @@ import {
   isEntityFacadeAssetReverseLookupResult,
   resolveWorkspaceMediaPath,
   resolveStorageLayout,
-  migrateStorageLayout,
   parseEntityUri,
   type CreativeEntityKind,
   type WorkspaceMediaPathContext,
@@ -181,37 +180,14 @@ export async function activate(
     try {
       const layout = resolveStorageLayout(workspaceRoot, os.homedir());
 
-      // One-time migration from legacy paths
-      try {
-        const migrated = await migrateStorageLayout(workspaceRoot, {
-          exists: async (p) => {
-            try {
-              await fs.access(p);
-              return true;
-            } catch {
-              return false;
-            }
-          },
-          rename: (o, n) => fs.rename(o, n),
-          mkdir: (p, opts) => fs.mkdir(p, opts).then(() => {}),
-          copy: (o, n) => fs.cp(o, n, { recursive: true, force: false }),
-          rm: (p, opts) => fs.rm(p, opts),
-        });
-        if (migrated.length > 0) {
-          logger.info(`Storage migration: ${migrated.join('; ')}`);
-        }
-      } catch (err) {
-        logger.warn('Storage migration failed (non-fatal):', err);
-      }
-
       const storage = new JsonFileStorage({
-        filePath: layout.project.assetLibrary,
+        filePath: layout.project.facts.assetLibrary,
         fs: nodeFileSystem,
         autoSaveDelay: 1000,
       });
 
       // Initialize ThumbnailService
-      thumbnailService = new ThumbnailService(layout.project.cache.thumbnails);
+      thumbnailService = new ThumbnailService(layout.project.local.cache.thumbnails);
       context.subscriptions.push(thumbnailService);
 
       library = new AssetLibrary({
@@ -223,7 +199,7 @@ export async function activate(
       });
 
       await library.initialize();
-      logger.info(`AssetLibrary initialized at ${layout.project.assetLibrary}`);
+      logger.info(`AssetLibrary initialized at ${layout.project.facts.assetLibrary}`);
       dependencyManifestService = new ProjectAssetDependencyManifestService({
         projectRoot: workspaceRoot,
         fs: {
@@ -370,7 +346,7 @@ export async function activate(
 
     // Initialize persistent metadata cache
     const metadataCache = new MediaMetadataCache(
-      resolveStorageLayout(workspaceRoot, os.homedir()).project.cache.mediaMetadata,
+      resolveStorageLayout(workspaceRoot, os.homedir()).project.local.cache.mediaMetadata,
       cachePathResolver,
     );
     await metadataCache.load();
@@ -381,7 +357,7 @@ export async function activate(
     const searchService = new MediaLibrarySearchService(
       settingsService,
       metadataCache,
-      storageLayout.project.cache.searchIndex,
+      storageLayout.project.local.cache.searchIndex,
     );
     context.subscriptions.push(searchService);
     trackExtensionTask('Media library search warmup', searchService.warmup());

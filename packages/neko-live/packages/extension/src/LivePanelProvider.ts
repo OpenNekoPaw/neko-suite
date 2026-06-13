@@ -383,7 +383,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
    */
   public async startRecording(
     includeAudio: boolean,
-    authority: 'local-fallback' | 'compositor' = 'local-fallback',
+    authority: 'local-preview' | 'compositor' = 'local-preview',
   ): Promise<void> {
     await this.sessionService.startRecording({ includeAudio, authority });
     // Note: webview already set recording state before sending this message
@@ -400,7 +400,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     this.postMessage({
       type: 'recordingStopped',
       filePath,
-      authority: result.authority ?? 'local-fallback',
+      authority: result.authority ?? 'local-preview',
       diagnostics: result.diagnostics ?? [],
     });
   }
@@ -427,8 +427,8 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       this.postMessage({
         type: 'recordingStopped',
         filePath,
-        authority: 'local-fallback',
-        diagnostics: ['fallback-non-authoritative'],
+        authority: 'local-preview',
+        diagnostics: ['preview-non-authoritative'],
       });
     } catch (err) {
       this.logger.error(vscode.l10n.t('neko.live.recording.videoSaveFailed'), err);
@@ -765,8 +765,8 @@ function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function readRecordingAuthority(value: unknown): 'local-fallback' | 'compositor' {
-  return value === 'compositor' ? 'compositor' : 'local-fallback';
+function readRecordingAuthority(value: unknown): 'local-preview' | 'compositor' {
+  return value === 'compositor' ? 'compositor' : 'local-preview';
 }
 
 function getNonce(): string {

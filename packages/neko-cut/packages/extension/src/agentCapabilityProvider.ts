@@ -417,25 +417,6 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
       ),
       createTimelineTool(
         bridge,
-        TOOL_NAMES_TIMELINE.ADD_AUDIO_KEYFRAME,
-        'Add an audio keyframe for volume or pan automation',
-        {
-          type: 'object',
-          properties: {
-            elementId: { type: 'string', description: 'Element ID' },
-            property: {
-              type: 'string',
-              enum: ['volume', 'pan'],
-              description: 'Automated audio property',
-            },
-            time: { type: 'number', description: 'Keyframe time in seconds' },
-            value: { type: 'number', description: 'Keyframe value' },
-          },
-          required: ['elementId', 'property', 'time', 'value'],
-        },
-      ),
-      createTimelineTool(
-        bridge,
         TOOL_NAMES_TIMELINE.SEPARATE_AUDIO,
         'Separate embedded audio from a media element into an audio track',
         {

@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { NEKO_LIVE_RENDERER_FALLBACK_ENABLED } from './rendererMigration';
+import { NEKO_LIVE_LOCAL_PREVIEW_ENABLED } from './rendererMigration';
 import { selectLiveVisualPath } from './viewport/liveVisualPath';
 
-describe('neko-live renderer migration fallback', () => {
-  it('keeps the local renderer behind an explicit non-authoritative fallback flag', () => {
-    expect(NEKO_LIVE_RENDERER_FALLBACK_ENABLED).toBe(true);
+describe('neko-live renderer migration preview', () => {
+  it('keeps the local renderer behind an explicit non-authoritative preview flag', () => {
+    expect(NEKO_LIVE_LOCAL_PREVIEW_ENABLED).toBe(true);
   });
 
-  it('prefers compositor visual truth and only selects local fallback when compositor is unavailable', () => {
+  it('prefers compositor visual truth and only selects local preview when compositor is unavailable', () => {
     expect(
       selectLiveVisualPath({
         compositorStatus: 'active',
         hasController: true,
         hasAvatar: true,
-        fallbackEnabled: NEKO_LIVE_RENDERER_FALLBACK_ENABLED,
+        localPreviewEnabled: NEKO_LIVE_LOCAL_PREVIEW_ENABLED,
       }),
     ).toBe('compositor');
 
@@ -22,8 +22,8 @@ describe('neko-live renderer migration fallback', () => {
         compositorStatus: 'unavailable',
         hasController: true,
         hasAvatar: true,
-        fallbackEnabled: NEKO_LIVE_RENDERER_FALLBACK_ENABLED,
+        localPreviewEnabled: NEKO_LIVE_LOCAL_PREVIEW_ENABLED,
       }),
-    ).toBe('local-fallback');
+    ).toBe('local-preview');
   });
 });

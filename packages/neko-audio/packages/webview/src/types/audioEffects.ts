@@ -317,31 +317,34 @@ export function getAudioEffectDefinition(type: AudioEffectType): AudioEffectDefi
 function sharedSliderParam(
   effectType: RenderableAudioEffectType,
   key: string,
-  fallback: Omit<AudioEffectParameterDefinition, 'key' | 'type'>,
+  defaults: Omit<AudioEffectParameterDefinition, 'key' | 'type'>,
 ): AudioEffectParameterDefinition {
   const metadata = getAudioEffectParameterMetadata(effectType, key);
   return {
     key,
-    labelKey: metadata?.labelKey ?? fallback.labelKey,
+    labelKey: metadata?.labelKey ?? defaults.labelKey,
     type: 'slider',
-    min: metadata?.min ?? fallback.min,
-    max: metadata?.max ?? fallback.max,
-    step: metadata?.step ?? fallback.step,
-    unit: metadata?.unit ?? fallback.unit,
-    automatable: metadata?.automatable ?? fallback.automatable,
+    min: metadata?.min ?? defaults.min,
+    max: metadata?.max ?? defaults.max,
+    step: metadata?.step ?? defaults.step,
+    unit: metadata?.unit ?? defaults.unit,
+    automatable: metadata?.automatable ?? defaults.automatable,
   };
 }
 
-function defaultParam(metadata: AudioEffectParameterMetadata | undefined, fallback: number): number {
-  return typeof metadata?.defaultValue === 'number' ? metadata.defaultValue : fallback;
+function defaultParam(
+  metadata: AudioEffectParameterMetadata | undefined,
+  defaultValue: number,
+): number {
+  return typeof metadata?.defaultValue === 'number' ? metadata.defaultValue : defaultValue;
 }
 
 function sharedNumericDefault(
   effectType: RenderableAudioEffectType,
   key: string,
-  fallback: number,
+  defaultValue: number,
 ): number {
-  return defaultParam(getAudioEffectParameterMetadata(effectType, key), fallback);
+  return defaultParam(getAudioEffectParameterMetadata(effectType, key), defaultValue);
 }
 
 // =============================================================================

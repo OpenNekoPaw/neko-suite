@@ -402,27 +402,14 @@ interface PropertyPanelProps {
   onExecuteAIAction?: (actionId: string, elementIds: string[]) => void;
 }
 
-function getLegacyCompatibleTransition(
+function getElementTransition(
   element: TimelineElement | null | undefined,
   key: 'transitionIn' | 'transitionOut',
 ): Transition | null {
   if (!element) {
     return null;
   }
-
-  if (key === 'transitionIn') {
-    return (
-      element.transitionIn ??
-      (element as TimelineElement & { inTransition?: Transition }).inTransition ??
-      null
-    );
-  }
-
-  return (
-    element.transitionOut ??
-    (element as TimelineElement & { outTransition?: Transition }).outTransition ??
-    null
-  );
+  return element[key] ?? null;
 }
 
 export const PropertyPanel = memo(function PropertyPanel({
@@ -984,7 +971,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={getLegacyCompatibleTransition(element, 'transitionIn')}
+          transition={getElementTransition(element, 'transitionIn')}
           onChange={handleInTransitionChange}
           showDuration={true}
           disabled={isDisabled}
@@ -998,7 +985,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
       >
         <TransitionPicker
-          transition={getLegacyCompatibleTransition(element, 'transitionOut')}
+          transition={getElementTransition(element, 'transitionOut')}
           onChange={handleOutTransitionChange}
           showDuration={true}
           disabled={isDisabled}

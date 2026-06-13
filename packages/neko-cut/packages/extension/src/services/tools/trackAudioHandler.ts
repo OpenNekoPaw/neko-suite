@@ -159,9 +159,8 @@ export class TrackAudioHandler implements IToolHandler {
     const found = findElement(project, elementId);
     if (!found) return { success: false, error: `Element not found: ${elementId}` };
 
-    // Compatible with two input formats:
-    // 1) { elementId, colorCorrection: Partial<...> } (legacy webview handler)
-    // 2) { elementId, brightness/contrast/... } (timeline-bridge schema)
+    // Accept direct adjustment fields and the grouped payload produced by
+    // TimelineToolBridge when expanding public element updates.
     const nested = (params as { colorCorrection?: unknown }).colorCorrection as
       | Record<string, unknown>
       | undefined;

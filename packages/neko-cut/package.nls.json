@@ -33,7 +33,6 @@
   "neko.color.set.title": "Set Color Correction",
   "neko.color.reset.title": "Reset Color Correction",
   "neko.audio.setProperties.title": "Set Audio Properties",
-  "neko.audio.addKeyframe.title": "Add Audio Keyframe",
   "neko.animation.add.title": "Add Animation",
   "neko.subtitle.add.title": "Add Subtitle",
   "neko.subtitle.import.title": "Import Subtitles",

@@ -538,10 +538,9 @@ export class MessageHandler {
 
   /**
    * Handle saving blob data from WebView (WebCodecs export)
-   * Supports both binary ArrayBuffer (preferred) and base64 string (legacy)
    */
   private async handleSaveBlob(
-    data: ArrayBuffer | string,
+    data: ArrayBuffer,
     filename: string,
     mimeType: string,
   ): Promise<void> {
@@ -579,24 +578,7 @@ export class MessageHandler {
         return;
       }
 
-      // Handle both binary (preferred) and base64 (legacy) formats
-      let buffer: Buffer;
-      if (typeof data === 'string') {
-        // Legacy: base64 encoded string
-        buffer = Buffer.from(data, 'base64');
-      } else if (data instanceof ArrayBuffer) {
-        // Preferred: direct ArrayBuffer
-        buffer = Buffer.from(data);
-      } else if (ArrayBuffer.isView(data)) {
-        // TypedArray or DataView
-        buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-      } else if (typeof data === 'object' && data !== null) {
-        // Structured clone result (object with numeric keys)
-        const values = Object.values(data as Record<string, number>);
-        buffer = Buffer.from(values);
-      } else {
-        throw new Error('Invalid data format for blob save');
-      }
+      const buffer = readBlobBuffer(data);
 
       await vscode.workspace.fs.writeFile(saveUri, buffer);
 
@@ -681,29 +663,12 @@ export class MessageHandler {
    * Handle saving blob data to a pre-selected path (no dialog)
    */
   private async handleSaveBlobToPath(
-    data: ArrayBuffer | string,
+    data: ArrayBuffer,
     filePath: string,
     mimeType: string,
   ): Promise<void> {
     try {
-      // Handle both binary (preferred) and base64 (legacy) formats
-      let buffer: Buffer;
-      if (typeof data === 'string') {
-        // Legacy: base64 encoded string
-        buffer = Buffer.from(data, 'base64');
-      } else if (data instanceof ArrayBuffer) {
-        // Preferred: direct ArrayBuffer
-        buffer = Buffer.from(data);
-      } else if (ArrayBuffer.isView(data)) {
-        // TypedArray or DataView
-        buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-      } else if (typeof data === 'object' && data !== null) {
-        // Structured clone result (object with numeric keys)
-        const values = Object.values(data as Record<string, number>);
-        buffer = Buffer.from(values);
-      } else {
-        throw new Error('Invalid data format for blob save');
-      }
+      const buffer = readBlobBuffer(data);
 
       const saveUri = vscode.Uri.file(filePath);
       await vscode.workspace.fs.writeFile(saveUri, buffer);
@@ -812,6 +777,30 @@ export class MessageHandler {
       });
     }
   }
+}
+
+function readBlobBuffer(data: unknown): Buffer {
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data);
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+  if (isStructuredCloneByteRecord(data)) {
+    return Buffer.from(Object.values(data));
+  }
+  throw new Error('Invalid binary data format for blob save');
+}
+
+function isStructuredCloneByteRecord(data: unknown): data is Record<string, number> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return false;
+  }
+  const values = Object.values(data);
+  return (
+    values.length > 0 &&
+    values.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)
+  );
 }
 
 function createFileRangeContentAccessService(projectRoot: string): ContentAccessService {

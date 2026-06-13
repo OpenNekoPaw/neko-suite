@@ -332,13 +332,6 @@ export class TimelineToolBridge {
             ...(args.fadeIn !== undefined && { fadeIn: args.fadeIn }),
             ...(args.fadeOut !== undefined && { fadeOut: args.fadeOut }),
           });
-        case TOOL_NAMES_TIMELINE.ADD_AUDIO_KEYFRAME:
-          return await this.executeInternal('AddAudioKeyframe', {
-            elementId: args.elementId,
-            property: args.property,
-            time: args.time,
-            value: args.value,
-          });
         case TOOL_NAMES_TIMELINE.SEPARATE_AUDIO:
           return await this.executeInternal('SeparateAudio', {
             elementId: args.elementId,

@@ -21,11 +21,8 @@ import type {
 export interface DocumentDataMessage {
   type: 'document:data';
   payload: {
-    /** Base64-encoded file content (legacy / non-EPUB) */
-    data?: string;
-    /** Direct webview URI — preferred for large files (EPUB).
-     *  When present, the webview should load via URL instead of decoding base64. */
-    url?: string;
+    /** Direct webview URI exposed by the Extension Host for document viewers. */
+    url: string;
     /** File name for display (optional — not sent by all providers) */
     fileName?: string;
     /** File size in bytes (optional — not sent by all providers) */
@@ -99,7 +96,7 @@ export interface DocumentSendToAiMessage {
     /** Structured source, normally enriched by Extension before forwarding to Agent. */
     source?: DocumentSourceRef;
     /** Stable semantic document locator emitted by the viewer. */
-    locator?: DocumentLocator;
+    locator: DocumentLocator;
     /** Semantic document range for follow-up reads. */
     range?: DocumentRange;
     /** Bounded inline excerpt attached to the context payload. */

@@ -622,7 +622,7 @@ export class ExportService implements vscode.Disposable {
     }
 
     // Transitions — map "type" → "transitionType", easing to PascalCase
-    const transIn = this.getLegacyCompatibleTransition(el, 'transitionIn');
+    const transIn = el.transitionIn;
     if (transIn && typeof transIn === 'object') {
       result.transitionIn = {
         transitionType: transIn.type ?? '',
@@ -630,7 +630,7 @@ export class ExportService implements vscode.Disposable {
         easing: this.mapEasing(transIn.easing),
       };
     }
-    const transOut = this.getLegacyCompatibleTransition(el, 'transitionOut');
+    const transOut = el.transitionOut;
     if (transOut && typeof transOut === 'object') {
       result.transitionOut = {
         transitionType: transOut.type ?? '',
@@ -866,17 +866,6 @@ export class ExportService implements vscode.Disposable {
     }
 
     return undefined;
-  }
-
-  private getLegacyCompatibleTransition(
-    element: Record<string, unknown>,
-    key: 'transitionIn' | 'transitionOut',
-  ): Record<string, unknown> | undefined {
-    const legacyKey = key === 'transitionIn' ? 'inTransition' : 'outTransition';
-    const transition = element[key] ?? element[legacyKey];
-    return transition && typeof transition === 'object'
-      ? (transition as Record<string, unknown>)
-      : undefined;
   }
 
   /**

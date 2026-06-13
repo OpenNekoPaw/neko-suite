@@ -71,11 +71,7 @@ export const PdfViewer: FC = () => {
       initPersistedStore(m.payload as Record<string, unknown>);
       notifySubscribers();
     } else if (msg.type === 'document:data') {
-      if ('url' in msg.payload && msg.payload.url) {
-        void loadPdfFromUrl(msg.payload.url as string);
-      } else if (msg.payload.data) {
-        void loadPdf(msg.payload.data as string);
-      }
+      void loadPdfFromUrl(msg.payload.url);
     } else if (msg.type === 'document:navigate') {
       const locator = msg.payload.locator;
       const pageNumber =
@@ -103,32 +99,6 @@ export const PdfViewer: FC = () => {
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
         // Restore persisted page or start at 1
-        const saved = persistedPageRef.current;
-        const restoredPage = saved >= 1 && saved <= pdf.numPages ? saved : 1;
-        setCurrentPage(restoredPage);
-        await computeViewports(pdf, scale);
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      }
-    },
-    [scale],
-  );
-
-  const loadPdf = useCallback(
-    async (base64Data: string) => {
-      try {
-        setLoading(true);
-        setError(null);
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-        pdfDocRef.current = pdf;
-        setNumPages(pdf.numPages);
         const saved = persistedPageRef.current;
         const restoredPage = saved >= 1 && saved <= pdf.numPages ? saved : 1;
         setCurrentPage(restoredPage);
@@ -197,12 +167,12 @@ export const PdfViewer: FC = () => {
 
     const containerRect = scrollContainer.getBoundingClientRect();
     const midY = containerRect.top + containerRect.height / 3;
-    let fallbackPage: number | null = null;
+    let firstVisiblePage: number | null = null;
 
     for (const [pageNum, el] of pageRefsMap.current) {
       const rect = el.getBoundingClientRect();
-      if (fallbackPage == null && rect.bottom >= containerRect.top) {
-        fallbackPage = pageNum;
+      if (firstVisiblePage == null && rect.bottom >= containerRect.top) {
+        firstVisiblePage = pageNum;
       }
       if (rect.top <= midY && rect.bottom >= midY) {
         if (pageNum !== persistedPageRef.current) {
@@ -212,8 +182,8 @@ export const PdfViewer: FC = () => {
       }
     }
 
-    if (fallbackPage != null && fallbackPage !== persistedPageRef.current) {
-      setCurrentPage(fallbackPage);
+    if (firstVisiblePage != null && firstVisiblePage !== persistedPageRef.current) {
+      setCurrentPage(firstVisiblePage);
     }
   }, [setCurrentPage]);
 

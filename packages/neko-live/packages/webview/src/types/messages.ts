@@ -22,7 +22,7 @@ export type LiveExtensionMessage =
   | {
       type: 'recordingStopped';
       filePath: string;
-      authority?: 'local-fallback' | 'compositor';
+      authority?: 'local-preview' | 'compositor';
       diagnostics?: string[];
     }
   | { type: 'recordingProgress'; elapsedMs: number }
@@ -42,7 +42,7 @@ export type LiveWebviewMessage =
   | { type: 'selectAvatar' }
   | { type: 'setTrackingMode'; mode: TrackingMode }
   | { type: 'setPuppetParam'; name: string; value: number }
-  | { type: 'startRecording'; includeAudio: boolean; authority?: 'local-fallback' | 'compositor' }
+  | { type: 'startRecording'; includeAudio: boolean; authority?: 'local-preview' | 'compositor' }
   | { type: 'stopRecording' }
   | { type: 'listCameraDevices' }
   | { type: 'startCameraCapture'; deviceId?: string }
