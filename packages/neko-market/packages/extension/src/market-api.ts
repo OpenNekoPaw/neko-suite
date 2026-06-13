@@ -34,9 +34,6 @@ export interface MarketAssetEvent {
   manifest: AssetManifest;
 }
 
-/** @deprecated Use MarketPackageEvent from @neko/shared/types/asset/market. */
-export type { MarketPackageEvent };
-
 // =============================================================================
 // Public API Interface
 // =============================================================================

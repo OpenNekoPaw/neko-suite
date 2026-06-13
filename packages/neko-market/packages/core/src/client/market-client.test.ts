@@ -95,18 +95,18 @@ describe('MarketClient', () => {
       expect(url).toContain('embedding.query=warm+vintage');
     });
 
-    it('normalizes legacy intent.useCase to intent.useCases and does not encode page fields', async () => {
+    it('encodes canonical intent.useCases and does not encode page fields', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ items: [], total: 0, hasMore: false }));
 
       await client.search({
-        intent: { useCase: ['legacy'] },
+        intent: { useCases: ['storyboard'] },
         limit: 20,
         offset: 40,
         ...({ page: 3, pageSize: 10 } as Record<string, unknown>),
       });
 
       const url = mockFetch.mock.calls[0]?.[0] as string;
-      expect(url).toContain('intent.useCases=legacy');
+      expect(url).toContain('intent.useCases=storyboard');
       expect(url).toContain('limit=20');
       expect(url).toContain('offset=40');
       expect(url).not.toContain('page=');
@@ -184,10 +184,8 @@ describe('MarketClient', () => {
 
       await expect(client.getDownloadDescriptor('@test/skill', '1.0.0')).resolves.toMatchObject({
         integrity: 'sha256-abc',
+        url: 'https://cdn/file.tar.gz',
       });
-      await expect(client.getDownloadUrl('@test/skill', '1.0.0')).resolves.toBe(
-        'https://cdn/file.tar.gz',
-      );
     });
 
     it('models sparse, variant, proxy, and delta endpoints', async () => {

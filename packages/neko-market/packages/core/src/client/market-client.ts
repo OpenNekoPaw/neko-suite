@@ -160,11 +160,6 @@ export class MarketClient implements IMarketClient {
     );
   }
 
-  async getDownloadUrl(packageId: string, version: string): Promise<string> {
-    const result = await this.getDownloadDescriptor(packageId, version);
-    return result.url;
-  }
-
   async getFeatured(type?: AssetType): Promise<MarketPackage[]> {
     const params = type ? `?type=${type}` : '';
     const response = await this.get<{ items: MarketPackage[] } | MarketPackage[]>(
@@ -504,8 +499,7 @@ export class MarketClient implements IMarketClient {
     if (!intent) return;
     Object.entries(intent).forEach(([key, value]) => {
       if (value === undefined) return;
-      const normalizedKey = key === 'useCase' ? 'useCases' : key;
-      params.set(`intent.${normalizedKey}`, Array.isArray(value) ? value.join(',') : value);
+      params.set(`intent.${key}`, Array.isArray(value) ? value.join(',') : value);
     });
   }
 }
