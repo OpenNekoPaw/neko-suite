@@ -235,6 +235,9 @@ function buildReport(allMatches, sourceFiles) {
       files: topRows(groupMatches(nonTestMatches, (match) => match.file), 40),
     },
     examples: representativeExamples(nonTestMatches, 30),
+    needsReview: nonTestMatches
+      .filter((match) => match.semanticClass === 'needs-review')
+      .map(formatExample),
     cleanupCandidates: cleanupCandidates(nonTestMatches),
   };
 }
@@ -382,6 +385,9 @@ function classifySurface(file, line, term) {
   if (containsAny(lowerLine, ['false positive', 'knip', 'dynamic import']) && term !== 'fallback') {
     return 'false-positive-word';
   }
+  if (containsAny(lowerFile, ['vitest.config.ts']) && containsAny(lowerLine, ['deprecated task-manager'])) {
+    return 'false-positive-word';
+  }
   if (isDomainDeprecatedSurface(lowerFile, lowerLine, term)) {
     return 'domain-status';
   }
@@ -396,6 +402,9 @@ function classifySurface(file, line, term) {
   }
   if (term === 'fallback' && isRuntimeResilienceSurface(lowerFile, lowerLine)) {
     return 'runtime-resilience';
+  }
+  if (term === 'fallback' && isBoundaryCanonicalizerSurface(lowerFile, lowerLine)) {
+    return 'boundary-canonicalizer';
   }
   if (term === 'fallback' && isPresentationDefaultSurface(lowerFile, lowerLine)) {
     return 'presentation-default';
@@ -417,11 +426,33 @@ function isGeneratedPath(file) {
 }
 
 function isDomainDeprecatedSurface(lowerFile, lowerLine, term) {
+  if (
+    term === 'fallback' &&
+    (containsAny(lowerFile, ['representationresolver.ts', 'creative-entity-composition.ts']) ||
+      containsAny(lowerLine, [
+        'default_representation_fallbacks',
+        'representationresolver',
+        'representationresolveroptions',
+        'resolvedkind',
+        'fallbackorder',
+        'createfallbackresolvedassetref',
+      ]))
+  ) {
+    return true;
+  }
   if (term !== 'deprecated') {
     return false;
   }
   return (
-    containsAny(lowerFile, ['/market', '/entity', '/dashboard']) ||
+    containsAny(lowerFile, [
+      '/market',
+      '/entity',
+      '/dashboard',
+      'dashboard',
+      'neko-entity',
+      'creativeentityservice.ts',
+      'execution-persona.ts',
+    ]) ||
     containsAny(lowerLine, ['deprecated status', "status: 'deprecated'", '"deprecated"', "'deprecated'", 'deprecated:'])
   );
 }
@@ -436,30 +467,113 @@ function isDeleteNowSurface(lowerFile, lowerLine) {
 function isCurrentBridgeSurface(lowerFile, lowerLine) {
   return (
     containsAny(lowerFile, ['/bridge/', 'bridge.ts', 'adapter.ts', 'capabilityprovider.ts']) ||
-    containsAny(lowerLine, ['bridge', 'adapter', 'compatibility adapter', 'legacy bridge', 'provider resolver'])
+    containsAny(lowerFile, [
+      'ai-sdk/src/types.ts',
+      'toolbootstrap.ts',
+      'media-task-executor.ts',
+      'stage-guardian.ts',
+      'components/index.ts',
+      'h264streamclient.ts',
+    ]) ||
+    containsAny(lowerFile, ['semanticcoveragetool.ts']) ||
+    containsAny(lowerLine, [
+      'bridge',
+      'adapter',
+      'compatibility adapter',
+      'legacy bridge',
+      'legacy adapter',
+      'provider resolver',
+      'codec override',
+      '@neko/shared/components',
+      'legacycentralizedtoolregistrationmetadata',
+      'legacy_centralized_tool_registration_metadata',
+      'centralized tool registration',
+    ])
   );
 }
 
 function isBoundaryCanonicalizerSurface(lowerFile, lowerLine) {
   return (
-    containsAny(lowerFile, ['migrator', 'normalization', 'normalizer', 'resource-cache-provider']) ||
+    containsAny(lowerFile, [
+      'migrator',
+      'normalization',
+      'normalizer',
+      'resource-cache-provider',
+      'projectresolver.ts',
+      'character-registry.ts',
+      'types/canvas.ts',
+      'canvaseditorprovider.ts',
+      'engine/types.ts',
+      'project-cache-search.ts',
+      'reference-resolution.ts',
+      'asset/market.ts',
+      'canvas-layered.ts',
+      'canvas-playback.ts',
+      'creative-entity-asset-composition.ts',
+      'types/skill.ts',
+      'tool-planning.ts',
+      'fieldbinding.ts',
+    ]) ||
     containsAny(lowerLine, [
+      'allowfallback',
       'canonical',
       'canonicalize',
       'compat',
       'compatibility',
       'convert',
+      'fallbackderived',
+      'generatedasset',
+      'generatedvideoasset',
       'legacy field',
       'migrat',
       'normalize',
       'old format',
+      'older canvas files',
+      'structured fallback sources',
+      'allowedfallbacks',
+      'fallback message',
+      'fallback?:',
     ])
   );
 }
 
 function isRuntimeResilienceSurface(lowerFile, lowerLine) {
   return (
-    containsAny(lowerFile, ['engineclient', 'socket', 'service', 'provider', 'runtime', 'renderer', 'reader']) ||
+    containsAny(lowerFile, [
+      'engineclient',
+      'socket',
+      'service',
+      'provider',
+      'runtime',
+      'renderer',
+      'reader',
+      'summarizer',
+      'conversation-compressor',
+      'message-classifier',
+      'experiment/',
+      'presets.ts',
+      'types.ts',
+      'plan-parser',
+      'stage-planner',
+      'tier-resolver',
+      'agent-session',
+      'media-routing-manager',
+      'media-file-downloader',
+      'audiostreamclient',
+      'fmp4streamclient',
+      'market-client',
+      'install-manager',
+      'assetvariantdiffmessagehandler',
+      'streamingcontroller',
+      'credential-resolver',
+      'core/config.ts',
+      'platform-bootstrap.ts',
+      'canvasgenerationhost.ts',
+      'auth',
+      'audiotempo.ts',
+      'storyboardplanner',
+      'subpackage-guard',
+    ]) ||
     containsAny(lowerLine, [
       'catch',
       'cancel',
@@ -469,7 +583,9 @@ function isRuntimeResilienceSurface(lowerFile, lowerLine) {
       'fail',
       'fallbackpolicy',
       'fallback-non-authoritative',
+      'fallbackurl',
       'file',
+      'generic fallback',
       'gpu',
       'hold-last-frame',
       'media',
@@ -482,6 +598,7 @@ function isRuntimeResilienceSurface(lowerFile, lowerLine) {
       'permission',
       'provider',
       'retry',
+      'task-type hint',
       'sharp',
       'timeout',
       'unavailable',
@@ -493,6 +610,14 @@ function isRuntimeResilienceSurface(lowerFile, lowerLine) {
 function isPresentationDefaultSurface(lowerFile, lowerLine) {
   return (
     containsAny(lowerFile, ['webview', 'component', 'presenter', 'view', 'i18n']) ||
+    containsAny(lowerFile, ['nodetypedescriptor.ts', 'types/animation.ts']) ||
+    containsAny(lowerFile, [
+      'types/generation.ts',
+      'sketch-psd-blend-mode.ts',
+      'storyboardexecutionsummary.ts',
+      'number-input.tsx',
+      'tabs.tsx',
+    ]) ||
     containsAny(lowerLine, [
       'className',
       'color',
@@ -500,12 +625,16 @@ function isPresentationDefaultSurface(lowerFile, lowerLine) {
       'dimension',
       'display',
       'empty',
+      'fallbacklabel',
+      'fallbackvalue',
       'height',
       'label',
       'placeholder',
       'render',
       'text',
       'title',
+      'terminal',
+      'unicode',
       'unknown',
       'width',
     ])

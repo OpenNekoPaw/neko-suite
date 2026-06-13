@@ -1050,7 +1050,11 @@ function findWebviewReExportShimViolations(scope, file, content) {
   if (relativeFile.includes('/__tests__/') || /\.test\.(ts|tsx|js|jsx)$/.test(relativeFile)) {
     return [];
   }
-  if (!isWebviewCompatibilityShimCandidate(relativeFile)) {
+  const hasCompatibilityShimMarker =
+    /re-export\s+shim|compatibility\s+shim|backward-compatible\s+re-export|backward-compatible\s+re-exports|re-export\s+for\s+backward\s+compatibility/i.test(
+      content,
+    );
+  if (!hasCompatibilityShimMarker && !isWebviewCompatibilityShimCandidate(relativeFile)) {
     return [];
   }
 

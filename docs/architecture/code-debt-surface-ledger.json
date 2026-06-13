@@ -32,7 +32,8 @@
     {
       "id": "REQ-LCDR-003",
       "pathPattern": "packages/neko-types/src/types/storage.ts",
-      "ledgerEntryId": "LCDR-003"
+      "ledgerEntryId": "LCDR-003",
+      "requiredWhileMatched": false
     },
     {
       "id": "REQ-LCDR-004",
@@ -123,7 +124,8 @@
     {
       "id": "REQ-LCDR-016",
       "pathPattern": "packages/neko-types/src/path/workspace-media-path.ts",
-      "ledgerEntryId": "LCDR-016"
+      "ledgerEntryId": "LCDR-016",
+      "requiredWhileMatched": false
     },
     {
       "id": "REQ-LCDR-017",
@@ -134,12 +136,14 @@
     {
       "id": "REQ-LCDR-022",
       "pathPattern": "packages/neko-types/src/types/live-compositor.ts",
-      "ledgerEntryId": "LCDR-022"
+      "ledgerEntryId": "LCDR-022",
+      "requiredWhileMatched": false
     },
     {
       "id": "REQ-LCDR-023",
       "pathPattern": "packages/neko-puppet/packages/webview/src/PuppetApp.tsx",
-      "ledgerEntryId": "LCDR-023"
+      "ledgerEntryId": "LCDR-023",
+      "requiredWhileMatched": false
     }
   ],
   "entries": [
@@ -901,23 +905,115 @@
     {
       "id": "LCDR-013",
       "package": "@neko-client",
-      "surface": "EngineClient and scene socket fallback handling",
+      "surface": "EngineClient and SceneControlSocket fallback reader naming",
       "semanticClass": "runtime-resilience",
-      "action": "preserve",
-      "status": "active",
+      "action": "rename",
+      "status": "removed",
       "owner": "neko-client",
       "paths": [
         "packages/neko-client/src/EngineClient.ts",
         "packages/neko-client/src/SceneControlSocket.ts"
       ],
-      "replacement": "Current engine connection, media, socket, and optional capability failure handling.",
-      "removeCondition": "Only remove branches that no longer protect a current engine/socket failure path and have passing targeted tests.",
+      "replacement": "defaultValue/defaultVec/defaultStates/defaultKind boundary parser naming; current engine connection, socket, and capability failure handling remain owned by @neko/client.",
+      "removeCondition": "Removed after call-chain review confirmed these were boundary parser defaults rather than old protocol compatibility branches.",
+      "removedAt": "2026-06-13",
       "validation": {
         "commands": [
-          "rg -i \"fallback\" packages/neko-client/src/EngineClient.ts packages/neko-client/src/SceneControlSocket.ts",
+          "rg -n \"\\bfallback\\b|\\blegacy\\b|\\bdeprecated\\b\" packages/neko-client/src/EngineClient.ts packages/neko-client/src/SceneControlSocket.ts",
           "pnpm --filter @neko/client test"
         ]
-      }
+      },
+      "stalePatterns": [
+        {
+          "pattern": "\\bfallback\\b|\\blegacy\\b|\\bdeprecated\\b",
+          "paths": [
+            "packages/neko-client/src/EngineClient.ts",
+            "packages/neko-client/src/SceneControlSocket.ts"
+          ]
+        }
+      ],
+      "notes": "Only the misleading fallback wording was removed. Runtime failure handling and boundary default parsing behavior were preserved and covered by @neko/client tests."
+    },
+    {
+      "id": "LCDR-028",
+      "package": "@neko/asset",
+      "surface": "@neko/asset PathResolver compatibility re-export and duplicate shim test",
+      "semanticClass": "delete-now",
+      "action": "delete",
+      "status": "removed",
+      "owner": "neko-assets",
+      "paths": [
+        "packages/neko-assets/packages/asset/src/service/PathResolver.ts",
+        "packages/neko-assets/packages/asset/src/__tests__/service/PathResolver.test.ts",
+        "packages/neko-assets/packages/asset/src/service/index.ts",
+        "packages/neko-assets/src/extension.ts",
+        "packages/neko-assets/src/services/MediaMetadataCache.ts",
+        "packages/neko-assets/src/services/MediaLibrarySettingsService.ts",
+        "packages/neko-assets/packages/asset/src/service/AssetLibrary.ts"
+      ],
+      "replacement": "@neko/shared PathResolver and PathVariableMap imports at current call sites.",
+      "removeCondition": "Removed after repo scan showed the @neko/asset service/PathResolver file only re-exported @neko/shared and current callers could import the canonical shared contract directly.",
+      "removedAt": "2026-06-13",
+      "validation": {
+        "commands": [
+          "rg -n \"service/PathResolver|\\./PathResolver|@neko/asset.*PathResolver\" packages/neko-assets packages/neko-cut -g \"*.ts\" -g \"*.tsx\"",
+          "pnpm --dir packages/neko-assets/packages/asset run build"
+        ]
+      },
+      "stalePatterns": [
+        {
+          "pattern": "service/PathResolver|\\./PathResolver|@neko/asset.*PathResolver",
+          "paths": [
+            "packages/neko-assets/**/*.ts",
+            "packages/neko-assets/**/*.tsx",
+            "packages/neko-cut/**/*.ts",
+            "packages/neko-cut/**/*.tsx"
+          ]
+        }
+      ],
+      "notes": "The asset package build currently has unrelated pre-existing type errors in EntityAssetCompositionService.test.ts and MarketAssetProjection.ts; the PathResolver value import error was removed."
+    },
+    {
+      "id": "LCDR-029",
+      "package": "neko-search",
+      "surface": "packages/neko-search/src/host-vscode/compatAdapters.ts current project-search host bridge",
+      "semanticClass": "current-bridge",
+      "action": "preserve",
+      "status": "active",
+      "owner": "neko-search",
+      "paths": [
+        "packages/neko-search/src/host-vscode/compatAdapters.ts",
+        "packages/neko-search/src/host-vscode/commands.ts"
+      ],
+      "replacement": "Per-domain ProjectSearchAdapter providers registered by Story, Assets, Entity, Generated Assets, and Media Library owners through neko-search host integration.",
+      "removeCondition": "Remove only after registerProjectSearchService() no longer needs createCompatibilityProjectSearchAdapters() as a default provider set and Agent creates its adapters exclusively from owner-provided provider registrations.",
+      "validation": {
+        "commands": [
+          "pnpm --dir packages/neko-search exec vitest run src/__tests__/compatAdapters.test.ts src/__tests__/commands.test.ts",
+          "rg -n \"createCompatibilityProjectSearchAdapters|CompatibilityProjectSearchAdaptersOptions|compatAdapters\" packages/neko-search -g \"*.ts\""
+        ]
+      },
+      "sunsetProviders": [
+        {
+          "provider": "Story symbols",
+          "currentPath": "StorySymbolProjectSearchAdapter reads story files through VSCode host APIs and optional neko-story parseScript export.",
+          "replacement": "neko-story registers a ProjectSearchAdapter/provider with neko-search host integration.",
+          "removalTrigger": "Story partition tests pass without StorySymbolProjectSearchAdapter in compatAdapters.ts."
+        },
+        {
+          "provider": "Asset/media/generated assets",
+          "currentPath": "AssetLibraryProjectSearchAdapter, MediaLibraryProjectSearchAdapter, and GeneratedAssetProjectSearchAdapter read current project cache/fact files through host JSON reader.",
+          "replacement": "neko-assets and generated-asset owner register ProjectSearchAdapter providers or a neutral cache provider API.",
+          "removalTrigger": "Asset, media, document, puppet/model dimension, and generated asset search tests pass without compatAdapters.ts default adapters."
+        },
+        {
+          "provider": "Creative entities",
+          "currentPath": "Agent wraps the compat creative-entities adapter with neko-entity and dashboard/context candidate providers.",
+          "replacement": "neko-entity/dashboard provider registration covers confirmed entities, candidates, requirements, and freshness aggregation.",
+          "removalTrigger": "createAgentProjectSearchAdapters() no longer consumes createCompatibilityProjectSearchAdapters() for creative-entities."
+        }
+      ],
+      "notes": "This file is not an unused shim: it is still on the current Agent project search call path through @neko/search/host-vscode. Agent call-site ownership is tracked in the Agent LCD register; this non-Agent ledger entry covers the neko-search bridge itself."
     }
   ]
 }

@@ -75,8 +75,8 @@ pnpm check:legacy-debt
 
 | Scope | files scanned | files with matches | `legacy` | `fallback` | `deprecated` | total occurrence |
 |-------|---------------|--------------------|----------|------------|--------------|------------------|
-| all TS/TSX | 3523 | 403 | 346 | 929 | 64 | 1339 |
-| non-test TS/TSX | 2569 | 258 | 140 | 677 | 58 | 875 |
+| all TS/TSX | 3505 | 364 | 293 | 727 | 54 | 1074 |
+| non-test TS/TSX | 2557 | 223 | 101 | 488 | 48 | 637 |
 
 ### 非测试源码口径
 
@@ -87,20 +87,20 @@ pnpm check:legacy-debt
 | semanticClass | occurrence | 判断 |
 |---------------|------------|------|
 | `delete-now` | 0 | 词面 delete-now 已清零；knip unused files 也已清零 |
-| `migrate-now` | 60 | 旧 schema / deprecated alias / legacy reader 主清理池；不得用重命名替代调用链判断 |
-| `current-bridge` | 154 | 仍服务当前功能的桥接面，需 owner / removal trigger / tests |
-| `runtime-resilience` | 315 | 当前 provider/model/GPU/media/network/file/capability 失败韧性路径 |
-| `boundary-canonicalizer` | 37 | 输入边界 canonicalizer；不得扩散成 runtime 旧字段兼容 |
-| `presentation-default` | 132 | UI copy、placeholder、default value 命名；不按旧格式兼容处理 |
-| `needs-review` | 137 | 待拆分的 fallback 语义命中，需逐包进入 ledger 或重命名 |
-| `domain-status` | 33 | 当前产品状态命名，如 deprecated entity/market state |
+| `migrate-now` | 0 | 当前 scanner 口径下已清零；新增旧 schema / deprecated alias / legacy reader 必须进入 cleanup 批次 |
+| `current-bridge` | 124 | 仍服务当前功能的桥接面，需 owner / removal trigger / tests |
+| `runtime-resilience` | 254 | 当前 provider/model/GPU/media/network/file/capability 失败韧性路径 |
+| `boundary-canonicalizer` | 73 | 输入边界 canonicalizer；不得扩散成 runtime 旧字段兼容 |
+| `presentation-default` | 116 | UI copy、placeholder、default value 命名；不按旧格式兼容处理 |
+| `needs-review` | 0 | 当前 scanner 口径下已清零；新命中不得长期停留在 needs-review |
+| `domain-status` | 62 | 当前产品状态命名，如 deprecated entity/market state |
 | `generated-source` | 7 | 源 IDL/schema 批次处理，不手改 generated output |
 | `test-only` | 0 | 当前非测试口径无 test-only 命中 |
-| `false-positive-word` | 0 | 当前非测试口径无 false-positive-word 命中 |
+| `false-positive-word` | 1 | 当前仅剩静态分析说明类词面命中 |
 
 ### TODO / FIXME / HACK
 
-当前命中 21 处。历史文档中“`neko-agent` projectSearch shim 仍占 8 处”的说法已过时；Agent `projectSearch` shim 已删除。
+当前生产代码口径命中 23 处。历史文档中“`neko-agent` projectSearch shim 仍占 8 处”的说法已过时；Agent `projectSearch` shim 已删除。
 
 ### knip
 
@@ -162,7 +162,7 @@ pnpm exec knip --reporter json
 | platform deprecated re-export / `LegacyToolCall` / `triggerKeywords()` | 已迁移调用方并删除旧 surface；`platform/src/types/index.ts` 不再导出已删除的 `prompt` / `task` / `tool` re-export module |
 | Agent runtime legacy workflow / artifact / document / capability / IDC state path | 已删除 `createLegacyWorkflowUsageRecorder()` / `AgentLegacyWorkflow*`、artifact restore `.neko/cache` fallback、document read legacy wording、capability registry `legacyToolNames`、IDC runtime string `feedback.pendingGuidance` reader；`LCD-014` 记录 removed 防回流 |
 | SkillInjection Track A legacy fallback | 已删除 coordinator 内 optional `SkillInjectionModule` 和 direct `composer.setSection` 旧写入路径；Track A 统一由 required `SkillInjectionModule` 投影 |
-| `.hook` directory hook runtime | 已删除未接入的 `.hook/<name>/HOOK.ts\|js` runtime、Extension `HookManager` 和 `hookSource` bridge；保留当前 `.neko/settings.json` SettingsHookLoader 与 `.neko/hooks/*.md` catalog |
+| `.hook` / `.neko/hooks` hook compatibility surfaces | 已删除未接入的 `.hook/<name>/HOOK.ts\|js` runtime、Extension `HookManager`、`hookSource` bridge，以及无 Webview/protocol 消费者的 `.neko/hooks/*.md` HookFile catalog；当前 hook 执行只保留 `.neko/settings.json` SettingsHookLoader |
 | IDC projected task payload mirror | 已删除 `IdcProjectedTaskPayload.content` 旧持久化 mirror；当前 serializer 只写 canonical `payload.name`，guard 拒绝带 `content` 的旧 payload |
 | IDC projected task cleanup provenance fallback | 已删除 run cleanup 对损坏 payload binding 和缺 `runStartedAt` payload 的旧兜底；带 `runStartedAt` 的 cleanup 只匹配 canonical `runId + runStartedAt` provenance |
 | SubAgent tool access compatibility | 已删除 `SubAgentConfig.allowedTools` / `SpecializedAgentPreset.allowedTools` 和空数组 allow-all 语义；SubAgent 只接受显式 `AgentToolPolicy`，Skill `allowedTools` 仍是独立当前契约 |
@@ -203,6 +203,12 @@ Agent 机器可读来源：`docs/architecture/agent-code-debt-lcd-register.json`
 | LCD-021 | Agent prompt/stage migration-era wording | canonical-compatibility | migrate-now | removed |
 | LCD-022 | platform `types/tool.ts` deprecated re-export | canonical-compatibility | migrate-now | removed |
 | LCD-023 | IDC projected task cleanup provenance fallback | canonical-compatibility | migrate-now | removed |
+| LCD-024 | Agent Webview helper re-export shims | canonical-compatibility | delete-now | removed |
+| LCD-025 | `.neko/hooks/*.md` HookFile catalog / HookSync bridge | canonical-compatibility | delete-now | removed |
+| LCD-026 | `RetryHooks` 未接入的 model fallback 状态 | confirmed-dead-code | delete-now | removed |
+| LCD-027 | Character Dialogue 默认评估器从 Extension 迁到 runtime | misplaced-domain-logic | migrate-now | removed |
+| LCD-028 | SemanticCoverage `planning.fallback` 工具规划桥接 | stray-surface | current-bridge | active |
+| LCD-029 | Skill optional subpackage `fallback.message` 降级契约 | runtime-fallback-resilience | runtime-resilience | active |
 | LCD-030 | 未接线 ApprovalEngine channel adapters | confirmed-dead-code | delete-now | removed |
 
 `pnpm check:agent-boundaries` 会校验 LCD metadata、provider sunset rows、semantic classes、测试文件引用和 Webview re-export shim guard。
@@ -236,7 +242,7 @@ Agent 机器可读来源：`docs/architecture/agent-code-debt-lcd-register.json`
 | LCDR-010 | `neko-preview` | `presentation-default` | Preview fallback display defaults |
 | LCDR-011 | `neko-entity` | `domain-status` | entity deprecated status |
 | LCDR-012 | `@neko-dashboard/webview` | `delete-now` | Dashboard unused-file candidates |
-| LCDR-013 | `@neko/client` | `runtime-resilience` | engine/socket fallback handling |
+| LCDR-013 | `@neko/client` | `runtime-resilience` | EngineClient / SceneControlSocket fallback reader 命名已清零，默认值解析行为保留 |
 | LCDR-014 | `@neko/shared` | `boundary-canonicalizer` | VSCode document resource cache canonical boundary |
 | LCDR-015 | `@neko/shared` | `boundary-canonicalizer` | NKC migrator legacy versions |
 | LCDR-016 | `@neko/shared` | `boundary-canonicalizer` | workspace media path variants |
@@ -245,6 +251,8 @@ Agent 机器可读来源：`docs/architecture/agent-code-debt-lcd-register.json`
 | LCDR-025 | `neko-preview` | `migrate-now` | document preview `document:data` base64 旧 reader 已删除 |
 | LCDR-026 | `@neko-model` | `migrate-now` | `environmentCommand.legacyPlacement` 旧消息字段已迁到 `placement` |
 | LCDR-027 | `neko-preview` | `migrate-now` | document preview context-only locator 旧 reader 已删除 |
+| LCDR-028 | `@neko/asset` | `delete-now` | `PathResolver` compatibility re-export 已删除 |
+| LCDR-029 | `neko-search` | `current-bridge` | project search host compat adapters |
 
 ## 决策
 
@@ -417,7 +425,7 @@ pnpm --dir packages/neko-agent exec vitest run \
 | 类别 | 处理结果 |
 |------|----------|
 | Presentation default rename | `MentionMenu` i18n label `fallback` 改为 `defaultText`；`ScriptTableView` 角色展示 fallback 改为 `default*`；`config-message-presenter` `fallbackContextWindow` 改为 `defaultContextWindow`；`audioEffects` 默认参数 fallback 改为 `defaults/defaultValue` |
-| Runtime resilience preserve | `EngineClient` / scene socket、Agent media routing / turn fallback、Live compositor `fallbackPolicy` / `local-fallback`、Puppet local canvas preview 保留；通过 targeted tests 和 ledger 记录保护 |
+| Runtime resilience preserve | Agent media routing / turn fallback、Live compositor `fallbackPolicy` / `local-fallback`、Puppet local canvas preview 保留；通过 targeted tests 和 ledger 记录保护 |
 | Classification hardening | `knip.config.ts` Sharp WASM fallback、Live compositor fallback policy 从 `needs-review` 改判为 `runtime-resilience`；`LCDR-022` / `LCDR-023` 记录当前 Live/Puppet fallback surface |
 
 追加复核（2026-06-13 后续批次）继续坚持“先定位调用链，再删除或保留”，本批次处理：
@@ -429,7 +437,9 @@ pnpm --dir packages/neko-agent exec vitest run \
 | i18n `fallbackLocale`、preview flat fallback、storyboard fallback image resolver、tool/default helper 参数 | 改为 `default` / `placeholder` / `flatPreview` 等命名 | presentation/default value，不是 runtime 旧协议 |
 | Autoheal L3 event `fallback` 字段 | 改为 `substitute` | channel 已是 `execution.autoheal.l3.substitute`，字段只在当前源码内 emit/read，无上线旧协议约束 |
 | Canvas gallery reference projection | 删除 shared `reference-resolution.ts` 对旧 `data.cells` 的投影，改为 canonical `container.childPlacements` | 真实旧路径残留；由 `reference-resolution.test.ts` 和 node-card policy test 覆盖 |
-| AI SDK `legacy` bridge、Agent `RetryHooks` model fallback、EngineClient / SceneControlSocket fallback readers | 保留 | 前者仍是 fal.ai / DashScope / Kling 当前 provider bridge；后两者是当前 runtime resilience 或公开 API，不用“直接替换 legacy/fallback”掩盖真实语义 |
+| Canvas Preview / EngineClient / SceneControlSocket 默认值命名 | 改为 `default*` / retry / default state 命名 | 这些是默认展示或边界解析默认值，不是旧协议兼容分支；运行时容错行为保留 |
+| AI SDK `legacy` bridge | 保留 | 仍是 fal.ai / DashScope / Kling 当前 provider bridge，不用“直接替换 legacy”掩盖真实语义。Agent `RetryHooks` 未接入的 model fallback 状态已按 dead code 删除，保留当前工具重试能力 |
+| Agent ApprovalEngine channel adapters | 删除 `permission` / `quality-gate` / `plan-review` 三个 adapter wrapper 和 adapter-only tests；`approval/index.ts` 不再导出这些未接线工厂 | 调用链复核显示只有 barrel export 和自身测试，生产权限审批已由 `AgentSession._resolveToolConfirmation()` 直接进入 ApprovalEngine；quality review 当前通过 evidence/tool 流转，未接入 pipeline gate |
 
 当前 `pnpm check:legacy-debt:ledger` 已不再提示 Canvas `canvasLayered.ts` / `galleryMigration.ts` 盲区；`packages/neko-types/src/vscode/extension/creative-entity-composition.ts` 已并入 LCDR-011，按当前 creative entity 表现资源解析 fallback 管理，而非 dead code 删除项。
 
@@ -513,8 +523,9 @@ pnpm build
 | `node scripts/check-neko-agent-boundaries.mjs --self-test` | 通过，16 cases |
 | `pnpm check:agent-boundaries` | 通过，1216 files checked |
 | `node scripts/check-legacy-debt-surfaces.mjs --self-test` | 通过，5 cases |
-| `pnpm check:legacy-debt -- --json` | 通过；all TS/TSX 1339 occurrence（legacy 346 / fallback 929 / deprecated 64），非测试源码 875 occurrence（legacy 140 / fallback 677 / deprecated 58） |
-| `pnpm check:legacy-debt:ledger` | 通过；27 个非 Agent ledger entries checked；剩余 warnings 为 4 个历史 required coverage pattern 当前无命中 |
+| `node scripts/check-legacy-debt-surfaces.mjs --json` | 通过；all TS/TSX 1074 occurrence（legacy 293 / fallback 727 / deprecated 54），非测试源码 637 occurrence（legacy 101 / fallback 488 / deprecated 48）；`delete-now` / `migrate-now` / `needs-review` 均为 0 |
+| `node scripts/check-legacy-debt-surfaces.mjs --self-test` | 通过，6 cases |
+| `node scripts/check-legacy-debt-surfaces.mjs --validate-ledger` | 通过；29 个非 Agent ledger entries checked |
 | `rg "utils/animation\\|Canonical source moved to neko-cut/webview\\|@deprecated Canonical source moved" packages/neko-types packages/neko-cut -n` | 无 `neko-types` 旧 alias 命中；剩余为 `neko-cut/webview` 包内当前 helper imports |
 | `pnpm --dir packages/neko-types exec vitest run src/operations/__tests__/apply-keyframe.test.ts src/__tests__/config.test.ts` | 通过，34 tests |
 | `rg "migrateLegacyFields\|LegacyProviderConfig\|isLegacyProvidersFormat\|convertLegacyProviders\|Legacy Fields\|@deprecated Use defaultProvider\|@deprecated Use defaultModel\|providers object\|old format\|backward compatibility" packages/neko-types/src/config packages/neko-types/src/__tests__/config.test.ts -n` | 无命中；`neko-types` config 旧格式 reader / fixtures 已删除 |
@@ -536,7 +547,10 @@ pnpm build
 | `pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts` | 通过，25 tests；document reader 删除 pdf-parse function/default 旧 parser 与 officeparser `parseOfficeAsync` reader，保留当前 `PDFParse` / `parseOffice` API |
 | `pnpm --dir packages/neko-agent exec vitest run packages/ai-sdk/src/bridge/legacy-video-model.test.ts packages/ai-sdk/src/resolve.test.ts` | 通过，4 tests；AI SDK legacy bridge 仍为 fal.ai / DashScope / Kling 当前路径，不做直接改名 |
 | `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/skill/__tests__/skill-injection-coordinator.test.ts packages/agent/src/prompt/__tests__/skill-injection-module.test.ts packages/agent/src/__tests__/executor-integration.test.ts` | 通过，44 tests；SkillInjection Track A 删除 direct writer fallback 后统一走 required `SkillInjectionModule` |
-| `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hook-loader/__tests__/hook-file-runtime.test.ts packages/agent/src/hook-loader/__tests__/hook-file-projector.test.ts packages/agent/src/__tests__/standalone.test.ts packages/agent/src/runtime/__tests__/runtime-host-bindings.test.ts` | 通过，38 tests；未接入 `.hook` directory runtime / Extension `HookManager` 删除，当前 settings hooks 与 `.neko/hooks/*.md` catalog 仍保留 |
+| `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hook-loader/__tests__/settings-hook-loader.test.ts packages/agent/src/__tests__/standalone.test.ts packages/agent/src/runtime/__tests__/config-bridge-runtime.test.ts packages/agent/src/workspace/__tests__/neko-content-layout.test.ts packages/agent/src/permission/__tests__/permission-hooks.test.ts` | 通过，82 tests；未接入 `.hook` directory runtime / Extension `HookManager` 和无消费者 `.neko/hooks/*.md` HookFile catalog 已删除，当前 hook 执行只保留 `.neko/settings.json` SettingsHookLoader |
+| `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts packages/agent/src/experiment/__tests__/apply-toggles.integration.test.ts packages/agent/src/__tests__/standalone.test.ts` | 通过，54 tests；`RetryHooks` 删除未接入 model fallback 状态后仍保留当前工具重试 hook 与 ablation toggle 行为 |
+| `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/character-dialogue-runtime.test.ts` | 通过，5 tests；Character Dialogue 默认 transcript evaluator、解析和 fallback report 生成迁到 runtime，Extension 只传入 Platform service/model |
+| `pnpm --dir packages/neko-agent run compile:extension` | 通过；Extension bundle 能解析新的 `@neko/agent/runtime` evaluator export |
 | `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/idc-projected-task.test.ts packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/idc-task-projection.test.ts` | 通过，64 tests；IDC projected task payload 只接受 canonical `name`，旧 `content` mirror 被拒绝 |
 | `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/subagent/__tests__/subagent-manager.test.ts packages/agent/src/subagent/__tests__/creative-presets.test.ts` | 通过，42 tests；SubAgent tool access 从 `allowedTools` 旧入口收敛到 explicit `AgentToolPolicy` |
 | `pnpm --dir packages/neko-agent exec vitest run packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/agent/src/skill/__tests__/stage-planner.test.ts` | 通过，35 tests；Agent prompt/stage 迁移期 legacy/deprecated 文案和 fixture 命名清理后行为保持 |
@@ -594,7 +608,7 @@ pnpm build
 
 **旧格式和旧协议默认删除或迁移；当前 bridge 和 runtime resilience 可以保留，但必须被分类、测试和 sunset；raw search count 只作为 triage，不作为保留或删除理由。**
 
-本 ADR 的后续工作应继续优先清掉剩余 `migrate-now`、`needs-review` 和 unused export / barrel API 面，再处理 proto/generated、resource/entity canonicalizer 与其他 package-specific current-bridge sunset。`delete-now` 词面和 knip unused files 当前已清零。
+本 ADR 的后续工作应继续优先防止 `migrate-now` / `needs-review` 回流，并收缩 unused export / barrel API 面；剩余重点是 proto/generated、resource/entity canonicalizer 与其他 package-specific current-bridge sunset。`delete-now`、`migrate-now`、`needs-review` 词面分类和 knip unused files 当前已清零。
 
 ## 变更日志
 
@@ -630,13 +644,16 @@ pnpm build
 14. 删除 document legacy resource cache provider、`legacy-cache-path` content ref、`legacyCachePath` metadata materialization 和 preview reads；canonical 路径统一为 DocumentArchiveResourceRef / DocumentResourceCacheProvider / ResourceCache。
 15. 撤销“直接把 legacy bridge 改名”的错误方向：AI SDK legacy bridge 经调用链验证仍是当前 provider bridge，继续以 `LCD-009 current-bridge` 保留，后续按 provider native AI SDK 支持逐个 sunset。
 16. 继续删除已证实无当前生产者的旧消息/reader：Agent `memory/context.ts` 空 legacy stub 删除；Agent CLI `getGlobalConfig*` / `getProjectConfigPath` 兼容 alias 删除；Agent document reader 删除 pdf-parse function/default 旧 parser 与 officeparser `parseOfficeAsync` reader；Model `environmentCommand.legacyPlacement` 迁到 canonical `placement` 字段；Preview DOCX/CBZ/EPUB/PDF `document:data` base64 旧 reader删除，协议收窄为 required `payload.url`；Preview `document:sendToAi` 不再从旧 `context` 反推 locator，改为 required semantic `DocumentLocator`。
-17. Agent 追加清理：`SkillInjectionCoordinator` Track A 删除 optional module + direct `composer.setSection` fallback，统一 required `SkillInjectionModule`；未接入 `.hook/<name>/HOOK.ts|js` directory runtime、Extension `HookManager`、`hookSource` bridge 已删除，当前 hook 功能保留 `.neko/settings.json` SettingsHookLoader 与 `.neko/hooks/*.md` catalog。
+17. Agent 追加清理：`SkillInjectionCoordinator` Track A 删除 optional module + direct `composer.setSection` fallback，统一 required `SkillInjectionModule`；未接入 `.hook/<name>/HOOK.ts|js` directory runtime、Extension `HookManager`、`hookSource` bridge 已删除；随后删除无 Webview/protocol 消费者的 `.neko/hooks/*.md` HookFile catalog，当前 hook 功能只保留 `.neko/settings.json` SettingsHookLoader。
 18. Agent 继续收敛 canonical contract：删除 `IdcProjectedTaskPayload.content` 旧持久化 mirror，payload guard 只接受 canonical `name`；删除 SubAgent `allowedTools` 旧配置入口和空数组 allow-all 语义，基础/创意 presets 与配置覆盖统一为 explicit `AgentToolPolicy`。
 19. Agent 小批量清理：删除 prompt/stage 迁移期 `legacy/deprecated` 文案和 `legacy:foo` fixture 命名；删除无仓库调用方的 `platform/src/types/tool.ts` deprecated re-export；收窄 IDC projected task run cleanup，带 `runStartedAt` 的清理不再通过损坏 payload 或缺 startedAt payload 兜底匹配。
 20. 后续复核批次将 raw count 推进到 all TS/TSX 1339 occurrence（legacy 346 / fallback 929 / deprecated 64），非测试源码 875 occurrence（legacy 140 / fallback 677 / deprecated 58）；`delete-now` 仍为 0，`needs-review` 降至 137。
-21. 明确反对“直接替换 legacy/fallback 名称”：AI SDK legacy bridge、Agent RetryHooks model fallback、EngineClient / SceneControlSocket fallback readers 因当前调用链或公开 API 保留；只对已验证为默认值、placeholder、restore、substitute 的局部命名做收敛。
+21. 明确反对“直接替换 legacy/fallback 名称”：AI SDK legacy bridge 因当前调用链保留；Agent `RetryHooks` 的 model fallback 状态经调用链复核确认未接入执行环，已按 dead code 删除；只对已验证为默认值、placeholder、restore、substitute 的局部命名做收敛。
 22. 删除真实旧路径残留：`reference-resolution.ts` 的 gallery reference projection 不再读取旧 `data.cells`，改为 canonical `container.childPlacements`，并把 LCDR-005 stale scan 扩展到 shared reference projector。
-23. 继续按调用链定位而非直接替换词面：删除未接线的 Agent ApprovalEngine `permission` / `quality-gate` / `plan-review` adapter wrappers 和 adapter-only tests；`StageGuardian` 的 migration-era 注释改为当前 ApprovalEngine opt-out 语义；`LCD-030` 记录为 confirmed dead code。
+23. 继续按“misplaced domain logic 迁到 runtime/domain”处理 Agent 边界：Character Dialogue 默认 transcript evaluator 的 prompt projection、LLM response parsing 和 fallback report generation 已从 Extension controller 迁到 `@neko/agent/runtime evaluateCharacterDialogueTranscript()`；Extension 只保留 Platform service/model adapter。
+24. 将剩余 Agent fallback 热点按语义登记而非按关键词删除：SemanticCoverage `planning.fallback = normal-tool-analysis` 是当前工具规划桥接契约（LCD-028），Skill `requiredSubpackages[].fallback.message` 是可选子包缺失时的运行时降级契约（LCD-029），均保留 sunset 条件。
+25. 继续清理误导性 fallback 命名而不删除当前容错行为：Canvas Preview 默认标题 / 默认 body / pending message retry、EngineClient 和 SceneControlSocket 边界 parser 默认值改为 `default*` 命名；`@neko/client` 词面 fallback/legacy/deprecated 清零并由 LCDR-013 stale scan 防回流。
+26. 继续按调用链定位而非直接替换词面：删除未接线的 Agent ApprovalEngine `permission` / `quality-gate` / `plan-review` adapter wrappers 和 adapter-only tests；`StageGuardian` 的 migration-era 注释改为当前 ApprovalEngine opt-out 语义；`LCD-030` 记录为 confirmed dead code。最新 scanner 基线为 all TS/TSX 1074 occurrence（legacy 293 / fallback 727 / deprecated 54），非测试源码 637 occurrence（legacy 101 / fallback 488 / deprecated 48）；`delete-now`、`migrate-now`、`needs-review` 均为 0。
 
 ### 2026-06-13 agent-boundary cleanup 实施
 

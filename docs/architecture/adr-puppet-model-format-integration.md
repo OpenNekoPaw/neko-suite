@@ -25,7 +25,7 @@ Proposed (2026-05-19)
 | `.moc3` | Live2D Cubism 3 二进制 | Rust parser 完整支持（ArtMesh/Deformer/Expression/Motion/Physics） |
 | `.nkp` | Neko Puppet 项目 JSON | 引用 .moc3 + 参数覆盖 + 视口状态 |
 | `.nkpm` | Motion/Expression 预设 | motion3.json + exp3.json + 参数绑定 |
-| `.inp` | Inochi2D 二进制 | **废弃（2026-05-19 决定）**，代码中仍有残留引用 |
+| `.inp` | Inochi2D 二进制 | **已废弃并从生产入口移除（2026-06-13 清理）** |
 
 已有集成：
 - **Agent**: 3 个 AI 工具（`PuppetGenerateParams` / `PuppetFromImage` / `PuppetAdjust`）via AgentCapabilityProvider
@@ -132,8 +132,8 @@ neko-sketch 有 `ag-psd` 适配器（`psd-ag-adapter.ts`，支持图层解析、
 
 ### 决策 1: INP 格式废弃，MOC3 单线
 
-- `puppetEditorProvider.ts` 移除 `.inp` 文件过滤器和新建流程入口
-- 保留后向兼容读取（已存在的 `.inp` 仍可打开），但不在"新建"或"导入"流程中出现
+- `puppetEditorProvider.ts` 移除 `.inp` 文件过滤器、新建流程入口和直接打开读取路径
+- 不保留 `.inp` 后向兼容读取；当前未上线服务不需要保护旧格式
 - i18n 字符串更新（`en.ts` / `zh-cn.ts` 移除 INP 相关提示）
 - Rust `runtime-puppet/src/loader.rs` INP parser 标记 `#[deprecated]`
 - `.nkp` 项目文件 doc comment 更新：引用目标从 `.inp` 改为 `.moc3`
@@ -1322,7 +1322,7 @@ manifest.json 是 library.json 的子集:
 
 | PR | 标题 | 内容 | 依赖 | 估时 |
 |----|------|------|------|------|
-| PR-1 | `refactor(puppet): deprecate INP entrypoints` | 移除新建/导入流程中的 .inp 入口，保留历史 .inp 打开；更新 i18n、类型注释和 Rust deprecation 标记 | - | 1d |
+| PR-1 | `refactor(puppet): remove INP entrypoints` | 移除新建/导入/直接打开流程中的 .inp 入口；更新 i18n、类型注释和格式契约 | - | 1d |
 | PR-2 | `feat(types): add bundle locator + model/import contracts` | extension-api.ts 新增 NekoModelAPI；新增 ImportHandler 类型契约；新增 BundleEntryLocator / storageMode 类型。仅类型，不引入 fs/vscode/AdmZip | - | 1d |
 | PR-3 | `feat(model): implement NekoModelAPI` | ModelEditorProvider 实现接口，从 extension 导出；复用已有 SceneSnapshot / engine 类型 | PR-2 | 1d |
 | PR-4 | `feat(model): add AgentCapabilityProvider` | 3 个 AI 工具 + extension.ts 注册；query 工具标记 readOnly，editing 工具按现有确认策略处理 | PR-3 | 1.5d |

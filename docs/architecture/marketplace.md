@@ -1909,7 +1909,7 @@ export interface IMarketClient {
   /** Get all versions of a package */
   getVersions(packageId: string): Promise<MarketPackageVersion[]>;
   /** Get pre-signed download URL */
-  getDownloadUrl(packageId: string, version: string): Promise<string>;
+  getDownloadDescriptor(packageId: string, version: string): Promise<DownloadDescriptor>;
   /** Featured / trending / recent / free feeds (server sort param) */
   getFeatured(type?: AssetType): Promise<MarketPackage[]>;
 

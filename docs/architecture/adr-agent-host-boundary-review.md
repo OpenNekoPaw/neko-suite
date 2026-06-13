@@ -49,7 +49,7 @@ OpenSpec change `implement-agent-boundary-cleanup` 已完成以下边界迁移�
 
 | 原风险面 | 当前实现状态 |
 |----------|--------------|
-| `characterDialogueController.ts` 默认业务策略 | profile enrichment、evaluation、fallback report、suggestion policy、headless probe orchestration 等已迁到 `@neko/agent/runtime` 的 `character-dialogue-runtime`；Extension 保留 VSCode/Webview/tab/QuickPick/file adapter |
+| `characterDialogueController.ts` 默认业务策略 | profile enrichment、transcript evaluation、fallback report、suggestion policy、headless probe orchestration 等已迁到 `@neko/agent/runtime` 的 `character-dialogue-runtime`；Extension 保留 VSCode/Webview/tab/QuickPick/file/Platform service adapter |
 | Webview `entity-memory-contribution-inference.ts` | Webview 侧文件已删除；Markdown 表格解析、实体候选/观察维度/置信度和 reviewable contribution 构造迁到 `@neko/agent/artifact`；Webview 只渲染 runtime projection |
 | `characterEvidenceLoader.ts` evidence 策略 | locator collection、story-scene 派生、freshness、relevance、trimming 和 omission metadata 已迁到 runtime evidence strategy；Extension 保留 VSCode command/file/Story API reader |
 | `agentProjectSearchAdapters.ts` 搜索聚合策略 | creative entity dedupe、partition status/freshness 聚合迁到 `@neko/search/core`；Dashboard row projection 和 script role candidate extraction 迁到 `@neko/entity/projections` |
