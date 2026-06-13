@@ -13,19 +13,6 @@ export function findLayerById(layers: readonly LayerData[], layerId: string): La
   return null;
 }
 
-export function updateLayerById(
-  layers: readonly LayerData[],
-  layerId: string,
-  update: (layer: LayerData) => LayerData,
-): LayerData[] {
-  return layers.map((layer) => {
-    if (layer.id === layerId) {
-      return update(layer);
-    }
-    return { ...layer, children: updateLayerById(layer.children, layerId, update) };
-  });
-}
-
 export function findLastEditableLayer(layers: readonly LayerData[]): LayerData | null {
   for (let index = layers.length - 1; index >= 0; index--) {
     const layer = layers[index];

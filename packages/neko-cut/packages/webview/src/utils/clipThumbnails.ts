@@ -38,7 +38,7 @@ export function getClipTimelineDuration(element: TimelineElement): number {
   return Math.max(0, element.duration - element.trimStart - element.trimEnd);
 }
 
-export function getClipSourceDuration(element: TimelineElement): number {
+function getClipSourceDuration(element: TimelineElement): number {
   const timelineDuration = getClipTimelineDuration(element);
   const timeRemap = element.speed?.timeRemap;
   if (timeRemap?.enabled && timeRemap.keyframes.length >= 2) {

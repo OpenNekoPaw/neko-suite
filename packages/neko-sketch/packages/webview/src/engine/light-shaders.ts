@@ -228,36 +228,6 @@ void main() {
 }
 `;
 
-// ─── Grayscale-to-Normal Sobel Inference ───
-
-export const NORMAL_FROM_HEIGHT_FRAG = `#version 300 es
-precision highp float;
-
-in vec2 v_texCoord;
-out vec4 fragColor;
-
-uniform sampler2D u_heightMap;
-uniform vec2 u_resolution;
-uniform float u_strength;
-
-void main() {
-  vec2 texel = 1.0 / u_resolution;
-
-  float left  = texture(u_heightMap, v_texCoord - vec2(texel.x, 0.0)).r;
-  float right = texture(u_heightMap, v_texCoord + vec2(texel.x, 0.0)).r;
-  float up    = texture(u_heightMap, v_texCoord - vec2(0.0, texel.y)).r;
-  float down  = texture(u_heightMap, v_texCoord + vec2(0.0, texel.y)).r;
-
-  vec3 normal = normalize(vec3(
-    (left - right) * u_strength,
-    (up - down) * u_strength,
-    1.0
-  ));
-
-  fragColor = vec4(normal * 0.5 + 0.5, 1.0);
-}
-`;
-
 // ─── Ambient Light Pass ───
 
 export const LIGHT_AMBIENT_FRAG = `#version 300 es

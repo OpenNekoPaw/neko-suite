@@ -116,31 +116,3 @@ export const BUILTIN_PRESETS: readonly FilterPreset[] = [
     createdAt: 0,
   },
 ];
-
-/**
- * Parse a .cube LUT file content into a flat RGB float array.
- * Returns the LUT data and detected dimension size.
- */
-export function parseCubeLUT(content: string): { data: Float32Array; size: number } | null {
-  const lines = content.split('\n');
-  let size = 0;
-  const values: number[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('#') || trimmed === '') continue;
-    if (trimmed.startsWith('LUT_3D_SIZE')) {
-      size = parseInt(trimmed.split(/\s+/)[1] ?? '0', 10);
-      continue;
-    }
-    if (trimmed.startsWith('TITLE') || trimmed.startsWith('DOMAIN_')) continue;
-
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 3) {
-      values.push(parseFloat(parts[0]!), parseFloat(parts[1]!), parseFloat(parts[2]!));
-    }
-  }
-
-  if (size === 0 || values.length !== size * size * size * 3) return null;
-  return { data: new Float32Array(values), size };
-}

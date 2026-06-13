@@ -29,13 +29,6 @@ export interface LinearGradientPaintOptions {
   readonly color: readonly [number, number, number, number];
 }
 
-/** Compute gradient radius for radial mode */
-export function gradientRadius(state: GradientState): number {
-  const dx = state.endX - state.startX;
-  const dy = state.endY - state.startY;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
 /**
  * Paint a foreground-to-transparent linear gradient over straight-alpha RGBA data.
  * The source color is strongest at start and fades to transparent at end.

@@ -203,7 +203,7 @@ export const useSketchOperationStore = create<SketchOperationStore>((set, get) =
   },
 }));
 
-export function toLayerSnapshot(layer: LayerData): SketchLayerSnapshot {
+function toLayerSnapshot(layer: LayerData): SketchLayerSnapshot {
   return {
     id: layer.id,
     name: layer.name,

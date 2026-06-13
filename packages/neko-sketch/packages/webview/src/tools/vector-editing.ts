@@ -168,7 +168,7 @@ export function hitTestVectorPathNode(
   return best?.node ?? null;
 }
 
-export function getVectorNodeKey(ref: VectorNodeRef): string {
+function getVectorNodeKey(ref: VectorNodeRef): string {
   return `${ref.pathId}:${ref.segmentIndex}:${ref.pointIndex}`;
 }
 

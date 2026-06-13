@@ -13,32 +13,6 @@ export interface CloneState {
   readonly sourceSet: boolean;
 }
 
-/**
- * Clone pixels from source position to destination on an ImageData buffer.
- *
- * @param imageData - RGBA pixel data for the active layer
- * @param w - Canvas width
- * @param dstX - Destination center X (document pixels)
- * @param dstY - Destination center Y (document pixels)
- * @param offsetX - Source offset from destination
- * @param offsetY - Source offset from destination
- * @param radius - Brush radius in pixels
- * @param hardness - Brush hardness [0-1] for edge falloff
- */
-export function cloneStamp(
-  imageData: Uint8ClampedArray,
-  w: number,
-  h: number,
-  dstX: number,
-  dstY: number,
-  offsetX: number,
-  offsetY: number,
-  radius: number,
-  hardness: number,
-): void {
-  cloneStampFromSource(imageData, imageData, w, h, dstX, dstY, offsetX, offsetY, radius, hardness);
-}
-
 export function cloneStampFromSource(
   targetData: Uint8ClampedArray,
   sourceData: Uint8ClampedArray,

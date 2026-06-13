@@ -104,15 +104,6 @@ export function applyHandleDrag(
 }
 
 /**
- * Convert a 2D affine matrix [sx, sky, skx, sy, tx, ty] to a CSS transform string
- * for overlay rendering.
- */
-export function matrixToCSS(matrix: TransformState['matrix']): string {
-  const [a, b, c, d, e, f] = matrix;
-  return `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`;
-}
-
-/**
  * Apply the transform to pixel data via Canvas2D resample.
  * Returns a new ImageData with the transformed pixels.
  */
