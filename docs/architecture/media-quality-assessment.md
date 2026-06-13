@@ -37,7 +37,7 @@
 | 质量评估 Skill | ✅ `qualityAssessmentSkill` + `/quality-check` 斜杠命令 | `quality-assessment.ts` |
 | 质量评估 ToolSet | ✅ `mediaQAToolSet`（QualityCheck + QualityRepairCheck + QualityCheckConsistency + 按需激活） | `tool-skills.ts` |
 | quality-checker SubAgent | ✅ 专用质量评估 SubAgent 预设（QualityCheck + QualityCheckConsistency） | `creative-presets.ts` |
-| Pipeline qualityGate | ⚠️ 文档历史项；当前未见 pipeline stage，仅见 quality gate approval adapter / feedback evidence | `approval/adapters/quality-gate-approval-adapter.ts` + `feedback/quality-review-evidence.ts` |
+| Pipeline qualityGate | ⚠️ 文档历史项；当前未见 pipeline stage；未接线 approval adapter 已删除，当前保留 QualityReview evidence / tool flow | `feedback/quality-review-evidence.ts` |
 
 ### 1.2 现有架构
 
@@ -444,7 +444,7 @@ ReAct 局限:
 - **单素材评估**：Agent ReAct 直接调用 `QualityCheck` tool
 - **批量评估**：Agent 启动 Coordinator，N 个 `quality-checker` SubAgent 并行评估
 - **修复决策**：Agent ReAct 看到评估结果后自主选择修复工具
-- **Pipeline 集成**：当前以 `QualityReviewEvidence` / approval adapter 为准；`qualityGate` stage 是可恢复目标形态，待代码核实
+- **Pipeline 集成**：当前以 `QualityReviewEvidence` / quality tool flow 为准；`qualityGate` stage 是可恢复目标形态，待重新设计真实入口
 
 **不应该做的**：
 - 不要把判断逻辑塞进 Pipeline ReactiveStage（丢失 LLM 推理能力）
@@ -1076,7 +1076,7 @@ enableClipScreen: {
 
 **实现内容**：`ConsistencyReport` 基础实现，双层评估架构（CLIP 快筛 + Vision LLM 精评），角色一致性追踪，quality-checker SubAgent。Pipeline `qualityGate` stage 是历史目标项，当前需重新核实。
 
-**2026-05-04 inline reconciliation**：当前工作树未见 `agent/src/pipeline/stages/quality-gate.ts`；该 stage 不作为当前实现入口。历史能力在 `approval/adapters/quality-gate-approval-adapter.ts` 与 `feedback/quality-review-evidence.ts` 中以不同形态保留，且仍需遵守“QA 产出 evidence / recommendation，不替代 Agent 判断”的边界。
+**2026-06-13 inline reconciliation**：当前工作树未见 `agent/src/pipeline/stages/quality-gate.ts`；该 stage 不作为当前实现入口。此前未接线的 quality gate approval adapter 已按 dead code 删除。当前质量评估以 `QualityReviewEvidence` / quality tool flow 为准；若后续恢复 Pipeline stage，仍必须遵守“QA 产出 evidence / recommendation，不替代 Agent 判断”的边界。
 
 ##### 4a. ConsistencyEvaluator（已实现）
 
@@ -1125,7 +1125,7 @@ ConsistencyEvaluator
 
 ##### 4d. Pipeline qualityGate（历史目标 / 待核实）
 
-**2026-05-04 现状校正**：这是历史实施目标描述。当前工作树未发现 `agent/src/pipeline/stages/quality-gate.ts`；已存在的是 quality gate approval adapter 与 `QualityReviewEvidence` 桥接。若后续恢复 Pipeline stage，本节仍可作为目标形态，但必须遵守 Agent-first 边界：stage 只产出 report / evidence / recommendation，不直接替代 Agent 判断或修复决策。
+**2026-06-13 现状校正**：这是历史实施目标描述。当前工作树未发现 `agent/src/pipeline/stages/quality-gate.ts`；未接线的 quality gate approval adapter 已删除，当前保留 `QualityReviewEvidence` 桥接和 quality tool flow。若后续恢复 Pipeline stage，本节仍可作为目标形态，但必须遵守 Agent-first 边界：stage 只产出 report / evidence / recommendation，不直接替代 Agent 判断或修复决策。
 
 **目标文件**: `agent/src/pipeline/stages/quality-gate.ts`（历史规划）
 
@@ -1302,7 +1302,7 @@ Phase 1 ✅ (类型 + 图片评估 + 修复映射) — 已完成
 | 修复执行 | 复用已有 ToolSet | 零新工具开发 |
 | 执行模式 | 混合分层（§3） | ReAct 做判断 + Coordinator 做并行 + Pipeline opt-in 门控 |
 | 批量评估 | Coordinator + quality-checker SubAgent | 并行评估 N 场景，结果聚合回 Agent |
-| Pipeline 集成 | 当前以 QualityReviewEvidence / approval adapter 为准；qualityGate stage 待核实 | 不在 Pipeline 内做修复判断，保持 Agent 决策权 |
+| Pipeline 集成 | 当前以 QualityReviewEvidence / quality tool flow 为准；qualityGate stage 待重新设计真实入口 | 不在 Pipeline 内做修复判断，保持 Agent 决策权 |
 | VMAF 集成 | 暂不集成，SSIM/PSNR 已足够 | 减少复杂度，已有能力已够用 |
 
 ### 4.8 外部依赖

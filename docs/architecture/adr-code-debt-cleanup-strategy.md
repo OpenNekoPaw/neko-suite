@@ -203,6 +203,7 @@ Agent 机器可读来源：`docs/architecture/agent-code-debt-lcd-register.json`
 | LCD-021 | Agent prompt/stage migration-era wording | canonical-compatibility | migrate-now | removed |
 | LCD-022 | platform `types/tool.ts` deprecated re-export | canonical-compatibility | migrate-now | removed |
 | LCD-023 | IDC projected task cleanup provenance fallback | canonical-compatibility | migrate-now | removed |
+| LCD-030 | 未接线 ApprovalEngine channel adapters | confirmed-dead-code | delete-now | removed |
 
 `pnpm check:agent-boundaries` 会校验 LCD metadata、provider sunset rows、semantic classes、测试文件引用和 Webview re-export shim guard。
 
@@ -635,6 +636,7 @@ pnpm build
 20. 后续复核批次将 raw count 推进到 all TS/TSX 1339 occurrence（legacy 346 / fallback 929 / deprecated 64），非测试源码 875 occurrence（legacy 140 / fallback 677 / deprecated 58）；`delete-now` 仍为 0，`needs-review` 降至 137。
 21. 明确反对“直接替换 legacy/fallback 名称”：AI SDK legacy bridge、Agent RetryHooks model fallback、EngineClient / SceneControlSocket fallback readers 因当前调用链或公开 API 保留；只对已验证为默认值、placeholder、restore、substitute 的局部命名做收敛。
 22. 删除真实旧路径残留：`reference-resolution.ts` 的 gallery reference projection 不再读取旧 `data.cells`，改为 canonical `container.childPlacements`，并把 LCDR-005 stale scan 扩展到 shared reference projector。
+23. 继续按调用链定位而非直接替换词面：删除未接线的 Agent ApprovalEngine `permission` / `quality-gate` / `plan-review` adapter wrappers 和 adapter-only tests；`StageGuardian` 的 migration-era 注释改为当前 ApprovalEngine opt-out 语义；`LCD-030` 记录为 confirmed dead code。
 
 ### 2026-06-13 agent-boundary cleanup 实施
 

@@ -74,9 +74,8 @@ export interface StageGuardianConfig {
    * Whether to check `noteApply()` against previously-seen `noteApproval()`
    * calls and raise `approval-skipped` when an Apply's subject has no
    * prior approval record. Defaults to true when approval wiring is
-   * available. Turn off for legacy call sites that bypass the engine
-   * intentionally (e.g. the platform lane that still routes through
-   * the old PermissionHooks flow).
+   * available. Turn off only for specialized call sites that intentionally
+   * bypass the ApprovalEngine.
    */
   enforceApprovalGate?: boolean;
 }

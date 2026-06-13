@@ -351,6 +351,22 @@
         "rg -n 'Legacy payloads written|provenance tagging|falls back to IDC task id provenance|payload binding is corrupted|idBinding\\\\?\\\\.runStartedAt === undefined|binding\\\\.runStartedAt === undefined \\\\|\\\\|' packages/neko-agent/packages/agent/src/task -g'*.ts'"
       ],
       "notes": "Run cleanup without runStartedAt still clears all canonical projected tasks for that run; the removed path was only the old-format/corrupt-payload fallback."
+    },
+    {
+      "id": "LCD-030",
+      "package": "neko-agent",
+      "surface": "Unwired ApprovalEngine channel adapters: permission, quality-gate, and plan-review adapter wrappers plus adapter-only tests",
+      "kind": "confirmed-dead-code",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-approval",
+      "replacement": "Current AgentSession._resolveToolConfirmation() permission approval path, core ApprovalEngine, and strategy packs. Quality review remains evidence/tool driven until a real pipeline gate is reintroduced.",
+      "removeAfter": "Removed after repo scan showed the adapter factories were only exported from approval/index.ts and used by their own tests; current production permission approval is in AgentSession and no pipeline qualityGate or plan-review caller exists.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/approval/__tests__/approval-engine.test.ts packages/agent/src/approval/__tests__/preferences-strategy-pack.test.ts",
+        "rg -n \"createPermissionApprovalAdapter|PermissionApprovalAdapterDeps|permission-approval-adapter|createQualityGateApprovalAdapter|QualityGateApprovalAdapterDeps|quality-gate-approval-adapter|verdictFromReport|DEFAULT_QUALITY_GATE_THRESHOLDS|createPlanReviewApprovalAdapter|PlanReviewApprovalAdapterDeps|plan-review-approval-adapter\" packages/neko-agent/packages/agent/src packages/neko-agent/packages/extension/src docs/architecture"
+      ],
+      "notes": "This is not a runtime fallback removal. It deletes uncalled bridge wrappers after the current approval path was verified in AgentSession."
     }
   ]
 }
