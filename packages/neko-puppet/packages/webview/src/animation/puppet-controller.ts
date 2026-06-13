@@ -1,7 +1,7 @@
 /**
  * PuppetController — drives 2D puppet rendering via neko-engine HTTP API
  *
- * Loads puppet files (INP legacy / MOC3) through the engine backend (runtime-puppet crate),
+ * Loads MOC3 puppet files through the engine backend (runtime-puppet crate),
  * manages parameter-driven deformation, and provides vertex data
  * for WebGL2 rendering in the puppet editor.
  *
@@ -479,10 +479,7 @@ function readParameterCurveInfoArray(value: unknown): ParameterCurveInfo[] {
 function isPuppetSnapshot(value: unknown): value is PuppetSnapshot {
   if (!isRecord(value)) return false;
   return (
-    (value.format === undefined ||
-      value.format === 'inp' ||
-      value.format === 'moc3' ||
-      value.format === 'native') &&
+    (value.format === undefined || value.format === 'moc3' || value.format === 'native') &&
     isArrayOf(value.nodes, isPuppetNodeSnapshot) &&
     isArrayOf(value.parameters, isParameterInfo) &&
     isArrayOf(value.meshes, isMeshSnapshot)

@@ -67,9 +67,6 @@
             "filenamePattern": "*.nkp.puppet.bundle"
           },
           {
-            "filenamePattern": "*.inp"
-          },
-          {
             "filenamePattern": "*.moc3"
           }
         ],

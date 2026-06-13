@@ -6,7 +6,7 @@
  */
 
 export interface PuppetSnapshot {
-  format?: 'inp' | 'moc3' | 'native';
+  format?: 'moc3' | 'native';
   nodes: PuppetNodeSnapshot[];
   parameters: ParameterInfo[];
   meshes: MeshSnapshot[];

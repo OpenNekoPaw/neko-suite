@@ -2,7 +2,7 @@
  * Puppet Editor Provider - Custom editor for .nkp puppet project files
  *
  * Implements VSCode CustomEditorProvider to open Neko Puppet project files (.nkp)
- * with full read-write support. Also supports legacy read-only opening of .inp files.
+ * with full read-write support and .moc3 source files in read-only mode.
  *
  * .nkp is a JSON project format that references an external .moc3 binary file
  * and persists parameter overrides and viewport state.
@@ -21,7 +21,7 @@ import { isNkpNativeProjectData, type NkpProjectData } from '@neko/shared';
 class PuppetDocument implements vscode.CustomDocument {
   readonly uri: vscode.Uri;
   private _projectData: NkpProjectData | null = null;
-  private _isInpFile: boolean;
+  private readonly _isSourceFile: boolean;
   private _dirty = false;
 
   private readonly _onDidDispose = new vscode.EventEmitter<void>();
@@ -29,11 +29,11 @@ class PuppetDocument implements vscode.CustomDocument {
 
   constructor(uri: vscode.Uri) {
     this.uri = uri;
-    this._isInpFile = uri.fsPath.endsWith('.inp') || uri.fsPath.endsWith('.moc3');
+    this._isSourceFile = uri.fsPath.toLowerCase().endsWith('.moc3');
   }
 
-  get isInpFile(): boolean {
-    return this._isInpFile;
+  get isSourceFile(): boolean {
+    return this._isSourceFile;
   }
 
   get projectData(): NkpProjectData | null {
@@ -81,7 +81,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   ): Promise<PuppetDocument> {
     const doc = new PuppetDocument(uri);
 
-    if (!doc.isInpFile) {
+    if (!doc.isSourceFile) {
       // Parse .nkp JSON
       try {
         const fileData = await vscode.workspace.fs.readFile(uri);
@@ -128,7 +128,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     document: PuppetDocument,
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
-    if (document.isInpFile || !document.projectData) return;
+    if (document.isSourceFile || !document.projectData) return;
     const json = JSON.stringify(document.projectData, null, 2);
     await vscode.workspace.fs.writeFile(document.uri, Buffer.from(json, 'utf-8'));
     document.dirty = false;
@@ -148,7 +148,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     document: PuppetDocument,
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
-    if (document.isInpFile) return;
+    if (document.isSourceFile) return;
     try {
       const fileData = await vscode.workspace.fs.readFile(document.uri);
       const json = Buffer.from(fileData).toString('utf-8');
@@ -229,7 +229,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
           });
         }
 
-        if (document.isInpFile) {
+        if (document.isSourceFile) {
           webviewPanel.webview.postMessage({
             type: 'loadPuppetSource',
             source: document.uri.fsPath,
@@ -243,7 +243,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
               project: document.projectData,
             });
           } else if (srcPath) {
-            await this.loadInpFromProject(document, webviewPanel);
+            await this.loadMoc3FromProject(document, webviewPanel);
           } else if (document.projectData.puppet.bundle) {
             await this.loadLive2dBundleFromProject(document, webviewPanel);
           } else {
@@ -275,7 +275,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
 
       case 'state:save': {
         // Persist parameter overrides from webview
-        if (document.isInpFile || !document.projectData) break;
+        if (document.isSourceFile || !document.projectData) break;
         const params = message.parameters as Record<string, number> | undefined;
         if (params) {
           this.activeParameterNames = new Set(Object.keys(params));
@@ -295,9 +295,8 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       }
 
       case 'puppet:import': {
-        // Open file dialog to select a new MOC3 source. Legacy .inp remains readable
-        // when an existing file/project already points to it, but is not promoted here.
-        if (document.isInpFile) break;
+        // Open file dialog to select a new MOC3 source.
+        if (document.isSourceFile) break;
         const uris = await vscode.window.showOpenDialog({
           canSelectFiles: true,
           canSelectFolders: false,
@@ -321,7 +320,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
           this._onDidChangeCustomDocument.fire({ document });
 
           // Load the selected MOC3
-          await this.loadInpFromProject(document, webviewPanel);
+          await this.loadMoc3FromProject(document, webviewPanel);
 
           // Notify webview that puppet was imported
           webviewPanel.webview.postMessage({
@@ -333,9 +332,8 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       }
 
       case 'puppet:dropFile': {
-        // Save dropped .moc3 file and load it. Legacy .inp can still be opened directly,
-        // but new import/drop entrypoints only promote MOC3.
-        if (document.isInpFile || !document.projectData) break;
+        // Save dropped .moc3 file and load it.
+        if (document.isSourceFile || !document.projectData) break;
         const fileName = message.name as string;
         if (!fileName.endsWith('.moc3')) break;
         const base64Data = message.data as string;
@@ -352,7 +350,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         this._onDidChangeCustomDocument.fire({ document });
 
         // Load and notify
-        await this.loadInpFromProject(document, webviewPanel);
+        await this.loadMoc3FromProject(document, webviewPanel);
         webviewPanel.webview.postMessage({
           type: 'puppetImported',
           name: path.basename(fileName).replace(/\.moc3$/, ''),
@@ -409,10 +407,9 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   }
 
   /**
-   * Resolve puppet source path from .nkp project and let the webview load it.
-   * Existing .inp references remain readable for compatibility.
+   * Resolve a MOC3 source path from .nkp project and let the webview load it.
    */
-  private async loadInpFromProject(
+  private async loadMoc3FromProject(
     document: PuppetDocument,
     webviewPanel: vscode.WebviewPanel,
   ): Promise<void> {
@@ -421,10 +418,10 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
 
     try {
       const nkpDir = path.dirname(document.uri.fsPath);
-      const inpAbsPath = path.resolve(nkpDir, srcPath);
-      webviewPanel.webview.postMessage({ type: 'loadPuppetSource', source: inpAbsPath });
+      const moc3AbsPath = path.resolve(nkpDir, srcPath);
+      webviewPanel.webview.postMessage({ type: 'loadPuppetSource', source: moc3AbsPath });
     } catch (err) {
-      logger.error(`Failed to read .inp from project: ${err}`);
+      logger.error(`Failed to read .moc3 from project: ${err}`);
     }
   }
 
