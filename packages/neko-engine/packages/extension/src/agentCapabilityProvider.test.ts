@@ -151,15 +151,20 @@ describe('EngineCapabilityProvider domain metadata', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(executeCommand).toHaveBeenLastCalledWith('neko.engine.dispatch', 'puppets', 'native_command', {
-      seq: 4,
-      baseRevision: 3,
-      transactionId: 'tx-1',
-      command: { type: 'setNativeBlendShape', name: 'jawOpen', weight: 0.8 },
-    });
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      'neko.engine.dispatch',
+      'puppets',
+      'native_command',
+      {
+        seq: 4,
+        baseRevision: 3,
+        transactionId: 'tx-1',
+        command: { type: 'setNativeBlendShape', name: 'jawOpen', weight: 0.8 },
+      },
+    );
   });
 
-  it('returns legacy-only diagnostics for native puppet mutations against MOC3 assets', async () => {
+  it('returns native-readiness diagnostics for native puppet mutations against MOC3 assets', async () => {
     executeCommand.mockResolvedValueOnce(
       '{"status":"ok","data":{"format":"legacy","native":false,"revision":2,"diagnostics":[{"code":"legacy-only-puppet"}]}}',
     );
@@ -176,7 +181,7 @@ describe('EngineCapabilityProvider domain metadata', () => {
       success: false,
       error: 'Native puppet command requires a .nkp v2 bone-blendshape project.',
       data: expect.objectContaining({
-        code: 'legacy-only-puppet',
+        code: 'native-puppet-required',
       }),
     });
     expect(executeCommand).toHaveBeenCalledTimes(1);

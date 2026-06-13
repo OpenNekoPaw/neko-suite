@@ -189,7 +189,9 @@ async function getNativePuppetCapabilities(): Promise<unknown> {
   return dispatchEngine('puppets', 'capabilities', {});
 }
 
-async function applyNativePuppetCommand(envelope: PuppetCommandEnvelope): Promise<PuppetCommandAck> {
+async function applyNativePuppetCommand(
+  envelope: PuppetCommandEnvelope,
+): Promise<PuppetCommandAck> {
   return dispatchEngine<PuppetCommandAck>('puppets', 'native_command', {
     ...envelope,
     command: envelope.command as unknown,
@@ -479,7 +481,7 @@ function createPuppetTools(): Tool[] {
     {
       name: TOOL_NAMES_PUPPET.PUPPET_QUERY,
       description:
-        'Query native 2D puppet capabilities, current command revision, available bones, BlendShapes, and legacy-only diagnostics.',
+        'Query native 2D puppet capabilities, current command revision, available bones, BlendShapes, and native-readiness diagnostics.',
       parameters: { type: 'object', properties: {} },
       category: 'analysis',
       domain: PUPPET_DOMAIN,
@@ -515,7 +517,8 @@ function createPuppetTools(): Tool[] {
       },
       queryBeforeMutate: {
         preferredQueryTools: [TOOL_NAMES_PUPPET.PUPPET_QUERY],
-        reason: 'Creation returns a draft artifact and diagnostics; committing generated state needs preview.',
+        reason:
+          'Creation returns a draft artifact and diagnostics; committing generated state needs preview.',
       },
       traits: {
         cost: 'moderate',
@@ -556,8 +559,7 @@ function createPuppetTools(): Tool[] {
     },
     {
       name: TOOL_NAMES_PUPPET.PUPPET_SET_BLENDSHAPE,
-      description:
-        'Set a native puppet BlendShape weight with a revision-aware command envelope.',
+      description: 'Set a native puppet BlendShape weight with a revision-aware command envelope.',
       parameters: {
         type: 'object',
         properties: {
@@ -727,7 +729,8 @@ function createPuppetTools(): Tool[] {
       },
       queryBeforeMutate: {
         preferredQueryTools: [TOOL_NAMES_PUPPET.PUPPET_QUERY],
-        reason: 'Animation generation needs native rig capabilities and should preview tracks first.',
+        reason:
+          'Animation generation needs native rig capabilities and should preview tracks first.',
       },
       traits: {
         cost: 'moderate',
@@ -751,8 +754,8 @@ async function applyNativeCommandTool(
 ): Promise<ToolResult> {
   try {
     const capabilities = await getNativePuppetCapabilities();
-    if (isLegacyOnlyPuppetCapability(capabilities)) {
-      return legacyOnlyPuppetResult(capabilities);
+    if (isNativePuppetUnavailableCapability(capabilities)) {
+      return nativePuppetRequiredResult(capabilities);
     }
     const ack = await applyNativePuppetCommand({
       seq: requiredInteger(args, 'seq'),
@@ -808,18 +811,18 @@ function previewRequired(
   };
 }
 
-function legacyOnlyPuppetResult(capabilities: unknown): ToolResult {
+function nativePuppetRequiredResult(capabilities: unknown): ToolResult {
   return {
     success: false,
     error: 'Native puppet command requires a .nkp v2 bone-blendshape project.',
     data: {
-      code: 'legacy-only-puppet',
+      code: 'native-puppet-required',
       capabilities,
     },
   };
 }
 
-function isLegacyOnlyPuppetCapability(value: unknown): boolean {
+function isNativePuppetUnavailableCapability(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return value['native'] === false || value['format'] === 'legacy';
 }

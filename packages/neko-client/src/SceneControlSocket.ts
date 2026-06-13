@@ -1560,55 +1560,55 @@ function readBounds3(value: unknown): SceneBounds3 | undefined {
 
 function readAssetHandle(
   value: unknown,
-  fallbackKind: 'mesh' | 'material',
+  defaultKind: 'mesh' | 'material',
 ): SceneAssetHandle | undefined {
   if (!isRecord(value)) return undefined;
   const id = readString(value.id);
   if (!id) return undefined;
   const handle = {
     id,
-    kind: readString(value.kind) ?? fallbackKind,
+    kind: readString(value.kind) ?? defaultKind,
   };
   const uri = readString(value.uri);
   return uri === undefined ? handle : { ...handle, uri };
 }
 
-function readVec3(value: unknown, fallback: SceneVec3): SceneVec3 {
+function readVec3(value: unknown, defaultVec: SceneVec3): SceneVec3 {
   if (Array.isArray(value)) {
     return {
-      x: readFiniteNumber(value[0]) ?? fallback.x,
-      y: readFiniteNumber(value[1]) ?? fallback.y,
-      z: readFiniteNumber(value[2]) ?? fallback.z,
+      x: readFiniteNumber(value[0]) ?? defaultVec.x,
+      y: readFiniteNumber(value[1]) ?? defaultVec.y,
+      z: readFiniteNumber(value[2]) ?? defaultVec.z,
     };
   }
   if (isRecord(value)) {
     return {
-      x: readFiniteNumber(value.x) ?? fallback.x,
-      y: readFiniteNumber(value.y) ?? fallback.y,
-      z: readFiniteNumber(value.z) ?? fallback.z,
+      x: readFiniteNumber(value.x) ?? defaultVec.x,
+      y: readFiniteNumber(value.y) ?? defaultVec.y,
+      z: readFiniteNumber(value.z) ?? defaultVec.z,
     };
   }
-  return fallback;
+  return defaultVec;
 }
 
-function readQuat(value: unknown, fallback: SceneQuat): SceneQuat {
+function readQuat(value: unknown, defaultQuat: SceneQuat): SceneQuat {
   if (Array.isArray(value)) {
     return {
-      x: readFiniteNumber(value[0]) ?? fallback.x,
-      y: readFiniteNumber(value[1]) ?? fallback.y,
-      z: readFiniteNumber(value[2]) ?? fallback.z,
-      w: readFiniteNumber(value[3]) ?? fallback.w,
+      x: readFiniteNumber(value[0]) ?? defaultQuat.x,
+      y: readFiniteNumber(value[1]) ?? defaultQuat.y,
+      z: readFiniteNumber(value[2]) ?? defaultQuat.z,
+      w: readFiniteNumber(value[3]) ?? defaultQuat.w,
     };
   }
   if (isRecord(value)) {
     return {
-      x: readFiniteNumber(value.x) ?? fallback.x,
-      y: readFiniteNumber(value.y) ?? fallback.y,
-      z: readFiniteNumber(value.z) ?? fallback.z,
-      w: readFiniteNumber(value.w) ?? fallback.w,
+      x: readFiniteNumber(value.x) ?? defaultQuat.x,
+      y: readFiniteNumber(value.y) ?? defaultQuat.y,
+      z: readFiniteNumber(value.z) ?? defaultQuat.z,
+      w: readFiniteNumber(value.w) ?? defaultQuat.w,
     };
   }
-  return fallback;
+  return defaultQuat;
 }
 
 function inferSceneNodeKind(value: Record<string, unknown>): string {

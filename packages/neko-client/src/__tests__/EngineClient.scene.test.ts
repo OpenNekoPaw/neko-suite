@@ -242,12 +242,14 @@ describe('EngineClient scene operations', () => {
   it('discovers scene LookDev capability flags from Engine', async () => {
     mockDispatchResponse({
       renderModes: ['pbr', 'clay', 'wireframe', 'unknown'],
-      liveViewportSettings: true,
-      clay: true,
-      authoredLights: true,
-      environment: true,
-      typedPicking: true,
-      characterRegions: false,
+      capabilityStates: {
+        liveViewportSettings: 'supported',
+        clay: 'supported',
+        authoredLights: 'supported',
+        environment: 'supported',
+        typedPicking: 'supported',
+        characterRegions: 'unsupported',
+      },
     });
     const client = new EngineClient(7788);
 
@@ -348,6 +350,37 @@ describe('EngineClient scene operations', () => {
         action: 'capabilities',
       }),
     );
+  });
+
+  it('ignores pre-capabilityStates boolean fields when discovering scene capabilities', async () => {
+    mockDispatchResponse({
+      renderModes: ['pbr', 'clay'],
+      liveViewportSettings: true,
+      clay: true,
+      authoredLights: true,
+      environment: true,
+      typedPicking: true,
+      characterRegions: true,
+    });
+    const client = new EngineClient(7788);
+
+    await expect(client.getModelLookDevSceneControlCapabilities()).resolves.toMatchObject({
+      renderModes: ['pbr', 'clay'],
+      liveViewportSettings: false,
+      clay: true,
+      authoredLights: false,
+      environment: false,
+      typedPicking: false,
+      characterRegions: false,
+      capabilityStates: {
+        liveViewportSettings: 'unknown',
+        clay: 'unknown',
+        authoredLights: 'unknown',
+        environment: 'unknown',
+        typedPicking: 'unknown',
+        characterRegions: 'unknown',
+      },
+    });
   });
 
   it('routes typed selection queries through SceneControlSocket helper', async () => {

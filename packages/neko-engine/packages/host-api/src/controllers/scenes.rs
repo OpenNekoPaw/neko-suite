@@ -2555,12 +2555,24 @@ impl Controller for ScenesController {
                         "lightComplexity",
                         "shadowAtlas"
                     ],
-                    "liveViewportSettings": true,
-                    "clay": true,
-                    "authoredLights": false,
-                    "environment": false,
-                    "typedPicking": false,
-                    "characterRegions": false
+                    "capabilityStates": {
+                        "renderModes": {
+                            "pbr": "supported",
+                            "clay": "supported",
+                            "wireframe": "supported",
+                            "unlit": "supported",
+                            "normal": "supported",
+                            "depth": "supported",
+                            "lightComplexity": "supported",
+                            "shadowAtlas": "supported"
+                        },
+                        "liveViewportSettings": "supported",
+                        "clay": "supported",
+                        "authoredLights": "unsupported",
+                        "environment": "unsupported",
+                        "typedPicking": "unsupported",
+                        "characterRegions": "unsupported"
+                    }
                 }),
             )),
 
@@ -2732,8 +2744,8 @@ mod tests {
             .unwrap();
         let data = response.data.as_ref().unwrap();
 
-        assert_eq!(data["clay"], true);
-        assert_eq!(data["liveViewportSettings"], true);
+        assert_eq!(data["capabilityStates"]["clay"], "supported");
+        assert_eq!(data["capabilityStates"]["liveViewportSettings"], "supported");
         assert!(data["renderModes"]
             .as_array()
             .unwrap()

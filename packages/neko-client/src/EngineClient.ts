@@ -325,16 +325,16 @@ const ALL_VIEWPORT_RENDER_MODES: readonly ViewportDescriptor['renderMode'][] = [
   'shadowAtlas',
 ];
 
-function getString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback;
+function getString(value: unknown, defaultValue = ''): string {
+  return typeof value === 'string' ? value : defaultValue;
 }
 
-function getNumber(value: unknown, fallback = 0): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+function getNumber(value: unknown, defaultValue = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
 }
 
-function getBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
+function getBoolean(value: unknown, defaultValue: boolean): boolean {
+  return typeof value === 'boolean' ? value : defaultValue;
 }
 
 function getStringArray(value: unknown): string[] {
@@ -343,62 +343,62 @@ function getStringArray(value: unknown): string[] {
     : [];
 }
 
-function toVec3(value: unknown, fallback: { x: number; y: number; z: number }) {
+function toVec3(value: unknown, defaultVec: { x: number; y: number; z: number }) {
   if (Array.isArray(value)) {
     return {
-      x: getNumber(value[0], fallback.x),
-      y: getNumber(value[1], fallback.y),
-      z: getNumber(value[2], fallback.z),
+      x: getNumber(value[0], defaultVec.x),
+      y: getNumber(value[1], defaultVec.y),
+      z: getNumber(value[2], defaultVec.z),
     };
   }
   if (isRecord(value)) {
     return {
-      x: getNumber(value.x, fallback.x),
-      y: getNumber(value.y, fallback.y),
-      z: getNumber(value.z, fallback.z),
+      x: getNumber(value.x, defaultVec.x),
+      y: getNumber(value.y, defaultVec.y),
+      z: getNumber(value.z, defaultVec.z),
     };
   }
-  return fallback;
+  return defaultVec;
 }
 
-function toVec4(value: unknown, fallback: { x: number; y: number; z: number; w: number }) {
+function toVec4(value: unknown, defaultVec: { x: number; y: number; z: number; w: number }) {
   if (Array.isArray(value)) {
     return {
-      x: getNumber(value[0], fallback.x),
-      y: getNumber(value[1], fallback.y),
-      z: getNumber(value[2], fallback.z),
-      w: getNumber(value[3], fallback.w),
+      x: getNumber(value[0], defaultVec.x),
+      y: getNumber(value[1], defaultVec.y),
+      z: getNumber(value[2], defaultVec.z),
+      w: getNumber(value[3], defaultVec.w),
     };
   }
   if (isRecord(value)) {
     return {
-      x: getNumber(value.x, fallback.x),
-      y: getNumber(value.y, fallback.y),
-      z: getNumber(value.z, fallback.z),
-      w: getNumber(value.w, fallback.w),
+      x: getNumber(value.x, defaultVec.x),
+      y: getNumber(value.y, defaultVec.y),
+      z: getNumber(value.z, defaultVec.z),
+      w: getNumber(value.w, defaultVec.w),
     };
   }
-  return fallback;
+  return defaultVec;
 }
 
-function toQuat(value: unknown, fallback: { x: number; y: number; z: number; w: number }) {
+function toQuat(value: unknown, defaultQuat: { x: number; y: number; z: number; w: number }) {
   if (Array.isArray(value)) {
     return {
-      x: getNumber(value[0], fallback.x),
-      y: getNumber(value[1], fallback.y),
-      z: getNumber(value[2], fallback.z),
-      w: getNumber(value[3], fallback.w),
+      x: getNumber(value[0], defaultQuat.x),
+      y: getNumber(value[1], defaultQuat.y),
+      z: getNumber(value[2], defaultQuat.z),
+      w: getNumber(value[3], defaultQuat.w),
     };
   }
   if (isRecord(value)) {
     return {
-      x: getNumber(value.x, fallback.x),
-      y: getNumber(value.y, fallback.y),
-      z: getNumber(value.z, fallback.z),
-      w: getNumber(value.w, fallback.w),
+      x: getNumber(value.x, defaultQuat.x),
+      y: getNumber(value.y, defaultQuat.y),
+      z: getNumber(value.z, defaultQuat.z),
+      w: getNumber(value.w, defaultQuat.w),
     };
   }
-  return fallback;
+  return defaultQuat;
 }
 
 function normalizeBounds3(value: unknown): SceneBounds3 | undefined {
@@ -916,11 +916,12 @@ function normalizeModelLookDevSceneControlCapabilities(
         .map(normalizeRenderMode)
         .filter((mode): mode is ViewportDescriptor['renderMode'] => mode !== undefined)
     : undefined;
-  const capabilityStateSource = isRecord(value.capabilityStates) ? value.capabilityStates : value;
-  const renderModeStateSource = isRecord(capabilityStateSource.renderModes)
-    ? capabilityStateSource.renderModes
-    : isRecord(value.renderModeStates)
-      ? value.renderModeStates
+  const capabilityStateSource = isRecord(value.capabilityStates)
+    ? value.capabilityStates
+    : undefined;
+  const renderModeStateSource =
+    capabilityStateSource && isRecord(capabilityStateSource.renderModes)
+      ? capabilityStateSource.renderModes
       : undefined;
   const renderModeStates = normalizeRenderModeCapabilityStates(
     renderModeStateSource,
@@ -931,26 +932,13 @@ function normalizeModelLookDevSceneControlCapabilities(
     rawRenderModes ??
     ALL_VIEWPORT_RENDER_MODES.filter((mode) => renderModeStates[mode] === 'supported');
   const liveViewportSettings = normalizeCapabilityState(
-    capabilityStateSource.liveViewportSettings,
-    value.liveViewportSettings,
+    capabilityStateSource?.liveViewportSettings,
   );
-  const clay = normalizeCapabilityState(capabilityStateSource.clay, value.clay);
-  const authoredLights = normalizeCapabilityState(
-    capabilityStateSource.authoredLights,
-    value.authoredLights,
-  );
-  const environment = normalizeCapabilityState(
-    capabilityStateSource.environment,
-    value.environment,
-  );
-  const typedPicking = normalizeCapabilityState(
-    capabilityStateSource.typedPicking,
-    value.typedPicking,
-  );
-  const characterRegions = normalizeCapabilityState(
-    capabilityStateSource.characterRegions,
-    value.characterRegions,
-  );
+  const clay = normalizeCapabilityState(capabilityStateSource?.clay);
+  const authoredLights = normalizeCapabilityState(capabilityStateSource?.authoredLights);
+  const environment = normalizeCapabilityState(capabilityStateSource?.environment);
+  const typedPicking = normalizeCapabilityState(capabilityStateSource?.typedPicking);
+  const characterRegions = normalizeCapabilityState(capabilityStateSource?.characterRegions);
   return {
     renderModes,
     liveViewportSettings: capabilityStateToBoolean(
@@ -974,63 +962,56 @@ function normalizeModelLookDevSceneControlCapabilities(
   };
 }
 
-function normalizeCapabilityState(
-  stateValue: unknown,
-  legacyValue: unknown,
-): ModelSceneControlCapabilityState {
+function normalizeCapabilityState(stateValue: unknown): ModelSceneControlCapabilityState {
   if (stateValue === 'supported' || stateValue === 'unsupported' || stateValue === 'unknown') {
     return stateValue;
   }
-  if (typeof stateValue === 'boolean') {
-    return stateValue ? 'supported' : 'unsupported';
-  }
   if (isRecord(stateValue)) {
-    return normalizeCapabilityState(stateValue.state ?? stateValue.supported, undefined);
-  }
-  if (typeof legacyValue === 'boolean') {
-    return legacyValue ? 'supported' : 'unsupported';
+    return normalizeCapabilityState(stateValue.state);
   }
   return 'unknown';
 }
 
 function capabilityStateToBoolean(
   state: ModelSceneControlCapabilityState,
-  fallback: boolean,
+  defaultValue: boolean,
 ): boolean {
   if (state === 'supported') return true;
   if (state === 'unsupported') return false;
-  return fallback;
+  return defaultValue;
 }
 
 function normalizeRenderModeCapabilityStates(
   stateSource: Record<string, unknown> | undefined,
   renderModes: readonly ViewportDescriptor['renderMode'][] | undefined,
-  fallback: Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>>,
+  defaultStates: Readonly<
+    Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>
+  >,
 ): Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>> {
   const renderModeSet = renderModes ? new Set(renderModes) : null;
   return {
-    pbr: normalizeRenderModeCapabilityState('pbr', stateSource, renderModeSet, fallback),
-    clay: normalizeRenderModeCapabilityState('clay', stateSource, renderModeSet, fallback),
+    pbr: normalizeRenderModeCapabilityState('pbr', stateSource, renderModeSet, defaultStates),
+    clay: normalizeRenderModeCapabilityState('clay', stateSource, renderModeSet, defaultStates),
     wireframe: normalizeRenderModeCapabilityState(
       'wireframe',
       stateSource,
       renderModeSet,
-      fallback,
+      defaultStates,
     ),
-    unlit: normalizeRenderModeCapabilityState('unlit', stateSource, renderModeSet, fallback),
-    normal: normalizeRenderModeCapabilityState('normal', stateSource, renderModeSet, fallback),
-    depth: normalizeRenderModeCapabilityState('depth', stateSource, renderModeSet, fallback),
+    unlit: normalizeRenderModeCapabilityState('unlit', stateSource, renderModeSet, defaultStates),
+    normal: normalizeRenderModeCapabilityState('normal', stateSource, renderModeSet, defaultStates),
+    depth: normalizeRenderModeCapabilityState('depth', stateSource, renderModeSet, defaultStates),
     lightComplexity: normalizeRenderModeCapabilityState(
       'lightComplexity',
       stateSource,
       renderModeSet,
-      fallback,
+      defaultStates,
     ),
     shadowAtlas: normalizeRenderModeCapabilityState(
       'shadowAtlas',
       stateSource,
       renderModeSet,
-      fallback,
+      defaultStates,
     ),
   };
 }
@@ -1039,15 +1020,17 @@ function normalizeRenderModeCapabilityState(
   mode: ViewportDescriptor['renderMode'],
   stateSource: Record<string, unknown> | undefined,
   renderModes: ReadonlySet<ViewportDescriptor['renderMode']> | null,
-  fallback: Readonly<Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>>,
+  defaultStates: Readonly<
+    Record<ViewportDescriptor['renderMode'], ModelSceneControlCapabilityState>
+  >,
 ): ModelSceneControlCapabilityState {
   if (stateSource && Object.prototype.hasOwnProperty.call(stateSource, mode)) {
-    return normalizeCapabilityState(stateSource[mode], undefined);
+    return normalizeCapabilityState(stateSource[mode]);
   }
   if (renderModes) {
     return renderModes.has(mode) ? 'supported' : 'unsupported';
   }
-  return fallback[mode];
+  return defaultStates[mode];
 }
 
 export class EngineClient {
