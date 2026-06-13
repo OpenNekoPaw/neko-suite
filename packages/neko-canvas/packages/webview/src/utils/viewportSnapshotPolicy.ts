@@ -67,6 +67,6 @@ export function createViewportSnapshotPolicy({
   };
 }
 
-export function createViewportSnapshotFingerprint(viewport: CanvasViewport): string {
+function createViewportSnapshotFingerprint(viewport: CanvasViewport): string {
   return JSON.stringify(viewport);
 }

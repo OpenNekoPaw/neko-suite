@@ -15,10 +15,10 @@ export const DEFAULT_RUNTIME_VIEWPORT: CanvasViewport = {
   zoom: 1,
 };
 
-export const MIN_RUNTIME_ZOOM = 0.05;
-export const MAX_RUNTIME_ZOOM = 16;
+const MIN_RUNTIME_ZOOM = 0.05;
+const MAX_RUNTIME_ZOOM = 16;
 
-export function clampRuntimeZoom(zoom: number): number {
+function clampRuntimeZoom(zoom: number): number {
   return Math.max(MIN_RUNTIME_ZOOM, Math.min(MAX_RUNTIME_ZOOM, zoom));
 }
 

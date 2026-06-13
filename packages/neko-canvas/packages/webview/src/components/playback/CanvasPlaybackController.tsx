@@ -222,7 +222,7 @@ export function CanvasPlaybackController({
   );
 }
 
-export function resolveCanvasPlaybackViewState({
+function resolveCanvasPlaybackViewState({
   plan,
   route,
   activeUnitId,

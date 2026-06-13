@@ -110,8 +110,8 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
               label: 'preset.shot.image',
               binding: { path: '/generatedImage', valueType: 'asset' },
               metadata: {
-                fallbackAssetPaths: ['/runtimeReferenceImagePath', '/referenceImagePath'],
-                fallbackResourceRefPaths: ['/referenceImageResourceRef'],
+                alternateAssetPaths: ['/runtimeReferenceImagePath', '/referenceImagePath'],
+                alternateResourceRefPaths: ['/referenceImageResourceRef'],
               },
               capabilities: [
                 {
@@ -1372,7 +1372,7 @@ const GALLERY_PRESET_OPTIONS = [
 
 function getMediaPreviewRole(node: CanvasNodeDraft): CanvasPreviewRole {
   if (node.type !== 'media') {
-    return 'fallback';
+    return 'unavailable';
   }
 
   switch (node.data.mediaType) {
@@ -1383,7 +1383,7 @@ function getMediaPreviewRole(node: CanvasNodeDraft): CanvasPreviewRole {
     case 'image':
       return 'image';
     default:
-      return 'fallback';
+      return 'unavailable';
   }
 }
 

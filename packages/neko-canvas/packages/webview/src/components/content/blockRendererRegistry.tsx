@@ -336,17 +336,17 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
   const hasDocumentResourceRef = Boolean(
     resolvePreviewSourceMetadata(context)?.documentResourceRef,
   );
-  for (const path of getStringArrayMetadata(context.block, 'fallbackAssetPaths')) {
+  for (const path of getStringArrayMetadata(context.block, 'alternateAssetPaths')) {
     if (!isJsonPointerPath(path)) continue;
-    const { value: fallbackValue } = readNodeBinding(context.node, {
+    const { value: alternateValue } = readNodeBinding(context.node, {
       path,
       valueType: 'asset',
     });
     if (
-      isPresentAssetValue(fallbackValue) &&
-      (!hasDocumentResourceRef || path.includes('runtime') || fallbackValue.startsWith('data:'))
+      isPresentAssetValue(alternateValue) &&
+      (!hasDocumentResourceRef || path.includes('runtime') || alternateValue.startsWith('data:'))
     ) {
-      return fallbackValue;
+      return alternateValue;
     }
   }
 
@@ -372,7 +372,7 @@ function createPreviewSource(
     (capability) => capability.kind === 'preview',
   );
   const path = typeof value === 'string' ? value : assetCapability?.path;
-  const role = previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'fallback';
+  const role = previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'unavailable';
 
   const variants = previewCapability?.variants ? [...previewCapability.variants] : [];
   if (typeof path === 'string' && isSafeWebviewUrl(path)) {
@@ -411,13 +411,13 @@ function resolvePreviewSourceMetadata(
     return { projectType: context.node.data.projectType };
   }
 
-  const fallbackResourceRefPath = getStringArrayMetadata(
+  const alternateResourceRefPath = getStringArrayMetadata(
     context.block,
-    'fallbackResourceRefPaths',
+    'alternateResourceRefPaths',
   )[0];
-  if (fallbackResourceRefPath && isJsonPointerPath(fallbackResourceRefPath)) {
+  if (alternateResourceRefPath && isJsonPointerPath(alternateResourceRefPath)) {
     const { value } = readNodeBinding(context.node, {
-      path: fallbackResourceRefPath,
+      path: alternateResourceRefPath,
       valueType: 'object',
     });
     const documentResourceRef = parseDocumentArchiveResourceRef(value);

@@ -37,7 +37,7 @@ function createPreviewRendererRegistry(): PreviewRendererRegistry {
     'panorama-rotation': renderVisualPreview,
     'generation-candidate': renderVisualPreview,
     'project-thumbnail': renderProjectPreview,
-    fallback: renderFallbackPreview,
+    unavailable: renderFallbackPreview,
   };
 }
 

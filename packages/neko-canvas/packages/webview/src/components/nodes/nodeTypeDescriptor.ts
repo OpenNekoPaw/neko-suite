@@ -27,7 +27,7 @@ export interface NodeTypeDescriptor {
   type: CanvasNodeType;
   /** i18n key for the display label, resolved via t() at render time */
   labelKey: string;
-  /** Toolbar/library icon. Strings are supported for legacy descriptors. */
+  /** Toolbar/library icon. Strings are supported for existing descriptors. */
   icon: React.ReactNode;
   /** Short uppercase tag label for the node header (e.g. "SHOT", "SCENE") */
   tagLabel: string;
@@ -56,15 +56,4 @@ export function getNodeLabel(
 ): string {
   const descriptor = registry[type];
   return descriptor ? t(descriptor.labelKey) : type;
-}
-
-/**
- * Get the default size for a node type.
- */
-export function getNodeDefaultSize(
-  registry: NodeTypeDescriptorRegistry,
-  type: CanvasNodeType,
-): NodeDefaultSize {
-  const descriptor = registry[type];
-  return descriptor ? descriptor.defaultSize : { width: 200, height: 100 };
 }

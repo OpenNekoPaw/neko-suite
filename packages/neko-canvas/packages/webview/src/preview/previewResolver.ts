@@ -18,7 +18,7 @@ const ROLE_TO_ENGINE_ROLE: Partial<Record<CanvasPreviewRole, PreviewVariantRole>
   'model-turntable': 'proxy',
   'panorama-fov-crop': 'fov-crop',
   'panorama-rotation': 'proxy',
-  fallback: 'thumbnail',
+  unavailable: 'thumbnail',
 };
 
 export class WebviewPreviewResolver implements PreviewResolver {
@@ -90,8 +90,8 @@ function createUnavailableVariant(
   label: string,
 ): RuntimePreviewVariant {
   return {
-    id: `${request.source.id}:fallback`,
-    role: 'fallback',
+    id: `${request.source.id}:unavailable`,
+    role: 'unavailable',
     assetId: request.source.asset?.assetId,
     sourcePath: request.source.asset?.path,
     metadata: { label },

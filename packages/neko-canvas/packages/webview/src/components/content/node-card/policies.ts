@@ -221,7 +221,7 @@ export function resolveShotPreviewSource(node: CanvasNode): CardPreviewSource {
   };
 }
 
-export const annotationCardPolicy: NodeCardPolicy = {
+const annotationCardPolicy: NodeCardPolicy = {
   nodeType: 'annotation',
   resolvePreviewSource: (node) => ({
     renderForm: 'text',
@@ -249,7 +249,7 @@ export const textCardPolicy: NodeCardPolicy = {
   resolveActions: () => DEFAULT_ACTIONS,
 };
 
-export const containerSummaryCardPolicy: NodeCardPolicy = {
+const containerSummaryCardPolicy: NodeCardPolicy = {
   nodeType: 'group',
   resolvePreviewSource: () => ({ renderForm: 'icon', icon: 'C' }),
   resolveTitle: (node, parent) =>

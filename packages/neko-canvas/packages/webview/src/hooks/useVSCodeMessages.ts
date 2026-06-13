@@ -126,7 +126,7 @@ function normalizeFieldBinding(value: unknown): FieldBinding | undefined {
     valueType: isFieldValueType(value.valueType) ? value.valueType : undefined,
     mode: isFieldBindingMode(value.mode) ? value.mode : undefined,
     required: typeof value.required === 'boolean' ? value.required : undefined,
-    fallback: value.fallback,
+    defaultValue: value.defaultValue,
   };
 }
 

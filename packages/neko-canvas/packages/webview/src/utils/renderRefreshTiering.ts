@@ -29,7 +29,7 @@ export interface CanvasRenderRefreshDecision {
   readonly maxShellDurationMs: number;
 }
 
-export const DEFAULT_RENDER_REFRESH_POLICY_CONFIG: CanvasRenderRefreshPolicyConfig = {
+const DEFAULT_RENDER_REFRESH_POLICY_CONFIG: CanvasRenderRefreshPolicyConfig = {
   throttleNodeThreshold: 100,
   heavyContentNodeThreshold: 500,
   denseGraphConnectionRatio: 2,

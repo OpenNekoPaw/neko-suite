@@ -28,14 +28,14 @@ describe('WebviewPreviewResolver', () => {
     expect(source.variants[0]).not.toHaveProperty('runtimeUrl');
   });
 
-  it('falls back when no preview source exists', async () => {
+  it('returns unavailable preview when no source exists', async () => {
     const resolver = new WebviewPreviewResolver();
 
     const variant = await resolver.resolve({
       source: { id: 'empty', role: 'image', title: 'Missing' },
     });
 
-    expect(variant.role).toBe('fallback');
+    expect(variant.role).toBe('unavailable');
     expect(variant.metadata?.label).toBe('No preview source');
   });
 

@@ -11,12 +11,7 @@ import {
   parseDocumentResourceStatus,
 } from '@neko/shared';
 import { isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../../preview';
-import type {
-  ActionCondition,
-  ActionConditionContext,
-  CardPreviewSource,
-  TextPreviewSource,
-} from './types';
+import type { ActionCondition, ActionConditionContext, CardPreviewSource } from './types';
 
 const TEXT_PREVIEW_MAX_LENGTH = 60;
 const SUBTITLE_MAX_LENGTH = 40;
@@ -43,7 +38,7 @@ export function evaluateActionCondition(
   }
 }
 
-export function hasRenderablePreview(ctx: ActionConditionContext): boolean {
+function hasRenderablePreview(ctx: ActionConditionContext): boolean {
   if (ctx.previewSource) {
     return isRenderablePreviewSource(ctx.previewSource);
   }
@@ -60,7 +55,7 @@ export function hasRenderablePreview(ctx: ActionConditionContext): boolean {
   return Boolean(ctx.node.preview?.thumbnailVariantId);
 }
 
-export function isRenderablePreviewSource(source: CardPreviewSource): boolean {
+function isRenderablePreviewSource(source: CardPreviewSource): boolean {
   switch (source.renderForm) {
     case 'none':
     case 'icon':
@@ -160,7 +155,7 @@ export function readNumber(data: unknown, key: string): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
 
-export function readAssetPath(node: CanvasNode): string | undefined {
+function readAssetPath(node: CanvasNode): string | undefined {
   const data = readRecord(node.data);
   const assetPath = data['assetPath'];
   return typeof assetPath === 'string' && assetPath.length > 0 ? assetPath : undefined;
@@ -231,10 +226,6 @@ export function resolvePlacementTitle(node: CanvasNode, parent?: CanvasNode): st
   return typeof placementLabel === 'string' && placementLabel.length > 0
     ? placementLabel
     : undefined;
-}
-
-export function isTextPreviewSource(source: CardPreviewSource): source is TextPreviewSource {
-  return source.renderForm === 'text';
 }
 
 export function capitalize(value: string): string {

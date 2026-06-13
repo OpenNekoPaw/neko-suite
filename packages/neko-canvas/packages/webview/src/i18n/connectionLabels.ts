@@ -34,7 +34,7 @@ export function resolveInternalConnectionCountLabel(count: number): string {
   return t('connection.internalCount', { count });
 }
 
-export function resolveConnectionNodeTypeLabel(type: CanvasNode['type']): string {
+function resolveConnectionNodeTypeLabel(type: CanvasNode['type']): string {
   return translateWithDefault(`node.${toNodeLabelKeySegment(type)}`, type);
 }
 

@@ -35,7 +35,7 @@ export function resolveCanvasStatusLabel(value: string): string {
   return resolveCanvasOptionLabel('/generationStatus', value);
 }
 
-export function resolveCanvasValueLabelKey(
+function resolveCanvasValueLabelKey(
   path: JsonPointerPath | string | undefined,
   value: string,
 ): string | undefined {

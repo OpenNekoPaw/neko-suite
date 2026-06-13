@@ -12,7 +12,7 @@ export interface NodeSizingInput {
 }
 
 export const DEFAULT_NODE_MIN_SIZE: NodeSize = { width: 180, height: 120 };
-export const DEFAULT_CONTAINER_MIN_SIZE: NodeSize = { width: 260, height: 180 };
+const DEFAULT_CONTAINER_MIN_SIZE: NodeSize = { width: 260, height: 180 };
 
 const KNOWN_NODE_TYPE_MIN_SIZES = {
   annotation: { width: 180, height: 120 },

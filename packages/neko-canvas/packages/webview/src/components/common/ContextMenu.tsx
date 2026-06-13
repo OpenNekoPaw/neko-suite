@@ -7,7 +7,6 @@
 
 export {
   PositionedContextMenu as ContextMenu,
-  buildAIMenuSection,
   type MenuItem,
   type MenuAction,
   type MenuSeparator,

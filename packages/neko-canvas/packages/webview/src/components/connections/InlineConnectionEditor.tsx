@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { CanvasConnection, CanvasNode, ConnectionType } from '@neko/shared';
+import type { CanvasConnection, CanvasNode } from '@neko/shared';
 import { CANVAS_CONNECTION_TYPES, isCanvasConnectionType } from '@neko/shared';
 import { t } from '../../i18n';
 import { getConnectionPathGeometry } from './connectionGeometry';
@@ -167,8 +167,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
-}
-
-export function isRegisteredConnectionAttributeType(type: ConnectionType): boolean {
-  return type !== 'default' && type !== 'sequence' && type !== 'reference';
 }

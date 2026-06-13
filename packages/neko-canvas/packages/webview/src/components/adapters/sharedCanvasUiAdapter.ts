@@ -138,7 +138,7 @@ export function mapCanvasNodeLibraryGroupToTreeItems({
   ];
 }
 
-export function mapCanvasNodeLibraryTypeToTreeItem({
+function mapCanvasNodeLibraryTypeToTreeItem({
   descriptors,
   nodeType,
   subsystemId,

@@ -1,9 +1,5 @@
 import type { CanvasNode } from '@neko/shared';
-import type {
-  ContainerActionDescriptor,
-  ContainerActionDescriptorContext,
-  ContainerActionId,
-} from './types';
+import type { ContainerActionDescriptor, ContainerActionDescriptorContext } from './types';
 
 export type ContainerActionDescriptorRegistry = Partial<
   Record<CanvasNode['type'], readonly ContainerActionDescriptor[]>
@@ -61,7 +57,7 @@ const TABLE_ACTIONS: readonly ContainerActionDescriptor[] = [
   },
 ];
 
-export function createBuiltInContainerActionRegistry(): ContainerActionDescriptorRegistry {
+function createBuiltInContainerActionRegistry(): ContainerActionDescriptorRegistry {
   return {
     scene: SCENE_ACTIONS,
     gallery: GALLERY_ACTIONS,
@@ -70,12 +66,6 @@ export function createBuiltInContainerActionRegistry(): ContainerActionDescripto
 }
 
 const BUILT_IN_CONTAINER_ACTION_REGISTRY = createBuiltInContainerActionRegistry();
-const CONTAINER_ACTION_ID_SET: ReadonlySet<string> = new Set(
-  Object.values(BUILT_IN_CONTAINER_ACTION_REGISTRY).flatMap(
-    (actions) => actions?.map((action) => action.id) ?? [],
-  ),
-);
-
 export function getContainerActionDescriptors(
   node: CanvasNode,
   registry: ContainerActionDescriptorRegistry = BUILT_IN_CONTAINER_ACTION_REGISTRY,
@@ -97,8 +87,4 @@ export function isContainerActionVisible(
     case 'empty':
       return ctx.childNodes.length === 0;
   }
-}
-
-export function isContainerActionId(value: string): value is ContainerActionId {
-  return CONTAINER_ACTION_ID_SET.has(value);
 }
