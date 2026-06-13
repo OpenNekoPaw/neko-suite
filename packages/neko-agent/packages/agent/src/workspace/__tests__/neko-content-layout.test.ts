@@ -15,8 +15,8 @@ describe('neko-content-layout', () => {
   });
 
   it('resolves project content directories only when a workspace root exists', () => {
-    expect(resolveProjectNekoContentDir('/repo', 'hooks')).toBe('/repo/.neko/hooks');
-    expect(resolveProjectNekoContentDir(undefined, 'hooks')).toBeNull();
+    expect(resolveProjectNekoContentDir('/repo', 'commands')).toBe('/repo/.neko/commands');
+    expect(resolveProjectNekoContentDir(undefined, 'commands')).toBeNull();
   });
 
   it('resolves source-scoped content directories', () => {

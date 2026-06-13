@@ -93,7 +93,7 @@ export async function think(
   const step: AgentStep = {
     type: 'think',
     content,
-    // Prefer API thinking field, fallback to extracted <think> tags
+    // Prefer API thinking field, then recover provider-emitted <think> tags.
     thinking: response.thinking || extractedThinking || undefined,
     toolCalls: toolCalls?.map((tc) => ({
       id: tc.id,
@@ -246,13 +246,13 @@ export async function* thinkStream(
 // =============================================================================
 
 /**
- * Parse tool call arguments from raw JSON string with fallback
+ * Parse tool call arguments from raw JSON, preserving malformed input as _raw.
  */
 export function parseToolCallArgs(rawArgs: string): Record<string, unknown> {
   try {
     return JSON.parse(rawArgs);
   } catch {
-    // LLM returned malformed JSON — pass raw string as fallback
+    // LLM returned malformed JSON; keep the raw string for downstream diagnostics.
     return { _raw: rawArgs };
   }
 }

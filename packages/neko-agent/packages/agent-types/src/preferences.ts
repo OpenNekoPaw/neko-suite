@@ -31,7 +31,7 @@
  *
  * Prefix-less bullets are treated as label matches against
  * `ApprovalSubject.label` (case-insensitive substring). That's a
- * looser fallback; prefer explicit prefixes.
+ * looser label match; prefer explicit prefixes.
  */
 export interface PreferenceSubjectRule {
   /**

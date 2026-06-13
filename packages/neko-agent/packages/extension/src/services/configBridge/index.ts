@@ -4,7 +4,6 @@
  * Thin orchestrator that delegates to domain-specific handlers:
  * - PromptSyncHandler: Prompt CRUD + file system sync
  * - SkillSyncHandler: Skill file scanning + caching + enabled state
- * - HookSyncHandler: Hook file scanning + caching
  * - ToolSkillHandler: ToolSkill registration + enabled state
  * - ConfigFileHandler: Config file import/watching + openUserConfigFile
  */
@@ -24,7 +23,6 @@ import { getLogger } from '../../base';
 import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
-  ConfiguredHook,
   ConfiguredToolGroup,
   IAuthSession,
 } from '@neko/shared';
@@ -37,12 +35,10 @@ interface NekoAuthAPI {
   onDidChangeSession: (listener: (session: IAuthSession | null) => void) => { dispose(): void };
 }
 import { getSkillFileService } from '../SkillFileService';
-import { getHookFileService } from '../HookFileService';
 
 import type { PostMessageFn, WebviewConfigState } from './types';
 import { broadcastToWebviews } from './broadcastHelper';
 import { SkillSyncHandler } from './skillSyncHandler';
-import { HookSyncHandler } from './hookSyncHandler';
 import { ToolSkillHandler } from './toolSkillHandler';
 import { ConfigFileHandler } from './configFileHandler';
 
@@ -77,7 +73,6 @@ export class ConfigBridge implements vscode.Disposable {
 
   // Domain handlers
   private readonly skillSync: SkillSyncHandler;
-  private readonly hookSync: HookSyncHandler;
   private readonly toolSkill: ToolSkillHandler;
   private readonly configFile: ConfigFileHandler;
 
@@ -87,16 +82,14 @@ export class ConfigBridge implements vscode.Disposable {
   ) {
     // Initialize domain handlers
     this.skillSync = new SkillSyncHandler(getSkillFileService(), context);
-    this.hookSync = new HookSyncHandler(getHookFileService());
     this.toolSkill = new ToolSkillHandler(context);
     this.configFile = new ConfigFileHandler(platform, this.activeWebviews);
 
     // Register disposable sub-handlers
-    this.disposables.push(this.skillSync, this.hookSync, this.configFile);
+    this.disposables.push(this.skillSync, this.configFile);
 
     // Initialize all handlers
     this.skillSync.init();
-    this.hookSync.init();
     void this.configFile.init();
 
     // Broadcast updated configState to webviews whenever ~/.neko/config.json changes
@@ -194,10 +187,6 @@ export class ConfigBridge implements vscode.Disposable {
     return this.skillSync.getCommands();
   }
 
-  getHooks(): ConfiguredHook[] {
-    return this.hookSync.getHooks();
-  }
-
   getToolSkills(): ConfiguredToolGroup[] {
     return this.toolSkill.getToolSkills();
   }
@@ -217,7 +206,6 @@ export class ConfigBridge implements vscode.Disposable {
       waitForSkillsInit: () => this.skillSync.waitForInit(),
       getSkills: () => this.skillSync.getSkills(),
       getCommands: () => this.skillSync.getCommands(),
-      getHooks: () => this.hookSync.getHooks(),
       getToolSkills: () => this.toolSkill.getToolSkills(),
     });
     if (result.message) {

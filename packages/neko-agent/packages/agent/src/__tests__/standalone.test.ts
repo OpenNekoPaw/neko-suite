@@ -62,8 +62,6 @@ import {
 
   // Hook Loading
   SettingsHookLoader,
-  createHookFileRuntime,
-  HOOK_MARKDOWN_FILE_EXTENSION,
 } from '../index';
 
 function createMockProjectMemory(content: string | null): IProjectMemoryManager {
@@ -141,8 +139,6 @@ describe('Standalone Mode', () => {
 
     it('should export hook loading components', () => {
       expect(SettingsHookLoader).toBeDefined();
-      expect(createHookFileRuntime).toBeDefined();
-      expect(HOOK_MARKDOWN_FILE_EXTENSION).toBe('.md');
     });
   });
 
@@ -310,12 +306,6 @@ describe('Standalone Mode', () => {
     it('should create output validator', () => {
       const validator = createOutputValidator();
       expect(validator).toBeDefined();
-    });
-  });
-
-  describe('Hook Loading', () => {
-    it('should expose markdown hook file defaults', () => {
-      expect(HOOK_MARKDOWN_FILE_EXTENSION).toBe('.md');
     });
   });
 

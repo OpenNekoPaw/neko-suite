@@ -11,7 +11,6 @@ import {
   type SsoSessionMessagePayload,
 } from '@neko-agent/types';
 import type {
-  ConfiguredHook,
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredToolGroup,
@@ -60,7 +59,6 @@ export interface ConfigBridgeQueryRuntimeDeps<
   waitForSkillsInit?(): Promise<void>;
   getSkills(): readonly ConfiguredSkill[];
   getCommands(): readonly ConfiguredSlashCommand[];
-  getHooks(): readonly ConfiguredHook[];
   getToolSkills(): readonly ConfiguredToolGroup[];
 }
 
@@ -201,18 +199,6 @@ export interface SkillConfigSyncRuntime<TScanResult> {
   handleChanged(scanResult: TScanResult): SkillConfigSyncState;
 }
 
-export interface HookConfigSyncRuntimeOptions<TScanResult> {
-  readonly scanHooks: () => Promise<TScanResult>;
-  readonly toConfigured: (scanResult: TScanResult) => ConfiguredHook[];
-  readonly logger?: Partial<ConfigBridgeRuntimeLogger>;
-}
-
-export interface HookConfigSyncRuntime<TScanResult> {
-  init(): Promise<void>;
-  getHooks(): ConfiguredHook[];
-  handleChanged(scanResult: TScanResult): ConfiguredHook[];
-}
-
 export interface ToolSkillConfigSyncRuntimeOptions {
   readonly enabledState: EnabledStateRuntimeStore;
 }
@@ -232,12 +218,6 @@ export function createSkillConfigSyncRuntime<TScanResult>(
   options: SkillConfigSyncRuntimeOptions<TScanResult>,
 ): SkillConfigSyncRuntime<TScanResult> {
   return new DefaultSkillConfigSyncRuntime(options);
-}
-
-export function createHookConfigSyncRuntime<TScanResult>(
-  options: HookConfigSyncRuntimeOptions<TScanResult>,
-): HookConfigSyncRuntime<TScanResult> {
-  return new DefaultHookConfigSyncRuntime(options);
 }
 
 export function createToolSkillConfigSyncRuntime(
@@ -405,33 +385,6 @@ class DefaultSkillConfigSyncRuntime<TScanResult> implements SkillConfigSyncRunti
       ),
     };
     return this.state;
-  }
-}
-
-class DefaultHookConfigSyncRuntime<TScanResult> implements HookConfigSyncRuntime<TScanResult> {
-  private initialized = false;
-  private cachedHooks: ConfiguredHook[] = [];
-
-  constructor(private readonly options: HookConfigSyncRuntimeOptions<TScanResult>) {}
-
-  async init(): Promise<void> {
-    if (this.initialized) return;
-    this.initialized = true;
-
-    try {
-      this.cachedHooks = this.options.toConfigured(await this.options.scanHooks());
-    } catch (error) {
-      this.options.logger?.error?.('Failed to initialize hook file sync:', error);
-    }
-  }
-
-  getHooks(): ConfiguredHook[] {
-    return this.cachedHooks;
-  }
-
-  handleChanged(scanResult: TScanResult): ConfiguredHook[] {
-    this.cachedHooks = this.options.toConfigured(scanResult);
-    return this.cachedHooks;
   }
 }
 

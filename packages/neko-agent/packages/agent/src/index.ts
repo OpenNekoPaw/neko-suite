@@ -780,27 +780,8 @@ export {
   type LLMSummarizerConfig,
 } from './context';
 
-// Export hook-loader
+// Export settings hook execution
 export {
-  createHookFileRuntime,
-  HOOK_FILE_WATCH_DEBOUNCE_MS,
-  HOOK_MARKDOWN_FILE_EXTENSION,
-  buildHookDirectoryScanError,
-  buildHookFileReadError,
-  parseHookMarkdownFile,
-  parseSimpleHookYaml,
-  shouldScanHookFile,
-  toConfiguredHookCatalog,
-  type HookLoadError,
-  type HookFileRuntime,
-  type HookFileRuntimeDirentLike,
-  type HookFileRuntimeFs,
-  type HookFileRuntimeLogger,
-  type HookFileRuntimeOptions,
-  type HookFileRuntimePath,
-  type HookFileWatchEntry,
-  type HookFileParseResult,
-  type HookFileScanResult,
   type HookExecutionResult,
   type ISettingsFileSystem,
   type IShellExecutor,

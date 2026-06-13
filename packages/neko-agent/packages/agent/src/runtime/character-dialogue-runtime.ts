@@ -1,14 +1,20 @@
 import type {
   CreativeEntityRef,
+  IService,
   NpcEvaluationReport,
   NpcEvaluationSuggestion,
   NpcProfileSource,
   NpcTestBenchLaunchRequest,
   NpcTestMode,
+  ServiceResponse,
   NpcTranscriptArtifact,
   NpcTranscriptMessage,
 } from '@neko/shared';
 import { NPC_TRANSCRIPT_ARTIFACT_VERSION } from '@neko/shared';
+import {
+  parseCharacterRoleEvaluationReportOutput,
+  projectCharacterRoleEvaluationPrompt,
+} from '../prompt/character-role-evaluator-projector';
 import {
   CharacterDialogueSession,
   type CharacterDialogueResponder,
@@ -101,6 +107,13 @@ export interface CharacterDialogueHeadlessProbeInput {
 
 export interface CharacterDialogueRuntimeLogger {
   warn(message: string, meta?: Readonly<Record<string, unknown>>): void;
+}
+
+export interface CharacterDialogueTranscriptEvaluatorOptions {
+  readonly service?: Pick<IService, 'chat'>;
+  readonly modelId?: string;
+  readonly now?: () => string;
+  readonly logger?: CharacterDialogueRuntimeLogger;
 }
 
 export interface CharacterDialogueRuntimePorts {
@@ -361,6 +374,44 @@ export function createCharacterDialogueRuntimeService(
   return new CharacterDialogueRuntimeService(options);
 }
 
+export async function evaluateCharacterDialogueTranscript(
+  artifact: NpcTranscriptArtifact,
+  options: CharacterDialogueTranscriptEvaluatorOptions = {},
+): Promise<NpcEvaluationReport> {
+  const now = options.now ?? (() => new Date().toISOString());
+  const service = options.service;
+  if (service) {
+    try {
+      const prompts = projectCharacterRoleEvaluationPrompt(artifact);
+      const response = await service.chat(
+        [
+          { role: 'system', content: prompts.systemPrompt },
+          { role: 'user', content: prompts.userPrompt },
+        ],
+        {
+          ...(options.modelId ? { modelId: options.modelId } : {}),
+          tools: [],
+          toolChoice: 'none',
+          maxTokens: 2000,
+        },
+      );
+      const parsed = parseCharacterRoleEvaluationReportOutput(extractServiceResponseText(response));
+      if (parsed.status === 'parsed') {
+        return parsed.report;
+      }
+      options.logger?.warn('Character role evaluator output was invalid', {
+        reason: parsed.reason,
+      });
+    } catch (error) {
+      options.logger?.warn('Character role evaluator failed; using fallback report', {
+        error,
+      });
+    }
+  }
+
+  return createFallbackCharacterDialogueEvaluationReport(artifact, now());
+}
+
 export function createFallbackCharacterDialogueEvaluationReport(
   artifact: NpcTranscriptArtifact,
   createdAt: string,
@@ -436,4 +487,17 @@ function withProjectRoot(entityRef: CreativeEntityRef, projectRoot: string): Cre
     projectRoot,
     source: entityRef.source ?? 'neko-entity',
   };
+}
+
+function extractServiceResponseText(response: ServiceResponse): string {
+  const content = response.message.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  return content
+    .filter(
+      (part): part is Extract<(typeof content)[number], { type: 'text' }> => part.type === 'text',
+    )
+    .map((part) => part.text)
+    .join('');
 }

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CreativeEntityRef, NpcProfileSource } from '@neko/shared';
+import type { CreativeEntityRef, NpcEvaluationReport, NpcProfileSource } from '@neko/shared';
 import {
   appendCharacterDialogueUserSupplement,
   createCharacterDialogueRuntimeService,
   createFallbackCharacterDialogueEvaluationReport,
+  evaluateCharacterDialogueTranscript,
   type CharacterDialogueResponder,
 } from '../character-dialogue-runtime';
 import type { CharacterEvidenceBundle, CharacterEvidenceRequest } from '../character-evidence';
@@ -133,22 +134,7 @@ describe('CharacterDialogueRuntimeService', () => {
       },
       now: () => '2026-06-01T00:00:00.000Z',
     });
-    const artifact = {
-      version: 1,
-      createdAt: '2026-06-01T00:00:00.000Z',
-      entityRef,
-      mode: 'roleplay' as const,
-      profileSnapshot: thinProfile,
-      sessionId: 'session-1',
-      transcript: [
-        {
-          id: 'm1',
-          role: 'user' as const,
-          content: 'hello',
-          createdAt: '2026-06-01T00:00:00.000Z',
-        },
-      ],
-    };
+    const artifact = makeArtifact();
 
     const evaluated = await runtime.evaluateArtifact({ artifact, projectRoot: '/project' });
     const saved = await runtime.maybeSaveArtifact({
@@ -181,10 +167,100 @@ describe('CharacterDialogueRuntimeService', () => {
     expect(saved).toEqual({ path: '.neko/character-tests/lin.json' });
     expect(applied).toEqual({ applied: true });
   });
+
+  it('evaluates transcripts through the injected service in runtime', async () => {
+    const artifact = makeArtifact();
+    const report: NpcEvaluationReport = {
+      version: 1,
+      createdAt: '2026-06-01T00:00:00.000Z',
+      entityRef,
+      summary: 'Lin stayed in character.',
+      scores: [
+        {
+          dimension: 'persona-consistency',
+          score: 0.9,
+          summary: 'Consistent.',
+        },
+      ],
+      findings: [],
+      suggestions: [],
+    };
+    const chat = vi.fn(async () => ({
+      id: 'eval-1',
+      model: 'model-a',
+      message: { role: 'assistant' as const, content: JSON.stringify(report) },
+      finishReason: 'stop' as const,
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    }));
+
+    await expect(
+      evaluateCharacterDialogueTranscript(artifact, {
+        service: { chat },
+        modelId: 'model-a',
+        now: () => '2026-06-01T00:00:00.000Z',
+      }),
+    ).resolves.toEqual(report);
+
+    expect(chat).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'system' }),
+        expect.objectContaining({ role: 'user' }),
+      ]),
+      expect.objectContaining({
+        modelId: 'model-a',
+        tools: [],
+        toolChoice: 'none',
+        maxTokens: 2000,
+      }),
+    );
+  });
+
+  it('keeps fallback evaluation in runtime when the evaluator service fails', async () => {
+    const artifact = makeArtifact();
+    const logger = { warn: vi.fn() };
+
+    await expect(
+      evaluateCharacterDialogueTranscript(artifact, {
+        service: {
+          chat: vi.fn(async () => {
+            throw new Error('offline');
+          }),
+        },
+        now: () => '2026-06-01T00:00:00.000Z',
+        logger,
+      }),
+    ).resolves.toEqual(
+      createFallbackCharacterDialogueEvaluationReport(artifact, '2026-06-01T00:00:00.000Z'),
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Character role evaluator failed; using fallback report',
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+  });
 });
 
 function asyncResponder(content: string): () => CharacterDialogueResponder {
   return () => async () => ({ content });
+}
+
+function makeArtifact() {
+  return {
+    version: 1,
+    createdAt: '2026-06-01T00:00:00.000Z',
+    entityRef,
+    mode: 'roleplay' as const,
+    profileSnapshot: thinProfile,
+    sessionId: 'session-1',
+    transcript: [
+      {
+        id: 'm1',
+        role: 'user' as const,
+        content: 'hello',
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
+    ],
+  };
 }
 
 function makeEvidenceBundle(

@@ -45,7 +45,7 @@ import {
   CharacterDialogueSession,
   createDefaultCharacterDialogueSessionId,
   createCharacterDialogueRuntimeService,
-  createFallbackCharacterDialogueEvaluationReport,
+  evaluateCharacterDialogueTranscript,
   projectCharacterDialogueTranscriptToChatMessages,
   type CharacterDialogueResponder,
 } from '@neko/agent/runtime';
@@ -55,10 +55,6 @@ import type {
   CharacterEvidenceLoader,
   CharacterEvidenceRequest,
 } from '@neko/agent/runtime';
-import {
-  parseCharacterRoleEvaluationReportOutput,
-  projectCharacterRoleEvaluationPrompt,
-} from '@neko/agent';
 import type {
   AssembleNpcProfileInput,
   NpcProfileAssemblerReaders,
@@ -447,7 +443,7 @@ export class CharacterDialogueController implements vscode.Disposable {
     };
   }
 
-  async exitActive(fallbackConversationId?: string): Promise<CharacterDialogueExitResult | null> {
+  async exitActive(candidateConversationId?: string): Promise<CharacterDialogueExitResult | null> {
     const tabState = this.deps.getTabState();
     const activeTab = tabState.activeTabId
       ? tabState.openTabs.find((tab) => tab.id === tabState.activeTabId)
@@ -455,8 +451,8 @@ export class CharacterDialogueController implements vscode.Disposable {
     const sessionId =
       activeTab?.kind === 'character-dialogue'
         ? activeTab.conversationId
-        : fallbackConversationId && this.hasSession(fallbackConversationId)
-          ? fallbackConversationId
+        : candidateConversationId && this.hasSession(candidateConversationId)
+          ? candidateConversationId
           : undefined;
     if (!sessionId) {
       this.postGlobalError('No active Character Dialogue session to exit.');
@@ -585,10 +581,10 @@ export class CharacterDialogueController implements vscode.Disposable {
           artifact: evaluationInput.artifact,
           projectRoot: evaluationInput.projectRoot,
         });
-        return (
-          artifact.evaluation ??
-          createFallbackCharacterDialogueEvaluationReport(artifact, this.now())
-        );
+        if (!artifact.evaluation) {
+          throw new Error('Character Dialogue runtime returned an artifact without evaluation.');
+        }
+        return artifact.evaluation;
       },
       saveArtifact: async (saveInput) => {
         const save =
@@ -636,40 +632,12 @@ export class CharacterDialogueController implements vscode.Disposable {
     artifact: NpcTranscriptArtifact,
   ): Promise<NpcEvaluationReport> {
     const platform = this.deps.getPlatform?.();
-    if (platform) {
-      try {
-        const prompts = projectCharacterRoleEvaluationPrompt(artifact);
-        const service = toSharedService(platform.createService());
-        const response = await service.chat(
-          [
-            { role: 'system', content: prompts.systemPrompt },
-            { role: 'user', content: prompts.userPrompt },
-          ],
-          {
-            modelId: this.deps.getSelectedChatModel?.()?.modelId,
-            tools: [],
-            toolChoice: 'none',
-            maxTokens: 2000,
-          },
-        );
-        const parsed = parseCharacterRoleEvaluationReportOutput(extractResponseText(response));
-        if (parsed.status === 'parsed') {
-          return parsed.report;
-        }
-        (this.deps.logger ?? logger).warn('Character role evaluator output was invalid', {
-          reason: parsed.reason,
-        });
-      } catch (error) {
-        (this.deps.logger ?? logger).warn(
-          'Character role evaluator failed; using fallback report',
-          {
-            error,
-          },
-        );
-      }
-    }
-
-    return createFallbackCharacterDialogueEvaluationReport(artifact, this.now());
+    return evaluateCharacterDialogueTranscript(artifact, {
+      ...(platform ? { service: toSharedService(platform.createService()) } : {}),
+      modelId: this.deps.getSelectedChatModel?.()?.modelId,
+      now: this.now,
+      logger: this.deps.logger ?? logger,
+    });
   }
 
   private async createDefaultProfileEnrichment(
@@ -1842,7 +1810,7 @@ function createCharacterRoleChatError(chatError: unknown, streamError: unknown):
       'Character role model request failed.',
       chatMessage,
       'The provider returned a response that could not be consumed as either a stream or a JSON chat completion.',
-      `Stream fallback error: ${streamMessage}`,
+      `Stream attempt error: ${streamMessage}`,
     ].join(' '),
   );
   error.cause = chatError;

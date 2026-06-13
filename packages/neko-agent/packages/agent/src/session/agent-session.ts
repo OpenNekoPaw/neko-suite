@@ -533,7 +533,7 @@ export class AgentSession implements IAgentSession {
       // ArtifactWatcher (Phase B) — fire-and-forget start. Prefer the
       // runtime artifact-plane factory when one is supplied so host
       // bootstraps control how Draft/Plan/Task watch/validate is wired.
-      // Fallback keeps the workspace-backed watcher alive.
+      // Use the workspace-backed watcher when the host does not supply one.
       this._artifactWatcher = this._createConfiguredArtifactWatcher();
       void this._artifactWatcher?.start();
 
@@ -2165,17 +2165,17 @@ export class AgentSession implements IAgentSession {
         }
         // 'escalate' → user prompt.
       } catch (err) {
-        logger.warn('Approval engine threw; falling back to user onConfirmTool', {
+        logger.warn('Approval engine threw; delegating to user onConfirmTool', {
           error: err,
         });
       }
     }
 
-    // Fallback: existing user callback path.
+    // Host callback path for explicit user confirmation.
     if (!this._config.onConfirmTool) {
       // No user prompt + no decisive engine answer → safe default: reject.
       logger.debug(
-        'neko.agent.approval.confirmation.fallback',
+        'neko.agent.approval.confirmation.host-callback',
         withAgentTrace(trace, {
           toolCallId,
           toolName: request.toolCall.name,
@@ -2189,7 +2189,7 @@ export class AgentSession implements IAgentSession {
     try {
       const approved = await this._config.onConfirmTool(request);
       logger.debug(
-        'neko.agent.approval.confirmation.fallback',
+        'neko.agent.approval.confirmation.host-callback',
         withAgentTrace(trace, {
           toolCallId,
           toolName: request.toolCall.name,

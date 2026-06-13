@@ -5,7 +5,7 @@
  * is delegated to think-phase.ts and act-phase.ts.
  *
  * Features are implemented via composable hooks:
- * - RetryHooks: multi-model fallback, tool retry
+ * - RetryHooks: tool retry
  * - MemoryHooks: session memory, context management
  */
 
@@ -64,7 +64,7 @@ export interface AgentExecutorOptions {
  * - Checkpoint and resume
  *
  * Extended features via hooks:
- * - RetryHooks: Tool retry, model fallback
+ * - RetryHooks: Tool retry
  * - MemoryHooks: Context compression, session memory
  */
 export class AgentExecutor implements IAgentExecutor {

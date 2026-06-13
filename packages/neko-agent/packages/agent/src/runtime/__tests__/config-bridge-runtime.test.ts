@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-  ConfiguredHook,
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredToolGroup,
@@ -13,7 +12,6 @@ import {
   buildConfigBridgeSsoSessionChangedMessage,
   buildConfigChangedRuntimeMessage,
   createEnabledStateRuntimeStore,
-  createHookConfigSyncRuntime,
   createSkillConfigSyncRuntime,
   createToolSkillConfigSyncRuntime,
   runConfigBridgeQueryRuntime,
@@ -71,30 +69,6 @@ describe('config-bridge-runtime', () => {
     expect(runtime.getSkills().map((skill) => skill.name)).toEqual(['scan-2']);
   });
 
-  it('keeps hook sync state and swallows init failures through logger', async () => {
-    const logger = { error: vi.fn() };
-    const runtime = createHookConfigSyncRuntime({
-      scanHooks: async () => {
-        throw new Error('denied');
-      },
-      toConfigured: (scanResult: ConfiguredHook[]) => scanResult,
-      logger,
-    });
-
-    await runtime.init();
-
-    expect(runtime.getHooks()).toEqual([]);
-    expect(logger.error).toHaveBeenCalledWith(
-      'Failed to initialize hook file sync:',
-      expect.any(Error),
-    );
-
-    const changed = runtime.handleChanged([makeHook('post-tool')]);
-
-    expect(changed).toEqual([makeHook('post-tool')]);
-    expect(runtime.getHooks()).toEqual([makeHook('post-tool')]);
-  });
-
   it('applies enabled state to tool skills in runtime', () => {
     const runtime = createToolSkillConfigSyncRuntime({
       enabledState: createEnabledStateRuntimeStore({
@@ -120,7 +94,6 @@ describe('config-bridge-runtime', () => {
       getConfigState: () => ({ providers: [{ id: 'openai', name: 'OpenAI', type: 'openai' }] }),
       getSkills: () => [makeSkill('review')],
       getCommands: () => [makeCommand('commit')],
-      getHooks: () => [makeHook('post-tool')],
       getToolSkills: () => [makeToolSkill('media')],
     };
 
@@ -239,17 +212,6 @@ function makeCommand(command: string): ConfiguredSlashCommand {
     command,
     description: `${command} description`,
     content: `${command} content`,
-    source: 'personal',
-    enabled: true,
-  };
-}
-
-function makeHook(name: string): ConfiguredHook {
-  return {
-    name,
-    description: `${name} description`,
-    event: 'PostToolUse',
-    action: `${name} action`,
     source: 'personal',
     enabled: true,
   };

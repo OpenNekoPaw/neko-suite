@@ -27,33 +27,17 @@ import {
 export interface RetryHooksOptions {
   /** Tool retry policy */
   toolRetryPolicy?: RetryPolicy;
-  /** Model fallback configuration */
-  modelFallback?: {
-    enabled: boolean;
-    fallbackModels: string[];
-    maxFallbacks: number;
-  };
   /** Callback on retry */
   onRetry?: (error: BaseError, attempt: number) => void;
-  /** Callback on model switch */
-  onModelSwitch?: (from: string, to: string, reason: string) => void;
 }
 
 /**
- * Retry hooks - adds retry and model fallback capabilities
+ * Retry hooks - adds retry capabilities for transient tool failures
  */
 export class RetryHooks implements ExecutorHooks {
   name = 'retry';
   private toolRetryPolicy: RetryPolicy;
-  private modelFallback: {
-    enabled: boolean;
-    fallbackModels: string[];
-    maxFallbacks: number;
-  };
   private onRetryCallback?: (error: BaseError, attempt: number) => void;
-  private onModelSwitchCallback?: (from: string, to: string, reason: string) => void;
-  private currentModel?: string;
-  private fallbackCount = 0;
 
   constructor(options: RetryHooksOptions = {}) {
     const defaultBackoff: BackoffStrategy = {
@@ -67,13 +51,7 @@ export class RetryHooks implements ExecutorHooks {
       backoffStrategy: defaultBackoff,
       retryableCategories: ['timeout', 'rate_limit', 'server', 'network'],
     };
-    this.modelFallback = options.modelFallback || {
-      enabled: false,
-      fallbackModels: [],
-      maxFallbacks: 2,
-    };
     this.onRetryCallback = options.onRetry;
-    this.onModelSwitchCallback = options.onModelSwitch;
   }
 
   async onToolCall(
@@ -114,45 +92,6 @@ export class RetryHooks implements ExecutorHooks {
       name: info.name,
       retryCount,
     };
-  }
-
-  /**
-   * Get current model (for multi-model support)
-   */
-  getCurrentModel(): string | undefined {
-    return this.currentModel;
-  }
-
-  /**
-   * Set current model
-   */
-  setCurrentModel(model: string): void {
-    this.currentModel = model;
-  }
-
-  /**
-   * Try fallback to next model
-   */
-  tryFallback(error: BaseError): string | null {
-    if (!this.modelFallback.enabled) return null;
-    if (this.fallbackCount >= this.modelFallback.maxFallbacks) return null;
-
-    const nextModel = this.modelFallback.fallbackModels[this.fallbackCount];
-    if (!nextModel) return null;
-
-    this.fallbackCount++;
-    const previousModel = this.currentModel || 'default';
-    this.currentModel = nextModel;
-    this.onModelSwitchCallback?.(previousModel, nextModel, error.message);
-
-    return nextModel;
-  }
-
-  /**
-   * Reset fallback state
-   */
-  resetFallback(): void {
-    this.fallbackCount = 0;
   }
 
   private sleep(ms: number): Promise<void> {

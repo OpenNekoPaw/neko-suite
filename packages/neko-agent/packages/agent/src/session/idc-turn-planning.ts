@@ -88,7 +88,9 @@ export function classifyIdcEntrySignal(
   context: IdcTurnPlanningContext | null,
 ): StageEntrySignal {
   if (!context) {
-    return signals.round > 0 ? 'atomic-instruction' : fallbackEntrySignal(signals.taskShape, '');
+    return signals.round > 0
+      ? 'atomic-instruction'
+      : inferDefaultEntrySignal(signals.taskShape, '');
   }
 
   const metadata = extractIdcTurnMetadata(context.metadata);
@@ -100,7 +102,7 @@ export function classifyIdcEntrySignal(
   if (IDC_ARTIFACT_REF_RE.test(input)) return 'referenced-artifact';
   if (HIGH_RISK_RE.test(input)) return 'high-risk-forced';
   if (looksLikeVagueCreative(input)) return 'vague-creative';
-  return fallbackEntrySignal(signals.taskShape, input);
+  return inferDefaultEntrySignal(signals.taskShape, input);
 }
 
 export function resolveIdcRunKind(context: IdcTurnPlanningContext | null): string {
@@ -113,7 +115,7 @@ export function resolveIdcRunKind(context: IdcTurnPlanningContext | null): strin
   return 'agent-turn';
 }
 
-function fallbackEntrySignal(taskShape: StageTaskShape, input: string): StageEntrySignal {
+function inferDefaultEntrySignal(taskShape: StageTaskShape, input: string): StageEntrySignal {
   switch (taskShape) {
     case 'single-read':
     case 'single-write':
