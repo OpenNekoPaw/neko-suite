@@ -57,6 +57,6 @@ export function hasEditableActiveElement(
 }
 
 export function isComposingKeyboardEvent(event: KeyboardEvent): boolean {
-  const legacyKeyCode = 'keyCode' in event ? event.keyCode : undefined;
-  return event.isComposing || legacyKeyCode === 229;
+  const imeCompositionKeyCode = 'keyCode' in event ? event.keyCode : undefined;
+  return event.isComposing || imeCompositionKeyCode === 229;
 }
