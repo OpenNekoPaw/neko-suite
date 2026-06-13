@@ -72,6 +72,13 @@ fn workspace_manifest() -> PathBuf {
         .join("Cargo.toml")
 }
 
+fn engine_root() -> PathBuf {
+    packages_dir()
+        .parent()
+        .expect("packages directory has an engine root")
+        .to_path_buf()
+}
+
 fn relative_to_packages(path: &Path) -> String {
     path.strip_prefix(packages_dir())
         .unwrap_or(path)
@@ -130,6 +137,8 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
         "neko_engine_kernel",
         "neko_engine_codec",
         "neko_engine_audio",
+        "neko_runtime_scene",
+        "neko_runtime_puppet",
         "crate::services",
         "crate::export",
         "crate::preview",
@@ -141,6 +150,9 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
         "scene_renderer",
         "puppet_renderer",
         "panoramic_renderer",
+        "Live2D",
+        "MOC3",
+        "moc3",
     ];
 
     for file in rust_files(&gpu_src) {
@@ -159,6 +171,151 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
                 file.display(),
                 pattern
             );
+        }
+    }
+}
+
+#[test]
+fn engine_gpu_morph_compute_is_domain_neutral() {
+    let morph_compute = packages_dir().join("engine-gpu/src/morph_compute.rs");
+    let source = fs::read_to_string(&morph_compute)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", morph_compute.display(), err));
+
+    for forbidden in [
+        "neko_runtime_scene",
+        "neko_runtime_puppet",
+        "neko_engine_scene_renderer",
+        "neko_engine_puppet_renderer",
+        "SceneNode",
+        "Bone2D",
+        "BlendShapeSet",
+        "AnimationClip2D",
+        "Live2D",
+        "MOC3",
+        "moc3",
+        "bevy_ecs",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "{} must keep shared morph compute domain-neutral; found `{}`",
+            relative_to_packages(&morph_compute),
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn bevy_reuse_policy_documents_current_allowlist_and_glam_gate() {
+    let policy_path = engine_root().join("BEVY_REUSE_POLICY.md");
+    let policy = fs::read_to_string(&policy_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", policy_path.display(), err));
+
+    for required in [
+        "bevy_ecs = 0.15",
+        "bevy_tasks = 0.15",
+        "bevy_math",
+        "TODO(P1)",
+        "glam = 0.29",
+        "bevy_app",
+        "bevy_render",
+        "bevy_window",
+        "bevy_asset",
+    ] {
+        assert!(
+            policy.contains(required),
+            "{} must document Bevy reuse policy item `{}`",
+            policy_path.display(),
+            required
+        );
+    }
+}
+
+#[test]
+fn runtime_and_renderer_manifests_only_use_approved_bevy_crates() {
+    let packages_dir = packages_dir();
+    let crate_dirs = [
+        "engine-gpu",
+        "engine-scene-renderer",
+        "engine-puppet-renderer",
+        "runtime-scene",
+        "runtime-puppet",
+    ];
+    let forbidden = [
+        "bevy_app",
+        "bevy_render",
+        "bevy_window",
+        "bevy_asset",
+        "bevy_pbr",
+        "bevy_winit",
+        "bevy_sprite",
+        "bevy_scene",
+        "bevy_core_pipeline",
+        "bevy_animation",
+        "bevy_math",
+    ];
+
+    for crate_dir in crate_dirs {
+        let manifest_path = packages_dir.join(crate_dir).join("Cargo.toml");
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", manifest_path.display(), err));
+        for forbidden_crate in forbidden {
+            assert!(
+                !manifest.contains(forbidden_crate),
+                "{} must not depend on disallowed Bevy crate `{}`",
+                manifest_path.display(),
+                forbidden_crate
+            );
+        }
+    }
+}
+
+#[test]
+fn runtime_and_renderer_sources_do_not_adopt_full_bevy_runtime() {
+    let packages_dir = packages_dir();
+    let source_roots = [
+        packages_dir.join("engine-gpu/src"),
+        packages_dir.join("engine-scene-renderer/src"),
+        packages_dir.join("engine-puppet-renderer/src"),
+        packages_dir.join("runtime-scene/src"),
+        packages_dir.join("runtime-puppet/src"),
+    ];
+    let forbidden = [
+        "bevy_app",
+        "bevy_render",
+        "bevy_window",
+        "bevy_asset",
+        "bevy_pbr",
+        "bevy_winit",
+        "bevy_sprite",
+        "bevy_scene::",
+        "bevy_core_pipeline",
+        "bevy_animation::",
+        "bevy_math::",
+        "App::new(",
+        "Schedule::default(",
+        "Schedule::new(",
+        "AssetServer",
+        "WindowPlugin",
+    ];
+
+    for root in source_roots {
+        for file in rust_files(&root) {
+            if file
+                .file_name()
+                .is_some_and(|name| name == "architecture_tests.rs")
+            {
+                continue;
+            }
+            let source = fs::read_to_string(&file)
+                .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+            for pattern in forbidden {
+                assert!(
+                    !source.contains(pattern),
+                    "{} must not contain full Bevy runtime pattern `{}`",
+                    relative_to_packages(&file),
+                    pattern
+                );
+            }
         }
     }
 }
@@ -768,8 +925,19 @@ fn engine_types_animation_sources_remain_runtime_and_ecs_free() {
     for forbidden in [
         "bevy",
         "bevy_ecs",
+        "bevy_app",
+        "bevy_render",
+        "bevy_math",
         "neko_runtime_scene",
         "neko_runtime_puppet",
+        "neko_engine_scene_renderer",
+        "neko_engine_puppet_renderer",
+        "neko_engine_gpu",
+        "host_api",
+        "host_http",
+        "host_napi",
+        "vscode",
+        "webview",
         "neko-runtime-scene",
         "neko-runtime-puppet",
         "SceneBlendLayer",

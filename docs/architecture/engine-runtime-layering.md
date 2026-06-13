@@ -168,7 +168,25 @@ packages/neko-engine/packages/
 - `Live2dRuntimeAdapter` / `SpineRuntimeAdapter` 是第三方生态 adapter，不应并入 `runtime-puppet` core。
 - `runtime-stage` 是互动舞台编排层，不能被 `scene` 或 `puppet` 替代。
 
-### 4.3 engine-kernel 拆分分析
+2026-06-13 落地状态：`runtime-puppet` 已按 Neko 原生 2D Bone2D + BlendShape runtime 推进，保留 crate 名以表达领域模型；对外能力分类可以叫 2D，但不把 crate 重命名为 `runtime-2d`。Live2D 高保真播放继续走独立 `Live2dRuntimeAdapter` / custom SDK 封装，SDK 授权、平台打包和渲染生命周期不进入 `runtime-puppet` core。
+
+### 4.3 MOC3 parser 的分层例外
+
+`runtime-puppet` 当前包含 MOC3 parser / importer，这是**过渡期允许的领域例外**，不是新增 runtime 分层规则：
+
+| 阶段 | 归属 | 理由 |
+|---|---|---|
+| 当前 | `runtime-puppet/moc3` | parser 与 `.nkp` v1 兼容播放、golden render 对比、Bone2D + BlendShape 转换强绑定，拆出会先增加边界成本 |
+| Native `.nkp` v2 稳定后 | 评估 `moc3-parser` / `runtime-puppet-import` 独立 crate | 导入转换更像 format/tool 能力，可供 CLI、market ingest、asset indexing 复用 |
+| Live2D 高保真播放 | `Live2dRuntimeAdapter` | Cubism SDK/Core 受第三方许可约束，不进入 `runtime-puppet` core |
+
+拆分触发条件：
+
+- MOC3 parser 被 runtime 以外的 CLI、Market、Asset Index、Agent import 工具复用两处以上。
+- legacy MOC3 playback 降级为导入器，`runtime-puppet` 不再需要在 tick 路径执行 MOC3 参数树。
+- parser 依赖、fixture 或许可证边界开始拖慢 `runtime-puppet` 原生 Bone2D + BlendShape 迭代。
+
+### 4.4 engine-kernel 拆分分析
 
 > **重要发现**：对 engine-kernel 的 service 实现进行深度依赖分析后，发现大部分 service（Video/Audio/Timeline/Export/Effects/Image）与 GPU/Decoder/Encoder 基础设施深度耦合。直接拆出 runtime-video 会导致循环依赖或需要引入复杂抽象层。因此采用**渐进策略**：先拆可独立的，再逐步解耦。
 

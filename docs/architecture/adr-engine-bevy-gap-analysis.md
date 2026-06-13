@@ -119,6 +119,10 @@ Playable Stage 是可运行世界的语义层，不是 Canvas、Compositor 或 3
 | **`bevy_tasks`** | bevy_platform only | `cargo add bevy_tasks` | ComputeTaskPool + IoTaskPool + ParallelIterator + work-stealing，解决无并行计算问题 |
 | **`bevy_math`** | glam only | 替换直接 glam 依赖 | 样条曲线 (CubicBezier/BSpline/Nurbs)、Curve sampling、Rot2、几何原语 (Ray3d/Aabb3d)。neko 已用 glam 0.29，bevy_math 用 glam 0.32，需评估升级 |
 
+`bevy_math` 必须晚于 scene / puppet 的 glam 版本统一：不得在 `runtime-scene` 与 `runtime-puppet` 中同时出现 glam 0.29 与 0.32 的类型边界。短期只引入不触碰 glam 的 `bevy_tasks` / `bevy_color`，`bevy_math` 作为统一升级项单独评估。
+
+2026-06-13 落地状态：`bevy_tasks = 0.15` 已作为 `runtime-puppet` 的直接依赖接入 native 2D CPU BlendShape + Skinning 批处理，并保留 serial fallback、parity tests 与 benchmark；`bevy_ecs = 0.15` 继续作为 World / Component / Query 基础。完整 Bevy App / Schedule ownership / Renderer / Window / AssetServer 仍被 architecture tests 禁止，`bevy_math` 仍等待 glam 对齐。
+
 #### 3.2.2 Shader / 算法可直接移植（MIT 开源）
 
 Bevy 渲染 crate 无法独立引用，但其 WGSL shader 和纯算法代码可以拷贝并适配到 neko 的 wgpu 管线。
@@ -128,7 +132,7 @@ Bevy 渲染 crate 无法独立引用，但其 WGSL shader 和纯算法代码可�
 | **Shadow mapping** (cascaded + PCF) | `bevy_pbr/render/shadows.wgsl` + `shadow_sampling.wgsl` | 890 行 WGSL | engine-scene-renderer (新 shadow pass + depth atlas) | ~2.5 周 |
 | **SSAO** | `bevy_pbr/ssao/ssao.wgsl` | 217 行 WGSL | engine-scene-renderer post_process (需 depth prepass) | ~1.5 周 |
 | **IBL environment map** | `bevy_pbr/light_probe/environment_map.wgsl` | 420 行 WGSL | engine-scene-renderer environment.rs (需 cubemap prefilter + DFG LUT) | ~1.5 周 |
-| **Morph target GPU deform** | `bevy_pbr/render/morph.wgsl` | 120 行 WGSL | pbr_forward_skinned.wgsl (补全顶点数据加载 + 变形) | ~0.5 周 |
+| **Morph / BlendShape GPU deform** | `bevy_pbr/render/morph.wgsl` | 120 行 WGSL | engine-gpu 共享 morph/blendshape compute primitive；scene-renderer 与 puppet-renderer 通过 render-extract 消费 | ~0.75 周 |
 | **TAA** | `bevy_anti_alias/taa/taa.wgsl` | 201 行 WGSL | post_process.rs (需 velocity buffer + history texture) | ~1 周 |
 | **DOF** (景深) | `bevy_post_process/dof/dof.wgsl` | 241 行 WGSL | post_process.rs | ~1 周 |
 | **Motion blur** | `bevy_post_process/motion_blur/motion_blur.wgsl` | 149 行 WGSL | post_process.rs (需 velocity buffer) | ~0.5 周 |
@@ -143,7 +147,7 @@ Bevy 渲染 crate 无法独立引用，但其 WGSL shader 和纯算法代码可�
 
 | Bevy 模块 | 参考内容 | 应用到 neko |
 |---|---|---|
-| **`bevy_animation` AnimationGraph** | 节点图 + blend tree + additive blend + animation events + UUID target | 替换当前线性 blend/crossfade，实现动画状态机 |
+| **`bevy_animation` AnimationGraph** | 节点图 + blend tree + additive blend + animation events + UUID target | 自研跨 2D/3D 动画图；`AnimationClip2D` / 3D animation clip 作为叶节点，图层只负责状态、混合、事件 |
 | **`bevy_asset` AssetServer** | Handle\<T\> 引用计数 + 异步加载 + 热重载 (file_watcher) + 依赖追踪 | 改进 AssetCache，加入文件监视与缓存失效 |
 | **`bevy_transform` 增量传播** | Changed\<T\> dirty flag + 静态优化 flag (StaticTransformOptimizations) | 优化全树每帧传播为仅 dirty 子树 |
 | **`bevy_material` Material trait** | 可扩展材质系统 + per-material shader specialization + prepass support | 从硬编码 PBR 走向自定义 shader 材质 |
@@ -328,15 +332,24 @@ Bevy 57 crates
 
 Phase 1B 只定义合同与空运行骨架，不引入完整脚本、物理或第三方 SDK。目标是让后续 story/entity/canvas/agent 能稳定投影到同一个互动运行时入口。
 
-#### Phase 2：P1 差距补全——视觉质量 + 动画（~6.5 周）
+#### Phase 1C：Phase 2 汇合前置合同（~1 周）
+
+| 任务 | Owner / 负责 crate | 来源 | 工期 |
+|------|---|------|------|
+| **AnimationGraph ↔ Clip leaf 合同** | `engine-types` 定义跨 2D/3D DTO；`runtime-scene` / `runtime-puppet` 各实现 sampler adapter | 参考 bevy_animation；对齐 `AnimationClip2D` 与 3D animation clip 的采样输出 | 0.5 周 |
+| **Shared Morph/BlendShape compute 合同** | `engine-gpu` 拥有共享 compute primitive；`engine-scene-renderer` / `engine-puppet-renderer` 只做数据布局适配 | 参考 bevy morph shader；抽象 2D BlendShape 与 3D MorphTarget 共同的 `v += Σ(delta × weight)` primitive | 0.5 周 |
+
+该阶段必须早于 Phase 2 的动画图和 GPU morph 工作。否则 scene-renderer 与 puppet-renderer 会各自实现一套几乎相同的变形 shader，`AnimationClip2D` 也可能无法作为未来 AnimationGraph 的叶节点复用。
+
+#### Phase 2：P1 差距补全——视觉质量 + 动画（~6.75 周）
 
 | 任务 | 来源 | 工期 |
 |------|------|------|
 | **IBL** (specular cubemap + DFG LUT) | 移植 `bevy_pbr/light_probe/environment_map.wgsl` (420 行) | 1.5 周 |
-| **Morph target GPU deform** | 移植 `bevy_pbr/render/morph.wgsl` (120 行) + 加载顶点数据 | 0.5 周 |
+| **Shared Morph/BlendShape GPU deform** | 移植 `bevy_pbr/render/morph.wgsl` 思路；落到 engine-gpu 共享 compute primitive，再接入 scene-renderer / puppet-renderer | 0.75 周 |
 | **GPU mipmap generation** | 移植 compute shader ~100 行 | 0.5 周 |
-| **Animation Graph** | 参考 bevy_animation 设计，自研状态机 | 3 周 |
-| **Task 并行化** | bevy_tasks 集成后，并行化 render extraction + asset loading | 1 周 |
+| **Animation Graph** | 参考 bevy_animation 设计，自研状态机；`AnimationClip2D` 与 3D clip 作为 leaf sampler | 3 周 |
+| **Task 并行化** | bevy_tasks 集成后，并行化 render extraction、asset loading、runtime-puppet CPU BlendShape+Skinning 求值 | 1 周 |
 
 #### Phase 3：P2 差距补全——高级渲染 + 基础设施（~8 周）
 
@@ -369,15 +382,67 @@ Phase 1B 只定义合同与空运行骨架，不引入完整脚本、物理或�
 |------|------|
 | Shader 移植后与 Bevy 上游不同步 | 记录 Bevy commit hash；仅移植稳定算法（Shadow/SSAO/IBL 多年未大改） |
 | bevy_tasks 引入 Bevy 版本锁定 | bevy_tasks 依赖极浅 (仅 bevy_platform)，可锁定版本独立升级 |
-| glam 版本冲突 (neko 0.29 vs bevy 0.32) | bevy_color/bevy_tasks 不直接依赖 glam；bevy_math 集成需先升级 glam |
+| glam 版本冲突 (neko 0.29 vs bevy 0.32) | bevy_color/bevy_tasks 不直接依赖 glam；bevy_math 必须等 scene/puppet 同步升级 glam 后再引入，不允许跨 runtime 出现双 glam 类型边界 |
 | Shadow mapping 性能影响流式帧率 | 与 [adr-engine-gpu-budget](./adr-engine-gpu-budget.md) 联动，interactive 优先级下可降级 shadow 分辨率 |
 | Morph target 加载改动涉及 loader.rs 核心路径 | 增量添加，不改现有 skinning 路径；新增 `morph_targets` 组件 |
+| 3D MorphTarget 与 2D BlendShape shader 重复 | 先在 engine-gpu 定义共享 morph/blendshape compute primitive；scene-renderer / puppet-renderer 只做数据布局适配和 render-extract |
+| AnimationGraph 与 AnimationClip2D 返工 | Phase 1C 先固定 leaf sampler 合同；2D clip 不嵌入状态机，动画图不改写 clip 存储格式 |
 | runtime-stage 过早膨胀成第二套游戏引擎 | 先固定 Stage 合同与 actor/event/session 边界；物理、网络、复杂脚本延后到 runtime-game |
 | Live2D/Spine SDK 许可证污染开源内核 | 第三方 runtime 只能作为 optional adapter；核心只保留导入转换、schema 和 command/GpuLayer 边界 |
 
 ---
 
-## 7. 与其他 ADR 关系
+## 7. 三份 ADR 交叉一致性审计
+
+本 ADR 与 [engine-runtime-layering](./engine-runtime-layering.md)、[adr-2d-bone-blendshape-animation](./adr-2d-bone-blendshape-animation.md) 形成自底向上的约束链：
+
+```text
+engine-runtime-layering       → 结构地基：crate 怎么拆、Host 怎么统一
+adr-engine-bevy-gap-analysis  → 能力补全：从 Bevy 借什么、自研什么、不碰什么
+adr-2d-bone-blendshape        → 领域设计：2D 角色运行时的数据模型与管线
+```
+
+### 7.1 核心共识
+
+| 共识 | 落点 |
+|---|---|
+| **bevy_ecs only** | 三份文档都只承认 `bevy_ecs` 的 World / Component / Query 价值，不引入 Bevy App / Schedule / Renderer 作为主循环 |
+| **runtime-puppet 零 GPU 依赖** | `runtime-puppet` 拥有 ECS 数据和 CPU 顶点计算；GPU 路径通过 render-extract 进入 renderer；Bevy shader 移植只落到 renderer / engine-gpu |
+| **runtime-stage 是共同依赖但尚无代码** | 分层 ADR 把它列为互动编排层；本 ADR Phase 1B 定义 StageDocument / StageActor 骨架；2D ADR 通过 StageBinding 投影 puppet actor |
+
+### 7.2 已收敛的张力点
+
+| 张力 | 处理方式 |
+|---|---|
+| glam 版本冲突 | `bevy_math` 延后到 scene / puppet 同步升级 glam 后再引入；短期只用 `bevy_tasks` / `bevy_color` |
+| Morph/BlendShape GPU 管线重复 | Phase 1C 先定义 engine-gpu 共享 morph/blendshape compute primitive，scene-renderer / puppet-renderer 只做数据布局适配 |
+| bevy_tasks 未纳入 2D 路线 | 2D ADR Phase 0 增加 P0-PR7，用于 CPU `blendshape_apply` / `skinning_2d` 并行化 |
+| AnimationGraph 与 AnimationClip2D 合同缺失 | Phase 1C 固定 `AnimationClip2D` 作为 AnimationGraph leaf sampler；clip 不保存状态机 |
+| MOC3 parser 分层归属 | 分层 ADR 记录为 `runtime-puppet/moc3` 的过渡期例外，并定义后续拆成 parser/import crate 的触发条件 |
+
+### 7.3 关键路径
+
+```text
+2D Phase -1 契约 (1.5w)
+  → 2D Phase 0 ECS + bevy_tasks CPU 并行 (4.5w)
+  → 2D Phase 1 MOC3 转换 (3w)
+  = 9w
+
+Bevy Phase 1 shadow / picking / gizmo
+  = 5w，可与 2D Phase -1/0/1 并行
+
+汇合点：
+  Phase 1C AnimationGraph leaf + Shared Morph/BlendShape compute 合同
+  → Phase 2 视觉质量 / 动画 / puppet GPU 路径
+```
+
+Phase 2 前不得跳过 Phase 1C，否则最容易产生两类返工：一是 2D/3D 各自复制 morph/blendshape shader，二是 `AnimationClip2D` 无法作为未来跨 2D/3D AnimationGraph 的叶节点。
+
+2026-06-13 落地状态：Phase 1C 的两个合同已通过 OpenSpec change `align-engine-bevy-reuse-runtime-contracts` 实现：`engine-types` 提供 `AnimationLeafSample` 等 leaf sampler DTO，`runtime-puppet` / `runtime-scene` 提供采样 adapter；`engine-gpu` 提供 Position2 / Position3 共享 Morph/BlendShape compute primitive，puppet renderer 已接入，scene renderer 在真实布局未对齐前返回显式 unsupported/fallback diagnostic。
+
+---
+
+## 8. 与其他 ADR 关系
 
 | 关联 ADR | 关系 |
 |---|---|

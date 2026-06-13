@@ -29,6 +29,7 @@ pub mod render_graph_presets;
 pub mod render_systems;
 pub mod render_target_pool;
 pub mod render_world;
+pub mod scene_morph_adapter;
 pub mod vertex;
 pub mod viewport;
 
@@ -58,6 +59,10 @@ pub use render_target_pool::{RenderTargetLease, RenderTargetPool, RenderTargetPo
 pub use render_world::{
     DrawItem, GpuMaterialHandle, GpuMeshHandle, RenderCameraData, RenderInstance, RenderLightData,
     RenderLightKind, RenderMaterialData, RenderWorld,
+};
+pub use scene_morph_adapter::{
+    require_scene_morph_compute_adapter, unsupported_scene_morph_compute,
+    SceneMorphComputeDiagnostic,
 };
 pub use vertex::PbrVertex;
 pub use viewport::{

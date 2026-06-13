@@ -3,6 +3,9 @@
 use std::sync::Arc;
 
 use neko_engine_gpu::error::{Error, Result};
+use neko_engine_gpu::morph_compute::{
+    compute_morph_position2_gpu, MorphComputeGpuPosition2Input, MorphGpuDeltaSet2,
+};
 use neko_engine_gpu::GpuContext;
 
 /// Data extracted from native runtime for optional GPU deformation.
@@ -141,11 +144,10 @@ pub fn deform_native_gpu(
 
     let device = ctx.device();
     device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let vertex_count = extract.bind_vertices.len() as u32;
-    let shape_count = extract.blendshape_deltas.len() as u32;
+    let pre_skin_vertices = apply_shared_morph_gpu(ctx, &extract.bind_vertices, extract, false)?;
+    let vertex_count = pre_skin_vertices.len() as u32;
     let bone_count = extract.bone_matrices.len().max(1) as u32;
-    let bind_vertices = extract
-        .bind_vertices
+    let bind_vertices = pre_skin_vertices
         .iter()
         .map(|vertex| GpuVec2 {
             value: *vertex,
@@ -182,28 +184,10 @@ pub fn deform_native_gpu(
             })
             .collect::<Vec<_>>()
     };
-    let deltas = flatten_deltas(extract);
-    let shape_metadata = extract
-        .blendshape_deltas
-        .iter()
-        .zip(
-            extract
-                .blendshape_weights
-                .iter()
-                .copied()
-                .chain(std::iter::repeat(0.0)),
-        )
-        .map(|(shape, weight)| GpuShapeMeta {
-            weight,
-            post_skin: u32::from(shape.post_skin),
-            _padding: [0, 0],
-        })
-        .collect::<Vec<_>>();
     let uniforms = GpuNativeDeformUniforms {
         vertex_count,
-        shape_count,
         bone_count,
-        _padding: 0,
+        _padding: [0, 0],
     };
 
     let bind_vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -226,16 +210,6 @@ pub fn deform_native_gpu(
         contents: bytemuck::cast_slice(&bone_matrices),
         usage: wgpu::BufferUsages::STORAGE,
     });
-    let deltas_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("native_blendshape_deltas"),
-        contents: bytemuck::cast_slice(&deltas),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    let shape_metadata_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("native_blendshape_metadata"),
-        contents: bytemuck::cast_slice(&shape_metadata),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
     let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("native_deform_uniforms"),
         contents: bytemuck::bytes_of(&uniforms),
@@ -255,10 +229,8 @@ pub fn deform_native_gpu(
             storage_entry(1, true),
             storage_entry(2, true),
             storage_entry(3, true),
-            storage_entry(4, true),
-            storage_entry(5, true),
-            uniform_entry(6),
-            storage_entry(7, false),
+            uniform_entry(4),
+            storage_entry(5, false),
         ],
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -284,10 +256,8 @@ pub fn deform_native_gpu(
             buffer_entry(1, &joint_indices_buffer),
             buffer_entry(2, &joint_weights_buffer),
             buffer_entry(3, &bone_matrices_buffer),
-            buffer_entry(4, &deltas_buffer),
-            buffer_entry(5, &shape_metadata_buffer),
-            buffer_entry(6, &uniform_buffer),
-            buffer_entry(7, &output_buffer),
+            buffer_entry(4, &uniform_buffer),
+            buffer_entry(5, &output_buffer),
         ],
     });
 
@@ -312,12 +282,13 @@ pub fn deform_native_gpu(
     }
 
     let bytes = ctx.read_buffer_sync(&output_buffer)?;
-    let vertices = bytemuck::cast_slice::<u8, GpuVec2>(&bytes)
+    let skinned = bytemuck::cast_slice::<u8, GpuVec2>(&bytes)
         .iter()
         .take(extract.bind_vertices.len())
         .map(|vertex| vertex.value)
-        .collect();
-    Ok(vertices)
+        .collect::<Vec<_>>();
+
+    apply_shared_morph_gpu(ctx, &skinned, extract, true)
 }
 
 fn validate_extract(extract: &NativePuppetRenderExtract) -> Result<()> {
@@ -349,6 +320,40 @@ fn apply_delta(vertices: &mut [[f32; 2]], deltas: &[[f32; 2]], weight: f32) {
     }
 }
 
+fn apply_shared_morph_gpu(
+    ctx: &Arc<GpuContext>,
+    base_vertices: &[[f32; 2]],
+    extract: &NativePuppetRenderExtract,
+    post_skin: bool,
+) -> Result<Vec<[f32; 2]>> {
+    let delta_sets = extract
+        .blendshape_deltas
+        .iter()
+        .enumerate()
+        .filter(|(_, shape)| shape.post_skin == post_skin)
+        .map(|(shape_index, shape)| MorphGpuDeltaSet2 {
+            id: shape.name.as_str(),
+            deltas: shape.vertex_deltas.as_slice(),
+            weight: extract
+                .blendshape_weights
+                .get(shape_index)
+                .copied()
+                .unwrap_or(0.0),
+        })
+        .collect::<Vec<_>>();
+    if delta_sets.is_empty() {
+        return Ok(base_vertices.to_vec());
+    }
+
+    compute_morph_position2_gpu(
+        ctx,
+        &MorphComputeGpuPosition2Input {
+            base_vertices,
+            delta_sets,
+        },
+    )
+}
+
 fn transform_point(matrix: [[f32; 3]; 3], vertex: [f32; 2]) -> [f32; 2] {
     [
         matrix[0][0] * vertex[0] + matrix[1][0] * vertex[1] + matrix[2][0],
@@ -358,26 +363,6 @@ fn transform_point(matrix: [[f32; 3]; 3], vertex: [f32; 2]) -> [f32; 2] {
 
 fn identity3() -> [[f32; 3]; 3] {
     [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-}
-
-fn flatten_deltas(extract: &NativePuppetRenderExtract) -> Vec<GpuVec2> {
-    if extract.blendshape_deltas.is_empty() {
-        return vec![GpuVec2 {
-            value: [0.0, 0.0],
-            _padding: [0.0, 0.0],
-        }];
-    }
-
-    extract
-        .blendshape_deltas
-        .iter()
-        .flat_map(|shape| {
-            shape.vertex_deltas.iter().map(|delta| GpuVec2 {
-                value: *delta,
-                _padding: [0.0, 0.0],
-            })
-        })
-        .collect()
 }
 
 fn mat3_to_gpu(matrix: [[f32; 3]; 3]) -> [[f32; 4]; 3] {
@@ -448,19 +433,10 @@ struct GpuMat3 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct GpuShapeMeta {
-    weight: f32,
-    post_skin: u32,
-    _padding: [u32; 2],
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuNativeDeformUniforms {
     vertex_count: u32,
-    shape_count: u32,
     bone_count: u32,
-    _padding: u32,
+    _padding: [u32; 2],
 }
 
 const NATIVE_DEFORM_WGSL: &str = r#"
@@ -486,43 +462,25 @@ struct Mat3Buffer {
     data: array<Mat3>,
 };
 
-struct ShapeMeta {
-    weight: f32,
-    post_skin: u32,
-    _padding0: u32,
-    _padding1: u32,
-};
-
-struct ShapeMetaBuffer {
-    data: array<ShapeMeta>,
-};
-
 struct Uniforms {
     vertex_count: u32,
-    shape_count: u32,
     bone_count: u32,
-    _padding: u32,
+    _padding0: u32,
+    _padding1: u32,
 };
 
 @group(0) @binding(0) var<storage, read> bind_vertices: Vec2Buffer;
 @group(0) @binding(1) var<storage, read> joint_indices: JointIndexBuffer;
 @group(0) @binding(2) var<storage, read> joint_weights: Vec4Buffer;
 @group(0) @binding(3) var<storage, read> bone_matrices: Mat3Buffer;
-@group(0) @binding(4) var<storage, read> blendshape_deltas: Vec2Buffer;
-@group(0) @binding(5) var<storage, read> shape_metadata: ShapeMetaBuffer;
-@group(0) @binding(6) var<uniform> uniforms: Uniforms;
-@group(0) @binding(7) var<storage, read_write> output_vertices: Vec2Buffer;
+@group(0) @binding(4) var<uniform> uniforms: Uniforms;
+@group(0) @binding(5) var<storage, read_write> output_vertices: Vec2Buffer;
 
 fn transform_point(matrix: Mat3, vertex: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(
         matrix.row0.x * vertex.x + matrix.row1.x * vertex.y + matrix.row2.x,
         matrix.row0.y * vertex.x + matrix.row1.y * vertex.y + matrix.row2.y,
     );
-}
-
-fn delta_for(shape_index: u32, vertex_index: u32) -> vec2<f32> {
-    let offset = shape_index * uniforms.vertex_count + vertex_index;
-    return blendshape_deltas.data[offset].xy;
 }
 
 @compute @workgroup_size(64)
@@ -533,13 +491,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     }
 
     var vertex = bind_vertices.data[vertex_index].xy;
-    for (var shape_index = 0u; shape_index < uniforms.shape_count; shape_index = shape_index + 1u) {
-        let shape_info = shape_metadata.data[shape_index];
-        if (shape_info.post_skin == 0u && abs(shape_info.weight) > 0.000001) {
-            vertex = vertex + delta_for(shape_index, vertex_index) * shape_info.weight;
-        }
-    }
-
     let indices = joint_indices.data[vertex_index];
     let weights = joint_weights.data[vertex_index];
     var skinned = vec2<f32>(0.0, 0.0);
@@ -550,14 +501,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             skinned = skinned + transform_point(bone_matrices.data[joint_index], vertex) * weight;
         }
     }
-
-    for (var shape_index = 0u; shape_index < uniforms.shape_count; shape_index = shape_index + 1u) {
-        let shape_info = shape_metadata.data[shape_index];
-        if (shape_info.post_skin != 0u && abs(shape_info.weight) > 0.000001) {
-            skinned = skinned + delta_for(shape_index, vertex_index) * shape_info.weight;
-        }
-    }
-
     output_vertices.data[vertex_index] = vec4<f32>(skinned, 0.0, 0.0);
 }
 "#;

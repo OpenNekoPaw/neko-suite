@@ -411,6 +411,8 @@ Keyframe<T> {
 
 动画混合复用共壳分核的 `AnimationBlendState<L>` 泛型框架（见 adr-2d3d-unified-engine.md），新增 `Bone2DBlendLayer` 实现。
 
+`AnimationClip2D` 是**采样叶节点合同**，不是状态机本身。后续 `AnimationGraph`（见 [adr-engine-bevy-gap-analysis.md](./adr-engine-bevy-gap-analysis.md) Phase 1C / Phase 2）可以把 `AnimationClip2D` 作为 leaf sampler，并在图层处理 state、transition、blend tree、additive blend 和 animation event。`AnimationClip2D` 不保存图状态，避免 2D clip 与 3D clip 在 Phase 2 对接时返工。
+
 ### 6. MOC3 导入转换管线
 
 ```
@@ -590,6 +592,8 @@ AI：
 
 **当前状态**：engine-puppet-renderer 已存在（lib.rs），通过 wgpu SpriteBatch 渲染。当前输入是 `PuppetMeshInput` 的 CPU 已变形顶点（`vertices: Vec<[f32; 2]>`）——runtime-puppet 在 CPU 侧完成 MOC3 参数插值后传入。
 
+2026-06-13 落地状态：`runtime-puppet` 已明确为 Neko 原生 2D Bone2D + BlendShape runtime，不承载 Live2D Cubism SDK 高保真播放生命周期。Live2D/MOC3 在本 ADR 中只作为导入转换源、legacy 兼容路径或未来 `Live2dRuntimeAdapter` / custom SDK 的输入；高保真 SDK 播放由独立 adapter 隔离许可、平台和渲染差异。
+
 **迁移路径**（非从零建设）：
 
 ```
@@ -597,9 +601,11 @@ Phase A: CPU 管线保留（Phase 0-1 期间）
   runtime-puppet 新增 skinning+blendshape 系统，在 CPU 侧计算 v_final
   输出仍然是 deformed vertices → PuppetMeshInput → SpriteBatch
   renderer 零改动，验证 ECS 逻辑正确性
+  典型模型顶点数增长后，通过 bevy_tasks ParallelIterator 并行 mesh/vertex 批处理
 
 Phase B: 可选 GPU 管线（Phase 2）
   renderer 新增 GPU skinning+blendshape 路径
+  Morph/BlendShape 加权求和复用 engine-gpu 共享 compute primitive
   输入改为 bind-pose vertices + bone matrices + blendshape deltas + weights
   CPU 管线作为 fallback 保留（低端设备 / 调试模式）
 
@@ -886,6 +892,8 @@ interface PuppetGenerateAnimationTool {
 7. **渲染器无关**：数据模型不绑定具体渲染后端，renderer 可独立演进（CPU fallback 或 GPU 管线）
 8. **契约先行**：`.nkentity` v2 / `.nkp` v2 的类型定义必须先落到 `packages/neko-types`，配 JSON Schema + contract test，再实现 loader/renderer
 9. **统一 Viewport 协议**（详见 [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md)）：puppet 通过 PuppetController 实现 ISceneController 接口消费 ViewportShell；P2 切换到引擎流前先用本地渲染迭代
+10. **AnimationClip2D 是动画图叶节点**：clip 只描述骨骼/BlendShape 轨道采样，不保存 transition / state / blend tree；跨 2D/3D 动画图由后续 AnimationGraph 合同拥有
+11. **Morph/BlendShape GPU 共享 primitive**：2D BlendShape 与 3D MorphTarget 的 `v += Σ(delta × weight)` 计算不得各自复制 shader；Phase 2 通过 engine-gpu 共享 compute primitive 复用
 
 ---
 
@@ -899,7 +907,7 @@ interface PuppetGenerateAnimationTool {
 | P-1-PR2 | `packages/neko-types`: `NkpProjectData` 扩展（`format: native` / `animationModel` / `importSource` / `autoRig` / `skeleton` / `blendShapes` / `controlDrivers` / `expressions` / `animations` 字段）+ JSON Schema + contract test | — |
 | P-1-PR3 | `packages/neko-types`: `AnimationClip2D` / `BoneTrack` / `BlendShapeTrack` / `Keyframe<T>` TS 类型定义 + Rust `engine-types` 对应 DTO | P-1-PR2 |
 
-### Phase 0: 基础组件（~4 周，6 PR）
+### Phase 0: 基础组件（~4.5 周，7 PR）
 
 | PR | 内容 | 依赖 |
 |----|------|------|
@@ -909,6 +917,7 @@ interface PuppetGenerateAnimationTool {
 | P0-PR4 | 新增 `skinning_2d` system（骨骼蒙皮计算，输入已含 BlendShape 偏移） | PR1 |
 | P0-PR5 | 修改 `DeformedVertices` 计算：**control driver → blendshape → skinning** → output | PR3, PR4 |
 | P0-PR6 | 新增 `IkConstraint2D`, `SpringBone2D` 组件 + system | PR4 |
+| P0-PR7 | 引入 bevy_tasks 并行化 CPU `blendshape_apply` / `skinning_2d` mesh 批处理；保留单线程 deterministic fallback 和 benchmark | P0-PR3, P0-PR4 |
 
 ### Phase 1: MOC3 导入转换（~3 周，4 PR）
 
@@ -924,7 +933,7 @@ interface PuppetGenerateAnimationTool {
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| P2-PR1 | engine-puppet-renderer 新增 GPU BlendShape+Skinning 管线（CPU 管线保留为 fallback） | P0 |
+| P2-PR1 | engine-puppet-renderer 新增 GPU BlendShape+Skinning 管线（CPU 管线保留为 fallback）；Morph/BlendShape 加权求和复用 engine-gpu 共享 compute primitive | P0 + Bevy Gap ADR Phase 1C |
 | P2-PR2 | PuppetController 实现 ISceneController + puppet webview 从 Canvas2D/VideoViewport 切换到 ViewportShell（含 overlay 预测性渲染）；**验收指标：骨骼拖拽延迟 ≤ 16ms** | P2-PR1 + **Viewport ADR V-1 + V0 完成**（本 ADR 不重复实现 ViewportProtocol DTO 和 ViewportShell 组件） |
 | P2-PR3 | 骨骼编辑工具（创建/移动/旋转/IK 交互） | P2-PR2 |
 | P2-PR4 | BlendShape 编辑工具（关键姿态绘制→顶点偏移计算） | P2-PR2 |
@@ -949,7 +958,7 @@ interface PuppetGenerateAnimationTool {
 | P4-PR2 | Text-to-Motion 集成（外部模型 API → AnimationClip2D） | P3-PR1 |
 | P4-PR3 | AI 单图生成完整角色增强（从零生成素材→切层→绑骨→表情→动画一站式） | P4-PR1, P4-PR2 |
 
-**合计：~19.5 周，28 PR**（含 Phase -1 契约迁移 3 PR；Phase 2 ViewportShell 前置由统一 Viewport ADR V-1/V0 拥有，不计入本 ADR）
+**合计：~20 周，29 PR**（含 Phase -1 契约迁移 3 PR；Phase 0 增加 bevy_tasks CPU 并行化 PR；Phase 2 ViewportShell 前置由统一 Viewport ADR V-1/V0 拥有，不计入本 ADR）
 
 ---
 
@@ -963,6 +972,8 @@ interface PuppetGenerateAnimationTool {
 
 现有 MOC3 parser（~4,300 LOC）在 Phase 1 中直接复用为导入转换器的前端，零浪费。
 导入后保留原始 Live2D source metadata（`puppet.importSource`），方便后续重新导入；`puppet.src` / `puppet.format: moc3` 仅用于旧项目兼容路径。
+
+Live2D 高保真播放不进入 `runtime-puppet` core；若产品需要 Cubism 级 fidelity，应通过独立 `Live2dRuntimeAdapter` / custom SDK 接入 StageActor、GpuLayer 和 command bridge。`runtime-puppet/moc3` 保留为过渡期导入/兼容例外，待 native `.nkp` v2 与导入 golden tests 稳定后再评估拆出 parser/import crate。
 
 ---
 
@@ -1057,6 +1068,9 @@ ARKit 52 + VRM Expression 是好的标准锚点。但 2D 角色经常不是完�
 | **golden render 对比** | MOC3/keyform 原始播放 vs 转换后 native 播放，逐帧 SSIM ≥ 0.995；失败输出 reference/native/diff artifact 与 summary | Phase 1 P1-PR5（首版 harness 已落地，后续继续扩真实模型集） |
 | **契约测试** | `.nkp` v2 / `.nkentity` v2 序列化/反序列化 round-trip | Phase -1 每个 PR |
 | **renderer synthetic mesh** | 用合成网格验证 GPU skinning + BlendShape 管线正确性（不依赖真实模型） | Phase 2 P2-PR1 |
+| **CPU 并行一致性** | bevy_tasks 并行 `blendshape_apply` / `skinning_2d` 与单线程 fallback 在 synthetic mesh 上逐顶点误差 ≤ 1e-5；benchmark 覆盖 1k/10k/50k vertices，并包含 many-shapes × large-delta 极端 fixture（>20 BlendShapes、极端 weight 分布）；若超阈值，评估 Kahan 或 f64 accumulator | Phase 0 P0-PR7 |
+| **AnimationGraph leaf 合同** | `AnimationClip2D` 采样输出可作为 AnimationGraph leaf，不包含 state/transition；fixture 覆盖 clip → pose sample → graph leaf wrapper round-trip | Phase 1C / Phase 2 前 |
+| **共享 morph primitive** | 2D BlendShape 与 3D MorphTarget 使用同一 engine-gpu compute primitive 的 synthetic parity fixture，验证 `v += Σ(delta × weight)` 输出一致 | Phase 2 P2-PR1 |
 | **ID 稳定性测试** | 骨骼/BlendShape 通过 name 引用，Entity 重建后引用不断 | Phase 0 P0-PR1, P0-PR2 |
 | **子集兼容测试** | 缺失 BlendShape 时权重归零、不 panic | Phase 0 P0-PR3 |
 | **autoRig fixture** | 预设 PSD/PNG fixture（至少 3 种体型：全身人形/半身/Q版），验证自动骨骼+BlendShape+Driver 生成的结构正确性和 round-trip（生成→序列化→反序列化→渲染不报错） | Phase 2 P2-PR6 |

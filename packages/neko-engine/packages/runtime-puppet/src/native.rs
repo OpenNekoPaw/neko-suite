@@ -1,21 +1,31 @@
 //! Native Bone2D + BlendShape runtime components, loading, and CPU systems.
 
 use crate::components::{
-    BlendMode, DeformedVertices, GlobalTransform2D, MeshData, NodeName, Opacity, PuppetNodeId,
-    PuppetFormat, PuppetNodeType, PuppetRoot, TextureRef, Transform2D, ZOrder,
+    BlendMode, DeformedVertices, GlobalTransform2D, MeshData, NodeName, Opacity, PuppetFormat,
+    PuppetNodeId, PuppetNodeType, PuppetRoot, TextureRef, Transform2D, ZOrder,
 };
 use crate::hierarchy;
 use bevy_ecs::prelude::*;
+use bevy_tasks::{prelude::ParallelSlice, TaskPool};
 use glam::{Mat3, Vec2, Vec3};
+use neko_engine_types::animation::{
+    AnimationDuration, AnimationLeafDomain, AnimationLeafSample, AnimationLeafTrackId,
+    AnimationLeafTrackSample, AnimationLeafValueKind,
+};
 use neko_engine_types::puppet::{
     AnimationClip2D, NkpAxis2D, NkpBlendShapeDef, NkpControlDriver, NkpControlSource,
     NkpControlTarget, NkpDriverBlendMode, NkpDriverCurve, NkpIkSolver2D, NkpProjectData,
     NkpTransform2DEdit, NkpTransformEditMode,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::sync::LazyLock;
 
 const WEIGHT_SUM_TOLERANCE: f32 = 0.01;
 const EPSILON: f32 = 1e-6;
+const PARALLEL_DEFORMATION_VERTEX_THRESHOLD: usize = usize::MAX;
+const PARALLEL_DEFORMATION_CHUNK_SIZE: usize = 1024;
+
+static NATIVE_CPU_DEFORMATION_TASK_POOL: LazyLock<TaskPool> = LazyLock::new(TaskPool::new);
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
@@ -208,6 +218,57 @@ pub struct NativeAnimationPlayback {
     pub playing: bool,
     pub looping: bool,
 }
+
+/// CPU deformation execution mode for native puppet evaluation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeCpuDeformationMode {
+    Serial,
+    Parallel,
+    Auto,
+}
+
+/// Runtime policy for native CPU deformation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeCpuDeformationConfig {
+    pub mode: NativeCpuDeformationMode,
+    pub parallel_vertex_threshold: usize,
+    pub chunk_size: usize,
+}
+
+impl NativeCpuDeformationConfig {
+    pub const fn serial() -> Self {
+        Self {
+            mode: NativeCpuDeformationMode::Serial,
+            parallel_vertex_threshold: usize::MAX,
+            chunk_size: PARALLEL_DEFORMATION_CHUNK_SIZE,
+        }
+    }
+
+    pub const fn parallel() -> Self {
+        Self {
+            mode: NativeCpuDeformationMode::Parallel,
+            parallel_vertex_threshold: 0,
+            chunk_size: PARALLEL_DEFORMATION_CHUNK_SIZE,
+        }
+    }
+}
+
+impl Default for NativeCpuDeformationConfig {
+    fn default() -> Self {
+        Self {
+            mode: NativeCpuDeformationMode::Auto,
+            parallel_vertex_threshold: PARALLEL_DEFORMATION_VERTEX_THRESHOLD,
+            chunk_size: PARALLEL_DEFORMATION_CHUNK_SIZE,
+        }
+    }
+}
+
+/// Benchmark fixture sizes used to evaluate native CPU deformation policy.
+pub const NATIVE_DEFORMATION_BENCHMARK_VERTEX_COUNTS: &[usize] = &[1_000, 10_000, 50_000];
+
+/// Current conservative default threshold derived from scheduling-overhead policy.
+pub const NATIVE_DEFORMATION_DEFAULT_PARALLEL_THRESHOLD: usize =
+    PARALLEL_DEFORMATION_VERTEX_THRESHOLD;
 
 // ─── Loading ────────────────────────────────────────────────────────────────
 
@@ -1012,6 +1073,61 @@ pub fn seek_animation(world: &mut World, time_ms: f32) -> Result<(), String> {
     Err("No native animation playback active".to_string())
 }
 
+/// Sample a native 2D clip as a future AnimationGraph leaf.
+///
+/// The returned sample is stateless: graph transitions, blend tree state, and
+/// event cursors belong to a graph layer above the clip.
+pub fn sample_animation_clip_2d_leaf(
+    clip: &AnimationClip2D,
+    time_ms: f32,
+    looping: bool,
+) -> AnimationLeafSample {
+    let sample_time = clamp_or_wrap_clip_time(time_ms, clip.duration_ms, looping);
+    let mut tracks = Vec::new();
+
+    for track in &clip.bone_tracks {
+        if let Some(position) = sample_vec2_keys(&track.position_keys, sample_time) {
+            tracks.push(AnimationLeafTrackSample::new(
+                AnimationLeafTrackId::new(&track.bone, "position"),
+                AnimationLeafValueKind::Vec2,
+                position.to_vec(),
+            ));
+        }
+        if let Some(rotation) = sample_scalar_keys(&track.rotation_keys, sample_time) {
+            tracks.push(AnimationLeafTrackSample::new(
+                AnimationLeafTrackId::new(&track.bone, "rotationZ"),
+                AnimationLeafValueKind::Scalar,
+                vec![rotation],
+            ));
+        }
+        if let Some(scale) = sample_vec2_keys(&track.scale_keys, sample_time) {
+            tracks.push(AnimationLeafTrackSample::new(
+                AnimationLeafTrackId::new(&track.bone, "scale"),
+                AnimationLeafValueKind::Vec2,
+                scale.to_vec(),
+            ));
+        }
+    }
+    for track in &clip.blendshape_tracks {
+        if let Some(weight) = sample_scalar_keys(&track.weight_keys, sample_time) {
+            tracks.push(AnimationLeafTrackSample::new(
+                AnimationLeafTrackId::new(&track.blendshape, "blendShapeWeight"),
+                AnimationLeafValueKind::Scalar,
+                vec![weight],
+            ));
+        }
+    }
+
+    AnimationLeafSample::new(
+        AnimationLeafDomain::Puppet2D,
+        clip.name.clone(),
+        AnimationDuration::from_millis(sample_time),
+        AnimationDuration::from_millis(clip.duration_ms.max(0.0)),
+        looping,
+        tracks,
+    )
+}
+
 pub fn control_driver_update(world: &mut World) {
     let Some(root) = find_native_root(world) else {
         return;
@@ -1124,25 +1240,27 @@ pub fn control_driver_update(world: &mut World) {
 }
 
 pub fn blendshape_apply(world: &mut World) {
+    blendshape_apply_with_config(world, NativeCpuDeformationConfig::default());
+}
+
+pub fn blendshape_apply_serial(world: &mut World) {
+    blendshape_apply_with_config(world, NativeCpuDeformationConfig::serial());
+}
+
+pub fn blendshape_apply_parallel(world: &mut World) {
+    blendshape_apply_with_config(world, NativeCpuDeformationConfig::parallel());
+}
+
+pub fn blendshape_apply_with_config(world: &mut World, config: NativeCpuDeformationConfig) {
     let updates: Vec<(Entity, Vec<Vec2>)> = {
         let mut query = world.query::<(Entity, &MeshData, &BlendShapeSet, &BlendShapeWeights)>();
         query
             .iter(world)
             .map(|(entity, mesh, shapes, weights)| {
-                let mut vertices = mesh.vertices.clone();
-                for (shape_index, shape) in shapes.shapes.iter().enumerate() {
-                    if shape.post_skin {
-                        continue;
-                    }
-                    let weight = weights.weights.get(shape_index).copied().unwrap_or(0.0);
-                    if weight.abs() <= EPSILON {
-                        continue;
-                    }
-                    for (vertex, delta) in vertices.iter_mut().zip(shape.vertex_deltas.iter()) {
-                        *vertex += *delta * weight;
-                    }
-                }
-                (entity, vertices)
+                (
+                    entity,
+                    apply_pre_skin_blendshapes(&mesh.vertices, shapes, weights, config),
+                )
             })
             .collect()
     };
@@ -1157,6 +1275,18 @@ pub fn blendshape_apply(world: &mut World) {
 }
 
 pub fn skinning_2d(world: &mut World) {
+    skinning_2d_with_config(world, NativeCpuDeformationConfig::default());
+}
+
+pub fn skinning_2d_serial(world: &mut World) {
+    skinning_2d_with_config(world, NativeCpuDeformationConfig::serial());
+}
+
+pub fn skinning_2d_parallel(world: &mut World) {
+    skinning_2d_with_config(world, NativeCpuDeformationConfig::parallel());
+}
+
+pub fn skinning_2d_with_config(world: &mut World, config: NativeCpuDeformationConfig) {
     let Some(root) = find_native_root(world) else {
         return;
     };
@@ -1191,25 +1321,14 @@ pub fn skinning_2d(world: &mut World) {
                 let bind_vertices = morphed
                     .map(|vertices| &vertices.0)
                     .unwrap_or(&mesh.vertices);
-                let mut deformed = match skin_weights {
-                    Some(skin) => skin_vertices(bind_vertices, skin, &bone_matrices),
-                    None => bind_vertices.clone(),
-                };
-
-                if let (Some(shapes), Some(weights)) = (shapes, weights) {
-                    for (shape_index, shape) in shapes.shapes.iter().enumerate() {
-                        if !shape.post_skin {
-                            continue;
-                        }
-                        let weight = weights.weights.get(shape_index).copied().unwrap_or(0.0);
-                        if weight.abs() <= EPSILON {
-                            continue;
-                        }
-                        for (vertex, delta) in deformed.iter_mut().zip(shape.vertex_deltas.iter()) {
-                            *vertex += *delta * weight;
-                        }
-                    }
-                }
+                let deformed = skin_and_apply_post_skin_blendshapes(
+                    bind_vertices,
+                    skin_weights,
+                    shapes,
+                    weights,
+                    &bone_matrices,
+                    config,
+                );
                 (entity, deformed)
             })
             .collect()
@@ -1603,6 +1722,19 @@ fn native_animation_update(world: &mut World, delta_ms: f32) {
     }
 }
 
+fn clamp_or_wrap_clip_time(time_ms: f32, duration_ms: f32, looping: bool) -> f32 {
+    let duration = duration_ms.max(0.0);
+    let time = time_ms.max(0.0);
+    if duration <= EPSILON {
+        return 0.0;
+    }
+    if looping {
+        time % duration
+    } else {
+        time.min(duration)
+    }
+}
+
 fn advance_clip_time(elapsed_ms: f32, delta_ms: f32, duration_ms: f32, looping: bool) -> f32 {
     let duration = duration_ms.max(0.0);
     if duration <= EPSILON {
@@ -1661,6 +1793,132 @@ fn sample_vec2_keys(
     keys.last().map(|key| key.value)
 }
 
+fn apply_pre_skin_blendshapes(
+    base_vertices: &[Vec2],
+    shapes: &BlendShapeSet,
+    weights: &BlendShapeWeights,
+    config: NativeCpuDeformationConfig,
+) -> Vec<Vec2> {
+    let active_shapes = active_blendshape_inputs(shapes, weights, false);
+    if active_shapes.is_empty() {
+        return base_vertices.to_vec();
+    }
+    if should_use_parallel(base_vertices.len(), config) {
+        apply_blendshapes_parallel(base_vertices, &active_shapes, config.chunk_size)
+    } else {
+        apply_blendshapes_serial(base_vertices, &active_shapes)
+    }
+}
+
+fn skin_and_apply_post_skin_blendshapes(
+    bind_vertices: &[Vec2],
+    skin_weights: Option<&SkinWeights2D>,
+    shapes: Option<&BlendShapeSet>,
+    weights: Option<&BlendShapeWeights>,
+    bone_matrices: &[Mat3],
+    config: NativeCpuDeformationConfig,
+) -> Vec<Vec2> {
+    let mut deformed = match skin_weights {
+        Some(skin) if should_use_parallel(bind_vertices.len(), config) => {
+            skin_vertices_parallel(bind_vertices, skin, bone_matrices, config.chunk_size)
+        }
+        Some(skin) => skin_vertices_serial(bind_vertices, skin, bone_matrices),
+        None => bind_vertices.to_vec(),
+    };
+
+    if let (Some(shapes), Some(weights)) = (shapes, weights) {
+        let active_shapes = active_blendshape_inputs(shapes, weights, true);
+        if !active_shapes.is_empty() {
+            deformed = if should_use_parallel(deformed.len(), config) {
+                apply_blendshapes_parallel(&deformed, &active_shapes, config.chunk_size)
+            } else {
+                apply_blendshapes_serial(&deformed, &active_shapes)
+            };
+        }
+    }
+    deformed
+}
+
+fn active_blendshape_inputs<'a>(
+    shapes: &'a BlendShapeSet,
+    weights: &'a BlendShapeWeights,
+    post_skin: bool,
+) -> Vec<(&'a [Vec2], f32)> {
+    shapes
+        .shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(shape_index, shape)| {
+            if shape.post_skin != post_skin {
+                return None;
+            }
+            let weight = weights.weights.get(shape_index).copied().unwrap_or(0.0);
+            if weight.abs() <= EPSILON {
+                None
+            } else {
+                Some((shape.vertex_deltas.as_slice(), weight))
+            }
+        })
+        .collect()
+}
+
+fn should_use_parallel(vertex_count: usize, config: NativeCpuDeformationConfig) -> bool {
+    match config.mode {
+        NativeCpuDeformationMode::Serial => false,
+        NativeCpuDeformationMode::Parallel => vertex_count > 0,
+        NativeCpuDeformationMode::Auto => {
+            config.parallel_vertex_threshold != usize::MAX
+                && vertex_count >= config.parallel_vertex_threshold
+        }
+    }
+}
+
+fn apply_blendshapes_serial(base_vertices: &[Vec2], active_shapes: &[(&[Vec2], f32)]) -> Vec<Vec2> {
+    base_vertices
+        .iter()
+        .enumerate()
+        .map(|(vertex_index, vertex)| {
+            let mut output = *vertex;
+            for (deltas, weight) in active_shapes {
+                if let Some(delta) = deltas.get(vertex_index) {
+                    output += *delta * *weight;
+                }
+            }
+            output
+        })
+        .collect()
+}
+
+fn apply_blendshapes_parallel(
+    base_vertices: &[Vec2],
+    active_shapes: &[(&[Vec2], f32)],
+    chunk_size: usize,
+) -> Vec<Vec2> {
+    let pool = native_cpu_deformation_task_pool();
+    let chunk_size = chunk_size.max(1);
+    base_vertices
+        .par_chunk_map(pool, chunk_size, |chunk_index, chunk| {
+            let offset = chunk_index * chunk_size;
+            chunk
+                .iter()
+                .enumerate()
+                .map(|(local_index, vertex)| {
+                    let vertex_index = offset + local_index;
+                    let mut output = *vertex;
+                    for (deltas, weight) in active_shapes {
+                        if let Some(delta) = deltas.get(vertex_index) {
+                            output += *delta * *weight;
+                        }
+                    }
+                    output
+                })
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
 fn evaluate_curve(curve: DriverCurve, value: f32) -> f32 {
     match curve {
         DriverCurve::Linear { scale, offset } => value * scale + offset,
@@ -1682,31 +1940,70 @@ fn evaluate_curve(curve: DriverCurve, value: f32) -> f32 {
     }
 }
 
-fn skin_vertices(vertices: &[Vec2], skin: &SkinWeights2D, bone_matrices: &[Mat3]) -> Vec<Vec2> {
+fn skin_vertices_serial(
+    vertices: &[Vec2],
+    skin: &SkinWeights2D,
+    bone_matrices: &[Mat3],
+) -> Vec<Vec2> {
     vertices
         .iter()
         .enumerate()
-        .map(|(vertex_index, vertex)| {
-            let Some(indices) = skin.joint_indices.get(vertex_index).copied() else {
-                return *vertex;
-            };
-            let Some(weights) = skin.joint_weights.get(vertex_index).copied() else {
-                return *vertex;
-            };
-            let mut skinned = Vec2::ZERO;
-            for (joint_index, weight) in indices.iter().zip(weights.iter()) {
-                if *weight <= EPSILON {
-                    continue;
-                }
-                let matrix = bone_matrices
-                    .get(*joint_index as usize)
-                    .copied()
-                    .unwrap_or(Mat3::IDENTITY);
-                skinned += transform_point(matrix, *vertex) * *weight;
-            }
-            skinned
-        })
+        .map(|(vertex_index, vertex)| skin_vertex(vertex_index, *vertex, skin, bone_matrices))
         .collect()
+}
+
+fn skin_vertices_parallel(
+    vertices: &[Vec2],
+    skin: &SkinWeights2D,
+    bone_matrices: &[Mat3],
+    chunk_size: usize,
+) -> Vec<Vec2> {
+    let pool = native_cpu_deformation_task_pool();
+    let chunk_size = chunk_size.max(1);
+    vertices
+        .par_chunk_map(pool, chunk_size, |chunk_index, chunk| {
+            let offset = chunk_index * chunk_size;
+            chunk
+                .iter()
+                .enumerate()
+                .map(|(local_index, vertex)| {
+                    skin_vertex(offset + local_index, *vertex, skin, bone_matrices)
+                })
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn native_cpu_deformation_task_pool() -> &'static TaskPool {
+    &NATIVE_CPU_DEFORMATION_TASK_POOL
+}
+
+fn skin_vertex(
+    vertex_index: usize,
+    vertex: Vec2,
+    skin: &SkinWeights2D,
+    bone_matrices: &[Mat3],
+) -> Vec2 {
+    let Some(indices) = skin.joint_indices.get(vertex_index).copied() else {
+        return vertex;
+    };
+    let Some(weights) = skin.joint_weights.get(vertex_index).copied() else {
+        return vertex;
+    };
+    let mut skinned = Vec2::ZERO;
+    for (joint_index, weight) in indices.iter().zip(weights.iter()) {
+        if *weight <= EPSILON {
+            continue;
+        }
+        let matrix = bone_matrices
+            .get(*joint_index as usize)
+            .copied()
+            .unwrap_or(Mat3::IDENTITY);
+        skinned += transform_point(matrix, vertex) * *weight;
+    }
+    skinned
 }
 
 fn propagate_bones(world: &mut World, bone_entities: &[Entity]) {
@@ -1992,6 +2289,144 @@ mod tests {
     }
 
     #[test]
+    fn parallel_cpu_deformation_matches_serial_fixture() {
+        let mut serial_world = World::new();
+        let mut parallel_world = World::new();
+        let project = fixture_project();
+        load_native_project(&mut serial_world, &project).unwrap();
+        load_native_project(&mut parallel_world, &project).unwrap();
+
+        set_blendshape_weight(&mut serial_world, "jawOpen", 1.0);
+        set_blendshape_weight(&mut parallel_world, "jawOpen", 1.0);
+        blendshape_apply_serial(&mut serial_world);
+        skinning_2d_serial(&mut serial_world);
+        blendshape_apply_parallel(&mut parallel_world);
+        skinning_2d_parallel(&mut parallel_world);
+
+        let (max_error, diagnostic) =
+            deformation_max_error(&mut serial_world, &mut parallel_world, 1)
+                .expect("vertices comparable");
+        assert!(
+            max_error <= 1e-5,
+            "parallel deformation mismatch: {diagnostic}"
+        );
+    }
+
+    #[test]
+    fn parallel_cpu_deformation_handles_many_shapes_large_delta_fixture() {
+        let project = many_shapes_large_delta_project(64, 24);
+        let mut serial_world = World::new();
+        let mut parallel_world = World::new();
+        load_native_project(&mut serial_world, &project).unwrap();
+        load_native_project(&mut parallel_world, &project).unwrap();
+
+        for shape_index in 0..24 {
+            let weight = if shape_index % 2 == 0 { 1.0 } else { 0.125 };
+            let shape_name = format!("shape_{shape_index}");
+            set_blendshape_weight(&mut serial_world, &shape_name, weight);
+            set_blendshape_weight(&mut parallel_world, &shape_name, weight);
+        }
+        blendshape_apply_serial(&mut serial_world);
+        skinning_2d_serial(&mut serial_world);
+        blendshape_apply_parallel(&mut parallel_world);
+        skinning_2d_parallel(&mut parallel_world);
+
+        let (max_error, diagnostic) =
+            deformation_max_error(&mut serial_world, &mut parallel_world, 24)
+                .expect("vertices comparable");
+        assert!(
+            max_error <= 1e-5,
+            "many-shapes large-delta mismatch: {diagnostic}"
+        );
+    }
+
+    #[test]
+    fn auto_deformation_policy_keeps_small_workloads_serial() {
+        assert!(!should_use_parallel(
+            999,
+            NativeCpuDeformationConfig::default()
+        ));
+        assert!(!should_use_parallel(
+            50_000,
+            NativeCpuDeformationConfig::default()
+        ));
+        assert!(should_use_parallel(
+            10_000,
+            NativeCpuDeformationConfig {
+                mode: NativeCpuDeformationMode::Auto,
+                parallel_vertex_threshold: 10_000,
+                chunk_size: PARALLEL_DEFORMATION_CHUNK_SIZE,
+            }
+        ));
+        assert!(should_use_parallel(
+            1,
+            NativeCpuDeformationConfig::parallel()
+        ));
+        assert!(!should_use_parallel(
+            usize::MAX,
+            NativeCpuDeformationConfig::serial()
+        ));
+    }
+
+    #[test]
+    fn parallel_cpu_deformation_reuses_task_pool() {
+        let first = native_cpu_deformation_task_pool() as *const TaskPool;
+        let second = native_cpu_deformation_task_pool() as *const TaskPool;
+
+        assert_eq!(first, second);
+        assert!(native_cpu_deformation_task_pool().thread_num() > 0);
+    }
+
+    #[test]
+    fn benchmark_fixture_sizes_and_default_policy_are_explicit() {
+        assert_eq!(
+            NATIVE_DEFORMATION_BENCHMARK_VERTEX_COUNTS,
+            &[1_000, 10_000, 50_000]
+        );
+        assert_eq!(
+            NATIVE_DEFORMATION_DEFAULT_PARALLEL_THRESHOLD,
+            PARALLEL_DEFORMATION_VERTEX_THRESHOLD
+        );
+        let decisions = NATIVE_DEFORMATION_BENCHMARK_VERTEX_COUNTS
+            .iter()
+            .map(|count| {
+                (
+                    *count,
+                    should_use_parallel(*count, NativeCpuDeformationConfig::default()),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            decisions,
+            vec![(1_000, false), (10_000, false), (50_000, false)]
+        );
+    }
+
+    #[test]
+    #[ignore = "prints local timing evidence; run with --ignored --nocapture"]
+    fn bench_native_cpu_deformation_serial_vs_parallel() {
+        let iterations = 3;
+        for vertex_count in NATIVE_DEFORMATION_BENCHMARK_VERTEX_COUNTS {
+            let project = many_shapes_large_delta_project(*vertex_count, 24);
+            let mut serial_world = loaded_weighted_world(&project, 24);
+            let mut parallel_world = loaded_weighted_world(&project, 24);
+
+            let serial = measure_deformation_passes(&mut serial_world, false, iterations);
+            let parallel = measure_deformation_passes(&mut parallel_world, true, iterations);
+            let speedup = serial.as_secs_f64() / parallel.as_secs_f64().max(f64::EPSILON);
+            println!(
+                "native_cpu_deformation_benchmark vertices={} shapes=24 iterations={} serial_ms={:.3} parallel_ms={:.3} speedup={:.3}",
+                vertex_count,
+                iterations,
+                serial.as_secs_f64() * 1000.0,
+                parallel.as_secs_f64() * 1000.0,
+                speedup
+            );
+        }
+    }
+
+    #[test]
     fn path_constraint_moves_bone_toward_path_point() {
         let mut project = fixture_project();
         project.skeleton.as_mut().unwrap().path_constraints =
@@ -2247,6 +2682,69 @@ mod tests {
         assert!((weights.weights[jaw] - 0.5).abs() < 1e-6);
     }
 
+    #[test]
+    fn animation_clip_2d_samples_as_graph_leaf_without_graph_state() {
+        let clip = AnimationClip2D {
+            name: "leaf".to_string(),
+            duration_ms: 1000.0,
+            bone_tracks: vec![neko_engine_types::puppet::NkpBoneTrack {
+                bone: "bone-head".to_string(),
+                position_keys: vec![neko_engine_types::puppet::NkpVec2Keyframe {
+                    time_ms: 0.0,
+                    value: [0.0, 0.0],
+                    easing: None,
+                }],
+                rotation_keys: vec![
+                    neko_engine_types::puppet::NkpScalarKeyframe {
+                        time_ms: 0.0,
+                        value: 0.0,
+                        easing: None,
+                    },
+                    neko_engine_types::puppet::NkpScalarKeyframe {
+                        time_ms: 1000.0,
+                        value: 90.0,
+                        easing: None,
+                    },
+                ],
+                scale_keys: vec![],
+            }],
+            blendshape_tracks: vec![neko_engine_types::puppet::NkpBlendShapeTrack {
+                blendshape: "jawOpen".to_string(),
+                weight_keys: vec![
+                    neko_engine_types::puppet::NkpScalarKeyframe {
+                        time_ms: 0.0,
+                        value: 0.0,
+                        easing: None,
+                    },
+                    neko_engine_types::puppet::NkpScalarKeyframe {
+                        time_ms: 1000.0,
+                        value: 1.0,
+                        easing: None,
+                    },
+                ],
+            }],
+        };
+
+        let sample = sample_animation_clip_2d_leaf(&clip, 500.0, false);
+        let json = serde_json::to_string(&sample).unwrap();
+        let restored: AnimationLeafSample = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.domain, AnimationLeafDomain::Puppet2D);
+        assert_eq!(restored.clip_name, "leaf");
+        assert_eq!(restored.sample_time.as_millis(), 500.0);
+        assert_eq!(restored.tracks.len(), 3);
+        assert!(restored.tracks.iter().any(|track| {
+            track.track_id.target == "bone-head"
+                && track.track_id.property == "rotationZ"
+                && track.values == vec![45.0]
+        }));
+        assert!(restored.tracks.iter().any(|track| {
+            track.track_id.target == "jawOpen"
+                && track.track_id.property == "blendShapeWeight"
+                && track.values == vec![0.5]
+        }));
+    }
+
     fn fixture_project() -> NkpProjectData {
         NkpProjectData {
             version: "2.0".to_string(),
@@ -2324,12 +2822,128 @@ mod tests {
         }
     }
 
+    fn many_shapes_large_delta_project(vertex_count: usize, shape_count: usize) -> NkpProjectData {
+        let mut project = fixture_project();
+        let vertices = (0..vertex_count)
+            .map(|index| [index as f32, (index % 7) as f32])
+            .collect::<Vec<_>>();
+        project.layers[0].mesh.vertices = vertices;
+        project.layers[0].skin_weights = Some(neko_engine_types::puppet::NkpSkinWeights2D {
+            mesh_id: "mesh-face".to_string(),
+            joint_indices: vec![[0, 0, 0, 0]; vertex_count],
+            joint_weights: vec![[1.0, 0.0, 0.0, 0.0]; vertex_count],
+        });
+        let shapes = (0..shape_count)
+            .map(|shape_index| {
+                let deltas = (0..vertex_count)
+                    .map(|vertex_index| {
+                        [
+                            shape_index as f32 * 100.0 + vertex_index as f32 * 0.5,
+                            -(shape_index as f32) * 75.0 + vertex_index as f32 * 0.25,
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                shape_for_mesh(&format!("shape_{shape_index}"), deltas)
+            })
+            .collect::<Vec<_>>();
+        project.blend_shapes = Some(NkpBlendShapeLibrary {
+            standard: None,
+            implemented: (0..shape_count)
+                .map(|shape_index| format!("shape_{shape_index}"))
+                .collect(),
+            shapes,
+            custom: vec![],
+            aliases: BTreeMap::new(),
+        });
+        project
+    }
+
+    fn loaded_weighted_world(project: &NkpProjectData, shape_count: usize) -> World {
+        let mut world = World::new();
+        load_native_project(&mut world, project).unwrap();
+        for shape_index in 0..shape_count {
+            let weight = if shape_index % 2 == 0 { 1.0 } else { 0.125 };
+            let shape_name = format!("shape_{shape_index}");
+            set_blendshape_weight(&mut world, &shape_name, weight);
+        }
+        world
+    }
+
+    fn measure_deformation_passes(
+        world: &mut World,
+        parallel: bool,
+        iterations: usize,
+    ) -> std::time::Duration {
+        let started = std::time::Instant::now();
+        for _ in 0..iterations {
+            if parallel {
+                blendshape_apply_parallel(world);
+                skinning_2d_parallel(world);
+            } else {
+                blendshape_apply_serial(world);
+                skinning_2d_serial(world);
+            }
+        }
+        started.elapsed()
+    }
+
+    fn deformation_max_error(
+        left_world: &mut World,
+        right_world: &mut World,
+        active_shape_count: usize,
+    ) -> Result<(f32, String), String> {
+        let mut left_query = left_world.query::<(&PuppetNodeId, &DeformedVertices)>();
+        let mut right_query = right_world.query::<(&PuppetNodeId, &DeformedVertices)>();
+        let left_vertices = left_query
+            .iter(&left_world)
+            .map(|(id, vertices)| (id.0.clone(), vertices.0.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let right_vertices = right_query
+            .iter(&right_world)
+            .map(|(id, vertices)| (id.0.clone(), vertices.0.clone()))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut max_error = 0.0;
+        let mut diagnostic =
+            format!("mesh=<none> vertex=<none> activeShapes={active_shape_count} stage=cpu-parity");
+        for (mesh_id, left_mesh) in &left_vertices {
+            let right_mesh = right_vertices
+                .get(mesh_id)
+                .ok_or_else(|| format!("missing right mesh {mesh_id}"))?;
+            if left_mesh.len() != right_mesh.len() {
+                return Err(format!(
+                    "mesh {mesh_id} vertex count mismatch: {} vs {}",
+                    left_mesh.len(),
+                    right_mesh.len()
+                ));
+            }
+            for (vertex_index, (left_vertex, right_vertex)) in
+                left_mesh.iter().zip(right_mesh.iter()).enumerate()
+            {
+                let error = (left_vertex.x - right_vertex.x)
+                    .abs()
+                    .max((left_vertex.y - right_vertex.y).abs());
+                if error > max_error {
+                    max_error = error;
+                    diagnostic = format!(
+                        "mesh={mesh_id} vertex={vertex_index} activeShapes={active_shape_count} maxError={error} stage=cpu-parity"
+                    );
+                }
+            }
+        }
+        Ok((max_error, diagnostic))
+    }
+
     fn shape(name: &str, deltas: [[f32; 2]; 2]) -> NkpBlendShapeDef {
+        shape_for_mesh(name, deltas.to_vec())
+    }
+
+    fn shape_for_mesh(name: &str, deltas: Vec<[f32; 2]>) -> NkpBlendShapeDef {
         NkpBlendShapeDef {
             id: Some(format!("shape-{}", name)),
             name: name.to_string(),
             mesh_id: "mesh-face".to_string(),
-            vertex_deltas: deltas.to_vec(),
+            vertex_deltas: deltas,
             post_skin: None,
         }
     }

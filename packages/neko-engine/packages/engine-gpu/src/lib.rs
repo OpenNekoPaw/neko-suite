@@ -22,6 +22,7 @@ mod gpu_layer;
 pub mod lut3d;
 mod mask_rasterizer;
 mod ml_gpu_bridge;
+pub mod morph_compute;
 mod nv12_import;
 mod nv12_renderer;
 mod platform_bridge;

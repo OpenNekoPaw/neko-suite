@@ -3,6 +3,10 @@
 use crate::{asset_database::AssetHandle, bounds::SceneBounds3};
 use bevy_ecs::prelude::*;
 use glam::{Mat4, Quat, Vec3};
+use neko_engine_types::animation::{
+    AnimationDuration, AnimationLeafDomain, AnimationLeafSample, AnimationLeafTrackId,
+    AnimationLeafTrackSample, AnimationLeafValueKind,
+};
 use neko_engine_types::easing::EasingType;
 use serde::{Deserialize, Serialize};
 
@@ -421,6 +425,107 @@ impl AnimationProperty {
     }
 }
 
+/// Sample a scene clip as a future AnimationGraph leaf without mutating ECS state.
+pub fn sample_scene_animation_clip_leaf(
+    clip: &AnimationClipData,
+    time_seconds: f32,
+    looping: bool,
+) -> AnimationLeafSample {
+    let sample_time = clamp_or_wrap_clip_time_seconds(time_seconds, clip.duration, looping);
+    let tracks = clip
+        .channels
+        .iter()
+        .filter_map(|channel| sample_scene_channel_leaf(channel, sample_time))
+        .collect();
+
+    AnimationLeafSample::new(
+        AnimationLeafDomain::Scene3D,
+        clip.name.clone(),
+        AnimationDuration::from_seconds(sample_time),
+        AnimationDuration::from_seconds(clip.duration.max(0.0)),
+        looping,
+        tracks,
+    )
+}
+
+fn sample_scene_channel_leaf(
+    channel: &AnimationChannel,
+    time_seconds: f32,
+) -> Option<AnimationLeafTrackSample> {
+    if channel.keyframes.is_empty() {
+        return None;
+    }
+
+    let (left, right, t) = scene_keyframe_pair(&channel.keyframes, time_seconds);
+    let value = match right {
+        Some(right) => interpolate_values(&left.values, &right.values, t),
+        None => left.values.clone(),
+    };
+    let (property, kind) = match channel.property {
+        AnimationProperty::Translation => ("translation", AnimationLeafValueKind::Vec3),
+        AnimationProperty::Rotation => ("rotation", AnimationLeafValueKind::Quat),
+        AnimationProperty::Scale => ("scale", AnimationLeafValueKind::Vec3),
+        AnimationProperty::MorphWeights => ("morphWeights", AnimationLeafValueKind::FloatArray),
+    };
+
+    Some(AnimationLeafTrackSample::new(
+        AnimationLeafTrackId::new(&channel.target_node, property),
+        kind,
+        value,
+    ))
+}
+
+fn scene_keyframe_pair(
+    keyframes: &[SceneKeyframe],
+    time_seconds: f32,
+) -> (&SceneKeyframe, Option<&SceneKeyframe>, f32) {
+    let first = &keyframes[0];
+    if time_seconds <= first.timestamp {
+        return (first, None, 0.0);
+    }
+
+    for pair in keyframes.windows(2) {
+        let left = &pair[0];
+        let right = &pair[1];
+        if time_seconds <= right.timestamp {
+            let span = (right.timestamp - left.timestamp).max(f32::EPSILON);
+            let t = ((time_seconds - left.timestamp) / span).clamp(0.0, 1.0);
+            return (left, Some(right), t);
+        }
+    }
+
+    (
+        keyframes
+            .last()
+            .expect("scene_keyframe_pair requires non-empty keyframes"),
+        None,
+        0.0,
+    )
+}
+
+fn interpolate_values(left: &[f32], right: &[f32], t: f32) -> Vec<f32> {
+    left.iter()
+        .enumerate()
+        .map(|(index, left_value)| {
+            let right_value = right.get(index).copied().unwrap_or(*left_value);
+            left_value + (right_value - left_value) * t
+        })
+        .collect()
+}
+
+fn clamp_or_wrap_clip_time_seconds(time_seconds: f32, duration_seconds: f32, looping: bool) -> f32 {
+    let duration = duration_seconds.max(0.0);
+    let time = time_seconds.max(0.0);
+    if duration <= f32::EPSILON {
+        return 0.0;
+    }
+    if looping {
+        time % duration
+    } else {
+        time.min(duration)
+    }
+}
+
 /// Animation clip data
 #[derive(Clone, Debug)]
 pub struct AnimationClipData {
@@ -477,3 +582,57 @@ pub struct AnimationTarget {
 /// Marker: this entity is a scene root
 #[derive(Component, Clone, Debug, Default)]
 pub struct SceneRoot;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neko_engine_types::animation::{AnimationLeafDomain, AnimationLeafValueKind};
+
+    #[test]
+    fn scene_animation_clip_samples_as_graph_leaf() {
+        let clip = AnimationClipData {
+            name: "move".to_string(),
+            duration: 2.0,
+            channels: vec![
+                AnimationChannel {
+                    target_node: "node-a".to_string(),
+                    property: AnimationProperty::Translation,
+                    keyframes: vec![
+                        SceneKeyframe::new(0.0, vec![0.0, 0.0, 0.0]),
+                        SceneKeyframe::new(2.0, vec![2.0, 4.0, 6.0]),
+                    ],
+                },
+                AnimationChannel {
+                    target_node: "node-a".to_string(),
+                    property: AnimationProperty::MorphWeights,
+                    keyframes: vec![
+                        SceneKeyframe::new(0.0, vec![0.0, 1.0]),
+                        SceneKeyframe::new(2.0, vec![1.0, 0.0]),
+                    ],
+                },
+            ],
+        };
+
+        let sample = sample_scene_animation_clip_leaf(&clip, 1.0, false);
+        let json = serde_json::to_string(&sample).unwrap();
+        let restored: AnimationLeafSample = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.domain, AnimationLeafDomain::Scene3D);
+        assert_eq!(restored.clip_name, "move");
+        assert_eq!(restored.sample_time.as_seconds(), 1.0);
+        assert_eq!(restored.duration.as_seconds(), 2.0);
+        assert_eq!(restored.tracks.len(), 2);
+        assert!(restored.tracks.iter().any(|track| {
+            track.track_id.target == "node-a"
+                && track.track_id.property == "translation"
+                && track.value_kind == AnimationLeafValueKind::Vec3
+                && track.values == vec![1.0, 2.0, 3.0]
+        }));
+        assert!(restored.tracks.iter().any(|track| {
+            track.track_id.target == "node-a"
+                && track.track_id.property == "morphWeights"
+                && track.value_kind == AnimationLeafValueKind::FloatArray
+                && track.values == vec![0.5, 0.5]
+        }));
+    }
+}

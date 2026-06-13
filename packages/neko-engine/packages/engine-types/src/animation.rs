@@ -222,6 +222,97 @@ impl AnimationCrossfadeRequest {
     }
 }
 
+/// Runtime domain that produced an animation leaf sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnimationLeafDomain {
+    Puppet2D,
+    Scene3D,
+}
+
+/// Value kind carried by one sampled animation leaf track.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnimationLeafValueKind {
+    Scalar,
+    Vec2,
+    Vec3,
+    Quat,
+    FloatArray,
+}
+
+/// Stable identity for one sampled track inside an AnimationGraph leaf.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationLeafTrackId {
+    pub target: String,
+    pub property: String,
+}
+
+impl AnimationLeafTrackId {
+    pub fn new(target: impl Into<String>, property: impl Into<String>) -> Self {
+        Self {
+            target: target.into(),
+            property: property.into(),
+        }
+    }
+}
+
+/// Sampled value for one graph leaf track.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationLeafTrackSample {
+    pub track_id: AnimationLeafTrackId,
+    pub value_kind: AnimationLeafValueKind,
+    pub values: Vec<f32>,
+}
+
+impl AnimationLeafTrackSample {
+    pub fn new(
+        track_id: AnimationLeafTrackId,
+        value_kind: AnimationLeafValueKind,
+        values: Vec<f32>,
+    ) -> Self {
+        Self {
+            track_id,
+            value_kind,
+            values,
+        }
+    }
+}
+
+/// Stateless sampled output from a 2D or 3D animation clip.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationLeafSample {
+    pub domain: AnimationLeafDomain,
+    pub clip_name: String,
+    pub sample_time: AnimationDuration,
+    pub duration: AnimationDuration,
+    pub looping: bool,
+    pub tracks: Vec<AnimationLeafTrackSample>,
+}
+
+impl AnimationLeafSample {
+    pub fn new(
+        domain: AnimationLeafDomain,
+        clip_name: impl Into<String>,
+        sample_time: AnimationDuration,
+        duration: AnimationDuration,
+        looping: bool,
+        tracks: Vec<AnimationLeafTrackSample>,
+    ) -> Self {
+        Self {
+            domain,
+            clip_name: clip_name.into(),
+            sample_time,
+            duration,
+            looping,
+            tracks,
+        }
+    }
+}
+
 /// Serializer helper for runtime-specific blend layer info units/field names.
 pub fn serialize_blend_layer_info_with_unit<S>(
     info: &AnimationBlendLayerInfo,
@@ -587,6 +678,37 @@ mod tests {
         assert!(json.contains("\"target_clip_index\":2"));
         assert!(json.contains("\"fade_duration\":{\"millis\":500.0}"));
         assert!(json.contains("\"fade_elapsed\":{\"millis\":125.0}"));
+    }
+
+    #[test]
+    fn animation_leaf_sample_roundtrips_with_track_metadata() {
+        let sample = AnimationLeafSample::new(
+            AnimationLeafDomain::Puppet2D,
+            "smile",
+            AnimationDuration::from_millis(125.0),
+            AnimationDuration::from_millis(1000.0),
+            true,
+            vec![
+                AnimationLeafTrackSample::new(
+                    AnimationLeafTrackId::new("head", "rotationZ"),
+                    AnimationLeafValueKind::Scalar,
+                    vec![15.0],
+                ),
+                AnimationLeafTrackSample::new(
+                    AnimationLeafTrackId::new("jawOpen", "blendShapeWeight"),
+                    AnimationLeafValueKind::Scalar,
+                    vec![0.5],
+                ),
+            ],
+        );
+
+        let json = serde_json::to_string(&sample).unwrap();
+        let restored: AnimationLeafSample = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored, sample);
+        assert_eq!(restored.sample_time.as_millis(), 125.0);
+        assert_eq!(restored.duration.as_millis(), 1000.0);
+        assert_eq!(restored.tracks[0].track_id.target, "head");
     }
 
     #[test]
