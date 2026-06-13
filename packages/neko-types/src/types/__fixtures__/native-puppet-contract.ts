@@ -172,7 +172,7 @@ export const nativePuppetEntityFixture: NkEntityArtifactV2 = {
     },
     {
       role: 'live2d',
-      ref: 'project://puppets/sakura-legacy.nkp',
+      ref: 'project://puppets/sakura-live2d.nkp',
       mediaKind: 'puppet-model',
       dimension: 'model',
       optional: true,

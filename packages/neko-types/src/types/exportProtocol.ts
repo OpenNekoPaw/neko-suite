@@ -378,9 +378,7 @@ export const FFMPEG_SUPPORTED_FEATURES = {
  *
  * Phase 5: 支持 Webview GPU 渲染 → Extension FFmpeg 流式编码
  */
-export type StreamingExportMode =
-  | 'legacy' // 旧模式：Extension 渲染 + 编码（两阶段）
-  | 'streaming'; // 新模式：Webview 渲染 → 流式传输 → Extension 编码
+export type StreamingExportMode = 'streaming'; // Webview 渲染 → 流式传输 → Extension 编码
 
 /**
  * 帧数据格式

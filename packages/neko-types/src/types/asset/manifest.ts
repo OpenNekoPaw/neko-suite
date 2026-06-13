@@ -138,7 +138,7 @@ export interface MediaMetadata {
   'model-motion'?: { format: 'gltf-animation' | 'nkma' | 'vrma'; duration?: number };
   'model-config'?: { format: 'vrm-expression' | 'material-preset' | 'nkm-config' };
   'puppet-model'?: { format: 'moc3' | 'nkp' | 'live2d-bundle'; textureCount?: number };
-  'puppet-motion'?: { format: 'inp' | 'live2d' | 'nkpup'; duration: number };
+  'puppet-motion'?: { format: 'live2d' | 'nkpup'; duration: number };
   'puppet-config'?: { format: 'exp3' | 'physics3' | 'live2d-config' | 'nkp-config' };
   'voice-pack'?: {
     format: 'wav' | 'ogg' | 'flac' | 'voice-pack';

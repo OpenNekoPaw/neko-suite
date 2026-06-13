@@ -1296,46 +1296,6 @@ export function parseAllowedTools(toolsStr: string | undefined): string[] | unde
 }
 
 /**
- * Check if a tool is allowed (Bash patterns only).
- *
- * @deprecated Use `matchesPattern` + `normalizeToolCall` from `@neko/agent/tools/tool-pattern-matcher`
- * for full pattern support including path globs, domain matching, and MCP tools.
- */
-export function isToolAllowed(tool: string, allowedTools?: string[]): boolean {
-  if (!allowedTools || allowedTools.length === 0) {
-    return true;
-  }
-
-  for (const pattern of allowedTools) {
-    // Exact match
-    if (pattern === tool) {
-      return true;
-    }
-
-    // Bash pattern matching
-    if (pattern.startsWith('Bash(') && tool.startsWith('Bash(')) {
-      const patternInner = pattern.slice(5, -1);
-      const toolInner = tool.slice(5, -1);
-
-      // "git:*" matches "git status", "git commit"
-      if (patternInner.endsWith(':*')) {
-        const cmdPrefix = patternInner.slice(0, -2);
-        if (toolInner === cmdPrefix || toolInner.startsWith(cmdPrefix + ' ')) {
-          return true;
-        }
-      } else if (patternInner.endsWith('*')) {
-        const prefix = patternInner.slice(0, -1);
-        if (toolInner.startsWith(prefix)) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-/**
  * Semver-ish regex: major.minor.patch with optional pre-release and build
  * metadata. Deliberately not importing a full semver library — Skills
  * author-input versions are validated to catch typos, not to run complex

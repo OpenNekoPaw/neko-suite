@@ -367,9 +367,6 @@ export type ModelType = 'llm' | 'image' | 'video' | 'audio' | 'music';
  */
 export type MediaModelType = Exclude<ModelType, 'llm'>;
 
-/** @deprecated Use ModelType instead */
-export type ModelCategory = ModelType | 'chat' | 'other';
-
 /**
  * Chat model option for UI model selector dropdown
  * Built by Platform layer from enabled providers and models

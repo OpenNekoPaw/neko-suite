@@ -11,12 +11,12 @@ describe('field binding utilities', () => {
     });
   });
 
-  it('returns fallback for missing fields without mutating data', () => {
+  it('returns default value for missing fields without mutating data', () => {
     const data = { title: 'Scene' };
 
-    expect(readFieldBinding(data, { path: '/missing', fallback: 'fallback' })).toEqual({
+    expect(readFieldBinding(data, { path: '/missing', defaultValue: 'default' })).toEqual({
       found: false,
-      value: 'fallback',
+      value: 'default',
     });
     expect(data).toEqual({ title: 'Scene' });
   });

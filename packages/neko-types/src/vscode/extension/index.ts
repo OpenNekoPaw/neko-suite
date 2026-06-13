@@ -200,13 +200,7 @@ export { createProjectSnapshotPackage } from './project-package';
 export type { ProjectPackageRequest, ProjectPackageResult } from './project-package';
 
 // Binary template generators for new-file templates
-export {
-  generateMinimalInp,
-  generateHumanoidInp,
-  generateMinimalGlb,
-  generateDefaultCubeGlb,
-  generateHumanoidGlb,
-} from './templates';
+export { generateMinimalGlb, generateDefaultCubeGlb, generateHumanoidGlb } from './templates';
 
 // StatusBar group lifecycle manager
 export {

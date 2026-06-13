@@ -100,7 +100,7 @@ export const vscodeCSSTokens = {
     'vscode-chart-yellow': 'var(--vscode-charts-yellow)',
     'vscode-chart-purple': 'var(--vscode-charts-purple)',
 
-    // Legacy alias
+    // Compatibility token alias
     'vscode-border': 'var(--vscode-panel-border)',
 
     // macOS surface colors (theme-aware via CSS variables)

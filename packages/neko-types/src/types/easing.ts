@@ -22,7 +22,7 @@
  * - Bounce (3)
  * - CubicBezier (custom)
  *
- * Plus legacy aliases for backward compatibility.
+ * Plus UI shorthand aliases.
  */
 export type EasingType =
   // Linear
@@ -69,7 +69,7 @@ export type EasingType =
   | 'ease-in-out-bounce'
   // Custom cubic bezier
   | 'bezier'
-  // Legacy aliases (mapped to engine equivalents)
+  // UI shorthand aliases (mapped to engine equivalents)
   | 'ease-in' // → ease-in-quad
   | 'ease-out' // → ease-out-quad
   | 'ease-in-out'; // → ease-in-out-quad

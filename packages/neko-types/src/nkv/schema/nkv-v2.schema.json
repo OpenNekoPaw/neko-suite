@@ -545,7 +545,7 @@
           "required": ["type", "src"],
           "properties": {
             "type": { "const": "puppet" },
-            "src": { "type": "string", "description": "Source puppet file path (.moc3 or .inp)" },
+            "src": { "type": "string", "description": "Source puppet file path (.moc3)" },
             "animationClip": { "type": "string", "description": "Active animation clip name" },
             "animationLoop": { "type": "boolean", "description": "Loop animation playback" },
             "animationSpeed": { "type": "number", "description": "Animation speed multiplier" },

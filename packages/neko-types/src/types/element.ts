@@ -232,7 +232,7 @@ export interface Scene3DElement extends BaseTimelineElement {
 /** 2D puppet (Live2D/MOC3) element on the timeline */
 export interface PuppetElement extends BaseTimelineElement {
   type: 'puppet';
-  /** Source puppet file path (.moc3 or .inp) */
+  /** Source puppet file path (.moc3) */
   src: string;
   /** Active animation clip name */
   animationClip?: string;

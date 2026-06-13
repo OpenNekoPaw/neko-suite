@@ -17,7 +17,7 @@ import type { EngineAudioProperties } from '../generated/timeline.engine';
  * UI extension: eq (not in engine)
  *
  * Note: Omit fadeInCurve/fadeOutCurve because TS EasingType is a superset of
- * EngineEasingType (includes legacy aliases 'bezier', 'ease-in', etc.)
+ * EngineEasingType (includes UI shorthand values 'bezier', 'ease-in', etc.)
  */
 export interface AudioProperties extends Omit<
   EngineAudioProperties,

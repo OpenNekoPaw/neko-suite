@@ -29,8 +29,8 @@ export interface FieldBinding {
   mode?: FieldBindingMode;
   /** Required bindings are reported when the path cannot be resolved. */
   required?: boolean;
-  /** Stable fallback value used by renderers when data is absent. */
-  fallback?: unknown;
+  /** Stable default value used by renderers when data is absent. */
+  defaultValue?: unknown;
 }
 
 export type CanvasContentVisibility = 'always' | 'selected' | 'expanded' | 'hover';
@@ -198,7 +198,7 @@ export type CanvasPreviewRole =
   | 'collection'
   | 'project-thumbnail'
   | 'node-summary'
-  | 'fallback';
+  | 'unavailable';
 
 export interface CanvasPreviewDimensions {
   width: number;
@@ -234,7 +234,7 @@ export interface PreviewCapability {
   roles: CanvasPreviewRole[];
   preferredRole?: CanvasPreviewRole;
   variants?: CanvasPreviewVariant[];
-  fallbackLabel?: string;
+  unavailableLabel?: string;
 }
 
 export interface PlaybackCapability {

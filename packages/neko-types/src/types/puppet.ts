@@ -2,15 +2,14 @@
 // Puppet Project Types — .nkp file format
 //
 // Lightweight JSON wrapper referencing an external .moc3 file or a Live2D
-// bundle-backed source. Legacy .inp references remain readable for compatibility.
+// bundle-backed source.
 // Stores parameter overrides and viewport state.
 // =============================================================================
 
 import type { BundleEntryLocator } from './bundle-locator';
 
-/** Supported puppet binary formats */
-/** Supported .nkp source formats; `inp` is retained only for legacy metadata deserialization. */
-export type PuppetFormat = 'inp' | 'moc3' | 'native';
+/** Supported .nkp source formats. */
+export type PuppetFormat = 'moc3' | 'native';
 
 export type NkpAnimationModel = 'moc3-parameter' | 'bone-blendshape';
 
@@ -639,7 +638,7 @@ function isNkpTransformEditMode(value: unknown): value is NkpTransformEditMode {
 }
 
 function isPuppetFormat(value: unknown): value is PuppetFormat {
-  return value === 'inp' || value === 'moc3' || value === 'native';
+  return value === 'moc3' || value === 'native';
 }
 
 function isNkpAnimationModel(value: unknown): value is NkpAnimationModel {

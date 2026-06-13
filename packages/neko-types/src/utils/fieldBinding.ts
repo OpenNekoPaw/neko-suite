@@ -19,8 +19,8 @@ export interface FieldBindingWriteResult<TData> {
 export function readFieldBinding(data: unknown, binding: FieldBinding): FieldBindingReadResult {
   const result = readJsonPointer(data, binding.path);
 
-  if (!result.found && binding.fallback !== undefined) {
-    return { found: false, value: binding.fallback };
+  if (!result.found && binding.defaultValue !== undefined) {
+    return { found: false, value: binding.defaultValue };
   }
 
   return result;

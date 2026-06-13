@@ -68,8 +68,6 @@ export interface MarketSearchQuery {
   semantic?: Record<string, MarketFacetValue | MarketRangeFacet>;
   intent?: {
     useCases?: string[];
-    /** @deprecated Use useCases. Removal target: marketplace contract v1.1 / next minor after 2026-05-05 migration window. */
-    useCase?: string[];
     audience?: string | string[];
     workflowStage?: string | string[];
     domain?: string | string[];
@@ -445,8 +443,6 @@ export interface IMarketClient {
   getPackage(packageId: string): Promise<MarketPackage | undefined>;
   getVersions(packageId: string): Promise<MarketPackageVersion[]>;
   getDownloadDescriptor(packageId: string, version: string): Promise<DownloadDescriptor>;
-  /** @deprecated Use getDownloadDescriptor. */
-  getDownloadUrl(packageId: string, version: string): Promise<string>;
   getFeatured(type?: AssetType): Promise<MarketPackage[]>;
   setAuthToken(token: string | null): void;
   setRegistryUrl?(registryUrl: string | null | undefined): void;

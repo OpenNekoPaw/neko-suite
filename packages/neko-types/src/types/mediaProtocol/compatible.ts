@@ -198,7 +198,7 @@ export interface RenderCompositeFrameResponse {
   payload?: {
     /** Binary JPEG data (preferred, more efficient) */
     imageData?: Uint8Array;
-    /** Rendered image as base64 data URL (legacy fallback) */
+    /** Rendered image as a data URL transport alternative */
     imageDataUrl?: string;
     /** Image width */
     width: number;
@@ -235,7 +235,7 @@ export interface CompatibleGetVideoFrameResponse {
   payload?: {
     /** Frame image as binary JPEG data (preferred, more efficient) */
     imageData?: Uint8Array;
-    /** Frame image as base64 data URL (legacy fallback) */
+    /** Frame image as a data URL transport alternative */
     imageDataUrl?: string;
     /** Frame width */
     width: number;

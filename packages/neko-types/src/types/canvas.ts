@@ -220,7 +220,7 @@ export interface CanvasNodeBase {
   locked?: boolean;
   /** Port definitions for data-flow connections (optional, backward compatible) */
   ports?: PortDefinition[];
-  /** Optional composable content tree. Nodes without it use legacy renderers. */
+  /** Optional composable content tree. Nodes without it use the registered default renderer. */
   content?: ContainerSection;
   /** Optional organization parent. Position remains absolute canvas coordinates. */
   parentId?: string;

@@ -5,7 +5,7 @@
  *
  * Phase 4 更新：
  * - 新增 ExtensionCacheStats 类型
- * - 简化合成请求（标记为 deprecated）
+ * - 简化合成请求（保留为单轨解码 IPC）
  * - Extension 端仅负责单轨解码，合成移至 Webview GPU
  *
  * 职责：
