@@ -137,6 +137,15 @@ importers:
       '@ai-sdk/provider':
         specifier: ^3.0.8
         version: 3.0.8
+      '@neko-agent/types':
+        specifier: workspace:*
+        version: link:../agent-types
+      '@neko/shared':
+        specifier: workspace:*
+        version: link:../../../neko-types
+      undici:
+        specifier: ^7.16.0
+        version: 7.20.0
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -205,6 +214,9 @@ importers:
       '@neko/agent':
         specifier: workspace:*
         version: link:../agent
+      '@neko/ai-sdk':
+        specifier: workspace:*
+        version: link:../ai-sdk
       '@neko/entity':
         specifier: workspace:*
         version: link:../../../neko-entity
@@ -846,6 +858,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.16
         version: 10.4.23(postcss@8.5.14)
+      jsdom:
+        specifier: ^27.0.1
+        version: 27.4.0
       postcss:
         specifier: ^8.4.32
         version: 8.5.14
@@ -1041,9 +1056,6 @@ importers:
       '@neko/market-core':
         specifier: workspace:*
         version: link:../core
-      '@neko/neko-client':
-        specifier: workspace:*
-        version: link:../../../neko-client
       '@neko/shared':
         specifier: workspace:*
         version: link:../../../neko-types
@@ -1347,6 +1359,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.16
         version: 10.4.23(postcss@8.5.6)
+      jsdom:
+        specifier: ^27.0.1
+        version: 27.4.0
       postcss:
         specifier: ^8.4.32
         version: 8.5.6
@@ -1578,12 +1593,6 @@ importers:
         specifier: ^0.34.0
         version: 0.34.5
     devDependencies:
-      '@neko/neko-client':
-        specifier: workspace:*
-        version: link:../neko-client
-      '@neko/shared':
-        specifier: workspace:*
-        version: link:../neko-types
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.27
@@ -1667,6 +1676,9 @@ importers:
       '@types/vscode':
         specifier: ^1.85.0
         version: 1.107.0
+      jsdom:
+        specifier: ^27.0.1
+        version: 27.4.0
 
   packages/neko-ui:
     dependencies:
@@ -1716,9 +1728,6 @@ importers:
       '@types/react-dom':
         specifier: ^18.2.17
         version: 18.3.7(@types/react@18.3.27)
-      '@vitejs/plugin-react':
-        specifier: 4.3.4
-        version: 4.3.4(vite@6.4.2(@types/node@25.7.0)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
       jsdom:
         specifier: ^27.0.1
         version: 27.4.0
