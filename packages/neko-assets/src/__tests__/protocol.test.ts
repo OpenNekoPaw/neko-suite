@@ -65,12 +65,11 @@ describe('neko-assets package.json -- required commands are present', () => {
 });
 
 // ============================================================================
-// Tests: extension.ts source contract -- registerLegacyCommands
+// Tests: extension.ts source contract -- baseline commands
 // ============================================================================
 
-describe('extension.ts -- registerLegacyCommands keeps only valid commands', () => {
+describe('extension.ts -- baseline commands keep only valid commands', () => {
   it('does NOT contain neko.assets.sync command registration', () => {
-    // registerLegacyCommands should not register removed cloud sync commands
     expect(extensionSource).not.toMatch(/registerCommand\(\s*['"]neko\.assets\.sync['"]/);
   });
 
@@ -130,13 +129,13 @@ describe('extension.ts -- entity integration boundary', () => {
   });
 });
 
-describe('extension.ts -- registerLegacyCommands function exists', () => {
-  it('defines registerLegacyCommands as a function', () => {
-    expect(extensionSource).toMatch(/function registerLegacyCommands/);
+describe('extension.ts -- baseline command function exists', () => {
+  it('defines registerBaselineCommands as a function', () => {
+    expect(extensionSource).toMatch(/function registerBaselineCommands/);
   });
 
   it('is called during activation', () => {
-    expect(extensionSource).toContain('registerLegacyCommands(context)');
+    expect(extensionSource).toContain('registerBaselineCommands(context)');
   });
 });
 
@@ -145,8 +144,8 @@ describe('extension.ts -- registerLegacyCommands function exists', () => {
 // ============================================================================
 
 describe('extension activation (NKAS-007)', () => {
-  it('calls registerLegacyCommands(context) during activation', () => {
-    expect(extensionSource).toContain('registerLegacyCommands(context)');
+  it('calls registerBaselineCommands(context) during activation', () => {
+    expect(extensionSource).toContain('registerBaselineCommands(context)');
   });
 
   it('registers neko.assetManager tree view', () => {

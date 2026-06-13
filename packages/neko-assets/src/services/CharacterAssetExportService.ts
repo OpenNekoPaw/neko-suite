@@ -275,7 +275,7 @@ export class CharacterAssetExportService {
         { path: outputPath, role: 'spritesheet', mediaKind: 'puppet-motion', dimension: 'motion' },
       ],
       diagnostics: [
-        'Spritesheet fallback export wrote a non-mutating engine bake plan for native puppet clips.',
+        'Spritesheet export wrote a non-mutating engine bake plan for native puppet clips.',
       ],
     };
   }
@@ -301,7 +301,7 @@ export class CharacterAssetExportService {
       outputPath,
       files: [{ path: outputPath, role: 'diagnostic' }],
       diagnostics: [
-        'Lottie-compatible export plan records unsupported native skinned mesh features and fallback targets.',
+        'Lottie-compatible export plan records unsupported native skinned mesh features and alternate export targets.',
       ],
     };
   }
@@ -343,7 +343,7 @@ export class CharacterAssetExportService {
       ],
       diagnostics: [
         {
-          code: 'spritesheet-bake-fallback',
+          code: 'spritesheet-bake-plan',
           severity: 'info',
           message:
             'Spritesheet export bakes native puppet animation frames for runtimes that cannot consume skeleton or BlendShape data; source assets are not mutated.',
@@ -367,7 +367,7 @@ export class CharacterAssetExportService {
           code: 'lottie-native-skinning-unsupported',
           severity: 'unsupported',
           message:
-            'Lottie-compatible export is not directly supported for native skinned meshes yet; use spritesheet fallback or Spine JSON when target runtime supports it.',
+            'Lottie-compatible export is not directly supported for native skinned meshes yet; use spritesheet export or Spine JSON when target runtime supports it.',
         },
       ],
     };

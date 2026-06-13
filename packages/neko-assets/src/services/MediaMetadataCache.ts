@@ -15,8 +15,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { MediaFileMetadata } from '@neko/shared';
-import { PathResolver } from '@neko/asset';
+import { PathResolver, type MediaFileMetadata } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MediaMetadataCache');

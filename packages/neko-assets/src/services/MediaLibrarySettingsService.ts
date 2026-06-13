@@ -16,8 +16,8 @@ import type {
   MediaLibraryLocalSettings,
   MediaLibraryEntry,
   ResolvedMediaLibrary,
+  type PathVariableMap,
 } from '@neko/shared';
-import type { PathVariableMap } from '@neko/asset';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MediaLibrarySettings');

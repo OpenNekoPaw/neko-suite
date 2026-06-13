@@ -24,13 +24,13 @@ import type {
   MergeEntitiesInput,
   MergeEntitiesResult,
 } from '@neko/shared';
+import { PathResolver } from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import type { IAssetClassifier } from '../classifier/IClassifier';
 import { EntityService } from './EntityService';
 import { VariantService } from './VariantService';
 import { FileService, type MetadataExtractor } from './FileService';
 import { AssetHealthService } from './AssetHealthService';
-import { PathResolver } from './PathResolver';
 import type {
   FileAccessChecker,
   FileHealthResult,

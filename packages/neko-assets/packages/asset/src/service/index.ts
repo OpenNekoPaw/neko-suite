@@ -41,7 +41,6 @@ export {
   type DeleteAssetPlan,
   type RepresentationPackageDetail,
 } from './EntityAssetCompositionService';
-export { PathResolver } from './PathResolver';
 export type {
   FileAccessChecker,
   FileHealthResult,

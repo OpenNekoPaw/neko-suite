@@ -20,7 +20,6 @@ import {
   JsonFileStorage,
   RuleClassifier,
   AssetDiffService,
-  PathResolver,
   buildAssetBindingCandidate,
   buildCancelEntityBindingPlan,
   buildDeleteAssetPlan,
@@ -37,6 +36,7 @@ import {
   resolveWorkspaceMediaPath,
   resolveStorageLayout,
   parseEntityUri,
+  PathResolver,
   type CreativeEntityKind,
   type WorkspaceMediaPathContext,
   type ResourceVariantRequest,
@@ -387,8 +387,8 @@ export async function activate(
   // 5. Register asset action commands
   registerAssetCommands(context);
 
-  // 6. Register existing commands (sync, push, pull, LFS, preview)
-  registerLegacyCommands(context);
+  // 6. Register baseline preview/history commands
+  registerBaselineCommands(context);
 
   // 7. Register internal API commands (for cross-extension access)
   registerInternalCommands(context);
@@ -2135,11 +2135,7 @@ function registerSearchCommand(
   );
 }
 
-// =============================================================================
-// Legacy Commands (preserved from original extension.ts)
-// =============================================================================
-
-function registerLegacyCommands(context: vscode.ExtensionContext): void {
+function registerBaselineCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.viewHistory', () => {
       vscode.commands.executeCommand('neko.assetHistory.focus');

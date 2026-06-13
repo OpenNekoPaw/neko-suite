@@ -319,7 +319,7 @@ describe('CharacterAssetExportService', () => {
       target: 'spritesheet',
       mutatesSource: false,
       files: [{ role: 'spritesheet', mediaKind: 'puppet-motion', dimension: 'motion' }],
-      diagnostics: [{ code: 'spritesheet-bake-fallback', severity: 'info' }],
+      diagnostics: [{ code: 'spritesheet-bake-plan', severity: 'info' }],
     });
     expect(
       service.planNativePuppetLottieExport({
