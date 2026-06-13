@@ -60,7 +60,7 @@ export async function processCompatibleFrameResponse(
     throw new Error('No image data in response');
   }
 
-  // Prefer binary data (more efficient), fallback to base64
+  // Prefer binary data; data URLs remain a supported transport alternative.
   if (response.payload.imageData) {
     return arrayBufferToImageBitmap(
       response.payload.imageData.buffer as ArrayBuffer,
@@ -88,7 +88,7 @@ export async function processCompositeFrameResponse(
     throw new Error('No image data in response');
   }
 
-  // Prefer binary data (more efficient), fallback to base64
+  // Prefer binary data; data URLs remain a supported transport alternative.
   if (response.payload.imageData) {
     const buffer = response.payload.imageData.buffer as ArrayBuffer;
     const imgWidth = response.payload.width;

@@ -305,12 +305,10 @@ class MediaRequestProxy implements IMediaRequestProxy {
       throw new Error('No payload in response');
     }
 
-    // Handle both formats for backward compatibility
+    // Handle both supported image transports.
     if (response.payload.imageDataUrl) {
-      // Old format: base64 data URL
       return dataUrlToImageBitmap(response.payload.imageDataUrl);
     } else if (response.payload.imageBuffer) {
-      // New format: raw ArrayBuffer (more efficient)
       return arrayBufferToImageBitmap(
         response.payload.imageBuffer,
         response.payload.mimeType || 'image/jpeg',
@@ -364,10 +362,8 @@ class MediaRequestProxy implements IMediaRequestProxy {
       try {
         let bitmap: ImageBitmap;
         if (frame.imageDataUrl) {
-          // New format: base64 data URL
           bitmap = await dataUrlToImageBitmap(frame.imageDataUrl);
         } else if (frame.imageBuffer) {
-          // Old format: ArrayBuffer (may not work reliably)
           const mimeType = response.payload.mimeType || 'image/jpeg';
           bitmap = await arrayBufferToImageBitmap(frame.imageBuffer, mimeType, logger);
         } else {

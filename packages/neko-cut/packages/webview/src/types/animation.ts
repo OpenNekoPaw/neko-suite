@@ -145,7 +145,7 @@ export function createDefaultElementTransform(): ElementTransform {
  */
 export const EASING_TYPE_I18N_KEYS: Record<EasingType, string> = {
   linear: 'animation.easing.linear',
-  // Legacy aliases
+  // Short aliases
   'ease-in': 'animation.easing.easeIn',
   'ease-out': 'animation.easing.easeOut',
   'ease-in-out': 'animation.easing.easeInOut',
