@@ -1,4 +1,4 @@
-import type { CanvasNode, GroupCanvasNode } from '@neko/shared';
+import type { CanvasNode } from '@neko/shared';
 import {
   getContainerChildIds,
   getContainerPolicyName,
@@ -253,8 +253,8 @@ function withContainerChildIds(node: CanvasNode, childIds: string[]): CanvasNode
     return {
       ...node,
       container: { ...nextContainer, policy: 'group' },
-      data: { ...node.data, childIds },
-    } satisfies GroupCanvasNode;
+      data: { ...node.data },
+    };
   }
 
   return { ...node, container: nextContainer };

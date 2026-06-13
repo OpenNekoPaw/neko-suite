@@ -1,5 +1,5 @@
 import React from 'react';
-import { FallbackNode } from './FallbackNode';
+import { UnsupportedNode } from './UnsupportedNode';
 import { NodeContentDispatcher } from '../content/NodeContentDispatcher';
 import type { NodeRendererContext, NodeRendererRegistry } from './nodeRendererTypes';
 
@@ -12,8 +12,12 @@ export function renderCanvasNode(
   return (
     <NodeContentDispatcher
       context={context}
-      renderLegacy={(legacyContext) =>
-        renderer ? renderer(legacyContext) : <FallbackNode key={context.node.id} {...legacyContext} />
+      renderDefaultNode={(defaultContext) =>
+        renderer ? (
+          renderer(defaultContext)
+        ) : (
+          <UnsupportedNode key={context.node.id} {...defaultContext} />
+        )
       }
     />
   );

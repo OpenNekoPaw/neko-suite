@@ -15,7 +15,6 @@ import {
   DocumentResourceCacheProvider,
   GeneratedAssetResourceCacheProvider,
   HostContentAccessService,
-  LegacyResourceCacheProvider,
   PreviewVariantResourceCacheProvider,
   ResourceCacheContentAccessProvider,
   ThumbnailResourceCacheProvider,
@@ -610,13 +609,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                 height: options.maxHeight,
                 mimeType: 'image/jpeg',
               });
-              const legacyPath =
+              const thumbnailPath =
                 visual?.projectedUri && !isWebviewOrRemoteUri(visual.projectedUri)
                   ? visual.projectedUri
                   : await api?.getThumbnailPath(filePath);
-              return legacyPath
+              return thumbnailPath
                 ? {
-                    path: legacyPath,
+                    path: thumbnailPath,
                     width: options.maxWidth,
                     height: options.maxHeight,
                     mimeType: 'image/jpeg',
@@ -637,7 +636,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           entryReader: createCanvasDocumentEntryReader(workspaceRoot),
           enableRangeFallback: false,
         }),
-        new LegacyResourceCacheProvider(),
       ],
       logger,
     });
@@ -1792,10 +1790,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): { filePath: string; assetId: string } {
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
     const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
-    const dir = path.join(
-      resolveStorageLayout(workspaceDir, os.homedir() || workspaceDir).project.cache.generated,
-      'image',
-    );
+    const generatedCacheDir = resolveStorageLayout(workspaceDir, os.homedir() || workspaceDir)
+      .project.local.cache.generated;
+    const dir = path.join(generatedCacheDir, 'image');
     fs.mkdirSync(dir, { recursive: true });
     const assetId = crypto.randomUUID();
     const filePath = path.join(dir, `${assetId}.${ext}`);
@@ -3412,12 +3409,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): string | undefined {
     if (assetPath) {
       return assetPath;
-    }
-    if (isResourceRef(resourceRef)) {
-      const value = resourceRef.source.metadata?.['legacyCachePath'];
-      if (typeof value === 'string' && value.length > 0) {
-        return value;
-      }
     }
     return isDocumentArchiveResourceRef(documentResourceRef)
       ? documentResourceRef.cachePath

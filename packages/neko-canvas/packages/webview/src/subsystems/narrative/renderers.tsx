@@ -296,8 +296,8 @@ function colorForType(type: string): string {
   }
 }
 
-function readString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
+function readString(value: unknown, defaultValue: string): string {
+  return typeof value === 'string' ? value : defaultValue;
 }
 
 function readSceneRef(node: NarrativeNode): string | undefined {

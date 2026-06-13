@@ -1,6 +1,8 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/mask.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * Shared mask operation primitives.
+ *
+ * This host-agnostic contract is used by @neko/shared operations. Feature
+ * Webviews own rendering and editor helpers on top of this shape.
  */
 // =============================================================================
 // Masks

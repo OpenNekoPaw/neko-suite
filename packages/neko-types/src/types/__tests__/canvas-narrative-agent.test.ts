@@ -26,9 +26,9 @@ function edge(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type: 'choice',
     choiceText: id,
     priority: 0,
@@ -37,7 +37,7 @@ function edge(
 }
 
 describe('canvas narrative agent analysis', () => {
-  it('reports graph diagnostics without using deprecated story graph formats', () => {
+  it('reports graph diagnostics without old-format scene-ref branches', () => {
     const analysis = analyzeCanvasNarrativeForAgent({
       variableNames: ['closeness'],
       nodes: [
@@ -64,7 +64,7 @@ describe('canvas narrative agent analysis', () => {
         'narrative-missing-ending',
         'narrative-unreachable-node',
         'narrative-accidental-dead-end',
-        'narrative-deprecated-scene-graph-ref',
+        'narrative-invalid-scene-ref',
         'narrative-unsupported-condition',
         'narrative-unresolved-variable',
       ]),

@@ -21,7 +21,6 @@ import {
 export const ARTIFACT_PROJECTOR_STORYBOARD_TO_CANVAS = 'projector:storyboard-to-canvas' as const;
 export const ARTIFACT_PROJECTOR_STORYBOARD_TO_CUT = 'projector:storyboard-to-cut' as const;
 export const ARTIFACT_DOMAIN_STORYBOARD_TABLE = 'StoryboardTable' as const;
-const LEGACY_ARTIFACT_DOMAIN_STORYBOARD_TABLE = 'StoryboardTableV1' as const;
 
 export interface ArtifactStoryboardDomainProjectionInput {
   readonly artifact: CompositeArtifact;
@@ -135,9 +134,7 @@ function findStoryboardDomainBlock(
 ): CompositeArtifactDomainBlock | undefined {
   return artifact.blocks.find(
     (block): block is CompositeArtifactDomainBlock =>
-      block.kind === 'domain' &&
-      (block.domainKind === ARTIFACT_DOMAIN_STORYBOARD_TABLE ||
-        block.domainKind === LEGACY_ARTIFACT_DOMAIN_STORYBOARD_TABLE),
+      block.kind === 'domain' && block.domainKind === ARTIFACT_DOMAIN_STORYBOARD_TABLE,
   );
 }
 

@@ -409,6 +409,7 @@ export const en = {
   'scene.column.characters': 'Characters',
   'scene.column.dialogueSfx': 'Dialogue / SFX',
   'scene.column.tagsStyle': 'Tags / Style',
+  'scene.column.imagePrep': 'Image Prep',
   'scene.column.status': 'Status',
   'scene.column.characterDescription': 'Character Description',
   'scene.column.characterReference': 'Character Reference',

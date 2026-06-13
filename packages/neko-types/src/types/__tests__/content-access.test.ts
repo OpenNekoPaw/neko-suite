@@ -91,7 +91,7 @@ describe('content access contracts', () => {
     ]);
   });
 
-  it('rejects preview, proxy, Webview, blob, object, cache-only, and legacy cache refs for offline intents', () => {
+  it('rejects preview, proxy, Webview, blob, object, and runtime cache refs for offline intents', () => {
     const cases: Array<{
       readonly name: string;
       readonly request: ContentAccessRequest;
@@ -168,9 +168,13 @@ describe('content access contracts', () => {
         expectedCodes: ['offline-runtime-ref'],
       },
       {
-        name: 'legacy cache path',
+        name: 'runtime cache path',
         request: {
-          ref: { kind: 'legacy-cache-path', cachePath: '/workspace/.neko/.cache/shot.png' },
+          ref: {
+            kind: 'runtime',
+            runtimeKind: 'cache-path',
+            value: '/workspace/.neko/.cache/shot.png',
+          },
           intent: 'package',
           target: 'bytes',
         },

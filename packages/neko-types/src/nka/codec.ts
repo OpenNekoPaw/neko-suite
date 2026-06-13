@@ -1031,19 +1031,19 @@ function toWarning(message: string): { field: string; message: string; severity:
   return { field: 'version', message, severity: 'warning' };
 }
 
-function readString(data: Record<string, unknown>, key: string, fallback: string): string {
+function readString(data: Record<string, unknown>, key: string, defaultValue: string): string {
   const value = data[key];
-  return typeof value === 'string' ? value : fallback;
+  return typeof value === 'string' ? value : defaultValue;
 }
 
-function readNumber(data: Record<string, unknown>, key: string, fallback: number): number {
+function readNumber(data: Record<string, unknown>, key: string, defaultValue: number): number {
   const value = data[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
 }
 
-function readBoolean(data: Record<string, unknown>, key: string, fallback: boolean): boolean {
+function readBoolean(data: Record<string, unknown>, key: string, defaultValue: boolean): boolean {
   const value = data[key];
-  return typeof value === 'boolean' ? value : fallback;
+  return typeof value === 'boolean' ? value : defaultValue;
 }
 
 function readArray(data: Record<string, unknown>, key: string): unknown[] {

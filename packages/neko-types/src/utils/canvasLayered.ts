@@ -7,7 +7,7 @@
 import type { CanvasNode } from '../types/canvas';
 import type { ContainerPolicyName } from '../types/canvas-layered';
 
-export type CanvasContainerChildSource = 'container' | 'legacy-group-childIds';
+export type CanvasContainerChildSource = 'container';
 
 export interface CanvasContainerChildReference {
   parentId: string;
@@ -23,17 +23,8 @@ export interface CanvasParentReference {
   source: CanvasParentReferenceSource;
 }
 
-export function getLegacyContainerChildIds(node: CanvasNode): string[] {
-  switch (node.type) {
-    case 'group':
-      return node.data.childIds;
-    default:
-      return [];
-  }
-}
-
 export function getContainerChildIds(node: CanvasNode): string[] {
-  return uniqueStrings([...(node.container?.childIds ?? []), ...getLegacyContainerChildIds(node)]);
+  return uniqueStrings(node.container?.childIds ?? []);
 }
 
 export function getContainerChildReferences(node: CanvasNode): CanvasContainerChildReference[] {
@@ -41,13 +32,6 @@ export function getContainerChildReferences(node: CanvasNode): CanvasContainerCh
 
   for (const childId of node.container?.childIds ?? []) {
     references.push({ parentId: node.id, childId, source: 'container' });
-  }
-
-  const legacySource = getLegacyContainerChildSource(node);
-  if (legacySource) {
-    for (const childId of getLegacyContainerChildIds(node)) {
-      references.push({ parentId: node.id, childId, source: legacySource });
-    }
   }
 
   return references;
@@ -85,15 +69,6 @@ export function getContainerPolicyName(node: CanvasNode): ContainerPolicyName | 
       return 'artboard';
     case 'table':
       return 'table';
-    default:
-      return undefined;
-  }
-}
-
-function getLegacyContainerChildSource(node: CanvasNode): CanvasContainerChildSource | undefined {
-  switch (node.type) {
-    case 'group':
-      return 'legacy-group-childIds';
     default:
       return undefined;
   }

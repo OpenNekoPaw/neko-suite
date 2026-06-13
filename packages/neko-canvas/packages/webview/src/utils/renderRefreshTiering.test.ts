@@ -17,9 +17,9 @@ function createConnections(count: number, nodeCount: number): CanvasConnection[]
   return Array.from({ length: count }, (_, index) => ({
     id: `connection-${index}`,
     sourceId: `node-${index % nodeCount}`,
-    sourceAnchor: 'right',
     targetId: `node-${(index + 1) % nodeCount}`,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: `node-${index % nodeCount}`, scope: 'node' },
+    targetEndpoint: { nodeId: `node-${(index + 1) % nodeCount}`, scope: 'node' },
     type: 'reference',
   }));
 }

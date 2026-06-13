@@ -144,34 +144,6 @@ export interface UnifiedConfig {
    * Registry URL override for private deployments.
    */
   market?: MarketConfig;
-
-  // ==========================================================================
-  // Legacy Fields (for backward compatibility)
-  // ==========================================================================
-
-  /**
-   * Legacy: provider (use defaultProvider instead)
-   * @deprecated Use defaultProvider
-   */
-  provider?: string;
-
-  /**
-   * Legacy: model (use defaultModel instead)
-   * @deprecated Use defaultModel
-   */
-  model?: string;
-
-  /**
-   * Legacy: apiKey (use providers[].apiKey instead)
-   * @deprecated Use providers[].apiKey
-   */
-  apiKey?: string;
-
-  /**
-   * Legacy: baseUrl (use providers[].apiUrl instead)
-   * @deprecated Use providers[].apiUrl
-   */
-  baseUrl?: string;
 }
 
 // =============================================================================

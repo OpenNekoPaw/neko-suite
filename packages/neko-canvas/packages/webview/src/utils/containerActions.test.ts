@@ -176,7 +176,7 @@ describe('containerLayout', () => {
       ...createNode('group-1', 'group', 100, 100),
       size: { width: 400, height: 320 },
       container: { policy: 'group', childIds: ['a', 'b'] },
-      data: { childIds: ['a', 'b'], label: 'Group' },
+      data: { label: 'Group' },
     } as CanvasNode;
     const a = createNode('a', 'annotation', 0, 0);
     const b = createNode('b', 'annotation', 0, 0);

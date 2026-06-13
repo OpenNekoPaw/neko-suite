@@ -2,7 +2,7 @@
  * Connection - Single connection component
  * Renders a bezier curve with directional arrow and data-type coloring.
  *
- * Supports both legacy anchor-based and port-based connections.
+ * Supports endpoint-based node and port connections.
  * Enhanced with:
  * - Directional arrow markers
  * - Data-type-based coloring
@@ -11,8 +11,8 @@
  */
 
 import { useMemo } from 'react';
-import type { CanvasConnection, CanvasNode, PortDefinition } from '@neko/shared';
-import { getDefaultPorts } from '@neko/shared';
+import type { CanvasConnection, CanvasNode } from '@neko/shared';
+import { findCanvasNodePort } from '@neko/shared';
 import { getConnectionPathGeometry } from './connectionGeometry';
 import { resolveConnectionTitle } from '../../i18n/connectionLabels';
 
@@ -53,10 +53,10 @@ function resolveConnectionColor(
   sourceNode: CanvasNode,
   _targetNode: CanvasNode,
 ): string {
-  // Try to get color from source port data type
-  if (connection.sourcePort) {
-    const ports = sourceNode.ports ?? getDefaultPorts(sourceNode.type);
-    const port = ports.find((p: PortDefinition) => p.id === connection.sourcePort);
+  const sourcePortId =
+    connection.sourceEndpoint.scope === 'port' ? connection.sourceEndpoint.portId : undefined;
+  if (sourcePortId) {
+    const port = findCanvasNodePort(sourceNode, sourcePortId);
     if (port?.dataType && DATA_TYPE_COLORS[port.dataType]) {
       return DATA_TYPE_COLORS[port.dataType]!;
     }

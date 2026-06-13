@@ -413,32 +413,14 @@ function validateChildSlotIds(
 
 function validateConnections(connections: CanvasConnection[], context: ValidationContext): void {
   connections.forEach((connection, index) => {
-    validateLegacyConnectionEndpoint(
-      connection.sourceId,
-      `connections[${index}].sourceId`,
-      context,
-    );
-    validateLegacyConnectionEndpoint(
-      connection.targetId,
-      `connections[${index}].targetId`,
-      context,
-    );
-
-    if (connection.sourceEndpoint) {
-      validateEndpoint(connection.sourceEndpoint, `connections[${index}].sourceEndpoint`, context);
-    }
-
-    if (connection.targetEndpoint) {
-      validateEndpoint(connection.targetEndpoint, `connections[${index}].targetEndpoint`, context);
-    }
+    validateConnectionNodeId(connection.sourceId, `connections[${index}].sourceId`, context);
+    validateConnectionNodeId(connection.targetId, `connections[${index}].targetId`, context);
+    validateEndpoint(connection.sourceEndpoint, `connections[${index}].sourceEndpoint`, context);
+    validateEndpoint(connection.targetEndpoint, `connections[${index}].targetEndpoint`, context);
   });
 }
 
-function validateLegacyConnectionEndpoint(
-  nodeId: string,
-  path: string,
-  context: ValidationContext,
-): void {
+function validateConnectionNodeId(nodeId: string, path: string, context: ValidationContext): void {
   if (!context.nodeById.has(nodeId)) {
     context.errors.push({
       field: path,

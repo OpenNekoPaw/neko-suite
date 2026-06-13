@@ -70,6 +70,7 @@ const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
   characters: 'scene.column.characters',
   'dialogue-sfx': 'scene.column.dialogueSfx',
   'tags-style': 'scene.column.tagsStyle',
+  'image-prep': 'scene.column.imagePrep',
   status: 'scene.column.status',
   'character-description': 'scene.column.characterDescription',
   'character-reference': 'scene.column.characterReference',
@@ -83,13 +84,14 @@ const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
 
 const SCENE_TABLE_COLUMN_WIDTHS: Record<SceneShotTableColumnId, number> = {
   shot: 96,
-  image: 128,
+  image: 220,
   duration: 88,
   camera: 150,
   'visual-action': 260,
   characters: 160,
   'dialogue-sfx': 220,
   'tags-style': 180,
+  'image-prep': 240,
   status: 150,
   'character-description': 220,
   'character-reference': 180,
@@ -427,29 +429,29 @@ function GalleryReviewList({
             return (
               <tr key={childNode.id} data-gallery-review-row-id={childNode.id} className="bg-white">
                 <td className="border border-gray-200 px-2 py-2 align-top">
-                  {resolveGalleryCellOrdinal(parentNode, childNode, index)}
+                  {resolveGalleryChildOrdinal(parentNode, childNode, index)}
                 </td>
                 <td className="border border-gray-200 px-2 py-2 align-top">
                   <BoundedSceneCellText
                     value={
                       readString(placement, 'label') ?? childNode.preview?.title ?? childNode.id
                     }
-                    fallback={t('scene.valueUnavailable')}
+                    placeholder={t('scene.valueUnavailable')}
                   />
                 </td>
                 <td className="border border-gray-200 px-2 py-2 align-top">
                   <BoundedSceneCellText
                     value={status ? resolveCanvasStatusLabel(status) : ''}
-                    fallback={t('scene.valueUnavailable')}
+                    placeholder={t('scene.valueUnavailable')}
                   />
                 </td>
                 <td className="border border-gray-200 px-2 py-2 align-top">
-                  <BoundedSceneCellText value={prompt} fallback={t('scene.valueUnavailable')} />
+                  <BoundedSceneCellText value={prompt} placeholder={t('scene.valueUnavailable')} />
                 </td>
                 <td className="border border-gray-200 px-2 py-2 align-top">
                   <BoundedSceneCellText
                     value={childNode.id}
-                    fallback={t('scene.valueUnavailable')}
+                    placeholder={t('scene.valueUnavailable')}
                   />
                 </td>
               </tr>
@@ -911,61 +913,83 @@ function renderSceneShotTableCell(
     case 'image':
       return <SceneShotTableImageCell row={row} context={options.context} />;
     case 'duration':
-      return <BoundedSceneCellText value={row.duration} fallback={t('scene.valueUnavailable')} />;
+      return (
+        <BoundedSceneCellText value={row.duration} placeholder={t('scene.valueUnavailable')} />
+      );
     case 'camera':
-      return <BoundedSceneCellText value={row.camera} fallback={t('scene.valueUnavailable')} />;
+      return <BoundedSceneCellText value={row.camera} placeholder={t('scene.valueUnavailable')} />;
     case 'visual-action':
       return (
-        <BoundedSceneCellText value={row.visualAction} fallback={t('scene.shotVisualFallback')} />
+        <BoundedSceneCellText
+          value={row.visualAction}
+          placeholder={t('scene.shotVisualFallback')}
+        />
       );
     case 'characters':
       return (
-        <BoundedSceneCellText value={row.characters} fallback={t('preset.shot.noCharacters')} />
+        <BoundedSceneCellText value={row.characters} placeholder={t('preset.shot.noCharacters')} />
       );
     case 'dialogue-sfx':
-      return <BoundedSceneCellText value={row.dialogueSfx} fallback={t('scene.noDialogue')} />;
+      return <BoundedSceneCellText value={row.dialogueSfx} placeholder={t('scene.noDialogue')} />;
     case 'tags-style':
-      return <BoundedSceneCellText value={row.tagsStyle} fallback={t('scene.valueUnavailable')} />;
+      return (
+        <BoundedSceneCellText value={row.tagsStyle} placeholder={t('scene.valueUnavailable')} />
+      );
+    case 'image-prep':
+      return (
+        <BoundedSceneCellText value={row.imagePrep} placeholder={t('scene.valueUnavailable')} />
+      );
     case 'status':
       return <SceneShotStatusCell row={row} />;
     case 'character-description':
       return (
         <BoundedSceneCellText
           value={row.characterDescription}
-          fallback={t('scene.valueUnavailable')}
+          placeholder={t('scene.valueUnavailable')}
         />
       );
     case 'character-reference':
       return (
         <BoundedSceneCellText
           value={row.characterReference}
-          fallback={t('scene.valueUnavailable')}
+          placeholder={t('scene.valueUnavailable')}
         />
       );
     case 'reference-image':
       return (
-        <BoundedSceneCellText value={row.referenceImage} fallback={t('scene.imageUnavailable')} />
+        <BoundedSceneCellText
+          value={row.referenceImage}
+          placeholder={t('scene.imageUnavailable')}
+        />
       );
     case 'storyboard-prompt':
       return (
-        <BoundedSceneCellText value={row.storyboardPrompt} fallback={t('scene.valueUnavailable')} />
+        <BoundedSceneCellText
+          value={row.storyboardPrompt}
+          placeholder={t('scene.valueUnavailable')}
+        />
       );
     case 'video-camera-prompt':
       return (
         <BoundedSceneCellText
           value={row.videoCameraPrompt}
-          fallback={t('scene.valueUnavailable')}
+          placeholder={t('scene.valueUnavailable')}
         />
       );
     case 'image-strategy':
       return (
-        <BoundedSceneCellText value={row.imageStrategy} fallback={t('scene.valueUnavailable')} />
+        <BoundedSceneCellText value={row.imageStrategy} placeholder={t('scene.valueUnavailable')} />
       );
     case 'media-refs':
-      return <BoundedSceneCellText value={row.mediaRefs} fallback={t('scene.valueUnavailable')} />;
+      return (
+        <BoundedSceneCellText value={row.mediaRefs} placeholder={t('scene.valueUnavailable')} />
+      );
     case 'diagnostics':
       return (
-        <BoundedSceneCellText value={row.diagnostics} fallback={t('preset.shot.noDiagnostics')} />
+        <BoundedSceneCellText
+          value={row.diagnostics}
+          placeholder={t('preset.shot.noDiagnostics')}
+        />
       );
   }
 }
@@ -980,13 +1004,19 @@ function SceneShotTableImageCell({
   const previewSource = resolveShotPreviewSource(row.node);
   if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
     return (
-      <div className="flex h-[72px] w-[108px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400">
+      <div
+        className="flex h-[132px] w-[198px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400"
+        data-scene-shot-image-preview="large"
+      >
         {t('scene.imageUnavailable')}
       </div>
     );
   }
   return (
-    <div className="h-[72px] w-[108px] overflow-hidden rounded border border-gray-200 bg-gray-50">
+    <div
+      className="h-[132px] w-[198px] overflow-hidden rounded border border-gray-200 bg-gray-50"
+      data-scene-shot-image-preview="large"
+    >
       <CardPreviewSlot
         source={previewSource}
         title={row.shotNumber}
@@ -1022,17 +1052,17 @@ function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNo
 
 function BoundedSceneCellText({
   value,
-  fallback,
+  placeholder,
 }: {
   value: string;
-  fallback: string;
+  placeholder: string;
 }): React.ReactNode {
   return (
     <div
       className="max-h-[5.25rem] min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
       data-scene-cell-text-bounded="true"
     >
-      {value || <span className="text-gray-400">{fallback}</span>}
+      {value || <span className="text-gray-400">{placeholder}</span>}
     </div>
   );
 }
@@ -1285,7 +1315,7 @@ function GalleryChildCard({
           interactionRenderMode={context.interactionRenderMode}
         />
         <div className="absolute left-2 top-2 rounded border border-black/10 bg-white/90 px-1.5 py-0.5 text-[10px] leading-none text-gray-600 shadow-sm">
-          {resolveGalleryCellOrdinal(parentNode, childNode, index)}
+          {resolveGalleryChildOrdinal(parentNode, childNode, index)}
         </div>
       </div>
       <div className="flex min-h-[66px] flex-col gap-1 border-t border-gray-200 bg-white px-2 py-2 text-left">
@@ -1998,7 +2028,7 @@ function resolveGalleryChildBadges(
   return [{ label: resolveCanvasStatusLabel(status), tone: badgeToneForStatus(status) }, ...badges];
 }
 
-function resolveGalleryCellOrdinal(
+function resolveGalleryChildOrdinal(
   parentNode: CanvasNode,
   childNode: CanvasNode,
   index: number,

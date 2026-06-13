@@ -1,6 +1,8 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/ui-state.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * Shared editor UI state primitives.
+ *
+ * These types are host-agnostic contracts for persisted/editor operations. They
+ * must stay independent from feature Webview implementations.
  */
 // =============================================================================
 // UI State Types — Separated from Engine Model
@@ -17,7 +19,6 @@
 import { ElementTransform } from './animation';
 import { ColorCorrection } from './colorCorrection';
 import { MaskInstance } from './mask';
-import { KeyframeTrack } from './keyframe';
 import { BlendModeType } from './blendMode';
 import { ElementTransition } from './transition';
 
@@ -79,8 +80,6 @@ export interface ElementEditState {
   colorCorrection?: ColorCorrection;
   /** Mask instances — pending engine support */
   masks?: MaskInstance[];
-  /** Legacy keyframe animations — pending migration to engine keyframes */
-  keyframes?: KeyframeTrack[];
 }
 
 /** Default edit state for a new element */

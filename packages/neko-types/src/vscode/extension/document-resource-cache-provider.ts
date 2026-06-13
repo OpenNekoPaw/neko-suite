@@ -19,7 +19,6 @@ import type {
   ResourceEnsureInput,
   ResourceEnsureResult,
 } from './resource-cache-service';
-import { readLegacyCachePath } from './legacy-resource-cache-provider';
 
 export const DOCUMENT_RESOURCE_CACHE_PROVIDER_ID = 'document-archive';
 
@@ -122,13 +121,6 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       return directEntry;
     }
 
-    const legacyEntry = await this.materializeLegacyCachePath(input, entryPath).catch(
-      () => undefined,
-    );
-    if (legacyEntry) {
-      return legacyEntry;
-    }
-
     if (!this.enableRangeFallback) {
       return {
         status: 'missing',
@@ -136,7 +128,7 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
         variant: input.variant,
         error: entryPath
           ? `Document image entry could not be materialized directly: ${entryPath}`
-          : 'Document resource ref cannot be materialized without a direct entry or legacy cache path.',
+          : 'Document resource ref cannot be materialized without a direct entry.',
       };
     }
 
@@ -176,33 +168,6 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
     };
   }
 
-  private async materializeLegacyCachePath(
-    input: ResourceEnsureInput,
-    entryPath: string | undefined,
-  ): Promise<ResourceEnsureResult | undefined> {
-    const legacyPath = readLegacyCachePath(input.ref);
-    if (!legacyPath) {
-      return undefined;
-    }
-    const targetRelativePath = createDocumentResourceRelativePath(input.ref, legacyPath, entryPath);
-    const targetPath = path.join(input.cacheRoot, targetRelativePath);
-    await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
-    await this.fsOps.copyFile(legacyPath, targetPath);
-    const stat = await this.fsOps.stat(targetPath);
-    return {
-      status: 'ready',
-      ref: input.ref,
-      variant: input.variant,
-      absolutePath: targetPath,
-      relativePath: targetRelativePath,
-      mimeType: input.variant.mimeType ?? inferMimeType(legacyPath),
-      width: input.variant.width,
-      height: input.variant.height,
-      sizeBytes: stat.size,
-      rebuildable: true,
-    };
-  }
-
   private async materializeDirectEntry(
     input: ResourceEnsureInput,
     source: DocumentSourceRef,
@@ -237,8 +202,7 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
 
 export function createDocumentResourceRef(input: CreateDocumentResourceRefInput): ResourceRef {
   const entryPath = input.entryPath ?? readLocatorEntryName(input.locator);
-  const baseSource = createDocumentResourceSource(input, false);
-  const source = createDocumentResourceSource(input, Boolean(input.cachePath));
+  const source = createDocumentResourceSource(input);
   const identityValue = readDocumentSourceIdentityValue(input.source);
   const fingerprint = createResourceFingerprint({
     strategy: identityValue ? 'identity' : 'provider',
@@ -262,23 +226,15 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
     scope: input.scope ?? 'project',
     provider: DOCUMENT_RESOURCE_CACHE_PROVIDER_ID,
     kind: 'document',
-    source: baseSource,
+    source,
     locator: createDocumentResourceLocator(entryPath, input.locator),
     fingerprint,
   });
 
-  return input.cachePath
-    ? {
-        ...ref,
-        source,
-      }
-    : ref;
+  return ref;
 }
 
-function createDocumentResourceSource(
-  input: CreateDocumentResourceRefInput,
-  includeLegacyCachePath: boolean,
-): ResourceSourceRef {
+function createDocumentResourceSource(input: CreateDocumentResourceRefInput): ResourceSourceRef {
   return {
     kind: 'document',
     document: createStableDocumentSource(input.source),
@@ -302,7 +258,6 @@ function createDocumentResourceSource(
             nonPortableReason: 'no-workspace-or-extension-private-scratch',
           }
         : {}),
-      ...(includeLegacyCachePath && input.cachePath ? { legacyCachePath: input.cachePath } : {}),
     },
   };
 }

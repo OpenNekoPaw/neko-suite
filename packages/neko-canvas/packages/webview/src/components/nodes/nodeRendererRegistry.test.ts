@@ -36,23 +36,26 @@ describe('nodeRendererRegistry', () => {
     expect(descriptors.annotation).toBeUndefined();
   });
 
-  it('renders a fallback card for unsupported complete nodes', () => {
+  it('renders an unsupported card for unsupported complete nodes', () => {
     const markup = renderToStaticMarkup(
-      renderCanvasNode({}, {
-        node: {
-          id: 'future-1',
-          type: 'future-node',
-          position: { x: 0, y: 0 },
-          size: { width: 240, height: 140 },
-          zIndex: 1,
-          data: { preserved: true },
-        } as never,
-        allNodes: [],
-        selectedNodeIds: [],
-        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
-        isSelected: false,
-        containerRef: { current: null },
-      }),
+      renderCanvasNode(
+        {},
+        {
+          node: {
+            id: 'future-1',
+            type: 'future-node',
+            position: { x: 0, y: 0 },
+            size: { width: 240, height: 140 },
+            zIndex: 1,
+            data: { preserved: true },
+          } as never,
+          allNodes: [],
+          selectedNodeIds: [],
+          viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+          isSelected: false,
+          containerRef: { current: null },
+        },
+      ),
     );
 
     expect(markup).toContain('UNSUPPORTED');
@@ -126,7 +129,7 @@ describe('nodeRendererRegistry', () => {
     expect(markup).not.toContain('UNSUPPORTED');
   });
 
-  it('renders project nodes through composable content instead of fallback cards', () => {
+  it('renders project nodes through composable content instead of unsupported cards', () => {
     const node = {
       id: 'project-1',
       type: 'project',
@@ -141,14 +144,17 @@ describe('nodeRendererRegistry', () => {
     } as CanvasNode;
 
     const markup = renderToStaticMarkup(
-      renderCanvasNode({}, {
-        node,
-        allNodes: [node],
-        selectedNodeIds: [],
-        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
-        isSelected: false,
-        containerRef: { current: null },
-      }),
+      renderCanvasNode(
+        {},
+        {
+          node,
+          allNodes: [node],
+          selectedNodeIds: [],
+          viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+          isSelected: false,
+          containerRef: { current: null },
+        },
+      ),
     );
 
     expect(markup).toContain('PROJECT');

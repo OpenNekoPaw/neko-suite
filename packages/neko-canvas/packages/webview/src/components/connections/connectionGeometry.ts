@@ -1,12 +1,12 @@
-import type { CanvasConnection, CanvasNode, PortDefinition } from '@neko/shared';
-import { getDefaultPorts } from '@neko/shared';
+import type { CanvasConnection, CanvasNode, ConnectionAnchor, PortDefinition } from '@neko/shared';
+import { getDefaultPorts, resolveCanvasConnectionEndpoint } from '@neko/shared';
 
-export interface Point {
+interface Point {
   x: number;
   y: number;
 }
 
-export interface ConnectionPathGeometry {
+interface ConnectionPathGeometry {
   sourcePoint: Point;
   targetPoint: Point;
   midX: number;
@@ -14,10 +14,10 @@ export interface ConnectionPathGeometry {
   pathD: string;
 }
 
-export function getLegacyAnchorPoint(node: CanvasNode, anchor: string): Point {
+function getNodeSidePoint(node: CanvasNode, side: string): Point {
   const { position, size } = node;
 
-  switch (anchor) {
+  switch (side) {
     case 'top':
       return { x: position.x + size.width / 2, y: position.y };
     case 'right':
@@ -31,7 +31,7 @@ export function getLegacyAnchorPoint(node: CanvasNode, anchor: string): Point {
   }
 }
 
-export function getPortAnchorPoint(node: CanvasNode, portId: string): Point | null {
+function getPortAnchorPoint(node: CanvasNode, portId: string): Point | null {
   const ports = node.ports ?? getDefaultPorts(node.type);
   const port = ports.find((p: PortDefinition) => p.id === portId);
   if (!port) return null;
@@ -58,7 +58,7 @@ export function getPortAnchorPoint(node: CanvasNode, portId: string): Point | nu
   }
 }
 
-export function rotatePoint(point: Point, center: Point, angleDeg: number): Point {
+function rotatePoint(point: Point, center: Point, angleDeg: number): Point {
   if (angleDeg === 0) return point;
   const rad = (angleDeg * Math.PI) / 180;
   const cos = Math.cos(rad);
@@ -71,20 +71,20 @@ export function rotatePoint(point: Point, center: Point, angleDeg: number): Poin
   };
 }
 
-export function getNodeCenter(node: CanvasNode): Point {
+function getNodeCenter(node: CanvasNode): Point {
   return {
     x: node.position.x + node.size.width / 2,
     y: node.position.y + node.size.height / 2,
   };
 }
 
-export function getAnchorPoint(node: CanvasNode, anchor: string, portId?: string): Point {
+function getEndpointPoint(node: CanvasNode, side: string, portId?: string): Point {
   let point: Point;
   if (portId) {
     const portPoint = getPortAnchorPoint(node, portId);
-    point = portPoint ?? getPortAnchorPoint(node, anchor) ?? getLegacyAnchorPoint(node, anchor);
+    point = portPoint ?? getPortAnchorPoint(node, side) ?? getNodeSidePoint(node, side);
   } else {
-    point = getPortAnchorPoint(node, anchor) ?? getLegacyAnchorPoint(node, anchor);
+    point = getPortAnchorPoint(node, side) ?? getNodeSidePoint(node, side);
   }
 
   const rotation = node.rotation ?? 0;
@@ -94,16 +94,8 @@ export function getAnchorPoint(node: CanvasNode, anchor: string, portId?: string
   return point;
 }
 
-export function getAnchorDirection(node: CanvasNode, anchor: string, portId?: string): string {
-  const id = portId ?? anchor;
-  const ports = node.ports ?? getDefaultPorts(node.type);
-  const port = ports.find((p: PortDefinition) => p.id === id);
-  if (port) return port.position;
-  return anchor;
-}
-
-export function getControlPoint(point: Point, anchor: string, offset: number): Point {
-  switch (anchor) {
+function getControlPoint(point: Point, side: ConnectionAnchor, offset: number): Point {
+  switch (side) {
     case 'top':
       return { x: point.x, y: point.y - offset };
     case 'right':
@@ -122,18 +114,18 @@ export function getConnectionPathGeometry(
   sourceNode: CanvasNode,
   targetNode: CanvasNode,
 ): ConnectionPathGeometry {
-  const sourcePoint = getAnchorPoint(sourceNode, connection.sourceAnchor, connection.sourcePort);
-  const targetPoint = getAnchorPoint(targetNode, connection.targetAnchor, connection.targetPort);
-  const sourceDir = getAnchorDirection(sourceNode, connection.sourceAnchor, connection.sourcePort);
-  const targetDir = getAnchorDirection(targetNode, connection.targetAnchor, connection.targetPort);
+  const source = resolveCanvasConnectionEndpoint(connection, sourceNode, 'source');
+  const target = resolveCanvasConnectionEndpoint(connection, targetNode, 'target');
+  const sourcePoint = getEndpointPoint(sourceNode, source.side, source.portId);
+  const targetPoint = getEndpointPoint(targetNode, target.side, target.portId);
 
   const dx = targetPoint.x - sourcePoint.x;
   const dy = targetPoint.y - sourcePoint.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   const controlOffset = Math.min(distance / 2, 100) + 50;
 
-  const cp1 = getControlPoint(sourcePoint, sourceDir, controlOffset);
-  const cp2 = getControlPoint(targetPoint, targetDir, controlOffset);
+  const cp1 = getControlPoint(sourcePoint, source.side, controlOffset);
+  const cp2 = getControlPoint(targetPoint, target.side, controlOffset);
 
   return {
     sourcePoint,

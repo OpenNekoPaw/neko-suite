@@ -29,8 +29,8 @@ export type { ModelNodeProps } from './ModelNode';
 export { CanvasEmbedNode } from './CanvasEmbedNode';
 export type { CanvasEmbedNodeProps } from './CanvasEmbedNode';
 
-export { FallbackNode } from './FallbackNode';
-export type { FallbackNodeProps } from './FallbackNode';
+export { UnsupportedNode } from './UnsupportedNode';
+export type { UnsupportedNodeProps } from './UnsupportedNode';
 
 export { renderCanvasNode } from './nodeRendererRegistry';
 export type {

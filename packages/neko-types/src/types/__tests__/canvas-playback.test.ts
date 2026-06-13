@@ -67,9 +67,9 @@ function connection(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type,
     ...extra,
   };
@@ -288,7 +288,7 @@ describe('canvas playback contracts', () => {
         layout: { mode: 'manual' },
       },
       extension: { playback: { expand: 'children' } },
-      data: { childIds: ['note-a', 'note-b'] },
+      data: { label: 'Group' },
     });
     const noteA = baseNode('note-a', 'annotation', {
       parentId: 'group',
@@ -482,28 +482,6 @@ describe('canvas playback contracts', () => {
         severity: 'warning',
       }),
     ]);
-  });
-
-  it('derives a legacy route from the first entry when route candidates are absent', () => {
-    const { routeCandidates: _routeCandidates, ...plan } = createCanvasPlaybackPlan({
-      canvas: canvas(
-        [media('media-a', 'assets/a.mp4'), media('media-b', 'assets/b.mp4')],
-        [connection('media-link', 'media-a', 'media-b', 'sequence')],
-      ),
-      adapterId: 'media-sequence',
-    });
-
-    const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
-
-    expect(resolution.routes).toEqual([
-      expect.objectContaining({
-        id: 'legacy-entry:media-a',
-        entryUnitId: 'media-a',
-        unitIds: ['media-a', 'media-b'],
-        sourceKind: 'entry',
-      }),
-    ]);
-    expect(resolution.diagnostics).toEqual([]);
   });
 
   it('reports a diagnostic when default route traversal reaches a cycle', () => {

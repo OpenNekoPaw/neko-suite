@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CURRENT_NKC_VERSION,
-  detectNkcVersion,
-  migrateNkc,
-  migrateNkcV2ToV2_1,
-} from '../index';
+import { CURRENT_NKC_VERSION, detectNkcVersion, migrateNkc, migrateNkcV2ToV2_1 } from '../index';
 import type { CanvasData, RegisteredCanvasNode } from '../../types/canvas';
 
 const registeredNode: RegisteredCanvasNode = {
@@ -29,9 +24,9 @@ function createCanvas(version: string): CanvasData {
       {
         id: 'connection-1',
         sourceId: 'choice-1',
-        sourceAnchor: 'right',
         targetId: 'choice-1',
-        targetAnchor: 'left',
+        sourceEndpoint: { nodeId: 'choice-1', scope: 'node' },
+        targetEndpoint: { nodeId: 'choice-1', scope: 'node' },
         type: 'choice',
         choiceText: 'Loop',
         priority: 0,
@@ -84,9 +79,7 @@ describe('NKC migrator v2.1', () => {
     expect(result.fromVersion).toBe('2.0');
     expect(result.toVersion).toBe('2.1');
     expect(result.data.version).toBe('2.1');
-    expect(result.steps).toEqual([
-      expect.objectContaining({ from: '2.0', to: '2.1' }),
-    ]);
+    expect(result.steps).toEqual([expect.objectContaining({ from: '2.0', to: '2.1' })]);
     expect(result.warnings).toEqual([]);
   });
 
@@ -97,7 +90,10 @@ describe('NKC migrator v2.1', () => {
     expect(result.fromVersion).toBe('1.0');
     expect(result.toVersion).toBe('2.1');
     expect(result.data.version).toBe('2.1');
-    expect(result.steps.map((step) => `${step.from}->${step.to}`)).toEqual(['1.0->2.0', '2.0->2.1']);
+    expect(result.steps.map((step) => `${step.from}->${step.to}`)).toEqual([
+      '1.0->2.0',
+      '2.0->2.1',
+    ]);
   });
 
   it('keeps current v2.1 data untouched', () => {
@@ -115,7 +111,7 @@ describe('NKC migrator v2.1', () => {
     expect(result.migrated).toBe(true);
     expect(result.data.version).toBe('2.1');
     expect(result.warnings).toEqual([
-      'Unknown NKC version "9.9" migrated with the v1-to-v2-to-v2.1 compatibility path.',
+      'Unknown NKC version "9.9" migrated through the canonical version normalizer.',
     ]);
   });
 });

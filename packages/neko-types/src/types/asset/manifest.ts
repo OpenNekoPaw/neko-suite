@@ -58,25 +58,6 @@ export const ASSET_TYPES: readonly AssetType[] = [
   'bundle',
 ] as const;
 
-export type LegacyAssetType =
-  | 'video'
-  | 'audio'
-  | 'image'
-  | 'sequence'
-  | '3d-model'
-  | 'puppet-motion'
-  | 'document'
-  | 'project-template'
-  | 'identity-pack'
-  | 'ai-model'
-  | 'lora'
-  | 'embedding'
-  | 'service-endpoint'
-  | 'provider-card'
-  | 'shader-preset'
-  | 'template'
-  | 'lut';
-
 // =============================================================================
 // Source
 // =============================================================================
@@ -783,17 +764,6 @@ export interface AssetManifestValidationResult {
   issues: AssetManifestValidationIssue[];
 }
 
-export interface LegacyMetadataPatch {
-  type: AssetType;
-  data?: Record<string, unknown>;
-}
-
-export interface LegacyAssetTypeMigration {
-  legacyType: LegacyAssetType;
-  type: AssetType;
-  metadataPatch: LegacyMetadataPatch;
-}
-
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
 const MEDIA_KIND_SET = new Set<string>(MEDIA_KINDS);
 const BUNDLE_TYPE_SET = new Set<string>(BUNDLE_TYPES);
@@ -801,58 +771,6 @@ const DISTRIBUTION_KIND_SET = new Set<string>(DISTRIBUTION_KINDS);
 const DISTRIBUTION_MODE_SET = new Set<string>(DISTRIBUTION_MODES);
 const PLUGIN_PERMISSION_SET = new Set<string>(PLUGIN_PERMISSIONS);
 const PLUGIN_HIGH_SENSITIVE_PERMISSION_SET = new Set<string>(PLUGIN_HIGH_SENSITIVE_PERMISSIONS);
-
-const LEGACY_TYPE_MIGRATIONS: Record<LegacyAssetType, LegacyAssetTypeMigration> = {
-  video: { legacyType: 'video', type: 'media', metadataPatch: mediaPatch('video') },
-  audio: { legacyType: 'audio', type: 'media', metadataPatch: mediaPatch('audio') },
-  image: { legacyType: 'image', type: 'media', metadataPatch: mediaPatch('image') },
-  sequence: { legacyType: 'sequence', type: 'media', metadataPatch: mediaPatch('sequence') },
-  '3d-model': { legacyType: '3d-model', type: 'media', metadataPatch: mediaPatch('3d-model') },
-  'puppet-motion': {
-    legacyType: 'puppet-motion',
-    type: 'media',
-    metadataPatch: mediaPatch('puppet-motion'),
-  },
-  document: { legacyType: 'document', type: 'media', metadataPatch: mediaPatch('document') },
-  'project-template': {
-    legacyType: 'project-template',
-    type: 'starter',
-    metadataPatch: { type: 'starter' },
-  },
-  'identity-pack': {
-    legacyType: 'identity-pack',
-    type: 'identity',
-    metadataPatch: { type: 'identity' },
-  },
-  'ai-model': { legacyType: 'ai-model', type: 'model', metadataPatch: modelPatch('base') },
-  lora: { legacyType: 'lora', type: 'model', metadataPatch: modelPatch('lora') },
-  embedding: { legacyType: 'embedding', type: 'model', metadataPatch: modelPatch('embedding') },
-  'service-endpoint': {
-    legacyType: 'service-endpoint',
-    type: 'endpoint',
-    metadataPatch: { type: 'endpoint' },
-  },
-  'provider-card': {
-    legacyType: 'provider-card',
-    type: 'provider',
-    metadataPatch: { type: 'provider' },
-  },
-  'shader-preset': {
-    legacyType: 'shader-preset',
-    type: 'shader',
-    metadataPatch: { type: 'shader', data: { shaderKind: 'preset' } },
-  },
-  template: {
-    legacyType: 'template',
-    type: 'preset',
-    metadataPatch: { type: 'preset', data: { presetKind: 'theme' } },
-  },
-  lut: {
-    legacyType: 'lut',
-    type: 'preset',
-    metadataPatch: { type: 'preset', data: { presetKind: 'lut' } },
-  },
-};
 
 export function isAssetType(value: unknown): value is AssetType {
   return typeof value === 'string' && ASSET_TYPE_SET.has(value);
@@ -937,15 +855,6 @@ export function getAssetCategory(type: AssetType): AssetCategory {
   return CATEGORY_MAP[type];
 }
 
-export function isLegacyAssetType(value: unknown): value is LegacyAssetType {
-  return typeof value === 'string' && value in LEGACY_TYPE_MIGRATIONS;
-}
-
-export function getLegacyAssetTypeMigration(value: unknown): LegacyAssetTypeMigration | undefined {
-  if (!isLegacyAssetType(value)) return undefined;
-  return LEGACY_TYPE_MIGRATIONS[value];
-}
-
 export function validateAssetManifest(manifest: unknown): AssetManifestValidationResult {
   const issues: AssetManifestValidationIssue[] = [];
 
@@ -1010,14 +919,6 @@ export function parseAssetManifest(manifest: unknown): AssetManifest {
     throw new Error(`Invalid AssetManifest: ${message}`);
   }
   return manifest as AssetManifest;
-}
-
-function mediaPatch(mediaKind: MediaKind): LegacyMetadataPatch {
-  return { type: 'media', data: { mediaKind } };
-}
-
-function modelPatch(modelKind: ModelMetadata['modelKind']): LegacyMetadataPatch {
-  return { type: 'model', data: { modelKind } };
 }
 
 function validateSource(

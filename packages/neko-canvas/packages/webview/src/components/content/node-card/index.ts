@@ -46,7 +46,7 @@ export {
   annotationCardPolicy,
   containerSummaryCardPolicy,
   createBuiltInNodeCardPolicyRegistry,
-  fallbackCardPolicy,
+  defaultCardPolicy,
   getNodeCardPolicy,
   mediaCardPolicy,
   resolveShotPreviewSource,

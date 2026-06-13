@@ -204,18 +204,18 @@ describe('scene contract fixtures', () => {
     expect(Array.from(patch.payload as unknown as number[])).toEqual([0, 1, 2, 3]);
   });
 
-  it('classifies legacy and future character schema versions', () => {
-    const legacy = loadLegacyCharacterFixture();
+  it('classifies unsupported and future character schema versions', () => {
+    const oldFixture = loadLegacyCharacterFixture();
     const current: Pick<NkcCharacterFile, 'schemaVersion'> = { schemaVersion: 1 };
 
     expect(evaluateCharacterSchemaVersion(current).status).toBe('current');
-    expect(evaluateCharacterSchemaVersion(legacy)).toEqual({
-      status: 'migration-required',
+    expect(evaluateCharacterSchemaVersion(oldFixture)).toEqual({
+      status: 'unsupported-version',
       schemaVersion: 0,
       currentSchemaVersion: 1,
-      migrationId: 'character-v0-to-v1',
     });
-    expect(() => assertCharacterSchemaEditable({ ...legacy, schemaVersion: 99 })).toThrow(
+    expect(() => assertCharacterSchemaEditable(oldFixture)).toThrow(/is not supported/);
+    expect(() => assertCharacterSchemaEditable({ ...oldFixture, schemaVersion: 99 })).toThrow(
       /requires runtime schema/,
     );
   });

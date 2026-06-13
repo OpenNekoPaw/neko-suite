@@ -46,7 +46,6 @@ export const TOOL_NAMES_TIMELINE = {
   SET_COLOR_CORRECTION: 'SetColorCorrection',
   RESET_COLOR_CORRECTION: 'ResetColorCorrection',
   SET_AUDIO_PROPERTIES: 'SetAudioProperties',
-  ADD_AUDIO_KEYFRAME: 'AddAudioKeyframe',
   SEPARATE_AUDIO: 'SeparateAudio',
   SET_PLAYBACK_SPEED: 'SetPlaybackSpeed',
 } as const;

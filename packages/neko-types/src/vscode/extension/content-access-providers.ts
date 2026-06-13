@@ -794,8 +794,6 @@ function extractSourcePath(ref: ContentSourceRef): string | undefined {
       return ref.path ?? ref.resource?.source.filePath;
     case 'runtime':
       return ref.source ? extractSourcePath(ref.source) : undefined;
-    case 'legacy-cache-path':
-      return ref.source ? extractSourcePath(ref.source) : undefined;
     default:
       return undefined;
   }
@@ -816,7 +814,7 @@ function getDocumentRef(ref: ContentSourceRef): ContentDocumentSourceRef | undef
 }
 
 function stableSourceOrUndefined(ref: ContentSourceRef): ContentStableSourceRef | undefined {
-  return ref.kind === 'runtime' || ref.kind === 'legacy-cache-path' ? ref.source : ref;
+  return ref.kind === 'runtime' ? ref.source : ref;
 }
 
 function unsupported(

@@ -245,13 +245,11 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('new ThumbnailResourceCacheProvider');
       expect(providerSource).toContain('new PreviewVariantResourceCacheProvider');
       expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider');
-      expect(providerSource).toContain('new LegacyResourceCacheProvider');
-      expect(providerSource.indexOf('new LegacyResourceCacheProvider')).toBeGreaterThan(
-        providerSource.indexOf('new PreviewVariantResourceCacheProvider'),
-      );
+      expect(providerSource).toContain('new DocumentResourceCacheProvider');
+      expect(providerSource).not.toContain('new LegacyResourceCacheProvider');
     });
 
-    it('preview variant resolution prefers ResourceRef over legacy cache paths', () => {
+    it('preview variant resolution uses ResourceRef without cache-path compatibility', () => {
       expect(providerSource).toContain('const resourceRef = isResourceRef(message.resourceRef)');
       expect(providerSource).toContain('this.projectResourceCacheVariant(');
       expect(providerSource).toContain("case 'preview:resolveVariant'");
@@ -260,7 +258,7 @@ describe('canvasEditorProvider message contracts', () => {
       );
     });
 
-    it('open media preview resolves ResourceRef through content access before legacy cache paths', () => {
+    it('open media preview resolves ResourceRef through content access before local paths', () => {
       expect(providerSource).toContain("case 'openMediaPreview'");
       expect(providerSource).toContain('this.resolveResourceRefLocalPreviewPath(');
       expect(providerSource).toContain("'neko-canvas.open-media-preview'");
@@ -424,13 +422,13 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("delete nodeData['referenceImagePath'];");
     });
 
-    it('uses legacy document cache paths only as runtime Preview fallbacks', () => {
+    it('does not read removed document cache metadata for runtime Preview fallbacks', () => {
       expect(providerSource).not.toContain('markDocumentResourceMigrationFallback');
       expect(providerSource).not.toContain("reason: 'legacy-cache-fallback'");
       expect(providerSource).not.toContain('Using a legacy document cache path');
       expect(providerSource).not.toContain('resolveExistingDocumentResourceRoot');
       expect(providerSource).not.toContain('documentResourceCacheRoots');
-      expect(providerSource).toContain("resourceRef.source.metadata?.['legacyCachePath']");
+      expect(providerSource).not.toContain('legacyCachePath');
       expect(providerSource).toContain('projectDocumentResourcePreviewUrl(');
       expect(providerSource).toContain("delete nodeData['runtimeReferenceImagePath'];");
       expect(providerSource).toContain("nodeData['documentResourceStatus'] = {");
@@ -653,7 +651,7 @@ describe('canvasEditorProvider message contracts', () => {
   describe('NKV-013: document resource preview variants', () => {
     it('projects document resource refs before using authorized local-resource or Preview variant fallbacks', () => {
       expect(providerSource).toContain('VSCodeResourceCacheService');
-      expect(providerSource).toContain('LegacyResourceCacheProvider');
+      expect(providerSource).not.toContain('LegacyResourceCacheProvider');
       expect(providerSource).toContain('os.homedir() || workspaceRoot');
       expect(providerSource).not.toContain('process.env.HOME');
       expect(providerSource).toContain('projectResourceCacheVariant(');

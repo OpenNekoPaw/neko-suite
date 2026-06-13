@@ -17,7 +17,6 @@ export type NarrativeGraphValidationCode =
   | 'narrative-start-incoming-edge'
   | 'narrative-ending-outgoing-edge'
   | 'invalid-narrative-scene-ref'
-  | 'unsupported-narrative-graph-format'
   | 'invalid-narrative-asset-ref';
 
 export interface NarrativeGraphValidationDiagnostic {
@@ -30,7 +29,6 @@ export interface NarrativeGraphValidationDiagnostic {
 }
 
 const SUPPORTED_NARRATIVE_SCENE_EXTENSION = '.fountain';
-const DEPRECATED_NARRATIVE_GRAPH_EXTENSIONS = ['.nks', '.story', '.nkstory'] as const;
 
 export function validateCanvasNarrativeGraph(canvas: {
   readonly nodes: readonly CanvasNarrativeNodeLike[];
@@ -77,12 +75,8 @@ export function validateCanvasNarrativeGraph(canvas: {
     const sceneRef = data ? readStringField(data, 'sceneRef') : undefined;
     if (sceneRef !== undefined && !isSupportedNarrativeSceneRef(sceneRef)) {
       diagnostics.push({
-        code: isDeprecatedNarrativeGraphRef(sceneRef)
-          ? 'unsupported-narrative-graph-format'
-          : 'invalid-narrative-scene-ref',
-        message: isDeprecatedNarrativeGraphRef(sceneRef)
-          ? 'Deprecated story graph formats cannot be used as interactive narrative graph sources.'
-          : 'Narrative scene refs must point to standard .fountain files.',
+        code: 'invalid-narrative-scene-ref',
+        message: 'Narrative scene refs must point to standard .fountain files.',
         nodeId: node.id,
         path: sceneRef,
       });
@@ -108,11 +102,6 @@ export function validateCanvasNarrativeGraph(canvas: {
 
 export function isSupportedNarrativeSceneRef(path: string): boolean {
   return path.trim().toLowerCase().endsWith(SUPPORTED_NARRATIVE_SCENE_EXTENSION);
-}
-
-export function isDeprecatedNarrativeGraphRef(path: string): boolean {
-  const normalized = path.trim().toLowerCase();
-  return DEPRECATED_NARRATIVE_GRAPH_EXTENSIONS.some((extension) => normalized.endsWith(extension));
 }
 
 function isNarrativeRuntimeConnection(connection: CanvasNarrativeConnectionLike): boolean {

@@ -18,23 +18,23 @@ import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { clampNodeSize, resolveNodeMinSize } from '../../utils/nodeSizing';
 
-export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
+export type DefaultNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
 export interface NodeContentDispatcherProps {
   context: NodeRendererContext;
-  renderLegacy?: LegacyNodeRenderer;
+  renderDefaultNode?: DefaultNodeRenderer;
 }
 
 const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
 const COLLAPSED_NODE_RENDER_HEIGHT = 42;
 
-export function NodeContentDispatcher({ context, renderLegacy }: NodeContentDispatcherProps) {
+export function NodeContentDispatcher({ context, renderDefaultNode }: NodeContentDispatcherProps) {
   const { node } = context;
 
   const content = useMemo(() => resolveContent(node), [node]);
 
   if (!content) {
-    return renderLegacy ? <>{renderLegacy(context)}</> : null;
+    return renderDefaultNode ? <>{renderDefaultNode(context)}</> : null;
   }
 
   return <ComposableNodeContent context={context} node={node} content={content} />;

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { CanvasNode } from '@neko/shared';
 import {
   createBuiltInNodeCardPolicyRegistry,
+  defaultCardPolicy,
   evaluateActionCondition,
-  fallbackCardPolicy,
   getNodeCardPolicy,
   getStableSafeVariantUrl,
   mediaCardPolicy,
@@ -285,8 +285,20 @@ describe('node card policies', () => {
       position: { x: 0, y: 0 },
       size: { width: 180, height: 120 },
       zIndex: 1,
+      container: {
+        policy: 'gallery',
+        childIds: ['front'],
+        childPlacements: {
+          front: {
+            childId: 'front',
+            metadata: { label: 'Front' },
+          },
+        },
+      },
       data: {
-        cells: [{ id: 'front', image: '${PROJECT}/refs/front.png', label: 'Front' }],
+        preset: 'custom',
+        rows: 1,
+        cols: 1,
       },
     } as CanvasNode;
     const generated = {
@@ -356,7 +368,7 @@ describe('node card policies', () => {
     expect(textCardPolicy.resolveTitle(node)).toBe('A compact note for the scene');
   });
 
-  it('uses fallback policy for unknown or unregistered node types', () => {
+  it('uses default policy for unknown or unregistered node types', () => {
     const registry = createBuiltInNodeCardPolicyRegistry();
     const node = {
       id: 'storyboard-1',
@@ -367,8 +379,8 @@ describe('node card policies', () => {
       data: { title: 'Legacy board' },
     } as CanvasNode;
 
-    expect(getNodeCardPolicy(registry, node)).toBe(fallbackCardPolicy);
-    expect(fallbackCardPolicy.resolvePreviewSource(node).renderForm).toBe('icon');
+    expect(getNodeCardPolicy(registry, node)).toBe(defaultCardPolicy);
+    expect(defaultCardPolicy.resolvePreviewSource(node).renderForm).toBe('icon');
   });
 });
 

@@ -1,6 +1,8 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/keyframe.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * Shared keyframe operation primitives.
+ *
+ * This host-agnostic contract is consumed by @neko/shared operations. Feature
+ * Webviews can project these values into richer package-local editor state.
  */
 // =============================================================================
 // Keyframes (关键帧轨道)

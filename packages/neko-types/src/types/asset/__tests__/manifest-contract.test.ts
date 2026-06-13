@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORY_MAP,
   getAssetCategory,
-  getLegacyAssetTypeMigration,
   isAssetType,
   isDistributionKind,
   isBundleType,
@@ -69,14 +68,9 @@ describe('AssetManifest v4 contract', () => {
   it('rejects legacy asset types as direct AssetType values', () => {
     expect(isAssetType('media')).toBe(true);
     expect(isAssetType('video')).toBe(false);
-    expect(getLegacyAssetTypeMigration('video')).toMatchObject({
-      legacyType: 'video',
-      type: 'media',
-      metadataPatch: { type: 'media', data: { mediaKind: 'video' } },
-    });
-    expect(getLegacyAssetTypeMigration('provider-card')).toMatchObject({
-      type: 'provider',
-      metadataPatch: { type: 'provider' },
+    expect(validateAssetManifest({ ...validManifest(), type: 'video' }).issues).toContainEqual({
+      field: 'type',
+      message: 'must be one of AssetType v4 values',
     });
   });
 

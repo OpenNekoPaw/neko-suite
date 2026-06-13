@@ -40,11 +40,11 @@ const REMOVE_ACTION: CardActionDescriptor = {
 
 const DEFAULT_ACTIONS: readonly CardActionDescriptor[] = [REMOVE_ACTION];
 
-export const fallbackCardPolicy: NodeCardPolicy = {
+export const defaultCardPolicy: NodeCardPolicy = {
   nodeType: 'annotation',
   resolvePreviewSource: (node) => ({
     renderForm: 'icon',
-    icon: getFallbackIcon(node),
+    icon: getDefaultIcon(node),
   }),
   resolveTitle: (node, parent) =>
     resolvePlacementTitle(node, parent) ?? node.preview?.title ?? capitalize(node.type),
@@ -307,7 +307,7 @@ export function getNodeCardPolicy(
   registry: NodeCardPolicyRegistry,
   node: CanvasNode,
 ): NodeCardPolicy {
-  return registry[node.type] ?? fallbackCardPolicy;
+  return registry[node.type] ?? defaultCardPolicy;
 }
 
 interface SelectedGenerationCandidate {
@@ -419,7 +419,7 @@ function badgeToneForGenerationStatus(status: string): CardBadge['tone'] {
   }
 }
 
-function getFallbackIcon(node: CanvasNode): string {
+function getDefaultIcon(node: CanvasNode): string {
   switch (node.type) {
     case 'media':
       return 'M';

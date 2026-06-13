@@ -1,12 +1,10 @@
 import { CANVAS_NODE_TYPES, type CanvasNodeType } from './canvas';
 import type { ContainerPolicyName } from './canvas-layered';
 
-export type CanvasPresetCreationMode = 'legacy' | 'composable';
-
 export interface CanvasNodePresetMetadata {
   readonly name: string;
   readonly nodeType: CanvasNodeType;
-  readonly creationMode: CanvasPresetCreationMode;
+  readonly composable?: true;
   readonly label: string;
   readonly description?: string;
   readonly containerPolicy?: ContainerPolicyName;
@@ -15,37 +13,23 @@ export interface CanvasNodePresetMetadata {
 
 export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
-    name: 'annotation.legacy',
-    nodeType: 'annotation',
-    creationMode: 'legacy',
-    label: 'Annotation',
-    deriveTargets: ['annotation.legacy', 'annotation.basic', 'text.basic'],
-  },
-  {
     name: 'annotation.basic',
     nodeType: 'annotation',
-    creationMode: 'composable',
+    composable: true,
     label: 'Annotation Basic',
     deriveTargets: ['annotation.basic', 'text.basic'],
   },
   {
-    name: 'text.legacy',
-    nodeType: 'text',
-    creationMode: 'legacy',
-    label: 'Text',
-    deriveTargets: ['text.legacy', 'text.basic', 'annotation.basic'],
-  },
-  {
     name: 'text.basic',
     nodeType: 'text',
-    creationMode: 'composable',
+    composable: true,
     label: 'Text Basic',
     deriveTargets: ['text.basic', 'annotation.basic'],
   },
   {
     name: 'shot.basic',
     nodeType: 'shot',
-    creationMode: 'composable',
+    composable: true,
     label: 'Shot Basic',
     description: 'Composable storyboard shot with bound controls and generation preview.',
     deriveTargets: ['shot.basic', 'media.basic', 'gallery.basic', 'annotation.basic', 'text.basic'],
@@ -53,7 +37,7 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'scene.basic',
     nodeType: 'scene',
-    creationMode: 'composable',
+    composable: true,
     label: 'Scene Basic',
     description: 'Composable Scene container with metadata controls and child-node slot.',
     containerPolicy: 'scene',
@@ -69,7 +53,7 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'gallery.basic',
     nodeType: 'gallery',
-    creationMode: 'composable',
+    composable: true,
     label: 'Gallery Basic',
     description: 'Composable Gallery container for character image management with media children.',
     containerPolicy: 'gallery',
@@ -78,7 +62,7 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'media.basic',
     nodeType: 'media',
-    creationMode: 'composable',
+    composable: true,
     label: 'Media Basic',
     description: 'Composable Media asset card with lightweight preview capability.',
     deriveTargets: [
@@ -93,29 +77,14 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'project.basic',
     nodeType: 'project',
-    creationMode: 'composable',
+    composable: true,
     label: 'Project Basic',
     description: 'Composable project reference with thumbnail preview.',
     deriveTargets: ['project.basic', 'media.basic', 'annotation.basic', 'text.basic'],
   },
   {
-    name: 'storyboard.legacy',
-    nodeType: 'storyboard',
-    creationMode: 'legacy',
-    label: 'Storyboard',
-    deriveTargets: [
-      'storyboard.legacy',
-      'shot.basic',
-      'media.basic',
-      'gallery.basic',
-      'annotation.basic',
-      'text.basic',
-    ],
-  },
-  {
     name: 'group.container',
     nodeType: 'group',
-    creationMode: 'legacy',
     label: 'Group',
     containerPolicy: 'group',
     deriveTargets: ['group.container', 'annotation.basic', 'text.basic'],
@@ -123,7 +92,6 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'artboard.container',
     nodeType: 'artboard',
-    creationMode: 'legacy',
     label: 'Artboard',
     containerPolicy: 'artboard',
     deriveTargets: ['artboard.container', 'annotation.basic', 'text.basic'],
@@ -131,39 +99,11 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
   {
     name: 'table.basic',
     nodeType: 'table',
-    creationMode: 'composable',
+    composable: true,
     label: 'Table',
     description: 'Table container with rows and columns for organizing mixed content.',
     containerPolicy: 'table',
     deriveTargets: ['table.basic', 'annotation.basic', 'text.basic', 'media.basic'],
-  },
-  {
-    name: 'script.legacy',
-    nodeType: 'script',
-    creationMode: 'legacy',
-    label: 'Script',
-    deriveTargets: ['script.legacy', 'scene.basic', 'shot.basic', 'annotation.basic'],
-  },
-  {
-    name: 'document.legacy',
-    nodeType: 'document',
-    creationMode: 'legacy',
-    label: 'Document',
-    deriveTargets: ['document.legacy', 'annotation.basic', 'text.basic'],
-  },
-  {
-    name: 'model.legacy',
-    nodeType: 'model',
-    creationMode: 'legacy',
-    label: 'Model',
-    deriveTargets: ['model.legacy', 'annotation.basic', 'text.basic'],
-  },
-  {
-    name: 'canvas-embed.legacy',
-    nodeType: 'canvas-embed',
-    creationMode: 'legacy',
-    label: 'Canvas Embed',
-    deriveTargets: ['canvas-embed.legacy', 'annotation.basic', 'text.basic'],
   },
 ] as const satisfies readonly CanvasNodePresetMetadata[];
 
@@ -192,14 +132,7 @@ export function getBuiltInCanvasNodePresetMetadata(
 }
 
 export function getDefaultCanvasNodePresetName(nodeType: CanvasNodeType): string | undefined {
-  return (
-    BUILT_IN_CANVAS_NODE_PRESETS.find(
-      (preset) => preset.nodeType === nodeType && preset.creationMode === 'composable',
-    ) ??
-    BUILT_IN_CANVAS_NODE_PRESETS.find(
-      (preset) => preset.nodeType === nodeType && preset.creationMode === 'legacy',
-    )
-  )?.name;
+  return BUILT_IN_CANVAS_NODE_PRESETS.find((preset) => preset.nodeType === nodeType)?.name;
 }
 
 export function isBuiltInCanvasNodePresetName(name: string): boolean {

@@ -1123,7 +1123,7 @@ function isStableSemanticSourceRef(value: unknown): value is MediaSemanticSource
 }
 
 function isCacheOrRuntimeSemanticSourceRef(ref: ContentSourceRef): boolean {
-  if (ref.kind === 'runtime' || ref.kind === 'legacy-cache-path') return true;
+  if (ref.kind === 'runtime') return true;
   if (isResourceRef(ref) && ref.scope === 'extension-private') return true;
   return !isSafeSemanticCoverageValue(ref);
 }

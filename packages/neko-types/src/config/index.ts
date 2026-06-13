@@ -44,12 +44,7 @@ export {
 } from './types';
 
 // Normalizer (browser-safe - pure functions, no Node.js dependencies)
-export {
-  migrateLegacyFields,
-  mergeConfigs,
-  normalizeConfig,
-  processConfig,
-} from './config-normalizer';
+export { mergeConfigs, normalizeConfig, processConfig } from './config-normalizer';
 
 // Config adapter interface (browser-safe)
 export type {

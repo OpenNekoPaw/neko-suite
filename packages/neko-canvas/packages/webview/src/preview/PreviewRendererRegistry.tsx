@@ -785,8 +785,8 @@ function renderProjectPreview({ source, delegateActions }: PreviewRendererProps)
   );
 }
 
-function resolveProjectTypeLabel(value: unknown, fallbackExt: string): string {
-  const projectType = typeof value === 'string' ? value : fallbackExt;
+function resolveProjectTypeLabel(value: unknown, defaultExt: string): string {
+  const projectType = typeof value === 'string' ? value : defaultExt;
   switch (projectType) {
     case 'nkv':
       return t('project.type.nkv');

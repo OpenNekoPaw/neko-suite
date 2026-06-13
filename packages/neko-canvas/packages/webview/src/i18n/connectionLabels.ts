@@ -2,7 +2,7 @@ import type { CanvasConnection, CanvasNode } from '@neko/shared';
 import { t } from './index';
 
 export function resolveConnectionTypeLabel(type: CanvasConnection['type'] | 'default'): string {
-  return translateWithFallback(`connection.type.${type ?? 'default'}`, type ?? 'default');
+  return translateWithDefault(`connection.type.${type ?? 'default'}`, type ?? 'default');
 }
 
 export function resolveConnectionDirectionLabel(
@@ -35,12 +35,12 @@ export function resolveInternalConnectionCountLabel(count: number): string {
 }
 
 export function resolveConnectionNodeTypeLabel(type: CanvasNode['type']): string {
-  return translateWithFallback(`node.${toNodeLabelKeySegment(type)}`, type);
+  return translateWithDefault(`node.${toNodeLabelKeySegment(type)}`, type);
 }
 
-function translateWithFallback(key: string, fallback: string): string {
+function translateWithDefault(key: string, defaultValue: string): string {
   const translated = t(key);
-  return translated === key ? fallback : translated;
+  return translated === key ? defaultValue : translated;
 }
 
 function toNodeLabelKeySegment(type: CanvasNode['type']): string {

@@ -1,6 +1,8 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/colorCorrection.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * Shared color correction primitives.
+ *
+ * These host-agnostic types feed @neko/shared color mapping and operation
+ * contracts. Feature Webviews may expose richer editor UI around them.
  */
 // =============================================================================
 // Color Correction

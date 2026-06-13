@@ -1,6 +1,6 @@
 /**
  * useConnectionDrag - Hook for connection creation via drag
- * Handles the interaction of dragging from an anchor to create a new connection
+ * Handles the interaction of dragging from a connection handle.
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -14,28 +14,28 @@ import type { CanvasViewport } from '@neko/shared';
 export interface UseConnectionDragOptions {
   viewport: CanvasViewport;
   containerRef: React.RefObject<HTMLElement>;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, handleId: string) => void;
   onConnectionComplete?: (
     sourceNodeId: string,
-    sourceAnchor: string,
+    sourceHandleId: string,
     targetNodeId: string,
-    targetAnchor: string,
+    targetHandleId: string,
   ) => void;
   onConnectionCancel?: () => void;
 }
 
 export interface PendingConnection {
   sourceNodeId: string;
-  sourceAnchor: string;
+  sourceHandleId: string;
   mousePosition: { x: number; y: number };
 }
 
 export interface UseConnectionDragReturn {
   pendingConnection: PendingConnection | null;
   isConnecting: boolean;
-  startConnection: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
+  startConnection: (nodeId: string, handleId: string, e: React.MouseEvent) => void;
   updateConnection: (e: MouseEvent) => void;
-  completeConnection: (targetNodeId: string, targetAnchor: string) => void;
+  completeConnection: (targetNodeId: string, targetHandleId: string) => void;
   cancelConnection: () => void;
 }
 
@@ -68,9 +68,9 @@ export function useConnectionDrag({
     [viewport, containerRef],
   );
 
-  // Start a new connection from an anchor
+  // Start a new connection from a handle.
   const startConnection = useCallback(
-    (nodeId: string, anchor: string, e: React.MouseEvent) => {
+    (nodeId: string, handleId: string, e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
 
@@ -78,11 +78,11 @@ export function useConnectionDrag({
 
       setPendingConnection({
         sourceNodeId: nodeId,
-        sourceAnchor: anchor,
+        sourceHandleId: handleId,
         mousePosition: canvasPos,
       });
       setIsConnecting(true);
-      onConnectionStart?.(nodeId, anchor);
+      onConnectionStart?.(nodeId, handleId);
     },
     [screenToCanvas, onConnectionStart],
   );
@@ -105,9 +105,9 @@ export function useConnectionDrag({
     [isConnecting, screenToCanvas],
   );
 
-  // Complete the connection to a target anchor
+  // Complete the connection to a target handle.
   const completeConnection = useCallback(
-    (targetNodeId: string, targetAnchor: string) => {
+    (targetNodeId: string, targetHandleId: string) => {
       if (!pendingConnection) return;
 
       // Don't connect to self
@@ -118,9 +118,9 @@ export function useConnectionDrag({
 
       onConnectionComplete?.(
         pendingConnection.sourceNodeId,
-        pendingConnection.sourceAnchor,
+        pendingConnection.sourceHandleId,
         targetNodeId,
-        targetAnchor,
+        targetHandleId,
       );
 
       setPendingConnection(null);
@@ -145,16 +145,16 @@ export function useConnectionDrag({
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      // Check if we're over an anchor point
+      // Check if we're over a connection handle.
       const target = e.target as HTMLElement;
-      const anchorElement = target.closest('[data-anchor]');
+      const handleElement = target.closest('[data-connection-handle]');
 
-      if (anchorElement) {
-        const nodeId = anchorElement.getAttribute('data-node-id');
-        const anchor = anchorElement.getAttribute('data-anchor');
+      if (handleElement) {
+        const nodeId = handleElement.getAttribute('data-node-id');
+        const handleId = handleElement.getAttribute('data-connection-handle');
 
-        if (nodeId && anchor) {
-          completeConnection(nodeId, anchor);
+        if (nodeId && handleId) {
+          completeConnection(nodeId, handleId);
           return;
         }
       }

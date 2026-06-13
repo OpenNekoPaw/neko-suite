@@ -122,6 +122,45 @@ describe('reference resolution contracts', () => {
     );
   });
 
+  it('projects gallery container placements as Canvas node references', () => {
+    const result = collectReferencesFromCanvasNode({
+      id: 'gallery-1',
+      type: 'gallery',
+      container: {
+        policy: 'gallery',
+        childIds: ['front'],
+        childPlacements: {
+          front: {
+            childId: 'front',
+            metadata: { label: 'Front' },
+          },
+        },
+      },
+      data: {
+        preset: 'custom',
+        rows: 1,
+        cols: 1,
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.descriptors).toHaveLength(1);
+    expect(result.descriptors[0]).toMatchObject({
+      referenceId: 'gallery-1:childPlacements:front',
+      role: 'reference',
+      modality: 'image',
+      payload: {
+        type: 'canvas-node',
+        nodeId: 'front',
+      },
+      metadata: {
+        field: 'container.childPlacements',
+        placementId: 'front',
+        label: 'Front',
+      },
+    });
+  });
+
   it('summarizes Canvas references by role and diagnostic severity', () => {
     const summary = summarizeReferencesFromCanvasNode({
       id: 'shot-1',

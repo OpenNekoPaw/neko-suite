@@ -55,9 +55,9 @@ describe('NKC validator v2.1', () => {
           {
             id: 'association-1',
             sourceId: 'memory-1',
-            sourceAnchor: 'right',
             targetId: 'memory-1',
-            targetAnchor: 'left',
+            sourceEndpoint: { nodeId: 'memory-1', scope: 'node' },
+            targetEndpoint: { nodeId: 'memory-1', scope: 'node' },
             type: 'association',
             weight: 0.7,
           },
@@ -135,9 +135,9 @@ describe('NKC validator v2.1', () => {
         {
           id: 'future-edge',
           sourceId: 'a',
-          sourceAnchor: 'right',
           targetId: 'b',
-          targetAnchor: 'left',
+          sourceEndpoint: { nodeId: 'a', scope: 'node' },
+          targetEndpoint: { nodeId: 'b', scope: 'node' },
           type: 'future-edge',
         },
       ],

@@ -129,7 +129,7 @@ interface RemapClonedNodeOptions {
 }
 
 function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): CanvasNode {
-  const base = {
+  return {
     ...node,
     id: options.nextId,
     parentId: options.nextParentId,
@@ -139,22 +139,6 @@ function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): Can
       y: node.position.y + options.offset.y,
     },
   };
-
-  switch (node.type) {
-    case 'group':
-      return {
-        ...base,
-        type: 'group',
-        data: {
-          ...node.data,
-          childIds: getContainerChildIds(node)
-            .map((childId) => options.idMap.get(childId))
-            .filter((childId): childId is string => Boolean(childId)),
-        },
-      };
-    default:
-      return base;
-  }
 }
 
 // =============================================================================

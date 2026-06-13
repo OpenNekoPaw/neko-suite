@@ -1,6 +1,9 @@
 /**
- * @deprecated Canonical source moved to neko-cut/webview/src/types/animation.ts.
- * Retained for internal neko-types consumers. Will be removed in Phase 4 cleanup.
+ * Shared animation/keyframe primitives.
+ *
+ * This host-agnostic contract is still used by @neko/shared operations.
+ * Feature Webviews may keep package-local UI helpers, but L0 shared types must
+ * not depend on Webview packages.
  */
 // =============================================================================
 // Animatable Property System (关键帧动画系统)

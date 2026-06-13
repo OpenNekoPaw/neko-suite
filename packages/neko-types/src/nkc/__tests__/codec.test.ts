@@ -30,9 +30,9 @@ const VALID_CANVAS: CanvasData = {
     {
       id: 'conn-1',
       sourceId: 'node-1',
-      sourceAnchor: 'right',
       targetId: 'node-2',
-      targetAnchor: 'left',
+      sourceEndpoint: { nodeId: 'node-1', scope: 'node' },
+      targetEndpoint: { nodeId: 'node-2', scope: 'node' },
     },
   ],
 };

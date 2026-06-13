@@ -2,10 +2,7 @@ import type {
   CanvasNarrativeConnectionLike,
   CanvasNarrativeNodeLike,
 } from './canvas-narrative-contract';
-import {
-  isDeprecatedNarrativeGraphRef,
-  isSupportedNarrativeSceneRef,
-} from './canvas-narrative-validation';
+import { isSupportedNarrativeSceneRef } from './canvas-narrative-validation';
 import { traverseNarrativeFlow } from './canvas-flow-traversal';
 import { WhitelistConditionEvaluator } from './narrative-runtime';
 
@@ -15,7 +12,6 @@ export type CanvasNarrativeAgentDiagnosticCode =
   | 'narrative-accidental-dead-end'
   | 'narrative-missing-ending'
   | 'narrative-invalid-scene-ref'
-  | 'narrative-deprecated-scene-graph-ref'
   | 'narrative-unresolved-variable'
   | 'narrative-unsupported-condition';
 
@@ -108,13 +104,9 @@ export function analyzeCanvasNarrativeForAgent(input: {
     }
     if (!isSupportedNarrativeSceneRef(sceneRef)) {
       diagnostics.push({
-        code: isDeprecatedNarrativeGraphRef(sceneRef)
-          ? 'narrative-deprecated-scene-graph-ref'
-          : 'narrative-invalid-scene-ref',
+        code: 'narrative-invalid-scene-ref',
         severity: 'error',
-        message: isDeprecatedNarrativeGraphRef(sceneRef)
-          ? 'Deprecated story graph files are not accepted as Canvas narrative scene refs.'
-          : 'Narrative scene refs must point to standard .fountain files.',
+        message: 'Narrative scene refs must point to standard .fountain files.',
         nodeId: node.id,
         path: sceneRef,
       });

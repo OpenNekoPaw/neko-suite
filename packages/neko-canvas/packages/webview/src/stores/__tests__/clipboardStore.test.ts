@@ -21,9 +21,9 @@ function createConnection(id: string, sourceId: string, targetId: string): Canva
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type: 'default',
   };
 }
@@ -140,7 +140,7 @@ describe('clipboardStore', () => {
       size: { width: 200, height: 160 },
       zIndex: 0,
       container: { policy: 'group', childIds: ['child-1'] },
-      data: { childIds: ['child-1'], label: 'Group' },
+      data: { label: 'Group' },
     };
     const child: CanvasNode = {
       ...createNode('child-1', 20, 20),
@@ -157,9 +157,7 @@ describe('clipboardStore', () => {
     expect(pastedChild?.id).not.toBe('child-1');
     expect(pastedGroup?.container?.childIds).toEqual([pastedChild?.id]);
     expect(pastedChild?.parentId).toBe(pastedGroup?.id);
-    expect(pastedGroup?.type === 'group' ? pastedGroup.data.childIds : []).toEqual([
-      pastedChild?.id,
-    ]);
+    expect(pastedGroup?.type === 'group' ? 'childIds' in pastedGroup.data : false).toBe(false);
   });
 
   it('paste should remap migrated Scene canonical children', () => {

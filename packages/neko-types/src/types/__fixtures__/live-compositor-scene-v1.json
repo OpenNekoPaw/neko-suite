@@ -63,7 +63,7 @@
         "blendMode": "normal",
         "visible": true,
         "zIndex": 0,
-        "fallbackPolicy": "substitute"
+        "sourceUnavailablePolicy": "substitute"
       },
       {
         "id": "layer-camera",
@@ -90,7 +90,7 @@
         "blendMode": "normal",
         "visible": true,
         "zIndex": 10,
-        "fallbackPolicy": "diagnostic-overlay"
+        "sourceUnavailablePolicy": "diagnostic-overlay"
       },
       {
         "id": "layer-puppet",
@@ -113,7 +113,7 @@
         "blendMode": "normal",
         "visible": true,
         "zIndex": 20,
-        "fallbackPolicy": "hold-last-frame"
+        "sourceUnavailablePolicy": "hold-last-frame"
       },
       {
         "id": "layer-tracking-overlay",
@@ -135,7 +135,7 @@
         "blendMode": "alpha",
         "visible": true,
         "zIndex": 90,
-        "fallbackPolicy": "exclude"
+        "sourceUnavailablePolicy": "exclude"
       }
     ],
     "presets": [
@@ -240,14 +240,14 @@
         "sourceKind": "model",
         "retryable": false,
         "details": {
-          "fallbackPolicy": "diagnostic-overlay"
+          "sourceUnavailablePolicy": "diagnostic-overlay"
         }
       },
       {
-        "id": "diag-fallback",
-        "code": "fallback-non-authoritative",
+        "id": "diag-local-preview",
+        "code": "preview-non-authoritative",
         "severity": "info",
-        "message": "Local Webview preview is enabled as a non-authoritative fallback.",
+        "message": "Local Webview preview is enabled as a non-authoritative preview.",
         "timestamp": 1810814400000
       }
     ],

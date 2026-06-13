@@ -407,10 +407,10 @@ export interface NekoCanvasAPI {
     applyAgentContent(payload: CanvasAgentContentPayload): Promise<CanvasAgentApplyContentResult>;
 
     /**
-     * Trigger image generation for a ShotNode or a specific GalleryCell.
+     * Trigger image generation for a ShotNode or a specific gallery child media node.
      * Delegates to BatchGenerationScheduler.
      */
-    generateImage(nodeId: string, cellId?: string): Promise<void>;
+    generateImage(nodeId: string, childNodeId?: string): Promise<void>;
 
     /**
      * Trigger batch image generation for multiple nodes

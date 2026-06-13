@@ -226,7 +226,7 @@ describe('resource cache service', () => {
   });
 
   it('selects the first registered provider that supports a resource ref', async () => {
-    const fallbackProvider = createNamedProvider('legacy-cache-path', async (input) => {
+    const fallbackProvider = createNamedProvider('external-cache-path', async (input) => {
       const absolutePath = `${input.cacheRoot}/legacy/page-1.jpg`;
       fsOps.files.set(absolutePath, 'image-bytes');
       return {

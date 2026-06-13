@@ -48,7 +48,7 @@ export type LiveCompositorBlendMode =
   | 'subtract'
   | 'alpha';
 
-export type LiveCompositorFallbackPolicy =
+export type LiveCompositorSourceUnavailablePolicy =
   | 'exclude'
   | 'substitute'
   | 'hold-last-frame'
@@ -75,7 +75,7 @@ export type LiveCompositorDiagnosticCode =
   | 'stale-revision'
   | 'latency-budget-exceeded'
   | 'latency-unavailable'
-  | 'fallback-non-authoritative';
+  | 'preview-non-authoritative';
 
 export type LiveCompositorLatencyKind =
   | 'command-to-frame'
@@ -128,7 +128,7 @@ export interface LiveCompositorLayer {
   readonly visible: boolean;
   readonly zIndex: number;
   readonly locked?: boolean;
-  readonly fallbackPolicy: LiveCompositorFallbackPolicy;
+  readonly sourceUnavailablePolicy: LiveCompositorSourceUnavailablePolicy;
   readonly metadata?: ViewportSerializableRecord;
 }
 
@@ -142,7 +142,7 @@ export interface LiveCompositorLayerPatch {
   readonly visible?: boolean;
   readonly zIndex?: number;
   readonly locked?: boolean;
-  readonly fallbackPolicy?: LiveCompositorFallbackPolicy;
+  readonly sourceUnavailablePolicy?: LiveCompositorSourceUnavailablePolicy;
   readonly metadata?: ViewportSerializableRecord;
 }
 
@@ -316,7 +316,7 @@ export function isLiveCompositorLayer(value: unknown): value is LiveCompositorLa
     typeof value['visible'] === 'boolean' &&
     isFiniteNumber(value['zIndex']) &&
     (value['locked'] === undefined || typeof value['locked'] === 'boolean') &&
-    isLiveCompositorFallbackPolicy(value['fallbackPolicy']) &&
+    isLiveCompositorSourceUnavailablePolicy(value['sourceUnavailablePolicy']) &&
     (value['metadata'] === undefined || isSerializableRecord(value['metadata']))
   );
 }
@@ -328,8 +328,7 @@ export function isLiveCompositorSourceRef(value: unknown): value is LiveComposit
     isLiveCompositorSourceKind(value['kind']) &&
     (value['label'] === undefined || typeof value['label'] === 'string') &&
     (value['mediaRef'] === undefined || typeof value['mediaRef'] === 'string') &&
-    (value['deviceSessionRef'] === undefined ||
-      typeof value['deviceSessionRef'] === 'string') &&
+    (value['deviceSessionRef'] === undefined || typeof value['deviceSessionRef'] === 'string') &&
     (value['streamRef'] === undefined || typeof value['streamRef'] === 'string') &&
     (value['entityRef'] === undefined || typeof value['entityRef'] === 'string') &&
     (value['sceneRef'] === undefined || typeof value['sceneRef'] === 'string') &&
@@ -382,9 +381,7 @@ export function isLiveOutputRoute(value: unknown): value is LiveOutputRoute {
   );
 }
 
-export function isLiveCompositorDiagnostic(
-  value: unknown,
-): value is LiveCompositorDiagnostic {
+export function isLiveCompositorDiagnostic(value: unknown): value is LiveCompositorDiagnostic {
   if (!isRecord(value)) return false;
   return (
     typeof value['id'] === 'string' &&
@@ -415,8 +412,7 @@ export function isLiveCompositorLatencySample(
     (value['frameId'] === undefined || isNonNegativeInteger(value['frameId'])) &&
     (value['seq'] === undefined || isNonNegativeInteger(value['seq'])) &&
     (value['sourceId'] === undefined || typeof value['sourceId'] === 'string') &&
-    (value['unavailableReason'] === undefined ||
-      typeof value['unavailableReason'] === 'string') &&
+    (value['unavailableReason'] === undefined || typeof value['unavailableReason'] === 'string') &&
     (value['metadata'] === undefined || isSerializableRecord(value['metadata']))
   );
 }
@@ -461,10 +457,7 @@ export function isLiveCompositorSetTrackingOverlayPayload(
   value: unknown,
 ): value is LiveCompositorSetTrackingOverlayPayload {
   if (!isRecord(value)) return false;
-  return (
-    isLiveTrackingOverlayConfig(value['trackingOverlay']) &&
-    isSerializableRecord(value)
-  );
+  return isLiveTrackingOverlayConfig(value['trackingOverlay']) && isSerializableRecord(value);
 }
 
 export function isLiveCompositorSetOutputRoutePayload(
@@ -632,7 +625,7 @@ function isLiveCompositorLayerPatch(value: unknown): value is LiveCompositorLaye
     value['visible'] !== undefined ||
     value['zIndex'] !== undefined ||
     value['locked'] !== undefined ||
-    value['fallbackPolicy'] !== undefined ||
+    value['sourceUnavailablePolicy'] !== undefined ||
     value['metadata'] !== undefined;
 
   return (
@@ -646,8 +639,8 @@ function isLiveCompositorLayerPatch(value: unknown): value is LiveCompositorLaye
     (value['visible'] === undefined || typeof value['visible'] === 'boolean') &&
     (value['zIndex'] === undefined || isFiniteNumber(value['zIndex'])) &&
     (value['locked'] === undefined || typeof value['locked'] === 'boolean') &&
-    (value['fallbackPolicy'] === undefined ||
-      isLiveCompositorFallbackPolicy(value['fallbackPolicy'])) &&
+    (value['sourceUnavailablePolicy'] === undefined ||
+      isLiveCompositorSourceUnavailablePolicy(value['sourceUnavailablePolicy'])) &&
     (value['metadata'] === undefined || isSerializableRecord(value['metadata']))
   );
 }
@@ -688,9 +681,9 @@ function isLiveCompositorBlendMode(value: unknown): value is LiveCompositorBlend
   );
 }
 
-function isLiveCompositorFallbackPolicy(
+function isLiveCompositorSourceUnavailablePolicy(
   value: unknown,
-): value is LiveCompositorFallbackPolicy {
+): value is LiveCompositorSourceUnavailablePolicy {
   return (
     value === 'exclude' ||
     value === 'substitute' ||
@@ -709,9 +702,7 @@ function isLiveTrackingOverlayMode(value: unknown): value is LiveTrackingOverlay
   );
 }
 
-function isLiveTrackingOverlayStalePolicy(
-  value: unknown,
-): value is LiveTrackingOverlayStalePolicy {
+function isLiveTrackingOverlayStalePolicy(value: unknown): value is LiveTrackingOverlayStalePolicy {
   return value === 'hide' || value === 'dim' || value === 'hold-last-frame';
 }
 
@@ -741,9 +732,7 @@ function isLiveCompositorDiagnosticSeverity(
   return value === 'info' || value === 'warning' || value === 'error';
 }
 
-function isLiveCompositorDiagnosticCode(
-  value: unknown,
-): value is LiveCompositorDiagnosticCode {
+function isLiveCompositorDiagnosticCode(value: unknown): value is LiveCompositorDiagnosticCode {
   return (
     value === 'unsupported-source' ||
     value === 'unsupported-output-route' ||
@@ -752,7 +741,7 @@ function isLiveCompositorDiagnosticCode(
     value === 'stale-revision' ||
     value === 'latency-budget-exceeded' ||
     value === 'latency-unavailable' ||
-    value === 'fallback-non-authoritative'
+    value === 'preview-non-authoritative'
   );
 }
 

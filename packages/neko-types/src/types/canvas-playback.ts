@@ -155,7 +155,7 @@ export interface CanvasPlaybackPlan {
   readonly entryUnitIds: readonly string[];
   readonly units: readonly CanvasPlaybackUnit[];
   readonly transitions: readonly CanvasPlaybackTransition[];
-  readonly routeCandidates?: readonly CanvasPlaybackRouteCandidate[];
+  readonly routeCandidates: readonly CanvasPlaybackRouteCandidate[];
   readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
   readonly metadata: CanvasSerializableRecord;
 }
@@ -305,29 +305,7 @@ export function resolveEffectiveCanvasPlaybackRoutes(
   options: { readonly maxRoutes?: number } = {},
 ): CanvasPlaybackRouteResolution {
   const maxRoutes = normalizeRouteCandidateCap(options.maxRoutes);
-  if (plan.routeCandidates !== undefined) {
-    if (plan.routeCandidates.length === 0) {
-      return {
-        routes: [],
-        diagnostics: [
-          playbackRouteDiagnostic(
-            plan,
-            'playback-missing-route',
-            'warning',
-            'Playback plan has no route candidates.',
-          ),
-        ],
-      };
-    }
-    return limitCanvasPlaybackRouteCandidates(
-      validateAndSortCanvasPlaybackRouteCandidates(plan.routeCandidates, plan),
-      plan,
-      maxRoutes,
-    );
-  }
-
-  const route = deriveLegacyCanvasPlaybackRoute(plan);
-  if (!route) {
+  if (plan.routeCandidates.length === 0) {
     return {
       routes: [],
       diagnostics: [
@@ -335,12 +313,16 @@ export function resolveEffectiveCanvasPlaybackRoutes(
           plan,
           'playback-missing-route',
           'warning',
-          'Playback plan has no playable route entry.',
+          'Playback plan has no route candidates.',
         ),
       ],
     };
   }
-  return { routes: [route], diagnostics: [...(route.diagnostics ?? [])] };
+  return limitCanvasPlaybackRouteCandidates(
+    validateAndSortCanvasPlaybackRouteCandidates(plan.routeCandidates, plan),
+    plan,
+    maxRoutes,
+  );
 }
 
 export function createCanvasPlaybackPlan(input: CreateCanvasPlaybackPlanInput): CanvasPlaybackPlan {
@@ -939,39 +921,6 @@ function limitCanvasPlaybackRouteCandidates(
         `Playback route candidates exceeded the limit of ${maxRoutes}; ${truncatedCount} routes were omitted.`,
       ),
     ],
-  };
-}
-
-function deriveLegacyCanvasPlaybackRoute(
-  plan: CanvasPlaybackPlan,
-): CanvasPlaybackRouteCandidate | undefined {
-  const firstEntryUnitId = plan.entryUnitIds[0];
-  if (!firstEntryUnitId) return undefined;
-  const routePath = buildDefaultCanvasPlaybackRoutePath(plan, firstEntryUnitId);
-  const unitIds = routePath.unitIds;
-  if (unitIds.length === 0) return undefined;
-  const entryUnit = plan.units.find((unit) => unit.id === firstEntryUnitId);
-  return {
-    id: `legacy-entry:${firstEntryUnitId}`,
-    title: entryUnit?.label ?? firstEntryUnitId,
-    entryUnitId: firstEntryUnitId,
-    unitIds,
-    sourceKind: 'entry',
-    ...(entryUnit?.sourceNodeId ? { sourceNodeId: entryUnit.sourceNodeId } : {}),
-    totalDurationMs: resolveRouteDurationMs(unitIds, plan),
-    ...(routePath.cycleUnitId
-      ? {
-          diagnostics: [
-            playbackRouteDiagnostic(
-              plan,
-              'playback-route-cycle',
-              'warning',
-              `Playback route "legacy-entry:${firstEntryUnitId}" stopped before repeated unit "${routePath.cycleUnitId}".`,
-              entryUnit?.sourceNodeId,
-            ),
-          ],
-        }
-      : {}),
   };
 }
 

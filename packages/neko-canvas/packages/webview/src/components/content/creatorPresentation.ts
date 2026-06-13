@@ -1,4 +1,5 @@
 import type { CanvasNode } from '@neko/shared';
+import { SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY } from '@neko/shared';
 
 export type CreatorSceneViewMode = 'storyboard-table' | 'creative-view';
 
@@ -11,6 +12,7 @@ export type SceneShotTableColumnId =
   | 'characters'
   | 'dialogue-sfx'
   | 'tags-style'
+  | 'image-prep'
   | 'status'
   | 'character-description'
   | 'character-reference'
@@ -54,6 +56,7 @@ export interface SceneShotTableRow {
   readonly characters: string;
   readonly dialogueSfx: string;
   readonly tagsStyle: string;
+  readonly imagePrep: string;
   readonly status: string;
   readonly characterDescription: string;
   readonly characterReference: string;
@@ -80,6 +83,7 @@ export const DEFAULT_SCENE_SHOT_TABLE_COLUMNS = [
   'characters',
   'dialogue-sfx',
   'tags-style',
+  'image-prep',
   'storyboard-prompt',
   'status',
 ] as const satisfies readonly SceneShotTableColumnId[];
@@ -195,7 +199,8 @@ function projectSceneShotTableRow(
   const sourceMediaRefs = readReadonlyArray(data['sourceMediaRefs']);
   const generatedMediaRefs = readReadonlyArray(data['generatedMediaRefs']);
   const mediaRefs = readReadonlyArray(data['mediaRefs']);
-  const imageStrategy = readString(readRecord(data['shotImagePrepPlan']), 'imageStrategy');
+  const shotImagePrepPlan = readRecord(data['shotImagePrepPlan']);
+  const imageStrategy = readString(shotImagePrepPlan, 'imageStrategy');
 
   return {
     id: shot.id,
@@ -226,6 +231,7 @@ function projectSceneShotTableRow(
       readString(data, 'visualStyle'),
       ...readStringArray(data['vfx']),
     ]),
+    imagePrep: summarizeImagePrep(shot, data, shotImagePrepPlan),
     status: joinDisplayParts([generationStatus, summarizeImageStatus(data)]),
     characterDescription: summarizeCharacterField(data['characters'], 'appearanceNotes'),
     characterReference: summarizeCharacterRefs(data['characters']),
@@ -250,6 +256,87 @@ function projectSceneShotTableRow(
     characterNames,
     diagnosticCount: diagnostics.length,
   };
+}
+
+function summarizeImagePrep(
+  node: CanvasNode,
+  data: Record<string, unknown>,
+  shotImagePrepPlan: Record<string, unknown>,
+): string {
+  const planMetadata = readRecord(shotImagePrepPlan['metadata']);
+  return joinDisplayParts([
+    readString(shotImagePrepPlan, 'status'),
+    readString(shotImagePrepPlan, 'imageStrategy') ?? readString(data, 'imageStrategy'),
+    summarizeOperationPlan(shotImagePrepPlan['operationPlan']),
+    summarizeRegenerationRecommendation(planMetadata['regenerationRecommendation']),
+    summarizeComicImageAudit(planMetadata['imageAudit']),
+    summarizeComicImageAudit(readStoryboardComicImageAuditExtension(node, data)),
+  ]);
+}
+
+function readStoryboardComicImageAuditExtension(
+  node: CanvasNode,
+  data: Record<string, unknown>,
+): unknown {
+  return (
+    readRecord(data['extensions'])[SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY] ??
+    readRecord(node.extension)[SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY]
+  );
+}
+
+function summarizeOperationPlan(value: unknown): string | undefined {
+  const operations = readStringArray(value);
+  return operations.length > 0 ? operations.join(', ') : undefined;
+}
+
+function summarizeRegenerationRecommendation(value: unknown): string | undefined {
+  const recommendation = readRecord(value);
+  return readString(recommendation, 'label') ?? readString(recommendation, 'decision');
+}
+
+function summarizeComicImageAudit(value: unknown): string | undefined {
+  const audit = readRecord(value);
+  if (Object.keys(audit).length === 0) {
+    return undefined;
+  }
+  return joinDisplayParts([
+    readString(audit, 'orientation'),
+    summarizeCount(audit, 'panelCount', 'panel'),
+    summarizeCount(audit, 'derivedShotCount', 'shot'),
+    summarizeRequiredImageOperations(audit),
+    readString(audit, 'notes'),
+  ]);
+}
+
+function summarizeRequiredImageOperations(audit: Record<string, unknown>): string | undefined {
+  const requiredOperations = readStringArray(audit['requiredOperations']);
+  const flags = [
+    ['requiresRotation', 'rotate'],
+    ['requiresSplit', 'split'],
+    ['requiresTextRemoval', 'remove text'],
+    ['requiresInpaint', 'inpaint'],
+    ['requiresOutpaint', 'outpaint'],
+    ['requiresColorize', 'colorize'],
+    ['requiresUpscale', 'upscale'],
+    ['requiresStyleNormalize', 'style normalize'],
+    ['requiresRedraw', 'redraw'],
+    ['requiresKeyframeGeneration', 'keyframe'],
+  ] as const;
+  const flaggedOperations = flags.flatMap(([key, label]) => (audit[key] === true ? [label] : []));
+  const operations = [...requiredOperations, ...flaggedOperations];
+  return operations.length > 0 ? Array.from(new Set(operations)).join(', ') : undefined;
+}
+
+function summarizeCount(
+  data: Record<string, unknown>,
+  key: string,
+  singularLabel: string,
+): string | undefined {
+  const count = readNumber(data, key);
+  if (count === undefined) {
+    return undefined;
+  }
+  return `${count} ${count === 1 ? singularLabel : `${singularLabel}s`}`;
 }
 
 function readShotNumber(shot: CanvasNode, index: number): string {
@@ -356,7 +443,7 @@ function summarizeDiagnostics(value: unknown): readonly string[] {
     .filter((message): message is string => Boolean(message));
 }
 
-function summarizeMediaRefs(refs: readonly unknown[], fallbackLabel: string): string | undefined {
+function summarizeMediaRefs(refs: readonly unknown[], defaultLabel: string): string | undefined {
   if (refs.length === 0) {
     return undefined;
   }
@@ -366,7 +453,7 @@ function summarizeMediaRefs(refs: readonly unknown[], fallbackLabel: string): st
       return readString(record, 'label') ?? readString(record, 'refId');
     })
     .filter((label): label is string => Boolean(label));
-  return labels.length > 0 ? labels.join(', ') : `${fallbackLabel}: ${refs.length}`;
+  return labels.length > 0 ? labels.join(', ') : `${defaultLabel}: ${refs.length}`;
 }
 
 function summarizeRecordRef(value: unknown): string | undefined {

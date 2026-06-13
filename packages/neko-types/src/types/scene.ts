@@ -1,8 +1,4 @@
-import type {
-  EngineCharacterMigrationManifest,
-  EngineNkcCharacterFile,
-  EngineNkcDataBlockManifest,
-} from '../generated/scene.engine';
+import type { EngineNkcCharacterFile, EngineNkcDataBlockManifest } from '../generated/scene.engine';
 
 export type {
   EngineAudioStreamDescriptor as AudioStreamDescriptor,
@@ -61,35 +57,19 @@ export const CURRENT_CHARACTER_SCHEMA_VERSION = 1;
 
 export type CharacterSchemaCompatibilityStatus =
   | 'current'
-  | 'migration-required'
-  | 'unsupported-legacy'
+  | 'unsupported-version'
   | 'unsupported-future';
 
 export interface CharacterSchemaCompatibility {
   status: CharacterSchemaCompatibilityStatus;
   schemaVersion: number;
   currentSchemaVersion: number;
-  migrationId?: string;
 }
-
-export const DEFAULT_CHARACTER_MIGRATION_MANIFEST: EngineCharacterMigrationManifest = {
-  currentSchemaVersion: CURRENT_CHARACTER_SCHEMA_VERSION,
-  supportedLegacyVersions: [0],
-  steps: [
-    {
-      fromSchemaVersion: 0,
-      toSchemaVersion: CURRENT_CHARACTER_SCHEMA_VERSION,
-      migrationId: 'character-v0-to-v1',
-      requiredFeatureFlags: [],
-    },
-  ],
-};
 
 export function evaluateCharacterSchemaVersion(
   file: Pick<EngineNkcCharacterFile | EngineNkcDataBlockManifest, 'schemaVersion'>,
-  manifest: EngineCharacterMigrationManifest = DEFAULT_CHARACTER_MIGRATION_MANIFEST,
 ): CharacterSchemaCompatibility {
-  const currentSchemaVersion = manifest.currentSchemaVersion;
+  const currentSchemaVersion = CURRENT_CHARACTER_SCHEMA_VERSION;
   const schemaVersion = file.schemaVersion;
 
   if (schemaVersion === currentSchemaVersion) {
@@ -99,33 +79,19 @@ export function evaluateCharacterSchemaVersion(
     return { status: 'unsupported-future', schemaVersion, currentSchemaVersion };
   }
 
-  const migrationStep = manifest.steps.find(
-    (step) =>
-      step.fromSchemaVersion === schemaVersion && step.toSchemaVersion === currentSchemaVersion,
-  );
-  if (migrationStep && manifest.supportedLegacyVersions.includes(schemaVersion)) {
-    return {
-      status: 'migration-required',
-      schemaVersion,
-      currentSchemaVersion,
-      migrationId: migrationStep.migrationId,
-    };
-  }
-
-  return { status: 'unsupported-legacy', schemaVersion, currentSchemaVersion };
+  return { status: 'unsupported-version', schemaVersion, currentSchemaVersion };
 }
 
 export function assertCharacterSchemaEditable(
   file: Pick<EngineNkcCharacterFile | EngineNkcDataBlockManifest, 'schemaVersion'>,
-  manifest: EngineCharacterMigrationManifest = DEFAULT_CHARACTER_MIGRATION_MANIFEST,
 ): CharacterSchemaCompatibility {
-  const compatibility = evaluateCharacterSchemaVersion(file, manifest);
+  const compatibility = evaluateCharacterSchemaVersion(file);
   if (compatibility.status === 'unsupported-future') {
     throw new Error(
       `Character schema version ${compatibility.schemaVersion} requires runtime schema ${compatibility.currentSchemaVersion} or newer`,
     );
   }
-  if (compatibility.status === 'unsupported-legacy') {
+  if (compatibility.status === 'unsupported-version') {
     throw new Error(`Character schema version ${compatibility.schemaVersion} is not supported`);
   }
   return compatibility;

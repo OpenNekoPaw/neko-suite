@@ -70,9 +70,9 @@ function createConnection(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type,
   };
 }
@@ -336,7 +336,7 @@ describe('canvasStore scene container actions', () => {
           size: { width: 400, height: 320 },
           zIndex: 0,
           container: { policy: 'group', childIds: ['shot-1'] },
-          data: { childIds: ['shot-1'], label: 'Group' },
+          data: { label: 'Group' },
         },
         { ...createShotNode('shot-1', 20, 60), parentId: 'group-1' },
         createShotNode('shot-2', 500, 60),
@@ -363,7 +363,7 @@ describe('canvasStore scene container actions', () => {
           size: { width: 400, height: 320 },
           zIndex: 0,
           container: { policy: 'gallery', childIds: ['media-1'], deleteBehavior: 'delete-subtree' },
-          data: { preset: 'custom', rows: 1, cols: 1, cells: [] },
+          data: { preset: 'custom', rows: 1, cols: 1 },
         } as CanvasData['nodes'][number],
         {
           id: 'media-1',
@@ -396,7 +396,7 @@ describe('canvasStore scene container actions', () => {
           size: { width: 400, height: 320 },
           zIndex: 0,
           container: { policy: 'group', childIds: ['shot-1'], deleteBehavior: 'release-children' },
-          data: { childIds: ['shot-1'], label: 'Group' },
+          data: { label: 'Group' },
         },
         { ...createShotNode('shot-1', 20, 60), parentId: 'group-1' },
         createShotNode('shot-2', 500, 60),
@@ -660,18 +660,18 @@ describe('canvasStore scene container actions', () => {
     expect(() =>
       useCanvasStore.getState().addConnection({
         sourceId: 'scene',
-        sourceAnchor: 'right',
         targetId: 'start',
-        targetAnchor: 'left',
+        sourceEndpoint: { nodeId: 'scene', scope: 'node' },
+        targetEndpoint: { nodeId: 'start', scope: 'node' },
         type: 'default',
       }),
     ).toThrow(/narrative graph constraints/);
     expect(() =>
       useCanvasStore.getState().addConnection({
         sourceId: 'start',
-        sourceAnchor: 'right',
         targetId: 'scene',
-        targetAnchor: 'left',
+        sourceEndpoint: { nodeId: 'start', scope: 'node' },
+        targetEndpoint: { nodeId: 'scene', scope: 'node' },
         type: 'default',
       }),
     ).not.toThrow();
@@ -704,9 +704,9 @@ describe('canvasStore scene container actions', () => {
     expect(() =>
       useCanvasStore.getState().addConnection({
         sourceId: 'shot-a',
-        sourceAnchor: 'right',
         targetId: 'shot-b',
-        targetAnchor: 'left',
+        sourceEndpoint: { nodeId: 'shot-a', scope: 'node' },
+        targetEndpoint: { nodeId: 'shot-b', scope: 'node' },
         type: 'sequence',
       }),
     ).toThrow(/constraints/);

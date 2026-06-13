@@ -21,9 +21,9 @@ function edge(id: string, sourceId: string, targetId: string): CanvasConnection 
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type: 'choice',
   };
 }
@@ -76,7 +76,7 @@ describe('canvas narrative validation', () => {
     ]);
   });
 
-  it('rejects deprecated story graph formats as scene refs', () => {
+  it('rejects non-Fountain scene refs without old-format branches', () => {
     const diagnostics = validateCanvasNarrativeGraph(
       canvas([
         node('scene-a', 'narrative-scene', { sceneRef: 'story/main.nks' }),
@@ -86,9 +86,9 @@ describe('canvas narrative validation', () => {
     );
 
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'unsupported-narrative-graph-format',
-      'unsupported-narrative-graph-format',
-      'unsupported-narrative-graph-format',
+      'invalid-narrative-scene-ref',
+      'invalid-narrative-scene-ref',
+      'invalid-narrative-scene-ref',
     ]);
   });
 

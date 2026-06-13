@@ -68,20 +68,6 @@ export interface ToolGroup {
   icon?: string;
 }
 
-/**
- * ToolGroup match result from keyword matching
- */
-export interface ToolGroupMatch {
-  /** Matched group */
-  group: ToolGroup;
-
-  /** Relevance score (0-1) */
-  relevance: number;
-
-  /** Keywords that matched */
-  matchedKeywords: string[];
-}
-
 // Note: ToolFilterOptions moved to tool.ts to break circular dependency
 
 /**
@@ -119,12 +105,6 @@ export interface IToolGroupRegistry extends IToolProvider {
 
   /** List enabled ToolGroups */
   listEnabled(): ToolGroup[];
-
-  /**
-   * Match ToolGroups by user input.
-   * @deprecated Always returns []. Discovery is now LLM-driven via SearchToolSets.
-   */
-  match(input: string): ToolGroupMatch[];
 
   /** Get active tools based on active groups */
   getActiveTools(activeGroups: string[]): string[];

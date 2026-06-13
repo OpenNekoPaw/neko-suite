@@ -1036,7 +1036,7 @@ export function collectReferencesFromCanvasNode(
   if (source.type === 'media') {
     projectMediaNodeReferences(data, sourceId, descriptors);
   } else if (source.type === 'gallery') {
-    projectGalleryNodeReferences(data, sourceId, descriptors);
+    projectGalleryNodeReferences(source.container, data, sourceId, descriptors);
   } else if (source.type === 'document') {
     projectDocumentNodeReferences(data, sourceId, descriptors);
   } else if (source.type === 'storyboard') {
@@ -1456,6 +1456,7 @@ function summarizeReferenceGroup(
 }
 
 function projectGalleryNodeReferences(
+  container: unknown,
   data: Readonly<Record<string, unknown>>,
   sourceId: string,
   descriptors: ReferenceDescriptor[],
@@ -1476,28 +1477,31 @@ function projectGalleryNodeReferences(
       }),
     );
   }
-  const cells = data['cells'];
-  if (!Array.isArray(cells)) return;
-  cells.forEach((cell, index) => {
-    if (!isRecord(cell)) return;
-    const image = cell['image'];
-    if (typeof image === 'string' && image.trim().length > 0) {
-      descriptors.push(
-        createPathDescriptor({
-          referenceId: `${sourceId}:cells:${index}:image`,
-          sourceKind: 'canvas-node',
-          sourceId,
-          role: 'subject',
-          modality: 'image',
-          path: image,
-          metadata: compactJsonRecord({
-            field: 'cells.image',
-            cellId: typeof cell['id'] === 'string' ? cell['id'] : String(index),
-            label: typeof cell['label'] === 'string' ? cell['label'] : undefined,
-          }),
+  const placements = isRecord(container) ? container['childPlacements'] : undefined;
+  if (!isRecord(placements)) return;
+  Object.entries(placements).forEach(([placementId, placement], index) => {
+    if (!isRecord(placement)) return;
+    const childId = readStringFromKeys(placement, ['childId']) ?? placementId;
+    if (!childId) return;
+    const metadata = isRecord(placement['metadata']) ? placement['metadata'] : undefined;
+    descriptors.push(
+      createCanvasNodeDescriptor({
+        referenceId: `${sourceId}:childPlacements:${placementId}`,
+        sourceKind: 'canvas-node',
+        sourceId,
+        role: 'reference',
+        modality: 'image',
+        nodeId: childId,
+        metadata: compactJsonRecord({
+          field: 'container.childPlacements',
+          placementId,
+          slotId: placement['slotId'],
+          order: placement['order'],
+          index,
+          label: metadata?.['label'],
         }),
-      );
-    }
+      }),
+    );
   });
 }
 
@@ -2199,6 +2203,7 @@ function batchStatus(summary: ReferenceBatchResolveSummary): ReferenceResolution
 
 function isCanvasNodeLike(value: unknown): value is Pick<CanvasNode, 'id' | 'type'> & {
   readonly data?: unknown;
+  readonly container?: unknown;
 } {
   return isRecord(value) && typeof value['id'] === 'string' && typeof value['type'] === 'string';
 }

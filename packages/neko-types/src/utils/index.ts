@@ -50,7 +50,6 @@ export {
   getContainerChildIds,
   getContainerChildReferences,
   getContainerPolicyName,
-  getLegacyContainerChildIds,
   getNodeParentId,
   getNodeParentReferences,
   isContainerNode,
@@ -59,6 +58,14 @@ export {
   type CanvasParentReference,
   type CanvasParentReferenceSource,
 } from './canvasLayered';
+export {
+  createNodeConnectionEndpoint,
+  createPortConnectionEndpoint,
+  findCanvasNodePort,
+  getDefaultNodeEndpointSide,
+  resolveCanvasConnectionEndpoint,
+  type CanvasConnectionEndpointResolution,
+} from './canvasConnection';
 export {
   isJsonPointerPath,
   parseJsonPointer,

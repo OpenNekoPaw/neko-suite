@@ -111,7 +111,7 @@ describe('imported generated asset normalization', () => {
     });
   });
 
-  it('does not treat unprojected legacy paths as runtime preview paths for linked imports', () => {
+  it('does not treat unprojected source paths as runtime preview paths for linked imports', () => {
     const resourceRef = createResourceRef({
       scope: 'project',
       provider: 'document-archive',
@@ -120,10 +120,7 @@ describe('imported generated asset normalization', () => {
         kind: 'document',
         document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
         filePath: '${BOOKS}/comic.epub',
-        metadata: {
-          legacyCachePath:
-            '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page.jpg',
-        },
+        metadata: {},
       },
       locator: { kind: 'document', entryPath: 'image/page-1.jpg' },
       fingerprint: createResourceFingerprint({

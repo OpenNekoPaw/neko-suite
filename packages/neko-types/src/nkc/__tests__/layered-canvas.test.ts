@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadNkc, migrateNkc, validateNkcLayered } from '../index';
 import { getContainerChildIds, getNodeParentId } from '../../utils/canvasLayered';
-import type {
-  CanvasData,
-  GroupCanvasNode,
-  SceneGroupCanvasNode,
-  ShotCanvasNode,
-} from '../../types/canvas';
+import type { CanvasData, SceneGroupCanvasNode, ShotCanvasNode } from '../../types/canvas';
 
 const sceneNode: SceneGroupCanvasNode = {
   id: 'scene-1',
@@ -62,9 +57,9 @@ const validV1Canvas: CanvasData = {
     {
       id: 'conn-1',
       sourceId: 'shot-1',
-      sourceAnchor: 'right',
       targetId: 'shot-2',
-      targetAnchor: 'left',
+      sourceEndpoint: { nodeId: 'shot-1', scope: 'node' },
+      targetEndpoint: { nodeId: 'shot-2', scope: 'node' },
     },
   ],
 };
@@ -104,28 +99,27 @@ describe('NKC layered migration', () => {
     expect(result.data.version).toBe('2.1');
   });
 
-  it('mirrors legacy group child IDs without removing legacy data', () => {
-    const group: GroupCanvasNode = {
+  it('keeps canonical group containment while migrating the document version', () => {
+    const group: CanvasData['nodes'][number] = {
       id: 'group-1',
       type: 'group',
       position: { x: 0, y: 0 },
       size: { width: 400, height: 300 },
       zIndex: 1,
+      container: { policy: 'group', childIds: ['shot-1'] },
       data: {
-        childIds: ['shot-1'],
         label: 'References',
       },
     };
     const canvas: CanvasData = {
       ...validV1Canvas,
-      nodes: [group, { ...shotOne, parentId: undefined }],
+      nodes: [group, { ...shotOne, parentId: 'group-1' }],
     };
 
     const migration = migrateNkc(canvas);
     const migratedGroup = migration.data.nodes.find((node) => node.id === 'group-1');
     const migratedChild = migration.data.nodes.find((node) => node.id === 'shot-1');
 
-    expect(migratedGroup?.type === 'group' ? migratedGroup.data.childIds : []).toEqual(['shot-1']);
     expect(migratedGroup?.container?.childIds).toEqual(['shot-1']);
     expect(migratedChild?.parentId).toBe('group-1');
   });
@@ -227,9 +221,9 @@ describe('NKC layered validator', () => {
     migration.data.connections.push({
       id: 'conn-missing',
       sourceId: 'shot-1',
-      sourceAnchor: 'right',
       targetId: 'missing-node',
-      targetAnchor: 'left',
+      sourceEndpoint: { nodeId: 'shot-1', scope: 'node' },
+      targetEndpoint: { nodeId: 'missing-node', scope: 'node' },
     });
 
     const result = validateNkcLayered(migration.data);

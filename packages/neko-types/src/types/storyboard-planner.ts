@@ -8,6 +8,7 @@ import type {
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { NekoStoryScriptIndex } from './extension-api';
 import type { ResourceRef } from './resource-cache';
+import type { ShotImagePrepPlan } from './shot-image-prep';
 
 export type StoryboardImportMode = 'mechanical' | 'semantic';
 
@@ -36,6 +37,7 @@ export interface StoryShotPlan {
   readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
   readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
   readonly mediaRefs?: readonly StoryboardMediaRef[];
+  readonly shotImagePrepPlan?: ShotImagePrepPlan;
 }
 
 export interface StoryScenePlan {
@@ -71,6 +73,7 @@ export interface CanvasStoryboardShotPlan {
   readonly sourceMediaRefs?: readonly StoryboardMediaRef[];
   readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
   readonly mediaRefs?: readonly StoryboardMediaRef[];
+  readonly shotImagePrepPlan?: ShotImagePrepPlan;
 }
 
 export interface CanvasStoryboardScenePlan {

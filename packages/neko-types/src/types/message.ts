@@ -376,9 +376,9 @@ export type MessageFromWebview =
   | { type: 'save'; content: ProjectData }
   | { type: 'requestFile'; path: string }
   | { type: 'addMediaToTimeline'; path: string }
-  | { type: 'saveBlob'; data: string; filename: string; mimeType: string }
+  | { type: 'saveBlob'; data: ArrayBuffer; filename: string; mimeType: string }
   | { type: 'selectExportPath'; filename: string; format: string }
-  | { type: 'saveBlobToPath'; data: string; path: string; mimeType: string }
+  | { type: 'saveBlobToPath'; data: ArrayBuffer; path: string; mimeType: string }
   // Unified export messages (WebView -> Extension -> NativeEngine)
   | { type: 'export:start'; project: ProjectData; config: ExportStartConfig }
   | { type: 'export:cancel' }

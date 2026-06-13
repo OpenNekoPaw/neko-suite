@@ -68,8 +68,7 @@ export type ContentAccessSourceKind =
   | 'file'
   | 'media-library'
   | 'generated-asset'
-  | 'runtime'
-  | 'legacy-cache-path';
+  | 'runtime';
 
 export type ContentRuntimeRefKind =
   | 'cache-path'
@@ -147,13 +146,6 @@ export interface ContentRuntimeRef {
   readonly metadata?: Record<string, unknown>;
 }
 
-export interface ContentLegacyCachePathRef {
-  readonly kind: 'legacy-cache-path';
-  readonly cachePath: string;
-  readonly source?: ContentStableSourceRef;
-  readonly metadata?: Record<string, unknown>;
-}
-
 export type ContentStableSourceRef =
   | ResourceRef
   | ContentDocumentSourceRef
@@ -162,10 +154,7 @@ export type ContentStableSourceRef =
   | ContentMediaLibrarySourceRef
   | ContentGeneratedAssetSourceRef;
 
-export type ContentSourceRef =
-  | ContentStableSourceRef
-  | ContentRuntimeRef
-  | ContentLegacyCachePathRef;
+export type ContentSourceRef = ContentStableSourceRef | ContentRuntimeRef;
 
 export interface ContentAccessRequest {
   readonly ref: ContentSourceRef;
@@ -420,15 +409,8 @@ export function isRuntimeOnlyContentRef(ref: ContentSourceRef): ref is ContentRu
   return ref.kind === 'runtime';
 }
 
-export function isLegacyCachePathContentRef(
-  ref: ContentSourceRef,
-): ref is ContentLegacyCachePathRef {
-  return ref.kind === 'legacy-cache-path';
-}
-
 export function isCacheOrRuntimeOnlyContentRef(ref: ContentSourceRef): boolean {
   if (isRuntimeOnlyContentRef(ref)) return ref.source === undefined;
-  if (isLegacyCachePathContentRef(ref)) return true;
   if (isResourceRef(ref) && ref.scope === 'extension-private') return true;
   if ('kind' in ref && ref.kind === 'generated-asset') return ref.promoted !== true;
   return false;
@@ -652,8 +634,6 @@ export function isContentSourceRef(value: unknown): value is ContentSourceRef {
       );
     case 'runtime':
       return isContentRuntimeRefKind(value['runtimeKind']) && typeof value['value'] === 'string';
-    case 'legacy-cache-path':
-      return typeof value['cachePath'] === 'string';
     default:
       return false;
   }

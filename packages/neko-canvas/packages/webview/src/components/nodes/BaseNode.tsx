@@ -4,7 +4,7 @@
  *
  * Port system:
  * - If node.ports is defined and non-empty, renders typed input/output ports
- * - Otherwise falls back to legacy 4-direction anchor points
+ * - Otherwise renders node-level endpoint handles on each side
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -69,7 +69,7 @@ export interface BaseNodeProps {
   onRotate?: (nodeId: string, rotation: number) => void;
   /** Called on mouseup when rotation ends */
   onRotateEnd?: (nodeId: string, rotation: number) => void;
-  onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
+  onConnectionStart?: (nodeId: string, handleId: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
   autoSizeContent?: boolean;
@@ -330,18 +330,17 @@ export function BaseNode({
     [node.id, onSelect],
   );
 
-  // Handle anchor/port mousedown for drag-based connection
+  // Handle endpoint mousedown for drag-based connection
   const handleAnchorMouseDown = useCallback(
-    (anchor: string) => (e: React.MouseEvent) => {
+    (handleId: string) => (e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      onConnectionStart?.(node.id, anchor, e);
+      onConnectionStart?.(node.id, handleId, e);
     },
     [node.id, onConnectionStart],
   );
 
-  // Get legacy anchor position styles
-  const getAnchorStyle = (anchor: AnchorPosition): React.CSSProperties => {
+  const getEndpointHandleStyle = (side: AnchorPosition): React.CSSProperties => {
     const base: React.CSSProperties = {
       position: 'absolute',
       width: 12,
@@ -353,7 +352,7 @@ export function BaseNode({
       zIndex: 10,
     };
 
-    switch (anchor) {
+    switch (side) {
       case 'top':
         return { ...base, top: -6, left: '50%', transform: 'translateX(-50%)' };
       case 'right':
@@ -541,7 +540,7 @@ export function BaseNode({
               data-port-id={port.id}
               data-port-type={port.type}
               data-node-id={node.id}
-              data-anchor={port.position}
+              data-connection-handle={port.id}
               style={getPortStyle(port, index, portsOnSide.length)}
               onMouseDown={handleAnchorMouseDown(port.id)}
               className={clsx(
@@ -563,16 +562,16 @@ export function BaseNode({
           )),
         )}
 
-      {/* Legacy anchor points (only when selected, for backward compat) */}
+      {/* Node-level endpoint handles (only when selected) */}
       {!hasPorts &&
         isSelected &&
-        ANCHOR_POSITIONS.map((anchor) => (
+        ANCHOR_POSITIONS.map((side) => (
           <div
-            key={anchor}
+            key={side}
             data-node-id={node.id}
-            data-anchor={anchor}
-            style={getAnchorStyle(anchor)}
-            onMouseDown={handleAnchorMouseDown(anchor)}
+            data-connection-handle={side}
+            style={getEndpointHandleStyle(side)}
+            onMouseDown={handleAnchorMouseDown(side)}
             className="hover:bg-[var(--node-selected)] hover:scale-125 transition-all duration-150"
           />
         ))}

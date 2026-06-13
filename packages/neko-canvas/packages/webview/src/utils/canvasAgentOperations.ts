@@ -248,8 +248,6 @@ export function deriveCanvasNode(
         id: connectionId,
         sourceId: sourceNode.id,
         targetId: nodeId,
-        sourceAnchor: 'right',
-        targetAnchor: 'left',
         type: 'default',
         sourceEndpoint: { nodeId: sourceNode.id, scope: 'node' },
         targetEndpoint: { nodeId, scope: 'node' },
@@ -715,15 +713,13 @@ function createCompositeConnections(
       {
         id: connection.id ?? context.generateId(),
         sourceId,
-        sourceAnchor: connection.sourceAnchor ?? 'right',
         targetId,
-        targetAnchor: connection.targetAnchor ?? 'left',
         ...(connection.type ? { type: connection.type } : {}),
         ...(connection.label ? { label: connection.label } : {}),
         ...(connection.priority !== undefined ? { priority: connection.priority } : {}),
         ...(connection.extension ? { extension: connection.extension } : {}),
-        sourceEndpoint: { nodeId: sourceId, scope: 'node' },
-        targetEndpoint: { nodeId: targetId, scope: 'node' },
+        sourceEndpoint: { nodeId: sourceId, scope: 'node', ...(connection.sourceEndpoint ?? {}) },
+        targetEndpoint: { nodeId: targetId, scope: 'node', ...(connection.targetEndpoint ?? {}) },
       },
     ];
   });

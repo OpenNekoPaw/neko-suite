@@ -30,10 +30,10 @@ export class MidiClient extends DeviceStreamClient<MidiEvent> {
   }
 }
 
-function getNumber(value: unknown, fallback = 0): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+function getNumber(value: unknown, defaultValue = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
 }
 
-function getString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback;
+function getString(value: unknown, defaultValue = ''): string {
+  return typeof value === 'string' ? value : defaultValue;
 }

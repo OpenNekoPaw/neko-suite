@@ -1925,11 +1925,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const directResourceRef = readResourceLike(value);
       const directDocumentResourceRef = readDocumentResourceLike(value);
       if (directResourceRef || directDocumentResourceRef) {
-        const legacyCachePath = directResourceRef
-          ? readFirstString(directResourceRef.source?.metadata || {}, ['legacyCachePath'])
-          : undefined;
         return {
-          ...(legacyCachePath ? { assetPath: legacyCachePath } : {}),
           ...(directResourceRef ? { resourceRef: directResourceRef } : {}),
           ...(directDocumentResourceRef ? { documentResourceRef: directDocumentResourceRef } : {}),
         };
@@ -1957,8 +1953,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         readDocumentResourceLike(metadata?.resourceRef);
       const assetPath =
         readFirstString(value, ['dataUrl', 'sourcePath', 'localPath', 'path', 'assetPath', 'uri', 'filePath', 'previewUrl', 'url', 'src']) ||
-        readFirstString(assetRef || {}, ['dataUrl', 'sourcePath', 'localPath', 'path', 'assetPath', 'uri', 'filePath', 'previewUrl', 'url', 'src']) ||
-        readFirstString(metadata || {}, ['legacyCachePath']);
+        readFirstString(assetRef || {}, ['dataUrl', 'sourcePath', 'localPath', 'path', 'assetPath', 'uri', 'filePath', 'previewUrl', 'url', 'src']);
       return assetPath || resourceRef || documentResourceRef
         ? {
             ...(assetPath ? { assetPath } : {}),
@@ -2439,29 +2434,20 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       if (!plan) {
         return { routes: [], diagnostics: [] };
       }
-      if (Array.isArray(plan.routeCandidates)) {
-        if (plan.routeCandidates.length === 0) {
-          return {
-            routes: [],
-            diagnostics: [{
-              code: 'playback-missing-route',
-              severity: 'warning',
-              message: t('missingRouteCandidates'),
-            }],
-          };
-        }
+      const candidates = Array.isArray(plan.routeCandidates) ? plan.routeCandidates : [];
+      if (candidates.length === 0) {
         return {
-          routes: normalizeRouteCandidates(plan.routeCandidates, plan),
-          diagnostics: [],
+          routes: [],
+          diagnostics: [{
+            code: 'playback-missing-route',
+            severity: 'warning',
+            message: t('missingRouteCandidates'),
+          }],
         };
       }
       return {
-        routes: [],
-        diagnostics: [{
-          code: 'playback-missing-route',
-          severity: 'warning',
-          message: t('missingRouteEntry'),
-        }],
+        routes: normalizeRouteCandidates(candidates, plan),
+        diagnostics: [],
       };
     }
 

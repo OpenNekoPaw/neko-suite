@@ -191,8 +191,6 @@ describe('canvasAgentOperations', () => {
         id: 'generated-4',
         sourceId: 'generated-2',
         targetId: 'generated-3',
-        sourceAnchor: 'right',
-        targetAnchor: 'left',
         type: 'sequence',
         label: 'next',
         priority: 0,
@@ -342,9 +340,9 @@ describe('canvasAgentOperations', () => {
         {
           id: 'start-scene',
           sourceId: 'start',
-          sourceAnchor: 'right',
           targetId: 'scene-a',
-          targetAnchor: 'left',
+          sourceEndpoint: { nodeId: 'start', scope: 'node' },
+          targetEndpoint: { nodeId: 'scene-a', scope: 'node' },
           type: 'choice',
           choiceText: 'Enter cafe',
           condition: 'closeness >= 1',
@@ -352,9 +350,9 @@ describe('canvasAgentOperations', () => {
         {
           id: 'scene-ending',
           sourceId: 'scene-a',
-          sourceAnchor: 'right',
           targetId: 'ending',
-          targetAnchor: 'left',
+          sourceEndpoint: { nodeId: 'scene-a', scope: 'node' },
+          targetEndpoint: { nodeId: 'ending', scope: 'node' },
           type: 'choice',
           choiceText: 'Finish',
         },
@@ -531,9 +529,9 @@ describe('canvasAgentOperations', () => {
         {
           id: 'start-scene',
           sourceId: 'start',
-          sourceAnchor: 'right',
           targetId: 'scene',
-          targetAnchor: 'left',
+          sourceEndpoint: { nodeId: 'start', scope: 'node' },
+          targetEndpoint: { nodeId: 'scene', scope: 'node' },
           type: 'choice',
           condition: 'missingVar',
         },
@@ -545,7 +543,7 @@ describe('canvasAgentOperations', () => {
       expect.arrayContaining([
         'narrative-missing-ending',
         'narrative-accidental-dead-end',
-        'narrative-deprecated-scene-graph-ref',
+        'narrative-invalid-scene-ref',
         'narrative-unresolved-variable',
       ]),
     );
@@ -576,7 +574,7 @@ describe('canvasAgentOperations', () => {
     const group = {
       ...node('group-1', 'group', 100, 100),
       container: { policy: 'group', childIds: [] },
-      data: { label: 'Arrival', childIds: [] },
+      data: { label: 'Arrival' },
     } as unknown as CanvasNode;
 
     const result = applyCanvasAgentContent(

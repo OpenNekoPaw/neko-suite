@@ -2,189 +2,10 @@
  * Configuration Normalizer
  *
  * Normalizes and merges configuration from different sources.
- * Handles legacy field migration and format conversion.
  */
 
-import type { ProviderConfig } from '../types/config';
 import type { UnifiedConfig, NormalizedConfig } from './types';
 import { DEFAULT_CONFIG } from './types';
-
-// =============================================================================
-// Legacy Format Migration
-// =============================================================================
-
-/**
- * Legacy provider configuration format (agent-cli old format)
- *
- * Old format used object keyed by provider name:
- * ```json
- * {
- *   "providers": {
- *     "anthropic": { "apiKey": "...", "defaultModel": "..." },
- *     "openai": { "apiKey": "...", "defaultModel": "..." }
- *   }
- * }
- * ```
- */
-interface LegacyProviderConfig {
-  apiKey?: string;
-  baseUrl?: string;
-  defaultModel?: string;
-  models?: (string | { id: string; name?: string })[];
-}
-
-/**
- * Check if providers is in legacy object format
- */
-function isLegacyProvidersFormat(
-  providers: unknown,
-): providers is Record<string, LegacyProviderConfig> {
-  if (!providers || typeof providers !== 'object') {
-    return false;
-  }
-  // Array format is the new format
-  if (Array.isArray(providers)) {
-    return false;
-  }
-  // Object format is legacy
-  return true;
-}
-
-/**
- * Convert legacy providers object format to array format
- */
-function convertLegacyProviders(
-  legacyProviders: Record<string, LegacyProviderConfig>,
-): ProviderConfig[] {
-  const providers: ProviderConfig[] = [];
-
-  for (const [name, config] of Object.entries(legacyProviders)) {
-    providers.push({
-      id: name,
-      name: name,
-      displayName: capitalizeFirst(name),
-      type: inferProviderType(name),
-      apiUrl: config.baseUrl ?? getDefaultApiUrl(name),
-      apiKey: config.apiKey,
-      enabled: true,
-    });
-  }
-
-  return providers;
-}
-
-/**
- * Infer provider type from name
- */
-function inferProviderType(name: string): ProviderConfig['type'] {
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('anthropic') || lowerName.includes('claude')) {
-    return 'anthropic';
-  }
-  if (lowerName.includes('openai') || lowerName.includes('gpt')) {
-    return 'openai';
-  }
-  if (lowerName.includes('google') || lowerName.includes('gemini')) {
-    return 'google';
-  }
-  if (lowerName.includes('azure')) {
-    return 'azure';
-  }
-  if (lowerName.includes('ollama')) {
-    return 'ollama';
-  }
-  if (lowerName.includes('deepseek')) {
-    return 'generic';
-  }
-  return 'generic';
-}
-
-/**
- * Get default API URL for known providers
- */
-function getDefaultApiUrl(name: string): string {
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('anthropic')) {
-    return 'https://api.anthropic.com';
-  }
-  if (lowerName.includes('openai')) {
-    return 'https://api.openai.com/v1';
-  }
-  if (lowerName.includes('deepseek')) {
-    return 'https://api.deepseek.com';
-  }
-  if (lowerName.includes('ollama')) {
-    return 'http://localhost:11434';
-  }
-  return '';
-}
-
-/**
- * Capitalize first letter
- */
-function capitalizeFirst(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// =============================================================================
-// Configuration Migration
-// =============================================================================
-
-/**
- * Migrate legacy fields in configuration
- *
- * Handles:
- * - provider → defaultProvider
- * - model → defaultModel
- * - providers object → providers array
- * - apiKey/baseUrl → providers[].apiKey/apiUrl
- */
-export function migrateLegacyFields(config: UnifiedConfig): UnifiedConfig {
-  const migrated = { ...config };
-
-  // Migrate provider → defaultProvider
-  if (config.provider && !config.defaultProvider) {
-    migrated.defaultProvider = config.provider;
-  }
-
-  // Migrate model → defaultModel
-  if (config.model && !config.defaultModel) {
-    migrated.defaultModel = config.model;
-  }
-
-  // Migrate legacy providers object format to array format
-  if (isLegacyProvidersFormat(config.providers)) {
-    migrated.providers = convertLegacyProviders(config.providers);
-  }
-
-  // Migrate top-level apiKey/baseUrl to default provider
-  if ((config.apiKey || config.baseUrl) && migrated.providers) {
-    const defaultProviderId = migrated.defaultProvider ?? 'anthropic';
-    const existingProvider = migrated.providers.find((p) => p.id === defaultProviderId);
-
-    if (existingProvider) {
-      if (config.apiKey && !existingProvider.apiKey) {
-        existingProvider.apiKey = config.apiKey;
-      }
-      if (config.baseUrl && !existingProvider.apiUrl) {
-        existingProvider.apiUrl = config.baseUrl;
-      }
-    } else {
-      // Create provider entry for legacy apiKey/baseUrl
-      migrated.providers.push({
-        id: defaultProviderId,
-        name: defaultProviderId,
-        displayName: capitalizeFirst(defaultProviderId),
-        type: inferProviderType(defaultProviderId),
-        apiUrl: config.baseUrl ?? getDefaultApiUrl(defaultProviderId),
-        apiKey: config.apiKey,
-        enabled: true,
-      });
-    }
-  }
-
-  return migrated;
-}
 
 // =============================================================================
 // Configuration Merging
@@ -357,7 +178,7 @@ function arrayToMap<T extends { id: string }>(items?: T[]): Map<string, T> {
 /**
  * Normalize unified configuration to internal format
  *
- * @param config - Unified configuration (after migration and merging)
+ * @param config - Unified configuration after merging
  * @returns Normalized configuration
  */
 export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
@@ -387,9 +208,8 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
 /**
  * Process configuration through the full pipeline
  *
- * 1. Migrate legacy fields
- * 2. Merge user and workspace configs
- * 3. Normalize to internal format
+ * 1. Merge user and workspace configs
+ * 2. Normalize to internal format
  *
  * @param userConfig - User configuration (~/.neko/config.json)
  * @param workspaceConfig - Workspace configuration (.neko/config.json)
@@ -404,14 +224,12 @@ export function processConfig(
 
   // Merge user config (if exists)
   if (userConfig) {
-    const migratedUser = migrateLegacyFields(userConfig);
-    config = mergeConfigs(config, migratedUser);
+    config = mergeConfigs(config, userConfig);
   }
 
   // Merge workspace config (takes precedence)
   if (workspaceConfig) {
-    const migratedWorkspace = migrateLegacyFields(workspaceConfig);
-    config = mergeConfigs(config, migratedWorkspace);
+    config = mergeConfigs(config, workspaceConfig);
   }
 
   // Normalize to internal format

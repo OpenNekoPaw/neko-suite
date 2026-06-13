@@ -30,7 +30,7 @@ describe('nodeFactory gallery container', () => {
     expect(galleryNode.data.preset).toBe('character-3view');
     expect(galleryNode.data.cols).toBe(3);
     expect(galleryNode.data.rows).toBe(1);
-    expect(galleryNode.data.cells).toBeUndefined();
+    expect('cells' in galleryNode.data).toBe(false);
   });
 
   it('preserves characterProfile data', () => {
@@ -87,7 +87,6 @@ describe('nodeFactory composable presets', () => {
   it('registers migrated core presets without legacy core escape hatches', () => {
     expect(getBuiltInCanvasNodePresetMetadata('shot.basic')).toMatchObject({
       nodeType: 'shot',
-      creationMode: 'composable',
     });
     expect(getBuiltInCanvasNodePresetMetadata('scene.basic')).toMatchObject({
       nodeType: 'scene',
@@ -95,23 +94,30 @@ describe('nodeFactory composable presets', () => {
     });
     expect(getBuiltInCanvasNodePresetMetadata('gallery.basic')).toMatchObject({
       nodeType: 'gallery',
-      creationMode: 'composable',
     });
     expect(getBuiltInCanvasNodePresetMetadata('media.basic')).toMatchObject({
       nodeType: 'media',
-      creationMode: 'composable',
     });
     expect(getBuiltInCanvasNodePresetMetadata('project.basic')).toMatchObject({
       nodeType: 'project',
-      creationMode: 'composable',
     });
+    expect(getBuiltInCanvasNodePresetMetadata('annotation.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('text.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('shot.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('scene.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('gallery.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('media.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('storyboard.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('script.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('document.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('model.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('canvas-embed.legacy')).toBeUndefined();
     expect(CANVAS_AGENT_NODE_PRESETS).toContain('shot.basic');
     expect(CANVAS_AGENT_NODE_PRESETS).toContain('project.basic');
+    expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('annotation.legacy');
+    expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('text.legacy');
     expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('shot.legacy');
+    expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('storyboard.legacy');
     expect(CANVAS_AGENT_CHILD_PRESETS).toContain('gallery.basic');
     expect(CANVAS_AGENT_CONTAINER_PRESETS).toContain('scene.basic');
     expect(getDefaultCanvasNodePresetName('project')).toBe('project.basic');
@@ -354,7 +360,6 @@ describe('nodeFactory composable presets', () => {
       zIndex: 0,
       data: {
         label: 'Review',
-        childIds: ['note-1'],
       },
     });
 
@@ -362,7 +367,7 @@ describe('nodeFactory composable presets', () => {
     expect(node.preset).toBe('group.container');
     expect(node.container).toMatchObject({
       policy: 'group',
-      childIds: ['note-1'],
+      childIds: [],
       deleteBehavior: 'release-children',
     });
     expect(node.content?.childSlots?.[0]).toMatchObject({

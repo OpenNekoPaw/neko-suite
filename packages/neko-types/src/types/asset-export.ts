@@ -110,8 +110,6 @@ export interface NkEntityNativePuppetMetadata {
   readonly animation_model?: 'bone-blendshape' | 'moc3-parameter';
   readonly sourceKind?: string;
   readonly source_kind?: string;
-  readonly legacyFallbackRef?: string;
-  readonly legacy_fallback_ref?: string;
 }
 
 export interface NkEntityArtifactMetadata extends Record<string, unknown> {
@@ -257,9 +255,7 @@ function isNkEntityNativePuppetMetadata(value: unknown): value is NkEntityNative
     isOptionalAnimationModel(value['animationModel']) &&
     isOptionalAnimationModel(value['animation_model']) &&
     isOptionalString(value['sourceKind']) &&
-    isOptionalString(value['source_kind']) &&
-    isOptionalString(value['legacyFallbackRef']) &&
-    isOptionalString(value['legacy_fallback_ref'])
+    isOptionalString(value['source_kind'])
   );
 }
 

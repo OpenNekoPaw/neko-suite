@@ -530,7 +530,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               type: 'string',
               enum: [...CANVAS_AGENT_NODE_PRESETS],
               description:
-                'Optional registered Canvas preset. Legacy presets keep existing node rendering; composable presets opt into block rendering.',
+                'Optional registered Canvas preset. Prefer composable presets for block rendering and preview metadata.',
             },
             x: { type: 'number', description: 'Canvas X position' },
             y: { type: 'number', description: 'Canvas Y position' },
@@ -1007,7 +1007,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE,
         description:
-          'Trigger image generation for a ShotNode or a specific GalleryCell. ' +
+          'Trigger image generation for a ShotNode or a specific gallery child media node. ' +
           'Call canvas_update_node first to write the prompt/params to the node ' +
           'so they are persisted. Generation runs asynchronously in the background.',
         category: 'generation',

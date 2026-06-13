@@ -21,9 +21,9 @@ function edge(id: string, sourceId: string, targetId: string, priority = 0): Can
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type: 'choice',
     choiceText: id,
     priority,

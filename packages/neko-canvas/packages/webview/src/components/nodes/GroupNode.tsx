@@ -4,6 +4,7 @@
  */
 
 import type { CanvasViewport, GroupCanvasNode, CanvasNode } from '@neko/shared';
+import { getContainerChildIds } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { t } from '../../i18n';
 
@@ -62,7 +63,8 @@ export function GroupNode({
   onResizeEnd,
   onConnectionStart,
 }: GroupNodeProps) {
-  const { label, color, childIds } = node.data;
+  const { label, color } = node.data;
+  const childIds = getContainerChildIds(node);
   const groupColor = color || '#6b7280';
 
   // Resolve child nodes

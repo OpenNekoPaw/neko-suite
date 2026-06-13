@@ -15,7 +15,7 @@ describe('DocumentResourceCacheProvider', () => {
     identity: { fileId: 'comic-v1', sizeBytes: 1024, mtimeMs: 42 },
   };
 
-  it('creates stable resource refs from archive refs with legacy cache metadata', () => {
+  it('creates stable resource refs from archive refs without embedding cache paths', () => {
     const ref = createDocumentResourceRefFromArchiveRef({
       kind: 'document-entry',
       source,
@@ -30,8 +30,8 @@ describe('DocumentResourceCacheProvider', () => {
     expect(ref.source.kind).toBe('document');
     expect(ref.source.metadata).toMatchObject({
       format: 'epub',
-      legacyCachePath: '/tmp/page-1.jpg',
     });
+    expect(ref.source.metadata).not.toHaveProperty('legacyCachePath');
     expect(ref.id).toBe(
       createDocumentResourceRefFromArchiveRef({
         kind: 'document-entry',
@@ -188,40 +188,6 @@ describe('DocumentResourceCacheProvider', () => {
     expect(fsOps.copyFile).not.toHaveBeenCalled();
   });
 
-  it('falls back to legacy cache metadata as input and still writes a document resource variant', async () => {
-    const fsOps = createFsOps();
-    const reader = createReader({ source, imageInfo: [] });
-    const entryReader = {
-      readEntry: vi.fn(async () => null),
-    };
-    const provider = new DocumentResourceCacheProvider({ reader, entryReader, fsOps });
-    const ref = createDocumentResourceRef({
-      source,
-      entryPath: 'OPS/page-1.jpg',
-      locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml', spineIndex: 0 },
-      cachePath: '/tmp/document-image-cache/neko_epub_old/page-1.jpg',
-    });
-
-    const result = await provider.ensure({
-      ref,
-      variant: { role: 'document-entry' },
-      cacheRoot: '/workspace/.neko/.cache/resources',
-    });
-
-    expect(result).toMatchObject({
-      status: 'ready',
-      relativePath: expect.stringMatching(/^documents\/doc_.+\/OPS\/page-1\.jpg$/),
-      mimeType: 'image/jpeg',
-      rebuildable: true,
-    });
-    expect(entryReader.readEntry).toHaveBeenCalledWith(source, 'OPS/page-1.jpg');
-    expect(reader.readRange).not.toHaveBeenCalled();
-    expect(fsOps.copyFile).toHaveBeenCalledWith(
-      '/tmp/document-image-cache/neko_epub_old/page-1.jpg',
-      expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
-    );
-  });
-
   it('does not call range reader when range fallback is disabled', async () => {
     const fsOps = createFsOps();
     const reader = createReader({ source, imageInfo: [] });
@@ -243,8 +209,7 @@ describe('DocumentResourceCacheProvider', () => {
 
     expect(result).toMatchObject({
       status: 'missing',
-      error:
-        'Document resource ref cannot be materialized without a direct entry or legacy cache path.',
+      error: 'Document resource ref cannot be materialized without a direct entry.',
     });
     expect(reader.readRange).not.toHaveBeenCalled();
     expect(fsOps.copyFile).not.toHaveBeenCalled();

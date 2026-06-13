@@ -33,7 +33,6 @@ import {
   normalizeImportedGeneratedAsset,
   type ImportedGeneratedAssetPayload,
 } from '../utils/importedGeneratedAsset';
-import { migrateGalleryV1ToContainer } from '../utils/galleryMigration';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
 import { isEditorLevelKeyboardAction } from './keyboardActionPolicy';
 
@@ -277,14 +276,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
         }
         switch (message.type) {
           case 'update': {
-            let canvasData = message.data ? (message.data as CanvasData) : defaultCanvasData;
-            const migrationResult = migrateGalleryV1ToContainer(
-              canvasData.nodes,
-              () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            );
-            if (migrationResult.migrated) {
-              canvasData = { ...canvasData, nodes: migrationResult.nodes };
-            }
+            const canvasData = message.data ? (message.data as CanvasData) : defaultCanvasData;
             setCanvasData(canvasData);
             onCanvasDataLoadedRef.current?.(canvasData);
             setIsReady(true);

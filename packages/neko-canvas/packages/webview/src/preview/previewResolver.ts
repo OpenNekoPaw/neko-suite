@@ -34,7 +34,7 @@ export class WebviewPreviewResolver implements PreviewResolver {
     const documentResourceRef = request.source.metadata?.['documentResourceRef'];
     const resourceRef = request.source.metadata?.['resourceRef'];
     if (!sourcePath && !documentResourceRef && !resourceRef) {
-      return createFallbackVariant(request, 'No preview source');
+      return createUnavailableVariant(request, 'No preview source');
     }
 
     const runtimeUrl = await this.requestRuntimeVariant({
@@ -85,7 +85,7 @@ function selectStableVariant(request: PreviewResolveRequest): RuntimePreviewVari
   };
 }
 
-function createFallbackVariant(
+function createUnavailableVariant(
   request: PreviewResolveRequest,
   label: string,
 ): RuntimePreviewVariant {

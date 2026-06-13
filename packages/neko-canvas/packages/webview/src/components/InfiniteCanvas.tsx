@@ -49,12 +49,12 @@ export interface InfiniteCanvasProps {
   onNodeRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionSelect?: (connectionId: string) => void;
   onConnectionUpdate?: (connectionId: string, updates: Partial<CanvasConnection>) => void;
-  onConnectionStart?: (nodeId: string, anchor: string) => void;
+  onConnectionStart?: (nodeId: string, handleId: string) => void;
   onConnectionComplete?: (
     sourceNodeId: string,
-    sourceAnchor: string,
+    sourceHandleId: string,
     targetNodeId: string,
-    targetAnchor: string,
+    targetHandleId: string,
   ) => void;
   onConnectionCancel?: () => void;
   onCanvasClick?: () => void;

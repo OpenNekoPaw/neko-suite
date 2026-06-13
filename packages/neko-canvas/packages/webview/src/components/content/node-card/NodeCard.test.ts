@@ -36,7 +36,7 @@ describe('NodeCard rendering', () => {
     expect(markup).toContain('Pinned note');
   });
 
-  it('renders unknown node fallback cards', () => {
+  it('renders unknown node unsupported cards', () => {
     const node = createNode('storyboard-1', 'storyboard', { title: 'Legacy' });
 
     const markup = renderToStaticMarkup(React.createElement(NodeCard, { node }));

@@ -1,7 +1,7 @@
 import type { CanvasNode, CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 
-export interface FallbackNodeProps {
+export interface UnsupportedNodeProps {
   node: CanvasNode;
   viewport: CanvasViewport;
   isSelected: boolean;
@@ -24,7 +24,7 @@ export interface FallbackNodeProps {
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
 }
 
-export function FallbackNode({
+export function UnsupportedNode({
   node,
   viewport,
   isSelected,
@@ -37,7 +37,7 @@ export function FallbackNode({
   onRotate,
   onRotateEnd,
   onConnectionStart,
-}: FallbackNodeProps) {
+}: UnsupportedNodeProps) {
   return (
     <BaseNode
       node={node}

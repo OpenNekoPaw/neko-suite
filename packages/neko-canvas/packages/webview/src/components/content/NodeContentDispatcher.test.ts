@@ -17,6 +17,30 @@ import { buildCanvasNode } from '../../utils/nodeFactory';
 import { setLocale } from '../../i18n';
 
 const viewport: CanvasViewport = { pan: { x: 0, y: 0 }, zoom: 1 };
+const imagePrepPlan = {
+  schemaVersion: 1,
+  kind: 'shot-image-prep-plan',
+  planId: 'shot-a-image-prep',
+  sceneId: 'scene-projection',
+  shotId: 'shot-a',
+  sourceMediaRefs: [],
+  imageStrategy: 'transform-original',
+  operationPlan: ['rotate', 'split-panels', 'colorize'],
+  status: 'planned',
+  metadata: {
+    regenerationRecommendation: {
+      decision: 'transform-source',
+      label: 'Transform source',
+      reason: 'Panel needs preparation before animation.',
+    },
+    imageAudit: {
+      orientation: 'rotate-90',
+      panelCount: 3,
+      derivedShotCount: 2,
+      requiresSplit: true,
+    },
+  },
+};
 
 function createContext(node: CanvasNode, allNodes: CanvasNode[] = [node]): NodeRendererContext {
   return {
@@ -45,7 +69,7 @@ afterEach(() => {
 });
 
 describe('NodeContentDispatcher', () => {
-  it('uses the legacy renderer when node has no content and no preset', () => {
+  it('uses the default renderer when node has no content and no preset', () => {
     const node: CanvasNode = {
       id: 'storyboard-1',
       type: 'storyboard',
@@ -57,12 +81,13 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', { className: 'legacy-node' }, 'Legacy path'),
+        renderDefaultNode: () =>
+          React.createElement('div', { className: 'default-node' }, 'Default path'),
       }),
     );
 
-    expect(markup).toContain('Legacy path');
-    expect(markup).toContain('legacy-node');
+    expect(markup).toContain('Default path');
+    expect(markup).toContain('default-node');
   });
 
   it('uses composable content when node.content exists and no preset matches', () => {
@@ -88,12 +113,12 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
     expect(markup).toContain('My Doc');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
     expect(markup).toContain('data-content-block-id="body"');
   });
 
@@ -118,7 +143,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -145,7 +170,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -154,7 +179,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-node-density="compact"');
     expect(markup).toContain('data-node-overflow="scroll"');
     expect(markup).toContain('flex min-h-0 min-w-0 flex-1 flex-col overflow-auto');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('renders migrated shot generation preview from selected candidate data', () => {
@@ -184,13 +209,13 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
     expect(markup).toContain('data:image/png;base64,aaa');
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('renders migrated shot preview from a reference image before generation', () => {
@@ -212,13 +237,13 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
     expect(markup).toContain('data:image/png;base64,reference');
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('renders migrated shot preview from a materialized document reference image', () => {
@@ -249,14 +274,14 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
     expect(markup).toContain('https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg');
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).not.toContain('src="/cache/page-1.jpg"');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('keeps composable node content visible when the node is not selected', () => {
@@ -279,7 +304,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -289,7 +314,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-content-block-id="shot-character-action"');
     expect(markup).toContain('Visual');
     expect(markup).toContain('Characters');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('keeps shot overlay details collapsed behind creator-facing preview defaults', () => {
@@ -590,7 +615,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -652,7 +677,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -679,13 +704,13 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
     expect(markup).toContain('data-content-block-id="project-asset-preview"');
     expect(markup).toContain('Video Project');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
     expect(markup).not.toContain('UNSUPPORTED');
   });
 
@@ -722,7 +747,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: { ...createContext(scene, [scene, shot]), isSelected: true },
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -746,7 +771,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('data-child-card-layout="detail"');
     expect(markup).not.toContain('data-child-detail-id="shot-1"');
     expect(markup).not.toContain('data-node-card-id="shot-1"');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('renders parent-linked scene children even when container childIds are stale', () => {
@@ -776,7 +801,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(scene, [scene, shot]),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -786,7 +811,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-scene-shot-table-cell="shot"');
     expect(markup).toContain('Visible through parentId');
     expect(markup).not.toContain('No shots');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('keeps generic detail-card child slots scrollable in constrained containers', () => {
@@ -815,7 +840,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(parent, [parent, child]),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -824,7 +849,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-overflow="scroll"');
     expect(markup).toContain('flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto');
     expect(markup).toContain('Scrollable child summary');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('keeps scene storyboard table horizontally scrollable when a scene container is narrow', () => {
@@ -858,7 +883,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(scene, [scene, ...children]),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -869,7 +894,9 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:1692px');
+    expect(markup).toContain('min-width:2024px');
+    expect(markup).toContain('data-scene-shot-table-column="image-prep"');
+    expect(markup).toContain('data-scene-shot-image-preview="large"');
     expect(markup).toContain('data-scene-shot-table-column="storyboard-prompt"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-2"');
@@ -877,7 +904,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Beat 2');
     expect(markup).not.toContain('data-child-card-layout="detail"');
     expect(markup).not.toContain('data-scene-shot-rail="true"');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('projects scene shot table rows in canonical child order with default review columns', () => {
@@ -909,6 +936,7 @@ describe('NodeContentDispatcher', () => {
           generationPrompt: 'Mika turns toward the neon window, storyboard frame',
           generationStatus: 'done',
           generatedImage: 'data:image/png;base64,done',
+          shotImagePrepPlan: imagePrepPlan,
         },
       }),
       id: 'shot-a',
@@ -942,6 +970,13 @@ describe('NodeContentDispatcher', () => {
     expect(rows[1]?.duration).toBe('2.5s');
     expect(rows[1]?.characters).toBe('Mika');
     expect(rows[1]?.storyboardPrompt).toBe('Mika turns toward the neon window, storyboard frame');
+    expect(rows[1]?.imagePrep).toContain('transform-original');
+    expect(rows[1]?.imagePrep).toContain('rotate');
+    expect(rows[1]?.imagePrep).toContain('split-panels');
+    expect(rows[1]?.imagePrep).toContain('colorize');
+    expect(rows[1]?.imagePrep).toContain('Transform source');
+    expect(rows[1]?.imagePrep).toContain('rotate-90');
+    expect(rows[1]?.imagePrep).toContain('3 panels');
     expect(rows[1]?.hasImage).toBe(true);
     expect(resolveSceneShotTableColumns('creator-review')).toEqual([
       'shot',
@@ -952,6 +987,7 @@ describe('NodeContentDispatcher', () => {
       'characters',
       'dialogue-sfx',
       'tags-style',
+      'image-prep',
       'storyboard-prompt',
       'status',
     ]);
@@ -1063,7 +1099,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(node),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -1078,7 +1114,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-height="170"');
     expect(markup).not.toContain('data-content-block-id="gallery-global-prompt"');
     expect(markup).not.toContain('Character Profile');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('shows gallery advanced fields only in expanded content context', () => {
@@ -1101,7 +1137,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: { ...createContext(node), isExpanded: true },
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -1184,7 +1220,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(gallery, [gallery, mediaFront, mediaSide]),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -1204,7 +1240,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('overflow-x-hidden');
     expect(markup).not.toContain('data-scene-shot-rail="true"');
     expect(markup).not.toContain('flex-nowrap');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 
   it('renders group children as informative summary cards with remove actions', () => {
@@ -1213,9 +1249,10 @@ describe('NodeContentDispatcher', () => {
         type: 'group',
         position: { x: 0, y: 0 },
         zIndex: 0,
-        data: { label: 'Review Group', childIds: ['note-1', 'media-1'] },
+        data: { label: 'Review Group' },
       }),
       id: 'group-1',
+      container: { policy: 'group', childIds: ['note-1', 'media-1'] },
     } as CanvasNode;
     const note = {
       ...buildCanvasNode({
@@ -1242,7 +1279,7 @@ describe('NodeContentDispatcher', () => {
     const markup = renderToStaticMarkup(
       React.createElement(NodeContentDispatcher, {
         context: createContext(group, [group, note, media]),
-        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
       }),
     );
 
@@ -1264,7 +1301,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('overflow-x-hidden');
     expect(markup).toContain('Remove from group');
     expect(markup).toContain('Detail');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
     expect(markup).not.toContain('group-node');
   });
 
@@ -1339,7 +1376,7 @@ describe('NodeContentDispatcher', () => {
           type: 'group',
           position: { x: 640, y: 0 },
           zIndex: 0,
-          data: { label: 'Review', childIds: [] },
+          data: { label: 'Review' },
         }),
         id: 'group-parity',
       },
@@ -1363,7 +1400,7 @@ describe('NodeContentDispatcher', () => {
         renderToStaticMarkup(
           React.createElement(NodeContentDispatcher, {
             context: createContext(node, nodes),
-            renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+            renderDefaultNode: () => React.createElement('div', null, 'Default path'),
           }),
         ),
       )
@@ -1389,7 +1426,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-node-id="project-parity"');
     expect(markup).toContain('data-content-block-id="project-asset-preview"');
     expect(markup).toContain('Puppet');
-    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('Default path');
   });
 });
 

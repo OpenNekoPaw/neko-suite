@@ -3,6 +3,11 @@ import type { CreativeEntityRef, RepresentationKind } from './creative-entity-as
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
+import {
+  SHOT_IMAGE_PREP_OPERATIONS,
+  SHOT_IMAGE_PREP_STATUSES,
+  type ShotImagePrepPlan,
+} from './shot-image-prep';
 
 export const STORYBOARD_TABLE_SCHEMA_VERSION = 1 as const;
 export const STORYBOARD_TABLE_KIND = 'storyboard-table' as const;
@@ -296,7 +301,7 @@ export type StoryboardValidationDiagnosticCode =
   | 'ambiguous-media-alias'
   | 'unresolved-tool-result'
   | 'media-ref-role-mismatch'
-  | 'ambiguous-legacy-media-ref'
+  | 'ambiguous-media-ref'
   | 'invalid-extension-namespace'
   | 'non-serializable-extension'
   | 'missing-profile-field'
@@ -339,13 +344,13 @@ export interface ProjectStoryboardTableToCanvasOptions {
   readonly resolveImageUnifiedResourceRef?: (
     context: StoryboardMediaResolverContext,
   ) => ResourceRef | undefined;
-  readonly resolveFallbackImagePath?: (
+  readonly resolvePlaceholderImagePath?: (
     context: StoryboardShotResolverContext,
   ) => string | undefined;
-  readonly resolveFallbackImageResourceRef?: (
+  readonly resolvePlaceholderImageResourceRef?: (
     context: StoryboardShotResolverContext,
   ) => DocumentArchiveResourceRef | undefined;
-  readonly resolveFallbackImageUnifiedResourceRef?: (
+  readonly resolvePlaceholderImageUnifiedResourceRef?: (
     context: StoryboardShotResolverContext,
   ) => ResourceRef | undefined;
 }
@@ -466,23 +471,8 @@ export interface StoryboardImageStrategyInterpreterResult {
   readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
-export interface LegacyStoryboardMediaRef {
-  readonly toolCallId: string;
-  readonly assetIndex?: number;
-  readonly caption?: string;
-  readonly role?: string;
-}
-
-export interface LegacyStoryboardSection {
-  readonly heading?: string;
-  readonly content?: string;
-  readonly mediaRefs?: readonly LegacyStoryboardMediaRef[];
-  readonly layout?: 'inline' | 'grid' | 'table-row';
-}
-
 export interface NormalizeStoryboardTableInput {
   readonly value: unknown;
-  readonly fallbackTitle?: string;
 }
 
 export interface NormalizeStoryboardTableResult {
@@ -491,8 +481,6 @@ export interface NormalizeStoryboardTableResult {
 }
 
 const MAX_STORYBOARD_DIAGNOSTICS = 64;
-const MAX_LEGACY_SECTIONS = 200;
-const MAX_LEGACY_MEDIA_REFS = 12;
 const STORYBOARD_IMAGE_ALIAS_EXTENSION = 'neko.storyboardImageAlias' as const;
 const STORYBOARD_SOURCE_IMAGE_EXTENSION = 'neko.storyboardSourceImage' as const;
 const FLAT_STORYBOARD_SCENE_ID = 'scene-1' as const;
@@ -533,10 +521,15 @@ export function normalizeStoryboardTable(
     };
   }
 
-  const legacy = normalizeLegacyStoryboardSections(root, input.fallbackTitle, diagnostics);
   return {
-    ...(legacy ? { table: legacy } : {}),
-    diagnostics: limitStoryboardDiagnostics(diagnostics),
+    diagnostics: [
+      storyboardDiagnostic(
+        'error',
+        'invalid-root',
+        [],
+        'Storyboard table must use schemaVersion 1 with scenes[].',
+      ),
+    ],
   };
 }
 
@@ -658,7 +651,7 @@ export function splitStoryboardMediaRefsByRole(
     diagnostics.push(
       storyboardDiagnostic(
         'warning',
-        'ambiguous-legacy-media-ref',
+        'ambiguous-media-ref',
         refPath,
         `Media ref ${mediaRef.refId} has ambiguous role ${mediaRef.role}.`,
         {
@@ -711,9 +704,46 @@ export function projectStoryboardTableToCanvasPayload(
         ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
         ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
         ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
+        ...projectCanvasShotImagePrepPlan(shot),
       })),
     })),
   };
+}
+
+function projectCanvasShotImagePrepPlan(shot: StoryboardShotRow): {
+  readonly shotImagePrepPlan?: ShotImagePrepPlan;
+} {
+  const plan = shot.extensions?.['neko.shotImagePrep'];
+  return isShotImagePrepPlanLike(plan) ? { shotImagePrepPlan: plan } : {};
+}
+
+function isShotImagePrepPlanLike(value: unknown): value is ShotImagePrepPlan {
+  const record = readStoryboardRecord(value);
+  return Boolean(
+    record &&
+    record['kind'] === 'shot-image-prep-plan' &&
+    record['schemaVersion'] === 1 &&
+    typeof record['planId'] === 'string' &&
+    typeof record['sceneId'] === 'string' &&
+    typeof record['shotId'] === 'string' &&
+    isStoryboardImageStrategy(record['imageStrategy']) &&
+    Array.isArray(record['sourceMediaRefs']) &&
+    Array.isArray(record['operationPlan']) &&
+    record['operationPlan'].every(isShotImagePrepOperationLike) &&
+    isShotImagePrepStatusLike(record['status']),
+  );
+}
+
+function isShotImagePrepOperationLike(value: unknown): boolean {
+  return (
+    typeof value === 'string' && (SHOT_IMAGE_PREP_OPERATIONS as readonly string[]).includes(value)
+  );
+}
+
+function isShotImagePrepStatusLike(value: unknown): boolean {
+  return (
+    typeof value === 'string' && (SHOT_IMAGE_PREP_STATUSES as readonly string[]).includes(value)
+  );
 }
 
 function resolveCanvasStoryboardReferenceImagePath(
@@ -731,10 +761,10 @@ function resolveCanvasStoryboardReferenceImagePath(
   const mediaContext = mediaRef ? { ...shotContext, mediaRef } : undefined;
   const referenceImageResourceRef = mediaContext
     ? options.resolveImageResourceRef?.(mediaContext)
-    : options.resolveFallbackImageResourceRef?.(shotContext);
+    : options.resolvePlaceholderImageResourceRef?.(shotContext);
   const referenceResourceRef = mediaContext
     ? options.resolveImageUnifiedResourceRef?.(mediaContext)
-    : options.resolveFallbackImageUnifiedResourceRef?.(shotContext);
+    : options.resolvePlaceholderImageUnifiedResourceRef?.(shotContext);
   const stableRefs = {
     ...(referenceResourceRef ? { referenceResourceRef } : {}),
     ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
@@ -752,7 +782,7 @@ function resolveCanvasStoryboardReferenceImagePath(
   const imagePath =
     (mediaContext ? options.resolveImagePath?.(mediaContext) : undefined) ??
     (mediaRef ? resolveStoryboardWorkspacePath(mediaRef) : undefined) ??
-    options.resolveFallbackImagePath?.(shotContext);
+    options.resolvePlaceholderImagePath?.(shotContext);
   return {
     ...(imagePath ? { referenceImagePath: imagePath } : {}),
   };
@@ -1008,7 +1038,7 @@ function normalizeFlatStoryboardShotSceneRows(
 ): readonly StoryboardSceneRow[] {
   const groups: StoryboardSceneRow[] = [];
   const groupIndexes = new Map<string, number>();
-  let fallbackShotIndex = 0;
+  let defaultShotIndex = 0;
 
   for (const [rowIndex, row] of value.entries()) {
     if (!isFlatStoryboardShotRecord(row)) continue;
@@ -1037,11 +1067,11 @@ function normalizeFlatStoryboardShotSceneRows(
       });
     }
 
-    const shot = normalizeShotRow(row, sceneIndex, fallbackShotIndex, diagnostics, {
+    const shot = normalizeShotRow(row, sceneIndex, defaultShotIndex, diagnostics, {
       diagnosticPath: ['scenes', rowIndex],
-      fallbackShotNumber: fallbackShotIndex + 1,
+      defaultShotNumber: defaultShotIndex + 1,
     });
-    fallbackShotIndex += 1;
+    defaultShotIndex += 1;
     if (!shot) continue;
 
     const current = groups[sceneIndex];
@@ -1159,7 +1189,7 @@ function normalizeShotRow(
   diagnostics: StoryboardValidationDiagnostic[],
   options: {
     readonly diagnosticPath?: readonly StoryboardValidationDiagnosticPathSegment[];
-    readonly fallbackShotNumber?: number;
+    readonly defaultShotNumber?: number;
   } = {},
 ): StoryboardShotRow | undefined {
   const path = options.diagnosticPath ?? (['scenes', sceneIndex, 'shots', shotIndex] as const);
@@ -1172,7 +1202,7 @@ function normalizeShotRow(
   }
 
   const shotId = readTrimmedString(record['shotId']);
-  const shotNumber = readOptionalPositiveNumber(record['shotNumber']) ?? options.fallbackShotNumber;
+  const shotNumber = readOptionalPositiveNumber(record['shotNumber']) ?? options.defaultShotNumber;
   const duration = readOptionalPositiveNumber(record['duration']);
   const visualDescription = readTrimmedString(record['visualDescription']);
   const characterAction = readTrimmedString(record['characterAction']);
@@ -1990,135 +2020,6 @@ function validateProfileHints(table: StoryboardTable): readonly StoryboardValida
   return diagnostics;
 }
 
-function normalizeLegacyStoryboardSections(
-  root: Record<string, unknown>,
-  fallbackTitle: string | undefined,
-  diagnostics: StoryboardValidationDiagnostic[],
-): StoryboardTable | undefined {
-  if (root['template'] !== 'storyboard-table' || !Array.isArray(root['sections'])) {
-    diagnostics.push(
-      storyboardDiagnostic(
-        'error',
-        'invalid-root',
-        [],
-        'Legacy storyboard compatibility normalization needs template storyboard-table and sections.',
-      ),
-    );
-    return undefined;
-  }
-
-  const title = readTrimmedString(root['title']) ?? fallbackTitle?.trim() ?? 'Storyboard';
-  const sections = root['sections'].slice(0, MAX_LEGACY_SECTIONS);
-  const shots = sections.flatMap((section, index) => {
-    const normalized = normalizeLegacySectionToShot(section, index, diagnostics);
-    return normalized ? [normalized] : [];
-  });
-  if (shots.length === 0) {
-    diagnostics.push(
-      storyboardDiagnostic(
-        'error',
-        'empty-shots',
-        ['sections'],
-        'Legacy storyboard needs renderable sections.',
-      ),
-    );
-    return undefined;
-  }
-
-  return {
-    schemaVersion: 1,
-    kind: 'storyboard-table',
-    profile: 'manual',
-    source: { type: 'agent' },
-    title,
-    scenes: [
-      {
-        sceneId: 'legacy-scene-1',
-        sceneTitle: title,
-        sceneNumber: 1,
-        shots,
-      },
-    ],
-  };
-}
-
-function normalizeLegacySectionToShot(
-  value: unknown,
-  index: number,
-  diagnostics: StoryboardValidationDiagnostic[],
-): StoryboardShotRow | undefined {
-  const record = readStoryboardRecord(value);
-  if (!record) return undefined;
-  const heading = readTrimmedString(record['heading']);
-  const content = readTrimmedString(record['content']);
-  const mediaRefs = Array.isArray(record['mediaRefs'])
-    ? record['mediaRefs'].slice(0, MAX_LEGACY_MEDIA_REFS).flatMap((mediaRef, mediaIndex) => {
-        const normalized = normalizeLegacyMediaRef(mediaRef, index, mediaIndex, diagnostics);
-        return normalized ? [normalized] : [];
-      })
-    : [];
-  const splitRefs = splitStoryboardMediaRefsByRole(mediaRefs, ['sections', index, 'mediaRefs']);
-  diagnostics.push(...splitRefs.diagnostics);
-  const visualDescription = content ?? heading;
-  if (!visualDescription && mediaRefs.length === 0) return undefined;
-
-  const shot: StoryboardShotRow = {
-    shotId: `legacy-shot-${index + 1}`,
-    shotNumber: index + 1,
-    duration: 3,
-    visualDescription: visualDescription ?? `Storyboard shot ${index + 1}`,
-    characterAction: visualDescription ?? '',
-    imageStrategy: splitRefs.sourceMediaRefs.length > 0 ? 'reuse-original' : 'generate-new',
-    ...(heading ? { sceneTags: [heading] } : {}),
-    ...(splitRefs.sourceMediaRefs.length > 0 ? { sourceMediaRefs: splitRefs.sourceMediaRefs } : {}),
-    ...(splitRefs.generatedMediaRefs.length > 0
-      ? { generatedMediaRefs: splitRefs.generatedMediaRefs }
-      : {}),
-    ...(mediaRefs.length > 0 ? { mediaRefs } : {}),
-  };
-
-  return shot.imageStrategy === 'generate-new' && !shot.generationPrompt
-    ? { ...shot, generationPrompt: shot.visualDescription }
-    : shot;
-}
-
-function normalizeLegacyMediaRef(
-  value: unknown,
-  sectionIndex: number,
-  mediaIndex: number,
-  diagnostics: StoryboardValidationDiagnostic[],
-): StoryboardMediaRef | undefined {
-  const record = readStoryboardRecord(value);
-  const path = ['sections', sectionIndex, 'mediaRefs', mediaIndex] as const;
-  if (!record) return undefined;
-  const toolCallId = readTrimmedString(record['toolCallId']);
-  if (!toolCallId) {
-    diagnostics.push(
-      storyboardDiagnostic(
-        'warning',
-        'invalid-media-ref',
-        path,
-        'Legacy media ref needs toolCallId.',
-      ),
-    );
-    return undefined;
-  }
-  const assetIndex = readNonNegativeInteger(record['assetIndex']) ?? 0;
-  const role = normalizeLegacyMediaRole(readTrimmedString(record['role']));
-  return {
-    refId: `legacy:${toolCallId}:${assetIndex}`,
-    role,
-    locator: {
-      type: 'tool-result',
-      toolCallId,
-      assetIndex,
-    },
-    ...(readTrimmedString(record['caption'])
-      ? { label: readTrimmedString(record['caption']) }
-      : {}),
-  };
-}
-
 function normalizeMediaRefs(
   value: unknown,
   path: readonly StoryboardValidationDiagnosticPathSegment[],
@@ -2651,32 +2552,6 @@ function normalizeImageStrategy(value: unknown): StoryboardShotImageStrategy | u
 
 function normalizeMediaRole(value: unknown): StoryboardMediaRole | undefined {
   return isStoryboardMediaRole(value) ? value : undefined;
-}
-
-function normalizeLegacyMediaRole(value: string | undefined): StoryboardMediaRole {
-  switch (value) {
-    case 'source':
-    case 'original':
-    case 'input':
-      return 'source';
-    case 'reference':
-    case 'ref':
-      return 'reference';
-    case 'generated':
-    case 'result':
-    case 'shot':
-      return 'generated';
-    case 'derived':
-    case 'colorized':
-    case 'transformed':
-      return 'derived';
-    case 'thumbnail':
-      return 'thumbnail';
-    case 'mask':
-      return 'mask';
-    default:
-      return 'reference';
-  }
 }
 
 function normalizeCharacterRole(value: unknown): StoryboardShotCharacterRole | undefined {

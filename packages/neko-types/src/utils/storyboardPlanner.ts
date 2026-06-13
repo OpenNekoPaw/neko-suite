@@ -129,6 +129,7 @@ export async function applyStoryboardPayloadToCanvas(
                 ? [...shot.generatedMediaRefs]
                 : undefined,
               mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
+              shotImagePrepPlan: shot.shotImagePrepPlan,
               // Phase 6.3 — stamp plan provenance when orchestrated
               ...(options.workflowPlanId !== undefined && {
                 workflowPlanId: options.workflowPlanId,
@@ -175,9 +176,9 @@ function createStoryboardSceneSequenceConnection(
 ): CanvasCreateConnectionRequest {
   return {
     sourceId: sourceSceneNodeId,
-    sourceAnchor: 'right',
     targetId: targetSceneNodeId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceSceneNodeId, scope: 'port', portId: 'out' },
+    targetEndpoint: { nodeId: targetSceneNodeId, scope: 'port', portId: 'in' },
     type: 'sequence',
     label: STORYBOARD_SEQUENCE_CONNECTION_LABEL,
     priority,
@@ -189,9 +190,9 @@ function createStoryboardSequenceConnections(shotCount: number): CanvasComposite
   for (let index = 0; index < shotCount - 1; index++) {
     connections.push({
       sourceChildIndex: index,
-      sourceAnchor: 'right',
       targetChildIndex: index + 1,
-      targetAnchor: 'left',
+      sourceEndpoint: { scope: 'port', portId: 'img-out' },
+      targetEndpoint: { scope: 'node' },
       type: 'sequence',
       label: STORYBOARD_SEQUENCE_CONNECTION_LABEL,
       priority: index,
@@ -274,6 +275,7 @@ function normalizeShotPlan(
     sourceMediaRefs: shotPlan.sourceMediaRefs ? [...shotPlan.sourceMediaRefs] : undefined,
     generatedMediaRefs: shotPlan.generatedMediaRefs ? [...shotPlan.generatedMediaRefs] : undefined,
     mediaRefs: shotPlan.mediaRefs ? [...shotPlan.mediaRefs] : undefined,
+    shotImagePrepPlan: shotPlan.shotImagePrepPlan,
   };
 }
 

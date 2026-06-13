@@ -10,121 +10,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import {
-  migrateLegacyFields,
   mergeConfigs,
   normalizeConfig,
   processConfig,
   type UnifiedConfig,
 } from '../config/config-normalizer';
 import { DEFAULT_CONFIG, CONFIG_DIR_NAME, CONFIG_FILE_NAME } from '../config/types';
-
-// =============================================================================
-// Legacy Field Migration Tests
-// =============================================================================
-
-describe('migrateLegacyFields', () => {
-  it('should migrate provider to defaultProvider', () => {
-    const config: UnifiedConfig = {
-      provider: 'openai',
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    expect(migrated.defaultProvider).toBe('openai');
-  });
-
-  it('should not override existing defaultProvider', () => {
-    const config: UnifiedConfig = {
-      provider: 'openai',
-      defaultProvider: 'anthropic',
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    expect(migrated.defaultProvider).toBe('anthropic');
-  });
-
-  it('should migrate model to defaultModel', () => {
-    const config: UnifiedConfig = {
-      model: 'gpt-4o',
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    expect(migrated.defaultModel).toBe('gpt-4o');
-  });
-
-  it('should convert legacy providers object format to array', () => {
-    const config: UnifiedConfig = {
-      providers: {
-        anthropic: {
-          apiKey: 'sk-ant-xxx',
-          defaultModel: 'claude-sonnet-4',
-        },
-        openai: {
-          apiKey: 'sk-xxx',
-          baseUrl: 'https://api.openai.com/v1',
-        },
-      } as unknown as UnifiedConfig['providers'],
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    expect(Array.isArray(migrated.providers)).toBe(true);
-    expect(migrated.providers).toHaveLength(2);
-
-    const anthropic = migrated.providers?.find((p) => p.id === 'anthropic');
-    expect(anthropic).toBeDefined();
-    expect(anthropic?.apiKey).toBe('sk-ant-xxx');
-    expect(anthropic?.type).toBe('anthropic');
-
-    const openai = migrated.providers?.find((p) => p.id === 'openai');
-    expect(openai).toBeDefined();
-    expect(openai?.apiKey).toBe('sk-xxx');
-    expect(openai?.type).toBe('openai');
-  });
-
-  it('should not modify array format providers', () => {
-    const config: UnifiedConfig = {
-      providers: [
-        {
-          id: 'anthropic',
-          name: 'anthropic',
-          displayName: 'Anthropic',
-          type: 'anthropic',
-          apiUrl: 'https://api.anthropic.com',
-          enabled: true,
-        },
-      ],
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    expect(migrated.providers).toEqual(config.providers);
-  });
-
-  it('should migrate top-level apiKey to default provider', () => {
-    const config: UnifiedConfig = {
-      defaultProvider: 'anthropic',
-      apiKey: 'sk-ant-xxx',
-      providers: [
-        {
-          id: 'anthropic',
-          name: 'anthropic',
-          displayName: 'Anthropic',
-          type: 'anthropic',
-          apiUrl: 'https://api.anthropic.com',
-          enabled: true,
-        },
-      ],
-    };
-
-    const migrated = migrateLegacyFields(config);
-
-    const anthropic = migrated.providers?.find((p) => p.id === 'anthropic');
-    expect(anthropic?.apiKey).toBe('sk-ant-xxx');
-  });
-});
 
 // =============================================================================
 // Config Merging Tests
@@ -348,20 +239,41 @@ describe('processConfig', () => {
     expect(anthropic?.apiKey).toBe('workspace-key');
   });
 
-  it('should migrate legacy fields before merging', () => {
+  it('should merge canonical provider and model selections before normalizing', () => {
     const userConfig: UnifiedConfig = {
-      provider: 'openai',
-      apiKey: 'user-api-key',
+      defaultProvider: 'openai',
+      providers: [
+        {
+          id: 'openai',
+          name: 'openai',
+          displayName: 'OpenAI',
+          type: 'openai',
+          apiUrl: 'https://api.openai.com/v1',
+          apiKey: 'user-api-key',
+          enabled: true,
+        },
+      ],
     };
 
     const workspaceConfig: UnifiedConfig = {
-      model: 'gpt-4o',
+      defaultModel: 'gpt-4o',
+      models: [
+        {
+          id: 'gpt-4o',
+          name: 'gpt-4o',
+          providerId: 'openai',
+          capabilities: ['chat'],
+          enabled: true,
+        },
+      ],
     };
 
     const normalized = processConfig(userConfig, workspaceConfig);
 
     expect(normalized.defaultProvider).toBe('openai');
     expect(normalized.defaultModel).toBe('gpt-4o');
+    expect(normalized.providers.get('openai')?.apiKey).toBe('user-api-key');
+    expect(normalized.models.get('gpt-4o')?.providerId).toBe('openai');
   });
 });
 

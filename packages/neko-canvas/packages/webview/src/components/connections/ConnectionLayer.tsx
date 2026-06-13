@@ -2,9 +2,7 @@
  * ConnectionLayer - Connection layer component
  * Manages rendering of all connections and pending connection preview.
  *
- * Supports both legacy anchor-based and port-based connections.
- * For port-based connections, calculates anchor points using port position
- * and index within the same side.
+ * Supports endpoint-based connections and pending handle previews.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -34,7 +32,7 @@ export interface ConnectionLayerProps {
   freezeProjection?: boolean;
   pendingConnection?: {
     sourceNodeId: string;
-    sourceAnchor: string;
+    sourceHandleId: string;
     mousePosition: { x: number; y: number };
   } | null;
   onConnectionSelect?: (connectionId: string) => void;
@@ -56,13 +54,10 @@ const SVG_SIZE = 100000;
 // Helpers
 // =============================================================================
 
-/**
- * Get the anchor point for a legacy anchor position (center of each side).
- */
-function getLegacyAnchorPoint(node: CanvasNode, anchor: string): Point {
+function getNodeSidePoint(node: CanvasNode, side: string): Point {
   const { position, size } = node;
 
-  switch (anchor) {
+  switch (side) {
     case 'top':
       return { x: position.x + size.width / 2, y: position.y };
     case 'right':
@@ -108,42 +103,30 @@ function getPortAnchorPoint(node: CanvasNode, portId: string): Point | null {
   }
 }
 
-/**
- * Get anchor point for a connection endpoint.
- * Tries port-based first, falls back to legacy anchor.
- */
-function getAnchorPoint(node: CanvasNode, anchor: string, portId?: string): Point {
-  // Try port-based position first
+function getHandlePoint(node: CanvasNode, handleId: string, portId?: string): Point {
   if (portId) {
     const portPoint = getPortAnchorPoint(node, portId);
     if (portPoint) return portPoint;
   }
 
-  // Check if anchor is actually a port ID
-  const portPoint = getPortAnchorPoint(node, anchor);
+  const portPoint = getPortAnchorPoint(node, handleId);
   if (portPoint) return portPoint;
 
-  // Fall back to legacy anchor
-  return getLegacyAnchorPoint(node, anchor);
+  return getNodeSidePoint(node, handleId);
 }
 
-/**
- * Get the anchor direction for control point calculation.
- * For ports, uses the port's position side. For legacy, uses the anchor directly.
- */
-function getAnchorDirection(node: CanvasNode, anchor: string, portId?: string): string {
+function getHandleDirection(node: CanvasNode, handleId: string, portId?: string): string {
   if (portId) {
     const ports = node.ports ?? getDefaultPorts(node.type);
     const port = ports.find((p: PortDefinition) => p.id === portId);
     if (port) return port.position;
   }
 
-  // Check if anchor is a port ID
   const ports = node.ports ?? getDefaultPorts(node.type);
-  const port = ports.find((p: PortDefinition) => p.id === anchor);
+  const port = ports.find((p: PortDefinition) => p.id === handleId);
   if (port) return port.position;
 
-  return anchor;
+  return handleId;
 }
 
 function getControlPoint(point: Point, anchor: string, offset: number): Point {
@@ -206,8 +189,8 @@ export function ConnectionLayer({
     const sourceNode = nodeMap.get(pendingConnection.sourceNodeId);
     if (!sourceNode) return null;
 
-    const sourcePoint = getAnchorPoint(sourceNode, pendingConnection.sourceAnchor);
-    const sourceDir = getAnchorDirection(sourceNode, pendingConnection.sourceAnchor);
+    const sourcePoint = getHandlePoint(sourceNode, pendingConnection.sourceHandleId);
+    const sourceDir = getHandleDirection(sourceNode, pendingConnection.sourceHandleId);
     const targetPoint = pendingConnection.mousePosition;
 
     // Calculate control points

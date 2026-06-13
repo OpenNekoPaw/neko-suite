@@ -7,7 +7,7 @@ import type {
   MemoryGraphMetadata,
   NarrativeMetadata,
 } from './canvas';
-import type { FieldBinding, JsonPointerPath } from './canvas-layered';
+import type { CanvasConnectionEndpoint, FieldBinding, JsonPointerPath } from './canvas-layered';
 import type {
   CanvasNarrativeAgentDiagnostic,
   CanvasNarrativeNodeAgentSummary,
@@ -43,8 +43,8 @@ export interface CanvasDeriveNodeResult {
 export interface CanvasCreateConnectionRequest {
   sourceId: string;
   targetId: string;
-  sourceAnchor?: CanvasConnection['sourceAnchor'];
-  targetAnchor?: CanvasConnection['targetAnchor'];
+  sourceEndpoint?: CanvasConnectionEndpoint;
+  targetEndpoint?: CanvasConnectionEndpoint;
   type?: CanvasConnection['type'];
   label?: string;
   priority?: number;
@@ -64,8 +64,8 @@ export interface CanvasCompositeConnectionSpec {
   id?: string;
   sourceChildIndex: number;
   targetChildIndex: number;
-  sourceAnchor?: CanvasConnection['sourceAnchor'];
-  targetAnchor?: CanvasConnection['targetAnchor'];
+  sourceEndpoint?: Omit<CanvasConnectionEndpoint, 'nodeId'>;
+  targetEndpoint?: Omit<CanvasConnectionEndpoint, 'nodeId'>;
   type?: CanvasConnection['type'];
   label?: string;
   priority?: number;

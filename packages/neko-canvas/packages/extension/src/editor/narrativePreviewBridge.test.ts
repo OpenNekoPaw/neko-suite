@@ -592,10 +592,7 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('previewSourceResourceRef');
     expect(html).toContain('previewSourceDocumentResourceRef');
     expect(html).toContain('referenceImageResourceRef');
-    expect(html).toContain(
-      "readFirstString(directResourceRef.source?.metadata || {}, ['legacyCachePath'])",
-    );
-    expect(html).toContain("readFirstString(metadata || {}, ['legacyCachePath'])");
+    expect(html).not.toContain('legacyCachePath');
     expect(html).toContain("value.includes('vscode-resource.vscode-cdn.net/')");
     expect(html).toContain('img-src vscode-webview: data: blob: https:');
     expect(html).toContain('media-src vscode-webview: data: blob: https:');
@@ -1668,9 +1665,9 @@ function createConnection(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type,
     ...extra,
   };

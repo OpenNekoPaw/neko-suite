@@ -707,11 +707,11 @@ describe('storyboard table contract', () => {
     );
   });
 
-  it('normalizes legacy mediaRefs into layered refs by role', () => {
+  it('rejects pre-schema storyboard section payloads', () => {
     const result = normalizeStoryboardTable({
       value: {
         template: 'storyboard-table',
-        title: 'Legacy',
+        title: 'Old sections',
         sections: [
           {
             heading: 'Shot 1',
@@ -725,28 +725,17 @@ describe('storyboard table contract', () => {
       },
     });
 
-    expect(result.table?.scenes[0]?.shots[0]).toMatchObject({
-      shotNumber: 1,
-      imageStrategy: 'reuse-original',
-      sourceMediaRefs: [
-        {
-          refId: 'legacy:read-panel:0',
-          role: 'source',
-          locator: { type: 'tool-result', toolCallId: 'read-panel', assetIndex: 0 },
-          label: '原图',
-        },
-      ],
-      generatedMediaRefs: [
-        {
-          refId: 'legacy:generate-shot:1',
-          role: 'generated',
-          locator: { type: 'tool-result', toolCallId: 'generate-shot', assetIndex: 1 },
-        },
-      ],
-    });
+    expect(result.table).toBeUndefined();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'invalid-root',
+        path: [],
+      }),
+    ]);
   });
 
-  it('splits semantic legacy mediaRefs when layered refs are absent', () => {
+  it('splits schema v1 mediaRefs when layered refs are absent', () => {
     const result = normalizeStoryboardTable({
       value: {
         schemaVersion: 1,
@@ -1053,6 +1042,19 @@ describe('storyboard table contract', () => {
               soundCue: 'Radio static.',
               generationPrompt: 'close-up anime frame',
               imageStrategy: 'generate-new',
+              extensions: {
+                'neko.shotImagePrep': {
+                  schemaVersion: 1,
+                  kind: 'shot-image-prep-plan',
+                  planId: 'shot-1-image-prep',
+                  sceneId: 'scene-1',
+                  shotId: 'shot-1',
+                  sourceMediaRefs: [],
+                  imageStrategy: 'generate-new',
+                  operationPlan: ['generate-keyframe'],
+                  status: 'planned',
+                },
+              },
               generatedMediaRefs: [
                 {
                   refId: 'asset-1',
@@ -1136,6 +1138,17 @@ describe('storyboard table contract', () => {
               voiceOver: 'The signal returns.',
               soundCue: 'Radio static.',
               generationPrompt: 'close-up anime frame',
+              shotImagePrepPlan: {
+                schemaVersion: 1,
+                kind: 'shot-image-prep-plan',
+                planId: 'shot-1-image-prep',
+                sceneId: 'scene-1',
+                shotId: 'shot-1',
+                sourceMediaRefs: [],
+                imageStrategy: 'generate-new',
+                operationPlan: ['generate-keyframe'],
+                status: 'planned',
+              },
               referenceImagePath: '${WORKSPACE}/.neko/generated/image/shot-1.png',
               generatedMediaRefs: [
                 {
@@ -1249,7 +1262,7 @@ describe('storyboard table contract', () => {
     ]);
   });
 
-  it('uses canvas fallback image resolvers when a semantic shot has no media refs', () => {
+  it('uses canvas placeholder image resolvers when a semantic shot has no media refs', () => {
     const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
@@ -1297,11 +1310,11 @@ describe('storyboard table contract', () => {
 
     expect(
       projectStoryboardTableToCanvasPayload(table, {
-        resolveFallbackImagePath: ({ shot }) =>
+        resolvePlaceholderImagePath: ({ shot }) =>
           shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
-        resolveFallbackImageResourceRef: ({ shot }) =>
+        resolvePlaceholderImageResourceRef: ({ shot }) =>
           shot.shotNumber === 1 ? resourceRef : undefined,
-        resolveFallbackImageUnifiedResourceRef: ({ shot }) =>
+        resolvePlaceholderImageUnifiedResourceRef: ({ shot }) =>
           shot.shotNumber === 1 ? cacheResourceRef : undefined,
       }).scenes[0]?.shotPlans[0],
     ).toMatchObject({
@@ -1310,11 +1323,11 @@ describe('storyboard table contract', () => {
     });
     expect(
       projectStoryboardTableToCanvasPayload(table, {
-        resolveFallbackImagePath: ({ shot }) =>
+        resolvePlaceholderImagePath: ({ shot }) =>
           shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
-        resolveFallbackImageResourceRef: ({ shot }) =>
+        resolvePlaceholderImageResourceRef: ({ shot }) =>
           shot.shotNumber === 1 ? resourceRef : undefined,
-        resolveFallbackImageUnifiedResourceRef: ({ shot }) =>
+        resolvePlaceholderImageUnifiedResourceRef: ({ shot }) =>
           shot.shotNumber === 1 ? cacheResourceRef : undefined,
       }).scenes[0]?.shotPlans[0],
     ).not.toHaveProperty('referenceImagePath');

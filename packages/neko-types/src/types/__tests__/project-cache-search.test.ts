@@ -448,8 +448,9 @@ describe('project cache/search contracts', () => {
     const badQuery = {
       ...makeCoverageQuery(),
       sourceRef: {
-        kind: 'legacy-cache-path',
-        cachePath: '${PROJECT}/.neko/.cache/semantic/pages.json',
+        kind: 'runtime',
+        runtimeKind: 'cache-path',
+        value: '${PROJECT}/.neko/.cache/semantic/pages.json',
       },
     };
     const badResult = {

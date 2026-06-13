@@ -19,7 +19,7 @@ function node(
     position: options.position ?? { x: 0, y: 0 },
     size: options.size ?? { width: 120, height: 80 },
     zIndex: options.zIndex ?? 1,
-    data: options.type === 'group' ? { childIds: [], label: id } : { content: id },
+    data: options.type === 'group' ? { label: id } : { content: id },
     ...options,
   } as CanvasNode;
 }
@@ -30,7 +30,7 @@ function container(id: string, childIds: string[], x = 0): CanvasNode {
     position: { x, y: 0 },
     size: { width: 300, height: 240 },
     container: { policy: 'group', childIds },
-    data: { childIds, label: id },
+    data: { label: id },
   });
 }
 
@@ -43,9 +43,9 @@ function connection(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type,
   };
 }

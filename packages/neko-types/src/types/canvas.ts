@@ -301,8 +301,6 @@ export interface AnnotationCanvasNode extends CanvasNodeBase {
 export interface GroupCanvasNode extends CanvasNodeBase {
   type: 'group';
   data: {
-    /** Child node IDs */
-    childIds: string[];
     /** Group label */
     label?: string;
     /** Group color (hex) */
@@ -566,19 +564,6 @@ export type GalleryPreset =
   | 'scene-views'
   | 'custom';
 
-/** A single cell within a GalleryNode */
-export interface GalleryCell {
-  id: string;
-  label: string;
-  /** Base64 data URL or asset path */
-  image?: string;
-  prompt?: string;
-  generationStatus: ShotGenerationStatus;
-  /** Costume variant label for character consistency */
-  costumeLabel?: string;
-  generationHistory?: GeneratedImageVersion[];
-}
-
 /**
  * Gallery node - multi-view character reference sheet (3-view, 9-expression, etc.)
  */
@@ -594,8 +579,6 @@ export interface GalleryCanvasNode extends CanvasNodeBase {
     preset: GalleryPreset;
     rows: number;
     cols: number;
-    /** @deprecated Migrated to child media nodes with container.childPlacements metadata. */
-    cells?: GalleryCell[];
     globalPromptPrefix?: string;
     characterId?: string;
     characterName?: string;
@@ -727,24 +710,16 @@ export interface CanvasConnection {
   id: string;
   /** Source node ID */
   sourceId: string;
-  /** Source anchor position */
-  sourceAnchor: ConnectionAnchor;
   /** Target node ID */
   targetId: string;
-  /** Target anchor position */
-  targetAnchor: ConnectionAnchor;
   /** Connection type for styling */
   type?: ConnectionType;
   /** Optional label on the connection */
   label?: string;
-  /** Source port ID (for port-based connections) */
-  sourcePort?: string;
-  /** Target port ID (for port-based connections) */
-  targetPort?: string;
-  /** Optional source endpoint for future node/port/block/field references. */
-  sourceEndpoint?: CanvasConnectionEndpoint;
-  /** Optional target endpoint for future node/port/block/field references. */
-  targetEndpoint?: CanvasConnectionEndpoint;
+  /** Canonical source endpoint for node/port/block/field references. */
+  sourceEndpoint: CanvasConnectionEndpoint;
+  /** Canonical target endpoint for node/port/block/field references. */
+  targetEndpoint: CanvasConnectionEndpoint;
   /** Optional subsystem extension data. Edge ownership remains top-level. */
   extension?: CanvasSerializableRecord;
   /** Narrative choice label rendered on branch connections. */
@@ -935,7 +910,7 @@ export const STORYBOARD_NODE_PORTS: PortDefinition[] = [
   { id: 'out', type: 'output', position: 'right', dataType: 'any', label: 'Output' },
 ];
 
-/** Default ports for annotation nodes (no ports, uses legacy anchors) */
+/** Default ports for annotation nodes. Empty means node-level endpoint handles are used. */
 export const ANNOTATION_NODE_PORTS: PortDefinition[] = [];
 
 /** Default ports for group nodes */
@@ -967,7 +942,7 @@ export const MODEL_WORKFLOW_PORTS: PortDefinition[] = [
 
 /**
  * Get default ports for a node type.
- * Returns empty array for types that use legacy anchors.
+ * Returns empty array for types that use node-level endpoints.
  */
 export function getDefaultPorts(nodeType: CanvasNodeType): PortDefinition[] {
   switch (nodeType) {

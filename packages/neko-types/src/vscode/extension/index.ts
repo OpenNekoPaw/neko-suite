@@ -118,16 +118,6 @@ export type {
   DocumentResourceCacheFsOps,
   DocumentResourceCacheProviderOptions,
 } from './document-resource-cache-provider';
-export {
-  LEGACY_RESOURCE_CACHE_PROVIDER_ID,
-  LegacyResourceCacheProvider,
-  readLegacyCachePath,
-} from './legacy-resource-cache-provider';
-export type {
-  LegacyResourceCacheFsOps,
-  LegacyResourceCacheProviderOptions,
-} from './legacy-resource-cache-provider';
-
 // Intent-aware content read/write orchestration.
 export { HostContentAccessService, HostContentIngestService } from './content-access-service';
 export type {

@@ -298,39 +298,16 @@ function validateConnection(
     errors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
   }
 
-  // sourceId — required string
   if (!isString(connection['sourceId'])) {
     errors.push({ field: `${path}.sourceId`, message: 'must be a string', severity: 'error' });
   }
 
-  // sourceAnchor — required, must be valid anchor
-  if (
-    !isString(connection['sourceAnchor']) ||
-    !ALLOWED_ANCHOR_VALUES.has(connection['sourceAnchor'])
-  ) {
-    errors.push({
-      field: `${path}.sourceAnchor`,
-      message: 'must be a valid anchor position',
-      severity: 'error',
-    });
-  }
-
-  // targetId — required string
   if (!isString(connection['targetId'])) {
     errors.push({ field: `${path}.targetId`, message: 'must be a string', severity: 'error' });
   }
 
-  // targetAnchor — required, must be valid anchor
-  if (
-    !isString(connection['targetAnchor']) ||
-    !ALLOWED_ANCHOR_VALUES.has(connection['targetAnchor'])
-  ) {
-    errors.push({
-      field: `${path}.targetAnchor`,
-      message: 'must be a valid anchor position',
-      severity: 'error',
-    });
-  }
+  validateConnectionEndpointShape(connection['sourceEndpoint'], `${path}.sourceEndpoint`, errors);
+  validateConnectionEndpointShape(connection['targetEndpoint'], `${path}.targetEndpoint`, errors);
 
   if (connection['type'] !== undefined) {
     if (!isString(connection['type'])) {
@@ -342,6 +319,47 @@ function validateConnection(
         severity: 'warning',
       });
     }
+  }
+}
+
+function validateConnectionEndpointShape(
+  endpoint: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
+  if (!isRecord(endpoint)) {
+    errors.push({ field: path, message: 'must be an object', severity: 'error' });
+    return;
+  }
+
+  if (!isString(endpoint['nodeId'])) {
+    errors.push({ field: `${path}.nodeId`, message: 'must be a string', severity: 'error' });
+  }
+
+  if (
+    endpoint['scope'] !== undefined &&
+    endpoint['scope'] !== 'node' &&
+    endpoint['scope'] !== 'port' &&
+    endpoint['scope'] !== 'block' &&
+    endpoint['scope'] !== 'field'
+  ) {
+    errors.push({
+      field: `${path}.scope`,
+      message: 'must be "node", "port", "block", or "field"',
+      severity: 'error',
+    });
+  }
+
+  if (endpoint['portId'] !== undefined && !isString(endpoint['portId'])) {
+    errors.push({ field: `${path}.portId`, message: 'must be a string', severity: 'error' });
+  }
+
+  if (endpoint['blockId'] !== undefined && !isString(endpoint['blockId'])) {
+    errors.push({ field: `${path}.blockId`, message: 'must be a string', severity: 'error' });
+  }
+
+  if (endpoint['fieldPath'] !== undefined && !isString(endpoint['fieldPath'])) {
+    errors.push({ field: `${path}.fieldPath`, message: 'must be a string', severity: 'error' });
   }
 }
 

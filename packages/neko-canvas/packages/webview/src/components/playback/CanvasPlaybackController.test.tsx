@@ -180,6 +180,16 @@ describe('CanvasPlaybackController', () => {
         transitions: [
           { id: 'a-b', sourceUnitId: 'a', targetUnitId: 'b', type: 'choice', priority: 0 },
         ],
+        routeCandidates: [
+          {
+            id: 'entry:a',
+            title: 'A',
+            entryUnitId: 'a',
+            unitIds: ['a', 'b'],
+            sourceKind: 'entry',
+            sourceNodeId: 'a',
+          },
+        ],
         diagnostics: [],
         metadata: {},
       }),
@@ -201,6 +211,16 @@ describe('CanvasPlaybackController', () => {
         transitions: [
           { id: 'a-b', sourceUnitId: 'a', targetUnitId: 'b', type: 'sequence', priority: 0 },
           { id: 'b-a', sourceUnitId: 'b', targetUnitId: 'a', type: 'sequence', priority: 0 },
+        ],
+        routeCandidates: [
+          {
+            id: 'entry:a',
+            title: 'A',
+            entryUnitId: 'a',
+            unitIds: ['a', 'b'],
+            sourceKind: 'entry',
+            sourceNodeId: 'a',
+          },
         ],
         diagnostics: [],
         metadata: {},
@@ -302,9 +322,9 @@ function connection(
   return {
     id,
     sourceId,
-    sourceAnchor: 'right',
     targetId,
-    targetAnchor: 'left',
+    sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+    targetEndpoint: { nodeId: targetId, scope: 'node' },
     type,
     ...extra,
   };

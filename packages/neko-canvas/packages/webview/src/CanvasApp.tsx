@@ -10,9 +10,11 @@ import { projectCanvasShotPrompt } from '@neko/shared';
 import type {
   CanvasData,
   CanvasDroppedAsset,
+  CanvasNode,
   CanvasNodeType,
   CanvasSubsystemId,
   CanvasViewport,
+  GeneratedImageVersion,
   ProjectedCanvasStatus,
 } from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
@@ -91,6 +93,83 @@ const logger = getLogger('CanvasApp');
 
 function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
   return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
+}
+
+function updateGalleryChildGeneration(
+  galleryId: string,
+  childNodeId: string,
+  update: {
+    status?: string;
+    imageData?: string;
+    historyIdPrefix: string;
+  },
+): void {
+  const state = useCanvasStore.getState();
+  const canvasData = state.canvasData;
+  if (!canvasData) return;
+
+  const gallery = canvasData.nodes.find((node) => node.id === galleryId);
+  const child = canvasData.nodes.find((node) => node.id === childNodeId);
+  if (gallery?.type !== 'gallery' || child?.type !== 'media') return;
+
+  const previousMetadata = gallery.container?.childPlacements?.[childNodeId]?.metadata ?? {};
+  const previousHistory: GeneratedImageVersion[] = Array.isArray(
+    previousMetadata['generationHistory'],
+  )
+    ? previousMetadata['generationHistory'].filter(
+        (entry): entry is GeneratedImageVersion =>
+          typeof entry === 'object' && entry !== null && !Array.isArray(entry),
+      )
+    : [];
+  const generationHistory = update.imageData
+    ? appendSelectedGenerationCandidate(previousHistory, {
+        id: `${update.historyIdPrefix}-${childNodeId}-${Date.now()}`,
+        dataUrl: update.imageData,
+        prompt: '',
+        timestamp: Date.now(),
+        selected: true,
+      })
+    : previousHistory;
+
+  const nextNodes = canvasData.nodes.map((node): CanvasNode => {
+    if (node.id === childNodeId && node.type === 'media' && update.imageData) {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          assetPath: update.imageData,
+          mediaType: 'image',
+        },
+      };
+    }
+
+    if (node.id === galleryId && node.type === 'gallery') {
+      return {
+        ...node,
+        container: {
+          policy: 'gallery',
+          childIds: [],
+          ...(node.container ?? {}),
+          childPlacements: {
+            ...(node.container?.childPlacements ?? {}),
+            [childNodeId]: {
+              childId: childNodeId,
+              ...(node.container?.childPlacements?.[childNodeId] ?? {}),
+              metadata: {
+                ...previousMetadata,
+                ...(update.status ? { generationStatus: update.status } : {}),
+                ...(update.imageData ? { generationHistory } : {}),
+              },
+            },
+          },
+        },
+      };
+    }
+
+    return node;
+  });
+
+  state.updateCanvasData({ nodes: nextNodes });
 }
 
 declare const acquireVsCodeApi: () => {
@@ -557,35 +636,11 @@ export function CanvasApp() {
           updateNodeData(nodeId, { generationStatus: status });
         }
       } else if (node.type === 'gallery' && childNodeId) {
-        // Legacy cells path — will be replaced by childPlacements metadata update
-        const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
-        const cells = galleryNode.data.cells?.map((c) =>
-          c.id === childNodeId
-            ? (() => {
-                if (status === 'done' && dataUrl) {
-                  const history = appendSelectedGenerationCandidate(c.generationHistory ?? [], {
-                    id: `gallery-${childNodeId}-${Date.now()}`,
-                    dataUrl,
-                    prompt: '',
-                    timestamp: Date.now(),
-                    selected: true,
-                  });
-                  return {
-                    ...c,
-                    generationStatus: 'done' as const,
-                    image: dataUrl,
-                    generationHistory: history,
-                  };
-                }
-                return {
-                  ...c,
-                  generationStatus:
-                    status as import('@neko/shared').GalleryCell['generationStatus'],
-                };
-              })()
-            : c,
-        );
-        if (cells) updateNodeData(nodeId, { cells });
+        updateGalleryChildGeneration(nodeId, childNodeId, {
+          status,
+          imageData: status === 'done' ? dataUrl : undefined,
+          historyIdPrefix: 'gallery',
+        });
       }
     },
     onScriptIndexResult: (nodeId, scenes) => {
@@ -622,24 +677,10 @@ export function CanvasApp() {
           generationHistory: history,
         });
       } else if (node.type === 'gallery' && childNodeId) {
-        // Legacy cells path — will be replaced by childPlacements metadata update
-        const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
-        const cells = galleryNode.data.cells?.map((c) =>
-          c.id === childNodeId
-            ? {
-                ...c,
-                image: imageData,
-                generationHistory: appendSelectedGenerationCandidate(c.generationHistory ?? [], {
-                  id: `gallery-sketch-${childNodeId}-${Date.now()}`,
-                  dataUrl: imageData,
-                  prompt: '',
-                  timestamp: Date.now(),
-                  selected: true,
-                }),
-              }
-            : c,
-        );
-        if (cells) updateNodeData(nodeId, { cells });
+        updateGalleryChildGeneration(nodeId, childNodeId, {
+          imageData,
+          historyIdPrefix: 'gallery-sketch',
+        });
       }
     },
     onKeyboardFocusChange: setKeyboardFocused,
@@ -669,15 +710,13 @@ export function CanvasApp() {
       }
       const connectionId = useCanvasStore.getState().addConnection({
         sourceId: request.sourceId,
-        sourceAnchor: request.sourceAnchor ?? 'right',
         targetId: request.targetId,
-        targetAnchor: request.targetAnchor ?? 'left',
         ...(request.type ? { type: request.type } : {}),
         ...(request.label ? { label: request.label } : {}),
         ...(request.priority !== undefined ? { priority: request.priority } : {}),
         ...(request.extension ? { extension: request.extension } : {}),
-        sourceEndpoint: { nodeId: request.sourceId, scope: 'node' },
-        targetEndpoint: { nodeId: request.targetId, scope: 'node' },
+        sourceEndpoint: request.sourceEndpoint ?? { nodeId: request.sourceId, scope: 'node' },
+        targetEndpoint: request.targetEndpoint ?? { nodeId: request.targetId, scope: 'node' },
       });
       const connection = useCanvasStore
         .getState()
@@ -1228,13 +1267,18 @@ export function CanvasApp() {
     [updateNodeData],
   );
   const handleConnectionStart = useCallback(
-    (nodeId: string, anchor: string) => startConnection(nodeId, anchor),
+    (nodeId: string, handleId: string) => startConnection(nodeId, handleId),
     [startConnection],
   );
   const handleConnectionComplete = useCallback(
-    (sourceNodeId: string, sourceAnchor: string, targetNodeId: string, targetAnchor: string) => {
-      startConnection(sourceNodeId, sourceAnchor);
-      completeConnection(targetNodeId, targetAnchor);
+    (
+      sourceNodeId: string,
+      sourceHandleId: string,
+      targetNodeId: string,
+      targetHandleId: string,
+    ) => {
+      startConnection(sourceNodeId, sourceHandleId);
+      completeConnection(targetNodeId, targetHandleId);
     },
     [startConnection, completeConnection],
   );

@@ -296,8 +296,6 @@ export interface CharacterAssetDimensionMetadata {
   animationModel?: 'bone-blendshape' | 'moc3-parameter';
   /** Source kind preserved from the native puppet import metadata. */
   sourceKind?: string;
-  /** Optional legacy Live2D fallback asset reference. */
-  legacyFallbackRef?: string;
   /** Storage mode for direct files, bundle-memory entries, and market assets. */
   storageMode?: MediaAssetStorageMode;
   /** Bundle entry metadata for bundle-memory assets. */

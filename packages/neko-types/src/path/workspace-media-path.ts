@@ -11,23 +11,18 @@ export type WorkspaceMediaPathKind =
   | 'remote-url'
   | 'variable'
   | 'absolute-local'
-  | 'workspace-relative'
-  | 'slash-prefixed-portable';
+  | 'workspace-relative';
 
 export type WorkspaceMediaPathCandidateReason =
   | 'absolute-local'
   | 'workspace-relative'
   | 'workspace-variable'
-  | 'custom-variable'
-  | 'document-relative-legacy'
-  | 'slash-prefixed-portable';
+  | 'custom-variable';
 
 export type WorkspaceMediaPathDiagnosticCode =
   | 'missing-context'
   | 'unknown-variable'
   | 'multi-root-ambiguity'
-  | 'legacy-document-relative-fallback'
-  | 'slash-prefixed-portable-fallback'
   | 'unauthorized-path'
   | 'missing-file';
 
@@ -105,7 +100,6 @@ export type WorkspaceMediaPathContractionFormat =
   | 'remote-url'
   | 'workspace-relative'
   | 'variable'
-  | 'document-relative'
   | 'absolute-local';
 
 export interface WorkspaceMediaPathContractionResult {
@@ -131,9 +125,7 @@ export function classifyWorkspaceMediaPath(source: string): WorkspaceMediaPathCl
 
   if (isAbsoluteLocalPath(trimmed)) {
     return {
-      kind: isSlashPrefixedPortableCandidate(trimmed)
-        ? 'slash-prefixed-portable'
-        : 'absolute-local',
+      kind: 'absolute-local',
       source: trimmed,
     };
   }
@@ -171,19 +163,6 @@ export function createWorkspaceMediaPathCandidates(
         path: normalizeSlashes(classification.source),
         reason: 'absolute-local',
       });
-      break;
-    case 'slash-prefixed-portable':
-      addCandidate(candidates, {
-        path: normalizeSlashes(classification.source),
-        reason: 'absolute-local',
-      });
-      addPortableCandidates(
-        candidates,
-        diagnostics,
-        stripPortableLeadingSlash(classification.source),
-        context,
-        'slash-prefixed-portable',
-      );
       break;
     case 'workspace-relative':
       addPortableCandidates(candidates, diagnostics, classification.source, context);
@@ -271,25 +250,6 @@ export function resolveWorkspaceMediaPath({
     };
   }
 
-  if (selected.reason === 'document-relative-legacy') {
-    diagnostics.push(
-      createDiagnostic(
-        'legacy-document-relative-fallback',
-        'Media path resolved through document-relative legacy fallback.',
-        selected.path,
-      ),
-    );
-  }
-  if (selected.reason === 'slash-prefixed-portable') {
-    diagnostics.push(
-      createDiagnostic(
-        'slash-prefixed-portable-fallback',
-        'Slash-prefixed media path resolved as a portable workspace/document reference.',
-        selected.path,
-      ),
-    );
-  }
-
   return {
     status: 'resolved-local',
     source,
@@ -326,21 +286,6 @@ export function contractWorkspaceMediaPath(
     return { path: variablePath, format: 'variable', diagnostics };
   }
 
-  const documentDir = normalizeOptionalRoot(context.documentDir);
-  if (documentDir) {
-    return {
-      path: toRelativePath(documentDir, normalizedSource),
-      format: 'document-relative',
-      diagnostics: [
-        createDiagnostic(
-          'legacy-document-relative-fallback',
-          'Media path contracted relative to the source document directory.',
-          normalizedSource,
-        ),
-      ],
-    };
-  }
-
   return { path: normalizedSource, format: 'absolute-local', diagnostics };
 }
 
@@ -362,7 +307,6 @@ function addVariableCandidates(
 
   if (WORKSPACE_VARIABLES.has(variable)) {
     addWorkspaceRootCandidates(candidates, rest, context, 'workspace-variable');
-    addDocumentFallbackCandidate(candidates, rest, context);
     return;
   }
 
@@ -396,13 +340,11 @@ function addPortableCandidates(
 ): void {
   const normalizedPortable = stripLeadingCurrentDir(normalizeSlashes(portablePath));
   addWorkspaceRootCandidates(candidates, normalizedPortable, context, reason);
-  addDocumentFallbackCandidate(candidates, normalizedPortable, context);
 
   if (
     candidates.length === 0 &&
     !context.owningWorkspaceRoot &&
-    (!context.workspaceRoots || context.workspaceRoots.length === 0) &&
-    !context.documentDir
+    (!context.workspaceRoots || context.workspaceRoots.length === 0)
   ) {
     diagnostics.push(
       createDiagnostic(
@@ -426,19 +368,6 @@ function addWorkspaceRootCandidates(
       root: normalizeSlashes(root),
     });
   }
-}
-
-function addDocumentFallbackCandidate(
-  candidates: WorkspaceMediaPathCandidate[],
-  relativePath: string,
-  context: WorkspaceMediaPathContext,
-): void {
-  if (!context.documentDir) return;
-  addCandidate(candidates, {
-    path: joinPath(context.documentDir, relativePath),
-    reason: 'document-relative-legacy',
-    root: normalizeSlashes(context.documentDir),
-  });
 }
 
 function getOrderedWorkspaceRoots(context: WorkspaceMediaPathContext): string[] {
@@ -549,14 +478,6 @@ function isAbsoluteLocalPath(source: string): boolean {
   return (
     source.startsWith('/') || WINDOWS_DRIVE_PATTERN.test(source) || WINDOWS_UNC_PATTERN.test(source)
   );
-}
-
-function isSlashPrefixedPortableCandidate(source: string): boolean {
-  return source.startsWith('/') && !source.startsWith('//');
-}
-
-function stripPortableLeadingSlash(source: string): string {
-  return normalizeSlashes(source).replace(/^\/+/, '');
 }
 
 function stripLeadingPathSeparator(source: string): string {

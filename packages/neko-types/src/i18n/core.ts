@@ -48,14 +48,14 @@ export function interpolate(template: string, params?: Record<string, string | n
  */
 export class I18nService implements II18nService {
   private _locale: SupportedLocale;
-  private readonly fallbackLocale: SupportedLocale;
+  private readonly defaultLocale: SupportedLocale;
   /** namespace -> locale -> bundle */
   private readonly bundles = new Map<string, Map<SupportedLocale, MessageBundle>>();
   private readonly listeners: Array<(locale: SupportedLocale) => void> = [];
 
-  constructor(initialLocale: SupportedLocale = 'en', fallbackLocale: SupportedLocale = 'en') {
+  constructor(initialLocale: SupportedLocale = 'en', defaultLocale: SupportedLocale = 'en') {
     this._locale = initialLocale;
-    this.fallbackLocale = fallbackLocale;
+    this.defaultLocale = defaultLocale;
   }
 
   get locale(): SupportedLocale {
@@ -72,8 +72,8 @@ export class I18nService implements II18nService {
   }
 
   t(key: string, params?: Record<string, string | number>): string {
-    // Try current locale first, then fallback
-    const localesToTry = [this._locale, this.fallbackLocale];
+    // Try current locale first, then the service default locale.
+    const localesToTry = [this._locale, this.defaultLocale];
     for (const locale of localesToTry) {
       const result = this.findInBundles(key, locale);
       if (result !== undefined) {

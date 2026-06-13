@@ -80,7 +80,7 @@ describe('narrative subsystem panel metadata', () => {
     expect(renderers['narrative-ending']).toBeTypeOf('function');
   });
 
-  it('renders narrative start and ending nodes without fallback cards', () => {
+  it('renders narrative start and ending nodes without unsupported cards', () => {
     const renderers = createNarrativeNodeRendererRegistry();
     const startMarkup = renderToStaticMarkup(
       renderCanvasNode(renderers, {

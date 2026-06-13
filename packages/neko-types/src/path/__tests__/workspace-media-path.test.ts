@@ -30,23 +30,22 @@ describe('workspace media path resolver', () => {
       variable: 'WORKSPACE',
     });
     expect(classifyWorkspaceMediaPath('/cases/test.mp4')).toMatchObject({
-      kind: 'slash-prefixed-portable',
+      kind: 'absolute-local',
     });
     expect(classifyWorkspaceMediaPath('/Volumes/media/test.mp4')).toMatchObject({
-      kind: 'slash-prefixed-portable',
+      kind: 'absolute-local',
     });
     expect(classifyWorkspaceMediaPath('https://example.test/a.mp4')).toMatchObject({
       kind: 'remote-url',
     });
   });
 
-  it('plans plain relative paths from owning workspace before document fallback', () => {
+  it('plans plain relative paths from workspace roots', () => {
     const planned = createWorkspaceMediaPathCandidates('cases/1080P.mp4', context);
 
     expect(planned.candidates.map((candidate) => candidate.path)).toEqual([
       '/work/a/cases/1080P.mp4',
       '/work/b/cases/1080P.mp4',
-      '/work/a/story/cases/1080P.mp4',
     ]);
     expect(planned.candidates[0]).toMatchObject({
       reason: 'workspace-relative',
@@ -131,36 +130,26 @@ describe('workspace media path resolver', () => {
     });
   });
 
-  it('uses document-relative fallback for legacy paths', () => {
+  it('rejects old document-relative paths when no workspace candidate exists', () => {
     const result = resolveWorkspaceMediaPath({
       source: '../cases/test.mp4',
       context,
       fileExists: (filePath) => filePath === '/work/a/cases/test.mp4',
     });
 
-    expect(result).toMatchObject({
-      status: 'resolved-local',
-      path: '/work/a/cases/test.mp4',
-    });
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'legacy-document-relative-fallback',
-    );
+    expect(result.status).toBe('unresolved');
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual(['/work/cases/test.mp4']);
   });
 
-  it('treats slash-prefixed non-files as portable migration candidates', () => {
+  it('treats slash-prefixed paths as absolute local paths only', () => {
     const result = resolveWorkspaceMediaPath({
       source: '/cases/test.mp4',
       context,
       fileExists: (filePath) => filePath === '/work/a/cases/test.mp4',
     });
 
-    expect(result).toMatchObject({
-      status: 'resolved-local',
-      path: '/work/a/cases/test.mp4',
-    });
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'slash-prefixed-portable-fallback',
-    );
+    expect(result.status).toBe('unresolved');
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual(['/cases/test.mp4']);
   });
 
   it('preserves existing absolute files when they exist', () => {

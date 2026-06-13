@@ -407,6 +407,7 @@ export const zhCN = {
   'scene.column.characters': '角色',
   'scene.column.dialogueSfx': '台词 / 音效',
   'scene.column.tagsStyle': '标签 / 风格',
+  'scene.column.imagePrep': '图片处理',
   'scene.column.status': '状态',
   'scene.column.characterDescription': '角色描述',
   'scene.column.characterReference': '角色参考',

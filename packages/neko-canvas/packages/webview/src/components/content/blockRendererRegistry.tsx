@@ -41,7 +41,7 @@ export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
     projection: renderProjectionBlock,
     'child-node-slot': renderChildNodeSlotBlock,
     select: renderSelectBlock,
-    custom: renderFallbackBlock,
+    custom: renderDefaultBlock,
   };
 }
 
@@ -49,7 +49,7 @@ export function renderCanvasBlock(
   registry: BlockRendererRegistry,
   context: BlockRendererContext,
 ): React.ReactNode {
-  const renderer = registry[context.block.kind] ?? renderFallbackBlock;
+  const renderer = registry[context.block.kind] ?? renderDefaultBlock;
   return renderer(context);
 }
 
@@ -232,7 +232,7 @@ function renderKeyValueBlock(context: BlockRendererContext): React.ReactNode {
 
 function renderCollectionBlock(context: BlockRendererContext): React.ReactNode {
   if (!context.block.collection) {
-    return renderFallbackBlock(context);
+    return renderDefaultBlock(context);
   }
 
   const { value } = readNodeBinding(context.node, context.block.collection.source);
@@ -295,7 +295,7 @@ function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNod
   );
 }
 
-function renderFallbackBlock(context: BlockRendererContext): React.ReactNode {
+function renderDefaultBlock(context: BlockRendererContext): React.ReactNode {
   return (
     <div className="rounded border border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
       {resolveLabel(context.block.label) ?? context.block.kind}
@@ -450,9 +450,9 @@ function toInputValue(value: unknown): string {
   return String(value);
 }
 
-function stringifyValue(value: unknown, fallback: string | undefined): string {
+function stringifyValue(value: unknown, placeholder: string | undefined): string {
   if (value === undefined || value === null || value === '') {
-    return fallback ?? '';
+    return placeholder ?? '';
   }
 
   if (typeof value === 'string') {
@@ -496,9 +496,9 @@ function readStringValue(value: unknown): string | undefined {
 function stringifyFieldValue(
   value: unknown,
   path: string | undefined,
-  fallback: string | undefined,
+  placeholder: string | undefined,
 ): string {
-  const rawValue = stringifyValue(value, fallback);
+  const rawValue = stringifyValue(value, placeholder);
   return path ? resolveCanvasOptionLabel(path, rawValue) : rawValue;
 }
 

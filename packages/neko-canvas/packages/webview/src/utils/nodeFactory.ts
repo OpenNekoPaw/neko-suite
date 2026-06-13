@@ -93,12 +93,12 @@ const REGISTERED_NODE_DEFAULT_DATA: Partial<
 
 const REGISTERED_NODE_TYPES = new Set<string>(REGISTERED_CANVAS_NODE_TYPES);
 
-function asString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback;
+function asString(value: unknown, defaultValue = ''): string {
+  return typeof value === 'string' ? value : defaultValue;
 }
 
-function asNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+function asNumber(value: unknown, defaultValue: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -531,7 +531,6 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         preset,
       );
     case 'group':
-      const groupChildIds = asStringArray(data.childIds);
       const groupNode = applyCanvasNodePreset(
         {
           type,
@@ -539,7 +538,6 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
           size: getNodeDefaultSize(type),
           zIndex,
           data: {
-            childIds: groupChildIds,
             label: asString(data.label) || undefined,
             color: asString(data.color) || undefined,
           },
@@ -554,7 +552,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         container: {
           ...groupNode.container,
           policy: 'group',
-          childIds: groupChildIds,
+          childIds: [],
           deleteBehavior: 'release-children',
         },
       };

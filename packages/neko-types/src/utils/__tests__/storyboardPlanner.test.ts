@@ -159,6 +159,17 @@ describe('storyboardPlanner', () => {
                     },
                   },
                 ],
+                shotImagePrepPlan: {
+                  schemaVersion: 1,
+                  kind: 'shot-image-prep-plan',
+                  planId: 'shot-1-image-prep',
+                  sceneId: 'scene-1',
+                  shotId: 'shot-1',
+                  sourceMediaRefs: [],
+                  imageStrategy: 'generate-new',
+                  operationPlan: ['generate-keyframe'],
+                  status: 'planned',
+                },
                 characters: [
                   {
                     characterName: 'Mika',
@@ -188,9 +199,9 @@ describe('storyboardPlanner', () => {
       connections: [
         {
           sourceChildIndex: 0,
-          sourceAnchor: 'right',
           targetChildIndex: 1,
-          targetAnchor: 'left',
+          sourceEndpoint: { scope: 'port', portId: 'img-out' },
+          targetEndpoint: { scope: 'node' },
           type: 'sequence',
           label: 'next',
           priority: 0,
@@ -229,6 +240,17 @@ describe('storyboardPlanner', () => {
           },
         },
       ],
+      shotImagePrepPlan: {
+        schemaVersion: 1,
+        kind: 'shot-image-prep-plan',
+        planId: 'shot-1-image-prep',
+        sceneId: 'scene-1',
+        shotId: 'shot-1',
+        sourceMediaRefs: [],
+        imageStrategy: 'generate-new',
+        operationPlan: ['generate-keyframe'],
+        status: 'planned',
+      },
       characters: [
         {
           characterName: 'Mika',
@@ -304,9 +326,9 @@ describe('storyboardPlanner', () => {
     expect(createConnection).toHaveBeenCalledTimes(1);
     expect(createConnection).toHaveBeenCalledWith({
       sourceId: 'scene-node-1',
-      sourceAnchor: 'right',
       targetId: 'scene-node-2',
-      targetAnchor: 'left',
+      sourceEndpoint: { nodeId: 'scene-node-1', scope: 'port', portId: 'out' },
+      targetEndpoint: { nodeId: 'scene-node-2', scope: 'port', portId: 'in' },
       type: 'sequence',
       label: 'next',
       priority: 0,
