@@ -1,4 +1,4 @@
-import type { MessageContextReference } from '@/components/types';
+import type { MessageContextReference } from '@neko-agent/types';
 import type { AgentContextPayload } from '@neko/shared';
 
 export function projectContextReferencesFromPayloads(

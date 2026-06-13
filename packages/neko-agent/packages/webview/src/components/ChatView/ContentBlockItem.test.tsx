@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ContentBlock } from '@/components/types';
+import type { ContentBlock } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { ContentBlockItem } from './ContentBlockItem';

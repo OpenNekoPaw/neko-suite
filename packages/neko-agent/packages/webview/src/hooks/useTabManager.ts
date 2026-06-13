@@ -6,8 +6,8 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { OpenTab, ConversationSummary, TabType } from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import type { OpenTab, ConversationSummary, TabType } from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 import { isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 
 export interface UseTabManagerProps {

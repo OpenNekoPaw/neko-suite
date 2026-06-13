@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { Message } from '@/components/types';
+import { Message } from '@neko-agent/types';
 import { getLogger } from '../../utils/logger';
 import { CopyIcon, CheckIcon, EditIcon, RefreshIcon } from '@neko/shared/icons';
 

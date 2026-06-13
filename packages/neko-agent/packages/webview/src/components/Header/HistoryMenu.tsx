@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { ConversationSummary } from '@/components/types';
+import { ConversationSummary } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 
 interface HistoryMenuProps {

@@ -9,7 +9,7 @@ const vscodeMocks = vi.hoisted(() => ({
   cancelMessage: vi.fn(),
 }));
 
-vi.mock('@/components/hooks/useVSCode', () => ({
+vi.mock('@/messages', () => ({
   VSCodeMessages: {
     sendMessage: vscodeMocks.sendMessage,
     invokeSlashCommand: vscodeMocks.invokeSlashCommand,

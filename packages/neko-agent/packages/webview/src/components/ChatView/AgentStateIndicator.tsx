@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { AgentState, AgentPhase } from '@/components/types';
+import type { AgentState, AgentPhase } from '@neko-agent/types';
 
 /**
  * Phase configuration for display

@@ -7,7 +7,7 @@
 
 import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Message } from '@/components/types';
+import { Message } from '@neko-agent/types';
 import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';

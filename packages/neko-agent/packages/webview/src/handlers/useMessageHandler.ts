@@ -20,7 +20,7 @@ import type {
   TabType,
   SettingsState,
   AgentState,
-} from '@/components/types';
+} from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';

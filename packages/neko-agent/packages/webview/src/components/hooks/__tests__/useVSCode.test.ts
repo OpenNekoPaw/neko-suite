@@ -14,20 +14,20 @@ beforeAll(() => {
 });
 
 // Dynamic import to ensure mock is set up first
-let postMessage: typeof import('../useVSCode').postMessage;
-let VSCodeMessages: typeof import('../useVSCode').VSCodeMessages;
-let vscode: typeof import('../useVSCode').vscode;
+let postMessage: typeof import('../../../messages').postMessage;
+let VSCodeMessages: typeof import('../../../messages').VSCodeMessages;
+let vscode: typeof import('../../../messages').vscode;
 
 beforeAll(async () => {
   // Clear module cache to ensure fresh import with mock
   vi.resetModules();
-  const module = await import('../useVSCode');
+  const module = await import('../../../messages');
   postMessage = module.postMessage;
   VSCodeMessages = module.VSCodeMessages;
   vscode = module.vscode;
 });
 
-describe('useVSCode', () => {
+describe('messages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

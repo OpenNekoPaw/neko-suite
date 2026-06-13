@@ -4,7 +4,7 @@ import type {
   ContentBlock,
   MediaRef,
   ToolCall,
-} from '@/components/types';
+} from '@neko-agent/types';
 import type {
   StoryboardTable,
   StoryboardMediaRef,

@@ -14,7 +14,7 @@ export interface SkillInjectionProjection {
   activeSkill: BoundActiveSkillIndicator;
 }
 
-export function projectSkillsList<TSkill>(skills: readonly TSkill[] | undefined): TSkill[] {
+function projectSkillsList<TSkill>(skills: readonly TSkill[] | undefined): TSkill[] {
   return Array.isArray(skills) ? [...skills] : [];
 }
 
@@ -24,7 +24,7 @@ export function projectInputSkillSummaries(
   return projectSkillsList(skills).map(projectInputSkillSummary);
 }
 
-export function projectInputSkillSummary(skill: ProtocolSkillSummaryForUi): SkillSummary {
+function projectInputSkillSummary(skill: ProtocolSkillSummaryForUi): SkillSummary {
   return {
     id: skill.name,
     name: skill.name,

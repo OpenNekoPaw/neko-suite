@@ -6,7 +6,7 @@
 
 import { useState, useMemo, memo } from 'react';
 import { computeDiff, computeDiffStats } from '@neko/shared/utils';
-import { CodeDiff } from '@/components/types';
+import { CodeDiff } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import {
   projectDiffLinesUi,

@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 
 type Step = 'choose' | 'fileOpened';
 

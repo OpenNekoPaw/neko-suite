@@ -1,4 +1,4 @@
-import type { ConversationKind, SessionMode } from '@/components/types';
+import type { ConversationKind, SessionMode } from '@neko-agent/types';
 
 export interface InputAreaUiProjectionInput {
   inputValue: string;

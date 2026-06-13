@@ -1,6 +1,6 @@
 import type { ChatModelOption } from '@neko/shared';
 import type { MediaModelSelectionState, AgentMediaModelCategory } from '@neko-agent/types';
-import type { SessionMode } from '@/components/types';
+import type { SessionMode } from '@neko-agent/types';
 
 export interface MediaModelPickerProjection {
   category: AgentMediaModelCategory;
@@ -71,7 +71,7 @@ export function projectGenerationParamsBarState(input: {
   };
 }
 
-export function hasGenerationParamsContext(input: {
+function hasGenerationParamsContext(input: {
   ambientNodeCount?: number;
   contextChips?: readonly GenerationParamsBarContextChipLike[];
 }): boolean {
@@ -81,9 +81,7 @@ export function hasGenerationParamsContext(input: {
   );
 }
 
-export function isAgentMediaSessionMode(
-  sessionMode: SessionMode,
-): sessionMode is AgentMediaModelCategory {
+function isAgentMediaSessionMode(sessionMode: SessionMode): sessionMode is AgentMediaModelCategory {
   return sessionMode === 'image' || sessionMode === 'video' || sessionMode === 'audio';
 }
 

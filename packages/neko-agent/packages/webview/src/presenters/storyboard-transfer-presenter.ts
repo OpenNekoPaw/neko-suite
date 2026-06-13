@@ -20,7 +20,7 @@ import type {
   PluginTransferTargetRef,
 } from '@neko-agent/types';
 import type { StoryboardScene } from '@/components/ChatView/MediaPreview';
-import type { ContentBlock, ToolCall } from '@/components/types';
+import type { ContentBlock, ToolCall } from '@neko-agent/types';
 import type {
   ResolvedCompositeMedia,
   ResolvedCompositeSection,

@@ -1,4 +1,4 @@
-import type { ContentBlock, Message } from '@/components/types';
+import type { ContentBlock, Message } from '@neko-agent/types';
 import {
   deriveToolCallsFromContentBlocks,
   projectContentBlocksDisplay,
@@ -72,9 +72,9 @@ export interface MessageListProjection {
   streamingItemIndex: number;
 }
 
-export const MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT = 80;
-export const MESSAGE_LIST_ESTIMATED_CONTENT_BLOCK_HEIGHT = 60;
-export const MESSAGE_LIST_THINKING_INDICATOR_HEIGHT = 50;
+const MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT = 80;
+const MESSAGE_LIST_ESTIMATED_CONTENT_BLOCK_HEIGHT = 60;
+const MESSAGE_LIST_THINKING_INDICATOR_HEIGHT = 50;
 
 export function projectMessageList(input: MessageListProjectionInput): MessageListProjection {
   const showThinkingIndicator = input.isThinking && !input.streamingMessageId;
@@ -167,7 +167,7 @@ export function projectMessageListItems(
   return items;
 }
 
-export function findMessageListStreamingItemIndex(
+function findMessageListStreamingItemIndex(
   items: readonly MessageListProjectionItem[],
   streamingMessageId: string | null,
 ): number {

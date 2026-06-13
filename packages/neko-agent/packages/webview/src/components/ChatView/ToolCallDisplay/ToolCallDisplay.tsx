@@ -6,10 +6,10 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { ToolCall } from '@/components/types';
+import { ToolCall } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';

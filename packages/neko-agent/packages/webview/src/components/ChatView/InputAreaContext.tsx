@@ -6,8 +6,8 @@
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { ShellExecutionMode, PromptMode, SessionMode } from '@/components/types';
-import type { ConversationKind } from '@/components/types';
+import type { ShellExecutionMode, PromptMode, SessionMode } from '@neko-agent/types';
+import type { ConversationKind } from '@neko-agent/types';
 import type { ChatModelOption } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
 import type {

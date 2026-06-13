@@ -13,7 +13,7 @@ import {
 } from '@/presenters/work-item-projection-presenter';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import { configHandlers } from '../config-handlers';
 import { mediaHandlers } from '../media-handlers';
 import { subAgentHandlers } from '../subagent-handlers';

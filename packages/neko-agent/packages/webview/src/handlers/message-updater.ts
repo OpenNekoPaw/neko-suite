@@ -7,7 +7,7 @@
  */
 
 import type { MessageHandlerContext } from './types';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 
 /**
  * Result of a conversation update that may change streaming state.

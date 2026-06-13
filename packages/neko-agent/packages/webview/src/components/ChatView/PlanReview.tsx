@@ -5,7 +5,7 @@
  */
 
 import { useState, memo } from 'react';
-import { Plan } from '@/components/types';
+import { Plan } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ChevronRightIcon, CheckIcon, CloseIcon, EditIcon } from '@neko/shared/icons';
 import {

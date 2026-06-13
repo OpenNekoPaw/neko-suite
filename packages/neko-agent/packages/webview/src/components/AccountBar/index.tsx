@@ -7,9 +7,9 @@
  *   custom key    → green dot, provider name + model, change-key option
  */
 import { useState, useRef, useEffect } from 'react';
-import type { SsoSession, ConfiguredProvider } from '@/components/types';
+import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import { ChevronDownIcon } from '@neko/shared/icons';
 
 interface AccountBarProps {

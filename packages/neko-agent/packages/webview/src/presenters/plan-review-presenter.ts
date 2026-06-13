@@ -60,7 +60,7 @@ export function projectPlanReviewUiState(input: PlanReviewProjectionInput): Plan
   };
 }
 
-export function projectPlanReviewStats(plan: Plan): PlanReviewStatsProjection {
+function projectPlanReviewStats(plan: Plan): PlanReviewStatsProjection {
   let pending = 0;
   let approved = 0;
   let rejected = 0;
@@ -83,7 +83,7 @@ export function projectPlanReviewStats(plan: Plan): PlanReviewStatsProjection {
   };
 }
 
-export function projectPlanReviewBadge(
+function projectPlanReviewBadge(
   planStatus: PlanStatus,
   stats: PlanReviewStatsProjection,
 ): PlanReviewBadgeProjection | null {
@@ -102,7 +102,7 @@ export function projectPlanReviewBadge(
   return null;
 }
 
-export function projectPlanReviewStep(step: PlanStep, index: number): PlanReviewStepProjection {
+function projectPlanReviewStep(step: PlanStep, index: number): PlanReviewStepProjection {
   return {
     step,
     index,
@@ -115,7 +115,7 @@ export function projectPlanReviewStep(step: PlanStep, index: number): PlanReview
   };
 }
 
-export function projectPlanStepIcon(status: PlanStatus): PlanStepIconProjection {
+function projectPlanStepIcon(status: PlanStatus): PlanStepIconProjection {
   switch (status) {
     case 'approved':
       return { kind: 'approved', tone: 'success' };

@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef } from 'react';
-import type { SessionMode } from '@/components/types';
+import type { SessionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { useTranslation } from '@/i18n/I18nContext';

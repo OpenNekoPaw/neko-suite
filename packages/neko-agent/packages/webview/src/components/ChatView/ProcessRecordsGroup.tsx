@@ -1,5 +1,5 @@
 import { memo, useCallback, useState } from 'react';
-import type { ContentBlock } from '@/components/types';
+import type { ContentBlock } from '@neko-agent/types';
 import type { ContentBlockProcessGroupProjection } from '@/presenters/content-block-presenter';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';

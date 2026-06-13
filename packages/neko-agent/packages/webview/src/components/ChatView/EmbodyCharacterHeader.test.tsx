@@ -1,12 +1,12 @@
 import { act } from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EmbodyCharacterSessionProjection } from '@/components/types';
+import type { EmbodyCharacterSessionProjection } from '@neko-agent/types';
 import { EmbodyCharacterHeader } from './EmbodyCharacterHeader';
 
 const exitEmbodyCharacterSession = vi.fn();
 
-vi.mock('@/components/hooks/useVSCode', () => ({
+vi.mock('@/messages', () => ({
   VSCodeMessages: {
     exitEmbodyCharacterSession: (...args: unknown[]) => exitEmbodyCharacterSession(...args),
   },

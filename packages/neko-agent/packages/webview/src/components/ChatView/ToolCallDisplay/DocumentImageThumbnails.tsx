@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import { CopyIcon, FileIcon } from '@neko/shared/icons';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { MessageItem } from './MessageItem';
 import type { MessageIdentityMap } from './message-identity';

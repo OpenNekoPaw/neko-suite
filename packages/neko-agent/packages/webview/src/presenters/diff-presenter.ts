@@ -1,5 +1,5 @@
 import type { DiffLine, DiffStats } from '@neko/shared';
-import type { CodeDiff } from '@/components/types';
+import type { CodeDiff } from '@neko-agent/types';
 
 export type DiffBlockTone = 'default' | 'success' | 'danger';
 export type DiffBlockOpacity = 'default' | 'muted';
@@ -50,7 +50,7 @@ export function projectDiffBlockUiState(input: DiffBlockProjectionInput): DiffBl
   };
 }
 
-export function projectDiffBlockTone(status: CodeDiff['status']): DiffBlockTone {
+function projectDiffBlockTone(status: CodeDiff['status']): DiffBlockTone {
   switch (status) {
     case 'accepted':
       return 'success';
@@ -61,7 +61,7 @@ export function projectDiffBlockTone(status: CodeDiff['status']): DiffBlockTone 
   }
 }
 
-export function projectDiffBadge(status: CodeDiff['status']): DiffBadgeProjection | null {
+function projectDiffBadge(status: CodeDiff['status']): DiffBadgeProjection | null {
   switch (status) {
     case 'accepted':
       return { tone: 'success', labelKey: 'chat.diff.accepted' };
@@ -72,7 +72,7 @@ export function projectDiffBadge(status: CodeDiff['status']): DiffBadgeProjectio
   }
 }
 
-export function projectDiffLineUi(line: DiffLine): DiffLineUiProjection {
+function projectDiffLineUi(line: DiffLine): DiffLineUiProjection {
   return {
     line,
     tone: projectDiffLineTone(line.type),
@@ -86,7 +86,7 @@ export function projectDiffLinesUi(lines: readonly DiffLine[]): DiffLineUiProjec
   return lines.map(projectDiffLineUi);
 }
 
-export function projectDiffLineTone(type: DiffLine['type']): DiffLineTone {
+function projectDiffLineTone(type: DiffLine['type']): DiffLineTone {
   switch (type) {
     case 'add':
       return 'add';
@@ -97,7 +97,7 @@ export function projectDiffLineTone(type: DiffLine['type']): DiffLineTone {
   }
 }
 
-export function projectDiffLineMarker(type: DiffLine['type']): DiffLineMarker {
+function projectDiffLineMarker(type: DiffLine['type']): DiffLineMarker {
   switch (type) {
     case 'add':
       return '+';
@@ -108,11 +108,11 @@ export function projectDiffLineMarker(type: DiffLine['type']): DiffLineMarker {
   }
 }
 
-export function getDiffFileName(filePath: string): string {
+function getDiffFileName(filePath: string): string {
   return filePath.split('/').pop() || filePath;
 }
 
-export function getDiffLanguageFromPath(filePath: string): string {
+function getDiffLanguageFromPath(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   return DIFF_LANGUAGE_BY_EXTENSION[ext] ?? 'text';
 }

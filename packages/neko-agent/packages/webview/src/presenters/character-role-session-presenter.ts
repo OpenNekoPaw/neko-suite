@@ -1,4 +1,4 @@
-import type { ConversationKind, Message, OpenTab } from '@/components/types';
+import type { ConversationKind, Message, OpenTab } from '@neko-agent/types';
 import type { ConversationStreamingState } from '@neko-agent/types';
 
 export type CharacterRoleOpenTab = OpenTab & {

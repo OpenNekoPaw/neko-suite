@@ -5,7 +5,7 @@ import type {
   ExtensionToWebviewMessage,
   OpenTab,
 } from '@neko-agent/types';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { characterDialogueSessionHandlers } from '../character-dialogue-session-handlers';

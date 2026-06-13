@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   CharacterDialogueSessionProjection,
   EmbodyCharacterSessionProjection,
-} from '@/components/types';
+} from '@neko-agent/types';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
   projectMessageIdentities,

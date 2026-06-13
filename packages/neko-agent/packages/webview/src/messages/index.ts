@@ -17,7 +17,6 @@ import type {
 import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
-// Re-export for backward compatibility
 export { postRawMessage as postMessage, type VSCodeAPI };
 
 /**

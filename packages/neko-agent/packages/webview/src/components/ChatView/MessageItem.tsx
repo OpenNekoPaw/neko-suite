@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
@@ -28,7 +28,7 @@ import {
   type MessageAttachmentProjection,
 } from '@/presenters/message-attachment-presenter';
 import { AgentContextChip } from '@/components/ChatView/InputArea/AgentContextChip';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';

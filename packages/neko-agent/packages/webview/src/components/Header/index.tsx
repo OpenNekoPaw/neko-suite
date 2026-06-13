@@ -1,9 +1,9 @@
-import { OpenTab, ConversationSummary, TabType } from '@/components/types';
+import { OpenTab, ConversationSummary, TabType } from '@neko-agent/types';
 import { TabBar } from '@/components/Header/TabBar';
 import { HistoryMenu } from '@/components/Header/HistoryMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { AccountBar } from '@/components/AccountBar';
-import type { SsoSession, ConfiguredProvider } from '@/components/types';
+import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 
 interface HeaderProps {
   tabs: OpenTab[];

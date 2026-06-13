@@ -18,7 +18,7 @@ import type {
   SsoErrorMessage,
   SsoSessionChangedMessage,
 } from './messages';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import {
   projectConfigStateMessage,
   projectMediaModelSelectionDefaults,

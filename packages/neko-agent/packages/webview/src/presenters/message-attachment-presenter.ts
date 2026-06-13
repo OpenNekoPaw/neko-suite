@@ -12,9 +12,7 @@ export interface MessageAttachmentProjection {
   showSize: boolean;
 }
 
-export function projectMessageAttachment(
-  attachment: MessageAttachment,
-): MessageAttachmentProjection {
+function projectMessageAttachment(attachment: MessageAttachment): MessageAttachmentProjection {
   return {
     attachment,
     previewKind: toAttachmentPreviewKind(attachment),
@@ -32,7 +30,7 @@ export function projectMessageAttachments(
   return attachments?.map(projectMessageAttachment) ?? [];
 }
 
-export function formatAttachmentSize(bytes: number | undefined): string | null {
+function formatAttachmentSize(bytes: number | undefined): string | null {
   if (bytes === undefined || bytes <= 0) return null;
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

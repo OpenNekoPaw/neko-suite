@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type {
   Message,
-  MessageAttachment,
   ToolCall,
   ConversationSummary,
   OpenTab,
@@ -10,8 +9,8 @@ import type {
   ShellExecutionMode,
   SettingsState,
   ConfiguredProvider,
-} from '../types';
-import type { ChatModelOption } from '@neko/shared';
+} from '@neko-agent/types';
+import type { ChatModelOption, MessageAttachment } from '@neko/shared';
 
 /**
  * Type validation tests

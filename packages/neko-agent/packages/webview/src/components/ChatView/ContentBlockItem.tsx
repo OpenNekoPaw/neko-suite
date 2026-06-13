@@ -6,7 +6,7 @@
  */
 
 import { memo } from 'react';
-import type { ContentBlock } from '@/components/types';
+import type { ContentBlock } from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';

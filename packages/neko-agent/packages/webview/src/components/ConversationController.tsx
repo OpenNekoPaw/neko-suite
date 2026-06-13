@@ -22,8 +22,8 @@ import type {
   OpenTab,
   PromptMode,
   TabType,
-} from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+} from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 import type {
   SkillSummary,
   MentionItem,

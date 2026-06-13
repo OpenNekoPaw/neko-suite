@@ -1,4 +1,4 @@
-import { OpenTab, TabType } from '@/components/types';
+import { OpenTab, TabType } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { CloseIcon } from '@neko/shared/icons';
 

@@ -5,7 +5,7 @@
  */
 
 import { useCallback } from 'react';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 
 export interface UsePlanActionsProps {
   activeConversationId: string | null;

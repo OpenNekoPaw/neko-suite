@@ -184,11 +184,7 @@ export function InputArea({
   };
 
   // Cycle execution mode: plan → ask → auto → plan
-  const EXECUTION_MODES: import('@/components/types').ShellExecutionMode[] = [
-    'plan',
-    'ask',
-    'auto',
-  ];
+  const EXECUTION_MODES: import('@neko-agent/types').ShellExecutionMode[] = ['plan', 'ask', 'auto'];
   const cycleExecutionMode = useCallback(() => {
     const idx = EXECUTION_MODES.indexOf(executionMode);
     const next = EXECUTION_MODES[(idx + 1) % EXECUTION_MODES.length];

@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { TabType } from '@/components/types';
+import type { TabType } from '@neko-agent/types';
 import type { GenCategory, GenerationParams } from '@/components/ChatView/InputArea/types';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 

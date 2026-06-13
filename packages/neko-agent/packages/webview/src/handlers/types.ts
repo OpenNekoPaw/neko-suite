@@ -14,7 +14,7 @@ import type {
   TabType,
   SettingsState,
   AgentState,
-} from '@/components/types';
+} from '@neko-agent/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -164,7 +164,7 @@ export type WebviewMessageType = ExtensionToWebviewMessage['type'];
 /**
  * Type guard that keeps the runtime dispatch boundary aligned with the protocol union.
  */
-export function isMessageOfType<T extends WebviewMessageType>(
+function isMessageOfType<T extends WebviewMessageType>(
   message: ExtensionToWebviewMessage,
   type: T,
 ): message is MessageOfType<T> {

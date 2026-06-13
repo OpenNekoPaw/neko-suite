@@ -5,7 +5,7 @@
  */
 
 import { useCallback } from 'react';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import type {
   SlashCommand,
   SkillSummary,
@@ -17,7 +17,7 @@ import {
   formatSlashCommandHelpCatalog,
 } from '@/components/ChatView/InputArea/slash-command-catalog';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 
 export interface UseSlashCommandsProps {
   skills: SkillSummary[];

@@ -12,8 +12,8 @@ import {
   type SetStateAction,
   type MutableRefObject,
 } from 'react';
-import { Message, type SessionMode, type TabType } from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { Message, type SessionMode, type TabType } from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
 import {
   getBuiltinSlashCommand,

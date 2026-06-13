@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
-import type { Message, ConversationSummary, OpenTab } from '@/components/types';
+import type { Message, ConversationSummary, OpenTab } from '@neko-agent/types';
 
 /**
  * Streaming state for a conversation

@@ -5,7 +5,7 @@ import {
   type ConversationKind,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
-} from '@/components/types';
+} from '@neko-agent/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';

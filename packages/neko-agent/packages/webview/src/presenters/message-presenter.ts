@@ -546,13 +546,7 @@ export function toPlanStatus(value: unknown): PlanStatus | null {
   }
 }
 
-export function deriveToolCalls(blocks: readonly ContentBlock[]): ToolCall[] {
-  return blocks
-    .map((block) => (block.type === 'tool_call' ? block.toolCall : undefined))
-    .filter((toolCall): toolCall is ToolCall => toolCall !== undefined);
-}
-
-export function addToolCallBlock(
+function addToolCallBlock(
   blocks: readonly ContentBlock[],
   toolCall: ToolCall,
   timestamp: number = Date.now(),
@@ -581,7 +575,7 @@ export function updateToolCallInBlocks(
   });
 }
 
-export function updateLastPendingToolCall(
+function updateLastPendingToolCall(
   blocks: readonly ContentBlock[],
   updater: (toolCall: ToolCall) => ToolCall,
 ): ContentBlock[] {

@@ -1,7 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { ExtensionToWebviewMessage, OpenTab } from '@neko-agent/types';
-import type { Message } from '@/components/types';
+import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { conversationHandlers } from '../conversation-handlers';

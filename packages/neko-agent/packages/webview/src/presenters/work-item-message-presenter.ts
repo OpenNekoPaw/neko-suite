@@ -260,7 +260,7 @@ export function rehydrateBackgroundTasksFromMessages(
   );
 }
 
-export function rehydrateBackgroundTaskWorkItemsFromMessages(
+function rehydrateBackgroundTaskWorkItemsFromMessages(
   messages: readonly Message[],
   conversationId: string,
   options: RehydrateWorkItemsFromMessagesOptions = {},

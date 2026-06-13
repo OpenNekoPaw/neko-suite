@@ -5,7 +5,7 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/messages';
 import type { BoundActiveSkillIndicator } from '@/handlers';
 
 export interface UseSkillActionsProps {

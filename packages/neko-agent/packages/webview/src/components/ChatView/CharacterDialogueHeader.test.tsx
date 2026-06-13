@@ -1,12 +1,12 @@
 import { act } from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CharacterDialogueSessionProjection } from '@/components/types';
+import type { CharacterDialogueSessionProjection } from '@neko-agent/types';
 import { CharacterDialogueHeader } from './CharacterDialogueHeader';
 
 const exitCharacterDialogueSession = vi.fn();
 
-vi.mock('@/components/hooks/useVSCode', () => ({
+vi.mock('@/messages', () => ({
   VSCodeMessages: {
     exitCharacterDialogueSession: (...args: unknown[]) => exitCharacterDialogueSession(...args),
   },

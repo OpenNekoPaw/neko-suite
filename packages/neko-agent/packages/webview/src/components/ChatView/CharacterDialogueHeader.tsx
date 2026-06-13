@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { NpcProfileFact } from '@neko/shared';
-import type { CharacterDialogueSessionProjection } from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import type { CharacterDialogueSessionProjection } from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 
 interface CharacterDialogueHeaderProps {
   session: CharacterDialogueSessionProjection;

@@ -1,4 +1,4 @@
-import type { CodeDiff, ContentBlock, ToolCall } from '@/components/types';
+import type { CodeDiff, ContentBlock, ToolCall } from '@neko-agent/types';
 import type { Plan } from '@neko-agent/types';
 import {
   projectCompositeBlockRichContent,
@@ -307,7 +307,7 @@ export function projectContentBlocksDisplay(
   };
 }
 
-export function formatContentBlockTimestamp(timestamp: number): string {
+function formatContentBlockTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], {
     hour: '2-digit',

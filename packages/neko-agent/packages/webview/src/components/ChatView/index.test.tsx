@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { CharacterDialogueSessionProjection } from '@/components/types';
+import type { CharacterDialogueSessionProjection } from '@neko-agent/types';
 import { ChatView } from './index';
 
 const translations: Record<string, string> = {

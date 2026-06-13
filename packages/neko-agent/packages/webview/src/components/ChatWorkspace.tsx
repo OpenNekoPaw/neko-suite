@@ -22,9 +22,9 @@ import {
   type ConversationKind,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
-} from '@/components/types';
-import type { SettingsState, Message, TabType } from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+} from '@neko-agent/types';
+import type { SettingsState, Message, TabType } from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
 import type {

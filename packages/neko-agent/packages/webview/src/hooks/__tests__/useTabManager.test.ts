@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import type { OpenTab } from '@/components/types';
+import type { OpenTab } from '@neko-agent/types';
 import { useTabManager } from '../useTabManager';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -12,7 +12,7 @@ const vscodeMocks = vi.hoisted(() => ({
   deleteConversation: vi.fn(),
 }));
 
-vi.mock('@/components/hooks/useVSCode', () => ({
+vi.mock('@/messages', () => ({
   VSCodeMessages: vscodeMocks,
 }));
 

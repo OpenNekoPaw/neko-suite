@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef } from 'react';
-import { ShellExecutionMode } from '@/components/types';
+import { ShellExecutionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';

@@ -1,5 +1,5 @@
-import type { EmbodyCharacterSessionProjection } from '@/components/types';
-import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import type { EmbodyCharacterSessionProjection } from '@neko-agent/types';
+import { VSCodeMessages } from '@/messages';
 
 interface EmbodyCharacterHeaderProps {
   session: EmbodyCharacterSessionProjection;

@@ -75,8 +75,6 @@ const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandSource, string | null> = {
   plugin: 'plugin',
 };
 
-export { normalizeSlashCommandName } from '@neko-agent/types';
-
 export function createSlashCommandCatalog(
   skills: readonly SkillSummary[] = [],
   pluginCommands: readonly RegisteredPluginSlashCommand[] = [],

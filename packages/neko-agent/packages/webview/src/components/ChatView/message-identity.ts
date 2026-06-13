@@ -3,7 +3,7 @@ import type {
   ConversationKind,
   EmbodyCharacterSessionProjection,
   Message,
-} from '@/components/types';
+} from '@neko-agent/types';
 
 export interface MessageSpeakerIdentity {
   readonly displayName: string;

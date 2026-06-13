@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { SettingsState, ShellExecutionMode, PromptMode } from '@/components/types';
+import type { SettingsState, ShellExecutionMode, PromptMode } from '@neko-agent/types';
 import type { MentionItem, PluginSlashCommandDef } from '@/components/ChatView/InputArea/types';
 
 /**
