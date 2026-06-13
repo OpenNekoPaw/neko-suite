@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateInitialPuppetViewport,
   calculatePuppetBounds,
-  createMeshSnapshotFallbacks,
+  createRenderMeshesFromSnapshots,
 } from './PuppetCanvas';
 import type { DeformedMesh, MeshSnapshot } from '../animation/types';
 
@@ -70,7 +70,7 @@ describe('PuppetCanvas fit-to-view', () => {
       },
     ];
 
-    expect(createMeshSnapshotFallbacks(snapshots, [])).toEqual([
+    expect(createRenderMeshesFromSnapshots(snapshots, [])).toEqual([
       {
         node_id: 'ArtMesh2',
         vertices: snapshots[0]!.vertices,
@@ -92,6 +92,6 @@ describe('PuppetCanvas fit-to-view', () => {
       },
     ];
 
-    expect(createMeshSnapshotFallbacks([], meshes)).toEqual(meshes);
+    expect(createRenderMeshesFromSnapshots([], meshes)).toEqual(meshes);
   });
 });

@@ -2,7 +2,7 @@ import type { PuppetExternalTextureData } from '@neko/shared';
 
 export interface Moc3TextureDecoder<TImage> {
   decodePng(bytes: Uint8Array, source: PuppetExternalTextureData): Promise<TImage>;
-  createFallbackTexture(slotIndex: number): Promise<TImage>;
+  createPlaceholderTexture(slotIndex: number): Promise<TImage>;
 }
 
 export function base64ToBytes(data: string): Uint8Array {
@@ -43,7 +43,7 @@ export async function decodeMoc3ExternalTexturesWithDecoder<TImage>(
 
   for (let index = 0; index < slots.length; index++) {
     if (slots[index] === undefined) {
-      slots[index] = await decoder.createFallbackTexture(index);
+      slots[index] = await decoder.createPlaceholderTexture(index);
     }
   }
 
@@ -69,7 +69,7 @@ const browserMoc3TextureDecoder: Moc3TextureDecoder<ImageBitmap> = {
     const blob = new Blob([blobBytes.buffer], { type: 'image/png' });
     return createImageBitmap(blob);
   },
-  async createFallbackTexture() {
+  async createPlaceholderTexture() {
     return createImageBitmap(new ImageData(1, 1));
   },
 };

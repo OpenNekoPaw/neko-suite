@@ -820,7 +820,7 @@ function resolveGraphPath(): string | undefined {
     return undefined;
   }
   const layout = resolveStorageLayout(folder.uri.fsPath, os.homedir());
-  return layout.project.cache.assetGraph;
+  return layout.project.local.cache.assetGraph;
 }
 
 function formatError(error: unknown): string {

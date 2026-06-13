@@ -7,7 +7,7 @@ import {
 } from './moc3-textures';
 
 interface TestImage {
-  readonly kind: 'decoded' | 'fallback';
+  readonly kind: 'decoded' | 'placeholder';
   readonly slot: number;
   readonly bytes?: readonly number[];
 }
@@ -16,8 +16,8 @@ const decoder: Moc3TextureDecoder<TestImage> = {
   async decodePng(bytes, source) {
     return { kind: 'decoded', slot: source.index, bytes: [...bytes] };
   },
-  async createFallbackTexture(slotIndex) {
-    return { kind: 'fallback', slot: slotIndex };
+  async createPlaceholderTexture(slotIndex) {
+    return { kind: 'placeholder', slot: slotIndex };
   },
 };
 
@@ -26,7 +26,7 @@ describe('moc3 external texture decoding', () => {
     expect([...base64ToBytes('data:image/png;base64,AQID')]).toEqual([1, 2, 3]);
   });
 
-  it('preserves MOC3 texture indexes and fills gaps with fallback textures', async () => {
+  it('preserves MOC3 texture indexes and fills gaps with placeholder textures', async () => {
     const sources: PuppetExternalTextureData[] = [
       { index: 1, data: 'BAU=', mimeType: 'image/png', name: 'texture_01.png' },
       { index: 0, data: 'AQID', mimeType: 'image/png', name: 'texture_00.png' },
@@ -47,8 +47,8 @@ describe('moc3 external texture decoding', () => {
     );
 
     expect(textures).toEqual([
-      { kind: 'fallback', slot: 0 },
-      { kind: 'fallback', slot: 1 },
+      { kind: 'placeholder', slot: 0 },
+      { kind: 'placeholder', slot: 1 },
       { kind: 'decoded', slot: 2, bytes: [10] },
     ]);
   });

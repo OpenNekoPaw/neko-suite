@@ -356,10 +356,10 @@ export class PuppetController implements IPuppetController {
     this.disconnectStream();
 
     const handle = this.engine.createPuppetH264StreamHandle();
-    let fallbackStarted = false;
-    const startJsonFallback = () => {
-      if (!this.previewActive || fallbackStarted) return;
-      fallbackStarted = true;
+    let jsonPreviewStarted = false;
+    const startJsonPreview = () => {
+      if (!this.previewActive || jsonPreviewStarted) return;
+      jsonPreviewStarted = true;
       this.activeH264Stream?.dispose();
       this.activeH264Stream = null;
       this.openPreviewWs();
@@ -380,20 +380,20 @@ export class PuppetController implements IPuppetController {
       onConnectionChange: (connected) => {
         this.previewOnStatus?.(connected);
         if (!connected) {
-          startJsonFallback();
+          startJsonPreview();
         }
       },
       onError: () => {
-        startJsonFallback();
+        startJsonPreview();
       },
       onStreamEnd: () => {
-        startJsonFallback();
+        startJsonPreview();
       },
     });
 
     this.activeH264Stream = stream;
     void stream.connect().catch(() => {
-      startJsonFallback();
+      startJsonPreview();
     });
   }
 

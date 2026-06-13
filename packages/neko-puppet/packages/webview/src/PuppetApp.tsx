@@ -92,10 +92,13 @@ function PuppetLoadErrorPlaceholder({ message }: { message: string }) {
   );
 }
 
-function PuppetFallbackLabel() {
+function PuppetLocalPreviewLabel() {
   return (
-    <div className="puppet-fallback-badge" data-non-authoritative-preview="local-canvas-fallback">
-      Local fallback preview
+    <div
+      className="puppet-local-preview-badge"
+      data-non-authoritative-preview="local-canvas-preview"
+    >
+      Local preview
     </div>
   );
 }
@@ -320,7 +323,7 @@ export function PuppetApp() {
   const puppetFrameMeta = React.useMemo<ViewportFrameMeta>(
     () => ({
       protocolVersion: 1,
-      streamId: 'puppet-local-fallback',
+      streamId: 'puppet-local-preview',
       sceneId: 'puppet-main',
       viewportId: 'main',
       frameId: 0,
@@ -330,7 +333,7 @@ export function PuppetApp() {
       revision: nativeRevision,
       appliedSeq: 0,
       viewTransform: [1, 0, 0, 1, 0, 0],
-      diagnostics: { authoritative: false, reason: 'local-canvas-fallback' },
+      diagnostics: { authoritative: false, reason: 'local-canvas-preview' },
     }),
     [nativeRevision],
   );
@@ -443,7 +446,7 @@ export function PuppetApp() {
                         noPuppetSource ? <PuppetEmptyState onDropMoc3={handleDropMoc3} /> : null
                       }
                       contextMenuLayer={null}
-                      fallbackLabel={noPuppetSource ? null : <PuppetFallbackLabel />}
+                      localPreviewLabel={noPuppetSource ? null : <PuppetLocalPreviewLabel />}
                       fitViewRequest={fitViewRequest}
                       emptyViewport={noPuppetSource}
                     />
@@ -463,7 +466,7 @@ export function PuppetApp() {
               />
             ) : puppetLoaded ? (
               <PuppetCanvas
-                fallbackLabel={<PuppetFallbackLabel />}
+                localPreviewLabel={<PuppetLocalPreviewLabel />}
                 fitViewRequest={fitViewRequest}
               />
             ) : (

@@ -11,7 +11,7 @@ import type { DeformedMesh, MeshSnapshot, PuppetNodeSnapshot } from '../animatio
 export interface PuppetCanvasProps {
   readonly overlayLayer?: React.ReactNode;
   readonly contextMenuLayer?: React.ReactNode;
-  readonly fallbackLabel?: React.ReactNode;
+  readonly localPreviewLabel?: React.ReactNode;
   readonly fitViewRequest?: number;
   readonly emptyViewport?: boolean;
 }
@@ -199,7 +199,7 @@ function drawTexturedTriangle(
   ctx.restore();
 }
 
-/** Draw a solid-colored triangle (fallback when no texture). */
+/** Draw a solid-colored triangle (solid color when no texture). */
 function drawSolidTriangle(
   ctx: CanvasRenderingContext2D,
   x0: number,
@@ -287,7 +287,7 @@ export function calculateInitialPuppetViewport(
   };
 }
 
-export function createMeshSnapshotFallbacks(
+export function createRenderMeshesFromSnapshots(
   meshSnapshots: readonly MeshSnapshot[],
   deformedMeshes: readonly DeformedMesh[],
 ): DeformedMesh[] {
@@ -389,7 +389,7 @@ function renderPuppet(
           uv2[1],
         );
       } else {
-        // No texture — draw solid with skin-tone fallback
+        // No texture — draw solid with skin-tone placeholder
         drawSolidTriangle(ctx, v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], 'rgba(217, 190, 163, 1)');
       }
     }
@@ -531,7 +531,7 @@ function renderNativeBoneOverlay(
 export function PuppetCanvas({
   overlayLayer = null,
   contextMenuLayer = null,
-  fallbackLabel = null,
+  localPreviewLabel = null,
   fitViewRequest = 0,
   emptyViewport = false,
 }: PuppetCanvasProps) {
@@ -549,7 +549,7 @@ export function PuppetCanvas({
     () =>
       emptyViewport
         ? [...EMPTY_PUPPET_MESHES]
-        : createMeshSnapshotFallbacks(meshSnapshots, deformedMeshes),
+        : createRenderMeshesFromSnapshots(meshSnapshots, deformedMeshes),
     [deformedMeshes, emptyViewport, meshSnapshots],
   );
   const renderNodes = emptyViewport ? EMPTY_PUPPET_NODES : nodes;
@@ -720,7 +720,7 @@ export function PuppetCanvas({
       <canvas ref={canvasRef} className="absolute inset-0" />
       {overlayLayer}
       {contextMenuLayer}
-      {fallbackLabel}
+      {localPreviewLabel}
     </div>
   );
 }

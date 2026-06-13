@@ -115,16 +115,16 @@ function Th({ children, width }: { children: React.ReactNode; width?: string }) 
 
 function CharacterBadge({
   character,
-  fallbackName,
-  fallbackThumbnailUri,
+  defaultName,
+  defaultThumbnailUri,
   sceneId,
   thumbnailUri,
   onSendToAgent,
   onNavigateToAsset,
 }: {
   character?: StoryCharacterVisualReadiness;
-  fallbackName?: string;
-  fallbackThumbnailUri?: string;
+  defaultName?: string;
+  defaultThumbnailUri?: string;
   sceneId: string;
   thumbnailUri?: string;
   onSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
@@ -133,9 +133,9 @@ function CharacterBadge({
   const [hoverVisible, setHoverVisible] = useState(false);
   const badgeRef = useRef<HTMLSpanElement>(null);
   const { t } = useTranslation();
-  const name = character?.name ?? fallbackName ?? '';
+  const name = character?.name ?? defaultName ?? '';
   const visualStatus = character?.status;
-  const resolvedThumbnailUri = character?.thumbnailUri ?? thumbnailUri ?? fallbackThumbnailUri;
+  const resolvedThumbnailUri = character?.thumbnailUri ?? thumbnailUri ?? defaultThumbnailUri;
   const palette = visualStatus ? VISUAL_STATUS_PALETTE[visualStatus] : undefined;
   const visualLabel = visualStatus
     ? translateVisualStatus(visualStatus, t)
@@ -301,7 +301,7 @@ function translateLocalizedText(
   t: TranslationFn,
   key: string | undefined,
   params: Readonly<Record<string, string | number>> | undefined,
-  fallback: string | undefined,
+  defaultText: string | undefined,
 ): string {
   if (key) {
     const translated = t(key, params ? { ...params } : undefined);
@@ -309,7 +309,7 @@ function translateLocalizedText(
       return translated;
     }
   }
-  return fallback ?? '';
+  return defaultText ?? '';
 }
 
 function translateVisualStatus(
@@ -556,7 +556,7 @@ const SceneRow = memo(function SceneRow({
     ? `#${scene.sceneNumber}`
     : `#${String(sceneIndex).padStart(2, '0')}`;
   const readinessCharacters = readiness?.characters ?? [];
-  const fallbackCharacters =
+  const defaultCharacters =
     readinessCharacters.length > 0
       ? []
       : scene.sceneCharacters.map((name) => ({
@@ -564,9 +564,9 @@ const SceneRow = memo(function SceneRow({
           thumbnailUri: characterThumbnails?.[name],
         }));
   const characterCount =
-    readinessCharacters.length > 0 ? readinessCharacters.length : fallbackCharacters.length;
+    readinessCharacters.length > 0 ? readinessCharacters.length : defaultCharacters.length;
   const visibleReadinessChars = readinessCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
-  const visibleFallbackChars = fallbackCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
+  const visibleDefaultChars = defaultCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
   const overflowCount = characterCount - MAX_VISIBLE_CHARACTERS;
 
   const rowBg = selected
@@ -778,11 +778,11 @@ const SceneRow = memo(function SceneRow({
                 onNavigateToAsset={onCharacterNavigate}
               />
             ))}
-            {visibleFallbackChars.map((character) => (
+            {visibleDefaultChars.map((character) => (
               <CharacterBadge
                 key={character.name}
-                fallbackName={character.name}
-                fallbackThumbnailUri={character.thumbnailUri}
+                defaultName={character.name}
+                defaultThumbnailUri={character.thumbnailUri}
                 sceneId={scene.sceneId}
                 onSendToAgent={onCharacterSendToAgent}
                 onNavigateToAsset={onCharacterNavigate}
@@ -797,7 +797,7 @@ const SceneRow = memo(function SceneRow({
                 }}
                 title={[
                   ...readinessCharacters.map((character) => character.name),
-                  ...fallbackCharacters.map((character) => character.name),
+                  ...defaultCharacters.map((character) => character.name),
                 ]
                   .slice(MAX_VISIBLE_CHARACTERS)
                   .join(', ')}
