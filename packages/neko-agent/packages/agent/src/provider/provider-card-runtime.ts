@@ -54,7 +54,7 @@ export async function registerRuntimeProviderCardDirectories(
         root: resolveStorageLayout(options.workspaceRoot, options.homeDir).project.facts
           .providerCards,
         recursive: false,
-        sourceRefPrefix: '.neko/providers',
+        sourceRefPrefix: 'neko/providers',
       })
     : Promise.resolve([]);
 

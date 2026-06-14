@@ -30,11 +30,13 @@ export const DEFAULT_PLUGIN_SKILL_PROVIDER_EXTENSION_IDS = [
 ] as const;
 
 export interface PluginSkillDiscoveryLogger {
+  debug(message: string, context?: unknown): void;
   info(message: string, context?: unknown): void;
   warn(message: string, context?: unknown): void;
 }
 
 const noopLogger: PluginSkillDiscoveryLogger = {
+  debug: () => undefined,
   info: () => undefined,
   warn: () => undefined,
 };

@@ -10,17 +10,21 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useReportWebviewKeyboardEditable, useReportWebviewKeyboardFocus } from '@neko/ui/keyboard';
 import { Header } from '@/components/Header';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
-import { useConfigState, useResourceState } from '@/hooks';
+import {
+  useConfigState,
+  useResourceState,
+  useWebviewKeyboardEditableReporting,
+  useWebviewKeyboardFocusReporting,
+} from '@/hooks';
 import { vscode } from '@/messages';
 import { ConversationController } from './ConversationController';
 
 export function AppShell() {
   const rootRef = useRef<HTMLDivElement>(null);
-  useReportWebviewKeyboardFocus(rootRef, vscode);
-  useReportWebviewKeyboardEditable(vscode);
+  useWebviewKeyboardFocusReporting(rootRef, vscode);
+  useWebviewKeyboardEditableReporting(vscode);
 
   const config = useConfigState();
   const resource = useResourceState();

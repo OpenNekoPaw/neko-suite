@@ -61,3 +61,8 @@ export {
   type UseSkillActionsProps,
   type UseSkillActionsReturn,
 } from './useSkillActions';
+
+export {
+  useWebviewKeyboardEditableReporting,
+  useWebviewKeyboardFocusReporting,
+} from './useWebviewKeyboardReporting';

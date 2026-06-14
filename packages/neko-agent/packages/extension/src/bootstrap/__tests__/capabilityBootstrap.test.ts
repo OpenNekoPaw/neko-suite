@@ -23,6 +23,40 @@ const registerRuntimeProviderCardDirectoriesMock = vi.fn(() =>
   Promise.resolve({ market: [], project: [] }),
 );
 
+function createMockCapabilityRuntimeBindingStore(logger: {
+  warn: (message: string, data?: unknown) => void;
+}) {
+  let bindings: Record<string, unknown> = {};
+  const update = (next: Record<string, unknown>) => {
+    const merged = { ...bindings };
+    for (const [key, value] of Object.entries(next)) {
+      if (value === undefined) {
+        if (merged[key] !== undefined) {
+          logger.warn(
+            'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
+            {
+              code: 'extension.capability-runtime.binding-update-ignored',
+              reason: 'undefined-value-ignored',
+              message:
+                'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
+              context: { binding: key },
+            },
+          );
+        }
+        continue;
+      }
+      merged[key] = value;
+    }
+    bindings = merged;
+    return bindings;
+  };
+  return {
+    get: () => bindings,
+    update,
+    setSkillService: (skillService: unknown) => update({ skillService }),
+  };
+}
+
 vi.mock('@neko/agent', () => ({
   ProviderCardRegistry: class ProviderCardRegistry {
     readonly id = 'default-provider-card-registry';
@@ -30,40 +64,11 @@ vi.mock('@neko/agent', () => ({
   ToolCategoryRegistry: class ToolCategoryRegistry {
     readonly id = 'default-tool-category-registry';
   },
-  createCapabilityRuntimeBindingStore: (logger: {
-    warn: (message: string, data?: unknown) => void;
-  }) => {
-    let bindings: Record<string, unknown> = {};
-    const update = (next: Record<string, unknown>) => {
-      const merged = { ...bindings };
-      for (const [key, value] of Object.entries(next)) {
-        if (value === undefined) {
-          if (merged[key] !== undefined) {
-            logger.warn(
-              'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
-              {
-                code: 'extension.capability-runtime.binding-update-ignored',
-                reason: 'undefined-value-ignored',
-                message:
-                  'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
-                context: { binding: key },
-              },
-            );
-          }
-          continue;
-        }
-        merged[key] = value;
-      }
-      bindings = merged;
-      return bindings;
-    };
-    return {
-      get: () => bindings,
-      update,
-      setSkillService: (skillService: unknown) => update({ skillService }),
-    };
-  },
   registerRuntimeProviderCardDirectories: registerRuntimeProviderCardDirectoriesMock,
+}));
+
+vi.mock('@neko/agent/runtime', () => ({
+  createCapabilityRuntimeBindingStore: createMockCapabilityRuntimeBindingStore,
 }));
 
 vi.mock('../../base', () => ({

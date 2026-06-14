@@ -1,4 +1,4 @@
-import type { Message } from '@neko-agent/types';
+import type { Message, ToolCall } from '@neko-agent/types';
 
 const MEDIA_FILE_EXTENSIONS = [
   '.png',
@@ -55,7 +55,13 @@ export function projectMessageForResourceDisplay(
   message: Message,
   options: MessageResourceProjectionOptions = {},
 ): Message {
-  const projectedMessage = { ...message };
+  const projectedMessage: MessageWithLegacyToolCalls = { ...message };
+
+  if (messageHasLegacyToolCalls(message)) {
+    projectedMessage.toolCalls = message.toolCalls.map((toolCall) =>
+      projectToolCallForResourceDisplay(toolCall, options),
+    );
+  }
 
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
@@ -64,30 +70,45 @@ export function projectMessageForResourceDisplay(
         return block;
       }
 
-      const projectedArguments = projectResourceValue(toolCall.arguments, options);
-      const projectedResultData = toolCall.result?.data
-        ? projectResourceValue(toolCall.result.data, options)
-        : undefined;
-
       return {
         ...block,
-        toolCall: {
-          ...toolCall,
-          arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
-          ...(projectedResultData !== undefined && toolCall.result
-            ? {
-                result: {
-                  ...toolCall.result,
-                  data: projectedResultData,
-                },
-              }
-            : {}),
-        },
+        toolCall: projectToolCallForResourceDisplay(toolCall, options),
       };
     });
   }
 
   return projectedMessage;
+}
+
+type MessageWithLegacyToolCalls = Message & {
+  toolCalls?: ToolCall[];
+};
+
+function messageHasLegacyToolCalls(message: Message): message is MessageWithLegacyToolCalls {
+  return Array.isArray((message as { toolCalls?: unknown }).toolCalls);
+}
+
+function projectToolCallForResourceDisplay(
+  toolCall: ToolCall,
+  options: MessageResourceProjectionOptions,
+): ToolCall {
+  const projectedArguments = projectResourceValue(toolCall.arguments, options);
+  const projectedResultData = toolCall.result?.data
+    ? projectResourceValue(toolCall.result.data, options)
+    : undefined;
+
+  return {
+    ...toolCall,
+    arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
+    ...(projectedResultData !== undefined && toolCall.result
+      ? {
+          result: {
+            ...toolCall.result,
+            data: projectedResultData,
+          },
+        }
+      : {}),
+  };
 }
 
 export function projectResourceValue(

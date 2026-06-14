@@ -15,7 +15,6 @@
     "@neko-agent/types": "workspace:*",
     "@tanstack/react-virtual": "^3.13.14",
     "@neko/shared": "workspace:*",
-    "@neko/ui": "workspace:*",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "devlop": "^1.1.0",

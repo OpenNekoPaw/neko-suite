@@ -89,14 +89,17 @@ export class ConversationPersistenceRuntime {
     }
 
     try {
-      void this.options.storage.save(plan.record).then(
-        () => this.options.storage.flush?.(),
-        (error: unknown) => {
+      void this.options.storage
+        .save(plan.record)
+        .then(
+          () => this.options.storage.flush?.(),
+          (error: unknown) => {
+            this.options.onWarning?.({ code: 'save-failed', conversationId, error });
+          },
+        )
+        .catch((error: unknown) => {
           this.options.onWarning?.({ code: 'save-failed', conversationId, error });
-        },
-      ).catch((error: unknown) => {
-        this.options.onWarning?.({ code: 'save-failed', conversationId, error });
-      });
+        });
     } catch (error: unknown) {
       this.options.onWarning?.({ code: 'save-failed', conversationId, error });
     }
@@ -129,14 +132,17 @@ export class ConversationPersistenceRuntime {
 
   private queueDelete(conversationId: string): void {
     try {
-      void this.options.storage.delete(conversationId).then(
-        () => this.options.storage.flush?.(),
-        (error: unknown) => {
+      void this.options.storage
+        .delete(conversationId)
+        .then(
+          () => this.options.storage.flush?.(),
+          (error: unknown) => {
+            this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
+          },
+        )
+        .catch((error: unknown) => {
           this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
-        },
-      ).catch((error: unknown) => {
-        this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
-      });
+        });
     } catch (error: unknown) {
       this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
     }

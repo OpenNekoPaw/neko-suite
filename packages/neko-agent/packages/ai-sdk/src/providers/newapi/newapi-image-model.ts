@@ -737,9 +737,7 @@ async function grayscaleMaskToTransparentPng(input: Uint8Array): Promise<MaskCon
     const pipeline = sharp(input) as {
       ensureAlpha: () => {
         raw: () => {
-          toBuffer: (options: {
-            resolveWithObject: true;
-          }) => Promise<{
+          toBuffer: (options: { resolveWithObject: true }) => Promise<{
             data: Buffer;
             info: { width: number; height: number; channels: number };
           }>;

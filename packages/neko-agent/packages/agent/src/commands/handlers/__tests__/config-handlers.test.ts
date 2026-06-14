@@ -244,7 +244,7 @@ describe('handleInit', () => {
     expect(result.output).toContain('.neko/');
     expect(result.output).toContain('skills/');
     expect(result.output).toContain('commands/');
-    expect(result.output).toContain('hooks/');
+    expect(result.output).toContain('settings.json');
   });
 
   it('should work with empty context', () => {

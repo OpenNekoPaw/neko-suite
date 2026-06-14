@@ -63,8 +63,8 @@ describe('content block presenter', () => {
     expect(markdown).toMatchObject({
       renderKind: 'markdown',
       siblingBlocks: blocks,
+      toolCalls: [blocks[0]?.toolCall],
     });
-    expect(markdown).not.toHaveProperty('toolCalls');
   });
 });
 

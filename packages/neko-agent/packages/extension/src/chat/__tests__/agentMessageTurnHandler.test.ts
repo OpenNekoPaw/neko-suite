@@ -67,7 +67,7 @@ import {
   buildProviderExpressionTargets,
   type AgentMessageRuntimeRequest,
 } from '@neko/agent/runtime';
-import type { SubAgentEvent } from '@neko/agent';
+import { DEFAULT_MENTION_EXCLUDE_GLOB, type SubAgentEvent } from '@neko/agent';
 import { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 
 // Mock @neko/agent module - createInputProcessor is used inside _getInputProcessor
@@ -793,7 +793,7 @@ describe('AgentMessageTurnHandler', () => {
 
       expect(vscode.workspace.findFiles).toHaveBeenCalledWith(
         '**/*app*',
-        '**/node_modules/**,**/.git/**,**/dist/**,**/build/**',
+        DEFAULT_MENTION_EXCLUDE_GLOB,
         30,
       );
       expect(webview.postMessage).toHaveBeenCalledWith({
@@ -890,7 +890,9 @@ describe('AgentMessageTurnHandler', () => {
           kinds: expect.arrayContaining(['asset', 'media', 'creative-entity']),
         }),
       );
-      expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
+      expect(vscode.workspace.fs.readFile).toHaveBeenCalledWith({
+        fsPath: '/workspace/.gitignore',
+      });
       expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
         webview,
         '/workspace/thumbs/hero.png',

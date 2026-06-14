@@ -703,7 +703,7 @@ describe('FeedbackCoordinator', () => {
           kind: 'set-guidance',
           guidance:
             '- Repair the failed tool step for Write. Diagnose the error "permission denied" ' +
-            'and choose a safer fallback if needed.',
+            'and choose a safer substitute if needed.',
           signalKinds: ['tool-failure'],
         },
       ],

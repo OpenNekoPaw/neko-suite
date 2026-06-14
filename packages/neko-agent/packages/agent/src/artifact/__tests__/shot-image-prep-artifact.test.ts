@@ -54,6 +54,7 @@ describe('shot image prep artifact projection', () => {
         persisted: true,
         profiles: [prepArtifactProfile, COMIC_SHOT_ASSET_PREP_PROFILE],
         resolvedSchemaRefs: [
+          'neko.shot-image-prep.image-audit',
           'neko.shot-image-prep.mask-refs',
           'neko.shot-image-prep.reference-bundle',
         ],

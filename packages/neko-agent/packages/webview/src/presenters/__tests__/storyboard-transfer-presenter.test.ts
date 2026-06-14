@@ -471,6 +471,18 @@ describe('storyboard transfer presenter', () => {
                 characterAction: 'The character turns.',
                 emotion: [],
                 sceneTags: [],
+                sourceMediaRefs: [
+                  {
+                    refId: 'page-1-panel',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-1',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
                 referenceImageResourceRef: resourceRef,
               },
             ],

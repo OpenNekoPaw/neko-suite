@@ -34,10 +34,10 @@ describe('registerRuntimeProviderCardDirectories', () => {
     expect(registerDirectory).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        root: '/workspace/project/.neko/providers',
+        root: '/workspace/project/neko/providers',
         sourceLayer: 'project',
         recursive: false,
-        sourceRefPrefix: '.neko/providers',
+        sourceRefPrefix: 'neko/providers',
       }),
     );
     expect(result).toEqual({

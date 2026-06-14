@@ -1332,7 +1332,7 @@ describe('AgentSession', () => {
             {
               kind: 'set-guidance',
               guidance:
-                '- Repair the failed tool step for Write. Diagnose the error "permission denied" and choose a safer fallback if needed.',
+                '- Repair the failed tool step for Write. Diagnose the error "permission denied" and choose a safer substitute if needed.',
               signalKinds: ['tool-failure'],
             },
           ],
@@ -3867,7 +3867,9 @@ describe('AgentSession', () => {
           pending: [],
         },
         feedback: {
-          pendingGuidance: '- Repair the failing draft artifact before retrying.',
+          pendingGuidance: {
+            content: '- Repair the failing draft artifact before retrying.',
+          },
         },
       });
       const restoredFsOps = {

@@ -88,6 +88,7 @@ describe('createPluginSkillDiscoveryTools', () => {
 
   it('returns a failed tool result when the host source throws', async () => {
     const logger = {
+      debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
     };
