@@ -110,6 +110,30 @@ Do not mark a task complete solely because code was written. It is complete when
 the intended behavior is implemented and the planned validation is run or an
 explicit residual risk is recorded.
 
+### Prelaunch Breaking Migrations
+
+Neko Suite is prelaunch. OpenSpec changes may choose deliberate breaking
+migrations for unreleased or internal project formats, DTOs, commands, runtime
+payloads, and workflow contracts when doing so removes legacy debt or keeps the
+canonical architecture clearer than maintaining compatibility shims.
+
+Breaking migrations must be explicit, not incidental:
+
+- State in the proposal or design what is breaking and why prelaunch cleanup is
+  the better tradeoff.
+- Identify affected files, contracts, persisted state, fixtures, and user
+  workflows.
+- Define whether existing data is migrated, rebuilt, reimported, ignored, or
+  intentionally discarded.
+- Add validation tasks for load/save, contract fixtures, failure diagnostics,
+  and any migration or rebuild path.
+- Avoid compatibility shims unless they protect valuable local data or an
+  already documented public contract.
+
+Even before launch, do not break security or trust state, marketplace/plugin
+governance, external provider contracts, published release artifacts, or durable
+user data without explicit migration, rollback, or user-confirmation semantics.
+
 ## Architecture Principles
 
 ### Contract First
