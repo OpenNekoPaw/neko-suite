@@ -1,15 +1,21 @@
 import {
   NarrativeRuntime,
   WhitelistConditionEvaluator,
+  createNarrativeProductionBindingContentAccessRequest,
   isNarrativeAssetRef,
   isResourceRef,
   validateNarrativeAssetRef,
+  validateNarrativeProductionBinding,
+  type ContentAccessRequest,
+  type ContentAccessResult,
   type ContentAccessIntent,
+  type ContentStableSourceRef,
   type NarrativeAssetRef,
   type NarrativeAssetResolveResult,
   type NarrativeAssetResolver,
   type NarrativeGraphSnapshot,
   type NarrativeNodeSnapshot,
+  type NarrativeProductionBinding,
 } from '@neko/shared';
 import {
   loadFountainPlayScene,
@@ -27,6 +33,10 @@ import {
 } from './html5RuntimeBundle';
 
 export type NarrativeExportArtifactKind = 'html' | 'data' | 'runtime' | 'renderer' | 'asset';
+
+export type NarrativeExportMediaRef = NarrativeAssetRef | ContentStableSourceRef;
+
+export type NarrativeExportMediaResolveResult = NarrativeAssetResolveResult | ContentAccessResult;
 
 export interface NarrativeExportArtifact {
   readonly path: string;
@@ -57,16 +67,19 @@ export interface NarrativeExportDiagnostic {
   readonly nodeId?: string;
   readonly connectionId?: string;
   readonly path?: string;
-  readonly assetRef?: NarrativeAssetRef;
+  readonly assetRef?: NarrativeExportMediaRef;
+  readonly bindingId?: string;
 }
 
 export interface NarrativePackagedAsset {
   readonly id: string;
-  readonly ref: NarrativeAssetRef;
+  readonly ref: NarrativeExportMediaRef;
   readonly outputPath: string;
-  readonly finalExportStatus?: NarrativeAssetResolveResult['status'];
-  readonly packageStatus?: NarrativeAssetResolveResult['status'];
+  readonly finalExportStatus?: NarrativeExportMediaResolveResult['status'];
+  readonly packageStatus?: NarrativeExportMediaResolveResult['status'];
   readonly mimeType?: string;
+  readonly source?: 'narrative-asset' | 'production-binding';
+  readonly productionBindingId?: string;
 }
 
 export interface NarrativeExportStoryData {
@@ -85,14 +98,15 @@ export interface NarrativeExportResult {
 }
 
 export interface NarrativeExportAssetCopyInput {
-  readonly ref: NarrativeAssetRef;
+  readonly ref: NarrativeExportMediaRef;
   readonly outputPath: string;
-  readonly finalExportResult?: NarrativeAssetResolveResult;
-  readonly packageResult?: NarrativeAssetResolveResult;
+  readonly finalExportResult?: NarrativeExportMediaResolveResult;
+  readonly packageResult?: NarrativeExportMediaResolveResult;
 }
 
 export interface NarrativeExporterOptions {
   readonly assetResolver?: NarrativeAssetResolver;
+  readonly contentAccessResolver?: NarrativeExportContentAccessResolver;
   readonly readScene?: (sceneRef: string) => Promise<string | undefined> | string | undefined;
   readonly copyAsset?: (
     input: NarrativeExportAssetCopyInput,
@@ -101,15 +115,37 @@ export interface NarrativeExporterOptions {
   readonly rendererBundle?: string;
 }
 
-interface CollectedAsset {
-  readonly ref: NarrativeAssetRef;
+export interface NarrativeExportContentAccessResolver {
+  resolve(request: ContentAccessRequest): Promise<ContentAccessResult>;
+}
+
+type CollectedAsset = CollectedNarrativeAsset | CollectedProductionBindingAsset;
+
+interface CollectedAssetBase {
+  readonly ref: NarrativeExportMediaRef;
   readonly nodeId?: string;
   readonly path?: string;
 }
 
+interface CollectedNarrativeAsset extends CollectedAssetBase {
+  readonly source: 'narrative-asset';
+  readonly ref: NarrativeAssetRef;
+}
+
+interface CollectedProductionBindingAsset extends CollectedAssetBase {
+  readonly source: 'production-binding';
+  readonly ref: NarrativeExportMediaRef;
+  readonly binding: NarrativeProductionBinding;
+}
+
+interface CollectedProductionBinding {
+  readonly binding: NarrativeProductionBinding;
+  readonly nodeId?: string;
+}
+
 interface AssetResolvePair {
-  readonly finalExportResult?: NarrativeAssetResolveResult;
-  readonly packageResult?: NarrativeAssetResolveResult;
+  readonly finalExportResult?: NarrativeExportMediaResolveResult;
+  readonly packageResult?: NarrativeExportMediaResolveResult;
 }
 
 interface AssetResolvePlan {
@@ -133,6 +169,7 @@ export class NarrativeExporter {
     const diagnostics: NarrativeExportDiagnostic[] = [];
     const scenes = await this.loadScenes(snapshot, diagnostics);
     const assets = collectAssets(snapshot, scenes);
+    const productionBindings = collectProductionBindings(snapshot);
     const characterBindings = normalizeNarrativeCharacterBindings(
       snapshot.charactersYaml,
     ).characters;
@@ -140,17 +177,13 @@ export class NarrativeExporter {
     diagnostics.push(...validateRuntimeGraph(snapshot));
     diagnostics.push(...validateConditions(snapshot));
     diagnostics.push(...validateAssets(assets));
+    diagnostics.push(...validateProductionBindings(productionBindings));
 
-    const hasAssetValidationError = diagnostics.some(
-      (diagnostic) =>
-        diagnostic.code === 'export-invalid-asset-ref' ||
-        diagnostic.code === 'export-runtime-asset-ref' ||
-        diagnostic.code === 'export-non-portable-absolute-path',
-    );
+    const hasAssetValidationError = diagnostics.some(isAssetValidationBlockingDiagnostic);
     const assetPlan = hasAssetValidationError
       ? {
           packagedAssets: dedupeAssets(assets).map((asset, index) =>
-            toPackagedAsset(asset.ref, index, {}),
+            toPackagedAsset(asset, index, {}),
           ),
           resolvedByOutputPath: new Map<string, AssetResolvePair>(),
         }
@@ -225,14 +258,15 @@ export class NarrativeExporter {
     diagnostics: NarrativeExportDiagnostic[],
   ): Promise<AssetResolvePlan> {
     const uniqueAssets = dedupeAssets(assets);
-    if (uniqueAssets.length > 0 && !this.options.assetResolver) {
+    if (uniqueAssets.length > 0 && uniqueAssets.some((asset) => !this.canResolveAsset(asset))) {
       diagnostics.push({
         code: 'export-asset-resolver-missing',
         severity: 'error',
-        message: 'Narrative export requires an asset resolver for durable media refs.',
+        message:
+          'Narrative export requires an asset resolver or content access resolver for durable media refs.',
       });
       return {
-        packagedAssets: uniqueAssets.map((asset, index) => toPackagedAsset(asset.ref, index, {})),
+        packagedAssets: uniqueAssets.map((asset, index) => toPackagedAsset(asset, index, {})),
         resolvedByOutputPath: new Map(),
       };
     }
@@ -242,8 +276,8 @@ export class NarrativeExporter {
     for (let index = 0; index < uniqueAssets.length; index += 1) {
       const asset = uniqueAssets[index];
       if (!asset) continue;
-      const resolved = await this.resolveAssetPair(asset.ref);
-      const packaged = toPackagedAsset(asset.ref, index, resolved);
+      const resolved = await this.resolveAssetPair(asset);
+      const packaged = toPackagedAsset(asset, index, resolved);
       packagedAssets.push(packaged);
       resolvedByOutputPath.set(packaged.outputPath, resolved);
 
@@ -252,13 +286,44 @@ export class NarrativeExporter {
     return { packagedAssets, resolvedByOutputPath };
   }
 
-  private async resolveAssetPair(ref: NarrativeAssetRef): Promise<AssetResolvePair> {
-    if (!this.options.assetResolver) return {};
+  private canResolveAsset(asset: CollectedAsset): boolean {
+    if (asset.source === 'narrative-asset') return Boolean(this.options.assetResolver);
+    return Boolean(
+      this.options.contentAccessResolver ||
+      (this.options.assetResolver && productionBindingToNarrativeAssetRef(asset.binding)),
+    );
+  }
+
+  private async resolveAssetPair(asset: CollectedAsset): Promise<AssetResolvePair> {
+    if (asset.source === 'production-binding' && this.options.contentAccessResolver) {
+      return this.resolveProductionBindingPair(asset.binding);
+    }
+
+    const ref =
+      asset.source === 'narrative-asset'
+        ? asset.ref
+        : productionBindingToNarrativeAssetRef(asset.binding);
+    if (!ref || !this.options.assetResolver) return {};
     const [finalExportResult, packageResult] = await Promise.all([
       resolveAsset(this.options.assetResolver, ref, 'final-export'),
       resolveAsset(this.options.assetResolver, ref, 'package'),
     ]);
     return { finalExportResult, packageResult };
+  }
+
+  private async resolveProductionBindingPair(
+    binding: NarrativeProductionBinding,
+  ): Promise<AssetResolvePair> {
+    const resolver = this.options.contentAccessResolver;
+    if (!resolver) return {};
+    const [finalExportResult, packageResult] = await Promise.all([
+      resolveProductionBinding(resolver, binding, 'final-export'),
+      resolveProductionBinding(resolver, binding, 'package'),
+    ]);
+    return {
+      ...(finalExportResult ? { finalExportResult } : {}),
+      ...(packageResult ? { packageResult } : {}),
+    };
   }
 
   private async createArtifacts(
@@ -295,12 +360,13 @@ export class NarrativeExporter {
 
     for (const asset of assetPlan.packagedAssets) {
       const pair = assetPlan.resolvedByOutputPath.get(asset.outputPath);
-      const content = await this.options.copyAsset?.({
+      const copied = await this.options.copyAsset?.({
         ref: asset.ref,
         outputPath: asset.outputPath,
         finalExportResult: pair?.finalExportResult,
         packageResult: pair?.packageResult,
       });
+      const content = copied ?? readPackagedBytes(pair?.packageResult);
       if (content !== undefined) {
         artifacts.push({
           path: asset.outputPath,
@@ -336,6 +402,19 @@ async function resolveAsset(
     role: 'source',
     metadata: { caller: 'neko-story:narrative-export' },
   });
+}
+
+async function resolveProductionBinding(
+  resolver: NarrativeExportContentAccessResolver,
+  binding: NarrativeProductionBinding,
+  intent: ContentAccessIntent,
+): Promise<ContentAccessResult | undefined> {
+  const request = createNarrativeProductionBindingContentAccessRequest(binding, {
+    intent,
+    target: intent === 'package' ? 'bytes' : 'local-path',
+    caller: 'neko-story:narrative-export',
+  });
+  return request ? resolver.resolve(request) : undefined;
 }
 
 function validateRuntimeGraph(
@@ -387,6 +466,7 @@ function validateConditions(
 function validateAssets(assets: readonly CollectedAsset[]): readonly NarrativeExportDiagnostic[] {
   const diagnostics: NarrativeExportDiagnostic[] = [];
   for (const asset of assets) {
+    if (asset.source !== 'narrative-asset') continue;
     for (const assetDiagnostic of validateNarrativeAssetRef(asset.ref)) {
       diagnostics.push({
         code:
@@ -406,6 +486,20 @@ function validateAssets(assets: readonly CollectedAsset[]): readonly NarrativeEx
   return diagnostics;
 }
 
+function validateProductionBindings(
+  bindings: readonly CollectedProductionBinding[],
+): readonly NarrativeExportDiagnostic[] {
+  return bindings.flatMap((entry) =>
+    validateNarrativeProductionBinding(entry.binding).map((diagnostic) => ({
+      code: 'export-runtime-asset-ref' as const,
+      severity: 'error' as const,
+      message: diagnostic.message,
+      nodeId: entry.nodeId,
+      bindingId: entry.binding.bindingId,
+    })),
+  );
+}
+
 function collectAssets(
   snapshot: NarrativeGraphSnapshot,
   scenes: Readonly<Record<string, FountainPlayScene>>,
@@ -413,6 +507,7 @@ function collectAssets(
   const assets: CollectedAsset[] = [];
   for (const node of snapshot.nodes) {
     assets.push(...collectNodeAssets(node));
+    assets.push(...collectNodeProductionBindingAssets(node));
   }
   for (const scene of Object.values(scenes)) {
     for (const directive of scene.directives) {
@@ -422,7 +517,7 @@ function collectAssets(
       assets.push(...collectCharacterBindingAssets(binding));
     }
     for (const binding of scene.backgroundBindings) {
-      assets.push({ ref: binding.ref, path: binding.ref.path });
+      assets.push({ source: 'narrative-asset', ref: binding.ref, path: binding.ref.path });
     }
   }
   return assets;
@@ -432,6 +527,7 @@ function collectNodeAssets(node: NarrativeNodeSnapshot): readonly CollectedAsset
   const assets: CollectedAsset[] = [];
   if (node.scene?.backgroundRef) {
     assets.push({
+      source: 'narrative-asset',
       ref: node.scene.backgroundRef,
       nodeId: node.nodeId,
       path: assetRefPath(node.scene.backgroundRef),
@@ -439,6 +535,7 @@ function collectNodeAssets(node: NarrativeNodeSnapshot): readonly CollectedAsset
   }
   if (node.scene?.bgm) {
     assets.push({
+      source: 'narrative-asset',
       ref: node.scene.bgm,
       nodeId: node.nodeId,
       path: assetRefPath(node.scene.bgm),
@@ -447,15 +544,51 @@ function collectNodeAssets(node: NarrativeNodeSnapshot): readonly CollectedAsset
   for (const field of ['videoRef', 'posterRef'] as const) {
     const ref = readAssetRefFromUnknown(node.data[field]);
     if (ref) {
-      assets.push({ ref, nodeId: node.nodeId, path: assetRefPath(ref) });
+      assets.push({ source: 'narrative-asset', ref, nodeId: node.nodeId, path: assetRefPath(ref) });
     }
   }
   return assets;
 }
 
+function collectNodeProductionBindingAssets(
+  node: NarrativeNodeSnapshot,
+): readonly CollectedAsset[] {
+  return (node.scene?.productionRefs ?? []).flatMap((binding) => {
+    const ref = productionBindingToExportMediaRef(binding);
+    return ref
+      ? [
+          {
+            source: 'production-binding' as const,
+            ref,
+            binding,
+            nodeId: node.nodeId,
+            path: exportMediaRefPath(ref),
+          },
+        ]
+      : [];
+  });
+}
+
+function collectProductionBindings(
+  snapshot: NarrativeGraphSnapshot,
+): readonly CollectedProductionBinding[] {
+  return snapshot.nodes.flatMap((node) =>
+    (node.scene?.productionRefs ?? []).map((binding) => ({
+      binding,
+      nodeId: node.nodeId,
+    })),
+  );
+}
+
 function collectDirectiveAssets(directive: PlayDirective): readonly CollectedAsset[] {
   if (directive.type === 'scene-heading' && directive.backgroundRef) {
-    return [{ ref: directive.backgroundRef, path: directive.backgroundRef.path }];
+    return [
+      {
+        source: 'narrative-asset',
+        ref: directive.backgroundRef,
+        path: directive.backgroundRef.path,
+      },
+    ];
   }
   if (directive.type === 'dialogue' && directive.characterRef) {
     return collectCharacterBindingAssets(directive.characterRef);
@@ -480,7 +613,7 @@ function collectCharacterBindingAssets(binding: PlayCharacterBinding): readonly 
 
 function pushPlayAsset(assets: CollectedAsset[], ref: PlayNarrativeAssetRef | undefined): void {
   if (ref) {
-    assets.push({ ref, path: ref.path });
+    assets.push({ source: 'narrative-asset', ref, path: ref.path });
   }
 }
 
@@ -496,7 +629,10 @@ function dedupeAssets(assets: readonly CollectedAsset[]): readonly CollectedAsse
   const result: CollectedAsset[] = [];
   const seen = new Set<string>();
   for (const asset of assets) {
-    const key = JSON.stringify(asset.ref);
+    const key =
+      asset.source === 'production-binding'
+        ? `${asset.source}:${asset.binding.bindingId}:${JSON.stringify(asset.ref)}`
+        : `${asset.source}:${JSON.stringify(asset.ref)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(asset);
@@ -505,18 +641,22 @@ function dedupeAssets(assets: readonly CollectedAsset[]): readonly CollectedAsse
 }
 
 function toPackagedAsset(
-  ref: NarrativeAssetRef,
+  asset: CollectedAsset,
   index: number,
   resolved: AssetResolvePair,
 ): NarrativePackagedAsset {
-  const outputPath = `assets/media/${String(index + 1).padStart(3, '0')}-${assetOutputName(ref)}`;
+  const outputPath = `assets/media/${String(index + 1).padStart(3, '0')}-${assetOutputName(asset.ref)}`;
   return {
     id: `asset-${index + 1}`,
-    ref,
+    ref: asset.ref,
     outputPath,
     finalExportStatus: resolved.finalExportResult?.status,
     packageStatus: resolved.packageResult?.status,
     mimeType: resolved.packageResult?.mimeType ?? resolved.finalExportResult?.mimeType,
+    source: asset.source,
+    ...(asset.source === 'production-binding'
+      ? { productionBindingId: asset.binding.bindingId }
+      : {}),
   };
 }
 
@@ -533,6 +673,7 @@ function reportAssetResolveDiagnostics(
       nodeId: asset.nodeId,
       path: asset.path,
       assetRef: asset.ref,
+      ...(asset.source === 'production-binding' ? { bindingId: asset.binding.bindingId } : {}),
     });
   }
   if (resolved.packageResult && resolved.packageResult.status !== 'ready') {
@@ -543,8 +684,52 @@ function reportAssetResolveDiagnostics(
       nodeId: asset.nodeId,
       path: asset.path,
       assetRef: asset.ref,
+      ...(asset.source === 'production-binding' ? { bindingId: asset.binding.bindingId } : {}),
     });
   }
+}
+
+function isAssetValidationBlockingDiagnostic(diagnostic: NarrativeExportDiagnostic): boolean {
+  return (
+    diagnostic.code === 'export-invalid-asset-ref' ||
+    diagnostic.code === 'export-runtime-asset-ref' ||
+    diagnostic.code === 'export-non-portable-absolute-path'
+  );
+}
+
+function productionBindingToExportMediaRef(
+  binding: NarrativeProductionBinding,
+): NarrativeExportMediaRef | undefined {
+  const narrativeRef = productionBindingToNarrativeAssetRef(binding);
+  if (narrativeRef) return narrativeRef;
+  const request = createNarrativeProductionBindingContentAccessRequest(binding, {
+    intent: 'package',
+    target: 'bytes',
+    caller: 'neko-story:narrative-export',
+  });
+  return request?.ref.kind === 'runtime' ? undefined : request?.ref;
+}
+
+function productionBindingToNarrativeAssetRef(
+  binding: NarrativeProductionBinding,
+): NarrativeAssetRef | undefined {
+  const target = binding.target;
+  if (target.kind !== 'asset') return undefined;
+  const ref = target.ref;
+  if (isNarrativeAssetRef(ref)) return ref;
+  return undefined;
+}
+
+function readPackagedBytes(
+  packageResult: NarrativeExportMediaResolveResult | undefined,
+): Uint8Array | undefined {
+  return isContentAccessResult(packageResult) ? packageResult.bytes : undefined;
+}
+
+function isContentAccessResult(
+  value: NarrativeExportMediaResolveResult | undefined,
+): value is ContentAccessResult {
+  return Boolean(value && 'request' in value);
 }
 
 function readSceneContentFromSnapshot(
@@ -615,8 +800,8 @@ function createIndexHtml(): string {
 </html>`;
 }
 
-function assetOutputName(ref: NarrativeAssetRef): string {
-  const source = assetRefPath(ref) ?? (isResourceRef(ref) ? ref.id : 'asset');
+function assetOutputName(ref: NarrativeExportMediaRef): string {
+  const source = exportMediaRefPath(ref) ?? exportMediaRefId(ref) ?? 'asset';
   const base = source.split(/[\\/]/).filter(Boolean).pop() ?? 'asset';
   const sanitized = base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
   return sanitized.length > 0 ? sanitized : 'asset';
@@ -627,6 +812,39 @@ function assetRefPath(ref: NarrativeAssetRef): string | undefined {
   if (ref.source.projectRelativePath) return ref.source.projectRelativePath;
   if (ref.source.filePath) return ref.source.filePath;
   return ref.locator?.kind === 'file' ? ref.locator.path : undefined;
+}
+
+function exportMediaRefPath(ref: NarrativeExportMediaRef): string | undefined {
+  if (isNarrativeAssetRef(ref)) return assetRefPath(ref);
+  if (isResourceRef(ref)) return assetRefPath(ref);
+  switch (ref.kind) {
+    case 'document':
+      return ref.entryPath ?? (ref.locator?.kind === 'file' ? ref.locator.path : undefined);
+    case 'asset':
+      return ref.sourcePath;
+    case 'file':
+      return ref.path;
+    case 'media-library':
+      return ref.path ?? ref.assetId;
+    case 'generated-asset':
+      return ref.path ?? ref.assetId;
+  }
+}
+
+function exportMediaRefId(ref: NarrativeExportMediaRef): string | undefined {
+  if (isResourceRef(ref)) return ref.id;
+  if (isNarrativeAssetRef(ref)) return undefined;
+  switch (ref.kind) {
+    case 'asset':
+      return ref.assetId;
+    case 'media-library':
+      return ref.assetId ?? ref.libraryId;
+    case 'generated-asset':
+      return ref.assetId;
+    case 'document':
+    case 'file':
+      return undefined;
+  }
 }
 
 function stripDotSlash(value: string): string {

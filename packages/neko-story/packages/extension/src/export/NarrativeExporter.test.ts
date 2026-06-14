@@ -2,6 +2,8 @@ import { Script } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import {
   NarrativeRuntime,
+  type ContentAccessRequest,
+  type ContentAccessResult,
   type ContentAccessIntent,
   type NarrativeAssetRef,
   type NarrativeAssetResolveResult,
@@ -73,7 +75,12 @@ describe('NarrativeExporter', () => {
 
   it('validates unsupported conditions, missing endings, and non-portable runtime assets', async () => {
     const resolver: NarrativeAssetResolver = {
-      resolve: vi.fn(async (ref, intent) => ({ status: 'ready', ref, intent })),
+      resolve: vi.fn(
+        async (
+          ref: NarrativeAssetRef,
+          intent: ContentAccessIntent,
+        ): Promise<NarrativeAssetResolveResult> => ({ status: 'ready', ref, intent }),
+      ),
     };
     const exporter = new NarrativeExporter({ assetResolver: resolver });
     const graph = createGraph({
@@ -121,6 +128,155 @@ describe('NarrativeExporter', () => {
       ]),
     );
     expect(resolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('packages generated-video production bindings through content access export intents', async () => {
+    const requests: ContentAccessRequest[] = [];
+    const contentAccessResolver = {
+      resolve: vi.fn(async (request: ContentAccessRequest): Promise<ContentAccessResult> => {
+        requests.push(request);
+        return {
+          status: 'ready',
+          request,
+          source: request.ref.kind === 'runtime' ? undefined : request.ref,
+          localPath: request.intent === 'final-export' ? '/tmp/final/generated.mp4' : undefined,
+          bytes: request.intent === 'package' ? new Uint8Array([4, 5, 6]) : undefined,
+          mimeType: 'video/mp4',
+        };
+      }),
+    };
+    const assetResolver: NarrativeAssetResolver = {
+      resolve: vi.fn(
+        async (
+          ref: NarrativeAssetRef,
+          intent: ContentAccessIntent,
+        ): Promise<NarrativeAssetResolveResult> => ({ status: 'ready', ref, intent }),
+      ),
+    };
+    const exporter = new NarrativeExporter({ assetResolver, contentAccessResolver });
+    const graph = createGraph({
+      metadata: { ...createGraph().metadata, genre: 'interactive-film' },
+      nodes: createGraph().nodes.map((node) =>
+        node.nodeId === 'scene-a'
+          ? {
+              ...node,
+              scene: {
+                ...node.scene,
+                productionRefs: [
+                  {
+                    bindingId: 'bind-video-1',
+                    role: 'primary',
+                    target: {
+                      kind: 'generated-video',
+                      ref: {
+                        kind: 'generated-asset',
+                        assetId: 'generated-video-1',
+                        resourceRef: createGeneratedVideoResource(),
+                      },
+                    },
+                  },
+                ],
+              },
+            }
+          : node,
+      ),
+    });
+
+    const result = await exporter.export(graph);
+
+    expect(result.ok).toBe(true);
+    expect(requests.map((request) => request.intent)).toEqual(
+      expect.arrayContaining(['final-export', 'package']),
+    );
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          intent: 'final-export',
+          target: 'local-path',
+          metadata: expect.objectContaining({ bindingId: 'bind-video-1' }),
+        }),
+        expect.objectContaining({
+          intent: 'package',
+          target: 'bytes',
+          metadata: expect.objectContaining({ productionTargetKind: 'generated-video' }),
+        }),
+      ]),
+    );
+    expect(result.story.assets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'production-binding',
+          productionBindingId: 'bind-video-1',
+          finalExportStatus: 'ready',
+          packageStatus: 'ready',
+          mimeType: 'video/mp4',
+        }),
+      ]),
+    );
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'asset',
+          path: expect.stringMatching(/^assets\/media\/\d+-generated-video-1$/),
+          content: new Uint8Array([4, 5, 6]),
+        }),
+      ]),
+    );
+  });
+
+  it('rejects runtime-only production bindings during export packaging', async () => {
+    const contentAccessResolver = {
+      resolve: vi.fn(
+        async (request: ContentAccessRequest): Promise<ContentAccessResult> => ({
+          status: 'ready',
+          request,
+        }),
+      ),
+    };
+    const exporter = new NarrativeExporter({ contentAccessResolver });
+    const graph = createGraph({
+      nodes: createGraph().nodes.map((node) =>
+        node.nodeId === 'scene-a'
+          ? {
+              ...node,
+              scene: {
+                ...node.scene,
+                productionRefs: [
+                  {
+                    bindingId: 'bind-runtime-video',
+                    role: 'primary',
+                    target: {
+                      kind: 'generated-video',
+                      ref: {
+                        kind: 'generated-asset',
+                        assetId: 'generated-video-1',
+                        resourceRef: {
+                          ...createGeneratedVideoResource(),
+                          id: 'blob:runtime-video',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            }
+          : node,
+      ),
+    });
+
+    const result = await exporter.export(graph);
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'export-runtime-asset-ref',
+          bindingId: 'bind-runtime-video',
+          nodeId: 'scene-a',
+        }),
+      ]),
+    );
+    expect(contentAccessResolver.resolve).not.toHaveBeenCalled();
   });
 
   it('keeps exported HTML5 runtime semantics aligned with the shared Preview runtime', () => {
@@ -270,5 +426,19 @@ function createGraph(overrides: Partial<NarrativeGraphSnapshot> = {}): Narrative
       },
     ],
     ...overrides,
+  };
+}
+
+function createGeneratedVideoResource() {
+  return {
+    id: 'generated-video-1',
+    scope: 'project' as const,
+    provider: 'generated',
+    kind: 'generated' as const,
+    source: {
+      kind: 'generated-asset' as const,
+      generatedAssetId: 'generated-video-1',
+    },
+    fingerprint: { strategy: 'provider' as const, value: 'generated-video-1' },
   };
 }
