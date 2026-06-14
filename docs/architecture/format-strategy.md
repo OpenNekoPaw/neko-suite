@@ -35,6 +35,10 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 
 **交互叙事格式边界**：Canvas 交互叙事不新增 `.nkstory`，也不使用历史 `.nks` / `.story` Story 语言文件。`.nkc` 是分支图 SSOT，保存 `narrative-start`、`narrative-scene`、`choice`、`merge`、`narrative-ending`、变量和连线；`narrative-scene.sceneRef` 只引用标准 `.fountain` 场景文件。这里的排除仅指 Story/交互叙事用途，`.nks` 仍是 neko-sketch 的 2D 绘画项目格式。
 
+**Canvas 长叙事 scope 边界**：`.nkc` 不是“只能是一场戏”或“必须是一整集”的文件格式。Canvas 可通过可选 `creativeScope` 声明当前工作单元是 episode overview、sequence、scene、shot-cluster、interactive-narrative 或 generic；`relatedBoards` 用 workspace-relative path、project/resource ref 等 durable ref 连接其他画布。scope 只是导航和上下文元数据，不是 Canvas kind discriminator，也不限制节点类型、子系统或播放 adapter。长剧集推荐用 episode overview 连接 sequence/scene/shot-cluster board，避免把完整 TV 集塞进单个巨大画布。
+
+**生产绑定边界**：Canvas narrative graph 仍是互动分支 SSOT；`narrative-scene.productionRefs[]` 只保存到 StoryboardTable scene/shot、Canvas node、Cut clip、generated video 或 asset 的 durable binding。Preview、package、final-export 必须通过 content access resolver 使用 `interactive-preview` / `package` / `final-export` intent 解析这些 refs，不得把 Webview URI、blob URL、localhost URL、绝对缓存路径或 provider run handle 写入 `.nkc`。
+
 **Fountain `[[KEY: value]]` 指令扩展**：neko-story 通过 Fountain 标准的 Notes 语法 `[[...]]` 支持结构化指令，保持与其他 Fountain 工具的兼容性（标准渲染器将 `[[...]]` 视为不可见注释）。
 
 | 类别 | 指令键 | 示例 |

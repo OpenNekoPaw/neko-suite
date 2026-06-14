@@ -107,6 +107,10 @@ INT. 咖啡馆 - 白天
 
 **格式边界**：`narrative-scene.sceneRef` 只指向标准 `.fountain` 文件。分支、条件、变量、入口、终点和路径诊断属于 `.nkc` Canvas 图；`.nks` / `.story` / standalone `.nkstory` 是废弃的 Story/交互叙事设计，不参与 Preview、Agent 诊断或 HTML5 Export。注意 `.nks` 仍是 neko-sketch 的 2D 绘画项目扩展名，本 ADR 排除的是历史 Story 语言用途。
 
+**生产绑定扩展**：`narrative-scene` 可额外保存 `productionRefs[]`，用于把互动影视节点绑定到 StoryboardTable scene/shot、Canvas scene/shot node、Cut clip、generated-video 或 asset。该字段只补充生产来源和可播放媒体引用，不参与分支推导，不覆盖 Canvas 连接、choice 条件、变量或 traversal order。Preview 使用 `interactive-preview` intent 解析 primary/fallback/generated-video binding；HTML5/package/final-export 使用 `package` 或 `final-export` intent 解析同一 durable ref。若 binding 只包含 Webview URI、blob URL、localhost runtime URL、绝对路径或 provider runtime handle，Canvas/Agent 必须给出 diagnostic，导出不得打包该 runtime-only 来源。
+
+**长叙事 Canvas scope**：一个 `.nkc` 可以是 episode overview、sequence、scene、shot-cluster 或 interactive-narrative board。`creativeScope` 与 `relatedBoards` 只提供导航和 Agent 上下文摘要，不能把 Canvas 文件锁定为单一用途。互动视频项目通常保留一个 narrative graph board 作为分支 SSOT，再用 related boards 连接线性分镜、视频片段、镜头簇和 Cut 装配板。
+
 **设计理由**：
 
 1. **激活模式一致**——Canvas 子系统因节点类型存在而激活（`summarizeCanvasSubsystems()`），narrative 子系统天然适合作为分支故事的创作面

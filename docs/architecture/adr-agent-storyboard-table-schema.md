@@ -42,6 +42,18 @@ Schema 契约 → LLM 文本计划 → Validator 校验 → Strategy 执行 → 
 - Canvas 仍是正式 storyboard 工作台；Story 仍是剧本事实与审阅入口；Agent 只持有当轮生成计划，不成为长期 storyboard 事实源。
 - 未来扩展到音频、视频、人物形象创作时，应沿用“纯文本计划 + capability provider + artifact refs/backfill + 专业子包事实源”的模式，而不是让 Agent 成为统一创作中心。
 
+### 2.4 AnimationPlan overlay 与执行状态边界
+
+`AnimationPlan` 不再作为第二张分镜表展示或持久化。它是绑定到 `StoryboardTable` 的执行意图 overlay：
+
+- `StoryboardTable` 继续拥有剧情、场景顺序、镜头顺序、人物、对白、声音提示、时长意图和来源媒体事实。
+- `AnimationPlan` 只通过 `sourceStoryboardRef` 与 `shotOverlays[].shotId` 引用分镜镜头，保存运动意图、镜头意图、图像准备、音视频提示词意图、审批提示和目标能力提示。
+- overlay 不复制分镜行，不按行号模糊匹配；缺失或过期 `shotId` 必须产生 diagnostic。
+- queued/running/completed/failed/progress/attempt/provider run id/task id 等运行态属于 Agent async task 或 execution summary，不写入 `StoryboardTable` 或 `AnimationPlan`。
+- Provider-specific prompt 可以作为缓存或展示结果存在，但稳定计划必须保留 provider-neutral intent，以便换 provider 时重新派生提示词。
+
+因此 Agent Webview 的创作者视图应把 compatible overlay 合并到 StoryboardTable 行级展示，而不是再渲染一个重复 table。plan-only payload 只能降级为紧凑计划摘要，并提示 source storyboard 缺失。
+
 ### 2.2 最终设计方案
 
 分镜表最终不是 Agent Chat 里的普通表格，而是一个可校验、可修复、可投影、可调度能力的结构化镜头计划。
