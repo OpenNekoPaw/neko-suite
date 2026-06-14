@@ -113,6 +113,33 @@ test('resolveFfmpegEnv discovers Chocolatey FFmpeg installs on Windows runners',
   });
 });
 
+test('resolveFfmpegEnv accepts Ubuntu multiarch FFmpeg dev package layout', () => {
+  const systemPrefix = '/usr';
+  const existing = new Set([
+    path.join(systemPrefix, 'include', 'x86_64-linux-gnu', 'libavutil', 'avutil.h'),
+    path.join(systemPrefix, 'lib', 'x86_64-linux-gnu'),
+    path.join(systemPrefix, 'lib', 'x86_64-linux-gnu', 'pkgconfig'),
+  ]);
+
+  const resolved = resolveFfmpegEnv({
+    env: {},
+    platform: 'linux',
+    platformKey: 'linux-x64',
+    existsSync(filePath) {
+      return existing.has(filePath);
+    },
+    execFileSync() {
+      return '';
+    },
+  });
+
+  assert.deepEqual(resolved, {
+    ffmpegDir: systemPrefix,
+    pkgConfigPath: path.join(systemPrefix, 'lib', 'x86_64-linux-gnu', 'pkgconfig'),
+    source: 'system',
+  });
+});
+
 test('createBuildEnv prepends pkg-config path without discarding the existing value', () => {
   const env = createBuildEnv(
     {

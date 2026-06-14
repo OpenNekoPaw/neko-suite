@@ -6,6 +6,8 @@ const path = require('path');
 
 const { DEPS_DIR, getCurrentPlatformKey, getTargetConfig } = require('./package-config');
 
+const LINUX_MULTIARCH_TRIPLES = ['x86_64-linux-gnu', 'aarch64-linux-gnu', 'arm-linux-gnueabihf'];
+
 /**
  * @typedef {{
  *   env?: NodeJS.ProcessEnv;
@@ -40,10 +42,14 @@ function isUsableFfmpegDir(candidate, deps = {}) {
   const includeCandidates = [
     path.join(candidate, 'include', 'libavutil', 'avutil.h'),
     path.join(candidate, 'include', 'ffmpeg', 'libavutil', 'avutil.h'),
+    ...LINUX_MULTIARCH_TRIPLES.map((triple) =>
+      path.join(candidate, 'include', triple, 'libavutil', 'avutil.h'),
+    ),
   ];
   const libCandidates = [
     path.join(candidate, 'lib'),
     path.join(candidate, 'lib64'),
+    ...LINUX_MULTIARCH_TRIPLES.map((triple) => path.join(candidate, 'lib', triple)),
     path.join(candidate, 'bin'),
   ];
 
@@ -60,8 +66,7 @@ function getPkgConfigPath(ffmpegDir, deps = {}) {
   const candidates = [
     path.join(ffmpegDir, 'lib', 'pkgconfig'),
     path.join(ffmpegDir, 'lib64', 'pkgconfig'),
-    path.join(ffmpegDir, 'lib', 'x86_64-linux-gnu', 'pkgconfig'),
-    path.join(ffmpegDir, 'lib', 'aarch64-linux-gnu', 'pkgconfig'),
+    ...LINUX_MULTIARCH_TRIPLES.map((triple) => path.join(ffmpegDir, 'lib', triple, 'pkgconfig')),
   ];
 
   for (const candidate of candidates) {
