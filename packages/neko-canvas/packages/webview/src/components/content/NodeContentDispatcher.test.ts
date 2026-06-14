@@ -898,8 +898,8 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:2124px');
-    expect(markup).toContain('inline-flex max-h-[220px] max-w-[300px] overflow-hidden');
+    expect(markup).toContain('min-width:2044px');
+    expect(markup).toContain('inline-flex max-h-[220px] max-w-[220px] overflow-hidden');
     expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).not.toContain('max-h-[720px]');
     expect(markup).toContain('data-scene-shot-table-column="image-prep"');

@@ -149,18 +149,18 @@ function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRo
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1800px] w-full table-fixed border-separate border-spacing-0 text-left">
+      <table className="w-[1334px] max-w-none table-fixed border-separate border-spacing-0 text-left">
         <colgroup>
           <col className="w-[110px]" />
-          <col className="w-[320px]" />
-          <col className="w-[74px]" />
+          <col className="w-[220px]" />
+          <col className="w-[64px]" />
+          <col className="w-[90px]" />
+          <col className="w-[180px]" />
           <col className="w-[120px]" />
-          <col className="w-[220px]" />
-          <col className="w-[180px]" />
-          <col className="w-[180px]" />
-          <col className="w-[220px]" />
+          <col className="w-[140px]" />
           <col className="w-[150px]" />
-          <col className="w-[220px]" />
+          <col className="w-[110px]" />
+          <col className="w-[150px]" />
         </colgroup>
         <thead>
           <tr className="bg-[var(--agent-elevated)] text-[10px] uppercase text-[var(--agent-fg-secondary)]">
@@ -308,7 +308,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="w-[320px] min-w-[320px] max-w-[320px]">
+      <TableCell className="w-[220px] max-w-[220px]">
         {section && section.media.length > 0 ? (
           <div className="grid gap-1">
             {section.media.map((media) => (
@@ -320,11 +320,9 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
         )}
         {section && <Diagnostics diagnostics={section.diagnostics} />}
       </TableCell>
-      <TableCell className="w-[74px] min-w-[74px] font-mono">
-        {formatDuration(shot.duration)}
-      </TableCell>
-      <TableCell className="w-[120px] min-w-[120px] whitespace-pre-wrap">{camera || '-'}</TableCell>
-      <TableCell className="min-w-[220px]">
+      <TableCell className="w-[64px] font-mono">{formatDuration(shot.duration)}</TableCell>
+      <TableCell className="w-[90px] whitespace-pre-wrap">{camera || '-'}</TableCell>
+      <TableCell className="w-[180px]">
         <div className="whitespace-pre-wrap break-words">{shot.visualDescription}</div>
         <div className="mt-1 whitespace-pre-wrap break-words text-[var(--agent-fg-secondary)]">
           {shot.characterAction}
@@ -340,22 +338,20 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="min-w-[180px] whitespace-pre-wrap break-words">
+      <TableCell className="w-[120px] whitespace-pre-wrap break-words">
         {characters || '-'}
       </TableCell>
-      <TableCell className="min-w-[180px] whitespace-pre-wrap break-words">
+      <TableCell className="w-[140px] whitespace-pre-wrap break-words">
         {cueDisplay || supplementalAudio || '-'}
       </TableCell>
-      <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
-        {style || '-'}
-      </TableCell>
-      <TableCell className="w-[150px] whitespace-pre-wrap break-words">
+      <TableCell className="w-[150px] whitespace-pre-wrap break-words">{style || '-'}</TableCell>
+      <TableCell className="w-[110px] whitespace-pre-wrap break-words">
         <div className="font-medium">{shot.imageStrategy}</div>
         {shot.decisionReason && (
           <div className="mt-1 text-[var(--agent-fg-secondary)]">{shot.decisionReason}</div>
         )}
       </TableCell>
-      <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
+      <TableCell className="w-[150px] whitespace-pre-wrap break-words">
         {animation || '-'}
       </TableCell>
     </tr>
@@ -706,7 +702,7 @@ function MediaPreview({
   const [imageFailed, setImageFailed] = useState(false);
   const label = media.caption ?? media.label ?? media.assetId ?? 'Media';
   const imagePreviewFrameClassName = compact
-    ? 'inline-flex max-h-[220px] max-w-[300px]'
+    ? 'inline-flex max-h-[220px] max-w-[200px]'
     : 'flex h-[220px] max-h-[220px] w-full';
   const previewImageClassName = compact
     ? 'h-auto max-h-[220px] w-auto max-w-full object-contain'

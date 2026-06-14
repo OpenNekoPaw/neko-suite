@@ -147,7 +147,7 @@ describe('CardPreviewSlot rendering', () => {
       }),
     );
 
-    expect(markup).toContain('relative inline-flex max-h-[220px] max-w-[300px]');
+    expect(markup).toContain('relative inline-flex max-h-[220px] max-w-[220px]');
     expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).not.toContain('aspect-ratio');
     expect(markup).not.toContain('object-cover');

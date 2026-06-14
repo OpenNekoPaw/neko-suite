@@ -549,7 +549,7 @@ function getPreviewFrameClassName(variant: NodeCardVariant): string {
     return 'relative flex h-full min-h-[72px] w-full items-center justify-center overflow-hidden rounded bg-gray-100 text-sm text-gray-500';
   }
   if (variant === 'review-full') {
-    return 'relative inline-flex max-h-[220px] max-w-[300px] items-center justify-center overflow-hidden rounded bg-gray-50 text-sm text-gray-500';
+    return 'relative inline-flex max-h-[220px] max-w-[220px] items-center justify-center overflow-hidden rounded bg-gray-50 text-sm text-gray-500';
   }
   if (variant === 'gallery') {
     return 'relative flex h-full min-h-[104px] w-full items-center justify-center overflow-hidden bg-gray-100 text-base text-gray-500';
