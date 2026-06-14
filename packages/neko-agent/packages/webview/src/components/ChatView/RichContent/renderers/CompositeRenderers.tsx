@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { RichContentProps, RichContentRendererEntry } from '../types';
 import type {
   AssetGalleryRichData,
@@ -9,6 +10,7 @@ import type {
   StoryboardTableRichData,
 } from '@/presenters/composite-content-presenter';
 import type { StoryboardSceneRow, StoryboardShotRow, StoryboardTextCue } from '@neko/shared';
+import type { StoryboardShotPlanOverlay } from '@neko/shared';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -101,25 +103,44 @@ interface SemanticStoryboardRow {
   readonly scene: StoryboardSceneRow;
   readonly shot: StoryboardShotRow;
   readonly section?: ResolvedCompositeSection;
+  readonly animationOverlay?: StoryboardShotPlanOverlay;
 }
 
 function projectSemanticStoryboardRows(
   data: StoryboardTableRichData,
 ): readonly SemanticStoryboardRow[] {
   const rows: SemanticStoryboardRow[] = [];
+  const animationOverlays = createAnimationOverlayIndex(data);
   for (const scene of data.storyboardTable?.scenes ?? []) {
     for (const shot of scene.shots) {
       const rowIndex = rows.length;
+      const shotId = shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`;
       rows.push({
-        id: shot.shotId ?? `${scene.sceneId}:${shot.shotNumber}:${rowIndex}`,
+        id: shotId,
         rowIndex,
         scene,
         shot,
         ...(data.sections[rowIndex] ? { section: data.sections[rowIndex] } : {}),
+        ...(animationOverlays.get(shotId)
+          ? { animationOverlay: animationOverlays.get(shotId) }
+          : {}),
       });
     }
   }
   return rows;
+}
+
+function createAnimationOverlayIndex(
+  data: StoryboardTableRichData,
+): ReadonlyMap<string, StoryboardShotPlanOverlay> {
+  const index = new Map<string, StoryboardShotPlanOverlay>();
+  for (const overlay of data.storyboardPlanOverlays ?? []) {
+    if (overlay.overlayType !== 'AnimationPlan') continue;
+    for (const shotOverlay of overlay.shotOverlays) {
+      index.set(shotOverlay.shotId, shotOverlay);
+    }
+  }
+  return index;
 }
 
 function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRow[] }) {
@@ -128,7 +149,19 @@ function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRo
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left">
+      <table className="min-w-[1920px] w-full table-fixed border-separate border-spacing-0 text-left">
+        <colgroup>
+          <col className="w-[110px]" />
+          <col className="w-[440px]" />
+          <col className="w-[74px]" />
+          <col className="w-[120px]" />
+          <col className="w-[220px]" />
+          <col className="w-[180px]" />
+          <col className="w-[180px]" />
+          <col className="w-[220px]" />
+          <col className="w-[150px]" />
+          <col className="w-[220px]" />
+        </colgroup>
         <thead>
           <tr className="bg-[var(--agent-elevated)] text-[10px] uppercase text-[var(--agent-fg-secondary)]">
             {STORYBOARD_TABLE_COLUMNS.map((columnKey) => (
@@ -263,10 +296,11 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
       ? `${t('chat.storyboardTable.labels.prompt')}: ${shot.generationPrompt}`
       : undefined,
   ]).join('\n');
+  const animation = formatAnimationOverlay(row.animationOverlay, t);
 
   return (
     <tr className="align-top text-[11px] text-[var(--agent-fg)] odd:bg-[color-mix(in_srgb,var(--agent-elevated)_40%,transparent)]">
-      <TableCell className="w-[110px]">
+      <TableCell className="w-[110px] min-w-[110px]">
         <div className="font-mono text-[11px] font-medium">{formatShotNumber(shot.shotNumber)}</div>
         {shot.shotId && (
           <div className="mt-1 break-words font-mono text-[10px] text-[var(--agent-fg-secondary)]">
@@ -274,7 +308,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="w-[150px]">
+      <TableCell className="w-[440px] min-w-[440px] max-w-[440px]">
         {section && section.media.length > 0 ? (
           <div className="grid gap-1">
             {section.media.map((media) => (
@@ -286,8 +320,10 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
         )}
         {section && <Diagnostics diagnostics={section.diagnostics} />}
       </TableCell>
-      <TableCell className="w-[74px] font-mono">{formatDuration(shot.duration)}</TableCell>
-      <TableCell className="w-[120px] whitespace-pre-wrap">{camera || '-'}</TableCell>
+      <TableCell className="w-[74px] min-w-[74px] font-mono">
+        {formatDuration(shot.duration)}
+      </TableCell>
+      <TableCell className="w-[120px] min-w-[120px] whitespace-pre-wrap">{camera || '-'}</TableCell>
       <TableCell className="min-w-[220px]">
         <div className="whitespace-pre-wrap break-words">{shot.visualDescription}</div>
         <div className="mt-1 whitespace-pre-wrap break-words text-[var(--agent-fg-secondary)]">
@@ -319,6 +355,9 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           <div className="mt-1 text-[var(--agent-fg-secondary)]">{shot.decisionReason}</div>
         )}
       </TableCell>
+      <TableCell className="min-w-[220px] whitespace-pre-wrap break-words">
+        {animation || '-'}
+      </TableCell>
     </tr>
   );
 }
@@ -349,6 +388,7 @@ const STORYBOARD_TABLE_COLUMNS = [
   'chat.storyboardTable.columns.dialogueSfx',
   'chat.storyboardTable.columns.stylePrompt',
   'chat.storyboardTable.columns.strategy',
+  'chat.storyboardTable.columns.animation',
 ] as const;
 
 const STORYBOARD_TABLE_COLUMN_COUNT = STORYBOARD_TABLE_COLUMNS.length;
@@ -359,7 +399,7 @@ function ProjectedStoryboardRows({ sections }: { sections: readonly ResolvedComp
       {sections.map((section) => (
         <div
           key={section.id}
-          className="grid gap-2 px-2 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(120px,180px)]"
+          className="grid gap-2 px-2 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(240px,440px)]"
         >
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2">
@@ -482,6 +522,46 @@ function formatSupplementalAudio(
       : undefined,
     shot.soundCue && !hasSoundCue
       ? `${t('chat.storyboardTable.labels.soundCue')}: ${shot.soundCue}`
+      : undefined,
+  ]).join('\n');
+}
+
+function formatAnimationOverlay(
+  overlay: StoryboardShotPlanOverlay | undefined,
+  t: (key: string) => string,
+): string | undefined {
+  if (!overlay) return undefined;
+  const imagePrep = overlay.imagePrep?.operations?.join(', ') ?? overlay.imagePrep?.notes;
+  const providerHints = overlay.providerHints
+    ?.map((hint) => compactStrings([hint.providerId, hint.modelId, hint.capabilityId]).join('/'))
+    .filter((value) => value.length > 0)
+    .join(', ');
+  const requirements = compactStrings([
+    overlay.requiresImagePrep ? t('chat.storyboardTable.animation.requiresImagePrep') : undefined,
+    overlay.requiresVideoGeneration
+      ? t('chat.storyboardTable.animation.requiresVideoGeneration')
+      : undefined,
+  ]).join(', ');
+  return compactStrings([
+    overlay.motionIntent
+      ? `${t('chat.storyboardTable.animation.motion')}: ${overlay.motionIntent}`
+      : undefined,
+    overlay.cameraIntent
+      ? `${t('chat.storyboardTable.animation.camera')}: ${overlay.cameraIntent}`
+      : undefined,
+    imagePrep ? `${t('chat.storyboardTable.animation.imagePrep')}: ${imagePrep}` : undefined,
+    overlay.videoPromptIntent?.positive
+      ? `${t('chat.storyboardTable.animation.videoPrompt')}: ${overlay.videoPromptIntent.positive}`
+      : undefined,
+    overlay.audioPromptIntent?.positive
+      ? `${t('chat.storyboardTable.animation.audioPrompt')}: ${overlay.audioPromptIntent.positive}`
+      : undefined,
+    requirements ? `${t('chat.storyboardTable.animation.requires')}: ${requirements}` : undefined,
+    providerHints
+      ? `${t('chat.storyboardTable.animation.providerHints')}: ${providerHints}`
+      : undefined,
+    overlay.approvalNotes
+      ? `${t('chat.storyboardTable.animation.approval')}: ${overlay.approvalNotes}`
       : undefined,
   ]).join('\n');
 }
@@ -623,25 +703,36 @@ function MediaPreview({
   media: ResolvedCompositeMedia;
   compact?: boolean;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const label = media.caption ?? media.label ?? media.assetId ?? 'Media';
-  const className = compact ? 'max-h-[120px]' : 'max-h-[180px]';
+  const previewFrameClassName = compact
+    ? 'min-h-[180px] max-h-[720px]'
+    : 'min-h-[220px] max-h-[720px]';
   const roleLabel = formatMediaRole(media.role);
+  const hasRenderableSource = media.src.trim().length > 0;
+  const canOpen = canOpenMedia(media);
 
   if (media.type === 'image') {
     return (
       <div className="min-w-0">
         <button
           type="button"
-          className="block w-full overflow-hidden rounded bg-[var(--vscode-editor-background)]"
+          className={`flex w-full min-w-0 items-center justify-center overflow-hidden rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] disabled:cursor-default ${previewFrameClassName}`}
           onClick={() => openMedia(media)}
+          disabled={!canOpen}
           title={label}
         >
-          <img
-            src={media.src}
-            alt={label}
-            className={`w-full object-cover ${className}`}
-            loading="lazy"
-          />
+          {hasRenderableSource && !imageFailed ? (
+            <img
+              src={media.src}
+              alt={label}
+              className="h-auto max-h-[720px] max-w-full object-contain"
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <MediaPreviewFallback mediaType={media.type} label={label} compact={compact} />
+          )}
         </button>
         {roleLabel && (
           <div className="mt-0.5 truncate text-[9px] leading-tight text-[var(--agent-fg-secondary)]">
@@ -653,18 +744,38 @@ function MediaPreview({
   }
 
   if (media.type === 'video') {
+    if (!hasRenderableSource) {
+      return (
+        <MediaPreviewFallbackFrame
+          media={media}
+          label={label}
+          compact={compact}
+          previewHeightClassName={previewFrameClassName}
+        />
+      );
+    }
     return (
       <video
         src={media.src}
         controls
         preload="metadata"
-        className={`w-full rounded bg-black object-contain ${className}`}
+        className={`max-h-[720px] w-full rounded bg-black object-contain ${previewFrameClassName}`}
         title={label}
       />
     );
   }
 
   if (media.type === 'audio') {
+    if (!hasRenderableSource) {
+      return (
+        <MediaPreviewFallbackFrame
+          media={media}
+          label={label}
+          compact={compact}
+          previewHeightClassName="min-h-[42px]"
+        />
+      );
+    }
     return <audio src={media.src} controls className="w-full" title={label} />;
   }
 
@@ -691,6 +802,70 @@ function MediaPreview({
       {label}
     </button>
   );
+}
+
+function MediaPreviewFallbackFrame({
+  media,
+  label,
+  compact,
+  previewHeightClassName,
+}: {
+  media: ResolvedCompositeMedia;
+  label: string;
+  compact: boolean;
+  previewHeightClassName: string;
+}) {
+  const canOpen = canOpenMedia(media);
+  return (
+    <button
+      type="button"
+      className={`flex w-full min-w-0 overflow-hidden rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] disabled:cursor-default ${previewHeightClassName}`}
+      onClick={() => openMedia(media)}
+      disabled={!canOpen}
+      title={label}
+    >
+      <MediaPreviewFallback mediaType={media.type} label={label} compact={compact} />
+    </button>
+  );
+}
+
+function MediaPreviewFallback({
+  mediaType,
+  label,
+  compact,
+}: {
+  mediaType: CompositeMediaType;
+  label: string;
+  compact: boolean;
+}) {
+  return (
+    <div className="flex h-full w-full min-w-0 flex-col items-center justify-center gap-0.5 px-2 text-center text-[var(--agent-fg-secondary)]">
+      <span className="font-mono text-[9px] uppercase tracking-normal">
+        {formatMediaTypeLabel(mediaType)}
+      </span>
+      <span
+        className={`${compact ? 'line-clamp-2 text-[9px]' : 'line-clamp-3 text-[10px]'} max-w-full break-all font-medium leading-snug text-[var(--agent-fg)]`}
+      >
+        {label}
+      </span>
+      <span className="text-[9px] leading-tight">Preview unavailable</span>
+    </div>
+  );
+}
+
+function formatMediaTypeLabel(mediaType: CompositeMediaType): string {
+  switch (mediaType) {
+    case 'image':
+      return 'Image';
+    case 'video':
+      return 'Video';
+    case 'audio':
+      return 'Audio';
+    case 'model':
+      return 'Model';
+    default:
+      return 'Media';
+  }
 }
 
 function formatMediaRole(role: string | undefined): string | undefined {
@@ -774,7 +949,13 @@ function openMedia(media: ResolvedCompositeMedia): void {
     VSCodeMessages.openFile(media.localPath);
     return;
   }
-  VSCodeMessages.openUrl(media.src);
+  if (media.src) {
+    VSCodeMessages.openUrl(media.src);
+  }
+}
+
+function canOpenMedia(media: ResolvedCompositeMedia): boolean {
+  return Boolean(media.localPath || media.src);
 }
 
 function dedupeDiagnostics(

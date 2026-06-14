@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '@/i18n/I18nContext';
 import { chat as enChat } from '@/i18n/locales/en/chat';
 import { chat as zhCnChat } from '@/i18n/locales/zh-cn/chat';
@@ -285,6 +286,27 @@ describe('composite rich content renderers', () => {
                 },
               ],
             },
+            storyboardPlanOverlays: [
+              {
+                schemaVersion: 1,
+                kind: 'animation-plan-overlay',
+                overlayType: 'AnimationPlan',
+                sourceStoryboardRef: { kind: 'artifact', artifactId: 'storyboard-1' },
+                shotOverlays: [
+                  {
+                    shotId: 'shot-1',
+                    motionIntent: 'subtle hand motion and pulsing blue light',
+                    cameraIntent: 'slow push-in',
+                    imagePrep: { operations: ['upscale', 'text-removal'] },
+                    videoPromptIntent: { positive: 'animated blue pulse under the table' },
+                    audioPromptIntent: { positive: 'low electric hum' },
+                    requiresImagePrep: true,
+                    requiresVideoGeneration: true,
+                    approvalNotes: 'Review before bulk generation.',
+                  },
+                ],
+              },
+            ],
             sections: [
               {
                 id: 'section-0',
@@ -335,7 +357,76 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText(/Prompt: close-up, blue pulse, manga noir/)).toBeTruthy();
     expect(screen.getByText('use-as-reference')).toBeTruthy();
     expect(screen.getByText('Keep the manga panel composition as reference.')).toBeTruthy();
+    expect(screen.getByText(/Motion: subtle hand motion and pulsing blue light/)).toBeTruthy();
+    expect(screen.getByText(/Camera: slow push-in/)).toBeTruthy();
+    expect(screen.getByText(/Image prep: upscale, text-removal/)).toBeTruthy();
+    expect(screen.getByText(/Video prompt: animated blue pulse under the table/)).toBeTruthy();
+    expect(screen.getByText(/Audio prompt: low electric hum/)).toBeTruthy();
+    expect(screen.getByText(/Requires: image prep, video generation/)).toBeTruthy();
+    expect(screen.getByText(/Approval: Review before bulk generation./)).toBeTruthy();
     expect(screen.getByAltText('Original panel')).toBeTruthy();
+  });
+
+  it('renders semantic storyboard images in a large contain-fit table column', () => {
+    registerDefaultRenderers();
+
+    const markup = renderWithI18nToStaticMarkup(
+      <RichContentRenderer
+        kind="storyboard-table"
+        data={
+          {
+            template: 'storyboard-table',
+            title: 'Image Review',
+            storyboardTable: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Image Review',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'Panel Review',
+                  shots: [
+                    {
+                      shotId: 'shot-1',
+                      shotNumber: 1,
+                      duration: 4,
+                      visualDescription: 'Full panel should remain visible.',
+                      characterAction: 'The character crosses the frame.',
+                      imageStrategy: 'reuse-original',
+                    },
+                  ],
+                },
+              ],
+            },
+            sections: [
+              {
+                id: 'section-0',
+                index: 0,
+                media: [
+                  {
+                    id: 'media-1',
+                    toolCallId: 'read-image',
+                    assetIndex: 0,
+                    type: 'image',
+                    src: 'webview://wide-panel.png',
+                    caption: 'Wide panel',
+                  },
+                ],
+                diagnostics: [],
+              },
+            ],
+            diagnostics: [],
+          } satisfies StoryboardTableRichData
+        }
+      />,
+    );
+
+    expect(markup).toContain('min-w-[1920px]');
+    expect(markup).toContain('w-[440px] min-w-[440px] max-w-[440px]');
+    expect(markup).toContain('min-h-[180px] max-h-[720px]');
+    expect(markup).toContain('h-auto max-h-[720px] max-w-full object-contain');
+    expect(markup).toContain('object-contain');
+    expect(markup).not.toContain('object-cover');
   });
 
   it('renders storyboard table transfer actions for available targets', () => {
@@ -568,6 +659,85 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText('Final')).toBeTruthy();
     expect(screen.getByText('Open')).toBeTruthy();
   });
+
+  it('renders an image fallback when a gallery asset has no preview src', () => {
+    registerDefaultRenderers();
+
+    render(
+      <RichContentRenderer
+        kind="asset-gallery"
+        data={
+          {
+            template: 'gallery',
+            title: 'Generated assets',
+            sections: [
+              {
+                id: 'section-0',
+                index: 0,
+                media: [
+                  {
+                    id: 'asset-1',
+                    toolCallId: 'call-1',
+                    assetIndex: 0,
+                    type: 'image',
+                    src: '',
+                    caption: 'broken-output.png',
+                    localPath: '/repo/broken-output.png',
+                  },
+                ],
+                diagnostics: [],
+              },
+            ],
+            diagnostics: [],
+          } satisfies AssetGalleryRichData
+        }
+      />,
+    );
+
+    expect(screen.getAllByText('broken-output.png').length).toBeGreaterThan(0);
+    expect(screen.getByText('Preview unavailable')).toBeTruthy();
+    expect(screen.queryByAltText('broken-output.png')).toBeNull();
+  });
+
+  it('replaces a failed image preview with the stable fallback', () => {
+    registerDefaultRenderers();
+
+    render(
+      <RichContentRenderer
+        kind="asset-gallery"
+        data={
+          {
+            template: 'gallery',
+            title: 'Generated assets',
+            sections: [
+              {
+                id: 'section-0',
+                index: 0,
+                media: [
+                  {
+                    id: 'asset-1',
+                    toolCallId: 'call-1',
+                    assetIndex: 0,
+                    type: 'image',
+                    src: 'webview://missing.png',
+                    caption: 'Missing preview',
+                  },
+                ],
+                diagnostics: [],
+              },
+            ],
+            diagnostics: [],
+          } satisfies AssetGalleryRichData
+        }
+      />,
+    );
+
+    fireEvent.error(screen.getByAltText('Missing preview'));
+
+    expect(screen.getAllByText('Missing preview').length).toBeGreaterThan(0);
+    expect(screen.getByText('Preview unavailable')).toBeTruthy();
+    expect(screen.queryByAltText('Missing preview')).toBeNull();
+  });
 });
 
 function renderWithI18n(node: React.ReactElement, locale: 'en' | 'zh-cn' = 'en') {
@@ -575,4 +745,14 @@ function renderWithI18n(node: React.ReactElement, locale: 'en' | 'zh-cn' = 'en')
   service.registerBundle('chat', 'en', enChat);
   service.registerBundle('chat', 'zh-cn', zhCnChat);
   return render(<I18nProvider service={service}>{node}</I18nProvider>);
+}
+
+function renderWithI18nToStaticMarkup(
+  node: React.ReactElement,
+  locale: 'en' | 'zh-cn' = 'en',
+): string {
+  const service = new I18nService(locale);
+  service.registerBundle('chat', 'en', enChat);
+  service.registerBundle('chat', 'zh-cn', zhCnChat);
+  return renderToStaticMarkup(<I18nProvider service={service}>{node}</I18nProvider>);
 }

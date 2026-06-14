@@ -1,6 +1,6 @@
 # Storyboard to Animation Plan
 
-Transform a validated CompositeArtifact with a StoryboardTable domain block, or a legacy bare StoryboardTable, into an animation plan. Preserve scene and shot ids, source media refs, durations, dialogue, sound cues, and continuity notes.
+Transform a validated CompositeArtifact with a StoryboardTable domain block into an AnimationPlan overlay. Preserve stable scene and shot ids from the storyboard; do not duplicate storyboard rows or rewrite creative shot content.
 
 ## Structured Artifact Rules
 
@@ -13,13 +13,14 @@ Transform a validated CompositeArtifact with a StoryboardTable domain block, or 
 
 - When the input is CompositeArtifact, read the StoryboardTable from the `domainKind: "StoryboardTable"` block.
 - Do not regenerate or rewrite the storyboard unless validation fails.
-- Add motionPrompt, cameraPrompt, generationPrompt, requiresGeneration, and approval notes per shot.
+- Add provider-neutral motionIntent, cameraIntent, videoPromptIntent, audioPromptIntent, imagePrep, generation requirements, and approval notes per shot.
 - Mark source shots that need colorization, upscale, inpaint, or image-to-video as planned transformations only until tools run.
-- Emit the animation plan as a `CompositeArtifact` domain block with `domainKind: "AnimationPlan"` and `payload.kind: "animation-plan"`.
-- Preserve sceneId, shotId, shot order, sourceMediaRefs, generatedMediaRefs, textCues, voiceCues, character refs, scene refs, duration, and diagnostics from the storyboard.
+- Emit the plan as a `CompositeArtifact` domain block with `domainKind: "AnimationPlan"` and `payload.kind: "animation-plan-overlay"`.
+- Include `sourceStoryboardRef` and `shotOverlays[]` keyed by stable `shotId`. Do not copy scene order, shot order, dialogue, character participation, source media facts, or runtime task status into the plan.
 - Use `preparedKeyframeRefs` only for real generated or transformed keyframe refs. Use `sourceMediaRefs` or `referenceBundle` for planned references.
 - Set `requiresImagePrep` when `imageStrategy` implies `transform-original`, source cleanup, text removal, colorization, outpaint, upscale, or style normalization.
 - Set `requiresVideoGeneration` only when the user wants clips rather than a static storyboard/Cut draft.
+- Runtime fields such as queued, running, completed, failed, progress, attempt count, provider run id, task id, generated output status, and retry state belong in Agent async task or execution summary data, not in AnimationPlan.
 - Add diagnostics instead of guessing when speaker binding, source refs, masks, cost estimate, provider support, character identity, or scene identity is missing.
 
 ## AnimationPlan Domain Payload
@@ -30,17 +31,16 @@ Transform a validated CompositeArtifact with a StoryboardTable domain block, or 
   "domainKind": "AnimationPlan",
   "schemaVersion": 1,
   "payload": {
-    "kind": "animation-plan",
-    "sourceStoryboardRef": "artifact-or-storyboard-id",
-    "shots": [
+    "kind": "animation-plan-overlay",
+    "overlayType": "AnimationPlan",
+    "sourceStoryboardRef": { "kind": "artifact", "artifactId": "artifact-or-storyboard-id" },
+    "shotOverlays": [
       {
         "sceneId": "scene-1",
         "shotId": "scene-1-shot-1",
-        "shotNumber": 1,
-        "duration": 3,
-        "motionPrompt": "small subject and environment motion",
-        "cameraPrompt": "slow push-in, eye-level medium shot",
-        "generationPrompt": "video-ready prompt grounded in source refs",
+        "motionIntent": "small subject and environment motion",
+        "cameraIntent": "slow push-in, eye-level medium shot",
+        "videoPromptIntent": { "positive": "video-ready prompt grounded in source refs" },
         "requiresImagePrep": true,
         "requiresVideoGeneration": true,
         "sourceMediaRefs": [],

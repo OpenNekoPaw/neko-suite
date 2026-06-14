@@ -391,7 +391,7 @@ describe('KeywordSkillMatcher', () => {
       name: 'media-to-video',
       description: 'Coordinate media-to-video workflows.',
       mediaWorkflow: {
-        producedArtifacts: ['StoryboardTable', 'animation-plan', 'cut-storyboard-payload'],
+        producedArtifacts: ['StoryboardTable', 'storyboard-plan-overlay', 'cut-storyboard-payload'],
         tags: ['media-to-video', 'orchestration', 'storyboard'],
       },
     });

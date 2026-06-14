@@ -4,18 +4,20 @@
 
 ## 工作流指引
 
-1. 先判断输入来源：漫画、文档、图片、图片序列、包含 StoryboardTable domain block 的 CompositeArtifact、旧裸 StoryboardTable、动画计划或已生成媒体。
+1. 先判断输入来源：漫画、文档、图片、图片序列、包含 StoryboardTable domain block 的 CompositeArtifact、动画计划或已生成媒体。
 2. 用 GetContext 查看可用相关 Skill，只在需要详细规则时激活聚焦子 Skill。
 3. EPUB/PDF/CBZ/CBR 漫画页优先使用 comic-to-storyboard。
 4. 静态图片或图片序列优先使用 image-to-shot。
-5. 已有包含 StoryboardTable domain block 的 CompositeArtifact，或旧裸 StoryboardTable 时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
-6. 已有动画计划且目标是 Cut 时，优先使用 animation-plan-to-cut。
-7. 已有生成素材时，根据需要使用 generated-shot-assembly 和 export-video-package。
-8. 当缺少生成提供方、目标插件、审批或安全媒体引用时，停留在计划阶段。
+5. 已有包含 StoryboardTable domain block 的 CompositeArtifact 时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
+6. 将 AnimationPlan 视为按稳定 `shotId` 绑定到 StoryboardTable 的 overlay，不要把它当作第二张分镜表。缺少稳定 shot id 时，先停止并请求或修正稳定 id，再规划生成。
+7. 已有动画计划 overlay 且目标是 Cut 时，优先使用 animation-plan-to-cut。
+8. 已有生成素材时，根据需要使用 generated-shot-assembly 和 export-video-package。
+9. 当缺少生成提供方、目标插件、审批或安全媒体引用时，停留在计划阶段。
 
 ## 结构化产物规则
 
 - Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。
+- StoryboardTable 仍是创作镜头内容来源。AnimationPlan 只在 `shotOverlays[]` 中保存 provider-neutral 执行意图；运行状态属于 Agent async task 或 execution summary。
 - 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
 - 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。
 - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。聚焦 Skill 需要复用稳定来源范围的语义证据时，使用 QuerySemanticCoverage。
@@ -25,7 +27,7 @@
 
 - comic-to-storyboard：读取漫画页、分格/OCR 证据、输出包含 StoryboardTable domain block 的 CompositeArtifact。
 - image-to-shot：将静态图片引用转为镜头或分镜计划。
-- storyboard-to-animation-plan：把分镜行转换为运动、镜头和生成计划。
+- storyboard-to-animation-plan：把分镜行转换为按镜头绑定的运动、镜头和生成 overlay 计划。
 - animation-plan-to-cut：把动画计划转换为 Cut 时间线 payload。
 - generated-shot-assembly：汇总已生成媒体引用。
 - export-video-package：面向导出和交付的打包总结。

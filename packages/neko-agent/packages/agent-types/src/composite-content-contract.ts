@@ -2,9 +2,11 @@ import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
 import {
   hasBlockingStoryboardDiagnostics,
   normalizeStoryboardTable,
+  normalizeStoryboardPlanOverlay,
   type ArtifactExtensionMap,
   type ArtifactJsonValue,
   type StoryboardMediaRef,
+  type StoryboardPlanOverlay,
   type StoryboardTable,
   type StoryboardValidationDiagnostic,
 } from '@neko/shared';
@@ -26,6 +28,7 @@ const MAX_COMPOSITE_SECTIONS = 200;
 const MAX_SECTION_MEDIA_REFS = 12;
 const MAX_STORYBOARD_DIAGNOSTIC_SECTIONS = 8;
 const STORYBOARD_DOMAIN_KIND = 'StoryboardTable';
+const ANIMATION_PLAN_DOMAIN_KIND = 'AnimationPlan';
 
 const COMPOSITE_CONTENT_FENCE_PATTERN =
   /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
@@ -119,9 +122,24 @@ function normalizeArtifactBackedStoryboardBlock(
   if (value.kind !== 'composite-artifact' || value.schemaVersion !== 1) return null;
   const blocks = Array.isArray(value.blocks) ? value.blocks : [];
   const storyboardBlock = blocks.find(isStoryboardDomainBlock);
+  const animationPlanBlocks = blocks.filter(isAnimationPlanDomainBlock);
+  if (!storyboardBlock && animationPlanBlocks.length > 0) {
+    const storyboardPlanOverlays = normalizeStoryboardPlanBlocks(animationPlanBlocks, undefined);
+    if (storyboardPlanOverlays.length === 0) return null;
+    return {
+      template: 'storyboard-table',
+      title: readString(value, 'title') ?? 'Animation Plan',
+      storyboardPlanOverlays,
+      sections: createAnimationPlanSummarySections(storyboardPlanOverlays),
+    };
+  }
   if (!storyboardBlock) return null;
 
   const semanticStoryboard = normalizeStoryboardTable({ value: storyboardBlock.payload });
+  const storyboardPlanOverlays = normalizeStoryboardPlanBlocks(
+    animationPlanBlocks,
+    semanticStoryboard.table,
+  );
   const title =
     readString(storyboardBlock, 'title') ??
     readString(value, 'title') ??
@@ -137,6 +155,7 @@ function normalizeArtifactBackedStoryboardBlock(
     template: 'storyboard-table',
     ...(title ? { title } : {}),
     ...(semanticStoryboard.table ? { storyboardTable: semanticStoryboard.table } : {}),
+    ...(storyboardPlanOverlays.length > 0 ? { storyboardPlanOverlays } : {}),
     ...(semanticStoryboard.diagnostics.length > 0
       ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
       : {}),
@@ -145,11 +164,65 @@ function normalizeArtifactBackedStoryboardBlock(
   };
 }
 
+function createAnimationPlanSummarySections(
+  overlays: readonly StoryboardPlanOverlay[],
+): readonly CompositeSection[] {
+  return overlays.flatMap((overlay) =>
+    overlay.shotOverlays.slice(0, MAX_COMPOSITE_SECTIONS).map((shotOverlay, index) => ({
+      heading: `${overlay.overlayType} / ${shotOverlay.shotId}`,
+      content: [
+        'Source storyboard unavailable; this is an execution overlay summary, not a complete storyboard.',
+        shotOverlay.motionIntent ? `Motion: ${shotOverlay.motionIntent}` : undefined,
+        shotOverlay.cameraIntent ? `Camera: ${shotOverlay.cameraIntent}` : undefined,
+        shotOverlay.videoPromptIntent?.positive
+          ? `Video prompt: ${shotOverlay.videoPromptIntent.positive}`
+          : undefined,
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join('\n'),
+      layout: 'table-row' as const,
+      extensions: {
+        'neko.storyboardPlanSummary': {
+          overlayType: overlay.overlayType,
+          shotId: shotOverlay.shotId,
+          index,
+        },
+      },
+    })),
+  );
+}
+
+function normalizeStoryboardPlanBlocks(
+  blocks: readonly Record<string, unknown>[],
+  storyboardTable: StoryboardTable | undefined,
+): readonly StoryboardPlanOverlay[] {
+  return blocks.flatMap((block) => {
+    const normalized = normalizeStoryboardPlanOverlay(
+      {
+        kind: 'domain',
+        domainKind: block.domainKind,
+        payload: block.payload,
+      },
+      { sourceStoryboard: storyboardTable },
+    );
+    return normalized.overlay ? [normalized.overlay] : [];
+  });
+}
+
 function isStoryboardDomainBlock(value: unknown): value is Record<string, unknown> {
   return (
     isRecord(value) &&
     value.kind === 'domain' &&
     value.domainKind === STORYBOARD_DOMAIN_KIND &&
+    value.payload !== undefined
+  );
+}
+
+function isAnimationPlanDomainBlock(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    value.kind === 'domain' &&
+    value.domainKind === ANIMATION_PLAN_DOMAIN_KIND &&
     value.payload !== undefined
   );
 }

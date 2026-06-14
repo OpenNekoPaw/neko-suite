@@ -5,11 +5,17 @@ import {
   projectStoryboardTableToCanvasPayload as projectSemanticStoryboardTableToCanvasPayload,
   projectStoryboardTableToCutPayload as projectSemanticStoryboardTableToCutPayload,
   type CanvasStoryboardPayload,
+  type CanvasStoryboardShotPlan,
   type DocumentArchiveResourceRef,
   type ResourceRef,
+  type ShotImagePrepOperation,
+  type ShotImagePrepPlan,
   type ShotScale,
   type StoryboardMediaRef,
   type StoryboardImportMode,
+  type StoryboardPlanImagePrepIntent,
+  type StoryboardPlanOverlay,
+  type StoryboardShotPlanOverlay,
 } from '@neko/shared';
 import type {
   PluginTransferAssetRef,
@@ -187,17 +193,7 @@ export function projectStoryboardTableTransferPayload(
   if (data.storyboardTable) {
     return {
       kind: 'canvasStoryboard',
-      storyboard: projectSemanticStoryboardTableToCanvasPayload(
-        sanitizeStoryboardTableReferenceImagePaths(data.storyboardTable),
-        {
-          sourceScriptUri: 'agent://rich-content/storyboard-table',
-          resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
-          resolveImageResourceRef: ({ mediaRef }) =>
-            resolveStoryboardMediaResourceRef(data, mediaRef),
-          resolveImageUnifiedResourceRef: ({ mediaRef }) =>
-            resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
-        },
-      ),
+      storyboard: projectStoryboardTableWithPlanOverlaysToCanvasPayload(data),
       ...(data.entityMemoryContribution
         ? { entityMemoryContribution: data.entityMemoryContribution }
         : {}),
@@ -207,6 +203,207 @@ export function projectStoryboardTableTransferPayload(
   const storyboard = projectStoryboardTableToCanvasPayload(data);
   if (!storyboard) return null;
   return { kind: 'canvasStoryboard', storyboard };
+}
+
+function projectStoryboardTableWithPlanOverlaysToCanvasPayload(
+  data: StoryboardTableRichData,
+): CanvasStoryboardPayload {
+  const storyboardTable = sanitizeStoryboardTableReferenceImagePaths(data.storyboardTable!);
+  return mergeStoryboardPlanOverlaysIntoCanvasPayload(
+    projectSemanticStoryboardTableToCanvasPayload(storyboardTable, {
+      sourceScriptUri: 'agent://rich-content/storyboard-table',
+      resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
+      resolveImageResourceRef: ({ mediaRef }) => resolveStoryboardMediaResourceRef(data, mediaRef),
+      resolveImageUnifiedResourceRef: ({ mediaRef }) =>
+        resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
+    }),
+    data.storyboardPlanOverlays,
+  );
+}
+
+function mergeStoryboardPlanOverlaysIntoCanvasPayload(
+  payload: CanvasStoryboardPayload,
+  overlays: readonly StoryboardPlanOverlay[] | undefined,
+): CanvasStoryboardPayload {
+  const overlayIndex = createAnimationPlanOverlayIndex(overlays);
+  if (overlayIndex.size === 0) return payload;
+
+  let changed = false;
+  const scenes = payload.scenes.map((scene) => {
+    let sceneChanged = false;
+    const shotPlans = scene.shotPlans.map((shot) => {
+      const shotId = shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`;
+      const overlay = overlayIndex.get(shotId);
+      if (!overlay) return shot;
+      sceneChanged = true;
+      changed = true;
+      return mergeAnimationOverlayIntoShotPlan(scene.sceneId, shotId, shot, overlay);
+    });
+    return sceneChanged ? { ...scene, shotPlans } : scene;
+  });
+
+  return changed ? { ...payload, scenes } : payload;
+}
+
+function createAnimationPlanOverlayIndex(
+  overlays: readonly StoryboardPlanOverlay[] | undefined,
+): ReadonlyMap<string, StoryboardShotPlanOverlay> {
+  const index = new Map<string, StoryboardShotPlanOverlay>();
+  for (const overlay of overlays ?? []) {
+    if (overlay.overlayType !== 'AnimationPlan') continue;
+    for (const shotOverlay of overlay.shotOverlays) {
+      index.set(shotOverlay.shotId, shotOverlay);
+    }
+  }
+  return index;
+}
+
+function mergeAnimationOverlayIntoShotPlan(
+  sceneId: string,
+  shotId: string,
+  shot: CanvasStoryboardShotPlan,
+  overlay: StoryboardShotPlanOverlay,
+): CanvasStoryboardShotPlan {
+  const mergedPrompt = mergePromptText(
+    shot.generationPrompt,
+    overlay.videoPromptIntent?.positive,
+    overlay.motionIntent,
+    overlay.cameraIntent,
+  );
+  const imagePrepPlan = mergeAnimationOverlayIntoImagePrepPlan(
+    sceneId,
+    shotId,
+    shot,
+    overlay,
+    mergedPrompt,
+  );
+  return {
+    ...shot,
+    ...(mergedPrompt ? { generationPrompt: mergedPrompt } : {}),
+    shotImagePrepPlan: imagePrepPlan,
+  };
+}
+
+function mergeAnimationOverlayIntoImagePrepPlan(
+  sceneId: string,
+  shotId: string,
+  shot: CanvasStoryboardShotPlan,
+  overlay: StoryboardShotPlanOverlay,
+  mergedPrompt: string | undefined,
+): ShotImagePrepPlan {
+  const existingPlan = shot.shotImagePrepPlan;
+  const overlayOperations = normalizeImagePrepOperations(overlay.imagePrep);
+  const operationPlan = uniqueOperations([
+    ...(existingPlan?.operationPlan ?? []),
+    ...overlayOperations,
+    ...(overlay.requiresImagePrep || overlay.requiresVideoGeneration
+      ? (['generate-keyframe'] satisfies readonly ShotImagePrepOperation[])
+      : []),
+  ]);
+  return {
+    schemaVersion: 1,
+    kind: 'shot-image-prep-plan',
+    planId: existingPlan?.planId ?? `${shotId}-image-prep`,
+    sceneId: existingPlan?.sceneId ?? sceneId,
+    shotId: existingPlan?.shotId ?? shotId,
+    sourceMediaRefs: existingPlan?.sourceMediaRefs ?? overlay.sourceMediaRefs ?? [],
+    imageStrategy: existingPlan?.imageStrategy ?? 'generate-new',
+    operationPlan,
+    ...(existingPlan?.referenceBundle ? { referenceBundle: existingPlan.referenceBundle } : {}),
+    ...(existingPlan?.targetAspectRatio
+      ? { targetAspectRatio: existingPlan.targetAspectRatio }
+      : {}),
+    ...((shot.visualStyle ?? existingPlan?.targetStyle)
+      ? { targetStyle: shot.visualStyle ?? existingPlan?.targetStyle }
+      : {}),
+    ...((overlay.imagePrep?.notes ?? existingPlan?.editInstruction)
+      ? { editInstruction: overlay.imagePrep?.notes ?? existingPlan?.editInstruction }
+      : {}),
+    ...((mergedPrompt ?? existingPlan?.generationPrompt)
+      ? { generationPrompt: mergedPrompt ?? existingPlan?.generationPrompt }
+      : {}),
+    ...(existingPlan?.negativePrompt ? { negativePrompt: existingPlan.negativePrompt } : {}),
+    ...(existingPlan?.maskRefs ? { maskRefs: existingPlan.maskRefs } : {}),
+    ...(existingPlan?.perceptionCardRefs
+      ? { perceptionCardRefs: existingPlan.perceptionCardRefs }
+      : {}),
+    ...(existingPlan?.outputMediaRefs ? { outputMediaRefs: existingPlan.outputMediaRefs } : {}),
+    status: existingPlan?.status ?? 'planned',
+    ...(existingPlan?.diagnostics ? { diagnostics: existingPlan.diagnostics } : {}),
+    metadata: mergeSerializableRecords(existingPlan?.metadata, {
+      ...(overlay.motionIntent ? { motionIntent: overlay.motionIntent } : {}),
+      ...(overlay.cameraIntent ? { cameraIntent: overlay.cameraIntent } : {}),
+      ...(overlay.audioPromptIntent?.positive
+        ? { audioPrompt: overlay.audioPromptIntent.positive }
+        : {}),
+      ...(overlay.approvalNotes ? { approvalNotes: overlay.approvalNotes } : {}),
+      ...(overlay.requiresVideoGeneration !== undefined
+        ? { requiresVideoGeneration: overlay.requiresVideoGeneration }
+        : {}),
+    }),
+  };
+}
+
+function mergePromptText(...values: readonly (string | undefined)[]): string | undefined {
+  const parts = compactStrings(values);
+  return parts.length > 0 ? Array.from(new Set(parts)).join('\n') : undefined;
+}
+
+function normalizeImagePrepOperations(
+  imagePrep: StoryboardPlanImagePrepIntent | undefined,
+): readonly ShotImagePrepOperation[] {
+  return (imagePrep?.operations ?? []).flatMap((operation) => {
+    const normalized = operation.trim().toLowerCase().replace(/_/g, '-');
+    switch (normalized) {
+      case 'crop-panel':
+      case 'crop':
+        return ['crop-panel'];
+      case 'rotate':
+      case 'rotation':
+        return ['rotate'];
+      case 'split-panels':
+      case 'split-panel':
+      case 'split':
+        return ['split-panels'];
+      case 'remove-text':
+      case 'text-removal':
+      case 'remove text':
+        return ['remove-text'];
+      case 'inpaint':
+        return ['inpaint'];
+      case 'outpaint':
+        return ['outpaint'];
+      case 'colorize':
+      case 'color':
+        return ['colorize'];
+      case 'upscale':
+        return ['upscale'];
+      case 'style-normalize':
+      case 'normalize-style':
+        return ['style-normalize'];
+      case 'redraw':
+        return ['redraw'];
+      case 'generate-keyframe':
+      case 'keyframe':
+        return ['generate-keyframe'];
+      default:
+        return [];
+    }
+  });
+}
+
+function uniqueOperations(
+  operations: readonly ShotImagePrepOperation[],
+): readonly ShotImagePrepOperation[] {
+  return Array.from(new Set(operations));
+}
+
+function mergeSerializableRecords(
+  left: ShotImagePrepPlan['metadata'] | undefined,
+  right: ShotImagePrepPlan['metadata'],
+): ShotImagePrepPlan['metadata'] | undefined {
+  const merged = { ...(left ?? {}), ...(right ?? {}) };
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 export function projectStoryboardTableAssetBatch(

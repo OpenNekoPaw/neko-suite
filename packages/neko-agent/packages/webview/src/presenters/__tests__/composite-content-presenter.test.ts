@@ -1839,6 +1839,74 @@ describe('composite content presenter', () => {
       expect.objectContaining({ src: 'webview://safe.png' }),
     ]);
   });
+
+  it('projects AnimationPlan domain blocks as storyboard shot overlays', () => {
+    const composites = parseCompositeContentJson(
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: 'composite-artifact',
+        artifactId: 'artifact-1',
+        title: 'Storyboard With Plan',
+        blocks: [
+          {
+            blockId: 'storyboard',
+            kind: 'domain',
+            domainKind: 'StoryboardTable',
+            payload: {
+              schemaVersion: 1,
+              kind: 'storyboard-table',
+              title: 'Storyboard',
+              scenes: [
+                {
+                  sceneId: 'scene-1',
+                  sceneTitle: 'Opening',
+                  shots: [
+                    {
+                      shotId: 'scene-1-shot-1',
+                      shotNumber: 1,
+                      duration: 3,
+                      visualDescription: 'Mika opens the door.',
+                      characterAction: 'Mika steps in.',
+                      imageStrategy: 'generate-new',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            blockId: 'animation',
+            kind: 'domain',
+            domainKind: 'AnimationPlan',
+            payload: {
+              kind: 'animation-plan-overlay',
+              sourceStoryboardRef: { kind: 'artifact', artifactId: 'artifact-1' },
+              shotOverlays: [
+                {
+                  sceneId: 'scene-1',
+                  shotId: 'scene-1-shot-1',
+                  motionIntent: 'cloth moves in the doorway',
+                  cameraIntent: 'slow push-in',
+                  videoPromptIntent: { positive: 'video prompt' },
+                  requiresVideoGeneration: true,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const projection = projectCompositeBlockRichContent({ composite: composites[0]! });
+
+    expect(projection.kind).toBe('storyboard-table');
+    expect(projection.data.storyboardPlanOverlays?.[0]?.shotOverlays[0]).toMatchObject({
+      shotId: 'scene-1-shot-1',
+      motionIntent: 'cloth moves in the doorway',
+      cameraIntent: 'slow push-in',
+      videoPromptIntent: { positive: 'video prompt' },
+      requiresVideoGeneration: true,
+    });
+  });
 });
 
 function makeImageToolCall(

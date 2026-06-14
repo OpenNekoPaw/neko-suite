@@ -7,6 +7,7 @@ import type {
 } from '@neko-agent/types';
 import type {
   StoryboardTable,
+  StoryboardPlanOverlay,
   StoryboardMediaRef,
   StoryboardValidationDiagnostic,
   DocumentArchiveResourceRef,
@@ -17,6 +18,7 @@ import type {
 import {
   isEntityMemoryContribution,
   isResourceRef,
+  normalizeStoryboardPlanOverlay,
   normalizeStoryboardTable,
   parseDocumentArchiveResourceRef,
 } from '@neko/shared';
@@ -74,6 +76,7 @@ export interface CompositeRichContentData {
   readonly title?: string;
   readonly plugins?: PluginsAvailable;
   readonly storyboardTable?: StoryboardTable;
+  readonly storyboardPlanOverlays?: readonly StoryboardPlanOverlay[];
   readonly entityMemoryContribution?: EntityMemoryContribution;
   readonly storyboardDiagnostics?: readonly CompositeStoryboardDiagnostic[];
   readonly sections: readonly ResolvedCompositeSection[];
@@ -191,6 +194,7 @@ export function projectCompositeBlockRichContent(
     ...(input.composite.title ? { title: input.composite.title } : {}),
     ...(input.plugins ? { plugins: input.plugins } : {}),
     ...(storyboardTable ? { storyboardTable } : {}),
+    ...resolveStoryboardPlanOverlays(input.composite, storyboardTable),
     ...resolveEntityMemoryContribution(input.composite),
     ...mergeStoryboardDiagnostics(input.composite.storyboardDiagnostics, diagnostics),
     sections,
@@ -206,6 +210,22 @@ export function projectCompositeBlockRichContent(
     case 'report':
       return { kind: 'asset-gallery', data: { ...base, template: input.composite.template } };
   }
+}
+
+function resolveStoryboardPlanOverlays(
+  composite: CompositeBlockData,
+  storyboardTable: StoryboardTable | undefined,
+): { readonly storyboardPlanOverlays?: readonly StoryboardPlanOverlay[] } {
+  if (!composite.storyboardPlanOverlays || composite.storyboardPlanOverlays.length === 0) {
+    return {};
+  }
+  const overlays = composite.storyboardPlanOverlays.flatMap((overlay) => {
+    const normalized = normalizeStoryboardPlanOverlay(overlay, {
+      sourceStoryboard: storyboardTable,
+    });
+    return normalized.overlay ? [normalized.overlay] : [];
+  });
+  return overlays.length > 0 ? { storyboardPlanOverlays: overlays } : {};
 }
 
 function resolveEntityMemoryContribution(composite: CompositeBlockData): {

@@ -8,14 +8,16 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 2. Use GetContext to inspect available related skills. Activate a focused skill when its detailed guidance is needed.
 3. For comic EPUB/PDF/CBZ/CBR pages, prefer comic-to-storyboard first.
 4. For still images or image sequences, prefer image-to-shot.
-5. For an existing CompositeArtifact with a StoryboardTable domain block, or a legacy bare StoryboardTable, prefer storyboard-to-animation-plan before generation or Cut.
-6. For an existing animation plan and a Cut target, prefer animation-plan-to-cut.
-7. For already generated shots, prefer generated-shot-assembly and export-video-package as needed.
-8. Stop after planning when generation providers, target plugins, approvals, or safe media refs are unavailable.
+5. For an existing CompositeArtifact with a StoryboardTable domain block, prefer storyboard-to-animation-plan before generation or Cut.
+6. Treat AnimationPlan as a StoryboardTable overlay keyed by stable `shotId`, not as a duplicate storyboard table. If shot ids are missing or unstable, stop and request/fix stable ids before planning generation.
+7. For an existing animation plan overlay and a Cut target, prefer animation-plan-to-cut.
+8. For already generated shots, prefer generated-shot-assembly and export-video-package as needed.
+9. Stop after planning when generation providers, target plugins, approvals, or safe media refs are unavailable.
 
 ## Structured Artifact Rules
 
 - Markdown is presentation only. For storyboard, animation, Canvas, Cut, generated media, or execution summaries, emit validated structured payloads.
+- StoryboardTable remains the creative shot source. AnimationPlan carries only provider-neutral execution intent in `shotOverlays[]`; runtime status belongs to Agent async tasks or execution summaries.
 - Use actual tool-result or generated-asset references for media. Do not invent ids.
 - Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.
 - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Use QuerySemanticCoverage when a focused skill needs semantic evidence reuse for stable source ranges.
@@ -25,7 +27,7 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 
 - comic-to-storyboard: comic page reading, panel/OCR evidence, CompositeArtifact output with a StoryboardTable domain block.
 - image-to-shot: still image references to shot/storyboard plans.
-- storyboard-to-animation-plan: storyboard rows to motion/camera/generation plans.
+- storyboard-to-animation-plan: storyboard rows to shot-scoped motion/camera/generation overlay plans.
 - animation-plan-to-cut: animation plans to Cut timeline payloads.
 - generated-shot-assembly: generated media refs to assembly summaries.
 - export-video-package: export-oriented packaging and delivery.

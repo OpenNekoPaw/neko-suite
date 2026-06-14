@@ -59,7 +59,13 @@ export class KeywordSkillMatcher extends SkillMatcher {
       '制作分镜表',
       '输出分镜表',
     ],
-    'animation-plan': ['animation plan', 'motion plan', '动画计划', '运镜计划', '动态漫画计划'],
+    'storyboard-plan-overlay': [
+      'animation plan',
+      'motion plan',
+      '动画计划',
+      '运镜计划',
+      '动态漫画计划',
+    ],
     'cut-storyboard-payload': ['cut assembly', 'timeline assembly', '剪辑装配', '时间线装配'],
   };
 

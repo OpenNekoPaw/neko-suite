@@ -62,7 +62,7 @@ description: Convert media inputs into video planning artifacts.
           referencedSkills: [{ id: 'image-to-shot', relationship: 'delegator' }],
           mediaWorkflow: {
             acceptedModalities: ['image'],
-            producedArtifacts: ['animation-plan'],
+            producedArtifacts: ['storyboard-plan-overlay'],
           },
         }),
       }),
@@ -77,7 +77,7 @@ description: Convert media inputs into video planning artifacts.
         referencedSkills: [{ id: 'image-to-shot', relationship: 'delegator' }],
         mediaWorkflow: {
           acceptedModalities: ['image'],
-          producedArtifacts: ['animation-plan'],
+          producedArtifacts: ['storyboard-plan-overlay'],
         },
       },
     });

@@ -254,6 +254,14 @@ describe('storyboard transfer presenter', () => {
       storyboard: {
         mode: 'semantic',
         sourceScriptUri: 'agent://rich-content/storyboard-table',
+        creativeScope: {
+          kind: 'scene',
+          workId: 'scene-semantic',
+          title: 'Semantic Scene',
+          sceneIds: ['scene-semantic'],
+          shotIds: ['scene-semantic-shot-7'],
+          sourceStoryboardRef: 'agent://rich-content/storyboard-table',
+        },
         scenes: [
           {
             sceneId: 'scene-semantic',
@@ -271,6 +279,18 @@ describe('storyboard transfer presenter', () => {
                 sceneTags: ['signal'],
                 dialogue: 'There it is.',
                 generationPrompt: 'semantic prompt',
+                shotImagePrepPlan: {
+                  schemaVersion: 1,
+                  kind: 'shot-image-prep-plan',
+                  planId: 'scene-semantic-shot-7-image-prep',
+                  sceneId: 'scene-semantic',
+                  shotId: 'scene-semantic-shot-7',
+                  sourceMediaRefs: [],
+                  imageStrategy: 'generate-new',
+                  operationPlan: ['generate-keyframe'],
+                  generationPrompt: 'semantic prompt',
+                  status: 'planned',
+                },
               },
             ],
           },
@@ -456,6 +476,14 @@ describe('storyboard transfer presenter', () => {
       storyboard: {
         mode: 'semantic',
         sourceScriptUri: 'agent://rich-content/storyboard-table',
+        creativeScope: {
+          kind: 'scene',
+          workId: 'scene-page-1',
+          title: 'Page 1',
+          sceneIds: ['scene-page-1'],
+          shotIds: ['scene-page-1-shot-1'],
+          sourceStoryboardRef: 'agent://rich-content/storyboard-table',
+        },
         scenes: [
           {
             sceneId: 'scene-page-1',
@@ -484,6 +512,28 @@ describe('storyboard transfer presenter', () => {
                   },
                 ],
                 referenceImageResourceRef: resourceRef,
+                shotImagePrepPlan: {
+                  schemaVersion: 1,
+                  kind: 'shot-image-prep-plan',
+                  planId: 'scene-page-1-shot-1-image-prep',
+                  sceneId: 'scene-page-1',
+                  shotId: 'scene-page-1-shot-1',
+                  sourceMediaRefs: [
+                    {
+                      refId: 'page-1-panel',
+                      role: 'source',
+                      locator: {
+                        type: 'tool-result',
+                        toolCallId: 'read-image-1',
+                        assetIndex: 0,
+                      },
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                  imageStrategy: 'use-as-reference',
+                  operationPlan: [],
+                  status: 'planned',
+                },
               },
             ],
           },
@@ -1269,5 +1319,79 @@ describe('storyboard transfer presenter', () => {
         provenance: { source: 'webview', label: 'assistant-text-block' },
       }),
     ).toBeNull();
+  });
+
+  it('merges storyboard animation overlays into Canvas shot plans', () => {
+    const payload = projectStoryboardTableTransferPayload({
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Opening',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene 1',
+            shots: [
+              {
+                shotId: 'shot-1',
+                shotNumber: 1,
+                duration: 4,
+                visualDescription: 'Rin sees the signal.',
+                characterAction: 'Rin leans closer.',
+                visualStyle: 'watercolor manga',
+                sceneTags: ['signal'],
+                imageStrategy: 'use-as-reference',
+                generationPrompt: 'base storyboard prompt',
+              },
+            ],
+          },
+        ],
+      },
+      storyboardPlanOverlays: [
+        {
+          schemaVersion: 1,
+          kind: 'storyboard-plan-overlay',
+          overlayType: 'AnimationPlan',
+          sourceStoryboardRef: { kind: 'artifact', artifactId: 'storyboard-1' },
+          shotOverlays: [
+            {
+              shotId: 'shot-1',
+              motionIntent: 'hair moves in the rain',
+              cameraIntent: 'slow push-in',
+              imagePrep: { operations: ['text-removal', 'upscale'], notes: 'clean speech text' },
+              videoPromptIntent: { positive: 'cinematic rain motion' },
+              requiresImagePrep: true,
+              requiresVideoGeneration: true,
+            },
+          ],
+        },
+      ],
+      sections: [{ id: 'section-0', index: 0, media: [], diagnostics: [] }],
+      diagnostics: [],
+    });
+
+    const shotPlan =
+      payload?.kind === 'canvasStoryboard' ? payload.storyboard.scenes[0]?.shotPlans[0] : undefined;
+    expect(shotPlan).toMatchObject({
+      shotId: 'shot-1',
+      generationPrompt:
+        'base storyboard prompt\ncinematic rain motion\nhair moves in the rain\nslow push-in',
+      shotImagePrepPlan: {
+        shotId: 'shot-1',
+        imageStrategy: 'use-as-reference',
+        operationPlan: ['remove-text', 'upscale', 'generate-keyframe'],
+        targetStyle: 'watercolor manga',
+        editInstruction: 'clean speech text',
+        generationPrompt:
+          'base storyboard prompt\ncinematic rain motion\nhair moves in the rain\nslow push-in',
+        metadata: {
+          motionIntent: 'hair moves in the rain',
+          cameraIntent: 'slow push-in',
+          requiresVideoGeneration: true,
+        },
+      },
+    });
   });
 });

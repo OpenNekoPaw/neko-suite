@@ -213,7 +213,7 @@
 
 ## 动画计划结构
 
-输出动画计划时，将它放入 `CompositeArtifact` 的 domain block：
+输出动画计划时，将它作为按稳定 `shotId` 索引的 StoryboardTable overlay 放入 `CompositeArtifact` 的 domain block。不要重复分镜行，也不要把异步任务状态写进 plan：
 
 ```json
 {
@@ -221,16 +221,16 @@
   "domainKind": "AnimationPlan",
   "schemaVersion": 1,
   "payload": {
-    "kind": "animation-plan",
-    "sourceStoryboardRef": "artifact-or-storyboard-id",
-    "shots": [
+    "kind": "animation-plan-overlay",
+    "overlayType": "AnimationPlan",
+    "sourceStoryboardRef": { "kind": "artifact", "artifactId": "artifact-or-storyboard-id" },
+    "shotOverlays": [
       {
         "sceneId": "scene-1",
         "shotId": "scene-1-shot-1",
-        "duration": 3,
-        "motionPrompt": "角色小幅动作和环境运动",
-        "cameraPrompt": "中景平视，缓慢推进",
-        "generationPrompt": "基于来源引用的视频关键帧提示词",
+        "motionIntent": "角色小幅动作和环境运动",
+        "cameraIntent": "中景平视，缓慢推进",
+        "videoPromptIntent": { "positive": "基于来源引用的视频关键帧提示词" },
         "requiresImagePrep": true,
         "requiresVideoGeneration": true,
         "sourceMediaRefs": [],

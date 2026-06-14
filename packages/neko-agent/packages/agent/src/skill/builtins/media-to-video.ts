@@ -103,7 +103,7 @@ export const mediaToVideoSkill: Skill = {
       'CompositeArtifact',
       'GenericTable',
       'StoryboardTable',
-      'animation-plan',
+      'storyboard-plan-overlay',
       'generated-media-ref',
     ],
     producedArtifacts: [
@@ -111,7 +111,7 @@ export const mediaToVideoSkill: Skill = {
       'GenericTable',
       'StoryboardTable',
       'EntityMemoryContribution',
-      'animation-plan',
+      'storyboard-plan-overlay',
       'cut-storyboard-payload',
       'generated-media-ref',
       'workflow-execution-summary',
@@ -178,7 +178,7 @@ export const comicToAnimationSkill: Skill = {
       'GenericTable',
       'StoryboardTable',
       'comic-shot-asset-prep',
-      'animation-plan',
+      'storyboard-plan-overlay',
       'generated-media-ref',
     ],
     producedArtifacts: [
@@ -187,7 +187,7 @@ export const comicToAnimationSkill: Skill = {
       'StoryboardTable',
       'EntityMemoryContribution',
       'comic-shot-asset-prep',
-      'animation-plan',
+      'storyboard-plan-overlay',
       'cut-storyboard-payload',
       'generated-media-ref',
       'workflow-execution-summary',
@@ -240,7 +240,12 @@ export const imageToShotSkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['image', 'image-sequence'],
-    producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable', 'animation-plan'],
+    producedArtifacts: [
+      'CompositeArtifact',
+      'GenericTable',
+      'StoryboardTable',
+      'storyboard-plan-overlay',
+    ],
     artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
     tags: ['image', 'shot', 'reference'],
     costLevel: 'medium',
@@ -252,7 +257,7 @@ export const imageToShotSkill: Skill = {
 export const storyboardToAnimationPlanSkill: Skill = {
   name: 'storyboard-to-animation-plan',
   description:
-    'Convert CompositeArtifact storyboard domain blocks or StoryboardTable rows into animation shot plans with motion, camera, generation, and continuity guidance.',
+    'Convert CompositeArtifact storyboard domain blocks into storyboard plan overlays with motion, camera, generation, and continuity guidance.',
   content: storyboardToAnimationPlanContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -273,8 +278,8 @@ export const storyboardToAnimationPlanSkill: Skill = {
   mediaWorkflow: {
     acceptedModalities: ['storyboard'],
     inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
-    producedArtifacts: ['animation-plan'],
-    tags: ['storyboard', 'animation-plan', 'motion'],
+    producedArtifacts: ['storyboard-plan-overlay'],
+    tags: ['storyboard', 'storyboard-plan-overlay', 'motion'],
     costLevel: 'medium',
     riskLevel: 'medium',
     validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
@@ -284,7 +289,7 @@ export const storyboardToAnimationPlanSkill: Skill = {
 export const animationPlanToCutSkill: Skill = {
   name: 'animation-plan-to-cut',
   description:
-    'Project a validated animation plan or storyboard into Cut-ready timeline payloads without owning generation.',
+    'Project a validated storyboard plan overlay or storyboard into Cut-ready timeline payloads without owning generation.',
   content: animationPlanToCutContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -303,7 +308,7 @@ export const animationPlanToCutSkill: Skill = {
   referencedSkills: [{ id: 'media-to-video', relationship: 'collaborator' }],
   mediaWorkflow: {
     acceptedModalities: ['storyboard'],
-    inputArtifacts: ['animation-plan', 'StoryboardTable'],
+    inputArtifacts: ['storyboard-plan-overlay', 'StoryboardTable'],
     producedArtifacts: ['cut-storyboard-payload'],
     tags: ['cut', 'timeline', 'assembly'],
     costLevel: 'low',
@@ -334,7 +339,7 @@ export const generatedShotAssemblySkill: Skill = {
   ],
   mediaWorkflow: {
     acceptedModalities: ['mixed', 'video', 'audio'],
-    inputArtifacts: ['generated-media-ref', 'animation-plan'],
+    inputArtifacts: ['generated-media-ref', 'storyboard-plan-overlay'],
     producedArtifacts: ['workflow-execution-summary'],
     tags: ['assembly', 'generated-media'],
     costLevel: 'low',

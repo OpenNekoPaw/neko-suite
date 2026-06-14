@@ -9,6 +9,7 @@ import type {
   ArtifactExtensionMap,
   MessageAttachment,
   PerceptionCard,
+  StoryboardPlanOverlay,
   StoryboardTable,
   StoryboardValidationDiagnostic,
   ToolResultAttachment,
@@ -82,6 +83,7 @@ export interface CompositeBlockData {
   readonly template: CompositeTemplate;
   readonly title?: string;
   readonly storyboardTable?: StoryboardTable;
+  readonly storyboardPlanOverlays?: readonly StoryboardPlanOverlay[];
   readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnostic[];
   readonly sections: readonly CompositeSection[];
   readonly extensions?: ArtifactExtensionMap;

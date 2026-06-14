@@ -213,7 +213,7 @@ Minimal mapping example:
 
 ## Animation Plan Shape
 
-When emitting an animation plan, wrap it in a `CompositeArtifact` domain block:
+When emitting an animation plan, wrap it in a `CompositeArtifact` domain block as a StoryboardTable overlay keyed by stable `shotId`. Do not duplicate storyboard rows or store async task status in the plan:
 
 ```json
 {
@@ -221,16 +221,16 @@ When emitting an animation plan, wrap it in a `CompositeArtifact` domain block:
   "domainKind": "AnimationPlan",
   "schemaVersion": 1,
   "payload": {
-    "kind": "animation-plan",
-    "sourceStoryboardRef": "artifact-or-storyboard-id",
-    "shots": [
+    "kind": "animation-plan-overlay",
+    "overlayType": "AnimationPlan",
+    "sourceStoryboardRef": { "kind": "artifact", "artifactId": "artifact-or-storyboard-id" },
+    "shotOverlays": [
       {
         "sceneId": "scene-1",
         "shotId": "scene-1-shot-1",
-        "duration": 3,
-        "motionPrompt": "small character motion and environmental movement",
-        "cameraPrompt": "slow push-in, eye-level medium shot",
-        "generationPrompt": "video-ready visual prompt grounded in source refs",
+        "motionIntent": "small character motion and environmental movement",
+        "cameraIntent": "slow push-in, eye-level medium shot",
+        "videoPromptIntent": { "positive": "video-ready visual prompt grounded in source refs" },
         "requiresImagePrep": true,
         "requiresVideoGeneration": true,
         "sourceMediaRefs": [],
