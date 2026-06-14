@@ -421,9 +421,9 @@ describe('composite rich content renderers', () => {
       />,
     );
 
-    expect(markup).toContain('w-[1334px] max-w-none');
-    expect(markup).toContain('w-[220px] max-w-[220px]');
-    expect(markup).toContain('inline-flex max-h-[220px] max-w-[200px]');
+    expect(markup).toContain('w-[1124px] max-w-none');
+    expect(markup).toContain('w-[180px] max-w-[180px]');
+    expect(markup).toContain('inline-flex max-h-[220px] max-w-[170px]');
     expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).toContain('object-contain');
     expect(markup).not.toContain('object-cover');

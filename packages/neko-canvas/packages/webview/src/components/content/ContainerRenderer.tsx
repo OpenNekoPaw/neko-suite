@@ -84,7 +84,7 @@ const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
 
 const SCENE_TABLE_COLUMN_WIDTHS: Record<SceneShotTableColumnId, number> = {
   shot: 96,
-  image: 240,
+  image: 200,
   duration: 88,
   camera: 150,
   'visual-action': 260,
@@ -1005,7 +1005,7 @@ function SceneShotTableImageCell({
   if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
     return (
       <div
-        className="flex h-[220px] max-w-[220px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 px-2 text-[10px] text-gray-400"
+        className="flex h-[220px] max-w-[180px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 px-2 text-[10px] text-gray-400"
         data-scene-shot-image-preview="large"
       >
         {t('scene.imageUnavailable')}
@@ -1014,7 +1014,7 @@ function SceneShotTableImageCell({
   }
   return (
     <div
-      className="inline-flex max-h-[220px] max-w-[220px] overflow-hidden rounded border border-gray-200 bg-gray-50 align-top"
+      className="inline-flex max-h-[220px] max-w-[180px] overflow-hidden rounded border border-gray-200 bg-gray-50 align-top"
       data-scene-shot-image-preview="large"
     >
       <CardPreviewSlot
