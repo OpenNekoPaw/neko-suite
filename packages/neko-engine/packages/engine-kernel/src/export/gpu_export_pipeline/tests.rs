@@ -158,9 +158,11 @@ impl PuppetRenderPort for FakePuppetRenderPort {
     }
 }
 
+type SceneRenderCall = (Option<String>, f32, (u32, u32));
+
 struct FakeSceneRenderPort {
     ctx: Arc<GpuContext>,
-    calls: Mutex<Vec<(Option<String>, f32, (u32, u32))>>,
+    calls: Mutex<Vec<SceneRenderCall>>,
 }
 
 impl FakeSceneRenderPort {

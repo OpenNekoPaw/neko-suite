@@ -513,16 +513,18 @@ impl Timeline {
 
         match &mut element.element_type {
             ElementType::Media(ref mut m) => {
-                if !std::path::Path::new(&m.src).is_absolute() {
-                    m.src = base.join(&m.src).to_string_lossy().to_string();
-                }
+                Self::resolve_source_path(&mut m.src, base);
             }
             ElementType::Audio(ref mut a) => {
-                if !std::path::Path::new(&a.src).is_absolute() {
-                    a.src = base.join(&a.src).to_string_lossy().to_string();
-                }
+                Self::resolve_source_path(&mut a.src, base);
             }
             _ => {}
+        }
+    }
+
+    fn resolve_source_path(src: &mut String, base: &std::path::Path) {
+        if !std::path::Path::new(src.as_str()).is_absolute() {
+            *src = base.join(src.as_str()).to_string_lossy().to_string();
         }
     }
 }

@@ -338,13 +338,12 @@ fn kernel_public_modules_are_allowlisted() {
         }
     }
 
-    for forbidden in ["pub use neko_runtime_puppet::world::PuppetDelta;"] {
-        assert!(
-            !source.contains(forbidden),
-            "engine-kernel root must keep domain shortcuts behind `contracts`, not `{}`",
-            forbidden
-        );
-    }
+    let forbidden = "pub use neko_runtime_puppet::world::PuppetDelta;";
+    assert!(
+        !source.contains(forbidden),
+        "engine-kernel root must keep domain shortcuts behind `contracts`, not `{}`",
+        forbidden
+    );
 }
 
 #[test]

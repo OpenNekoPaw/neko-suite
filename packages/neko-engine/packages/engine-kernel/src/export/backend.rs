@@ -903,8 +903,10 @@ mod tests {
             total_ns: Duration::from_millis(1).as_nanos() as u64,
             ..Default::default()
         };
-        let mut stats = ExportStats::default();
-        stats.encode_time_ms = timing.total_ns as f64 / 1_000_000.0;
+        let stats = ExportStats {
+            encode_time_ms: timing.total_ns as f64 / 1_000_000.0,
+            ..Default::default()
+        };
         assert_eq!(stats.encode_time_ms, 1.0);
     }
 }
