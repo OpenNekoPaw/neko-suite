@@ -1072,11 +1072,10 @@ fn write_float_accessor(
     }
 
     let byte_length = bin.len() - offset;
-    let element_count = if component_count > 0 {
-        data.len() / component_count
-    } else {
-        data.len()
-    };
+    let element_count = data
+        .len()
+        .checked_div(component_count)
+        .unwrap_or(data.len());
 
     buffer_views.push(serde_json::json!({
         "buffer": 0,

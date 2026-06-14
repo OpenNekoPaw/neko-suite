@@ -14,6 +14,10 @@ const config: KnipConfig = {
     // Skills are runtime CLI scripts, not imported modules
     'skills/**',
   ],
+  ignoreBinaries: [
+    // Root package scripts invoke this local CI wrapper directly.
+    'scripts/act-ci.sh',
+  ],
   ignoreDependencies: [
     '@types/vscode', // Provided by VSCode runtime
     'esbuild', // Used as CLI bundler, not imported

@@ -699,7 +699,7 @@ mod tests {
         // When no buffers provided, identity matrices are returned as fallback
         // (tested indirectly via the no-accessor branch in read_ibms)
         let identity = glam::Mat4::IDENTITY;
-        let result = vec![identity; 2];
+        let result = [identity; 2];
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], glam::Mat4::IDENTITY);
     }
