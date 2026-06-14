@@ -121,7 +121,7 @@ describe('CardPreviewSlot rendering', () => {
     expect(JSON.stringify(source)).not.toContain('runtimeUrl');
   });
 
-  it('renders review-full image previews scaled within the preview frame', () => {
+  it('renders review-full image previews with bounded natural dimensions', () => {
     const source: CardPreviewSource = {
       renderForm: 'asset-thumbnail',
       aspectRatio: '3/2',
@@ -147,8 +147,8 @@ describe('CardPreviewSlot rendering', () => {
       }),
     );
 
-    expect(markup).toContain('relative flex h-full w-full');
-    expect(markup).toContain('h-full w-full object-contain');
+    expect(markup).toContain('relative inline-flex max-h-[220px] max-w-[300px]');
+    expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).not.toContain('aspect-ratio');
     expect(markup).not.toContain('object-cover');
     expect(markup).not.toContain('max-h-[720px]');

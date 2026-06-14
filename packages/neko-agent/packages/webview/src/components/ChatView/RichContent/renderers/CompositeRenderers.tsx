@@ -149,10 +149,10 @@ function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRo
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1920px] w-full table-fixed border-separate border-spacing-0 text-left">
+      <table className="min-w-[1800px] w-full table-fixed border-separate border-spacing-0 text-left">
         <colgroup>
           <col className="w-[110px]" />
-          <col className="w-[440px]" />
+          <col className="w-[320px]" />
           <col className="w-[74px]" />
           <col className="w-[120px]" />
           <col className="w-[220px]" />
@@ -308,7 +308,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="w-[440px] min-w-[440px] max-w-[440px]">
+      <TableCell className="w-[320px] min-w-[320px] max-w-[320px]">
         {section && section.media.length > 0 ? (
           <div className="grid gap-1">
             {section.media.map((media) => (
@@ -705,7 +705,15 @@ function MediaPreview({
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   const label = media.caption ?? media.label ?? media.assetId ?? 'Media';
-  const previewFrameClassName = compact ? 'h-[180px] max-h-[180px]' : 'h-[220px] max-h-[220px]';
+  const imagePreviewFrameClassName = compact
+    ? 'inline-flex max-h-[220px] max-w-[300px]'
+    : 'flex h-[220px] max-h-[220px] w-full';
+  const previewImageClassName = compact
+    ? 'h-auto max-h-[220px] w-auto max-w-full object-contain'
+    : 'h-full w-full object-contain';
+  const fallbackPreviewFrameClassName = compact
+    ? 'h-[160px] max-h-[160px]'
+    : 'h-[220px] max-h-[220px]';
   const roleLabel = formatMediaRole(media.role);
   const hasRenderableSource = media.src.trim().length > 0;
   const canOpen = canOpenMedia(media);
@@ -715,7 +723,7 @@ function MediaPreview({
       <div className="min-w-0">
         <button
           type="button"
-          className={`flex w-full min-w-0 items-center justify-center overflow-hidden rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] disabled:cursor-default ${previewFrameClassName}`}
+          className={`min-w-0 items-center justify-center overflow-hidden rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] disabled:cursor-default ${imagePreviewFrameClassName}`}
           onClick={() => openMedia(media)}
           disabled={!canOpen}
           title={label}
@@ -724,7 +732,7 @@ function MediaPreview({
             <img
               src={media.src}
               alt={label}
-              className="h-full w-full object-contain"
+              className={previewImageClassName}
               loading="lazy"
               onError={() => setImageFailed(true)}
             />
@@ -748,7 +756,7 @@ function MediaPreview({
           media={media}
           label={label}
           compact={compact}
-          previewHeightClassName={previewFrameClassName}
+          previewHeightClassName={fallbackPreviewFrameClassName}
         />
       );
     }
@@ -757,7 +765,7 @@ function MediaPreview({
         src={media.src}
         controls
         preload="metadata"
-        className={`w-full rounded bg-black object-contain ${previewFrameClassName}`}
+        className={`w-full rounded bg-black object-contain ${fallbackPreviewFrameClassName}`}
         title={label}
       />
     );

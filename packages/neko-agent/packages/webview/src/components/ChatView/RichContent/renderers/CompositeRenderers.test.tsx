@@ -367,7 +367,7 @@ describe('composite rich content renderers', () => {
     expect(screen.getByAltText('Original panel')).toBeTruthy();
   });
 
-  it('renders semantic storyboard images scaled inside a fixed table cell', () => {
+  it('renders semantic storyboard images with a bounded natural-size preview', () => {
     registerDefaultRenderers();
 
     const markup = renderWithI18nToStaticMarkup(
@@ -421,10 +421,10 @@ describe('composite rich content renderers', () => {
       />,
     );
 
-    expect(markup).toContain('min-w-[1920px]');
-    expect(markup).toContain('w-[440px] min-w-[440px] max-w-[440px]');
-    expect(markup).toContain('h-[180px] max-h-[180px]');
-    expect(markup).toContain('h-full w-full object-contain');
+    expect(markup).toContain('min-w-[1800px]');
+    expect(markup).toContain('w-[320px] min-w-[320px] max-w-[320px]');
+    expect(markup).toContain('inline-flex max-h-[220px] max-w-[300px]');
+    expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).toContain('object-contain');
     expect(markup).not.toContain('object-cover');
     expect(markup).not.toContain('max-h-[720px]');
