@@ -552,7 +552,7 @@ mod tests {
 
         // Register 3 resources (at capacity)
         let id1 = registry.register(Path::new("/tmp/a.mp4")).await;
-        let id2 = registry.register(Path::new("/tmp/b.mp4")).await;
+        let _id2 = registry.register(Path::new("/tmp/b.mp4")).await;
         let id3 = registry.register(Path::new("/tmp/c.mp4")).await;
         assert_eq!(registry.count().await, 3);
 

@@ -335,6 +335,8 @@ mod tests {
             plugin_manager,
             preview_registry,
             model_preview_controller,
+            #[cfg(feature = "onnx")]
+            None,
         )
     }
 

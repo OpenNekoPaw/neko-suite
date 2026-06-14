@@ -644,13 +644,13 @@ mod tests {
     async fn test_session_streams() {
         let registry = StreamRegistry::new();
 
-        let (id1, _) = registry
+        let (_id1, _) = registry
             .create_stream("session1", "vid_1", test_config())
             .await;
-        let (id2, _) = registry
+        let (_id2, _) = registry
             .create_stream("session1", "vid_2", test_config())
             .await;
-        let (id3, _) = registry
+        let (_id3, _) = registry
             .create_stream("session2", "vid_3", test_config())
             .await;
 
@@ -665,10 +665,10 @@ mod tests {
     async fn test_resource_streams() {
         let registry = StreamRegistry::new();
 
-        let (id1, _) = registry
+        let (_id1, _) = registry
             .create_stream("session1", "vid_abc", test_config())
             .await;
-        let (id2, _) = registry
+        let (_id2, _) = registry
             .create_stream("session2", "vid_abc", test_config())
             .await;
         let (_id3, _) = registry

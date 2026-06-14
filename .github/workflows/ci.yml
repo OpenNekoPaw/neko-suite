@@ -225,7 +225,7 @@ jobs:
         working-directory: packages/neko-engine
 
       - name: Clippy lint (onnx feature)
-        run: cargo clippy --package neko-engine-kernel --features onnx -- -D warnings
+        run: cargo clippy --package neko-host-api --features onnx -- -D warnings
         working-directory: packages/neko-engine
 
       - name: Run tests
@@ -233,9 +233,11 @@ jobs:
         working-directory: packages/neko-engine
 
       - name: Run tests (onnx feature)
-        # Runs the 10 always-on ML tests (register/list/evict_idle_empty etc.)
-        # that compile onnx-gated code but require no ORT dylib at runtime.
-        run: cargo test --package neko-engine-kernel --features onnx
+        # Compile host-api ONNX integration and run the always-on ML tests
+        # (register/list/evict_idle_empty etc.) that require no ORT dylib.
+        run: |
+          cargo test --package neko-host-api --features onnx
+          cargo test --package neko-runtime-ml
         working-directory: packages/neko-engine
 
       # ── ONNX Runtime dylib — session + eviction timing tests ──────────
@@ -259,7 +261,7 @@ jobs:
         # --include-ignored to run the three #[ignore] evict_idle timing
         # tests that need a live ORT session (stale / fresh / mixed).
         run: |
-          cargo test --package neko-engine-kernel --features onnx \
+          cargo test --package neko-runtime-ml \
             -- ml::tests::test_evict_idle --include-ignored
         working-directory: packages/neko-engine
 

@@ -1116,7 +1116,7 @@ mod tests {
         assert_eq!(data["sampleRate"], 48000);
         assert_eq!(data["channels"], 2);
         assert!(data["warnings"].as_array().unwrap().is_empty());
-        assert!(data["dataBase64"].as_str().unwrap().len() > 0);
+        assert!(!data["dataBase64"].as_str().unwrap().is_empty());
     }
 
     #[tokio::test]
