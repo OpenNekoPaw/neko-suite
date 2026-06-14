@@ -53,7 +53,10 @@ function isUsableFfmpegDir(candidate, deps = {}) {
     path.join(candidate, 'bin'),
   ];
 
-  return includeCandidates.some((filePath) => existsSync(filePath)) && libCandidates.some((filePath) => existsSync(filePath));
+  return (
+    includeCandidates.some((filePath) => existsSync(filePath)) &&
+    libCandidates.some((filePath) => existsSync(filePath))
+  );
 }
 
 /**
@@ -174,7 +177,8 @@ function getSearchCandidates(options = {}) {
   }
 
   if (platform === 'win32') {
-    const chocolateyInstall = env.ChocolateyInstall ?? path.join(env.ProgramData ?? 'C:\\ProgramData', 'chocolatey');
+    const chocolateyInstall =
+      env.ChocolateyInstall ?? path.join(env.ProgramData ?? 'C:\\ProgramData', 'chocolatey');
     const chocolateyToolsDir = path.join(chocolateyInstall, 'lib', 'ffmpeg-shared', 'tools');
     pushCandidate(path.join(chocolateyToolsDir, 'ffmpeg'), 'chocolatey');
     for (const entryPath of listChildDirectories(chocolateyToolsDir, options)) {
@@ -216,13 +220,30 @@ function resolveFfmpegEnv(options = {}) {
 }
 
 /**
+ * ffmpeg-sys-next treats FFMPEG_DIR as a prebuilt prefix and only searches
+ * <prefix>/include. Linux distro packages often use multiarch include paths
+ * such as /usr/include/x86_64-linux-gnu, so those must fall through to
+ * pkg-config instead.
+ *
+ * @param {ResolvedFfmpegEnv} resolved
+ * @returns {boolean}
+ */
+function shouldSetFfmpegDir(resolved) {
+  return resolved.source !== 'pkg-config' && resolved.source !== 'system';
+}
+
+/**
  * @param {NodeJS.ProcessEnv} baseEnv
  * @param {ResolvedFfmpegEnv} resolved
  * @returns {NodeJS.ProcessEnv}
  */
 function createBuildEnv(baseEnv, resolved) {
   const env = { ...baseEnv };
-  env.FFMPEG_DIR = resolved.ffmpegDir;
+  if (shouldSetFfmpegDir(resolved)) {
+    env.FFMPEG_DIR = resolved.ffmpegDir;
+  } else {
+    delete env.FFMPEG_DIR;
+  }
 
   if (resolved.pkgConfigPath) {
     env.PKG_CONFIG_PATH = env.PKG_CONFIG_PATH
@@ -249,7 +270,9 @@ function formatMissingFfmpegMessage(platform = process.platform) {
   if (platform === 'darwin') {
     lines.push('  2. Install Homebrew FFmpeg: `brew install ffmpeg pkg-config`.');
   } else if (platform === 'linux') {
-    lines.push('  2. Install system dev packages, e.g. `sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev pkg-config`.');
+    lines.push(
+      '  2. Install system dev packages, e.g. `sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev pkg-config`.',
+    );
   } else if (platform === 'win32') {
     lines.push('  2. Install FFmpeg and set `FFMPEG_DIR` to its install prefix.');
   } else {

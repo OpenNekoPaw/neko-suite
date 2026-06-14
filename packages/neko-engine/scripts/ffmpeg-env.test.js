@@ -160,6 +160,26 @@ test('createBuildEnv prepends pkg-config path without discarding the existing va
   );
 });
 
+test('createBuildEnv lets Ubuntu multiarch system packages use pkg-config discovery', () => {
+  const env = createBuildEnv(
+    {
+      FFMPEG_DIR: '/stale/ffmpeg',
+      PKG_CONFIG_PATH: '/existing/pkgconfig',
+    },
+    {
+      ffmpegDir: '/usr',
+      pkgConfigPath: '/usr/lib/x86_64-linux-gnu/pkgconfig',
+      source: 'system',
+    },
+  );
+
+  assert.equal(env.FFMPEG_DIR, undefined);
+  assert.equal(
+    env.PKG_CONFIG_PATH,
+    `/usr/lib/x86_64-linux-gnu/pkgconfig${path.delimiter}/existing/pkgconfig`,
+  );
+});
+
 test('getSearchCandidates keeps explicit environment override ahead of automatic fallbacks', () => {
   const candidates = getSearchCandidates({
     env: {
