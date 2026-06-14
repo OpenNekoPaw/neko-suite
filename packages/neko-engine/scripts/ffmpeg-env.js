@@ -257,10 +257,6 @@ function formatMissingFfmpegMessage(platform = process.platform) {
 module.exports = {
   createBuildEnv,
   formatMissingFfmpegMessage,
-  getPkgConfigPath,
   getSearchCandidates,
-  isUsableFfmpegDir,
-  listChildDirectories,
-  queryPkgConfigPrefix,
   resolveFfmpegEnv,
 };

@@ -67,11 +67,6 @@ export function broadcastQuietMode(reason: string | undefined): void {
   }
 }
 
-/** Test-only: inspect the current registry size. */
-export function getLiveSchedulerCount(): number {
-  return liveSchedulers.size;
-}
-
 export class BatchGenerationScheduler implements vscode.Disposable {
   readonly maxConcurrent = 2;
   private readonly maxRetries = 3;

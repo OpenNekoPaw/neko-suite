@@ -15,7 +15,3 @@ function registerAll(allBundles: Record<string, MessageBundle>, locale: Supporte
 
 registerAll(enBundles, 'en');
 registerAll(zhCnBundles, 'zh-cn');
-
-export function t(key: string, params?: Record<string, string | number>): string {
-  return i18nService.t(key, params);
-}

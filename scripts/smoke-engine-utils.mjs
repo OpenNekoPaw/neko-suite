@@ -8,7 +8,7 @@ export const repoRoot = resolve(scriptDir, '..');
 
 const executableName = process.platform === 'win32' ? 'neko-engine.exe' : 'neko-engine';
 
-export function engineBinaryCandidates() {
+function engineBinaryCandidates() {
   const candidates = [
     resolve(repoRoot, 'packages/neko-engine/target/debug', executableName),
     resolve(repoRoot, 'packages/neko-engine/target/release', executableName),

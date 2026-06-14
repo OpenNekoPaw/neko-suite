@@ -4,7 +4,6 @@ export type {
   Live2dBundleLoaderOptions,
   Live2dBundleRuntimeData,
 } from './Live2dBundleLoader';
-export { parseLive2dModel3Manifest } from './model3Manifest';
 export type {
   Live2dBundleManifest,
   Live2dBundleManifestDiagnostic,

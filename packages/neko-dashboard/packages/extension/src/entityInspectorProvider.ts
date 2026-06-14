@@ -439,16 +439,6 @@ function isCandidateDashboardRef(ref: DashboardCreativeEntityRef): boolean {
   return ref.sourceEntityId.startsWith('candidate:');
 }
 
-export function isCreativeEntityChangeRelated(
-  current: CreativeEntityRef,
-  changedRefs: readonly CreativeEntityChangedRef[],
-): boolean {
-  return changedRefs.some((changedRef) => {
-    if (changedRef.entityRef && sameCreativeEntityRef(changedRef.entityRef, current)) return true;
-    return changedRef.kind === 'entity' && changedRef.id === current.entityId;
-  });
-}
-
 function isEntityInspectorActionMessage(value: unknown): value is EntityInspectorActionMessage {
   if (!isRecord(value)) return false;
   return (

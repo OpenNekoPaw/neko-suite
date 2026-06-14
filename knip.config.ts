@@ -53,6 +53,8 @@ const config: KnipConfig = {
     'packages/neko-story/packages/webview/src/preview/conditionEvaluator.ts': ['exports'],
     'packages/neko-story/packages/webview/src/preview/rendererRegistry.tsx': ['exports'],
     'packages/neko-story/packages/webview/src/preview/renderers.tsx': ['exports'],
+    // CommonJS script API consumed by package/bundle scripts via require().
+    'packages/neko-engine/scripts/package-config.js': ['exports'],
   },
 
   workspaces: {

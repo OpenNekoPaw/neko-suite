@@ -4,10 +4,14 @@ module.exports = {
     // ── Rule 1: No circular dependencies ───────────────
     {
       name: 'no-circular',
-      comment: 'Circular dependencies break module isolation and cause runtime issues',
+      comment:
+        'Runtime circular dependencies break module isolation and cause initialization issues',
       severity: 'error',
       from: {},
-      to: { circular: true },
+      to: {
+        circular: true,
+        viaOnly: { dependencyTypesNot: ['type-only', 'type-import'] },
+      },
     },
 
     // ── Rule 2: Layer 0 has zero internal dependencies ─

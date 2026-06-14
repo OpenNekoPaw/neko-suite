@@ -3,7 +3,7 @@ import type {
   DashboardCreativeEntityRow,
 } from '@neko/shared/types/dashboard-creative-entity';
 
-export function containsUnsafeCreativeEntityPath(value: unknown): boolean {
+function containsUnsafeCreativeEntityPath(value: unknown): boolean {
   if (typeof value === 'string') {
     return isUnsafePathString(value);
   }

@@ -4,9 +4,6 @@ import {
 } from '@neko/shared/types/dashboard-project';
 
 export {
-  DASHBOARD_PROJECT_EXTENSIONS,
-  DASHBOARD_PROJECT_TYPE_DEFINITIONS,
-  DASHBOARD_PROJECT_TYPES,
   getDashboardProjectTypeForExtension,
   isDashboardProjectType,
   type DashboardProjectType,
