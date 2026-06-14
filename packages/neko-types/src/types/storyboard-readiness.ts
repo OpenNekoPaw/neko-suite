@@ -5,6 +5,12 @@
 // and backward-compatible Agent handoff payloads.
 // =============================================================================
 
+import type {
+  CanvasBoardSummary,
+  CanvasCreativeScope,
+  CanvasRelatedBoardRef,
+} from './canvas-creative-scope';
+
 export type StorySceneVideoReadinessStatus =
   | 'unknown'
   | 'needs-input'
@@ -117,6 +123,9 @@ export interface CanvasSceneExecutionSummary {
 export interface CanvasStoryboardExecutionSummary {
   readonly sourceScriptUri?: string;
   readonly canvasFileUri?: string;
+  readonly boardSummary?: CanvasBoardSummary;
+  readonly creativeScope?: CanvasCreativeScope;
+  readonly relatedBoards?: readonly CanvasRelatedBoardRef[];
   readonly status?: CanvasExecutionStatus;
   readonly scenes: readonly CanvasSceneExecutionSummary[];
   readonly error?: string;

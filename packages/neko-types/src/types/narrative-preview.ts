@@ -1,6 +1,7 @@
 import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import type { CanvasPlaybackPlan } from './canvas-playback';
 import type { NarrativeAssetRef } from './narrative-asset';
+import type { NarrativeProductionBinding } from './narrative-production-binding';
 
 export const STORY_GENRES = [
   'interactive-film',
@@ -35,6 +36,7 @@ export interface NarrativeSceneMetadata {
   readonly bgm?: NarrativeAssetRef;
   readonly characters?: readonly string[];
   readonly variableEffects?: readonly VariableEffect[];
+  readonly productionRefs?: readonly NarrativeProductionBinding[];
 }
 
 export interface NarrativeEndingMetadata {

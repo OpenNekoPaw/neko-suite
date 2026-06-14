@@ -7,11 +7,20 @@ import type {
   MemoryGraphMetadata,
   NarrativeMetadata,
 } from './canvas';
+import type {
+  CanvasCreativeScope,
+  CanvasRelatedBoardRef,
+  CanvasBoardSummary,
+} from './canvas-creative-scope';
 import type { CanvasConnectionEndpoint, FieldBinding, JsonPointerPath } from './canvas-layered';
 import type {
   CanvasNarrativeAgentDiagnostic,
   CanvasNarrativeNodeAgentSummary,
 } from './canvas-narrative-agent';
+import type {
+  NarrativeProductionBinding,
+  NarrativeProductionBindingDiagnostic,
+} from './narrative-production-binding';
 import type { CanvasSubsystemId } from './canvas-subsystem';
 
 export interface CanvasPoint {
@@ -101,6 +110,18 @@ export interface CanvasUpdateBlockResult {
   nodeId: string;
   changed: boolean;
   data?: Record<string, unknown>;
+}
+
+export interface CanvasUpsertNarrativeProductionBindingRequest {
+  nodeId: string;
+  binding: NarrativeProductionBinding;
+}
+
+export interface CanvasUpsertNarrativeProductionBindingResult {
+  nodeId: string;
+  changed: boolean;
+  productionRefs?: readonly NarrativeProductionBinding[];
+  diagnostics?: readonly NarrativeProductionBindingDiagnostic[];
 }
 
 export type CanvasStructuredContentFormat = 'json' | 'markdown' | 'prompt';
@@ -216,6 +237,7 @@ export interface CanvasAgentActiveContextRequest {
   includeFocusedContainer?: boolean;
   includeNodeDetails?: boolean;
   includeSubsystemMetadata?: boolean;
+  includeBoardNavigation?: boolean;
 }
 
 export interface CanvasAgentSubsystemMetadataSummary {
@@ -228,6 +250,9 @@ export interface CanvasAgentSubsystemMetadataSummary {
 export interface CanvasAgentActiveContextResult {
   documentUri?: string;
   canvasId?: string;
+  boardSummary?: CanvasBoardSummary;
+  creativeScope?: CanvasCreativeScope;
+  relatedBoards?: readonly CanvasRelatedBoardRef[];
   nodeTypeSummary?: Readonly<Record<string, number>>;
   activeSubsystems?: readonly CanvasSubsystemId[];
   selectedNodeIds: string[];

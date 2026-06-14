@@ -337,6 +337,52 @@ describe('canvas playback contracts', () => {
     expect(storyboardPlan.units.map((unit) => unit.kind)).toEqual(['shot']);
   });
 
+  it('derives preview media refs from narrative generated-video production bindings', () => {
+    const generatedVideoResource = {
+      id: 'generated-video-1',
+      scope: 'project' as const,
+      provider: 'generated',
+      kind: 'generated' as const,
+      source: {
+        kind: 'generated-asset' as const,
+        generatedAssetId: 'generated-video-1',
+      },
+      fingerprint: { strategy: 'provider' as const, value: 'generated-video-1' },
+    };
+    const data = canvas([
+      baseNode('start', 'narrative-start'),
+      baseNode('scene-a', 'narrative-scene', {
+        data: {
+          title: 'Interactive clip',
+          productionRefs: [
+            {
+              bindingId: 'bind-video-1',
+              role: 'primary',
+              target: {
+                kind: 'generated-video',
+                ref: {
+                  kind: 'generated-asset',
+                  assetId: 'generated-video-1',
+                  resourceRef: generatedVideoResource,
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ]);
+
+    const plan = createCanvasPlaybackPlan({ canvas: data, adapterId: 'narrative' });
+    expect(plan.units.find((unit) => unit.id === 'scene-a')).toMatchObject({
+      resourceRef: generatedVideoResource,
+      metadata: {
+        previewMediaType: 'video',
+        productionBindingId: 'bind-video-1',
+        productionTargetKind: 'generated-video',
+      },
+    });
+  });
+
   it('copies durable playback metadata while excluding runtime-only preview resources', () => {
     const data = canvas([
       scene('scene-a', ['shot-a']),

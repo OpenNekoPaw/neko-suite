@@ -4,8 +4,11 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
 import {
+  SHOT_IMAGE_PREP_KIND,
   SHOT_IMAGE_PREP_OPERATIONS,
+  SHOT_IMAGE_PREP_SCHEMA_VERSION,
   SHOT_IMAGE_PREP_STATUSES,
+  type ShotImagePrepOperation,
   type ShotImagePrepPlan,
 } from './shot-image-prep';
 
@@ -669,52 +672,157 @@ export function projectStoryboardTableToCanvasPayload(
   table: StoryboardTable,
   options: ProjectStoryboardTableToCanvasOptions = {},
 ): CanvasStoryboardPayload {
+  const sourceScriptUri =
+    options.sourceScriptUri ??
+    table.source?.sourceUri ??
+    `agent://storyboard-table/v${table.schemaVersion}`;
+  const scenes = table.scenes.map((scene, sceneIndex) => ({
+    sceneId: scene.sceneId,
+    sceneTitle: scene.sceneTitle,
+    sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
+    ...(scene.location ? { location: scene.location } : {}),
+    ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
+    shotPlans: scene.shots.map((shot) => ({
+      ...(shot.shotId ? { shotId: shot.shotId } : {}),
+      shotNumber: shot.shotNumber,
+      duration: shot.duration,
+      visualDescription: shot.visualDescription,
+      characters: projectStoryboardCharactersToCanvas(shot.characters),
+      shotScale: shot.shotScale ?? options.defaultShotScale ?? 'MS',
+      ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
+      ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
+      characterAction: shot.characterAction,
+      emotion: shot.emotion ?? [],
+      sceneTags: shot.sceneTags ?? [],
+      ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
+      ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
+      ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
+      ...(shot.textCues ? { textCues: shot.textCues } : {}),
+      ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
+      ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
+      ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
+      ...resolveCanvasStoryboardReferenceImagePath(table, scene, shot, options),
+      ...(shot.vfx ? { vfx: shot.vfx } : {}),
+      ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
+      ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
+      ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
+      ...projectCanvasShotImagePrepPlan(scene, shot),
+    })),
+  }));
   return {
     mode: options.mode ?? 'semantic',
-    sourceScriptUri:
-      options.sourceScriptUri ??
-      table.source?.sourceUri ??
-      `agent://storyboard-table/v${table.schemaVersion}`,
-    scenes: table.scenes.map((scene, sceneIndex) => ({
-      sceneId: scene.sceneId,
-      sceneTitle: scene.sceneTitle,
-      sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
-      ...(scene.location ? { location: scene.location } : {}),
-      ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
-      shotPlans: scene.shots.map((shot) => ({
-        shotNumber: shot.shotNumber,
-        duration: shot.duration,
-        visualDescription: shot.visualDescription,
-        characters: projectStoryboardCharactersToCanvas(shot.characters),
-        shotScale: shot.shotScale ?? options.defaultShotScale ?? 'MS',
-        ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
-        ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
-        characterAction: shot.characterAction,
-        emotion: shot.emotion ?? [],
-        sceneTags: shot.sceneTags ?? [],
-        ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
-        ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
-        ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
-        ...(shot.textCues ? { textCues: shot.textCues } : {}),
-        ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
-        ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
-        ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
-        ...resolveCanvasStoryboardReferenceImagePath(table, scene, shot, options),
-        ...(shot.vfx ? { vfx: shot.vfx } : {}),
-        ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
-        ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
-        ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
-        ...projectCanvasShotImagePrepPlan(shot),
-      })),
-    })),
+    sourceScriptUri,
+    creativeScope: createCanvasScopeForStoryboardPayload(sourceScriptUri, table.title, scenes),
+    scenes,
   };
 }
 
-function projectCanvasShotImagePrepPlan(shot: StoryboardShotRow): {
+function createCanvasScopeForStoryboardPayload(
+  sourceScriptUri: string,
+  title: string,
+  scenes: CanvasStoryboardPayload['scenes'],
+): CanvasStoryboardPayload['creativeScope'] {
+  if (scenes.length === 1) {
+    const scene = scenes[0];
+    return scene
+      ? {
+          kind: 'scene',
+          workId: scene.sceneId,
+          title: scene.sceneTitle,
+          sceneIds: [scene.sceneId],
+          shotIds: scene.shotPlans.map(
+            (shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`,
+          ),
+          sourceStoryboardRef: sourceScriptUri,
+        }
+      : undefined;
+  }
+  if (scenes.length > 1) {
+    return {
+      kind: 'sequence',
+      workId: sourceScriptUri,
+      title,
+      sceneIds: scenes.map((scene) => scene.sceneId),
+      shotIds: scenes.flatMap((scene) =>
+        scene.shotPlans.map((shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`),
+      ),
+      sourceStoryboardRef: sourceScriptUri,
+    };
+  }
+  return undefined;
+}
+
+function projectCanvasShotImagePrepPlan(
+  scene: StoryboardSceneRow,
+  shot: StoryboardShotRow,
+): {
   readonly shotImagePrepPlan?: ShotImagePrepPlan;
 } {
   const plan = shot.extensions?.['neko.shotImagePrep'];
-  return isShotImagePrepPlanLike(plan) ? { shotImagePrepPlan: plan } : {};
+  if (isShotImagePrepPlanLike(plan)) {
+    return { shotImagePrepPlan: plan };
+  }
+  return { shotImagePrepPlan: createDerivedShotImagePrepPlan(scene, shot) };
+}
+
+function createDerivedShotImagePrepPlan(
+  scene: StoryboardSceneRow,
+  shot: StoryboardShotRow,
+): ShotImagePrepPlan {
+  const shotId = shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`;
+  return {
+    schemaVersion: SHOT_IMAGE_PREP_SCHEMA_VERSION,
+    kind: SHOT_IMAGE_PREP_KIND,
+    planId: `${shotId}-image-prep`,
+    sceneId: scene.sceneId,
+    shotId,
+    sourceMediaRefs: [...(shot.sourceMediaRefs ?? [])],
+    imageStrategy: shot.imageStrategy,
+    operationPlan: inferShotImagePrepOperations(shot.imageStrategy),
+    ...(shot.visualStyle ? { targetStyle: shot.visualStyle } : {}),
+    ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
+    ...(shot.decisionReason ? { editInstruction: shot.decisionReason } : {}),
+    status: shot.imageStrategy === 'reuse-original' ? 'skipped' : 'planned',
+    ...(shot.decisionReason
+      ? {
+          metadata: {
+            regenerationRecommendation: {
+              decision: imageStrategyRecommendationDecision(shot.imageStrategy),
+              label: shot.decisionReason,
+              reason: shot.decisionReason,
+            },
+          },
+        }
+      : {}),
+  };
+}
+
+function inferShotImagePrepOperations(
+  imageStrategy: StoryboardShotImageStrategy,
+): readonly ShotImagePrepOperation[] {
+  switch (imageStrategy) {
+    case 'generate-new':
+      return ['generate-keyframe'];
+    case 'transform-original':
+      return ['generate-keyframe'];
+    case 'reuse-original':
+    case 'use-as-reference':
+      return [];
+  }
+}
+
+function imageStrategyRecommendationDecision(
+  imageStrategy: StoryboardShotImageStrategy,
+): 'not-needed' | 'transform-source' | 'regenerate' {
+  switch (imageStrategy) {
+    case 'reuse-original':
+      return 'not-needed';
+    case 'generate-new':
+      return 'regenerate';
+    case 'use-as-reference':
+    case 'transform-original':
+      return 'transform-source';
+  }
 }
 
 function isShotImagePrepPlanLike(value: unknown): value is ShotImagePrepPlan {

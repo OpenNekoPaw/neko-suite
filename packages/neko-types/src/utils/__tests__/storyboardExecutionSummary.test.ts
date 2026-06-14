@@ -32,6 +32,28 @@ describe('createCanvasStoryboardExecutionSummary', () => {
     const summary = createCanvasStoryboardExecutionSummary({
       nodes,
       canvasFileUri: 'file:///project/storyboard.nkc',
+      creativeScope: {
+        kind: 'sequence',
+        workId: 'seq-1',
+        title: 'Sequence 1',
+        sceneIds: ['scene_1'],
+      },
+      relatedBoards: [
+        {
+          role: 'scene',
+          ref: { kind: 'workspace-path', path: 'boards/scene-1.nkc' },
+          label: 'Scene 1 Board',
+        },
+      ],
+      boardSummary: {
+        name: 'Sequence Board',
+        scope: {
+          kind: 'sequence',
+          workId: 'seq-1',
+          title: 'Sequence 1',
+          sceneIds: ['scene_1'],
+        },
+      },
       request: {
         sourceScriptUri: 'file:///project/demo.fountain',
         sceneId: 'scene_1',
@@ -57,6 +79,9 @@ describe('createCanvasStoryboardExecutionSummary', () => {
       lastImportedToTimelineAt: 1234,
       lastImportedToTimelineProject: 'Demo Cut',
     });
+    expect(summary.creativeScope).toMatchObject({ kind: 'sequence', workId: 'seq-1' });
+    expect(summary.relatedBoards?.[0]).toMatchObject({ role: 'scene', label: 'Scene 1 Board' });
+    expect(summary.boardSummary).toMatchObject({ name: 'Sequence Board' });
     expect(JSON.stringify(summary)).not.toContain('blob:runtime');
     expect(JSON.stringify(summary)).not.toContain('data:image');
     expect(JSON.stringify(summary)).not.toContain('engineToken=');

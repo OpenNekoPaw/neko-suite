@@ -389,7 +389,7 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     const skill = baseSkill({
       mediaWorkflow: {
         acceptedModalities: ['image'],
-        producedArtifacts: ['StoryboardTable', 'animation-plan'],
+        producedArtifacts: ['StoryboardTable', 'storyboard-plan-overlay'],
         artifactProfiles: ['comic-shot-asset-prep'],
         inputArtifacts: ['generated-media-ref'],
         referencedCapabilities: ['cut.importStoryboard'],

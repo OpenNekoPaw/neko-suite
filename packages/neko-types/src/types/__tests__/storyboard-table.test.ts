@@ -1075,6 +1075,14 @@ describe('storyboard table contract', () => {
     expect(projectStoryboardTableToCanvasPayload(table)).toEqual({
       mode: 'semantic',
       sourceScriptUri: 'agent://storyboard-table/v1',
+      creativeScope: {
+        kind: 'scene',
+        workId: 'scene-1',
+        title: 'Scene',
+        sceneIds: ['scene-1'],
+        shotIds: ['shot-1'],
+        sourceStoryboardRef: 'agent://storyboard-table/v1',
+      },
       scenes: [
         {
           sceneId: 'scene-1',
@@ -1082,6 +1090,7 @@ describe('storyboard table contract', () => {
           sceneNumber: 1,
           shotPlans: [
             {
+              shotId: 'shot-1',
               shotNumber: 1,
               duration: 4,
               visualDescription: 'Rin looks up.',

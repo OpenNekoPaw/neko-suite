@@ -33,6 +33,11 @@ describe('storyboardPlanner', () => {
     const payload = createStoryboardPayload(scriptIndex);
 
     expect(payload.mode).toBe('mechanical');
+    expect(payload.creativeScope).toMatchObject({
+      kind: 'scene',
+      sceneIds: ['scene_alpha'],
+      sourceStoryboardRef: 'file:///project/demo.fountain',
+    });
     expect(payload.scenes).toHaveLength(1);
     expect(payload.scenes[0]!.shotPlans.length).toBeGreaterThan(0);
     expect(payload.scenes[0]!.shotPlans[0]).toMatchObject({
@@ -64,6 +69,10 @@ describe('storyboardPlanner', () => {
     });
 
     expect(payload.mode).toBe('semantic');
+    expect(payload.creativeScope).toMatchObject({
+      kind: 'scene',
+      title: 'Office Infiltration',
+    });
     expect(payload.scenes[0]).toMatchObject({
       sceneTitle: 'Office Infiltration',
     });

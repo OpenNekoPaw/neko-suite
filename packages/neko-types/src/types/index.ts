@@ -179,6 +179,7 @@ export * from './mediaEngine';
 
 // Canvas types (infinite canvas editor)
 export * from './canvas';
+export * from './canvas-creative-scope';
 export * from './canvas-playback';
 export * from './canvas-layered';
 export * from './canvas-serializable';
@@ -193,11 +194,13 @@ export * from './canvas-narrative-validation';
 export * from './canvas-narrative-agent';
 export * from './canvas-timeline-sync';
 export * from './narrative-asset';
+export * from './narrative-production-binding';
 export * from './narrative-preview';
 export * from './narrative-runtime';
 export * from './storyboard-planner';
 export * from './storyboard-readiness';
 export * from './storyboard-table';
+export * from './storyboard-plan-overlay';
 export * from './shot-image-prep';
 export * from './composite-artifact';
 export * from './artifact-projection';

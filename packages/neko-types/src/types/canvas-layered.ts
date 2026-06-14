@@ -186,6 +186,7 @@ export interface ContainerCapability {
 export type CanvasPreviewRole =
   | 'text'
   | 'image'
+  | 'source-image'
   | 'document-cover'
   | 'audio-waveform'
   | 'video-poster'

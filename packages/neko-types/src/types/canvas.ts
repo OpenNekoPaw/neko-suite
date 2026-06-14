@@ -7,6 +7,7 @@ import type {
 import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import type { NkProjectType } from './canvas-drop';
 import type { CanvasPlaybackMetadata } from './canvas-playback';
+import type { CanvasCreativeScope, CanvasRelatedBoardRef } from './canvas-creative-scope';
 import type { CreativeEntityRef } from './creative-entity-asset-composition';
 import type { DocumentArchiveResourceRef } from './document-reading';
 import type {
@@ -811,6 +812,10 @@ export interface CanvasData {
   connections: CanvasConnection[];
   /** Linked video project path (relative) */
   linkedProject?: string;
+  /** Optional advisory creative work-unit scope for long-form and interactive production. */
+  creativeScope?: CanvasCreativeScope;
+  /** Optional durable navigation refs to related Canvas boards. */
+  relatedBoards?: readonly CanvasRelatedBoardRef[];
   /** Narrative subsystem metadata. */
   narrative?: NarrativeMetadata;
   /** Behavior subsystem metadata. */

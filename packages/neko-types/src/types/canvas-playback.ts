@@ -9,6 +9,10 @@ import type {
 } from './canvas';
 import type { CanvasSerializableRecord, CanvasSerializableValue } from './canvas-serializable';
 import { NARRATIVE_RUNTIME_NODE_TYPES } from './narrative-preview';
+import {
+  isNarrativeProductionBinding,
+  type NarrativeProductionBinding,
+} from './narrative-production-binding';
 import { getContainerChildIds, getNodeParentId, isContainerNode } from '../utils/canvasLayered';
 
 export const CANVAS_PLAYBACK_ADAPTER_IDS = [
@@ -1060,7 +1064,11 @@ function syntheticSequenceTransitions(
 
 function toPlaybackUnit(node: CanvasNode, context: PlaybackProjectionContext): CanvasPlaybackUnit {
   const override = getCanvasPlaybackNodeOverride(context.metadata, node);
-  const metadata = copyPlaybackMetadata(node.data);
+  const productionBindingPreview = createNarrativeProductionBindingPlaybackPreview(node);
+  const metadata = {
+    ...copyPlaybackMetadata(node.data),
+    ...(productionBindingPreview.metadata ?? {}),
+  };
   const durationMs = resolvePlaybackUnitDurationMs(node, override);
   const assetPath =
     node.type === 'media' ? readDurablePlaybackString(node.data.assetPath) : undefined;
@@ -1074,9 +1082,48 @@ function toPlaybackUnit(node: CanvasNode, context: PlaybackProjectionContext): C
     ...(override.role === 'end' ? { terminal: true } : {}),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     ...(assetPath ? { assetPath } : {}),
+    ...(productionBindingPreview.resourceRef
+      ? { resourceRef: productionBindingPreview.resourceRef }
+      : {}),
     ...(node.type === 'media' && node.data.resourceRef
       ? { resourceRef: node.data.resourceRef }
       : {}),
+  };
+}
+
+function createNarrativeProductionBindingPlaybackPreview(node: CanvasNode): {
+  readonly resourceRef?: ResourceRef;
+  readonly metadata?: CanvasSerializableRecord;
+} {
+  if (node.type !== 'narrative-scene') return {};
+  const productionRefs: NarrativeProductionBinding[] = Array.isArray(node.data.productionRefs)
+    ? (node.data.productionRefs as readonly unknown[]).filter(isNarrativeProductionBinding)
+    : [];
+  const binding =
+    productionRefs.find(
+      (candidate) => candidate.role === 'primary' && candidate.target.kind === 'generated-video',
+    ) ??
+    productionRefs.find(
+      (candidate) => candidate.role === 'fallback' && candidate.target.kind === 'generated-video',
+    );
+  if (!binding || binding.target.kind !== 'generated-video') return {};
+  const ref = binding.target.ref;
+  const resourceRef =
+    ref.kind === 'generated-asset'
+      ? ref.resourceRef
+      : ref.kind === 'resource'
+        ? ref.resource
+        : ref.kind === 'tool-result' || ref.kind === 'perception-card'
+          ? ref.resourceRef
+          : undefined;
+  return {
+    ...(resourceRef ? { resourceRef } : {}),
+    metadata: {
+      previewMediaType: 'video',
+      productionBindingId: binding.bindingId,
+      productionBindingRole: binding.role,
+      productionTargetKind: binding.target.kind,
+    },
   };
 }
 

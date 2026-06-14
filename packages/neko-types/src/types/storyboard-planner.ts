@@ -1,4 +1,5 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
+import type { CanvasCreativeScope, CanvasRelatedBoardRef } from './canvas-creative-scope';
 import type {
   StoryboardMediaRef,
   StoryboardTextCue,
@@ -13,6 +14,7 @@ import type { ShotImagePrepPlan } from './shot-image-prep';
 export type StoryboardImportMode = 'mechanical' | 'semantic';
 
 export interface StoryShotPlan {
+  readonly shotId?: string;
   readonly shotNumber?: number;
   readonly duration?: number;
   readonly visualDescription?: string;
@@ -49,6 +51,7 @@ export interface StoryScenePlan {
 }
 
 export interface CanvasStoryboardShotPlan {
+  readonly shotId?: string;
   readonly shotNumber: number;
   readonly duration: number;
   readonly visualDescription: string;
@@ -88,6 +91,8 @@ export interface CanvasStoryboardScenePlan {
 export interface CanvasStoryboardPayload {
   readonly mode: StoryboardImportMode;
   readonly sourceScriptUri: string;
+  readonly creativeScope?: CanvasCreativeScope;
+  readonly relatedBoards?: readonly CanvasRelatedBoardRef[];
   readonly scenes: readonly CanvasStoryboardScenePlan[];
   readonly diagnostics?: readonly StoryboardValidationDiagnostic[];
 }

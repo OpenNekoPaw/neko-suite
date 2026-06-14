@@ -59,8 +59,43 @@ export function createStoryboardPayload(
   return {
     mode,
     sourceScriptUri: scriptIndex.uri,
+    creativeScope: createStoryboardPayloadScope(scriptIndex.uri, scenes),
     scenes,
   };
+}
+
+function createStoryboardPayloadScope(
+  sourceScriptUri: string,
+  scenes: readonly CanvasStoryboardScenePlan[],
+): CanvasStoryboardPayload['creativeScope'] {
+  if (scenes.length === 1) {
+    const scene = scenes[0];
+    return scene
+      ? {
+          kind: 'scene',
+          workId: scene.sceneId,
+          title: scene.sceneTitle,
+          sceneIds: [scene.sceneId],
+          shotIds: scene.shotPlans.map(
+            (shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`,
+          ),
+          sourceStoryboardRef: sourceScriptUri,
+        }
+      : undefined;
+  }
+  if (scenes.length > 1) {
+    return {
+      kind: 'sequence',
+      workId: sourceScriptUri,
+      title: 'Storyboard Sequence',
+      sceneIds: scenes.map((scene) => scene.sceneId),
+      shotIds: scenes.flatMap((scene) =>
+        scene.shotPlans.map((shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`),
+      ),
+      sourceStoryboardRef: sourceScriptUri,
+    };
+  }
+  return undefined;
 }
 
 export async function applyStoryboardPayloadToCanvas(
@@ -101,6 +136,7 @@ export async function applyStoryboardPayloadToCanvas(
             type: 'shot',
             position: { x: shotX, y: shotY },
             data: {
+              shotId: shot.shotId,
               shotNumber: shot.shotNumber,
               duration: shot.duration,
               visualDescription: shot.visualDescription,
@@ -247,6 +283,7 @@ function normalizeShotPlan(
   characterBindings: Readonly<Record<string, string>> | undefined,
 ): CanvasStoryboardShotPlan {
   return {
+    ...(shotPlan.shotId ? { shotId: shotPlan.shotId } : {}),
     shotNumber: shotPlan.shotNumber ?? shotNumber,
     duration: shotPlan.duration ?? DEFAULT_SHOT_DURATION,
     visualDescription: shotPlan.visualDescription ?? (scene.actionSummary || scene.sceneTitle),

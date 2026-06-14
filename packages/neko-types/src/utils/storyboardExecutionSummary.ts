@@ -4,6 +4,9 @@ import type {
   CanvasShotExecutionSummary,
   CanvasStoryboardExecutionSummary,
   CanvasStoryboardExecutionSummaryRequest,
+  CanvasBoardSummary,
+  CanvasCreativeScope,
+  CanvasRelatedBoardRef,
   SceneGroupCanvasNode,
   ShotCanvasNode,
 } from '../types';
@@ -14,6 +17,9 @@ export interface CreateCanvasStoryboardExecutionSummaryInput {
   readonly nodes: readonly CanvasNode[];
   readonly request?: CanvasStoryboardExecutionSummaryRequest;
   readonly canvasFileUri?: string;
+  readonly boardSummary?: CanvasBoardSummary;
+  readonly creativeScope?: CanvasCreativeScope;
+  readonly relatedBoards?: readonly CanvasRelatedBoardRef[];
 }
 
 export function createCanvasStoryboardExecutionSummary(
@@ -29,6 +35,9 @@ export function createCanvasStoryboardExecutionSummary(
   return {
     sourceScriptUri: request.sourceScriptUri,
     canvasFileUri: input.canvasFileUri ?? request.canvasFileUri,
+    ...(input.boardSummary ? { boardSummary: input.boardSummary } : {}),
+    ...(input.creativeScope ? { creativeScope: input.creativeScope } : {}),
+    ...(input.relatedBoards ? { relatedBoards: input.relatedBoards } : {}),
     status: scenes.length > 0 ? summarizeStoryboardStatus(scenes) : 'not-found',
     scenes,
   };
