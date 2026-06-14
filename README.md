@@ -296,6 +296,8 @@ Local CI equivalents:
 pnpm ci:local
 pnpm ci:local:rust
 pnpm ci:local:proto
+pnpm ci:act:list  # Optional: list GitHub Actions jobs supported by local act
+pnpm ci:act       # Optional: run Linux-compatible workflow preflight checks
 ```
 
 ---

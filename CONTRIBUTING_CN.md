@@ -298,6 +298,17 @@ pnpm ci:local:rust       # Rust engine 相关改动
 pnpm ci:local:proto      # Proto 契约与生成类型同步
 ```
 
+当修改 `.github/workflows/ci.yml`、依赖安装、Corepack/pnpm、FFmpeg setup 或 Linux runner shell 逻辑时，可用 `act` 做 GitHub Actions 形状预检：
+
+```bash
+pnpm ci:act:list         # 查看本地 act 支持的 job
+pnpm ci:act              # 默认运行 Linux 兼容 job：build/test-ts/code-quality/cargo-deny
+pnpm ci:act -- --verbose # 透传额外 act 参数
+pnpm ci:act -- --reuse   # 示例：复用容器加速调试
+```
+
+`act` 只是本地预检，不替代 GitHub Actions。`Rust Tests` 在 CI 使用 `macos-latest`，本地仍优先运行 `pnpm ci:local:rust`，最终结果以 GitHub runner 为准。
+
 需要做集成 smoke 时运行：
 
 ```bash

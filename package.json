@@ -42,6 +42,8 @@
     "ci:local": "pnpm format:check && pnpm lint && pnpm build && pnpm test -- --run && pnpm check",
     "ci:local:rust": "cd packages/neko-engine && cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings && cargo test --workspace",
     "ci:local:proto": "pnpm generate:types && git diff --exit-code packages/neko-types/src/generated/",
+    "ci:act": "scripts/act-ci.sh",
+    "ci:act:list": "scripts/act-ci.sh --list",
     "smoke:engine:cli": "pnpm --filter @neko-engine/host-cli run build:debug && node scripts/smoke-engine-cli.mjs",
     "smoke:engine:serve": "pnpm --filter @neko-engine/host-cli run build:debug && node scripts/smoke-engine-serve.mjs",
     "smoke:engine": "pnpm smoke:engine:cli && pnpm smoke:engine:serve",

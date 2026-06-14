@@ -294,6 +294,8 @@ cargo test --workspace
 pnpm ci:local
 pnpm ci:local:rust
 pnpm ci:local:proto
+pnpm ci:act:list  # 可选：查看本地 act 可模拟的 GitHub Actions job
+pnpm ci:act       # 可选：运行 Linux 兼容 workflow 预检
 ```
 
 ---

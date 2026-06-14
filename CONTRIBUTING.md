@@ -300,6 +300,17 @@ pnpm ci:local:rust       # Rust engine changes
 pnpm ci:local:proto      # Proto contract and generated type sync
 ```
 
+When changing `.github/workflows/ci.yml`, dependency installation, Corepack/pnpm, FFmpeg setup, or Linux runner shell logic, use `act` as a local GitHub Actions shape check:
+
+```bash
+pnpm ci:act:list         # List locally supported act jobs
+pnpm ci:act              # Runs Linux-compatible jobs: build/test-ts/code-quality/cargo-deny
+pnpm ci:act -- --verbose # Pass extra act args through
+pnpm ci:act -- --reuse   # Example: reuse containers while debugging
+```
+
+`act` is a local preflight, not a replacement for GitHub Actions. The `Rust Tests` job uses `macos-latest` in CI, so run `pnpm ci:local:rust` locally and treat GitHub-hosted runners as the final signal.
+
 For integration smoke checks:
 
 ```bash
