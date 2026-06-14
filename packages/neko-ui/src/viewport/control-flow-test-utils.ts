@@ -26,7 +26,10 @@ export interface SemanticWorkflowExpectation {
     readonly viewportId?: string;
     readonly baseRevision?: number;
   };
-  readonly frameMeta?: Pick<ViewportFrameMeta, 'sceneId' | 'viewportId' | 'revision' | 'appliedSeq'>;
+  readonly frameMeta?: Pick<
+    ViewportFrameMeta,
+    'sceneId' | 'viewportId' | 'revision' | 'appliedSeq'
+  >;
 }
 
 export interface SemanticWorkflowSample extends SemanticWorkflowExpectation {
@@ -75,7 +78,10 @@ function assertCommandShape(
     if (mismatch) return fail('command-mismatch', mismatch);
   }
   if (!command.sceneId || command.seq < 0 || !command.correlationId || !command.source) {
-    return fail('invalid-command-envelope', 'Command is missing sceneId, seq, correlationId, or source.');
+    return fail(
+      'invalid-command-envelope',
+      'Command is missing sceneId, seq, correlationId, or source.',
+    );
   }
   return pass('command');
 }

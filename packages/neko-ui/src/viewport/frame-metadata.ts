@@ -25,7 +25,9 @@ export function bridgeRenderFrameMetaToViewportFrameMeta(
   };
 }
 
-function normalizeViewTransform(value: readonly number[] | undefined): ViewportFrameMeta['viewTransform'] {
+function normalizeViewTransform(
+  value: readonly number[] | undefined,
+): ViewportFrameMeta['viewTransform'] {
   if (Array.isArray(value) && value.length === 6 && value.every((item) => Number.isFinite(item))) {
     const [a, b, c, d, tx, ty] = value as [number, number, number, number, number, number];
     return [a, b, c, d, tx, ty];

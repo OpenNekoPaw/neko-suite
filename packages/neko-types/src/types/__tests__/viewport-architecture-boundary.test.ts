@@ -86,7 +86,11 @@ function sourceFiles(root: string): string[] {
       files.push(...sourceFiles(path));
       continue;
     }
-    if (/\.(?:ts|tsx)$/.test(entry) && !entry.endsWith('.test.ts') && !entry.endsWith('.test.tsx')) {
+    if (
+      /\.(?:ts|tsx)$/.test(entry) &&
+      !entry.endsWith('.test.ts') &&
+      !entry.endsWith('.test.tsx')
+    ) {
       files.push(path);
     }
   }

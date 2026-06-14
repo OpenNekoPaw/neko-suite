@@ -163,19 +163,13 @@ function mapOverlayPoint(
   point: ViewportVec2,
   frameMeta: ViewportFrameMeta | null,
 ): ViewportVec2 {
-  if (
-    frameMeta &&
-    (overlay.coordinateSpace === 'world' || overlay.coordinateSpace === 'scene')
-  ) {
+  if (frameMeta && (overlay.coordinateSpace === 'world' || overlay.coordinateSpace === 'scene')) {
     return applyViewportTransform(frameMeta.viewTransform, point);
   }
   return point;
 }
 
-function applyStyle(
-  context: OverlayCanvasContext,
-  overlay: ViewportOverlayDescriptor,
-): void {
+function applyStyle(context: OverlayCanvasContext, overlay: ViewportOverlayDescriptor): void {
   context.strokeStyle = overlay.style?.stroke ?? 'rgba(96, 165, 250, 0.9)';
   context.fillStyle = overlay.style?.fill ?? overlay.style?.stroke ?? 'rgba(96, 165, 250, 0.9)';
   context.lineWidth = overlay.style?.lineWidth ?? 1.5;
@@ -185,7 +179,9 @@ function applyStyle(
 
 function readPoints(payload: ViewportSerializableRecord): ViewportVec2[] {
   const points = payload['points'];
-  return Array.isArray(points) ? points.map(readPoint).filter((point): point is ViewportVec2 => point !== null) : [];
+  return Array.isArray(points)
+    ? points.map(readPoint).filter((point): point is ViewportVec2 => point !== null)
+    : [];
 }
 
 function readPoint(value: unknown): ViewportVec2 | null {
@@ -197,13 +193,11 @@ function readPoint(value: unknown): ViewportVec2 | null {
     : null;
 }
 
-function readRect(payload: ViewportSerializableRecord): readonly [number, number, number, number] | null {
+function readRect(
+  payload: ViewportSerializableRecord,
+): readonly [number, number, number, number] | null {
   const rect = payload['rect'];
-  if (
-    Array.isArray(rect) &&
-    rect.length === 4 &&
-    rect.every((item) => typeof item === 'number')
-  ) {
+  if (Array.isArray(rect) && rect.length === 4 && rect.every((item) => typeof item === 'number')) {
     const [x, y, width, height] = rect as [number, number, number, number];
     return [x, y, width, height];
   }

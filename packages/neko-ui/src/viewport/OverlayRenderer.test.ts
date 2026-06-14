@@ -32,16 +32,23 @@ function overlay(
     coordinateSpace: 'scene',
     revision: 5,
     zIndex: 0,
-    payload: { points: [[0, 0], [1, 1]] },
+    payload: {
+      points: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
     ...patch,
   };
 }
 
 describe('OverlayRenderer helpers', () => {
   it('sorts overlay descriptors by z-index', () => {
-    expect(sortOverlayDescriptors([overlay('b', { zIndex: 20 }), overlay('a', { zIndex: 1 })]).map(
-      (item) => item.id,
-    )).toEqual(['a', 'b']);
+    expect(
+      sortOverlayDescriptors([overlay('b', { zIndex: 20 }), overlay('a', { zIndex: 1 })]).map(
+        (item) => item.id,
+      ),
+    ).toEqual(['a', 'b']);
   });
 
   it('rejects stale viewport, scene, and revision metadata', () => {

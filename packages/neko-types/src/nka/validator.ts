@@ -407,11 +407,7 @@ function validateTempoMap(value: unknown, path: string, errors: ValidationError[
   }
 
   validateTempoEvents(value['tempoEvents'], `${path}.tempoEvents`, errors);
-  validateTimeSignatureEvents(
-    value['timeSignatureEvents'],
-    `${path}.timeSignatureEvents`,
-    errors,
-  );
+  validateTimeSignatureEvents(value['timeSignatureEvents'], `${path}.timeSignatureEvents`, errors);
 }
 
 function validateTempoEvents(value: unknown, path: string, errors: ValidationError[]): void {
@@ -421,7 +417,11 @@ function validateTempoEvents(value: unknown, path: string, errors: ValidationErr
   }
 
   if (value.length === 0) {
-    errors.push({ field: path, message: 'must include at least one tempo event', severity: 'error' });
+    errors.push({
+      field: path,
+      message: 'must include at least one tempo event',
+      severity: 'error',
+    });
     return;
   }
 
@@ -455,7 +455,11 @@ function validateTempoEvents(value: unknown, path: string, errors: ValidationErr
     }
 
     if (!isNumber(event['bpm']) || event['bpm'] < 20 || event['bpm'] > 300) {
-      errors.push({ field: `${eventPath}.bpm`, message: 'must be between 20 and 300', severity: 'error' });
+      errors.push({
+        field: `${eventPath}.bpm`,
+        message: 'must be between 20 and 300',
+        severity: 'error',
+      });
     }
   }
 
@@ -468,7 +472,11 @@ function validateTempoEvents(value: unknown, path: string, errors: ValidationErr
   }
 }
 
-function validateTimeSignatureEvents(value: unknown, path: string, errors: ValidationError[]): void {
+function validateTimeSignatureEvents(
+  value: unknown,
+  path: string,
+  errors: ValidationError[],
+): void {
   if (!isArray(value)) {
     errors.push({ field: path, message: 'must be an array', severity: 'error' });
     return;
@@ -512,7 +520,11 @@ function validateTimeSignatureEvents(value: unknown, path: string, errors: Valid
       previousTicks = ticks;
     }
 
-    if (!isNumber(event['numerator']) || event['numerator'] <= 0 || !Number.isInteger(event['numerator'])) {
+    if (
+      !isNumber(event['numerator']) ||
+      event['numerator'] <= 0 ||
+      !Number.isInteger(event['numerator'])
+    ) {
       errors.push({
         field: `${eventPath}.numerator`,
         message: 'must be a positive integer',
@@ -577,7 +589,12 @@ function validateAutomationLane(
     errors.push({ field: `${path}.enabled`, message: 'must be a boolean', severity: 'error' });
   }
 
-  const targetRange = validateAutomationTarget(lane['target'], `${path}.target`, effectChain, errors);
+  const targetRange = validateAutomationTarget(
+    lane['target'],
+    `${path}.target`,
+    effectChain,
+    errors,
+  );
   const points = lane['points'];
   if (!isArray(points)) {
     errors.push({ field: `${path}.points`, message: 'must be an array', severity: 'error' });
@@ -613,7 +630,10 @@ function validateAutomationLane(
 
     if (!isNumber(point['value'])) {
       errors.push({ field: `${pointPath}.value`, message: 'must be a number', severity: 'error' });
-    } else if (targetRange && (point['value'] < targetRange.min || point['value'] > targetRange.max)) {
+    } else if (
+      targetRange &&
+      (point['value'] < targetRange.min || point['value'] > targetRange.max)
+    ) {
       errors.push({
         field: `${pointPath}.value`,
         message: `must be between ${targetRange.min} and ${targetRange.max}`,

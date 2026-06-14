@@ -133,11 +133,7 @@ describe('StatusBarProjectionManager', () => {
       { id: 'middle', alignment: vscode.StatusBarAlignment.Left, priority: 50 },
     ];
 
-    expect(sortStatusBarItemSpecs(specs).map((spec) => spec.id)).toEqual([
-      'high',
-      'middle',
-      'low',
-    ]);
+    expect(sortStatusBarItemSpecs(specs).map((spec) => spec.id)).toEqual(['high', 'middle', 'low']);
   });
 
   it('treats visibilityCondition as metadata rather than a programmatic when clause', () => {
@@ -157,16 +153,18 @@ describe('StatusBarProjectionManager', () => {
     );
 
     expect(mocks.statusItems.get('neko.model.selected')).not.toHaveProperty('when');
-    expect(isStatusBarItemSpecVisible(
-      {
-        id: 'neko.model.selected',
-        alignment: vscode.StatusBarAlignment.Left,
-        priority: 9,
-        activeCustomEditorId: 'neko.modelEditor',
-        visibilityCondition: 'activeCustomEditorId == neko.modelEditor',
-      },
-      { activeCustomEditorId: 'neko.canvasEditor' },
-    )).toBe(false);
+    expect(
+      isStatusBarItemSpecVisible(
+        {
+          id: 'neko.model.selected',
+          alignment: vscode.StatusBarAlignment.Left,
+          priority: 9,
+          activeCustomEditorId: 'neko.modelEditor',
+          visibilityCondition: 'activeCustomEditorId == neko.modelEditor',
+        },
+        { activeCustomEditorId: 'neko.canvasEditor' },
+      ),
+    ).toBe(false);
 
     manager.dispose();
   });

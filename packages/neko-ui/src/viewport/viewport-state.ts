@@ -72,7 +72,10 @@ export function reduceViewportLocalState(
   }
 }
 
-export function applyViewportTransform(transform: ViewportAffine2D, point: ViewportVec2): ViewportVec2 {
+export function applyViewportTransform(
+  transform: ViewportAffine2D,
+  point: ViewportVec2,
+): ViewportVec2 {
   const [a, b, c, d, tx, ty] = transform;
   return [a * point[0] + c * point[1] + tx, b * point[0] + d * point[1] + ty];
 }
@@ -119,7 +122,15 @@ export function createViewportWheelInput(
   viewportId: string,
   event: Pick<
     React.WheelEvent,
-    'clientX' | 'clientY' | 'deltaX' | 'deltaY' | 'deltaMode' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
+    | 'clientX'
+    | 'clientY'
+    | 'deltaX'
+    | 'deltaY'
+    | 'deltaMode'
+    | 'altKey'
+    | 'ctrlKey'
+    | 'metaKey'
+    | 'shiftKey'
   >,
   rect: Pick<DOMRect, 'left' | 'top'>,
   timestamp = Date.now(),
@@ -140,7 +151,10 @@ export function createViewportKeyInput(
   sceneId: string,
   viewportId: string,
   phase: 'down' | 'up',
-  event: Pick<React.KeyboardEvent, 'key' | 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
+  event: Pick<
+    React.KeyboardEvent,
+    'key' | 'code' | 'repeat' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
+  >,
   timestamp = Date.now(),
 ): ViewportKeyInput {
   return {
@@ -156,14 +170,12 @@ export function createViewportKeyInput(
   };
 }
 
-function readModifiers(
-  event: {
-    readonly altKey?: boolean;
-    readonly ctrlKey?: boolean;
-    readonly metaKey?: boolean;
-    readonly shiftKey?: boolean;
-  },
-): ViewportModifierState {
+function readModifiers(event: {
+  readonly altKey?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly shiftKey?: boolean;
+}): ViewportModifierState {
   return {
     alt: event.altKey === true,
     ctrl: event.ctrlKey === true,

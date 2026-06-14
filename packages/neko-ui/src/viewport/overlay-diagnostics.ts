@@ -84,10 +84,7 @@ export function projectOverlayPointForFrame(
   point: readonly [number, number],
   frameMeta: ViewportFrameMeta | null,
 ): readonly [number, number] {
-  if (
-    frameMeta &&
-    (overlay.coordinateSpace === 'world' || overlay.coordinateSpace === 'scene')
-  ) {
+  if (frameMeta && (overlay.coordinateSpace === 'world' || overlay.coordinateSpace === 'scene')) {
     return applyViewportTransform(frameMeta.viewTransform, point);
   }
   return point;
@@ -105,7 +102,9 @@ export function createOverlayAlignmentSamples(
   }));
 }
 
-function readOverlayPoints(overlay: ViewportOverlayDescriptor): readonly (readonly [number, number])[] {
+function readOverlayPoints(
+  overlay: ViewportOverlayDescriptor,
+): readonly (readonly [number, number])[] {
   const points = overlay.payload['points'];
   if (Array.isArray(points)) {
     const result: Array<readonly [number, number]> = [];
@@ -123,11 +122,7 @@ function readOverlayPoints(overlay: ViewportOverlayDescriptor): readonly (readon
   }
 
   const rect = overlay.payload['rect'];
-  if (
-    Array.isArray(rect) &&
-    rect.length === 4 &&
-    rect.every((item) => typeof item === 'number')
-  ) {
+  if (Array.isArray(rect) && rect.length === 4 && rect.every((item) => typeof item === 'number')) {
     const [x, y, width, height] = rect as [number, number, number, number];
     return [
       [x, y],

@@ -236,18 +236,16 @@ function validateAutomationLanes(lanes: AudioAutomationLane[], state: AudioTrack
     let previousTicks = -1;
     for (const point of lane.points) {
       if (!Number.isInteger(point.ticks) || point.ticks < 0) {
-        throw OperationError.invalidOperation(`automation point ticks out of range: ${point.ticks}`);
+        throw OperationError.invalidOperation(
+          `automation point ticks out of range: ${point.ticks}`,
+        );
       }
       if (point.ticks <= previousTicks) {
         throw OperationError.invalidOperation('automation point ticks must be strictly increasing');
       }
       previousTicks = point.ticks;
       assertFiniteRange('automation point value', point.value, range.min, range.max);
-      if (
-        point.curve !== 'linear' &&
-        point.curve !== 'hold' &&
-        point.curve !== 'exponential'
-      ) {
+      if (point.curve !== 'linear' && point.curve !== 'hold' && point.curve !== 'exponential') {
         throw OperationError.invalidOperation(`unsupported automation curve: ${point.curve}`);
       }
     }
@@ -270,9 +268,7 @@ function resolveAutomationTargetRange(
       }
       const metadata = getAudioEffectParameterMetadata(effect.effectType, target.param);
       if (!metadata || !metadata.automatable || metadata.valueKind !== 'number') {
-        throw OperationError.invalidOperation(
-          `unsupported automatable parameter: ${target.param}`,
-        );
+        throw OperationError.invalidOperation(`unsupported automatable parameter: ${target.param}`);
       }
       return {
         min: metadata.min ?? Number.NEGATIVE_INFINITY,

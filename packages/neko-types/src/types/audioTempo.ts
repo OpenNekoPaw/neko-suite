@@ -115,7 +115,9 @@ export function secondsToTicks(seconds: number, tempoMap: TempoMap): number {
     const segmentTicks = event.ticks - previousTick;
     const segmentSeconds = ticksDeltaToSeconds(segmentTicks, previousEvent.bpm, ppq);
     if (remainingSeconds < segmentSeconds) {
-      return Math.round(previousTick + secondsDeltaToTicks(remainingSeconds, previousEvent.bpm, ppq));
+      return Math.round(
+        previousTick + secondsDeltaToTicks(remainingSeconds, previousEvent.bpm, ppq),
+      );
     }
 
     remainingSeconds -= segmentSeconds;
@@ -194,7 +196,9 @@ export function barBeatToTicks(position: BarBeatPosition, tempoMap: TempoMap): n
   }
 
   if (position.beat > currentSignature.numerator) {
-    throw new RangeError(`beat must be within the active time signature numerator (${currentSignature.numerator})`);
+    throw new RangeError(
+      `beat must be within the active time signature numerator (${currentSignature.numerator})`,
+    );
   }
 
   const beatLength = ticksPerBeat(ppq, currentSignature.denominator);

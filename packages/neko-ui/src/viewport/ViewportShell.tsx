@@ -260,8 +260,9 @@ function isViewportChromeEventTarget(target: EventTarget | null, root: HTMLEleme
     return false;
   }
   return (
-    target.closest('button, input, select, textarea, [role="button"], [role="menu"], [role="toolbar"]') !==
-      null
+    target.closest(
+      'button, input, select, textarea, [role="button"], [role="menu"], [role="toolbar"]',
+    ) !== null
   );
 }
 

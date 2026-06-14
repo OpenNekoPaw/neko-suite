@@ -61,8 +61,10 @@ export interface ViewportPredictionUpdate {
   readonly topologyVersion?: number;
 }
 
-export interface ViewportPredictionSnapshot
-  extends Omit<ViewportPredictionInput, 'id' | 'nowMs' | 'timeoutMs'> {
+export interface ViewportPredictionSnapshot extends Omit<
+  ViewportPredictionInput,
+  'id' | 'nowMs' | 'timeoutMs'
+> {
   readonly id: string;
   readonly payload: ViewportSerializableRecord;
   readonly overlays: readonly ViewportOverlayDescriptor[];
@@ -132,7 +134,9 @@ export class ViewportPredictionLayer {
       ...prediction,
       payload: update.payload ? { ...prediction.payload, ...update.payload } : prediction.payload,
       overlays: update.overlays ?? prediction.overlays,
-      metadata: update.metadata ? { ...prediction.metadata, ...update.metadata } : prediction.metadata,
+      metadata: update.metadata
+        ? { ...prediction.metadata, ...update.metadata }
+        : prediction.metadata,
       topologyVersion: update.topologyVersion ?? prediction.topologyVersion,
       updatedAtMs: nowMs,
     };

@@ -22,12 +22,13 @@ export const AUDIO_RENDER_SERVICE_PORT_ID = 'audio-render';
 export const SCENE_RENDER_SERVICE_PORT_ID = 'scene-render';
 export const PUPPET_RENDER_SERVICE_PORT_ID = 'puppet-render';
 
-export const CREATIVE_DOMAIN_SERVICE_PORT_IDS: Readonly<Partial<Record<CreativeDomainId, string>>> = {
-  timeline: TIMELINE_RENDER_SERVICE_PORT_ID,
-  audio: AUDIO_RENDER_SERVICE_PORT_ID,
-  scene: SCENE_RENDER_SERVICE_PORT_ID,
-  puppet: PUPPET_RENDER_SERVICE_PORT_ID,
-};
+export const CREATIVE_DOMAIN_SERVICE_PORT_IDS: Readonly<Partial<Record<CreativeDomainId, string>>> =
+  {
+    timeline: TIMELINE_RENDER_SERVICE_PORT_ID,
+    audio: AUDIO_RENDER_SERVICE_PORT_ID,
+    scene: SCENE_RENDER_SERVICE_PORT_ID,
+    puppet: PUPPET_RENDER_SERVICE_PORT_ID,
+  };
 
 export interface CreativeDomainMetadata {
   readonly id: CreativeDomainId;

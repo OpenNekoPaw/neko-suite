@@ -252,7 +252,9 @@ describe('ViewportShell', () => {
     if (!menuItem) throw new Error('Context menu item not rendered');
 
     act(() => {
-      menuItem.dispatchEvent(pointerEvent('pointerdown', { pointerId: 11, clientX: 20, clientY: 30 }));
+      menuItem.dispatchEvent(
+        pointerEvent('pointerdown', { pointerId: 11, clientX: 20, clientY: 30 }),
+      );
       menuItem.click();
     });
 

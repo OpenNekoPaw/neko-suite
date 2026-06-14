@@ -26,11 +26,7 @@ export interface MixConfigContext {
 }
 
 export interface MixConfigWarning {
-  code:
-    | 'planned-effect'
-    | 'unknown-effect'
-    | 'invalid-automation'
-    | 'unsupported-automation';
+  code: 'planned-effect' | 'unknown-effect' | 'invalid-automation' | 'unsupported-automation';
   message: string;
   effectId?: string;
   effectType: string;

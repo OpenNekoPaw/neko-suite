@@ -62,7 +62,9 @@ export type ViewportVec2 = readonly [number, number];
 export type ViewportVec3 = readonly [number, number, number];
 export type ViewportAffine2D = readonly [number, number, number, number, number, number];
 
-export interface ViewportCommand<TPayload extends ViewportSerializableRecord = ViewportSerializableRecord> {
+export interface ViewportCommand<
+  TPayload extends ViewportSerializableRecord = ViewportSerializableRecord,
+> {
   readonly protocolVersion: ViewportProtocolVersion;
   readonly domain: ViewportDomain;
   readonly action: string;
@@ -84,7 +86,9 @@ export interface ViewportProtocolError {
   readonly retryable?: boolean;
 }
 
-export interface ViewportEvent<TPayload extends ViewportSerializableRecord = ViewportSerializableRecord> {
+export interface ViewportEvent<
+  TPayload extends ViewportSerializableRecord = ViewportSerializableRecord,
+> {
   readonly protocolVersion: ViewportProtocolVersion;
   readonly domain: ViewportDomain;
   readonly event: string;
@@ -245,7 +249,9 @@ export interface ViewportToolbarOption {
   readonly disabled?: boolean;
 }
 
-export interface ViewportToolbarItem<TValue extends ViewportSerializableValue = ViewportSerializableValue> {
+export interface ViewportToolbarItem<
+  TValue extends ViewportSerializableValue = ViewportSerializableValue,
+> {
   readonly id: string;
   readonly kind: ViewportToolbarItemKind;
   readonly label?: string;
@@ -289,13 +295,27 @@ export type ViewportControllerMaybePromise<T> = T | Promise<T>;
 export interface ISceneController {
   readonly sceneId: string;
   readonly sceneType: ViewportSceneType;
-  onPointerDown(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onPointerMove(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onPointerUp(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onPointerCancel?(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onWheel(input: ViewportWheelInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onKeyDown(input: ViewportKeyInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
-  onKeyUp?(input: ViewportKeyInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onPointerDown(
+    input: ViewportPointerInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onPointerMove(
+    input: ViewportPointerInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onPointerUp(
+    input: ViewportPointerInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onPointerCancel?(
+    input: ViewportPointerInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onWheel(
+    input: ViewportWheelInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onKeyDown(
+    input: ViewportKeyInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onKeyUp?(
+    input: ViewportKeyInput,
+  ): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   getOverlays(frame?: ViewportFrameMeta): readonly ViewportOverlayDescriptor[];
   getToolbarExtensions(): readonly ViewportToolbarItem[];
   getContextMenu(request: ViewportContextMenuRequest): readonly ViewportMenuItem[];
@@ -462,8 +482,7 @@ export function isViewportToolbarItem(value: unknown): value is ViewportToolbarI
     (value['degradedReason'] === undefined || isViewportDegradedReason(value['degradedReason'])) &&
     (value['toggled'] === undefined || typeof value['toggled'] === 'boolean') &&
     (value['value'] === undefined || isViewportSerializableValue(value['value'])) &&
-    (value['options'] === undefined ||
-      isArrayOf(value['options'], isViewportToolbarOption)) &&
+    (value['options'] === undefined || isArrayOf(value['options'], isViewportToolbarOption)) &&
     (value['payload'] === undefined || isViewportSerializableRecord(value['payload']))
   );
 }
@@ -527,9 +546,7 @@ function isViewportEventStatus(value: unknown): value is ViewportEventStatus {
   return value === 'ack' || value === 'error' || value === 'event' || value === 'resync';
 }
 
-function isViewportControlConnectionState(
-  value: unknown,
-): value is ViewportControlConnectionState {
+function isViewportControlConnectionState(value: unknown): value is ViewportControlConnectionState {
   return (
     value === 'disconnected' ||
     value === 'connecting' ||
@@ -540,9 +557,7 @@ function isViewportControlConnectionState(
   );
 }
 
-function isViewportCommandLifecycleState(
-  value: unknown,
-): value is ViewportCommandLifecycleState {
+function isViewportCommandLifecycleState(value: unknown): value is ViewportCommandLifecycleState {
   return (
     value === 'queued' ||
     value === 'sent' ||
@@ -554,9 +569,7 @@ function isViewportCommandLifecycleState(
   );
 }
 
-function isViewportMetadataFreshnessState(
-  value: unknown,
-): value is ViewportMetadataFreshnessState {
+function isViewportMetadataFreshnessState(value: unknown): value is ViewportMetadataFreshnessState {
   return (
     value === 'fresh' ||
     value === 'missing' ||
@@ -567,9 +580,7 @@ function isViewportMetadataFreshnessState(
   );
 }
 
-function isViewportMetadataTransport(
-  value: unknown,
-): value is ViewportMetadataEvent['transport'] {
+function isViewportMetadataTransport(value: unknown): value is ViewportMetadataEvent['transport'] {
   return value === 'scene-control';
 }
 
@@ -593,9 +604,7 @@ function isViewportDegradedReason(value: unknown): value is ViewportDegradedReas
   );
 }
 
-function isViewportDiagnosticKind(
-  value: unknown,
-): value is ViewportControlFlowDiagnostic['kind'] {
+function isViewportDiagnosticKind(value: unknown): value is ViewportControlFlowDiagnostic['kind'] {
   return (
     value === 'connection' ||
     value === 'command' ||
@@ -622,11 +631,7 @@ function isViewportProtocolError(value: unknown): value is ViewportProtocolError
 }
 
 function isViewportAffine2D(value: unknown): value is ViewportAffine2D {
-  return (
-    Array.isArray(value) &&
-    value.length === 6 &&
-    value.every((item) => isFiniteNumber(item))
-  );
+  return Array.isArray(value) && value.length === 6 && value.every((item) => isFiniteNumber(item));
 }
 
 function isViewportOverlayKind(value: unknown): value is ViewportOverlayKind {

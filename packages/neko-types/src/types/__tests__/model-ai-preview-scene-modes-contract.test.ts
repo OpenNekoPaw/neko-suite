@@ -18,9 +18,9 @@ describe('model AI preview scene mode contracts', () => {
       'motion',
       'voice-pack',
     ]);
-    expect(DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS.every((mode) => isCharacterPreviewModeId(mode.id))).toBe(
-      true,
-    );
+    expect(
+      DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS.every((mode) => isCharacterPreviewModeId(mode.id)),
+    ).toBe(true);
   });
 
   it('validates request, camera reset, playback command, and state payloads', () => {

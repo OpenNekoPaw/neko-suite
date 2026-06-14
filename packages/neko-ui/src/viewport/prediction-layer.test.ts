@@ -169,9 +169,9 @@ describe('ViewportPredictionLayer', () => {
     ).toEqual([]);
     expect(layer.active().map((prediction) => prediction.seq)).toEqual([50]);
 
-    expect(
-      layer.reconcileFrameMeta(frame({ revision: 8, appliedSeq: 50 }), 1_040)[0]?.reason,
-    ).toBe('frame');
+    expect(layer.reconcileFrameMeta(frame({ revision: 8, appliedSeq: 50 }), 1_040)[0]?.reason).toBe(
+      'frame',
+    );
     expect(layer.active()).toHaveLength(0);
   });
 

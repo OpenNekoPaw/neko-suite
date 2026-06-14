@@ -125,9 +125,7 @@ export class StatusBarGroup implements vscode.Disposable {
   }
 }
 
-export function sortStatusBarItemSpecs(
-  specs: readonly StatusBarItemSpec[],
-): StatusBarItemSpec[] {
+export function sortStatusBarItemSpecs(specs: readonly StatusBarItemSpec[]): StatusBarItemSpec[] {
   return [...specs].sort((a, b) => b.priority - a.priority);
 }
 
@@ -164,7 +162,10 @@ export class StatusBarProjectionManager implements vscode.Disposable {
   private readonly resolveActiveSurface: () => StatusBarActiveSurface;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(specs: readonly StatusBarItemSpec[], options: StatusBarProjectionManagerOptions = {}) {
+  constructor(
+    specs: readonly StatusBarItemSpec[],
+    options: StatusBarProjectionManagerOptions = {},
+  ) {
     this.specs = sortStatusBarItemSpecs(specs);
     this.resolveActiveSurface = options.resolveActiveSurface ?? getStatusBarActiveSurface;
     this.group = new StatusBarGroup(

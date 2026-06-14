@@ -43,9 +43,9 @@ describe('audioEffectParams metadata', () => {
 
   it('excludes non-numeric metadata from automatable parameters', () => {
     expect(getAudioEffectParameterMetadata('reverb', 'type')?.automatable).toBe(false);
-    expect(getAutomatableAudioEffectParameters('reverb').map((metadata) => metadata.key)).not.toContain(
-      'type',
-    );
+    expect(
+      getAutomatableAudioEffectParameters('reverb').map((metadata) => metadata.key),
+    ).not.toContain('type');
   });
 
   it('keeps track automation target metadata aligned with operation ranges', () => {

@@ -1,12 +1,7 @@
 import type { EngineAudioStreamDescriptor } from '../generated/scene.engine';
 import type { ViewportSerializableRecord } from './viewport-protocol';
 
-export const MODEL_AI_PREVIEW_MODE_IDS = [
-  'face',
-  'full-body',
-  'motion',
-  'voice-pack',
-] as const;
+export const MODEL_AI_PREVIEW_MODE_IDS = ['face', 'full-body', 'motion', 'voice-pack'] as const;
 
 export type CharacterPreviewModeId = (typeof MODEL_AI_PREVIEW_MODE_IDS)[number];
 
@@ -147,44 +142,45 @@ export interface CharacterPreviewFrameAlignment {
   readonly previewPlaybackClockMs?: number;
 }
 
-export const DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS: readonly CharacterPreviewModeDescriptor[] = [
-  {
-    id: 'face',
-    label: 'Face',
-    cameraPreset: 'face-closeup',
-    framingTarget: 'head-shoulders',
-    renderPreset: 'face-detail',
-    playbackRequirement: 'none',
-    overlaySet: ['face-detail'],
-  },
-  {
-    id: 'full-body',
-    label: 'Body',
-    cameraPreset: 'full-body',
-    framingTarget: 'full-character',
-    renderPreset: 'body-silhouette',
-    playbackRequirement: 'none',
-    overlaySet: ['silhouette'],
-  },
-  {
-    id: 'motion',
-    label: 'Motion',
-    cameraPreset: 'motion-review',
-    framingTarget: 'motion-envelope',
-    renderPreset: 'motion-diagnostics',
-    playbackRequirement: 'animation',
-    overlaySet: ['deformation', 'clipping'],
-  },
-  {
-    id: 'voice-pack',
-    label: 'Voice',
-    cameraPreset: 'voice-performance',
-    framingTarget: 'mouth-and-expression',
-    renderPreset: 'voice-lipsync',
-    playbackRequirement: 'voice-pack',
-    overlaySet: ['viseme', 'emotion'],
-  },
-];
+export const DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS: readonly CharacterPreviewModeDescriptor[] =
+  [
+    {
+      id: 'face',
+      label: 'Face',
+      cameraPreset: 'face-closeup',
+      framingTarget: 'head-shoulders',
+      renderPreset: 'face-detail',
+      playbackRequirement: 'none',
+      overlaySet: ['face-detail'],
+    },
+    {
+      id: 'full-body',
+      label: 'Body',
+      cameraPreset: 'full-body',
+      framingTarget: 'full-character',
+      renderPreset: 'body-silhouette',
+      playbackRequirement: 'none',
+      overlaySet: ['silhouette'],
+    },
+    {
+      id: 'motion',
+      label: 'Motion',
+      cameraPreset: 'motion-review',
+      framingTarget: 'motion-envelope',
+      renderPreset: 'motion-diagnostics',
+      playbackRequirement: 'animation',
+      overlaySet: ['deformation', 'clipping'],
+    },
+    {
+      id: 'voice-pack',
+      label: 'Voice',
+      cameraPreset: 'voice-performance',
+      framingTarget: 'mouth-and-expression',
+      renderPreset: 'voice-lipsync',
+      playbackRequirement: 'voice-pack',
+      overlaySet: ['viseme', 'emotion'],
+    },
+  ];
 
 export function isCharacterPreviewModeId(value: unknown): value is CharacterPreviewModeId {
   return MODEL_AI_PREVIEW_MODE_IDS.includes(value as CharacterPreviewModeId);
@@ -250,9 +246,10 @@ export function isCharacterPreviewModeStatePayload(
   );
 }
 
-export function readCharacterPreviewFrameAlignment(
-  meta: { readonly activePreviewMode?: unknown; readonly previewPlaybackClockMs?: unknown },
-): CharacterPreviewFrameAlignment {
+export function readCharacterPreviewFrameAlignment(meta: {
+  readonly activePreviewMode?: unknown;
+  readonly previewPlaybackClockMs?: unknown;
+}): CharacterPreviewFrameAlignment {
   const activePreviewMode = isCharacterPreviewModeId(meta.activePreviewMode)
     ? meta.activePreviewMode
     : undefined;

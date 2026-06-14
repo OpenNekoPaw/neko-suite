@@ -40,9 +40,7 @@ export interface MediaLibraryLocalResourceRootProviderOptions {
   readonly command?: string;
   readonly extensionId?: string;
   readonly logger?: LocalResourceAccessLogger;
-  readonly getExtension?: (
-    extensionId: string,
-  ) => MediaLibraryExtensionHandle | undefined;
+  readonly getExtension?: (extensionId: string) => MediaLibraryExtensionHandle | undefined;
   readonly executeCommand?: (
     command: string,
     ...args: readonly unknown[]
@@ -420,11 +418,7 @@ function isMediaLibraryRootsAPI(
 
 function isCommandUnavailableError(error: unknown, command: string): boolean {
   const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : String(error);
+    error instanceof Error ? error.message : typeof error === 'string' ? error : String(error);
   return message.includes(command) && /not found|not registered|unknown command/i.test(message);
 }
 

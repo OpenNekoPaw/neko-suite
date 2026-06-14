@@ -105,7 +105,10 @@ export function createProjectionAdapterKey(kind: CanvasProjectionKind, sourceUri
 }
 
 export function isProjectedCanvasData(data: CanvasData): data is ProjectedCanvasData {
-  return data.projected === true && isProjectedCanvasSource((data as { projectionSource?: unknown }).projectionSource);
+  return (
+    data.projected === true &&
+    isProjectedCanvasSource((data as { projectionSource?: unknown }).projectionSource)
+  );
 }
 
 export function isProjectedCanvasSource(value: unknown): value is ProjectedCanvasSource {

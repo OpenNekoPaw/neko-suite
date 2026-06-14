@@ -92,13 +92,11 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
     case 'audio.setTimeSignature': {
       assertPositiveInteger('time signature numerator', op.payload.numerator, 1, 32);
       assertPositiveInteger('time signature denominator', op.payload.denominator, 1, 32);
-      const tempoMap =
-        data.tempoMap ??
-        {
-          ppq: 480,
-          tempoEvents: [{ ticks: 0, bpm: data.bpm ?? 120 }],
-          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
-        };
+      const tempoMap = data.tempoMap ?? {
+        ppq: 480,
+        tempoEvents: [{ ticks: 0, bpm: data.bpm ?? 120 }],
+        timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+      };
       const [firstEvent, ...remainingEvents] = tempoMap.timeSignatureEvents;
       return {
         ...data,

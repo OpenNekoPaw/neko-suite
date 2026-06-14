@@ -29,10 +29,7 @@ export type { ViewportToolbarProps } from './ViewportToolbar';
 
 export { bridgeRenderFrameMetaToViewportFrameMeta } from './frame-metadata';
 
-export {
-  ViewportPredictionLayer,
-  createViewportPredictionId,
-} from './prediction-layer';
+export { ViewportPredictionLayer, createViewportPredictionId } from './prediction-layer';
 export type {
   ViewportPredictionInput,
   ViewportPredictionInvalidationFilter,

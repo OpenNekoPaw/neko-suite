@@ -2,10 +2,7 @@
 // Audio Effect Parameter Metadata — shared automation contract
 // =============================================================================
 
-import {
-  ENGINE_AUDIO_EFFECT_TYPES,
-  type RenderableAudioEffectType,
-} from './audioMix';
+import { ENGINE_AUDIO_EFFECT_TYPES, type RenderableAudioEffectType } from './audioMix';
 
 export type AudioEffectParameterValueKind = 'number' | 'boolean' | 'string' | 'object';
 
@@ -66,16 +63,8 @@ const AUDIO_EFFECT_PARAMETER_METADATA_INPUT = {
       labelKey: 'audioEffects.params.gain',
     }),
   ],
-  'high-pass': [
-    frequencyParam(),
-    resonanceParam(),
-    qParam(),
-  ],
-  'low-pass': [
-    frequencyParam(8000),
-    resonanceParam(),
-    qParam(),
-  ],
+  'high-pass': [frequencyParam(), resonanceParam(), qParam()],
+  'low-pass': [frequencyParam(8000), resonanceParam(), qParam()],
   'band-pass': [
     frequencyParam(),
     numberParam('bandwidth', {
@@ -88,28 +77,10 @@ const AUDIO_EFFECT_PARAMETER_METADATA_INPUT = {
     }),
     qParam(),
   ],
-  notch: [
-    frequencyParam(),
-    qParam(),
-  ],
-  peaking: [
-    frequencyParam(),
-    qParam(),
-    gainDbParam(),
-    gainParam(),
-  ],
-  'low-shelf': [
-    frequencyParam(200),
-    qParam(0.707),
-    gainDbParam(),
-    gainParam(),
-  ],
-  'high-shelf': [
-    frequencyParam(4000),
-    qParam(0.707),
-    gainDbParam(),
-    gainParam(),
-  ],
+  notch: [frequencyParam(), qParam()],
+  peaking: [frequencyParam(), qParam(), gainDbParam(), gainParam()],
+  'low-shelf': [frequencyParam(200), qParam(0.707), gainDbParam(), gainParam()],
+  'high-shelf': [frequencyParam(4000), qParam(0.707), gainDbParam(), gainParam()],
   'parametric-eq': [
     nonNumericParam('bands', {
       valueKind: 'object',
@@ -384,7 +355,9 @@ const AUDIO_EFFECT_PARAMETER_METADATA_INPUT = {
       ],
     }),
   ],
-} as const satisfies Readonly<Record<RenderableAudioEffectType, readonly AudioEffectParameterMetadataInput[]>>;
+} as const satisfies Readonly<
+  Record<RenderableAudioEffectType, readonly AudioEffectParameterMetadataInput[]>
+>;
 
 export const AUDIO_EFFECT_PARAMETER_METADATA: AudioEffectParameterRegistry =
   ENGINE_AUDIO_EFFECT_TYPES.reduce(
@@ -439,13 +412,12 @@ export function isAudioEffectParameterValueInRange(
 }
 
 export function listAudioEffectParameterMetadata(): AudioEffectParameterMetadata[] {
-  return ENGINE_AUDIO_EFFECT_TYPES.flatMap((effectType) => [...AUDIO_EFFECT_PARAMETER_METADATA[effectType]]);
+  return ENGINE_AUDIO_EFFECT_TYPES.flatMap((effectType) => [
+    ...AUDIO_EFFECT_PARAMETER_METADATA[effectType],
+  ]);
 }
 
-function numberParam(
-  key: string,
-  input: NumberParamInput,
-): AudioEffectParameterMetadataInput {
+function numberParam(key: string, input: NumberParamInput): AudioEffectParameterMetadataInput {
   return {
     ...input,
     key,

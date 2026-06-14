@@ -42,7 +42,9 @@ describe('overlay diagnostics and alignment', () => {
 
   it('projects 2D scene-space overlay points through frame transform metadata', () => {
     expect(projectOverlayPointForFrame(overlay('line'), [4, 8], frameMeta)).toEqual([18, 36]);
-    expect(createOverlayAlignmentSamples(overlay('line'), frameMeta).map((item) => item.screen)).toEqual([
+    expect(
+      createOverlayAlignmentSamples(overlay('line'), frameMeta).map((item) => item.screen),
+    ).toEqual([
       [10, 20],
       [12, 22],
     ]);
@@ -71,7 +73,12 @@ function overlay(
     coordinateSpace: 'scene',
     revision: 5,
     appliedSeq: 10,
-    payload: { points: [[0, 0], [1, 1]] },
+    payload: {
+      points: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
     ...patch,
   };
 }

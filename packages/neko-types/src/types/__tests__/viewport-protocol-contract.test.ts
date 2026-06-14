@@ -43,9 +43,7 @@ describe('viewport protocol L0 contracts', () => {
     expect(isViewportFrameMeta(fixture.frameMeta)).toBe(true);
     expect(isViewportMetadataEvent(fixture.metadataEvent)).toBe(true);
     expect(
-      fixture.controlDiagnostics.every((diagnostic) =>
-        isViewportControlFlowDiagnostic(diagnostic),
-      ),
+      fixture.controlDiagnostics.every((diagnostic) => isViewportControlFlowDiagnostic(diagnostic)),
     ).toBe(true);
     expect(fixture.overlays.every((overlay) => isViewportOverlayDescriptor(overlay))).toBe(true);
     expect(fixture.toolbar.every((item) => isViewportToolbarItem(item))).toBe(true);
