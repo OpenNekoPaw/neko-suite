@@ -2745,7 +2745,10 @@ mod tests {
         let data = response.data.as_ref().unwrap();
 
         assert_eq!(data["capabilityStates"]["clay"], "supported");
-        assert_eq!(data["capabilityStates"]["liveViewportSettings"], "supported");
+        assert_eq!(
+            data["capabilityStates"]["liveViewportSettings"],
+            "supported"
+        );
         assert!(data["renderModes"]
             .as_array()
             .unwrap()

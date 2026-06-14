@@ -11,6 +11,12 @@ export default defineConfig({
   noExternal: ['@neko/shared', '@neko/agent'],
   // Keep heavy/optional deps external
   external: ['ink', 'react', 'yoga-wasm-web', 'mermaid', 'ajv'],
+  esbuildOptions(options) {
+    options.loader = {
+      ...options.loader,
+      '.md': 'text',
+    };
+  },
   banner: {
     js: '#!/usr/bin/env node',
   },

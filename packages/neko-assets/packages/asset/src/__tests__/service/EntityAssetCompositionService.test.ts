@@ -62,6 +62,7 @@ describe('EntityAssetCompositionService', () => {
       assetRef: 'project://assets/asset_linxia_portrait',
       role: 'portrait',
       status: 'confirmed',
+      availability: 'active',
       source: 'user',
       updatedAt: '2026-05-10T00:00:00.000Z',
     };
@@ -92,7 +93,7 @@ function createAssetEntity(input: {
   readonly id: string;
   readonly name: string;
   readonly tags: readonly string[];
-  readonly files: readonly Array<{
+  readonly files: ReadonlyArray<{
     readonly id: string;
     readonly name: string;
     readonly path: string;

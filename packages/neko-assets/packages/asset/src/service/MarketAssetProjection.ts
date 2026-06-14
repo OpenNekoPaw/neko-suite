@@ -1,11 +1,11 @@
 import type {
   AssetEntity,
   AssetManifest,
-  AssetMediaType,
   CreateEntityInput,
   EntityCategory,
   InstalledPackage,
   InstalledPackageStatus,
+  MediaKind,
 } from '@neko/shared';
 
 export interface MarketAssetProjection {
@@ -98,9 +98,7 @@ function toEntityCategory(manifest: AssetManifest): EntityCategory {
   return toMediaEntityCategory(mediaKind);
 }
 
-function toMediaEntityCategory(
-  mediaKind: AssetMediaType | '3d-model' | 'puppet-motion' | undefined,
-): EntityCategory {
+function toMediaEntityCategory(mediaKind: MediaKind | undefined): EntityCategory {
   switch (mediaKind) {
     case 'audio':
       return 'audio';
@@ -111,6 +109,7 @@ function toMediaEntityCategory(
     case 'sequence':
       return 'effect';
     case '3d-model':
+    case 'puppet-model':
     case 'puppet-motion':
     default:
       return 'object';
