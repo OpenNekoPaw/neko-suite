@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -70,14 +69,30 @@ function scanFiles(predicate: (source: string, relativePath: string) => boolean)
 }
 
 function listTypeScriptFiles(): string[] {
-  const output = execFileSync('rg', ['--files', ...migratedExtensionFiles], {
-    cwd: repoRoot,
-    encoding: 'utf-8',
-  });
+  const files: string[] = [];
+  for (const directory of migratedExtensionFiles) {
+    collectTypeScriptFiles(directory, files);
+  }
 
-  return output
-    .split('\n')
+  return files
     .filter(
       (file) => file.endsWith('.ts') && !file.includes('/__tests__/') && !file.endsWith('.test.ts'),
-    );
+    )
+    .sort();
+}
+
+function collectTypeScriptFiles(relativeDirectory: string, files: string[]): void {
+  const absoluteDirectory = path.join(repoRoot, relativeDirectory);
+  for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
+    const relativePath = normalizePath(path.join(relativeDirectory, entry.name));
+    if (entry.isDirectory()) {
+      collectTypeScriptFiles(relativePath, files);
+    } else if (entry.isFile()) {
+      files.push(relativePath);
+    }
+  }
+}
+
+function normalizePath(filePath: string): string {
+  return filePath.split(path.sep).join('/');
 }
