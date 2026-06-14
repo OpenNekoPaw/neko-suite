@@ -705,9 +705,7 @@ function MediaPreview({
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   const label = media.caption ?? media.label ?? media.assetId ?? 'Media';
-  const previewFrameClassName = compact
-    ? 'min-h-[180px] max-h-[720px]'
-    : 'min-h-[220px] max-h-[720px]';
+  const previewFrameClassName = compact ? 'h-[180px] max-h-[180px]' : 'h-[220px] max-h-[220px]';
   const roleLabel = formatMediaRole(media.role);
   const hasRenderableSource = media.src.trim().length > 0;
   const canOpen = canOpenMedia(media);
@@ -726,7 +724,7 @@ function MediaPreview({
             <img
               src={media.src}
               alt={label}
-              className="h-auto max-h-[720px] max-w-full object-contain"
+              className="h-full w-full object-contain"
               loading="lazy"
               onError={() => setImageFailed(true)}
             />
@@ -759,7 +757,7 @@ function MediaPreview({
         src={media.src}
         controls
         preload="metadata"
-        className={`max-h-[720px] w-full rounded bg-black object-contain ${previewFrameClassName}`}
+        className={`w-full rounded bg-black object-contain ${previewFrameClassName}`}
         title={label}
       />
     );

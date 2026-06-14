@@ -1005,7 +1005,7 @@ function SceneShotTableImageCell({
   if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
     return (
       <div
-        className="flex min-h-[260px] w-[400px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400"
+        className="flex h-[260px] w-[400px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400"
         data-scene-shot-image-preview="large"
       >
         {t('scene.imageUnavailable')}
@@ -1014,7 +1014,7 @@ function SceneShotTableImageCell({
   }
   return (
     <div
-      className="w-[400px] overflow-hidden rounded border border-gray-200 bg-gray-50"
+      className="h-[260px] w-[400px] overflow-hidden rounded border border-gray-200 bg-gray-50"
       data-scene-shot-image-preview="large"
     >
       <CardPreviewSlot

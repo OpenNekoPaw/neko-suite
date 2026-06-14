@@ -350,9 +350,7 @@ function PreviewImage({
 
 function getPreviewImageClassName(variant: NodeCardVariant, imageFit: 'cover' | 'contain'): string {
   if (variant === 'review-full') {
-    return imageFit === 'contain'
-      ? 'h-auto max-h-[720px] max-w-full object-contain'
-      : 'h-auto max-h-[720px] w-full object-cover';
+    return `h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`;
   }
   return `h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`;
 }
@@ -549,7 +547,7 @@ function getPreviewFrameClassName(variant: NodeCardVariant): string {
     return 'relative flex h-full min-h-[72px] w-full items-center justify-center overflow-hidden rounded bg-gray-100 text-sm text-gray-500';
   }
   if (variant === 'review-full') {
-    return 'relative flex min-h-[260px] max-h-[720px] w-full items-center justify-center overflow-hidden rounded bg-gray-50 text-sm text-gray-500';
+    return 'relative flex h-full w-full items-center justify-center overflow-hidden rounded bg-gray-50 text-sm text-gray-500';
   }
   if (variant === 'gallery') {
     return 'relative flex h-full min-h-[104px] w-full items-center justify-center overflow-hidden bg-gray-100 text-base text-gray-500';

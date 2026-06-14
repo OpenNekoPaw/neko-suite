@@ -367,7 +367,7 @@ describe('composite rich content renderers', () => {
     expect(screen.getByAltText('Original panel')).toBeTruthy();
   });
 
-  it('renders semantic storyboard images in a large contain-fit table column', () => {
+  it('renders semantic storyboard images scaled inside a fixed table cell', () => {
     registerDefaultRenderers();
 
     const markup = renderWithI18nToStaticMarkup(
@@ -423,10 +423,11 @@ describe('composite rich content renderers', () => {
 
     expect(markup).toContain('min-w-[1920px]');
     expect(markup).toContain('w-[440px] min-w-[440px] max-w-[440px]');
-    expect(markup).toContain('min-h-[180px] max-h-[720px]');
-    expect(markup).toContain('h-auto max-h-[720px] max-w-full object-contain');
+    expect(markup).toContain('h-[180px] max-h-[180px]');
+    expect(markup).toContain('h-full w-full object-contain');
     expect(markup).toContain('object-contain');
     expect(markup).not.toContain('object-cover');
+    expect(markup).not.toContain('max-h-[720px]');
   });
 
   it('renders storyboard table transfer actions for available targets', () => {
