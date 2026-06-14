@@ -3,6 +3,7 @@ import type { KnipConfig } from 'knip';
 const config: KnipConfig = {
   entry: [
     'scripts/check-3d-route-a-boundaries.mjs',
+    'scripts/compile-ts-vsix.mjs',
     'scripts/scene-render-diagnostics.mjs',
   ],
   exclude: [

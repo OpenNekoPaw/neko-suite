@@ -383,20 +383,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build TS extensions
-        run: |
-          pnpm turbo compile \
-            --filter=neko-tools \
-            --filter=neko-preview \
-            --filter=neko-cut \
-            --filter=neko-canvas \
-            --filter=neko-agent \
-            --filter=neko-story \
-            --filter=neko-sketch \
-            --filter=neko-puppet \
-            --filter=neko-audio \
-            --filter=neko-assets \
-            --filter=neko-auth \
-            --filter=neko-market
+        run: pnpm compile:ts-vsix
 
       - name: Package TS extensions
         run: |

@@ -18,6 +18,7 @@
     "build:neko-preview": "turbo run compile --filter=neko-preview",
     "build:neko-cut": "turbo run compile --filter=neko-cut",
     "build:neko-agent": "turbo run compile --filter=neko-agent",
+    "compile:ts-vsix": "node scripts/compile-ts-vsix.mjs",
     "dev": "turbo run dev --filter=neko-cut",
     "dev:neko": "turbo run watch --filter=neko-cut",
     "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",
