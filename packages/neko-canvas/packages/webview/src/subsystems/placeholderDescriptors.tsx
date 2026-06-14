@@ -1,5 +1,8 @@
 import type { CanvasSubsystemId, RegisteredCanvasNodeType } from '@neko/shared';
-import type { NodeTypeDescriptor, NodeTypeDescriptorRegistry } from '../components/nodes/nodeTypeDescriptor';
+import type {
+  NodeTypeDescriptor,
+  NodeTypeDescriptorRegistry,
+} from '../components/nodes/nodeTypeDescriptor';
 
 export type PlaceholderSubsystemId = Exclude<CanvasSubsystemId, 'storyboard' | 'narrative'>;
 
@@ -19,27 +22,54 @@ const PLACEHOLDER_NODE_DEFINITIONS: Record<
   readonly PlaceholderNodeDefinition[]
 > = {
   behavior: [
-    definition('state', 'node.state', 'S', 'STATE', '#2563eb', ['name', 'label'], [
-      'description',
-    ]),
-    definition('trigger', 'node.trigger', 'T', 'TRIGGER', '#f59e0b', ['event', 'name', 'label'], [
-      'description',
-    ]),
-    definition('action', 'node.action', 'A', 'ACTION', '#ef4444', ['name', 'label'], [
-      'description',
-    ]),
-    definition('condition', 'node.condition', 'C', 'COND', '#8b5cf6', ['expression', 'name'], [
-      'description',
-    ]),
-    definition('composite', 'node.composite', 'C', 'COMP', '#64748b', ['name', 'label'], [
-      'description',
-    ]),
+    definition('state', 'node.state', 'S', 'STATE', '#2563eb', ['name', 'label'], ['description']),
+    definition(
+      'trigger',
+      'node.trigger',
+      'T',
+      'TRIGGER',
+      '#f59e0b',
+      ['event', 'name', 'label'],
+      ['description'],
+    ),
+    definition(
+      'action',
+      'node.action',
+      'A',
+      'ACTION',
+      '#ef4444',
+      ['name', 'label'],
+      ['description'],
+    ),
+    definition(
+      'condition',
+      'node.condition',
+      'C',
+      'COND',
+      '#8b5cf6',
+      ['expression', 'name'],
+      ['description'],
+    ),
+    definition(
+      'composite',
+      'node.composite',
+      'C',
+      'COMP',
+      '#64748b',
+      ['name', 'label'],
+      ['description'],
+    ),
   ],
   entity: [
-    definition('entity', 'node.entity', 'E', 'ENTITY', '#0f766e', ['displayName', 'name'], [
-      'entityType',
-      'description',
-    ]),
+    definition(
+      'entity',
+      'node.entity',
+      'E',
+      'ENTITY',
+      '#0f766e',
+      ['displayName', 'name'],
+      ['entityType', 'description'],
+    ),
     definition(
       'representation-slot',
       'node.representationSlot',
@@ -49,10 +79,15 @@ const PLACEHOLDER_NODE_DEFINITIONS: Record<
       ['label', 'role'],
       ['description'],
     ),
-    definition('occurrence', 'node.occurrence', 'O', 'OCCUR', '#06b6d4', ['label', 'source'], [
-      'locator',
-      'description',
-    ]),
+    definition(
+      'occurrence',
+      'node.occurrence',
+      'O',
+      'OCCUR',
+      '#06b6d4',
+      ['label', 'source'],
+      ['locator', 'description'],
+    ),
     definition(
       'generated-asset',
       'node.generatedAsset',
@@ -64,10 +99,15 @@ const PLACEHOLDER_NODE_DEFINITIONS: Record<
     ),
   ],
   memory: [
-    definition('memory', 'node.memory', 'M', 'MEMORY', '#7c3aed', ['title', 'name'], [
-      'content',
-      'description',
-    ]),
+    definition(
+      'memory',
+      'node.memory',
+      'M',
+      'MEMORY',
+      '#7c3aed',
+      ['title', 'name'],
+      ['content', 'description'],
+    ),
     definition(
       'conversation',
       'node.conversation',
@@ -77,10 +117,15 @@ const PLACEHOLDER_NODE_DEFINITIONS: Record<
       ['title', 'name'],
       ['summary', 'description'],
     ),
-    definition('fact', 'node.fact', 'F', 'FACT', '#16a34a', ['statement', 'title'], [
-      'source',
-      'description',
-    ]),
+    definition(
+      'fact',
+      'node.fact',
+      'F',
+      'FACT',
+      '#16a34a',
+      ['statement', 'title'],
+      ['source', 'description'],
+    ),
   ],
 };
 
@@ -108,9 +153,7 @@ export function getPlaceholderNodeDefinitions(
   return PLACEHOLDER_NODE_DEFINITIONS[subsystemId];
 }
 
-export function getPlaceholderNodeDefinition(
-  type: string,
-): PlaceholderNodeDefinition | undefined {
+export function getPlaceholderNodeDefinition(type: string): PlaceholderNodeDefinition | undefined {
   return Object.values(PLACEHOLDER_NODE_DEFINITIONS)
     .flat()
     .find((definition) => definition.type === type);

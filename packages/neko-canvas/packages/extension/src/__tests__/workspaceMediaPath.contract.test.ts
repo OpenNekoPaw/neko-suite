@@ -40,36 +40,28 @@ describe('Canvas workspace media path contract', () => {
     });
   });
 
-  it('recovers slash-prefixed Canvas media as a portable workspace path', () => {
+  it('treats slash-prefixed Canvas media as absolute local paths only', () => {
     const result = resolveWorkspaceMediaPath({
       source: '/cases/test.mp4',
       context,
       fileExists: (filePath) => filePath === '/workspace/cases/test.mp4',
     });
 
-    expect(result).toMatchObject({
-      status: 'resolved-local',
-      path: '/workspace/cases/test.mp4',
-    });
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'slash-prefixed-portable-fallback',
-    );
+    expect(result.status).toBe('unresolved');
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual(['/cases/test.mp4']);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain('missing-file');
   });
 
-  it('recovers slash-prefixed document-relative Canvas media as a legacy fallback', () => {
+  it('does not recover slash-prefixed document-relative Canvas media as a legacy fallback', () => {
     const result = resolveWorkspaceMediaPath({
       source: '/../cases/test.mp4',
       context,
       fileExists: (filePath) => filePath === '/workspace/cases/test.mp4',
     });
 
-    expect(result).toMatchObject({
-      status: 'resolved-local',
-      path: '/workspace/cases/test.mp4',
-    });
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'legacy-document-relative-fallback',
-    );
+    expect(result.status).toBe('unresolved');
+    expect(result.candidates.map((candidate) => candidate.path)).toEqual(['/../cases/test.mp4']);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain('missing-file');
   });
 
   it('reports missing media without fabricating an engine path', () => {

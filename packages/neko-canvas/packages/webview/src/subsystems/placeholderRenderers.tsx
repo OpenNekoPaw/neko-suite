@@ -98,7 +98,10 @@ function PlaceholderNodeCard({
   );
 }
 
-function readFirstString(data: Record<string, unknown>, keys: readonly string[]): string | undefined {
+function readFirstString(
+  data: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
   for (const key of keys) {
     const value = data[key];
     if (typeof value === 'string' && value.trim()) {

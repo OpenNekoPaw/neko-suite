@@ -48,8 +48,9 @@ describe('Canvas keyboard focus routing contracts', () => {
   });
 
   it('keeps outline, status, and selection updates scoped to the active document', () => {
+    expect(providerSource).toContain('this.updateRememberedCanvasSnapshot(');
     expect(providerSource).toContain(
-      'this.canvasSnapshotsByDocumentUri.set(document.uri.toString(), canvasData);',
+      'this.canvasSnapshotsByDocumentUri.set(documentUri, canvasData);',
     );
     expect(providerSource).toContain('if (this.isActiveCanvasDocument(document))');
     expect(providerSource).toContain('documentUri: document.uri.toString()');
@@ -124,7 +125,9 @@ describe('Canvas keyboard focus routing contracts', () => {
   });
 
   it('does not let retained Canvas webviews self-activate or run local viewport keys while unfocused', () => {
-    expect(canvasAppSource).toContain('useFocusedWebviewRoot(rootRef, vscode ? false : true)');
+    expect(canvasAppSource).toMatch(
+      /useFocusedWebviewRoot\(\s*rootRef,\s*vscode \? false : true,\s*\)/,
+    );
     expect(canvasAppSource).toContain('useCanvasKeyboardController({');
     expect(canvasAppSource).toContain('isKeyboardFocused');
     expect(canvasAppSource).toContain('isKeyboardFocusedRef,');
@@ -142,7 +145,7 @@ describe('Canvas keyboard focus routing contracts', () => {
     expect(keyboardControllerSource).toContain("createEditorBinding('select-all'");
     expect(keyboardControllerSource).toContain("createEditorBinding('undo'");
     expect(keyboardControllerSource).toContain("createEditorBinding('redo'");
-    expect(keyboardControllerSource).toContain("createEditorBinding('generate-selected'");
+    expect(keyboardControllerSource).toMatch(/createEditorBinding\(\s*'generate-selected'/);
     expect(keyboardControllerSource).toContain("createViewportBinding('toggle-pan-mode'");
     expect(keyboardControllerSource).toContain("createViewportBinding('space-pan-start'");
     expect(keyboardControllerSource).toContain("createViewportBinding('space-pan-end'");

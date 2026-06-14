@@ -17,7 +17,9 @@ export interface WebviewSubsystemRegistry {
   getSubsystemForNodeType(type: CanvasNodeType): CanvasSubsystemManifest | undefined;
   getCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry;
   load(id: CanvasSubsystemId): Promise<WebviewSubsystemRegistration>;
-  loadForCanvas(canvas: Pick<CanvasData, 'nodes'>): Promise<readonly WebviewSubsystemRegistration[]>;
+  loadForCanvas(
+    canvas: Pick<CanvasData, 'nodes'>,
+  ): Promise<readonly WebviewSubsystemRegistration[]>;
 }
 
 const BUILT_IN_SUBSYSTEM_LOADERS: Record<CanvasSubsystemId, WebviewSubsystemLoader> = {

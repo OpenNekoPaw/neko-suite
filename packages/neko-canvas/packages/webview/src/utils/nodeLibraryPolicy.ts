@@ -1,10 +1,6 @@
 import type { CanvasNodeType } from '@neko/shared';
 
-export type NodeLibraryCreationKind =
-  | 'create'
-  | 'file-bound'
-  | 'source-bound'
-  | 'projection-only';
+export type NodeLibraryCreationKind = 'create' | 'file-bound' | 'source-bound' | 'projection-only';
 
 export type NodeLibraryPickerMessageType =
   | 'pickMediaFile'
@@ -39,9 +35,7 @@ const PROJECTION_ONLY_NODE_TYPES = new Set<CanvasNodeType>([
   'generated-asset',
 ]);
 
-export function getNodeLibraryCreationPolicy(
-  nodeType: CanvasNodeType,
-): NodeLibraryCreationPolicy {
+export function getNodeLibraryCreationPolicy(nodeType: CanvasNodeType): NodeLibraryCreationPolicy {
   const pickerMessageType = FILE_BOUND_NODE_PICKERS[nodeType];
   if (pickerMessageType) {
     return {

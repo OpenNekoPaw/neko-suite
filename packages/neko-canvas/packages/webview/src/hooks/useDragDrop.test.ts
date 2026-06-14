@@ -17,9 +17,9 @@ describe('useDragDrop node-library drag helpers', () => {
       contains: (target: Node) => target === insideTarget,
     } as HTMLDivElement;
 
-    expect(
-      isNodeLibraryDragLeavingCanvas({ relatedTarget: insideTarget }, canvasElement),
-    ).toBe(false);
+    expect(isNodeLibraryDragLeavingCanvas({ relatedTarget: insideTarget }, canvasElement)).toBe(
+      false,
+    );
     expect(isNodeLibraryDragLeavingCanvas({ relatedTarget: null }, canvasElement)).toBe(true);
     expect(
       isNodeLibraryDragLeavingCanvas(
