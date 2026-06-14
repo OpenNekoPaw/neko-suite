@@ -17,7 +17,7 @@ import {
   NODE_CARD_ACTION_DISPATCHER,
   readNumber,
   readString,
-  resolveShotPreviewSource,
+  resolveShotReviewPreviewSource,
 } from './node-card';
 import type {
   CreatorSceneViewMode,
@@ -84,7 +84,7 @@ const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
 
 const SCENE_TABLE_COLUMN_WIDTHS: Record<SceneShotTableColumnId, number> = {
   shot: 96,
-  image: 220,
+  image: 440,
   duration: 88,
   camera: 150,
   'visual-action': 260,
@@ -1001,11 +1001,11 @@ function SceneShotTableImageCell({
   row: SceneShotTableRow;
   context: ContainerRendererProps['context'];
 }): React.ReactNode {
-  const previewSource = resolveShotPreviewSource(row.node);
+  const previewSource = resolveShotReviewPreviewSource(row.node);
   if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
     return (
       <div
-        className="flex h-[132px] w-[198px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400"
+        className="flex min-h-[260px] w-[400px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[10px] text-gray-400"
         data-scene-shot-image-preview="large"
       >
         {t('scene.imageUnavailable')}
@@ -1014,13 +1014,14 @@ function SceneShotTableImageCell({
   }
   return (
     <div
-      className="h-[132px] w-[198px] overflow-hidden rounded border border-gray-200 bg-gray-50"
+      className="w-[400px] overflow-hidden rounded border border-gray-200 bg-gray-50"
       data-scene-shot-image-preview="large"
     >
       <CardPreviewSlot
         source={previewSource}
         title={row.shotNumber}
-        variant="summary-large"
+        variant="review-full"
+        imageFit="contain"
         interactionRenderMode={context.interactionRenderMode}
       />
     </div>

@@ -59,6 +59,7 @@ import {
   resolveWorkspaceMediaPath,
   summarizeCanvasSubsystems,
   resolveStorageLayout,
+  validateCanvasBoardRef,
 } from '@neko/shared';
 import type {
   CanvasPlaybackPlan,
@@ -72,6 +73,9 @@ import type {
   CanvasExtractStructuredContentRequest,
   CanvasExtractStructuredContentResult,
   CanvasData,
+  CanvasBoardSummary,
+  CanvasBoardRef,
+  CanvasCreativeScope,
   CanvasNode,
   CanvasNodeType,
   ContentAccessRequest,
@@ -82,6 +86,7 @@ import type {
   CanvasStoryboardExecutionSummary,
   CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
+  CanvasRelatedBoardRef,
   CreatedCanvasStoryboard,
   CanvasAgentActiveContextRequest,
   CanvasAgentActiveContextResult,
@@ -265,20 +270,28 @@ function resolveCanvasPreviewVariantRole(
   preferredRole: ResourceVariantRole | undefined,
 ): ResourceVariantRole {
   if (resourceRef.kind === 'document' || resourceRef.source.kind === 'document') {
-    return 'document-entry';
+    return preferredRole === 'source' || preferredRole === 'page-image'
+      ? 'page-image'
+      : 'document-entry';
   }
   if (resourceRef.kind === 'generated' || resourceRef.source.kind === 'generated-asset') {
-    return preferredRole === 'thumbnail' || preferredRole === 'preview' ? preferredRole : 'preview';
+    return preferredRole === 'source' ||
+      preferredRole === 'thumbnail' ||
+      preferredRole === 'preview'
+      ? preferredRole
+      : 'preview';
   }
   if (resourceRef.kind === 'media') {
-    return preferredRole === 'thumbnail' ||
+    return preferredRole === 'source' ||
+      preferredRole === 'thumbnail' ||
       preferredRole === 'proxy' ||
       preferredRole === 'fov-crop'
       ? preferredRole
       : 'thumbnail';
   }
   if (resourceRef.kind === 'preview') {
-    return preferredRole === 'thumbnail' ||
+    return preferredRole === 'source' ||
+      preferredRole === 'thumbnail' ||
       preferredRole === 'preview' ||
       preferredRole === 'proxy' ||
       preferredRole === 'fov-crop'
@@ -338,6 +351,122 @@ function readCanvasProjectionSummary(canvasData: Record<string, unknown>): strin
   return typeof status.message === 'string' && status.message.length > 0
     ? `Projected: ${status.state} - ${status.message}`
     : `Projected: ${status.state}`;
+}
+
+function readCanvasBoardSummaryInput(canvasData: Record<string, unknown> | undefined): {
+  readonly boardSummary?: CanvasBoardSummary;
+  readonly creativeScope?: CanvasCreativeScope;
+  readonly relatedBoards?: readonly CanvasRelatedBoardRef[];
+} {
+  if (!canvasData) return {};
+  const creativeScope = isCanvasCreativeScopeLike(canvasData['creativeScope'])
+    ? (canvasData['creativeScope'] as CanvasCreativeScope)
+    : undefined;
+  const relatedBoards = Array.isArray(canvasData['relatedBoards'])
+    ? (canvasData['relatedBoards'].filter(isCanvasRelatedBoardRefLike) as CanvasRelatedBoardRef[])
+    : undefined;
+  if (!creativeScope && !relatedBoards) return {};
+  const nodes = Array.isArray(canvasData['nodes']) ? canvasData['nodes'] : [];
+  const nodeTypeSummary: Record<string, number> = {};
+  for (const node of nodes) {
+    if (
+      typeof node === 'object' &&
+      node !== null &&
+      !Array.isArray(node) &&
+      typeof (node as { type?: unknown }).type === 'string'
+    ) {
+      const type = (node as { type: string }).type;
+      nodeTypeSummary[type] = (nodeTypeSummary[type] ?? 0) + 1;
+    }
+  }
+  const boardSummary: CanvasBoardSummary = {
+    name: typeof canvasData['name'] === 'string' ? canvasData['name'] : 'Untitled Canvas',
+    ...(creativeScope ? { scope: creativeScope } : {}),
+    ...(relatedBoards ? { relatedBoards } : {}),
+    ...(Object.keys(nodeTypeSummary).length > 0 ? { nodeTypeSummary } : {}),
+  };
+  return {
+    boardSummary,
+    ...(creativeScope ? { creativeScope } : {}),
+    ...(relatedBoards ? { relatedBoards } : {}),
+  };
+}
+
+function isCanvasCreativeScopeLike(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { kind?: unknown }).kind === 'string'
+  );
+}
+
+function isCanvasRelatedBoardRefLike(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { role?: unknown }).role === 'string' &&
+    typeof (value as { ref?: unknown }).ref === 'object' &&
+    (value as { ref?: unknown }).ref !== null
+  );
+}
+
+function readCanvasBoardRef(value: unknown): CanvasBoardRef | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  switch (record['kind']) {
+    case 'workspace-path':
+      return typeof record['path'] === 'string'
+        ? { kind: 'workspace-path', path: record['path'] }
+        : undefined;
+    case 'uri':
+      return typeof record['uri'] === 'string' ? { kind: 'uri', uri: record['uri'] } : undefined;
+    case 'resource':
+      return isResourceRef(record['resourceRef'])
+        ? { kind: 'resource', resourceRef: record['resourceRef'] }
+        : undefined;
+    case 'project':
+      return typeof record['projectId'] === 'string'
+        ? {
+            kind: 'project',
+            projectId: record['projectId'],
+            ...(typeof record['canvasId'] === 'string' ? { canvasId: record['canvasId'] } : {}),
+          }
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function isUnsafeCanvasBoardUri(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed.length === 0 ||
+    /^vscode-webview:\/\//i.test(trimmed) ||
+    /^vscode-resource:\/\//i.test(trimmed) ||
+    /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(trimmed) ||
+    /^file:\/\//i.test(trimmed)
+  );
+}
+
+function findOpenCanvasDocumentUriByProjectRef(
+  ref: Extract<CanvasBoardRef, { kind: 'project' }>,
+  snapshots: ReadonlyMap<string, Record<string, unknown>>,
+): vscode.Uri | undefined {
+  for (const [documentUri, canvasData] of snapshots.entries()) {
+    const canvasId = typeof canvasData['id'] === 'string' ? canvasData['id'] : undefined;
+    const scope = isCanvasCreativeScopeLike(canvasData['creativeScope'])
+      ? (canvasData['creativeScope'] as CanvasCreativeScope)
+      : undefined;
+    if (ref.canvasId && ref.canvasId !== canvasId && ref.canvasId !== scope?.workId) {
+      continue;
+    }
+    if (scope?.projectId === ref.projectId || (!scope && ref.canvasId === canvasId)) {
+      return vscode.Uri.parse(documentUri);
+    }
+  }
+  return undefined;
 }
 
 function createProjectionSourceKey(source: ProjectedCanvasSource): string {
@@ -960,6 +1089,55 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return createCanvasPlaybackPlanFromCanvasData(canvasData, {
       selectedNodeId: this.readCanvasPlaybackSelectedNodeId(canvasData),
     });
+  }
+
+  async openCanvasBoardRef(ref: unknown, sourceDocumentUri: vscode.Uri): Promise<void> {
+    const boardRef = readCanvasBoardRef(ref);
+    if (!boardRef) {
+      throw new Error('Invalid Canvas board reference.');
+    }
+    const diagnostics = validateCanvasBoardRef(boardRef);
+    const blocking = diagnostics.find((diagnostic) => diagnostic.severity === 'error');
+    if (blocking) {
+      throw new Error(blocking.message);
+    }
+
+    switch (boardRef.kind) {
+      case 'workspace-path': {
+        const fsPath = await this.resolveAssetPath(
+          boardRef.path,
+          sourceDocumentUri,
+          'neko-canvas.open-related-board',
+        );
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(fsPath));
+        return;
+      }
+      case 'uri': {
+        if (isUnsafeCanvasBoardUri(boardRef.uri)) {
+          throw new Error('Canvas board URI is not durable.');
+        }
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(boardRef.uri));
+        return;
+      }
+      case 'resource': {
+        const fsPath = await this.resolveResourceRefLocalPreviewPath(
+          boardRef.resourceRef,
+          'neko-canvas.open-related-board',
+        );
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(fsPath));
+        return;
+      }
+      case 'project': {
+        const targetUri = findOpenCanvasDocumentUriByProjectRef(
+          boardRef,
+          this.canvasSnapshotsByDocumentUri,
+        );
+        if (!targetUri) {
+          throw new Error('Related Canvas project board is not open or indexed.');
+        }
+        await vscode.commands.executeCommand('vscode.open', targetUri);
+      }
+    }
   }
 
   async extractCanvasPlaybackPlanForPreview(
@@ -1719,10 +1897,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
 
     const nodes = await this.listNodes();
+    const canvasSnapshot = this.activeDocument
+      ? this.canvasSnapshotsByDocumentUri.get(this.activeDocument.uri.toString())
+      : undefined;
     return createCanvasStoryboardExecutionSummary({
       nodes,
       request,
       canvasFileUri: this.activeDocument?.uri.toString() ?? request.canvasFileUri,
+      ...readCanvasBoardSummaryInput(canvasSnapshot),
     });
   }
 
@@ -3043,6 +3225,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'openCanvasBoardRef': {
+        try {
+          await this.openCanvasBoardRef(message.ref, document.uri);
+        } catch (error) {
+          logger.error(`Failed to open related canvas board: ${error}`);
+          void handleError(error instanceof Error ? error : new Error(String(error)), {
+            showToUser: true,
+          });
+        }
+        break;
+      }
+
       case 'checkModelInstalled': {
         // Query neko-market for model installation status
         const modelPath = message.modelPath as string;
@@ -3707,7 +3901,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       documentResourceRef,
       resourceRef,
     );
-    const role = message.role as 'thumbnail' | 'proxy' | 'fov-crop' | undefined;
+    const role = message.role as ResourceVariantRole | undefined;
     const mediaTypeHint = message.mediaType as string | undefined;
     if (!requestId) return false;
     const context: PreviewResourceVariantRequestContext = {
@@ -3755,6 +3949,26 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       const fsPath = await this.resolvePreviewVariantAssetPath(assetPath, documentUri);
       if (!fsPath) {
         throw new Error('Preview variant source could not be resolved to a local file.');
+      }
+      if (role === 'source') {
+        const projection = await this.localResourceAccess.toWebviewUri(
+          webviewPanel.webview,
+          fsPath,
+          {
+            caller: 'neko-canvas.source-image-preview',
+            extraRoots: [
+              ...(webviewPanel.webview.options.localResourceRoots ?? []),
+              ...this.getCanvasLocalResourceRoots(documentUri),
+            ],
+          },
+        );
+        if (projection.ok) {
+          return webviewPanel.webview.postMessage({
+            type: 'preview:variantResolved',
+            requestId,
+            url: projection.uri,
+          });
+        }
       }
       const variantApi = await this.getPreviewVariantApi();
       if (variantApi) {

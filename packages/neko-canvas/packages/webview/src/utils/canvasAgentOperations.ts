@@ -20,9 +20,17 @@ import type {
   CanvasStructuredNodeSummary,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
+  CanvasUpsertNarrativeProductionBindingRequest,
+  CanvasUpsertNarrativeProductionBindingResult,
   FieldBinding,
   JsonPointerPath,
   CanvasNarrativeAgentAnalysis,
+  CanvasBoardSummary,
+  CanvasCreativeScope,
+  CanvasRelatedBoardRef,
+  NarrativeProductionBinding,
+  CanvasSerializableRecord,
+  CanvasSerializableValue,
 } from '@neko/shared';
 import {
   analyzeCanvasNarrativeForAgent,
@@ -39,6 +47,7 @@ import {
   summarizeCanvasSubsystems,
   writeJsonPointer,
   writeFieldBinding,
+  validateNarrativeProductionBinding,
 } from '@neko/shared';
 import { addContainerChild, createContainerComposite } from './containerActions';
 import { autoArrangeContainer, findFreePosition } from './containerLayout';
@@ -60,6 +69,9 @@ export interface CanvasAgentActiveContextInput {
   nodes: CanvasNode[];
   connections?: readonly CanvasConnection[];
   canvasData?: {
+    name?: string;
+    creativeScope?: CanvasCreativeScope;
+    relatedBoards?: readonly CanvasRelatedBoardRef[];
     narrative?: CanvasAgentSubsystemMetadataSummary['narrative'];
     behavior?: CanvasAgentSubsystemMetadataSummary['behavior'];
     entityGraph?: CanvasAgentSubsystemMetadataSummary['entityGraph'];
@@ -77,6 +89,107 @@ export interface CanvasAgentMutationResult<T> {
   result: T;
   nodes: CanvasNode[];
   connections: CanvasConnection[];
+}
+
+export function upsertCanvasNarrativeProductionBinding(
+  context: Pick<CanvasAgentOperationContext, 'nodes' | 'connections'>,
+  request: CanvasUpsertNarrativeProductionBindingRequest,
+): CanvasAgentMutationResult<CanvasUpsertNarrativeProductionBindingResult> {
+  const node = context.nodes.find((item) => item.id === request.nodeId);
+  if (!node || node.type !== 'narrative-scene') {
+    return {
+      result: {
+        nodeId: request.nodeId,
+        changed: false,
+        diagnostics: [
+          {
+            code: 'missing-target-narrative-node',
+            severity: 'error',
+            message: `Narrative scene node ${request.nodeId} was not found.`,
+            nodeId: request.nodeId,
+            bindingId: request.binding.bindingId,
+          },
+        ],
+      },
+      nodes: context.nodes,
+      connections: context.connections,
+    };
+  }
+
+  const diagnostics = validateNarrativeProductionBinding(request.binding);
+  if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+    return {
+      result: {
+        nodeId: request.nodeId,
+        changed: false,
+        diagnostics,
+      },
+      nodes: context.nodes,
+      connections: context.connections,
+    };
+  }
+
+  const existingRefs: NarrativeProductionBinding[] = Array.isArray(node.data.productionRefs)
+    ? (node.data.productionRefs as readonly unknown[]).filter(isProductionBindingLike)
+    : [];
+  const nextRefs = [
+    ...existingRefs.filter((binding) => binding.bindingId !== request.binding.bindingId),
+    request.binding,
+  ];
+  const updatedNode: CanvasNode = {
+    ...node,
+    data: {
+      ...node.data,
+      productionRefs: toCanvasSerializableValue(nextRefs) ?? [],
+    },
+  };
+  const nodes = context.nodes.map((item) => (item.id === node.id ? updatedNode : item));
+  return {
+    result: {
+      nodeId: request.nodeId,
+      changed: true,
+      productionRefs: nextRefs,
+      ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    },
+    nodes,
+    connections: context.connections,
+  };
+}
+
+function isProductionBindingLike(value: unknown): value is NarrativeProductionBinding {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as { bindingId?: unknown }).bindingId === 'string',
+  );
+}
+
+function toCanvasSerializableValue(value: unknown): CanvasSerializableValue | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toCanvasSerializableValue(item) ?? null);
+  }
+  if (isRecord(value)) {
+    return toCanvasSerializableRecord(value);
+  }
+  return undefined;
+}
+
+function toCanvasSerializableRecord(value: Record<string, unknown>): CanvasSerializableRecord {
+  const record: CanvasSerializableRecord = {};
+  for (const [key, field] of Object.entries(value)) {
+    const serializable = toCanvasSerializableValue(field);
+    if (serializable !== undefined) {
+      record[key] = serializable;
+    }
+  }
+  return record;
 }
 
 const DERIVE_GAP = 60;
@@ -141,6 +254,18 @@ export function createCanvasAgentActiveContext(
     ...(input.insertionPoint ? { insertionPoint: input.insertionPoint } : {}),
     ...(input.viewport ? { viewport: input.viewport } : {}),
   };
+  if (input.request?.includeBoardNavigation !== false) {
+    const boardSummary = summarizeCanvasAgentBoard(input, subsystemSummary.nodeTypeSummary);
+    if (boardSummary) {
+      result.boardSummary = boardSummary;
+      if (boardSummary.scope) {
+        result.creativeScope = boardSummary.scope;
+      }
+      if (boardSummary.relatedBoards) {
+        result.relatedBoards = boardSummary.relatedBoards;
+      }
+    }
+  }
 
   if (input.request?.includeFocusedContainer !== false) {
     const focusedContainer = findFocusedContainer(input.nodes, selectedNodeIds);
@@ -158,6 +283,20 @@ export function createCanvasAgentActiveContext(
   }
 
   return result;
+}
+
+function summarizeCanvasAgentBoard(
+  input: CanvasAgentActiveContextInput,
+  nodeTypeSummary: Readonly<Record<string, number>>,
+): CanvasBoardSummary | undefined {
+  if (!input.canvasData?.creativeScope && !input.canvasData?.relatedBoards) return undefined;
+  return {
+    ...(input.canvasId ? { canvasId: input.canvasId } : {}),
+    name: input.canvasData.name ?? 'Untitled Canvas',
+    ...(input.canvasData.creativeScope ? { scope: input.canvasData.creativeScope } : {}),
+    ...(input.canvasData.relatedBoards ? { relatedBoards: input.canvasData.relatedBoards } : {}),
+    nodeTypeSummary,
+  };
 }
 
 export function applyCanvasAgentContent(

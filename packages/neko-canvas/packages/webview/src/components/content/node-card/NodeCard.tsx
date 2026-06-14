@@ -113,11 +113,13 @@ export function CardPreviewSlot({
   title,
   variant = 'thumbnail',
   interactionRenderMode = 'full',
+  imageFit = 'cover',
 }: {
   source: CardPreviewSource;
   title: string;
   variant?: NodeCardVariant;
   interactionRenderMode?: NodeInteractionRenderMode;
+  imageFit?: 'cover' | 'contain';
 }): React.ReactNode {
   const effectiveMode = useInteractionRenderMode({
     requestedMode: interactionRenderMode,
@@ -149,6 +151,7 @@ export function CardPreviewSlot({
           title={title}
           aspectRatio={source.aspectRatio}
           variant={variant}
+          imageFit={imageFit}
         />
       ) : (
         <IconPlaceholder icon="IMG" aspectRatio={source.aspectRatio} variant={variant} />
@@ -160,7 +163,11 @@ export function CardPreviewSlot({
           style={previewFrameStyle(source.aspectRatio, variant)}
         >
           {displayUrl ? (
-            <img src={displayUrl} alt={title} className="h-full w-full object-cover" />
+            <img
+              src={displayUrl}
+              alt={title}
+              className={`h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
+            />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-[var(--node-fg-secondary)]">
               {t('preview.videoPlaceholder')}
@@ -323,20 +330,31 @@ function PreviewImage({
   title,
   aspectRatio,
   variant,
+  imageFit,
 }: {
   url: string;
   title: string;
   aspectRatio: CardPreviewAspectRatio;
   variant: NodeCardVariant;
+  imageFit: 'cover' | 'contain';
 }): React.ReactNode {
   return (
     <div
       className={getPreviewFrameClassName(variant)}
       style={previewFrameStyle(aspectRatio, variant)}
     >
-      <img src={url} alt={title} className="h-full w-full object-cover" />
+      <img src={url} alt={title} className={getPreviewImageClassName(variant, imageFit)} />
     </div>
   );
+}
+
+function getPreviewImageClassName(variant: NodeCardVariant, imageFit: 'cover' | 'contain'): string {
+  if (variant === 'review-full') {
+    return imageFit === 'contain'
+      ? 'h-auto max-h-[720px] max-w-full object-contain'
+      : 'h-auto max-h-[720px] w-full object-cover';
+  }
+  return `h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`;
 }
 
 function AudioWaveformPreview({ variant }: { variant: NodeCardVariant }): React.ReactNode {
@@ -499,7 +517,12 @@ function previewFrameStyle(
   aspectRatio: CardPreviewAspectRatio,
   variant: NodeCardVariant,
 ): React.CSSProperties | undefined {
-  if (variant === 'row' || variant === 'summary-large' || variant === 'gallery') {
+  if (
+    variant === 'row' ||
+    variant === 'summary-large' ||
+    variant === 'review-full' ||
+    variant === 'gallery'
+  ) {
     return undefined;
   }
 
@@ -524,6 +547,9 @@ function getPreviewFrameClassName(variant: NodeCardVariant): string {
   }
   if (variant === 'summary-large') {
     return 'relative flex h-full min-h-[72px] w-full items-center justify-center overflow-hidden rounded bg-gray-100 text-sm text-gray-500';
+  }
+  if (variant === 'review-full') {
+    return 'relative flex min-h-[260px] max-h-[720px] w-full items-center justify-center overflow-hidden rounded bg-gray-50 text-sm text-gray-500';
   }
   if (variant === 'gallery') {
     return 'relative flex h-full min-h-[104px] w-full items-center justify-center overflow-hidden bg-gray-100 text-base text-gray-500';

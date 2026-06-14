@@ -10,7 +10,7 @@ import {
   projectSceneShotTableRows,
   resolveSceneShotTableColumns,
 } from './creatorPresentation';
-import { resolveShotPreviewSource } from './node-card';
+import { resolveShotPreviewSource, resolveShotReviewPreviewSource } from './node-card';
 import type { NodeContentRenderContext } from './types';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
@@ -873,7 +873,11 @@ describe('NodeContentDispatcher', () => {
             position: { x: 20 + index * 20, y: 20 },
             zIndex: index + 1,
             preset: 'shot.basic',
-            data: { shotNumber: index + 1, visualDescription: `Beat ${index + 1}` },
+            data: {
+              shotNumber: index + 1,
+              visualDescription: `Beat ${index + 1}`,
+              ...(index === 0 ? { referenceImagePath: 'data:image/png;base64,review-source' } : {}),
+            },
           }),
           id,
           parentId: 'scene-narrow',
@@ -894,7 +898,9 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:2024px');
+    expect(markup).toContain('min-width:2244px');
+    expect(markup).toContain('w-[400px] overflow-hidden');
+    expect(markup).toContain('min-h-[260px] max-h-[720px]');
     expect(markup).toContain('data-scene-shot-table-column="image-prep"');
     expect(markup).toContain('data-scene-shot-image-preview="large"');
     expect(markup).toContain('data-scene-shot-table-column="storyboard-prompt"');
@@ -999,6 +1005,65 @@ describe('NodeContentDispatcher', () => {
     ]);
   });
 
+  it('projects storyboard and animation plan fields into scene shot table rows', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Animation Import', sceneNumber: 1, sceneId: 'scene-1' },
+      }),
+      id: 'scene-animation-import',
+      container: { policy: 'scene', childIds: ['shot-animation'] },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotId: 'shot-1',
+          shotNumber: 1,
+          duration: 4,
+          visualDescription: 'Rin sees the signal.',
+          characterAction: 'Rin leans closer.',
+          sceneTags: ['signal'],
+          visualStyle: 'watercolor manga',
+          generationPrompt: 'base storyboard prompt\ncinematic rain motion\nhair moves in the rain',
+          shotImagePrepPlan: {
+            schemaVersion: 1,
+            kind: 'shot-image-prep-plan',
+            planId: 'shot-1-image-prep',
+            sceneId: 'scene-1',
+            shotId: 'shot-1',
+            sourceMediaRefs: [],
+            imageStrategy: 'use-as-reference',
+            operationPlan: ['remove-text', 'upscale', 'generate-keyframe'],
+            targetStyle: 'watercolor manga',
+            editInstruction: 'clean speech text',
+            generationPrompt:
+              'base storyboard prompt\ncinematic rain motion\nhair moves in the rain',
+            status: 'planned',
+          },
+        },
+      }),
+      id: 'shot-animation',
+      parentId: 'scene-animation-import',
+    } as CanvasNode;
+
+    const rows = projectSceneShotTableRows(scene, [shot]);
+
+    expect(rows[0]?.tagsStyle).toContain('signal');
+    expect(rows[0]?.tagsStyle).toContain('watercolor manga');
+    expect(rows[0]?.imagePrep).toContain('planned');
+    expect(rows[0]?.imagePrep).toContain('use-as-reference');
+    expect(rows[0]?.imagePrep).toContain('remove-text');
+    expect(rows[0]?.imagePrep).toContain('upscale');
+    expect(rows[0]?.storyboardPrompt).toContain('cinematic rain motion');
+  });
+
   it('reuses shot preview-source behavior for scene table generated and referenced images', () => {
     const generatedShot = {
       ...buildCanvasNode({
@@ -1050,6 +1115,17 @@ describe('NodeContentDispatcher', () => {
         ? referencedSource.source.variants?.[0]?.sourcePath
         : undefined,
     ).toBe('data:image/png;base64,reference');
+
+    const reviewSource = resolveShotReviewPreviewSource(referencedShot);
+    expect(reviewSource.renderForm).toBe('asset-thumbnail');
+    expect(
+      reviewSource.renderForm === 'asset-thumbnail' ? reviewSource.source.role : undefined,
+    ).toBe('source-image');
+    expect(
+      reviewSource.renderForm === 'asset-thumbnail'
+        ? reviewSource.source.variants?.[0]?.role
+        : undefined,
+    ).toBe('source-image');
   });
 
   it('keeps creator presentation runtime state out of Canvas data writers', () => {

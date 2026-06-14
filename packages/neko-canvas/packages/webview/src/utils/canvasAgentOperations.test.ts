@@ -7,6 +7,7 @@ import {
   createCanvasAgentActiveContext,
   deriveCanvasNode,
   extractStructuredCanvasContent,
+  upsertCanvasNarrativeProductionBinding,
   updateCanvasBlock,
 } from './canvasAgentOperations';
 import { buildCanvasNode } from './nodeFactory';
@@ -465,6 +466,46 @@ describe('canvasAgentOperations', () => {
     expect(result.subsystemMetadata).toBeUndefined();
   });
 
+  it('includes compact board scope and related board summaries in active context', () => {
+    const result = createCanvasAgentActiveContext({
+      nodes: [node('scene-1', 'scene')],
+      selectedNodeIds: [],
+      canvasData: {
+        name: 'Episode 1 Sequence A',
+        creativeScope: {
+          kind: 'sequence',
+          workId: 'seq-a',
+          title: 'Sequence A',
+          episodeId: 'episode-1',
+          sceneIds: ['scene-1'],
+        },
+        relatedBoards: [
+          {
+            role: 'scene',
+            ref: { kind: 'workspace-path', path: 'boards/scene-1.nkc' },
+            label: 'Scene 1',
+          },
+        ],
+      },
+    });
+
+    expect(result.boardSummary).toMatchObject({
+      name: 'Episode 1 Sequence A',
+      scope: {
+        kind: 'sequence',
+        workId: 'seq-a',
+      },
+      relatedBoards: [
+        {
+          role: 'scene',
+          label: 'Scene 1',
+        },
+      ],
+    });
+    expect(result.creativeScope?.kind).toBe('sequence');
+    expect(result.relatedBoards).toHaveLength(1);
+  });
+
   it('returns bounded subsystem metadata summaries only when requested', () => {
     const variables = Array.from({ length: 60 }, (_, index) => ({
       id: `var-${index}`,
@@ -548,6 +589,89 @@ describe('canvasAgentOperations', () => {
       ]),
     );
     expect(JSON.stringify(result)).not.toContain('blob:runtime-preview');
+  });
+
+  it('upserts durable narrative production bindings on narrative scene nodes', () => {
+    const scene = {
+      ...node('narrative-scene-1', 'narrative-scene'),
+      data: { sceneRef: 'story/scene-1' },
+    } as CanvasNode;
+    const result = upsertCanvasNarrativeProductionBinding(
+      {
+        nodes: [scene],
+        connections: [],
+      },
+      {
+        nodeId: 'narrative-scene-1',
+        binding: {
+          bindingId: 'bind-shot-1',
+          role: 'source',
+          target: {
+            kind: 'storyboard-shot',
+            sceneId: 'scene-1',
+            shotId: 'scene-1-shot-1',
+          },
+        },
+      },
+    );
+
+    expect(result.result).toMatchObject({
+      changed: true,
+      productionRefs: [
+        {
+          bindingId: 'bind-shot-1',
+          role: 'source',
+        },
+      ],
+    });
+    expect((result.nodes[0]?.data as Record<string, unknown>).productionRefs).toEqual(
+      result.result.productionRefs,
+    );
+  });
+
+  it('diagnoses missing narrative targets and non-durable production bindings', () => {
+    const missing = upsertCanvasNarrativeProductionBinding(
+      {
+        nodes: [],
+        connections: [],
+      },
+      {
+        nodeId: 'missing',
+        binding: {
+          bindingId: 'bind-shot-1',
+          role: 'source',
+          target: { kind: 'storyboard-shot', shotId: 'scene-1-shot-1' },
+        },
+      },
+    );
+    expect(missing.result.diagnostics?.[0]).toMatchObject({
+      code: 'missing-target-narrative-node',
+    });
+
+    const unsafe = upsertCanvasNarrativeProductionBinding(
+      {
+        nodes: [{ ...node('scene', 'narrative-scene'), data: {} } as CanvasNode],
+        connections: [],
+      },
+      {
+        nodeId: 'scene',
+        binding: {
+          bindingId: 'bind-video',
+          role: 'primary',
+          target: {
+            kind: 'generated-video',
+            ref: {
+              kind: 'generated-asset',
+              assetId: 'blob://runtime',
+            },
+          },
+        },
+      },
+    );
+    expect(unsafe.result).toMatchObject({
+      changed: false,
+      diagnostics: [expect.objectContaining({ code: 'non-durable-production-binding' })],
+    });
   });
 
   it('applies prompt content to a validated Shot field without replacing unrelated data', () => {

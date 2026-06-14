@@ -200,7 +200,8 @@ function projectSceneShotTableRow(
   const generatedMediaRefs = readReadonlyArray(data['generatedMediaRefs']);
   const mediaRefs = readReadonlyArray(data['mediaRefs']);
   const shotImagePrepPlan = readRecord(data['shotImagePrepPlan']);
-  const imageStrategy = readString(shotImagePrepPlan, 'imageStrategy');
+  const imageStrategy =
+    readString(shotImagePrepPlan, 'imageStrategy') ?? readString(data, 'imageStrategy');
 
   return {
     id: shot.id,
@@ -240,7 +241,10 @@ function projectSceneShotTableRow(
       summarizeRecordRef(data['referenceImageResourceRef']),
       summarizeRecordRef(data['referenceResourceRef']),
     ]),
-    storyboardPrompt: readString(data, 'generationPrompt') ?? '',
+    storyboardPrompt:
+      readString(data, 'generationPrompt') ??
+      readString(shotImagePrepPlan, 'generationPrompt') ??
+      '',
     videoCameraPrompt: readString(readRecord(data['generatedVideoAsset']), 'prompt') ?? '',
     imageStrategy: imageStrategy ?? readString(data, 'imageStrategy') ?? '',
     mediaRefs: joinDisplayParts([

@@ -121,6 +121,38 @@ describe('CardPreviewSlot rendering', () => {
     expect(JSON.stringify(source)).not.toContain('runtimeUrl');
   });
 
+  it('renders review-full image previews without a fixed aspect-ratio frame', () => {
+    const source: CardPreviewSource = {
+      renderForm: 'asset-thumbnail',
+      aspectRatio: '3/2',
+      source: {
+        id: 'shot-review',
+        role: 'source-image',
+        variants: [
+          {
+            id: 'reference-image',
+            role: 'source-image',
+            sourcePath: 'data:image/png;base64,tall-source',
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source,
+        title: 'Tall source',
+        variant: 'review-full',
+        imageFit: 'contain',
+      }),
+    );
+
+    expect(markup).toContain('min-h-[260px] max-h-[720px]');
+    expect(markup).toContain('h-auto max-h-[720px] max-w-full object-contain');
+    expect(markup).not.toContain('aspect-ratio');
+    expect(markup).not.toContain('object-cover');
+  });
+
   it('renders waveform, text, icon, and unsafe asset fallback forms', () => {
     const waveform = renderToStaticMarkup(
       React.createElement(CardPreviewSlot, {

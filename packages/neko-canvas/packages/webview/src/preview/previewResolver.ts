@@ -10,6 +10,7 @@ export function isSafeWebviewUrl(url: string): boolean {
 
 const ROLE_TO_ENGINE_ROLE: Partial<Record<CanvasPreviewRole, PreviewVariantRole>> = {
   image: 'thumbnail',
+  'source-image': 'source',
   'document-cover': 'thumbnail',
   'video-poster': 'thumbnail',
   'video-proxy': 'proxy',

@@ -300,6 +300,7 @@ function createCanvasStore(canvasData: CanvasData | null = null): CanvasStore {
     updateBlock: vi.fn(),
     extractStructuredContent: vi.fn(),
     applyAgentContent: vi.fn(),
+    upsertNarrativeProductionBinding: vi.fn(),
     selectNode: vi.fn(),
     selectConnection: vi.fn(),
     selectNodes: vi.fn(),

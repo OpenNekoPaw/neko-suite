@@ -41,6 +41,7 @@ export {
   defaultCardPolicy,
   getNodeCardPolicy,
   mediaCardPolicy,
+  resolveShotReviewPreviewSource,
   resolveShotPreviewSource,
   shotCardPolicy,
   textCardPolicy,

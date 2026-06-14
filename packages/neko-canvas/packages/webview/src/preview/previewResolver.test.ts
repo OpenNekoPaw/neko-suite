@@ -196,6 +196,36 @@ describe('WebviewPreviewResolver', () => {
       runtimeUrl: undefined,
     });
   });
+
+  it('requests source variants for source-image review previews', async () => {
+    vi.useFakeTimers();
+    installFakeWindow();
+    const postMessage = vi.fn();
+    setGlobalVSCodeApi({
+      postMessage,
+      getState: () => undefined,
+      setState: () => {},
+    });
+    const resolver = new WebviewPreviewResolver();
+
+    const promise = resolver.resolve({
+      source: {
+        id: 'node:shot-review',
+        role: 'source-image',
+        asset: { kind: 'asset-identity', path: 'panel.jpg', mediaType: 'image' },
+      },
+    });
+    const request = postMessage.mock.calls[0]?.[0] as Record<string, unknown>;
+    resolver.dispose();
+
+    expect(request).toMatchObject({
+      type: 'preview:resolveVariant',
+      assetPath: 'panel.jpg',
+      role: 'source',
+      mediaType: 'image',
+    });
+    await expect(promise).resolves.toMatchObject({ sourcePath: 'panel.jpg' });
+  });
 });
 
 function installFakeWindow(): {

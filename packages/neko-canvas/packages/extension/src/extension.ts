@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
   applyStoryboardPayloadToCanvas,
+  type CanvasCreativeScope,
   type CanvasAgentContentPayload,
   getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
@@ -388,13 +389,21 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
 /**
  * Get default canvas data for new files
  */
-function getCanvasTemplate(name: string): string {
+function getCanvasTemplate(
+  name: string,
+  options: {
+    readonly creativeScope?: CanvasCreativeScope;
+    readonly relatedBoards?: CanvasStoryboardPayload['relatedBoards'];
+  } = {},
+): string {
   const data = {
-    version: '1.0',
+    version: '2.1',
     name,
     viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
     nodes: [],
     connections: [],
+    ...(options.creativeScope ? { creativeScope: options.creativeScope } : {}),
+    ...(options.relatedBoards ? { relatedBoards: options.relatedBoards } : {}),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -776,6 +785,8 @@ async function ensureCanvasEditorForStoryboardImport(
     name: title,
     width: 1600,
     height: 1000,
+    creativeScope: inferStoryboardCanvasCreativeScope(payload),
+    relatedBoards: payload.relatedBoards,
   });
   await vscode.commands.executeCommand(
     'vscode.openWith',
@@ -823,9 +834,52 @@ async function waitForActiveCanvasEditorReady(): Promise<void> {
 }
 
 function createStoryboardCanvasName(payload: CanvasStoryboardPayload): string {
+  const scopeTitle = payload.creativeScope?.title?.trim();
   const firstSceneTitle = payload.scenes[0]?.sceneTitle;
-  const sourceTitle = firstSceneTitle?.trim() || 'Agent Storyboard';
+  const multiSceneTitle =
+    payload.scenes.length > 1
+      ? (payload.creativeScope?.sequenceId ??
+        payload.creativeScope?.episodeId ??
+        payload.creativeScope?.workId ??
+        'Storyboard Sequence')
+      : undefined;
+  const sourceTitle =
+    scopeTitle || multiSceneTitle || firstSceneTitle?.trim() || 'Agent Storyboard';
   return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Storyboard';
+}
+
+function inferStoryboardCanvasCreativeScope(
+  payload: CanvasStoryboardPayload,
+): CanvasCreativeScope | undefined {
+  if (payload.creativeScope) return payload.creativeScope;
+  const sceneIds = payload.scenes.map((scene) => scene.sceneId);
+  const shotIds = payload.scenes.flatMap((scene) =>
+    scene.shotPlans.map((shot) => `${scene.sceneId}-shot-${shot.shotNumber}`),
+  );
+  if (payload.scenes.length === 1) {
+    const scene = payload.scenes[0];
+    return scene
+      ? {
+          kind: 'scene',
+          workId: scene.sceneId,
+          title: scene.sceneTitle,
+          sceneIds: [scene.sceneId],
+          shotIds,
+          sourceStoryboardRef: payload.sourceScriptUri,
+        }
+      : undefined;
+  }
+  if (payload.scenes.length > 1) {
+    return {
+      kind: 'sequence',
+      workId: payload.sourceScriptUri,
+      title: createStoryboardCanvasName({ ...payload, creativeScope: undefined }),
+      sceneIds,
+      shotIds,
+      sourceStoryboardRef: payload.sourceScriptUri,
+    };
+  }
+  return undefined;
 }
 
 function createAssetCanvasName(asset: { readonly path?: string; readonly name?: string }): string {
@@ -850,7 +904,10 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
   }
 
   const canvasFile = await createAvailableCanvasFilePath(folders[0].uri.fsPath, config.name);
-  const content = getCanvasTemplate(config.name);
+  const content = getCanvasTemplate(config.name, {
+    creativeScope: config.creativeScope,
+    relatedBoards: config.relatedBoards,
+  });
   await vscode.workspace.fs.writeFile(vscode.Uri.file(canvasFile), Buffer.from(content, 'utf-8'));
   return canvasFile;
 }

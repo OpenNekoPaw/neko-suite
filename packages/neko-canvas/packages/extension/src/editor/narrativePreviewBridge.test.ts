@@ -198,6 +198,39 @@ describe('createNarrativeGraphSnapshotFromCanvasData', () => {
       backgroundRef: { kind: 'relative-path', path: 'assets/bg/cafe.png' },
       characters: ['characters/hero.yaml'],
       variableEffects: [{ variableId: 'affection', operation: 'add', value: 1 }],
+      productionRefs: [
+        {
+          bindingId: 'bind-shot-1',
+          role: 'source',
+          target: {
+            kind: 'storyboard-shot',
+            sceneId: 'scene-1',
+            shotId: 'scene-1-shot-1',
+          },
+        },
+        {
+          bindingId: 'bind-video-1',
+          role: 'primary',
+          target: {
+            kind: 'generated-video',
+            ref: {
+              kind: 'generated-asset',
+              assetId: 'generated-video-1',
+              resourceRef: {
+                id: 'generated-video-1',
+                scope: 'project',
+                provider: 'generated',
+                kind: 'generated',
+                source: {
+                  kind: 'generated-asset',
+                  generatedAssetId: 'generated-video-1',
+                },
+                fingerprint: { strategy: 'provider', value: 'generated-video-1' },
+              },
+            },
+          },
+        },
+      ],
     });
     expect(snapshot.nodes.find((node) => node.nodeId === 'ending-a')?.ending).toEqual({
       endingType: 'good',
@@ -1616,6 +1649,39 @@ function createCanvasData(): CanvasData {
         backgroundRef: 'assets/bg/cafe.png',
         characters: ['characters/hero.yaml'],
         variableEffects: [{ variableId: 'affection', operation: 'add', value: 1 }],
+        productionRefs: [
+          {
+            bindingId: 'bind-shot-1',
+            role: 'source',
+            target: {
+              kind: 'storyboard-shot',
+              sceneId: 'scene-1',
+              shotId: 'scene-1-shot-1',
+            },
+          },
+          {
+            bindingId: 'bind-video-1',
+            role: 'primary',
+            target: {
+              kind: 'generated-video',
+              ref: {
+                kind: 'generated-asset',
+                assetId: 'generated-video-1',
+                resourceRef: {
+                  id: 'generated-video-1',
+                  scope: 'project',
+                  provider: 'generated',
+                  kind: 'generated',
+                  source: {
+                    kind: 'generated-asset',
+                    generatedAssetId: 'generated-video-1',
+                  },
+                  fingerprint: { strategy: 'provider', value: 'generated-video-1' },
+                },
+              },
+            },
+          },
+        ],
       }),
       createNode('choice-a', 'choice', { label: 'Choice' }),
       createNode('ending-a', 'narrative-ending', {

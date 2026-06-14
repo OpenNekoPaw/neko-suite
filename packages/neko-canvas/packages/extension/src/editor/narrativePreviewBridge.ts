@@ -3,6 +3,7 @@ import {
   createCanvasPlaybackPlan,
   createNarrativeRelativePathAssetRef,
   isNarrativeAssetRef,
+  isNarrativeProductionBinding,
   isResourceRef,
   NARRATIVE_RUNTIME_NODE_TYPES,
   normalizeNarrativePreviewFeatureToggles,
@@ -22,6 +23,7 @@ import {
   type NarrativeMetadata,
   type NarrativeNodeSnapshot,
   type NarrativePreviewFeatureToggles,
+  type NarrativeProductionBinding,
   type NarrativeRuntimeNodeType,
   type NarrativeSceneMetadata,
   type PreviewToCanvasMessage,
@@ -3335,6 +3337,7 @@ function readNarrativeMetadata(canvas: CanvasData | Record<string, unknown>): Na
 
 function readNarrativeSceneMetadata(data: CanvasSerializableRecord): NarrativeSceneMetadata {
   const variableEffects = readVariableEffects(data['variableEffects']);
+  const productionRefs = readNarrativeProductionRefs(data['productionRefs']);
   return {
     ...(typeof data['sceneRef'] === 'string' ? { sceneRef: data['sceneRef'] } : {}),
     ...readNarrativeAssetRefField(data, 'backgroundRef', 'backgroundRef'),
@@ -3343,7 +3346,12 @@ function readNarrativeSceneMetadata(data: CanvasSerializableRecord): NarrativeSc
       ? { characters: data['characters'].filter(isStringValue) }
       : {}),
     ...(variableEffects.length > 0 ? { variableEffects } : {}),
+    ...(productionRefs.length > 0 ? { productionRefs } : {}),
   };
+}
+
+function readNarrativeProductionRefs(value: unknown): readonly NarrativeProductionBinding[] {
+  return Array.isArray(value) ? value.filter(isNarrativeProductionBinding) : [];
 }
 
 function readNarrativeEndingMetadata(data: CanvasSerializableRecord): NarrativeEndingMetadata {

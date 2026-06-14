@@ -6,8 +6,10 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
-import { projectCanvasShotPrompt } from '@neko/shared';
+import { projectCanvasShotPrompt, validateCanvasBoardRef } from '@neko/shared';
 import type {
+  CanvasBoardNavigationDiagnostic,
+  CanvasBoardRef,
   CanvasData,
   CanvasDroppedAsset,
   CanvasNode,
@@ -90,6 +92,15 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
 const logger = getLogger('CanvasApp');
+
+const SCOPE_LABELS: Record<string, string> = {
+  episode: 'scopeNavigation.kind.episode',
+  sequence: 'scopeNavigation.kind.sequence',
+  scene: 'scopeNavigation.kind.scene',
+  'shot-cluster': 'scopeNavigation.kind.shotCluster',
+  'interactive-narrative': 'scopeNavigation.kind.interactiveNarrative',
+  generic: 'scopeNavigation.kind.generic',
+};
 
 function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
   return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
@@ -734,6 +745,9 @@ export function CanvasApp() {
         connections: state.canvasData?.connections ?? [],
         canvasData: state.canvasData
           ? {
+              name: state.canvasData.name,
+              creativeScope: state.canvasData.creativeScope,
+              relatedBoards: state.canvasData.relatedBoards,
               narrative: state.canvasData.narrative,
               behavior: state.canvasData.behavior,
               entityGraph: state.canvasData.entityGraph,
@@ -747,6 +761,8 @@ export function CanvasApp() {
       });
     },
     applyAgentContent: (payload) => useCanvasStore.getState().applyAgentContent(payload),
+    upsertNarrativeProductionBinding: (request) =>
+      useCanvasStore.getState().upsertNarrativeProductionBinding(request),
   });
 
   // =========================================================================
@@ -885,6 +901,10 @@ export function CanvasApp() {
 
   const handleCanvasEmbedOpen = useCallback((canvasPath: string) => {
     vscode?.postMessage({ type: 'openDocument', docPath: canvasPath });
+  }, []);
+
+  const handleCanvasBoardRefOpen = useCallback((ref: CanvasBoardRef) => {
+    vscode?.postMessage({ type: 'openCanvasBoardRef', ref });
   }, []);
 
   const handleModelCheckInstalled = useCallback((nodeId: string, modelPath: string) => {
@@ -1410,6 +1430,12 @@ export function CanvasApp() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
+            {canvasData && (
+              <CanvasScopeNavigationBar
+                canvasData={canvasData}
+                onOpenBoardRef={handleCanvasBoardRefOpen}
+              />
+            )}
             <InfiniteCanvas
               nodes={nodes}
               connections={connections}
@@ -1565,6 +1591,93 @@ export function CanvasApp() {
           ) : undefined
         }
       />
+    </div>
+  );
+}
+
+function CanvasScopeNavigationBar({
+  canvasData,
+  onOpenBoardRef,
+}: {
+  canvasData: CanvasData;
+  onOpenBoardRef: (ref: CanvasBoardRef) => void;
+}) {
+  const scope = canvasData.creativeScope;
+  const relatedBoards = canvasData.relatedBoards ?? [];
+  const diagnostics = relatedBoards.flatMap((board) =>
+    validateCanvasBoardRef(board.ref).map((diagnostic) => ({
+      ...diagnostic,
+      boardId: board.boardId,
+      role: board.role,
+    })),
+  );
+
+  if (!scope && relatedBoards.length === 0) return null;
+
+  const scopeTitle =
+    scope?.title ||
+    scope?.workId ||
+    scope?.sequenceId ||
+    scope?.episodeId ||
+    scope?.sceneIds?.[0] ||
+    canvasData.name;
+  const scopeLabel = scope
+    ? t(SCOPE_LABELS[scope.kind] ?? 'scopeNavigation.kind.generic')
+    : t('scopeNavigation.kind.generic');
+
+  return (
+    <div className="pointer-events-none absolute left-3 right-3 top-3 z-20 flex min-w-0 flex-wrap items-center gap-2">
+      <div className="pointer-events-auto flex min-w-0 max-w-full items-center gap-2 rounded-md border border-[var(--toolbar-border)] bg-[var(--toolbar-bg)] px-2 py-1 shadow-sm">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-normal text-[var(--toolbar-fg-secondary)]">
+          {scopeLabel}
+        </span>
+        <span className="min-w-0 truncate text-xs text-[var(--toolbar-fg)]">{scopeTitle}</span>
+        {relatedBoards.length > 0 && (
+          <span className="shrink-0 text-[10px] text-[var(--toolbar-fg-secondary)]">
+            {t('scopeNavigation.boardCount', { count: relatedBoards.length })}
+          </span>
+        )}
+      </div>
+
+      {relatedBoards.slice(0, 6).map((board, index) => {
+        const boardDiagnostics = validateCanvasBoardRef(board.ref);
+        const disabled = boardDiagnostics.some((diagnostic) => diagnostic.severity === 'error');
+        const label = board.label || board.scope?.title || board.boardId || board.role;
+        return (
+          <button
+            key={`${board.boardId ?? board.role}:${index}`}
+            type="button"
+            className="pointer-events-auto min-w-0 max-w-[180px] truncate rounded-md border border-[var(--toolbar-border)] bg-[var(--toolbar-bg)] px-2 py-1 text-xs text-[var(--toolbar-fg)] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={disabled}
+            title={
+              disabled ? boardDiagnostics.map((diagnostic) => diagnostic.message).join('\n') : label
+            }
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenBoardRef(board.ref);
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+
+      {diagnostics.length > 0 && <CanvasBoardDiagnostics diagnostics={diagnostics} />}
+    </div>
+  );
+}
+
+function CanvasBoardDiagnostics({
+  diagnostics,
+}: {
+  diagnostics: readonly CanvasBoardNavigationDiagnostic[];
+}) {
+  return (
+    <div
+      className="pointer-events-auto rounded-md border border-[var(--color-warning-border)] bg-[var(--toolbar-bg)] px-2 py-1 text-[10px] text-[var(--toolbar-fg-secondary)] shadow-sm"
+      title={diagnostics.map((diagnostic) => diagnostic.message).join('\n')}
+    >
+      {t('scopeNavigation.issueCount', { count: diagnostics.length })}
     </div>
   );
 }

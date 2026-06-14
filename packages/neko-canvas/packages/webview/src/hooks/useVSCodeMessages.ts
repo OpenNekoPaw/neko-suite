@@ -21,6 +21,7 @@ import type {
   CanvasExtractStructuredContentRequest,
   CanvasAgentActiveContextRequest,
   CanvasAgentContentPayload,
+  CanvasUpsertNarrativeProductionBindingRequest,
   FieldBinding,
   CanvasUpdateBlockRequest,
   ProjectedCanvasStatus,
@@ -96,6 +97,9 @@ export interface UseVSCodeMessagesOptions {
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
   getActiveContext?: (request?: CanvasAgentActiveContextRequest) => unknown;
   applyAgentContent?: (payload: CanvasAgentContentPayload) => unknown;
+  upsertNarrativeProductionBinding?: (
+    request: CanvasUpsertNarrativeProductionBindingRequest,
+  ) => unknown;
   onProjectionStatus?: (status: ProjectedCanvasStatus) => void;
   onProjectionSourceChanged?: (event: ProjectionSourceChangeEvent) => void;
   /** Called after a Canvas document payload has been normalized and applied. */
@@ -192,6 +196,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     extractStructuredContent,
     getActiveContext,
     applyAgentContent,
+    upsertNarrativeProductionBinding,
     onProjectionStatus,
     onProjectionSourceChanged,
     onCanvasDataLoaded,
@@ -243,6 +248,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   getActiveContextRef.current = getActiveContext;
   const applyAgentContentRef = useRef(applyAgentContent);
   applyAgentContentRef.current = applyAgentContent;
+  const upsertNarrativeProductionBindingRef = useRef(upsertNarrativeProductionBinding);
+  upsertNarrativeProductionBindingRef.current = upsertNarrativeProductionBinding;
   const onProjectionStatusRef = useRef(onProjectionStatus);
   onProjectionStatusRef.current = onProjectionStatus;
   const onProjectionSourceChangedRef = useRef(onProjectionSourceChanged);
@@ -623,6 +630,28 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               );
               if (!isRecord(result)) {
                 throw new Error('Agent content application failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'narrative.upsertProductionBinding': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                upsertNarrativeProductionBindingRef.current?.(
+                  message.payload as CanvasUpsertNarrativeProductionBindingRequest,
+                ),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Narrative production binding update failed');
               }
               vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
             } catch (error) {

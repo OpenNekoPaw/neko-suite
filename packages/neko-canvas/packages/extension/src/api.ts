@@ -10,6 +10,7 @@ import type {
   CanvasAgentContentPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
+  CanvasCreativeScope,
   CanvasCreateConnectionRequest,
   CanvasCreateConnectionResult,
   CanvasDeriveNodeRequest,
@@ -22,6 +23,7 @@ import type {
   CanvasStoryboardExecutionSummary,
   CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
+  CanvasRelatedBoardRef,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
   CreatedCanvasStoryboard,
@@ -65,6 +67,8 @@ export interface CanvasConfig {
   width: number;
   height: number;
   backgroundColor?: string;
+  creativeScope?: CanvasCreativeScope;
+  relatedBoards?: readonly CanvasRelatedBoardRef[];
 }
 
 export interface ShapeConfig {

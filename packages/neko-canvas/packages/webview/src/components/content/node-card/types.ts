@@ -102,6 +102,7 @@ export type NodeCardVariant =
   | 'row'
   | 'summary'
   | 'summary-large'
+  | 'review-full'
   | 'gallery';
 
 export interface ActionConditionContext {

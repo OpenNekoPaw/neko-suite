@@ -13,6 +13,8 @@ import type {
   CanvasExtractStructuredContentResult,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
+  CanvasUpsertNarrativeProductionBindingRequest,
+  CanvasUpsertNarrativeProductionBindingResult,
   PortDefinition,
   SceneGroupCanvasNode,
   ShotCanvasNode,
@@ -59,6 +61,7 @@ import {
   deriveCanvasNode,
   extractStructuredCanvasContent,
   applyCanvasAgentContent,
+  upsertCanvasNarrativeProductionBinding,
   updateCanvasBlock,
 } from '../utils/canvasAgentOperations';
 import {
@@ -189,6 +192,10 @@ export interface CanvasStore {
   ) => CanvasExtractStructuredContentResult;
   /** Apply Agent-generated text, prompt, or structured content through shared target validation. */
   applyAgentContent: (payload: CanvasAgentContentPayload) => CanvasAgentApplyContentResult | null;
+  /** Add or refresh durable production bindings on a narrative-scene node. */
+  upsertNarrativeProductionBinding: (
+    request: CanvasUpsertNarrativeProductionBindingRequest,
+  ) => CanvasUpsertNarrativeProductionBindingResult | null;
 
   // ==================== Selection Actions ====================
   selectNode: (id: string, multi?: boolean) => void;
@@ -1365,6 +1372,41 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       }
     }
 
+    return mutation.result;
+  },
+
+  upsertNarrativeProductionBinding: (request) => {
+    const { canvasData } = get();
+    if (!canvasData) return null;
+    const mutation = upsertCanvasNarrativeProductionBinding(
+      {
+        nodes: canvasData.nodes,
+        connections: canvasData.connections,
+      },
+      request,
+    );
+    if (!mutation.result.changed) {
+      return mutation.result;
+    }
+    recordHistory(canvasData);
+    set({
+      canvasData: withSubsystemMetadataDefaults({
+        ...canvasData,
+        nodes: mutation.nodes,
+        connections: mutation.connections,
+      }),
+    });
+    const before = canvasData.nodes.find((node) => node.id === request.nodeId);
+    const after = mutation.nodes.find((node) => node.id === request.nodeId);
+    if (before && after) {
+      useCanvasOperationStore
+        .getState()
+        .recordNodeUpdate(
+          request.nodeId,
+          { data: after.data } as Partial<CanvasNode>,
+          { data: before.data } as Partial<CanvasNode>,
+        );
+    }
     return mutation.result;
   },
 

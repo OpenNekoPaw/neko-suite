@@ -154,13 +154,24 @@ export const shotCardPolicy: NodeCardPolicy = {
 };
 
 export function resolveShotPreviewSource(node: CanvasNode): CardPreviewSource {
+  return createShotPreviewSource(node, 'image');
+}
+
+export function resolveShotReviewPreviewSource(node: CanvasNode): CardPreviewSource {
+  return createShotPreviewSource(node, 'source-image');
+}
+
+function createShotPreviewSource(
+  node: CanvasNode,
+  referenceRole: Extract<CanvasPreviewRole, 'image' | 'source-image'>,
+): CardPreviewSource {
   const selected = findSelectedGenerationCandidate(node);
   const generatedImage = readString(node.data, 'generatedImage');
   const generatedAssetPath = readString(readRecord(node.data)['generatedAsset'], 'path');
   const runtimeReferenceImagePath = readString(node.data, 'runtimeReferenceImagePath');
   const referenceImagePath = readString(node.data, 'referenceImagePath');
   const sourceRole: CanvasPreviewRole =
-    selected || generatedImage || generatedAssetPath ? 'generation-candidate' : 'image';
+    selected || generatedImage || generatedAssetPath ? 'generation-candidate' : referenceRole;
   const referenceImageResourceRef =
     selected || generatedImage || generatedAssetPath
       ? undefined
