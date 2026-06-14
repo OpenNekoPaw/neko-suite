@@ -532,7 +532,6 @@ impl LinuxExportBackingStore {
             uv_pitch: self.uv_row_pitch as usize,
             width: self.width,
             height: self.height,
-            diagnostics: None,
         })
     }
 }

@@ -543,7 +543,7 @@ mod tests {
             EncoderPreset::Veryslow,
         ] {
             let s = preset.as_str();
-            assert!(s.len() > 0, "empty string for preset {:?}", preset);
+            assert!(!s.is_empty(), "empty string for preset {:?}", preset);
         }
     }
 

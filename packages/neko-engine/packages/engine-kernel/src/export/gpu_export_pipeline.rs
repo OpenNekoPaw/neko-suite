@@ -537,6 +537,7 @@ impl GpuExportPipeline {
 
     /// Process a single frame to an encoder-ready GPU handle with timing breakdown.
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[cfg(target_os = "macos")]
     pub fn process_frame_to_gpu_handle_timed(
         &mut self,
         time: f64,
@@ -582,6 +583,21 @@ impl GpuExportPipeline {
             height: result.height,
             timing,
         })
+    }
+
+    /// Process a single frame to an encoder-ready GPU handle with timing breakdown.
+    #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[cfg(not(target_os = "macos"))]
+    pub fn process_frame_to_gpu_handle_timed(
+        &mut self,
+        time: f64,
+        _background_color: [f32; 4],
+    ) -> Result<Nv12FrameResult> {
+        let _ = time;
+        Err(Error::UnsupportedCapability(format!(
+            "GPU zero-copy export is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 
     /// Close all decoders and return them to the pool for reuse
