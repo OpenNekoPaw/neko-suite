@@ -153,7 +153,13 @@ function LaneEditor({
           onAddPoint((event.clientX - rect.left) / pps);
         }}
       >
-        <path d={path} stroke="var(--accent)" strokeWidth={1.5} fill="none" opacity={lane.enabled ? 1 : 0.35} />
+        <path
+          d={path}
+          stroke="var(--accent)"
+          strokeWidth={1.5}
+          fill="none"
+          opacity={lane.enabled ? 1 : 0.35}
+        />
         {points.map((point, index) => {
           const x = secondsToPixels(point.ticks, tempoMap, pps);
           const y = valueToY(point.value, range.min, range.max);
@@ -219,13 +225,19 @@ function parseAutomationTarget(value: string): AutomationTarget | null {
   return null;
 }
 
-function secondsToPixels(ticks: number, tempoMap: ReturnType<typeof getProjectTempoMap>, pps: number): number {
+function secondsToPixels(
+  ticks: number,
+  tempoMap: ReturnType<typeof getProjectTempoMap>,
+  pps: number,
+): number {
   return ticksToSeconds(ticks, tempoMap) * pps;
 }
 
 function valueToY(value: number, min: number, max: number): number {
   const ratio = max === min ? 0 : (value - min) / (max - min);
-  return AUTOMATION_LANE_HEIGHT - 6 - Math.max(0, Math.min(1, ratio)) * (AUTOMATION_LANE_HEIGHT - 12);
+  return (
+    AUTOMATION_LANE_HEIGHT - 6 - Math.max(0, Math.min(1, ratio)) * (AUTOMATION_LANE_HEIGHT - 12)
+  );
 }
 
 function isEffectParamHighlighted(

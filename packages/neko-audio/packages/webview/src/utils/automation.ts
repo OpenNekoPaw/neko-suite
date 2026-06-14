@@ -60,12 +60,11 @@ export function getAutomationValueRange(
       return {
         min: metadata.min ?? 0,
         max: metadata.max ?? 1,
-        defaultValue:
-          isNumber(currentValue)
-            ? currentValue
-            : typeof metadata.defaultValue === 'number'
-              ? metadata.defaultValue
-              : metadata.min ?? 0,
+        defaultValue: isNumber(currentValue)
+          ? currentValue
+          : typeof metadata.defaultValue === 'number'
+            ? metadata.defaultValue
+            : (metadata.min ?? 0),
         unit: metadata.unit,
         label: `${effect.effectType}.${target.param}`,
       };

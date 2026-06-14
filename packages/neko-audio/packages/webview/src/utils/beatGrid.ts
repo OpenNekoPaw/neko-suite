@@ -37,7 +37,9 @@ export function formatBarBeatPosition(position: BarBeatPosition): string {
 }
 
 export function formatSecondsAsBarBeat(seconds: number, tempoMap: TempoMap): string {
-  return formatBarBeatPosition(ticksToBarBeat(secondsToTicks(Math.max(0, seconds), tempoMap), tempoMap));
+  return formatBarBeatPosition(
+    ticksToBarBeat(secondsToTicks(Math.max(0, seconds), tempoMap), tempoMap),
+  );
 }
 
 export function getInitialBarDurationSeconds(tempoMap: TempoMap): number {
@@ -120,7 +122,10 @@ export function snapSecondsToGrid(
   return ticksToSeconds(Math.round(currentTicks / gridTicks) * gridTicks, tempoMap);
 }
 
-function getActiveTimeSignature(tempoMap: TempoMap, ticks: number): TempoMap['timeSignatureEvents'][number] {
+function getActiveTimeSignature(
+  tempoMap: TempoMap,
+  ticks: number,
+): TempoMap['timeSignatureEvents'][number] {
   const [firstEvent] = tempoMap.timeSignatureEvents;
   let active = firstEvent ?? { ticks: 0, numerator: 4, denominator: 4 };
   for (const event of tempoMap.timeSignatureEvents) {

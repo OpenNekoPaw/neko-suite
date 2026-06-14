@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
-import {
-  StatusBarProjectionManager,
-  type StatusBarItemSpec,
-} from '@neko/shared/vscode/extension';
+import { StatusBarProjectionManager, type StatusBarItemSpec } from '@neko/shared/vscode/extension';
 import {
   MODEL_EDITOR_VIEW_TYPE,
   formatModelEngineStatus,

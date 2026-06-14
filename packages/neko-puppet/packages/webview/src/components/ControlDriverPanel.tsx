@@ -21,8 +21,7 @@ export function ControlDriverPanel() {
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const drivers = usePuppetStore((s) => s.nativeControlDrivers);
   const sortedDrivers = useMemo(
-    () =>
-      [...drivers].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id)),
+    () => [...drivers].sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id)),
     [drivers],
   );
 

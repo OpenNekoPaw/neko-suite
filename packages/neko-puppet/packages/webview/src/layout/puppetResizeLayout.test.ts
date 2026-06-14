@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readPersistedResizeState } from '@neko/ui/hooks';
 import { PUPPET_RIGHT_PANEL_RESIZE } from './puppetResizeLayout';
 
-const srcRoot = resolve(process.cwd(), 'src');
+const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function readSource(relativePath: string): string {
   return readFileSync(resolve(srcRoot, relativePath), 'utf8');

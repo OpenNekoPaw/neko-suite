@@ -51,21 +51,13 @@ export function computeClipInteractionUpdates(
   const dt = deltaPixels / pixelsPerSecond;
 
   if (type === 'move') {
-    const newStart = snapSecondsToGrid(
-      Math.max(0, state.origStartTime + dt),
-      tempoMap,
-      beatGrid,
-    );
+    const newStart = snapSecondsToGrid(Math.max(0, state.origStartTime + dt), tempoMap, beatGrid);
     return { startTime: newStart };
   }
 
   if (type === 'resize-left') {
     const clampedDt = Math.max(-state.origTrimStart, Math.min(state.origDuration - 0.01, dt));
-    const snappedStart = snapSecondsToGrid(
-      state.origStartTime + clampedDt,
-      tempoMap,
-      beatGrid,
-    );
+    const snappedStart = snapSecondsToGrid(state.origStartTime + clampedDt, tempoMap, beatGrid);
     const snappedDt = snappedStart - state.origStartTime;
     return {
       startTime: snappedStart,

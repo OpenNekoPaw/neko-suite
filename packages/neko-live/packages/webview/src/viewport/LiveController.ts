@@ -199,8 +199,7 @@ export class LiveController implements ISceneController {
         group: 'live',
         order: 101,
         toggled:
-          this.sceneSnapshot.trackingOverlay.enabled &&
-          this.sceneSnapshot.trackingOverlay.visible,
+          this.sceneSnapshot.trackingOverlay.enabled && this.sceneSnapshot.trackingOverlay.visible,
         disabled: controlUnavailable || pending,
         disabledReason,
         degraded: controlUnavailable || this.lastControlError !== null,
@@ -283,10 +282,7 @@ export class LiveController implements ISceneController {
   async setTrackingOverlay(
     payload: LiveCompositorSetTrackingOverlayPayload,
   ): Promise<ViewportEvent> {
-    return this.dispatchLiveCommand(
-      LIVE_COMPOSITOR_COMMAND_ACTIONS.setTrackingOverlay,
-      payload,
-    );
+    return this.dispatchLiveCommand(LIVE_COMPOSITOR_COMMAND_ACTIONS.setTrackingOverlay, payload);
   }
 
   async toggleTrackingOverlay(): Promise<ViewportEvent> {
@@ -426,7 +422,8 @@ export class LiveController implements ISceneController {
   }
 
   private handleUnsupportedOutputRoute(route: LiveOutputRoute): void {
-    const message = route.diagnostics?.[0]?.message ?? `Live output route ${route.id} is unavailable`;
+    const message =
+      route.diagnostics?.[0]?.message ?? `Live output route ${route.id} is unavailable`;
     this.lastControlError = message;
     this.onError?.(message);
   }
@@ -455,10 +452,9 @@ function applyAckToScene(
   }
 
   if (event.event.startsWith(LIVE_COMPOSITOR_COMMAND_ACTIONS.updateLayer)) {
-    const pendingPayload =
-      pending?.payload as
-        | Partial<{ readonly layerId: unknown; readonly patch: LiveCompositorLayerPatch }>
-        | undefined;
+    const pendingPayload = pending?.payload as
+      | Partial<{ readonly layerId: unknown; readonly patch: LiveCompositorLayerPatch }>
+      | undefined;
     const layerId = readString(event.payload['layerId']) ?? readString(pendingPayload?.layerId);
     if (!layerId) return withLiveSceneRevision(scene, revision, updatedAt);
     return withLiveSceneRevision(scene, revision, updatedAt, {
@@ -471,24 +467,22 @@ function applyAckToScene(
   }
 
   if (event.event.startsWith(LIVE_COMPOSITOR_COMMAND_ACTIONS.setTrackingOverlay)) {
-    const pendingPayload =
-      pending?.payload as
-        | Partial<{ readonly trackingOverlay: LiveCompositorScene['trackingOverlay'] }>
-        | undefined;
+    const pendingPayload = pending?.payload as
+      | Partial<{ readonly trackingOverlay: LiveCompositorScene['trackingOverlay'] }>
+      | undefined;
     return withLiveSceneRevision(scene, revision, updatedAt, {
       trackingOverlay: pendingPayload?.trackingOverlay ?? scene.trackingOverlay,
     });
   }
 
   if (event.event.startsWith(LIVE_COMPOSITOR_COMMAND_ACTIONS.setOutputRoute)) {
-    const pendingPayload =
-      pending?.payload as
-        | Partial<{
-            readonly routeId: unknown;
-            readonly enabled: unknown;
-            readonly route: LiveOutputRoute;
-          }>
-        | undefined;
+    const pendingPayload = pending?.payload as
+      | Partial<{
+          readonly routeId: unknown;
+          readonly enabled: unknown;
+          readonly route: LiveOutputRoute;
+        }>
+      | undefined;
     const routeId = readString(event.payload['routeId']) ?? readString(pendingPayload?.routeId);
     if (!routeId) return withLiveSceneRevision(scene, revision, updatedAt);
     return withLiveSceneRevision(scene, revision, updatedAt, {

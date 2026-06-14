@@ -38,9 +38,9 @@ describe('beatGrid helpers', () => {
   });
 
   it('snaps seconds in tick space to nearest beat', () => {
-    expect(
-      snapSecondsToGrid(0.46, project.tempoMap!, { enabled: true, mode: 'beat' }),
-    ).toBeCloseTo(0.5);
+    expect(snapSecondsToGrid(0.46, project.tempoMap!, { enabled: true, mode: 'beat' })).toBeCloseTo(
+      0.5,
+    );
   });
 
   it('returns visible labels on bar starts only', () => {
@@ -62,8 +62,6 @@ describe('beatGrid helpers', () => {
   });
 
   it('returns raw seconds when grid is off', () => {
-    expect(
-      snapSecondsToGrid(0.46, project.tempoMap!, { enabled: false, mode: 'off' }),
-    ).toBe(0.46);
+    expect(snapSecondsToGrid(0.46, project.tempoMap!, { enabled: false, mode: 'off' })).toBe(0.46);
   });
 });

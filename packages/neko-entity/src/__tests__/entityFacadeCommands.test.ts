@@ -636,9 +636,7 @@ function createMemoryRuntimeRegistry(
   });
 }
 
-function isBindingFile(
-  value: unknown,
-): value is {
+function isBindingFile(value: unknown): value is {
   readonly bindings: readonly { readonly id: string; readonly isDefault?: boolean }[];
 } {
   return isRecord(value) && Array.isArray(value['bindings']);

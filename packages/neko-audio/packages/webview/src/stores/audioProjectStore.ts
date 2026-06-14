@@ -247,7 +247,10 @@ export interface AudioProjectStore {
   ) => void;
   removeAutomationPoint: (trackId: string, laneId: string, pointIndex: number) => void;
   getTrackUIState: (trackId: string) => AudioTrackUIState;
-  getAutomationValueRange: (trackId: string, target: AutomationTarget) => AutomationValueRange | null;
+  getAutomationValueRange: (
+    trackId: string,
+    target: AutomationTarget,
+  ) => AutomationValueRange | null;
 
   // Mix config builder
   buildMixStreamConfig: () => MixStreamConfig | null;

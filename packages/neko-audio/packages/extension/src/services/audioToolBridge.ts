@@ -565,7 +565,10 @@ export class AudioToolBridge {
     mix: ReturnType<AudioToolBridge['getTrackMix']>,
   ): { ok: true; value: AudioAutomationLane } | { ok: false; error: string } {
     if (this.hasSecondsOnlyPoints(args.points)) {
-      return { ok: false, error: 'Automation points must use ticks; seconds-only timing is not accepted' };
+      return {
+        ok: false,
+        error: 'Automation points must use ticks; seconds-only timing is not accepted',
+      };
     }
 
     const target = this.parseAutomationTarget(args.target);
@@ -626,7 +629,10 @@ export class AudioToolBridge {
     }
     return {
       ok: true,
-      value: { min: metadata.min ?? Number.NEGATIVE_INFINITY, max: metadata.max ?? Number.POSITIVE_INFINITY },
+      value: {
+        min: metadata.min ?? Number.NEGATIVE_INFINITY,
+        max: metadata.max ?? Number.POSITIVE_INFINITY,
+      },
     };
   }
 
@@ -647,7 +653,11 @@ export class AudioToolBridge {
       if ('seconds' in rawPoint) {
         return { ok: false, error: 'Automation points must use ticks, not seconds' };
       }
-      if (typeof rawPoint.ticks !== 'number' || !Number.isInteger(rawPoint.ticks) || rawPoint.ticks < 0) {
+      if (
+        typeof rawPoint.ticks !== 'number' ||
+        !Number.isInteger(rawPoint.ticks) ||
+        rawPoint.ticks < 0
+      ) {
         return { ok: false, error: `points[${index}].ticks must be a non-negative integer` };
       }
       if (rawPoint.ticks <= previousTicks) {
