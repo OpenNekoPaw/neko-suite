@@ -141,6 +141,45 @@ and auth core must not depend on feature packages. Feature extensions should not
 directly depend on other feature extensions; use shared contracts, command/API
 facades, registries, or capability providers instead.
 
+### Shared Foundation Services
+
+Use the repository's shared foundations for cross-cutting concerns. Do not create
+package-local parallel systems for internationalization, theming, styling,
+logging, errors, config, path resolution, or shared DTOs unless an ADR/OpenSpec
+change explicitly introduces a replacement or extension.
+
+Shared foundation expectations:
+
+- Use `@neko/shared` (`packages/neko-types`) as the default source for Layer 0
+  logger contracts, i18n core, theme tokens, error abstractions, config/path
+  helpers, validators, and shared DTOs.
+- Use `@neko/ui` for reusable Webview React controls, creative UI primitives,
+  keyboard/focus behavior, accessibility affordances, and theme-aware UI
+  composition when a suitable primitive exists.
+- Use the shared Tailwind preset, VSCode CSS variables, and shared theme tokens
+  for Webview styling. Avoid package-local design systems, hard-coded color
+  palettes, duplicated spacing scales, or one-off component styling that should
+  be a shared primitive.
+- User-visible strings in Webviews, VSCode commands, notifications, menus,
+  errors, empty states, and status text must go through the owning package's i18n
+  bundles or shared i18n services. Keep supported locales in sync when a package
+  has both English and Chinese bundles.
+- DTO labels from providers are data or fallback text, not permission to skip
+  UI-layer translation for known chrome, actions, statuses, or validation
+  messages.
+- Production logging must use the project Logger abstractions and package
+  logger registries. Do not use `console.log` as formal logging, and do not
+  invent feature-specific logger interfaces when `ILogger` or a narrow injected
+  logger port is enough.
+- User-facing and cross-boundary errors should use shared error contracts such as
+  `BaseError`, typed command/error DTOs, diagnostics, or `IErrorHandler`/VSCode
+  error reporters as appropriate. Preserve machine-readable error codes and
+  safe context; do not pass raw provider errors or stack traces directly to
+  Webviews or durable artifacts.
+- Respect subpath layering: Extension Host may use `@neko/shared/vscode/extension`;
+  Webviews may use Webview/React-safe subpaths; Layer 0 code must not import
+  DOM, React, VSCode, or Node-only foundation adapters.
+
 ### VSCode And Webview Boundaries
 
 - Webviews must not import `vscode`, Node APIs, or extension-only modules.
@@ -168,6 +207,34 @@ The Rust sidecar is the authority for:
 TypeScript must not duplicate engine-owned computation as durable business logic.
 Webviews may render UI, overlays, local predictions, and bounded previews, but
 must reconcile with engine acknowledgements, deltas, snapshots, or diagnostics.
+
+### Engine Access Path
+
+TypeScript packages should call `neko-engine` through `@neko/neko-client`
+(`EngineClient` and stream clients) whenever an engine HTTP/WS/file/stream path
+exists.
+
+Engine access expectations:
+
+- Extension packages obtain the shared sidecar endpoint through the engine host
+  command/API, then inject the endpoint into `EngineClient`; they should not
+  create package-local HTTP clients, WebSocket clients, port discovery, or file
+  token protocols for engine access.
+- Webviews must not discover engine ports, register engine files, or invent
+  engine protocol calls directly unless a documented ADR/OpenSpec route
+  explicitly allows direct Webview HTTP for a bounded preview path. Even then,
+  source registration, authority, and stable refs remain Extension/EngineClient
+  responsibilities.
+- Engine file access must go through `ContentAccessService` and
+  `EngineClient.registerFile(...)` before using file tokens, range URLs, sibling
+  resource URLs, or engine source refs.
+- New engine actions, stream contracts, file-access helpers, and runtime DTOs
+  should update Proto/shared contracts and `@neko/neko-client` helpers before
+  feature packages consume them.
+- Direct calls to `neko-engine` host HTTP/WS/N-API/CLI from feature packages are
+  exceptions, not the default. Record the reason, scope, lifecycle owner, and
+  tests in the OpenSpec design if a direct path is required for bootstrapping,
+  smoke tests, CLI tooling, or an engine host package itself.
 
 ### Runtime Handles Are Not Persistent Identity
 
