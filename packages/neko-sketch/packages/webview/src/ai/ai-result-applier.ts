@@ -215,9 +215,7 @@ async function decodeSelectionMaskBlob(blob: Blob): Promise<SelectionMask> {
   return rgbaToSelectionMask(source.width, source.height, imageData.data);
 }
 
-async function decodeBlob(
-  blob: Blob,
-): Promise<{
+async function decodeBlob(blob: Blob): Promise<{
   readonly image: CanvasImageSource & { close?: () => void };
   readonly width: number;
   readonly height: number;

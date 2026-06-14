@@ -72,11 +72,14 @@ describe('EpubSymbolProvider', () => {
       { isCancellationRequested: false } as never,
     );
 
-    expect(resolvePreviewPath).toHaveBeenCalledWith('/${A}/library/book.epub');
+    expect(resolvePreviewPath).toHaveBeenCalledWith('/${A}/library/book.epub', {
+      sourceDocumentUri: { fsPath: '/${A}/library/book.epub' },
+    });
     expect(stat).toHaveBeenCalledWith('/resolved/library/book.epub');
     expect(withEpubEntryReader).toHaveBeenCalledWith(
       '/resolved/library/book.epub',
       expect.any(Function),
+      undefined,
     );
     expect(symbols[0]?.name).toBe('Chapter 1');
   });
@@ -90,10 +93,13 @@ describe('EpubSymbolProvider', () => {
     const provider = new EpubSymbolProvider();
     const toc = await provider.getToc('/${A}/library/book.epub');
 
-    expect(resolvePreviewPath).toHaveBeenCalledWith('/${A}/library/book.epub');
+    expect(resolvePreviewPath).toHaveBeenCalledWith('/${A}/library/book.epub', {
+      sourceDocumentUri: undefined,
+    });
     expect(withEpubEntryReader).toHaveBeenCalledWith(
       '/resolved/library/book.epub',
       expect.any(Function),
+      undefined,
     );
     expect(toc[0]?.label).toBe('Chapter 2');
   });

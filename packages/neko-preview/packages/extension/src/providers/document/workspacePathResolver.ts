@@ -225,7 +225,7 @@ async function createPreviewWorkspaceMediaPathContext(
   });
 }
 
-export async function resolveWorkspacePath(
+async function resolveWorkspacePath(
   filePath: string,
   options?: PreviewPathResolutionOptions,
 ): Promise<string> {

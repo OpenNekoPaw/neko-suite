@@ -118,9 +118,7 @@ async function blobToPngBase64(
   };
 }
 
-async function decodeBlob(
-  blob: Blob,
-): Promise<{
+async function decodeBlob(blob: Blob): Promise<{
   readonly image: CanvasImageSource & { close?: () => void };
   readonly width: number;
   readonly height: number;

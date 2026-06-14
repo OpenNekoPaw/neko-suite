@@ -208,7 +208,7 @@ function hashString(value: string): string {
   return Math.abs(hash >>> 0).toString(36);
 }
 
-export function parseDurationValue(raw: string): number | undefined {
+function parseDurationValue(raw: string): number | undefined {
   const match = /^(?:(\d+)m)?(?:(\d+)s?)?$/.exec(raw.trim());
   if (!match) return undefined;
   const minutes = parseInt(match[1] ?? '0', 10);

@@ -4,4 +4,4 @@
 
 import { createLoggerRegistry } from '@neko/shared';
 
-export const { setRootLogger, getRootLogger, getLogger } = createLoggerRegistry('NekoPreview');
+export const { setRootLogger, getLogger } = createLoggerRegistry('NekoPreview');

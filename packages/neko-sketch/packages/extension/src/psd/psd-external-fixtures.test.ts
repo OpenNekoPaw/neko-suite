@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { PsdImportIssue, PsdImportIssueCode, PsdLayerNodeWire } from '@neko/shared';
 import { parsePsdToWire } from './psd-ag-adapter';
@@ -31,7 +32,9 @@ interface PsdFixtureIssueExpectation {
   readonly layerPath?: readonly string[];
 }
 
-const FIXTURE_ROOT = path.resolve(process.cwd(), '../../test-fixtures/psd');
+const FIXTURE_ROOT = path.resolve(
+  fileURLToPath(new URL('../../../../test-fixtures/psd', import.meta.url)),
+);
 const MANIFEST_PATH = path.join(FIXTURE_ROOT, 'manifest.json');
 const manifest = loadFixtureManifest(MANIFEST_PATH);
 

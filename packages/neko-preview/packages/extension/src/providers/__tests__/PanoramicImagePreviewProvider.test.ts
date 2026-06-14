@@ -12,6 +12,7 @@ vi.mock('vscode', () => {
   return {
     Uri,
     commands: { executeCommand: vi.fn() },
+    extensions: { getExtension: vi.fn() },
   };
 });
 

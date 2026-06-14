@@ -362,14 +362,24 @@ function createGraph(overrides: Partial<NarrativeGraphSnapshot> = {}): Narrative
 }
 
 function createPlaybackPlan(overrides: Partial<CanvasPlaybackPlan>): CanvasPlaybackPlan {
+  const units = overrides.units ?? [];
+
   return {
     adapterId: 'generic',
     requestedAdapterId: 'generic',
     behaviorMode: 'linear',
     advancePolicy: 'timer',
     entryUnitIds: [],
-    units: [],
+    units,
     transitions: [],
+    routeCandidates: units.map((unit, index) => ({
+      id: `test-route:${unit.id}`,
+      title: unit.id,
+      entryUnitId: unit.id,
+      unitIds: index === 0 && units.length > 1 ? units.map((routeUnit) => routeUnit.id) : [unit.id],
+      sourceKind: 'entry',
+      sourceNodeId: unit.sourceNodeId,
+    })),
     diagnostics: [],
     metadata: {},
     ...overrides,

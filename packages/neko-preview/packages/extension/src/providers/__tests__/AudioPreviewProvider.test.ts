@@ -34,6 +34,9 @@ vi.mock('vscode', () => {
     commands: {
       executeCommand: vi.fn(),
     },
+    extensions: {
+      getExtension: vi.fn(),
+    },
   };
 });
 

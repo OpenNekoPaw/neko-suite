@@ -86,6 +86,18 @@ vi.mock('vscode', () => ({
 
 vi.mock('@neko/shared/vscode/extension', () => ({
   injectLocaleAttribute: () => '',
+  createFocusedWebviewRegistry: () => ({
+    createController: vi.fn(() => ({
+      dispose: vi.fn(),
+      markReady: vi.fn(),
+      markDisposed: vi.fn(),
+      updateVisibility: vi.fn(),
+    })),
+    getFocused: vi.fn(() => undefined),
+    syncFocus: vi.fn(),
+    clearFocus: vi.fn(),
+    dispose: vi.fn(),
+  }),
 }));
 
 describe('SketchEditorProvider AI context snapshot', () => {

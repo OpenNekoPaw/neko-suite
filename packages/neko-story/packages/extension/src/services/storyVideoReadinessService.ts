@@ -111,7 +111,7 @@ export async function buildStorySceneVideoReadinessRows(
   return rows;
 }
 
-export function deriveCreatorStatus(
+function deriveCreatorStatus(
   state: StorySceneState,
   canvasSummary?: CanvasSceneExecutionSummary,
 ): StoryCreatorStatus {

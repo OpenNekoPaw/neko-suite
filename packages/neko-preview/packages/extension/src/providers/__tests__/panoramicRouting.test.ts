@@ -60,7 +60,9 @@ describe('panoramic image routing', () => {
       confidence: 'high',
       signal: 'gpano-metadata',
     });
-    expect(readRange).toHaveBeenCalledWith('/assets/mobile-photo.jpg', 0, 256 * 1024 - 1);
+    expect(readRange).toHaveBeenCalledWith('/assets/mobile-photo.jpg', 0, 256 * 1024 - 1, {
+      sourceDocumentUri: uri,
+    });
   });
 
   it('opens the manifest-backed panoramic custom editor', async () => {

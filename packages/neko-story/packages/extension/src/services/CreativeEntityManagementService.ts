@@ -76,6 +76,7 @@ export interface EntityBindingSummary {
   readonly role: EntityAssetBindingRole;
   readonly assetRef: string;
   readonly status: EntityAssetBinding['status'];
+  readonly availability: EntityAssetBinding['availability'];
   readonly source: EntityAssetBinding['source'];
   readonly isDefault: boolean;
   readonly confidence?: number;
@@ -355,6 +356,7 @@ function toBindingSummary(binding: EntityAssetBinding): EntityBindingSummary {
     role: binding.role,
     assetRef: binding.assetRef,
     status: binding.status,
+    availability: binding.availability ?? 'active',
     source: binding.source,
     isDefault: binding.isDefault === true,
     confidence: binding.confidence,

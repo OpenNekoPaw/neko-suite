@@ -6,13 +6,27 @@
  * - 单次调用只写回一次（单个 undo step 的基础保障）
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
 import type { ProjectData, TimelineElement } from '@neko/shared';
 import { CENTERED_TRANSFORM } from '@neko/shared';
 import { ServiceCollection, setGlobalServices } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import { TimelineToolExecutor } from './TimelineToolExecutor';
+
+vi.mock('vscode', () => ({
+  Uri: {
+    file: (filePath: string) => ({
+      scheme: 'file',
+      fsPath: filePath,
+      path: filePath,
+      toString: () => `file://${filePath}`,
+    }),
+  },
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: '/test' }, name: 'test', index: 0 }],
+  },
+}));
 
 class MockVideoEditorModel {
   readonly type = 'video';

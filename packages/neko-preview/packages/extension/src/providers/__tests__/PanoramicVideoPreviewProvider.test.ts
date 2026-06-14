@@ -9,7 +9,7 @@ vi.mock('vscode', () => {
       return { scheme: 'file', fsPath: joined, path: joined, toString: () => joined };
     },
   };
-  return { Uri };
+  return { Uri, extensions: { getExtension: vi.fn() } };
 });
 
 vi.mock('../../utils/html', () => ({

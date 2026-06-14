@@ -1400,7 +1400,7 @@ export function formatPsdImportIssueSummary(issues: readonly PsdImportIssue[]): 
   ].join('\n');
 }
 
-export function formatPsdImportIssue(issue: PsdImportIssue, index: number): string {
+function formatPsdImportIssue(issue: PsdImportIssue, index: number): string {
   const layerPath = formatPsdIssueLayerPath(issue);
   return [
     `${index}. [${issue.severity}] ${issue.code}`,
