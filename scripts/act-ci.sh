@@ -177,6 +177,8 @@ for job in "${JOBS[@]}"; do
     cmd+=(--pull)
   fi
 
-  cmd+=("${ACT_ARGS[@]}")
+  if [[ "${#ACT_ARGS[@]}" -gt 0 ]]; then
+    cmd+=("${ACT_ARGS[@]}")
+  fi
   "${cmd[@]}"
 done
