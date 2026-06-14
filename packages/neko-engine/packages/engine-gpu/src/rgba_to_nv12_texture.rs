@@ -491,10 +491,9 @@ impl RgbaToNv12TextureConverter {
         height: u32,
         color_space: u32,
     ) -> Result<usize> {
-        Ok(self
-            .convert_to_encoder_handle(input_texture, width, height, color_space)?
+        self.convert_to_encoder_handle(input_texture, width, height, color_space)?
             .native_encoder_handle()
-            .map_err(|error| Error::UnsupportedCapability(error.to_string()))?)
+            .map_err(|error| Error::UnsupportedCapability(error.to_string()))
     }
 
     /// Convert RGBA texture to an encoder-ready platform handle.
@@ -622,11 +621,10 @@ impl RgbaToNv12TextureConverter {
         let handle = self
             .bridge
             .export_encoder_handle(backing.io_surface_handle(), width, height)
-            .map_err(|error| {
+            .inspect_err(|_error| {
                 if retain_for_reuse {
                     self.output_backings.push_back(Arc::clone(&backing));
                 }
-                error
             })?;
 
         if retain_for_reuse {

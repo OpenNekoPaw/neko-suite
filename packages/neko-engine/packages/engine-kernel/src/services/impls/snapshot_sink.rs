@@ -71,19 +71,27 @@ impl SnapshotSink {
 impl PipelineSink for SnapshotSink {
     fn accepts(&self, output: &PipelineOutput) -> bool {
         matches!(
-            output,
-            PipelineOutput::Video(VideoOutput::GpuFrame(_))
-                | PipelineOutput::Video(VideoOutput::RawFrame(VideoRawFrame {
-                    format: FrameFormat::Rgba,
-                    ..
-                }))
+            output.as_video(),
+            Some(
+                VideoOutput::GpuFrame(_)
+                    | VideoOutput::RawFrame(VideoRawFrame {
+                        format: FrameFormat::Rgba,
+                        ..
+                    })
+            )
         )
     }
 
     fn submit(&self, output: PipelineOutput) -> Result<()> {
         match output {
-            PipelineOutput::Video(VideoOutput::GpuFrame(frame)) => self.submit_gpu_frame(frame),
-            PipelineOutput::Video(VideoOutput::RawFrame(frame)) => self.submit_raw_frame(frame),
+            PipelineOutput::Video(video) => match *video {
+                VideoOutput::GpuFrame(frame) => self.submit_gpu_frame(*frame),
+                VideoOutput::RawFrame(frame) => self.submit_raw_frame(frame),
+                other => Err(Error::UnsupportedOutput(format!(
+                    "SnapshotSink accepts VideoOutput::GpuFrame or RGBA RawFrame, got {:?}",
+                    other
+                ))),
+            },
             other => Err(Error::UnsupportedOutput(format!(
                 "SnapshotSink accepts VideoOutput::GpuFrame or RGBA RawFrame, got {:?}",
                 other
@@ -118,18 +126,18 @@ mod tests {
     #[test]
     fn snapshot_sink_accepts_rgba_raw_frame() {
         let (sink, _rx) = SnapshotSink::new();
-        let output = PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame()));
+        let output = PipelineOutput::video(VideoOutput::RawFrame(rgba_frame()));
         assert!(sink.accepts(&output));
     }
 
     #[tokio::test]
     async fn snapshot_sink_rejects_second_submit() {
         let (sink, rx) = SnapshotSink::new();
-        sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame())))
+        sink.submit(PipelineOutput::video(VideoOutput::RawFrame(rgba_frame())))
             .unwrap();
 
         let err = sink
-            .submit(PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame())))
+            .submit(PipelineOutput::video(VideoOutput::RawFrame(rgba_frame())))
             .unwrap_err();
         assert!(matches!(err, Error::AlreadyCompleted(_)));
 
@@ -149,7 +157,7 @@ mod tests {
             duration: 33_333,
         };
 
-        sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(source.clone())))
+        sink.submit(PipelineOutput::video(VideoOutput::RawFrame(source.clone())))
             .unwrap();
         let frame = SnapshotSink::recv(rx).await.unwrap();
 
@@ -164,7 +172,7 @@ mod tests {
     #[tokio::test]
     async fn snapshot_sink_receives_rgba_terminal_frame_async() {
         let (sink, rx) = SnapshotSink::new();
-        sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame())))
+        sink.submit(PipelineOutput::video(VideoOutput::RawFrame(rgba_frame())))
             .unwrap();
 
         let frame = SnapshotSink::recv(rx).await.unwrap();

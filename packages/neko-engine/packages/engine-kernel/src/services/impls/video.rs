@@ -72,7 +72,7 @@ fn panoramic_stream_video_output(
 ) -> Result<VideoOutput> {
     let gpu_handle =
         converter.convert_to_encoder_handle(&output.color_view, output.width, output.height, 1)?;
-    Ok(VideoOutput::GpuFrame(VideoGpuFrame {
+    Ok(VideoOutput::gpu_frame(VideoGpuFrame {
         lease: GpuFrameLease::new(gpu_handle),
         pts,
         duration,
@@ -817,7 +817,7 @@ impl IVideoService for VideoService {
                         break;
                     }
                 };
-                let submit_result = sink.submit(PipelineOutput::Video(video_output));
+                let submit_result = sink.submit(PipelineOutput::video(video_output));
                 budget.report_frame_time(
                     budget_pipeline_id.clone(),
                     PipelinePriority::Transcode,

@@ -856,7 +856,7 @@ impl SceneWorld for BevySceneWorld {
                 bounds,
                 world_bounds,
                 primitives: primitive_refs
-                    .map(|refs| mesh_primitive_snapshots(refs))
+                    .map(mesh_primitive_snapshots)
                     .unwrap_or_default(),
                 character_id: None,
                 region_descriptors: None,

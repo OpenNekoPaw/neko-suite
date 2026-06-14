@@ -738,7 +738,7 @@ impl ITimelineService for TimelineService {
         let result = compositor.composite(&layers, width, height, [0.0, 0.0, 0.0, 1.0])?;
 
         let (snapshot_sink, snapshot_rx) = SnapshotSink::new();
-        snapshot_sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(
+        snapshot_sink.submit(PipelineOutput::video(VideoOutput::RawFrame(
             VideoRawFrame {
                 data: result.data,
                 width: result.width,
@@ -1000,7 +1000,7 @@ impl ITimelineService for TimelineService {
                         gpu_frame.pts = (current_time * 1_000_000.0) as i64;
                         gpu_frame.duration = (1_000_000.0 / fps * current_speed) as i64;
                         stream_sink
-                            .submit(PipelineOutput::Video(VideoOutput::GpuFrame(gpu_frame)))?;
+                            .submit(PipelineOutput::video(VideoOutput::gpu_frame(gpu_frame)))?;
                         let submit_ns = submit_start.elapsed().as_nanos() as u64;
                         Ok((gpu_timing, submit_ns, submit_ns))
                     });

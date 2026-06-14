@@ -89,8 +89,7 @@ pub struct EnginePluginManifest {
 impl EnginePluginManifest {
     pub fn is_native_cdylib(&self) -> bool {
         self.runtime_artifacts
-            .iter()
-            .any(|artifact| *artifact == PluginRuntimeArtifact::Cdylib)
+            .contains(&PluginRuntimeArtifact::Cdylib)
     }
 
     pub fn is_registry_native_plugin(&self) -> bool {

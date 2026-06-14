@@ -391,7 +391,7 @@ fn preview_variant_response(variant: PreviewVariant) -> axum::response::Response
     if let Some(error) = variant.error.as_ref().filter(|error| error.is_gpu_busy()) {
         let retry_after_secs = error
             .retry_after_ms
-            .map(|ms| ((ms + 999) / 1000).max(1).to_string())
+            .map(|ms| ms.div_ceil(1000).max(1).to_string())
             .unwrap_or_else(|| "1".to_string());
         return (
             StatusCode::SERVICE_UNAVAILABLE,

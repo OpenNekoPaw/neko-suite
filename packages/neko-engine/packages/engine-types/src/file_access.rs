@@ -6,9 +6,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Why a file is being registered with the engine.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FileAccessPurpose {
+    #[default]
     Preview,
     MediaDecode,
     Subtitle,
@@ -17,12 +18,6 @@ pub enum FileAccessPurpose {
     Puppet,
     AgentAttachment,
     Other,
-}
-
-impl Default for FileAccessPurpose {
-    fn default() -> Self {
-        Self::Preview
-    }
 }
 
 /// A source reference consumed by engine actions.

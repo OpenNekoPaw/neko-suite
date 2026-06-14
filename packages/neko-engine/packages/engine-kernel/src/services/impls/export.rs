@@ -23,6 +23,7 @@ pub struct ExportService {
 
 impl ExportService {
     /// Create a new export service with GPU context
+    #[allow(dead_code)]
     pub fn new(gpu_ctx: Arc<GpuContext>) -> Self {
         let inner = Arc::new(crate::export::ExportService::with_gpu_context(gpu_ctx));
         Self { inner }

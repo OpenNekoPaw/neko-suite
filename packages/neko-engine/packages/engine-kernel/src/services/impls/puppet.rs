@@ -594,7 +594,7 @@ fn rendered_output_to_encoder_video_output(
             output.height,
             1,
         )?;
-        return Ok(VideoOutput::GpuFrame(VideoGpuFrame {
+        return Ok(VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::new(gpu_handle),
             pts: output.pts,
             duration: output.duration,
@@ -771,7 +771,7 @@ impl IPuppetService for PuppetService {
         #[cfg(not(target_os = "macos"))]
         let video_output = rendered_output_to_encoder_video_output(output, None, ctx)?;
 
-        sink.submit(PipelineOutput::Video(video_output))
+        sink.submit(PipelineOutput::video(video_output))
     }
 
     fn export_rendered_clip_to_sink(
@@ -801,7 +801,7 @@ impl IPuppetService for PuppetService {
             #[cfg(not(target_os = "macos"))]
             let video_output = rendered_output_to_encoder_video_output(output, None, ctx)?;
 
-            sink.submit(PipelineOutput::Video(video_output))?;
+            sink.submit(PipelineOutput::video(video_output))?;
         }
 
         sink.close()?;
@@ -1109,7 +1109,7 @@ mod tests {
                 base_revision: 0,
                 transaction_id: Some("load-native".to_string()),
                 command: PuppetCommand::LoadNativeProject {
-                    project: native_fixture_project(),
+                    project: Box::new(native_fixture_project()),
                 },
             })
             .unwrap();

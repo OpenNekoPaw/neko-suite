@@ -270,9 +270,7 @@ pub fn probe_dimensions(path: &Path) -> Option<PreviewDimensions> {
 }
 
 fn read_gpano_prefix_text(path: &Path) -> Option<String> {
-    let Some(extension) = normalized_extension(path) else {
-        return None;
-    };
+    let extension = normalized_extension(path)?;
     if !matches!(extension.as_str(), "jpg" | "jpeg" | "png" | "webp") {
         return None;
     }

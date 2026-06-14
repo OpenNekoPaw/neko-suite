@@ -35,6 +35,29 @@ pub enum ViewportStreamInteractionProfile {
     Interactive,
 }
 
+#[derive(Clone, Copy)]
+pub struct SceneH264KeyframeRequest<'a> {
+    pub output_size: (u32, u32),
+    pub camera_override: Option<&'a CameraParams>,
+    pub background_color: Option<[f32; 4]>,
+    pub quality: u32,
+    pub pts_us: i64,
+    pub duration_us: i64,
+    pub viewport: &'a ViewportDescriptor,
+}
+
+#[derive(Clone, Copy)]
+pub struct SceneStreamGpuFrameRequest<'a> {
+    pub output_size: (u32, u32),
+    pub camera_override: Option<&'a CameraParams>,
+    pub background_color: Option<[f32; 4]>,
+    pub pts_us: i64,
+    pub duration_us: i64,
+    pub frame_index: u64,
+    pub viewport: &'a ViewportDescriptor,
+    pub dropped_frames_since_last: u32,
+}
+
 /// Service interface for 3D scene management
 #[allow(async_fn_in_trait)]
 pub trait ISceneService: Send + Sync {
@@ -106,13 +129,7 @@ pub trait ISceneService: Send + Sync {
     /// Capture one H.264 keyframe for the legacy scene stream path.
     fn capture_h264_keyframe(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        quality: u32,
-        pts_us: i64,
-        duration_us: i64,
-        viewport: &ViewportDescriptor,
+        request: SceneH264KeyframeRequest<'_>,
     ) -> crate::error::Result<FrameData>;
 
     /// Capture one raw NV12 frame for local latency and transfer diagnostics.
@@ -129,14 +146,7 @@ pub trait ISceneService: Send + Sync {
     /// Render one GPU-resident scene stream output frame.
     fn render_scene_stream_gpu_output(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        pts_us: i64,
-        duration_us: i64,
-        frame_index: u64,
-        viewport: &ViewportDescriptor,
-        dropped_frames_since_last: u32,
+        request: SceneStreamGpuFrameRequest<'_>,
     ) -> crate::error::Result<PipelineOutput>;
 
     /// Set the editor camera used by realtime scene stream rendering.

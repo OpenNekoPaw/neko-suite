@@ -92,8 +92,8 @@ pub mod services {
         EffectRegistry, EnvironmentLoadDiagnostic, IAudioService, IEffectsService, IExportService,
         IGamepadService, IImageService, IMidiService, INodeService, IPuppetService, ISceneService,
         IStreamPlayback, ITaskService, ITimelineService, IVideoService, PipelineSink,
-        PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming, StreamSink,
-        ViewportStreamInteractionProfile,
+        PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming, SceneH264KeyframeRequest,
+        SceneStreamGpuFrameRequest, StreamSink, ViewportStreamInteractionProfile,
     };
 }
 

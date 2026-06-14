@@ -115,7 +115,7 @@ impl MuxerSink {
 
     /// Cancel and finalize the sink.
     pub fn cancel(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Cancel(ack), true)
+        self.finish_with(MuxerCommand::Cancel, true)
     }
 
     fn submit_video_gpu_frame(&self, frame: VideoGpuFrame) -> Result<()> {
@@ -217,18 +217,19 @@ impl MuxerSink {
 
 impl PipelineSink for MuxerSink {
     fn accepts(&self, output: &PipelineOutput) -> bool {
-        matches!(
-            output,
-            PipelineOutput::Video(VideoOutput::GpuFrame(_))
-                | PipelineOutput::Audio(AudioOutput::EncodedPacket(_))
-        )
+        matches!(output.as_video(), Some(VideoOutput::GpuFrame(_)))
+            || matches!(output, PipelineOutput::Audio(AudioOutput::EncodedPacket(_)))
     }
 
     fn submit(&self, output: PipelineOutput) -> Result<()> {
         match output {
-            PipelineOutput::Video(VideoOutput::GpuFrame(frame)) => {
-                self.submit_video_gpu_frame(frame)
-            }
+            PipelineOutput::Video(video) => match *video {
+                VideoOutput::GpuFrame(frame) => self.submit_video_gpu_frame(*frame),
+                other => Err(Error::UnsupportedOutput(format!(
+                    "MuxerSink accepts VideoOutput::GpuFrame or AudioOutput::EncodedPacket, got {:?}",
+                    other
+                ))),
+            },
             PipelineOutput::Audio(AudioOutput::EncodedPacket(packet)) => {
                 self.submit_audio_packet(packet)
             }
@@ -240,11 +241,11 @@ impl PipelineSink for MuxerSink {
     }
 
     fn flush(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Flush(ack), false)
+        self.finish_with(MuxerCommand::Flush, false)
     }
 
     fn close(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Close(ack), true)
+        self.finish_with(MuxerCommand::Close, true)
     }
 }
 
@@ -360,7 +361,7 @@ mod tests {
     }
 
     fn gpu_output() -> PipelineOutput {
-        PipelineOutput::Video(VideoOutput::GpuFrame(VideoGpuFrame {
+        PipelineOutput::video(VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::new(test_handle()),
             pts: 0,
             duration: 1,

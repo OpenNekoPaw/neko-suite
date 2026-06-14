@@ -6,6 +6,17 @@ use tokio::sync::broadcast;
 
 use super::FrameData;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamSendError;
+
+impl std::fmt::Display for StreamSendError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "stream has no active receivers")
+    }
+}
+
+impl std::error::Error for StreamSendError {}
+
 /// Per-stream entry — each stream has its own broadcast channel
 ///
 /// This replaces the older shared broadcast channel used by the legacy
@@ -110,11 +121,8 @@ impl StreamEntry {
     }
 
     /// Send a frame to all subscribers
-    pub fn send_frame(
-        &self,
-        frame: FrameData,
-    ) -> Result<usize, broadcast::error::SendError<FrameData>> {
-        self.tx.send(frame)
+    pub fn send_frame(&self, frame: FrameData) -> Result<usize, StreamSendError> {
+        self.tx.send(frame).map_err(|_| StreamSendError)
     }
 
     /// Get number of active receivers

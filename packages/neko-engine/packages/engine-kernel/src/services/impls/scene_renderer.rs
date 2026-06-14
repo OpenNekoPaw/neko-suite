@@ -11,8 +11,8 @@ use crate::error::{Error, Result};
 use neko_engine_gpu::GpuContext;
 use neko_engine_scene_renderer::{
     AssetCache, CameraParams, EnvironmentBackground, EnvironmentBackgroundSettings, PbrRenderer,
-    RenderTargetPoolSnapshot, RenderWorld, SceneRenderOutput, ViewportDescriptor,
-    ViewportRenderGraphOutput,
+    PbrViewportRenderRequest, RenderTargetPoolSnapshot, RenderWorld, SceneRenderOutput,
+    ViewportDescriptor, ViewportRenderGraphOutput,
 };
 
 pub const SCENE_EXPORT_QUEUE_CAPACITY: usize = 1;
@@ -109,6 +109,16 @@ pub struct SceneRenderRequest<'a> {
     pub viewport_graph: Option<(&'a ViewportDescriptor, ViewportRenderGraphOutput)>,
 }
 
+pub struct MaterialUniformUpdate<'a> {
+    pub uri: &'a str,
+    pub material_index: usize,
+    pub base_color: Option<[f32; 4]>,
+    pub metallic: Option<f32>,
+    pub roughness: Option<f32>,
+    pub emissive: Option<[f32; 3]>,
+    pub occlusion_strength: Option<f32>,
+}
+
 pub struct SceneRenderer {
     renderer: Mutex<PbrRenderer>,
     asset_cache: Mutex<AssetCache>,
@@ -187,29 +197,20 @@ impl SceneRenderer {
         Ok(())
     }
 
-    pub fn update_material_uniforms(
-        &self,
-        uri: &str,
-        material_index: usize,
-        base_color: Option<[f32; 4]>,
-        metallic: Option<f32>,
-        roughness: Option<f32>,
-        emissive: Option<[f32; 3]>,
-        occlusion_strength: Option<f32>,
-    ) -> Result<()> {
+    pub fn update_material_uniforms(&self, update: MaterialUniformUpdate<'_>) -> Result<()> {
         let cache = self
             .asset_cache
             .lock()
             .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
         cache
             .update_material_uniforms(
-                uri,
-                material_index,
-                base_color,
-                metallic,
-                roughness,
-                emissive,
-                occlusion_strength,
+                update.uri,
+                update.material_index,
+                update.base_color,
+                update.metallic,
+                update.roughness,
+                update.emissive,
+                update.occlusion_strength,
             )
             .map_err(Error::Other)
     }
@@ -244,16 +245,18 @@ impl SceneRenderer {
             .lock()
             .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
         let output = match request.viewport_graph {
-            Some((descriptor, graph_output)) => renderer.render_viewport_from_render_world(
-                request.snapshot,
-                &cache,
-                request.camera,
-                request.output_size,
-                request.background_color,
-                request.environment_background,
-                descriptor,
-                graph_output,
-            ),
+            Some((descriptor, graph_output)) => {
+                renderer.render_viewport_from_render_world(PbrViewportRenderRequest {
+                    render_world: request.snapshot,
+                    asset_cache: &cache,
+                    camera_params: request.camera,
+                    output_size: request.output_size,
+                    background_color: request.background_color,
+                    environment_background: request.environment_background,
+                    descriptor,
+                    graph_output,
+                })
+            }
             None => renderer.render_from_render_world_with_environment(
                 request.snapshot,
                 &cache,

@@ -166,7 +166,7 @@ fn create_render_frame_diagnostics_message(
     let diagnostics = frame.diagnostics.as_ref()?;
     Some(RenderFrameDiagnosticsMessage {
         message_type: "renderFrameDiagnostics",
-        pts_us: h264_pts_us(frame).unwrap_or_else(|| (frame.timestamp * 1_000_000.0) as i64),
+        pts_us: h264_pts_us(frame).unwrap_or((frame.timestamp * 1_000_000.0) as i64),
         diagnostics,
     })
 }

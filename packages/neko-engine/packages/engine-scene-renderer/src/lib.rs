@@ -42,6 +42,7 @@ pub use frame_scheduler::{
 pub use particles::{GpuParticleSystem, ParticleEmitterConfig};
 pub use pbr_pipeline::{
     EnvironmentBackground, EnvironmentBackgroundSettings, PbrRenderError, PbrRenderer,
+    PbrViewportRenderRequest, PbrWorldViewportRenderRequest,
 };
 pub use post_process::{PostProcessChain, PostProcessSettings, ToneMapping};
 pub use render_extract::{extract_render_world, RenderExtractStats};

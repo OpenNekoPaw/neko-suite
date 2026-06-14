@@ -129,7 +129,7 @@ impl PanoramicRenderOutput {
         frame_index: u64,
     ) -> VideoOutput {
         let readback = GpuReadbackTarget::new(ctx, self.color_texture, self.width, self.height);
-        VideoOutput::GpuFrame(VideoGpuFrame {
+        VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::with_readback(
                 GpuOutputHandle::Unsupported {
                     platform: std::env::consts::OS,

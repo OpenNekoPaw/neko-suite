@@ -42,7 +42,7 @@ impl ViewportController {
                 &command,
                 self.current_revision(),
                 "unsupportedProtocolVersion",
-                &format!(
+                format!(
                     "viewport protocol version {} is not supported; expected {}",
                     command.protocol_version, VIEWPORT_PROTOCOL_VERSION
                 ),
@@ -195,9 +195,7 @@ impl ViewportController {
                 command,
                 revision,
                 "revisionConflict",
-                &format!(
-                    "base revision {base_revision} does not match current revision {revision}"
-                ),
+                format!("base revision {base_revision} does not match current revision {revision}"),
             ));
         }
         None

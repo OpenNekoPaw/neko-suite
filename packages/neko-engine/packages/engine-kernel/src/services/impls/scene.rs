@@ -4,14 +4,15 @@
 
 use super::scene_computation::SceneComputation;
 use super::scene_renderer::{
-    SceneExportFrameQueue, SceneRenderRequest, SceneRenderSnapshot, SceneRenderer,
-    SceneSnapshotWatch,
+    MaterialUniformUpdate, SceneExportFrameQueue, SceneRenderRequest, SceneRenderSnapshot,
+    SceneRenderer, SceneSnapshotWatch,
 };
 use crate::domain::FrameData;
 use crate::encoder::encode_nv12_to_h264_iframe;
 use crate::error::{Error, Result};
 use crate::services::scene::{
-    EnvironmentLoadDiagnostic, ISceneService, ViewportStreamInteractionProfile,
+    EnvironmentLoadDiagnostic, ISceneService, SceneH264KeyframeRequest, SceneStreamGpuFrameRequest,
+    ViewportStreamInteractionProfile,
 };
 use half::f16;
 use neko_engine_gpu::GpuContext;
@@ -1084,16 +1085,10 @@ impl SceneService {
 
     pub fn capture_h264_keyframe(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        quality: u32,
-        pts_us: i64,
-        duration_us: i64,
-        viewport: &ViewportDescriptor,
+        request: SceneH264KeyframeRequest<'_>,
     ) -> Result<FrameData> {
-        let (width, height) = output_size;
-        if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
+        let (width, height) = request.output_size;
+        if width == 0 || height == 0 || !width.is_multiple_of(2) || !height.is_multiple_of(2) {
             return Err(Error::InvalidParameter(
                 "H.264 scene stream requires non-zero even dimensions".to_string(),
             ));
@@ -1102,10 +1097,10 @@ impl SceneService {
         let output = self.render_frame_internal(
             None,
             0.0,
-            output_size,
-            camera_override,
-            background_color,
-            Some((viewport, ViewportRenderGraphOutput::RealtimeStream)),
+            request.output_size,
+            request.camera_override,
+            request.background_color,
+            Some((request.viewport, ViewportRenderGraphOutput::RealtimeStream)),
         )?;
         let ctx = self
             .gpu_ctx
@@ -1114,14 +1109,14 @@ impl SceneService {
         let rgba =
             read_scene_texture_as_rgba8(ctx, &output.color_texture, output.width, output.height)?;
         let nv12 = rgba_to_nv12_bt709(&rgba, output.width, output.height)?;
-        let h264 = encode_nv12_to_h264_iframe(&nv12, output.width, output.height, quality)?;
+        let h264 = encode_nv12_to_h264_iframe(&nv12, output.width, output.height, request.quality)?;
 
         Ok(pack_scene_h264_frame(
             h264,
             output.width,
             output.height,
-            pts_us,
-            duration_us,
+            request.pts_us,
+            request.duration_us,
         ))
     }
 
@@ -1135,7 +1130,7 @@ impl SceneService {
         viewport: &ViewportDescriptor,
     ) -> Result<FrameData> {
         let (width, height) = output_size;
-        if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
+        if width == 0 || height == 0 || !width.is_multiple_of(2) || !height.is_multiple_of(2) {
             return Err(Error::InvalidParameter(
                 "Raw NV12 scene stream requires non-zero even dimensions".to_string(),
             ));
@@ -1178,48 +1173,25 @@ impl SceneService {
 
     pub fn render_scene_stream_gpu_output(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        pts_us: i64,
-        duration_us: i64,
-        frame_index: u64,
-        viewport: &ViewportDescriptor,
-        dropped_frames_since_last: u32,
+        request: SceneStreamGpuFrameRequest<'_>,
     ) -> Result<PipelineOutput> {
-        let frame = self.render_scene_stream_gpu_frame(
-            output_size,
-            camera_override,
-            background_color,
-            pts_us,
-            duration_us,
-            frame_index,
-            viewport,
-            dropped_frames_since_last,
-        )?;
-        Ok(PipelineOutput::Video(VideoOutput::GpuFrame(frame)))
+        let frame = self.render_scene_stream_gpu_frame(request)?;
+        Ok(PipelineOutput::video(VideoOutput::gpu_frame(frame)))
     }
 
     #[cfg(target_os = "macos")]
     fn render_scene_stream_gpu_frame(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        pts_us: i64,
-        duration_us: i64,
-        frame_index: u64,
-        viewport: &ViewportDescriptor,
-        dropped_frames_since_last: u32,
+        request: SceneStreamGpuFrameRequest<'_>,
     ) -> Result<VideoGpuFrame> {
         let render_started = Instant::now();
         let output = self.render_frame_internal(
             None,
             0.0,
-            output_size,
-            camera_override,
-            background_color,
-            Some((viewport, ViewportRenderGraphOutput::RealtimeStream)),
+            request.output_size,
+            request.camera_override,
+            request.background_color,
+            Some((request.viewport, ViewportRenderGraphOutput::RealtimeStream)),
         )?;
         let render_time_ms = render_started.elapsed().as_secs_f32() * 1000.0;
         let pool_snapshot = self
@@ -1231,10 +1203,10 @@ impl SceneService {
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
         let bridge_key = scene_stream_encoder_bridge_key(
-            viewport,
+            request.viewport,
             output.width,
             output.height,
-            viewport.color_space.nv12_matrix_id(),
+            request.viewport.color_space.nv12_matrix_id(),
         );
         let mut bridges = self.stream_encoder_bridges.lock().map_err(|e| {
             Error::Other(format!("Scene stream encoder bridge lock poisoned: {}", e))
@@ -1242,7 +1214,7 @@ impl SceneService {
         if !bridges.contains_key(&bridge_key)
             && bridges.len() >= SCENE_STREAM_ENCODER_BRIDGE_CACHE_LIMIT
         {
-            prune_scene_stream_encoder_bridges(&mut bridges, &viewport.viewport_id);
+            prune_scene_stream_encoder_bridges(&mut bridges, &request.viewport.viewport_id);
         }
         let converter = match bridges.get_mut(&bridge_key) {
             Some(converter) => converter,
@@ -1262,15 +1234,15 @@ impl SceneService {
                 &output.color_view,
                 output.width,
                 output.height,
-                viewport.color_space.nv12_matrix_id(),
+                request.viewport.color_space.nv12_matrix_id(),
             )?;
         let convert_time_ms = convert_started.elapsed().as_secs_f32() * 1000.0;
 
         Ok(VideoGpuFrame {
             lease: GpuFrameLease::with_keepalive(gpu_handle, backing_owner),
-            pts: pts_us,
-            duration: duration_us,
-            frame_index,
+            pts: request.pts_us,
+            duration: request.duration_us,
+            frame_index: request.frame_index,
             width: output.width,
             height: output.height,
             force_keyframe: false,
@@ -1284,7 +1256,7 @@ impl SceneService {
                 convert_time_ms,
                 encode_time_ms: 0.0,
                 gpu_wait_time_ms: convert_stats.gpu_wait_time_ms,
-                dropped_frames_since_last,
+                dropped_frames_since_last: request.dropped_frames_since_last,
                 queue_depth: pool_snapshot
                     .map(|snapshot| snapshot.active_leases as u32)
                     .unwrap_or_default(),
@@ -1297,14 +1269,7 @@ impl SceneService {
     #[cfg(not(target_os = "macos"))]
     fn render_scene_stream_gpu_frame(
         &self,
-        _output_size: (u32, u32),
-        _camera_override: Option<&CameraParams>,
-        _background_color: Option<[f32; 4]>,
-        _pts_us: i64,
-        _duration_us: i64,
-        _frame_index: u64,
-        _viewport: &ViewportDescriptor,
-        _dropped_frames_since_last: u32,
+        _request: SceneStreamGpuFrameRequest<'_>,
     ) -> Result<VideoGpuFrame> {
         Err(Error::UnsupportedCapability(format!(
             "scene GPU stream output is not implemented on {}",
@@ -1564,7 +1529,7 @@ fn rgba16float_to_rgba8(data: &[u8], width: u32, height: u32) -> Result<Vec<u8>>
 }
 
 fn rgba_to_nv12_bt709(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
-    if width % 2 != 0 || height % 2 != 0 {
+    if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
         return Err(Error::InvalidParameter(
             "NV12 conversion requires even dimensions".to_string(),
         ));
@@ -1892,26 +1857,8 @@ impl ISceneService for SceneService {
         )
     }
 
-    fn capture_h264_keyframe(
-        &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        quality: u32,
-        pts_us: i64,
-        duration_us: i64,
-        viewport: &ViewportDescriptor,
-    ) -> Result<FrameData> {
-        SceneService::capture_h264_keyframe(
-            self,
-            output_size,
-            camera_override,
-            background_color,
-            quality,
-            pts_us,
-            duration_us,
-            viewport,
-        )
+    fn capture_h264_keyframe(&self, request: SceneH264KeyframeRequest<'_>) -> Result<FrameData> {
+        SceneService::capture_h264_keyframe(self, request)
     }
 
     fn capture_nv12_frame(
@@ -1936,26 +1883,9 @@ impl ISceneService for SceneService {
 
     fn render_scene_stream_gpu_output(
         &self,
-        output_size: (u32, u32),
-        camera_override: Option<&CameraParams>,
-        background_color: Option<[f32; 4]>,
-        pts_us: i64,
-        duration_us: i64,
-        frame_index: u64,
-        viewport: &ViewportDescriptor,
-        dropped_frames_since_last: u32,
+        request: SceneStreamGpuFrameRequest<'_>,
     ) -> Result<PipelineOutput> {
-        SceneService::render_scene_stream_gpu_output(
-            self,
-            output_size,
-            camera_override,
-            background_color,
-            pts_us,
-            duration_us,
-            frame_index,
-            viewport,
-            dropped_frames_since_last,
-        )
+        SceneService::render_scene_stream_gpu_output(self, request)
     }
 
     fn set_editor_camera(&self, camera: CameraParams) {
@@ -2402,15 +2332,15 @@ impl ISceneService for SceneService {
         // GPU cache is a derived runtime cache. Keep authoring update even when
         // GPU rendering is unavailable, then best-effort sync the cache.
         if let Some(renderer) = &self.scene_renderer {
-            renderer.update_material_uniforms(
-                &uri,
-                mat_idx,
+            renderer.update_material_uniforms(MaterialUniformUpdate {
+                uri: &uri,
+                material_index: mat_idx,
                 base_color,
                 metallic,
                 roughness,
                 emissive,
                 occlusion_strength,
-            )?;
+            })?;
         }
 
         Ok(())

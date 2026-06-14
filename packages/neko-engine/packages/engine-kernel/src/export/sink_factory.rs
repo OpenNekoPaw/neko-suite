@@ -64,11 +64,8 @@ mod tests {
 
     impl PipelineSink for FakeExportSink {
         fn accepts(&self, output: &PipelineOutput) -> bool {
-            matches!(
-                output,
-                PipelineOutput::Video(VideoOutput::GpuFrame(_))
-                    | PipelineOutput::Audio(AudioOutput::EncodedPacket(_))
-            )
+            matches!(output.as_video(), Some(VideoOutput::GpuFrame(_)))
+                || matches!(output, PipelineOutput::Audio(AudioOutput::EncodedPacket(_)))
         }
 
         fn submit(&self, output: PipelineOutput) -> Result<()> {
@@ -127,7 +124,7 @@ mod tests {
         }));
 
         assert!(sink.accepts(&output));
-        assert!(!sink.accepts(&PipelineOutput::Video(VideoOutput::RawFrame(
+        assert!(!sink.accepts(&PipelineOutput::video(VideoOutput::RawFrame(
             neko_engine_types::VideoRawFrame {
                 data: vec![0, 0, 0, 255],
                 width: 1,

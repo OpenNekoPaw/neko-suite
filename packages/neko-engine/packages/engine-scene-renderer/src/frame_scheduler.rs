@@ -86,21 +86,11 @@ pub struct DegradationDecision {
 
 /// Prevents quality tier oscillation by requiring several consecutive
 /// frames at a better tier before upgrading (degrade fast, restore slow).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DegradationHysteresis {
     current_steps: Vec<DegradationStep>,
     current_severity: usize,
     upgrade_hold: u32,
-}
-
-impl Default for DegradationHysteresis {
-    fn default() -> Self {
-        Self {
-            current_steps: Vec::new(),
-            current_severity: 0,
-            upgrade_hold: 0,
-        }
-    }
 }
 
 impl DegradationHysteresis {
@@ -176,10 +166,10 @@ impl FrameScheduler {
         let mut steps = Vec::new();
         let control_unhealthy = !control_ack.is_healthy();
 
-        if overload_ratio > 1.0 || load.dropped_frames > 0 || control_unhealthy {
-            if auxiliary_viewport_count > 0 {
-                steps.push(DegradationStep::AuxiliaryHelperPasses);
-            }
+        if (overload_ratio > 1.0 || load.dropped_frames > 0 || control_unhealthy)
+            && auxiliary_viewport_count > 0
+        {
+            steps.push(DegradationStep::AuxiliaryHelperPasses);
         }
         if (overload_ratio > 1.10 || load.dropped_frames > 1 || control_unhealthy)
             && auxiliary_viewport_count > 0

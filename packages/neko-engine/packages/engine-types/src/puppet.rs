@@ -33,7 +33,7 @@ pub enum PuppetCommand {
     /// Load puppet bytes encoded as base64.
     Load { data_base64: String },
     /// Load a native .nkp v2 Bone2D + BlendShape project.
-    LoadNativeProject { project: NkpProjectData },
+    LoadNativeProject { project: Box<NkpProjectData> },
     /// Set a model parameter.
     SetParameter { name: String, value: f32 },
     /// Advance runtime animation/physics.

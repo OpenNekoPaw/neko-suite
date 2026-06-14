@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PROTOCOL: &str = "neko-scene-control-v1";
+#[cfg(test)]
 const VIEWPORT_PROTOCOL_VERSION: u64 = 1;
 const ENVIRONMENT_FILE_TOKEN_KIND: &str = "file-token";
 const ENVIRONMENT_ASSET_HANDLE_KIND: &str = "asset-handle";

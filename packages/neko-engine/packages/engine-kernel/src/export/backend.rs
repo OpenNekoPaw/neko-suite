@@ -698,11 +698,8 @@ mod tests {
 
     impl PipelineSink for FakeSink {
         fn accepts(&self, output: &PipelineOutput) -> bool {
-            matches!(
-                output,
-                PipelineOutput::Video(VideoOutput::GpuFrame(_))
-                    | PipelineOutput::Audio(AudioOutput::EncodedPacket(_))
-            )
+            matches!(output.as_video(), Some(VideoOutput::GpuFrame(_)))
+                || matches!(output, PipelineOutput::Audio(AudioOutput::EncodedPacket(_)))
         }
 
         fn submit(&self, output: PipelineOutput) -> Result<()> {
@@ -879,7 +876,7 @@ mod tests {
     fn fake_sink_rejects_cpu_video_output_shape() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = FakeSink { events };
-        assert!(!sink.accepts(&PipelineOutput::Video(VideoOutput::RawFrame(
+        assert!(!sink.accepts(&PipelineOutput::video(VideoOutput::RawFrame(
             VideoRawFrame {
                 data: vec![0, 0, 0, 255],
                 width: 1,

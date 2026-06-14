@@ -338,6 +338,39 @@ impl EnvironmentBackground {
     }
 }
 
+/// Borrowed request for rendering an ECS world through a viewport RenderGraph.
+pub struct PbrWorldViewportRenderRequest<'a> {
+    pub world: &'a mut bevy_ecs::world::World,
+    pub asset_cache: &'a AssetCache,
+    pub camera_params: &'a CameraParams,
+    pub output_size: (u32, u32),
+    pub background_color: Option<[f32; 4]>,
+    pub descriptor: &'a ViewportDescriptor,
+    pub graph_output: ViewportRenderGraphOutput,
+}
+
+/// Borrowed request for rendering an extracted RenderWorld through a viewport RenderGraph.
+pub struct PbrViewportRenderRequest<'a> {
+    pub render_world: &'a RenderWorld,
+    pub asset_cache: &'a AssetCache,
+    pub camera_params: &'a CameraParams,
+    pub output_size: (u32, u32),
+    pub background_color: Option<[f32; 4]>,
+    pub environment_background: Option<&'a EnvironmentBackground>,
+    pub descriptor: &'a ViewportDescriptor,
+    pub graph_output: ViewportRenderGraphOutput,
+}
+
+struct PbrForwardPassRequest<'a> {
+    render_world: &'a RenderWorld,
+    asset_cache: &'a AssetCache,
+    camera_params: &'a CameraParams,
+    output_size: (u32, u32),
+    background_color: Option<[f32; 4]>,
+    descriptor: &'a ViewportDescriptor,
+    environment_background: Option<&'a EnvironmentBackground>,
+}
+
 // ── GPU uniform structs (16-byte aligned) ───────────────────
 
 #[repr(C)]
@@ -971,60 +1004,56 @@ impl PbrRenderer {
         environment_background: Option<&EnvironmentBackground>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
         let descriptor = default_pbr_viewport_descriptor();
-        self.render_viewport_from_render_world(
+        self.render_viewport_from_render_world(PbrViewportRenderRequest {
             render_world,
             asset_cache,
             camera_params,
             output_size,
             background_color,
             environment_background,
-            &descriptor,
-            ViewportRenderGraphOutput::QualityCapture,
-        )
+            descriptor: &descriptor,
+            graph_output: ViewportRenderGraphOutput::QualityCapture,
+        })
     }
 
     /// Render a viewport through the compiled RenderGraph selected by its descriptor.
     pub fn render_viewport(
         &self,
-        world: &mut bevy_ecs::world::World,
-        asset_cache: &AssetCache,
-        camera_params: &CameraParams,
-        output_size: (u32, u32),
-        background_color: Option<[f32; 4]>,
-        descriptor: &ViewportDescriptor,
-        graph_output: ViewportRenderGraphOutput,
+        request: PbrWorldViewportRenderRequest<'_>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
         let mut render_world = RenderWorld::default();
         let asset_database = AssetDatabase::default();
-        extract_render_world(world, &asset_database, camera_params, &mut render_world);
-        self.render_viewport_from_render_world(
-            &render_world,
-            asset_cache,
-            camera_params,
-            output_size,
-            background_color,
-            None,
-            descriptor,
-            graph_output,
-        )
+        extract_render_world(
+            request.world,
+            &asset_database,
+            request.camera_params,
+            &mut render_world,
+        );
+        self.render_viewport_from_render_world(PbrViewportRenderRequest {
+            render_world: &render_world,
+            asset_cache: request.asset_cache,
+            camera_params: request.camera_params,
+            output_size: request.output_size,
+            background_color: request.background_color,
+            environment_background: None,
+            descriptor: request.descriptor,
+            graph_output: request.graph_output,
+        })
     }
 
     /// Render an already-extracted Render World through the viewport RenderGraph.
     pub fn render_viewport_from_render_world(
         &self,
-        render_world: &RenderWorld,
-        asset_cache: &AssetCache,
-        camera_params: &CameraParams,
-        output_size: (u32, u32),
-        background_color: Option<[f32; 4]>,
-        environment_background: Option<&EnvironmentBackground>,
-        descriptor: &ViewportDescriptor,
-        graph_output: ViewportRenderGraphOutput,
+        request: PbrViewportRenderRequest<'_>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
-        let plan = build_viewport_render_graph(descriptor, graph_output)?;
-        let render_scale =
-            render_scale_for_viewport(descriptor, graph_output, plan.post_process, output_size);
-        let scaled_output_size = scaled_render_output_size(output_size, render_scale);
+        let plan = build_viewport_render_graph(request.descriptor, request.graph_output)?;
+        let render_scale = render_scale_for_viewport(
+            request.descriptor,
+            request.graph_output,
+            plan.post_process,
+            request.output_size,
+        );
+        let scaled_output_size = scaled_render_output_size(request.output_size, render_scale);
         let compiled = plan
             .graph
             .compile(std::slice::from_ref(&plan.live_output))?;
@@ -1050,15 +1079,15 @@ impl PbrRenderer {
                 });
         let mut executor = PbrRenderGraphPassExecutor {
             renderer: self,
-            render_world,
-            asset_cache,
-            camera_params,
-            viewport: descriptor,
-            output_size,
+            render_world: request.render_world,
+            asset_cache: request.asset_cache,
+            camera_params: request.camera_params,
+            viewport: request.descriptor,
+            output_size: request.output_size,
             scaled_output_size,
-            background_color,
-            environment_background,
-            post_process_settings: post_process_settings_for_descriptor(descriptor),
+            background_color: request.background_color,
+            environment_background: request.environment_background,
+            post_process_settings: post_process_settings_for_descriptor(request.descriptor),
             output: None,
             intermediate_textures: Vec::new(),
             intermediate_views: Vec::new(),
@@ -1076,16 +1105,10 @@ impl PbrRenderer {
 
     fn record_pbr_forward_pass(
         &self,
-        render_world: &RenderWorld,
-        asset_cache: &AssetCache,
-        camera_params: &CameraParams,
-        output_size: (u32, u32),
-        background_color: Option<[f32; 4]>,
-        descriptor: &ViewportDescriptor,
+        request: PbrForwardPassRequest<'_>,
         encoder: &mut wgpu::CommandEncoder,
-        environment_background: Option<&EnvironmentBackground>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
-        let (width, height) = output_size;
+        let (width, height) = request.output_size;
         let device = self.ctx.device();
 
         // Create render targets
@@ -1103,7 +1126,12 @@ impl PbrRenderer {
         // Pre-collect draw data (buffers + bind groups must outlive render pass).
         // We do this before allocating camera/light buffers so the empty case
         // can skip those uploads entirely.
-        let draw_calls = self.collect_draw_calls(render_world, asset_cache, device, descriptor);
+        let draw_calls = self.collect_draw_calls(
+            request.render_world,
+            request.asset_cache,
+            device,
+            request.descriptor,
+        );
 
         // Camera + light uniforms only matter when at least one draw call will
         // actually consume them. The clear-only fast path below skips this work.
@@ -1112,9 +1140,12 @@ impl PbrRenderer {
             None
         } else {
             let camera_uniforms = CameraUniformsGpu {
-                view: camera_params.view_matrix().to_cols_array_2d(),
-                projection: camera_params.projection_matrix(aspect).to_cols_array_2d(),
-                camera_position: camera_params.position.to_array(),
+                view: request.camera_params.view_matrix().to_cols_array_2d(),
+                projection: request
+                    .camera_params
+                    .projection_matrix(aspect)
+                    .to_cols_array_2d(),
+                camera_position: request.camera_params.position.to_array(),
                 _padding: 0.0,
             };
             let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1131,7 +1162,7 @@ impl PbrRenderer {
                 }],
             });
 
-            let light_uniforms = Self::collect_lights(render_world);
+            let light_uniforms = Self::collect_lights(request.render_world);
             let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("pbr_light_buffer"),
                 contents: bytemuck::bytes_of(&light_uniforms),
@@ -1153,16 +1184,19 @@ impl PbrRenderer {
                 light_bind_group,
             ))
         };
-        let environment_background_binding = environment_background.map(|environment_background| {
-            self.create_environment_background_binding(
-                camera_params,
-                output_size,
-                environment_background,
-            )
-        });
+        let environment_background_binding =
+            request
+                .environment_background
+                .map(|environment_background| {
+                    self.create_environment_background_binding(
+                        request.camera_params,
+                        request.output_size,
+                        environment_background,
+                    )
+                });
 
         // Begin render pass
-        let bg = background_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
+        let bg = request.background_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("pbr_render_pass"),
@@ -1777,14 +1811,16 @@ impl RenderGraphExecutor for PbrRenderGraphPassExecutor<'_> {
             let output = self
                 .renderer
                 .record_pbr_forward_pass(
-                    self.render_world,
-                    self.asset_cache,
-                    self.camera_params,
-                    self.scaled_output_size,
-                    self.background_color,
-                    self.viewport,
+                    PbrForwardPassRequest {
+                        render_world: self.render_world,
+                        asset_cache: self.asset_cache,
+                        camera_params: self.camera_params,
+                        output_size: self.scaled_output_size,
+                        background_color: self.background_color,
+                        descriptor: self.viewport,
+                        environment_background: self.environment_background,
+                    },
                     encoder,
-                    self.environment_background,
                 )
                 .map_err(|error| RenderGraphError::Execution {
                     pass: pass.id.0.clone(),
@@ -2109,7 +2145,7 @@ fn scaled_render_output_size(output_size: (u32, u32), scale: f32) -> (u32, u32) 
 
 fn scaled_even_dimension(value: u32, scale: f32) -> u32 {
     let scaled = ((value as f32) * scale).round().max(value as f32) as u32;
-    if scaled % 2 == 0 {
+    if scaled.is_multiple_of(2) {
         scaled
     } else {
         scaled + 1

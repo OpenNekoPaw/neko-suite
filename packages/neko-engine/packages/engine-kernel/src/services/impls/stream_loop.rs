@@ -29,13 +29,7 @@ pub fn normalize_stream_fps(fps: f64) -> f64 {
     if !fps.is_finite() || fps <= 0.0 {
         return DEFAULT_PACER_FPS;
     }
-    if fps < MIN_PACER_FPS {
-        MIN_PACER_FPS
-    } else if fps > MAX_PACER_FPS {
-        MAX_PACER_FPS
-    } else {
-        fps
-    }
+    fps.clamp(MIN_PACER_FPS, MAX_PACER_FPS)
 }
 
 pub fn normalize_playback_speed(speed: f64) -> f64 {

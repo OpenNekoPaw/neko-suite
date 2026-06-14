@@ -48,13 +48,36 @@ pub enum PipelineContractError {
 #[derive(Clone, Debug)]
 pub enum PipelineOutput {
     /// Video output variants.
-    Video(VideoOutput),
+    Video(Box<VideoOutput>),
     /// Audio output variants.
     Audio(AudioOutput),
 }
 
+impl PipelineOutput {
+    /// Create a boxed video pipeline output.
+    pub fn video(output: VideoOutput) -> Self {
+        Self::Video(Box::new(output))
+    }
+
+    /// Borrow the video output if this item carries video.
+    pub fn as_video(&self) -> Option<&VideoOutput> {
+        match self {
+            Self::Video(output) => Some(output.as_ref()),
+            Self::Audio(_) => None,
+        }
+    }
+
+    /// Mutably borrow the video output if this item carries video.
+    pub fn as_video_mut(&mut self) -> Option<&mut VideoOutput> {
+        match self {
+            Self::Video(output) => Some(output.as_mut()),
+            Self::Audio(_) => None,
+        }
+    }
+}
+
 /// High-level realtime render path label for diagnostics.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GpuRenderPath {
     /// Render output is converted to an encoder-owned GPU surface without CPU copies.
@@ -62,6 +85,7 @@ pub enum GpuRenderPath {
     /// GPU surface is used, but the encoder falls back to CPU-visible IOSurface memory.
     PartialZeroCopy,
     /// CPU readback/encode fallback path.
+    #[default]
     LegacyCpu,
 }
 
@@ -72,12 +96,6 @@ impl GpuRenderPath {
             Self::PartialZeroCopy => "partial-zero-copy",
             Self::LegacyCpu => "legacy-cpu",
         }
-    }
-}
-
-impl Default for GpuRenderPath {
-    fn default() -> Self {
-        Self::LegacyCpu
     }
 }
 
@@ -166,13 +184,20 @@ pub struct RenderFrameMeta {
 #[derive(Clone, Debug)]
 pub enum VideoOutput {
     /// GPU-resident frame intended for zero-copy consumers.
-    GpuFrame(VideoGpuFrame),
+    GpuFrame(Box<VideoGpuFrame>),
     /// Terminal preview artifact such as RGBA/JPEG/PNG bytes.
     PreviewFrame(VideoPreviewFrame),
     /// Encoded video packet.
     EncodedPacket(VideoEncodedPacket),
     /// Raw terminal frame buffer.
     RawFrame(VideoRawFrame),
+}
+
+impl VideoOutput {
+    /// Create a boxed GPU frame video output.
+    pub fn gpu_frame(frame: VideoGpuFrame) -> Self {
+        Self::GpuFrame(Box::new(frame))
+    }
 }
 
 /// Audio output variants.

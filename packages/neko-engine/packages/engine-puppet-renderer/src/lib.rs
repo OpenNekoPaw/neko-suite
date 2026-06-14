@@ -161,7 +161,7 @@ impl PuppetRenderOutput {
     /// Convert to a PipelineSink-compatible GPU video output.
     pub fn into_video_output(self, ctx: Arc<GpuContext>) -> VideoOutput {
         let readback = GpuReadbackTarget::new(ctx, self.color_texture, self.width, self.height);
-        VideoOutput::GpuFrame(VideoGpuFrame {
+        VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::with_readback(
                 unsupported_output_handle(),
                 Some(Arc::new(readback)),
@@ -515,7 +515,7 @@ mod tests {
 
     #[test]
     fn puppet_gpu_frame_has_pipeline_output_shape() {
-        let frame = VideoOutput::GpuFrame(VideoGpuFrame {
+        let frame = VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::new(unsupported_output_handle()),
             pts: 0,
             duration: 16_667,
@@ -526,11 +526,8 @@ mod tests {
             diagnostics: None,
             meta: None,
         });
-        let output = PipelineOutput::Video(frame);
+        let output = PipelineOutput::video(frame);
 
-        assert!(matches!(
-            output,
-            PipelineOutput::Video(VideoOutput::GpuFrame(_))
-        ));
+        assert!(matches!(output.as_video(), Some(VideoOutput::GpuFrame(_))));
     }
 }

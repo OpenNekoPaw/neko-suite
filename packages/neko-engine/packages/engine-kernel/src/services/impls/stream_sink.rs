@@ -207,12 +207,18 @@ impl StreamSink {
 
 impl PipelineSink for StreamSink {
     fn accepts(&self, output: &PipelineOutput) -> bool {
-        matches!(output, PipelineOutput::Video(VideoOutput::GpuFrame(_)))
+        matches!(output.as_video(), Some(VideoOutput::GpuFrame(_)))
     }
 
     fn submit(&self, output: PipelineOutput) -> Result<()> {
         match output {
-            PipelineOutput::Video(VideoOutput::GpuFrame(frame)) => self.submit_gpu_frame(frame),
+            PipelineOutput::Video(video) => match *video {
+                VideoOutput::GpuFrame(frame) => self.submit_gpu_frame(*frame),
+                other => Err(Error::UnsupportedOutput(format!(
+                    "StreamSink accepts only VideoOutput::GpuFrame, got {:?}",
+                    other
+                ))),
+            },
             other => Err(Error::UnsupportedOutput(format!(
                 "StreamSink accepts only VideoOutput::GpuFrame, got {:?}",
                 other
@@ -343,7 +349,7 @@ mod tests {
     }
 
     fn gpu_output() -> PipelineOutput {
-        PipelineOutput::Video(VideoOutput::GpuFrame(VideoGpuFrame {
+        PipelineOutput::video(VideoOutput::gpu_frame(VideoGpuFrame {
             lease: GpuFrameLease::new(test_handle()),
             pts: 0,
             duration: 33_333,

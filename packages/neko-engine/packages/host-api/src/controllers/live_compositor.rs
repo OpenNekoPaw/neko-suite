@@ -429,7 +429,7 @@ impl LiveCompositorController {
                 &command,
                 self.current_revision(&command.scene_id),
                 "unsupportedProtocolVersion",
-                &format!(
+                format!(
                     "viewport protocol version {} is not supported; expected {}",
                     command.protocol_version, VIEWPORT_PROTOCOL_VERSION
                 ),
@@ -796,7 +796,7 @@ fn validate_required_base_revision(
             command,
             revision,
             "revisionConflict",
-            &format!("base revision {base_revision} does not match current revision {revision}"),
+            format!("base revision {base_revision} does not match current revision {revision}"),
         ));
     }
 

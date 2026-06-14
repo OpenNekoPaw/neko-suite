@@ -166,6 +166,7 @@ impl ExportService {
     }
 
     /// Create with existing GPU context
+    #[allow(dead_code)]
     pub fn with_gpu_context(gpu_ctx: Arc<GpuContext>) -> Self {
         Self::with_backend_bundle(Arc::new(ExportBackendBundle::with_gpu_context(gpu_ctx)))
     }
@@ -613,7 +614,7 @@ impl ExportService {
             // Submit frame to encoder
             let encode_start = Instant::now();
             let _ = nv12_data;
-            export_sink.submit(PipelineOutput::Video(VideoOutput::GpuFrame(
+            export_sink.submit(PipelineOutput::video(VideoOutput::gpu_frame(
                 VideoGpuFrame {
                     lease: GpuFrameLease::new(gpu_handle),
                     pts: frame_idx as i64,
