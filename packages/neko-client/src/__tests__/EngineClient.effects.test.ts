@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EngineClient } from '../EngineClient';
 import { sourceReplacementToElementPatch } from '../engine/sourceReplacement';
 
+const originalWebSocket = globalThis.WebSocket;
+
 function mockDispatchResponse(data: unknown): void {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
@@ -22,6 +24,11 @@ function lastDispatchBody(): Record<string, unknown> {
 describe('EngineClient effect discovery', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalWebSocket) {
+      globalThis.WebSocket = originalWebSocket;
+    } else {
+      Reflect.deleteProperty(globalThis, 'WebSocket');
+    }
   });
 
   it('dispatches effects:list-capabilities', async () => {
@@ -103,6 +110,12 @@ describe('EngineClient effect discovery', () => {
 
   it('builds puppet H.264 stream URLs and export requests', async () => {
     mockDispatchResponse({ frames_submitted: 12 });
+    vi.stubGlobal(
+      'WebSocket',
+      class MockWebSocket {
+        constructor(readonly url: string) {}
+      },
+    );
     const client = new EngineClient(7788);
 
     expect(
