@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Neko Suite Local CI Script
 # Mirrors .github/workflows/ci.yml checks for local pre-push verification.
@@ -52,6 +52,23 @@ VSCODE_TARGET="$(detect_vscode_target)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_DIR="$SCRIPT_DIR/packages/neko-engine"
 
+read_package_group() {
+  node "$SCRIPT_DIR/scripts/read-package-group.mjs" "$1"
+}
+
+read_package_group_into() {
+  local array_name="$1"
+  local group_path="$2"
+  local item
+  local group_output
+
+  eval "$array_name=()"
+  group_output="$(read_package_group "$group_path")"
+  while IFS= read -r item; do
+    [ -n "$item" ] && eval "$array_name+=(\"\$item\")"
+  done <<< "$group_output"
+}
+
 # =============================================================================
 # Options
 # =============================================================================
@@ -78,14 +95,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # =============================================================================
-# TS extension list (must match ci.yml package-ts-vsix job)
+# TS extension list shared with compile-ts-vsix and release packaging.
 # =============================================================================
 
-TS_EXTENSIONS=(
-  neko-tools neko-preview neko-cut neko-canvas neko-agent
-  neko-story neko-sketch neko-puppet neko-audio neko-assets
-  neko-auth neko-market
-)
+read_package_group_into TS_EXTENSIONS packages.tsExtensions
 
 # =============================================================================
 # Result tracking

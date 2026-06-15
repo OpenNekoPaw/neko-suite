@@ -49,9 +49,11 @@ jobs:
       # Package each TS extension
       - name: Package TS extensions
         run: |
-          for pkg in neko-tools neko-preview neko-cut neko-canvas neko-agent \
-                     neko-story neko-sketch neko-puppet neko-audio neko-assets \
-                     neko-auth neko-market neko-suite; do
+          {
+            node scripts/read-package-group.mjs packages.tsExtensions
+            node scripts/read-package-group.mjs extensionPack
+          } | while IFS= read -r pkg; do
+            [ -n "$pkg" ] || continue
             if [ -d "packages/$pkg" ]; then
               echo "📦 Packaging $pkg..."
               (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository) || true

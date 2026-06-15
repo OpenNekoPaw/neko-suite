@@ -1,4 +1,3 @@
-
 # AGENTS.md
 
 ## 适用范围
@@ -48,6 +47,7 @@
 - 总体架构先看 `ARCHITECTURE_CN.md`，必要时对照 `ARCHITECTURE.md`。
 - 文档导航先看 `docs/README.md`，不要猜测具体文档路径。
 - 系统级架构、ADR 和跨领域约束从 `docs/architecture/README.md` 进入。
+- 子包边界、UI 层、公共代码、Extension/Webview/Engine 约束先看 `docs/architecture/package-boundaries.md`。
 - 领域能力、领域架构和跨包领域边界从 `docs/domains/README.md` 进入，再进入 `docs/domains/<domain>/README.md`。
 - 调研、竞品、技术 spike 和 UX 分析从 `docs/research/README.md` 进入。
 - Gap、迁移、健康度和审计快照从 `docs/status/README.md` 进入。

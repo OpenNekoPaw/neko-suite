@@ -161,13 +161,11 @@ export class ConversationMessageHandler {
       onAgentStopped: (conversationId, listener) => {
         const runner = this.deps.agentManager?.get(conversationId);
         if (!runner) return undefined;
-        return (
-          runner.onDidRunnerEvent?.((event) => {
-            if (event.type === 'stop') {
-              listener();
-            }
-          }) ?? runner.onDidStop(listener)
-        );
+        return runner.onDidRunnerEvent((event) => {
+          if (event.type === 'stop') {
+            listener();
+          }
+        });
       },
       postMessage: async (message: ConversationControlRuntimeMessage): Promise<void> => {
         await webview?.postMessage(message);

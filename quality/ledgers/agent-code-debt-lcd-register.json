@@ -1,0 +1,472 @@
+{
+  "schemaVersion": 1,
+  "owner": "neko-agent-architecture",
+  "updatedAt": "2026-06-13",
+  "categories": [
+    "confirmed-dead-code",
+    "static-analysis-false-positive",
+    "canonical-compatibility",
+    "migration-adapter",
+    "stray-surface",
+    "misplaced-domain-logic",
+    "runtime-fallback-resilience"
+  ],
+  "semanticClasses": [
+    "delete-now",
+    "migrate-now",
+    "current-bridge",
+    "runtime-resilience",
+    "boundary-canonicalizer",
+    "test-only",
+    "domain-status",
+    "false-positive-word"
+  ],
+  "entries": [
+    {
+      "id": "LCD-001",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/extension/src/services/projectSearch/*",
+      "kind": "migration-adapter",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-search",
+      "replacement": "@neko/search/host-vscode and @neko/search/core",
+      "removeAfter": "Removed by implement-agent-boundary-cleanup Phase 1 after Agent imports moved to canonical search entrypoints.",
+      "tests": [
+        "rg services/projectSearch packages/neko-agent",
+        "pnpm --dir packages/neko-agent exec vitest run packages/extension/src/services/__tests__/projectMentionSearch.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/extension/src/evidence/__tests__/characterEvidenceLoader.test.ts"
+      ],
+      "notes": "Historical LCD retained so the deleted shim group does not reappear as an undocumented compatibility layer."
+    },
+    {
+      "id": "LCD-002",
+      "package": "neko-agent",
+      "surface": "legacy centralized domain-tool registration path",
+      "kind": "stray-surface",
+      "semanticClass": "current-bridge",
+      "status": "active",
+      "owner": "neko-agent-runtime",
+      "replacement": "Per-package AgentCapabilityProvider registration",
+      "removeAfter": "Only documented agent-owned meta-tools or compatibility bridges may remain on centralized paths; new domain tools must use AgentCapabilityProvider.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts",
+        "pnpm check:agent-boundaries"
+      ],
+      "notes": "This is a guardrail, not a blocker for host-boundary migration."
+    },
+    {
+      "id": "LCD-009",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/ai-sdk/src/bridge/*",
+      "kind": "migration-adapter",
+      "semanticClass": "current-bridge",
+      "status": "active",
+      "owner": "neko-agent-ai-sdk",
+      "replacement": "Provider-specific native AI SDK providers or explicit newapi/generic compatible-provider configuration",
+      "removeAfter": "Provider-specific sunset rows prove resolver, adapter, task execution, failure, cancellation, provider options, and result normalization no longer require createLegacyBridgeProvider().",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/ai-sdk/src/resolve.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/ai-sdk/src/bridge/legacy-video-model.test.ts"
+      ],
+      "sunsetProviders": [
+        {
+          "provider": "fal.ai",
+          "providerType": "fal",
+          "taskFamilies": ["image"],
+          "resolverPath": "resolveProvider('fal', config, FalMediaAdapter) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "No native resolveProvider('fal') branch; fal.ai may be represented only through compatible newapi/generic configuration.",
+          "migrationConditions": [
+            "A native fal provider path or documented generic/newapi compatible-provider path covers queue polling.",
+            "Auth tests cover fal.ai Key authentication.",
+            "Provider option tests cover ControlNet, IP-Adapter, image-to-image/edit fields, and result normalization.",
+            "Cancellation and failure normalization tests pass without FalMediaAdapter bridge execution."
+          ],
+          "removalTrigger": "resolveProvider('fal') no longer enters createLegacyBridgeProvider() for supported image tasks and FalMediaAdapter has no runtime callers for those tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/fal-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "DashScope",
+          "providerType": "dashscope",
+          "taskFamilies": ["image", "video"],
+          "resolverPath": "resolveProvider('dashscope', config, DashScopeMediaAdapter) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "No native resolveProvider('dashscope') branch.",
+          "migrationConditions": [
+            "Native or compatible provider path covers Qwen image and Wan video requests.",
+            "Async task status polling, result download, retry/failure semantics, and result normalization are covered by tests.",
+            "Cancellation behavior is verified without DashScopeMediaAdapter bridge execution."
+          ],
+          "removalTrigger": "resolveProvider('dashscope') no longer enters createLegacyBridgeProvider() for supported media tasks and DashScope smoke/unit tests run through the native path.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/dashscope-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Kling",
+          "providerType": "kling",
+          "taskFamilies": ["image", "video"],
+          "resolverPath": "resolveProvider('kling', config, OpenAICompatMediaAdapter) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "No native resolveProvider('kling') branch; generic/newapi can express some OpenAI-compatible scenarios but the kling provider type still bridges.",
+          "migrationConditions": [
+            "The kling provider type maps to createNewAPIProvider() or is replaced by explicit generic/newapi configuration.",
+            "Image/video endpoint, provider options, async status, failure normalization, and result normalization are covered by contract tests.",
+            "Adapter registry no longer needs a distinct kling builtin legacy adapter for supported task families."
+          ],
+          "removalTrigger": "resolveProvider('kling') no longer calls createLegacyBridgeProvider() and Kling contract tests pass through the native provider path.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/openai-compat-media-adapter.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LCD-010",
+      "package": "neko-agent",
+      "surface": "agent-types/src/message.ts legacy fields, platform/src/types re-export modules, skill/tool-group-registry.ts triggerKeywords()",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-contracts",
+      "replacement": "contentBlocks[].toolCall, shared prompt/task types, and the next skill/tool-group API",
+      "removeAfter": "Removed by cleanup-prelaunch-legacy-surfaces after repo callers migrated to contentBlocks[].toolCall, shared prompt/task types, LLMToolCall, and canonical skill discovery.",
+      "tests": [
+        "rg \"types/prompt|types/task|LegacyToolCall|export type ToolCall = LLMToolCall|ToolGroupMatch|triggerKeywords\\\\(|toolCalls\\\\?: ToolCall\\\\[]|AI thinking process \\\\(legacy\" packages/neko-agent packages/neko-types -g'*.ts' -g'*.tsx'",
+        "pnpm --dir packages/neko-agent/packages/webview exec vitest run src/presenters/__tests__/message-presenter.test.ts src/presenters/__tests__/work-item-message-presenter.test.ts src/presenters/__tests__/message-list-presenter.test.ts src/components/__tests__/types.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/session/__tests__/conversation-manager.test.ts packages/agent/src/session/__tests__/conversation-record-projector.test.ts packages/agent/src/runtime/__tests__/message-runtime.test.ts packages/agent/src/runtime/__tests__/message-resource-projector.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/message-resource-projector.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/skill/__tests__/tool-group-registry-tier.test.ts"
+      ]
+    },
+    {
+      "id": "LCD-011",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/webview/src/presenters/entity-memory-contribution-inference.ts",
+      "kind": "misplaced-domain-logic",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-runtime",
+      "replacement": "packages/neko-agent/packages/agent/src/artifact/entity-memory-contribution-inference.ts",
+      "removeAfter": "Removed from Webview by implement-agent-boundary-cleanup Phase 3; Webview renders runtime-provided projections and sends user intent.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/artifact/__tests__/entity-memory-contribution-inference.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/webview/src/presenters/__tests__/composite-content-presenter.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts"
+      ]
+    },
+    {
+      "id": "LCD-012",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/extension/package.json document parser dependencies",
+      "kind": "static-analysis-false-positive",
+      "semanticClass": "false-positive-word",
+      "status": "active",
+      "owner": "neko-agent-platform-document",
+      "replacement": "Runtime import() parser backends used by document-reader and document-access-service",
+      "removeAfter": "Only remove a parser dependency after the corresponding document format support and tests are intentionally deleted.",
+      "tests": [
+        "pnpm check:unused",
+        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts"
+      ],
+      "dependencies": ["epub2", "fast-xml-parser", "node-fetch", "node-unrar-js", "xlsx"],
+      "notes": "Knip cannot reliably trace these dynamic parser backends from the extension package manifest."
+    },
+    {
+      "id": "LCD-013",
+      "package": "neko-agent",
+      "surface": "runtime fallback, provider degradation, media routing fallback, and retry behavior",
+      "kind": "runtime-fallback-resilience",
+      "semanticClass": "runtime-resilience",
+      "status": "active",
+      "owner": "neko-agent-runtime",
+      "replacement": "N/A: resilience behavior, not cleanup target",
+      "removeAfter": "Only remove a fallback path when tests prove the canonical path covers the legacy input or failure mode.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/media/__tests__/media-routing-manager.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/media/routing/__tests__/media-routing-manager.test.ts"
+      ],
+      "notes": "Text matches on fallback are not enough to classify code as dead or legacy."
+    },
+    {
+      "id": "LCD-014",
+      "package": "neko-agent",
+      "surface": "Agent remaining legacy runtime compatibility paths: workflow usage recorder, artifact restore legacy index, document read legacy wording, capability registry legacy names, and IDC runtime string feedback guidance",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-runtime",
+      "replacement": "Canonical AgentWorkflowRuntime, .neko/.cache/artifact-index.json, explicit document read modes, AgentCapabilityProvider registry identity, and object-shaped feedback.pendingGuidance snapshots.",
+      "removeAfter": "Removed by cleanup-remaining-legacy-debt-surfaces Agent 7.x after repo scans found no current production caller for the compatibility paths.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-workflow-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/workspace/__tests__/idc-runtime-state-reader.test.ts packages/extension/src/tools/__tests__/readDocumentTool.test.ts packages/extension/src/tools/__tests__/readDocumentImageTool.test.ts",
+        "rg -n \"createLegacyWorkflowUsageRecorder|AgentLegacyWorkflow|readArtifactRestoreEntriesWithLegacyFallback|toLegacyArtifactIndexPath|legacyToolNames|normalizeLegacyResourceRef|legacyContent|content preserves legacy full read\" packages/neko-agent/packages/agent packages/neko-agent/packages/agent-types packages/neko-agent/packages/extension",
+        "pnpm check:agent-boundaries"
+      ],
+      "notes": "The remaining Agent legacy/fallback words are separately classified as current bridge, runtime resilience, boundary canonicalizer, resource-cache compatibility, or test fixtures."
+    },
+    {
+      "id": "LCD-015",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/cli-tui/src/core/config.ts global/project config path legacy aliases",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-cli",
+      "replacement": "getUserConfigDir(), getUserConfigPath(), getWorkspaceConfigDir(), and getWorkspaceConfigPath()",
+      "removeAfter": "Removed after repo scan found no caller outside the CLI barrel re-export; prelaunch CLI API does not keep old global/project aliases.",
+      "tests": [
+        "rg -n \"getGlobalConfigDir|getGlobalConfigPath|getProjectConfigPath\" packages/neko-agent/packages/cli-tui packages/neko-agent/packages/agent docs/architecture/agent-code-debt-lcd-register.json",
+        "pnpm check:agent-boundaries"
+      ],
+      "notes": "CLI build currently fails on unrelated markdown ?raw loader baseline in @neko/agent skill builtins; stale scan guards this specific alias removal."
+    },
+    {
+      "id": "LCD-016",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/platform/src/document/document-reader.ts pdf-parse function/default parser and officeparser parseOfficeAsync readers",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-platform-document",
+      "replacement": "Current parser APIs: pdf-parse v2 PDFParse class and officeparser v6 parseOffice AST reader.",
+      "removeAfter": "Removed after current package versions and tests confirmed canonical parser APIs cover PDF/PPTX document reads.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts",
+        "rg -n \"legacyParser|parseOfficeAsync|numpages\" packages/neko-agent/packages/platform/src/document packages/neko-agent/packages/platform/src/document/__tests__"
+      ],
+      "notes": "Dynamic parser dependencies remain current and are covered by LCD-012; this entry only removes obsolete third-party API shapes."
+    },
+    {
+      "id": "LCD-017",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/agent/src/skill/skill-injection-coordinator.ts optional SkillInjectionModule and direct composer.setSection Track A writer",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-prompt-runtime",
+      "replacement": "Required SkillInjectionModule Track A section projection.",
+      "removeAfter": "Removed after production AgentSession construction proved every coordinator receives SkillInjectionModule and tests covered canonical module projection.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/skill/__tests__/skill-injection-coordinator.test.ts packages/agent/src/prompt/__tests__/skill-injection-module.test.ts packages/agent/src/__tests__/executor-integration.test.ts",
+        "rg -n \"skillInjectionModule\\\\?:|legacy direct|legacy path|legacy setSection|legacy fallback|byte-for-byte identical|byte-identical\" packages/neko-agent/packages/agent/src/skill packages/neko-agent/packages/agent/src/prompt packages/neko-agent/packages/agent/src/session"
+      ],
+      "notes": "This was a duplicate implementation path, not a runtime resilience fallback."
+    },
+    {
+      "id": "LCD-018",
+      "package": "neko-agent",
+      "surface": "Unwired .hook/<name>/HOOK.ts|js directory hook runtime: HookLoader, HookRuntimeManager, hook runtime compiler/sandbox, Extension HookManager, and hookSource bridge",
+      "kind": "confirmed-dead-code",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-hooks",
+      "replacement": "Current hook path: .neko/settings.json SettingsHookLoader for shell execution.",
+      "removeAfter": "Removed after repo scan found no production createHookManager/new HookManager/createProjectHookRuntimeManager/new HookLoader callers and Extension config only exposed an optional unused bridge.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hook-loader/__tests__/settings-hook-loader.test.ts packages/agent/src/__tests__/standalone.test.ts packages/agent/src/runtime/__tests__/runtime-host-bindings.test.ts",
+        "rg -n \"\\\\bhookSource\\\\b|\\\\bhookManager\\\\b|\\\\bAgentRuntimeHookSource\\\\b|\\\\bHookManager\\\\b|\\\\bcreateHookManager\\\\b|\\\\bHookLoader\\\\b|\\\\bcreateHookLoader\\\\b|\\\\bHookRuntimeManager\\\\b|\\\\bcreateHookRuntimeManager\\\\b|\\\\bcreateProjectHookRuntimeManager\\\\b|\\\\bHOOK_DIRECTORIES\\\\b|\\\\bDEFAULT_HOOK_METADATA\\\\b|\\\\bIHookCompiler\\\\b|\\\\bIHookFileSystem\\\\b|\\\\bcreateHookCompiler\\\\b|\\\\bcreateSafeHookRequire\\\\b|\\\\.hook/|Directory-based hooks\" packages/neko-agent/packages -g'*.ts' -g'*.tsx'"
+      ],
+      "notes": "This does not remove current ExecutorHooks or SettingsHookLoader support."
+    },
+    {
+      "id": "LCD-019",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/agent/src/task/idc-projected-task.ts IdcProjectedTaskPayload.content legacy display-field mirror",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-task-runtime",
+      "replacement": "Canonical IdcProjectedTaskPayload.name display field emitted by toIdcProjectedTaskPayload().",
+      "removeAfter": "Removed after the current serializer already emitted name only and prelaunch policy confirmed no persisted IDC task payload compatibility window is required.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/idc-projected-task.test.ts packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/idc-task-projection.test.ts",
+        "rg -n \"Legacy mirror kept only|already-persisted tasks|content\\\\?: string|candidate\\\\['content'\\\\] === undefined|typeof candidate\\\\['content'\\\\]\" packages/neko-agent/packages/agent/src/task/idc-projected-task.ts packages/neko-agent/packages/agent/src/task/__tests__/idc-projected-task.test.ts"
+      ],
+      "notes": "IdcProjectedTaskUpsertInput.content remains the current in-memory source text that serializes to payload.name; this entry only removes the persisted payload.content mirror."
+    },
+    {
+      "id": "LCD-020",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/agent/src/subagent SubAgentConfig.allowedTools / SpecializedAgentPreset.allowedTools compatibility entrypoint and empty-array allow-all semantics",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-subagent-runtime",
+      "replacement": "Explicit AgentToolPolicy on SubAgentConfig and SpecializedAgentPreset.",
+      "removeAfter": "Removed after all SubAgent presets and tests migrated to explicit toolPolicy none/all/allow-list semantics; Skill.allowedTools remains a separate current skill-injection contract.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/subagent/__tests__/subagent-manager.test.ts packages/agent/src/subagent/__tests__/creative-presets.test.ts",
+        "rg -n 'allowedTools\\\\??:|allowedTools:|preset\\\\.allowedTools|config\\\\.allowedTools|legacy allowedTools|legacy empty allowedTools|Empty means all tools|Has preset allowedTools' packages/neko-agent/packages/agent/src/subagent -g'*.ts'"
+      ],
+      "notes": "This does not remove Skill.allowedTools, injected capability allowedTools, or tool-guard allow-lists, which are current skill/capability contracts outside the SubAgent configuration surface."
+    },
+    {
+      "id": "LCD-021",
+      "package": "neko-agent",
+      "surface": "Agent prompt/stage migration-era wording: ModuleOrchestrator legacy direct section fixture, StageMode/StageTaskShape legacy primitive comments, and stage-planner incremental-switch wording",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-prompt-runtime",
+      "replacement": "Current ModuleOrchestrator external-writer ownership contract and IDC StageMode/StageTaskShape contracts.",
+      "removeAfter": "Removed after stage activation and prompt module orchestration were already on the current contracts; remaining text was migration-era wording and test fixture naming, not active compatibility behavior.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/agent/src/skill/__tests__/stage-planner.test.ts",
+        "rg -n 'legacy|deprecated|legacy:foo|LEGACY|activation-planner|primitive\\\\.ts|mode-activation-matrix' packages/neko-agent/packages/agent/src/prompt/composer/module-orchestrator.ts packages/neko-agent/packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/neko-agent/packages/agent/src/skill/activation/stage-activation-matrix.ts packages/neko-agent/packages/agent/src/skill/activation/stage-planner.ts packages/neko-agent/packages/agent-types/src/stage.ts"
+      ],
+      "notes": "This entry removes scanner noise after verifying no producer/consumer depended on a legacy prompt or stage API."
+    },
+    {
+      "id": "LCD-022",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/platform/src/types/tool.ts deprecated re-export module",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-platform",
+      "replacement": "@neko/shared tool types.",
+      "removeAfter": "Removed after repo scan found no current imports of the platform tool re-export and platform/src/types/index.ts no longer exports it.",
+      "tests": [
+        "pnpm check:agent-boundaries",
+        "rg -n \"platform/src/types/tool|types/tool|export \\\\* from './tool'|DEPRECATED: Import from '@neko/shared'\" packages/neko-agent/packages/platform packages/neko-agent -g'*.ts' -g'*.tsx'"
+      ],
+      "notes": "The canonical @neko/shared and @neko-types tool contracts remain current; this only removes the Agent platform alias module."
+    },
+    {
+      "id": "LCD-023",
+      "package": "neko-agent",
+      "surface": "packages/neko-agent/packages/agent/src/task/task-manager.ts IDC projected task run cleanup fallback for corrupted payload bindings or payloads without runStartedAt",
+      "kind": "canonical-compatibility",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-task-runtime",
+      "replacement": "Canonical IdcProjectedTaskPayload with matching runId and runStartedAt provenance.",
+      "removeAfter": "Removed after prelaunch policy confirmed there is no persisted old IDC task payload compatibility window; cleanup now ignores corrupted or untimed payloads when a runStartedAt-specific cleanup is requested.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/idc-projected-task.test.ts packages/agent/src/task/__tests__/idc-task-projection.test.ts",
+        "rg -n 'Legacy payloads written|provenance tagging|falls back to IDC task id provenance|payload binding is corrupted|idBinding\\\\?\\\\.runStartedAt === undefined|binding\\\\.runStartedAt === undefined \\\\|\\\\|' packages/neko-agent/packages/agent/src/task -g'*.ts'"
+      ],
+      "notes": "Run cleanup without runStartedAt still clears all canonical projected tasks for that run; the removed path was only the old-format/corrupt-payload fallback."
+    },
+    {
+      "id": "LCD-024",
+      "package": "neko-agent",
+      "surface": "Agent Webview useVSCode, AIAssistant component barrel, and components/types re-export shims",
+      "kind": "canonical-compatibility",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-webview",
+      "replacement": "@/messages, @/components/AppShell, @neko-agent/types, and @neko/shared direct imports.",
+      "removeAfter": "Removed after current Webview callers migrated to canonical imports and tests moved from the shim to the messages module.",
+      "tests": [
+        "pnpm --dir packages/neko-agent/packages/webview exec tsc --noEmit",
+        "pnpm --dir packages/neko-agent/packages/webview exec vitest run src/components/hooks/__tests__/useVSCode.test.ts src/components/__tests__/types.test.ts src/hooks/__tests__/useTabManager.test.ts src/hooks/__tests__/useChatActions.test.ts",
+        "pnpm check:agent-boundaries",
+        "rg -n \"@/components/hooks/useVSCode|components/hooks/useVSCode|@/components/types|components/types|from ['\"]@/components['\"]|backward-compatible re-export\" packages/neko-agent/packages/webview/src -g \"*.ts\" -g \"*.tsx\""
+      ],
+      "notes": "All current Webview callers now import the canonical message builders, AppShell, and shared type contracts directly."
+    },
+    {
+      "id": "LCD-025",
+      "package": "neko-agent",
+      "surface": ".neko/hooks/*.md HookFile catalog, HookFileService scanner, HookSyncHandler bridge, and HookConfigSyncRuntime projection",
+      "kind": "canonical-compatibility",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-hooks",
+      "replacement": ".neko/settings.json SettingsHookLoader and ConfigBridgeRuntime getConfigState() projection.",
+      "removeAfter": "Removed after repo scan confirmed HookFile catalog was not an execution path, Webview protocol had no ConfiguredHook consumer, and current hook execution already uses .neko/settings.json SettingsHookLoader.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hook-loader/__tests__/settings-hook-loader.test.ts packages/agent/src/__tests__/standalone.test.ts packages/agent/src/runtime/__tests__/config-bridge-runtime.test.ts packages/agent/src/workspace/__tests__/neko-content-layout.test.ts packages/agent/src/permission/__tests__/permission-hooks.test.ts",
+        "rg -n -g '*.ts' -g '*.tsx' '\\\\.neko/hooks|HookFile|HookSyncHandler|hookSync|ConfiguredHook|createHookConfigSyncRuntime|HookConfigSyncRuntime|parseHookMarkdownFile|HOOK_MARKDOWN_FILE_EXTENSION|toConfiguredHookCatalog|HookLoadError|HookFrontmatter|parseHookEvent\\\\(|matchHookCondition\\\\(|HOOK_DIRECTORIES|getHooks\\\\(\\\\)' packages/neko-agent packages/neko-types docs scripts",
+        "rg -n -g '*.ts' -g '*.tsx' 'resolve(Personal|Project)?NekoContentDir\\\\([^\\\\n]*hooks|subdir: ['\"'\"']hooks['\"'\"']|NEKO_CONTENT_SUBDIRS\\\\.hooks' packages/neko-agent"
+      ],
+      "notes": "The deleted catalog only read markdown hook descriptors for a configuration surface; it did not execute hooks. Runtime hook behavior remains covered by SettingsHookLoader and permission hook tests."
+    },
+    {
+      "id": "LCD-026",
+      "package": "neko-agent",
+      "surface": "RetryHooks model fallback state and methods: modelFallback options, currentModel, tryFallback(), resetFallback(), and onModelSwitch callback",
+      "kind": "confirmed-dead-code",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-executor",
+      "replacement": "Current RetryHooks tool retry path; provider/model routing remains owned by provider-router and media/service selection layers.",
+      "removeAfter": "Removed after repo scan confirmed AgentExecutor and hook runner never call RetryHooks.tryFallback(), while createExecutorHooks only configures toolRetryPolicy for transient tool failures.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts packages/agent/src/experiment/__tests__/apply-toggles.integration.test.ts packages/agent/src/__tests__/standalone.test.ts",
+        "rg -n \"multi-model fallback|model fallback|modelFallback|tryFallback|resetFallback|fallbackModels|maxFallbacks|onModelSwitch|currentModel\" packages/neko-agent/packages/agent/src"
+      ],
+      "notes": "This does not remove RetryHooks itself or runtime provider/model fallback contracts outside the executor hook chain."
+    },
+    {
+      "id": "LCD-027",
+      "package": "neko-agent",
+      "surface": "CharacterDialogueController default transcript evaluator prompt projection, evaluator response parsing, and fallback report generation",
+      "kind": "misplaced-domain-logic",
+      "semanticClass": "migrate-now",
+      "status": "removed",
+      "owner": "neko-agent-runtime",
+      "replacement": "@neko/agent/runtime evaluateCharacterDialogueTranscript() with Extension supplying only Platform IService and selected model adapters.",
+      "removeAfter": "Migrated after boundary review confirmed transcript evaluation is dialogue-domain logic, while Extension should only bridge VSCode/Webview/Platform dependencies.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/character-dialogue-runtime.test.ts",
+        "pnpm --dir packages/neko-agent run compile:extension",
+        "rg -n \"createFallbackCharacterDialogueEvaluationReport|parseCharacterRoleEvaluationReportOutput|projectCharacterRoleEvaluationPrompt\" packages/neko-agent/packages/extension/src/chat/characterDialogueController.ts"
+      ],
+      "notes": "Runtime fallback evaluation remains current resilience; the cleanup removes Extension-owned domain fallback generation."
+    },
+    {
+      "id": "LCD-028",
+      "package": "neko-agent",
+      "surface": "Semantic coverage tool planning.fallback normal-tool-analysis contract",
+      "kind": "stray-surface",
+      "semanticClass": "current-bridge",
+      "status": "active",
+      "owner": "neko-agent-search",
+      "replacement": "@neko/search semantic coverage capability provider planning contract.",
+      "removeAfter": "Remove the planning.fallback field only after semantic coverage planning moves to canonical package capability metadata and tool result consumers no longer inspect normal-tool-analysis.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/extension/src/tools/__tests__/semanticCoverageTool.test.ts",
+        "rg -n \"normal-tool-analysis|planning:|fallback\" packages/neko-agent/packages/extension/src/tools/semanticCoverageTool.ts packages/neko-agent/packages/extension/src/tools/__tests__/semanticCoverageTool.test.ts"
+      ],
+      "notes": "This is a current Agent tool planning bridge, not dead code."
+    },
+    {
+      "id": "LCD-029",
+      "package": "neko-agent",
+      "surface": "Skill requiredSubpackages optional dependency fallback.message degradation contract",
+      "kind": "runtime-fallback-resilience",
+      "semanticClass": "runtime-resilience",
+      "status": "active",
+      "owner": "neko-agent-skill-runtime",
+      "replacement": "Current optional subpackage degradation policy with required dependencies still blocking activation.",
+      "removeAfter": "Remove only if Skill requiredSubpackages no longer support optional dependency degradation or the skill contract replaces fallback.message with a canonical availability diagnostic field.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/skill/__tests__/subpackage-guard.test.ts",
+        "rg -n \"fallbackMessage|fallback\\\\?\\\\.message|requiredSubpackages\" packages/neko-agent/packages/agent/src/skill/subpackage-guard.ts packages/neko-types/src/types/skill.ts"
+      ],
+      "notes": "This preserves current runtime degradation for optional subpackages while required subpackages still fail activation."
+    },
+    {
+      "id": "LCD-030",
+      "package": "neko-agent",
+      "surface": "Unwired ApprovalEngine channel adapters: permission, quality-gate, and plan-review adapter wrappers plus adapter-only tests",
+      "kind": "confirmed-dead-code",
+      "semanticClass": "delete-now",
+      "status": "removed",
+      "owner": "neko-agent-approval",
+      "replacement": "Current AgentSession._resolveToolConfirmation() permission approval path, core ApprovalEngine, and strategy packs. Quality review remains evidence/tool driven until a real pipeline gate is reintroduced.",
+      "removeAfter": "Removed after repo scan showed the adapter factories were only exported from approval/index.ts and used by their own tests; current production permission approval is in AgentSession and no pipeline qualityGate or plan-review caller exists.",
+      "tests": [
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/approval/__tests__/approval-engine.test.ts packages/agent/src/approval/__tests__/preferences-strategy-pack.test.ts",
+        "rg -n \"createPermissionApprovalAdapter|PermissionApprovalAdapterDeps|permission-approval-adapter|createQualityGateApprovalAdapter|QualityGateApprovalAdapterDeps|quality-gate-approval-adapter|verdictFromReport|DEFAULT_QUALITY_GATE_THRESHOLDS|createPlanReviewApprovalAdapter|PlanReviewApprovalAdapterDeps|plan-review-approval-adapter\" packages/neko-agent/packages/agent/src packages/neko-agent/packages/extension/src docs/architecture"
+      ],
+      "notes": "This is not a runtime fallback removal. It deletes uncalled bridge wrappers after the current approval path was verified in AgentSession."
+    }
+  ]
+}

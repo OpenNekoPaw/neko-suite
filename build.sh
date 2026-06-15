@@ -1,8 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Neko Suite Build Script
 # Uses Turborepo for caching + parallel builds
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🔨 Building Neko Suite..."
 
@@ -10,29 +12,25 @@ echo "🔨 Building Neko Suite..."
 # Extension classification
 # =============================================================================
 
-# Release-ready extensions
-RELEASE_PACKAGES=(
-  "neko-engine"
-  "neko-tools"
-  "neko-preview"
-  "neko-cut"
-  "neko-canvas"
-  "neko-agent"
-  "neko-story"
-  "neko-sketch"
-  "neko-puppet"
-  "neko-audio"
-  "neko-assets"
-  "neko-auth"
-  "neko-market"
-  "neko-dashboard"
-)
+read_package_group() {
+  node "$SCRIPT_DIR/scripts/read-package-group.mjs" "$1"
+}
 
-# Development-only extensions
-DEV_ONLY_PACKAGES=(
-  "neko-live"
-  "neko-model"
-)
+read_package_group_into() {
+  local array_name="$1"
+  local group_path="$2"
+  local item
+  local group_output
+
+  eval "$array_name=()"
+  group_output="$(read_package_group "$group_path")"
+  while IFS= read -r item; do
+    [ -n "$item" ] && eval "$array_name+=(\"\$item\")"
+  done <<< "$group_output"
+}
+
+read_package_group_into RELEASE_PACKAGES packages.buildRelease
+read_package_group_into DEV_ONLY_PACKAGES packages.devOnly
 
 # =============================================================================
 # Parse arguments
@@ -120,6 +118,8 @@ package_list() {
 main() {
   local filters=""
   local packages=()
+
+  cd "$SCRIPT_DIR"
 
   if [ -n "$BUILD_PACKAGE" ]; then
     # Single package

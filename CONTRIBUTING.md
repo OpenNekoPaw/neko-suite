@@ -60,37 +60,26 @@ cd ../../../..
 # 5. Full TypeScript build
 pnpm build
 
-# 6. Install to VS Code (dev mode)
-./install.sh
+# 6. Build VSIX artifacts for local installation or distribution
+./build.sh --all
 ```
 
-### Selective Installation (Recommended)
+### VSIX Installation
 
-Neko Suite supports installing subsets of extensions by scenario, without installing everything at once:
+The repository builds and packages VSIX artifacts. Installing those artifacts is handled by VS Code or the user environment:
 
 ```bash
-# Scenario packs (automatically include core infrastructure)
-./install.sh --pack video     # AIGC Video: core + cut + canvas + story (10 extensions)
-./install.sh --pack 2d        # 2D Creation: core + sketch (8 extensions)
-./install.sh --pack audio     # Audio Editing: core + audio (8 extensions)
+# Build one extension VSIX
+./build.sh --package neko-cut
 
-# Stacking packs
-./install.sh --pack video --pack 2d   # Video + 2D (shared extensions not duplicated)
+# Build all release-ready VSIX artifacts
+./build.sh --all
 
-# Full installation (release-ready)
-./install.sh --all            # All release-ready extensions
-
-# Dev mode (includes unfinished modules)
-./install.sh --dev            # Includes neko-live, neko-model
+# Install a generated VSIX with the VS Code CLI
+code --install-extension neko-cut-*.vsix
 ```
 
-| Pack | Included Extensions | Use Case |
-|------|--------------------|----------|
-| **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | Infrastructure + AI (auto-dependency) |
-| **neko-suite-video** | core + cut + canvas + story | Assets -> Script -> Storyboard -> Video |
-| **neko-suite-2d** | core + sketch | Painting + Puppet + AI-assisted |
-| **neko-suite-audio** | core + audio | Waveform editing + Effect chains |
-| **neko-suite** | All | Full-stack creation |
+You can also use VS Code's "Extensions: Install from VSIX..." command and select the generated `.vsix` file.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for current package and extension boundaries.
 
@@ -310,6 +299,8 @@ pnpm ci:act -- --reuse   # Example: reuse containers while debugging
 ```
 
 `act` is a local preflight, not a replacement for GitHub Actions. The `Rust Tests` job uses `macos-latest` in CI, so run `pnpm ci:local:rust` locally and treat GitHub-hosted runners as the final signal.
+
+Build, local CI, and TS VSIX release flows share extension package groups from `scripts/package-groups.json`. When adding or changing releasable extensions, dev-only extensions, or TS VSIX package lists, update that file first and then run the relevant scripts. This avoids duplicating package lists across `build.sh`, `ci.sh`, and GitHub Actions.
 
 For integration smoke checks:
 

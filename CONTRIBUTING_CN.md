@@ -58,37 +58,26 @@ cd ../../../..
 # 5. 全量 TypeScript 构建
 pnpm build
 
-# 6. 安装到 VS Code（开发模式）
-./install.sh
+# 6. 构建 VSIX（用于本地安装或分发）
+./build.sh --all
 ```
 
-### 按需安装（推荐）
+### VSIX 安装
 
-Neko Suite 支持按场景安装子包，无需全量安装所有扩展：
+仓库只负责构建和打包 VSIX，实际安装动作交给 VS Code 或用户环境：
 
 ```bash
-# 场景子包（自动包含 core 基础设施）
-./install.sh --pack video     # AIGC 视频：core + cut + canvas + story（10 个扩展）
-./install.sh --pack 2d        # 2D 创作：core + sketch（8 个扩展）
-./install.sh --pack audio     # 音频编辑：core + audio（8 个扩展）
+# 构建单个扩展 VSIX
+./build.sh --package neko-cut
 
-# 叠加安装
-./install.sh --pack video --pack 2d   # 视频 + 2D（共享扩展不重复）
+# 构建全部 release-ready VSIX
+./build.sh --all
 
-# 全量安装（release-ready）
-./install.sh --all            # 全部 release-ready 扩展
-
-# 开发模式（含未完成模块）
-./install.sh --dev            # 包含 neko-live, neko-model
+# 使用 VS Code CLI 安装生成的 VSIX
+code --install-extension neko-cut-*.vsix
 ```
 
-| 子包 | 包含扩展 | 适用场景 |
-|------|---------|---------|
-| **neko-suite-core** | engine + tools + preview + assets + auth + agent + market | 基础设施 + AI（自动依赖） |
-| **neko-suite-video** | core + cut + canvas + story | 素材→剧本→分镜→视频 |
-| **neko-suite-2d** | core + sketch | 绘画 + Puppet + AI 辅助 |
-| **neko-suite-audio** | core + audio | 波形编辑 + 效果链 |
-| **neko-suite** | 全部 | 全栈创作 |
+也可以在 VS Code 中通过 “Extensions: Install from VSIX...” 选择生成的 `.vsix` 文件安装。
 
 当前包和扩展边界见 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md)。
 
@@ -308,6 +297,8 @@ pnpm ci:act -- --reuse   # 示例：复用容器加速调试
 ```
 
 `act` 只是本地预检，不替代 GitHub Actions。`Rust Tests` 在 CI 使用 `macos-latest`，本地仍优先运行 `pnpm ci:local:rust`，最终结果以 GitHub runner 为准。
+
+构建、本地 CI 和 TS VSIX 发布共享扩展包分组配置：`scripts/package-groups.json`。新增或调整可发布扩展、dev-only 扩展或 TS 扩展发布清单时，优先更新这个文件，再运行对应脚本做验证，避免在 `build.sh`、`ci.sh` 和 GitHub Actions 中重复维护包列表。
 
 需要做集成 smoke 时运行：
 

@@ -93,11 +93,11 @@ describe('ConversationMessageHandler', () => {
 
   it('waits for a running agent to stop before posting cancellation', async () => {
     const dispose = vi.fn();
-    let stopListener: (() => void) | undefined;
+    let runnerEventListener: ((event: { readonly type: 'stop' }) => void) | undefined;
     const runningAgent = {
       isRunning: vi.fn().mockReturnValue(true),
-      onDidStop: vi.fn((listener: () => void) => {
-        stopListener = listener;
+      onDidRunnerEvent: vi.fn((listener: (event: { readonly type: 'stop' }) => void) => {
+        runnerEventListener = listener;
         return { dispose };
       }),
     };
@@ -108,7 +108,7 @@ describe('ConversationMessageHandler', () => {
     expect(agentManager.cancel).toHaveBeenCalledWith('conv-a');
     expect(webview.postMessage).not.toHaveBeenCalled();
 
-    stopListener?.();
+    runnerEventListener?.({ type: 'stop' });
 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(webview.postMessage).toHaveBeenCalledWith({

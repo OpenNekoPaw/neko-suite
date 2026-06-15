@@ -1,26 +1,13 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 
+import { readPackageGroup } from './read-package-group.mjs';
+
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
-const prebuilds = [
-  ['--filter', '@neko/webview', 'run', 'build'],
-];
+const prebuilds = [['--filter', '@neko/webview', 'run', 'build']];
 
-const extensionPackages = [
-  'neko-tools',
-  'neko-preview',
-  'neko-cut',
-  'neko-canvas',
-  'neko-agent',
-  'neko-story',
-  'neko-sketch',
-  'neko-puppet',
-  'neko-audio',
-  'neko-assets',
-  'neko-auth',
-  'neko-market',
-];
+const extensionPackages = readPackageGroup('packages.tsExtensions');
 
 function run(args) {
   console.log(`\n$ pnpm ${args.join(' ')}`);

@@ -9,15 +9,22 @@
 - 影响多个领域或多个包的 ADR。
 - 全局质量门禁、安全边界、依赖方向和运行时策略。
 
+## 当前核心文档
+
+| 文档                                                                   | 内容                                                               |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
+| [`package-boundaries.md`](package-boundaries.md)                       | 子包边界、UI 层、公共代码、Extension/Webview/Engine 约束和验证命令 |
+
 ## 不放入本目录
 
-| 内容 | 应放位置 |
-|------|----------|
-| 单个领域内部架构 | `docs/domains/<domain>/architecture.md` |
-| 竞品、市场、技术调研 | `docs/research/` |
-| 当前 gap、迁移进度、健康度快照 | `docs/status/` |
-| 尚未稳定的开发变更 | `openspec/changes/` |
-| 单包实现细节 | `packages/<pkg>/docs/` |
+| 内容                           | 应放位置                                |
+| ------------------------------ | --------------------------------------- |
+| 单个领域内部架构               | `docs/domains/<domain>/architecture.md` |
+| 竞品、市场、技术调研           | `docs/research/`                        |
+| 当前 gap、迁移进度、健康度快照 | `docs/status/`                          |
+| 尚未稳定的开发变更             | `openspec/changes/`                     |
+| 单包实现细节                   | `packages/<pkg>/docs/`                  |
 
 ## 写作要求
 

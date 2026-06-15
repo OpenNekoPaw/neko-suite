@@ -1,0 +1,36 @@
+{
+  "extensionPack": "neko-suite",
+  "packages": {
+    "buildRelease": [
+      "neko-engine",
+      "neko-tools",
+      "neko-preview",
+      "neko-cut",
+      "neko-canvas",
+      "neko-agent",
+      "neko-story",
+      "neko-sketch",
+      "neko-puppet",
+      "neko-audio",
+      "neko-assets",
+      "neko-auth",
+      "neko-market",
+      "neko-dashboard"
+    ],
+    "devOnly": ["neko-live", "neko-model"],
+    "tsExtensions": [
+      "neko-tools",
+      "neko-preview",
+      "neko-cut",
+      "neko-canvas",
+      "neko-agent",
+      "neko-story",
+      "neko-sketch",
+      "neko-puppet",
+      "neko-audio",
+      "neko-assets",
+      "neko-auth",
+      "neko-market"
+    ]
+  }
+}
