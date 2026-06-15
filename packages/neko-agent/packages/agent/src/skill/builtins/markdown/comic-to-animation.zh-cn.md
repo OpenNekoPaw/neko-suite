@@ -6,17 +6,24 @@
 
 ## 工作流指引
 
-1. 如果还没有已校验分镜，先激活 `comic-to-storyboard`。
-2. 如果已有包含 `domainKind: "StoryboardTable"` 的 `CompositeArtifact`，先校验它；除非诊断要求修复，不要重写分镜。
-3. 长篇漫画/文档/视频/音频需要重新分析前，若存在稳定 source ref 和 range，先调用 `QuerySemanticCoverage`。fresh matched ranges 作为上下文复用，只对 missing 或 stale 范围继续调用工具分析。
-4. 如果没有稳定 source ref，继续正常工具分析，并写明该输入无法复用语义覆盖。
-5. 准备动画时，必须有或派生一个可审阅的 `comic-shot-asset-prep` 投影，其底层是 `ShotImagePrepPlan`。
-6. 派生或更新 `ShotImagePrepPlan` 前，必须审计每个漫画 source image/page：图片方向、分格边界、一页到多 shot 的映射、文字/音效字清理、缺失背景或边缘、inpaint 补全、outpaint 扩图、黑白转彩色、放大和风格统一。
-7. 批量图像准备、页面/分格切分、旋转、上色、去字、inpaint/outpaint、视频生成、TTS、破坏性 Cut 修改或导出前必须请求用户审批。
-8. 只有存在 host 已解析的 source image URI/base64 时，才把源图绑定编辑路由到 `TransformImage`；stable ref 在 host IO 解析前只是 lineage metadata。
-9. 新关键帧或重构关键帧走 `GenerateImage`，并尽量携带 source refs、角色 refs、场景 refs 和风格 refs。
-10. 只有关键帧/源图引用来自真实 generated asset 或 host 已解析 image-to-video 输入时，才调用 `GenerateVideo` 生成动画片段。
-11. 只有结构化 payload 校验通过且目标能力存在时，才发送到 Canvas 或 Cut。
+1. 先判断意图：
+   - 仅内容理解（描述、OCR、分格顺序、人物/场景分析、质量诊断）是内容分析，不是 comic-to-animation 生产运行。
+   - 仅分镜（例如“生成/制作分镜表”）应停在 `comic-to-storyboard`，除非用户同时要求动画、视频、批量处理、Canvas/Cut 交付、素材准备或导出。
+   - 动画/视频/批量生产请求才激活本 Skill，并开始生产编排。
+2. 本 Skill 为生产激活时，先创建用户可见的 `ProductionRun` / task graph，再执行生成类工作。默认任务应稳定且可恢复，例如：读取来源页、分析分格/OCR、草拟分镜、审阅分镜、派生镜头图像准备、审批图像准备、执行已批准图像准备、生成动画 overlay、审批视频生成、执行视频生成、装配 Cut/导出。
+3. 默认只自动运行低风险、只读或产出草稿的任务：来源读取、语义覆盖检查、OCR/分格分析、分镜草稿、图像准备计划派生和动画 overlay 草稿。创作真值确认、实体身份合并、破坏性或高成本媒体变换、视频/TTS 生成、Cut 替换和导出必须停在审批门。
+4. 如果还没有已校验分镜，先激活 `comic-to-storyboard`。
+5. 如果已有包含 `domainKind: "StoryboardTable"` 的 `CompositeArtifact`，先校验它；除非诊断要求修复，不要重写分镜。
+6. 不要在每个生产步骤重新生成 StoryboardTable。StoryboardTable 是创作事实来源；普通图像准备、生成、重试和执行结果应按稳定 `shotId` 更新 `ShotImagePrepPlan`、媒体引用、任务状态或执行总结。只有分格检测、OCR/对白含义、shot 拆分/合并/顺序、人物身份或剧情理解变化时，才修订 StoryboardTable。
+7. 长篇漫画/文档/视频/音频需要重新分析前，若存在稳定 source ref 和 range，先调用 `QuerySemanticCoverage`。fresh matched ranges 作为上下文复用，只对 missing 或 stale 范围继续调用工具分析。
+8. 如果没有稳定 source ref，继续正常工具分析，并写明该输入无法复用语义覆盖。
+9. 准备动画时，必须有或派生一个可审阅的 `comic-shot-asset-prep` 投影，其底层是 `ShotImagePrepPlan`。
+10. 派生或更新 `ShotImagePrepPlan` 前，必须审计每个漫画 source image/page：图片方向、分格边界、一页到多 shot 的映射、文字/音效字清理、缺失背景或边缘、inpaint 补全、outpaint 扩图、黑白转彩色、放大和风格统一。
+11. 批量图像准备、页面/分格切分、旋转、上色、去字、inpaint/outpaint、视频生成、TTS、破坏性 Cut 修改或导出前必须请求用户审批。
+12. 只有存在 host 已解析的 source image URI/base64 时，才把源图绑定编辑路由到 `TransformImage`；stable ref 在 host IO 解析前只是 lineage metadata。
+13. 新关键帧或重构关键帧走 `GenerateImage`，并尽量携带 source refs、角色 refs、场景 refs 和风格 refs。
+14. 只有关键帧/源图引用来自真实 generated asset 或 host 已解析 image-to-video 输入时，才调用 `GenerateVideo` 生成动画片段。
+15. 只有结构化 payload 校验通过且目标能力存在时，才发送到 Canvas 或 Cut。
 
 ## 结构化产物规则
 

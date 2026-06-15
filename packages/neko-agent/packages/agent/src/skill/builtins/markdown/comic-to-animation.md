@@ -6,17 +6,24 @@ This is not a hardcoded pipeline. Choose the smallest next skill or tool based o
 
 ## Workflow Guidance
 
-1. If no validated storyboard exists, activate `comic-to-storyboard` first.
-2. If a `CompositeArtifact` with a `domainKind: "StoryboardTable"` block already exists, validate it and do not rewrite it unless diagnostics require repair.
-3. Before long comic/document/video/audio re-analysis, call `QuerySemanticCoverage` when stable source refs and ranges are available. Reuse fresh matched ranges as context and schedule tools only for missing or stale ranges.
-4. If no stable source ref exists, continue with normal tool analysis and include an explicit diagnostic that semantic coverage reuse was unavailable.
-5. For animation readiness, require or derive a reviewable `comic-shot-asset-prep` projection backed by `ShotImagePrepPlan` records.
-6. Before deriving or updating `ShotImagePrepPlan` records, audit each source comic image/page for orientation, panel boundaries, one-page-to-many-shot mapping, text/SFX removal, missing background or margins, inpaint completion, outpaint expansion, monochrome-to-color needs, upscaling, and style normalization.
-7. Ask for approval before bulk image prep, page/panel splitting, rotation, colorization, text removal, inpaint/outpaint, video generation, TTS, destructive Cut changes, or export.
-8. Route source-bound panel edits through `TransformImage` only when a host-resolved source image URI/base64 is available; stable refs alone are lineage metadata until host IO resolves them.
-9. Route new or recomposed keyframes through `GenerateImage` with source refs, character refs, scene refs, and style refs when available.
-10. Route animation clips through `GenerateVideo` only after the keyframe/source image refs are real generated assets or host-resolved image-to-video inputs.
-11. Send to Canvas or Cut only after the structured payload validates and the target capability exists.
+1. Route intent first:
+   - Content understanding only (describe, OCR, panel order, character/scene analysis, quality diagnostics) is content analysis, not a comic-to-animation production run.
+   - Storyboard only (for example "make/generate a storyboard table") should stop at `comic-to-storyboard` unless the user also asks for animation, video, batch processing, Canvas/Cut delivery, asset preparation, or export.
+   - Animation/video/batch production requests activate this skill and start production orchestration.
+2. When this skill is activated for production, create a user-visible `ProductionRun` / task graph before executing generation work. Default tasks should be stable and resumable, for example: read source pages, analyze panels/OCR, draft storyboard, review storyboard, derive shot image prep, approve image prep, run approved image prep, generate animation overlay, approve video generation, run video generation, assemble Cut/export.
+3. Auto-run only low-risk, read-only, or draft-producing tasks: source reading, semantic coverage checks, OCR/panel analysis, storyboard draft, image-prep plan derivation, and animation overlay draft. Pause at approval gates for creative-truth acceptance, entity identity merges, destructive or costly media transforms, video/TTS generation, Cut replacement, and export.
+4. If no validated storyboard exists, activate `comic-to-storyboard` first.
+5. If a `CompositeArtifact` with a `domainKind: "StoryboardTable"` block already exists, validate it and do not rewrite it unless diagnostics require repair.
+6. Do not regenerate StoryboardTable at every production step. StoryboardTable is the creative source of truth; ordinary image prep, generation, retry, and execution results should update `ShotImagePrepPlan`, media refs, task state, or execution summaries keyed by stable `shotId`. Revise StoryboardTable only when panel detection, OCR/dialogue meaning, shot split/merge/order, character identity, or story understanding changes.
+7. Before long comic/document/video/audio re-analysis, call `QuerySemanticCoverage` when stable source refs and ranges are available. Reuse fresh matched ranges as context and schedule tools only for missing or stale ranges.
+8. If no stable source ref exists, continue with normal tool analysis and include an explicit diagnostic that semantic coverage reuse was unavailable.
+9. For animation readiness, require or derive a reviewable `comic-shot-asset-prep` projection backed by `ShotImagePrepPlan` records.
+10. Before deriving or updating `ShotImagePrepPlan` records, audit each source comic image/page for orientation, panel boundaries, one-page-to-many-shot mapping, text/SFX removal, missing background or margins, inpaint completion, outpaint expansion, monochrome-to-color needs, upscaling, and style normalization.
+11. Ask for approval before bulk image prep, page/panel splitting, rotation, colorization, text removal, inpaint/outpaint, video generation, TTS, destructive Cut changes, or export.
+12. Route source-bound panel edits through `TransformImage` only when a host-resolved source image URI/base64 is available; stable refs alone are lineage metadata until host IO resolves them.
+13. Route new or recomposed keyframes through `GenerateImage` with source refs, character refs, scene refs, and style refs when available.
+14. Route animation clips through `GenerateVideo` only after the keyframe/source image refs are real generated assets or host-resolved image-to-video inputs.
+15. Send to Canvas or Cut only after the structured payload validates and the target capability exists.
 
 ## Structured Artifact Rules
 

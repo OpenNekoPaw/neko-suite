@@ -2,6 +2,8 @@
 
 将已校验的、包含 StoryboardTable domain block 的 CompositeArtifact 转换为 AnimationPlan overlay。保留分镜里的稳定 scene/shot id；不要复制分镜行，也不要重写创作镜头内容。
 
+只有在已存在校验通过的 StoryboardTable，且用户需要动画/视频规划、运动/镜头/生成提示词意图或生产准备时，才使用本 Skill。不要为了源漫画/EPUB/PDF 内容分析或创建初始分镜而激活本 Skill。
+
 ## 结构化产物规则
 
 - Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。

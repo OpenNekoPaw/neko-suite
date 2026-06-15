@@ -59,7 +59,7 @@ const localizedExportVideoPackageContent = {
 export const mediaToVideoSkill: Skill = {
   name: 'media-to-video',
   description:
-    'Coordinate media-to-video work by choosing focused media skills, reading source evidence, producing structured artifacts, and handing off to generation, Canvas, Cut, or export when appropriate.',
+    'Coordinate explicit media-to-video production by choosing focused media skills, producing structured storyboard/plan artifacts, and handing off to generation, Canvas, Cut, or export when appropriate; not for content-only document or comic analysis.',
   content: mediaToVideoContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -133,7 +133,7 @@ export const mediaToVideoSkill: Skill = {
 export const comicToAnimationSkill: Skill = {
   name: 'comic-to-animation',
   description:
-    'Focused comic-to-animation entry point that coordinates validated comic storyboards, shot image prep, image/video generation approvals, Canvas review, Cut assembly, and export handoff without owning a hardcoded route.',
+    'Focused comic-to-animation production entry point for comic/storyboard-to-animation or video requests. Coordinates validated comic storyboards, shot image prep, image/video generation approvals, Canvas review, Cut assembly, and export handoff; not for content-only EPUB/comic analysis.',
   content: comicToAnimationContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -257,7 +257,7 @@ export const imageToShotSkill: Skill = {
 export const storyboardToAnimationPlanSkill: Skill = {
   name: 'storyboard-to-animation-plan',
   description:
-    'Convert CompositeArtifact storyboard domain blocks into storyboard plan overlays with motion, camera, generation, and continuity guidance.',
+    'Convert existing CompositeArtifact StoryboardTable domain blocks into animation plan overlays with motion, camera, generation, and continuity guidance when the user asks for animation/video planning.',
   content: storyboardToAnimationPlanContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,

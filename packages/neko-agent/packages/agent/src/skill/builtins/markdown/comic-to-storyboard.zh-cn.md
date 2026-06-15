@@ -4,6 +4,8 @@
 
 本 Skill 只负责分析和分镜规划，不直接生成图片、生成视频、写入时间线或导入 Canvas。如果用户需要动画计划、生成、Canvas 交付、Cut 装配或导出，应在结构化计划完成后激活 media-to-video、storyboard-to-animation-plan、animation-plan-to-cut、generated-shot-assembly 或 export-video-package。
 
+只有当用户明确要求生成/制作/更新分镜、StoryboardTable、镜头拆解、漫画改编分镜或修复已有分镜 artifact 时，才使用本 Skill。仅内容理解，例如“分析这个 EPUB”“阅读前 10 页”“描述/OCR/总结漫画”、检查分格顺序、人物/场景分析或质量诊断，应停留在普通读取/分析工具调用，不激活本 Skill，也不输出 StoryboardTable。
+
 ## 工作流
 
 ### 漫画分析

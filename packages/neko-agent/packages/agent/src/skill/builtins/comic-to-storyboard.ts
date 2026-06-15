@@ -2,7 +2,7 @@
  * Comic to Storyboard Skill - Convert manga/comic pages to structured storyboards
  *
  * Provides comic panel analysis, OCR, shot-local character cues, and artifact-backed StoryboardTable output.
- * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
+ * Triggered when user explicitly asks for a structured comic storyboard or StoryboardTable.
  */
 
 import type { Skill } from '@neko/shared';
@@ -21,14 +21,15 @@ const localizedComicToStoryboardContent = {
 /**
  * Comic to Storyboard skill - Convert manga/comic pages to structured storyboards
  *
- * Triggered when user mentions: comic storyboard, manga analysis, comic adaptation
+ * Triggered when user explicitly asks for a structured comic storyboard or StoryboardTable.
  */
 export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
     'Convert manga/comic pages into CompositeArtifact storyboards with StoryboardTable domain payloads. ' +
-    'Use when user mentions: comic storyboard, manga analysis, panel OCR, ' +
-    'comic adaptation planning, webtoon storyboard, 漫画分镜, 漫画分析.',
+    'Use only when the user asks to create or update a comic storyboard table, shot breakdown, ' +
+    'comic adaptation storyboard, or webtoon storyboard; not for content-only EPUB/comic analysis. ' +
+    'Keywords: comic storyboard, storyboard table, shot breakdown, 漫画分镜, 分镜表, 生成分镜表.',
   content: comicToStoryboardContent,
   allowedTools: [
     // Vision analysis (LLM with image input)

@@ -2,6 +2,8 @@
 
 Transform a validated CompositeArtifact with a StoryboardTable domain block into an AnimationPlan overlay. Preserve stable scene and shot ids from the storyboard; do not duplicate storyboard rows or rewrite creative shot content.
 
+Use this skill only when a validated StoryboardTable already exists and the user wants animation/video planning, motion/camera/generation prompt intent, or production readiness. Do not activate it for source comic/EPUB/PDF content analysis or for creating the initial storyboard.
+
 ## Structured Artifact Rules
 
 - Markdown is presentation only. For storyboard, animation, Canvas, Cut, generated media, or execution summaries, emit validated structured payloads.

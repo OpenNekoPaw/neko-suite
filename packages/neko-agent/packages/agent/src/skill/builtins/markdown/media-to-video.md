@@ -5,14 +5,18 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 ## Workflow Guidance
 
 1. Inspect the user's input and determine the source modality: comic, document, image, image sequence, storyboard, animation plan, or generated media.
-2. Use GetContext to inspect available related skills. Activate a focused skill when its detailed guidance is needed.
-3. For comic EPUB/PDF/CBZ/CBR pages, prefer comic-to-storyboard first.
-4. For still images or image sequences, prefer image-to-shot.
-5. For an existing CompositeArtifact with a StoryboardTable domain block, prefer storyboard-to-animation-plan before generation or Cut.
-6. Treat AnimationPlan as a StoryboardTable overlay keyed by stable `shotId`, not as a duplicate storyboard table. If shot ids are missing or unstable, stop and request/fix stable ids before planning generation.
-7. For an existing animation plan overlay and a Cut target, prefer animation-plan-to-cut.
-8. For already generated shots, prefer generated-shot-assembly and export-video-package as needed.
-9. Stop after planning when generation providers, target plugins, approvals, or safe media refs are unavailable.
+2. Route intent before activating production skills:
+   - Content understanding only (describe, OCR, summarize, extract text, panel order, character/scene analysis, quality diagnostics, "read/analyze the first N pages") should stay in normal read/analysis tool use and should not activate media-to-video, comic-to-animation, comic-to-storyboard, or storyboard-to-animation-plan.
+   - Storyboard-only requests activate comic-to-storyboard and stop after the StoryboardTable unless the user also asks for animation, video, generated media, Canvas/Cut handoff, or export.
+   - Explicit video/animation/generation/export requests activate this coordinator or a focused production skill.
+3. Use GetContext to inspect available related skills. Activate a focused skill when its detailed guidance is needed.
+4. For comic EPUB/PDF/CBZ/CBR pages, prefer comic-to-storyboard first only when a storyboard artifact is requested; prefer comic-to-animation when the user explicitly requests animation/video production.
+5. For still images or image sequences, prefer image-to-shot when the user asks for shot/storyboard planning or media generation.
+6. For an existing CompositeArtifact with a StoryboardTable domain block, prefer storyboard-to-animation-plan before generation or Cut.
+7. Treat AnimationPlan as a StoryboardTable overlay keyed by stable `shotId`, not as a duplicate storyboard table. If shot ids are missing or unstable, stop and request/fix stable ids before planning generation.
+8. For an existing animation plan overlay and a Cut target, prefer animation-plan-to-cut.
+9. For already generated shots, prefer generated-shot-assembly and export-video-package as needed.
+10. Stop after planning when generation providers, target plugins, approvals, or safe media refs are unavailable.
 
 ## Structured Artifact Rules
 
