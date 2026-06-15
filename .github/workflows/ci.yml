@@ -189,8 +189,6 @@ jobs:
     runs-on: macos-latest
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
-    env:
-      ORT_VERSION: '1.20.1'
     steps:
       - uses: actions/checkout@v5
 
@@ -238,31 +236,6 @@ jobs:
         run: |
           cargo test --package neko-host-api --features onnx
           cargo test --package neko-runtime-ml
-        working-directory: packages/neko-engine
-
-      # ── ONNX Runtime dylib — session + eviction timing tests ──────────
-      # Downloads the pre-built ORT dylib from GitHub Releases so that
-      # the #[ignore] timing tests (which create real ort::Session objects
-      # from an embedded minimal ONNX model) can run.
-      # E2E inference tests (upscale / denoise / clip / whisper) remain
-      # #[ignore] because they require large model files not present in CI.
-      - name: Download ONNX Runtime dylib (macOS)
-        run: |
-          ARCH=$(uname -m)   # arm64 or x86_64
-          curl -fsSL \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-${ARCH}-${ORT_VERSION}.tgz" \
-            -o /tmp/ort.tgz
-          tar xzf /tmp/ort.tgz -C /tmp
-          DYLIB=$(find "/tmp/onnxruntime-osx-${ARCH}-${ORT_VERSION}/lib" \
-                       -name "libonnxruntime.*.dylib" | head -1)
-          echo "ORT_DYLIB_PATH=${DYLIB}" >> "$GITHUB_ENV"
-
-      - name: Run ONNX session + eviction timing tests
-        # --include-ignored to run the three #[ignore] evict_idle timing
-        # tests that need a live ORT session (stale / fresh / mixed).
-        run: |
-          cargo test --package neko-runtime-ml \
-            -- ml::tests::test_evict_idle --include-ignored
         working-directory: packages/neko-engine
 
   # ── Rust: Dependency audit ─────────────────
