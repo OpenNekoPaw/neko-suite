@@ -22,22 +22,22 @@ The architecture is intentionally contract-first:
 
 Neko Suite has three connected product layers:
 
-| Layer | Responsibility |
-|-------|----------------|
-| Creative IDE | Story, Canvas, Cut, Preview, Model, Sketch, Puppet, Audio, Assets, Market, Dashboard, Search |
-| Creative Agent | Intent understanding, Skill activation, capability discovery, planning, tool execution, rich media delivery, perception, memory |
-| Interactive Engine | Scene, puppet, media, audio, device, ML, preview, and future stage runtimes powered by the Rust sidecar |
+| Layer              | Responsibility                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Creative IDE       | Story, Canvas, Cut, Preview, Model, Sketch, Puppet, Audio, Assets, Market, Dashboard, Search                                    |
+| Creative Agent     | Intent understanding, Skill activation, capability discovery, planning, tool execution, rich media delivery, perception, memory |
+| Interactive Engine | Scene, puppet, media, audio, device, ML, preview, and future stage runtimes powered by the Rust sidecar                         |
 
 ## Workspace Packages
 
-| Group | Packages |
-|-------|----------|
-| Core contracts | `neko-types`, `neko-proto`, `neko-client`, `neko-auth`, `neko-ui` |
-| Engine | `neko-engine` |
-| Agent and grounding | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search` |
-| Creative surfaces | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
-| Assets and distribution | `neko-assets`, `neko-market`, `neko-suite` |
-| Interactive creation | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
+| Group                   | Packages                                                              |
+| ----------------------- | --------------------------------------------------------------------- |
+| Core contracts          | `neko-types`, `neko-proto`, `neko-client`, `neko-auth`, `neko-ui`     |
+| Engine                  | `neko-engine`                                                         |
+| Agent and grounding     | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search`          |
+| Creative surfaces       | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
+| Assets and distribution | `neko-assets`, `neko-market`, `neko-suite`                            |
+| Interactive creation    | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
 
 ## Current Focus
 
@@ -73,25 +73,36 @@ For Rust engine work:
 
 ## Repository Layout
 
-| Path | Purpose |
-|------|---------|
-| `packages/` | Workspace packages and VS Code extensions |
-| `openspec/` | Active and archived OpenSpec changes |
-| `docs/` | Architecture, domain, research, and status documentation |
-| `README.md` / `README_CN.md` | Project entry points |
-| `ARCHITECTURE.md` / `ARCHITECTURE_CN.md` | Current architecture overview |
-| `TODO.md` / `TODO_CN.md` | Active work queue |
-| `ROADMAP.md` / `ROADMAP_CN.md` | Directional product roadmap |
-| `AGENTS.md` / `CONTRIBUTING.md` | Contributor and repository working rules |
+| Path                                     | Purpose                                                  |
+| ---------------------------------------- | -------------------------------------------------------- |
+| `packages/`                              | Workspace packages and VS Code extensions                |
+| `openspec/`                              | Active and archived OpenSpec changes                     |
+| `docs/`                                  | Architecture, domain, research, and status documentation |
+| `quality/`                               | Machine-readable quality gate inputs for scripts and CI  |
+| `README.md` / `README_CN.md`             | Project entry points                                     |
+| `ARCHITECTURE.md` / `ARCHITECTURE_CN.md` | Current architecture overview                            |
+| `TODO.md` / `TODO_CN.md`                 | Active work queue                                        |
+| `ROADMAP.md` / `ROADMAP_CN.md`           | Directional product roadmap                              |
+| `AGENTS.md` / `CONTRIBUTING.md`          | Contributor and repository working rules                 |
 
 ## Documentation
 
-- [Architecture Overview](./ARCHITECTURE.md)
-- [Documentation Index](./docs/README.md)
-- [TODO](./TODO.md)
-- [Roadmap](./ROADMAP.md)
-- [Repository Working Rules](./AGENTS.md)
-- [Contributing Guide](./CONTRIBUTING.md)
+| Need                                                    | Start Here                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------------- |
+| Project positioning, product shape, and quick start     | [README.md](./README.md)                                       |
+| Current system architecture overview                    | [ARCHITECTURE.md](./ARCHITECTURE.md)                           |
+| Full documentation navigation and writing rules         | [docs/README.md](./docs/README.md)                             |
+| System architecture, ADRs, and cross-domain constraints | [docs/architecture/README.md](./docs/architecture/README.md)   |
+| Creative-goal domain documentation                      | [docs/domains/README.md](./docs/domains/README.md)             |
+| Research, competitor analysis, and technical analysis   | [docs/research/README.md](./docs/research/README.md)           |
+| Gap, migration, health, and audit snapshots             | [docs/status/README.md](./docs/status/README.md)               |
+| Active work queue                                       | [TODO.md](./TODO.md)                                           |
+| Active design and implementation changes                | [openspec/](./openspec/)                                       |
+| Directional product roadmap                             | [ROADMAP.md](./ROADMAP.md)                                     |
+| Machine-readable quality gate inputs                    | [quality/README.md](./quality/README.md)                       |
+| Repository working rules and contribution guide         | [AGENTS.md](./AGENTS.md), [CONTRIBUTING.md](./CONTRIBUTING.md) |
+
+Documentation follows single-responsibility ownership: stable system constraints live in `docs/architecture/`, creative domain capabilities live in `docs/domains/<domain>/`, research lives in `docs/research/`, dated status snapshots live in `docs/status/`, in-flight changes live in `openspec/changes/`, and queued work lives in `TODO.md`.
 
 ## Contributing
 

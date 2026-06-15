@@ -100,6 +100,7 @@ Extension 包负责宿主能力，而不是 UI 渲染或媒体权威计算。
 - 通过 `webview.asWebviewUri()` 暴露资源。
 - 通过 typed `postMessage` bridge 与 Webview 通信。
 - 为 Webview 授权 Engine port、stream descriptor、token 或资源访问。
+- 为大型媒体、需要 seek 的资源和不兼容 codec 提供 Engine file access、preview proxy 或 stream descriptor。
 - 调用 `EngineClient` 编排 Engine 操作。
 - 用 `vscode.Disposable` 管理生命周期并显式释放。
 
@@ -108,6 +109,7 @@ Extension 包负责宿主能力，而不是 UI 渲染或媒体权威计算。
 - import React 或 Webview implementation。
 - 直接依赖其他功能扩展的 extension package。
 - 在 Extension Host 中解码/转发高频视频帧、PCM 或 scene delta。
+- 用 `file:`、绝对路径或宽泛 `localResourceRoots` 代替 Engine 授权和 Range 服务。
 - 复制 Rust Engine 已经拥有的媒体、ML、Scene、Puppet、Audio、Device 计算。
 
 历史形态需要注意：`neko-assets/src`、`neko-tools/src` 等仍有根级 extension-ish 代码；新代码优先维持清晰的 `packages/extension` 和 `packages/webview` 分层。
@@ -122,6 +124,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 - 通过共享 wrapper 或局部桥接模块封装 `acquireVsCodeApi`，业务组件不要直接散落调用。
 - 只保存可恢复 UI 状态和项目事实引用，运行时 URI/token/stream handle 只作为短生命周期状态。
 - 通过 `@neko/neko-client` 消费 Extension 授权后的 Engine stream。
+- 对媒体入口遵守 Webview CSP、格式兼容和 Range 限制；不兼容时展示 fallback/diagnostic。
 - 将业务协议定义为类型化 contract，并在 Extension 侧测试 protocol。
 
 不应做：
@@ -129,6 +132,8 @@ Webview 包负责浏览器沙箱内的交互体验。
 - import `vscode`、`node:*`、`fs`、`path` 或 Extension 实现。
 - 绕过 Extension Host 读取工作区文件或扩展资源。
 - 把 Engine 端权威数据结构复制成 Webview 私有事实。
+- 假设任意 `.mp4`、`.m4a`、AAC、Opus、MOV、MKV 或本地文件 URL 都能被 `<video>` / `<audio>` 播放。
+- 依赖 `asWebviewUri(...)` 对大型媒体提供 byte range、seek 或稳定流式读取。
 - 把某个领域特有 UI 直接放进 `@neko/ui`。
 
 ## Engine 层
@@ -145,6 +150,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 - 新 Engine 能力先定义 proto/API/descriptor，再补 client，再接 Extension/Webview。
 - GPU-first 和 zero-copy 是媒体与渲染路径的优先方向；确需 CPU fallback 时要有明确边界和测试。
 - 低延迟交互 Scene stream 优先短 GOP，必要时 GOP=1；不要把 GOP=1 写成所有流的全局规则，因为 Timeline/Puppet/Preview 等路径存在不同编码目标。
+- Engine file access 是大型媒体、container entry、sibling resource 和需要 Range/seek 的源文件访问权威路径。
 - 3D Route A 中 Extension Host 不代理视频帧/PCM，不 relay 高频 scene delta；Webview 消费 Engine canvas/stream/control，authoring panels 编译为 Engine commands。
 
 ## Agent 子包

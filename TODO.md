@@ -2,17 +2,18 @@
 
 > **Lang:** English | [中文](./TODO_CN.md)
 
-This file tracks active client-side work for the current repository. It intentionally avoids completed sprint logs, stale implementation notes, and code-path task lists. Long-term direction lives in [ROADMAP.md](./ROADMAP.md).
+This file tracks the active work queue for the current repository. It intentionally avoids completed sprint logs, stale implementation notes, and code-path task lists; design and acceptance details live in `openspec/changes/`, dated observations live in `docs/status/`, and stable constraints live in `docs/architecture/` or `docs/domains/`. Long-term direction lives in [ROADMAP.md](./ROADMAP.md).
 
 ## Active Themes
 
-| Theme | Goal |
-|-------|------|
-| Project graph | Unify assets, entities, generated media, search, Dashboard, and Agent memory |
-| Agent capability model | Let every creative package expose stable capability contracts |
-| Engine-first media authority | Keep binary file access, preview, perception, and export under engine-owned paths |
-| Shared Webview UI | Move repeated UI primitives into `neko-ui` without moving domain state out of feature packages |
-| End-to-end smoke | Validate story intent to generated media, timeline assembly, preview, export, and review |
+| Theme                        | Goal                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| Project graph                | Unify assets, entities, generated media, search, Dashboard, and Agent memory                   |
+| Agent capability model       | Let every creative package expose stable capability contracts                                  |
+| Engine-first media authority | Keep binary file access, preview, perception, and export under engine-owned paths              |
+| Shared Webview UI            | Move repeated UI primitives into `neko-ui` without moving domain state out of feature packages |
+| End-to-end smoke             | Validate story intent to generated media, timeline assembly, preview, export, and review       |
+| Documentation governance     | Keep README, Architecture, docs, TODO, Roadmap, and OpenSpec separated by responsibility       |
 
 ## Core Platform
 
@@ -78,7 +79,12 @@ Use the smallest validation command that covers the change:
 
 ## Documentation Hygiene
 
-- [ ] Keep architecture docs limited to decisions, boundaries, invariants, risks, and consequences.
-- [ ] Move implementation tasks to OpenSpec or this TODO only when they are still active.
+- [ ] When adding a system-level design document, update `docs/architecture/README.md` and `docs/README.md`.
+- [ ] When adding creative domain documentation, update `docs/domains/README.md`, the domain `README.md`, and the required `architecture.md`.
+- [ ] Keep architecture docs limited to decisions, boundaries, invariants, risks, and consequences; move active implementation tasks to OpenSpec or this TODO.
+- [ ] Keep gap, migration, health, and audit docs as dated snapshots, then promote stable conclusions to `docs/architecture/` or `docs/domains/`.
+- [ ] Put research, competitor analysis, and technical spikes in `docs/research/` with sources, dates, or uncertainty notes.
+- [ ] Put quality gate data consumed by scripts and CI in `quality/`; keep explanatory policy in architecture docs.
 - [ ] Delete or rewrite stale examples instead of preserving them as historical contract.
-- [ ] Keep README, Architecture, TODO, and Roadmap synchronized after architecture cleanup.
+- [ ] When documentation directory policy changes, synchronize README, Architecture, TODO, Roadmap, and `AGENTS.md`.
+- [ ] Run Markdown formatting, whitespace, and local link checks for documentation changes.

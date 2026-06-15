@@ -20,22 +20,22 @@ Neko Suite 是一个面向 AI 原生创作工作流的 monorepo。它把剧本�
 
 ## 产品结构
 
-| 层级 | 职责 |
-|------|------|
-| 创作 IDE | Story、Canvas、Cut、Preview、Model、Sketch、Puppet、Audio、Assets、Market、Dashboard、Search |
-| 创作 Agent | 意图理解、Skill 激活、能力发现、规划、工具执行、富媒体投递、感知、记忆 |
-| 互动引擎 | Rust sidecar 驱动的 scene、puppet、media、audio、device、ML、preview 和未来 stage runtime |
+| 层级       | 职责                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| 创作 IDE   | Story、Canvas、Cut、Preview、Model、Sketch、Puppet、Audio、Assets、Market、Dashboard、Search |
+| 创作 Agent | 意图理解、Skill 激活、能力发现、规划、工具执行、富媒体投递、感知、记忆                       |
+| 互动引擎   | Rust sidecar 驱动的 scene、puppet、media、audio、device、ML、preview 和未来 stage runtime    |
 
 ## Workspace 包
 
-| 分组 | 包 |
-|------|----|
-| 核心契约 | `neko-types`, `neko-proto`, `neko-client`, `neko-auth`, `neko-ui` |
-| 引擎 | `neko-engine` |
-| Agent 与项目接地 | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search` |
-| 创作界面 | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
-| 资产与分发 | `neko-assets`, `neko-market`, `neko-suite` |
-| 互动创作 | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
+| 分组             | 包                                                                    |
+| ---------------- | --------------------------------------------------------------------- |
+| 核心契约         | `neko-types`, `neko-proto`, `neko-client`, `neko-auth`, `neko-ui`     |
+| 引擎             | `neko-engine`                                                         |
+| Agent 与项目接地 | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search`          |
+| 创作界面         | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
+| 资产与分发       | `neko-assets`, `neko-market`, `neko-suite`                            |
+| 互动创作         | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
 
 ## 当前重点
 
@@ -71,25 +71,36 @@ Rust 引擎相关：
 
 ## 仓库结构
 
-| 路径 | 作用 |
-|------|------|
-| `packages/` | Workspace 包和 VS Code 扩展 |
-| `openspec/` | 活跃和归档的 OpenSpec change |
-| `docs/` | 架构、领域、调研和状态文档入口 |
-| `README.md` / `README_CN.md` | 项目入口 |
-| `ARCHITECTURE.md` / `ARCHITECTURE_CN.md` | 当前架构总览 |
-| `TODO.md` / `TODO_CN.md` | 活跃任务队列 |
-| `ROADMAP.md` / `ROADMAP_CN.md` | 方向性产品路线 |
-| `AGENTS.md` / `CONTRIBUTING_CN.md` | 仓库工作规则与贡献指南 |
+| 路径                                     | 作用                           |
+| ---------------------------------------- | ------------------------------ |
+| `packages/`                              | Workspace 包和 VS Code 扩展    |
+| `openspec/`                              | 活跃和归档的 OpenSpec change   |
+| `docs/`                                  | 架构、领域、调研和状态文档入口 |
+| `quality/`                               | 供脚本和 CI 消费的质量门禁输入 |
+| `README.md` / `README_CN.md`             | 项目入口                       |
+| `ARCHITECTURE.md` / `ARCHITECTURE_CN.md` | 当前架构总览                   |
+| `TODO.md` / `TODO_CN.md`                 | 活跃任务队列                   |
+| `ROADMAP.md` / `ROADMAP_CN.md`           | 方向性产品路线                 |
+| `AGENTS.md` / `CONTRIBUTING_CN.md`       | 仓库工作规则与贡献指南         |
 
 ## 文档
 
-- [架构总览](./ARCHITECTURE_CN.md)
-- [文档索引](./docs/README.md)
-- [TODO](./TODO_CN.md)
-- [路线图](./ROADMAP_CN.md)
-- [仓库工作规则](./AGENTS.md)
-- [贡献指南](./CONTRIBUTING_CN.md)
+| 想了解                       | 入口                                                                 |
+| ---------------------------- | -------------------------------------------------------------------- |
+| 项目定位、产品结构、快速开始 | [README_CN.md](./README_CN.md)                                       |
+| 当前系统架构总览             | [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md)                           |
+| 全量文档导航和写入规则       | [docs/README.md](./docs/README.md)                                   |
+| 系统级架构、ADR、跨领域约束  | [docs/architecture/README.md](./docs/architecture/README.md)         |
+| 面向创作目标的领域文档       | [docs/domains/README.md](./docs/domains/README.md)                   |
+| 调研、竞品和技术分析         | [docs/research/README.md](./docs/research/README.md)                 |
+| Gap、迁移、健康度和审计快照  | [docs/status/README.md](./docs/status/README.md)                     |
+| 活跃任务队列                 | [TODO_CN.md](./TODO_CN.md)                                           |
+| 活跃设计和实现变更           | [openspec/](./openspec/)                                             |
+| 方向性产品路线               | [ROADMAP_CN.md](./ROADMAP_CN.md)                                     |
+| 质量门禁机器输入             | [quality/README.md](./quality/README.md)                             |
+| 仓库工作规则与贡献指南       | [AGENTS.md](./AGENTS.md), [CONTRIBUTING_CN.md](./CONTRIBUTING_CN.md) |
+
+文档写入遵循单一职责：稳定系统约束进入 `docs/architecture/`，创作领域能力进入 `docs/domains/<domain>/`，调研分析进入 `docs/research/`，带日期的状态快照进入 `docs/status/`，开发中的变更进入 `openspec/changes/`，当前排队事项进入 `TODO_CN.md`。
 
 ## 贡献
 

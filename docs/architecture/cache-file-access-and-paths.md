@@ -1,0 +1,292 @@
+# 缓存、文件读写服务与路径变量
+
+更新日期：2026-06-15
+
+本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
+
+## 设计目标
+
+- 让所有创作领域使用一致的路径保存、路径解析、文件读取和缓存投影规则。
+- 区分 source path、stable ref、cache artifact、runtime handle，避免把本机状态写入项目事实。
+- 让 Webview、Agent、Dashboard、Engine、Assets、Documents 等消费者通过 Host 侧服务读取内容，而不是直接扫描文件系统或缓存目录。
+
+## 核心原则
+
+- 持久项目事实只保存 workspace-relative path、`${VAR}/path`、source ref、`ResourceRef`、asset/entity ID 和 provenance。
+- 绝对路径只允许出现在本机设置、Host adapter、短生命周期运行态，或明确标注的导入来源记录中。
+- Webview 不直接读取文件系统，不扫描 `.neko/.cache/`，不保存 `asWebviewUri(...)` 结果。
+- 文件读写属于 Extension Host、平台层或 Engine 受控接口；Webview 和纯 UI 包只消费投影 DTO。
+- 交互预览 cache-first，离线导出、打包、校验 source-first。
+- 缓存是派生物，删除缓存不得删除项目文件、素材事实、实体事实或用户确认绑定。
+- runtime handle 只在当前会话有效，包括 Webview URI、blob URL、Engine token、stream id、preview URL。
+
+## 分层模型
+
+```text
+Project facts
+  workspace-relative path
+  ${VAR}/path
+  source ref
+  ResourceRef
+        |
+        v
+Path and source resolution
+  PathResolver
+  ContentAccessService
+  ContentIngestService
+        |
+        v
+File access services
+  Host fs adapter
+  Engine file access
+  Document entry provider
+  Media library provider
+        |
+        v
+Derived cache
+  thumbnails
+  page images
+  preview variants
+  proxies
+  metadata
+  semantic sidecars
+        |
+        v
+Runtime projection
+  Webview URI
+  stream descriptor
+  token
+  bytes
+  local runtime path
+```
+
+只有第一层和明确的 stable ref 可以进入持久事实。后续各层是解析、读取、派生和展示，不应反向成为 source identity。
+
+## 路径变量
+
+路径变量解决“项目可移植”和“本机路径不同”之间的矛盾。
+
+| 路径形态                  | 是否可写入项目事实    | 用途                                        |
+| ------------------------- | --------------------- | ------------------------------------------- |
+| workspace-relative path   | 是                    | 项目内源文件、项目格式引用                  |
+| `${VAR}/path`             | 是                    | 团队共享媒体库、外部素材库、可配置 root     |
+| absolute local path       | 默认否                | Host 运行时、local override、一次性导入来源 |
+| Webview URI               | 否                    | 当前 Webview 展示                           |
+| Engine token / stream URL | 否                    | 当前 Engine session                         |
+| cache-relative path       | 只允许 cache manifest | 缓存内部定位，不作为项目 source             |
+
+### 变量来源
+
+| 来源                                  | 范围             | 说明                             |
+| ------------------------------------- | ---------------- | -------------------------------- |
+| workspace root                        | Project          | 默认项目根                       |
+| `neko/settings.json` media libraries  | Workspace / Team | 团队共享媒体库变量名和原始路径   |
+| `.neko/settings.local.json` overrides | User / Machine   | 本机路径覆盖，不提交             |
+| extension/global storage              | User / Machine   | 私有缓存和会话数据，不写项目事实 |
+| explicit import root                  | Session / Intent | 一次性导入或窄授权 root          |
+
+### 解析规则
+
+- 写入项目事实前，优先把本地路径收缩为 workspace-relative path。
+- 不在 workspace 内时，尝试收缩为已声明媒体库变量 `${VAR}/path`。
+- 无法收缩的绝对路径不能静默写入项目事实；应走导入、注册媒体库、local override 或返回诊断。
+- 变量名是契约，变量值是环境配置。跨机器同步的是变量名和相对路径，不是本机绝对路径。
+- 路径解析失败应返回 unresolved、unauthorized、missing 或 non-portable，不应猜测相邻文件。
+
+## 文件读写服务
+
+文件读写服务按 intent 和信任边界分工。
+
+| 服务                         | 负责                                                                      | 不负责                                    |
+| ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------- |
+| `PathResolver`               | `${VAR}/path`、workspace-relative、运行时绝对路径之间的转换               | 缓存选择、Webview 投影、导出语义          |
+| `ContentAccessService`       | 按读取意图选择 source、cache、proxy、Engine source、bytes 或投影          | 写入新 source、管理实体或素材事实         |
+| `ContentIngestService`       | 导入外部文件、注册已有 source、提升 generated output、委托 cache artifact | Webview 展示、低层 range 读取             |
+| `ResourceCacheService`       | `ResourceRef`/variant 的 materialize、resolve、project、invalidate、gc    | 原始素材身份、最终导出输入                |
+| `LocalResourceAccessService` | Webview roots 授权和 `asWebviewUri(...)` 投影                             | 缓存物化、source fingerprint、离线读取    |
+| Engine File Access           | 大型二进制、range、container entry、Engine 可读 source token              | 项目路径身份、Webview URI、cache manifest |
+| Project fact stores          | JSON/project 文件的原子读写、schema guard、锁或串行化                     | 派生缩略图、搜索排序、runtime token       |
+
+## 读取意图
+
+调用方不能只看 target 类型判断应读 source 还是 cache。必须声明 intent。
+
+| Intent                | 默认策略                                           | 允许使用缓存 | 离线安全 |
+| --------------------- | -------------------------------------------------- | ------------ | -------- |
+| `interactive-preview` | cache-first，必要时投影 Webview URI                | 是           | 否       |
+| `agent-context`       | cache/preprocess-first，保留 source/locator        | 是           | 有条件   |
+| `edit-playback`       | proxy/stream-first，保证响应性                     | 是           | 否       |
+| `cache-materialize`   | 从 source 生成 cache artifact                      | 是           | 否       |
+| `final-export`        | source-first，读取原始文件或 Engine source         | 默认否       | 是       |
+| `package`             | source-first，读取原始文件或 container entry bytes | 默认否       | 是       |
+| `verify`              | source-first，读取原始 bytes/hash/probe            | 默认否       | 是       |
+
+如果 `final-export`、`package` 或 `verify` 收到 thumbnail、preview、proxy、Webview URI、blob URL、runtime token 或 legacy `cachePath`，应返回 diagnostic，而不是复制缓存文件。用户明确选择 draft/proxy 导出时，必须在结果中记录使用了派生物。
+
+## 写入与导入
+
+写入项目事实前必须先判断写入对象是 source、cache artifact、runtime state 还是用户确认事实。
+
+| Mode                       | 用途                                           | 输出                                 |
+| -------------------------- | ---------------------------------------------- | ------------------------------------ |
+| `import-source`            | 外部图片、文档、模型、音视频导入项目或媒体库   | stable source ref，可带 prewarm hint |
+| `register-existing-source` | 注册已有 workspace/media-library/`${VAR}` 文件 | 收缩后的 source ref                  |
+| `generated-output`         | Agent/tool 生成媒体提升为项目 generated asset  | promoted generated source ref        |
+| `stage-export`             | 记录最终导出或 package 输出                    | staged output，不改写项目 source ref |
+| `cache-artifact`           | 缩略图、文档页图、proxy、preview variant 预热  | cache entry，不生成项目 source       |
+
+未 promoted 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Agent durable result、package manifest 或最终导出输入。
+
+## ResourceRef 与缓存变体
+
+`ResourceRef` 表达“这个派生资源来自哪里、由谁提供、如何判断 stale”。`ResourceVariantRef` 表达“为了某个用途生成的哪种表现”。两者都不是文件路径。
+
+| 概念           | 设计含义                  | 示例                                                                      |
+| -------------- | ------------------------- | ------------------------------------------------------------------------- |
+| `scope`        | 资源可携带范围            | `project`, `global`, `extension-private`                                  |
+| `provider`     | 谁能 materialize 或 probe | document provider、preview provider、generated provider                   |
+| `kind`         | 资源大类                  | `document`, `media`, `generated`, `preview`, `storyboard-reference`       |
+| `source`       | 原始来源                  | file、document、media-library、generated-asset、preview-asset、remote-url |
+| `locator`      | source 内部位置           | document page、archive entry、storyboard shot、preview route              |
+| `fingerprint`  | stale 判断依据            | hash、mtime-size、provider fingerprint、identity                          |
+| `variant role` | 派生表现用途              | `thumbnail`, `page-image`, `preview`, `proxy`, `fov-crop`                 |
+
+同一 `ResourceRef` 可以有多个 variant。比如一个 PDF 页面可以派生 `thumbnail`、`page-image` 和 OCR sidecar；一个视频 source 可以派生 `thumbnail`、`proxy` 和 preview clip。variant 可以删除和重建，source identity 不能被 variant path 替代。
+
+## 缓存生命周期
+
+```text
+source fact / ResourceRef
+  -> resolve manifest entry
+  -> probe source fingerprint
+  -> materialize variant
+  -> verify written artifact
+  -> update manifest
+  -> project to Webview or return descriptor
+  -> touch lastAccessedAt
+  -> invalidate / mark stale / gc
+```
+
+### 状态语义
+
+| 状态            | 含义                                              | 消费方式                                  |
+| --------------- | ------------------------------------------------- | ----------------------------------------- |
+| `ready`         | variant 可读取，fingerprint 与 source 匹配        | 可直接投影或读取                          |
+| `missing`       | manifest 或文件不存在，但 source 足够重建         | 可按 intent 触发 materialize              |
+| `stale`         | source fingerprint、provider version 或参数已变化 | 可展示旧预览并安排重建，离线操作回 source |
+| `materializing` | provider 正在生成或刷新                           | UI 显示进行中，读者等待或降级             |
+| `unsupported`   | 没有 provider 或格式不支持                        | 返回诊断，不猜测 fallback                 |
+| `unauthorized`  | 当前 workspace/root/token 不允许访问              | 提示授权或导入，不绕过 Host               |
+| `failed`        | provider 执行失败                                 | 保留错误诊断，可重试                      |
+| `non-portable`  | 只在 extension-private 或本机会话内有效           | 不能写入跨包持久 payload                  |
+
+### 读写操作
+
+| 操作         | 语义                     | 是否允许生成文件                 | 是否返回 Webview URI |
+| ------------ | ------------------------ | -------------------------------- | -------------------- |
+| `resolve`    | 查询现有 entry/variant   | 否                               | 否                   |
+| `ensure`     | 确保 variant 存在        | 可按 `materializeIfMissing` 生成 | 否                   |
+| `project`    | 确保并投影到当前 Webview | 可按 intent 生成                 | 是                   |
+| `invalidate` | 让 ref 相关 entry 失效   | 否                               | 否                   |
+| `stats/gc`   | 统计和回收缓存           | 删除缓存                         | 否                   |
+
+写入缓存应先物化文件，再更新 manifest。manifest 只记录已校验 artifact，并保留 `createdAt`、`updatedAt`、`lastAccessedAt`、`sizeBytes`、`status` 和 provider metadata。
+
+## 自动缓存与预热
+
+自动缓存的目标是降低交互延迟，不是提前构建所有派生物。
+
+| 触发         | 适合自动缓存                                | 不适合自动缓存                        |
+| ------------ | ------------------------------------------- | ------------------------------------- |
+| 项目打开     | manifest、轻量 metadata、已有 index summary | 全量视频 probing、OCR、ASR、embedding |
+| 素材导入     | 文件 identity、基础 metadata、小缩略图      | 大尺寸 proxy、复杂语义索引            |
+| Webview 可见 | 当前 viewport 周边 thumbnail/page-image     | 不可见列表的所有高清变体              |
+| Agent 上下文 | 有界片段、低分辨率图、transcript chunk      | 无来源的大型 scratch 内容             |
+| 用户显式预览 | preview/proxy/fov-crop                      | 与当前 intent 无关的表现              |
+| idle         | 低优先级 thumbnail、semantic sidecar        | 会挤占交互、GPU、磁盘预算的批量任务   |
+
+自动缓存必须可取消、可去重、可降级，并遵守 quota。后台生成失败只影响 freshness 和诊断，不改变项目事实。
+
+## 一致性与并发
+
+- source fingerprint 变化、provider 版本变化、variant 参数变化、授权 roots 变化都可以让缓存变为 `stale`。
+- manifest 丢失、缓存文件丢失或 JSON 损坏应视为 cache miss，不应污染事实层。
+- 同一 ref/variant 的并发 materialize 应合并为一个 in-flight 操作。
+- manifest 更新应串行化；JSON fact store 写入应使用锁、写队列或原子 rename。
+- provider 输出应写入 cache root 下的受管目录，避免写入 workspace 任意位置。
+- GC 只删除缓存文件和 manifest entry，不删除 `neko/assets/library.json`、entity facts、binding facts 或领域项目文件。
+- pinned variant、当前会话活跃 variant 和不可重建 variant 在 GC 中优先保留。
+
+## 典型链路
+
+### 预览展示
+
+```text
+source ref / ResourceRef / assetRef
+  -> ContentAccess(interactive-preview)
+  -> ResourceCacheService.project
+  -> LocalResourceAccessService.toWebviewUri
+  -> Webview projected URI
+```
+
+该链路适合小型图片、文档页图、thumbnail、extension 静态资源和无需 seek 的轻量预览。视频、音频、全景、大型文档、container entry 或需要 Range/seek 的资源应走 Engine file access：
+
+```text
+source ref / ResourceRef / project path
+  -> Extension Host authorization
+  -> Engine register/probe
+  -> range URL / stream descriptor / compatible proxy URL
+  -> Webview client
+```
+
+### Agent 上下文
+
+```text
+ProjectSearchItem / selected source
+  -> ContentAccess(agent-context)
+  -> bounded text/media/context chunks
+  -> model input
+```
+
+Agent 上下文可以消费缩略图、文档页图、transcript、OCR、ASR 或 semantic evidence，但这些材料必须保留 source/locator。
+
+### 导出、打包与校验
+
+```text
+project format refs
+  -> ContentAccess(final-export/package/verify)
+  -> Engine source / original file / document entry bytes
+  -> export artifact or diagnostic
+```
+
+离线链路默认不使用 thumbnail、preview、proxy、Webview URI、blob URL 或 legacy `cachePath`。
+
+## 约束与反模式
+
+| 反模式                                          | 风险                         | 正确边界                                        |
+| ----------------------------------------------- | ---------------------------- | ----------------------------------------------- |
+| 把 cache path 写入 Canvas/Agent durable payload | 换机器、清缓存、重建后断链   | 保存 `ResourceRef`、source ref、asset/entity ID |
+| Webview 扫描 `.neko/.cache/`                    | 绕过授权和 provider 语义     | Extension Host 投影                             |
+| 以绝对路径作为项目事实                          | 跨机器不可移植，泄露本机结构 | workspace-relative 或 `${VAR}/path`             |
+| 把 `projectedUri` 当 source                     | 只在当前 Webview 有效        | source ref + runtime projection 分离            |
+| 用 `asWebviewUri` 播放大型音视频并依赖 seek     | Range/codec/CSP 不稳定       | Engine file access / stream descriptor          |
+| 把大型媒体整体转成 data URI 或无界 blob         | 内存膨胀，无法证明生产性能   | bounded fixture 或 Engine proxy/stream          |
+| Search 或 UI 直接读取私有 cache JSON            | read model 与缓存格式耦合    | 走 Search/Cache service                         |
+| Engine stream token 写入项目格式                | 会话结束即失效               | 保存 source ref，运行时重新申请 token           |
+
+## 与其他架构文档的关系
+
+- [`unified-entity.md`](unified-entity.md) 定义实体身份、候选、绑定、需求和展示投影。
+- [`asset-library.md`](asset-library.md) 定义素材库、Asset/Variant/File、导入来源和素材搜索投影。
+- [`engine-runtime.md`](engine-runtime.md) 定义 Engine 对媒体、设备、ML、stream 和导出的权威边界。
+- [`proto-and-wire-contracts.md`](proto-and-wire-contracts.md) 定义跨语言 wire contract 与项目格式关系。
+
+## 吸收的稳定主题
+
+本设计吸收以下历史主题的稳定部分：
+
+- local resource access
+- intent-aware content access
+- storage strategy
+- project cache search service 中的 cache/search freshness 规则
+- format strategy 中的路径、引用和持久化部分

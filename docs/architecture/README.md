@@ -14,7 +14,19 @@
 | 文档                                                                   | 内容                                                               |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
+| [`agent.md`](agent.md)                                                 | Agent-first、IDC、skill/prompt/tool/provider 控制面和宿主分层      |
+| [`asset-library.md`](asset-library.md)                                 | 素材库、Asset/Variant/File、导入来源、市场安装和素材搜索投影       |
+| [`auth.md`](auth.md)                                                   | 用户凭据、workspace policy、Webview auth bridge 和 session 边界    |
+| [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)     | 缓存、文件读写服务、路径变量、ContentAccess 和 Webview 投影        |
+| [`engine-runtime.md`](engine-runtime.md)                               | Rust Engine runtime、GPU/0-copy、2D/3D/Live2D、ECS/OOP 与数据路径  |
+| [`marketplace.md`](marketplace.md)                                     | Marketplace/Registry、manifest、install target 和 trust 边界       |
 | [`package-boundaries.md`](package-boundaries.md)                       | 子包边界、UI 层、公共代码、Extension/Webview/Engine 约束和验证命令 |
+| [`proto-and-wire-contracts.md`](proto-and-wire-contracts.md)           | Proto、wire contract、生成类型、UI projection 和项目格式关系       |
+| [`ui-theme-i18n-error-logging.md`](ui-theme-i18n-error-logging.md)     | UI 公共层、主题 token、国际化、错误处理、日志和诊断边界            |
+| [`unified-entity.md`](unified-entity.md)                               | 统一实体、候选、实体素材绑定、视觉草案、展示投影和搜索投影         |
+| [`webview-media-security.md`](webview-media-security.md)               | VS Code Webview CSP、媒体格式兼容、Range 和 Engine 媒体访问约束    |
+
+机器可读的质量门禁输入放在 [`../../quality/`](../../quality/)，例如代码债务台账和 Agent 边界 LCD register；本目录只保留人类可读的架构决策和规则说明。
 
 ## 不放入本目录
 
@@ -24,6 +36,7 @@
 | 竞品、市场、技术调研           | `docs/research/`                        |
 | 当前 gap、迁移进度、健康度快照 | `docs/status/`                          |
 | 尚未稳定的开发变更             | `openspec/changes/`                     |
+| 供脚本和 CI 消费的 JSON 台账   | `quality/`                              |
 | 单包实现细节                   | `packages/<pkg>/docs/`                  |
 
 ## 写作要求

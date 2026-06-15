@@ -2,17 +2,18 @@
 
 > **语言:** 中文 | [English](./TODO.md)
 
-本文只跟踪当前仓库的客户端侧活跃工作。历史 Sprint 日志、过期实现说明和代码路径任务不再放在这里。长期方向见 [ROADMAP_CN.md](./ROADMAP_CN.md)。
+本文只跟踪当前仓库的活跃工作队列。历史 Sprint 日志、过期实现说明和代码路径任务不再放在这里；设计和验收细节进入 `openspec/changes/`，带日期的观察进入 `docs/status/`，稳定约束进入 `docs/architecture/` 或 `docs/domains/`。长期方向见 [ROADMAP_CN.md](./ROADMAP_CN.md)。
 
 ## 活跃主题
 
-| 主题 | 目标 |
-|------|------|
-| 项目图谱 | 统一资产、实体、生成媒体、搜索、Dashboard 和 Agent 记忆 |
-| Agent 能力模型 | 所有创作包通过稳定能力契约暴露给 Agent |
-| Engine-first 媒体权威 | 二进制文件访问、预览、感知和导出走引擎权威路径 |
-| 共享 Webview UI | 重复 UI primitive 进入 `neko-ui`，领域状态仍留在功能包 |
-| 端到端 smoke | 验证剧本意图到生成媒体、时间线装配、预览、导出和审阅 |
+| 主题                  | 目标                                                               |
+| --------------------- | ------------------------------------------------------------------ |
+| 项目图谱              | 统一资产、实体、生成媒体、搜索、Dashboard 和 Agent 记忆            |
+| Agent 能力模型        | 所有创作包通过稳定能力契约暴露给 Agent                             |
+| Engine-first 媒体权威 | 二进制文件访问、预览、感知和导出走引擎权威路径                     |
+| 共享 Webview UI       | 重复 UI primitive 进入 `neko-ui`，领域状态仍留在功能包             |
+| 端到端 smoke          | 验证剧本意图到生成媒体、时间线装配、预览、导出和审阅               |
+| 文档治理              | README、Architecture、docs、TODO、Roadmap 和 OpenSpec 保持职责分离 |
 
 ## 核心平台
 
@@ -78,7 +79,12 @@
 
 ## 文档卫生
 
-- [ ] 架构文档只保留决策、边界、不变量、风险和后果。
-- [ ] 仍活跃的实现任务放到 OpenSpec 或本文，不放进 ADR 正文。
+- [ ] 新增系统级设计文档时，同步 `docs/architecture/README.md` 和 `docs/README.md`。
+- [ ] 新增创作领域文档时，同步 `docs/domains/README.md`、对应领域 `README.md` 和必要的 `architecture.md`。
+- [ ] 架构文档只保留决策、边界、不变量、风险和后果；仍活跃的实现任务放到 OpenSpec 或本文。
+- [ ] Gap、迁移、健康度和审计文档只保存带日期快照，稳定结论提升到 `docs/architecture/` 或 `docs/domains/`。
+- [ ] 调研、竞品和技术 spike 放入 `docs/research/`，并标注来源、日期或不确定性。
+- [ ] 供脚本和 CI 消费的门禁数据放入 `quality/`，解释性政策保留在架构文档。
 - [ ] 过期示例应删除或重写，不作为历史契约保存。
-- [ ] 架构清理后同步 README、Architecture、TODO、Roadmap。
+- [ ] 文档目录规则变化后，同步 README、Architecture、TODO、Roadmap 和 `AGENTS.md`。
+- [ ] 文档改动至少执行 Markdown 格式检查、空白检查和本地链接检查。

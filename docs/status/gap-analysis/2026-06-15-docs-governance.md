@@ -27,7 +27,7 @@
 
 ## 建议动作
 
-1. 优先为高频领域创建入口：`docs/domains/agent/README.md`、`docs/domains/video/README.md`、`docs/domains/audio/README.md`。
+1. 优先为高频创作目标创建入口：`docs/domains/video/README.md`、`docs/domains/audio/README.md`、`docs/domains/model/README.md`、`docs/domains/2d/README.md`、`docs/domains/interactive/README.md`。
 2. 从当前实际开发需求倒推恢复架构专题，不批量复原旧 ADR。
 3. 为竞品分析按赛道建文档，例如 `docs/research/competitors/agent-workflows.md`。
 4. 后续可增加 Markdown 链接检查命令，并纳入 `pnpm check` 或文档维护脚本。

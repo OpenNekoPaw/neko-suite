@@ -23,7 +23,7 @@
 - `@neko/shared` 包内仍包含 L0 主入口、VS Code subpath、React/i18n subpath 和 legacy components subpath，需要开发者明确区分入口层级。
 - `neko-assets`、`neko-tools` 等包仍有历史根级 extension-ish 结构，新规范需要兼容但不应继续扩散。
 - Scene stream 的 GOP 策略不是全局 GOP=1；低延迟交互路径有 GOP=1 场景，但 Timeline/Puppet/Preview 等路径存在不同目标，文档和实现需要避免过度简化。
-- 领域目录目前尚未为 agent、video、audio、model、story 等创建具体领域入口，Agent 进入领域时仍主要依赖根架构和包边界文档。
+- 领域目录应按创作目标划分，而不是按 Agent、Engine、UI、Assets 等横切能力划分；Agent 进入领域时应先读对应创作目标目录，再按需读取包边界和横切能力文档。
 
 ## 风险
 
@@ -39,8 +39,8 @@
 2. 将跨扩展直接依赖规则从逐项枚举演进为模式化规则；条件成熟后把 warning 升级为 error。
 3. 为 `neko-agent` extension 和 `neko-market` extension 建立 strict 收敛计划，适合转入 OpenSpec change。
 4. 继续收敛 `@neko/shared/components` allowlist，新 UI 只进入 `@neko/ui`。
-5. 为高频领域创建入口文档：`docs/domains/agent/README.md`、`docs/domains/video/README.md`、`docs/domains/audio/README.md`、`docs/domains/model/README.md`。
-6. 将 Engine stream/GOP/Route A 规则在 `docs/domains/model/architecture.md` 或 Engine 领域文档中细化，系统级文档只保留不变量。
+5. 为创作目标领域创建入口文档：`docs/domains/video/README.md`、`docs/domains/audio/README.md`、`docs/domains/model/README.md`、`docs/domains/2d/README.md`、`docs/domains/interactive/README.md`。
+6. 将 Engine stream/GOP/Route A 规则作为横切约束保留在 `docs/architecture/`，并在模型/互动等创作领域中只描述与创作目标相关的使用方式。
 
 ## 行动项流转
 
