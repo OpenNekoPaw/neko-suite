@@ -363,6 +363,48 @@ describe('SkillService', () => {
 });
 
 describe('KeywordSkillMatcher', () => {
+  function makeMediaWorkflowSkills(): Skill[] {
+    return [
+      makeSkill({
+        name: 'comic-to-storyboard',
+        description:
+          'Convert manga/comic pages into structured StoryboardTable storyboards. Use only for storyboard table or shot breakdown requests, not content-only EPUB analysis.',
+        mediaWorkflow: {
+          producedArtifacts: ['StoryboardTable'],
+          tags: ['comic', 'manga', 'storyboard'],
+        },
+      }),
+      makeSkill({
+        name: 'comic-to-animation',
+        description:
+          'Focused comic-to-animation production entry point for comic/storyboard-to-animation or video requests, not content-only EPUB analysis.',
+        mediaWorkflow: {
+          producedArtifacts: [
+            'StoryboardTable',
+            'storyboard-plan-overlay',
+            'generated-media-ref',
+            'workflow-execution-summary',
+          ],
+          tags: ['comic-to-animation', 'comic', 'storyboard', 'animation', 'media-to-video'],
+        },
+      }),
+      makeSkill({
+        name: 'media-to-video',
+        description:
+          'Coordinate explicit media-to-video production, not content-only document or comic analysis.',
+        mediaWorkflow: {
+          producedArtifacts: [
+            'StoryboardTable',
+            'storyboard-plan-overlay',
+            'cut-storyboard-payload',
+            'generated-media-ref',
+          ],
+          tags: ['media-to-video', 'orchestration', 'storyboard', 'animation'],
+        },
+      }),
+    ];
+  }
+
   it('matches Chinese storyboard-table requests through produced artifacts', () => {
     const matcher = new KeywordSkillMatcher();
     const storyboardSkill = makeSkill({
@@ -408,6 +450,62 @@ describe('KeywordSkillMatcher', () => {
 
     expect(matches.map((match) => match.skill.name)).toEqual([
       'comic-to-storyboard',
+      'media-to-video',
+    ]);
+  });
+
+  it('does not auto-match production/storyboard skills for content-only EPUB analysis', () => {
+    const matcher = new KeywordSkillMatcher();
+
+    const matches = matcher.match('分析这个 EPUB 前10页', makeMediaWorkflowSkills());
+
+    expect(matches.map((match) => match.skill.name)).toEqual([]);
+  });
+
+  it('does not auto-match production/storyboard skills for content-only comic page analysis', () => {
+    const matcher = new KeywordSkillMatcher();
+
+    const matches = matcher.match('请分析漫画前 10 页的人物和剧情', makeMediaWorkflowSkills());
+
+    expect(matches.map((match) => match.skill.name)).toEqual([]);
+  });
+
+  it('does not auto-match production/storyboard skills for conceptual planning questions', () => {
+    const matcher = new KeywordSkillMatcher();
+
+    const matches = matcher.match('为什么不直接生成 AnimationPlan？是否应该用分镜表代替？', [
+      ...makeMediaWorkflowSkills(),
+      makeSkill({
+        name: 'storyboard-to-animation-plan',
+        description:
+          'Convert existing CompositeArtifact StoryboardTable domain blocks into animation plan overlays when the user asks for animation/video planning.',
+        mediaWorkflow: {
+          inputArtifacts: ['StoryboardTable'],
+          producedArtifacts: ['storyboard-plan-overlay'],
+          tags: ['storyboard', 'storyboard-plan-overlay', 'motion'],
+        },
+      }),
+    ]);
+
+    expect(matches.map((match) => match.skill.name)).toEqual([]);
+  });
+
+  it('routes explicit EPUB storyboard requests to comic-to-storyboard', () => {
+    const matcher = new KeywordSkillMatcher();
+
+    const matches = matcher.match('把这个 EPUB 前10页生成分镜表', makeMediaWorkflowSkills());
+
+    expect(matches[0]?.skill.name).toBe('comic-to-storyboard');
+    expect(matches[0]?.reason).toContain("Matched artifact 'StoryboardTable'");
+  });
+
+  it('routes explicit EPUB animation requests to comic-to-animation before broad media skills', () => {
+    const matcher = new KeywordSkillMatcher();
+
+    const matches = matcher.match('把这个 EPUB 前10页转动画并生成视频', makeMediaWorkflowSkills());
+
+    expect(matches.map((match) => match.skill.name).slice(0, 2)).toEqual([
+      'comic-to-animation',
       'media-to-video',
     ]);
   });

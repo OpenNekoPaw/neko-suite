@@ -19,6 +19,13 @@ export abstract class SkillMatcher implements ISkillMatcher {
   abstract match(request: string, skills: Skill[]): SkillMatch[];
 }
 
+interface RequestIntent {
+  readonly contentAnalysisOnly: boolean;
+  readonly hasComicDocumentSource: boolean;
+  readonly hasProductionIntent: boolean;
+  readonly hasStoryboardCreationIntent: boolean;
+}
+
 /**
  * Keyword-based skill matcher
  *
@@ -79,6 +86,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
 
     const requestLower = request.toLowerCase();
     const requestWords = this.tokenize(requestLower);
+    const requestIntent = this.classifyRequestIntent(requestLower);
     const matches: SkillMatch[] = [];
 
     for (const skill of skills) {
@@ -86,7 +94,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
         continue;
       }
 
-      const match = this.matchSkill(requestLower, requestWords, skill);
+      const match = this.matchSkill(requestLower, requestWords, requestIntent, skill);
       if (match) {
         matches.push(match);
       }
@@ -108,8 +116,13 @@ export class KeywordSkillMatcher extends SkillMatcher {
   private matchSkill(
     requestLower: string,
     requestWords: string[],
+    requestIntent: RequestIntent,
     skill: Skill,
   ): SkillMatch | null {
+    if (requestIntent.contentAnalysisOnly && this.isCreativeMediaWorkflowSkill(skill)) {
+      return null;
+    }
+
     let relevance = 0;
     const reasons: string[] = [];
 
@@ -167,6 +180,12 @@ export class KeywordSkillMatcher extends SkillMatcher {
       break;
     }
 
+    const mediaIntentRelevance = this.getMediaIntentMatchRelevance(skill, requestIntent);
+    if (mediaIntentRelevance > 0) {
+      relevance += mediaIntentRelevance;
+      reasons.push(`Matched media production intent (${mediaIntentRelevance.toFixed(2)})`);
+    }
+
     // Only return if relevance is above threshold
     if (relevance > 0.1) {
       return {
@@ -187,6 +206,145 @@ export class KeywordSkillMatcher extends SkillMatcher {
       .split(/[\s.,!?;:'"()[\]{}]+/)
       .map((w) => w.trim())
       .filter((w) => w.length > 0);
+  }
+
+  private classifyRequestIntent(requestLower: string): RequestIntent {
+    const hasConceptualQuestionIntent = this.containsAny(requestLower, [
+      '是否',
+      '能否',
+      '为什么',
+      '区别',
+      '是什么',
+      '需要吗',
+      '是否需要',
+      '有必要',
+      '应该',
+      '适合',
+      'what is',
+      'why',
+      'whether',
+      'should',
+      'difference',
+      'compare',
+    ]);
+    const hasContentAnalysisIntent =
+      hasConceptualQuestionIntent ||
+      this.containsAny(requestLower, [
+        '分析',
+        '解析',
+        '总结',
+        '概括',
+        '说明',
+        '描述',
+        '看看',
+        '查看',
+        '识别',
+        '提取',
+        '提取文字',
+        '阅读',
+        '读一下',
+        '前10页',
+        '前 10 页',
+        '前十页',
+        '前几页',
+        'ocr',
+        'analyze',
+        'analyse',
+        'describe',
+        'summarize',
+        'summary',
+        'extract text',
+        'read',
+        'inspect',
+        'understand',
+        'explain',
+      ]);
+    const hasStoryboardKeyword = this.containsAny(requestLower, [
+      '生成分镜表',
+      '制作分镜表',
+      '输出分镜表',
+      '创建分镜表',
+      '建立分镜表',
+      '做分镜表',
+      '转成分镜表',
+      '转为分镜表',
+      '拆分镜',
+      '镜头拆解',
+      'storyboard table',
+      'create storyboard',
+      'generate storyboard',
+      'make storyboard',
+      'shot breakdown',
+    ]);
+    const hasProductionKeyword = this.containsAny(requestLower, [
+      '生成视频',
+      '生成动画',
+      '转动画',
+      '转视频',
+      '转成动画',
+      '转成视频',
+      '转为动画',
+      '转为视频',
+      '做成动画',
+      '做成视频',
+      '制作动画',
+      '制作视频',
+      '动态漫画',
+      '动画化',
+      '视频化',
+      '批量处理',
+      '批处理',
+      '去字',
+      '去除文字',
+      '移除文字',
+      '补全',
+      '上色',
+      '扩图',
+      '导出',
+      '剪辑装配',
+      '时间线装配',
+      'canvas',
+      'cut handoff',
+      'cut assembly',
+      'generate video',
+      'generate animation',
+      'create video',
+      'make video',
+      'animate',
+      'animation',
+      'video production',
+      'image prep',
+      'asset prep',
+      'inpaint',
+      'outpaint',
+      'colorize',
+      'upscale',
+      'export',
+      'timeline',
+      'assembly',
+    ]);
+    const hasComicDocumentSource = this.containsAny(requestLower, [
+      'epub',
+      'pdf',
+      'cbz',
+      'cbr',
+      '漫画',
+      '日漫',
+      'manga',
+      'comic',
+      'webtoon',
+      '卷',
+    ]);
+    const hasStoryboardCreationIntent = hasStoryboardKeyword && !hasConceptualQuestionIntent;
+    const hasProductionIntent = hasProductionKeyword && !hasConceptualQuestionIntent;
+
+    return {
+      contentAnalysisOnly:
+        hasContentAnalysisIntent && !hasStoryboardCreationIntent && !hasProductionIntent,
+      hasComicDocumentSource,
+      hasProductionIntent,
+      hasStoryboardCreationIntent,
+    };
   }
 
   private buildSkillSearchText(skill: Skill): string {
@@ -215,6 +373,22 @@ export class KeywordSkillMatcher extends SkillMatcher {
     return producedArtifacts.length === 1 ? 0.95 : 0.85;
   }
 
+  private getMediaIntentMatchRelevance(skill: Skill, intent: RequestIntent): number {
+    if (!intent.hasProductionIntent) {
+      return 0;
+    }
+
+    if (skill.name === 'comic-to-animation' && intent.hasComicDocumentSource) {
+      return 0.97;
+    }
+
+    if (skill.name === 'media-to-video') {
+      return 0.65;
+    }
+
+    return 0;
+  }
+
   private getSkillSpecificityScore(skill: Skill): number {
     const producedArtifacts = skill.mediaWorkflow?.producedArtifacts ?? [];
     return producedArtifacts.length > 0 ? 1 / producedArtifacts.length : 0;
@@ -224,6 +398,45 @@ export class KeywordSkillMatcher extends SkillMatcher {
     return (skill.mediaWorkflow?.producedArtifacts ?? []).flatMap((artifact) =>
       artifact === 'storyboard-table' ? ['StoryboardTable'] : [artifact],
     );
+  }
+
+  private isCreativeMediaWorkflowSkill(skill: Skill): boolean {
+    if (
+      [
+        'comic-to-storyboard',
+        'comic-to-animation',
+        'media-to-video',
+        'storyboard-to-animation-plan',
+        'animation-plan-to-cut',
+        'generated-shot-assembly',
+        'export-video-package',
+      ].includes(skill.name)
+    ) {
+      return true;
+    }
+
+    const workflowTerms = [
+      ...(skill.mediaWorkflow?.tags ?? []),
+      ...(skill.mediaWorkflow?.producedArtifacts ?? []),
+      ...(skill.mediaWorkflow?.inputArtifacts ?? []),
+    ];
+    return workflowTerms.some((term) =>
+      [
+        'storyboard',
+        'storyboard-table',
+        'StoryboardTable',
+        'storyboard-plan-overlay',
+        'comic-to-animation',
+        'media-to-video',
+        'animation',
+        'cut-storyboard-payload',
+        'generated-media-ref',
+      ].includes(term),
+    );
+  }
+
+  private containsAny(text: string, keywords: readonly string[]): boolean {
+    return keywords.some((keyword) => text.includes(keyword));
   }
 }
 

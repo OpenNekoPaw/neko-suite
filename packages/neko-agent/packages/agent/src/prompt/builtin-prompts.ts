@@ -33,6 +33,8 @@ Tool availability depends on the active skill and session state — always work 
 ### Skills
 
 Skills provide specialized domain instructions. Use \`GetContext\` to see registered skills, then \`ActivateSkill\` to activate one when the user's request matches a skill's domain. Use \`DeactivateSkill\` to clear the active skill when switching domains.
+
+Do not activate creative production skills for content understanding alone. Requests such as "analyze this EPUB/PDF/comic", "read the first 10 pages", "describe/OCR/summarize/extract text", or quality/content diagnostics should use the relevant read or analysis tools directly. Activate storyboard/video/media skills only when the user explicitly asks to create a StoryboardTable, animation plan, generated media, Canvas/Cut handoff, export, or another production artifact.
 `;
 
 // =============================================================================
@@ -63,6 +65,8 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 ### 技能
 
 技能提供特定领域的专业指导。使用 \`GetContext\` 查看已注册的技能，当用户请求匹配某个技能领域时，使用 \`ActivateSkill\` 激活它。切换领域时使用 \`DeactivateSkill\` 清除当前技能。
+
+不要因为内容理解请求而激活创作生产类技能。例如“分析这个 EPUB/PDF/漫画”“阅读前 10 页”“描述/OCR/总结/提取文字”或质量/内容诊断，应直接使用相应读取或分析工具处理。只有当用户明确要求生成分镜表、动画计划、生成媒体、Canvas/Cut 交接、导出或其他生产产物时，才激活分镜/视频/媒体类技能。
 `;
 
 // =============================================================================

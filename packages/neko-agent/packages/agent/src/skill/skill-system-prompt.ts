@@ -33,6 +33,7 @@ export function buildSkillAwareSystemPrompt(input: BuildSkillAwareSystemPromptIn
   }
   lines.push(
     "\nUse `ActivateSkill` to activate a skill when the user's request matches a skill domain.",
+    'Do not activate creative production skills for content analysis alone; use read/analysis tools directly unless the user explicitly asks for a storyboard, animation, video, Canvas/Cut handoff, export, or another production artifact.',
     'Use `GetContext` to see all registered skills and current state.',
   );
 
