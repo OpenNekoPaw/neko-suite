@@ -1,19 +1,19 @@
 # neko-sketch TODO
 
-> 待开发功能与合入后续项的单一清单。已完成能力记录在 `ROADMAP.md`，这里不再重复列已落地功能。
+> 活跃实现任务与结构性维护项的单一清单。已落地能力以当前代码和 `README.md` / `ARCHITECTURE.md` 的稳定边界为准，不在 TODO 或 Roadmap 中保存完成台账。
 
-## P0 — 合入前必修
+## P0 — 合入前阻塞项
 
 当前无开放 P0。
 
-## P1 — 本迭代建议修
+## P1 — 当前重点
 
 | 事项 | 类型 | 验收标准 |
 | ---- | ---- | -------- |
 | PSD 真实外部 fixtures | 兼容性验证 | `test-fixtures/psd/manifest.json` 至少覆盖 Photoshop / Photopea / Krita 样本；`psd-external-fixtures.test.ts` 不再因空 manifest skip |
 | PSD 语义增强 | 功能增强 | pass-through group、文本层、智能对象、调整层、蒙版、图层样式都有明确 `PsdImportIssue`，详情报告包含 `layerPath` |
 | `.nks` JSON Schema | 格式治理 | 为 `.nks` v1.2 补 JSON Schema 与 schema drift test；`@neko/shared/nks` 继续作为迁移入口 |
-| AI palette / brushPreset undo 语义 | 产品决策 | 明确 palette / brushPreset apply 是否进入 history；若进入，补 history 快照与回归测试；若不进入，更新开发计划说明 |
+| AI palette / brushPreset undo 语义 | 产品决策 | 明确 palette / brushPreset apply 是否进入 history；若进入，补 history 快照与回归测试；若不进入，同步 TODO/README 说明 |
 
 ## P2 — 功能开发
 

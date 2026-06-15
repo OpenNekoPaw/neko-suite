@@ -92,7 +92,7 @@ Neko Suite supports installing subsets of extensions by scenario, without instal
 | **neko-suite-audio** | core + audio | Waveform editing + Effect chains |
 | **neko-suite** | All | Full-stack creation |
 
-See the [Extension Pack Layering Strategy ADR](./docs/architecture/extension-pack-strategy.md) for details.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for current package and extension boundaries.
 
 ---
 
@@ -108,9 +108,9 @@ neko-suite/
 │   ├── neko-client/     # @neko/neko-client streaming client + EngineClient (zero dependencies)
 │   ├── neko-proto/      # @neko/proto Protobuf IDL definitions
 │   └── ...              # Other packages (see README.md)
-├── docs/                # Architecture Decision Records (ADR)
+├── docs/                # Architecture, domain, research, and status docs
 ├── ARCHITECTURE.md      # System architecture overview
-├── CLAUDE.md            # AI development guidelines (must-read)
+├── AGENTS.md            # Repository working rules
 ├── ROADMAP.md           # Long-term roadmap
 └── TODO.md              # Active tasks for current iteration
 ```
@@ -319,7 +319,7 @@ pnpm smoke:webview       # Builds all webview packages; limit with NEKO_WEBVIEW_
 node scripts/smoke-webview-builds.mjs --list  # Lists selected webview packages without building
 ```
 
-For the code review process, risk levels, functional/UX/performance checks, professional software comparison, and merge rules, see [Code Review and Quality Gates ADR](./docs/architecture/adr-code-review-quality-gates.md).
+For the code review process, risk levels, functional/UX/performance checks, and merge rules, follow [AGENTS.md](./AGENTS.md) and the validation guidance in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ### CI/CD
 
@@ -339,7 +339,7 @@ PRs and pushes to the main branch automatically trigger GitHub Actions CI (`.git
 
 ## Code Standards
 
-For the full specification, see [CLAUDE.md](./CLAUDE.md). Key points below:
+For the repository-level working rules, see [AGENTS.md](./AGENTS.md). Key points below:
 
 ### TypeScript
 
@@ -513,11 +513,11 @@ Refer to [TODO.md](./TODO.md) for P0/P1 tasks. Below are the areas where help is
 | Effects/Shader system | Rust + WGSL + TypeScript | neko-engine + neko-cut |
 | i18n translation | Multilingual translation | All webview packages |
 
-**Recently completed architecture improvements** (good learning references):
-- AI Agent architecture refactor (`docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md`): ToolSet/Skill/Hook subsystem rename cleanup, Shell hooks bridge, two-tier tool injection (`always`/`dynamic`)
-- Unified engine architecture (`docs/adr-unified-engine.md`)
-- Cross-cutting concerns unification (`docs/architecture/adr-cross-cutting-concerns.md`)
-- Shader/Effects full pipeline (`packages/neko-engine/packages/engine-kernel/src/export/gpu_export_pipeline.rs`)
+**Current architecture references**:
+- [ARCHITECTURE.md](./ARCHITECTURE.md) for stable system boundaries.
+- [docs/README.md](./docs/README.md) for documentation categories and discovery paths.
+- [TODO.md](./TODO.md) for active work.
+- [ROADMAP.md](./ROADMAP.md) for directional product planning.
 
 ---
 
@@ -529,7 +529,7 @@ Refer to [TODO.md](./TODO.md) for P0/P1 tasks. Below are the areas where help is
 
 **Rust logs**: `tracing::info!("msg")` -> Output via neko-engine telemetry system
 
-For detailed debugging methods, see [CLAUDE.md](./CLAUDE.md).
+For repository-level debugging and working conventions, see [AGENTS.md](./AGENTS.md).
 
 ---
 

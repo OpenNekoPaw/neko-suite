@@ -115,5 +115,5 @@ NekoAgent 只处理 DRM-free 内容：
 
 参考：
 
-- [Agent 统一工作流](../../docs/architecture/agent-unified-workflow.md)
-- [Agent 媒体资产架构](../../docs/architecture/agent-media-architecture.md)
+- [neko-agent 架构](./ARCHITECTURE.md)
+- [系统架构总览](../../ARCHITECTURE_CN.md)

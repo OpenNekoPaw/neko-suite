@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 视频编辑器
 - 架构：独立包，被 Extension 集成使用
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 
@@ -148,6 +147,6 @@ const results = await healthService.validateAll({
 
 **并发池实现**：使用 `Set<Promise<void>> + .finally()` 自动移除模式，确保任何时刻活跃任务数不超过 `concurrency` 上限。
 
-## 设计文档
+## 设计边界
 
-详细设计见 [素材管理系统设计方案](../../docs/architecture/asset-management-system-design.md)
+`@neko/asset` 只负责素材实体、变体、文件、搜索、分类和健康检查等核心逻辑。VS Code 视图、命令、资源授权和跨扩展编排由上层 `neko-assets` 扩展负责。

@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：纯 ESM 库，零内部依赖，在 Extension Host 和 Webview 两端均可用
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

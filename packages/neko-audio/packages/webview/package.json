@@ -26,5 +26,5 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "license": "MIT"
+  "license": "AGPL-3.0-or-later"
 }

@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：纯 IDL 文件（.proto），TS/Rust 类型均从此派生
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

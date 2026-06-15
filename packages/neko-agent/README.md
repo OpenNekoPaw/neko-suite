@@ -6,9 +6,7 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host (Agent/Platform) + Webview (React 对话 UI) + CLI (Ink TUI)
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 - 详细架构：[ARCHITECTURE.md](./ARCHITECTURE.md)
-- Runtime ADR：[adr-agent-runtime-bootstrap.md](../../docs/architecture/adr-agent-runtime-bootstrap.md)
 
 ## Quick Reference
 

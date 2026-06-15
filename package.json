@@ -1,6 +1,7 @@
 {
   "name": "neko-suite-monorepo",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.29.2",
   "workspaces": [
     "packages/*",

@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host + 子包 `@neko/asset`（素材库核心）
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

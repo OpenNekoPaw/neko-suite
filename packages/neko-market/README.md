@@ -26,4 +26,4 @@ That deep link refreshes entitlements and package detail. The webview never rend
 
 ## Install Targets
 
-Domain packages contribute Y-class targets through `NekoMarketAPI.registerInstallTarget`. See [InstallTarget Contribution Guide](../../docs/architecture/install-target-contributions.md).
+Domain packages contribute Y-class targets through `NekoMarketAPI.registerInstallTarget`. Keep install target contracts in market core and domain-specific installation behavior in the contributing package.

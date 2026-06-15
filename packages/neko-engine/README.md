@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Rust 全局单例引擎 + N-API 控制命令 + WebSocket/HTTP 数据传输 + TypeScript Extension
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

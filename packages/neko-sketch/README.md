@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host（CustomEditorProvider .nks）+ Webview（React 18 + WebGL2）
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 - 骨骼动画：已拆分为独立子插件 [neko-puppet](../neko-puppet/)
 
 ## Quick Reference

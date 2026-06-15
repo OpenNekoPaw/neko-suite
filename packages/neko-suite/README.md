@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：纯 Extension Pack，无代码逻辑，仅声明扩展依赖包
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

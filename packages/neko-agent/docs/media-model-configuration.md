@@ -232,6 +232,5 @@ cat ~/.neko/config.json | grep -A 5 defaultMediaModels
 
 ## 相关文档
 
-- [Provider 配置指南](./provider-configuration.md)
-- [Model 配置指南](./model-configuration.md)
-- [AI Generate Skill 文档](./skills/ai-generate.md)
+- [neko-agent README](../README.md)
+- [neko-agent 架构](../ARCHITECTURE.md)

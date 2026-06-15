@@ -2,597 +2,126 @@
 
 > **Lang:** English | [中文](./ARCHITECTURE_CN.md)
 
-> This document serves as the architecture entry point for Neko Suite. For detailed Architecture Decision Records (ADRs), see [docs/architecture/](./docs/architecture/) and [docs/](./docs/).
+This document is the current architecture entry point for Neko Suite. It describes stable boundaries and invariants only. For detailed architecture records, ADRs, and domain documentation navigation, see [docs/README.md](./docs/README.md) and [docs/architecture/README.md](./docs/architecture/README.md).
 
----
+## Positioning
 
-## System Positioning
+Neko Suite is a VS Code integrated creative suite with three cooperating planes:
 
-Neko Suite is a creative work suite deeply integrated into VS Code. The core challenge is delivering heavy computation capabilities — media processing, GPU rendering, etc. — within VS Code's security sandbox constraints, while maintaining editor responsiveness.
+| Plane | Responsibility |
+|-------|----------------|
+| Authoring plane | React Webviews for story, canvas, timeline, preview, model, sketch, puppet, audio, assets, market, dashboard, and search |
+| Orchestration plane | VS Code Extension Host packages for workspace access, activation, cross-extension coordination, Agent sessions, and command routing |
+| Engine plane | Rust sidecar for media authority, GPU rendering, codecs, audio, device I/O, ML inference, runtime scene and puppet state |
 
-**Solution**: Rust Sidecar process + dual-process communication model.
+The product challenge is to expose professional creative and AI workflows inside VS Code without violating Webview sandbox constraints or duplicating engine-owned computation in TypeScript.
 
----
+## Layering
 
-## Overall Architecture
+| Layer | Owner | Rules |
+|-------|-------|-------|
+| L0 shared contracts | `neko-types`, `neko-proto`, selected schema and utility modules | Zero internal package dependency; reusable by Extension and Webview |
+| L1 host services | Extension Host packages and `neko-client` adapters | May use VS Code APIs; must not import React |
+| L2 Webview UI | React packages and `neko-ui` | Browser sandbox only; must not import `vscode` or Node APIs |
+| Engine | `neko-engine` Rust crates | Authoritative compute and runtime state; host agnostic |
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        VS Code Process                          │
-│                                                                 │
-│  ┌──────────────────────────────────────────────┐              │
-│  │              Extension Host (Node.js)         │              │
-│  │                                              │              │
-│  │  neko-engine ext  neko-cut ext  neko-agent ext  ...         │
-│  │       │                │               │                    │
-│  └───────┼────────────────┼───────────────┼────────────────────┘
-│          │ N-API          │ postMessage   │ postMessage         │
-│          │         ┌──────┼───────────────┼──────┐             │
-│          │         │      Webview (Browser)       │             │
-│          │         │  neko-cut UI  neko-agent UI  │             │
-│          │         └──────────────────────────────┘             │
-└──────────┼──────────────────────────────────────────────────────┘
-           │ Unified HTTP/WebSocket (axum, single port)
-┌──────────▼──────────────────────────────────────────────────────┐
-│                   neko-engine (Rust Sidecar)                    │
-│                                                                 │
-│  engine-kernel:   wgpu GPU · FFmpeg codec · DSP effects · Animation · GPU Skinning · Export │
-│  runtime-scene:  3D Scene ECS (bevy_ecs + glTF/VRM + IK + Blend)  │
-│  runtime-puppet: 2D Native Puppet ECS (Bone2D + BlendShape + MOC3 import compatibility) │
-│  runtime-device: Device I/O (cpal + midir + gilrs)             │
-│  runtime-media:  Media logic (probe + diff + subtitle)         │
-│  runtime-ml:     ONNX inference (CoreML acceleration)          │
-│  runtime-stage:  Interactive stage orchestration (planned)     │
-│  host-http:   axum HTTP/WebSocket server (unified port)        │
-│  host-napi:   Node.js N-API bindings                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+Dependency direction flows toward contracts and engine/client boundaries. Feature extensions should not depend directly on each other when a shared contract, command bus, or exported API can express the relationship.
 
----
+## Communication
 
-## Communication Patterns
+| Boundary | Mechanism | Invariant |
+|----------|-----------|-----------|
+| Webview to Extension Host | `postMessage` through a typed bridge | Webview never calls VS Code or Node APIs directly |
+| Extension Host to Engine | `EngineClient` over HTTP/WebSocket, plus controlled N-API surfaces | Extension Host does not duplicate engine compute |
+| Webview streaming to Engine | Authorized WebSocket stream descriptors | Extension Host brokers authority; media frames avoid Node relay where possible |
+| Extension to Extension | Shared exported APIs or VS Code command bus | No hidden package-level dependency between feature extensions |
 
-### 1. Extension Host ↔ Webview: postMessage IPC
+## Core Contracts
 
-```
-Webview (React)          Extension Host (Node.js)
-     │                          │
-     │─── postMessage ──────────▶│  Handle request (file I/O, VSCode API)
-     │◀── postMessage ───────────│  Return result
-```
+| Contract | Source of truth |
+|----------|-----------------|
+| Cross-layer IDL | `packages/neko-proto` |
+| Shared TypeScript contracts and infrastructure | `packages/neko-types` |
+| Engine client and stream clients | `packages/neko-client` |
+| Media and runtime authority | `packages/neko-engine` |
+| Architecture decisions | This document and `docs/architecture/` |
+| Quality gates | `AGENTS.md`, `CONTRIBUTING.md`, and package-level checks |
 
-The Webview runs inside a browser sandbox and **cannot directly access the file system or VS Code APIs** — all such operations must go through the message protocol proxy. Message types are defined in `@neko/shared` under `types/message.ts`.
+## Engine Authority
 
-### 2. Extension Host ↔ Rust Engine: Unified HTTP/WS (EngineClient)
+The Rust engine is the authority for:
 
-```
-Extension Host
-     │
-     └─ EngineClient (@neko/neko-client, zero vscode dependency)
-          │
-          ├─ HTTP POST /v1/dispatch  →  host-http  →  engine-kernel
-          │  For: synchronous commands (probe, waveform, diff, extractFrame, effects)
-          │
-          └─ WebSocket /v1/streams/:id  →  host-http  →  engine-kernel
-             For: streaming (H.264 push, PCM decode, control commands)
-```
+- media probing, decoding, encoding, export, and binary file access;
+- GPU rendering and stream production;
+- scene, puppet, audio, device, media, and ML runtime state;
+- compute-heavy perception and transformation pipelines;
+- runtime capabilities that must survive future host changes.
 
-**Key architecture points**:
+TypeScript may orchestrate, display, request, and validate, but it should not reimplement engine-owned media or runtime computation.
 
-- **Unified port**: All extensions share a single neko-engine Sidecar process and port
-- **Port discovery**: `vscode.commands.executeCommand('neko.engine.ensureFrameServer')` → `{ port }`
-- **EngineClient location**: `@neko/neko-client` (not a neko-engine subpackage), zero vscode dependency
-- **Convenience methods**: `probe()`, `waveform()`, `diff()`, `extractFrame()`, `listEffects()`, `applyEffect()`, etc.
+## Webview Constraints
 
-### 2.1 Intent-aware Content Access
+Every Webview must obey these constraints:
 
-Cross-package media and document reads must declare an operation intent before the host chooses
-source bytes, cache variants, proxies, engine tokens, or Webview URIs:
+1. No direct Node.js API access.
+2. No direct VS Code API access outside the host bridge.
+3. Workspace and extension resources are exposed through host-approved URIs.
+4. Durable project data never stores Webview URIs, blob URLs, stream IDs, preview tokens, or engine tokens as source facts.
+5. UI components consume abstract host bridges and shared contracts, not concrete Extension Host services.
 
-```
-interactive-preview / agent-context -> ResourceCacheService / Preview variants / Webview projection
-edit-playback                       -> proxy files or runtime streams
-final-export / package / verify      -> original source, original container entry, or engine source
-```
+## Agent Workflow
 
-Imports, existing-source registration, promoted generated media, and export-output staging go
-through `ContentIngestService`. Durable records store stable refs and portable paths, not
-`cachePath`, Webview URIs, blob/object URLs, preview tokens, engine tokens, or stream ids. See
-[intent-aware-content-access.md](./docs/architecture/intent-aware-content-access.md).
+The Agent follows a stable Draft / Plan / Apply workflow.
 
-### 3. Webview ↔ Rust Engine: Direct WebSocket (Streaming)
+Key invariants:
 
-```
-Webview (H264StreamClient / AudioStreamClient)
-     │ WebSocket
-     ▼
-neko-engine axum WebSocket endpoint
-     │
-     ▼
-engine-kernel decoder → GPU decoded frames → H.264 NAL / PCM Float32
-```
+- Skills describe behavior and domain strategy; they are not workflow engines.
+- Approval, policy, memory, runtime, schema, evaluator, and prompt concerns are separate control planes.
+- High-cost or irreversible actions require an approval path.
+- Agent tools operate through package capabilities and shared contracts, not direct Webview coupling.
+- Generated media and project facts must be grounded back into project assets, entity memory, or search indexes before they become durable context.
 
-Streaming goes over WebSocket directly, bypassing the Extension Host to avoid redundant frame data copies through the Node.js layer.
+## Creative Data Flow
 
----
+Neko Suite converges on a shared creative loop:
 
-## Package Dependency Graph
+1. User intent enters through Agent, Story, Canvas, or another creative surface.
+2. Intent is grounded against project files, assets, entities, memory, and current UI selection.
+3. Agent and package capabilities create or modify structured project artifacts.
+4. Engine-owned preview, render, perception, or export paths produce observable results.
+5. Results are indexed back into assets, search, entity memory, and review surfaces.
 
-```
-@neko/proto (single source of truth for IDL)
-     ↓ generates
-@neko/shared (neko-types)    ←── all packages depend on this (Logger/i18n/Theme/Errors, zero internal deps)
-@neko/neko-client            ←── EngineClient + streaming client + MediaPlaybackService + device clients (zero internal deps)
-     ↑
-neko-engine/host-napi      ←── N-API bindings (independently compiled)
-     ↑
-neko-engine/extension        ←── sole Sidecar manager + unified HTTP/WS server
-     ↑ (communicates via EngineClient HTTP/WS)
-neko-preview  →  @neko/neko-client
-neko-cut      →  @neko/neko-client + neko-tools + neko-preview
-neko-agent    →  @neko/neko-client + neko-tools + neko-preview
-neko-tools    →  @neko/neko-client
-neko-canvas   →  @neko/neko-client + neko-tools
-neko-model    →  @neko/neko-client + neko-tools + neko-preview
-neko-sketch   →  @neko/neko-client + @neko/shared
-neko-audio    →  @neko/neko-client + @neko/shared
-neko-story    →  @neko-story/parser + @neko/shared
-neko-assets   →  @neko/asset + @neko/shared
-```
+Story, Canvas, Cut, Preview, Assets, Entity, Search, Agent, and Engine each keep their own responsibilities; shared contracts connect them.
 
----
+## File And Path Policy
 
-## Core Data Flows
+Persistent project records store portable references:
 
-### Video Playback Flow
+- workspace-relative paths;
+- `${VAR}/path` style paths resolved by the path system;
+- stable resource references;
+- document source references with locators;
+- asset/entity IDs and provenance records.
 
-```
-User clicks play
-  │
-  ▼
-Extension Host
-  └── PreviewService / MediaService
-        └── EngineClient.createStream() → HTTP POST /v1/dispatch
-              └── Hardware decode → H.264 NAL stream (WebSocket /v1/streams/:id)
-                    │
-                    ▼
-              Webview H264StreamClient
-                    └── WebCodecs VideoDecoder
-                          └── Canvas renders frame
-```
+Persistent records must not store absolute machine paths unless explicitly scoped as local settings, nor transient runtime handles such as Webview URIs, blob URLs, stream IDs, or preview tokens.
 
-### Video Export Flow
+## Documentation Policy
 
-```
-User triggers export
-  │
-  ▼
-Extension Host
-  └── ExportService
-        └── EngineClient.dispatch() → HTTP POST /v1/dispatch
-              ├── GPU render pipeline (wgpu compositor + EffectDispatcher)
-              ├── Hardware encode (VideoToolbox/NVENC/VAAPI)
-              └── Audio/video mux → .mp4 file
-```
+Architecture documentation should describe current decisions, boundaries, invariants, risks, and consequences. Do not add code snippets, command transcripts, implementation status, path indexes, or completed development logs to architecture entry documents.
 
-### Storyboard Pipeline (Script → Canvas → Cut)
+Documentation follows these categories:
 
-```
-neko-story script (.fountain)
-  │
-  ├── Path A: Mechanical (import_script_to_canvas tool)
-  │     └── createStoryboardPayload(mode=mechanical) → ~lineSpan/10 ShotNodes
-  │
-  ├── Path B: Semantic (story → agent → canvas pipeline)
-  │     └── ScriptIndex (stable sceneId + metadata)
-  │           → GenerateScenePlan / GenerateShotPlan (deterministic planners)
-  │           → neko-agent parseStoryboard (IStructuredStoryPlanner preferred)
-  │           → importStoryboardToCanvas pipeline stage
-  │           → NekoCanvasAPI.storyboard.import(mode=semantic)
-  │
-  ├── Path F: Full video creation (neko.story.startVideoCreation → flowF)
-  │     └── parseStoryboard → importStoryboardToCanvas → generatePrompts
-  │           → generatePilot → batchGenerate → qualityGate → arrangeOnTimeline
-  │
-  ▼
-neko-canvas
-  ├── GenerationPromptPanel
-  │     └── neko.agent.buildPrompt (Chinese description → structured English prompt)
-  │     └── neko.agent.generateForNode → BatchGenerationScheduler
-  │           └── platform.media.generateImage → waitForTask → fetch base64
-  │                 └── ShotNode.generatedImage updated
-  ├── GalleryNode (candidate multi-view layouts: 3-view / 4-view / 9-grid)
-  ├── 7 Canvas MCP Tools (canvas_list/get/update/create_node +
-  │   generate_image/batch + set_project_generation_config)
-  └── Export: neko.cut.importStoryboard
-          │ postMessage → webview
-          ▼
-    neko-cut timeline (ShotNode → VideoClip track segments)
-```
-
-**Shared Storyboard Utils** (`@neko/shared/utils/storyboardPlanner.ts`):
-
-- `createStoryboardPayload()` — builds `CanvasStoryboardPayload` from `ScriptIndex` (mechanical or semantic mode)
-- `applyStoryboardPayloadToCanvas()` — applies payload to canvas API, creating scene/shot nodes
-
-**Complete Canvas Node Types** (`@neko/shared` `types/canvas.ts`):
-
-| Node Type      | Purpose                                                                        |
-| -------------- | ------------------------------------------------------------------------------ |
-| `shot`         | Storyboard frame (ShotScale + GeneratedImageVersion[] + candidate navigation)  |
-| `scene`        | Horizontal scene container (SceneGroupNode, groups ShotNodes by scene)         |
-| `gallery`      | Multi-view gallery (5 layouts + costumeLabel + @references + batch generation) |
-| `script`       | Script node (TOC directory + getScriptIndex → click to jump to SceneGroupNode) |
-| `narrative-start` | Interactive narrative entry node (`.nkc` branching graph SSOT, at most one) |
-| `narrative-scene` | Interactive narrative scene node (`sceneRef` points only to standard `.fountain`) |
-| `choice`       | Branch choice point (choice labels, conditions, and variable effects live in Canvas) |
-| `merge`        | Branch merge point                                                             |
-| `narrative-ending` | Interactive narrative ending node (valid terminal, multiple allowed)       |
-| `narrative-note` | Editor note node (activates narrative subsystem, excluded from runtime traversal) |
-| `document`     | Document node (PDF/DOCX/EPUB cover thumbnail + openDocument → vscode.open)     |
-| `model`        | AI model node (reference/workflow dual mode + checkModelInstalled)             |
-| `canvas-embed` | Nested canvas reference (.nkc thumbnail + double-click to open)                |
-| `video`        | Video container (multi-stream layout + InlineVideoPlayer)                      |
-| `audio`        | Audio container (InlineAudioPlayer + waveform)                                 |
-| `container`    | Generic container (policy-driven layout + NodeCard rendering)                  |
-
-**Canvas Interactive Narrative Path**:
-
-- `.nkc` is the branching graph SSOT and stores nodes, connections, variables, genre, locale, entry, and ending semantics.
-- `narrative-scene.sceneRef` points only to standard `.fountain` scene content; `.nks`, `.story`, and standalone `.nkstory` are not graph or scene formats for the new workflow.
-- Canvas node cards stay lightweight and delegate scene editing to Story; immersive playback lives in the separate Narrative Preview Webview.
-- Preview, HTML5 export, and tests share `@neko/shared` `NarrativeRuntime` / `WhitelistConditionEvaluator`; assets are resolved through injected `NarrativeAssetResolver` implementations for `interactive-preview`, `final-export`, and `package` intents.
-- Agent structured context exposes narrative node summaries and graph diagnostics without resolved Preview URLs, renderer state, or runtime handles.
-
-### AI Agent Workflow
-
-```
-User natural language input
-  │
-  ▼ UserPromptSubmit hooks (Shell, dynamic context injection)
-  │
-  ▼
-Webview chat UI
-  │ postMessage (regular message / /slash-command)
-  ▼
-Extension Host
-  ├── SlashCommandHandler — parse /command, apply SkillInjection to AgentSession
-  └── AgentManager — independent AgentRunner per session, LRU max 10 instances
-        │
-        ▼
-  AgentSession (unified abstraction for Extension + CLI)
-  │  system prompt = base + [accumulated Skill prompt injections]  ← Session-level, permanently written, see Note ①
-  │
-  ▼  PreToolUse hooks chained (Shell → TS PermissionHooks)
-  │
-  AgentExecutor (ReAct loop)
-  │  tool list = ToolInjectionManager.getToolsForTurn()  ← recalculated per turn, see Note ②
-  │              ├── always layer: core tools (Read/Write/Bash/Grep + meta-tools)
-  │              │                 + alwaysActive ToolSets' tools
-  │              └── dynamic layer: manually activated ToolSets' tools
-  │                                 (LLM calls ActivateToolSet / Skill auto-links)
-  │
-  ├── Claude / OpenAI API (streaming, @neko/platform LLM router)
-  └── Tool call → ToolRegistry.execute()
-        └── Timeline tools → EngineClient → neko-engine timeline mutation
-```
-
-**Three Injection Mechanisms Compared** (important — do not confuse):
-
-| Mechanism                 | Implementation                                           | Injection Timing                           | Reversible                       | Context-Aware                                       |
-| ------------------------- | -------------------------------------------------------- | ------------------------------------------ | -------------------------------- | --------------------------------------------------- |
-| **① Skill System Prompt** | `SkillInjectionCoordinator` 4-track atomic inject/remove | Session-level, Composer section management | ✅ 4-track atomic removal        | ⚠️ Composer has no global token cap                 |
-| **② ToolSet Tool List**   | `getToolsForTurn()` recalculated each time               | Dynamic per turn                           | ✅ Real-time activate/deactivate | ✅ Two-tier token budget (always/dynamic)           |
-| **③ ContextItem**         | `ContextManager` (used by MemoryHooks)                   | Injected as separate message per turn      | ✅ LRU eviction                  | ✅ Three-tier size budget (turn/session/persistent) |
-
-> **Note**: Phase 4 refactor (2026-03) fixed the historical design gaps: `SkillInjectionCoordinator` now auto-cleans old injections + Composer section management; `remove()` performs complete reverse across 3 tracks (prompt section + permission rules + state). The `SystemPromptComposer` still lacks a global token budget — base + multi-layer sections total may grow large.
-
-**neko-agent Internal Subsystems**:
-
-| Subsystem      | Components                                                                              | Responsibilities                                                                    |
-| -------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Tool**       | ToolRegistry, ToolCategoryRegistry, ToolInjectionManager, ToolGroupRegistry, TOOL_NAMES | Tool registration / execution / layered injection / set management / name constants |
-| **Skill**      | SkillRegistry, SkillService, SkillMatcher, SkillInjector, ToolGuard                     | Skill discovery / application / prompt injection / tool guarding                    |
-| **Hook**       | PermissionHooks, MemoryHooks, ValidationHooks, SettingsHookLoader                       | In-process TS interception + external Shell hook chaining                           |
-| **Capability** | CapabilityDiscoveryService, AgentCapabilityProvider                                     | Sub-package capability discovery (manifest + command) / registration / lifecycle    |
-
-**Concept Boundaries**:
-
-- `Tool` = atomic capability (executable function)
-- `ToolSet` = tool visibility module (activated on demand, reduces token usage)
-- `Skill` = behavioral pattern (system prompt + optional tool guard + associated ToolSets)
-- `Hook` = execution interceptor (Shell external + TS internal chained execution)
-- `SlashCommand` = user-triggered workflow (`/slash-command` → injects Skill prompt)
-
----
-
-## Architecture Decision Records (ADR)
-
-| Domain                        | Document                                                                                                                      | Key Decision                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unified Engine Architecture   | [adr-unified-engine.md](./docs/adr-unified-engine.md)                                                                         | EngineClient HTTP dispatch unifies all Engine calls, ports reduced from 3 to 1                                                                                                                                                                                                                                               |
-| Cross-Cutting Concerns        | [architecture/adr-cross-cutting-concerns.md](./docs/architecture/adr-cross-cutting-concerns.md)                               | Logger/i18n/Theme/Error unified in @neko/shared, three-layer isolation                                                                                                                                                                                                                                                       |
-| AI Agent Architecture         | [plans/2026-03-10-neko-agent-skill-tool-refactor-design.md](./docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md) | ToolSet/Skill/Hook subsystem separation; Shell hooks bridged to PermissionHooks; Skill auto-activates ToolSets                                                                                                                                                                                                               |
-| Agent Capability Provider     | [architecture/neko-agent-media-requirements-fit.md](./docs/architecture/neko-agent-media-requirements-fit.md)                 | Sub-packages register AgentCapabilityProvider via manifest+command; TOOL_NAMES constants as naming contract; CapabilityDiscoveryService hybrid discovery                                                                                                                                                                     |
-| Media Diff + LSP              | [architecture/media-lsp.md](./docs/architecture/media-lsp.md)                                                                 | H.264 + PCM streaming (not per-frame extraction); SSIM‖PSNR parallel; JVI diagnostics + symbol navigation + script semantic search                                                                                                                                                                                           |
-| Cross-Language Architecture   | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md)                             | Rust engine is the authoritative data model, TS handles UI only                                                                                                                                                                                                                                                              |
-| Shared Package Design         | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md)                                       | @neko/shared exports via subpath layers                                                                                                                                                                                                                                                                                      |
-| Asset Management              | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md)                                     | Unified AssetManifest + Handler registry pattern                                                                                                                                                                                                                                                                             |
-| 3D Capabilities               | [architecture/adr-model-lookdev-scene-editing.md](./docs/architecture/adr-model-lookdev-scene-editing.md)                     | bevy_ecs standalone crate + runtime-scene + Engine-streamed Route A viewport; LookDev Clay/Debug modes, authored lights, Engine-owned environment, typed picking; Webview does not provide a visible R3F/Three.js renderer                                                                                                   |
-| 2D Capabilities               | _Internalized_                                                                                                                | neko-sketch (painting) + neko-puppet (`.nkp` v2 native Bone2D + BlendShape skeletal animation, standalone sub-extension); runtime-puppet (bevy_ecs native 2D puppet runtime + MOC3/Live2D import compatibility); `.nkentity` v2 `puppet-bone` bindings; first Agent/asset/export paths; WS real-time streaming for neko-live |
-| Live Compositor               | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md)                         | neko-live consumes an engine Live Compositor H.264 stream through `ViewportShell`; devices expose authorized `sourceRef` data only, and local R3F/Puppet/canvas paths remain non-authoritative fallbacks                                                                                                                     |
-| Character Editing             | _Internalized_                                                                                                                | 2D/3D face customization, motion adjustment, painting, modeling assessment; standardized facial parameter templates (3D: 22 params / 2D: 32 params); shared keyframe timeline; .nkm project format; IK skeletal interactive editing                                                                                          |
-| Interactive Stage Runtime     | [architecture/adr-engine-bevy-gap-analysis.md](./docs/architecture/adr-engine-bevy-gap-analysis.md) · [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | `runtime-stage` is the planned playable scene orchestration layer: story/entity/canvas/agent/assets become StageActor, Trigger, Dialogue, Behavior, and Session state; it does not replace `runtime-scene`, `runtime-puppet`, or Live Compositor |
-| VSCode Constraints            | [architecture/vscode-constraints.md](./docs/architecture/vscode-constraints.md)                                               | Panel placement: editor-bound → embedded Webview, global → native container; device access: Webview sandbox proxied through neko-engine Rust sidecar (cpal/nokhwa/midir/gilrs)                                                                                                                                               |
-| Engine Pluginization (RFC)    | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md)                                                 | Capability pluginization instead of kernel pluginization; expose controlled shader/model/format/device/exporter/connector extension points; marketplace distributes, Engine Host activates                                                                                                                                   |
-| Engine Runtime Layering       | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md)                                     | Split runtimes by package and keep one Host app by default; Video/2D/3D/Docs/Device/ML stay in one host; Game/Sim/XR may graduate to dedicated sidecars later                                                                                                                                                                |
-| Creative Context Compression  | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md)                           | 7-level priority semantic classification: user messages permanently retained; creative decisions/version anchors/iteration chains/asset state/aesthetic preferences compressed in tiers                                                                                                                                      |
-| Ablation Experiment Framework | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md)                         | AblationToggles → AgentSessionConfig mapping + MetricsHooks metric collection, zero intrusion on existing subsystems                                                                                                                                                                                                         |
-| Agent Media Architecture      | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md)                                   | Story storyboard responsibility boundaries; Agent self-sufficiency; GeneratedAsset disk storage + JSON references; DragDropBroker cross-extension transfer; Send-to-Agent unified protocol (file-level + content-level, zero base64); MediaPreprocessor auto-scaling/frame-extraction                                        |
-| Story-Agent-Canvas Boundary   | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md)                             | Agent-first boundary convergence: story owns script facts + lightweight review table, agent owns orchestration, canvas owns storyboard workspace; dual-path (mechanical/semantic) import; StorySceneStateStore + workspaceState persistence                                                                                  |
-| Canvas Interactive Narrative  | [architecture/adr-canvas-interactive-narrative.md](./docs/architecture/adr-canvas-interactive-narrative.md)                   | `.nkc` branching graph SSOT; standard `.fountain` scene content; start/ending nodes; Canvas lightweight preview separated from Narrative Preview; `.nks`/`.story`/standalone `.nkstory` excluded from the new workflow; Preview/Export share runtime and intent-aware asset resolver |
-| Document Preview              | [architecture/document-preview.md](./docs/architecture/document-preview.md)                                                   | PDF/EPUB/CBZ/DOCX built-in previewer; waterfall virtual scroll + dual-column mode; Webview direct connection to neko-engine HTTP (no postMessage relay); epub.js fetchForEpub replaces XHR                                                                                                                                   |
-| Path System                   | _Internalized_                                                                                                                | Project files store only relative paths + `${VAR}/path`; PathResolver (@neko/shared L0) unified resolution; Rust ProjectContext (resolve/validate); EngineClient/PreviewFileServer auto-expand variables; variable sources: neko/settings.json (git-tracked) + .neko/settings.local.json (gitignored)                        |
-
----
-
-## EditOperation Command System
-
-All editors share a unified `EditOperation` abstraction (defined in `@neko/shared` under `operations/`), enabling operation-level undo/redo, AI integration, and audit trails.
-
-```
-Webview (user action)
-  │
-  ├─ Build EditOperation (type + payload + before + meta)
-  ├─ Apply to local state (applyOperation)
-  ├─ Record to undo stack (invertOperation generates inverse operation)
-  └─ postMessage('operationApplied', operation)
-        │
-        ▼
-Extension Host
-  ├─ Incremental update of in-memory cache (applyOperation)
-  ├─ Fire dirty event (onDidChangeCustomDocument)
-  └─ Optional: forward to AI Agent for analysis
-```
-
-**Operation Domain Coverage**:
-
-| Editor      | Operation Prefix                        | Integration Method                       |
-| ----------- | --------------------------------------- | ---------------------------------------- |
-| neko-cut    | `track.*` / `element.*`                 | Built-in dispatch in editorStore         |
-| neko-audio  | `audio.effect.*` / `audio.marker.*`     | audioProjectStore (dispatch + undo/redo) |
-| neko-canvas | `canvas.node.*` / `canvas.connection.*` | canvasOperationStore bridge layer        |
-| neko-sketch | `sketch.layer.*` / `sketch.stroke.*`    | sketchOperationStore bridge layer        |
-
----
+- System-level architecture and ADRs live in `docs/architecture/`.
+- Domain capabilities and domain-internal architecture live in `docs/domains/<domain>/`.
+- Research, competitor analysis, and technical spikes live in `docs/research/`.
+- Gap, migration, and health snapshots live in `docs/status/`.
+- Active design changes live in `openspec/changes/`.
 
 ## Design Principles
 
-**SOLID-Driven**: Each module has a single responsibility, programs to interfaces, and decouples through dependency injection.
-
-**Single Source of Authority**:
-
-- Type contracts: `@neko/proto` (.proto IDL)
-- Shared infrastructure: `@neko/shared` (Logger/i18n/Theme/Errors, three-layer isolation)
-- Engine communication: `@neko/neko-client` (EngineClient + streaming client, zero vscode dependency)
-- Computation logic: `neko-engine` (Rust — TS layer does not duplicate computation logic)
-
-**Dual-Process Isolation**: Each extension is split into `extension/` (Node.js Host) and `webview/` (Browser) layers, communicating via postMessage.
-
-**Progressive Architecture**: Extension Pack pattern — each extension can be installed independently and activated on demand.
-
----
-
-## Architecture Redlines (Host Isolation)
-
-> **Context**: The current mainline is VS Code integration (covering ~90% of AI-creation scenarios). The future may evolve into a standalone professional IDE (Neko Studio: native overlay HDR, multi-viewport, OpenXR, zero-copy GPU). To avoid being forced to fork or undergo a massive refactor when the host changes, the redlines below are **enforced on every PR starting now**.
-
-### Three-Layer Host Isolation Model
-
-```
-Layer 3: Frontend host (replaceable)
-  ├─ VS Code Extension (mainline P0): Webview sandbox + SDR + P3 + WebCodecs
-  └─ Neko Studio (future)           : Native window + HDR + multi-viewport + OpenXR
-        │
-        ▼
-Layer 2: Client SDK (@neko/neko-client, host-agnostic)
-  • EngineClient / streaming clients / detectCapabilities
-  • Zero vscode / zero electron / zero tauri dependency
-        │
-        ▼
-Layer 1: Engine (neko-engine, SSOT, host-agnostic)
-  • Full capability surface always available (HDR / 10-bit / EXR / Rgba16Float)
-  • Standalone process; host-cli already supports running outside VS Code
-```
-
-### Redlines (violation blocks the PR)
-
-| #      | Redline                                                    | Counter-example                                                   | Correct                                                          |
-| ------ | ---------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **R1** | Engine never knows the host                                | `fn render_for_vscode_webview()`                                  | `fn render(output: OutputFormat, color_pipeline: ColorPipeline)` |
-| **R2** | `@neko/neko-client` never depends on vscode/electron/tauri | `import * as vscode from 'vscode'`                                | Inject port/capabilities via constructor args                    |
-| **R3** | Engine capability is never trimmed for host limits         | Removing HEVC Main10 encoder because VSCode can't display HDR     | Engine keeps all formats; host picks via capabilities            |
-| **R4** | Display path is decoupled from export path                 | Preview precision limits export precision                         | VSCode previews SDR + exports HEVC Main10 master                 |
-| **R5** | Webview components never call `vscode.*` directly          | `acquireVsCodeApi().postMessage(...)` scattered across components | `HostBridge` adapter; components consume the abstract interface  |
-| **R6** | File paths go through PathResolver                         | `vscode.workspace.fs.readFile()` used cross-layer                 | `PathResolver` (@neko/shared L0) + adapter translation           |
-| **R7** | Display capability goes through `HostCapabilities`         | `if (isVSCode)` hardcoded in components                           | `if (capabilities.display.colorSpaces.includes('rec2100-pq'))`   |
-
-### HostCapabilities Contract (the key abstraction)
-
-`@neko/neko-client/src/host-capabilities.ts` exposes a unified capability description. Every "what can the host let me do" decision goes through this layer:
-
-```typescript
-interface HostCapabilities {
-  readonly hostType: 'vscode-webview' | 'electron-native' | 'tauri-native' | 'browser';
-  readonly display: {
-    colorSpaces: ('srgb' | 'display-p3' | 'rec2100-pq' | 'rec2100-hlg')[];
-    bitDepth: 8 | 10 | 16;
-    maxLuminance: number; // nits
-  };
-  readonly codec: {
-    h264: boolean;
-    h265Main10: boolean;
-    av1_8bit: boolean;
-    av1_10bit: boolean;
-  };
-  readonly windowing: {
-    nativeOverlay: boolean;
-    multiViewport: boolean;
-    openXR: boolean;
-  };
-  readonly fileIO: {
-    streamingRead: boolean; // VSCode must go through engine HTTP
-    largeFileLimit: number; // VSCode webview full-load limit
-  };
-}
-```
-
-VSCode Webview and the future Studio differ via **different `HostCapabilities` implementations** — engine and component code stay identical.
-
-### Three Contracts (Display / Data / Export)
-
-| Contract    | Boundary                        | VSCode (current)                         | Studio (future)               |
-| ----------- | ------------------------------- | ---------------------------------------- | ----------------------------- |
-| **Display** | Webview rendering               | 8-bit sRGB / display-p3                  | + 10-bit HDR (rec2100-pq/hlg) |
-| **Data**    | Engine internal + project files | `Rgba16Float` preserved end-to-end       | Same                          |
-| **Export**  | User export path                | All formats (HEVC Main10 / EXR / ProRes) | Same                          |
-
-**Core principle**: Display-precision limits must not propagate to data precision or export precision. A VSCode user editing HDR content under SDR preview can still export HDR masters — migrating to Studio is a **pure upgrade** with no historical-project loss.
-
-### Evolution Roadmap (directional, not a commitment)
-
-| Phase   | Window    | Content                                                                                  | Trigger                       |
-| ------- | --------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
-| Phase 1 | now – 6mo | VSCode mainline: H.264 SDR + P3 wide gamut + tone-mapping + HostCapabilities abstraction | —                             |
-| Phase 2 | 6 – 12mo  | Pro-capability seeding: XR desktop preview / advanced PBR / basic color grading          | Phase 1 commercial validation |
-| Phase 3 | 12 – 24mo | Neko Studio standalone IDE (Tauri/Electron): native HDR + multi-viewport + OpenXR        | Phase 2 paid-user validation  |
-| Phase 4 | optional  | Neko Cloud (Web) / iPad version                                                          | Strategic need                |
-
-**Invariant**: Phase 3 Studio shares the **same Rust engine and same EngineClient** with the VSCode mainline — only Layer 3 changes.
-
----
-
-## Tech Stack Overview
-
-| Layer        | Technology                                   | Rationale                                            |
-| ------------ | -------------------------------------------- | ---------------------------------------------------- |
-| Frontend     | React 18 + Zustand + Tailwind + Vite         | Mature ecosystem, Slice pattern for testability      |
-| Extension    | VS Code Extension API + TypeScript + esbuild | Platform requirement                                 |
-| Media Engine | Rust + wgpu + FFmpeg + axum + tokio          | Zero GC, cross-platform GPU, proven codecs           |
-| AI           | Vercel AI SDK + Claude/OpenAI + MCP          | Multi-model abstraction, streaming responses         |
-| Protocol     | Protobuf IDL (manually maintained)           | Cross-language type contracts                        |
-| Streaming    | H.264 + PCM over WebSocket                   | Low latency, native browser support (WebCodecs)      |
-| Build        | pnpm 10 + Turborepo 2                        | Monorepo parallel builds                             |
-| Testing      | Vitest v4.0.18 + cargo test                  | Covers both TS and Rust, unified coverage thresholds |
-
----
-
-## Extension Activation Dependency Chain
-
-```
-neko-engine ◀── neko-preview ◀── neko-cut
-                              ◀── neko-agent
-                              ◀── neko-canvas ◀── neko-sketch
-neko-tools  ◀── neko-cut
-            ◀── neko-agent
-```
-
-`neko-engine` is the foundation for all media-processing extensions and must be activated first. All extensions communicate with neko-engine's unified HTTP/WS port via `EngineClient` (`@neko/neko-client`).
-
----
-
-## Cross-Extension AI Collaboration
-
-Neko Suite extensions collaborate through two mechanisms: **Exported APIs** (type-safe bidirectional calls) and the **VSCode Command Bus** (loosely-coupled unidirectional triggers).
-
-### Communication Patterns
-
-```
-neko-canvas / neko-cut / neko-story
-  │
-  ├─ [Pattern A] vscode.extensions.getExtension<T>(id).exports
-  │     → Direct typed API calls (NekoCanvasAPI / NekoCutAPI / NekoStoryAPI)
-  │
-  └─ [Pattern B] vscode.commands.executeCommand('neko.agent.*', payload)
-        → Command bus IPC (loosely coupled, silent no-op if neko-agent is not installed)
-```
-
-### Exported API Contracts (`@neko/shared/types/extension-api.ts`)
-
-| Extension   | Export Type                      | Key Namespaces                                                                                                                                   |
-| ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| neko-canvas | `NekoCanvasAPI & ISkillProvider` | `asset` / `canvas` / `storyboard` / `nodes` / `events`                                                                                           |
-| neko-cut    | `NekoCutAPI & ISkillProvider`    | `timeline` / `ai`                                                                                                                                |
-| neko-story  | `NekoStoryAPI`                   | `parseScript` / `convertToTimeline` / `getScriptIndex` / `getCharacterRegistry` / `resolveCharacter` / `generateScenePlans` / `generateShotPlan` |
-| neko-auth   | `NekoAuthAPI`                    | `getSession` / `onDidChangeSession`                                                                                                              |
-
-### Cross-Extension Command Protocol
-
-neko-agent registers the following commands for other extensions to invoke. Commands silently no-op when not registered:
-
-| Command                               | Caller                                 | Purpose                                                                                          |
-| ------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `neko.agent.generateForNode`          | neko-canvas `BatchGenerationScheduler` | Trigger platform media service image generation, returns `{ dataUrl: string }`                   |
-| `neko.agent.reportGenerationProgress` | neko-canvas `BatchGenerationScheduler` | Broadcast generation progress to Agent Chat Webview                                              |
-| `neko.agent.registerSlashCommands`    | neko-canvas / neko-cut etc.            | Register `/slash` commands in the Agent chat panel                                               |
-| `neko.agent.internalChat`             | Any extension                          | Reuse the configured LLM service for inference                                                   |
-| `neko.agent.sendContext`              | neko-canvas / neko-story               | Inject context payload (AgentContextChip UI + story-selection / canvas-selection)                |
-| `neko.agent.startPipeline`            | neko-story                             | Start a pipeline flow (flowF etc.) with structured params (source, importToCanvas, eventCommand) |
-| `neko.agent.buildPrompt`              | neko-canvas `GenerationPromptPanel`    | Chinese scene description → structured English prompt (with character/shot scale/mood)           |
-| `neko.story.applyInlineDiff`          | neko-agent                             | Apply WorkspaceEdit to script file (accept/reject confirmation)                                  |
-| `neko.story.startVideoCreation`       | User / neko-story                      | Launch standard video creation workflow (flowF) from the current screenplay scene                |
-| `neko.story.handlePipelineEvent`      | neko-agent pipeline                    | Write-back pipeline events to StorySceneStateStore for status tracking                           |
-| `neko.canvas.importStoryboard`        | neko-story / neko-agent                | Import a `CanvasStoryboardPayload` into the active canvas as scene/shot nodes                    |
-
-### ISkillProvider — Skill Discovery Interface
-
-Extensions implementing `ISkillProvider` have their `getSkills()` aggregated by neko-agent's `ListPluginSkills` tool and exposed to the LLM:
-
-```typescript
-// @neko/shared
-interface ISkillProvider {
-  getSkills(): readonly SkillDef[];
-}
-interface SkillDef {
-  id: string;
-  name: string;
-  description: string; // LLM-readable capability description
-  icon?: string; // VSCode codicon
-  command: string; // VSCode command ID to execute this capability
-  tags?: readonly string[]; // For filtering ('generation' | 'export' | ...)
-}
-```
-
-Extensions currently implementing `ISkillProvider`:
-
-| Extension   | Skills                                                       |
-| ----------- | ------------------------------------------------------------ |
-| neko-canvas | `batch-generate` / `export-storyboard` / `generate-selected` |
-| neko-cut    | `generate-video-clip` / `transcribe-audio`                   |
-
-### Image Generation Data Flow (Canvas → Agent → Platform)
-
-```
-BatchGenerationScheduler (Extension Host)
-  │
-  ├─ callAgent()
-  │     └─ executeCommand('neko.agent.generateForNode', { nodeId, prompt, ratio, ... })
-  │                │
-  │                ▼ neko-agent Extension Host
-  │           platform.media.generateImage({ prompt, ratio, count })
-  │                │
-  │                ▼ @neko/platform → AI media service (Replicate / ComfyUI / ...)
-  │           platform.media.waitForTask(taskId, timeout=3min)
-  │                │
-  │                ▼ fetch(output.url) → base64
-  │           return { dataUrl: 'data:image/png;base64,...' }
-  │
-  ├─ reportToAgent(task, status)
-  │     └─ executeCommand('neko.agent.reportGenerationProgress', { nodeId, taskId, status, total })
-  │                │
-  │                ▼ chatViewProvider.postMessage({ type: 'generationProgress', ... })
-  │                      → Chat Webview real-time progress card
-  │
-  └─ onProgress('done', dataUrl)
-        → Webview postMessage → ShotNode updates generated image
-```
+1. Contract first, implementation second.
+2. Keep interfaces small and stable.
+3. Prefer dependency injection, registries, strategies, and event boundaries over direct package coupling.
+4. Keep engine computation authoritative and host agnostic.
+5. Keep Webview UX rich but sandbox-correct.
+6. Treat architecture documents as current contracts or explicit historical snapshots, not implementation ledgers.

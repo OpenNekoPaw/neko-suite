@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The open source licenses governing Neko Suite's code (MIT / Apache 2.0 /
-LGPL v3) grant broad permissions to use, modify, and distribute the
-software. However, these licenses do **not** grant permission to use the
+The open source license governing Neko Suite's code (GNU Affero General
+Public License v3.0 or later) grants broad permissions to use, modify, and
+distribute the software. However, this license does **not** grant permission to use the
 Neko Suite trademarks. This policy explains how you may — and may not —
 use our brand.
 
@@ -66,8 +66,7 @@ You **may not**, under any circumstances:
 - **Create confusion**: Use names or logos confusingly similar to Neko Suite
   marks for derivative or competing products.
 - **Disparage the brand**: Use the marks in connection with malicious
-  software, deceptive practices, or content that violates the project's
-  [Ethical Use Guidelines](./ETHICS.md).
+  software, deceptive practices, or abusive content.
 
 ## Derivative Works / Forks
 
@@ -77,8 +76,8 @@ If you create a fork or derivative product:
   with your own branding. This makes it clear that your product is
   independent.
 - **Credit the origin**: Include a notice such as: "Based on Neko Suite
-  (https://github.com/aspect-apps/neko-suite), licensed under [MIT /
-  Apache 2.0 / LGPL v3]."
+  (https://github.com/aspect-apps/neko-suite), licensed under the GNU
+  Affero General Public License v3.0 or later."
 - **Do not use neko-* prefixes**: Choose a distinct name for your modules
   (e.g., "myapp-cut" instead of "neko-cut").
 

@@ -90,7 +90,7 @@ Neko Suite 支持按场景安装子包，无需全量安装所有扩展：
 | **neko-suite-audio** | core + audio | 波形编辑 + 效果链 |
 | **neko-suite** | 全部 | 全栈创作 |
 
-详见 [Extension Pack 分层策略 ADR](./docs/architecture/extension-pack-strategy.md)。
+当前包和扩展边界见 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md)。
 
 ---
 
@@ -106,9 +106,9 @@ neko-suite/
 │   ├── neko-client/     # @neko/neko-client 流媒体客户端 + EngineClient（零依赖）
 │   ├── neko-proto/      # @neko/proto Protobuf IDL 定义
 │   └── ...              # 其他功能包（见 README.md）
-├── docs/                # 架构决策文档（ADR）
+├── docs/                # 架构、领域、调研和状态文档
 ├── ARCHITECTURE.md      # 系统架构总览
-├── CLAUDE.md            # AI 开发规范（必读）
+├── AGENTS.md            # 仓库工作规则
 ├── ROADMAP.md           # 长期路线图
 └── TODO.md              # 当前迭代活跃任务
 ```
@@ -317,7 +317,7 @@ pnpm smoke:webview       # 构建所有 webview 包；可用 NEKO_WEBVIEW_SMOKE_
 node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview 包
 ```
 
-代码审查流程、风险分级、功能/UX/性能检查、专业软件对标和合并规则见 [代码审查与质量门禁 ADR](./docs/architecture/adr-code-review-quality-gates.md)。
+代码审查流程、风险分级、功能/UX/性能检查和合并规则遵循 [AGENTS.md](./AGENTS.md) 与 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) 中的验证要求。
 
 ### CI/CD
 
@@ -337,7 +337,7 @@ PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.y
 
 ## 代码规范
 
-详细规范见 [CLAUDE_CN.md](./CLAUDE_CN.md)，以下是核心要点：
+仓库级工作规则见 [AGENTS.md](./AGENTS.md)，以下是核心要点：
 
 ### TypeScript
 
@@ -511,11 +511,11 @@ docs: update ARCHITECTURE.md with streaming flow
 | Effects/Shader 系统 | Rust + WGSL + TypeScript | neko-engine + neko-cut |
 | i18n 翻译补充 | 多语言翻译 | 所有 webview 包 |
 
-**最新完成的架构改进**（可参考学习）：
-- AI Agent 架构重构（`docs/plans/2026-03-10-neko-agent-skill-tool-refactor-design.md`）：ToolSet/Skill/Hook 三子系统重命名清理、Shell hooks 桥接、两层工具注入（`always`/`dynamic`）
-- 统一引擎架构（`docs/adr-unified-engine.md`）
-- 横切关注点统一（`docs/architecture/adr-cross-cutting-concerns.md`）
-- Shader/Effects 全量打通（`packages/neko-engine/packages/engine-kernel/src/export/gpu_export_pipeline.rs`）
+**当前架构参考**：
+- [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md)：稳定系统边界。
+- [docs/README.md](./docs/README.md)：文档分类与发现路径。
+- [TODO_CN.md](./TODO_CN.md)：活跃工作。
+- [ROADMAP_CN.md](./ROADMAP_CN.md)：方向性产品路线。
 
 ---
 
@@ -527,7 +527,7 @@ docs: update ARCHITECTURE.md with streaming flow
 
 **Rust 日志**：`tracing::info!("msg")` → 通过 neko-engine 遥测系统输出
 
-详细调试方法见 [CLAUDE_CN.md](./CLAUDE_CN.md)。
+仓库级调试和工作约定见 [AGENTS.md](./AGENTS.md)。
 
 ---
 

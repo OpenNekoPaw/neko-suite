@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：三层导出隔离（Core / VSCode / Webview），被所有 11 个包依赖
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

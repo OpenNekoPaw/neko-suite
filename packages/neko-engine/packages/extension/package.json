@@ -12,5 +12,5 @@
     "@neko/shared": "workspace:*",
     "@neko-engine/host-napi": "workspace:*"
   },
-  "license": "LGPL-3.0-or-later"
+  "license": "AGPL-3.0-or-later"
 }

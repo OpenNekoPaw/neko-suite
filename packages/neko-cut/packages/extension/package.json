@@ -13,5 +13,5 @@
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*"
   },
-  "license": "MIT"
+  "license": "AGPL-3.0-or-later"
 }

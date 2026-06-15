@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host (Node.js 服务层) + Webview (React 时间线 UI) 双进程
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 

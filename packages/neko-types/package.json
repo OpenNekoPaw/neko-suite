@@ -47,5 +47,5 @@
     "@types/vscode": "^1.85.0",
     "jsdom": "^27.0.1"
   },
-  "license": "Apache-2.0"
+  "license": "AGPL-3.0-or-later"
 }

@@ -1,6 +1,7 @@
 {
   "name": "@neko/auth-core",
   "version": "0.1.0",
+  "license": "AGPL-3.0-or-later",
   "description": "Neko auth core — OAuth 2.0 + PKCE, token management (Layer 0, zero VSCode dependency)",
   "type": "module",
   "exports": {

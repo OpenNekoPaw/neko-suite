@@ -1,8 +1,6 @@
 # neko-agent 架构
 
 > AI Agent 系统，提供对话、MCP 工具、技能系统、多模型 LLM 等能力。
->
-> 关联 ADR：[Agent Runtime Bootstrap 收口](../../docs/architecture/adr-agent-runtime-bootstrap.md)
 
 ---
 

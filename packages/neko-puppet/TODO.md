@@ -1,27 +1,10 @@
 # neko-puppet TODO
 
-> MOC3 (.moc3) support implementation status and remaining tasks.
-> Full design: [docs/development/neko-puppet-moc3-support.md](../../docs/development/neko-puppet-moc3-support.md)
-> License analysis: [docs/analysis/live2d-license-analysis-2026-04-13.md](../../docs/analysis/live2d-license-analysis-2026-04-13.md)
+> Active puppet work only. Current implemented behavior should be read from the
+> code, README, and package architecture docs; this file does not keep completed
+> phase history.
 
----
-
-## Completed (2026-04-14)
-
-- [x] **Phase 0**: Remove legacy dependencies — RUSTSEC-2022-0081 resolved
-- [x] **Phase 1**: MOC3 parser + loader + 1D key form interpolation (self-built, zero unsafe)
-- [x] **Phase 2**: WarpDeformer (bilinear grid) + RotationDeformer (pivot rotation) + deformer systems
-- [x] **Phase 3**: Expression (.exp3.json) + Motion (.motion3.json) + Physics (.physics3.json) + API layer
-- [x] **Phase 4**: Extension .moc3 file type + webview drag-drop + i18n (en/zh-cn)
-- [x] **Phase 5**: Face tracking enhancement (ParamBody/Breath/Cheek/EyeSmile + LIVE2D_PARAM_ALIASES)
-
-**Stats**: 104 Rust unit tests, clippy zero warnings, pnpm build 29/29
-
----
-
-## Remaining
-
-### Phase 6: AI-Assisted Puppet Creation (3-4 days, Priority: Medium)
+## AI-Assisted Puppet Creation
 
 **Goal**: AI agent tools for MOC3 expression control + template import UI
 
@@ -37,7 +20,7 @@
 - `neko-types/src/types/puppet.ts`
 - `neko-types/src/types/tool-names.ts`
 
-### Phase 7: VTube Studio API Compatibility (4-5 days, Priority: Low)
+## VTube Studio API Compatibility
 
 **Goal**: WebSocket endpoint accepting VTS plugin protocol for external plugin interop
 
@@ -50,7 +33,7 @@
   - `InjectParameterDataRequest` — external parameter injection (core)
   - `ExpressionStateRequest/ActivationRequest` — expression control
 
-### Other Enhancements
+## Other Enhancements
 
 - [ ] 2D bilinear interpolation (dual-axis key form interpolation for complex parameter bindings)
 - [ ] Real .moc3 model E2E testing (validate parser against production models)

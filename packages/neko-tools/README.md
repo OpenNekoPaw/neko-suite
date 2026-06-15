@@ -6,7 +6,6 @@
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host + Webview (React Diff UI) 双进程
-- 规范：[CLAUDE.md](../../CLAUDE.md)
 
 ## Quick Reference
 
@@ -15,7 +14,6 @@
 - **子包**：`extension/`（Host）、`webview/`（React Diff UI）
 - **依赖**：`@neko/shared`、`sharp`（图像处理）
 - **被依赖**：neko-cut、neko-canvas、neko-agent（extensionDependency）
-- **设计文档**：[`docs/architecture/neko-tools-di-refactor.md`](../../docs/architecture/neko-tools-di-refactor.md)
 
 ## Architecture
 

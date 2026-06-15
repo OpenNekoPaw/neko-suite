@@ -15,12 +15,12 @@
   3. 是否易于扩展与测试？
 - 遇到多模块改动或新功能，先做五层分析：职责、依赖、接口、扩展、测试。
 - 简单改动可直接实现，但仍需保持与现有架构一致。
-- 新增功能或非平凡代码修改后，按 `docs/architecture/adr-code-review-quality-gates.md` 做自审；可使用项目 skill `.codex/skills/neko-quality-review/SKILL.md`，并在交付说明中列出验证命令与剩余风险。
+- 新增功能或非平凡代码修改后，按本文“测试与质量门禁”章节和 `CONTRIBUTING_CN.md` 做自审；可使用项目 skill `.codex/skills/neko-quality-review/SKILL.md`，并在交付说明中列出验证命令与剩余风险。
 
 ## 语言与沟通
 
 - 面向用户的说明优先使用中文。
-- 新增代码注释应优先遵循所在模块既有风格；若无明确先例，可参考 `CLAUDE.md` 使用英文注释。
+- 新增代码注释应优先遵循所在模块既有风格；若无明确先例，使用简洁英文注释说明非显然约束。
 - 文档更新优先同步中文版本；若变更影响英文文档语义，补充对应英文文档。
 
 ## 项目概览
@@ -44,23 +44,29 @@
 
 ## 开发前先读
 
+- 功能背景先看 `README_CN.md`，必要时对照 `README.md`。
 - 总体架构先看 `ARCHITECTURE_CN.md`，必要时对照 `ARCHITECTURE.md`。
-- 功能背景先看 `README_CN.md`。
-- 进入某个领域前，先查阅对应 ADR 或架构文档，例如：
-  - VSCode 平台约束（面板放置 / 设备访问）：`docs/architecture/vscode-constraints.md`
-  - 媒体 Diff 与 LSP：`docs/architecture/media-lsp.md`
-  - 文件格式策略（nk* / JSON Schema / Proto）：`docs/architecture/format-strategy.md`
-  - 市场与 Registry（含 registry-server）：`docs/architecture/marketplace.md`
-  - 本地模型部署：`docs/architecture/model-runtime.md`
-  - 文档预览：`docs/architecture/document-preview.md`
-  - 创意上下文压缩：`docs/architecture/creative-context-compression.md`
-  - 消融实验框架：`docs/architecture/ablation-experiment-framework.md`
-  - Agent 媒体资产：`docs/architecture/agent-media-architecture.md`
-  - Agent 统一工作流（IDC 三阶段 + 六平面约束）：`docs/architecture/agent-unified-workflow.md`
-  - Agent 能力提供者协议：`docs/architecture/neko-agent-media-requirements-fit.md`
-  - 3D 编辑器渲染架构（活跃议题，Proposed 2026-04-27）：`docs/architecture/adr-3d-editor-rendering-architecture.md`
-  - 代码审查与质量门禁：`docs/architecture/adr-code-review-quality-gates.md`
-- ADR 全集见 `docs/architecture/`，更多条目请直接浏览该目录。
+- 文档导航先看 `docs/README.md`，不要猜测具体文档路径。
+- 系统级架构、ADR 和跨领域约束从 `docs/architecture/README.md` 进入。
+- 领域能力、领域架构和跨包领域边界从 `docs/domains/README.md` 进入，再进入 `docs/domains/<domain>/README.md`。
+- 调研、竞品、技术 spike 和 UX 分析从 `docs/research/README.md` 进入。
+- Gap、迁移、健康度和审计快照从 `docs/status/README.md` 进入。
+- 活跃设计变更优先查 `openspec/changes/`。
+- 若根架构与包级文档冲突，以当前代码和根架构约束为准。
+
+## 文档治理
+
+- 根目录 `README_CN.md` / `README.md` 是项目入口；`ARCHITECTURE_CN.md` / `ARCHITECTURE.md` 是系统架构总览入口。
+- `docs/architecture/` 只放系统级约束、ADR 和跨领域不变量。
+- `docs/domains/<domain>/` 放领域能力模型、领域数据流和领域内部架构；领域架构文件命名为 `architecture.md`。
+- `docs/research/` 放调研、竞品、市场、技术 spike 和 UX 分析；此类文档必须带日期、来源或不确定性说明。
+- `docs/status/` 放带日期的 gap、迁移进度、健康度和审计快照；此类文档不作为长期架构事实来源，也不承担任务管理。
+- `openspec/changes/` 放仍在设计或实施中的变更；稳定结论再提升到 `docs/architecture/` 或 `docs/domains/`。
+- `packages/<pkg>/docs/` 放只服务某个包的实现、配置和维护说明。
+- 新增或移动文档前，先判断它是系统约束、领域模型、调研分析、当前状态、开发变更还是包私有实现。
+- 不要把领域内部架构放入 `docs/architecture/<domain>/`；应放入 `docs/domains/<domain>/architecture.md`。
+- 不要把实现日志、命令输出、阶段完成记录或临时状态写成架构事实。
+- 状态文档中的行动项需要设计、实现或验收时，转入 `openspec/changes/`；只是排队事项时，转入 `TODO_CN.md` / `TODO.md`；长期方向转入 `ROADMAP_CN.md` / `ROADMAP.md`。
 
 ## 架构硬约束
 

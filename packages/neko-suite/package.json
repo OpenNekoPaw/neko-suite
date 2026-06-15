@@ -4,7 +4,7 @@
   "description": "All-in-one content creation IDE for developers - Video editing, 3D rendering, AI-driven filmmaking",
   "version": "0.0.1",
   "publisher": "neko",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/neko/creative-suite"

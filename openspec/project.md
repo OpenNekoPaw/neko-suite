@@ -535,36 +535,17 @@ workflows change.
 Prefer Chinese documentation updates for user/project-facing docs when a Chinese
 version exists. Keep English docs in sync when semantics change.
 
-New architecture decisions should either update the relevant ADR or create a new
-ADR/OpenSpec change that links to the affected ADRs.
+New architecture decisions should update the root architecture overview or add
+a concise OpenSpec/design note that captures stable boundaries, invariants,
+risks, and consequences. Do not recreate implementation logs as architecture
+records.
 
 ## Important References
 
 - `ARCHITECTURE_CN.md`: system architecture overview.
-- `README_CN.md`: package maturity and validation commands.
-- `docs/architecture/adr-code-review-quality-gates.md`: review, risk, and
-  validation model.
-- `docs/architecture/vscode-constraints.md`: VSCode panel and device boundaries.
-- `docs/architecture/engine-runtime-layering.md`: engine host/runtime split.
-- `docs/architecture/engine-file-access.md`: engine-owned binary file boundary.
-- `docs/architecture/intent-aware-content-access.md`: content access and ingest.
-- `docs/architecture/local-resource-access.md`: Webview local resource roots.
-- `docs/architecture/project-cache-search-service.md`: project search, cache,
-  and host-mediated projections.
-- `docs/architecture/neko-entity.md`: neutral creative entity runtime and fact
-  ownership.
-- `docs/architecture/creative-entity-asset-composition.md`: entity, asset,
-  binding, and representation boundaries.
-- `docs/architecture/format-strategy.md`: `nk*` JSON format strategy.
-- `docs/architecture/adr-viewport-stream-control-boundary.md`: viewport stream
-  and control invariants.
-- `docs/architecture/adr-webview-ui-design-system.md`: shared Webview UI system.
-- `docs/architecture/adr-webview-layout-unification.md`: creative workbench
-  layout contracts.
-- `docs/architecture/agent-unified-workflow.md`: Agent IDC workflow and runtime
-  boundaries.
-- `docs/architecture/adr-capability-protocol.md`: capability registration,
-  injection, and trust.
-- `docs/architecture/agent-media-architecture.md`: generated assets and rich
-  media handoff.
-- `docs/architecture/marketplace.md`: market client/server boundary.
+- `README_CN.md`: product shape, package groups, and validation commands.
+- `TODO_CN.md`: active work queue.
+- `ROADMAP_CN.md`: directional product roadmap.
+- `AGENTS.md`: repository working rules and quality gates.
+- Package-level `README.md`, `ARCHITECTURE.md`, and `TODO.md`: local package
+  entry points when they exist.

@@ -145,44 +145,24 @@ Current `.nks` version is `1.2`. Version detection and no-op migration scaffoldi
 | CanvasEditorProvider | `neko-canvas` | CustomEditorProvider template |
 | editor-store.ts | `neko-cut` | Zustand slices composition pattern |
 
-## Implementation Status
+## Current Capabilities
 
-### S.1: Drawing Fundamentals — COMPLETE ✅
+| Area | Details |
+|------|---------|
+| Package structure | Root manifest plus extension and webview sub-packages |
+| Extension Host | SketchEditorProvider, LayerOutline, StatusBar, and command registration |
+| WebGL2 engine | Context, shaders, blend modes, textures, and ping-pong compositing |
+| Brush system | Pressure-aware brushes, Catmull-Rom interpolation, tilt-aware stroke data, and brush presets |
+| Layer system | CRUD, grouping, blending, alpha lock, masks, adjustment layers, and pure layer helpers |
+| Selection system | Rectangle, lasso, magic wand, invert/all, and Uint8Array mask representation |
+| History | Region snapshots and undo/redo integration for document edits |
+| Tools | Brush, eraser, select, move, shape, transform, eyedropper, fill, zoom, text, gradient, clone stamp, vector editing, and texture stamp flows |
+| Effects | FilterPipeline, stylize filters, LUT/presets, lighting, normal maps, SSAO, particles, scene templates, and sprite sheet import/export |
+| Document I/O | `.nks` serialization, load/save/revert, version detection, and migration scaffolding through `@neko/shared/nks` |
+| PSD import | Extension-side `ag-psd` adapter with compatibility issues, import limits, reports, and kill switch |
+| AI assistance | Capability provider behind settings, cancellable sessions, and result application for layers, selections, palettes, and brush presets |
+| Cross-module handoff | Work should continue through explicit contracts with Canvas, Cut, Assets, and Agent |
 
-| Module | Status | Details |
-|--------|--------|---------|
-| Package structure | ✅ | Root manifest + extension + webview sub-packages |
-| Extension Host | ✅ | SketchEditorProvider, LayerOutline, StatusBar, 13 commands |
-| WebGL2 engine | ✅ | Context, shaders (12 blend modes), textures, ping-pong pipeline |
-| Brush system | ✅ | 7 brushes, Catmull-Rom interpolation, 4 pressure curves |
-| Layer system | ✅ | CRUD, group, flatten, deep find (pure functions) |
-| Selection system | ✅ | Rect/all/invert with Uint8Array bitmask |
-| History (undo/redo) | ✅ | Region snapshots, 100-step limit |
-| Tool manager | ✅ | 11 tools with cursor mapping |
-| Zustand store | ✅ | 12 slices composed into single store |
-| UI components | ✅ | Canvas, Toolbar, BrushPanel, ColorPanel, LayerPanel, StatusBar |
-| Document I/O | ✅ | Serialize/deserialize .nks, save/load/revert |
-| Keyboard dispatch | ✅ | undo/redo/tool switch/zoom reset/import/export |
-| Image import | ✅ | Base64 → ImageBitmap → new layer |
-| i18n locale switch | ✅ | Runtime setLocale via extension message |
-
-### S.3: Effects & Scenes — COMPLETE ✅
-
-| Module | Status | Details |
-|--------|--------|---------|
-| Filter pipeline | ✅ | 6 built-in GLSL filters + FilterPipeline ping-pong FBO |
-| Particle system | ✅ | Object pool + WebGL2 instanced rendering |
-| Scene manager | ✅ | Parallax rendering + 4 templates + 5 atmosphere presets |
-| Sprite sheet | ✅ | Import/export sprite sheets |
-
-### S.4: PSD, AI Assistance & Cross-Module — PARTIAL
-
-| Module | Status | Details |
-|--------|--------|---------|
-| PSD import | Experimental MVP | Extension-side `ag-psd` adapter, wire tree contract, compatibility issues, import limits, and `neko.sketch.psdImport.enabled` kill switch |
-| AI capability provider | Experimental MVP | Tool registration behind `neko.sketch.aiOps.enabled`; routes image work through neko-agent media capabilities |
-| AI result applier | ✅ | Applies layer / selection / palette / brushPreset results; cancelled apply rolls back and does not write history |
-| AI outpainting | Planned | Requires canvas expansion, mask/context contract, provider capability check, cancellation and rollback semantics |
-| Cross-module export | Planned | Export to neko-cut, neko-canvas, and neko-assets still needs explicit contracts |
-
-Open work is tracked in `TODO.md`.
+Open implementation work is tracked in `TODO.md`. This architecture document
+should stay focused on package boundaries and current invariants rather than
+historical status ledgers.
