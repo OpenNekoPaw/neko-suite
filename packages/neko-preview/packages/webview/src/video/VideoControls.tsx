@@ -135,7 +135,7 @@ export function VideoControls({
           </MacIconButton>
 
           {/* Volume */}
-          <div className="flex items-center gap-1">
+          <div className="flex flex-none items-center gap-1">
             <MacIconButton
               size="sm"
               onClick={() => onVolumeChange(volume > 0 ? 0 : 1)}
@@ -154,7 +154,7 @@ export function VideoControls({
               max={1}
               step={0.05}
               onChange={onVolumeChange}
-              className="w-15"
+              className="w-20 flex-none"
               title={t('preview.video.volumeLabel', {
                 percent: Math.round(volume * 100).toString(),
               })}

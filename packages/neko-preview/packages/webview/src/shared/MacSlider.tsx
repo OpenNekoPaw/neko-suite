@@ -1,14 +1,15 @@
-import type { InputHTMLAttributes } from 'react';
+import type { CSSProperties } from 'react';
 import { Slider } from '@neko/ui/primitives';
 
-export interface MacSliderProps extends Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  'type' | 'onChange'
-> {
+export interface MacSliderProps {
   value: number;
   min?: number;
   max?: number;
   step?: number;
+  disabled?: boolean;
+  className?: string;
+  style?: CSSProperties;
+  title?: string;
   onChange: (value: number) => void;
 }
 
@@ -19,20 +20,24 @@ export function MacSlider({
   min = 0,
   onChange,
   step = 0.01,
+  style,
   title,
   value,
 }: MacSliderProps) {
+  const label = typeof title === 'string' ? title : undefined;
+
   return (
-    <Slider
-      className={className}
-      disabled={disabled}
-      label={typeof title === 'string' ? title : undefined}
-      max={max}
-      min={min}
-      onCommit={onChange}
-      onPreviewChange={onChange}
-      step={step}
-      value={value}
-    />
+    <div className={className || 'w-full'} style={style} title={label}>
+      <Slider
+        disabled={disabled}
+        label={label}
+        max={max}
+        min={min}
+        onCommit={onChange}
+        onPreviewChange={onChange}
+        step={step}
+        value={value}
+      />
+    </div>
   );
 }
