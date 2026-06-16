@@ -69,7 +69,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(direction)} left-0`}
           role="menu"
         >
           {MODE_OPTIONS.map((option) => (

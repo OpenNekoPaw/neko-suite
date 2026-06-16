@@ -123,12 +123,7 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
               role="menuitem"
             >
               <ModelDot color={color} />
-              <span
-                className="agent-dropdown-item-label"
-                style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}
-              >
-                {m.label}
-              </span>
+              <span className="agent-dropdown-item-label">{m.label}</span>
             </button>
           ))}
         </div>

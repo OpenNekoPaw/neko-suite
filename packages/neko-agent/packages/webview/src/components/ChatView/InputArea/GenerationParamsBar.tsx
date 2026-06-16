@@ -151,7 +151,6 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
               className={`agent-dropdown-item ${
                 cat === category ? 'agent-dropdown-item-selected' : ''
               }`}
-              style={{ color: cat === category ? SESSION_MODE_COLORS[cat] : undefined }}
               role="menuitem"
             >
               <span style={{ color: SESSION_MODE_COLORS[cat] }}>
@@ -264,12 +263,7 @@ function InlineMediaModelChip({
               role="menuitem"
             >
               <ModelDot color={color} />
-              <span
-                className="agent-dropdown-item-label"
-                style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}
-              >
-                {m.label}
-              </span>
+              <span className="agent-dropdown-item-label">{m.label}</span>
             </button>
           ))}
         </div>

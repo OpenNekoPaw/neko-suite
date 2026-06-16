@@ -106,7 +106,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0 max-h-[400px] overflow-y-auto`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
           role="menu"
         >
           {/* Auto option */}

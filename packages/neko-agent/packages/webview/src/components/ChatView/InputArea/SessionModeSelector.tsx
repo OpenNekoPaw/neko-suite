@@ -92,7 +92,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu absolute ${dropdownPositionClass(direction)} left-0 w-[190px]`}
+          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(direction)} left-0`}
           role="menu"
         >
           {OPTIONS.map((opt) => (
@@ -112,12 +112,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
               <span className="flex-shrink-0" style={{ color: opt.color }}>
                 <SessionModeIcon mode={opt.value} size={14} />
               </span>
-              <span
-                className="text-[11px]"
-                style={{ color: mode === opt.value ? opt.color : 'var(--vscode-foreground)' }}
-              >
-                {t(opt.labelKey)}
-              </span>
+              <span className="agent-dropdown-item-label">{t(opt.labelKey)}</span>
             </button>
           ))}
         </div>
