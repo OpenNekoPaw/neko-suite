@@ -174,7 +174,7 @@ describe('MentionMenu icon projection', () => {
     expect(screen.getByText('Files')).toBeTruthy();
     expect(screen.getByText('Assets')).toBeTruthy();
     expect(screen.getByText('Entities')).toBeTruthy();
-    expect(screen.getByText('neko/assets/library.json')).toBeTruthy();
+    expect(screen.getByText('neko/assets')).toBeTruthy();
     expect(screen.getByText('assets/hero.png')).toBeTruthy();
     expect(screen.getByText('Image')).toBeTruthy();
     expect(screen.getByText('Character')).toBeTruthy();
@@ -185,6 +185,12 @@ describe('MentionMenu icon projection', () => {
     const fileButton = screen.getByRole('menuitem', { name: /library\.json/i });
     expect(fileButton.className).toContain('agent-composer-popover-row');
     expect(fileButton.className).toContain('agent-composer-mention-row');
+    expect(fileButton.getAttribute('title')).toBe('neko/assets/library.json');
+
+    const fileName = screen.getByText('library.json');
+    const filePath = screen.getByText('neko/assets');
+    expect(fileName.parentElement).toBe(filePath.parentElement);
+    expect(fileName.parentElement?.className).toContain('agent-composer-mention-main');
   });
 
   it('selects path-backed asset mentions as file references', () => {

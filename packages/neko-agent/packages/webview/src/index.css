@@ -718,8 +718,29 @@ body {
 }
 
 .agent-composer-mention-row {
-  min-height: 38px;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 32px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+}
+
+.agent-composer-mention-main {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.agent-composer-mention-main.has-meta {
+  color: var(--agent-fg-secondary);
+}
+
+.agent-composer-mention-name {
+  flex: 0 1 auto;
+}
+
+.agent-composer-mention-meta {
+  flex: 1 1 auto;
+  font-size: 11.5px;
 }
 
 .agent-composer-popover-primary {
@@ -754,6 +775,7 @@ body {
 
 .agent-composer-popover-badge {
   max-width: 76px;
+  flex: 0 0 auto;
   overflow: hidden;
   padding: 2px 6px;
   border: 1px solid transparent;
@@ -773,26 +795,26 @@ body {
 
 .agent-composer-glyph {
   display: inline-flex;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
   border: 1px solid;
-  border-radius: 7px;
-  font-size: 8.5px;
+  border-radius: 5px;
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
 }
 
 .agent-composer-glyph svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 
 .agent-composer-thumbnail {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
   object-fit: cover;
 }
 

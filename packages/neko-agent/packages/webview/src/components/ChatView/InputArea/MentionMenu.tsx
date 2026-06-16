@@ -180,7 +180,7 @@ export function MentionMenu({
                   const flatIdx = section.startIndex + itemIndex;
                   const isSelected = flatIdx === selectedIndex;
                   const glyph = getMentionGlyph(item, isSelected);
-                  const subtitle = getMentionSubtitle(item);
+                  const inlineMeta = getMentionInlineMeta(item);
                   const badge = getMentionBadge(item, isSelected);
 
                   return (
@@ -188,6 +188,7 @@ export function MentionMenu({
                       key={item.id}
                       type="button"
                       onClick={() => handleSelect(item)}
+                      title={getMentionRowTitle(item, inlineMeta)}
                       className={`agent-composer-popover-row agent-composer-mention-row ${
                         isSelected ? 'is-selected' : ''
                       }`}
@@ -204,10 +205,16 @@ export function MentionMenu({
                           {renderMentionGlyph(glyph.label)}
                         </span>
                       )}
-                      <span className="min-w-0">
-                        <span className="agent-composer-popover-primary block">{item.label}</span>
-                        {subtitle && (
-                          <span className="agent-composer-popover-secondary block">{subtitle}</span>
+                      <span
+                        className={`agent-composer-mention-main ${inlineMeta ? 'has-meta' : ''}`}
+                      >
+                        <span className="agent-composer-popover-primary agent-composer-mention-name">
+                          {item.label}
+                        </span>
+                        {inlineMeta && (
+                          <span className="agent-composer-popover-secondary agent-composer-mention-meta">
+                            {inlineMeta}
+                          </span>
                         )}
                       </span>
                       {badge && (
@@ -310,13 +317,28 @@ function buildMentionSections(items: MentionItem[]): MentionSection[] {
   return sections;
 }
 
-function getMentionSubtitle(item: MentionItem): string | undefined {
-  if (item.filePath) return item.filePath;
+function getMentionInlineMeta(item: MentionItem): string | undefined {
+  if (item.filePath) return getMentionFilePathMeta(item.label, item.filePath);
   if (item.description && item.description !== item.label) return item.description;
   if (item.contextPayload?.summary && item.contextPayload.summary !== item.label) {
     return item.contextPayload.summary;
   }
   return undefined;
+}
+
+function getMentionFilePathMeta(label: string, filePath: string): string | undefined {
+  const normalizedPath = normalizeMentionPath(filePath);
+  const fileName = getFileName(normalizedPath);
+  const parentPath = getParentPath(normalizedPath);
+
+  if (label === fileName) return parentPath;
+  return normalizedPath !== label ? normalizedPath : parentPath;
+}
+
+function getMentionRowTitle(item: MentionItem, inlineMeta: string | undefined): string {
+  if (item.filePath) return normalizeMentionPath(item.filePath);
+  if (inlineMeta) return `${item.label} ${inlineMeta}`;
+  return item.label;
 }
 
 function getMentionBadge(
@@ -541,6 +563,17 @@ function compareMentionText(left: string, right: string): number {
 
 function getFileName(path: string): string {
   return path.split(/[/\\]/).pop() ?? path;
+}
+
+function getParentPath(path: string): string | undefined {
+  const normalizedPath = normalizeMentionPath(path);
+  const separatorIndex = normalizedPath.lastIndexOf('/');
+  if (separatorIndex <= 0) return undefined;
+  return normalizedPath.slice(0, separatorIndex);
+}
+
+function normalizeMentionPath(path: string): string {
+  return path.replace(/\\/g, '/');
 }
 
 function getFileExtension(path: string): string | undefined {
