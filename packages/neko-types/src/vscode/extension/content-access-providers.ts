@@ -116,7 +116,9 @@ const nodeFileOps: ContentAccessFileOps = {
   readFile: async (filePath) => fs.readFile(filePath),
   writeFile: async (filePath, content) => fs.writeFile(filePath, content),
   copyFile: async (sourcePath, targetPath) => fs.copyFile(sourcePath, targetPath),
-  mkdir: async (dirPath, options) => fs.mkdir(dirPath, options),
+  mkdir: async (dirPath, options) => {
+    await fs.mkdir(dirPath, options);
+  },
 };
 
 export class ResourceCacheContentAccessProvider implements ContentAccessProvider {
@@ -639,13 +641,14 @@ export class GeneratedOutputContentIngestProvider implements ContentIngestProvid
 
   supports(request: ContentIngestRequest): boolean {
     return (
-      request.mode === 'generated-output' && (request.sourcePath !== undefined || request.bytes)
+      request.mode === 'generated-output' &&
+      (request.sourcePath !== undefined || request.bytes !== undefined)
     );
   }
 
   async ingest({ request }: ContentIngestProviderRequest): Promise<ContentIngestResult> {
     const outputPath = resolveIngestOutputPath(request, this.projectRoot);
-    if (request.bytes) {
+    if (request.bytes !== undefined) {
       await this.fileOps.mkdir(path.dirname(outputPath), { recursive: true });
       await this.fileOps.writeFile(outputPath, request.bytes);
     } else if (request.sourcePath && request.sourcePath !== outputPath) {

@@ -1295,6 +1295,18 @@ export function parseAllowedTools(toolsStr: string | undefined): string[] | unde
     .filter((t) => t.length > 0);
 }
 
+export function isToolAllowed(
+  toolName: string,
+  allowedTools: readonly string[] | undefined,
+): boolean {
+  if (!allowedTools || allowedTools.length === 0) return true;
+  return allowedTools.some((pattern) => {
+    if (pattern === toolName || pattern === '*') return true;
+    if (!pattern.endsWith('*')) return false;
+    return toolName.startsWith(pattern.slice(0, -1));
+  });
+}
+
 /**
  * Semver-ish regex: major.minor.patch with optional pre-release and build
  * metadata. Deliberately not importing a full semver library — Skills
