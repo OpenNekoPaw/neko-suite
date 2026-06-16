@@ -72,6 +72,7 @@ describe('useChatActions', () => {
     const setIsThinking = vi.fn();
     const setStreamingMessageId = vi.fn();
     const streamingMessageIdRef = { current: 'streaming-1' };
+    const onUserMessageSent = vi.fn();
 
     const { result } = renderHook(() => {
       const activeConversationIdRef = useRef<string | null>('conv-1');
@@ -89,6 +90,7 @@ describe('useChatActions', () => {
         setActiveTab: vi.fn(),
         clearInput: vi.fn(),
         setAttachedFiles: vi.fn(),
+        onUserMessageSent,
       });
     });
 
@@ -108,6 +110,13 @@ describe('useChatActions', () => {
     expect(setIsThinking).toHaveBeenCalledWith(true);
     expect(setStreamingMessageId).toHaveBeenCalledWith(null);
     expect(streamingMessageIdRef.current).toBeNull();
+    expect(onUserMessageSent).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      message: expect.objectContaining({
+        role: 'user',
+        content: '/not-a-builtin hello',
+      }),
+    });
   });
 
   it('sends builtin slash-looking text as role session content during character role sessions', () => {
@@ -187,5 +196,244 @@ describe('useChatActions', () => {
       }),
     );
     expect(vscodeMocks.sendMessage.mock.calls[0]?.[0]).not.toHaveProperty('contextPayloads');
+  });
+
+  it('keeps selected file references as local attachment previews while sending @path text', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const setSelectedFileReferences = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-files');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-files',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        setSelectedFileReferences,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '参考 @"assets/ref file.zip"',
+        displayMessageText: '参考',
+        fileReferences: [
+          {
+            id: 'file-ref:assets/ref file.zip',
+            label: 'ref file.zip',
+            path: 'assets/ref file.zip',
+          },
+        ],
+      });
+    });
+
+    expect(setMessages).toHaveBeenCalledWith(expect.any(Function));
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '参考',
+        attachments: [
+          expect.objectContaining({
+            id: 'file-ref:assets/ref file.zip',
+            name: 'ref file.zip',
+            path: 'assets/ref file.zip',
+            type: 'file',
+          }),
+        ],
+      }),
+    ]);
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-files',
+        message: '参考 @"assets/ref file.zip"',
+        attachments: [
+          expect.objectContaining({
+            id: 'file-ref:assets/ref file.zip',
+            name: 'ref file.zip',
+            path: 'assets/ref file.zip',
+            type: 'file',
+          }),
+        ],
+      }),
+    );
+    expect(setSelectedFileReferences).toHaveBeenCalledWith([]);
+  });
+
+  it('sends selected media file references as attachments for extension preprocessing', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-media');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-media',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '参考 @assets/1.png @cases/1080P.mp4',
+        displayMessageText: '参考',
+        fileReferences: [
+          {
+            id: 'file-ref:assets/1.png',
+            label: '1.png',
+            path: 'assets/1.png',
+            mediaType: 'image',
+          },
+          {
+            id: 'file-ref:cases/1080P.mp4',
+            label: '1080P.mp4',
+            path: 'cases/1080P.mp4',
+            mediaType: 'video',
+          },
+        ],
+      });
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-media',
+        message: '参考 @assets/1.png @cases/1080P.mp4',
+        attachments: [
+          expect.objectContaining({
+            id: 'file-ref:assets/1.png',
+            name: '1.png',
+            path: 'assets/1.png',
+            type: 'image',
+          }),
+          expect.objectContaining({
+            id: 'file-ref:cases/1080P.mp4',
+            name: '1080P.mp4',
+            path: 'cases/1080P.mp4',
+            type: 'video',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('infers selected file reference attachment types from paths', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-video');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-video',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '参考 @cases/1080P.mp4',
+        displayMessageText: '参考',
+        fileReferences: [
+          {
+            id: 'file-ref:cases/1080P.mp4',
+            label: '1080P.mp4',
+            path: 'cases/1080P.mp4',
+          },
+        ],
+      });
+    });
+
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            name: '1080P.mp4',
+            path: 'cases/1080P.mp4',
+            type: 'video',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('notifies user message sent for externally triggered sends', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const setActiveTab = vi.fn();
+    const onUserMessageSent = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-trigger');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-trigger',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab,
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        onUserMessageSent,
+      });
+    });
+
+    act(() => {
+      result.current.triggerSend('Use this selected clip');
+    });
+
+    expect(onUserMessageSent).toHaveBeenCalledWith({
+      conversationId: 'conv-trigger',
+      message: expect.objectContaining({
+        role: 'user',
+        content: 'Use this selected clip',
+      }),
+    });
+    expect(setActiveTab).toHaveBeenCalledWith('chat');
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-trigger',
+        message: 'Use this selected clip',
+      }),
+    );
   });
 });

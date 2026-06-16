@@ -52,7 +52,6 @@ export function projectGenerationParamsBarState(input: {
     ambientNodeCount: input.ambientNodeCount,
     contextChips: input.contextChips,
   });
-  const manuallyExpanded = input.manuallyExpanded ?? false;
   const category = input.sessionMode === 'agent' ? input.generationCategory : input.sessionMode;
   const picker = projectMediaModelPicker({
     category,
@@ -66,8 +65,8 @@ export function projectGenerationParamsBarState(input: {
     showCategorySelector: isAgentMode,
     showInlineMediaModelPicker: isAgentMode,
     hasGenerationContext,
-    isExpanded: !isAgentMode || hasGenerationContext || manuallyExpanded,
-    showManualCollapse: isAgentMode && manuallyExpanded && !hasGenerationContext,
+    isExpanded: true,
+    showManualCollapse: false,
   };
 }
 

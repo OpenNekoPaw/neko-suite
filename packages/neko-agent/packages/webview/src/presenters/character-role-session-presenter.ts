@@ -21,7 +21,7 @@ export function findActiveTab(
 }
 
 export function idleStreamingState(): ConversationStreamingState {
-  return { streamingMessageId: null, isThinking: false };
+  return { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 };
 }
 
 export function projectCharacterRoleSessionView(input: {

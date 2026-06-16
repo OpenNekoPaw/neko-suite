@@ -322,7 +322,9 @@ export function projectStreamingTextIntoMessages(
   const content = input.content ?? '';
   const targetMessageId = input.messageId ?? input.streamingMessageId ?? undefined;
   const hasExistingMessage = Boolean(
-    targetMessageId && input.streamingMessageId === targetMessageId,
+    targetMessageId &&
+    (input.streamingMessageId === targetMessageId ||
+      input.messages.some((message) => message.id === targetMessageId)),
   );
 
   if (!hasExistingMessage) {
@@ -390,7 +392,9 @@ export function projectStreamingThinkingIntoMessages(
   const content = input.content ?? '';
   const targetMessageId = input.messageId ?? input.streamingMessageId ?? undefined;
   const hasExistingMessage = Boolean(
-    targetMessageId && input.streamingMessageId === targetMessageId,
+    targetMessageId &&
+    (input.streamingMessageId === targetMessageId ||
+      input.messages.some((message) => message.id === targetMessageId)),
   );
 
   if (!hasExistingMessage) {

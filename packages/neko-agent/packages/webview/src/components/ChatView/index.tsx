@@ -9,6 +9,7 @@ import {
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
+import type { SelectedFileReference } from '@/components/ChatView/InputArea/types';
 import { EmptyState } from '@/components/ChatView/EmptyState';
 import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -24,6 +25,7 @@ interface ChatViewProps {
   messages: Message[];
   inputValue: string;
   isThinking: boolean;
+  queuedMessageCount?: number;
   streamingMessageId: string | null;
   activeConversationId: string | null;
   conversationKind?: ConversationKind;
@@ -54,14 +56,19 @@ interface ChatViewProps {
   onInputChange: (value: string) => void;
   onSend: (input?: {
     messageText?: string;
+    displayMessageText?: string;
     attachments?: MessageAttachment[];
     contextPayloads?: AgentContextPayload[];
+    fileReferences?: SelectedFileReference[];
   }) => void;
   onCancel?: () => void;
   /** Session-bound attached files (managed by parent) */
   attachedFiles?: MessageAttachment[];
   /** Callback to update attached files */
   onAttachedFilesChange?: (files: MessageAttachment[]) => void;
+  /** Session-bound @file references selected from the mention menu. */
+  selectedFileReferences?: SelectedFileReference[];
+  onSelectedFileReferencesChange?: (references: SelectedFileReference[]) => void;
   /** Current agent execution state (null when idle) */
   agentState?: AgentState | null;
 }
@@ -70,6 +77,7 @@ export function ChatView({
   messages,
   inputValue,
   isThinking,
+  queuedMessageCount = 0,
   streamingMessageId,
   activeConversationId,
   conversationKind = 'chat',
@@ -97,6 +105,8 @@ export function ChatView({
   onCancel,
   attachedFiles,
   onAttachedFilesChange,
+  selectedFileReferences,
+  onSelectedFileReferencesChange,
   agentState,
 }: ChatViewProps) {
   const isEmpty = messages.length === 0 && !isThinking;
@@ -123,7 +133,7 @@ export function ChatView({
 
   return (
     <DropZone onFilesDropped={handleFilesDropped} disabled={isThinking}>
-      <div className="flex-1 flex flex-col overflow-hidden relative h-full">
+      <div className="agent-chat-view flex-1 flex flex-col overflow-hidden relative h-full">
         {/* Active Skill Indicator */}
         {activeSkill && onClearActiveSkill && (
           <SkillIndicator skill={activeSkill} onClear={onClearActiveSkill} />
@@ -146,7 +156,7 @@ export function ChatView({
 
         {/* Messages Container */}
         {isEmpty ? (
-          <div className="flex-1 overflow-y-auto">
+          <div className="agent-chat-empty-scroll flex-1 overflow-y-auto">
             {conversationKind === 'chat' ? <EmptyState onSuggestionClick={onInputChange} /> : null}
           </div>
         ) : (
@@ -181,6 +191,7 @@ export function ChatView({
         <InputArea
           inputValue={inputValue}
           isThinking={isThinking}
+          queuedMessageCount={queuedMessageCount}
           droppedFiles={droppedFiles}
           onDroppedFilesProcessed={handleDroppedFilesProcessed}
           onInputChange={onInputChange}
@@ -189,6 +200,8 @@ export function ChatView({
           disabled={isConversationSwitching}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
+          selectedFileReferences={selectedFileReferences}
+          onSelectedFileReferencesChange={onSelectedFileReferencesChange}
         />
       </div>
     </DropZone>

@@ -44,6 +44,7 @@ export interface UseMessageHandlerProps {
   isThinking: boolean;
   activeConversationId: string | null;
   streamingMessageId: string | null;
+  queuedMessageCount: number;
   openTabs: OpenTab[];
   activeTabId: string | null;
 
@@ -57,6 +58,7 @@ export interface UseMessageHandlerProps {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
+  setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
 
   // State setters - Conversation
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
@@ -77,6 +79,7 @@ export interface UseMessageHandlerProps {
 
   // State setters - Project
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
+  mentionSearchFilter: string;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
@@ -119,6 +122,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     isThinking,
     activeConversationId,
     streamingMessageId,
+    queuedMessageCount,
     openTabs,
     activeTabId,
     activeConversationIdRef,
@@ -128,6 +132,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setMessages,
     setIsThinking,
     setStreamingMessageId,
+    setQueuedMessageCount,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -139,6 +144,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setWorkItemsByConversation,
 
     setProjectFiles,
+    mentionSearchFilter,
     setMentionItems,
     setPluginCommands,
     setPluginsAvailable,
@@ -175,12 +181,20 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       const currentStreaming = conversationStreamingRef.current.get(conversationId) || {
         streamingMessageId: null,
         isThinking: false,
+        queuedMessageCount: 0,
       };
       const updated = updater(currentMessages, currentStreaming);
       conversationMessagesRef.current.set(conversationId, updated.messages);
       conversationStreamingRef.current.set(conversationId, updated.streaming);
+      if (
+        currentStreaming.streamingMessageId !== updated.streaming.streamingMessageId ||
+        currentStreaming.isThinking !== updated.streaming.isThinking ||
+        (currentStreaming.queuedMessageCount ?? 0) !== (updated.streaming.queuedMessageCount ?? 0)
+      ) {
+        forceContextUpdate();
+      }
     },
-    [conversationMessagesRef, conversationStreamingRef],
+    [conversationMessagesRef, conversationStreamingRef, forceContextUpdate],
   );
 
   // Create context object
@@ -195,7 +209,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       isThinking,
       setIsThinking,
       setStreamingMessageId,
+      setQueuedMessageCount,
       streamingMessageId,
+      queuedMessageCount,
       streamingMessageIdRef,
       setConversations,
       setActiveConversationId,
@@ -210,6 +226,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setWorkItemsByConversation,
 
       setProjectFiles,
+      mentionSearchFilter,
       setMentionItems,
       setPluginCommands,
       setPluginsAvailable,
@@ -239,7 +256,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setIsThinking,
       setStreamingMessageId,
       streamingMessageId,
+      queuedMessageCount,
       streamingMessageIdRef,
+      setQueuedMessageCount,
       setConversations,
       setActiveConversationId,
       openTabs,
@@ -253,6 +272,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setWorkItemsByConversation,
 
       setProjectFiles,
+      mentionSearchFilter,
       setMentionItems,
       setPluginCommands,
       setPluginsAvailable,

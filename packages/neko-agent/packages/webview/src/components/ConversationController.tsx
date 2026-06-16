@@ -19,6 +19,7 @@ import type {
   SettingsState,
   AgentState,
   ConversationSummary,
+  Message,
   OpenTab,
   PromptMode,
   TabType,
@@ -45,13 +46,19 @@ import {
   isCharacterRoleTab,
   projectCharacterRoleSessionView,
 } from '@/presenters/character-role-session-presenter';
+import {
+  applyUserMessageToConversationSummaries,
+  applyUserMessageToOpenTabs,
+  projectDisplayTabs,
+  type DisplayTab,
+} from '@/presenters/tab-display-presenter';
 
 // =============================================================================
 // Props
 // =============================================================================
 
 interface HeaderRenderProps {
-  tabs: OpenTab[];
+  tabs: DisplayTab[];
   activeTabId: string | null;
   activeView: TabType;
   conversations: ConversationSummary[];
@@ -71,6 +78,8 @@ export interface ConversationControllerProps {
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   mentionItems: MentionItem[];
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
+  mentionSearchFilter: string;
+  setMentionSearchFilter: React.Dispatch<React.SetStateAction<string>>;
   pluginCommands: PluginSlashCommandDef[];
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   updateSettings: (partial: Partial<SettingsState>) => void;
@@ -92,6 +101,8 @@ export function ConversationController({
   setProjectFiles,
   mentionItems,
   setMentionItems,
+  mentionSearchFilter,
+  setMentionSearchFilter,
   pluginCommands,
   setPluginCommands,
   updateSettings,
@@ -111,6 +122,8 @@ export function ConversationController({
     setIsThinking,
     streamingMessageId,
     setStreamingMessageId,
+    queuedMessageCount,
+    setQueuedMessageCount,
     streamingMessageIdRef,
     conversations,
     setConversations,
@@ -143,7 +156,7 @@ export function ConversationController({
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
   const conversationCompressingRef = useRef<Map<string, boolean>>(new Map());
   const conversationMediaCallCountRef = useRef<Map<string, number>>(new Map());
-  const [, forceUpdate] = useState(0);
+  const [projectionVersion, forceUpdate] = useState(0);
 
   // Prompt mode is session state, not global settings: each tab/conversation can plan independently.
   const [promptModeByConversation, setPromptModeByConversation] = useState<Map<string, PromptMode>>(
@@ -338,6 +351,51 @@ export function ConversationController({
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
+  const handleUserMessageSent = useCallback(
+    (event: { conversationId: string; message: Message }) => {
+      const cachedMessages =
+        conversationMessagesRef.current.get(event.conversationId) ??
+        (event.conversationId === activeConversationIdRef.current ? messages : []);
+      const nextMessages = cachedMessages.some((message) => message.id === event.message.id)
+        ? cachedMessages
+        : [...cachedMessages, event.message];
+
+      conversationMessagesRef.current.set(event.conversationId, nextMessages);
+      conversationStreamingRef.current.set(event.conversationId, {
+        streamingMessageId: null,
+        isThinking: true,
+        queuedMessageCount:
+          conversationStreamingRef.current.get(event.conversationId)?.queuedMessageCount ?? 0,
+      });
+
+      setOpenTabs((prev) =>
+        applyUserMessageToOpenTabs({
+          openTabs: prev,
+          conversationId: event.conversationId,
+          messageContent: event.message.content,
+        }),
+      );
+      setConversations((prev) =>
+        applyUserMessageToConversationSummaries({
+          conversations: prev,
+          conversationId: event.conversationId,
+          messageContent: event.message.content,
+          timestamp: event.message.timestamp,
+        }),
+      );
+      triggerForceUpdate();
+    },
+    [
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      messages,
+      setConversations,
+      setOpenTabs,
+      triggerForceUpdate,
+    ],
+  );
+
   const persistCurrentVisibleConversation = useCallback(() => {
     const conversationId = activeConversationIdRef.current;
     if (!conversationId) return;
@@ -345,12 +403,14 @@ export function ConversationController({
     conversationStreamingRef.current.set(conversationId, {
       streamingMessageId: streamingMessageIdRef.current,
       isThinking,
+      queuedMessageCount,
     });
   }, [
     activeConversationIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
     isThinking,
+    queuedMessageCount,
     messages,
     streamingMessageIdRef,
   ]);
@@ -367,6 +427,7 @@ export function ConversationController({
       setStreamingMessageId(projection.streaming.streamingMessageId);
       streamingMessageIdRef.current = projection.streaming.streamingMessageId;
       setIsThinking(projection.streaming.isThinking);
+      setQueuedMessageCount(projection.streaming.queuedMessageCount ?? 0);
       activeConversationIdRef.current = projection.activeConversationId;
       setActiveConversationId(projection.activeConversationId);
       setActiveTab('chat');
@@ -378,6 +439,7 @@ export function ConversationController({
       setActiveConversationId,
       setIsThinking,
       setMessages,
+      setQueuedMessageCount,
       setStreamingMessageId,
       streamingMessageIdRef,
     ],
@@ -389,6 +451,7 @@ export function ConversationController({
     isThinking,
     activeConversationId,
     streamingMessageId,
+    queuedMessageCount,
     openTabs,
     activeTabId,
     activeConversationIdRef,
@@ -398,6 +461,7 @@ export function ConversationController({
     setMessages,
     setIsThinking,
     setStreamingMessageId,
+    setQueuedMessageCount,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -410,6 +474,7 @@ export function ConversationController({
     setPluginsAvailable,
     setProjectFiles,
     setMentionItems,
+    mentionSearchFilter,
     setPluginCommands,
     setAgentState,
     conversationAgentStateRef,
@@ -521,12 +586,51 @@ export function ConversationController({
     onNewChat: handleNewChat,
     onBeforeTabActivation: persistCurrentVisibleConversation,
     onActivateCharacterRoleTab: activateCharacterRoleTab,
+    hasLocalConversationActivity: (conversationId) => {
+      const cachedMessages = conversationMessagesRef.current.get(conversationId);
+      const cachedStreaming = conversationStreamingRef.current.get(conversationId);
+      const cachedAgentState = conversationAgentStateRef.current.get(conversationId);
+      return Boolean(
+        (cachedMessages?.length ?? 0) > 0 ||
+        cachedStreaming?.isThinking ||
+        cachedStreaming?.streamingMessageId ||
+        (cachedAgentState && cachedAgentState.phase !== 'idle'),
+      );
+    },
   });
+
+  const displayTabs = useMemo(
+    () =>
+      projectDisplayTabs({
+        openTabs,
+        conversations,
+        activeConversationId,
+        activeMessages: messages,
+        activeStreaming: {
+          streamingMessageId,
+          isThinking,
+          queuedMessageCount,
+        },
+        messagesByConversation: conversationMessagesRef.current,
+        streamingByConversation: conversationStreamingRef.current,
+        agentStateByConversation: conversationAgentStateRef.current,
+      }),
+    [
+      openTabs,
+      conversations,
+      activeConversationId,
+      messages,
+      streamingMessageId,
+      isThinking,
+      queuedMessageCount,
+      projectionVersion,
+    ],
+  );
 
   return (
     <>
       {renderHeader({
-        tabs: openTabs,
+        tabs: displayTabs,
         activeTabId,
         activeView: activeTab,
         conversations,
@@ -547,6 +651,7 @@ export function ConversationController({
           isThinking={isThinking}
           setIsThinking={setIsThinking}
           streamingMessageId={streamingMessageId}
+          queuedMessageCount={queuedMessageCount}
           setStreamingMessageId={setStreamingMessageId}
           streamingMessageIdRef={streamingMessageIdRef}
           activeConversationId={activeConversationId}
@@ -565,6 +670,7 @@ export function ConversationController({
           mediaModelSelection={mediaModelSelection}
           setMediaModelSelection={setMediaModelSelection}
           mentionItems={mentionItems}
+          onMentionSearchFilterChange={setMentionSearchFilter}
           pluginCommands={pluginCommands}
           // Resources
           workItems={workItems}
@@ -596,6 +702,7 @@ export function ConversationController({
           handleMessage={handleMessage}
           setAmbientNodes={setAmbientNodes}
           onNewChat={handleNewChat}
+          onUserMessageSent={handleUserMessageSent}
           // Session cleanup registration
           sessionCleanupRef={sessionCleanupRef}
         />

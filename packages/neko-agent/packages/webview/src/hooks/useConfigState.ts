@@ -48,6 +48,8 @@ export interface ConfigState {
   projectFiles: ProjectFileInfo[];
   /** Unified @mention items (files + canvas nodes + characters) */
   mentionItems: MentionItem[];
+  /** Latest @mention file search filter requested by the input area. */
+  mentionSearchFilter: string;
   /** Plugin slash commands registered by external extensions */
   pluginCommands: PluginSlashCommandDef[];
 }
@@ -59,6 +61,7 @@ export interface ConfigStateActions {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
+  setMentionSearchFilter: React.Dispatch<React.SetStateAction<string>>;
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   updateSettings: (updates: Partial<SettingsState>) => void;
   resetSettings: () => void;
@@ -79,6 +82,7 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
   });
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
+  const [mentionSearchFilter, setMentionSearchFilter] = useState('');
   const [pluginCommands, setPluginCommands] = useState<PluginSlashCommandDef[]>([]);
 
   // Helper: partial update settings
@@ -96,11 +100,13 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
     settings,
     projectFiles,
     mentionItems,
+    mentionSearchFilter,
     pluginCommands,
     // Actions
     setSettings,
     setProjectFiles,
     setMentionItems,
+    setMentionSearchFilter,
     setPluginCommands,
     updateSettings,
     resetSettings,

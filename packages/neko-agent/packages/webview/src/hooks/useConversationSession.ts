@@ -8,7 +8,10 @@
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import type { MessageAttachment } from '@/components/ChatView/InputArea';
+import type {
+  MessageAttachment,
+  SelectedFileReference,
+} from '@/components/ChatView/InputArea/types';
 import type { MutableRefObject } from 'react';
 
 /** Minimal Map interface for cleanup operations */
@@ -32,6 +35,8 @@ export interface UseConversationSessionProps {
 export interface UseConversationSessionReturn {
   attachedFiles: MessageAttachment[];
   setAttachedFiles: React.Dispatch<React.SetStateAction<MessageAttachment[]>>;
+  selectedFileReferences: SelectedFileReference[];
+  setSelectedFileReferences: React.Dispatch<React.SetStateAction<SelectedFileReference[]>>;
   /** Clean up all session-bound state for a single conversation */
   cleanupConversation: (conversationId: string) => void;
   /** Clean up all session-bound state for every conversation */
@@ -51,8 +56,10 @@ export function useConversationSession({
   // Per-conversation caches for input and attachments
   const conversationInputRef = useRef<Map<string, string>>(new Map());
   const conversationAttachmentsRef = useRef<Map<string, MessageAttachment[]>>(new Map());
+  const conversationFileReferencesRef = useRef<Map<string, SelectedFileReference[]>>(new Map());
 
   const [attachedFiles, setAttachedFiles] = useState<MessageAttachment[]>([]);
+  const [selectedFileReferences, setSelectedFileReferences] = useState<SelectedFileReference[]>([]);
 
   // Save/restore on conversation switch
   const prevConversationIdRef = useRef<string | null>(null);
@@ -64,14 +71,17 @@ export function useConversationSession({
     if (prevId && prevId !== newId) {
       conversationInputRef.current.set(prevId, inputValue);
       conversationAttachmentsRef.current.set(prevId, attachedFiles);
+      conversationFileReferencesRef.current.set(prevId, selectedFileReferences);
     }
 
     // Restore new conversation's state
     if (newId && newId !== prevId) {
       const savedInput = conversationInputRef.current.get(newId) || '';
       const savedAttachments = conversationAttachmentsRef.current.get(newId) || [];
+      const savedFileReferences = conversationFileReferencesRef.current.get(newId) || [];
       setInputValue(savedInput);
       setAttachedFiles(savedAttachments);
+      setSelectedFileReferences(savedFileReferences);
     }
 
     prevConversationIdRef.current = newId;
@@ -83,6 +93,7 @@ export function useConversationSession({
       conversationStreamingRef.current.delete(conversationId);
       conversationInputRef.current.delete(conversationId);
       conversationAttachmentsRef.current.delete(conversationId);
+      conversationFileReferencesRef.current.delete(conversationId);
       conversationTokenCountRef.current.delete(conversationId);
       conversationCompressingRef.current.delete(conversationId);
       conversationAgentStateRef.current.delete(conversationId);
@@ -101,6 +112,7 @@ export function useConversationSession({
     conversationStreamingRef.current.clear();
     conversationInputRef.current.clear();
     conversationAttachmentsRef.current.clear();
+    conversationFileReferencesRef.current.clear();
     conversationTokenCountRef.current.clear();
     conversationCompressingRef.current.clear();
     conversationAgentStateRef.current.clear();
@@ -115,6 +127,8 @@ export function useConversationSession({
   return {
     attachedFiles,
     setAttachedFiles,
+    selectedFileReferences,
+    setSelectedFileReferences,
     cleanupConversation,
     cleanupAllConversations,
   };

@@ -373,6 +373,51 @@ describe('message presenter', () => {
     });
   });
 
+  it('continues a restored streaming assistant message by message id', () => {
+    const result = projectStreamingTextIntoMessages({
+      messages: [
+        {
+          id: 'assistant-stream',
+          role: 'assistant',
+          content: 'Hello',
+          timestamp: 1000,
+          isStreaming: true,
+          contentBlocks: [
+            {
+              id: 'block-text',
+              type: 'text',
+              timestamp: 1000,
+              content: 'Hello',
+              isStreaming: true,
+            },
+          ],
+        },
+      ],
+      streamingMessageId: null,
+      messageId: 'assistant-stream',
+      content: ' world',
+    });
+
+    expect(result).toMatchObject({
+      updated: true,
+      targetMessageId: 'assistant-stream',
+      isThinking: false,
+      messages: [
+        {
+          id: 'assistant-stream',
+          content: 'Hello world',
+          contentBlocks: [
+            {
+              id: 'block-text',
+              content: 'Hello world',
+              isStreaming: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('projects streaming thinking into new and existing assistant messages', () => {
     const created = projectStreamingThinkingIntoMessages({
       messages: [],

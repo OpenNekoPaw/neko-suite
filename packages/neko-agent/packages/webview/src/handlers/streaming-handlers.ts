@@ -83,6 +83,7 @@ const handleStreamComplete: MessageHandler<'streamComplete'> = (
       messages: projection.messages,
       streamingMessageId: projection.streamingMessageId,
       isThinking: projection.isThinking,
+      queuedMessageCount: 0,
     };
   });
 };
@@ -117,15 +118,13 @@ const handleMessageQueued: MessageHandler<'messageQueued'> = (
   message: MessageQueuedMessage,
   context,
 ) => {
-  if (context.isCurrentConversation(message.conversationId)) {
-    context.setMessages(
-      (prev) =>
-        projectQueuedMessageIntoMessages({
-          messages: prev,
-          content: message.content,
-        }).messages,
-    );
-  }
+  updateConversation(context, message.conversationId, (msgs) => ({
+    messages: projectQueuedMessageIntoMessages({
+      messages: msgs,
+      content: message.content,
+    }).messages,
+    queuedMessageCount: Math.max(0, message.pendingCount ?? 0),
+  }));
 };
 
 /**
@@ -145,6 +144,7 @@ const handleMessageCancelled: MessageHandler<'messageCancelled'> = (
       messages: projection.messages,
       streamingMessageId: projection.streamingMessageId,
       isThinking: projection.isThinking,
+      queuedMessageCount: 0,
     };
   });
 };

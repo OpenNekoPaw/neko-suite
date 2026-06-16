@@ -13,10 +13,13 @@ import {
 } from '@/presenters/work-item-projection-presenter';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { MentionItem } from '@/components/ChatView/InputArea/types';
+import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { Message } from '@neko-agent/types';
 import { configHandlers } from '../config-handlers';
 import { mediaHandlers } from '../media-handlers';
 import { subAgentHandlers } from '../subagent-handlers';
+import { streamingHandlers } from '../streaming-handlers';
 import { taskHandlers } from '../task-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
@@ -34,6 +37,43 @@ describe('work item message handlers', () => {
     );
 
     expect(harness.pluginsAvailable()).toEqual({ canvas: true, cut: false, sketch: true });
+  });
+
+  it('ignores stale project file mention results for older @ filters', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      mentionSearchFilter: 'png',
+    });
+
+    dispatch(
+      configHandlers,
+      {
+        type: 'projectFiles',
+        conversationId: 'conv-a',
+        filter: 'p',
+        files: [{ path: 'assets/old-preview.png', name: 'old-preview.png', type: 'file' }],
+      },
+      harness.context,
+    );
+    expect(harness.mentionItems()).toEqual([]);
+
+    dispatch(
+      configHandlers,
+      {
+        type: 'projectFiles',
+        conversationId: 'conv-a',
+        filter: 'png',
+        files: [{ path: 'assets/current.png', name: 'current.png', type: 'file' }],
+      },
+      harness.context,
+    );
+
+    expect(harness.mentionItems()).toEqual([
+      expect.objectContaining({
+        id: 'file:assets/current.png',
+        filePath: 'assets/current.png',
+      }),
+    ]);
   });
 
   it('merges task updates by conversation instead of replacing the global store', () => {
@@ -215,9 +255,9 @@ describe('work item message handlers', () => {
       activeConversationId: 'conv-a',
       currentMessages: [],
       nonCurrentMessages: new Map([['conv-b', []]]),
-      currentStreaming: { isThinking: true, streamingMessageId: 'stream-a' },
+      currentStreaming: { isThinking: true, streamingMessageId: 'stream-a', queuedMessageCount: 0 },
       nonCurrentStreaming: new Map([
-        ['conv-b', { isThinking: true, streamingMessageId: 'stream-b' }],
+        ['conv-b', { isThinking: true, streamingMessageId: 'stream-b', queuedMessageCount: 0 }],
       ]),
     });
 
@@ -242,12 +282,66 @@ describe('work item message handlers', () => {
     expect(harness.conversationStreaming().get('conv-b')).toEqual({
       isThinking: false,
       streamingMessageId: null,
+      queuedMessageCount: 0,
     });
     expect(harness.workItems().get('conv-b')?.get('media-b')).toMatchObject({
       kind: 'media-task',
       conversationId: 'conv-b',
     });
     expect(harness.workItems().get('conv-a')).toBeUndefined();
+  });
+
+  it('stores queued message count from streaming events', () => {
+    const harness = createContextHarness({ activeConversationId: 'conv-a' });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueued',
+        conversationId: 'conv-a',
+        content: 'Message queued (2 pending)',
+        pendingCount: 2,
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 2,
+    });
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({
+        role: 'system',
+        isQueued: true,
+        content: 'Message queued (2 pending)',
+      }),
+    ]);
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamThinking',
+        conversationId: 'conv-a',
+        messageId: 'stream-a',
+        content: 'Working',
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(2);
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamComplete',
+        conversationId: 'conv-a',
+        messageId: 'stream-a',
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(0);
   });
 
   it('drops media task events when the route conversation does not match the work item', () => {
@@ -491,6 +585,7 @@ function createMediaWorkItem(conversationId: string, id: string) {
 
 interface ContextHarnessOptions {
   activeConversationId: string;
+  mentionSearchFilter?: string;
   currentMessages?: Message[];
   nonCurrentMessages?: Map<string, Message[]>;
   currentStreaming?: StreamingState;
@@ -505,13 +600,22 @@ interface ContextHarness {
   conversationStreaming(): Map<string, StreamingState>;
   workItems(): AgentWorkItemStore;
   pluginsAvailable(): PluginsAvailable;
+  projectFiles(): ProjectFileInfo[];
+  mentionItems(): MentionItem[];
 }
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let messages = options.currentMessages ?? [];
-  let streaming = options.currentStreaming ?? { isThinking: false, streamingMessageId: null };
+  let streaming: StreamingState & { queuedMessageCount: number } = {
+    isThinking: false,
+    streamingMessageId: null,
+    queuedMessageCount: 0,
+    ...options.currentStreaming,
+  };
   let workItems: AgentWorkItemStore = new Map();
   let pluginsAvailable: PluginsAvailable = {};
+  let projectFiles: ProjectFileInfo[] = [];
+  let mentionItems: MentionItem[] = [];
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
   const conversationMessagesRef = ref(new Map<string, Message[]>(options.nonCurrentMessages ?? []));
@@ -540,6 +644,13 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       streamingMessageIdRef.current = next;
     },
   );
+  const setQueuedMessageCount = createSetter(
+    () => streaming.queuedMessageCount,
+    (next) => {
+      streaming = { ...streaming, queuedMessageCount: next };
+      context.queuedMessageCount = next;
+    },
+  );
   const setWorkItemsByConversation = createSetter(
     () => workItems,
     (next) => {
@@ -552,6 +663,18 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       pluginsAvailable = next;
     },
   );
+  const setProjectFiles = createSetter(
+    () => projectFiles,
+    (next) => {
+      projectFiles = next;
+    },
+  );
+  const setMentionItems = createSetter(
+    () => mentionItems,
+    (next) => {
+      mentionItems = next;
+    },
+  );
 
   const context = {
     messages,
@@ -559,7 +682,9 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     isThinking: streaming.isThinking,
     setIsThinking,
     setStreamingMessageId,
+    setQueuedMessageCount,
     streamingMessageId: streaming.streamingMessageId,
+    queuedMessageCount: streaming.queuedMessageCount,
     streamingMessageIdRef,
     activeConversationId: options.activeConversationId,
     activeConversationIdRef,
@@ -591,6 +716,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {
         isThinking: false,
         streamingMessageId: null,
+        queuedMessageCount: 0,
       };
       const result = updater(existingMessages, existingStreaming);
       conversationMessagesRef.current.set(conversationId, result.messages);
@@ -599,8 +725,9 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     setConversations: noopDispatch(),
     setActiveConversationId: noopDispatch(),
     setWorkItemsByConversation,
-    setProjectFiles: noopDispatch(),
-    setMentionItems: noopDispatch(),
+    setProjectFiles,
+    mentionSearchFilter: options.mentionSearchFilter ?? '',
+    setMentionItems,
     setPluginCommands: noopDispatch(),
     setPluginsAvailable,
     setShowOnboarding: noopDispatch(),
@@ -614,6 +741,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationStreaming: () => conversationStreamingRef.current,
     workItems: () => workItems,
     pluginsAvailable: () => pluginsAvailable,
+    projectFiles: () => projectFiles,
+    mentionItems: () => mentionItems,
   };
 }
 

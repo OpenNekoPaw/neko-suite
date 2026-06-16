@@ -32,13 +32,18 @@ describe('Embody Character session handlers', () => {
     expect(harness.activeConversationId()).toBe('embody-session-1');
     expect(harness.context.activeConversationIdRef.current).toBe('embody-session-1');
     expect(harness.messages()).toEqual([]);
-    expect(harness.streaming()).toEqual({ isThinking: false, streamingMessageId: null });
+    expect(harness.streaming()).toEqual({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+    });
     expect(harness.context.conversationMessagesRef.current.get('conv-a')).toEqual([
       { id: 'old', role: 'assistant', content: 'old', timestamp: 1 },
     ]);
     expect(harness.context.conversationStreamingRef.current.get('conv-a')).toEqual({
       isThinking: true,
       streamingMessageId: 'old-stream',
+      queuedMessageCount: 0,
     });
     expect(harness.openTabs()).toEqual([tab]);
     expect(harness.activeTabId()).toBe('tab-embody');
@@ -126,7 +131,11 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let activeTabId: string | null = options.openTabs?.[0]?.id ?? null;
   let messages: Message[] = [{ id: 'old', role: 'assistant', content: 'old', timestamp: 1 }];
   let openTabs: OpenTab[] = options.openTabs ?? [];
-  let streaming: StreamingState = { isThinking: true, streamingMessageId: 'old-stream' };
+  let streaming: StreamingState = {
+    isThinking: true,
+    streamingMessageId: 'old-stream',
+    queuedMessageCount: 0,
+  };
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
   const conversationMessagesRef = ref(new Map<string, Message[]>());
@@ -158,6 +167,13 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
         streamingMessageIdRef.current = next;
       },
     ),
+    setQueuedMessageCount: createSetter(
+      () => streaming.queuedMessageCount ?? 0,
+      (next) => {
+        streaming = { ...streaming, queuedMessageCount: next };
+      },
+    ),
+    queuedMessageCount: streaming.queuedMessageCount,
     streamingMessageId: streaming.streamingMessageId,
     streamingMessageIdRef,
     activeConversationId,
@@ -211,6 +227,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       },
     ),
     setProjectFiles: noopDispatch(),
+    mentionSearchFilter: '',
     setMentionItems: noopDispatch(),
     setPluginCommands: noopDispatch(),
     setPluginsAvailable: createSetter(

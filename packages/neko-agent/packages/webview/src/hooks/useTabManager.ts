@@ -20,6 +20,7 @@ export interface UseTabManagerProps {
   onNewChat: () => void;
   onBeforeTabActivation?: () => void;
   onActivateCharacterRoleTab?: (tab: OpenTab) => void;
+  hasLocalConversationActivity?: (conversationId: string) => boolean;
 }
 
 export interface UseTabManagerReturn {
@@ -38,6 +39,7 @@ export function useTabManager({
   onNewChat,
   onBeforeTabActivation,
   onActivateCharacterRoleTab,
+  hasLocalConversationActivity,
 }: UseTabManagerProps): UseTabManagerReturn {
   // Sync tab state to extension for persistence across panel close/reopen
   const isInitialTabStateRef = useRef(true);
@@ -90,23 +92,28 @@ export function useTabManager({
       const tab = openTabs.find((t) => t.id === tabId);
       if (!tab) return;
 
+      const isClosingActiveTab = activeTabId === tabId;
+      if (isClosingActiveTab) {
+        onBeforeTabActivation?.();
+      }
+
       const conversation = conversations.find((c) => c.id === tab.conversationId);
-      const hasMessages = conversation && conversation.messageCount > 0;
+      const hasPersistedMessages = (conversation?.messageCount ?? 0) > 0;
+      const hasLocalActivity = hasLocalConversationActivity?.(tab.conversationId) ?? false;
+      const shouldDeleteEmptyConversation = Boolean(
+        conversation && !hasPersistedMessages && !hasLocalActivity,
+      );
 
       if (tab.kind === 'character-dialogue') {
         VSCodeMessages.exitCharacterDialogueSession(tab.conversationId);
       } else if (tab.kind === 'embody-character') {
         VSCodeMessages.exitEmbodyCharacterSession(tab.conversationId);
-      } else if (!hasMessages) {
+      } else if (shouldDeleteEmptyConversation) {
         VSCodeMessages.deleteConversation(tab.conversationId);
       }
 
       const tabIndex = openTabs.findIndex((t) => t.id === tabId);
       const newTabs = openTabs.filter((t) => t.id !== tabId);
-      const isClosingActiveTab = activeTabId === tabId;
-      if (isClosingActiveTab) {
-        onBeforeTabActivation?.();
-      }
       setOpenTabs(newTabs);
 
       if (isClosingActiveTab && newTabs.length > 0) {
@@ -132,6 +139,7 @@ export function useTabManager({
       onNewChat,
       onBeforeTabActivation,
       onActivateCharacterRoleTab,
+      hasLocalConversationActivity,
     ],
   );
 

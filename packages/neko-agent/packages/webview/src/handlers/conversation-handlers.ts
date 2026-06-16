@@ -35,6 +35,7 @@ const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) =>
     const streaming = projectHistoryClearedConversation().streaming;
     context.setStreamingMessageId(streaming.streamingMessageId);
     context.setIsThinking(streaming.isThinking);
+    context.setQueuedMessageCount?.(streaming.queuedMessageCount ?? 0);
   } else if (message.conversationId) {
     context.updateNonCurrentConversation(message.conversationId, (msgs, _streaming) => ({
       ...projectConversationError({
@@ -67,6 +68,7 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
     context.setMessages(projection.messages);
     context.setStreamingMessageId(projection.streaming.streamingMessageId);
     context.setIsThinking(projection.streaming.isThinking);
+    context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
     context.conversationMessagesRef.current.delete(conversationId);
     context.conversationStreamingRef.current.delete(conversationId);
     return;
@@ -124,6 +126,7 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.setStreamingMessageId(projection.streaming.streamingMessageId);
   context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
   context.setIsThinking(projection.streaming.isThinking);
+  context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
   context.setActiveConversationId(projection.activeConversationId);
   context.activeConversationIdRef.current = projection.activeConversationId;
   context.setOpenTabs(projection.openTabs);

@@ -99,6 +99,52 @@ describe('conversation UI presenter', () => {
     ]);
   });
 
+  it('updates an existing default tab title from active conversation metadata', () => {
+    const projected = projectActiveConversation({
+      conversation: {
+        id: 'conv-1',
+        title: 'Generated assets',
+        messages: [],
+      },
+      openTabs: [{ id: 'tab-1', title: 'New Chat', conversationId: 'conv-1' }],
+    });
+
+    expect(projected.openTabs).toEqual([
+      { id: 'tab-1', title: 'Generated assets', conversationId: 'conv-1' },
+    ]);
+    expect(projected.activeTabId).toBe('tab-1');
+  });
+
+  it('restores streaming state from a persisted partial assistant message', () => {
+    const projected = projectActiveConversation({
+      conversation: {
+        id: 'conv-1',
+        title: 'Draft',
+        messages: [
+          { id: 'user-1', role: 'user', content: 'hello', timestamp: 1 },
+          {
+            id: 'assistant-stream',
+            role: 'assistant',
+            content: 'partial',
+            timestamp: 2,
+            isStreaming: true,
+          },
+        ],
+      },
+      openTabs: [],
+      generateTabId: () => 'tab-1',
+    });
+
+    expect(projected.messages.at(-1)).toMatchObject({
+      id: 'assistant-stream',
+      isStreaming: true,
+    });
+    expect(projected.streaming).toEqual({
+      streamingMessageId: 'assistant-stream',
+      isThinking: true,
+    });
+  });
+
   it('projects empty active conversation into a cleared UI state', () => {
     const projected = projectActiveConversation({
       openTabs: [{ id: 'tab-1', title: 'Old chat', conversationId: 'conv-old' }],

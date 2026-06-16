@@ -13,6 +13,7 @@ import type { Message, ConversationSummary, OpenTab } from '@neko-agent/types';
 export interface StreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
+  queuedMessageCount: number;
 }
 
 /**
@@ -24,6 +25,7 @@ export interface ConversationState {
   // Streaming state
   isThinking: boolean;
   streamingMessageId: string | null;
+  queuedMessageCount: number;
   // Conversation management
   conversations: ConversationSummary[];
   activeConversationId: string | null;
@@ -49,6 +51,7 @@ export interface ConversationStateActions {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
+  setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
@@ -75,6 +78,7 @@ export function useConversationState(): UseConversationStateReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [queuedMessageCount, setQueuedMessageCount] = useState(0);
   // Ref for immediate access (fixes race condition with async state updates)
   const streamingMessageIdRef = useRef<string | null>(null);
 
@@ -104,9 +108,10 @@ export function useConversationState(): UseConversationStateReturn {
       conversationStreamingRef.current.set(activeConversationId, {
         streamingMessageId,
         isThinking,
+        queuedMessageCount,
       });
     }
-  }, [activeConversationId, messages, streamingMessageId, isThinking]);
+  }, [activeConversationId, messages, streamingMessageId, isThinking, queuedMessageCount]);
 
   // Helper: add a single message
   const addMessage = useCallback((message: Message) => {
@@ -118,6 +123,7 @@ export function useConversationState(): UseConversationStateReturn {
     setMessages([]);
     setStreamingMessageId(null);
     setIsThinking(false);
+    setQueuedMessageCount(0);
     if (activeConversationIdRef.current) {
       conversationMessagesRef.current.delete(activeConversationIdRef.current);
       conversationStreamingRef.current.delete(activeConversationIdRef.current);
@@ -129,6 +135,7 @@ export function useConversationState(): UseConversationStateReturn {
     messages,
     isThinking,
     streamingMessageId,
+    queuedMessageCount,
     conversations,
     activeConversationId,
     openTabs,
@@ -142,6 +149,7 @@ export function useConversationState(): UseConversationStateReturn {
     setMessages,
     setIsThinking,
     setStreamingMessageId,
+    setQueuedMessageCount,
     setConversations,
     setActiveConversationId,
     setOpenTabs,

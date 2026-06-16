@@ -81,7 +81,7 @@ export function projectActiveConversation(
     messages: projection.messages,
     streaming: hasCachedMessages
       ? (input.cachedStreaming ?? idleStreamingState())
-      : idleStreamingState(),
+      : projectPersistedStreamingState(projection.messages),
     openTabs: tabProjection.openTabs,
     activeTabId: tabProjection.activeTabId,
     activeTab: 'chat',
@@ -99,7 +99,14 @@ function projectConversationTab(input: {
 }): { openTabs: OpenTab[]; activeTabId: string } {
   const existingTab = input.openTabs.find((tab) => tab.conversationId === input.conversationId);
   if (existingTab) {
-    return { openTabs: [...input.openTabs], activeTabId: existingTab.id };
+    return {
+      openTabs: input.openTabs.map((tab) =>
+        tab.id === existingTab.id && shouldReplaceTabTitle(tab.title)
+          ? { ...tab, title: input.title }
+          : tab,
+      ),
+      activeTabId: existingTab.id,
+    };
   }
 
   const newTab: OpenTab = {
@@ -114,5 +121,25 @@ function projectConversationTab(input: {
 }
 
 function idleStreamingState(): ConversationStreamingState {
-  return { streamingMessageId: null, isThinking: false };
+  return { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 };
+}
+
+function projectPersistedStreamingState(
+  messages: readonly { readonly id: string; readonly isStreaming?: boolean }[],
+): ConversationStreamingState {
+  const streamingMessage = [...messages]
+    .reverse()
+    .find((message) => message.isStreaming && message.id);
+  if (!streamingMessage) {
+    return idleStreamingState();
+  }
+  return {
+    streamingMessageId: streamingMessage.id,
+    isThinking: true,
+    queuedMessageCount: 0,
+  };
+}
+
+function shouldReplaceTabTitle(title: string): boolean {
+  return title.trim().length === 0 || title === DEFAULT_CONVERSATION_TITLE;
 }

@@ -61,6 +61,7 @@ export interface ChatWorkspaceProps {
   isThinking: boolean;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   streamingMessageId: string | null;
+  queuedMessageCount: number;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   streamingMessageIdRef: MutableRefObject<string | null>;
   activeConversationId: string | null;
@@ -81,6 +82,7 @@ export interface ChatWorkspaceProps {
     React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>
   >;
   mentionItems: MentionItem[];
+  onMentionSearchFilterChange: (filter: string) => void;
   pluginCommands: PluginSlashCommandDef[];
   // Resources
   workItems: AgentWorkItem[];
@@ -115,6 +117,7 @@ export interface ChatWorkspaceProps {
     React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
   >;
   onNewChat: () => void;
+  onUserMessageSent?: (event: { conversationId: string; message: Message }) => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
     cleanupConversation: (id: string) => void;
@@ -132,6 +135,7 @@ export function ChatWorkspace({
   isThinking,
   setIsThinking,
   streamingMessageId,
+  queuedMessageCount,
   setStreamingMessageId,
   streamingMessageIdRef,
   activeConversationId,
@@ -148,6 +152,7 @@ export function ChatWorkspace({
   mediaModelSelection,
   setMediaModelSelection,
   mentionItems,
+  onMentionSearchFilterChange,
   pluginCommands,
   workItems,
   pluginsAvailable,
@@ -172,6 +177,7 @@ export function ChatWorkspace({
   handleMessage,
   setAmbientNodes,
   onNewChat,
+  onUserMessageSent,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
   // ---- UI state (model selection comes from props, not useUIState) ----
@@ -187,17 +193,23 @@ export function ChatWorkspace({
   } = ui;
 
   // ---- Session-bound state: input/attachment isolation per conversation ----
-  const { attachedFiles, setAttachedFiles, cleanupConversation, cleanupAllConversations } =
-    useConversationSession({
-      activeConversationId,
-      inputValue,
-      setInputValue,
-      conversationMessagesRef,
-      conversationStreamingRef,
-      conversationTokenCountRef,
-      conversationCompressingRef,
-      conversationAgentStateRef,
-    });
+  const {
+    attachedFiles,
+    setAttachedFiles,
+    selectedFileReferences,
+    setSelectedFileReferences,
+    cleanupConversation,
+    cleanupAllConversations,
+  } = useConversationSession({
+    activeConversationId,
+    inputValue,
+    setInputValue,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    conversationAgentStateRef,
+  });
 
   // Register cleanup callbacks so ConversationController can invoke them
   sessionCleanupRef.current = { cleanupConversation, cleanupAllConversations };
@@ -245,6 +257,8 @@ export function ChatWorkspace({
     setActiveTab,
     clearInput,
     setAttachedFiles,
+    setSelectedFileReferences,
+    onUserMessageSent,
   });
 
   // Pre-intercept handler: catches messages not in the registry
@@ -436,6 +450,7 @@ export function ChatWorkspace({
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
       onRequestFiles={(filter) => {
+        onMentionSearchFilterChange(filter);
         if (!isCharacterRoleSession && activeConversationId) {
           VSCodeMessages.searchProjectFiles(filter, activeConversationId);
         }
@@ -454,6 +469,7 @@ export function ChatWorkspace({
         messages={messages}
         inputValue={inputValue}
         isThinking={isThinking}
+        queuedMessageCount={queuedMessageCount}
         streamingMessageId={streamingMessageId}
         activeConversationId={activeConversationId}
         conversationKind={conversationKind}
@@ -490,6 +506,8 @@ export function ChatWorkspace({
         onCancel={handleCancelMessage}
         attachedFiles={attachedFiles}
         onAttachedFilesChange={setAttachedFiles}
+        selectedFileReferences={selectedFileReferences}
+        onSelectedFileReferencesChange={setSelectedFileReferences}
         agentState={agentState}
         onApprovePlanStep={planActions.handleApprovePlanStep}
         onRejectPlanStep={planActions.handleRejectPlanStep}

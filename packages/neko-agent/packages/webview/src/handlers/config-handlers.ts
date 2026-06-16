@@ -69,6 +69,9 @@ const handleProjectFiles: MessageHandler<'projectFiles'> = (
   if (!context.isCurrentConversation(message.conversationId)) {
     return;
   }
+  if (message.filter !== undefined && message.filter !== context.mentionSearchFilter) {
+    return;
+  }
 
   const projection = projectProjectFilesMessage(message);
   context.setProjectFiles(projection.projectFiles);

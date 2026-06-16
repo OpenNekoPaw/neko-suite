@@ -96,10 +96,17 @@ describe('character role context isolation', () => {
       activeConversationId: 'conv-a',
       activeTabId: 'tab-conv-a',
       currentMessages: ordinaryMessages,
-      currentStreaming: { isThinking: true, streamingMessageId: 'ordinary-stream' },
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'ordinary-stream',
+        queuedMessageCount: 0,
+      },
       cachedMessages: new Map([['embody-session-1', roleMessages]]),
       cachedStreaming: new Map([
-        ['embody-session-1', { isThinking: false, streamingMessageId: null }],
+        [
+          'embody-session-1',
+          { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+        ],
       ]),
       openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
     });
@@ -127,6 +134,7 @@ describe('character role context isolation', () => {
     expect(harness.conversationStreaming().get('conv-a')).toEqual({
       isThinking: true,
       streamingMessageId: 'ordinary-stream',
+      queuedMessageCount: 0,
     });
   });
 });
@@ -245,6 +253,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {
         isThinking: false,
         streamingMessageId: null,
+        queuedMessageCount: 0,
       };
       const result = updater(existingMessages, existingStreaming);
       conversationMessagesRef.current.set(conversationId, result.messages);
@@ -265,6 +274,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       },
     ),
     setProjectFiles: noopDispatch(),
+    mentionSearchFilter: '',
     setMentionItems: noopDispatch(),
     setPluginCommands: noopDispatch(),
     setPluginsAvailable: createSetter(

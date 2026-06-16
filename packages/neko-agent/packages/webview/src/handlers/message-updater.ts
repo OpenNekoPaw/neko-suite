@@ -19,6 +19,8 @@ export interface ConversationUpdateResult {
   streamingMessageId?: string | null;
   /** If provided, update isThinking */
   isThinking?: boolean;
+  /** If provided, update queued user messages behind the active run */
+  queuedMessageCount?: number;
 }
 
 /**
@@ -47,21 +49,33 @@ export function updateConversation(
   }
 
   if (context.isCurrentConversation(conversationId)) {
-    let result: ConversationUpdateResult | undefined;
-    context.setMessages((prev) => {
-      result = updater(prev, context.streamingMessageIdRef.current);
-      return result.messages;
-    });
-    // Apply streaming state changes (result is populated synchronously by setMessages callback)
-    if (result) {
-      if (result.streamingMessageId !== undefined) {
-        context.streamingMessageIdRef.current = result.streamingMessageId;
-        context.setStreamingMessageId(result.streamingMessageId);
-      }
-      if (result.isThinking !== undefined) {
-        context.setIsThinking(result.isThinking);
-      }
-    }
+    const currentMessages =
+      context.conversationMessagesRef.current.get(conversationId) ?? context.messages;
+    const currentStreaming = context.conversationStreamingRef.current.get(conversationId) ?? {
+      streamingMessageId: context.streamingMessageIdRef.current,
+      isThinking: context.isThinking,
+      queuedMessageCount: context.queuedMessageCount ?? 0,
+    };
+    const result = updater(currentMessages, currentStreaming.streamingMessageId);
+    const nextStreaming = {
+      streamingMessageId:
+        result.streamingMessageId !== undefined
+          ? result.streamingMessageId
+          : currentStreaming.streamingMessageId,
+      isThinking: result.isThinking !== undefined ? result.isThinking : currentStreaming.isThinking,
+      queuedMessageCount:
+        result.queuedMessageCount !== undefined
+          ? result.queuedMessageCount
+          : currentStreaming.queuedMessageCount,
+    };
+
+    context.conversationMessagesRef.current.set(conversationId, result.messages);
+    context.conversationStreamingRef.current.set(conversationId, nextStreaming);
+    context.setMessages(result.messages);
+    context.streamingMessageIdRef.current = nextStreaming.streamingMessageId;
+    context.setStreamingMessageId(nextStreaming.streamingMessageId);
+    context.setIsThinking(nextStreaming.isThinking);
+    context.setQueuedMessageCount?.(nextStreaming.queuedMessageCount ?? 0);
   } else if (conversationId) {
     context.updateNonCurrentConversation(conversationId, (msgs, streaming) => {
       const result = updater(msgs, streaming.streamingMessageId);
@@ -73,6 +87,10 @@ export function updateConversation(
               ? result.streamingMessageId
               : streaming.streamingMessageId,
           isThinking: result.isThinking !== undefined ? result.isThinking : streaming.isThinking,
+          queuedMessageCount:
+            result.queuedMessageCount !== undefined
+              ? result.queuedMessageCount
+              : streaming.queuedMessageCount,
         },
       };
     });

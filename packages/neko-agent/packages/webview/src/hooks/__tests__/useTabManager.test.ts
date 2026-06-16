@@ -105,4 +105,166 @@ describe('useTabManager', () => {
     expect(onActivateCharacterRoleTab).not.toHaveBeenCalled();
     expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
   });
+
+  it('does not delete a closed tab when the conversation summary is missing', () => {
+    const onNewChat = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Next', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-b');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [],
+        setActiveTab: vi.fn(),
+        onNewChat,
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
+
+  it('preserves locally active conversations when closing their tab', () => {
+    const onNewChat = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Next', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-b');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
+        setActiveTab: vi.fn(),
+        onNewChat,
+        hasLocalConversationActivity: (conversationId) => conversationId === 'conv-a',
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
+
+  it('persists the active tab before checking whether it is locally active', () => {
+    const events: string[] = [];
+    const onBeforeTabActivation = vi.fn(() => {
+      events.push('persist');
+    });
+    const hasLocalConversationActivity = vi.fn(() => {
+      events.push('activity-check');
+      return true;
+    });
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Next', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-a');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
+        setActiveTab: vi.fn(),
+        onNewChat: vi.fn(),
+        onBeforeTabActivation,
+        hasLocalConversationActivity,
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(events).toEqual(['persist', 'activity-check']);
+    expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
+  });
+
+  it('does not run the persist callback before checking inactive tabs', () => {
+    const events: string[] = [];
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Next', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-b');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
+        setActiveTab: vi.fn(),
+        onNewChat: vi.fn(),
+        onBeforeTabActivation: () => {
+          events.push('persist');
+        },
+        hasLocalConversationActivity: () => {
+          events.push('activity-check');
+          return true;
+        },
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(events).toEqual(['activity-check']);
+    expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
+  });
+
+  it('keeps the empty-tab cleanup behavior for confirmed empty conversations', () => {
+    const onNewChat = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'New Chat', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Next', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-b');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
+        setActiveTab: vi.fn(),
+        onNewChat,
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a');
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
 });

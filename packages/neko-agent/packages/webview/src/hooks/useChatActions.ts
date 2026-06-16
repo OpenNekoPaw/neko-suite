@@ -14,7 +14,10 @@ import {
 } from 'react';
 import { Message, type SessionMode, type TabType } from '@neko-agent/types';
 import { VSCodeMessages } from '@/messages';
-import type { MessageAttachment } from '@/components/ChatView/InputArea';
+import type {
+  MessageAttachment,
+  SelectedFileReference,
+} from '@/components/ChatView/InputArea/types';
 import {
   getBuiltinSlashCommand,
   normalizeSlashCommandName,
@@ -22,6 +25,7 @@ import {
 } from '@neko-agent/types';
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
 import { projectContextReferencesFromPayloads } from '../presenters/context-reference-presenter';
+import { toAttachmentTypeFromPathReference } from '../presenters/reference-token-presenter';
 import type { AgentContextPayload } from '@neko/shared';
 
 /** Per-category resolved media model for agent mode */
@@ -49,13 +53,17 @@ export interface UseChatActionsProps {
 
   clearInput: () => void;
   setAttachedFiles: (files: MessageAttachment[]) => void;
+  setSelectedFileReferences?: (references: SelectedFileReference[]) => void;
+  onUserMessageSent?: (event: { conversationId: string; message: Message }) => void;
 }
 
 export interface UseChatActionsReturn {
   handleSend: (input?: {
     messageText?: string;
+    displayMessageText?: string;
     attachments?: MessageAttachment[];
     contextPayloads?: AgentContextPayload[];
+    fileReferences?: SelectedFileReference[];
   }) => void;
   triggerSend: (messageText: string) => void;
   handleCancelMessage: () => void;
@@ -82,6 +90,8 @@ export function useChatActions({
   setActiveTab,
   clearInput,
   setAttachedFiles,
+  setSelectedFileReferences,
+  onUserMessageSent,
 }: UseChatActionsProps): UseChatActionsReturn {
   // Lightweight dedup guard: prevent double-click within 1s
   const lastSentRef = useRef<{ hash: string; time: number }>();
@@ -99,17 +109,22 @@ export function useChatActions({
   const handleSend = useCallback(
     (input?: {
       messageText?: string;
+      displayMessageText?: string;
       attachments?: MessageAttachment[];
       contextPayloads?: AgentContextPayload[];
+      fileReferences?: SelectedFileReference[];
     }) => {
       if (isConversationSwitching) return;
 
       const messageText = input?.messageText ?? inputValue;
+      const displayMessageText = input?.displayMessageText ?? messageText;
       const attachments = input?.attachments;
       const contextPayloads = input?.contextPayloads;
+      const fileReferenceAttachments = projectFileReferenceAttachments(input?.fileReferences);
+      const outboundAttachments = mergeDisplayAttachments(attachments, fileReferenceAttachments);
       const outboundContextPayloads = contextPayloads ?? [];
       const trimmed = messageText.trim();
-      const hasAttachments = (attachments?.length ?? 0) > 0;
+      const hasAttachments = outboundAttachments.length > 0;
       const hasContextPayloads = (contextPayloads?.length ?? 0) > 0;
       if (!trimmed && !hasAttachments && !hasContextPayloads) return;
 
@@ -120,6 +135,7 @@ export function useChatActions({
       if (slashCommand) {
         clearInput();
         setAttachedFiles([]);
+        setSelectedFileReferences?.([]);
         VSCodeMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
         return;
       }
@@ -137,15 +153,17 @@ export function useChatActions({
       const userMessage: Message = {
         id: Date.now().toString(),
         role: 'user',
-        content: trimmed,
+        content: displayMessageText.trim(),
         timestamp: Date.now(),
-        ...(attachments ? { attachments } : {}),
+        ...(outboundAttachments.length > 0 ? { attachments: outboundAttachments } : {}),
         ...(contextReferences ? { contextReferences } : {}),
       };
 
       setMessages((prev) => [...prev, userMessage]);
+      onUserMessageSent?.({ conversationId, message: userMessage });
       clearInput();
       setAttachedFiles([]);
+      setSelectedFileReferences?.([]);
       setIsThinking(true);
 
       const effectiveSessionMode = sessionMode ?? 'agent';
@@ -161,7 +179,7 @@ export function useChatActions({
         message: trimmed,
         sessionMode: effectiveSessionMode,
         ...modelProjection,
-        ...(attachments ? { attachments } : {}),
+        ...(outboundAttachments.length > 0 ? { attachments: outboundAttachments } : {}),
         ...(outboundContextPayloads.length > 0 ? { contextPayloads: outboundContextPayloads } : {}),
       });
     },
@@ -182,6 +200,8 @@ export function useChatActions({
       streamingMessageIdRef,
       clearInput,
       setAttachedFiles,
+      setSelectedFileReferences,
+      onUserMessageSent,
     ],
   );
 
@@ -205,6 +225,7 @@ export function useChatActions({
       };
 
       setMessages((prev) => [...prev, userMessage]);
+      onUserMessageSent?.({ conversationId, message: userMessage });
       setIsThinking(true);
       setActiveTab('chat');
 
@@ -229,6 +250,7 @@ export function useChatActions({
       setStreamingMessageId,
       streamingMessageIdRef,
       activeConversationIdRef,
+      onUserMessageSent,
     ],
   );
 
@@ -252,6 +274,32 @@ export function useChatActions({
   }, [isThinking, isConversationSwitching, activeConversationIdRef, setIsThinking]);
 
   return { handleSend, triggerSend, handleCancelMessage, copyLastResponse };
+}
+
+function projectFileReferenceAttachments(
+  references: readonly SelectedFileReference[] | undefined,
+): MessageAttachment[] {
+  return (
+    references?.map((reference) => {
+      const type = toAttachmentTypeFromPathReference(reference);
+      return {
+        id: reference.id,
+        name: reference.label,
+        type,
+        path: reference.path,
+        ...(reference.thumbnailUri && type === 'image' ? { preview: reference.thumbnailUri } : {}),
+      };
+    }) ?? []
+  );
+}
+
+function mergeDisplayAttachments(
+  attachments: readonly MessageAttachment[] | undefined,
+  fileReferences: readonly MessageAttachment[],
+): MessageAttachment[] {
+  if (!attachments || attachments.length === 0) return [...fileReferences];
+  if (fileReferences.length === 0) return [...attachments];
+  return [...attachments, ...fileReferences];
 }
 
 function parseDirectBuiltinSlashCommand(

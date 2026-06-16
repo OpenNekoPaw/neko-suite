@@ -39,6 +39,7 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
   if (context.isCurrentConversation(conversationId)) {
     context.setIsThinking(false);
     context.setStreamingMessageId(null);
+    context.setQueuedMessageCount?.(0);
 
     // Append synthetic assistant message that embeds the TaskCard
     context.setMessages((prev) => appendMediaTaskMessageToMessages(prev, workItem.id));
@@ -46,7 +47,12 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
     // Non-current conversation: update refs only
     context.updateNonCurrentConversation(conversationId, (messages, streaming) => ({
       messages: appendMediaTaskMessageToMessages(messages, workItem.id),
-      streaming: { ...streaming, isThinking: false, streamingMessageId: null },
+      streaming: {
+        ...streaming,
+        isThinking: false,
+        streamingMessageId: null,
+        queuedMessageCount: 0,
+      },
     }));
   }
 };

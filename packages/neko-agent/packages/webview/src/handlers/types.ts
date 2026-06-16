@@ -37,6 +37,7 @@ export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
 export interface StreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
+  queuedMessageCount?: number;
 }
 
 /**
@@ -58,7 +59,9 @@ export interface ChatStateContext {
   isThinking: boolean;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
+  setQueuedMessageCount?: React.Dispatch<React.SetStateAction<number>>;
   streamingMessageId: string | null;
+  queuedMessageCount?: number;
   streamingMessageIdRef: MutableRefObject<string | null>;
 }
 
@@ -151,6 +154,7 @@ export interface MessageHandlerContext
   // Project files
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   // Unified @mention items (files + canvas nodes + characters)
+  mentionSearchFilter: string;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   // Plugin slash commands registered by external extensions
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
