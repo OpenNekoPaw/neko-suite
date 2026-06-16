@@ -431,6 +431,13 @@ function registerCommands(
           ext: '.nkc',
           template: (title) => getCanvasTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.canvas.new.noFolder'),
+          onCreated: async (fileUri) => {
+            await vscode.commands.executeCommand(
+              'vscode.openWith',
+              fileUri,
+              CanvasEditorProvider.viewType,
+            );
+          },
         });
       } catch (error) {
         await handleError(error, { showToUser: true });
