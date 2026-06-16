@@ -6,8 +6,6 @@ import { ScriptTableView } from './components/ScriptTableView';
 import type {
   FountainDocument,
   MessageToWebview,
-  StorySceneAction,
-  StorySceneState,
   StoryTableAction,
   StoryTableActionScope,
   StoryViewMode,
@@ -35,16 +33,18 @@ function TabBar({
 }) {
   const { t } = useTranslation();
   return (
-    <Tabs
-      className="flex-shrink-0 gap-0"
-      listClassName="w-full justify-start rounded-none border-b border-[var(--vscode-panel-border)] bg-transparent p-0"
-      value={active}
-      onValueChange={(value) => onChange(value as StoryViewMode)}
-      items={TAB_IDS.map((tab) => ({
-        value: tab.id,
-        label: t(tab.labelKey),
-      }))}
-    />
+    <div className="story-view-tabs" aria-label={t('tab.table')}>
+      <Tabs
+        className="story-view-tabs-root"
+        listClassName="story-view-tab-list"
+        value={active}
+        onValueChange={(value) => onChange(value as StoryViewMode)}
+        items={TAB_IDS.map((tab) => ({
+          value: tab.id,
+          label: t(tab.labelKey),
+        }))}
+      />
+    </div>
   );
 }
 
@@ -55,7 +55,6 @@ function TabBar({
 export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
   const [scriptIndex, setScriptIndex] = useState<NekoStoryScriptIndex | null>(null);
-  const [sceneStates, setSceneStates] = useState<Record<string, StorySceneState>>({});
   const [readinessRows, setReadinessRows] = useState<readonly StorySceneVideoReadiness[]>([]);
   const [characterThumbnails, setCharacterThumbnails] = useState<Record<string, string>>({});
   const [view, setView] = useState<StoryViewMode>('screenplay');
@@ -65,7 +64,6 @@ export function App() {
       case 'update':
         setDocument(message.document);
         setScriptIndex(message.scriptIndex);
-        setSceneStates(message.sceneStates);
         if (message.readinessRows) {
           setReadinessRows(message.readinessRows);
         } else {
@@ -93,23 +91,9 @@ export function App() {
     [postMessage],
   );
 
-  const handleSceneAction = useCallback(
-    (sceneId: string, action: StorySceneAction) => {
-      postMessage({ type: 'sceneAction', sceneId, action });
-    },
-    [postMessage],
-  );
-
   const handleTableAction = useCallback(
     (action: StoryTableAction, scope?: StoryTableActionScope) => {
       postMessage({ type: 'tableAction', action, scope });
-    },
-    [postMessage],
-  );
-
-  const handleCharacterSendToAgent = useCallback(
-    (name: string, sceneId?: string, characterId?: string) => {
-      postMessage({ type: 'characterSendToAgent', name, sceneId, characterId });
     },
     [postMessage],
   );
@@ -123,23 +107,20 @@ export function App() {
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="story-view-shell"
       style={{ backgroundColor: 'var(--vscode-editor-background)' }}
     >
       <TabBar active={view} onChange={setView} />
 
-      <div className="flex-1 overflow-hidden">
+      <div className="story-view-content">
         {view === 'screenplay' && <ScriptRenderer document={document} />}
         {view === 'table' && (
           <ScriptTableView
             scriptIndex={scriptIndex}
-            sceneStates={sceneStates}
             readinessRows={readinessRows}
             characterThumbnails={characterThumbnails}
             onNavigate={handleNavigate}
-            onSceneAction={handleSceneAction}
             onTableAction={handleTableAction}
-            onCharacterSendToAgent={handleCharacterSendToAgent}
             onCharacterNavigate={handleCharacterNavigate}
           />
         )}

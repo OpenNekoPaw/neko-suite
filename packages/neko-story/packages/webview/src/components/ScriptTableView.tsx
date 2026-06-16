@@ -1,93 +1,31 @@
 /**
- * ScriptTableView — table-level storyboard dispatch panel for creators.
+ * ScriptTableView — whole-table storyboard input preview for creators.
  *
- * Main workflow actions live at table level. Scene rows summarize readiness,
- * visual references, Canvas progress, and local recovery issues.
+ * Main workflow actions live at table level. Scene rows summarize script
+ * structure and character references without becoming an asset-status table.
  *
  * It must not become a second storyboard editor.
  */
 
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type {
   NekoStoryScriptIndex,
   StoryCharacterVisualReadiness,
-  StoryCharacterVisualStatus,
-  StoryMissingInput,
   StorySceneVideoReadiness,
 } from '@neko/shared';
-import { Button, IconButton } from '@neko/ui/primitives';
-import { SendIcon, MoreHorizontalIcon } from '@neko/ui/icons';
-import type {
-  StorySceneAction,
-  StorySceneState,
-  StoryTableAction,
-  StoryTableActionScope,
-} from '../types';
+import { Button } from '@neko/ui/primitives';
+import { SendIcon } from '@neko/ui/icons';
+import type { StoryTableAction, StoryTableActionScope } from '../types';
 import { useTranslation } from '../i18n/I18nContext';
-
-type TranslationFn = ReturnType<typeof useTranslation>['t'];
 
 interface ScriptTableViewProps {
   scriptIndex: NekoStoryScriptIndex | null;
-  sceneStates: Record<string, StorySceneState>;
   readinessRows?: readonly StorySceneVideoReadiness[];
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
-  onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
   onTableAction?: (action: StoryTableAction, scope?: StoryTableActionScope) => void;
-  onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
   onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
 }
-
-const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
-  agentStatus: 'not-requested',
-  canvasStatus: 'not-sent',
-};
-
-// =============================================================================
-// Workflow state helpers
-// =============================================================================
-
-function isSceneSkipped(
-  state: StorySceneState,
-  readiness: StorySceneVideoReadiness | undefined,
-): boolean {
-  return (
-    readiness?.creatorStatus === 'skipped' ||
-    state.agentStatus === 'skipped' ||
-    state.canvasStatus === 'skipped'
-  );
-}
-
-function getStatusDetail(state: StorySceneState, t: TranslationFn): string | undefined {
-  if (state.agentStatus === 'failed' || state.generationStatus === 'partial-fail') {
-    return t('table.status.detail.failed');
-  }
-  if (
-    state.agentStatus === 'review' ||
-    state.agentStatus === 'prompt-review' ||
-    state.agentStatus === 'pilot-review'
-  ) {
-    return t('table.status.detail.review');
-  }
-  return undefined;
-}
-
-const VISUAL_STATUS_PALETTE: Record<
-  StoryCharacterVisualStatus,
-  { bg: string; fg: string; border?: string }
-> = {
-  bound: { bg: '#16a34a20', fg: '#16a34a' },
-  generated: { bg: '#3b82f620', fg: '#3b82f6' },
-  missing: { bg: '#f59e0b20', fg: '#f59e0b' },
-  unresolved: { bg: '#ef444420', fg: '#ef4444' },
-  unknown: {
-    bg: 'var(--vscode-badge-background)',
-    fg: 'var(--vscode-descriptionForeground)',
-  },
-  stale: { bg: '#f9731620', fg: '#f97316' },
-};
 
 // =============================================================================
 // Primitives
@@ -96,15 +34,8 @@ const VISUAL_STATUS_PALETTE: Record<
 function Th({ children, width }: { children: React.ReactNode; width?: string }) {
   return (
     <th
-      className="px-3 py-1.5 text-left font-medium whitespace-nowrap"
+      className="story-table-column-heading"
       style={{
-        color: 'var(--vscode-descriptionForeground)',
-        borderBottom: '1px solid var(--vscode-panel-border)',
-        backgroundColor: 'var(--vscode-editor-background)',
-        fontSize: 11,
-        position: 'sticky',
-        top: 0,
-        zIndex: 1,
         width,
       }}
     >
@@ -113,13 +44,16 @@ function Th({ children, width }: { children: React.ReactNode; width?: string }) 
   );
 }
 
+function MetricChip({ children }: { children: React.ReactNode }) {
+  return <span className="story-table-metric-chip">{children}</span>;
+}
+
 function CharacterBadge({
   character,
   defaultName,
   defaultThumbnailUri,
   sceneId,
   thumbnailUri,
-  onSendToAgent,
   onNavigateToAsset,
 }: {
   character?: StoryCharacterVisualReadiness;
@@ -127,61 +61,50 @@ function CharacterBadge({
   defaultThumbnailUri?: string;
   sceneId: string;
   thumbnailUri?: string;
-  onSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
   onNavigateToAsset?: (name: string, sceneId?: string, characterId?: string) => void;
 }) {
   const [hoverVisible, setHoverVisible] = useState(false);
   const badgeRef = useRef<HTMLSpanElement>(null);
-  const { t } = useTranslation();
   const name = character?.name ?? defaultName ?? '';
-  const visualStatus = character?.status;
   const resolvedThumbnailUri = character?.thumbnailUri ?? thumbnailUri ?? defaultThumbnailUri;
-  const palette = visualStatus ? VISUAL_STATUS_PALETTE[visualStatus] : undefined;
-  const visualLabel = visualStatus
-    ? translateVisualStatus(visualStatus, t)
-    : resolvedThumbnailUri
-      ? t('table.visualStatus.referenced')
-      : '';
-  const title = character
-    ? [
-        name,
-        visualLabel,
-        translateLocalizedText(
-          t,
-          character.missingReasonKey,
-          character.missingReasonParams,
-          character.missingReason,
-        ),
-      ]
-        .filter(Boolean)
-        .join('\n')
-    : name;
+  const initial = getCharacterInitial(name);
 
   return (
     <span
       ref={badgeRef}
-      title={title}
+      title={name}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        padding: '2px 6px',
-        borderRadius: 3,
+        minHeight: 24,
+        padding: '2px 7px 2px 4px',
+        borderRadius: 4,
         fontSize: 11,
         lineHeight: '16px',
-        backgroundColor: palette?.bg ?? 'var(--vscode-badge-background)',
-        color: palette?.fg ?? 'var(--vscode-badge-foreground)',
-        border: palette?.border ? `1px solid ${palette.border}` : undefined,
+        backgroundColor: 'color-mix(in srgb, var(--vscode-descriptionForeground) 7%, transparent)',
+        color: 'var(--vscode-foreground)',
+        border:
+          '1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 18%, transparent)',
         whiteSpace: 'nowrap',
         cursor: onNavigateToAsset ? 'pointer' : 'default',
         position: 'relative',
+        transition: 'background-color 160ms ease, border-color 160ms ease',
       }}
-      data-character-visual-status={visualStatus ?? (resolvedThumbnailUri ? 'referenced' : 'none')}
+      role={onNavigateToAsset ? 'button' : undefined}
+      tabIndex={onNavigateToAsset ? 0 : undefined}
       onMouseEnter={() => setHoverVisible(true)}
       onMouseLeave={() => setHoverVisible(false)}
       onClick={(e) => {
         e.stopPropagation();
         onNavigateToAsset?.(name, sceneId, character?.characterId);
+      }}
+      onKeyDown={(event) => {
+        if (!onNavigateToAsset) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        onNavigateToAsset(name, sceneId, character?.characterId);
       }}
     >
       {resolvedThumbnailUri ? (
@@ -209,46 +132,15 @@ function CharacterBadge({
             justifyContent: 'center',
             fontSize: 10,
             lineHeight: 1,
-            backgroundColor: palette?.bg ?? 'var(--vscode-badge-background)',
-            color: palette?.fg ?? 'var(--vscode-descriptionForeground)',
+            backgroundColor: 'var(--vscode-badge-background)',
+            color: 'var(--vscode-badge-foreground, var(--vscode-descriptionForeground))',
             border: '1px solid var(--vscode-panel-border)',
           }}
         >
-          {visualStatus === 'bound' || visualStatus === 'generated' ? '✓' : '?'}
+          {initial}
         </span>
       )}
       {name}
-      {visualLabel && (
-        <span
-          style={{
-            fontSize: 9,
-            lineHeight: '12px',
-            opacity: 0.85,
-            marginLeft: 1,
-          }}
-        >
-          {visualLabel}
-        </span>
-      )}
-      {onSendToAgent && (
-        <IconButton
-          label={t('table.character.sendToAgent')}
-          title={t('table.character.sendToAgent')}
-          icon={<SendIcon size={10} />}
-          size="xs"
-          variant="ghost"
-          className="h-4 w-4 flex-shrink-0 opacity-60"
-          style={{
-            borderRadius: 2,
-            fontSize: 9,
-            marginLeft: 1,
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSendToAgent(name, sceneId, character?.characterId);
-          }}
-        />
-      )}
       {/* Hover preview */}
       {hoverVisible && resolvedThumbnailUri && (
         <div
@@ -285,7 +177,6 @@ function CharacterBadge({
             }}
           >
             {name}
-            {visualStatus ? ` · ${translateVisualStatus(visualStatus, t)}` : ''}
           </div>
         </div>
       )}
@@ -293,57 +184,21 @@ function CharacterBadge({
   );
 }
 
-function translateMissingInputLabel(input: StoryMissingInput, t: TranslationFn): string {
-  return translateLocalizedText(t, input.labelKey, input.labelParams, input.label);
-}
-
-function translateLocalizedText(
-  t: TranslationFn,
-  key: string | undefined,
-  params: Readonly<Record<string, string | number>> | undefined,
-  defaultText: string | undefined,
-): string {
-  if (key) {
-    const translated = t(key, params ? { ...params } : undefined);
-    if (translated !== key) {
-      return translated;
-    }
-  }
-  return defaultText ?? '';
-}
-
-function translateVisualStatus(
-  status: StoryCharacterVisualStatus | undefined,
-  t: TranslationFn,
-): string {
-  switch (status) {
-    case 'bound':
-      return t('table.visualStatus.bound');
-    case 'generated':
-      return t('table.visualStatus.generated');
-    case 'missing':
-      return t('table.visualStatus.missing');
-    case 'unresolved':
-      return t('table.visualStatus.unresolved');
-    case 'stale':
-      return t('table.visualStatus.stale');
-    case 'unknown':
-      return t('table.visualStatus.unknown');
-    default:
-      return '';
-  }
+function getCharacterInitial(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? '?';
 }
 
 // =============================================================================
 // Action button primitives
 // =============================================================================
 
-function SecondaryActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+function TableActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button
-      className="h-5 px-2 text-[10px] leading-4"
-      size="xs"
-      variant="secondary"
+      className="story-table-action-button"
+      leadingIcon={<SendIcon size={13} />}
+      size="sm"
+      variant="default"
       onClick={(event) => {
         event.stopPropagation();
         onClick();
@@ -355,203 +210,36 @@ function SecondaryActionButton({ label, onClick }: { label: string; onClick: () 
 }
 
 // =============================================================================
-// Inline dropdown menu
-// =============================================================================
-
-interface DropdownMenuItem {
-  label: string;
-  onClick: () => void;
-}
-
-function DropdownMenu({
-  items,
-  anchorRef,
-  onClose,
-}: {
-  items: DropdownMenuItem[];
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
-  onClose: () => void;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const menuWidth = 140;
-    const vw = window.innerWidth;
-    const x = rect.right + menuWidth > vw ? rect.right - menuWidth : rect.left;
-    setPos({ x, y: rect.bottom + 2 });
-  }, [anchorRef]);
-
-  useEffect(() => {
-    const handlePointerDown = (e: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      role="menu"
-      style={{
-        position: 'fixed',
-        left: pos.x,
-        top: pos.y,
-        zIndex: 999,
-        minWidth: 120,
-        padding: '4px 0',
-        borderRadius: 4,
-        border: '1px solid var(--vscode-panel-border)',
-        backgroundColor: 'var(--vscode-menu-background, var(--vscode-editor-background))',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-      }}
-    >
-      {items.map((item, i) => (
-        <Button
-          key={i}
-          role="menuitem"
-          size="xs"
-          variant="ghost"
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '4px 12px',
-            border: 'none',
-            background: 'none',
-            textAlign: 'left',
-            fontSize: 11,
-            color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-              'var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground))';
-            (e.currentTarget as HTMLButtonElement).style.color =
-              'var(--vscode-menu-selectionForeground, var(--vscode-foreground))';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
-            (e.currentTarget as HTMLButtonElement).style.color =
-              'var(--vscode-menu-foreground, var(--vscode-foreground))';
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            item.onClick();
-            onClose();
-          }}
-        >
-          {item.label}
-        </Button>
-      ))}
-    </div>,
-    document.body,
-  );
-}
-
-// =============================================================================
 // Scene row
 // =============================================================================
 
 const MAX_VISIBLE_CHARACTERS = 3;
 
 const CELL_STYLE: React.CSSProperties = {
-  padding: '10px 12px',
+  padding: '12px 14px',
   verticalAlign: 'top',
   borderBottom: '1px solid var(--vscode-panel-border)',
 };
-
-function getSceneProgressLabel(
-  readiness: StorySceneVideoReadiness | undefined,
-  t: TranslationFn,
-): string | undefined {
-  if (readiness?.canvasSummary) {
-    return t('table.canvasProgress', {
-      done: readiness.canvasSummary.generatedShotCount,
-      total: readiness.canvasSummary.shotCount,
-    });
-  }
-
-  return undefined;
-}
-
-function getSceneIssueLabels(
-  readiness: StorySceneVideoReadiness | undefined,
-  state: StorySceneState,
-  skipped: boolean,
-  t: TranslationFn,
-): readonly string[] {
-  const missingInputs =
-    readiness?.missingInputs
-      .filter((input) => input.severity !== 'info')
-      .map((input) => translateMissingInputLabel(input, t)) ?? [];
-  if (missingInputs.length > 0) {
-    return missingInputs;
-  }
-
-  if (skipped) {
-    return [t('table.sceneIssues.skipped')];
-  }
-
-  if (readiness?.readinessStatus === 'failed') {
-    return [t('table.status.detail.failed')];
-  }
-
-  const statusDetail = getStatusDetail(state, t);
-  return statusDetail ? [statusDetail] : [];
-}
 
 interface SceneRowProps {
   scene: NekoStoryScriptIndex['scenes'][number];
   sceneIndex: number;
   isOdd: boolean;
-  selected: boolean;
-  state: StorySceneState;
   readiness?: StorySceneVideoReadiness;
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
-  onToggleSelected?: (sceneId: string, selected: boolean) => void;
-  onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
-  onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
   onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
-  t: TranslationFn;
 }
 
 const SceneRow = memo(function SceneRow({
   scene,
   sceneIndex,
   isOdd,
-  selected,
-  state,
   readiness,
   characterThumbnails,
   onNavigate,
-  onToggleSelected,
-  onSceneAction,
-  onCharacterSendToAgent,
   onCharacterNavigate,
-  t,
 }: SceneRowProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const moreButtonRef = useRef<HTMLButtonElement>(null);
-
-  const isSkipped = isSceneSkipped(state, readiness);
-  const progressLabel = getSceneProgressLabel(readiness, t);
-  const issueLabels = getSceneIssueLabels(readiness, state, isSkipped, t);
-  const sceneMetaTitle = [progressLabel, ...issueLabels].filter(Boolean).join('\n');
-
   const displayNumber = scene.sceneNumber
     ? `#${scene.sceneNumber}`
     : `#${String(sceneIndex).padStart(2, '0')}`;
@@ -569,102 +257,41 @@ const SceneRow = memo(function SceneRow({
   const visibleDefaultChars = defaultCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
   const overflowCount = characterCount - MAX_VISIBLE_CHARACTERS;
 
-  const rowBg = selected
-    ? 'var(--vscode-list-activeSelectionBackground)'
-    : isOdd
-      ? 'var(--vscode-list-hoverBackground)'
-      : 'transparent';
-
-  const fire = useCallback(
-    (action: StorySceneAction) => onSceneAction?.(scene.sceneId, action),
-    [onSceneAction, scene.sceneId],
-  );
-  const isActionAllowed = useCallback(
-    (action: StorySceneAction) => !readiness || readiness.allowedActions.includes(action),
-    [readiness],
-  );
-
-  // Dropdown items vary by state
-  const menuItems = useMemo<DropdownMenuItem[]>(() => {
-    const items: DropdownMenuItem[] = [];
-    if (!isSkipped) {
-      if (isActionAllowed('analyze')) {
-        items.push({ label: t('table.action.analyze'), onClick: () => fire('analyze') });
-      }
-      if (isActionAllowed('generateStoryboard')) {
-        items.push({
-          label: t('table.action.storyboard'),
-          onClick: () => fire('generateStoryboard'),
-        });
-      }
-      if (isActionAllowed('sendToCanvas')) {
-        items.push({ label: t('table.action.sendToCanvas'), onClick: () => fire('sendToCanvas') });
-      }
-      if (isActionAllowed('openCanvas')) {
-        items.push({ label: t('table.action.openCanvas'), onClick: () => fire('openCanvas') });
-      }
-      if (isActionAllowed('retryFailed')) {
-        items.push({ label: t('table.action.retry'), onClick: () => fire('retryFailed') });
-      }
-      if (isActionAllowed('startVideoCreation')) {
-        items.push({
-          label: t('table.action.startScene'),
-          onClick: () => fire('startVideoCreation'),
-        });
-      }
-    }
-    if (isActionAllowed('toggleSkip')) {
-      items.push({
-        label: isSkipped ? t('table.action.unskip') : t('table.action.skip'),
-        onClick: () => fire('toggleSkip'),
-      });
-    }
-    return items;
-  }, [t, fire, isSkipped, isActionAllowed]);
-
-  const handleCloseMenu = useCallback(() => setMenuOpen(false), []);
+  const rowBg = isOdd
+    ? 'color-mix(in srgb, var(--vscode-list-hoverBackground) 46%, transparent)'
+    : 'transparent';
 
   return (
     <tr
       onClick={() => onNavigate?.(scene.line_start)}
       style={{
         cursor: 'pointer',
-        opacity: isSkipped ? 0.45 : 1,
         backgroundColor: rowBg,
+        transition: 'background-color 160ms ease',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-          'var(--vscode-list-activeSelectionBackground)';
-        (e.currentTarget as HTMLTableRowElement).style.opacity = isSkipped ? '0.55' : '0.85';
+          'color-mix(in srgb, var(--vscode-list-hoverBackground) 74%, transparent)';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLTableRowElement).style.backgroundColor = rowBg;
-        (e.currentTarget as HTMLTableRowElement).style.opacity = isSkipped ? '0.45' : '1';
       }}
     >
-      {/* Select */}
-      <td style={{ ...CELL_STYLE, textAlign: 'center', width: 32 }}>
-        <input
-          type="checkbox"
-          aria-label={t('table.selection.row', { scene: displayNumber })}
-          checked={selected}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(event) => onToggleSelected?.(scene.sceneId, event.currentTarget.checked)}
-        />
-      </td>
-
       {/* # */}
-      <td style={{ ...CELL_STYLE, textAlign: 'center', width: 52 }}>
+      <td style={{ ...CELL_STYLE, textAlign: 'center', width: 72 }}>
         <span
           style={{
             display: 'inline-block',
             fontFamily: 'monospace',
             fontSize: 10,
             fontWeight: 600,
-            padding: '2px 6px',
-            borderRadius: 3,
-            backgroundColor: 'var(--vscode-badge-background)',
-            color: 'var(--vscode-badge-foreground)',
+            padding: '3px 7px',
+            borderRadius: 4,
+            backgroundColor:
+              'color-mix(in srgb, var(--vscode-descriptionForeground) 13%, transparent)',
+            color: 'var(--vscode-foreground)',
+            border:
+              '1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 20%, transparent)',
             whiteSpace: 'nowrap',
           }}
         >
@@ -676,10 +303,6 @@ const SceneRow = memo(function SceneRow({
       <td style={CELL_STYLE}>
         <div
           style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 8,
             lineHeight: '22px',
           }}
         >
@@ -693,38 +316,15 @@ const SceneRow = memo(function SceneRow({
           >
             {scene.sceneTitle}
           </span>
-          <IconButton
-            ref={moreButtonRef}
-            label={t('table.action.more')}
-            icon={<MoreHorizontalIcon size={14} />}
-            size="xs"
-            variant="secondary"
-            className="h-[18px] w-5 flex-shrink-0"
-            style={{
-              borderRadius: 3,
-              border: '1px solid var(--vscode-panel-border)',
-              color: 'var(--vscode-descriptionForeground)',
-              fontSize: 11,
-              lineHeight: 1,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-            title={t('table.action.more')}
-          />
-          {menuOpen && (
-            <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
-          )}
         </div>
         {scene.actionSummary && (
           <div
             style={{
               fontSize: 11,
-              lineHeight: '18px',
+              lineHeight: '19px',
               color: 'var(--vscode-descriptionForeground)',
-              opacity: 0.6,
-              marginTop: 3,
+              opacity: 0.86,
+              marginTop: 4,
               overflow: 'hidden',
               display: '-webkit-box',
               WebkitLineClamp: 2,
@@ -734,39 +334,10 @@ const SceneRow = memo(function SceneRow({
             {scene.actionSummary}
           </div>
         )}
-        {(progressLabel || issueLabels.length > 0) && (
-          <div
-            title={sceneMetaTitle || undefined}
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              marginTop: 4,
-              fontSize: 10,
-              lineHeight: '14px',
-            }}
-          >
-            {progressLabel && (
-              <span style={{ color: 'var(--vscode-descriptionForeground)', opacity: 0.85 }}>
-                {progressLabel}
-              </span>
-            )}
-            {issueLabels.slice(0, 2).map((label) => (
-              <span key={label} style={{ color: 'var(--vscode-descriptionForeground)' }}>
-                {label}
-              </span>
-            ))}
-            {issueLabels.length > 2 && (
-              <span style={{ color: 'var(--vscode-descriptionForeground)', opacity: 0.75 }}>
-                +{issueLabels.length - 2}
-              </span>
-            )}
-          </div>
-        )}
       </td>
 
       {/* Characters */}
-      <td style={{ ...CELL_STYLE, width: 160 }}>
+      <td style={{ ...CELL_STYLE, width: 220 }}>
         {characterCount > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {visibleReadinessChars.map((character) => (
@@ -774,7 +345,6 @@ const SceneRow = memo(function SceneRow({
                 key={character.characterId ?? character.name}
                 character={character}
                 sceneId={scene.sceneId}
-                onSendToAgent={onCharacterSendToAgent}
                 onNavigateToAsset={onCharacterNavigate}
               />
             ))}
@@ -784,7 +354,6 @@ const SceneRow = memo(function SceneRow({
                 defaultName={character.name}
                 defaultThumbnailUri={character.thumbnailUri}
                 sceneId={scene.sceneId}
-                onSendToAgent={onCharacterSendToAgent}
                 onNavigateToAsset={onCharacterNavigate}
               />
             ))}
@@ -828,17 +397,13 @@ const SceneRow = memo(function SceneRow({
 
 export function ScriptTableView({
   scriptIndex,
-  sceneStates,
   readinessRows,
   characterThumbnails,
   onNavigate,
-  onSceneAction,
   onTableAction,
-  onCharacterSendToAgent,
   onCharacterNavigate,
 }: ScriptTableViewProps) {
   const { t } = useTranslation();
-  const [selectedSceneIds, setSelectedSceneIds] = useState<readonly string[]>([]);
   const readinessByScene = useMemo(() => {
     const rows = new Map<string, StorySceneVideoReadiness>();
     for (const row of readinessRows ?? []) {
@@ -857,44 +422,15 @@ export function ScriptTableView({
     return chars;
   }, [scriptIndex, readinessByScene]);
 
-  useEffect(() => {
-    if (!scriptIndex) {
-      setSelectedSceneIds([]);
-      return;
-    }
-    const validSceneIds = new Set(scriptIndex.scenes.map((scene) => scene.sceneId));
-    setSelectedSceneIds((current) => current.filter((sceneId) => validSceneIds.has(sceneId)));
-  }, [scriptIndex]);
-
   const allSceneIds = useMemo(
     () => scriptIndex?.scenes.map((scene) => scene.sceneId) ?? [],
     [scriptIndex],
   );
-  const selectedSceneIdSet = useMemo(() => new Set(selectedSceneIds), [selectedSceneIds]);
-  const actionSceneIds = selectedSceneIds.length > 0 ? selectedSceneIds : allSceneIds;
-  const allSelected = allSceneIds.length > 0 && selectedSceneIds.length === allSceneIds.length;
-  const partiallySelected = selectedSceneIds.length > 0 && !allSelected;
-
-  const handleToggleSceneSelected = useCallback((sceneId: string, selected: boolean) => {
-    setSelectedSceneIds((current) => {
-      if (selected) {
-        return current.includes(sceneId) ? current : [...current, sceneId];
-      }
-      return current.filter((candidate) => candidate !== sceneId);
-    });
-  }, []);
-
-  const handleToggleAllSelected = useCallback(
-    (selected: boolean) => {
-      setSelectedSceneIds(selected ? allSceneIds : []);
-    },
-    [allSceneIds],
-  );
 
   const handleSendTableToAgent = useCallback(() => {
     if (!scriptIndex || !onTableAction) return;
-    onTableAction('sendToAgentAll', { sceneIds: actionSceneIds });
-  }, [scriptIndex, actionSceneIds, onTableAction]);
+    onTableAction('sendToAgentAll', { sceneIds: allSceneIds });
+  }, [scriptIndex, allSceneIds, onTableAction]);
 
   if (!scriptIndex) {
     return (
@@ -919,65 +455,53 @@ export function ScriptTableView({
   }
 
   const total = scriptIndex.scenes.length;
-  const actionScopeLabel =
-    selectedSceneIds.length > 0
-      ? t('table.selection.selected', { count: selectedSceneIds.length })
-      : t('table.selection.all');
 
   return (
-    <div
-      className="h-full overflow-auto"
-      style={{ backgroundColor: 'var(--vscode-editor-background)' }}
-    >
-      {/* Summary bar */}
+    <div className="story-table-scroll">
+      {/* Table header */}
       <div
-        className="flex items-center gap-4 px-4 py-1.5 sticky top-0 z-20"
+        className="story-table-sticky-header"
         style={{
-          backgroundColor: 'var(--vscode-editor-background)',
+          backgroundColor:
+            'color-mix(in srgb, var(--vscode-editor-background) 96%, var(--vscode-sideBar-background, transparent))',
           borderBottom: '1px solid var(--vscode-panel-border)',
           color: 'var(--vscode-descriptionForeground)',
-          fontSize: 11,
         }}
       >
-        <span>{t('table.scenes', { count: total })}</span>
-        {hasCharacters && (
-          <span>{t('table.characters', { count: scriptIndex.characters.length })}</span>
-        )}
-        <span>{actionScopeLabel}</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <SecondaryActionButton
-            label={
-              selectedSceneIds.length > 0
-                ? t('table.batch.sendSelectedToAgent')
-                : t('table.batch.sendTableToAgent')
-            }
-            onClick={handleSendTableToAgent}
-          />
+        <div className="story-table-toolbar" data-testid="story-table-toolbar">
+          <div className="story-table-heading">
+            <div className="story-table-title-row">
+              <h2 className="story-table-title">{t('table.title')}</h2>
+              <div className="story-table-metrics" aria-label={t('table.summary')}>
+                <MetricChip>{t('table.scenes', { count: total })}</MetricChip>
+                {hasCharacters && (
+                  <MetricChip>
+                    {t('table.characters', { count: scriptIndex.characters.length })}
+                  </MetricChip>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="story-table-actions">
+            <TableActionButton
+              label={t('table.batch.sendTableToAgent')}
+              onClick={handleSendTableToAgent}
+            />
+          </div>
         </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <thead>
+            <tr>
+              <Th width="72px">#</Th>
+              <Th>{t('table.header.scene')}</Th>
+              <Th width="220px">{t('table.header.characters')}</Th>
+            </tr>
+          </thead>
+        </table>
       </div>
 
       {/* Table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <Th width="32px">
-              <input
-                type="checkbox"
-                aria-label={t('table.selection.allRows')}
-                checked={allSelected}
-                ref={(input) => {
-                  if (input) {
-                    input.indeterminate = partiallySelected;
-                  }
-                }}
-                onChange={(event) => handleToggleAllSelected(event.currentTarget.checked)}
-              />
-            </Th>
-            <Th width="52px">#</Th>
-            <Th>{t('table.header.scene')}</Th>
-            <Th width="160px">{t('table.header.characters')}</Th>
-          </tr>
-        </thead>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <tbody>
           {scriptIndex.scenes.map((scene, i) => (
             <SceneRow
@@ -985,21 +509,10 @@ export function ScriptTableView({
               scene={scene}
               sceneIndex={i + 1}
               isOdd={i % 2 === 1}
-              selected={selectedSceneIdSet.has(scene.sceneId)}
-              state={
-                sceneStates[scene.sceneId] ?? {
-                  sceneId: scene.sceneId,
-                  ...DEFAULT_SCENE_STATE,
-                }
-              }
               readiness={readinessByScene.get(scene.sceneId)}
               characterThumbnails={characterThumbnails}
               onNavigate={onNavigate}
-              onToggleSelected={handleToggleSceneSelected}
-              onSceneAction={onSceneAction}
-              onCharacterSendToAgent={onCharacterSendToAgent}
               onCharacterNavigate={onCharacterNavigate}
-              t={t}
             />
           ))}
         </tbody>

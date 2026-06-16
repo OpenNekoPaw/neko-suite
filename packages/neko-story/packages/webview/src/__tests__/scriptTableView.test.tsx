@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { ScriptTableView } from '../components/ScriptTableView';
 import { renderWithI18n } from './setup';
-import type { StorySceneState } from '../types';
 import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
 
 const scriptIndex: NekoStoryScriptIndex = {
@@ -53,39 +52,21 @@ const multiSceneIndex: NekoStoryScriptIndex = {
   ],
 };
 
-const pendingState: StorySceneState = {
-  sceneId: 'scene_abc123',
-  agentStatus: 'not-requested',
-  canvasStatus: 'not-sent',
-};
-
 function renderTable(props: Partial<React.ComponentProps<typeof ScriptTableView>> = {}) {
-  return renderWithI18n(
-    <ScriptTableView
-      scriptIndex={scriptIndex}
-      sceneStates={{ scene_abc123: pendingState }}
-      {...props}
-    />,
-  );
+  return renderWithI18n(<ScriptTableView scriptIndex={scriptIndex} {...props} />);
 }
 
 describe('ScriptTableView', () => {
-  it('renders the storyboard table without a separate progress/issues or status column', () => {
-    renderTable({
-      sceneStates: {
-        scene_abc123: {
-          sceneId: 'scene_abc123',
-          agentStatus: 'ready',
-          canvasStatus: 'sent',
-        },
-      },
-    });
+  it('renders the storyboard table as a whole-table input preview', () => {
+    renderTable();
 
-    const table = screen.getByRole('table');
-    const headers = within(table)
-      .getAllByRole('columnheader')
-      .map((header) => header.textContent);
-    expect(headers).toEqual(['', '#', 'Scene', 'Characters']);
+    expect(screen.getByRole('heading', { name: 'Breakdown' })).toBeInTheDocument();
+    expect(
+      screen.queryByText('Whole-table input preview for the current screenplay structure'),
+    ).not.toBeInTheDocument();
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent);
+    expect(headers).toEqual(['#', 'Scene', 'Characters']);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('Progress / Issues')).not.toBeInTheDocument();
     expect(screen.queryByText('Status')).not.toBeInTheDocument();
     expect(screen.queryByText('Duration')).not.toBeInTheDocument();
@@ -98,99 +79,85 @@ describe('ScriptTableView', () => {
     expect(screen.getByText('BOB')).toBeInTheDocument();
   });
 
-  it('keeps table-level workflow actions as the primary controls', () => {
-    renderTable();
+  it('keeps only table-level workflow actions as the primary controls', () => {
+    const { container } = renderTable();
 
-    expect(screen.getByRole('button', { name: 'Send Table to Agent' })).toBeInTheDocument();
+    const action = screen.getByRole('button', { name: 'Analyze Table' });
+    expect(action).toBeInTheDocument();
+    expect(action.closest('.story-table-actions')).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(container.querySelector('.story-table-metrics')?.textContent).toContain('1 scenes');
+    expect(container.querySelector('.story-table-toolbar')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sync to Canvas' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Start Video Generation' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
-    expect(screen.getByText('All scenes')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(screen.queryByText('All scenes')).not.toBeInTheDocument();
     expect(screen.queryByText('0/1 done')).not.toBeInTheDocument();
     expect(screen.queryByText(/Est\. total/)).not.toBeInTheDocument();
   });
 
-  it('keeps row actions as a compact recovery menu', () => {
-    const onSceneAction = vi.fn();
-    renderTable({
-      sceneStates: {
-        scene_abc123: {
-          sceneId: 'scene_abc123',
-          agentStatus: 'ready',
-          canvasStatus: 'sent',
-        },
+  it('does not surface processing failures as row status UI', () => {
+    const readinessRows: StorySceneVideoReadiness[] = [
+      {
+        sceneId: 'scene_abc123',
+        sourceScriptUri: scriptIndex.uri,
+        sceneTitle: 'INT. OFFICE - DAY',
+        estimatedDuration: 18,
+        characters: [],
+        missingInputs: [],
+        readinessStatus: 'failed',
+        creatorStatus: 'failed',
+        allowedActions: ['retryFailed'],
       },
-      onSceneAction,
-    });
+    ];
 
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Storyboard' }));
-    expect(onSceneAction).toHaveBeenCalledWith('scene_abc123', 'generateStoryboard');
-  });
+    renderTable({ readinessRows });
 
-  it('shows blocking failure details inline without a row status badge', () => {
-    renderTable({
-      sceneStates: {
-        scene_abc123: {
-          sceneId: 'scene_abc123',
-          agentStatus: 'failed',
-          canvasStatus: 'not-sent',
-        },
-      },
-    });
-
-    expect(screen.getByText('Generation failed')).toBeInTheDocument();
+    expect(screen.queryByText('Generation failed')).not.toBeInTheDocument();
     expect(screen.queryByText('Needs Attention')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    expect(screen.getByRole('menuitem', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
   });
 
   it('dispatches full-table handoff only to Agent', () => {
-    const onSceneAction = vi.fn();
     const onTableAction = vi.fn();
-    renderTable({ onSceneAction, onTableAction });
+    renderTable({ onTableAction });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send Table to Agent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze Table' }));
     expect(onTableAction).toHaveBeenCalledWith('sendToAgentAll', {
       sceneIds: ['scene_abc123'],
     });
-    expect(onSceneAction).not.toHaveBeenCalled();
     expect(onTableAction).toHaveBeenCalledTimes(1);
   });
 
-  it('allows selected-scene handoff to Agent regardless of previous processing state', () => {
+  it('always dispatches the current whole table regardless of previous processing state', () => {
     const onTableAction = vi.fn();
     renderTable({
       scriptIndex: multiSceneIndex,
-      sceneStates: {
-        scene_abc123: pendingState,
-        scene_def456: {
-          sceneId: 'scene_def456',
-          agentStatus: 'sent',
-          canvasStatus: 'opened',
-        },
-      },
       onTableAction,
     });
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select #2' }));
-    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send Selected to Agent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze Table' }));
     expect(onTableAction).toHaveBeenCalledWith('sendToAgentAll', {
-      sceneIds: ['scene_def456'],
+      sceneIds: ['scene_abc123', 'scene_def456'],
     });
+    expect(
+      screen.queryByRole('button', { name: 'Send Selected to Agent' }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Send Selected to Canvas' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Start Selected' })).not.toBeInTheDocument();
   });
 
-  it('renders readiness character visual states and missing input indicators', () => {
+  it('keeps asset readiness and missing-input fields out of the table body', () => {
     const readinessRows: StorySceneVideoReadiness[] = [
       {
         sceneId: 'scene_abc123',
@@ -222,6 +189,12 @@ describe('ScriptTableView', () => {
             severity: 'blocking',
             characterName: 'BOB',
           },
+          {
+            kind: 'location',
+            label: 'Scene location is missing',
+            labelKey: 'table.missingInput.location',
+            severity: 'warning',
+          },
         ],
         readinessStatus: 'needs-input',
         creatorStatus: 'attention',
@@ -231,14 +204,14 @@ describe('ScriptTableView', () => {
 
     const { container } = renderTable({ readinessRows });
 
-    expect(screen.getByText('BOB is missing a character visual')).toBeInTheDocument();
+    expect(screen.queryByText('BOB is missing a character visual')).not.toBeInTheDocument();
+    expect(screen.queryByText('Scene location is missing')).not.toBeInTheDocument();
     expect(screen.queryByText('Needs Attention')).not.toBeInTheDocument();
-    expect(screen.getByText('Missing visual')).toBeInTheDocument();
+    expect(screen.queryByText('Missing visual')).not.toBeInTheDocument();
     expect(container.querySelector('img[src="vscode-webview://thumb/alice.png"]')).toBeTruthy();
-    expect(container.querySelector('[data-character-visual-status="missing"]')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    expect(screen.getByRole('menuitem', { name: 'Analyse' })).toBeInTheDocument();
+    expect(container.querySelector('[data-character-visual-status]')).toBeFalsy();
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Analyse' })).not.toBeInTheDocument();
   });
 
   it('renders empty character states explicitly', () => {
@@ -253,7 +226,7 @@ describe('ScriptTableView', () => {
     expect(container.textContent).toContain('—');
   });
 
-  it('renders Canvas summaries inline in the scene cell', () => {
+  it('does not render Canvas summaries in the Story table', () => {
     const readinessRows: StorySceneVideoReadiness[] = [
       {
         sceneId: 'scene_abc123',
@@ -281,7 +254,7 @@ describe('ScriptTableView', () => {
 
     renderTable({ readinessRows });
 
-    expect(screen.getByText('Canvas 1/2')).toBeInTheDocument();
+    expect(screen.queryByText('Canvas 1/2')).not.toBeInTheDocument();
     expect(screen.queryByText('3 planned shots')).not.toBeInTheDocument();
   });
 
@@ -306,7 +279,7 @@ describe('ScriptTableView', () => {
     expect(screen.queryByText('3 planned shots')).not.toBeInTheDocument();
   });
 
-  it('keeps skipped rows visible as a lightweight issue with restore action', () => {
+  it('keeps skipped processing state out of the Story table', () => {
     const readinessRows: StorySceneVideoReadiness[] = [
       {
         sceneId: 'scene_abc123',
@@ -321,24 +294,15 @@ describe('ScriptTableView', () => {
       },
     ];
 
-    renderTable({
-      sceneStates: {
-        scene_abc123: {
-          sceneId: 'scene_abc123',
-          agentStatus: 'skipped',
-          canvasStatus: 'skipped',
-        },
-      },
-      readinessRows,
-    });
+    renderTable({ readinessRows });
 
-    expect(screen.getByText('Skipped')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    expect(screen.getByRole('menuitem', { name: 'Unskip' })).toBeInTheDocument();
+    expect(screen.queryByText('Skipped')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Unskip' })).not.toBeInTheDocument();
   });
 
-  it('dispatches character actions with scene and character identifiers when readiness exists', () => {
-    const onCharacterSendToAgent = vi.fn();
+  it('keeps character badges navigable without exposing character-level send actions', () => {
+    const onCharacterNavigate = vi.fn();
     const readinessRows: StorySceneVideoReadiness[] = [
       {
         sceneId: 'scene_abc123',
@@ -360,9 +324,10 @@ describe('ScriptTableView', () => {
       },
     ];
 
-    renderTable({ readinessRows, onCharacterSendToAgent });
+    renderTable({ readinessRows, onCharacterNavigate });
 
-    fireEvent.click(screen.getByTitle('Send to Agent'));
-    expect(onCharacterSendToAgent).toHaveBeenCalledWith('ALICE', 'scene_abc123', 'char-alice');
+    fireEvent.click(screen.getByText('ALICE'));
+    expect(onCharacterNavigate).toHaveBeenCalledWith('ALICE', 'scene_abc123', 'char-alice');
+    expect(screen.queryByTitle('Send to Agent')).not.toBeInTheDocument();
   });
 });
