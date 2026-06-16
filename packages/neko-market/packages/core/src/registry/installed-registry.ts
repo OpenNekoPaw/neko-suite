@@ -13,7 +13,7 @@ import type {
   InstalledPackageRefState,
   InstalledRegistryData,
 } from '@neko/shared';
-import { isAssetType } from '@neko/shared';
+import { isAssetType, parseAssetManifest } from '@neko/shared';
 
 export interface RemovedReferenceState {
   packageId: string;
@@ -301,7 +301,6 @@ function readInstalledPackageRecord(
   if (value['packageId'] !== expectedPackageId) return undefined;
 
   return {
-    ...(value as InstalledPackage),
     packageId: value['packageId'],
     version: value['version'],
     type,
@@ -309,12 +308,72 @@ function readInstalledPackageRecord(
     installedPath: value['installedPath'],
     manifest,
     enabled: value['enabled'] === undefined ? true : value['enabled'] === true,
+    ...(typeof value['requested'] === 'boolean' ? { requested: value['requested'] } : {}),
+    ...(isInstalledPackageStatus(value['status']) ? { status: value['status'] } : {}),
+    ...(typeof value['expiresAt'] === 'number' ? { expiresAt: value['expiresAt'] } : {}),
+    ...(isInstalledPackageRefs(value['refs']) ? { refs: value['refs'] } : {}),
+    ...(isInstalledPackageSource(value['source']) ? { source: value['source'] } : {}),
+    ...(isInstalledLargeAssetState(value['largeAsset']) ? { largeAsset: value['largeAsset'] } : {}),
   };
 }
 
 function readCanonicalInstalledManifest(value: unknown): AssetManifest | undefined {
-  if (!isRecord(value) || !isAssetType(value['type'])) return undefined;
-  return value as AssetManifest;
+  try {
+    return parseAssetManifest(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function isInstalledPackageStatus(value: unknown): value is InstalledPackage['status'] {
+  return (
+    value === 'active' ||
+    value === 'expiring-soon' ||
+    value === 'expired' ||
+    value === 'incompatible' ||
+    value === 'deprecated'
+  );
+}
+
+function isInstalledPackageSource(value: unknown): value is InstalledPackage['source'] {
+  if (!isRecord(value)) return false;
+  switch (value['kind']) {
+    case 'market':
+    case 'ai-generated':
+      return value['path'] === undefined || typeof value['path'] === 'string';
+    case 'local':
+      return (
+        (value['path'] === undefined || typeof value['path'] === 'string') &&
+        (value['storageMode'] === undefined || value['storageMode'] === 'copy-managed')
+      );
+    case 'local-link':
+      return (
+        (value['path'] === undefined || typeof value['path'] === 'string') &&
+        (value['storageMode'] === undefined || value['storageMode'] === 'local-link') &&
+        (value['originalPath'] === undefined || typeof value['originalPath'] === 'string')
+      );
+    default:
+      return false;
+  }
+}
+
+function isInstalledLargeAssetState(value: unknown): value is InstalledPackage['largeAsset'] {
+  if (!isRecord(value) || typeof value['state'] !== 'string') return false;
+  return ['not-owned', 'owned', 'manifest-only', 'proxy', 'partial', 'full'].includes(
+    value['state'],
+  );
+}
+
+function isInstalledPackageRefs(value: unknown): value is InstalledPackage['refs'] {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(
+    (entry) =>
+      isRecord(entry) &&
+      typeof entry['refCount'] === 'number' &&
+      Number.isInteger(entry['refCount']) &&
+      Array.isArray(entry['owners']) &&
+      entry['owners'].every((owner) => typeof owner === 'string'),
+  );
 }
 
 function backfillV1RecordDefaults(data: InstalledRegistryData): InstalledRegistryData {

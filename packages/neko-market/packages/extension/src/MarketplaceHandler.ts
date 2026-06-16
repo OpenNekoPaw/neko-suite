@@ -28,11 +28,9 @@ export interface WebviewMessage {
 
 type PostMessageFn = (msg: unknown) => void;
 
-interface ValidationResult<T> {
-  ok: boolean;
-  value?: T;
-  error?: string;
-}
+type ValidationResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 // =============================================================================
 // DTO Mappers — flatten backend types to webview-friendly shapes

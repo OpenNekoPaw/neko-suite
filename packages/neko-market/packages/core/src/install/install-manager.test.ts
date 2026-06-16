@@ -1238,7 +1238,6 @@ function createManager(options: {
       );
     }),
     getDownloadDescriptor: options.getDownloadDescriptor ?? vi.fn().mockResolvedValue(descriptor),
-    getDownloadUrl: vi.fn().mockResolvedValue(descriptor.url),
     getFeatured: vi.fn(),
     setAuthToken: vi.fn(),
     getServerInfo: vi.fn(),

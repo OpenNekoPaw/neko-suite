@@ -21,6 +21,13 @@ const mockManifest: AssetManifest = {
     integrity: 'sha256-test',
   },
   distributionKind: 'archive',
+  typeMetadata: {
+    type: 'skill',
+    data: { domain: ['video-edit'] },
+  },
+  intent: {
+    useCases: ['video-editing'],
+  },
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
