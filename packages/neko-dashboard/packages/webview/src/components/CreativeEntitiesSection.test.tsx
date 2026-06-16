@@ -54,6 +54,13 @@ const detail: DashboardCreativeEntityDetail = {
       id: 'binding-portrait',
       role: 'portrait',
       assetRef: 'project://assets/xiaoju',
+      preview: {
+        kind: 'image',
+        uri: 'vscode-webview://neko-dashboard/assets/xiaoju.png',
+        label: '小橘头像',
+        thumbnailUri: 'vscode-webview://neko-dashboard/assets/xiaoju-thumb.png',
+        mimeType: 'image/png',
+      },
       status: 'confirmed',
       availability: 'active',
       source: 'user',
@@ -66,6 +73,13 @@ const detail: DashboardCreativeEntityDetail = {
       id: 'binding-portrait',
       role: 'portrait',
       assetRef: 'project://assets/xiaoju',
+      preview: {
+        kind: 'image',
+        uri: 'vscode-webview://neko-dashboard/assets/xiaoju.png',
+        label: '小橘头像',
+        thumbnailUri: 'vscode-webview://neko-dashboard/assets/xiaoju-thumb.png',
+        mimeType: 'image/png',
+      },
       status: 'confirmed',
       availability: 'active',
       source: 'user',
@@ -142,6 +156,7 @@ const detail: DashboardCreativeEntityDetail = {
     { id: 'character-dialogue', label: 'Character Dialogue' },
     { id: 'embody-character', label: 'Embody Character' },
     { id: 'bind-existing', label: 'Bind asset' },
+    { id: 'generate-material', label: 'Generate material' },
     { id: 'review-drafts', label: 'Review drafts', disabled: false },
     { id: 'confirm-candidate', label: 'Confirm candidate', disabled: true },
   ],
@@ -177,10 +192,16 @@ describe('CreativeEntitiesSection', () => {
     expect(html).toContain('创作实体');
     expect(html).toContain('刷新');
     expect(html).toContain('小橘');
+    expect(html).toContain('身份');
+    expect(html).toContain('素材');
+    expect(html).toContain('活动');
+    expect(html).not.toContain('<th>状态</th>');
+    expect(html).not.toContain('<th>默认绑定</th>');
+    expect(html).not.toContain('<th>断开</th>');
+    expect(html).not.toContain('<th>草稿</th>');
     expect(html).toContain('Live2D');
     expect(html).toContain('角色对话');
     expect(html).toContain('代入角色');
-    expect(html).toContain('绑定素材');
     expect(html).not.toContain('Bind asset');
     expect(html).not.toContain('测试 NPC');
     expect(html).not.toContain('角色视角');
@@ -192,8 +213,206 @@ describe('CreativeEntitiesSection', () => {
     expect(html).toContain('小橘穿着橙色外套。');
     expect(html).toContain('待审阅');
     expect(html).toContain('漫画 OCR');
+    expect(html).toContain('媒体预览');
+    expect(html).toContain('1 张图片');
+    expect(html).toContain('小橘头像');
+    expect(html).toContain('vscode-webview://neko-dashboard/assets/xiaoju-thumb.png');
+    expect(html).toContain('图片预览');
     expect(html).toContain('Asset tags may be stale');
     expect(html).toContain('disabled=""');
+  });
+
+  it('keeps media actions in the preview instead of duplicating them in the footer', () => {
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [row],
+          selectedRef: row.ref,
+          detail,
+        }}
+        onSelect={vi.fn()}
+        onAction={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(host.textContent).toContain('素材缺口');
+    const preview = host.querySelector('.entity-preview-panel');
+    expect(preview?.textContent).toContain('媒体预览');
+    expect(host.querySelector('.detail-actions')?.textContent).toContain('角色对话');
+    expect(host.querySelector('.detail-actions')?.textContent).toContain('代入角色');
+    expect(host.querySelector('.detail-actions')?.textContent).not.toContain('绑定素材');
+    expect(host.querySelector('.detail-actions')?.textContent).not.toContain('生成');
+    expect(host.querySelector('.detail-actions')?.textContent).not.toContain('详情');
+    expect(host.querySelector('.detail-actions')?.textContent).not.toContain('待补素材');
+  });
+
+  it('switches the detail preview between bound images and models', () => {
+    const modelDetail: DashboardCreativeEntityDetail = {
+      ...detail,
+      bindings: [
+        ...detail.bindings,
+        {
+          id: 'binding-live3d',
+          role: 'live3d',
+          assetRef: 'project://assets/xiaoju-model',
+          preview: {
+            kind: 'model',
+            uri: 'vscode-webview://neko-dashboard/assets/xiaoju.glb',
+            label: '小橘 3D 模型',
+            thumbnailUri: 'vscode-webview://neko-dashboard/assets/xiaoju-model-thumb.png',
+            mimeType: 'model/gltf-binary',
+          },
+          status: 'confirmed',
+          availability: 'active',
+          source: 'user',
+          isDefault: false,
+          updatedAt: '2026-05-18T00:00:00.000Z',
+        },
+      ],
+    };
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [row],
+          selectedRef: row.ref,
+          detail: modelDetail,
+        }}
+        onSelect={vi.fn()}
+        onAction={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(host.textContent).toContain('1 张图片 · 1 个模型');
+    expect(host.querySelector<HTMLImageElement>('.entity-preview-stage img')?.src).toContain(
+      'xiaoju-thumb.png',
+    );
+
+    const modelTab = findButtonByText(host, '模型1');
+    expect(modelTab).not.toBeNull();
+    act(() => {
+      modelTab?.click();
+    });
+
+    expect(host.textContent).toContain('小橘 3D 模型');
+    expect(host.querySelector<HTMLImageElement>('.entity-preview-stage img')?.src).toContain(
+      'xiaoju-model-thumb.png',
+    );
+  });
+
+  it('shows bind and generate guidance when the selected entity has no preview media', () => {
+    const onAction = vi.fn();
+    const noPreviewDetail: DashboardCreativeEntityDetail = {
+      ...detail,
+      bindings: detail.bindings.map((binding) => {
+        const { preview: _preview, ...bindingWithoutPreview } = binding;
+        return bindingWithoutPreview;
+      }),
+      defaults: detail.defaults.map((binding) => {
+        const { preview: _preview, ...bindingWithoutPreview } = binding;
+        return bindingWithoutPreview;
+      }),
+    };
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [row],
+          selectedRef: row.ref,
+          detail: noPreviewDetail,
+        }}
+        onSelect={vi.fn()}
+        onAction={onAction}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(host.textContent).toContain('需要绑定形象 / 生成形象');
+    expect(host.textContent).toContain('绑定参考图、Live2D 或 Live3D');
+
+    const bindButton = findButtonByText(host, '绑定素材');
+    const generateButton = findButtonByText(host, '生成');
+    expect(bindButton).not.toBeNull();
+    expect(generateButton).not.toBeNull();
+    act(() => {
+      bindButton?.click();
+      generateButton?.click();
+    });
+
+    expect(onAction).toHaveBeenNthCalledWith(1, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'bind-existing',
+    });
+    expect(onAction).toHaveBeenNthCalledWith(2, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'generate-material',
+    });
+  });
+
+  it('compresses empty detail fields and formats occurrence locations without repeated names', () => {
+    const compactDetail: DashboardCreativeEntityDetail = {
+      ...detail,
+      label: '猫妈妈',
+      aliases: [],
+      occurrences: [18, 21, 28, 31, 42, 56].map((line) => ({
+        source: 'script',
+        role: 'reference',
+        label: '猫妈妈',
+        location: `cases/test.fountain:${line}`,
+      })),
+      bindings: [],
+      defaults: [],
+      requirements: [
+        {
+          id: 'requirement-portrait-reference',
+          entityId: 'cat-mother',
+          entityKind: 'character',
+          source: 'story',
+          sourceRef: 'story://cases/test.fountain#18',
+          requiredKinds: ['portrait', 'reference'],
+          status: 'missing',
+          actions: ['generate', 'bind-existing'],
+        },
+      ],
+      visualDrafts: [],
+      memoryReviews: [],
+      syncSuggestions: [],
+    };
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [{ ...row, label: '猫妈妈' }],
+          selectedRef: row.ref,
+          detail: compactDetail,
+        }}
+        onSelect={vi.fn()}
+        onAction={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(host.textContent).toContain('6 次出现');
+    expect(host.textContent).toContain('缺：头像, 参考图');
+    expect(host.textContent).toContain('另 2 项');
+    expect(host.textContent).toContain('cases/test.fountain:18');
+    expect(host.textContent).toContain('素材缺口');
+    expect(host.textContent).not.toContain('默认绑定无');
+    expect(host.textContent).not.toContain('全部绑定无');
+    expect(host.textContent).not.toContain('视觉草稿无');
+    expect(host.textContent).not.toContain('记忆审阅无');
+    expect(host.textContent).not.toContain('同步建议无');
+
+    const occurrenceChips = Array.from(host.querySelectorAll('.detail-occurrence-chip'));
+    expect(occurrenceChips).toHaveLength(4);
+    for (const chip of occurrenceChips) {
+      expect(chip.textContent).not.toContain('猫妈妈');
+    }
   });
 
   it('does not render unsafe absolute paths from malformed source DTOs', () => {

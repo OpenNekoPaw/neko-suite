@@ -3,7 +3,13 @@ import { vi } from 'vitest';
 type CommandHandler = (...args: unknown[]) => unknown;
 
 const commandHandlers = new Map<string, CommandHandler>();
-const installedExtensions = new Map<string, { isActive: boolean; exports: unknown }>();
+interface InstalledExtension {
+  isActive: boolean;
+  exports: unknown;
+  activate: () => Promise<unknown>;
+}
+
+const installedExtensions = new Map<string, InstalledExtension>();
 const createWebviewPanel = vi.fn();
 const registerWebviewViewProvider = vi.fn(
   (_viewType: string, _provider: unknown, _options?: unknown) => ({ dispose: vi.fn() }),
@@ -46,12 +52,23 @@ export const vscodeEnvState = {
 
 export function installExtension(
   id: string,
-  options: { isActive?: boolean; exports?: unknown } = {},
+  options: {
+    isActive?: boolean;
+    exports?: unknown;
+    activate?: () => unknown | Promise<unknown>;
+  } = {},
 ): void {
-  installedExtensions.set(id, {
+  const extension: InstalledExtension = {
     isActive: options.isActive ?? true,
     exports: options.exports ?? {},
-  });
+    async activate() {
+      const exports = options.activate ? await options.activate() : extension.exports;
+      extension.exports = exports ?? {};
+      extension.isActive = true;
+      return extension.exports;
+    },
+  };
+  installedExtensions.set(id, extension);
 }
 
 export const vscodeWindowState = {

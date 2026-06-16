@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   DASHBOARD_CREATIVE_ENTITY_KINDS,
   DASHBOARD_CREATIVE_ENTITY_LIFECYCLE_STATUSES,
   type DashboardCreativeEntityAction,
   type DashboardCreativeEntityActionRequest,
   type DashboardCreativeEntityBindingSummary,
+  type DashboardCreativeEntityBindingPreviewKind,
   type DashboardCreativeEntityDetail,
   type DashboardCreativeEntityRef,
   type DashboardCreativeEntityRow,
@@ -161,12 +162,9 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
         <thead>
           <tr>
             <th>{t('creativeEntities.column.name')}</th>
-            <th>{t('creativeEntities.column.kind')}</th>
-            <th>{t('creativeEntities.column.status')}</th>
-            <th>{t('creativeEntities.column.missing')}</th>
-            <th>{t('creativeEntities.column.defaults')}</th>
-            <th>{t('creativeEntities.column.orphans')}</th>
-            <th>{t('creativeEntities.column.drafts')}</th>
+            <th>{t('creativeEntities.column.identity')}</th>
+            <th>{t('creativeEntities.column.materialState')}</th>
+            <th>{t('creativeEntities.column.activity')}</th>
           </tr>
         </thead>
         <tbody>
@@ -175,7 +173,10 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
               selected?.source === row.ref.source &&
               selected.sourceEntityId === row.ref.sourceEntityId;
             return (
-              <tr key={`${row.ref.source}:${row.ref.sourceEntityId}`}>
+              <tr
+                key={`${row.ref.source}:${row.ref.sourceEntityId}`}
+                className={selectedRow ? 'creative-entity-row selected' : 'creative-entity-row'}
+              >
                 <td>
                   <Button
                     className={selectedRow ? 'link-button selected-link' : 'link-button'}
@@ -190,27 +191,113 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
                   ) : null}
                 </td>
                 <td>
-                  <Badge className="h-auto rounded-full px-2 py-0.5">
-                    {t(`creativeEntities.kind.${row.kind}`)}
-                  </Badge>
+                  <div className="entity-table-identity">
+                    <Badge className="h-auto rounded-full px-2 py-0.5">
+                      {t(`creativeEntities.kind.${row.kind}`)}
+                    </Badge>
+                    <span>{t(`creativeEntities.status.${row.status}`)}</span>
+                  </div>
                 </td>
-                <td>{t(`creativeEntities.status.${row.status}`)}</td>
-                <td>{formatList(row.missingRepresentationKinds, t)}</td>
-                <td>{formatList(row.defaultBindingRoles, t)}</td>
-                <td>{formatOrphanCount(row.orphanedBindingCount, t)}</td>
-                <td>{row.visualDraftCount ?? 0}</td>
+                <td>
+                  <EntityTableMaterialSignals row={row} />
+                </td>
+                <td>
+                  <EntityTableActivitySignals row={row} />
+                </td>
               </tr>
             );
           })}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={7} className="empty-cell">
+              <td colSpan={4} className="empty-cell">
                 {t('creativeEntities.empty')}
               </td>
             </tr>
           ) : null}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function EntityTableMaterialSignals({ row }: { readonly row: DashboardCreativeEntityRow }) {
+  const { t } = useTranslation();
+  const missingKinds = row.missingRepresentationKinds ?? [];
+  const defaultRoles = row.defaultBindingRoles ?? [];
+  const orphanedCount = row.orphanedBindingCount ?? 0;
+  const signals: ReactNode[] = [];
+
+  if (missingKinds.length > 0) {
+    signals.push(
+      <span key="missing" className="entity-table-signal" data-tone="warning">
+        {t('creativeEntities.tableSignal.missing', {
+          kinds: missingKinds.map((kind) => translateEnumValue(kind, t)).join(', '),
+        })}
+      </span>,
+    );
+  }
+  if (defaultRoles.length > 0) {
+    signals.push(
+      <span key="defaults" className="entity-table-signal" data-tone="success">
+        {t('creativeEntities.tableSignal.defaults', {
+          roles: defaultRoles.map((role) => translateEnumValue(role, t)).join(', '),
+        })}
+      </span>,
+    );
+  }
+  if (orphanedCount > 0) {
+    signals.push(
+      <span key="orphans" className="entity-table-signal" data-tone="danger">
+        {t('creativeEntities.tableSignal.orphaned', { count: orphanedCount })}
+      </span>,
+    );
+  }
+
+  return (
+    <div className="entity-table-signals">
+      {signals.length > 0 ? (
+        signals
+      ) : (
+        <span className="entity-table-signal" data-tone="neutral">
+          {t('creativeEntities.tableSignal.ready')}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function EntityTableActivitySignals({ row }: { readonly row: DashboardCreativeEntityRow }) {
+  const { t } = useTranslation();
+  const signals: ReactNode[] = [];
+  if (row.occurrenceCount !== undefined && row.occurrenceCount > 0) {
+    signals.push(
+      <span key="occurrences" className="entity-table-signal" data-tone="neutral">
+        {t('creativeEntities.tableSignal.occurrences', { count: row.occurrenceCount })}
+      </span>,
+    );
+  }
+  if (row.visualDraftCount !== undefined && row.visualDraftCount > 0) {
+    signals.push(
+      <span key="drafts" className="entity-table-signal" data-tone="info">
+        {t('creativeEntities.tableSignal.drafts', { count: row.visualDraftCount })}
+      </span>,
+    );
+  }
+  if (row.syncSuggestionCount !== undefined && row.syncSuggestionCount > 0) {
+    signals.push(
+      <span key="sync" className="entity-table-signal" data-tone="info">
+        {t('creativeEntities.tableSignal.syncSuggestions', { count: row.syncSuggestionCount })}
+      </span>,
+    );
+  }
+
+  return (
+    <div className="entity-table-signals">
+      {signals.length > 0 ? (
+        signals
+      ) : (
+        <span className="muted-line">{t(`creativeEntities.freshness.${row.freshness}`)}</span>
+      )}
     </div>
   );
 }
@@ -229,6 +316,9 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
       </aside>
     );
   }
+  const footerActions = detail.actions.filter((action) =>
+    shouldRenderDetailFooterAction(action.id),
+  );
 
   return (
     <aside className="creative-entity-detail">
@@ -243,38 +333,313 @@ function CreativeEntityDetailPanel({ detail, onAction }: CreativeEntityDetailPan
         </div>
         <ActionButton detail={detail} action="open-source" onAction={onAction} />
       </div>
-      <DetailBlock
-        title={t('creativeEntities.detail.aliases')}
-        value={formatList(detail.aliases, t)}
-      />
-      <DetailBlock
-        title={t('creativeEntities.detail.occurrences')}
-        value={formatOccurrences(detail, t)}
-      />
-      <DetailBlock
-        title={t('creativeEntities.detail.defaultBindings')}
-        value={formatBindings(detail.defaults, t)}
-      />
+      <CreativeEntityDetailSummary detail={detail} />
+      <CreativeEntityPreviewPanel detail={detail} onAction={onAction} />
+      {detail.aliases.length > 0 ? (
+        <DetailBlock title={t('creativeEntities.detail.aliases')}>
+          <DetailChipList values={detail.aliases} />
+        </DetailBlock>
+      ) : null}
+      <OccurrenceList detail={detail} />
       <BindingList detail={detail} onAction={onAction} />
-      <DetailBlock
-        title={t('creativeEntities.detail.missingRequirements')}
-        value={formatRequirements(detail, t)}
-      />
-      <DetailBlock
-        title={t('creativeEntities.detail.visualDrafts')}
-        value={formatDrafts(detail, t)}
-      />
+      <RequirementList detail={detail} />
+      <VisualDraftList detail={detail} />
       <MemoryReviews detail={detail} onAction={onAction} />
       <SyncSuggestions detail={detail} onAction={onAction} />
-      <div className="detail-actions">
-        {detail.actions
-          .filter((action) => !isBindingScopedAction(action.id))
-          .map((action) => (
+      {footerActions.length > 0 ? (
+        <div className="detail-actions">
+          {footerActions.map((action) => (
             <ActionButton key={action.id} detail={detail} action={action.id} onAction={onAction} />
           ))}
-      </div>
+        </div>
+      ) : null}
     </aside>
   );
+}
+
+interface CreativeEntityPreviewItem {
+  readonly id: string;
+  readonly kind: DashboardCreativeEntityBindingPreviewKind;
+  readonly binding: DashboardCreativeEntityBindingSummary;
+  readonly displayUri: string;
+  readonly label: string;
+}
+
+interface CreativeEntityPreviewPanelProps {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}
+
+function CreativeEntityPreviewPanel({ detail, onAction }: CreativeEntityPreviewPanelProps) {
+  const { t } = useTranslation();
+  const [previewKind, setPreviewKind] =
+    useState<DashboardCreativeEntityBindingPreviewKind>('image');
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | undefined>();
+  const previewItems = useMemo(() => buildCreativeEntityPreviewItems(detail), [detail]);
+  const imageCount = previewItems.filter((item) => item.kind === 'image').length;
+  const modelCount = previewItems.filter((item) => item.kind === 'model').length;
+  const resolvedKind = resolvePreviewKind(previewKind, previewItems);
+  const selectedItems = previewItems.filter((item) => item.kind === resolvedKind);
+  const selectedItem =
+    selectedItems.find((item) => item.id === selectedPreviewId) ?? selectedItems[0];
+
+  return (
+    <section className="entity-preview-panel" aria-label={t('creativeEntities.preview.title')}>
+      <div className="entity-preview-header">
+        <div>
+          <div className="entity-preview-eyebrow">{t('creativeEntities.preview.title')}</div>
+          <div className="entity-preview-summary">
+            {formatPreviewSummary(imageCount, modelCount, t)}
+          </div>
+        </div>
+        <div
+          className="entity-preview-switch"
+          role="tablist"
+          aria-label={t('creativeEntities.preview.tabsLabel')}
+        >
+          {(['image', 'model'] as const).map((kind) => {
+            const count = kind === 'image' ? imageCount : modelCount;
+            const selected = resolvedKind === kind;
+            return (
+              <button
+                key={kind}
+                aria-selected={selected}
+                className={selected ? 'entity-preview-tab active' : 'entity-preview-tab'}
+                disabled={previewItems.length > 0 && count === 0}
+                onClick={() => setPreviewKind(kind)}
+                role="tab"
+                type="button"
+              >
+                <span>{t(`creativeEntities.preview.kind.${kind}`)}</span>
+                <span className="entity-preview-tab-count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="entity-preview-stage" data-preview-kind={resolvedKind}>
+        {selectedItem ? (
+          <PreviewStage item={selectedItem} />
+        ) : (
+          <PreviewEmptyState detail={detail} onAction={onAction} />
+        )}
+      </div>
+
+      {selectedItem ? <PreviewResourceMeta item={selectedItem} /> : null}
+      {selectedItems.length > 1 ? (
+        <PreviewStrip
+          items={selectedItems}
+          selectedId={selectedItem?.id}
+          onSelect={setSelectedPreviewId}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function PreviewStage({ item }: { readonly item: CreativeEntityPreviewItem }) {
+  const { t } = useTranslation();
+  if (item.kind === 'image') {
+    return (
+      <img
+        alt={t('creativeEntities.preview.imageAlt', { label: item.label })}
+        className="entity-preview-media"
+        src={item.displayUri}
+      />
+    );
+  }
+
+  return (
+    <div className="entity-preview-model">
+      {item.binding.preview?.thumbnailUri ? (
+        <img
+          alt={t('creativeEntities.preview.modelAlt', { label: item.label })}
+          className="entity-preview-media"
+          src={item.binding.preview.thumbnailUri}
+        />
+      ) : (
+        <div className="entity-preview-model-placeholder" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      )}
+      <div className="entity-preview-model-label">
+        {t('creativeEntities.preview.modelPlaceholder')}
+      </div>
+    </div>
+  );
+}
+
+function PreviewEmptyState({
+  detail,
+  onAction,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+  readonly onAction: (request: DashboardCreativeEntityActionRequest) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="entity-preview-empty" role="status">
+      <div className="entity-preview-empty-mark" aria-hidden="true" />
+      <div>
+        <div className="entity-preview-empty-title">{t('creativeEntities.preview.emptyTitle')}</div>
+        <div className="muted-line">{t('creativeEntities.preview.emptyDescription')}</div>
+      </div>
+      <div className="button-row entity-preview-empty-actions">
+        {(['bind-existing', 'generate-material'] as const)
+          .filter((action) => hasDetailAction(detail, action))
+          .map((action) => (
+            <ActionButton key={action} detail={detail} action={action} onAction={onAction} />
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function PreviewResourceMeta({ item }: { readonly item: CreativeEntityPreviewItem }) {
+  const { t } = useTranslation();
+  return (
+    <div className="entity-preview-resource-line">
+      <Badge className="h-auto rounded-full px-2 py-0.5">
+        {t(`creativeEntities.preview.kind.${item.kind}`)}
+      </Badge>
+      <span className="entity-preview-resource-name">{item.label}</span>
+      <span className="entity-preview-resource-ref">{item.binding.assetRef}</span>
+    </div>
+  );
+}
+
+function PreviewStrip({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  readonly items: readonly CreativeEntityPreviewItem[];
+  readonly selectedId?: string;
+  readonly onSelect: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="entity-preview-strip" aria-label={t('creativeEntities.preview.stripLabel')}>
+      {items.map((item) => {
+        const selected = item.id === selectedId;
+        return (
+          <button
+            key={item.id}
+            aria-pressed={selected}
+            className={selected ? 'entity-preview-thumb selected' : 'entity-preview-thumb'}
+            onClick={() => onSelect(item.id)}
+            title={item.label}
+            type="button"
+          >
+            {item.binding.preview?.thumbnailUri || item.kind === 'image' ? (
+              <img alt="" src={item.displayUri} />
+            ) : (
+              <span aria-hidden="true">3D</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CreativeEntityDetailSummary({
+  detail,
+}: {
+  readonly detail: DashboardCreativeEntityDetail;
+}) {
+  const { t } = useTranslation();
+  const items = buildDetailSummaryItems(detail, t);
+  if (items.length === 0) return null;
+
+  return (
+    <div className="detail-summary-strip" aria-label={t('creativeEntities.summary.label')}>
+      {items.map((item) => (
+        <span key={item.id} className="detail-summary-chip" data-tone={item.tone}>
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+interface DetailSummaryItem {
+  readonly id: string;
+  readonly label: string;
+  readonly tone: 'neutral' | 'info' | 'success' | 'warning';
+}
+
+function buildDetailSummaryItems(
+  detail: DashboardCreativeEntityDetail,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): readonly DetailSummaryItem[] {
+  const items: DetailSummaryItem[] = [];
+  if (detail.occurrences.length > 0) {
+    items.push({
+      id: 'occurrences',
+      label: t('creativeEntities.summary.occurrences', {
+        count: detail.occurrences.length,
+      }),
+      tone: 'neutral',
+    });
+  }
+  if (detail.bindings.length > 0) {
+    items.push({
+      id: 'bindings',
+      label: t('creativeEntities.summary.bindings', { count: detail.bindings.length }),
+      tone: 'success',
+    });
+  }
+  const defaultRoles = uniqueValues(detail.defaults.map((binding) => binding.role));
+  if (defaultRoles.length > 0) {
+    items.push({
+      id: 'defaults',
+      label: t('creativeEntities.summary.defaultBindings', {
+        roles: defaultRoles.map((role) => translateEnumValue(role, t)).join(', '),
+      }),
+      tone: 'info',
+    });
+  }
+  const missingKinds = uniqueValues(
+    detail.requirements.flatMap((requirement) => requirement.requiredKinds),
+  );
+  if (missingKinds.length > 0) {
+    items.push({
+      id: 'missing',
+      label: t('creativeEntities.summary.missingRequirements', {
+        kinds: missingKinds.map((kind) => translateEnumValue(kind, t)).join(', '),
+      }),
+      tone: 'warning',
+    });
+  }
+  if (detail.visualDrafts.length > 0) {
+    items.push({
+      id: 'drafts',
+      label: t('creativeEntities.summary.visualDrafts', { count: detail.visualDrafts.length }),
+      tone: 'info',
+    });
+  }
+  const reviewCount = detail.memoryReviews?.length ?? 0;
+  if (reviewCount > 0) {
+    items.push({
+      id: 'memory-reviews',
+      label: t('creativeEntities.summary.memoryReviews', { count: reviewCount }),
+      tone: 'warning',
+    });
+  }
+  if (detail.syncSuggestions.length > 0) {
+    items.push({
+      id: 'sync-suggestions',
+      label: t('creativeEntities.summary.syncSuggestions', {
+        count: detail.syncSuggestions.length,
+      }),
+      tone: 'info',
+    });
+  }
+  return items;
 }
 
 function BindingList({
@@ -286,12 +651,7 @@ function BindingList({
 }) {
   const { t } = useTranslation();
   if (detail.bindings.length === 0) {
-    return (
-      <DetailBlock
-        title={t('creativeEntities.detail.allBindings')}
-        value={t('creativeEntities.detail.none')}
-      />
-    );
+    return null;
   }
   const orphaned = detail.bindings.filter((binding) => binding.availability === 'orphaned');
   const orderedBindings =
@@ -299,14 +659,13 @@ function BindingList({
       ? [...orphaned, ...detail.bindings.filter((binding) => binding.availability !== 'orphaned')]
       : detail.bindings;
   return (
-    <div className="detail-block">
-      <div className="detail-block-title">{t('creativeEntities.detail.allBindings')}</div>
+    <DetailBlock title={t('creativeEntities.detail.allBindings')}>
       <div className="detail-list">
         {orderedBindings.map((binding) => (
           <BindingListItem key={binding.id} detail={detail} binding={binding} onAction={onAction} />
         ))}
       </div>
-    </div>
+    </DetailBlock>
   );
 }
 
@@ -436,6 +795,34 @@ function isBindingScopedAction(action: DashboardCreativeEntityAction): boolean {
   }
 }
 
+function shouldRenderDetailFooterAction(action: DashboardCreativeEntityAction): boolean {
+  if (isBindingScopedAction(action)) return false;
+  switch (action) {
+    case 'open-source':
+    case 'show-detail':
+    case 'bind-existing':
+    case 'generate-material':
+    case 'handle-requirement':
+    case 'review-drafts':
+    case 'dismiss-requirement':
+    case 'import-material':
+    case 'show-representation-package':
+    case 'apply-sync-suggestion':
+    case 'ignore-sync-suggestion':
+    case 'refresh':
+      return false;
+    default:
+      return true;
+  }
+}
+
+function hasDetailAction(
+  detail: DashboardCreativeEntityDetail,
+  action: DashboardCreativeEntityAction,
+): boolean {
+  return detail.actions.some((candidate) => candidate.id === action);
+}
+
 function MemoryReviews({
   detail,
   onAction,
@@ -446,17 +833,11 @@ function MemoryReviews({
   const { t } = useTranslation();
   const reviews = detail.memoryReviews ?? [];
   if (reviews.length === 0) {
-    return (
-      <DetailBlock
-        title={t('creativeEntities.detail.memoryReviews')}
-        value={t('creativeEntities.detail.none')}
-      />
-    );
+    return null;
   }
 
   return (
-    <div className="detail-block">
-      <div className="detail-block-title">{t('creativeEntities.detail.memoryReviews')}</div>
+    <DetailBlock title={t('creativeEntities.detail.memoryReviews')}>
       <div className="detail-list">
         {reviews.map((review) => (
           <MemoryReviewItem
@@ -467,7 +848,7 @@ function MemoryReviews({
           />
         ))}
       </div>
-    </div>
+    </DetailBlock>
   );
 }
 
@@ -525,17 +906,11 @@ function SyncSuggestions({
 }) {
   const { t } = useTranslation();
   if (detail.syncSuggestions.length === 0) {
-    return (
-      <DetailBlock
-        title={t('creativeEntities.detail.syncSuggestions')}
-        value={t('creativeEntities.detail.none')}
-      />
-    );
+    return null;
   }
 
   return (
-    <div className="detail-block">
-      <div className="detail-block-title">{t('creativeEntities.detail.syncSuggestions')}</div>
+    <DetailBlock title={t('creativeEntities.detail.syncSuggestions')}>
       <div className="detail-list">
         {detail.syncSuggestions.map((suggestion) => (
           <div key={suggestion.id} className="detail-list-item">
@@ -577,7 +952,7 @@ function SyncSuggestions({
           </div>
         ))}
       </div>
-    </div>
+    </DetailBlock>
   );
 }
 
@@ -620,11 +995,125 @@ function ActionButton({
   );
 }
 
-function DetailBlock({ title, value }: { readonly title: string; readonly value: string }) {
+function OccurrenceList({ detail }: { readonly detail: DashboardCreativeEntityDetail }) {
+  const { t } = useTranslation();
+  if (detail.occurrences.length === 0) return null;
+  const visibleOccurrences = detail.occurrences.slice(0, 4);
+  const remaining = detail.occurrences.length - visibleOccurrences.length;
+  return (
+    <DetailBlock title={t('creativeEntities.detail.occurrences')}>
+      <div className="detail-occurrence-list">
+        {visibleOccurrences.map((occurrence, index) => (
+          <OccurrenceChip
+            key={`${occurrence.source}:${occurrence.role}:${occurrence.location}:${index}`}
+            occurrence={occurrence}
+          />
+        ))}
+        {remaining > 0 ? (
+          <span className="detail-more-chip">
+            {t('creativeEntities.detail.moreItems', { count: remaining })}
+          </span>
+        ) : null}
+      </div>
+    </DetailBlock>
+  );
+}
+
+function OccurrenceChip({
+  occurrence,
+}: {
+  readonly occurrence: DashboardCreativeEntityDetail['occurrences'][number];
+}) {
+  const { t } = useTranslation();
+  const sourceLabel = formatOccurrenceSource(occurrence.source, t);
+  const roleLabel = t(`creativeEntities.occurrenceRole.${occurrence.role}`);
+  const locationLabel = formatCompactLocation(occurrence.location);
+  return (
+    <span
+      className="detail-occurrence-chip"
+      title={`${sourceLabel} · ${roleLabel} · ${occurrence.location}`}
+    >
+      <span className="detail-occurrence-meta">
+        {sourceLabel} · {roleLabel}
+      </span>
+      <span className="detail-occurrence-location">{locationLabel}</span>
+    </span>
+  );
+}
+
+function RequirementList({ detail }: { readonly detail: DashboardCreativeEntityDetail }) {
+  const { t } = useTranslation();
+  if (detail.requirements.length === 0) return null;
+  return (
+    <DetailBlock title={t('creativeEntities.detail.missingRequirements')}>
+      <div className="detail-list detail-list--compact">
+        {detail.requirements.map((requirement) => (
+          <div key={requirement.id} className="detail-list-item detail-list-item--compact">
+            <div>
+              <div className="detail-list-item-title">
+                {requirement.requiredKinds.map((kind) => translateEnumValue(kind, t)).join(', ')}
+              </div>
+              <div className="muted-line">
+                {t(`creativeEntities.requirementStatus.${requirement.status}`)} ·{' '}
+                {formatCompactLocation(requirement.sourceRef)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </DetailBlock>
+  );
+}
+
+function VisualDraftList({ detail }: { readonly detail: DashboardCreativeEntityDetail }) {
+  const { t } = useTranslation();
+  if (detail.visualDrafts.length === 0) return null;
+  return (
+    <DetailBlock title={t('creativeEntities.detail.visualDrafts')}>
+      <div className="detail-list detail-list--compact">
+        {detail.visualDrafts.map((draft) => (
+          <div key={draft.id} className="detail-list-item detail-list-item--compact">
+            <div>
+              <div className="detail-list-item-title">
+                {t(`creativeEntities.draftStatus.${draft.status}`)}
+              </div>
+              <div className="muted-line">
+                {t('creativeEntities.detail.assets', {
+                  count: draft.generatedAssetIds.length,
+                })}{' '}
+                · {draft.prompt}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </DetailBlock>
+  );
+}
+
+function DetailChipList({ values }: { readonly values: readonly string[] }) {
+  return (
+    <div className="detail-chip-list">
+      {values.map((value) => (
+        <span key={value} className="detail-chip">
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DetailBlock({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+}) {
   return (
     <div className="detail-block">
       <div className="detail-block-title">{title}</div>
-      <div>{value}</div>
+      <div className="detail-block-value">{children}</div>
     </div>
   );
 }
@@ -643,32 +1132,66 @@ function formatSourceStatus(
     .join(' · ');
 }
 
-function formatList(
-  values: readonly string[] | undefined,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  return values && values.length > 0
-    ? values.map((value) => translateEnumValue(value, t)).join(', ')
-    : t('creativeEntities.detail.none');
-}
-
-function formatOccurrences(
+function buildCreativeEntityPreviewItems(
   detail: DashboardCreativeEntityDetail,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  if (detail.occurrences.length === 0) return t('creativeEntities.detail.none');
-  return detail.occurrences
-    .slice(0, 4)
-    .map((occurrence) => `${occurrence.label} (${occurrence.location})`)
-    .join('; ');
+): readonly CreativeEntityPreviewItem[] {
+  return detail.bindings
+    .flatMap((binding): CreativeEntityPreviewItem[] => {
+      const preview = binding.preview;
+      if (binding.availability !== 'active' || !preview) return [];
+      return [
+        {
+          id: binding.id,
+          kind: preview.kind,
+          binding,
+          displayUri: preview.thumbnailUri ?? preview.uri,
+          label: preview.label ?? binding.assetRef,
+        },
+      ];
+    })
+    .sort(comparePreviewItems);
 }
 
-function formatBindings(
-  bindings: DashboardCreativeEntityDetail['bindings'],
+function comparePreviewItems(
+  left: CreativeEntityPreviewItem,
+  right: CreativeEntityPreviewItem,
+): number {
+  const defaultDelta = Number(right.binding.isDefault) - Number(left.binding.isDefault);
+  if (defaultDelta !== 0) return defaultDelta;
+  const statusDelta = bindingStatusPriority(right.binding) - bindingStatusPriority(left.binding);
+  if (statusDelta !== 0) return statusDelta;
+  return left.label.localeCompare(right.label);
+}
+
+function bindingStatusPriority(binding: DashboardCreativeEntityBindingSummary): number {
+  switch (binding.status) {
+    case 'confirmed':
+      return 2;
+    case 'suggested':
+      return 1;
+    case 'rejected':
+      return 0;
+  }
+}
+
+function resolvePreviewKind(
+  preferredKind: DashboardCreativeEntityBindingPreviewKind,
+  items: readonly CreativeEntityPreviewItem[],
+): DashboardCreativeEntityBindingPreviewKind {
+  if (items.length === 0) return preferredKind;
+  if (items.some((item) => item.kind === preferredKind)) return preferredKind;
+  return items.some((item) => item.kind === 'image') ? 'image' : 'model';
+}
+
+function formatPreviewSummary(
+  imageCount: number,
+  modelCount: number,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
-  if (bindings.length === 0) return t('creativeEntities.detail.none');
-  return bindings.map((binding) => formatBinding(binding, t)).join('; ');
+  return t('creativeEntities.preview.summary', {
+    images: imageCount,
+    models: modelCount,
+  });
 }
 
 function formatBinding(
@@ -684,44 +1207,45 @@ function formatBinding(
   )}${availability}`;
 }
 
-function formatOrphanCount(
-  count: number | undefined,
+function formatOccurrenceSource(
+  source: DashboardCreativeEntityDetail['occurrences'][number]['source'],
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
-  return count && count > 0
-    ? t('creativeEntities.orphanedBindingCount', { count })
-    : t('creativeEntities.detail.none');
+  const key = `creativeEntities.occurrenceSource.${source}`;
+  const label = t(key);
+  return label === key ? source : label;
 }
 
-function formatRequirements(
-  detail: DashboardCreativeEntityDetail,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  if (detail.requirements.length === 0) return t('creativeEntities.detail.none');
-  return detail.requirements
-    .map(
-      (requirement) =>
-        `${requirement.requiredKinds.map((kind) => translateEnumValue(kind, t)).join(', ')} · ${t(`creativeEntities.requirementStatus.${requirement.status}`)}`,
-    )
-    .join('; ');
+function formatCompactLocation(location: string): string {
+  const withoutProtocol = location.startsWith('file://')
+    ? location.slice('file://'.length)
+    : location;
+  const normalized = withoutProtocol.replace(/\\/g, '/');
+  const match = /^(.*?)(?::(\d+(?:-\d+)?))?$/.exec(normalized);
+  const rawPath = match?.[1] ?? normalized;
+  const lineSuffix = match?.[2] ? `:${match[2]}` : '';
+  const compactPath = compactPathLabel(decodeLocationPath(rawPath));
+  return `${compactPath}${lineSuffix}`;
 }
 
-function formatDrafts(
-  detail: DashboardCreativeEntityDetail,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  if (detail.visualDrafts.length === 0) return t('creativeEntities.detail.none');
-  return detail.visualDrafts
-    .map(
-      (draft) =>
-        `${t(`creativeEntities.draftStatus.${draft.status}`)}: ${t(
-          'creativeEntities.detail.assets',
-          {
-            count: draft.generatedAssetIds.length,
-          },
-        )}`,
-    )
-    .join('; ');
+function compactPathLabel(value: string): string {
+  const withoutScheme = value.replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, '');
+  const normalized = withoutScheme.replace(/\/+/g, '/');
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length <= 2) return normalized || value;
+  return `${parts.at(-2)}/${parts.at(-1)}`;
+}
+
+function decodeLocationPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function uniqueValues<T extends string>(values: readonly T[]): readonly T[] {
+  return [...new Set(values)];
 }
 
 function translateEnumValue(

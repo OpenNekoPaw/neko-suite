@@ -35,12 +35,13 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
     : t('common.na');
 
   return (
-    <section className="metric-cards" aria-label="Status">
+    <section className="metric-cards" aria-label={t('dashboard.status')}>
       <MetricCard
         label={t('dashboard.status.engine')}
         value={engineState}
         detail={engineDetail}
         indicator={engineOnline ? 'online' : 'offline'}
+        tone={engineOnline ? 'success' : 'neutral'}
       />
       <MetricCard label={t('dashboard.status.projects')} value={String(projectCount)} />
       <MetricCard label={t('tasks.title')} value={String(taskCount)} />
@@ -55,11 +56,12 @@ interface MetricCardProps {
   readonly value: string;
   readonly detail?: string;
   readonly indicator?: 'online' | 'offline';
+  readonly tone?: 'neutral' | 'success';
 }
 
-function MetricCard({ label, value, detail, indicator }: MetricCardProps) {
+function MetricCard({ label, value, detail, indicator, tone = 'neutral' }: MetricCardProps) {
   return (
-    <div className="metric-card">
+    <div className={`metric-card metric-card--${tone}`}>
       <span className="metric-card-label">{label}</span>
       <span className="metric-card-value">
         {indicator !== undefined ? (

@@ -211,6 +211,36 @@ describe('DashboardProvider', () => {
     provider.dispose();
   });
 
+  it('enters work mode when creative entity sources return rows without project files', async () => {
+    const postMessage = vi.fn(async () => true);
+    const panel = createPanel(postMessage);
+    vscodeWindowState.createWebviewPanel.mockReturnValue(panel);
+
+    const provider = new DashboardProvider(createContext(), {
+      scanner: createScanner(),
+      statusReader: createStatusReader(),
+      skillReader: createSkillReader(),
+      taskAggregator: createTaskAggregator(),
+      creativeEntityAggregator: createCreativeEntityAggregator({
+        state: { statuses: [], rows: [entityRow] },
+      }),
+      activityStore: createActivityStore(),
+    });
+    await provider.show();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'update',
+        data: expect.objectContaining({
+          mode: 'work',
+          projects: [],
+          creativeEntities: { statuses: [], rows: [entityRow] },
+        }),
+      }),
+    );
+    provider.dispose();
+  });
+
   it('exposes aggregated creative entity state for agent search', async () => {
     const creativeEntityAggregator = createCreativeEntityAggregator({
       state: { statuses: [], rows: [entityRow] },

@@ -92,6 +92,32 @@ describe('SkillList', () => {
     expect(host.textContent).not.toContain('视频导出打包');
   });
 
+  it('renders stable skill icons without leaking raw emoji or codicon text', () => {
+    const iconSkills: readonly DashboardSkill[] = [
+      makeSkill({
+        id: 'builtin-icon',
+        name: '内置图标技能',
+        tags: ['AI'],
+        role: 'orchestrator',
+        icon: '🎨',
+      }),
+      makeSkill({
+        id: 'command-icon',
+        name: '命令图标技能',
+        tags: ['视频'],
+        role: 'quick-action',
+        icon: '$(play-circle)',
+      }),
+    ];
+    const { host } = renderInteractive(
+      <SkillList skills={iconSkills} onCommand={vi.fn()} onSkillAction={vi.fn()} />,
+    );
+
+    expect(host.querySelectorAll('.skill-row-icon svg').length).toBe(2);
+    expect(host.textContent).not.toContain('🎨');
+    expect(host.textContent).not.toContain('$(play-circle)');
+  });
+
   it('collapses and expands advanced entries on demand', () => {
     const { host } = renderInteractive(
       <SkillList skills={skills} onCommand={vi.fn()} onSkillAction={vi.fn()} />,
@@ -185,6 +211,7 @@ function makeSkill(input: {
   readonly name: string;
   readonly tags: readonly string[];
   readonly role: DashboardSkill['catalog']['role'];
+  readonly icon?: string;
   readonly visibility?: DashboardSkill['catalog']['visibility'];
   readonly groupId?: string;
   readonly parentSkillIds?: readonly string[];
@@ -195,6 +222,7 @@ function makeSkill(input: {
     name: input.name,
     description: `${input.name}描述`,
     locale: 'zh-cn',
+    icon: input.icon,
     command: 'neko.agent.invokeSkill',
     tags: input.tags,
     catalog: {

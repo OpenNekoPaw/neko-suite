@@ -78,12 +78,32 @@ export function App() {
   }, []);
 
   const data = state.data;
+  const projectCount = data?.projects.length ?? 0;
+  const taskCount = data?.tasks.length ?? 0;
+  const skillCount = data?.skills.length ?? 0;
 
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
-        <h1>{t('dashboard.title')}</h1>
-        <button type="button" onClick={() => postMessage({ type: 'refresh' })}>
+        <div className="dashboard-title-block">
+          <h1>{t('dashboard.title')}</h1>
+          <div className="dashboard-header-summary" aria-label={t('dashboard.summary')}>
+            <span>
+              {t('dashboard.status.projects')}: {projectCount}
+            </span>
+            <span>
+              {t('tasks.title')}: {taskCount}
+            </span>
+            <span>
+              {t('dashboard.skills')}: {skillCount}
+            </span>
+          </div>
+        </div>
+        <button
+          className="dashboard-refresh-button"
+          type="button"
+          onClick={() => postMessage({ type: 'refresh' })}
+        >
           {t('common.refresh')}
         </button>
       </header>
@@ -156,53 +176,72 @@ function handleSkillAction(
 
 function WelcomeView({ data }: { readonly data: DashboardData }) {
   return (
-    <>
+    <div className="dashboard-content">
       <MetricCards runtime={data.runtime} projectCount={0} taskCount={data.tasks.length} />
-      <WorkflowCards
-        workflows={data.workflows}
-        onCreateProject={handleCreateProject}
-        onCommand={handleCommand}
-      />
-      <SkillList
-        skills={data.skills}
-        onCommand={handleSkillCommand}
-        onSkillAction={handleSkillAction}
-      />
-    </>
+      <div className="dashboard-workbench-grid dashboard-workbench-grid--welcome">
+        <div className="dashboard-main-stack">
+          <WorkflowCards
+            workflows={data.workflows}
+            onCreateProject={handleCreateProject}
+            onCommand={handleCommand}
+          />
+          <CreativeEntitiesPanel data={data} />
+        </div>
+        <aside className="dashboard-side-stack">
+          <SkillList
+            skills={data.skills}
+            onCommand={handleSkillCommand}
+            onSkillAction={handleSkillAction}
+          />
+        </aside>
+      </div>
+    </div>
   );
 }
 
 function WorkView({ data }: { readonly data: DashboardData }) {
   return (
-    <>
+    <div className="dashboard-content">
       <MetricCards
         runtime={data.runtime}
         projectCount={data.projects.length}
         taskCount={data.tasks.length}
       />
-      <WorkflowCards
-        workflows={data.workflows}
-        onCreateProject={handleCreateProject}
-        onCommand={handleCommand}
-      />
-      <SkillList
-        skills={data.skills}
-        onCommand={handleSkillCommand}
-        onSkillAction={handleSkillAction}
-      />
-      <CreativeEntitiesSection
-        state={data.creativeEntities}
-        onSelect={(ref) => postMessage({ type: 'selectCreativeEntity', ref })}
-        onAction={(request) => postMessage({ type: 'creativeEntityAction', request })}
-        onRefresh={() => postMessage({ type: 'refreshCreativeEntities' })}
-      />
-      <TaskTable
-        tasks={data.tasks}
-        onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}
-        onRetry={(taskId) => postMessage({ type: 'retryTask', taskId })}
-        onRevealOutput={(taskId) => postMessage({ type: 'revealTaskOutput', taskId })}
-      />
-    </>
+      <div className="dashboard-workbench-grid">
+        <div className="dashboard-main-stack">
+          <WorkflowCards
+            workflows={data.workflows}
+            onCreateProject={handleCreateProject}
+            onCommand={handleCommand}
+          />
+          <CreativeEntitiesPanel data={data} />
+          <TaskTable
+            tasks={data.tasks}
+            onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}
+            onRetry={(taskId) => postMessage({ type: 'retryTask', taskId })}
+            onRevealOutput={(taskId) => postMessage({ type: 'revealTaskOutput', taskId })}
+          />
+        </div>
+        <aside className="dashboard-side-stack">
+          <SkillList
+            skills={data.skills}
+            onCommand={handleSkillCommand}
+            onSkillAction={handleSkillAction}
+          />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function CreativeEntitiesPanel({ data }: { readonly data: DashboardData }) {
+  return (
+    <CreativeEntitiesSection
+      state={data.creativeEntities}
+      onSelect={(ref) => postMessage({ type: 'selectCreativeEntity', ref })}
+      onAction={(request) => postMessage({ type: 'creativeEntityAction', request })}
+      onRefresh={() => postMessage({ type: 'refreshCreativeEntities' })}
+    />
   );
 }
 

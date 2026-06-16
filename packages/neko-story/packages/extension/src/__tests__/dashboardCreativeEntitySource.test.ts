@@ -434,6 +434,46 @@ describe('StoryDashboardCreativeEntitySource', () => {
     expect(snapshot.rows.map((row) => row.label)).not.toContain('隔壁角色');
   });
 
+  it('projects workspace screenplay characters as Dashboard entity candidates', async () => {
+    const source = createSource({
+      entities: [],
+      scriptFiles: [
+        {
+          uri: `file://${workspaceRoot}/cases/test.fountain`,
+          characters: ['小橘', '小灰'],
+        },
+        {
+          uri: `file://${workspaceRoot}/cases/episode.nks`,
+          characters: ['花花老师'],
+        },
+        {
+          uri: `file://${workspaceRoot}/cases/outline.story`,
+          characters: ['校长'],
+        },
+      ],
+    });
+
+    const snapshot = await source.getSnapshot();
+
+    expect(snapshot.rows.map((row) => row.label)).toEqual(['小橘', '小灰', '校长', '花花老师']);
+    expect(snapshot.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: '小橘',
+          kind: 'character',
+          status: 'candidate',
+          sourceKind: 'script',
+        }),
+        expect.objectContaining({
+          label: '花花老师',
+          kind: 'character',
+          status: 'candidate',
+          sourceKind: 'script',
+        }),
+      ]),
+    );
+  });
+
   it('does not mutate asset metadata when applying unavailable sync suggestions', async () => {
     const source = createSource({ characterNames: ['小橘'] });
 
@@ -557,10 +597,16 @@ interface CreateSourceOptions {
   readonly entities?: readonly CreativeEntity[];
   readonly characterNames?: readonly string[];
   readonly externalCharacterNames?: readonly string[];
+  readonly scriptFiles?: readonly ScriptFileFixture[];
   readonly executeCommand?: (command: string, ...args: unknown[]) => Promise<unknown>;
   readonly openLocation?: (location: vscode.Location) => Promise<unknown>;
   readonly workspaceListeners?: Array<() => void>;
   readonly graphListeners?: Array<() => void>;
+}
+
+interface ScriptFileFixture {
+  readonly uri: string;
+  readonly characters: readonly string[];
 }
 
 function createSource(options: CreateSourceOptions = {}): StoryDashboardCreativeEntitySource {
@@ -596,6 +642,18 @@ function createSource(options: CreateSourceOptions = {}): StoryDashboardCreative
       ensureInitialized: vi.fn(async () => undefined),
       getAllCharacterNames: vi.fn(() => options.characterNames ?? ['小橘']),
       getAllScriptIndices: vi.fn(() => {
+        if (options.scriptFiles) {
+          return options.scriptFiles.map((scriptFile) => ({
+            uri: scriptFile.uri,
+            total_lines: 10,
+            scenes: [],
+            characters: scriptFile.characters.map((name, index) => ({
+              name,
+              first_line: index,
+              scene_ids: [],
+            })),
+          }));
+        }
         const projectNames = options.characterNames ?? ['小橘'];
         const externalNames = options.externalCharacterNames ?? [];
         return [

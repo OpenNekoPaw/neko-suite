@@ -81,4 +81,80 @@ describe('StatusReader', () => {
     expect(status.agent?.available).toBe(false);
     expect(status.assets?.available).toBe(false);
   });
+
+  it('activates installed workflow extensions before reporting command availability', async () => {
+    installExtension('neko.neko-model', {
+      isActive: false,
+      activate: () => {
+        registerCommandHandler('neko.model.new', () => {});
+        return {};
+      },
+    });
+
+    const workflows = await new StatusReader().readWorkflows();
+
+    expect(workflows).toContainEqual({
+      id: 'nkm',
+      available: true,
+      state: 'ready',
+      extensionId: 'neko.neko-model',
+      command: 'neko.model.new',
+    });
+  });
+
+  it('reports story workflow availability for fountain files', async () => {
+    installExtension('neko.neko-story');
+    registerCommandHandler('neko.story.newFile', () => {});
+
+    const workflows = await new StatusReader().readWorkflows();
+
+    expect(workflows).toContainEqual({
+      id: 'fountain',
+      available: true,
+      state: 'ready',
+      extensionId: 'neko.neko-story',
+      command: 'neko.story.newFile',
+    });
+  });
+
+  it('distinguishes missing workflow extensions from inactive command registration', async () => {
+    installExtension('neko.neko-puppet', { isActive: false });
+
+    const workflows = await new StatusReader().readWorkflows();
+
+    expect(workflows).toContainEqual({
+      id: 'nkm',
+      available: false,
+      state: 'missing',
+      extensionId: 'neko.neko-model',
+      command: 'neko.model.new',
+    });
+    expect(workflows).toContainEqual({
+      id: 'nkp',
+      available: false,
+      state: 'inactive',
+      extensionId: 'neko.neko-puppet',
+      command: 'neko.puppet.new',
+    });
+  });
+
+  it('reports workflow activation failures without treating them as missing installs', async () => {
+    installExtension('neko.neko-puppet', {
+      isActive: false,
+      activate: () => {
+        throw new Error('activation boom');
+      },
+    });
+
+    const workflows = await new StatusReader().readWorkflows();
+
+    expect(workflows).toContainEqual({
+      id: 'nkp',
+      available: false,
+      state: 'error',
+      extensionId: 'neko.neko-puppet',
+      command: 'neko.puppet.new',
+      error: 'activation boom',
+    });
+  });
 });

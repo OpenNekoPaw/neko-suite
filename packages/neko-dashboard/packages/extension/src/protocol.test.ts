@@ -54,6 +54,7 @@ describe('dashboard webview protocol guards', () => {
     ).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'openProject', path: 'scene.nkv' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'cancelTask', taskId: 'neko-cut:1' })).toBe(true);
+    expect(isWebviewToExtensionMessage({ type: 'createProject', projectType: 'story' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'createProject', projectType: 'video' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'executeCommand', command: 'neko.ai.chat' })).toBe(
       true,

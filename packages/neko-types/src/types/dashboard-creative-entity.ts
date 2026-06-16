@@ -226,6 +226,7 @@ export interface DashboardCreativeEntityBindingSummary {
   readonly id: string;
   readonly role: EntityAssetBindingRole;
   readonly assetRef: string;
+  readonly preview?: DashboardCreativeEntityBindingPreview;
   readonly status: EntityAssetBindingStatus;
   readonly availability: EntityAssetBindingAvailability;
   readonly orphanedAt?: string;
@@ -233,6 +234,16 @@ export interface DashboardCreativeEntityBindingSummary {
   readonly isDefault: boolean;
   readonly confidence?: number;
   readonly updatedAt: string;
+}
+
+export type DashboardCreativeEntityBindingPreviewKind = 'image' | 'model';
+
+export interface DashboardCreativeEntityBindingPreview {
+  readonly kind: DashboardCreativeEntityBindingPreviewKind;
+  readonly uri: string;
+  readonly label?: string;
+  readonly thumbnailUri?: string;
+  readonly mimeType?: string;
 }
 
 export interface DashboardCreativeEntityRequirementSummary {
@@ -663,6 +674,7 @@ export function isDashboardCreativeEntityBindingSummary(
     isNonEmptyString(value['id']) &&
     isEntityAssetBindingRole(value['role']) &&
     isSafeDashboardAssetRef(value['assetRef']) &&
+    (value['preview'] === undefined || isDashboardCreativeEntityBindingPreview(value['preview'])) &&
     isBindingStatus(value['status']) &&
     isBindingAvailability(value['availability']) &&
     (value['orphanedAt'] === undefined || typeof value['orphanedAt'] === 'string') &&
@@ -670,6 +682,19 @@ export function isDashboardCreativeEntityBindingSummary(
     typeof value['isDefault'] === 'boolean' &&
     (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
     typeof value['updatedAt'] === 'string'
+  );
+}
+
+export function isDashboardCreativeEntityBindingPreview(
+  value: unknown,
+): value is DashboardCreativeEntityBindingPreview {
+  if (!isRecord(value)) return false;
+  return (
+    (value['kind'] === 'image' || value['kind'] === 'model') &&
+    isSafeDashboardPreviewUri(value['uri']) &&
+    (value['label'] === undefined || typeof value['label'] === 'string') &&
+    (value['thumbnailUri'] === undefined || isSafeDashboardPreviewUri(value['thumbnailUri'])) &&
+    (value['mimeType'] === undefined || typeof value['mimeType'] === 'string')
   );
 }
 
@@ -917,6 +942,13 @@ export function isSafeDashboardAssetRef(ref: unknown): ref is string {
   if (isAssetLikeRef(ref)) return true;
   if (/^https?:\/\//i.test(ref)) return true;
   return !isAbsoluteLocalRef(ref);
+}
+
+export function isSafeDashboardPreviewUri(ref: unknown): ref is string {
+  if (typeof ref !== 'string' || ref.trim().length === 0) return false;
+  if (isCacheSchemaRef(ref)) return false;
+  if (isAbsoluteLocalRef(ref)) return false;
+  return /^(https?|vscode-webview-resource|vscode-resource|data|blob):/i.test(ref);
 }
 
 function isDashboardCreativeEntityRelationshipSummary(

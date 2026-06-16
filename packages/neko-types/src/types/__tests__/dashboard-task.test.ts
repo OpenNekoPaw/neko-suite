@@ -154,15 +154,17 @@ describe('dashboard task contracts', () => {
 
 describe('dashboard project contracts', () => {
   it('maps supported file extensions from the shared project SSOT', () => {
+    expect(getDashboardProjectTypeForExtension('.fountain')).toBe('story');
     expect(getDashboardProjectTypeForExtension('.nkv')).toBe('video');
     expect(getDashboardProjectTypeForExtension('.NKC')).toBe('canvas');
     expect(getDashboardProjectTypeForExtension('.txt')).toBeUndefined();
   });
 
   it('validates project types and exposes the glob extension list', () => {
+    expect(DASHBOARD_PROJECT_TYPES).toContain('story');
     expect(DASHBOARD_PROJECT_TYPES).toContain('audio');
     expect(isDashboardProjectType('puppet')).toBe(true);
     expect(isDashboardProjectType('unknown')).toBe(false);
-    expect(DASHBOARD_PROJECT_GLOB_EXTENSION_LIST).toBe('nkv,nkc,nks,nka,nkm,nkp');
+    expect(DASHBOARD_PROJECT_GLOB_EXTENSION_LIST).toBe('fountain,nkc,nkv,nka,nkm,nkp,nks');
   });
 });

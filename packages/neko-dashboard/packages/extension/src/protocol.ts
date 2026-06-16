@@ -63,17 +63,15 @@ export interface RuntimeSourceStatus<TValue> {
   readonly error?: string;
 }
 
-export type WorkflowId =
-  | 'filmmaking'
-  | 'screenwriting'
-  | 'visual'
-  | 'modeling'
-  | 'animation'
-  | 'ai';
+export type WorkflowId = 'fountain' | 'nkc' | 'nkv' | 'nka' | 'nkm' | 'nkp' | 'nks';
 
 export interface WorkflowAvailability {
   readonly id: WorkflowId;
   readonly available: boolean;
+  readonly state?: 'missing' | 'inactive' | 'ready' | 'error';
+  readonly extensionId?: string;
+  readonly command?: string;
+  readonly error?: string;
 }
 
 export interface DashboardSkill {

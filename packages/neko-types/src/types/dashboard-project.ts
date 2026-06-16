@@ -1,10 +1,11 @@
 export const DASHBOARD_PROJECT_TYPE_DEFINITIONS = [
-  { type: 'video', extension: '.nkv' },
+  { type: 'story', extension: '.fountain' },
   { type: 'canvas', extension: '.nkc' },
-  { type: 'sketch', extension: '.nks' },
+  { type: 'video', extension: '.nkv' },
   { type: 'audio', extension: '.nka' },
   { type: 'model', extension: '.nkm' },
   { type: 'puppet', extension: '.nkp' },
+  { type: 'sketch', extension: '.nks' },
 ] as const;
 
 export type DashboardProjectType = (typeof DASHBOARD_PROJECT_TYPE_DEFINITIONS)[number]['type'];

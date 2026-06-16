@@ -187,12 +187,13 @@ export class DashboardProvider implements vscode.Disposable {
       this.statusReader.readWorkflows(),
       this.skillReader.read(),
     ]);
+    const creativeEntities = this.creativeEntityAggregator.getState();
     const data: DashboardData = {
-      mode: projects.length > 0 ? 'work' : 'welcome',
+      mode: projects.length > 0 || hasCreativeEntityRows(creativeEntities) ? 'work' : 'welcome',
       projects,
       recent: createRecentActivity(projects),
       tasks: this.taskAggregator.getSnapshot(),
-      creativeEntities: this.creativeEntityAggregator.getState(),
+      creativeEntities,
       runtime,
       workflows,
       skills,
@@ -322,4 +323,8 @@ function buildDashboardCommandInvocation(
     ...(message.intent !== undefined ? { intent: message.intent } : {}),
     ...(message.skill !== undefined ? { skill: message.skill } : {}),
   };
+}
+
+function hasCreativeEntityRows(state: { readonly rows: readonly unknown[] }): boolean {
+  return state.rows.length > 0;
 }

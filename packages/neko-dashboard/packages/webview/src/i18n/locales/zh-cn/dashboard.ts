@@ -2,7 +2,9 @@ import type { MessageBundle } from '@neko/shared';
 
 export const dashboard = {
   'dashboard.title': 'Neko 工作台',
+  'dashboard.summary': '工作台摘要',
 
+  'dashboard.status': '运行状态',
   'dashboard.status.engine': '引擎',
   'dashboard.status.projects': '项目',
   'dashboard.status.agent': '智能体',
@@ -15,43 +17,54 @@ export const dashboard = {
   'dashboard.status.health.unhealthy': '连接异常',
   'dashboard.status.health.unknown': '连接未检测',
 
-  'dashboard.quickStart': '快速开始',
-  'dashboard.quickStart.screenplay': '新建剧本',
-  'dashboard.quickStart.video': '新建视频',
-  'dashboard.quickStart.canvas': '新建画布',
-  'dashboard.quickStart.sketch': '新建绘画',
-  'dashboard.quickStart.audio': '新建音频',
-  'dashboard.quickStart.model': '新建模型',
-  'dashboard.quickStart.puppet': '新建动画',
-  'dashboard.quickStart.ai': '打开对话',
-
   'dashboard.workflows': '创作套件',
 
-  'dashboard.workflow.filmmaking': '影视制作',
-  'dashboard.workflow.filmmaking.desc': '视频剪辑、音频混音、AI 生成与增强',
-  'dashboard.workflow.filmmaking.tags': '视频, 音频, AI 生成',
+  'dashboard.workflow.fountain': '剧本',
+  'dashboard.workflow.fountain.desc':
+    '编写剧本、场景、对白和角色出场，是分镜、实体和时间线的叙事来源。',
+  'dashboard.workflow.fountain.tags': '剧本, 场景, 对白, 角色',
+  'dashboard.workflow.fountain.action.primary': '新建剧本',
+  'dashboard.workflow.fountain.action.agent': '发送 Agent',
 
-  'dashboard.workflow.screenwriting': '剧本创作',
-  'dashboard.workflow.screenwriting.desc': '剧本编辑与智能补全、分镜生成、一键转时间线',
-  'dashboard.workflow.screenwriting.tags': '剧本, 分镜, AI 编剧',
+  'dashboard.workflow.nkc': '画布',
+  'dashboard.workflow.nkc.desc': '组织分镜画面、叙事节点、视觉参考和画布合成，承接剧本到视觉制作。',
+  'dashboard.workflow.nkc.tags': '画布, 分镜, 节点, 参考',
+  'dashboard.workflow.nkc.action.primary': '新建画布',
+  'dashboard.workflow.nkc.action.preview': '叙事预览',
 
-  'dashboard.workflow.visual': '视觉创作',
-  'dashboard.workflow.visual.desc': '压感手绘、画布合成、AI 图像生成',
-  'dashboard.workflow.visual.tags': '绘画, 画布, AI 绘图',
+  'dashboard.workflow.nkv': '剪辑',
+  'dashboard.workflow.nkv.desc': '制作剪辑时间线、镜头序列、字幕和导出任务，产出可观看视频。',
+  'dashboard.workflow.nkv.tags': '剪辑, 时间线, 字幕, 导出',
+  'dashboard.workflow.nkv.action.primary': '新建剪辑',
 
-  'dashboard.workflow.modeling': '3D / 角色',
-  'dashboard.workflow.modeling.desc': '3D 建模编辑、角色捏脸、GPU 实时视口',
-  'dashboard.workflow.modeling.tags': '建模, 捏脸, AI 角色',
+  'dashboard.workflow.nka': 'DAW',
+  'dashboard.workflow.nka.desc': '编辑多轨音频、录音、降噪、混音和音频导出，服务对白与成片声音。',
+  'dashboard.workflow.nka.tags': '多轨, 录音, 混音, 导出',
+  'dashboard.workflow.nka.action.primary': '新建 DAW',
 
-  'dashboard.workflow.animation': '动画 / Live',
-  'dashboard.workflow.animation.desc': '2D 骨骼动画、实时动作捕捉、虚拟形象直播',
-  'dashboard.workflow.animation.tags': '动画, 直播, 动捕',
+  'dashboard.workflow.nkm': '3D模型',
+  'dashboard.workflow.nkm.desc':
+    '管理 3D 模型、材质、视口状态和角色模型资产，为动画和画布提供对象。',
+  'dashboard.workflow.nkm.tags': '3D, 模型, 材质, 视口',
+  'dashboard.workflow.nkm.action.primary': '新建 3D 模型',
+  'dashboard.workflow.nkm.action.live': '启动 Live',
 
-  'dashboard.workflow.ai': 'AI 助手',
-  'dashboard.workflow.ai.desc': '多模型对话、图像/视频/音频生成、多模态分析',
-  'dashboard.workflow.ai.tags': '对话, 生成, 分析',
+  'dashboard.workflow.nkp': '2D模型',
+  'dashboard.workflow.nkp.desc': '制作 2D 骨骼角色、表情、动作和 Live2D 绑定，产出可驱动角色项目。',
+  'dashboard.workflow.nkp.tags': '2D, 骨骼, 表情, Live2D',
+  'dashboard.workflow.nkp.action.primary': '新建 2D 模型',
+  'dashboard.workflow.nkp.action.live': '启动 Live',
 
-  'dashboard.workflow.unavailable': '扩展未安装',
+  'dashboard.workflow.nks': '绘画',
+  'dashboard.workflow.nks.desc': '创建原生绘画文档、图层、笔刷和局部重绘素材，用于视觉资产生产。',
+  'dashboard.workflow.nks.tags': '绘画, 图层, 笔刷, 素材',
+  'dashboard.workflow.nks.action.primary': '新建绘画',
+
+  'dashboard.workflow.unavailable': '功能不可用',
+  'dashboard.workflow.developing': '开发中',
+  'dashboard.workflow.missing': '扩展未安装',
+  'dashboard.workflow.inactive': '扩展未就绪',
+  'dashboard.workflow.activationFailed': '激活失败',
 
   'dashboard.skills': '已安装技能',
   'dashboard.skills.count': '{count} 个技能',

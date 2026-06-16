@@ -2,7 +2,9 @@ import type { MessageBundle } from '@neko/shared';
 
 export const dashboard = {
   'dashboard.title': 'Neko Dashboard',
+  'dashboard.summary': 'Dashboard summary',
 
+  'dashboard.status': 'Runtime status',
   'dashboard.status.engine': 'Engine',
   'dashboard.status.projects': 'Projects',
   'dashboard.status.agent': 'Agent',
@@ -15,49 +17,59 @@ export const dashboard = {
   'dashboard.status.health.unhealthy': 'Unhealthy',
   'dashboard.status.health.unknown': 'Health unknown',
 
-  'dashboard.quickStart': 'Quick Start',
-  'dashboard.quickStart.screenplay': 'New Script',
-  'dashboard.quickStart.video': 'New Video',
-  'dashboard.quickStart.canvas': 'New Canvas',
-  'dashboard.quickStart.sketch': 'New Sketch',
-  'dashboard.quickStart.audio': 'New Audio',
-  'dashboard.quickStart.model': 'New Model',
-  'dashboard.quickStart.puppet': 'New Puppet',
-  'dashboard.quickStart.ai': 'Open Chat',
-
   'dashboard.workflows': 'Creative Suite',
 
-  'dashboard.workflow.filmmaking': 'Film & Video',
-  'dashboard.workflow.filmmaking.desc':
-    'Video editing, audio mixing, AI-powered generation and enhancement',
-  'dashboard.workflow.filmmaking.tags': 'Video, Audio, AI Generate',
+  'dashboard.workflow.fountain': 'Script',
+  'dashboard.workflow.fountain.desc':
+    'Write screenplay scenes, dialogue, and character appearances as the source for boards and timelines.',
+  'dashboard.workflow.fountain.tags': 'Script, Scenes, Dialogue, Characters',
+  'dashboard.workflow.fountain.action.primary': 'New Script',
+  'dashboard.workflow.fountain.action.agent': 'Send Agent',
 
-  'dashboard.workflow.screenwriting': 'Screenwriting',
-  'dashboard.workflow.screenwriting.desc':
-    'Script editing with LSP, storyboard generation, timeline conversion',
-  'dashboard.workflow.screenwriting.tags': 'Script, Storyboard, AI Script',
+  'dashboard.workflow.nkc': 'Canvas',
+  'dashboard.workflow.nkc.desc':
+    'Arrange storyboard frames, narrative nodes, visual references, and canvas compositions.',
+  'dashboard.workflow.nkc.tags': 'Canvas, Storyboard, Nodes, References',
+  'dashboard.workflow.nkc.action.primary': 'New Canvas',
+  'dashboard.workflow.nkc.action.preview': 'Narrative Preview',
 
-  'dashboard.workflow.visual': 'Visual Art',
-  'dashboard.workflow.visual.desc':
-    'Digital painting with pressure sensitivity, canvas composition, AI image generation',
-  'dashboard.workflow.visual.tags': 'Sketch, Canvas, AI Image',
+  'dashboard.workflow.nkv': 'Editing',
+  'dashboard.workflow.nkv.desc':
+    'Build edit timelines, shot sequences, subtitles, and export jobs for final video output.',
+  'dashboard.workflow.nkv.tags': 'Edit, Timeline, Subtitles, Export',
+  'dashboard.workflow.nkv.action.primary': 'New Edit',
 
-  'dashboard.workflow.modeling': '3D & Character',
-  'dashboard.workflow.modeling.desc':
-    '3D model editing, character sculpting, GPU-accelerated real-time viewport',
-  'dashboard.workflow.modeling.tags': 'Model, Sculpt, AI Face',
+  'dashboard.workflow.nka': 'DAW',
+  'dashboard.workflow.nka.desc':
+    'Edit multitrack audio, recordings, denoise passes, mixing, and audio exports.',
+  'dashboard.workflow.nka.tags': 'Multitrack, Recording, Mix, Export',
+  'dashboard.workflow.nka.action.primary': 'New DAW',
 
-  'dashboard.workflow.animation': 'Animation & Live',
-  'dashboard.workflow.animation.desc':
-    '2D skeletal animation, live motion capture, real-time puppet streaming',
-  'dashboard.workflow.animation.tags': 'Puppet, Live, Motion Cap',
+  'dashboard.workflow.nkm': '3D Model',
+  'dashboard.workflow.nkm.desc':
+    'Manage 3D models, materials, viewport state, and character assets for animation and canvas work.',
+  'dashboard.workflow.nkm.tags': '3D, Model, Materials, Viewport',
+  'dashboard.workflow.nkm.action.primary': 'New 3D Model',
+  'dashboard.workflow.nkm.action.live': 'Start Live',
 
-  'dashboard.workflow.ai': 'AI Assistant',
-  'dashboard.workflow.ai.desc':
-    'Multi-model chat, image/video/audio generation, multimodal analysis',
-  'dashboard.workflow.ai.tags': 'Chat, Generate, Analyze',
+  'dashboard.workflow.nkp': '2D Model',
+  'dashboard.workflow.nkp.desc':
+    'Author 2D skeletal characters, expressions, motions, and Live2D bindings for driven avatars.',
+  'dashboard.workflow.nkp.tags': '2D, Rig, Expression, Live2D',
+  'dashboard.workflow.nkp.action.primary': 'New 2D Model',
+  'dashboard.workflow.nkp.action.live': 'Start Live',
 
-  'dashboard.workflow.unavailable': 'Extension not installed',
+  'dashboard.workflow.nks': 'Sketch',
+  'dashboard.workflow.nks.desc':
+    'Create native painting documents, layers, brush work, and repaintable visual assets.',
+  'dashboard.workflow.nks.tags': 'Sketch, Layers, Brushes, Assets',
+  'dashboard.workflow.nks.action.primary': 'New Sketch',
+
+  'dashboard.workflow.unavailable': 'Unavailable',
+  'dashboard.workflow.developing': 'In development',
+  'dashboard.workflow.missing': 'Extension not installed',
+  'dashboard.workflow.inactive': 'Extension not ready',
+  'dashboard.workflow.activationFailed': 'Activation failed',
 
   'dashboard.skills': 'Installed Skills',
   'dashboard.skills.count': '{count} skills',

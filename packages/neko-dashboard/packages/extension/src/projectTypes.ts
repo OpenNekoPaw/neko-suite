@@ -12,12 +12,13 @@ export {
 export const SUPPORTED_PROJECT_FILE_PATTERN = `**/*.{${DASHBOARD_PROJECT_GLOB_EXTENSION_LIST}}`;
 
 const PROJECT_CREATE_COMMANDS = {
-  video: 'neko.newProject',
+  story: 'neko.story.newFile',
   canvas: 'neko.canvas.new',
-  sketch: 'neko.sketch.new',
+  video: 'neko.newProject',
   audio: 'neko.audio.new',
   model: 'neko.model.new',
   puppet: 'neko.puppet.new',
+  sketch: 'neko.sketch.new',
 } satisfies Record<DashboardProjectType, string>;
 
 export function getProjectCreateCommand(projectType: DashboardProjectType): string {

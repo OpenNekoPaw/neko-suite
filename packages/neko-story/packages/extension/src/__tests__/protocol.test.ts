@@ -62,6 +62,12 @@ describe('neko-story protocol', () => {
       const pkgExts = (lang.extensions as string[]).map((e: string) => e.replace(/^\./, '')).sort();
       expect(pkgExts).toEqual(['fountain', 'nks', 'story']);
     });
+
+    it('activates the Dashboard creative entity source command for screenplay analysis', () => {
+      expect(packageJson.activationEvents).toContain(
+        'onCommand:neko.story.getDashboardCreativeEntitySource',
+      );
+    });
   });
 
   describe('NKS-003: audio asset mapping', () => {
