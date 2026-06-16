@@ -127,6 +127,85 @@ describe('MessageItem tool aggregation', () => {
   });
 });
 
+describe('MessageItem reference rendering', () => {
+  it('renders non-preview user attachments with the shared reference token', () => {
+    renderMessageItem({
+      message: {
+        ...createMessage({ role: 'user', content: 'Please inspect this.' }),
+        attachments: [
+          {
+            id: 'attachment-1',
+            name: 'brief.md',
+            type: 'file',
+            size: 1024,
+          },
+        ],
+      },
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    const token = document.querySelector('[data-agent-reference-token="true"]');
+    expect(token?.className).toContain('agent-reference-token');
+    expect(token?.getAttribute('data-reference-variant')).toBe('inline');
+    expect(token?.getAttribute('data-reference-kind')).toBe('file');
+    expect(screen.getByText('brief.md')).toBeTruthy();
+    expect(screen.getByText('1.0 KB')).toBeTruthy();
+  });
+
+  it('keeps workspace attachment parent paths visible in user messages', () => {
+    renderMessageItem({
+      message: {
+        ...createMessage({ role: 'user', content: 'Please inspect this.' }),
+        attachments: [
+          {
+            id: 'attachment-video',
+            name: '1080P.mp4',
+            type: 'video',
+            path: 'cases/1080P.mp4',
+          },
+        ],
+      },
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    const token = document.querySelector('[data-agent-reference-token="true"]');
+    expect(token?.getAttribute('data-reference-kind')).toBe('video');
+    expect(screen.getByText('1080P.mp4')).toBeTruthy();
+    expect(screen.getByText('cases')).toBeTruthy();
+  });
+
+  it('renders stored context references with the shared reference token', () => {
+    renderMessageItem({
+      message: {
+        ...createMessage({ role: 'user', content: 'Please inspect this node.' }),
+        contextReferences: [
+          {
+            id: 'node-1',
+            type: 'canvas-node',
+            label: '#1 wide shot',
+            navigationData: { nodeId: 'node-1' },
+          },
+        ],
+      },
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    const token = document.querySelector('[data-agent-reference-token="true"]');
+    expect(token?.getAttribute('data-reference-kind')).toBe('canvas');
+    expect(token?.getAttribute('data-reference-variant')).toBe('attached');
+    expect(screen.getByText('#1 wide shot')).toBeTruthy();
+  });
+});
+
 function renderMessageItem(input: { message: Message; identities: MessageIdentityMap }) {
   render(
     <MessageActionsProvider>

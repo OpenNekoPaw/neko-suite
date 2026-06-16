@@ -10,14 +10,22 @@ import { ModeSelector } from './ModeSelector';
 import { SessionModeSelector } from './SessionModeSelector';
 import { GenerationParamsBar } from './GenerationParamsBar';
 import { AttachmentPreview } from './FileAttachment';
+import { FileReferencePreview } from './FileReferencePreview';
 import { SlashCommandMenu, sortSlashCommandsForDisplay } from './SlashCommandMenu';
 import { parseFileReference } from './FileReferenceMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
-import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
+import {
+  MessageAttachment,
+  ProjectFile,
+  SlashCommand,
+  MentionItem,
+  type SelectedFileReference,
+} from './types';
 import { createSlashCommandCatalog, filterSlashCommands } from './slash-command-catalog';
 import { AgentContextChip } from './AgentContextChip';
 import { CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
 import { SuggestionChips } from './SuggestionChips';
+import { AmbientCanvasContextBar } from './AmbientCanvasContextBar';
 import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
@@ -30,13 +38,16 @@ import type { AgentContextPayload } from '@neko/shared';
 interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
+  queuedMessageCount?: number;
   droppedFiles?: MessageAttachment[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
   onSend: (input?: {
     messageText?: string;
+    displayMessageText?: string;
     attachments?: MessageAttachment[];
     contextPayloads?: AgentContextPayload[];
+    fileReferences?: SelectedFileReference[];
   }) => void;
   onCancel?: () => void;
   disabled?: boolean;
@@ -44,11 +55,15 @@ interface InputAreaProps {
   attachedFiles?: MessageAttachment[];
   /** Callback to update attached files (when managed externally) */
   onAttachedFilesChange?: (files: MessageAttachment[]) => void;
+  /** Session-bound @file references selected from the mention menu. */
+  selectedFileReferences?: SelectedFileReference[];
+  onSelectedFileReferencesChange?: (references: SelectedFileReference[]) => void;
 }
 
 export function InputArea({
   inputValue,
   isThinking,
+  queuedMessageCount = 0,
   droppedFiles,
   onDroppedFilesProcessed,
   onInputChange,
@@ -57,6 +72,8 @@ export function InputArea({
   disabled = false,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
+  selectedFileReferences: externalSelectedFileReferences,
+  onSelectedFileReferencesChange,
 }: InputAreaProps) {
   // Global configuration from context (model, modes, compression, skills)
   const {
@@ -107,6 +124,10 @@ export function InputArea({
   // Attached files - use external state if provided (for conversation isolation)
   const [internalAttachedFiles, setInternalAttachedFiles] = useState<MessageAttachment[]>([]);
   const attachedFiles = externalAttachedFiles ?? internalAttachedFiles;
+  const [internalSelectedFileReferences, setInternalSelectedFileReferences] = useState<
+    SelectedFileReference[]
+  >([]);
+  const selectedFileReferences = externalSelectedFileReferences ?? internalSelectedFileReferences;
 
   // Create a unified setter that works with both internal state and external callback
   const updateAttachedFiles = useCallback(
@@ -124,6 +145,23 @@ export function InputArea({
     [onAttachedFilesChange, externalAttachedFiles],
   );
 
+  const updateSelectedFileReferences = useCallback(
+    (
+      updater:
+        | SelectedFileReference[]
+        | ((prev: SelectedFileReference[]) => SelectedFileReference[]),
+    ) => {
+      if (onSelectedFileReferencesChange) {
+        const newValue =
+          typeof updater === 'function' ? updater(externalSelectedFileReferences ?? []) : updater;
+        onSelectedFileReferencesChange(newValue);
+      } else {
+        setInternalSelectedFileReferences(updater);
+      }
+    },
+    [externalSelectedFileReferences, onSelectedFileReferencesChange],
+  );
+
   // Handle externally dropped files
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
@@ -131,6 +169,28 @@ export function InputArea({
       onDroppedFilesProcessed?.();
     }
   }, [droppedFiles, onDroppedFilesProcessed, updateAttachedFiles]);
+
+  useEffect(() => {
+    if (!inputValue.includes('@') || mentionItems.length === 0) return;
+    const promoted = promoteCompletedFileReferencesFromInput(
+      inputValue,
+      mentionItems,
+      selectedFileReferences,
+    );
+    if (promoted.value === inputValue && promoted.references === selectedFileReferences) return;
+    if (promoted.value !== inputValue) {
+      onInputChange(promoted.value);
+    }
+    if (promoted.references !== selectedFileReferences) {
+      updateSelectedFileReferences(promoted.references);
+    }
+  }, [
+    inputValue,
+    mentionItems,
+    onInputChange,
+    selectedFileReferences,
+    updateSelectedFileReferences,
+  ]);
 
   // Filtered data
   const slashCommands = createSlashCommandCatalog(skills, pluginCommands);
@@ -141,8 +201,16 @@ export function InputArea({
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
+    const promoted = promoteCompletedFileReferencesFromInput(
+      e.target.value,
+      mentionItems,
+      selectedFileReferences,
+    );
+    const value = promoted.value;
     onInputChange(value);
+    if (promoted.references !== selectedFileReferences) {
+      updateSelectedFileReferences(promoted.references);
+    }
 
     // Reset history navigation when user types
     if (!isNavigating) {
@@ -320,23 +388,28 @@ export function InputArea({
     textareaRef.current?.focus();
   };
 
-  const insertFilePath = (pathWithRange: string) => {
-    const lastAtIndex = inputValue.lastIndexOf('@');
-    const newValue = inputValue.slice(0, lastAtIndex) + '@' + pathWithRange + ' ';
-    onInputChange(newValue);
+  const replaceActiveMention = (replacement: string) => {
+    onInputChange(replaceTrailingMention(inputValue, replacement));
+  };
+
+  const addSelectedFileReference = (item: MentionItem) => {
+    if (!item.filePath) return;
+    const reference = projectSelectedFileReference(item);
+    replaceActiveMention('');
+    updateSelectedFileReferences((prev) =>
+      prev.some((existing) => existing.path === reference.path) ? prev : [...prev, reference],
+    );
     setShowAtMenu(false);
     textareaRef.current?.focus();
   };
 
-  /** Handle selection from MentionMenu — file inserts @path, others create a context chip */
+  /** Handle selection from MentionMenu — path-backed items become @file tokens; others create a context chip. */
   const handleMentionSelect = (item: MentionItem) => {
-    if (item.kind === 'file' && item.filePath) {
-      insertFilePath(item.filePath);
+    if (item.filePath) {
+      addSelectedFileReference(item);
     } else if (item.contextPayload && onAddContextChip) {
       // Remove the trailing @filter from input
-      const lastAtIndex = inputValue.lastIndexOf('@');
-      const newValue = inputValue.slice(0, lastAtIndex);
-      onInputChange(newValue);
+      replaceActiveMention('');
       onAddContextChip(item.contextPayload);
       setShowAtMenu(false);
       textareaRef.current?.focus();
@@ -345,21 +418,46 @@ export function InputArea({
 
   const handleSend = () => {
     if (disabled) return;
-    if (!inputValue.trim() && attachedFiles.length === 0 && contextChips.length === 0) return;
+    const outboundMessageText = appendSelectedFileReferencesToMessage(
+      inputValue,
+      selectedFileReferences,
+    );
+    const hasSelectedFileReferences = selectedFileReferences.length > 0;
+    if (
+      !outboundMessageText.trim() &&
+      attachedFiles.length === 0 &&
+      contextChips.length === 0 &&
+      !hasSelectedFileReferences
+    ) {
+      return;
+    }
     // Add to history before sending
-    if (inputValue.trim()) {
+    if (outboundMessageText.trim()) {
       addToHistory(inputValue);
     }
     const files = attachedFiles.length > 0 ? attachedFiles : undefined;
     const contextPayloads = contextChips.length > 0 ? contextChips : undefined;
-    onSend({ messageText: inputValue, attachments: files, contextPayloads });
+    onSend({
+      messageText: outboundMessageText,
+      displayMessageText: inputValue,
+      attachments: files,
+      contextPayloads,
+      fileReferences: hasSelectedFileReferences ? selectedFileReferences : undefined,
+    });
     contextChips.forEach((c) => onRemoveContextChip(c.id));
     onInputChange('');
     updateAttachedFiles([]);
+    updateSelectedFileReferences([]);
   };
 
   const handleRemoveFile = (id: string) => {
     updateAttachedFiles((files) => files.filter((f) => f.id !== id));
+  };
+
+  const handleRemoveFileReference = (id: string) => {
+    updateSelectedFileReferences((references) =>
+      references.filter((reference) => reference.id !== id),
+    );
   };
 
   // Handle file selection
@@ -464,11 +562,12 @@ export function InputArea({
 
   const inputAreaProjection = projectInputAreaUi({
     inputValue,
-    attachedFileCount: attachedFiles.length,
+    attachedFileCount: attachedFiles.length + selectedFileReferences.length,
     contextChipCount: contextChips.length,
     ambientNodeCount: ambientNodes.length,
     mediaModelCallCount,
     isThinking,
+    queuedMessageCount,
     disabled,
     sessionMode,
     conversationKind,
@@ -528,6 +627,11 @@ export function InputArea({
           {inputAreaProjection.showGenerationParams && <GenerationParamsBar />}
         </div>
 
+        {/* Ambient canvas reference — mirrors @ quick references above the composer. */}
+        {inputAreaProjection.showAmbientNodes && (
+          <AmbientCanvasContextBar ambientNodes={ambientNodes} onSuggest={onInputChange} />
+        )}
+
         {/* ── Input container ── */}
         <div className="agent-composer-shell relative mx-2 mb-2">
           {/* Slash command menu */}
@@ -545,11 +649,10 @@ export function InputArea({
             filter={atFilter}
             items={mentionItems}
             selectedIndex={selectedFileIndex}
-            onSelectFile={insertFilePath}
+            onSelectFile={addSelectedFileReference}
             onSelectContext={(payload) => {
               if (onAddContextChip) {
-                const lastAtIndex = inputValue.lastIndexOf('@');
-                onInputChange(inputValue.slice(0, lastAtIndex));
+                replaceActiveMention('');
                 onAddContextChip(payload);
                 setShowAtMenu(false);
                 textareaRef.current?.focus();
@@ -558,27 +661,9 @@ export function InputArea({
             onClose={() => setShowAtMenu(false)}
           />
 
-          {/* Ambient canvas chips — auto-injected from canvas selection, non-removable */}
-          {inputAreaProjection.showAmbientNodes && (
-            <div className="flex flex-wrap gap-1 px-3 pt-2">
-              {ambientNodes.map((n) => (
-                <AgentContextChip
-                  key={n.nodeId}
-                  payload={{
-                    type: 'canvas-node',
-                    id: n.nodeId,
-                    label: n.summary,
-                    summary: n.summary,
-                    data: undefined,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
           {/* Agent context chips — shown above textarea when context is attached */}
           {inputAreaProjection.showContextChips && (
-            <div className="flex flex-wrap gap-1 px-3 pt-2">
+            <div className="agent-reference-row agent-reference-row-attached">
               {contextChips.map((chip) => (
                 <AgentContextChip key={chip.id} payload={chip} onRemove={onRemoveContextChip} />
               ))}
@@ -588,8 +673,14 @@ export function InputArea({
           {/* File attachment preview */}
           <AttachmentPreview attachedFiles={attachedFiles} onRemove={handleRemoveFile} />
 
+          {/* @file reference preview */}
+          <FileReferencePreview
+            references={selectedFileReferences}
+            onRemove={handleRemoveFileReference}
+          />
+
           {/* Input row */}
-          <div className="flex items-end gap-1 px-2 py-2">
+          <div className="agent-composer-input-row">
             <textarea
               ref={textareaRef}
               value={inputValue}
@@ -597,18 +688,21 @@ export function InputArea({
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               disabled={disabled}
-              placeholder={t(inputAreaProjection.inputPlaceholderKey)}
-              className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
+              placeholder={t(inputAreaProjection.inputPlaceholderKey, {
+                count: inputAreaProjection.queuedMessageCount,
+              })}
+              className="agent-composer-textarea"
               rows={1}
             />
           </div>
 
           {/* ── Bottom bar: utilities + execution mode + send ── */}
-          <div className="agent-composer-toolbar flex items-center gap-0.5 px-2 py-1">
+          <div className="agent-composer-toolbar">
             {/* Attachment button */}
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors"
+              className="agent-composer-tool-button"
               title={t('chat.input.attach')}
             >
               <PlusIcon className="w-4 h-4" />
@@ -624,9 +718,10 @@ export function InputArea({
 
             {/* Slash command button */}
             <button
+              type="button"
               onClick={handleSlashClick}
-              className="flex items-center justify-center w-7 h-7 text-[var(--vscode-descriptionForeground)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded-md transition-colors font-medium text-[13px]"
-              title="Commands"
+              className="agent-composer-tool-button agent-composer-tool-button-text"
+              title={t('chat.input.commands')}
             >
               /
             </button>
@@ -642,8 +737,8 @@ export function InputArea({
             {/* Media call count */}
             {inputAreaProjection.showMediaCallCount && (
               <div
-                className="flex items-center gap-0.5 px-1 text-[10px] text-[var(--vscode-descriptionForeground)]"
-                title={`Media model calls: ${mediaModelCallCount}`}
+                className="agent-composer-media-count"
+                title={t('chat.input.mediaModelCalls', { count: mediaModelCallCount })}
               >
                 <MediaCallIcon className="w-3 h-3" />
                 <span>{mediaModelCallCount}</span>
@@ -657,32 +752,48 @@ export function InputArea({
               <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
             )}
 
-            {/* Send / Stop */}
-            {isThinking ? (
-              <button
-                onClick={onCancel}
-                disabled={disabled}
-                className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white transition-opacity ${
-                  !inputAreaProjection.canCancel
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:opacity-90'
-                }`}
-                title={t('chat.input.cancel')}
+            {inputAreaProjection.showQueuedMessages && (
+              <div
+                className="agent-composer-queue-count"
+                title={t('chat.input.queuedMessages', {
+                  count: inputAreaProjection.queuedMessageCount,
+                })}
               >
-                <StopIcon className="w-3.5 h-3.5" />
-              </button>
-            ) : (
+                {inputAreaProjection.queuedMessageCount}
+              </div>
+            )}
+
+            {/* Queue / Send */}
+            {(!isThinking || inputAreaProjection.canQueue) && (
               <button
+                type="button"
                 onClick={handleSend}
                 disabled={!inputAreaProjection.canSend}
-                className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
+                className={`agent-composer-action-button ${
                   inputAreaProjection.canSend
-                    ? 'agent-composer-send hover:opacity-95'
-                    : 'bg-[var(--agent-control-muted-bg)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
+                    ? isThinking
+                      ? 'agent-composer-queue'
+                      : 'agent-composer-send'
+                    : 'bg-[var(--agent-control-muted-bg)] text-[var(--vscode-descriptionForeground)]'
                 }`}
-                title={t('chat.input.send')}
+                title={t(inputAreaProjection.sendTitleKey)}
+                aria-label={t(inputAreaProjection.sendTitleKey)}
               >
                 <SendIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Stop current run */}
+            {isThinking && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={disabled}
+                className="agent-composer-action-button agent-composer-stop"
+                title={t('chat.input.cancel')}
+                aria-label={t('chat.input.cancel')}
+              >
+                <StopIcon className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -692,7 +803,110 @@ export function InputArea({
   );
 }
 
-export type { MessageAttachment, ProjectFile };
+export type { MessageAttachment, ProjectFile, SelectedFileReference };
+
+function projectSelectedFileReference(item: MentionItem): SelectedFileReference {
+  const path = item.filePath ?? item.label;
+  return {
+    id: `file-ref:${path}`,
+    path,
+    label: item.label || getReferenceBasename(path),
+    ...(item.mediaType ? { mediaType: item.mediaType } : {}),
+    ...(item.source ? { source: item.source } : {}),
+    ...(item.thumbnailUri ? { thumbnailUri: item.thumbnailUri } : {}),
+  };
+}
+
+function promoteCompletedFileReferencesFromInput(
+  input: string,
+  mentionItems: readonly MentionItem[],
+  existingReferences: SelectedFileReference[],
+): { value: string; references: SelectedFileReference[] } {
+  const candidates = mentionItems.filter((item): item is MentionItem & { filePath: string } =>
+    Boolean(item.filePath),
+  );
+  if (candidates.length === 0 || !input.includes('@')) {
+    return { value: input, references: existingReferences };
+  }
+
+  let nextValue = input;
+  const references = [...existingReferences];
+  let changed = false;
+
+  const sortedCandidates = [...candidates].sort(
+    (left, right) => right.filePath.length - left.filePath.length,
+  );
+  for (const item of sortedCandidates) {
+    const token = `@${item.filePath}`;
+    const pattern = new RegExp(`${escapeRegExp(token)}(?=$|\\s)`, 'g');
+    nextValue = nextValue.replace(pattern, () => {
+      if (!references.some((reference) => reference.path === item.filePath)) {
+        references.push(projectSelectedFileReference(item));
+      }
+      changed = true;
+      return '';
+    });
+  }
+
+  if (!changed) {
+    return { value: input, references: existingReferences };
+  }
+
+  return { value: normalizeInputWhitespace(nextValue), references };
+}
+
+function appendSelectedFileReferencesToMessage(
+  input: string,
+  references: readonly SelectedFileReference[],
+): string {
+  if (references.length === 0) return input;
+  const referenceText = references
+    .map((reference) => formatFileReferencePath(reference.path))
+    .join(' ');
+  return [input.trim(), referenceText].filter(Boolean).join(' ');
+}
+
+function formatFileReferencePath(path: string): string {
+  const escaped = path.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return needsQuotedFileReference(path) ? `@"${escaped}"` : `@${path}`;
+}
+
+function needsQuotedFileReference(path: string): boolean {
+  return /[\s"\\]/.test(path);
+}
+
+function getReferenceBasename(path: string): string {
+  const normalized = path.replaceAll('\\', '/');
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeInputWhitespace(value: string): string {
+  return value.replace(/[ \t]{2,}/g, ' ');
+}
+
+function replaceTrailingMention(input: string, replacement: string): string {
+  const range = findTrailingMentionRange(input);
+  if (!range) return input;
+  return normalizeInputWhitespace(
+    `${input.slice(0, range.start)}${replacement}${input.slice(range.end)}`,
+  );
+}
+
+function findTrailingMentionRange(input: string): { start: number; end: number } | null {
+  let index = input.length - 1;
+  while (index >= 0 && !/\s/.test(input[index] ?? '')) {
+    index -= 1;
+  }
+
+  const start = index + 1;
+  if (input[start] !== '@') return null;
+  return { start, end: input.length };
+}
 
 /** Small icon indicating media model calls (image/video/audio generation) */
 function MediaCallIcon({ className }: { className?: string }) {

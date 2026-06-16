@@ -2,26 +2,35 @@
  * MentionMenu Component
  *
  * Unified @mention popup that shows:
- *   • Files — selecting inserts @path into textarea
+ *   • Path-backed items — selecting creates a @file token
  *   • Canvas nodes / characters — selecting creates an AgentContextChip
  *
  * Replaces the old FileReferenceMenu for the @ trigger in InputArea.
  */
 
-import { useRef, type CSSProperties } from 'react';
+import { useRef, type CSSProperties, type ReactNode } from 'react';
+import {
+  CameraIcon,
+  CodeIcon,
+  FileIcon,
+  LayersIcon,
+  PackageIcon,
+  PlayIcon,
+  VolumeIcon,
+} from '@neko/shared/icons';
 import type { MentionItem } from './types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { AgentContextPayload } from '@neko/shared';
 
 const KIND_ICONS: Record<string, string> = {
-  file: '📄',
-  'canvas-node': '⬡',
-  character: '🎭',
-  scene: '🎬',
-  asset: '◈',
-  media: '🎞',
-  entity: '◇',
+  file: 'file',
+  'canvas-node': 'canvas',
+  character: 'character',
+  scene: 'scene',
+  asset: 'asset',
+  media: 'media',
+  entity: 'entity',
 };
 
 const KIND_SECTION_LABELS: Record<MentionItem['kind'], MentionLocalizedLabel> = {
@@ -111,8 +120,8 @@ interface MentionMenuProps {
   filter: string;
   items: MentionItem[];
   selectedIndex: number;
-  /** Called when user picks a file item — provides the workspace-relative path */
-  onSelectFile: (path: string) => void;
+  /** Called when user picks a path-backed item — provides the full mention projection. */
+  onSelectFile: (item: MentionItem) => void;
   /** Called when user picks a non-file item — provides context payload for chip creation */
   onSelectContext: (payload: AgentContextPayload) => void;
   onClose: () => void;
@@ -141,35 +150,30 @@ export function MentionMenu({
   const flat = sections.flatMap((s) => s.items);
 
   const handleSelect = (item: MentionItem) => {
-    if (item.kind === 'file' && item.filePath) {
-      onSelectFile(item.filePath);
+    if (item.filePath) {
+      onSelectFile(item);
     } else if (item.contextPayload) {
       onSelectContext(item.contextPayload);
     }
   };
 
   return (
-    <div
-      ref={menuRef}
-      className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(228px,34vh)] overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
-    >
-      <div className="max-h-[min(228px,34vh)] overflow-y-auto px-1.5 py-1.5">
-        <div className="px-2.5 pb-1.5 pt-1 text-[10.5px] leading-4 text-[var(--agent-fg-secondary)]">
+    <div ref={menuRef} className="agent-composer-popover agent-composer-mention-menu" role="menu">
+      <div className="agent-composer-popover-scroll">
+        <div className="agent-composer-popover-hint">
           {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
         </div>
 
         {flat.length === 0 ? (
-          <div className="px-2.5 py-2 text-[10.5px] leading-4 text-[var(--agent-fg-secondary)]">
-            {t('chat.input.noMatchingFiles')}
-          </div>
+          <div className="agent-composer-popover-empty">{t('chat.input.noMatchingFiles')}</div>
         ) : (
           <>
             {sections.map((section) => (
               <div key={section.kind}>
                 {/* Section header */}
-                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-2.5 pb-1 pt-1.5 text-[10.5px] font-medium leading-3 text-[var(--agent-fg-secondary)]">
+                <div className="agent-composer-popover-section agent-composer-popover-section-sticky">
                   <span>{resolveMentionLabel(section.label, t)}</span>
-                  <span className="font-normal opacity-70">{section.items.length}</span>
+                  <span>{section.items.length}</span>
                 </div>
 
                 {section.items.map((item, itemIndex) => {
@@ -184,48 +188,30 @@ export function MentionMenu({
                       key={item.id}
                       type="button"
                       onClick={() => handleSelect(item)}
-                      className={`grid h-8 w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[11px] px-2.5 text-left transition-colors ${
-                        isSelected
-                          ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
-                          : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
+                      className={`agent-composer-popover-row agent-composer-mention-row ${
+                        isSelected ? 'is-selected' : ''
                       }`}
+                      role="menuitem"
                     >
                       {item.thumbnailUri ? (
-                        <img
-                          src={item.thumbnailUri}
-                          alt=""
-                          className="h-6 w-6 rounded-[8px] object-cover"
-                        />
+                        <img src={item.thumbnailUri} alt="" className="agent-composer-thumbnail" />
                       ) : (
                         <span
                           aria-hidden="true"
-                          className="flex h-6 w-6 items-center justify-center rounded-[8px] border text-[8.5px] font-semibold leading-none"
+                          className="agent-composer-glyph"
                           style={glyph.style}
                         >
-                          {glyph.label}
+                          {renderMentionGlyph(glyph.label)}
                         </span>
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate text-[11.5px] font-medium leading-4">
-                          {item.label}
-                        </span>
+                        <span className="agent-composer-popover-primary block">{item.label}</span>
                         {subtitle && (
-                          <span
-                            className={`block truncate text-[9.5px] leading-3 ${
-                              isSelected
-                                ? 'text-[var(--agent-fg)] opacity-70'
-                                : 'text-[var(--agent-fg-secondary)]'
-                            }`}
-                          >
-                            {subtitle}
-                          </span>
+                          <span className="agent-composer-popover-secondary block">{subtitle}</span>
                         )}
                       </span>
                       {badge && (
-                        <span
-                          className="max-w-[72px] truncate rounded-full border px-1.5 py-0.5 text-[9.5px] font-medium leading-none"
-                          style={badge.style}
-                        >
+                        <span className="agent-composer-popover-badge" style={badge.style}>
                           {resolveMentionLabel(badge.label, t)}
                         </span>
                       )}
@@ -263,7 +249,7 @@ export function getFilteredMentionItems(items: MentionItem[], filter: string): M
       if (kindOrder !== 0) return kindOrder;
       const rankOrder = scoreMentionItem(a, lc) - scoreMentionItem(b, lc);
       if (rankOrder !== 0) return rankOrder;
-      return a.label.localeCompare(b.label);
+      return compareMentionTieBreakers(a, b);
     })
     .slice(0, 20);
 }
@@ -272,18 +258,18 @@ export function getMentionIcon(item: MentionItem): string {
   if (item.filePath && (!item.icon || isGenericMentionIcon(item.icon))) {
     return getFilePathIcon(item.filePath);
   }
-  if (item.icon) return item.icon;
+  if (item.icon && !isLegacyMentionEmojiIcon(item.icon)) return item.icon;
   if (item.mediaType) return getMediaTypeIcon(item.mediaType);
-  return KIND_ICONS[item.kind] ?? '◈';
+  return KIND_ICONS[item.kind] ?? 'entity';
 }
 
 function getMediaTypeIcon(mediaType: NonNullable<MentionItem['mediaType']>): string {
-  if (mediaType === 'video') return '🎬';
-  if (mediaType === 'audio') return '♪';
-  if (mediaType === 'image') return '🖼';
-  if (mediaType === 'sequence') return '▦';
+  if (mediaType === 'video') return 'video';
+  if (mediaType === 'audio') return 'audio';
+  if (mediaType === 'image') return 'image';
+  if (mediaType === 'sequence') return 'sequence';
   if (mediaType === 'text') return 'TXT';
-  return '📄';
+  return 'document';
 }
 
 function getFilePathIcon(filePath: string): string {
@@ -455,7 +441,72 @@ function getToneColor(key: string): string {
 }
 
 function isGenericMentionIcon(icon: string): boolean {
-  return icon === KIND_ICONS.file || icon === '📄' || icon === 'file';
+  return icon === KIND_ICONS.file || icon === 'file' || isLegacyMentionEmojiIcon(icon);
+}
+
+function isLegacyMentionEmojiIcon(icon: string): boolean {
+  return projectLegacyMentionEmojiToken(icon) !== undefined;
+}
+
+function renderMentionGlyph(label: string): ReactNode {
+  const normalizedLabel = normalizeMentionGlyphLabel(label);
+  const className = 'agent-composer-glyph-icon';
+  const props = { className, size: 13, strokeWidth: 1.8 };
+  if (normalizedLabel === 'code') return <CodeIcon {...props} />;
+  if (normalizedLabel === 'file' || normalizedLabel === 'document') {
+    return <FileIcon {...props} />;
+  }
+  if (normalizedLabel === 'image') return <CameraIcon {...props} />;
+  if (normalizedLabel === 'video' || normalizedLabel === 'media') return <PlayIcon {...props} />;
+  if (normalizedLabel === 'audio') return <VolumeIcon {...props} />;
+  if (
+    normalizedLabel === 'asset' ||
+    normalizedLabel === 'entity' ||
+    normalizedLabel === 'archive'
+  ) {
+    return <PackageIcon {...props} />;
+  }
+  if (
+    normalizedLabel === 'canvas' ||
+    normalizedLabel === 'scene' ||
+    normalizedLabel === 'sequence'
+  ) {
+    return <LayersIcon {...props} />;
+  }
+  if (normalizedLabel === 'character') return <MentionCharacterIcon className={className} />;
+  return normalizedLabel;
+}
+
+function normalizeMentionGlyphLabel(label: string): string {
+  return projectLegacyMentionEmojiToken(label) ?? label;
+}
+
+function projectLegacyMentionEmojiToken(icon: string): string | undefined {
+  const normalized = icon.replace(/[\uFE0E\uFE0F]/g, '').trim();
+  if (normalized === '📄') return 'file';
+  if (normalized === '🎭') return 'character';
+  if (normalized === '🎬' || normalized === '🎞') return 'video';
+  if (normalized === '🖼') return 'image';
+  return undefined;
+}
+
+function MentionCharacterIcon({ className }: { readonly className?: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+    </svg>
+  );
 }
 
 function scoreMentionItem(item: MentionItem, filter: string): number {
@@ -469,6 +520,23 @@ function scoreMentionItem(item: MentionItem, filter: string): number {
   if (label.includes(filter)) return 4;
   if (path.includes(filter)) return 5;
   return 6;
+}
+
+function compareMentionTieBreakers(left: MentionItem, right: MentionItem): number {
+  const labelOrder = compareMentionText(left.label, right.label);
+  if (labelOrder !== 0) return labelOrder;
+
+  const pathOrder = compareMentionText(left.filePath ?? '', right.filePath ?? '');
+  if (pathOrder !== 0) return pathOrder;
+
+  return compareMentionText(left.id, right.id);
+}
+
+function compareMentionText(left: string, right: string): number {
+  return left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
 }
 
 function getFileName(path: string): string {

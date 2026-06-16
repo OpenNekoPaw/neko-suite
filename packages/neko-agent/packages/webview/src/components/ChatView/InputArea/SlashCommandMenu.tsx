@@ -55,18 +55,11 @@ export function SlashCommandMenu({
   const sections = buildSlashCommandSections(commands, t);
 
   return (
-    <div
-      ref={menuRef}
-      className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(228px,34vh)] overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
-    >
-      <div className="max-h-[min(228px,34vh)] overflow-y-auto px-1.5 py-1.5">
+    <div ref={menuRef} className="agent-composer-popover agent-composer-command-menu" role="menu">
+      <div className="agent-composer-popover-scroll">
         {sections.map((section) => (
           <div key={section.group}>
-            {section.title && (
-              <div className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-medium leading-3 text-[var(--agent-fg-secondary)]">
-                {section.title}
-              </div>
-            )}
+            {section.title && <div className="agent-composer-popover-section">{section.title}</div>}
             {section.commands.map((cmd, itemIndex) => {
               const flatIndex = section.startIndex + itemIndex;
               const description = resolveSlashCommandDescription(cmd, t);
@@ -78,36 +71,19 @@ export function SlashCommandMenu({
                   key={cmd.id}
                   type="button"
                   onClick={() => onSelect(cmd)}
-                  className={`grid h-8 w-full grid-cols-[82px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[11px] px-2.5 text-left transition-colors ${
-                    isSelected
-                      ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
-                      : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
+                  className={`agent-composer-popover-row agent-composer-command-row ${
+                    isSelected ? 'is-selected' : ''
                   }`}
+                  role="menuitem"
                 >
                   <span
-                    className={`truncate text-[11.5px] font-semibold leading-4 ${
-                      isSelected ? '' : 'text-[var(--vscode-textLink-foreground)]'
-                    }`}
+                    className={`agent-composer-popover-primary ${isSelected ? 'is-selected' : ''}`}
                   >
                     {cmd.name}
                   </span>
-                  <span
-                    className={`min-w-0 truncate text-[10.5px] leading-4 ${
-                      isSelected
-                        ? 'text-[var(--agent-fg)] opacity-80'
-                        : 'text-[var(--agent-fg-secondary)]'
-                    }`}
-                  >
-                    {description}
-                  </span>
+                  <span className="agent-composer-popover-secondary">{description}</span>
                   {sourceLabel && (
-                    <span
-                      className={`max-w-[72px] truncate rounded-full px-1.5 py-0.5 text-[9.5px] font-medium leading-none ${
-                        isSelected
-                          ? 'bg-[color-mix(in_srgb,var(--agent-bg)_58%,transparent)] text-[var(--agent-fg)]'
-                          : 'text-[var(--agent-fg-secondary)]'
-                      }`}
-                    >
+                    <span className="agent-composer-popover-badge">
                       {resolveSlashCommandSourceLabelText(sourceLabel, t)}
                     </span>
                   )}

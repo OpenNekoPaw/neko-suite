@@ -88,32 +88,39 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
   return (
     <div className="relative" ref={menuRef}>
       <button
+        type="button"
         onClick={() => {
           if (!isOpen) setDirection(getDirection());
           setIsOpen(!isOpen);
         }}
-        className="flex items-center gap-1 px-1.5 py-1 text-[11px] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] rounded transition-colors"
+        aria-label={t('chat.selectModel')}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        className="agent-control-chip"
         title={selectedModelObj?.label ?? t('chat.autoMode')}
       >
         <ModelDot color={dotColor} />
-        {getSelectedLabel()}
+        <span className="agent-control-chip-text">{getSelectedLabel()}</span>
         <ChevronDownIcon className="w-3 h-3" />
       </button>
 
       {isOpen && (
         <div
-          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[200px] max-h-[400px] overflow-y-auto py-1 z-50`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0 max-h-[400px] overflow-y-auto`}
+          role="menu"
         >
           {/* Auto option */}
           {groupedModels.autoModel && (
             <button
+              type="button"
               onClick={() => {
                 onSelect('auto');
                 setIsOpen(false);
               }}
-              className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-                selectedModel === 'auto' ? 'text-[var(--vscode-textLink-foreground)]' : ''
+              className={`agent-dropdown-item ${
+                selectedModel === 'auto' ? 'agent-dropdown-item-selected' : ''
               }`}
+              role="menuitem"
             >
               {t('chat.autoMode')}
             </button>
@@ -123,22 +130,22 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
           {groupedModels.sortedCategories.map((category) => (
             <div key={category}>
               {/* Category header */}
-              <div className="px-3 py-1 mt-1 text-[10px] text-[var(--vscode-descriptionForeground)] font-medium border-t border-[var(--vscode-dropdown-border)]">
-                {getCategoryLabel(category)}
-              </div>
+              <div className="agent-dropdown-section">{getCategoryLabel(category)}</div>
               {/* Models in this category */}
               {groupedModels.groups[category].map((model) => (
                 <button
                   key={model.id}
+                  type="button"
                   onClick={() => {
                     onSelect(model.id);
                     setIsOpen(false);
                   }}
-                  className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-                    selectedModel === model.id ? 'text-[var(--vscode-textLink-foreground)]' : ''
+                  className={`agent-dropdown-item ${
+                    selectedModel === model.id ? 'agent-dropdown-item-selected' : ''
                   }`}
+                  role="menuitem"
                 >
-                  {model.label}
+                  <span className="agent-dropdown-item-label">{model.label}</span>
                 </button>
               ))}
             </div>
@@ -146,7 +153,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
           {/* No providers message */}
           {!hasModels && (
-            <div className="px-3 py-2 text-[10px] text-[var(--vscode-descriptionForeground)]">
+            <div className="px-2 py-1 text-[10px] text-[var(--vscode-descriptionForeground)]">
               {t('chat.noProvidersConfigured')}
             </div>
           )}

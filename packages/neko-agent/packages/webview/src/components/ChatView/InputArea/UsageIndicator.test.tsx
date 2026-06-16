@@ -18,8 +18,11 @@ describe('UsageIndicator', () => {
   it('uses the provided context window for the percentage and tooltip total', () => {
     render(<UsageIndicator tokenCount={50000} maxTokens={200000} onCompress={async () => {}} />);
 
-    fireEvent.mouseEnter(screen.getByRole('button'));
+    const button = screen.getByRole('button');
+    fireEvent.mouseEnter(button);
 
+    expect(button.className).toContain('agent-composer-tool-button');
+    expect(document.querySelector('.agent-composer-tooltip')).toBeTruthy();
     expect(screen.getByText('Context estimate: 50,000 / 200,000')).toBeTruthy();
     expect(screen.getByText('25.0% occupied — 50.0K')).toBeTruthy();
   });

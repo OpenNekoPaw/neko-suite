@@ -16,24 +16,14 @@ import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { getCategoryColor } from './ModelIcon';
 import { ModelDot } from './ModelIcon';
+import { MediaCategoryIcon } from './ComposerIcons';
+import { ChevronDownIcon } from './DropdownMenu';
+import { useTranslation } from '@/i18n/I18nContext';
 
 export const MEDIA_CATEGORY_ICONS: Record<MediaCategory, () => JSX.Element> = {
-  image: () => (
-    <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-      <path d="M1 2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm1 0v6.5l2-2a.5.5 0 0 1 .65-.04l2 1.6 2-2a.5.5 0 0 1 .7 0L13 8V2H2z" />
-      <circle cx="4.5" cy="4.5" r="1" />
-    </svg>
-  ),
-  video: () => (
-    <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-      <path d="M0 3a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 11 3v1.8l2-1.3A.5.5 0 0 1 14 4v6a.5.5 0 0 1-.77.42L11 9.2V11a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 0 11V3z" />
-    </svg>
-  ),
-  audio: () => (
-    <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-      <path d="M5 1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V1zM1 5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V5zm9-2a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V3z" />
-    </svg>
-  ),
+  image: () => <MediaCategoryIcon category="image" size={13} />,
+  video: () => <MediaCategoryIcon category="video" size={13} />,
+  audio: () => <MediaCategoryIcon category="audio" size={13} />,
 };
 
 function shortenLabel(label: string): string {
@@ -50,6 +40,7 @@ export interface CategoryChipProps {
 }
 
 export function CategoryChip({ category, Icon, selectedId, models, onSelect }: CategoryChipProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<'up' | 'down'>('up');
   const ref = useRef<HTMLDivElement>(null);
@@ -60,6 +51,7 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
   const selected = models.find((m) => m.id === selectedId);
   const isConfigured = !!selected && selectedId !== 'none';
   const hasModels = models.length > 0;
+  const categoryLabel = t(`chat.generation.category.${category}`);
 
   const handleOpen = () => {
     if (!hasModels) return; // no dropdown if no models available
@@ -70,54 +62,71 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={handleOpen}
-        className="flex items-center gap-1 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`agent-control-chip agent-control-chip-model ${
+          isConfigured ? '' : 'agent-control-chip-muted'
+        }`}
         style={{
           color: isConfigured ? color : 'var(--vscode-descriptionForeground)',
-          opacity: isConfigured ? 1 : 0.5,
         }}
         title={
           selected?.label ??
-          (hasModels ? `Select ${category} model` : `No ${category} model configured`)
+          (hasModels
+            ? t('chat.generation.model.select', { category: categoryLabel })
+            : t('chat.generation.model.unconfigured', { category: categoryLabel }))
         }
       >
         <Icon />
         {isConfigured ? (
-          <span>{shortenLabel(selected.label)}</span>
+          <span className="agent-control-chip-text">{shortenLabel(selected.label)}</span>
         ) : (
-          <span className="text-[var(--vscode-descriptionForeground)] opacity-60">none</span>
+          <span className="agent-control-chip-text text-[var(--vscode-descriptionForeground)]">
+            {t('chat.generation.model.noneShort')}
+          </span>
         )}
+        {hasModels && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
       {open && hasModels && (
         <div
-          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[180px] py-1 z-50`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          role="menu"
         >
           {/* None option */}
           <button
+            type="button"
             onClick={() => {
               onSelect('none');
               setOpen(false);
             }}
-            className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-              selectedId === 'none'
-                ? 'text-[var(--vscode-textLink-foreground)]'
-                : 'text-[var(--vscode-descriptionForeground)]'
+            className={`agent-dropdown-item ${
+              selectedId === 'none' ? 'agent-dropdown-item-selected' : 'agent-dropdown-item-muted'
             }`}
+            role="menuitem"
           >
-            不使用
+            {t('chat.generation.model.none')}
           </button>
           {models.map((m) => (
             <button
               key={m.id}
+              type="button"
               onClick={() => {
                 onSelect(m.id);
                 setOpen(false);
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+              className={`agent-dropdown-item ${
+                m.id === selectedId ? 'agent-dropdown-item-selected' : ''
+              }`}
+              role="menuitem"
             >
               <ModelDot color={color} />
-              <span style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}>
+              <span
+                className="agent-dropdown-item-label"
+                style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}
+              >
                 {m.label}
               </span>
             </button>

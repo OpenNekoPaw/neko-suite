@@ -100,6 +100,10 @@
   --agent-input-bg: color-mix(in srgb, var(--agent-elevated) 84%, var(--agent-bg) 16%);
   --agent-input-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
   --agent-chat-row-hover: color-mix(in srgb, var(--agent-fg) 3%, transparent);
+  --agent-empty-panel-bg: color-mix(in srgb, var(--agent-elevated) 54%, transparent);
+  --agent-empty-panel-border: color-mix(in srgb, var(--agent-fg) 8%, transparent);
+  --agent-empty-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
   --agent-empty-copy: var(--agent-fg-secondary);
   --agent-empty-muted: var(--agent-fg-muted);
   --agent-empty-action-bg: color-mix(in srgb, var(--agent-elevated) 58%, transparent);
@@ -119,12 +123,12 @@
   --agent-composer-rail-border: color-mix(in srgb, var(--agent-fg) 8%, transparent);
   --agent-composer-bg: color-mix(in srgb, var(--agent-elevated) 64%, var(--agent-bg) 36%);
   --agent-composer-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
-  --agent-composer-focus-border: color-mix(in srgb, var(--agent-accent) 64%, var(--agent-fg) 8%);
+  --agent-composer-focus-border: color-mix(in srgb, var(--agent-accent) 50%, var(--agent-fg) 8%);
   --agent-composer-divider: color-mix(in srgb, var(--agent-fg) 7%, transparent);
   --agent-composer-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),
     inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
-  --agent-composer-focus-shadow: 0 0 0 1px color-mix(in srgb, var(--agent-accent) 24%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--agent-accent) 8%, transparent),
+  --agent-composer-focus-shadow: 0 0 0 1px color-mix(in srgb, var(--agent-accent) 18%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--agent-accent) 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 5%, transparent);
   --agent-control-muted-bg: color-mix(in srgb, var(--agent-fg) 7%, transparent);
   --agent-composer-send-bg: color-mix(in srgb, var(--agent-accent) 88%, var(--agent-fg) 12%);
@@ -175,6 +179,9 @@ body[data-vscode-theme-kind='vscode-high-contrast'] {
   --agent-control-muted-bg: var(--agent-elevated);
   --agent-composer-send-bg: var(--vscode-button-background, var(--agent-accent));
   --agent-composer-send-border: var(--agent-border);
+  --agent-empty-panel-bg: var(--agent-elevated);
+  --agent-empty-panel-border: var(--agent-border);
+  --agent-empty-panel-shadow: none;
   --agent-empty-copy: var(--agent-fg);
   --agent-empty-muted: var(--agent-fg-secondary);
   --agent-empty-action-bg: var(--agent-elevated);
@@ -185,6 +192,10 @@ body[data-vscode-theme-kind='vscode-high-contrast'] {
 
 body.vscode-light,
 body[data-vscode-theme-kind='vscode-light'] {
+  --agent-empty-panel-bg: color-mix(in srgb, var(--agent-bg) 84%, #f3f3f3 16%);
+  --agent-empty-panel-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
+  --agent-empty-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.68);
   --agent-empty-copy: color-mix(in srgb, var(--agent-fg) 66%, transparent);
   --agent-empty-muted: color-mix(in srgb, var(--agent-fg) 32%, transparent);
   --agent-empty-action-bg: color-mix(in srgb, var(--agent-bg) 72%, #ffffff 28%);
@@ -538,6 +549,37 @@ body {
   background: var(--agent-chat-row-hover);
 }
 
+.agent-chat-empty-scroll {
+  min-height: 0;
+}
+
+.agent-empty-panel {
+  padding: 14px;
+  border: 1px solid var(--agent-empty-panel-border);
+  border-radius: 8px;
+  background: var(--agent-empty-panel-bg);
+  box-shadow: var(--agent-empty-panel-shadow);
+}
+
+.agent-empty-title {
+  letter-spacing: 0;
+}
+
+.agent-empty-action {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 3%, transparent);
+}
+
+.agent-empty-action-icon {
+  color: var(--agent-fg-secondary);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.agent-empty-action:hover .agent-empty-action-icon,
+.agent-empty-action:focus-visible .agent-empty-action-icon {
+  color: var(--agent-accent);
+  transform: translateX(2px);
+}
+
 .agent-bubble {
   border: 1px solid var(--agent-bubble-assistant-border);
   box-shadow: var(--agent-bubble-shadow);
@@ -569,9 +611,612 @@ body {
   box-shadow: var(--agent-composer-focus-shadow);
 }
 
+.agent-composer-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px 10px 7px;
+}
+
+.agent-composer-textarea {
+  flex: 1 1 auto;
+  min-height: 32px;
+  max-height: 120px;
+  min-width: 0;
+  padding: 5px 4px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  line-height: 20px;
+  resize: none;
+}
+
+.agent-composer-textarea::placeholder {
+  color: var(--vscode-descriptionForeground);
+}
+
+.agent-composer-popover {
+  position: absolute;
+  right: -1px;
+  bottom: 100%;
+  left: -1px;
+  z-index: 50;
+  width: auto;
+  max-height: min(260px, 42vh);
+  margin-bottom: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--agent-fg) 10%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--agent-elevated) 96%, var(--agent-bg) 4%);
+  box-shadow: 0 14px 34px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.26));
+  color: var(--agent-fg);
+}
+
+.agent-composer-popover-scroll {
+  max-height: min(260px, 42vh);
+  overflow-y: auto;
+  padding: 5px;
+}
+
+.agent-composer-popover-hint,
+.agent-composer-popover-empty {
+  padding: 5px 8px;
+  color: var(--agent-fg-secondary);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.agent-composer-popover-section {
+  padding: 6px 8px 4px;
+  color: var(--agent-fg-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 12px;
+}
+
+.agent-composer-popover-section-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--agent-elevated) 96%, var(--agent-bg) 4%);
+}
+
+.agent-composer-popover-row {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--agent-fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-composer-popover-row:hover,
+.agent-composer-popover-row:focus-visible {
+  background: color-mix(in srgb, var(--agent-fg) 6%, transparent);
+  outline: none;
+}
+
+.agent-composer-popover-row.is-selected {
+  border-color: color-mix(in srgb, var(--agent-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+}
+
+.agent-composer-command-row {
+  min-height: 32px;
+  grid-template-columns: minmax(68px, 82px) minmax(0, 1fr) auto;
+}
+
+.agent-composer-mention-row {
+  min-height: 38px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.agent-composer-popover-primary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--agent-fg);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-command-row .agent-composer-popover-primary:not(.is-selected) {
+  color: var(--vscode-textLink-foreground);
+}
+
+.agent-composer-popover-secondary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--agent-fg-secondary);
+  font-size: 10.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-popover-row.is-selected .agent-composer-popover-secondary {
+  color: var(--agent-fg);
+  opacity: 0.78;
+}
+
+.agent-composer-popover-badge {
+  max-width: 76px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--agent-fg-secondary);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-popover-row.is-selected .agent-composer-popover-badge {
+  background: color-mix(in srgb, var(--agent-bg) 58%, transparent);
+  color: var(--agent-fg);
+}
+
+.agent-composer-glyph {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agent-composer-glyph svg {
+  width: 13px;
+  height: 13px;
+}
+
+.agent-composer-thumbnail {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.agent-reference-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-reference-row-attached {
+  padding: 8px 12px 0;
+}
+
+.agent-reference-token {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(280px, 100%);
+  height: 26px;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--agent-fg) 10%, transparent);
+  border-radius: 999px;
+  color: var(--agent-fg);
+  font-size: 11.5px;
+  line-height: 1;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.agent-reference-token-ambient {
+  max-width: min(360px, 54%);
+  background: color-mix(in srgb, var(--agent-fg) 10%, transparent);
+}
+
+.agent-reference-token-attached {
+  background: color-mix(in srgb, var(--agent-accent) 11%, var(--agent-composer-bg));
+  border-color: color-mix(in srgb, var(--agent-accent) 20%, transparent);
+}
+
+.agent-reference-token-inline {
+  max-width: min(240px, 100%);
+  background: color-mix(in srgb, var(--agent-bg) 72%, transparent);
+  border-color: color-mix(in srgb, var(--agent-fg) 12%, transparent);
+}
+
+.agent-reference-token.is-clickable {
+  cursor: pointer;
+}
+
+.agent-reference-token.is-clickable:hover,
+.agent-reference-token.is-clickable:focus-visible {
+  border-color: color-mix(in srgb, var(--agent-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 14%, transparent);
+  outline: none;
+}
+
+.agent-reference-token-attached:hover {
+  border-color: color-mix(in srgb, var(--agent-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 15%, var(--agent-composer-bg));
+}
+
+.agent-reference-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--agent-fg-secondary);
+}
+
+.agent-reference-thumbnail {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.agent-reference-label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-reference-meta,
+.agent-reference-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--agent-fg-secondary);
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+.agent-reference-count {
+  flex: 0 0 auto;
+}
+
+.agent-reference-remove {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--agent-fg-secondary);
+  cursor: pointer;
+  opacity: 0.78;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.agent-reference-remove:hover,
+.agent-reference-remove:focus-visible {
+  background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 14%, transparent);
+  color: var(--vscode-errorForeground, #f14c4c);
+  opacity: 1;
+  outline: none;
+}
+
+.agent-canvas-reference-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 0 8px 6px;
+}
+
+.agent-canvas-reference-actions {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-canvas-reference-action {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  max-width: 120px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--agent-fg) 10%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--agent-bg) 64%, transparent);
+  color: var(--agent-fg);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.agent-canvas-reference-action:hover,
+.agent-canvas-reference-action:focus-visible {
+  border-color: color-mix(in srgb, var(--agent-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+  outline: none;
+}
+
+.agent-control-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 150px;
+  min-height: 24px;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.agent-control-chip:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.agent-control-chip:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--agent-accent));
+  outline-offset: 1px;
+}
+
+.agent-control-chip[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agent-accent) 24%, transparent);
+}
+
+.agent-control-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-control-chip-muted {
+  opacity: 0.62;
+}
+
+.agent-control-chip-icon {
+  justify-content: center;
+  width: 28px;
+  max-width: 28px;
+  padding-inline: 0;
+}
+
+.agent-control-chip-category {
+  max-width: 88px;
+}
+
+.agent-control-chip-model {
+  max-width: 156px;
+}
+
+.agent-control-chip-param {
+  justify-content: center;
+  min-width: 56px;
+  max-width: 92px;
+}
+
+.agent-control-chip-collapse {
+  width: 22px;
+  max-width: 22px;
+  min-height: 22px;
+  opacity: 0.72;
+}
+
+.agent-generation-params {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-dropdown-menu {
+  z-index: 50;
+  padding: 4px;
+  overflow-x: hidden;
+  color: var(--vscode-dropdown-foreground, var(--agent-fg));
+  background: color-mix(
+    in srgb,
+    var(--vscode-dropdown-background, var(--agent-menu-bg)) 96%,
+    var(--agent-bg) 4%
+  );
+  border: 1px solid var(--vscode-dropdown-border, var(--agent-border));
+  border-radius: 8px;
+  box-shadow: 0 12px 30px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.26));
+}
+
+.agent-dropdown-menu-compact {
+  width: max-content;
+  min-width: 96px;
+  max-width: min(180px, calc(100vw - 24px));
+}
+
+.agent-dropdown-menu-model {
+  min-width: 210px;
+  max-width: min(300px, calc(100vw - 24px));
+}
+
+.agent-dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 26px;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-dropdown-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-dropdown-item:hover,
+.agent-dropdown-item:focus-visible {
+  background: var(--vscode-list-hoverBackground);
+  outline: none;
+}
+
+.agent-dropdown-item-selected {
+  color: var(--vscode-textLink-foreground);
+  background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
+}
+
+.agent-dropdown-item-muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.agent-dropdown-item-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.agent-dropdown-section {
+  margin: 4px 4px 2px;
+  padding: 6px 4px 3px;
+  border-top: 1px solid var(--vscode-dropdown-border, var(--agent-border));
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.agent-dropdown-section:first-child {
+  margin-top: 0;
+  padding-top: 2px;
+  border-top: 0;
+}
+
+@media (max-width: 520px) {
+  .agent-canvas-reference-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-reference-token-ambient {
+    max-width: 100%;
+  }
+}
+
 .agent-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 37px;
+  padding: 4px 8px;
   border-top: 1px solid var(--agent-composer-divider);
   background: color-mix(in srgb, var(--agent-composer-bg) 82%, transparent);
+}
+
+.agent-composer-tool-button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.agent-composer-tool-button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.agent-composer-tool-button:focus-visible {
+  border-color: color-mix(in srgb, var(--agent-accent) 34%, transparent);
+  outline: 1px solid var(--vscode-focusBorder, var(--agent-accent));
+  outline-offset: 1px;
+}
+
+.agent-composer-tool-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.agent-composer-tool-button-text {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agent-composer-media-count {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 5px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+.agent-composer-action-button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.agent-composer-action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .agent-composer-send {
@@ -585,9 +1230,77 @@ body {
   background: color-mix(in srgb, var(--agent-composer-send-bg) 88%, #ffffff 12%);
 }
 
+.agent-composer-queue {
+  border-color: color-mix(in srgb, var(--agent-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--agent-accent) 14%, transparent);
+  color: var(--agent-accent);
+}
+
+.agent-composer-queue:not(:disabled):hover {
+  background: color-mix(in srgb, var(--agent-accent) 20%, transparent);
+}
+
+.agent-composer-stop {
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 70%, transparent);
+  background: var(--vscode-errorForeground);
+  color: #ffffff;
+}
+
+.agent-composer-stop:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+.agent-composer-queue-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 26%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent-accent) 10%, transparent);
+  color: var(--agent-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.agent-composer-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 50;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 7px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 12px 26px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.24));
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.agent-composer-tooltip-muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.agent-composer-tooltip-link {
+  margin-top: 3px;
+  color: var(--vscode-textLink-foreground);
+}
+
 .agent-header {
   background: color-mix(in srgb, var(--agent-elevated) 94%, transparent);
   border-bottom: 1px solid var(--agent-divider);
+}
+
+.agent-header-actions {
+  min-width: max-content;
+  padding-inline-start: 2px;
 }
 
 .agent-header-action {
@@ -595,26 +1308,238 @@ body {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  width: 28px;
+  height: 28px;
   min-width: 28px;
   min-height: 28px;
-  padding: 6px;
-  background: transparent;
+  padding: 0;
+  background: color-mix(in srgb, var(--agent-elevated) 42%, transparent);
   color: var(--agent-fg-secondary);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--agent-fg) 8%, transparent);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 3%, transparent);
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  flex: 0 0 28px;
+  line-height: 1;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+    box-shadow 0.12s ease, opacity 0.12s ease;
 }
 
-.agent-header-action:hover {
-  background: var(--agent-hover);
+.agent-header-action:hover,
+.agent-header-action:focus-visible {
+  background: color-mix(in srgb, var(--agent-fg) 7%, transparent);
+  border-color: color-mix(in srgb, var(--agent-fg) 14%, transparent);
   color: var(--agent-fg);
+}
+
+.agent-header-action:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--agent-accent));
+  outline-offset: 1px;
 }
 
 .agent-header-action.is-active {
   background: var(--agent-accent-soft);
   color: var(--agent-fg);
   border-color: color-mix(in srgb, var(--agent-accent) 28%, transparent);
+}
+
+.agent-header-action svg {
+  flex-shrink: 0;
+}
+
+.agent-account-trigger {
+  overflow: hidden;
+}
+
+.agent-account-avatar,
+.agent-account-status-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-account-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent-accent) 18%, var(--agent-elevated) 82%);
+  color: var(--agent-fg);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agent-account-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--agent-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent-success) 14%, transparent);
+}
+
+.agent-header-menu {
+  min-width: 210px;
+  max-width: min(320px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--vscode-dropdown-border, var(--agent-border));
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--vscode-dropdown-background, var(--agent-menu-bg)) 96%,
+    var(--agent-bg) 4%
+  );
+  box-shadow: 0 14px 34px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.24));
+  color: var(--agent-fg);
+}
+
+.agent-header-menu-summary,
+.agent-header-menu-search,
+.agent-header-menu-footer {
+  padding: 8px;
+}
+
+.agent-header-menu-summary,
+.agent-header-menu-search {
+  border-bottom: 1px solid var(--agent-divider);
+}
+
+.agent-header-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--agent-fg);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.agent-header-menu-item:hover,
+.agent-header-menu-item:focus-visible,
+.agent-header-menu-item.is-active {
+  background: var(--agent-hover);
+  outline: none;
+}
+
+.agent-header-menu-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-menu-icon-button {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--agent-fg-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.agent-menu-icon-button:hover,
+.agent-menu-icon-button:focus-visible {
+  background: var(--agent-hover);
+  color: var(--agent-fg);
+  outline: none;
+}
+
+.agent-history-menu {
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, 70vh);
+}
+
+.agent-history-menu-section {
+  padding: 7px 10px 4px;
+  border-bottom: 1px solid var(--agent-divider);
+}
+
+.agent-history-menu-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.agent-history-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 7px;
+}
+
+.agent-history-menu-item.is-active {
+  background: color-mix(in srgb, var(--agent-accent) 10%, transparent);
+}
+
+.agent-header-menu-item-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-header-menu-item-main:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--agent-accent));
+  outline-offset: -1px;
+}
+
+.agent-history-menu-title {
+  overflow: hidden;
+  color: var(--agent-fg);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-history-menu-meta,
+.agent-history-menu-footer-hint,
+.agent-history-menu-empty {
+  color: var(--agent-fg-secondary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.agent-history-menu-meta {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+}
+
+.agent-history-menu-empty {
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.agent-history-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--agent-divider);
+}
+
+.agent-history-clear-button {
+  padding: 2px 4px;
+  font-size: 10px;
+  line-height: 14px;
 }
 
 .agent-tab {

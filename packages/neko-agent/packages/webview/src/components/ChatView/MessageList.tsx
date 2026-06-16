@@ -119,7 +119,7 @@ export function MessageList({
   return (
     <div
       ref={parentRef}
-      className="flex-1 overflow-y-auto pl-3 pr-1 scrollbar-auto-hide"
+      className="agent-message-list flex-1 overflow-y-auto scrollbar-auto-hide"
       style={{ contain: 'strict' }}
     >
       <div
@@ -146,7 +146,7 @@ export function MessageList({
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
-              <div className="py-0.5">
+              <div className="agent-message-list-item py-0.5">
                 {item.kind === 'thinking_indicator' ? (
                   <ThinkingIndicator identity={identities.assistant} />
                 ) : item.kind === 'content_block' ? (

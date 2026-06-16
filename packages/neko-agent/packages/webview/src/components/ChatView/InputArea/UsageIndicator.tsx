@@ -62,17 +62,12 @@ export function UsageIndicator({
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={handleClick}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         disabled={isCompressing || !onCompress}
-        className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
-          isCompressing
-            ? 'opacity-50 cursor-wait'
-            : onCompress
-              ? 'hover:bg-[var(--vscode-toolbar-hoverBackground)] cursor-pointer'
-              : 'cursor-default'
-        }`}
+        className={`agent-composer-tool-button ${isCompressing ? 'cursor-wait' : ''}`}
         title={t('chat.usage.clickToCompress')}
       >
         {isCompressing ? (
@@ -129,18 +124,16 @@ export function UsageIndicator({
 
       {/* Tooltip */}
       {showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--vscode-editorWidget-background)] border border-[var(--vscode-editorWidget-border)] rounded shadow-lg text-[11px] whitespace-nowrap z-50">
-          <div className="text-[var(--vscode-foreground)]">
+        <div className="agent-composer-tooltip">
+          <div>
             {t('chat.usage.tokens')}: {tokenCount.toLocaleString()} /{' '}
             {effectiveMaxTokens.toLocaleString()}
           </div>
-          <div className="text-[var(--vscode-descriptionForeground)]">
+          <div className="agent-composer-tooltip-muted">
             {percentage.toFixed(1)}% {t('chat.usage.used')} — {formatTokenCount(tokenCount)}
           </div>
           {onCompress && !isCompressing && (
-            <div className="text-[var(--vscode-textLink-foreground)] mt-1">
-              {t('chat.usage.clickToCompress')}
-            </div>
+            <div className="agent-composer-tooltip-link">{t('chat.usage.clickToCompress')}</div>
           )}
         </div>
       )}

@@ -27,7 +27,10 @@ import {
   projectMessageAttachments,
   type MessageAttachmentProjection,
 } from '@/presenters/message-attachment-presenter';
-import { AgentContextChip } from '@/components/ChatView/InputArea/AgentContextChip';
+import {
+  projectAttachmentReferenceToken,
+  projectMessageContextReferenceToken,
+} from '@/presenters/reference-token-presenter';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
@@ -37,6 +40,9 @@ import {
   selectMessageIdentity,
   type MessageIdentityMap,
 } from '@/components/ChatView/message-identity';
+import { ReferenceToken } from '@/components/ChatView/InputArea/ReferenceToken';
+
+type MessageContextReference = NonNullable<Message['contextReferences']>[number];
 
 interface MessageItemProps {
   message: Message;
@@ -83,14 +89,33 @@ function AttachmentDisplay({ projection }: { projection: MessageAttachmentProjec
     );
   }
 
+  const token = projectAttachmentReferenceToken(projection.attachment);
   return (
-    <div className="agent-bubble agent-bubble-assistant mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]">
-      <span>{projection.icon}</span>
-      <span className="truncate max-w-[150px]">{projection.name}</span>
-      {projection.showSize && projection.sizeLabel && (
-        <span className="text-[var(--vscode-descriptionForeground)]">({projection.sizeLabel})</span>
-      )}
-    </div>
+    <ReferenceToken
+      kind={token.kind}
+      label={token.label}
+      title={token.title}
+      meta={token.meta}
+      thumbnailSrc={token.thumbnailSrc}
+      variant="inline"
+      className="mt-1"
+    />
+  );
+}
+
+function MessageContextReferenceDisplay({ reference }: { reference: MessageContextReference }) {
+  const token = projectMessageContextReferenceToken(reference);
+  return (
+    <ReferenceToken
+      kind={token.kind}
+      label={token.label}
+      title={token.title}
+      meta={token.meta}
+      thumbnailSrc={token.thumbnailSrc}
+      onClick={() =>
+        VSCodeMessages.revealContextSource(reference.type, reference.id, reference.navigationData)
+      }
+    />
   );
 }
 
@@ -440,19 +465,7 @@ export const MessageItem = memo(function MessageItem({
               {message.contextReferences && message.contextReferences.length > 0 && (
                 <div className="mb-1.5 flex flex-wrap gap-1">
                   {message.contextReferences.map((ref) => (
-                    <AgentContextChip
-                      key={ref.id}
-                      payload={{
-                        type: ref.type,
-                        id: ref.id,
-                        label: ref.label,
-                        summary: '',
-                        data: null,
-                      }}
-                      onClick={() =>
-                        VSCodeMessages.revealContextSource(ref.type, ref.id, ref.navigationData)
-                      }
-                    />
+                    <MessageContextReferenceDisplay key={ref.id} reference={ref} />
                   ))}
                 </div>
               )}

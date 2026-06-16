@@ -79,15 +79,14 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Show help message')).toBeTruthy();
     expect(screen.getByText('Plugin')).toBeTruthy();
     expect(screen.getByText('Personal')).toBeTruthy();
-    expect(panel.className).toContain('max-h-[min(228px,34vh)]');
-    expect(panel.className).toContain('left-0');
-    expect(panel.className).toContain('right-0');
-    expect(panel.className).not.toContain('w-[min');
+    expect(panel.className).toContain('agent-composer-popover');
+    expect(panel.className).toContain('agent-composer-command-menu');
+    expect(screen.getByRole('menu')).toBe(panel);
 
-    const selectedButton = screen.getByRole('button', { name: /\/commit/i });
-    expect(selectedButton.className).toContain('h-8');
-    expect(selectedButton.className).toContain('rounded-[11px]');
-    expect(selectedButton.className).toContain('grid-cols-[82px_minmax(0,1fr)_auto]');
+    const selectedButton = screen.getByRole('menuitem', { name: /\/storyboard/i });
+    expect(selectedButton.className).toContain('agent-composer-popover-row');
+    expect(selectedButton.className).toContain('agent-composer-command-row');
+    expect(selectedButton.className).toContain('is-selected');
   });
 
   it('keeps display ordering aligned with keyboard selection groups', () => {

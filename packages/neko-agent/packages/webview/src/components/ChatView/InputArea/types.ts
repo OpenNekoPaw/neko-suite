@@ -97,7 +97,7 @@ export type MentionItemKind =
 
 /**
  * Unified item shown in the @mention popup.
- * Files insert a @path reference; non-file items create an AgentContextChip.
+ * Items with filePath become @path reference tokens; other context-backed items create AgentContextChip.
  */
 export interface MentionItem {
   /** Stable unique key */
@@ -107,7 +107,7 @@ export interface MentionItem {
   label: string;
   /** Secondary hint text */
   description?: string;
-  /** For files: relative workspace path to insert */
+  /** Path sent as an @ reference when this item is selected. */
   filePath?: string;
   /** Optional icon supplied by host protocol */
   icon?: string;
@@ -124,5 +124,14 @@ export interface MentionItem {
   /** For canvas-node / character / scene: payload for AgentContextChip */
   contextPayload?: import('@neko/shared').AgentContextPayload;
   /** Optional thumbnail for visual enrichment (webview-safe URI or base64) */
+  thumbnailUri?: string;
+}
+
+export interface SelectedFileReference {
+  id: string;
+  path: string;
+  label: string;
+  mediaType?: ProjectFile['mediaType'];
+  source?: ProjectFile['source'];
   thumbnailUri?: string;
 }

@@ -2,9 +2,8 @@
  * GenerationParamsBar — right side of the InputArea top bar.
  *
  * In agent mode:
- *   - Collapsed to [⚙] when no generation context.
- *   - Expanded: [Category▼] [MediaModel▼] [ratio▼] [resolution▼] [duration▼?] [×]
- *   - Media model selector is integrated (no separate AgentMediaBar).
+ *   - Always shows [Category▼] [MediaModel▼] [ratio▼] [resolution▼] [duration▼?].
+ *   - Media model selector is integrated so LLM model and generation model are visible together.
  *
  * In image/video/audio session modes:
  *   - Always visible, no category selector (implied by sessionMode).
@@ -12,15 +11,18 @@
  */
 
 import { useState, useRef } from 'react';
+import { CloseIcon, SettingsIcon } from '@neko/shared/icons';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
+import { useTranslation } from '@/i18n/I18nContext';
 import type { GenCategory, GenerationParams } from './types';
 import { SESSION_MODE_COLORS } from './SessionModeSelector';
 import type { ChatModelOption } from '@neko/shared';
 import { getCategoryColor, ModelDot } from './ModelIcon';
 import { projectGenerationParamsBarState } from '@/presenters/media-model-presenter';
+import { MediaCategoryIcon } from './ComposerIcons';
 
 // ─── small reusable param chip ─────────────────────────────────────────────
 
@@ -29,9 +31,10 @@ interface ParamDropdownProps {
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
   color?: string;
+  ariaLabel: string;
 }
 
-function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) {
+function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDropdownProps) {
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
@@ -49,16 +52,20 @@ function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) 
       <button
         type="button"
         onClick={handleOpen}
-        className="flex items-center gap-0.5 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+        aria-label={ariaLabel}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="agent-control-chip agent-control-chip-param"
         style={{ color: color ?? 'var(--vscode-descriptionForeground)' }}
       >
-        <span>{selected?.label ?? value}</span>
+        <span className="agent-control-chip-text">{selected?.label ?? value}</span>
         <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
       </button>
 
       {open && (
         <div
-          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[96px] py-1 z-50`}
+          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(direction)} left-0`}
+          role="menu"
         >
           {options.map((opt) => (
             <button
@@ -68,9 +75,10 @@ function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) 
                 onChange(opt.value);
                 setOpen(false);
               }}
-              className={`w-full px-3 py-1 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-                value === opt.value ? 'text-[var(--vscode-textLink-foreground)]' : ''
+              className={`agent-dropdown-item ${
+                value === opt.value ? 'agent-dropdown-item-selected' : ''
               }`}
+              role="menuitem"
             >
               {opt.label}
             </button>
@@ -81,37 +89,14 @@ function ParamDropdown({ value, options, onChange, color }: ParamDropdownProps) 
   );
 }
 
-// ─── category icon ──────────────────────────────────────────────────────────
-
-function CategoryIcon({ cat }: { cat: GenCategory }) {
-  if (cat === 'image') {
-    return (
-      <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-        <path d="M1 2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm1 0v6.5l2-2a.5.5 0 0 1 .65-.04l2 1.6 2-2a.5.5 0 0 1 .7 0L13 8V2H2z" />
-        <circle cx="4.5" cy="4.5" r="1" />
-      </svg>
-    );
-  }
-  if (cat === 'video') {
-    return (
-      <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-        <path d="M0 3a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 11 3v1.8l2-1.3A.5.5 0 0 1 14 4v6a.5.5 0 0 1-.77.42L11 9.2V11a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 0 11V3z" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 14 14" fill="currentColor" className="w-3 h-3">
-      <path d="M5 1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V1zM1 5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V5zm9-2a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V3z" />
-    </svg>
-  );
-}
-
 // ─── category selector chip ─────────────────────────────────────────────────
 
-const CATEGORY_LABELS: Record<GenCategory, string> = {
-  image: '图片',
-  video: '视频',
-  audio: '音频',
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const CATEGORY_LABEL_KEYS: Record<GenCategory, string> = {
+  image: 'chat.generation.category.image',
+  video: 'chat.generation.category.video',
+  audio: 'chat.generation.category.audio',
 };
 
 interface CategorySelectorProps {
@@ -120,12 +105,14 @@ interface CategorySelectorProps {
 }
 
 function CategorySelector({ category, onChange }: CategorySelectorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
   const getDirection = useDropdownDirection(ref, 'down');
   const color = SESSION_MODE_COLORS[category];
+  const categoryLabel = getCategoryLabel(t, category);
 
   const handleOpen = () => {
     if (!open) setDirection(getDirection());
@@ -137,17 +124,21 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
       <button
         type="button"
         onClick={handleOpen}
-        className="flex items-center gap-1 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="agent-control-chip agent-control-chip-category"
         style={{ color }}
+        title={categoryLabel}
       >
-        <CategoryIcon cat={category} />
-        <span>{CATEGORY_LABELS[category]}</span>
+        <MediaCategoryIcon category={category} size={13} />
+        <span className="agent-control-chip-text">{categoryLabel}</span>
         <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
       </button>
 
       {open && (
         <div
-          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg w-[96px] py-1 z-50`}
+          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(direction)} left-0`}
+          role="menu"
         >
           {(['image', 'video', 'audio'] as GenCategory[]).map((cat) => (
             <button
@@ -157,13 +148,16 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
                 onChange(cat);
                 setOpen(false);
               }}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors`}
+              className={`agent-dropdown-item ${
+                cat === category ? 'agent-dropdown-item-selected' : ''
+              }`}
               style={{ color: cat === category ? SESSION_MODE_COLORS[cat] : undefined }}
+              role="menuitem"
             >
               <span style={{ color: SESSION_MODE_COLORS[cat] }}>
-                <CategoryIcon cat={cat} />
+                <MediaCategoryIcon category={cat} size={13} />
               </span>
-              {CATEGORY_LABELS[cat]}
+              <span className="agent-dropdown-item-label">{getCategoryLabel(t, cat)}</span>
             </button>
           ))}
         </div>
@@ -187,6 +181,7 @@ function InlineMediaModelChip({
   models,
   onSelect,
 }: InlineMediaModelChipProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<'up' | 'down'>('down');
   const ref = useRef<HTMLDivElement>(null);
@@ -197,6 +192,7 @@ function InlineMediaModelChip({
   const selected = models.find((m) => m.id === selectedId);
   const isConfigured = !!selected && selectedId !== 'none';
   const hasModels = models.length > 0;
+  const categoryLabel = getCategoryLabel(t, category);
 
   const handleOpen = () => {
     if (!hasModels) return;
@@ -214,21 +210,32 @@ function InlineMediaModelChip({
       <button
         type="button"
         onClick={handleOpen}
-        className="flex items-center gap-1 px-1.5 py-1 rounded text-[11px] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`agent-control-chip agent-control-chip-model ${
+          isConfigured ? '' : 'agent-control-chip-muted'
+        }`}
         style={{
           color: isConfigured ? color : 'var(--vscode-descriptionForeground)',
-          opacity: isConfigured ? 1 : 0.6,
         }}
-        title={selected?.label ?? (hasModels ? `Select ${category} model` : `No ${category} model`)}
+        title={
+          selected?.label ??
+          (hasModels
+            ? t('chat.generation.model.select', { category: categoryLabel })
+            : t('chat.generation.model.unconfigured', { category: categoryLabel }))
+        }
       >
         <ModelDot color={isConfigured ? color : 'var(--vscode-descriptionForeground)'} />
-        <span>{isConfigured ? shortenLabel(selected.label) : 'none'}</span>
+        <span className="agent-control-chip-text">
+          {isConfigured ? shortenLabel(selected.label) : t('chat.generation.model.noneShort')}
+        </span>
         {hasModels && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
       {open && hasModels && (
         <div
-          className={`absolute ${dropdownPositionClass(direction)} left-0 bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg min-w-[180px] py-1 z-50`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          role="menu"
         >
           <button
             type="button"
@@ -236,13 +243,12 @@ function InlineMediaModelChip({
               onSelect('none');
               setOpen(false);
             }}
-            className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors ${
-              selectedId === 'none'
-                ? 'text-[var(--vscode-textLink-foreground)]'
-                : 'text-[var(--vscode-descriptionForeground)]'
+            className={`agent-dropdown-item ${
+              selectedId === 'none' ? 'agent-dropdown-item-selected' : 'agent-dropdown-item-muted'
             }`}
+            role="menuitem"
           >
-            不使用
+            {t('chat.generation.model.none')}
           </button>
           {models.map((m) => (
             <button
@@ -252,10 +258,16 @@ function InlineMediaModelChip({
                 onSelect(m.id);
                 setOpen(false);
               }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+              className={`agent-dropdown-item ${
+                m.id === selectedId ? 'agent-dropdown-item-selected' : ''
+              }`}
+              role="menuitem"
             >
               <ModelDot color={color} />
-              <span style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}>
+              <span
+                className="agent-dropdown-item-label"
+                style={{ color: m.id === selectedId ? color : 'var(--vscode-foreground)' }}
+              >
                 {m.label}
               </span>
             </button>
@@ -304,10 +316,10 @@ const AUDIO_DURATION_OPTIONS = [1, 2, 3, 5, 8, 10, 15, 30].map((n) => ({
 }));
 
 const AUDIO_TYPE_OPTIONS = [
-  { value: 'music', label: '音乐' },
-  { value: 'sfx', label: '音效' },
-  { value: 'ambient', label: '环境音' },
-  { value: 'voice', label: '人声' },
+  { value: 'music', labelKey: 'chat.generation.audioType.music' },
+  { value: 'sfx', labelKey: 'chat.generation.audioType.sfx' },
+  { value: 'ambient', labelKey: 'chat.generation.audioType.ambient' },
+  { value: 'voice', labelKey: 'chat.generation.audioType.voice' },
 ];
 
 // ─── params panel for a given category ──────────────────────────────────────
@@ -320,6 +332,8 @@ interface ParamsPanelProps {
 }
 
 function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
+  const { t } = useTranslation();
+
   if (category === 'image') {
     return (
       <>
@@ -328,12 +342,14 @@ function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
           options={RATIO_OPTIONS}
           onChange={(v) => onChange({ ratio: v as GenerationParams['ratio'] })}
           color={color}
+          ariaLabel={t('chat.generation.param.ratio')}
         />
         <ParamDropdown
           value={params.resolution}
           options={IMAGE_RESOLUTION_OPTIONS}
           onChange={(v) => onChange({ resolution: v as GenerationParams['resolution'] })}
           color={color}
+          ariaLabel={t('chat.generation.param.resolution')}
         />
       </>
     );
@@ -347,18 +363,21 @@ function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
           options={RATIO_OPTIONS}
           onChange={(v) => onChange({ ratio: v as GenerationParams['ratio'] })}
           color={color}
+          ariaLabel={t('chat.generation.param.ratio')}
         />
         <ParamDropdown
           value={params.resolution}
           options={VIDEO_RESOLUTION_OPTIONS}
           onChange={(v) => onChange({ resolution: v as GenerationParams['resolution'] })}
           color={color}
+          ariaLabel={t('chat.generation.param.resolution')}
         />
         <ParamDropdown
           value={String(params.videoDuration)}
           options={VIDEO_DURATION_OPTIONS}
           onChange={(v) => onChange({ videoDuration: Number(v) })}
           color={color}
+          ariaLabel={t('chat.generation.param.videoDuration')}
         />
       </>
     );
@@ -369,15 +388,20 @@ function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
     <>
       <ParamDropdown
         value={params.audioType}
-        options={AUDIO_TYPE_OPTIONS}
+        options={AUDIO_TYPE_OPTIONS.map((option) => ({
+          value: option.value,
+          label: t(option.labelKey),
+        }))}
         onChange={(v) => onChange({ audioType: v as GenerationParams['audioType'] })}
         color={color}
+        ariaLabel={t('chat.generation.param.audioType')}
       />
       <ParamDropdown
         value={String(params.audioDuration)}
         options={AUDIO_DURATION_OPTIONS}
         onChange={(v) => onChange({ audioDuration: Number(v) })}
         color={color}
+        ariaLabel={t('chat.generation.param.audioDuration')}
       />
     </>
   );
@@ -386,6 +410,7 @@ function ParamsPanel({ category, params, onChange, color }: ParamsPanelProps) {
 // ─── main component ─────────────────────────────────────────────────────────
 
 export function GenerationParamsBar() {
+  const { t } = useTranslation();
   const {
     sessionMode,
     genCategory,
@@ -419,18 +444,16 @@ export function GenerationParamsBar() {
       <button
         type="button"
         onClick={() => setManuallyExpanded(true)}
-        className="flex items-center justify-center w-7 h-7 rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors text-[var(--vscode-descriptionForeground)] opacity-50 hover:opacity-80"
-        title="生成参数"
+        className="agent-control-chip agent-control-chip-icon"
+        title={t('chat.generation.params.title')}
       >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-          <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
-        </svg>
+        <SettingsIcon size={14} strokeWidth={1.8} />
       </button>
     );
   }
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="agent-generation-params">
       {/* Category selector — only in agent mode */}
       {projection.showCategorySelector && (
         <CategorySelector category={genCategory} onChange={onGenCategoryChange} />
@@ -459,12 +482,16 @@ export function GenerationParamsBar() {
         <button
           type="button"
           onClick={() => setManuallyExpanded(false)}
-          className="flex items-center justify-center w-5 h-5 rounded hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors text-[var(--vscode-descriptionForeground)] opacity-40 hover:opacity-70"
-          title="收起"
+          className="agent-control-chip agent-control-chip-icon agent-control-chip-collapse"
+          title={t('chat.generation.params.collapse')}
         >
-          ×
+          <CloseIcon size={12} strokeWidth={2} />
         </button>
       )}
     </div>
   );
+}
+
+function getCategoryLabel(t: Translate, category: GenCategory): string {
+  return t(CATEGORY_LABEL_KEYS[category]);
 }

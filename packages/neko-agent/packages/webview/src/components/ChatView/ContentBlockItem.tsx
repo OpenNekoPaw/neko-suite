@@ -18,6 +18,14 @@ import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';
 import {
+  CodeIcon,
+  EditIcon,
+  FileIcon,
+  InfoIcon,
+  PackageIcon,
+  SettingsIcon,
+} from '@neko/shared/icons';
+import {
   projectContentBlockUi,
   type ContentBlockHeaderIconKind,
   type ContentBlockHeaderTone,
@@ -47,11 +55,11 @@ interface ContentBlockItemProps {
 }
 
 const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
-  thinking: '💭',
-  response: '💬',
-  tool: '🔧',
-  edit: '📝',
-  plan: '📋',
+  thinking: 'thinking',
+  response: 'response',
+  tool: 'tool',
+  edit: 'edit',
+  plan: 'plan',
   composite: '[]',
 };
 
@@ -108,9 +116,13 @@ export const ContentBlockItem = memo(function ContentBlockItem({
           {/* Header: Block type + timestamp */}
           <div className="flex items-center gap-2 mb-0.5">
             <span
-              className={`text-[11px] font-medium ${blockHeaderToneClassByTone[projection.header.tone]}`}
+              className={`inline-flex items-center gap-1 text-[11px] font-medium ${blockHeaderToneClassByTone[projection.header.tone]}`}
             >
-              {blockHeaderIconByKind[projection.header.iconKind]} {projection.header.label}
+              <ContentBlockHeaderIcon
+                kind={projection.header.iconKind}
+                className="h-3 w-3 flex-shrink-0"
+              />
+              {projection.header.label}
             </span>
             <span className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-0 group-hover:opacity-100 transition-opacity">
               {projection.header.timestampLabel}
@@ -129,6 +141,29 @@ export const ContentBlockItem = memo(function ContentBlockItem({
     </div>
   );
 });
+
+function ContentBlockHeaderIcon({
+  kind,
+  className,
+}: {
+  kind: ContentBlockHeaderIconKind;
+  className?: string;
+}) {
+  switch (blockHeaderIconByKind[kind]) {
+    case 'thinking':
+      return <InfoIcon className={className} />;
+    case 'response':
+      return <FileIcon className={className} />;
+    case 'tool':
+      return <SettingsIcon className={className} />;
+    case 'edit':
+      return <EditIcon className={className} />;
+    case 'plan':
+      return <CodeIcon className={className} />;
+    case '[]':
+      return <PackageIcon className={className} />;
+  }
+}
 
 /**
  * Render the content of a block based on its type
