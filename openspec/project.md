@@ -73,6 +73,11 @@ For multi-module changes, include the five-layer analysis:
   caller edits?
 - Testing: what is covered by unit tests, contract tests, integration tests,
   CLI smoke, Webview runtime smoke, VSCode smoke, fixture smoke, or benchmarks?
+  For Extension Webview visuals/interactions, Webview runtime smoke means
+  Extension Development Host plus the `vscode-extension-debugger` Skill by
+  default. Chrome, the generic Browser plugin, Playwright, or a Vite dev server
+  in a regular browser must not be used as the default acceptance surface unless
+  the user explicitly asks for browser-compatibility validation.
 
 Designs must record rejected alternatives when they avoid a tempting but unsafe
 shortcut, especially around Engine authority, Webview sandboxing, runtime handles,
@@ -117,6 +122,32 @@ migrations for unreleased or internal project formats, DTOs, commands, runtime
 payloads, and workflow contracts when doing so removes legacy debt or keeps the
 canonical architecture clearer than maintaining compatibility shims.
 
+Prelaunch status does not mean version compatibility is ignored. The default is:
+break unreleased internal compatibility deliberately when it simplifies the
+architecture, but keep every breaking change diagnosable, reviewable, and
+recoverable.
+
+Allowed prelaunch breaking changes:
+
+- Replace internal APIs, DTOs, commands, Webview messages, Agent workflow
+  payloads, and fixtures without long-lived compatibility shims.
+- Revise unreleased `nk*` project drafts, local test fixtures, package manifests,
+  or runtime payloads when old data can be rebuilt, reimported, regenerated, or
+  intentionally discarded.
+- Remove legacy fallback fields, adapters, and compatibility bridges when the
+  canonical path is covered by tests or the remaining debt is tracked in a
+  ledger.
+
+Not allowed under the name of prelaunch cleanup:
+
+- Ignoring VS Code, Node, pnpm, Rust, OS, Webview sandbox, CSP, codec, Range,
+  Engine, Proto, or marketplace trust boundaries.
+- Silently deleting or corrupting valuable local project data, user settings,
+  trust state, entitlements, plugin install records, or generated artifacts.
+- Accepting higher-version durable files without fail-closed diagnostics.
+- Adding broad compatibility shims without owner, replacement, validation, and
+  removal criteria.
+
 Breaking migrations must be explicit, not incidental:
 
 - State in the proposal or design what is breaking and why prelaunch cleanup is
@@ -129,6 +160,8 @@ Breaking migrations must be explicit, not incidental:
   and any migration or rebuild path.
 - Avoid compatibility shims unless they protect valuable local data or an
   already documented public contract.
+- If old data is intentionally ignored or discarded, explain why it has no
+  migration value and how users or tests recover.
 
 Even before launch, do not break security or trust state, marketplace/plugin
 governance, external provider contracts, published release artifacts, or durable
@@ -210,6 +243,10 @@ Shared foundation expectations:
 - Extension host code must not import React/ReactDOM or Webview implementation.
 - Webview resources must be exposed through `webview.asWebviewUri(...)` and
   authorized `localResourceRoots`.
+- Webview CSP must default deny and only open explicit script/connect/media
+  sources. Native `<video>`/`<audio>` use is limited by VS Code media codec
+  support; unsupported or seek-heavy media must use Engine probe, file-access
+  Range endpoints, compatible proxy, or stream descriptors.
 - Extension Host and Webview communicate through typed `postMessage` protocols.
 - Every `vscode.Disposable` must be explicitly owned and disposed.
 - Editor-bound panels belong inside the editor Webview when they depend on the
@@ -317,6 +354,9 @@ Git-friendly, AI-readable JSON with explicit versioning and validation.
   clearly in older SDKs.
 - New format fields should be optional during migration unless the change is a
   deliberate breaking format revision with migration strategy.
+- Prelaunch format revisions may break old drafts, but the change must still
+  declare whether existing files are migrated, rebuilt, reimported, ignored, or
+  intentionally discarded.
 
 ## Domain Principles
 
@@ -504,8 +544,10 @@ Recommended commands by impact:
 - Rust engine: `pnpm ci:local:rust` or targeted `cargo test`/`cargo clippy`.
 - Proto: `pnpm ci:local:proto`.
 - Architecture: `pnpm check`, plus `pnpm check:agent-boundaries` for Agent work.
-- Smoke: `pnpm smoke:engine`, `pnpm smoke:webview`, or focused VSCode debugger
-  smoke when runtime behavior, Webview lifecycle, or UX is affected.
+- Smoke: `pnpm smoke:engine`, `pnpm smoke:webview`,
+  `pnpm smoke:webview:runtime`, or focused VSCode debugger Skill smoke. Use
+  Webview runtime smoke by default when Extension Webview visuals,
+  interactions, CSP, media, Webview lifecycle, or UX are affected.
 
 When validation cannot be run, record why, what risk remains, and what follow-up
 will close it.

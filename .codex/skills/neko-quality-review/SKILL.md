@@ -40,7 +40,7 @@ Source of truth:
    - Dependency: are L0/L1/L2 and Webview/Extension/Rust boundaries respected?
    - Interface: are types, messages, schemas, and Proto contracts minimal and stable?
    - Extension: will the next similar feature avoid broad edits or duplication?
-   - Testing: what is covered by unit, integration, CLI smoke, or VSCode smoke?
+   - Testing: what is covered by unit, integration, CLI smoke, Webview runtime smoke, VSCode debugger Skill smoke, or explicit residual risk?
 
 5. Run or recommend validation by impact:
 
@@ -67,7 +67,10 @@ Source of truth:
    ```bash
    pnpm smoke:engine
    pnpm smoke:webview
+   pnpm smoke:webview:runtime
    ```
+
+   For Extension Webview visual, layout, interaction, focus, CSP, media preview, or lifecycle changes, use `pnpm smoke:webview:runtime` or an equivalent `vscode-extension-debugger` Skill run. Do not use Chrome, the generic Browser plugin, Playwright, or a Vite localhost page as the default validation path unless the user explicitly asks for browser-compatibility testing.
 
 ## Review Checklist
 
@@ -81,11 +84,12 @@ Always check:
 - Paths are relative or `${VAR}/path`, not hard-coded absolute paths.
 - Async flows handle errors, cancellation, resource disposal, and races.
 - Public contracts include tests or clear validation evidence.
+- Prelaunch breaking changes identify what breaks, the old-data strategy, and why compatibility shims are avoided; they do not relax runtime, security, trust, or valuable local-data boundaries.
 - Docs are updated when behavior, architecture, config, package entry points, or public contracts change.
 
 Add domain checks as needed:
 
-- Webview/UX: layout, theme, focus, keyboard, i18n, screenshot or VSCode smoke evidence.
+- Webview/UX: layout, theme, focus, keyboard, i18n, and runtime evidence from `pnpm smoke:webview:runtime` or an equivalent VS Code debugger Skill run; Chrome/Browser/Playwright screenshots do not count as default VS Code Webview acceptance evidence.
 - Engine/media: `cargo test`, CLI smoke, `serve` integration, performance before/after when relevant.
 - Proto/shared: generated types are synchronized and callers are migrated.
 - Agent/AI: tool contracts, permissions, Journal/traceability, failure recovery.
@@ -115,4 +119,4 @@ For post-implementation self-review, summarize:
 - Risk level and affected areas.
 - Key architecture/contract decisions.
 - Validation performed.
-- Remaining follow-up, especially engine CLI smoke, `serve` integration, Webview smoke, UX evidence, or performance baselines.
+- Remaining follow-up, especially engine CLI smoke, `serve` integration, Webview runtime smoke, UX evidence, or performance baselines.

@@ -53,20 +53,48 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 
 按影响范围选择最小可靠验证，并在交付说明或 PR 中记录命令和结果。
 
-| 范围                          | 推荐命令                           |
-| ----------------------------- | ---------------------------------- |
-| TS / Webview / Extension 通用 | `pnpm ci:local`                    |
-| Rust Engine                   | `pnpm ci:local:rust`               |
-| Proto 契约                    | `pnpm ci:local:proto`              |
-| 架构边界                      | `pnpm check`                       |
-| Agent 边界                    | `pnpm check:agent-boundaries`      |
-| 3D Route A 边界               | `pnpm check:3d-route-a-boundaries` |
-| 代码债务台账                  | `pnpm check:legacy-debt:ledger`    |
-| Engine runtime smoke          | `pnpm smoke:engine`                |
-| Webview build smoke           | `pnpm smoke:webview`               |
-| GitHub Actions 形状预检       | `pnpm ci:act`                      |
+| 范围                          | 推荐命令                                        |
+| ----------------------------- | ----------------------------------------------- |
+| TS / Webview / Extension 通用 | `pnpm ci:local`                                 |
+| Rust Engine                   | `pnpm ci:local:rust`                            |
+| Proto 契约                    | `pnpm ci:local:proto`                           |
+| 架构边界                      | `pnpm check`                                    |
+| Agent 边界                    | `pnpm check:agent-boundaries`                   |
+| 3D Route A 边界               | `pnpm check:3d-route-a-boundaries`              |
+| 代码债务台账                  | `pnpm check:legacy-debt:ledger`                 |
+| 质量门禁组合                  | `pnpm check:quality`                            |
+| Engine runtime smoke          | `pnpm smoke:engine`                             |
+| Webview build smoke           | `pnpm smoke:webview`                            |
+| Webview runtime smoke         | `pnpm smoke:webview:runtime`                    |
+| VS Code debugger Skill smoke  | `pnpm smoke:vscode-debugger -- --skill <skill>` |
+| GitHub Actions 形状预检       | `pnpm ci:act`                                   |
 
 `act` 只是本地 Linux job 形状预检，不替代 GitHub Actions。Rust macOS runner、平台打包和 release 矩阵以 GitHub Actions 为准。
+
+代码债务、边界例外、发布通道等机器可读门禁输入放在 `quality/`，由脚本和 CI 消费；本文只记录质量政策、验证矩阵和人工 review 边界。
+
+## 新需求可行性检查
+
+L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通过 spike、fixture、失败测试、Engine smoke、Webview runtime smoke、VSCode debugger Skill smoke、VSCode 调试证据或原型完成。可行性证据写入 OpenSpec design/tasks；若无法运行，必须记录原因、风险和后续关闭方式。
+
+## Prelaunch 兼容策略
+
+项目尚未发布时，可以选择显式破坏未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 和 nk\* 草稿格式，用于移除 legacy debt 或保持 canonical 架构清晰。此类破坏性调整不需要为所有历史草稿保留长期兼容 shim。
+
+但 prelaunch 不等于忽略版本兼容性。Review 必须确认：
+
+- proposal/design 说明了破坏内容、原因和影响面。
+- 旧数据处理策略明确：迁移、重建、重新导入、忽略或有意丢弃。
+- load/save、contract fixture、失败 diagnostic、迁移或重建路径有验证任务。
+- 兼容 shim 只有在保护有价值本地数据或已记录公共契约时才保留，并且有 owner、replacement、验证命令和移除条件。
+- VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 和安全边界不能以“未发布”为由忽略。
+- 有价值的本地项目数据、用户设置、trust state、entitlement、插件安装记录和生成产物不能静默丢失；必须迁移、重建、提示确认或 fail-closed。
+
+## Engine 与 Webview 专项约束
+
+Engine 变更涉及 Rust action、stream、file access、runtime state、native packaging 或 EngineClient contract 时，应单独记录 Rust/Proto/client/fixture/smoke 验证。Webview 变更涉及 runtime behavior、Extension/Webview message、layout、keyboard/focus、i18n、VSCode lifecycle、CSP、媒体 codec 兼容或 Range/seek 读取时，应单独记录 message contract、focused build/test、CSP/HTML helper 测试、Engine file-access 测试、Webview runtime smoke、VSCode debugger Skill smoke 或截图证据。
+
+普通浏览器、Chrome、Browser 插件、Playwright 或 Vite/localhost 只能作为热重载和显式浏览器兼容性辅助；它们不经过 VS Code Webview CSP、`webview.asWebviewUri(...)`、Extension/Webview message、焦点生命周期或 VS Code 主题注入，因此不能作为 Extension Webview 视觉/交互变更的默认验收证据。此类变更必须使用 Extension Development Host + `vscode-extension-debugger` Skill，运行 `pnpm smoke:webview:runtime` 或等价命令；若无法运行，必须记录原因、剩余风险和关闭方式。
 
 ## 功能偏离检查
 

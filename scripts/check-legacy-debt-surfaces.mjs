@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 
 const repoRoot = process.cwd();
-const ledgerPath = 'docs/architecture/code-debt-surface-ledger.json';
+const ledgerPath = 'quality/ledgers/code-debt-surface-ledger.json';
 
 const terms = ['legacy', 'fallback', 'deprecated'];
 const requiredSemanticClasses = [

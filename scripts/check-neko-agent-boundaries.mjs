@@ -133,7 +133,7 @@ const requiredCompatibilityExceptionFields = [
 ];
 
 const compatibilityExceptionExpirySeverities = new Set(['failure', 'warning']);
-const lcdRegisterPath = 'docs/architecture/agent-code-debt-lcd-register.json';
+const lcdRegisterPath = 'quality/ledgers/agent-code-debt-lcd-register.json';
 const lcdCategories = new Set([
   'confirmed-dead-code',
   'static-analysis-false-positive',

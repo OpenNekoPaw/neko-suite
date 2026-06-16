@@ -125,6 +125,7 @@
 
 - Webview 侧不要导入 `vscode`。
 - Extension 侧不要引入 React。
+- Vite/浏览器/Chrome/Playwright 只可作为 Webview 热重载和纯浏览器兼容性辅助；涉及 VS Code Extension Webview 的视觉、交互、CSP、消息、焦点或媒体验证时，必须使用 Extension Development Host + `vscode-extension-debugger` Skill。除非用户明确要求浏览器兼容性测试，不要调用 Chrome/Browser/Playwright 作为默认验证路径，也不要把普通浏览器打开 `localhost` 当作运行态验收。
 - 注意 Webview 状态丢失、异步竞态、内存泄漏和 `postMessage` 丢失等常见问题。
 - 所有 `vscode.Disposable` 资源都要显式释放。
 - 扩展之间不要建立直接依赖，优先走共享层或契约层。
@@ -137,6 +138,14 @@
   - `TODO(P2)`：可延期增强项
 - TODO 应与完整接口或骨架实现一起出现，不要边写边发明接口。
 
+## Prelaunch 兼容策略
+
+- 项目尚未发布时，可以对未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 和 nk\* 草稿格式做显式破坏性调整，用于清理 legacy debt 或收敛到更清晰的架构。
+- “未发布”不等于忽略版本兼容性。破坏性变更必须说明影响范围，以及旧数据是迁移、重建、重新导入、忽略还是有意丢弃。
+- 不要为了未发布草稿保留长期 compatibility shim；确需保留时必须有 owner、replacement、验证命令和移除条件。
+- 不能借 prelaunch cleanup 忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 或安全边界。
+- 不能静默删除或损坏有价值的本地项目数据、用户设置、trust state、entitlement、插件安装记录或生成产物；必须提供迁移、重建、确认或 fail-closed diagnostic。
+
 ## 测试与质量门禁
 
 - 修改完成后按影响范围执行最小必要验证，并逐步扩大：
@@ -144,6 +153,7 @@
   - `pnpm test`
   - `pnpm check`
   - Rust 相关改动：`cd packages/neko-engine && cargo test`
+  - Webview 视觉/交互改动：运行 `pnpm smoke:webview:runtime` 或等价的 `vscode-extension-debugger` Skill 验证；仅浏览器/Vite/Chrome/Playwright 验证不足以证明 VS Code Webview 运行态正确。
 - 重点关注以下架构规则：
   - 禁止循环依赖
   - Layer 0 不得依赖内部包

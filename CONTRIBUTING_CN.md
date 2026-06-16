@@ -21,12 +21,12 @@
 
 ## 前置条件
 
-| 工具 | 版本要求 | 说明 |
-|------|---------|------|
-| Node.js | ≥ 20 | LTS 版本 |
-| pnpm | ≥ 10 | `npm i -g pnpm` |
-| Rust | stable（≥ 1.75） | `rustup toolchain install stable` |
-| VS Code | ≥ 1.85 | 目标宿主环境 |
+| 工具    | 版本要求         | 说明                              |
+| ------- | ---------------- | --------------------------------- |
+| Node.js | ≥ 20             | LTS 版本                          |
+| pnpm    | ≥ 10             | `npm i -g pnpm`                   |
+| Rust    | stable（≥ 1.75） | `rustup toolchain install stable` |
+| VS Code | ≥ 1.85           | 目标宿主环境                      |
 
 **macOS 额外依赖**：Xcode Command Line Tools（`xcode-select --install`）
 
@@ -105,6 +105,7 @@ neko-suite/
 各包详情见对应的 `packages/*/README.md`。
 
 **依赖关系**（统一引擎架构）:
+
 ```
 @neko/proto                          ← Protobuf 源（类型契约权威来源）
 @neko/shared (neko-types)            ← 共享基础设施（Logger/i18n/Theme/Errors，零内部依赖）
@@ -126,6 +127,7 @@ neko-assets ext → @neko/shared
 ```
 
 **架构要点**：
+
 - **统一引擎**：所有扩展通过 `EngineClient`（位于 `@neko/neko-client`）与唯一的 neko-engine Sidecar 进程通信
 - **端口统一**：从 3 个独立端口降为 1 个统一端口（HTTP/WS）
 - **横切关注点**：Logger/i18n/Theme/Errors 统一在 `@neko/shared`，三层隔离（Core/VSCode/Webview）
@@ -148,7 +150,11 @@ cd packages/neko-cut/packages/extension
 pnpm watch
 
 # 3. 在 VS Code 中按 F5 启动扩展调试（Extension Development Host）
+# 4. 做 Webview 视觉/交互验收时，使用 VS Code debugger Skill
+pnpm smoke:webview:runtime
 ```
+
+Vite/浏览器只用于热重载和明确要求的浏览器兼容性辅助；Neko 的 Extension Webview 最终运行在 VS Code 沙箱里。涉及视觉、布局、交互、焦点、CSP、Extension/Webview message、媒体预览或 VS Code 生命周期时，必须用 Extension Development Host + `vscode-extension-debugger` Skill 验证。不要用 Chrome、Browser 插件、Playwright 或普通浏览器打开 `localhost` 作为默认运行态验收。
 
 ### 开发 Rust 引擎
 
@@ -205,6 +211,7 @@ pnpm lint:fix        # 自动修复可修复问题
 Pre-commit hook 会自动执行 `eslint --fix` + `prettier --write`。
 
 **规则说明**：
+
 - 生产代码：`@typescript-eslint/no-explicit-any: 'warn'`（警告但不阻塞）
 - 测试文件：`'off'`（允许 `as any` 用于 mock 和测试数据）
 - 测试文件模式：`**/*.test.ts`, `**/*.spec.ts`, `**/__tests__/**`
@@ -219,12 +226,14 @@ pnpm check:unused:fix    # 自动移除未使用的导出和依赖
 ```
 
 **当前基线**（2026-03-14）：
+
 - 未使用文件: 5 个
 - 未使用导出: 435 个（函数/常量）
 - 未使用类型: 527 个
 - 未使用 devDependencies: 16 个
 
 **清理策略**：
+
 - 约 35% 可安全清理（barrel exports、工具函数）
 - 约 65% 应保留（Phase 2 功能类型、公共 API）
 
@@ -238,21 +247,21 @@ pnpm check:deps          # 检查架构规则违反
 
 当前强制执行的规则：
 
-| 规则 | 级别 | 说明 | 状态 |
-|------|------|------|------|
-| `no-circular` | error | 禁止循环依赖 | ✅ 0 违反 |
-| `layer0-no-internal-deps` | error | Layer 0（@neko/shared, @neko/neko-client）不依赖其他内部包 | ✅ 通过 |
-| `webview-no-vscode` | error | Webview 包禁止导入 `vscode` 模块 | ✅ 通过 |
-| `extension-no-react` | error | Extension 包禁止导入 React/ReactDOM | ✅ 通过 |
-| `no-cross-extension-deps-*` | warn | 扩展包之间不能直接互相依赖 | ✅ 通过 |
+| 规则                        | 级别  | 说明                                                       | 状态      |
+| --------------------------- | ----- | ---------------------------------------------------------- | --------- |
+| `no-circular`               | error | 禁止循环依赖                                               | ✅ 0 违反 |
+| `layer0-no-internal-deps`   | error | Layer 0（@neko/shared, @neko/neko-client）不依赖其他内部包 | ✅ 通过   |
+| `webview-no-vscode`         | error | Webview 包禁止导入 `vscode` 模块                           | ✅ 通过   |
+| `extension-no-react`        | error | Extension 包禁止导入 React/ReactDOM                        | ✅ 通过   |
+| `no-cross-extension-deps-*` | warn  | 扩展包之间不能直接互相依赖                                 | ✅ 通过   |
 
 **常见循环依赖模式及修复指南**：
 
-| 模式 | 示例 | 修复方法 |
-|------|------|----------|
-| **Barrel 回导入** | `index.ts` 定义接口 → 实现文件从 `./index` 导入 → `index.ts` 导入实现 | 将接口移到 `types.ts`，双方从 `types.ts` 导入 |
-| **Hook/Service 互引** | Service 依赖 Hook 中的工具函数 → Hook 通过 barrel 依赖 Service | 提取工具函数到 `utils/` 独立模块 |
-| **Inline `import()` 类型** | `types.ts` 用 `import('./impl').Class` 引用实现类 | 在 `types.ts` 定义接口（依赖倒置），实现类 `implements` 该接口 |
+| 模式                       | 示例                                                                  | 修复方法                                                       |
+| -------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Barrel 回导入**          | `index.ts` 定义接口 → 实现文件从 `./index` 导入 → `index.ts` 导入实现 | 将接口移到 `types.ts`，双方从 `types.ts` 导入                  |
+| **Hook/Service 互引**      | Service 依赖 Hook 中的工具函数 → Hook 通过 barrel 依赖 Service        | 提取工具函数到 `utils/` 独立模块                               |
+| **Inline `import()` 类型** | `types.ts` 用 `import('./impl').Class` 引用实现类                     | 在 `types.ts` 定义接口（依赖倒置），实现类 `implements` 该接口 |
 
 ### 覆盖率配置
 
@@ -261,12 +270,14 @@ pnpm check:deps          # 检查架构规则违反
 **Vitest 版本**：全部统一到 `^4.0.18`（根 + 所有子包）
 
 **覆盖率阈值**（已启用）：
+
 - Lines: 30%
 - Branches: 20%
 - Functions: 25%
 - Statements: 30%
 
 **v4 注意事项**：
+
 - 构造函数 mock 必须使用 `function` 语法，不能用箭头函数
 - 无测试文件的包需在 `package.json` 的 test 脚本加 `--passWithNoTests`
 - 对 package.json exports 解析更严格，alias 错误路径会导致 import 失败
@@ -305,8 +316,18 @@ pnpm ci:act -- --reuse   # 示例：复用容器加速调试
 ```bash
 pnpm smoke:engine        # engine CLI + serve /health + dispatch smoke
 pnpm smoke:webview       # 构建所有 webview 包；可用 NEKO_WEBVIEW_SMOKE_PACKAGES 限定范围
+pnpm smoke:webview:runtime
+# 默认使用 VS Code debugger + vscode-extension-debugger Skill，验证可见 Webview 运行态
+pnpm smoke:vscode-debugger -- --skill vscode-extension-debugger --require-webview
+# 连接已用 remote debugging 启动的 VS Code，采集 Skill 测试证据；不安装 VSIX
 node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview 包
 ```
+
+### Prelaunch 兼容策略
+
+当前项目仍处于发布前阶段，可以有意破坏尚未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 或 `nk*` 草稿格式，以减少长期兼容包袱。但这种破坏必须在 proposal、design、tasks 或 PR 说明中写清楚影响范围、原因，以及旧数据是迁移、重建、重新导入、忽略还是明确丢弃。
+
+不要为了未发布草稿保留长期 compatibility shim；确需保留时必须有 owner、replacement、验证命令和移除条件。预发布也不能忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 等运行/安全/信任边界，不能静默删除或损坏有价值的本地项目数据、设置、信任状态、权益、安装记录或生成产物。
 
 代码审查流程、风险分级、功能/UX/性能检查和合并规则遵循 [AGENTS.md](./AGENTS.md) 与 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) 中的验证要求。
 
@@ -314,15 +335,15 @@ node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview
 
 PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`），通过路径过滤按需运行：
 
-| Job | 触发条件 | 内容 |
-|-----|---------|------|
-| **Build & Lint** | TS/配置文件变更 | `format:check` + `lint` + `build` |
-| **TypeScript Tests** | 同上 | `pnpm test --coverage` + coverage artifact |
-| **Code Quality** | 同上 | Knip 僵尸代码检测 + dependency-cruiser 架构规则 |
-| **Rust Tests** | `packages/neko-engine/**` 变更 | `cargo fmt --check` + `clippy` + `cargo test` |
-| **Cargo Deny** | 同上 | Rust 依赖审计 |
-| **Proto Types Sync** | `packages/neko-proto/**` 变更 | 检查生成类型是否同步 |
-| **Dependency Review** | 仅 PR | 安全依赖审查 |
+| Job                   | 触发条件                       | 内容                                            |
+| --------------------- | ------------------------------ | ----------------------------------------------- |
+| **Build & Lint**      | TS/配置文件变更                | `format:check` + `lint` + `build`               |
+| **TypeScript Tests**  | 同上                           | `pnpm test --coverage` + coverage artifact      |
+| **Code Quality**      | 同上                           | Knip 僵尸代码检测 + dependency-cruiser 架构规则 |
+| **Rust Tests**        | `packages/neko-engine/**` 变更 | `cargo fmt --check` + `clippy` + `cargo test`   |
+| **Cargo Deny**        | 同上                           | Rust 依赖审计                                   |
+| **Proto Types Sync**  | `packages/neko-proto/**` 变更  | 检查生成类型是否同步                            |
+| **Dependency Review** | 仅 PR                          | 安全依赖审查                                    |
 
 ---
 
@@ -351,6 +372,7 @@ if (isMyType(data)) { logger.info('data', data); }
 ### 统一基础设施使用
 
 **Logger**（`@neko/shared`）：
+
 ```typescript
 // Extension Host
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
@@ -363,11 +385,12 @@ const logger = new ConsoleLogger('MyWebview');
 ```
 
 **i18n**（`@neko/shared`）：
+
 ```typescript
 // Extension Host
 import { I18nService, getVSCodeLocale } from '@neko/shared/vscode/extension';
 const i18n = new I18nService(getVSCodeLocale());
-i18n.register('myNamespace', { 'key': 'value' });
+i18n.register('myNamespace', { key: 'value' });
 
 // Webview (React)
 import { I18nProvider, useTranslation } from '@neko/shared/i18n/react';
@@ -375,10 +398,11 @@ const { t } = useTranslation();
 ```
 
 **EngineClient**（`@neko/neko-client`）：
+
 ```typescript
 // 获取引擎端口
 const { port } = await vscode.commands.executeCommand<{ port: number }>(
-  'neko.engine.ensureFrameServer'
+  'neko.engine.ensureFrameServer',
 );
 
 // 创建客户端
@@ -405,12 +429,12 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' });
 
 ### 命名约定
 
-| 类型 | 命名 | 示例 |
-|------|------|------|
-| 接口 | `I` + 名词 | `IEncoder`, `IMediaService` |
-| 抽象类 | `Abstract` + 名词 | `AbstractRenderer` |
-| 实现类 | 名词 + 后缀 | `H264Encoder`, `WebGLRenderer` |
-| 事件 | `onDid` + 动词 | `onDidChangeState` |
+| 类型   | 命名              | 示例                           |
+| ------ | ----------------- | ------------------------------ |
+| 接口   | `I` + 名词        | `IEncoder`, `IMediaService`    |
+| 抽象类 | `Abstract` + 名词 | `AbstractRenderer`             |
+| 实现类 | 名词 + 后缀       | `H264Encoder`, `WebGLRenderer` |
+| 事件   | `onDid` + 动词    | `onDidChangeState`             |
 
 ### 文件组织
 
@@ -441,6 +465,7 @@ pnpm typecheck
 ```
 
 **测试要求**：
+
 - 新增公共接口/服务需有对应单元测试
 - Rust 核心算法需有单元测试（`#[cfg(test)]`）
 - 复杂 Store Slice 变更需有 Vitest 测试
@@ -493,16 +518,17 @@ docs: update ARCHITECTURE.md with streaming flow
 
 参考 [TODO_CN.md](./TODO_CN.md) 中的 P0/P1 任务，以下是最需要帮助的方向：
 
-| 领域 | 技能要求 | 关联包 |
-|------|---------|--------|
-| GPU 渲染优化 | Rust + wgpu + WGSL | neko-engine |
-| 时间线 Skills | TypeScript + LLM API | neko-agent |
-| LSP 错误诊断 | TypeScript + LSP | neko-story |
-| 单元测试 | Vitest / cargo test | 所有包 |
+| 领域                | 技能要求                 | 关联包                 |
+| ------------------- | ------------------------ | ---------------------- |
+| GPU 渲染优化        | Rust + wgpu + WGSL       | neko-engine            |
+| 时间线 Skills       | TypeScript + LLM API     | neko-agent             |
+| LSP 错误诊断        | TypeScript + LSP         | neko-story             |
+| 单元测试            | Vitest / cargo test      | 所有包                 |
 | Effects/Shader 系统 | Rust + WGSL + TypeScript | neko-engine + neko-cut |
-| i18n 翻译补充 | 多语言翻译 | 所有 webview 包 |
+| i18n 翻译补充       | 多语言翻译               | 所有 webview 包        |
 
 **当前架构参考**：
+
 - [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md)：稳定系统边界。
 - [docs/README.md](./docs/README.md)：文档分类与发现路径。
 - [TODO_CN.md](./TODO_CN.md)：活跃工作。
@@ -522,4 +548,4 @@ docs: update ARCHITECTURE.md with streaming flow
 
 ---
 
-*有问题？欢迎在 Issues 中讨论，或直接在 PR 中 @ 维护者。*
+_有问题？欢迎在 Issues 中讨论，或直接在 PR 中 @ 维护者。_

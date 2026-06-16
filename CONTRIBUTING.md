@@ -23,12 +23,12 @@ Welcome to Neko Suite development! This document covers dev environment setup, c
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| Node.js | >= 20 | LTS recommended |
-| pnpm | >= 10 | `npm i -g pnpm` |
-| Rust | stable (>= 1.75) | `rustup toolchain install stable` |
-| VS Code | >= 1.85 | Target host environment |
+| Tool    | Version          | Notes                             |
+| ------- | ---------------- | --------------------------------- |
+| Node.js | >= 20            | LTS recommended                   |
+| pnpm    | >= 10            | `npm i -g pnpm`                   |
+| Rust    | stable (>= 1.75) | `rustup toolchain install stable` |
+| VS Code | >= 1.85          | Target host environment           |
 
 **macOS additional dependency**: Xcode Command Line Tools (`xcode-select --install`)
 
@@ -107,6 +107,7 @@ neko-suite/
 See each package's `packages/*/README.md` for details.
 
 **Dependency graph** (unified engine architecture):
+
 ```
 @neko/proto                          <- Protobuf source (authoritative type contracts)
 @neko/shared (neko-types)            <- Shared infrastructure (Logger/i18n/Theme/Errors, zero internal deps)
@@ -128,6 +129,7 @@ All webviews -> @neko/shared, @neko/neko-client (as needed), React 18
 ```
 
 **Key architecture points**:
+
 - **Unified engine**: All extensions communicate with a single neko-engine Sidecar process via `EngineClient` (in `@neko/neko-client`)
 - **Single port**: Consolidated from 3 separate ports down to 1 unified port (HTTP/WS)
 - **Cross-cutting concerns**: Logger/i18n/Theme/Errors unified in `@neko/shared` with three-layer isolation (Core/VSCode/Webview)
@@ -150,7 +152,11 @@ cd packages/neko-cut/packages/extension
 pnpm watch
 
 # 3. Press F5 in VS Code to launch Extension Development Host
+# 4. For Webview visual/interaction acceptance, use the VS Code debugger Skill
+pnpm smoke:webview:runtime
 ```
+
+Vite/browser validation is only a hot-reload aid or explicitly requested browser-compatibility check. Neko Extension Webviews ultimately run inside the VS Code sandbox. When a change affects visuals, layout, interaction, focus, CSP, Extension/Webview messages, media preview, or VS Code lifecycle, validate through Extension Development Host + the `vscode-extension-debugger` Skill. Do not use Chrome, the generic Browser plugin, Playwright, or `localhost` in a regular browser as the default runtime acceptance surface.
 
 ### Developing the Rust Engine
 
@@ -207,6 +213,7 @@ pnpm lint:fix        # Auto-fix fixable issues
 A pre-commit hook automatically runs `eslint --fix` + `prettier --write`.
 
 **Rule details**:
+
 - Production code: `@typescript-eslint/no-explicit-any: 'warn'` (warns but does not block)
 - Test files: `'off'` (allows `as any` for mocks and test data)
 - Test file patterns: `**/*.test.ts`, `**/*.spec.ts`, `**/__tests__/**`
@@ -221,12 +228,14 @@ pnpm check:unused:fix    # Auto-remove unused exports and dependencies
 ```
 
 **Current baseline** (2026-03-14):
+
 - Unused files: 5
 - Unused exports: 435 (functions/constants)
 - Unused types: 527
 - Unused devDependencies: 16
 
 **Cleanup strategy**:
+
 - ~35% can be safely removed (barrel exports, utility functions)
 - ~65% should be kept (Phase 2 feature types, public APIs)
 
@@ -240,21 +249,21 @@ pnpm check:deps          # Check for architecture rule violations
 
 Currently enforced rules:
 
-| Rule | Severity | Description | Status |
-|------|----------|-------------|--------|
-| `no-circular` | error | No circular dependencies | 0 violations |
-| `layer0-no-internal-deps` | error | Layer 0 (@neko/shared, @neko/neko-client) must not depend on other internal packages | Passing |
-| `webview-no-vscode` | error | Webview packages must not import the `vscode` module | Passing |
-| `extension-no-react` | error | Extension packages must not import React/ReactDOM | Passing |
-| `no-cross-extension-deps-*` | warn | Extension packages must not depend on each other directly | Passing |
+| Rule                        | Severity | Description                                                                          | Status       |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------ | ------------ |
+| `no-circular`               | error    | No circular dependencies                                                             | 0 violations |
+| `layer0-no-internal-deps`   | error    | Layer 0 (@neko/shared, @neko/neko-client) must not depend on other internal packages | Passing      |
+| `webview-no-vscode`         | error    | Webview packages must not import the `vscode` module                                 | Passing      |
+| `extension-no-react`        | error    | Extension packages must not import React/ReactDOM                                    | Passing      |
+| `no-cross-extension-deps-*` | warn     | Extension packages must not depend on each other directly                            | Passing      |
 
 **Common circular dependency patterns and fixes**:
 
-| Pattern | Example | Fix |
-|---------|---------|-----|
-| **Barrel re-import** | `index.ts` defines interface -> impl imports from `./index` -> `index.ts` imports impl | Move interfaces to `types.ts`; both sides import from `types.ts` |
-| **Hook/Service cross-reference** | Service depends on utility in Hook -> Hook depends on Service via barrel | Extract utilities to a standalone `utils/` module |
-| **Inline `import()` types** | `types.ts` uses `import('./impl').Class` to reference impl class | Define interface in `types.ts` (dependency inversion); impl class `implements` that interface |
+| Pattern                          | Example                                                                                | Fix                                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Barrel re-import**             | `index.ts` defines interface -> impl imports from `./index` -> `index.ts` imports impl | Move interfaces to `types.ts`; both sides import from `types.ts`                              |
+| **Hook/Service cross-reference** | Service depends on utility in Hook -> Hook depends on Service via barrel               | Extract utilities to a standalone `utils/` module                                             |
+| **Inline `import()` types**      | `types.ts` uses `import('./impl').Class` to reference impl class                       | Define interface in `types.ts` (dependency inversion); impl class `implements` that interface |
 
 ### Coverage Configuration
 
@@ -263,12 +272,14 @@ All packages share vitest coverage settings via `vitest.shared.ts` (reporters, e
 **Vitest version**: Unified to `^4.0.18` (root + all sub-packages)
 
 **Coverage thresholds** (enabled):
+
 - Lines: 30%
 - Branches: 20%
 - Functions: 25%
 - Statements: 30%
 
 **v4 notes**:
+
 - Constructor mocks must use `function` syntax, not arrow functions
 - Packages with no test files need `--passWithNoTests` in the `package.json` test script
 - Stricter `package.json` exports resolution means incorrect alias paths will cause import failures
@@ -307,8 +318,18 @@ For integration smoke checks:
 ```bash
 pnpm smoke:engine        # Engine CLI + serve /health + dispatch smoke
 pnpm smoke:webview       # Builds all webview packages; limit with NEKO_WEBVIEW_SMOKE_PACKAGES
+pnpm smoke:webview:runtime
+# Uses VS Code debugger + vscode-extension-debugger Skill for visible Webview runtime evidence
+pnpm smoke:vscode-debugger -- --skill vscode-extension-debugger --require-webview
+# Connects to a remote-debugging VS Code session and records Skill test evidence; does not install VSIX
 node scripts/smoke-webview-builds.mjs --list  # Lists selected webview packages without building
 ```
+
+### Prelaunch Compatibility Policy
+
+This project is still prelaunch, so changes may deliberately break unreleased internal APIs, DTOs, Webview messages, Agent workflow payloads, test fixtures, or `nk*` draft formats when doing so reduces long-term compatibility debt. The break must still be recorded in the proposal, design, tasks, or PR notes with the affected surface, the reason, and whether old data is migrated, rebuilt, reimported, ignored, or intentionally discarded.
+
+Do not keep long-term compatibility shims for unreleased drafts unless they have an owner, replacement path, validation command, and removal criteria. Prelaunch status also does not relax VS Code, Node, pnpm, Rust, OS, Webview sandbox, CSP, codec, Range, Engine, Proto, or marketplace trust boundaries, and it must not silently delete or corrupt valuable local project data, settings, trust state, entitlements, install records, or generated artifacts.
 
 For the code review process, risk levels, functional/UX/performance checks, and merge rules, follow [AGENTS.md](./AGENTS.md) and the validation guidance in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -316,15 +337,15 @@ For the code review process, risk levels, functional/UX/performance checks, and 
 
 PRs and pushes to the main branch automatically trigger GitHub Actions CI (`.github/workflows/ci.yml`), with path-based filtering to run only relevant jobs:
 
-| Job | Trigger | Contents |
-|-----|---------|----------|
-| **Build & Lint** | TS/config file changes | `format:check` + `lint` + `build` |
-| **TypeScript Tests** | Same as above | `pnpm test --coverage` + coverage artifact |
-| **Code Quality** | Same as above | Knip dead code detection + dependency-cruiser architecture rules |
-| **Rust Tests** | `packages/neko-engine/**` changes | `cargo fmt --check` + `clippy` + `cargo test` |
-| **Cargo Deny** | Same as above | Rust dependency audit |
-| **Proto Types Sync** | `packages/neko-proto/**` changes | Verify generated types are in sync |
-| **Dependency Review** | PRs only | Security dependency review |
+| Job                   | Trigger                           | Contents                                                         |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| **Build & Lint**      | TS/config file changes            | `format:check` + `lint` + `build`                                |
+| **TypeScript Tests**  | Same as above                     | `pnpm test --coverage` + coverage artifact                       |
+| **Code Quality**      | Same as above                     | Knip dead code detection + dependency-cruiser architecture rules |
+| **Rust Tests**        | `packages/neko-engine/**` changes | `cargo fmt --check` + `clippy` + `cargo test`                    |
+| **Cargo Deny**        | Same as above                     | Rust dependency audit                                            |
+| **Proto Types Sync**  | `packages/neko-proto/**` changes  | Verify generated types are in sync                               |
+| **Dependency Review** | PRs only                          | Security dependency review                                       |
 
 ---
 
@@ -353,6 +374,7 @@ if (isMyType(data)) { logger.info('data', data); }
 ### Shared Infrastructure Usage
 
 **Logger** (`@neko/shared`):
+
 ```typescript
 // Extension Host
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
@@ -365,11 +387,12 @@ const logger = new ConsoleLogger('MyWebview');
 ```
 
 **i18n** (`@neko/shared`):
+
 ```typescript
 // Extension Host
 import { I18nService, getVSCodeLocale } from '@neko/shared/vscode/extension';
 const i18n = new I18nService(getVSCodeLocale());
-i18n.register('myNamespace', { 'key': 'value' });
+i18n.register('myNamespace', { key: 'value' });
 
 // Webview (React)
 import { I18nProvider, useTranslation } from '@neko/shared/i18n/react';
@@ -377,10 +400,11 @@ const { t } = useTranslation();
 ```
 
 **EngineClient** (`@neko/neko-client`):
+
 ```typescript
 // Get the engine port
 const { port } = await vscode.commands.executeCommand<{ port: number }>(
-  'neko.engine.ensureFrameServer'
+  'neko.engine.ensureFrameServer',
 );
 
 // Create a client
@@ -407,12 +431,12 @@ vscode.postMessage({ type: 'readFile', path: '/path/to/file' });
 
 ### Naming Conventions
 
-| Type | Convention | Example |
-|------|-----------|---------|
-| Interface | `I` + Noun | `IEncoder`, `IMediaService` |
-| Abstract class | `Abstract` + Noun | `AbstractRenderer` |
-| Implementation | Noun + Suffix | `H264Encoder`, `WebGLRenderer` |
-| Event | `onDid` + Verb | `onDidChangeState` |
+| Type           | Convention        | Example                        |
+| -------------- | ----------------- | ------------------------------ |
+| Interface      | `I` + Noun        | `IEncoder`, `IMediaService`    |
+| Abstract class | `Abstract` + Noun | `AbstractRenderer`             |
+| Implementation | Noun + Suffix     | `H264Encoder`, `WebGLRenderer` |
+| Event          | `onDid` + Verb    | `onDidChangeState`             |
 
 ### File Organization
 
@@ -443,6 +467,7 @@ pnpm typecheck
 ```
 
 **Testing requirements**:
+
 - New public interfaces/services must have corresponding unit tests
 - Core Rust algorithms must have unit tests (`#[cfg(test)]`)
 - Complex Store Slice changes must have Vitest tests
@@ -495,16 +520,17 @@ docs: update ARCHITECTURE.md with streaming flow
 
 Refer to [TODO.md](./TODO.md) for P0/P1 tasks. Below are the areas where help is most needed:
 
-| Area | Required Skills | Related Packages |
-|------|----------------|-----------------|
-| GPU rendering optimization | Rust + wgpu + WGSL | neko-engine |
-| Timeline Skills | TypeScript + LLM API | neko-agent |
-| LSP error diagnostics | TypeScript + LSP | neko-story |
-| Unit tests | Vitest / cargo test | All packages |
-| Effects/Shader system | Rust + WGSL + TypeScript | neko-engine + neko-cut |
-| i18n translation | Multilingual translation | All webview packages |
+| Area                       | Required Skills          | Related Packages       |
+| -------------------------- | ------------------------ | ---------------------- |
+| GPU rendering optimization | Rust + wgpu + WGSL       | neko-engine            |
+| Timeline Skills            | TypeScript + LLM API     | neko-agent             |
+| LSP error diagnostics      | TypeScript + LSP         | neko-story             |
+| Unit tests                 | Vitest / cargo test      | All packages           |
+| Effects/Shader system      | Rust + WGSL + TypeScript | neko-engine + neko-cut |
+| i18n translation           | Multilingual translation | All webview packages   |
 
 **Current architecture references**:
+
 - [ARCHITECTURE.md](./ARCHITECTURE.md) for stable system boundaries.
 - [docs/README.md](./docs/README.md) for documentation categories and discovery paths.
 - [TODO.md](./TODO.md) for active work.
@@ -524,4 +550,4 @@ For repository-level debugging and working conventions, see [AGENTS.md](./AGENTS
 
 ---
 
-*Questions? Feel free to open an Issue for discussion, or @ a maintainer directly in your PR.*
+_Questions? Feel free to open an Issue for discussion, or @ a maintainer directly in your PR._

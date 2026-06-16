@@ -219,7 +219,7 @@
       "replacement": "getUserConfigDir(), getUserConfigPath(), getWorkspaceConfigDir(), and getWorkspaceConfigPath()",
       "removeAfter": "Removed after repo scan found no caller outside the CLI barrel re-export; prelaunch CLI API does not keep old global/project aliases.",
       "tests": [
-        "rg -n \"getGlobalConfigDir|getGlobalConfigPath|getProjectConfigPath\" packages/neko-agent/packages/cli-tui packages/neko-agent/packages/agent docs/architecture/agent-code-debt-lcd-register.json",
+        "rg -n \"getGlobalConfigDir|getGlobalConfigPath|getProjectConfigPath\" packages/neko-agent/packages/cli-tui packages/neko-agent/packages/agent quality/ledgers/agent-code-debt-lcd-register.json",
         "pnpm check:agent-boundaries"
       ],
       "notes": "CLI build currently fails on unrelated markdown ?raw loader baseline in @neko/agent skill builtins; stale scan guards this specific alias removal."

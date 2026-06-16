@@ -56,7 +56,12 @@ jobs:
             [ -n "$pkg" ] || continue
             if [ -d "packages/$pkg" ]; then
               echo "📦 Packaging $pkg..."
-              (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository) || true
+              rm -f packages/$pkg/*.vsix
+              (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository)
+              if ! compgen -G "packages/$pkg/*.vsix" > /dev/null; then
+                echo "::error::Packaging $pkg did not produce a new VSIX artifact."
+                exit 1
+              fi
             fi
           done
 
@@ -64,6 +69,10 @@ jobs:
         run: |
           mkdir -p release-artifacts
           find packages -maxdepth 2 -name '*.vsix' -exec cp {} release-artifacts/ \;
+          if ! compgen -G "release-artifacts/*.vsix" > /dev/null; then
+            echo "::error::No TS extension VSIX artifacts were collected."
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v6
         with:

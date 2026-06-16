@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-06-15",
+  "owner": "release-engineering",
+  "channels": {
+    "local": {
+      "description": "Developer-only builds and smoke validation. Packages may be incomplete but must not be published from this channel.",
+      "allowPublish": false,
+      "requires": ["focused-tests-or-smoke"],
+      "packages": ["neko-live", "neko-model"]
+    },
+    "canary": {
+      "description": "Pre-release validation channel for packages with explicit owner sign-off and rollback notes.",
+      "allowPublish": false,
+      "requires": ["check:quality", "package-smoke", "owner-signoff"],
+      "packages": []
+    },
+    "beta": {
+      "description": "Pre-stable channel for packages that have passed feature validation but still need broader installation/runtime evidence.",
+      "allowPublish": false,
+      "requires": ["check:quality", "ci:local", "smoke", "rollback-notes"],
+      "packages": []
+    },
+    "stable": {
+      "description": "Release-ready package set for tag releases after CI and package smoke validation.",
+      "allowPublish": true,
+      "requires": ["check:quality", "ci:local", "ci:local:rust", "smoke", "vsix-artifacts"],
+      "packages": [
+        "neko-engine",
+        "neko-tools",
+        "neko-preview",
+        "neko-cut",
+        "neko-canvas",
+        "neko-agent",
+        "neko-story",
+        "neko-sketch",
+        "neko-puppet",
+        "neko-audio",
+        "neko-assets",
+        "neko-auth",
+        "neko-market",
+        "neko-dashboard"
+      ]
+    },
+    "disabled": {
+      "description": "Packages intentionally excluded from publishable release sets until their owner records validation and promotion criteria.",
+      "allowPublish": false,
+      "requires": ["promotion-plan"],
+      "packages": ["neko-live", "neko-model"]
+    }
+  },
+  "promotionRules": [
+    {
+      "from": "local",
+      "to": "canary",
+      "requires": ["OpenSpec validation tasks", "focused package build", "owner sign-off"]
+    },
+    {
+      "from": "canary",
+      "to": "beta",
+      "requires": ["CI quality gate", "runtime smoke evidence", "rollback notes"]
+    },
+    {
+      "from": "beta",
+      "to": "stable",
+      "requires": [
+        "full release workflow",
+        "Engine/Webview smoke where applicable",
+        "artifact audit"
+      ]
+    }
+  ],
+  "disabledRationale": {
+    "neko-live": "Listed as devOnly in package groups; no release validation baseline is recorded yet.",
+    "neko-model": "Listed as devOnly in package groups; 3D Route A constraints exist but release validation baseline is not complete."
+  }
+}
