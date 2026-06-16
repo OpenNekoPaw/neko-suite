@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { ConversationSummary } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
+import { ClockIcon, CloseIcon, SearchIcon, TrashIcon } from '@neko/shared/icons';
 
 interface HistoryMenuProps {
   conversations: ConversationSummary[];
@@ -81,41 +82,26 @@ export function HistoryMenu({
   return (
     <div className="relative" ref={menuRef}>
       <button
+        type="button"
         onClick={() => setShowMenu(!showMenu)}
-        className={`agent-header-action ${showMenu ? 'is-active' : ''}`}
+        className={`agent-header-action agent-header-action-history ${showMenu ? 'is-active' : ''}`}
         title={t('history.title')}
+        aria-label={t('history.title')}
+        aria-haspopup="menu"
+        aria-expanded={showMenu}
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+        <ClockIcon className="w-4 h-4" />
       </button>
 
       {showMenu && (
         <div
-          className="neko-glass-dropdown absolute right-0 top-full z-50 mt-1 flex max-h-[400px] min-w-[250px] flex-col py-1"
+          className="agent-header-menu agent-history-menu absolute right-0 top-full z-50 mt-1 flex flex-col"
           onKeyDown={handleKeyDown}
+          role="menu"
         >
-          {/* Search Input */}
-          <div className="border-b border-[var(--agent-divider)] px-2 py-1.5">
-            <div className="agent-search-shell">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--agent-fg-secondary)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+          <div className="agent-header-menu-search agent-history-menu-search">
+            <div className="agent-search-shell agent-history-search-shell">
+              <SearchIcon className="h-3.5 w-3.5 text-[var(--agent-fg-secondary)]" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -126,102 +112,89 @@ export function HistoryMenu({
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery('')}
-                  className="agent-header-action min-h-0 min-w-0 p-0.5"
+                  className="agent-menu-icon-button agent-history-search-clear"
+                  aria-label={t('history.clearSearch')}
+                  title={t('history.clearSearch')}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                  <CloseIcon className="w-3 h-3" />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Header */}
-          <div className="agent-menu-section border-b border-[var(--agent-divider)] px-3 py-1.5 text-[10px]">
+          <div className="agent-menu-section agent-history-menu-section">
             {searchQuery
               ? t('history.results', { count: filteredConversations.length })
               : t('history.recentConversations')}
           </div>
 
-          {/* Conversation List */}
-          <div className="overflow-y-auto flex-1">
+          <div className="agent-history-menu-list">
             {filteredConversations.length === 0 ? (
-              <div className="px-3 py-3 text-center text-[11px] text-[var(--agent-fg-secondary)]">
+              <div className="agent-history-menu-empty">
                 {searchQuery ? t('history.noMatching') : t('history.noConversations')}
               </div>
             ) : (
               filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
-                  className={`vscode-list-item group px-3 py-1.5 ${conv.id === activeConversationId ? 'active' : ''}`}
+                  className={`agent-header-menu-item agent-history-menu-item group ${
+                    conv.id === activeConversationId ? 'is-active' : ''
+                  }`}
+                  role="none"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div
-                      className="flex-1 min-w-0"
-                      onClick={() => {
-                        onOpenConversation(conv.id, conv.title);
-                        setShowMenu(false);
-                        setSearchQuery('');
-                      }}
-                    >
-                      <div className="text-[11px] truncate">{conv.title}</div>
-                      <div className="flex items-center gap-2 text-[9px] text-[var(--agent-fg-secondary)]">
-                        <span>{t('history.messageCount', { count: conv.messageCount })}</span>
-                        <span>•</span>
-                        <span>{formatRelativeTime(conv.updatedAt, t)}</span>
-                      </div>
+                  <button
+                    type="button"
+                    className="agent-header-menu-item-main"
+                    onClick={() => {
+                      onOpenConversation(conv.id, conv.title);
+                      setShowMenu(false);
+                      setSearchQuery('');
+                    }}
+                    role="menuitem"
+                  >
+                    <div className="agent-history-menu-title">{conv.title}</div>
+                    <div className="agent-history-menu-meta">
+                      <span>{t('history.messageCount', { count: conv.messageCount })}</span>
+                      <span aria-hidden="true">•</span>
+                      <span>{formatRelativeTime(conv.updatedAt, t)}</span>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteConversation(conv.id);
-                      }}
-                      className="agent-header-action opacity-0 group-hover:opacity-100 min-h-0 min-w-0 p-0.5 transition-opacity flex-shrink-0"
-                      title={t('common.delete')}
-                    >
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteConversation(conv.id);
+                    }}
+                    className="agent-menu-icon-button agent-history-delete-button flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                    title={t('history.deleteConversation')}
+                    aria-label={t('history.deleteConversation')}
+                  >
+                    <TrashIcon className="w-3 h-3" />
+                  </button>
                 </div>
               ))
             )}
           </div>
 
-          {/* Footer with clear all button */}
           {conversations.length > 0 && (
-            <div className="flex items-center justify-between border-t border-[var(--agent-divider)] px-2 py-1.5">
+            <div className="agent-header-menu-footer agent-history-menu-footer">
               {conversations.length > 10 && !searchQuery && (
-                <span className="text-[9px] text-[var(--agent-fg-secondary)]">
+                <span className="agent-history-menu-footer-hint">
                   {t('history.searchHint', { count: conversations.length })}
                 </span>
               )}
               {conversations.length <= 10 || searchQuery ? <span /> : null}
               {onClearAllConversations && (
                 <button
+                  type="button"
                   onClick={() => {
                     onClearAllConversations();
                     setShowMenu(false);
                     setSearchQuery('');
                   }}
-                  className="agent-danger-link px-1.5 py-0.5 text-[9px]"
+                  className="agent-danger-link agent-history-clear-button"
                   title={t('history.clearAll')}
                 >
                   {t('history.clearAll')}

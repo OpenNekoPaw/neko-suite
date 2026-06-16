@@ -1,39 +1,26 @@
-/**
- * AccountBar — replaces the Settings gear button in Header.
- *
- * Three states:
- *   unconfigured  → warning dot, "Connect AI Service" CTA
- *   sso           → avatar initial, user email, plan/usage, sign-out
- *   custom key    → green dot, provider name + model, change-key option
- */
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { VSCodeMessages } from '@/messages';
-import { ChevronDownIcon } from '@neko/shared/icons';
+import { EditIcon, FileIcon, SettingsIcon } from '@neko/shared/icons';
 
 interface AccountBarProps {
   ssoSession: SsoSession | null;
   configuredProviders: ConfiguredProvider[];
-  selectedModelId: string | null;
   onOpenOnboarding: () => void;
 }
 
-export function AccountBar({
-  ssoSession,
-  configuredProviders,
-  selectedModelId,
-  onOpenOnboarding,
-}: AccountBarProps) {
+export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }: AccountBarProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+    if (!open) {
+      return undefined;
+    }
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
@@ -43,11 +30,22 @@ export function AccountBar({
 
   const activeProvider = configuredProviders.find((p) => p.enabled !== false && p.apiKey);
   const isConfigured = !!ssoSession || !!activeProvider;
+  const triggerLabel = ssoSession
+    ? ssoSession.user
+    : (activeProvider?.name ?? t('accountBar.connectTitle'));
+  const closeAndOpenConfigFile = () => {
+    setOpen(false);
+    VSCodeMessages.openConfigFile();
+  };
+  const closeAndOpenUserConfigFile = () => {
+    setOpen(false);
+    VSCodeMessages.openUserConfigFile();
+  };
 
-  // --- Unconfigured state ---
   if (!isConfigured) {
     return (
       <button
+        type="button"
         onClick={onOpenOnboarding}
         className="agent-warning-chip"
         title={t('accountBar.connectTitle')}
@@ -60,29 +58,31 @@ export function AccountBar({
 
   return (
     <div ref={ref} className="relative">
-      {/* Trigger button */}
       <button
-        onClick={() => setOpen((v) => !v)}
-        className={`agent-header-action h-auto w-auto gap-1.5 px-1.5 py-1.5 ${open ? 'is-active' : ''}`}
-        title={ssoSession ? ssoSession.user : activeProvider?.name}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={`agent-header-action agent-account-trigger ${open ? 'is-active' : ''}`}
+        title={triggerLabel}
+        aria-label={triggerLabel}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {ssoSession ? (
-          <span className="w-5 h-5 rounded-full bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] text-[10px] flex items-center justify-center font-medium">
-            {ssoSession.user[0]?.toUpperCase() ?? 'U'}
-          </span>
+          <span className="agent-account-avatar">{ssoSession.user[0]?.toUpperCase() ?? 'U'}</span>
         ) : (
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--vscode-charts-green)] flex-shrink-0" />
+          <span className="agent-account-status-dot" />
         )}
-        <ChevronDownIcon className="w-3 h-3 opacity-60" />
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="neko-glass-dropdown absolute right-0 top-full z-50 mt-1.5 w-52 py-1.5">
+        <div
+          className="agent-header-menu agent-account-menu absolute right-0 top-full z-50 mt-1.5"
+          role="menu"
+        >
           {ssoSession ? (
             <>
-              <div className="border-b border-[var(--agent-divider)] px-3 py-2">
-                <div className="text-[11px] font-medium truncate">{ssoSession.user}</div>
+              <div className="agent-header-menu-summary">
+                <div className="truncate text-[11px] font-medium">{ssoSession.user}</div>
                 {ssoSession.plan && (
                   <div className="mt-0.5 text-[10px] text-[var(--agent-fg-secondary)]">
                     {ssoSession.plan}
@@ -92,33 +92,71 @@ export function AccountBar({
                 )}
               </div>
               <button
+                type="button"
+                onClick={closeAndOpenConfigFile}
+                className="agent-header-menu-item"
+                role="menuitem"
+              >
+                <SettingsIcon className="h-3.5 w-3.5 flex-shrink-0 text-[var(--agent-fg-secondary)]" />
+                <span className="agent-header-menu-item-label">
+                  {t('accountBar.modelGenerationConfig')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={closeAndOpenUserConfigFile}
+                className="agent-header-menu-item"
+                role="menuitem"
+              >
+                <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-[var(--agent-fg-secondary)]" />
+                <span className="agent-header-menu-item-label">
+                  {t('accountBar.openConfigFile')}
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setOpen(false);
                   VSCodeMessages.ssoLogout();
                 }}
-                className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
+                className="agent-header-menu-item"
+                role="menuitem"
               >
-                {t('accountBar.signOut')}
+                <span className="agent-header-menu-item-label">{t('accountBar.signOut')}</span>
               </button>
             </>
           ) : (
             <>
-              <div className="border-b border-[var(--agent-divider)] px-3 py-2">
-                <div className="text-[11px] font-medium">{activeProvider?.name}</div>
-                {selectedModelId && (
-                  <div className="mt-0.5 truncate text-[10px] text-[var(--agent-fg-secondary)]">
-                    {selectedModelId}
-                  </div>
-                )}
-              </div>
               <button
-                onClick={() => {
-                  setOpen(false);
-                  VSCodeMessages.openConfigFile();
-                }}
-                className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
+                type="button"
+                onClick={closeAndOpenConfigFile}
+                className="agent-header-menu-item"
+                role="menuitem"
               >
-                {t('accountBar.changeKey')}
+                <EditIcon className="h-3.5 w-3.5 flex-shrink-0 text-[var(--agent-fg-secondary)]" />
+                <span className="agent-header-menu-item-label">{t('accountBar.changeKey')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={closeAndOpenConfigFile}
+                className="agent-header-menu-item"
+                role="menuitem"
+              >
+                <SettingsIcon className="h-3.5 w-3.5 flex-shrink-0 text-[var(--agent-fg-secondary)]" />
+                <span className="agent-header-menu-item-label">
+                  {t('accountBar.modelGenerationConfig')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={closeAndOpenUserConfigFile}
+                className="agent-header-menu-item"
+                role="menuitem"
+              >
+                <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-[var(--agent-fg-secondary)]" />
+                <span className="agent-header-menu-item-label">
+                  {t('accountBar.openConfigFile')}
+                </span>
               </button>
             </>
           )}

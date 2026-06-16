@@ -1,12 +1,14 @@
-import { OpenTab, ConversationSummary, TabType } from '@neko-agent/types';
+import type { ConversationSummary, TabType } from '@neko-agent/types';
 import { TabBar } from '@/components/Header/TabBar';
 import { HistoryMenu } from '@/components/Header/HistoryMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { AccountBar } from '@/components/AccountBar';
 import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
+import { PlusIcon } from '@neko/shared/icons';
+import type { DisplayTab } from '@/presenters/tab-display-presenter';
 
 interface HeaderProps {
-  tabs: OpenTab[];
+  tabs: DisplayTab[];
   activeTabId: string | null;
   activeView: TabType;
   conversations: ConversationSummary[];
@@ -20,7 +22,6 @@ interface HeaderProps {
   // AccountBar props (replaces settings gear)
   ssoSession: SsoSession | null;
   configuredProviders: ConfiguredProvider[];
-  selectedModelId: string | null;
   onOpenOnboarding: () => void;
 }
 
@@ -38,13 +39,12 @@ export function Header({
   onClearAllConversations,
   ssoSession,
   configuredProviders,
-  selectedModelId,
   onOpenOnboarding,
 }: HeaderProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="agent-header flex flex-shrink-0 items-center justify-between gap-2 px-1 py-1">
+    <header className="agent-header flex flex-shrink-0 items-center justify-between gap-2 px-2 py-1">
       {/* Left: Tabs */}
       <TabBar
         tabs={tabs}
@@ -55,12 +55,16 @@ export function Header({
       />
 
       {/* Right: Action buttons */}
-      <div className="flex items-center gap-0.5 flex-shrink-0">
+      <div className="agent-header-actions flex items-center gap-0.5 flex-shrink-0">
         {/* + New button */}
-        <button onClick={onNewChat} className="agent-header-action" title={t('header.newChat')}>
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="agent-header-action"
+          aria-label={t('header.newChat')}
+          title={t('header.newChat')}
+        >
+          <PlusIcon className="w-4 h-4" />
         </button>
 
         {/* History dropdown */}
@@ -76,10 +80,9 @@ export function Header({
         <AccountBar
           ssoSession={ssoSession}
           configuredProviders={configuredProviders}
-          selectedModelId={selectedModelId}
           onOpenOnboarding={onOpenOnboarding}
         />
       </div>
-    </div>
+    </header>
   );
 }

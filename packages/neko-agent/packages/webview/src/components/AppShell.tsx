@@ -35,6 +35,8 @@ export function AppShell() {
     setProjectFiles,
     mentionItems,
     setMentionItems,
+    mentionSearchFilter,
+    setMentionSearchFilter,
     pluginCommands,
     setPluginCommands,
     updateSettings,
@@ -78,6 +80,8 @@ export function AppShell() {
         setProjectFiles={setProjectFiles}
         mentionItems={mentionItems}
         setMentionItems={setMentionItems}
+        mentionSearchFilter={mentionSearchFilter}
+        setMentionSearchFilter={setMentionSearchFilter}
         pluginCommands={pluginCommands}
         setPluginCommands={setPluginCommands}
         updateSettings={updateSettings}
@@ -91,7 +95,6 @@ export function AppShell() {
             {...headerProps}
             ssoSession={settings.ssoSession}
             configuredProviders={settings.configuredProviders}
-            selectedModelId={settings.selectedModelId}
             onOpenOnboarding={() => setShowOnboarding(true)}
           />
         )}
