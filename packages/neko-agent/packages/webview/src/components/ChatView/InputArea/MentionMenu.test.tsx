@@ -174,7 +174,7 @@ describe('MentionMenu icon projection', () => {
     expect(screen.getByText('Files')).toBeTruthy();
     expect(screen.getByText('Assets')).toBeTruthy();
     expect(screen.getByText('Entities')).toBeTruthy();
-    expect(screen.getByText('neko/assets')).toBeTruthy();
+    expect(screen.getByText('neko/assets/library.json')).toBeTruthy();
     expect(screen.getByText('assets/hero.png')).toBeTruthy();
     expect(screen.getByText('Image')).toBeTruthy();
     expect(screen.getByText('Character')).toBeTruthy();
@@ -188,7 +188,7 @@ describe('MentionMenu icon projection', () => {
     expect(fileButton.getAttribute('title')).toBe('neko/assets/library.json');
 
     const fileName = screen.getByText('library.json');
-    const filePath = screen.getByText('neko/assets');
+    const filePath = screen.getByText('neko/assets/library.json');
     expect(fileName.parentElement).toBe(filePath.parentElement);
     expect(fileName.parentElement?.className).toContain('agent-composer-mention-main');
   });

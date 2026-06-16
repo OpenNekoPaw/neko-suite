@@ -328,11 +328,8 @@ function getMentionInlineMeta(item: MentionItem): string | undefined {
 
 function getMentionFilePathMeta(label: string, filePath: string): string | undefined {
   const normalizedPath = normalizeMentionPath(filePath);
-  const fileName = getFileName(normalizedPath);
-  const parentPath = getParentPath(normalizedPath);
-
-  if (label === fileName) return parentPath;
-  return normalizedPath !== label ? normalizedPath : parentPath;
+  if (!normalizedPath) return undefined;
+  return normalizedPath === label ? `./${normalizedPath}` : normalizedPath;
 }
 
 function getMentionRowTitle(item: MentionItem, inlineMeta: string | undefined): string {
@@ -563,13 +560,6 @@ function compareMentionText(left: string, right: string): number {
 
 function getFileName(path: string): string {
   return path.split(/[/\\]/).pop() ?? path;
-}
-
-function getParentPath(path: string): string | undefined {
-  const normalizedPath = normalizeMentionPath(path);
-  const separatorIndex = normalizedPath.lastIndexOf('/');
-  if (separatorIndex <= 0) return undefined;
-  return normalizedPath.slice(0, separatorIndex);
 }
 
 function normalizeMentionPath(path: string): string {

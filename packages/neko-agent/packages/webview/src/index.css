@@ -736,10 +736,11 @@ body {
 
 .agent-composer-mention-name {
   flex: 0 1 auto;
+  max-width: min(42%, 360px);
 }
 
 .agent-composer-mention-meta {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   font-size: 11.5px;
 }
 
