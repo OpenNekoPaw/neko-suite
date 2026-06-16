@@ -1492,7 +1492,7 @@ export function CanvasApp() {
             {isHudVisible && (
               <div
                 id="canvas-hud-controls"
-                className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2"
+                className="canvas-hud-controls absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2"
               >
                 <MiniMap
                   nodes={nodes}
