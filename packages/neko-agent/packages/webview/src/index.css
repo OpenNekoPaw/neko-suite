@@ -150,13 +150,14 @@
   --agent-overlay-shadow: 0 12px 30px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.26));
   --agent-overlay-padding: 4px;
   --agent-menu-row-min-height: 28px;
-  --agent-menu-row-padding: 5px 8px;
+  --agent-menu-row-padding: 4px 8px;
   --agent-menu-row-gap: 8px;
   --agent-menu-row-radius: 6px;
   --agent-menu-row-hover-bg: var(--vscode-list-hoverBackground, var(--agent-hover));
   --agent-menu-row-selected-bg: color-mix(in srgb, var(--agent-accent) 12%, transparent);
   --agent-menu-row-selected-border: color-mix(in srgb, var(--agent-accent) 24%, transparent);
-  --agent-menu-section-padding: 5px 8px 3px;
+  --agent-menu-section-margin: 2px 0;
+  --agent-menu-section-padding: 3px 8px 2px;
   --agent-menu-section-font-size: 10px;
   --agent-menu-section-line-height: 14px;
   --agent-danger: var(--neko-danger, var(--vscode-errorForeground, var(--fallback-error-fg)));
@@ -672,6 +673,7 @@ body {
   max-height: min(260px, 42vh);
   margin-bottom: 8px;
   overflow: hidden;
+  padding: var(--agent-overlay-padding);
   border: 1px solid var(--agent-overlay-border);
   border-radius: var(--agent-overlay-radius);
   background: var(--agent-overlay-bg);
@@ -682,7 +684,7 @@ body {
 .agent-composer-popover-scroll {
   max-height: min(260px, 42vh);
   overflow-y: auto;
-  padding: var(--agent-overlay-padding);
+  padding: 0;
 }
 
 .agent-composer-popover-hint,
@@ -694,6 +696,7 @@ body {
 }
 
 .agent-composer-popover-section {
+  margin: var(--agent-menu-section-margin);
   padding: var(--agent-menu-section-padding);
   color: var(--agent-fg-secondary);
   font-size: var(--agent-menu-section-font-size);
@@ -1179,9 +1182,9 @@ body {
 }
 
 .agent-dropdown-section {
-  margin: 4px 4px 2px;
+  margin: var(--agent-menu-section-margin);
   padding: var(--agent-menu-section-padding);
-  border-top: 1px solid var(--agent-divider);
+  border-top: 0;
   color: var(--vscode-descriptionForeground);
   font-size: var(--agent-menu-section-font-size);
   font-weight: 600;
@@ -1190,7 +1193,6 @@ body {
 
 .agent-dropdown-section:first-child {
   margin-top: 0;
-  padding-top: 2px;
   border-top: 0;
 }
 
@@ -1459,12 +1461,13 @@ body {
 .agent-header-menu-summary,
 .agent-header-menu-search,
 .agent-header-menu-footer {
-  padding: 5px;
+  padding: 0;
 }
 
 .agent-header-menu-summary,
 .agent-header-menu-search {
-  border-bottom: 1px solid var(--agent-divider);
+  margin-bottom: var(--agent-overlay-padding);
+  border-bottom: 0;
 }
 
 .agent-header-menu-item {
@@ -1474,7 +1477,7 @@ body {
   align-items: center;
   gap: var(--agent-menu-row-gap);
   padding: var(--agent-menu-row-padding);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--agent-menu-row-radius);
   background: transparent;
   color: var(--agent-fg);
@@ -1488,6 +1491,7 @@ body {
 .agent-header-menu-item:hover,
 .agent-header-menu-item:focus-visible,
 .agent-header-menu-item.is-active {
+  border-color: var(--agent-menu-row-selected-border);
   background: var(--agent-menu-row-hover-bg);
   outline: none;
 }
@@ -1527,8 +1531,9 @@ body {
 }
 
 .agent-history-menu-section {
+  margin: var(--agent-menu-section-margin);
   padding: var(--agent-menu-section-padding);
-  border-bottom: 1px solid var(--agent-divider);
+  border-bottom: 0;
   font-size: var(--agent-menu-section-font-size);
   line-height: var(--agent-menu-section-line-height);
 }
@@ -1536,25 +1541,26 @@ body {
 .agent-history-menu-list {
   min-height: 0;
   overflow-y: auto;
-  padding: var(--agent-overlay-padding);
+  padding: 0;
 }
 
 .agent-history-menu-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 4px 0 0;
+  gap: var(--agent-menu-row-gap);
+  padding: 3px 8px;
   border-radius: var(--agent-menu-row-radius);
 }
 
 .agent-history-menu-item.is-active {
+  border-color: var(--agent-menu-row-selected-border);
   background: var(--agent-menu-row-selected-bg);
 }
 
 .agent-header-menu-item-main {
   min-width: 0;
   flex: 1 1 auto;
-  padding: 4px 0 4px 8px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1600,7 +1606,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-top: 1px solid var(--agent-divider);
+  margin-top: var(--agent-overlay-padding);
+  padding: var(--agent-menu-row-padding);
+  border-top: 0;
 }
 
 .agent-history-clear-button {
