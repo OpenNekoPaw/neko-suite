@@ -12,6 +12,7 @@ vi.mock('../i18n/I18nContext', () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
         'selection.aria.workflowModes': '选择工作流模式',
+        'selection.label.workflow': '选择',
         'selection.workflow.object': '对象',
         'selection.workflow.faceRegion': '面部',
         'selection.workflow.bonePose': '骨骼',
@@ -53,11 +54,10 @@ describe('SelectionModeControls', () => {
     renderControls({ onWorkflowChange });
 
     expect(host.querySelector('[aria-label="选择工作流模式"]')).not.toBeNull();
-    expect(buttonByText('对象').getAttribute('aria-pressed')).toBe('true');
-    expect(buttonByText('灯光').title).toBe('已创建灯光选择');
+    expect(selectByLabel('选择工作流模式').value).toBe('object');
 
     act(() => {
-      buttonByText('灯光').click();
+      changeSelect('选择工作流模式', 'light');
     });
 
     expect(onWorkflowChange).toHaveBeenCalledWith('light');
@@ -66,21 +66,27 @@ describe('SelectionModeControls', () => {
   it('disables face-region selection until character regions are available', () => {
     renderControls({ characterRegionsAvailable: false });
 
-    expect(buttonByText('面部').disabled).toBe(true);
-    expect(buttonByText('面部').dataset.availabilityReason).toBe('missing-character-regions');
-    expect(buttonByText('面部').title).toBe('角色区域选择 - 不可用: 当前资产没有角色区域元数据');
-    expect(buttonByText('骨骼').disabled).toBe(false);
+    const options = selectOptions();
+    expect(options.find((item) => item.textContent === '面部')?.disabled).toBe(true);
+    expect(options.find((item) => item.textContent === '面部')?.dataset.availabilityReason).toBe(
+      'missing-character-regions',
+    );
+    expect(options.find((item) => item.textContent === '骨骼')?.disabled).toBe(false);
   });
 
   it('keeps Object and Inspect available when semantic typed picking is unavailable', () => {
     renderControls({ typedPickingAvailable: false, characterRegionsAvailable: false });
 
-    expect(buttonByText('对象').disabled).toBe(false);
-    expect(buttonByText('对象').dataset.availabilityState).toBe('available');
-    expect(buttonByText('检查').disabled).toBe(false);
-    expect(buttonByText('检查').dataset.availabilityState).toBe('available');
-    expect(buttonByText('骨骼').disabled).toBe(true);
-    expect(buttonByText('骨骼').dataset.availabilityReason).toBe('capability-unsupported');
+    const options = selectOptions();
+    expect(options.find((item) => item.textContent === '对象')?.disabled).toBe(false);
+    expect(options.find((item) => item.textContent === '对象')?.dataset.availabilityState).toBe(
+      'available',
+    );
+    expect(options.find((item) => item.textContent === '检查')?.disabled).toBe(false);
+    expect(options.find((item) => item.textContent === '骨骼')?.disabled).toBe(true);
+    expect(options.find((item) => item.textContent === '骨骼')?.dataset.availabilityReason).toBe(
+      'capability-unsupported',
+    );
   });
 });
 
@@ -107,10 +113,18 @@ function renderControls({
   });
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (item) => item.textContent === text,
-  );
-  if (!button) throw new Error(`Button not found: ${text}`);
-  return button;
+function selectByLabel(label: string): HTMLSelectElement {
+  const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+  if (!select) throw new Error(`Select not found: ${label}`);
+  return select;
+}
+
+function selectOptions(): HTMLOptionElement[] {
+  return [...selectByLabel('选择工作流模式').querySelectorAll('option')];
+}
+
+function changeSelect(label: string, value: string): void {
+  const select = selectByLabel(label);
+  select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
 }

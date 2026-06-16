@@ -60,12 +60,16 @@
     --model-status-error: var(--vscode-errorForeground, var(--model-danger));
     --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 88%, #17181b 12%);
     --model-viewport-bg: color-mix(in srgb, var(--model-bg) 90%, #000000 10%);
-    --model-left-toolbar-bg: color-mix(in srgb, var(--model-surface) 92%, transparent);
+    --model-left-toolbar-bg: color-mix(in srgb, var(--model-surface) 96%, var(--model-bg) 4%);
     --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
     --model-left-toolbar-shadow: var(--neko-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.24));
     --model-performance-overlay-bg: var(--model-surface);
-    --model-viewport-control-bg: color-mix(in srgb, var(--model-surface) 70%, transparent);
-    --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 84%, transparent);
+    --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 72%, var(--model-bg) 28%);
+    --model-viewport-control-hover-bg: color-mix(
+      in srgb,
+      var(--model-elevated) 86%,
+      var(--model-fg) 6%
+    );
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
     --model-viewport-control-active: color-mix(
@@ -74,8 +78,8 @@
       var(--model-fg) 26%
     );
     --model-viewport-control-shadow: var(--neko-shadow-md, 0 10px 26px rgba(0, 0, 0, 0.28));
-    --model-dock-bg: var(--model-surface);
-    --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 82%, var(--model-surface) 18%);
+    --model-dock-bg: color-mix(in srgb, var(--model-surface) 92%, var(--model-bg) 8%);
+    --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 76%, var(--model-bg) 24%);
     --model-dock-title-fg: var(--model-fg);
     --model-timeline-bg: color-mix(in srgb, var(--model-surface) 92%, var(--model-bg) 8%);
     --model-timeline-fg: color-mix(in srgb, var(--model-fg) 72%, var(--model-fg-secondary) 28%);
@@ -135,10 +139,10 @@
     --model-segment-active-fg: var(--model-fg);
     --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 94%, var(--model-fg) 6%);
     --model-viewport-bg: color-mix(in srgb, var(--model-bg) 92%, var(--model-fg) 8%);
-    --model-left-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
+    --model-left-toolbar-bg: color-mix(in srgb, var(--model-elevated) 96%, var(--model-bg) 4%);
     --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-performance-overlay-bg: var(--model-elevated);
-    --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 78%, transparent);
+    --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 86%, var(--model-bg) 14%);
     --model-viewport-control-hover-bg: color-mix(
       in srgb,
       var(--model-elevated) 92%,
@@ -562,6 +566,12 @@
     flex: 1;
   }
 
+  .model-workbench-body > .neko-creative-workbench-right-panel {
+    display: flex;
+    min-height: 0;
+    align-self: stretch;
+  }
+
   .model-center-panel {
     display: flex;
     min-width: 0;
@@ -578,6 +588,19 @@
     flex: 1;
     flex-direction: column;
     background: var(--model-viewport-area-bg);
+  }
+
+  #model-viewport-hud {
+    display: flex;
+    min-height: 34px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--model-border);
+    background: color-mix(in srgb, var(--model-dock-title-bg) 88%, var(--model-bg) 12%);
+    padding: 3px 6px;
+    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--model-fg) 3%, transparent);
+    color: var(--model-fg);
   }
 
   .model-viewport-shell {
@@ -696,72 +719,54 @@
     background: var(--model-accent);
   }
 
-  #model-viewport-hud {
-    pointer-events: none;
-    position: absolute;
-    inset: 10px 10px auto 10px;
-    z-index: 32;
-    display: grid;
-    grid-template-columns: minmax(260px, 1fr) minmax(220px, auto);
-    grid-template-areas:
-      'lookdev selection'
-      'quality selection'
-      'preview selection';
-    align-items: start;
-    gap: 8px;
-    max-width: calc(100% - 20px);
-  }
-
   #model-viewport-hud > * {
     min-width: 0;
   }
 
   .model-character-preview-modes {
-    pointer-events: auto;
-    grid-area: preview;
     display: flex;
-    width: min(520px, 100%);
-    max-width: min(520px, 100%);
-    flex-direction: column;
-    gap: 5px;
-    border: 1px solid var(--model-left-toolbar-border);
-    border-radius: 6px;
-    background: var(--model-left-toolbar-bg);
-    box-shadow: var(--model-left-toolbar-shadow);
-    padding: 6px;
-    backdrop-filter: blur(10px);
+    min-height: 26px;
+    align-items: center;
+    gap: 6px;
   }
 
   .model-lookdev-controls {
-    pointer-events: auto;
-    grid-area: lookdev;
     display: flex;
-    width: min(620px, 100%);
-    max-width: min(620px, 100%);
-    flex-direction: column;
-    gap: 5px;
-    border: 1px solid var(--model-left-toolbar-border);
-    border-radius: 6px;
-    background: var(--model-left-toolbar-bg);
-    box-shadow: var(--model-left-toolbar-shadow);
-    padding: 6px;
-    backdrop-filter: blur(10px);
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
   }
 
   .model-viewport-quality-controls {
-    pointer-events: auto;
-    grid-area: quality;
     display: flex;
-    width: min(360px, 100%);
-    max-width: min(360px, 100%);
+    min-width: 0;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--model-left-toolbar-border);
-    border-radius: 6px;
-    background: var(--model-left-toolbar-bg);
-    box-shadow: var(--model-left-toolbar-shadow);
-    padding: 6px;
-    backdrop-filter: blur(10px);
+  }
+
+  .model-compact-select-field {
+    display: inline-flex;
+    min-width: 0;
+    height: 26px;
+    align-items: center;
+    gap: 5px;
+    color: var(--model-fg-muted);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .model-compact-select {
+    height: 24px;
+    min-width: 76px;
+    max-width: 132px;
+    border-radius: 3px;
+    padding: 0 22px 0 7px;
+    color: var(--model-fg);
+    background: var(--model-viewport-control-bg);
+    border-color: var(--model-viewport-control-border);
+    font-size: 11px;
+    line-height: 1;
   }
 
   .model-viewport-quality-label {
@@ -772,27 +777,28 @@
   }
 
   .model-viewport-quality-segments {
-    display: grid;
+    display: none;
     flex: 1 1 auto;
-    grid-template-columns: repeat(3, minmax(48px, 1fr));
+    grid-template-columns: repeat(3, minmax(42px, 1fr));
     gap: 3px;
     min-width: 0;
   }
 
   .model-lookdev-segments {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+    display: none;
+    grid-template-columns: repeat(8, minmax(42px, 1fr));
     gap: 3px;
+    min-width: 0;
   }
 
   .model-lookdev-segments button,
   .model-lookdev-retry {
     min-width: 0;
-    min-height: 28px;
+    min-height: 26px;
     overflow: hidden;
-    border-radius: 4px;
+    border-radius: 3px;
     border: 1px solid var(--model-viewport-control-border);
-    background: color-mix(in srgb, var(--model-viewport-control-bg) 82%, transparent);
+    background: var(--model-viewport-control-bg);
     color: var(--model-fg-secondary);
     font-size: 11px;
     line-height: 1;
@@ -814,11 +820,13 @@
 
   .model-lookdev-status {
     display: flex;
-    min-height: 22px;
+    min-height: 26px;
     align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
+    gap: 6px;
     color: var(--model-fg-muted);
     font-size: 11px;
+    white-space: nowrap;
   }
 
   .model-lookdev-status [data-lookdev-status='pending'],
@@ -841,6 +849,7 @@
   }
 
   .model-lookdev-diagnostic {
+    grid-column: 1 / -1;
     max-width: 100%;
     overflow: hidden;
     color: var(--model-fg-muted);
@@ -851,30 +860,24 @@
   }
 
   .model-selection-mode-controls {
-    pointer-events: auto;
-    grid-area: selection;
-    justify-self: end;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(50px, 1fr));
-    width: min(340px, 100%);
-    max-width: min(340px, 100%);
-    gap: 3px;
-    border: 1px solid var(--model-left-toolbar-border);
-    border-radius: 6px;
-    background: var(--model-left-toolbar-bg);
-    box-shadow: var(--model-left-toolbar-shadow);
-    padding: 6px;
-    backdrop-filter: blur(10px);
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .model-selection-mode-controls > button {
+    display: none;
   }
 
   .model-selection-mode-controls button,
   .model-viewport-quality-segments button {
     min-width: 0;
-    min-height: 28px;
+    min-height: 26px;
     overflow: hidden;
-    border-radius: 4px;
+    border-radius: 3px;
     border: 1px solid var(--model-viewport-control-border);
-    background: color-mix(in srgb, var(--model-viewport-control-bg) 82%, transparent);
+    background: var(--model-viewport-control-bg);
     color: var(--model-fg-secondary);
     font-size: 11px;
     line-height: 1;
@@ -897,14 +900,16 @@
 
   .model-character-preview-segments {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+    width: min(260px, 100%);
+    flex: 0 1 260px;
+    grid-template-columns: repeat(4, minmax(48px, 1fr));
     gap: 3px;
   }
 
   .model-character-preview-segments button,
   .model-character-preview-reset {
     min-width: 0;
-    min-height: 28px;
+    min-height: 24px;
     overflow: hidden;
     border-radius: 4px;
     padding: 0 8px;
@@ -930,11 +935,16 @@
   .model-character-preview-status {
     display: flex;
     min-height: 24px;
+    flex: 1 1 auto;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 8px;
     color: var(--model-fg-muted);
     font-size: 11px;
+  }
+
+  .model-character-preview-modes.compact .model-character-preview-status {
+    flex: 0 1 auto;
   }
 
   .model-character-preview-playback {
@@ -976,8 +986,8 @@
     pointer-events: auto;
     user-select: text;
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: 12px;
+    bottom: 12px;
     z-index: 32;
     display: flex;
     width: min(620px, calc(100% - 20px));
@@ -1066,29 +1076,19 @@
 
   @media (max-width: 820px) {
     #model-viewport-hud {
-      grid-template-columns: 1fr;
-      grid-template-areas:
-        'lookdev'
-        'quality'
-        'selection'
-        'preview';
-      align-items: start;
-      max-height: calc(100% - 20px);
-      overflow: auto;
-      scrollbar-width: thin;
-    }
-
-    .model-lookdev-controls,
-    .model-viewport-quality-controls,
-    .model-selection-mode-controls,
-    .model-character-preview-modes {
-      width: 100%;
-      justify-self: stretch;
-      max-width: 100%;
+      flex-wrap: wrap;
     }
 
     .model-selection-mode-controls {
-      grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+      flex: 1 1 auto;
+    }
+
+    .model-compact-select {
+      max-width: 112px;
+    }
+
+    .model-character-preview-status {
+      justify-content: flex-start;
     }
 
     .model-performance-overlay {
@@ -1106,6 +1106,8 @@
   .model-right-dock {
     position: relative;
     display: flex;
+    height: 100%;
+    min-height: 0;
     width: 320px;
     min-width: 260px;
     max-width: 460px;
@@ -1117,6 +1119,7 @@
 
   .model-right-dock-stack {
     display: flex;
+    height: 100%;
     min-height: 0;
     flex: 1;
     flex-direction: column;
@@ -1131,10 +1134,12 @@
   .model-outliner-pane {
     flex: 0 0 auto;
     min-height: 150px;
+    max-height: calc(100% - 124px);
   }
 
   .model-properties-pane {
     flex: 1;
+    min-height: 0;
   }
 
   .model-dock-title {
@@ -1157,6 +1162,8 @@
 
   .model-dock-content > .model-side-panel,
   .model-dock-content > .model-tree-panel {
+    height: 100%;
+    min-height: 0;
     border: 0;
   }
 

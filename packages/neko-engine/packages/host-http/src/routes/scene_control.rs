@@ -874,7 +874,17 @@ fn overlay_state_result(
     viewport_id: &str,
     revision: u64,
 ) -> Value {
-    let selected_node_ids = payload_string_array(payload, "selectedNodeIds");
+    let selected_targets = payload_selection_targets(payload);
+    let mut selected_node_ids = payload_string_array(payload, "selectedNodeIds");
+    if selected_node_ids.is_empty() {
+        selected_node_ids = selected_targets
+            .iter()
+            .filter_map(|target| target.get("nodeId").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect();
+        selected_node_ids.sort();
+        selected_node_ids.dedup();
+    }
     let has_overlay_targets = has_explicit_overlay_targets(payload);
     let projected_bounds = if has_overlay_targets {
         projected_bounds_result(snapshot, payload, scene_id, viewport_id, revision)
@@ -900,6 +910,7 @@ fn overlay_state_result(
         "viewportId": viewport_id,
         "revision": revision,
         "selectedNodeIds": selected_node_ids,
+        "selectedTargets": selected_targets,
         "projectedBounds": projected_bounds,
         "gizmoAnchors": gizmo_anchors,
         "activeCamera": snapshot
@@ -4109,6 +4120,45 @@ mod tests {
         );
         assert_eq!(anchors["anchors"][0]["nodeId"], "mesh_1");
         assert_eq!(anchors["anchors"][0]["target"]["kind"], "materialSlot");
+    }
+
+    #[test]
+    fn overlay_state_preserves_selected_targets_and_derives_selected_nodes() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "nodes": [{
+                    "id": "mesh_1",
+                    "name": "Mesh",
+                    "position": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "visible": true,
+                    "has_mesh": true
+                }]
+            }),
+            22,
+        );
+        let payload = json!({
+            "selectedTargets": [{
+                "kind": "materialSlot",
+                "nodeId": "mesh_1",
+                "materialSlotId": "material:0"
+            }]
+        });
+
+        let overlay = overlay_state_result(&snapshot, Some(&payload), "scene-a", "main", 22);
+
+        assert_eq!(overlay["selectedNodeIds"][0], "mesh_1");
+        assert_eq!(overlay["selectedTargets"][0]["kind"], "materialSlot");
+        assert_eq!(
+            overlay["selectedTargets"][0]["materialSlotId"],
+            "material:0"
+        );
+        assert_eq!(
+            overlay["projectedBounds"][0]["target"]["materialSlotId"],
+            "material:0"
+        );
+        assert_eq!(overlay["gizmoAnchors"][0]["target"]["kind"], "materialSlot");
     }
 
     #[test]

@@ -14,6 +14,7 @@ vi.mock('../i18n/I18nContext', () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
         'lookdev.aria.renderModes': 'LookDev 模式',
+        'lookdev.label.mode': '着色',
         'lookdev.mode.pbr': 'PBR',
         'lookdev.mode.clay': '白模',
         'lookdev.mode.wireframe': '线框',
@@ -62,14 +63,11 @@ describe('LookDevControls', () => {
     const onModeChange = vi.fn();
     renderControls({ onModeChange });
 
-    expect(tabLabels()).toContain('PBR');
-    expect(tabLabels()).toContain('白模');
-    expect(tabLabels()).toContain('线框');
+    expect(selectByLabel('LookDev 模式').value).toBe('pbr');
     expect(host.querySelector('[aria-label="LookDev 模式"]')).not.toBeNull();
-    expect(buttonByText('白模').title).toBe('白模检查视图');
 
     act(() => {
-      buttonByText('白模').click();
+      changeSelect('LookDev 模式', 'clay');
     });
 
     expect(onModeChange).toHaveBeenCalledWith('clay');
@@ -105,7 +103,7 @@ describe('LookDevControls', () => {
       },
     });
 
-    expect(buttonByText('线框').getAttribute('aria-selected')).toBe('true');
+    expect(selectByLabel('LookDev 模式').value).toBe('wireframe');
     expect(host.textContent).toContain('切换中');
     expect(host.textContent).toContain('waiting for Engine descriptor');
     expect(host.textContent).toContain('实时');
@@ -135,10 +133,16 @@ describe('LookDevControls', () => {
       },
     });
 
-    expect(buttonByText('白模').dataset.availabilityReason).toBe('capability-unknown');
-    expect(buttonByText('白模').title).toBe('白模检查视图 - 不可用: 引擎能力状态未知');
-    expect(buttonByText('法线').dataset.availabilityReason).toBe('capability-unknown');
-    expect(buttonByText('深度').dataset.availabilityReason).toBe('capability-unsupported');
+    const options = [...selectByLabel('LookDev 模式').querySelectorAll('option')];
+    expect(options.find((item) => item.textContent === '白模')?.dataset.availabilityReason).toBe(
+      'capability-unknown',
+    );
+    expect(options.find((item) => item.textContent === '法线')?.dataset.availabilityReason).toBe(
+      'capability-unknown',
+    );
+    expect(options.find((item) => item.textContent === '深度')?.dataset.availabilityReason).toBe(
+      'capability-unsupported',
+    );
   });
 });
 
@@ -195,16 +199,14 @@ function appliedState(mode: ViewportRenderMode): LookDevUiState {
   };
 }
 
-function tabLabels(): string[] {
-  return [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].map(
-    (button) => button.textContent ?? '',
-  );
+function selectByLabel(label: string): HTMLSelectElement {
+  const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+  if (!select) throw new Error(`Select not found: ${label}`);
+  return select;
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-    (item) => item.textContent === text,
-  );
-  if (!button) throw new Error(`Button not found: ${text}`);
-  return button;
+function changeSelect(label: string, value: string): void {
+  const select = selectByLabel(label);
+  select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
 }

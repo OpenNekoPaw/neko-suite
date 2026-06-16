@@ -62,7 +62,7 @@ import type { EditableNodeTransform } from './scene/SceneEditingTypes';
 import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
 import type { ShapeType } from './types/shapeParams';
 import { modelErrorMessage, toError, webviewErrorHandler } from './platform/errors';
-import { MODEL_RESIZE_PANELS } from './layout/modelResizeLayout';
+import { MODEL_RESIZE_PANELS, constrainOutlinerSplitSize } from './layout/modelResizeLayout';
 import {
   useModelKeyboardController,
   type ModelKeyboardState,
@@ -130,7 +130,7 @@ export function App(): React.JSX.Element {
   const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
   const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
   const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(true);
-  const [isRightDockVisible, setIsRightDockVisible] = useState(false);
+  const [isRightDockVisible, setIsRightDockVisible] = useState(true);
   const [viewportInteractionSignal, setViewportInteractionSignal] = useState(0);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
@@ -1345,6 +1345,13 @@ export function App(): React.JSX.Element {
     target: characterPreviewTarget,
     t,
   });
+  const shouldShowCharacterPreviewControls =
+    previewCharacterId !== null ||
+    characterPreview.requestedMode !== null ||
+    characterPreview.appliedMode !== null ||
+    characterPreview.diagnostics.length > 0 ||
+    characterPreview.state?.playback.state === 'playing' ||
+    characterPreview.state?.playback.state === 'paused';
   const modelKeyboardState = useMemo<ModelKeyboardState>(
     () => ({
       hasSelection: selectedNodeId !== null,
@@ -1478,6 +1485,40 @@ export function App(): React.JSX.Element {
         main={
           <>
             <section className="model-viewport-area">
+              {isViewportHudVisible ? (
+                <div id="model-viewport-hud" aria-label={t('toolbar.viewportControls')}>
+                  <SelectionModeControls
+                    workflow={selectionWorkflow}
+                    typedPickingAvailable={lookDevCapabilities.typedPicking}
+                    characterRegionsAvailable={lookDevCapabilities.characterRegions}
+                    onWorkflowChange={handleSelectionWorkflowChange}
+                  />
+                  <LookDevControls
+                    state={lookDev}
+                    capabilities={lookDevCapabilities}
+                    routeAReady={routeAReady}
+                    availability={sceneCommandAvailability}
+                    helperPassesEnabled={helperPassesEnabled}
+                    onModeChange={handleLookDevModeChange}
+                  />
+                  <ViewportQualityControls
+                    quality={viewportStreamQuality}
+                    onQualityChange={setViewportStreamQuality}
+                  />
+                  {shouldShowCharacterPreviewControls ? (
+                    <CharacterPreviewModeSelector
+                      compact
+                      state={characterPreview}
+                      disabled={isCharacterPreviewDisabled}
+                      availability={characterPreviewAvailability}
+                      statusLabel={characterPreviewStatusLabel}
+                      onModeChange={handleCharacterPreviewModeChange}
+                      onResetCamera={handleCharacterPreviewCameraReset}
+                      onPlaybackControl={handleCharacterPreviewPlaybackControl}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 className="model-viewport-shell"
                 {...getKeyboardBoundaryMetadata({
@@ -1491,6 +1532,7 @@ export function App(): React.JSX.Element {
                     sceneId={sceneId}
                     sceneRevision={sceneRevision}
                     selectedNodeId={selectedNodeId}
+                    selectedTargets={selectedTargets}
                     hasPendingPrediction={hasPendingPrediction}
                     sceneControlSocket={sceneControlSocket}
                     visible={webviewVisible}
@@ -1512,37 +1554,6 @@ export function App(): React.JSX.Element {
                       alt=""
                       className="h-full w-full object-contain opacity-95"
                       draggable={false}
-                    />
-                  </div>
-                ) : null}
-                {isViewportHudVisible ? (
-                  <div id="model-viewport-hud">
-                    <LookDevControls
-                      state={lookDev}
-                      capabilities={lookDevCapabilities}
-                      routeAReady={routeAReady}
-                      availability={sceneCommandAvailability}
-                      helperPassesEnabled={helperPassesEnabled}
-                      onModeChange={handleLookDevModeChange}
-                    />
-                    <SelectionModeControls
-                      workflow={selectionWorkflow}
-                      typedPickingAvailable={lookDevCapabilities.typedPicking}
-                      characterRegionsAvailable={lookDevCapabilities.characterRegions}
-                      onWorkflowChange={handleSelectionWorkflowChange}
-                    />
-                    <ViewportQualityControls
-                      quality={viewportStreamQuality}
-                      onQualityChange={setViewportStreamQuality}
-                    />
-                    <CharacterPreviewModeSelector
-                      state={characterPreview}
-                      disabled={isCharacterPreviewDisabled}
-                      availability={characterPreviewAvailability}
-                      statusLabel={characterPreviewStatusLabel}
-                      onModeChange={handleCharacterPreviewModeChange}
-                      onResetCamera={handleCharacterPreviewCameraReset}
-                      onPlaybackControl={handleCharacterPreviewPlaybackControl}
                     />
                   </div>
                 ) : null}
@@ -1616,6 +1627,7 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
   const { t } = useTranslation();
   const dockSpec = MODEL_RESIZE_PANELS.rightDock;
   const outlinerSpec = MODEL_RESIZE_PANELS.outlinerSplit;
+  const [dockHeight, setDockHeight] = useState(0);
   const dockResize = usePersistedResize(dockSpec.panelId, dockSpec.defaultSize, {
     minSize: dockSpec.minSize,
     maxSize: dockSpec.maxSize,
@@ -1636,6 +1648,11 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
     maxSize: dockSpec.maxSize,
     onSizeChange: dockResize.setSize,
   });
+  const effectiveOutlinerSize = constrainOutlinerSplitSize(outlinerResize.size, dockHeight);
+  const handleOutlinerSizeChange = useCallback(
+    (size: number) => outlinerResize.setSize(constrainOutlinerSplitSize(size, dockHeight)),
+    [dockHeight, outlinerResize.setSize],
+  );
   const {
     containerRef: splitResizeRef,
     handleProps: splitHandleProps,
@@ -1645,10 +1662,35 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
     mode: 'pixel',
     size: outlinerResize.size,
     minSize: outlinerSpec.minSize,
-    maxSize: outlinerSpec.maxSize,
-    onSizeChange: outlinerResize.setSize,
-    calculateSize: (event, containerRect) => event.clientY - containerRect.top,
+    maxSize: constrainOutlinerSplitSize(outlinerSpec.maxSize, dockHeight),
+    onSizeChange: handleOutlinerSizeChange,
+    calculateSize: (event, containerRect) =>
+      constrainOutlinerSplitSize(event.clientY - containerRect.top, containerRect.height),
   });
+
+  useEffect(() => {
+    const dock = dockResizeRef.current;
+    if (!dock) return;
+
+    const updateDockHeight = () => {
+      setDockHeight(dock.getBoundingClientRect().height);
+    };
+    updateDockHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(updateDockHeight);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [dockResizeRef]);
+
+  useEffect(() => {
+    const constrainedSize = constrainOutlinerSplitSize(outlinerResize.size, dockHeight);
+    if (constrainedSize !== outlinerResize.size) {
+      outlinerResize.setSize(constrainedSize);
+    }
+  }, [dockHeight, outlinerResize.setSize, outlinerResize.size]);
 
   return (
     <aside
@@ -1679,7 +1721,7 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
       <div ref={splitResizeRef} className="model-right-dock-stack">
         <section
           className="model-dock-pane model-outliner-pane"
-          style={{ height: outlinerResize.size }}
+          style={{ height: effectiveOutlinerSize }}
           data-resizing={isSplitResizing ? 'true' : 'false'}
         >
           <div className="model-dock-title">{t('workbench.outliner')}</div>

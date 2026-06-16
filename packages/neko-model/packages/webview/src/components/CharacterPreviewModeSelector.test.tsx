@@ -13,6 +13,7 @@ vi.mock('../i18n/I18nContext', () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
         'characterPreview.aria.modes': '角色预览模式',
+        'characterPreview.label.mode': '预览',
         'characterPreview.aria.playback': '预览播放控制',
         'characterPreview.mode.face': '面部',
         'characterPreview.mode.full-body': '全身',
@@ -65,6 +66,13 @@ describe('CharacterPreviewModeSelector', () => {
       '面部',
     );
     expect(buttonByText('面部').title).toBe('面部近景预览');
+  });
+
+  it('renders compact mode as a single preview selector', () => {
+    renderSelector({ state: appliedState('face'), compact: true });
+
+    expect(selectByLabel('角色预览模式').value).toBe('face');
+    expect(host.querySelectorAll('[role="tab"]')).toHaveLength(0);
   });
 
   it('dispatches mode changes and camera reset from the selector', () => {
@@ -149,6 +157,7 @@ function renderSelector({
   state,
   disabled = false,
   availability,
+  compact = false,
   onModeChange = vi.fn(),
   onResetCamera = vi.fn(),
   onPlaybackControl = vi.fn(),
@@ -156,6 +165,7 @@ function renderSelector({
   state: CharacterPreviewUiState;
   disabled?: boolean;
   availability?: React.ComponentProps<typeof CharacterPreviewModeSelector>['availability'];
+  compact?: boolean;
   onModeChange?: (modeId: CharacterPreviewModeId) => void;
   onResetCamera?: () => void;
   onPlaybackControl?: (action: 'play' | 'pause' | 'stop') => void;
@@ -164,6 +174,7 @@ function renderSelector({
     root.render(
       <CharacterPreviewModeSelector
         state={state}
+        compact={compact}
         disabled={disabled}
         availability={availability}
         onModeChange={onModeChange}
@@ -228,4 +239,12 @@ function buttonByText(text: string): HTMLButtonElement {
     throw new Error(`Button not found: ${text}`);
   }
   return button;
+}
+
+function selectByLabel(label: string): HTMLSelectElement {
+  const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+  if (!select) {
+    throw new Error(`Select not found: ${label}`);
+  }
+  return select;
 }

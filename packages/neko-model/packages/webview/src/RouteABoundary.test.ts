@@ -136,6 +136,21 @@ describe('Route A webview boundaries', () => {
     expect(guideOverlay).not.toMatch(/blender-grid/);
   });
 
+  it('keeps selected model feedback Unity-like without viewport-sized fallback chrome', () => {
+    const overlayCanvas = readSource('components/OverlayCanvas.tsx');
+
+    expect(overlayCanvas).toMatch(/MODEL_VIEWPORT_SELECTION_STYLE/);
+    expect(overlayCanvas).toMatch(/rgba\(255, 142, 28, 0\.96\)/);
+    expect(overlayCanvas).toMatch(/MODEL_VIEWPORT_GIZMO_STYLE/);
+    expect(overlayCanvas).toMatch(/rgba\(239, 68, 68, 0\.96\)/);
+    expect(overlayCanvas).toMatch(/rgba\(34, 197, 94, 0\.96\)/);
+    expect(overlayCanvas).toMatch(/rgba\(59, 130, 246, 0\.96\)/);
+    expect(overlayCanvas).toMatch(/drawSelectionGizmo/);
+    expect(overlayCanvas).toMatch(/drawAxisArrowHead/);
+    expect(overlayCanvas).not.toMatch(/strokeRect\(12, 12, width - 24, height - 24\)/);
+    expect(overlayCanvas).not.toMatch(/rgba\(96, 165, 250/);
+  });
+
   it('integrates model ViewportShell migration through shared overlays, context menu, and hidden protocol toolbar', () => {
     const app = readSource('App.tsx');
     const videoViewport = readSource('components/VideoViewport.tsx');
@@ -190,8 +205,15 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/data-creative-left-rail-target="hud"/);
     expect(toolbar).toMatch(/data-creative-left-rail-action="toggle-bottom-panel"/);
     expect(toolbar).toMatch(/data-model-toolbar-action=\{`toggle-\$\{item.key\}`\}/);
-    expect(app).toMatch(/<div id="model-viewport-hud">/);
+    expect(app).toMatch(
+      /<div id="model-viewport-hud" aria-label=\{t\('toolbar\.viewportControls'\)\}>/,
+    );
     expect(app).toMatch(/hudVisible=\{isViewportHudVisible\}/);
+    expect(app).toMatch(
+      /<SelectionModeControls\b[\s\S]*<LookDevControls\b[\s\S]*<ViewportQualityControls\b/,
+    );
+    expect(app).toMatch(/shouldShowCharacterPreviewControls/);
+    expect(app).toMatch(/<CharacterPreviewModeSelector\s+compact/);
     expect(app).toMatch(/<ViewportQualityControls\b/);
     expect(app).toMatch(/<ViewportPerformanceOverlay \/>/);
     expect(app).toMatch(/\{isBottomPanelVisible \? \(\s*<TimelineDock/);
@@ -199,15 +221,36 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/id="model-timeline-dock"/);
     expect(app).not.toMatch(/timelineControlsHidden/);
     expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
+    expect(app).toMatch(/const \[dockHeight, setDockHeight\] = useState\(0\)/);
+    expect(app).toMatch(/constrainOutlinerSplitSize\(outlinerResize\.size, dockHeight\)/);
+    expect(app).toMatch(/new ResizeObserver\(updateDockHeight\)/);
     expect(css).toMatch(/\.model-center-panel\s*\{[\s\S]*flex-direction: column;/);
     expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: column;/);
     expect(css).not.toMatch(/\.model-viewport-controls\s*\{/);
-    expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*grid-template-areas:/);
+    expect(css).toMatch(
+      /\.model-workbench-body > \.neko-creative-workbench-right-panel\s*\{[\s\S]*align-self: stretch;/,
+    );
+    const rightDockRule = readCssRule(css, '.model-right-dock');
+    expect(rightDockRule).toMatch(/height:\s*100%/);
+    expect(rightDockRule).toMatch(/min-height:\s*0/);
+    expect(readCssRule(css, '.model-right-dock-stack')).toMatch(/height:\s*100%/);
+    expect(readCssRule(css, '.model-properties-pane')).toMatch(/min-height:\s*0/);
+    const viewportHudRule = readCssRule(css, '#model-viewport-hud');
+    expect(viewportHudRule).toMatch(/border-bottom:/);
+    expect(viewportHudRule).toMatch(/min-height:\s*34px;/);
     expect(css).toMatch(/\.model-viewport-quality-controls\s*\{/);
-    expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*pointer-events: none;/);
-    expect(css).toMatch(/\.model-lookdev-controls\s*\{[\s\S]*grid-area: lookdev;/);
-    expect(css).toMatch(/\.model-selection-mode-controls\s*\{[\s\S]*grid-area: selection;/);
-    expect(css).toMatch(/\.model-character-preview-modes\s*\{[\s\S]*grid-area: preview;/);
+    expect(css).toMatch(/\.model-compact-select-field\s*\{/);
+    expect(css).toMatch(/\.model-compact-select\s*\{/);
+    expect(viewportHudRule).not.toMatch(/position:\s*absolute/);
+    expect(viewportHudRule).not.toMatch(/pointer-events:\s*none/);
+    expect(viewportHudRule).not.toMatch(/grid-template-areas:/);
+    expect(readCssRule(css, '.model-lookdev-controls')).not.toMatch(/grid-area:\s*lookdev/);
+    expect(readCssRule(css, '.model-selection-mode-controls')).not.toMatch(
+      /grid-area:\s*selection/,
+    );
+    expect(readCssRule(css, '.model-character-preview-modes')).not.toMatch(/grid-area:\s*preview/);
+    expect(readCssRule(css, '.model-lookdev-segments')).toMatch(/display:\s*none/);
+    expect(readCssRule(css, '.model-viewport-quality-segments')).toMatch(/display:\s*none/);
 
     const toolbarRule = readCssRule(css, '.model-left-toolbar.neko-vtoolbar');
     expect(toolbarRule).toMatch(/border-right:/);
@@ -215,15 +258,15 @@ describe('Route A webview boundaries', () => {
 
     const lookDevRule = readCssRule(css, '.model-lookdev-controls');
     expect(lookDevRule).not.toMatch(/position: absolute/);
-    expect(lookDevRule).not.toMatch(/left:|right:|top:/);
+    expect(lookDevRule).not.toMatch(/(?:^|\s)(?:left|right|top):/);
 
     const selectionModesRule = readCssRule(css, '.model-selection-mode-controls');
     expect(selectionModesRule).not.toMatch(/position: absolute/);
-    expect(selectionModesRule).not.toMatch(/left:|right:|top:/);
+    expect(selectionModesRule).not.toMatch(/(?:^|\s)(?:left|right|top):/);
 
     const previewModesRule = readCssRule(css, '.model-character-preview-modes');
     expect(previewModesRule).not.toMatch(/position: absolute/);
-    expect(previewModesRule).not.toMatch(/left:|right:|top:/);
+    expect(previewModesRule).not.toMatch(/(?:^|\s)(?:left|right|top):/);
     expect(previewModesRule).not.toMatch(/left: 56px;/);
   });
 
@@ -297,10 +340,10 @@ describe('Route A webview boundaries', () => {
     expect(css).toMatch(/#model-viewport-hud\s*\{/);
   });
 
-  it('defaults the right dock to hidden while keeping the toolbar toggle wired', () => {
+  it('defaults the right dock to visible while keeping the toolbar toggle wired', () => {
     const app = readSource('App.tsx');
 
-    expect(app).toMatch(/const \[isRightDockVisible, setIsRightDockVisible\] = useState\(false\)/);
+    expect(app).toMatch(/const \[isRightDockVisible, setIsRightDockVisible\] = useState\(true\)/);
     expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
     expect(app).toMatch(/onToggleRightDock=\{toggleRightDock\}/);
     expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
@@ -370,18 +413,21 @@ describe('Route A webview boundaries', () => {
     );
     expect(app).toMatch(/streamQuality=\{viewportStreamQuality\}/);
     expect(qualityPolicy).toMatch(
-      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'quarter'/,
+      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'half'/,
     );
     expect(qualityPolicy).toMatch(/UHD_4K_PIXEL_COUNT = 3840 \* 2160/);
-    expect(qualityPolicy).toMatch(/quarter:[\s\S]*pixelFraction: 0\.25/);
-    expect(qualityPolicy).toMatch(/half:[\s\S]*pixelFraction: 0\.5/);
-    expect(qualityPolicy).toMatch(/native:[\s\S]*pixelFraction: 1/);
+    expect(qualityPolicy).toMatch(/PERFORMANCE_PIXEL_COUNT_LIMIT = 2880 \* 1620/);
+    expect(qualityPolicy).toMatch(/CLEAR_PIXEL_COUNT_LIMIT = UHD_4K_PIXEL_COUNT/);
+    expect(qualityPolicy).toMatch(/INSPECT_PIXEL_COUNT_LIMIT = 4096 \* 3072/);
+    expect(qualityPolicy).toMatch(/quarter:[\s\S]*pixelFraction: 0\.5625/);
+    expect(qualityPolicy).toMatch(/half:[\s\S]*pixelFraction: 1/);
+    expect(qualityPolicy).toMatch(/native:[\s\S]*pixelFraction: 1\.25/);
     expect(qualityPolicy).toMatch(/maxWidth: 4096/);
     expect(qualityPolicy).toMatch(/maxHeight: 4096/);
     expect(qualityPolicy).toMatch(/physicalHeight = cssHeight \* pixelRatio/);
     expect(qualityPolicy).toMatch(/physicalPixels = physicalWidth \* physicalHeight/);
     expect(qualityPolicy).toMatch(
-      /Math\.max\(physicalPixels, UHD_4K_PIXEL_COUNT\) \* config\.pixelFraction/,
+      /Math\.max\(physicalPixels, UHD_4K_PIXEL_COUNT\) \* config\.pixelFraction,[\s\S]*config\.maxPixelCount/,
     );
     expect(qualityPolicy).toMatch(/Math\.ceil\(value \/ VIEWPORT_DIMENSION_BUCKET\)/);
     expect(qualityPolicy).toMatch(/clamped % 2 === 0/);
@@ -404,6 +450,17 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).not.toMatch(
       /width:\s*1280,\s*\n\s*height:\s*720,\s*\n\s*pixelRatio:\s*window\.devicePixelRatio/,
     );
+  });
+
+  it('sizes the scene tree from its dock container instead of a fixed virtual list height', () => {
+    const sceneTree = readSource('components/SceneTree.tsx');
+
+    expect(sceneTree).toMatch(/treeContainerRef/);
+    expect(sceneTree).toMatch(/const \[treeHeight, setTreeHeight\] = React\.useState\(240\)/);
+    expect(sceneTree).toMatch(/new ResizeObserver\(updateTreeHeight\)/);
+    expect(sceneTree).toMatch(/height=\{treeHeight\}/);
+    expect(sceneTree).not.toMatch(/height=\{240\}/);
+    expect(sceneTree).toMatch(/flex h-full min-h-0 w-full flex-col overflow-hidden/);
   });
 
   it('presents Route A decoded frames without per-frame store backpressure', () => {
@@ -562,7 +619,7 @@ describe('Route A webview boundaries', () => {
     const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
 
     expect(readSource('viewport/viewportStreamQuality.ts')).toMatch(
-      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'quarter'/,
+      /DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'half'/,
     );
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
     expect(videoViewport).toMatch(/allowFpsDegrade: false/);

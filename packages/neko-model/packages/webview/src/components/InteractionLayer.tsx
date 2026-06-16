@@ -33,6 +33,7 @@ export interface InteractionLayerProps {
   sceneRevision: number;
   resolution?: ViewportQueryResolution | null;
   selectedNodeId: string | null;
+  selectedTargets?: readonly SelectionTarget[];
   lightNodeIds?: readonly string[];
   socket: SceneControlSocket | null;
   onSelectNode: (nodeId: string | null) => void;
@@ -51,6 +52,7 @@ export function InteractionLayer({
   sceneRevision,
   resolution,
   selectedNodeId,
+  selectedTargets = [],
   lightNodeIds = [],
   socket,
   onQueryError,
@@ -58,7 +60,7 @@ export function InteractionLayer({
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!socket || (!selectedNodeId && lightNodeIds.length === 0)) return;
+    if (!socket || !hasOverlayQueryTarget(selectedNodeId, selectedTargets, lightNodeIds)) return;
     const applyQueryError = (error: unknown) => {
       if (error instanceof Error) {
         onQueryError?.(error);
@@ -66,15 +68,15 @@ export function InteractionLayer({
       }
       onQueryError?.(new Error(String(error)));
     };
-    const queryPayload = {
+    const queryPayload = buildViewportOverlayQueryPayload({
       viewportId,
       sceneId,
       sceneRevision,
       resolution: resolution ?? undefined,
-      nodeIds: selectedNodeId ? [selectedNodeId] : [],
-      selectedNodeIds: selectedNodeId ? [selectedNodeId] : [],
+      selectedNodeId,
+      selectedTargets,
       lightNodeIds,
-    };
+    });
     void socket
       .query('overlayState', queryPayload)
       .then((overlayResult) => {
@@ -83,6 +85,7 @@ export function InteractionLayer({
           viewportId,
           sceneRevision,
           selectedNodeId: selectedNodeId ?? '',
+          selectedTargets,
           overlayResult,
           boundsResult: overlayResult,
           anchorResult: overlayResult,
@@ -99,6 +102,7 @@ export function InteractionLayer({
     sceneRevision,
     resolution,
     selectedNodeId,
+    selectedTargets,
     socket,
     viewportId,
   ]);
@@ -142,6 +146,49 @@ export function buildViewportPointerQueryFromPosition(
   };
 }
 
+export interface ViewportOverlayQueryPayload extends ViewportQueryBase {
+  nodeIds: string[];
+  selectedNodeIds: string[];
+  selectedTargets?: SelectionTarget[];
+  lightNodeIds: string[];
+}
+
+export interface ViewportOverlayQueryPayloadOptions {
+  viewportId: string;
+  sceneId?: string;
+  sceneRevision: number;
+  resolution?: ViewportQueryResolution;
+  selectedNodeId: string | null;
+  selectedTargets?: readonly SelectionTarget[];
+  lightNodeIds?: readonly string[];
+}
+
+export function buildViewportOverlayQueryPayload({
+  viewportId,
+  sceneId,
+  sceneRevision,
+  resolution,
+  selectedNodeId,
+  selectedTargets = [],
+  lightNodeIds = [],
+}: ViewportOverlayQueryPayloadOptions): ViewportOverlayQueryPayload {
+  const targets = selectedTargets.map(cloneSelectionTarget);
+  const selectedNodeIds = uniqueStrings([
+    ...(selectedNodeId ? [selectedNodeId] : []),
+    ...nodeIdsFromSelectionTargets(targets),
+  ]);
+  return {
+    viewportId,
+    sceneId,
+    sceneRevision,
+    resolution,
+    nodeIds: selectedNodeIds,
+    selectedNodeIds,
+    ...(targets.length > 0 ? { selectedTargets: targets } : {}),
+    lightNodeIds: [...lightNodeIds],
+  };
+}
+
 export function isCompatibleViewportQueryResult(
   result: Pick<SceneHitTestResult, 'sceneId' | 'viewportId' | 'revision'>,
   sceneId: string,
@@ -160,6 +207,7 @@ export interface ViewportOverlayQueryResults {
   readonly viewportId: string;
   readonly sceneRevision: number;
   readonly selectedNodeId: string;
+  readonly selectedTargets?: readonly SelectionTarget[];
   readonly overlayResult?: unknown;
   readonly boundsResult: unknown;
   readonly anchorResult: unknown;
@@ -170,6 +218,7 @@ export function viewportOverlayFromQueryResults({
   viewportId,
   sceneRevision,
   selectedNodeId,
+  selectedTargets = [],
   overlayResult,
   boundsResult,
   anchorResult,
@@ -177,6 +226,8 @@ export function viewportOverlayFromQueryResults({
   const projectedBounds = readProjectedBounds(boundsResult, selectedNodeId);
   const gizmoAnchors = readGizmoAnchors(anchorResult, selectedNodeId);
   const selectedNodeIds = readSelectedNodeIds(overlayResult).filter(Boolean);
+  const returnedTargets = readSelectedTargets(overlayResult);
+  const resolvedTargets = returnedTargets.length > 0 ? returnedTargets : [...selectedTargets];
   const boundsRevision = readViewportQueryRevision(boundsResult);
   const anchorRevision = readViewportQueryRevision(anchorResult);
   const revision = Math.max(boundsRevision ?? sceneRevision, anchorRevision ?? sceneRevision);
@@ -193,9 +244,14 @@ export function viewportOverlayFromQueryResults({
     viewportId,
     revision,
     selectedNodeIds:
-      selectedNodeIds.length > 0 ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : [],
+      selectedNodeIds.length > 0
+        ? selectedNodeIds
+        : selectedNodeId
+          ? [selectedNodeId]
+          : nodeIdsFromSelectionTargets(resolvedTargets),
     projectedBounds,
     gizmoAnchors,
+    ...(resolvedTargets.length > 0 ? { selectedTargets: resolvedTargets } : {}),
   };
 }
 
@@ -261,6 +317,15 @@ function readSelectedNodeIds(value: unknown): string[] {
   return selectedNodeIds.filter((item): item is string => typeof item === 'string');
 }
 
+function readSelectedTargets(value: unknown): SelectionTarget[] {
+  if (!isRecord(value)) return [];
+  const selectedTargets = value['selectedTargets'];
+  if (!Array.isArray(selectedTargets)) return [];
+  return selectedTargets
+    .map(readSelectionTarget)
+    .filter((target): target is SelectionTarget => target !== undefined);
+}
+
 function readProjectedBoundsItem(value: unknown, selectedNodeId: string): ProjectedBounds | null {
   if (!isRecord(value)) return null;
   const nodeId = readString(value['nodeId']) ?? selectedNodeId;
@@ -315,6 +380,48 @@ function readSelectionTarget(value: unknown): SelectionTarget | undefined {
   const environmentId = readString(value['environmentId']);
   if (environmentId !== undefined) target.environmentId = environmentId;
   return target;
+}
+
+function hasOverlayQueryTarget(
+  selectedNodeId: string | null,
+  selectedTargets: readonly SelectionTarget[],
+  lightNodeIds: readonly string[],
+): boolean {
+  return (
+    selectedNodeId !== null ||
+    selectedTargets.some((target) => typeof target.nodeId === 'string') ||
+    lightNodeIds.length > 0
+  );
+}
+
+function nodeIdsFromSelectionTargets(targets: readonly SelectionTarget[]): string[] {
+  return uniqueStrings(
+    targets
+      .map((target) => target.nodeId)
+      .filter((nodeId): nodeId is string => typeof nodeId === 'string' && nodeId.length > 0),
+  );
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  const result: string[] = [];
+  for (const value of values) {
+    if (!result.includes(value)) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
+function cloneSelectionTarget(target: SelectionTarget): SelectionTarget {
+  const cloned: SelectionTarget = { ...target };
+  if (target.hit) {
+    cloned.hit = {
+      ...target.hit,
+      ...(target.hit.worldPosition ? { worldPosition: { ...target.hit.worldPosition } } : {}),
+      ...(target.hit.worldNormal ? { worldNormal: { ...target.hit.worldNormal } } : {}),
+    };
+  }
+  return cloned;
 }
 
 function readSelectionKind(value: unknown): SelectionTarget['kind'] | undefined {

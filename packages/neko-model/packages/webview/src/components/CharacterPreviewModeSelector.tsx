@@ -14,6 +14,7 @@ export interface CharacterPreviewModeSelectorProps {
   disabled: boolean;
   availability?: ModelControlAvailability;
   statusLabel?: string;
+  compact?: boolean;
   onModeChange: (modeId: CharacterPreviewModeId) => void;
   onResetCamera: () => void;
   onPlaybackControl?: (action: 'play' | 'pause' | 'stop') => void;
@@ -23,6 +24,7 @@ export function CharacterPreviewModeSelector({
   state,
   disabled,
   availability,
+  compact = false,
   statusLabel,
   onModeChange,
   onResetCamera,
@@ -46,31 +48,67 @@ export function CharacterPreviewModeSelector({
   const primaryPlaybackAction = playbackState === 'playing' ? 'pause' : 'play';
 
   return (
-    <div className="model-character-preview-modes" aria-label={t('characterPreview.aria.modes')}>
-      <div className="model-character-preview-segments" role="tablist">
-        {DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS.map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            role="tab"
-            aria-selected={activeMode === mode.id}
+    <div
+      className={
+        compact ? 'model-character-preview-modes compact' : 'model-character-preview-modes'
+      }
+      aria-label={t('characterPreview.aria.modes')}
+    >
+      {compact ? (
+        <label className="model-compact-select-field">
+          <span>{t('characterPreview.label.mode')}</span>
+          <select
+            aria-label={t('characterPreview.aria.modes')}
+            className="model-compact-select"
             data-availability-state={availability?.state ?? 'available'}
             data-availability-reason={
               availability?.state === 'available' ? undefined : availability?.reason
             }
             disabled={controlDisabled}
-            className={activeMode === mode.id ? 'active' : undefined}
-            title={formatControlAvailabilityTitle(
-              availability ?? { state: 'available' },
-              t,
-              t(`characterPreview.modeTitle.${mode.id}`),
-            )}
-            onClick={() => onModeChange(mode.id)}
+            value={activeMode}
+            onChange={(event) => onModeChange(event.currentTarget.value as CharacterPreviewModeId)}
           >
-            {t(`characterPreview.mode.${mode.id}`)}
-          </button>
-        ))}
-      </div>
+            {DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS.map((mode) => (
+              <option
+                key={mode.id}
+                title={formatControlAvailabilityTitle(
+                  availability ?? { state: 'available' },
+                  t,
+                  t(`characterPreview.modeTitle.${mode.id}`),
+                )}
+                value={mode.id}
+              >
+                {t(`characterPreview.mode.${mode.id}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <div className="model-character-preview-segments" role="tablist">
+          {DEFAULT_CHARACTER_PREVIEW_MODE_DESCRIPTORS.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === mode.id}
+              data-availability-state={availability?.state ?? 'available'}
+              data-availability-reason={
+                availability?.state === 'available' ? undefined : availability?.reason
+              }
+              disabled={controlDisabled}
+              className={activeMode === mode.id ? 'active' : undefined}
+              title={formatControlAvailabilityTitle(
+                availability ?? { state: 'available' },
+                t,
+                t(`characterPreview.modeTitle.${mode.id}`),
+              )}
+              onClick={() => onModeChange(mode.id)}
+            >
+              {t(`characterPreview.mode.${mode.id}`)}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="model-character-preview-status">
         <span>{displayStatus}</span>
         {canControlPlayback ? (

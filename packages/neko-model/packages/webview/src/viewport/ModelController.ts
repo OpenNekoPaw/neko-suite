@@ -362,16 +362,21 @@ export class ModelController implements ISceneController {
       ) {
         const candidates = Array.isArray(result.candidates) ? result.candidates : [];
         const primary = candidates[0];
-        useModelStore.setState({
-          selectedTargets: candidates.length > 0 ? [...candidates] : [],
-        });
-        this.options.onSelectNode?.(
+        const nextNodeId =
           typeof primary?.nodeId === 'string'
             ? primary.nodeId
             : typeof result.nodeId === 'string'
               ? result.nodeId
-              : null,
-        );
+              : null;
+        this.options.onSelectNode?.(nextNodeId);
+        useModelStore.setState({
+          selectedTargets:
+            candidates.length > 0
+              ? [...candidates]
+              : nextNodeId
+                ? [{ kind: 'node', nodeId: nextNodeId }]
+                : [],
+        });
       }
     }
 

@@ -3,7 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readPersistedResizeState } from '@neko/ui/hooks';
-import { MODEL_RESIZE_PANELS } from './modelResizeLayout';
+import {
+  MODEL_RESIZE_PANELS,
+  constrainOutlinerSplitSize,
+  MODEL_RIGHT_DOCK_MIN_PROPERTIES_SIZE,
+  MODEL_RIGHT_DOCK_SPLIT_HANDLE_SIZE,
+} from './modelResizeLayout';
 
 const srcRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -67,12 +72,23 @@ describe('Model resize layout contract', () => {
     ).toBe(140);
   });
 
+  it('constrains the outliner split to the current right dock height', () => {
+    expect(constrainOutlinerSplitSize(999, 320)).toBe(
+      320 - MODEL_RIGHT_DOCK_SPLIT_HANDLE_SIZE - MODEL_RIGHT_DOCK_MIN_PROPERTIES_SIZE,
+    );
+    expect(constrainOutlinerSplitSize(100, 720)).toBe(MODEL_RESIZE_PANELS.outlinerSplit.minSize);
+    expect(constrainOutlinerSplitSize(999, 720)).toBe(MODEL_RESIZE_PANELS.outlinerSplit.maxSize);
+  });
+
   it('wires resize handles without changing viewport semantic control ownership', () => {
     const app = readSource('App.tsx');
 
     expect(app).toMatch(/usePersistedResize\(dockSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(outlinerSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(timelineSpec\.panelId/);
+    expect(app).toMatch(/const \[dockHeight, setDockHeight\] = useState\(0\)/);
+    expect(app).toMatch(/constrainOutlinerSplitSize\(outlinerResize\.size, dockHeight\)/);
+    expect(app).toMatch(/new ResizeObserver\(updateDockHeight\)/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{dockHandleProps\}/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{splitHandleProps\}/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{handleProps\}/);

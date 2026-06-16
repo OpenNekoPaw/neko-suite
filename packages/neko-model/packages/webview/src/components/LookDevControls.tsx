@@ -61,7 +61,39 @@ export function LookDevControls({
 
   return (
     <div className="model-lookdev-controls" aria-label={t('lookdev.aria.renderModes')}>
-      <div className="model-lookdev-segments" role="tablist">
+      <label className="model-compact-select-field">
+        <span>{t('lookdev.label.mode')}</span>
+        <select
+          aria-label={t('lookdev.aria.renderModes')}
+          className="model-compact-select"
+          value={activeMode}
+          onChange={(event) => onModeChange(event.currentTarget.value as ViewportRenderMode)}
+        >
+          {LOOKDEV_MODES.map((item) => {
+            const modeAvailability = lookDevModeAvailability({
+              capabilities,
+              mode: item.mode,
+              routeAReady,
+              baseAvailability: availability,
+            });
+            return (
+              <option
+                key={item.mode}
+                data-availability-state={modeAvailability.state}
+                data-availability-reason={
+                  modeAvailability.state === 'available' ? undefined : modeAvailability.reason
+                }
+                disabled={isControlDisabled(modeAvailability)}
+                title={formatControlAvailabilityTitle(modeAvailability, t, t(item.titleKey))}
+                value={item.mode}
+              >
+                {t(item.labelKey)}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+      <div className="model-lookdev-segments" role="tablist" aria-hidden="true">
         {LOOKDEV_MODES.map((item) => {
           const modeAvailability = lookDevModeAvailability({
             capabilities,

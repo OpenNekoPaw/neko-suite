@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildViewportOverlayQueryPayload,
   buildViewportPointerQuery,
   INTERACTION_LAYER_INPUT_POLICY,
   buildViewportPointerQueryFromPosition,
@@ -78,6 +79,50 @@ describe('InteractionLayer query helpers', () => {
     });
   });
 
+  it('builds overlay queries from selected targets and keeps node ids deduped', () => {
+    expect(
+      buildViewportOverlayQueryPayload({
+        viewportId: 'main',
+        sceneId: 'scene-a',
+        sceneRevision: 7,
+        selectedNodeId: 'node-1',
+        selectedTargets: [
+          {
+            kind: 'materialSlot',
+            nodeId: 'node-1',
+            materialSlotId: 'skin',
+          },
+          {
+            kind: 'submesh',
+            nodeId: 'node-2',
+            submeshId: 'body',
+          },
+        ],
+        lightNodeIds: ['key_light'],
+      }),
+    ).toEqual({
+      viewportId: 'main',
+      sceneId: 'scene-a',
+      sceneRevision: 7,
+      resolution: undefined,
+      nodeIds: ['node-1', 'node-2'],
+      selectedNodeIds: ['node-1', 'node-2'],
+      selectedTargets: [
+        {
+          kind: 'materialSlot',
+          nodeId: 'node-1',
+          materialSlotId: 'skin',
+        },
+        {
+          kind: 'submesh',
+          nodeId: 'node-2',
+          submeshId: 'body',
+        },
+      ],
+      lightNodeIds: ['key_light'],
+    });
+  });
+
   it('builds viewport overlay state from compatible bounds and gizmo query results', () => {
     expect(
       viewportOverlayFromQueryResults({
@@ -136,6 +181,13 @@ describe('InteractionLayer query helpers', () => {
         viewportId: 'main',
         sceneRevision: 7,
         selectedNodeId: 'node-1',
+        selectedTargets: [
+          {
+            kind: 'materialSlot',
+            nodeId: 'node-1',
+            materialSlotId: 'skin',
+          },
+        ],
         boundsResult: {
           sceneId: 'scene-a',
           viewportId: 'main',
@@ -180,6 +232,13 @@ describe('InteractionLayer query helpers', () => {
               materialSlotId: 'skin',
             },
           }),
+        ],
+        selectedTargets: [
+          {
+            kind: 'materialSlot',
+            nodeId: 'node-1',
+            materialSlotId: 'skin',
+          },
         ],
         gizmoAnchors: [
           expect.objectContaining({

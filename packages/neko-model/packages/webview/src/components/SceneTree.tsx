@@ -30,6 +30,8 @@ export function SceneTree({
   showHeader = true,
 }: SceneTreeProps): React.JSX.Element {
   const { t } = useTranslation();
+  const treeContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const [treeHeight, setTreeHeight] = React.useState(240);
   const visibilityLabels: VisibilityLabels = {
     hide: t('sceneTree.hideNode'),
     show: t('sceneTree.showNode'),
@@ -40,18 +42,35 @@ export function SceneTree({
     [nodes, selectedNodeId],
   );
 
+  React.useEffect(() => {
+    const container = treeContainerRef.current;
+    if (!container) return;
+
+    const updateTreeHeight = () => {
+      setTreeHeight(Math.max(1, Math.floor(container.getBoundingClientRect().height)));
+    };
+    updateTreeHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(updateTreeHeight);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="model-tree-panel h-full w-full overflow-y-auto text-xs">
+    <div className="model-tree-panel flex h-full min-h-0 w-full flex-col overflow-hidden text-xs">
       {showHeader && (
         <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
           {t('sceneTree.title')}
         </div>
       )}
-      <div className="p-1">
+      <div ref={treeContainerRef} className="min-h-0 flex-1 p-1">
         <TreeView
           className="h-full"
           focusedId={focusedId ?? selectedNodeId ?? nodes[0]?.nodeId}
-          height={240}
+          height={treeHeight}
           items={treeItems}
           label={t('sceneTree.title')}
           onFocusItem={setFocusedId}

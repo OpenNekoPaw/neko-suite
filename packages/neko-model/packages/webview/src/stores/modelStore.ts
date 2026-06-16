@@ -526,7 +526,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
       };
     }),
 
-  selectNode: (id) => set({ selectedNodeId: id }),
+  selectNode: (id) =>
+    set({
+      selectedNodeId: id,
+      selectedTargets: id ? [{ kind: 'node', nodeId: id }] : [],
+    }),
 
   setSceneControlStatus: (status, error = null) =>
     set({

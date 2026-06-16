@@ -63,6 +63,39 @@ export function SelectionModeControls({
 
   return (
     <div className="model-selection-mode-controls" aria-label={t('selection.aria.workflowModes')}>
+      <label className="model-compact-select-field">
+        <span>{t('selection.label.workflow')}</span>
+        <select
+          aria-label={t('selection.aria.workflowModes')}
+          className="model-compact-select"
+          value={workflow}
+          onChange={(event) =>
+            onWorkflowChange(event.currentTarget.value as ModelSelectionWorkflow)
+          }
+        >
+          {WORKFLOWS.map((item) => {
+            const availability = selectionWorkflowAvailability(
+              item.workflow,
+              typedPickingAvailable,
+              characterRegionsAvailable,
+            );
+            return (
+              <option
+                key={item.workflow}
+                data-availability-state={availability.state}
+                data-availability-reason={
+                  availability.state === 'available' ? undefined : availability.reason
+                }
+                disabled={isControlDisabled(availability)}
+                title={formatControlAvailabilityTitle(availability, t, t(item.titleKey))}
+                value={item.workflow}
+              >
+                {t(item.labelKey)}
+              </option>
+            );
+          })}
+        </select>
+      </label>
       {WORKFLOWS.map((item) => {
         const availability = selectionWorkflowAvailability(
           item.workflow,

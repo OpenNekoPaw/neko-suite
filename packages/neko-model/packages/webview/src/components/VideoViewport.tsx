@@ -3,6 +3,7 @@ import type {
   RenderFrameMeta,
   RenderStreamDescriptor,
   SceneDelta,
+  SelectionTarget,
   ViewportDescriptor,
   ViewportRenderMode,
 } from '@neko/shared';
@@ -27,6 +28,7 @@ import { handleModelMenuAction, ModelController } from '../viewport/ModelControl
 import { sampleViewportMemory } from '../viewport/viewportMemoryProbe';
 import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from '../viewport/streamInteractionPolicy';
 import {
+  DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET,
   createViewportStreamSize,
   type ViewportStreamQualityPreset,
 } from '../viewport/viewportStreamQuality';
@@ -37,6 +39,7 @@ export interface VideoViewportProps {
   sceneId: string;
   sceneRevision: number;
   selectedNodeId: string | null;
+  selectedTargets?: readonly SelectionTarget[];
   hasPendingPrediction: boolean;
   sceneControlSocket: SceneControlSocket | null;
   visible: boolean;
@@ -219,6 +222,7 @@ export function VideoViewport({
   sceneId,
   sceneRevision,
   selectedNodeId,
+  selectedTargets = [],
   hasPendingPrediction,
   sceneControlSocket,
   visible,
@@ -226,7 +230,7 @@ export function VideoViewport({
   predictions = [],
   topologyWarning = null,
   hudVisible = true,
-  streamQuality = 'quarter',
+  streamQuality = DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET,
   interactionSignal = 0,
   onSelectNode,
   onSceneControlError,
@@ -887,6 +891,7 @@ export function VideoViewport({
               sceneRevision={sceneRevision}
               resolution={isViewportStreamSizeReady(viewportSize) ? viewportSize : null}
               selectedNodeId={selectedNodeId}
+              selectedTargets={selectedTargets}
               lightNodeIds={lightNodeIds}
               socket={sceneControlSocket}
               onSelectNode={onSelectNode}
@@ -896,6 +901,7 @@ export function VideoViewport({
               viewportId={MAIN_VIEWPORT_ID}
               frameMeta={overlayFrameMeta}
               selectedNodeId={selectedNodeId}
+              selectedTargets={selectedTargets}
               hasPendingPrediction={hasPendingPrediction}
               overlay={overlay}
               predictions={predictions}
