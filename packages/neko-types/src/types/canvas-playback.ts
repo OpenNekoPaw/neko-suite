@@ -128,8 +128,9 @@ export interface CanvasPlaybackDiagnostic {
 }
 
 export type CanvasPlaybackRouteSourceKind =
-  | 'selection'
   | 'entry'
+  | 'auto-entry'
+  | 'selection'
   | 'container'
   | 'scene'
   | 'component'
@@ -403,12 +404,19 @@ function projectStoryboard(context: PlaybackProjectionContext): AdapterProjectio
   const selected = context.selectedNodeId
     ? context.nodeById.get(context.selectedNodeId)
     : undefined;
-  const startScene = resolveStoryboardStartScene(context, selected);
-  if (selected?.type === 'shot' && !startScene) {
+  const explicitStoryboardEntry = resolveStoryboardExplicitEntry(context);
+  const startScene = resolveStoryboardStartScene(context, explicitStoryboardEntry ?? selected);
+  const startShot =
+    explicitStoryboardEntry?.type === 'shot'
+      ? explicitStoryboardEntry
+      : selected?.type === 'shot'
+        ? selected
+        : undefined;
+  if (startShot && !startScene) {
     return {
-      units: [toPlaybackUnit(selected, context)],
-      transitions: outgoingNodeTransitions(context, new Set([selected.id])),
-      entryUnitIds: [selected.id],
+      units: [toPlaybackUnit(startShot, context)],
+      transitions: outgoingNodeTransitions(context, new Set([startShot.id])),
+      entryUnitIds: [startShot.id],
     };
   }
   if (!startScene) {
@@ -420,7 +428,7 @@ function projectStoryboard(context: PlaybackProjectionContext): AdapterProjectio
   const transitions: CanvasPlaybackTransition[] = [];
   const entryUnitIds: string[] = [];
   const sceneQueue: Array<{ scene: SceneGroupCanvasNode; startShotId?: string }> = [
-    { scene: startScene, startShotId: selected?.type === 'shot' ? selected.id : undefined },
+    { scene: startScene, startShotId: startShot?.id },
   ];
 
   while (sceneQueue.length > 0) {
@@ -619,6 +627,14 @@ function createCanvasPlaybackRouteCandidates(
 ): readonly CanvasPlaybackRouteCandidate[] {
   if (projection.units.length === 0) return [];
   const unitById = new Map(projection.units.map((unit) => [unit.id, unit]));
+  const playableUnitIds = new Set(projection.units.map((unit) => unit.id));
+  const explicitEntryUnitIds = new Set(
+    context.metadata.entryIds
+      .map((entryId) =>
+        resolveExplicitPlaybackEntryUnitId(context, projection.units, playableUnitIds, entryId),
+      )
+      .filter((entryId): entryId is string => Boolean(entryId)),
+  );
   const candidates: CanvasPlaybackRouteCandidate[] = [];
   const seenRouteKeys = new Set<string>();
 
@@ -634,8 +650,9 @@ function createCanvasPlaybackRouteCandidates(
     const unitIds = routePath.unitIds;
     if (unitIds.length === 0) return;
     const routeKey = `${entryUnitId}:${unitIds.join('>')}`;
-    if (seenRouteKeys.has(routeKey)) return;
-    seenRouteKeys.add(routeKey);
+    const semanticRouteKey = sourceKind === 'selection' ? `${sourceKind}:${routeKey}` : routeKey;
+    if (seenRouteKeys.has(semanticRouteKey)) return;
+    seenRouteKeys.add(semanticRouteKey);
     const entryUnit = unitById.get(entryUnitId);
     candidates.push({
       id: routeId,
@@ -663,6 +680,13 @@ function createCanvasPlaybackRouteCandidates(
     });
   };
 
+  for (const entryUnitId of projection.entryUnitIds) {
+    const sourceKind: CanvasPlaybackRouteSourceKind = explicitEntryUnitIds.has(entryUnitId)
+      ? 'entry'
+      : 'auto-entry';
+    addRoute(sourceKind, entryUnitId, `${sourceKind}:${entryUnitId}`);
+  }
+
   if (context.selectedNodeId) {
     const selectedNode = context.nodeById.get(context.selectedNodeId);
     const selectedUnit =
@@ -680,10 +704,6 @@ function createCanvasPlaybackRouteCandidates(
       selectedNode ? readNodeLabel(selectedNode) : selectedUnit?.label,
       context.selectedNodeId,
     );
-  }
-
-  for (const entryUnitId of projection.entryUnitIds) {
-    addRoute('entry', entryUnitId, `entry:${entryUnitId}`);
   }
 
   for (const sourceNode of context.canvas.nodes) {
@@ -950,18 +970,20 @@ function compareIndexedCanvasPlaybackRouteCandidates(
 
 function routeSourceKindOrder(kind: CanvasPlaybackRouteSourceKind): number {
   switch (kind) {
-    case 'selection':
-      return 0;
     case 'entry':
+      return 0;
+    case 'auto-entry':
       return 1;
-    case 'scene':
+    case 'selection':
       return 2;
-    case 'container':
+    case 'scene':
       return 3;
-    case 'component':
+    case 'container':
       return 4;
-    case 'single-unit':
+    case 'component':
       return 5;
+    case 'single-unit':
+      return 6;
   }
 }
 
@@ -992,7 +1014,11 @@ function finalizeProjectionEntries(
   projection: AdapterProjection,
 ): AdapterProjection {
   const unitIds = new Set(projection.units.map((unit) => unit.id));
-  const explicitEntry = context.metadata.entryIds.find((entryId) => unitIds.has(entryId));
+  const explicitEntry = context.metadata.entryIds
+    .map((entryId) =>
+      resolveExplicitPlaybackEntryUnitId(context, projection.units, unitIds, entryId),
+    )
+    .find((entryId): entryId is string => Boolean(entryId));
   const roleStart = projection.units.find((unit) => {
     const node = context.nodeById.get(unit.sourceNodeId);
     return node && getCanvasPlaybackNodeOverride(context.metadata, node).role === 'start';
@@ -1005,10 +1031,11 @@ function finalizeProjectionEntries(
       ? context.selectedNodeId
       : undefined;
   const fallback = projection.units[0]?.id;
-  const entryUnitIds =
-    projection.entryUnitIds.length > 0
+  const entryUnitIds = explicitEntry
+    ? [explicitEntry]
+    : projection.entryUnitIds.length > 0
       ? projection.entryUnitIds.filter((entryId) => unitIds.has(entryId))
-      : [explicitEntry ?? roleStart?.id ?? zeroIncoming?.id ?? selected ?? fallback].filter(
+      : [roleStart?.id ?? zeroIncoming?.id ?? selected ?? fallback].filter(
           (entryId): entryId is string => Boolean(entryId),
         );
 
@@ -1039,6 +1066,26 @@ function finalizeProjectionEntries(
         : []),
     ],
   };
+}
+
+function resolveExplicitPlaybackEntryUnitId(
+  context: PlaybackProjectionContext,
+  units: readonly CanvasPlaybackUnit[],
+  unitIds: ReadonlySet<string>,
+  entryId: string,
+): string | undefined {
+  if (unitIds.has(entryId)) {
+    return entryId;
+  }
+  const directUnit = units.find((unit) => unit.sourceNodeId === entryId);
+  if (directUnit) {
+    return directUnit.id;
+  }
+  const node = context.nodeById.get(entryId);
+  if (node && isContainerNode(node)) {
+    return findFirstPlaybackUnitForContainer(context, node, units)?.id;
+  }
+  return undefined;
 }
 
 function syntheticSequenceTransitions(
@@ -1366,6 +1413,18 @@ function resolveStoryboardStartScene(
     );
   }
   return context.canvas.nodes.find((node): node is SceneGroupCanvasNode => node.type === 'scene');
+}
+
+function resolveStoryboardExplicitEntry(
+  context: PlaybackProjectionContext,
+): CanvasNode | undefined {
+  for (const entryId of context.metadata.entryIds) {
+    const node = context.nodeById.get(entryId);
+    if (node && (node.type === 'scene' || node.type === 'shot')) {
+      return node;
+    }
+  }
+  return undefined;
 }
 
 function comparePlaybackNodes(

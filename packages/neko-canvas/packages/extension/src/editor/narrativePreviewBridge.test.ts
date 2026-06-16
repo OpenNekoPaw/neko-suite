@@ -576,9 +576,73 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('id="player-controls"');
     expect(html).toContain('narrative-preview-media-runtime.js');
     expect(html).toContain('id="segmented-timeline"');
+    expect(html).toContain('id="route-hint"');
+    expect(html).toContain('class="route-hint"');
     expect(html).toContain('class="branch-choices"');
     expect(html).toContain('id="playback-clock"');
     expect(html).toContain('id="playback-inspector"');
+    expect(html).toContain('--preview-surface:');
+    expect(html).toContain('.player-stage::before');
+    expect(html).toContain('.stage-action-icon');
+    expect(html).toContain('class="stage-action-icon" viewBox="0 0 24 24"');
+    expect(html).toContain('id="inspector-close"');
+    expect(html).toContain('M7 7 17 17M17 7 7 17');
+    expect(html).toContain('class="stage-nav stage-nav-left"');
+    expect(html).toContain('id="stage-previous"');
+    expect(html).toContain('class="stage-nav stage-nav-right"');
+    expect(html).toContain('id="stage-next"');
+    expect(html).toContain('data-mode="next"');
+    expect(html).toContain('id="stage-branch-menu"');
+    expect(html).toContain('.stage-nav-button[data-mode="branches"]');
+    expect(html).toContain('.stage-branch-menu[data-open="true"]');
+    expect(html).toContain('.player-controls > .branch-choices:not(:empty)');
+    expect(html).toContain('.player-controls > .timeline-wrap');
+    expect(html).toContain('.player-controls > .transport-row');
+    expect(html).toContain('width: min(1040px, 100%)');
+    expect(html).toContain('class="transport-glyph" data-kind="previous"');
+    expect(html).toContain('class="transport-glyph" data-kind="play"');
+    expect(html).toContain('class="transport-glyph" data-kind="next"');
+    expect(html).toContain('id="preview-play-label"');
+    expect(html).toContain('data-playing="false"');
+    expect(html).toContain(
+      "const previewPlayLabel = document.getElementById('preview-play-label')",
+    );
+    expect(html).toContain("previewPlayLabel.textContent = isPlaying ? t('pause') : t('play')");
+    expect(html).toContain("previewPlay.dataset.playing = isPlaying ? 'true' : 'false'");
+    expect(html).toContain("stagePrevious.addEventListener('click', () => stepPrevious())");
+    expect(html).toContain("stageNext.addEventListener('click'");
+    expect(html).toContain('function stepPrevious()');
+    expect(html).toContain('function stepNext()');
+    expect(html).toContain('function renderStageNavigation(unit, index, diagnostics)');
+    expect(html).toContain("stagePrevious.dataset.visible = index > 0 ? 'true' : 'false'");
+    expect(html).toContain("stageNext.dataset.mode = hasBranches ? 'branches' : 'next'");
+    expect(html).toContain('function groupRouteCandidates(candidates)');
+    expect(html).toContain("document.createElement('optgroup')");
+    expect(html).toContain(
+      "routeHint.dataset.visible = !hasExplicitEntry && hasFallbackFragments ? 'true' : 'false'",
+    );
+    expect(html).toContain('routeAmbiguousEntryHint');
+    expect(html).toContain('routeMainEntryGroup');
+    expect(html).toContain('routeCurrentSelectionGroup');
+    expect(html).toContain('routeSceneFragmentGroup');
+    expect(html).toContain('routeIsolatedFragmentGroup');
+    expect(html).toContain("inspectorBranches.dataset.visible = 'false'");
+    expect(html).toContain(
+      "inspectorDiagnostics.dataset.visible = diagnostics.length > 0 ? 'true' : 'false'",
+    );
+    expect(html).toContain('function createChoiceButton(choice)');
+    expect(html).toContain('function commitChoice(choice)');
+    expect(html).toContain('stageBranchMenu.appendChild(createChoiceButton(choice))');
+    expect(html).toContain('function toggleStageBranchMenu()');
+    expect(html).toContain('function closeStageBranchMenu()');
+    expect(html).toContain("document.addEventListener('keydown'");
+    expect(html).toContain("event.key !== 'Escape'");
+    expect(html).toContain('closeStageBranchMenu();');
+    expect(html).toContain('.stage-detail-label');
+    expect(html).toContain('.stage-detail-value');
+    expect(html).toContain('.meta-label');
+    expect(html).toContain('.meta-value');
+    expect(html).toContain('@media (prefers-reduced-motion: reduce)');
     expect(html).toContain('id="session-badge"');
     expect(html).toContain('源画布已关闭');
     expect(html).toContain("message.type === 'preview:sessionStale'");
@@ -667,11 +731,13 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain("playbackPlan.behaviorMode === 'interactive' && transitions.length > 1");
     expect(html).toContain('segment.addEventListener');
     expect(html).toContain('setActiveUnit(unit.id, false, 0)');
-    expect(html).toContain('unitChoices.appendChild(button)');
+    expect(html).toContain('unitChoices.appendChild(createChoiceButton(choice))');
+    expect(html).toContain('stageBranchMenu.appendChild(createChoiceButton(choice))');
     expect(html).toContain('canvas:choiceMade');
     expect(html).toContain("playbackInspector.dataset.open = 'true'");
     expect(html).toContain("playbackInspector.dataset.open = 'false'");
-    expect(html).toContain('inspectorDiagnostics.disabled = diagnostics.length === 0');
+    expect(html).toContain('closeStageBranchMenu();');
+    expect(html).toContain('inspectorDiagnostics.disabled = activeDiagnostics.length === 0');
     expect(html).toContain('mediaUnavailableDescription');
     expect(html).toContain('存在稳定的媒体引用');
     expect(html).toContain('isSafePreviewSource');
@@ -721,10 +787,39 @@ describe('NarrativePreviewBridge', () => {
     expect(html).toContain('let effectiveRoutes = []');
     expect(html).toContain('let activeRouteId = null');
     expect(html).toContain('let branchSelections = {}');
+    expect(html).toContain("let routeSelectOptionsKey = ''");
+    expect(html).toContain('let routeSelectInteractionActive = false');
+    expect(html).toContain('let routeSelectNeedsSync = false');
+    expect(html).toContain('let routeSelectStoppedPlayback = false');
     expect(html).toContain('routeSelect.addEventListener');
+    expect(html).toContain("routeSelect.addEventListener('pointerdown'");
+    expect(html).toContain("routeSelect.addEventListener('focus'");
+    expect(html).toContain("routeSelect.addEventListener('blur'");
+    expect(html).toContain('const hadDeferredRouteSync = routeSelectNeedsSync');
     expect(html).toContain('switchActiveRoute(routeId)');
     expect(html).toContain("routeSwitcher.dataset.visible = 'false'");
     expect(html).toContain("routeSwitcher.dataset.visible = 'true'");
+    expect(html).toContain('function beginRouteSelectInteraction()');
+    expect(html).toContain('function createRouteSelectOptionsKey()');
+    expect(html).toContain('activeRouteId = resolveDefaultRouteId(effectiveRoutes)');
+    expect(html).toContain('function resolveDefaultRouteId(candidates)');
+    expect(html).toContain('function isMainEntryRoute(candidate)');
+    expect(html).toContain("candidate.sourceKind === 'auto-entry'");
+    expect(html.indexOf('const explicitEntry = candidates.find')).toBeLessThan(
+      html.indexOf('const autoEntry = candidates.find'),
+    );
+    const routeSwitcherFunction = html.slice(
+      html.indexOf('function renderRouteSwitcher()'),
+      html.indexOf('function renderPlaybackTime', html.indexOf('function renderRouteSwitcher()')),
+    );
+    expect(routeSwitcherFunction).toContain('if (routeSelectInteractionActive)');
+    expect(routeSwitcherFunction).toContain('const optionsKey = createRouteSelectOptionsKey()');
+    expect(routeSwitcherFunction).toContain('if (routeSelectOptionsKey !== optionsKey)');
+    expect(routeSwitcherFunction).toContain("document.createElement('optgroup')");
+    expect(routeSwitcherFunction).toContain('groupRouteCandidates(effectiveRoutes)');
+    expect(routeSwitcherFunction).not.toMatch(
+      /function renderRouteSwitcher\(\) \{\s*routeSelect\.replaceChildren\(\);/,
+    );
     expect(html).toContain('function switchActiveRoute(routeId)');
     expect(html).toContain('disposeActiveMediaSurface()');
     expect(html).toContain('branchSelections = {}');

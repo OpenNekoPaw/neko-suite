@@ -187,6 +187,12 @@ describe('canvas playback contracts', () => {
     ]);
     expect(plan.routeCandidates).toEqual([
       expect.objectContaining({
+        id: 'auto-entry:shot-a1',
+        sourceKind: 'auto-entry',
+        entryUnitId: 'shot-a1',
+        unitIds: ['shot-a1', 'shot-a2', 'shot-b1'],
+      }),
+      expect.objectContaining({
         id: 'selection:shot-a1',
         sourceKind: 'selection',
         entryUnitId: 'shot-a1',
@@ -246,7 +252,31 @@ describe('canvas playback contracts', () => {
     ]);
   });
 
-  it('prioritizes selected container routes by using its first playable child unit', () => {
+  it('uses explicit scene playback entries as the main storyboard route start', () => {
+    const data = canvas([
+      scene('scene-a', ['shot-a1'], 1),
+      shot('shot-a1', 1, 'scene-a'),
+      scene('scene-b', ['shot-b1'], 2),
+      shot('shot-b1', 1, 'scene-b'),
+    ]);
+    data.playback = {
+      version: 1,
+      entryIds: ['scene-b'],
+    };
+
+    const plan = createCanvasPlaybackPlan({ canvas: data });
+    const routeResolution = resolveEffectiveCanvasPlaybackRoutes(plan);
+
+    expect(plan.entryUnitIds).toEqual(['shot-b1']);
+    expect(routeResolution.routes[0]).toMatchObject({
+      id: 'entry:shot-b1',
+      sourceKind: 'entry',
+      entryUnitId: 'shot-b1',
+      unitIds: ['shot-b1'],
+    });
+  });
+
+  it('keeps selected container routes available without overriding the main route', () => {
     const data = canvas([
       scene('scene-a', ['shot-a1', 'shot-a2'], 1),
       shot('shot-a1', 1, 'scene-a'),
@@ -257,6 +287,12 @@ describe('canvas playback contracts', () => {
     const routeResolution = resolveEffectiveCanvasPlaybackRoutes(plan);
 
     expect(routeResolution.routes[0]).toMatchObject({
+      id: 'auto-entry:shot-a1',
+      sourceKind: 'auto-entry',
+      entryUnitId: 'shot-a1',
+      unitIds: ['shot-a1', 'shot-a2'],
+    });
+    expect(routeResolution.routes[1]).toMatchObject({
       id: 'selection:shot-a1',
       title: 'scene-a',
       sourceKind: 'selection',
@@ -272,6 +308,7 @@ describe('canvas playback contracts', () => {
     const plan = createCanvasPlaybackPlan({ canvas: data, selectedNodeId: 'shot-a' });
 
     expect(plan.routeCandidates?.map((route) => [route.id, route.sourceKind])).toEqual([
+      ['auto-entry:shot-a', 'auto-entry'],
       ['selection:shot-a', 'selection'],
     ]);
     expect(resolveEffectiveCanvasPlaybackRoutes(plan).routes[0]).toMatchObject({
@@ -545,7 +582,7 @@ describe('canvas playback contracts', () => {
     const resolution = resolveEffectiveCanvasPlaybackRoutes(plan);
 
     expect(resolution.routes[0]).toMatchObject({
-      id: 'entry:media-a',
+      id: 'auto-entry:media-a',
       entryUnitId: 'media-a',
       unitIds: ['media-a', 'media-b'],
     });
@@ -640,13 +677,13 @@ describe('canvas playback contracts', () => {
     const resolution = resolveEffectiveCanvasPlaybackRoutes(plan, { maxRoutes: 2 });
 
     expect(plan.routeCandidates?.map((route) => route.id)).toEqual([
-      'entry:note-1',
+      'auto-entry:note-1',
       'component:note-2',
       'component:note-3',
       'component:note-4',
     ]);
     expect(resolution.routes.map((route) => route.id)).toEqual([
-      'entry:note-1',
+      'auto-entry:note-1',
       'component:note-2',
     ]);
     expect(resolution.diagnostics.map((diagnostic) => diagnostic.code)).toContain(

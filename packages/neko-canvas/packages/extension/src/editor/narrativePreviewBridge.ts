@@ -62,6 +62,15 @@ interface NarrativePreviewI18n {
   readonly info: string;
   readonly route: string;
   readonly routeTitle: string;
+  readonly routeMainEntryGroup: string;
+  readonly routeCurrentSelectionGroup: string;
+  readonly routeSceneFragmentGroup: string;
+  readonly routeIsolatedFragmentGroup: string;
+  readonly routeMainEntryTag: string;
+  readonly routeAutoEntryTag: string;
+  readonly routeSelectionTag: string;
+  readonly routeFragmentTag: string;
+  readonly routeAmbiguousEntryHint: string;
   readonly missingRouteCandidates: string;
   readonly missingRouteEntry: string;
   readonly invalidRoute: string;
@@ -1109,43 +1118,72 @@ export class NarrativePreviewBridge implements vscode.Disposable {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob: https:; font-src ${webview.cspSource}; media-src ${webview.cspSource} data: blob: https:; connect-src ws://127.0.0.1:* http://127.0.0.1:*;">
   <title>${h(i18n.title)}</title>
   <style>
+    :root {
+      --preview-surface: color-mix(in srgb, var(--vscode-editor-background) 92%, var(--vscode-sideBar-background));
+      --preview-surface-raised: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-editor-background));
+      --preview-border: color-mix(in srgb, var(--vscode-panel-border) 82%, transparent);
+      --preview-muted-border: color-mix(in srgb, var(--vscode-panel-border) 58%, transparent);
+      --preview-shadow: 0 18px 56px rgba(0, 0, 0, 0.22);
+      --preview-soft-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+      --preview-control-height: 34px;
+    }
+    * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
-    main { min-height: 100vh; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
+    main { min-height: 100vh; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
     section { width: 100%; box-sizing: border-box; }
-    h1 { margin: 0; font-size: 16px; font-weight: 600; }
-    h2 { margin: 0; font-size: 28px; font-weight: 650; }
+    h1 { margin: 0; font-size: 15px; font-weight: 650; }
+    h2 { margin: 0; font-size: 24px; font-weight: 680; letter-spacing: 0; }
     h3 { margin: 0 0 8px; font-size: 12px; font-weight: 650; text-transform: uppercase; color: var(--vscode-descriptionForeground); letter-spacing: 0; }
     p { margin: 0; color: var(--vscode-descriptionForeground); line-height: 1.5; }
     code { color: var(--vscode-textLink-foreground); }
-    button { height: 30px; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); border-radius: 4px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 0 10px; cursor: pointer; }
-    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
+    button { height: var(--preview-control-height); border: 1px solid var(--vscode-button-border, var(--preview-border)); border-radius: 6px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 0 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease; }
+    button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); border-color: color-mix(in srgb, var(--vscode-focusBorder) 42%, var(--preview-border)); }
+    button:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
     button:disabled { cursor: not-allowed; opacity: 0.45; }
     .placeholder { max-width: 720px; margin: 18px; border: 1px solid var(--vscode-panel-border); padding: 16px; border-radius: 6px; background: var(--vscode-sideBar-background); }
     .playback-shell { display: none; min-height: 100vh; height: 100vh; }
     .playback-shell[data-visible="true"] { display: flex; flex-direction: column; }
-    .player-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; justify-content: center; overflow: hidden; background: color-mix(in srgb, var(--vscode-editor-background) 88%, black); }
-    .stage-overlay { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 4; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; }
-    .stage-heading { min-width: 0; display: grid; gap: 4px; max-width: min(520px, 58vw); padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent); backdrop-filter: blur(10px); pointer-events: auto; }
+    .player-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; justify-content: center; overflow: hidden; background: var(--preview-surface); }
+    .player-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-editor-background) 74%, transparent), transparent 24%), linear-gradient(90deg, color-mix(in srgb, var(--vscode-sideBar-background) 56%, transparent), transparent 22%, transparent 78%, color-mix(in srgb, var(--vscode-sideBar-background) 56%, transparent)); }
+    .stage-overlay { position: absolute; top: 14px; left: 16px; right: 16px; z-index: 4; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; }
+    .stage-heading { min-width: 0; display: grid; gap: 5px; max-width: min(560px, 58vw); padding: 9px 11px; border: 1px solid var(--preview-border); border-radius: 8px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent); box-shadow: var(--preview-soft-shadow); backdrop-filter: blur(12px); pointer-events: auto; }
     .stage-heading-row { min-width: 0; display: flex; align-items: center; gap: 8px; }
-    .stage-kicker { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 0 7px; font-size: 12px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+    .stage-kicker { display: inline-flex; align-items: center; height: 22px; border: 1px solid var(--preview-muted-border); border-radius: 6px; padding: 0 8px; font-size: 12px; color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 62%, transparent); white-space: nowrap; }
     .stage-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .stage-subtitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--vscode-descriptionForeground); }
     .route-switcher { display: none; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
-    .route-switcher[data-visible="true"] { display: flex; }
+    .route-switcher[data-visible="true"] { display: grid; grid-template-columns: auto minmax(0, 1fr); }
     .route-switcher label { flex: 0 0 auto; color: var(--vscode-descriptionForeground); font-size: 12px; }
-    .route-switcher select { min-width: 0; width: min(520px, 100%); height: 26px; border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border)); border-radius: 4px; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); padding: 0 8px; }
+    .route-switcher select { min-width: 0; width: 100%; height: 34px; border: 1px solid var(--vscode-dropdown-border, var(--preview-border)); border-radius: 6px; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); padding: 0 10px; }
+    .route-hint { display: none; min-width: 0; justify-self: center; width: min(1040px, 100%); color: var(--vscode-descriptionForeground); font-size: 12px; text-align: center; }
+    .route-hint[data-visible="true"] { display: block; }
     .session-badge { display: none; align-items: center; min-width: 0; width: fit-content; max-width: 100%; height: 22px; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-panel-border)); border-radius: 4px; padding: 0 7px; color: var(--vscode-inputValidation-warningForeground, var(--vscode-descriptionForeground)); background: var(--vscode-inputValidation-warningBackground, var(--vscode-editor-background)); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-badge[data-visible="true"] { display: inline-flex; }
     .stage-actions { display: flex; align-items: center; gap: 6px; pointer-events: auto; }
-    .stage-actions button { min-width: 30px; width: 30px; padding: 0; background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent); backdrop-filter: blur(10px); }
+    .stage-actions button { min-width: 34px; width: 34px; padding: 0; border-radius: 8px; background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent); box-shadow: var(--preview-soft-shadow); backdrop-filter: blur(12px); }
+    .stage-actions button[data-visible="false"] { display: none; }
     .stage-actions button[data-active="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-    .stage-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 18px; padding: 48px 28px 32px; box-sizing: border-box; }
-    .stage-visual { min-width: 0; width: min(100%, 980px); min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .stage-visual img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
-    .stage-media-slot { width: min(100%, 980px); height: min(100%, 62vh); min-height: 220px; display: flex; align-items: stretch; justify-content: center; }
+    .stage-action-icon { width: 16px; height: 16px; display: block; }
+    .stage-nav { position: absolute; z-index: 5; top: 50%; display: flex; flex-direction: column; align-items: center; gap: 10px; transform: translateY(-50%); pointer-events: none; }
+    .stage-nav-left { left: 18px; }
+    .stage-nav-right { right: 18px; }
+    .stage-nav-button { width: 46px; min-width: 46px; height: 76px; padding: 0; border-radius: 999px; background: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent); color: var(--vscode-foreground); box-shadow: var(--preview-soft-shadow); backdrop-filter: blur(14px); pointer-events: auto; }
+    .stage-nav-button[data-visible="false"] { display: none; }
+    .stage-nav-button[data-mode="branches"] { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+    .stage-nav-button[data-mode="branches"]:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+    .stage-nav-branch-icon { display: none; }
+    .stage-nav-button[data-mode="branches"] .stage-nav-next-icon { display: none; }
+    .stage-nav-button[data-mode="branches"] .stage-nav-branch-icon { display: block; }
+    .stage-branch-menu { display: none; width: min(320px, 34vw); max-height: min(340px, 44vh); overflow: auto; gap: 6px; padding: 8px; border: 1px solid var(--preview-border); border-radius: 8px; background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent); box-shadow: var(--preview-shadow); backdrop-filter: blur(16px); pointer-events: auto; }
+    .stage-branch-menu[data-open="true"] { display: grid; }
+    .stage-branch-menu button { width: 100%; min-height: 34px; height: auto; justify-content: flex-start; padding: 7px 10px; overflow: hidden; text-align: left; line-height: 1.35; }
+    .stage-content { position: relative; z-index: 1; flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; justify-items: center; gap: 16px; padding: 76px 34px 28px; }
+    .stage-visual { min-width: 0; width: min(100%, 1040px); min-height: 0; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px; border-radius: 8px; }
+    .stage-visual img { max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--preview-muted-border); border-radius: 8px; background: color-mix(in srgb, var(--vscode-editor-background) 88%, black); box-shadow: var(--preview-shadow); }
+    .stage-media-slot { width: min(100%, 1040px); height: min(100%, 62vh); min-height: 220px; display: flex; align-items: stretch; justify-content: center; }
     .neko-preview-media-player { width: 100%; height: 100%; min-height: 220px; display: grid; grid-template-rows: minmax(0, 1fr); color: var(--vscode-foreground); }
     .neko-preview-media-title { display: none; }
-    .neko-preview-media-viewport { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: #000; box-shadow: 0 18px 70px rgba(0, 0, 0, 0.24); }
+    .neko-preview-media-viewport { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--preview-muted-border); border-radius: 8px; background: #000; box-shadow: var(--preview-shadow); }
     .neko-preview-video-surface { width: 100%; height: 100%; display: block; object-fit: contain; }
     .neko-preview-media-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.42; pointer-events: none; }
     .neko-preview-media-player[data-state="playing"] .neko-preview-media-poster { display: none; }
@@ -1160,56 +1198,84 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     .neko-preview-media-progress { width: 100%; accent-color: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
     .neko-preview-media-time { color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
     @keyframes neko-preview-audio-bar { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.42); } }
-    .stage-unavailable { width: min(720px, 100%); border: 1px dashed var(--vscode-panel-border); border-radius: 6px; padding: 22px; box-sizing: border-box; display: grid; gap: 8px; text-align: center; background: color-mix(in srgb, var(--vscode-sideBar-background) 78%, transparent); }
-    .stage-copy { width: min(820px, 100%); display: grid; gap: 10px; }
-    .unit-body { max-height: 26vh; overflow: auto; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 15px; line-height: 1.65; }
+    .stage-unavailable { width: min(720px, 100%); border: 1px dashed var(--preview-border); border-radius: 8px; padding: 22px; display: grid; gap: 8px; text-align: center; background: color-mix(in srgb, var(--vscode-sideBar-background) 78%, transparent); }
+    .stage-copy { width: min(980px, 100%); display: grid; gap: 9px; padding: 0 8px; }
+    .unit-body { max-height: 12vh; overflow: auto; white-space: pre-wrap; color: var(--vscode-foreground); font-size: 14px; line-height: 1.65; }
     .stage-details { display: flex; flex-wrap: wrap; gap: 6px; }
-    .stage-detail { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 5px 7px; font-size: 12px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
-    .player-controls { flex: 0 0 auto; display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--vscode-panel-border); background: color-mix(in srgb, var(--vscode-editor-background) 94%, black); box-sizing: border-box; }
-    .player-controls > .route-switcher { justify-self: center; width: min(720px, 100%); }
+    .stage-detail { min-width: 0; max-width: 100%; display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid var(--preview-muted-border); border-radius: 6px; padding: 5px 8px; font-size: 12px; color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 52%, transparent); }
+    .stage-detail-label { flex: 0 0 auto; color: var(--vscode-descriptionForeground); font-weight: 650; }
+    .stage-detail-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); }
+    .player-controls { flex: 0 0 auto; display: grid; gap: 10px; padding: 12px 18px 14px; border-top: 1px solid var(--preview-border); background: color-mix(in srgb, var(--vscode-editor-background) 96%, black); box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.12); }
+    .player-controls > .branch-choices:not(:empty),
+    .player-controls > .timeline-wrap,
+    .player-controls > .transport-row { border-top: 1px solid var(--preview-muted-border); padding-top: 10px; }
+    .player-controls > .route-switcher { justify-self: center; width: min(1040px, 100%); }
     .player-controls > .route-switcher label { white-space: nowrap; }
     .player-controls > .route-switcher select { flex: 1 1 auto; }
     .branch-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
     .branch-choices:empty { display: none; }
     .branch-choices button { max-width: min(360px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .timeline-wrap { display: grid; gap: 5px; }
-    .segmented-timeline { display: flex; gap: 3px; width: 100%; height: 12px; }
-    .stage-segment { position: relative; min-width: 14px; flex: 1 1 0; overflow: hidden; border: 1px solid var(--vscode-panel-border); border-radius: 3px; background: var(--vscode-button-secondaryBackground); padding: 0; height: 12px; }
+    .timeline-wrap { width: min(1040px, 100%); justify-self: center; display: grid; gap: 6px; }
+    .segmented-timeline { display: flex; gap: 4px; width: 100%; height: 14px; }
+    .stage-segment { position: relative; min-width: 14px; flex: 1 1 0; overflow: hidden; border: 1px solid var(--preview-muted-border); border-radius: 4px; background: var(--vscode-button-secondaryBackground); padding: 0; height: 14px; }
     .stage-segment:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    .stage-segment[data-active="true"] { border-color: var(--vscode-focusBorder); }
+    .stage-segment[data-active="true"] { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent); }
     .stage-segment[data-done="true"] { border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, var(--vscode-panel-border)); }
     .stage-segment-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); pointer-events: none; }
     .timeline-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--vscode-descriptionForeground); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .transport-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+    .transport-row { width: min(1040px, 100%); justify-self: center; display: grid; grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr); align-items: center; gap: 10px; }
     .playback-controls { display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .playback-controls button { min-width: 34px; }
+    .playback-controls button { min-width: 80px; padding: 0 12px; font-weight: 650; }
+    .playback-controls #preview-play { min-width: 88px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-border, var(--vscode-button-background)); }
+    .playback-controls #preview-play:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
     .progress { justify-self: start; min-width: 54px; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
     .playback-clock { justify-self: end; display: flex; align-items: center; gap: 4px; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
-    .playback-inspector { position: absolute; z-index: 6; top: 56px; right: 12px; bottom: 92px; width: min(360px, calc(100% - 24px)); display: grid; grid-template-rows: auto 1fr; border: 1px solid var(--vscode-panel-border); border-radius: 6px; background: var(--vscode-sideBar-background); box-shadow: 0 18px 58px rgba(0, 0, 0, 0.28); transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; transition: transform 150ms ease, opacity 150ms ease; }
+    .transport-glyph { position: relative; width: 14px; height: 14px; flex: 0 0 14px; display: inline-flex; align-items: center; justify-content: center; }
+    .transport-glyph[data-kind="previous"]::before,
+    .transport-glyph[data-kind="next"]::before { content: ""; width: 8px; height: 8px; border-top: 2px solid currentColor; border-left: 2px solid currentColor; }
+    .transport-glyph[data-kind="previous"]::before { transform: rotate(-45deg); }
+    .transport-glyph[data-kind="next"]::before { transform: rotate(135deg); }
+    .transport-glyph[data-kind="play"]::before { content: ""; margin-left: 2px; border-left: 9px solid currentColor; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+    #preview-play[data-playing="true"] .transport-glyph[data-kind="play"]::before { width: 10px; height: 12px; border: 0; border-left: 3px solid currentColor; border-right: 3px solid currentColor; margin-left: 0; }
+    .playback-inspector { position: absolute; z-index: 6; top: 62px; right: 16px; bottom: 104px; width: min(380px, calc(100% - 32px)); display: grid; grid-template-rows: auto 1fr; border: 1px solid var(--preview-border); border-radius: 8px; background: var(--preview-surface-raised); box-shadow: var(--preview-shadow); transform: translateX(calc(100% + 28px)); opacity: 0; pointer-events: none; transition: transform 150ms ease, opacity 150ms ease; }
     .playback-inspector[data-open="true"] { transform: translateX(0); opacity: 1; pointer-events: auto; }
-    .inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--vscode-panel-border); }
+    .inspector-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--preview-border); }
+    .inspector-header button { min-width: 34px; width: 34px; padding: 0; }
     .inspector-body { min-height: 0; overflow: auto; padding: 12px; display: grid; align-content: start; gap: 14px; }
     .inspector-section { display: none; }
     .playback-inspector[data-section="info"] .inspector-info,
     .playback-inspector[data-section="branches"] .inspector-branches,
     .playback-inspector[data-section="diagnostics"] .inspector-diagnostics { display: grid; gap: 8px; }
     .unit-meta { display: grid; gap: 6px; }
-    .meta-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+    .meta-item { display: grid; gap: 3px; border: 1px solid var(--preview-muted-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; background: color-mix(in srgb, var(--vscode-editor-background) 54%, transparent); }
+    .meta-label { font-size: 11px; font-weight: 650; color: var(--vscode-descriptionForeground); }
+    .meta-value { color: var(--vscode-foreground); }
     .branch-meta { display: grid; gap: 6px; }
-    .branch-item { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+    .branch-item { border: 1px solid var(--preview-muted-border); border-radius: 6px; padding: 8px; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; background: color-mix(in srgb, var(--vscode-editor-background) 54%, transparent); }
     .diagnostics { display: grid; gap: 6px; }
     .diagnostics:empty { display: none; }
     .diagnostic { border-left: 3px solid var(--vscode-editorWarning-foreground); padding: 6px 8px; background: var(--vscode-inputValidation-warningBackground, transparent); color: var(--vscode-descriptionForeground); }
     @media (max-width: 760px) {
-      .stage-overlay { align-items: stretch; flex-direction: column; }
+      h2 { font-size: 21px; }
+      .stage-overlay { left: 12px; right: 12px; align-items: stretch; flex-direction: column; }
       .stage-heading { max-width: none; }
       .stage-actions { justify-content: flex-end; }
-      .stage-content { padding: 76px 14px 22px; }
+      .stage-content { padding: 96px 14px 22px; }
+      .stage-nav { top: auto; bottom: 112px; transform: none; }
+      .stage-nav-left { left: 12px; }
+      .stage-nav-right { right: 12px; }
+      .stage-nav-button { width: 42px; min-width: 42px; height: 54px; }
+      .stage-branch-menu { width: min(300px, calc(100vw - 84px)); max-height: 34vh; }
       .player-controls > .route-switcher { justify-content: flex-start; }
       .transport-row { grid-template-columns: 1fr; justify-items: center; }
       .progress, .playback-clock { justify-self: center; }
-      .playback-inspector { top: auto; left: 12px; bottom: 94px; width: auto; max-height: min(62vh, 420px); transform: translateY(calc(100% + 24px)); }
+      .playback-inspector { top: auto; left: 12px; right: 12px; bottom: 104px; width: auto; max-height: min(62vh, 420px); transform: translateY(calc(100% + 24px)); }
       .playback-inspector[data-open="true"] { transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button,
+      .playback-inspector { transition: none; }
+      .neko-preview-audio-visualization span { animation: none; }
     }
   </style>
 </head>
@@ -1231,10 +1297,47 @@ export class NarrativePreviewBridge implements vscode.Disposable {
             <span class="session-badge" id="session-badge" data-visible="false" title="${h(i18n.staleSessionDescription)}">${h(i18n.staleSession)}</span>
           </div>
           <div class="stage-actions" aria-label="${h(i18n.ariaPlaybackDetails)}">
-            <button type="button" id="inspector-info" title="${h(i18n.info)}" aria-label="${h(i18n.info)}">i</button>
-            <button type="button" id="inspector-branches" title="${h(i18n.branches)}" aria-label="${h(i18n.branches)}">?</button>
-            <button type="button" id="inspector-diagnostics" title="${h(i18n.diagnostics)}" aria-label="${h(i18n.diagnostics)}">!</button>
+            <button type="button" id="inspector-info" title="${h(i18n.info)}" aria-label="${h(i18n.info)}">
+              <svg class="stage-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <path d="M12 11v5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"></path>
+                <circle cx="12" cy="8" r="1" fill="currentColor"></circle>
+              </svg>
+            </button>
+            <button type="button" id="inspector-branches" title="${h(i18n.branches)}" aria-label="${h(i18n.branches)}">
+              <svg class="stage-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <circle cx="18" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <circle cx="18" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <path d="M8.5 12c4 0 4-5 7-5M8.5 12c4 0 4 5 7 5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"></path>
+              </svg>
+            </button>
+            <button type="button" id="inspector-diagnostics" title="${h(i18n.diagnostics)}" aria-label="${h(i18n.diagnostics)}">
+              <svg class="stage-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 4 21 20H3L12 4Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"></path>
+                <path d="M12 10v4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"></path>
+                <circle cx="12" cy="17" r="1" fill="currentColor"></circle>
+              </svg>
+            </button>
           </div>
+        </div>
+
+        <div class="stage-nav stage-nav-left" aria-label="${h(i18n.previous)}">
+          <button type="button" class="stage-nav-button" id="stage-previous" data-visible="false" title="${h(i18n.previous)}" aria-label="${h(i18n.previous)}">
+            <span class="transport-glyph" data-kind="previous" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="stage-nav stage-nav-right" aria-label="${h(i18n.next)}">
+          <button type="button" class="stage-nav-button" id="stage-next" data-visible="false" data-mode="next" title="${h(i18n.next)}" aria-label="${h(i18n.next)}">
+            <span class="transport-glyph stage-nav-next-icon" data-kind="next" aria-hidden="true"></span>
+            <svg class="stage-action-icon stage-nav-branch-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+              <circle cx="18" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+              <circle cx="18" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+              <path d="M8.5 12c4 0 4-5 7-5M8.5 12c4 0 4 5 7 5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"></path>
+            </svg>
+          </button>
+          <div class="stage-branch-menu" id="stage-branch-menu" data-open="false"></div>
         </div>
 
         <article class="stage-content" id="stage-content" data-kind="node" data-render-mode="select-node">
@@ -1249,7 +1352,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         <aside class="playback-inspector" id="playback-inspector" data-open="false" data-section="info" aria-label="${h(i18n.ariaDetails)}">
           <div class="inspector-header">
             <h3 id="inspector-title">${h(i18n.info)}</h3>
-            <button type="button" id="inspector-close" title="${h(i18n.close)}" aria-label="${h(i18n.close)}">x</button>
+            <button type="button" id="inspector-close" title="${h(i18n.close)}" aria-label="${h(i18n.close)}">
+              <svg class="stage-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M7 7 17 17M17 7 7 17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9"></path>
+              </svg>
+            </button>
           </div>
           <div class="inspector-body">
             <section class="inspector-section inspector-info">
@@ -1273,6 +1380,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
           <label for="route-select">${h(i18n.route)}</label>
           <select id="route-select" title="${h(i18n.route)}" aria-label="${h(i18n.route)}"></select>
         </div>
+        <div class="route-hint" id="route-hint" data-visible="false"></div>
         <div class="branch-choices" id="unit-choices"></div>
         <div class="timeline-wrap" aria-label="${h(i18n.ariaTimeline)}">
           <div class="segmented-timeline" id="segmented-timeline"></div>
@@ -1284,9 +1392,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         <div class="transport-row">
           <span class="progress" id="preview-progress">0/0</span>
           <div class="playback-controls">
-            <button type="button" id="preview-previous" title="${h(i18n.previous)}" aria-label="${h(i18n.previous)}">${h(i18n.previousShort)}</button>
-            <button type="button" id="preview-play" title="${h(i18n.play)}" aria-label="${h(i18n.play)}">${h(i18n.play)}</button>
-            <button type="button" id="preview-next" title="${h(i18n.next)}" aria-label="${h(i18n.next)}">${h(i18n.next)}</button>
+            <button type="button" id="preview-previous" title="${h(i18n.previous)}" aria-label="${h(i18n.previous)}"><span class="transport-glyph" data-kind="previous" aria-hidden="true"></span><span>${h(i18n.previousShort)}</span></button>
+            <button type="button" id="preview-play" title="${h(i18n.play)}" aria-label="${h(i18n.play)}" data-playing="false"><span class="transport-glyph" data-kind="play" aria-hidden="true"></span><span id="preview-play-label">${h(i18n.play)}</span></button>
+            <button type="button" id="preview-next" title="${h(i18n.next)}" aria-label="${h(i18n.next)}"><span>${h(i18n.next)}</span><span class="transport-glyph" data-kind="next" aria-hidden="true"></span></button>
           </div>
           <span class="playback-clock" id="playback-clock">
             <span id="current-time">0:00</span>
@@ -1327,11 +1435,16 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     const sessionBadge = document.getElementById('session-badge');
     const routeSwitcher = document.getElementById('route-switcher');
     const routeSelect = document.getElementById('route-select');
+    const routeHint = document.getElementById('route-hint');
     const stageContent = document.getElementById('stage-content');
     const stageVisual = document.getElementById('stage-visual');
     const stageDetails = document.getElementById('stage-details');
+    const stagePrevious = document.getElementById('stage-previous');
+    const stageNext = document.getElementById('stage-next');
+    const stageBranchMenu = document.getElementById('stage-branch-menu');
     const previewPrevious = document.getElementById('preview-previous');
     const previewPlay = document.getElementById('preview-play');
+    const previewPlayLabel = document.getElementById('preview-play-label');
     const previewNext = document.getElementById('preview-next');
     const previewProgress = document.getElementById('preview-progress');
     const playbackClock = document.getElementById('playback-clock');
@@ -1361,6 +1474,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     let route = [];
     let activeUnitId = null;
     let branchSelections = {};
+    let routeSelectOptionsKey = '';
+    let routeSelectInteractionActive = false;
+    let routeSelectNeedsSync = false;
+    let routeSelectStoppedPlayback = false;
     let currentSessionId = null;
     let currentSourceCanvasUri = null;
     let currentRevision = null;
@@ -1383,13 +1500,25 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       postPreviewMediaMessage(message);
     };
 
-    previewPrevious.addEventListener('click', () => {
+    stagePrevious.addEventListener('click', () => stepPrevious());
+    previewPrevious.addEventListener('click', () => stepPrevious());
+    stageNext.addEventListener('click', () => {
+      const choices = getCurrentChoices();
+      if (choices.length > 1) {
+        toggleStageBranchMenu();
+        return;
+      }
+      stepNext();
+    });
+    previewNext.addEventListener('click', () => stepNext());
+    function stepPrevious() {
+      closeStageBranchMenu();
       stopPlayback();
       const index = getCurrentIndex();
       if (index > 0) {
         setActiveUnit(route[index - 1], false, 0);
       }
-    });
+    }
     previewPlay.addEventListener('click', () => {
       if (isPlaying) {
         stopPlayback();
@@ -1412,24 +1541,57 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       renderPlaybackPlan();
       scheduleNext(unit.id);
     });
-    previewNext.addEventListener('click', () => {
+    function stepNext() {
+      closeStageBranchMenu();
       stopPlayback();
       const next = resolveNextStep();
       if (next) {
         route = next.route;
         setActiveUnit(next.unitId, false, 0);
       }
-    });
+    }
     inspectorInfo.addEventListener('click', () => toggleInspector('info'));
     inspectorBranches.addEventListener('click', () => toggleInspector('branches'));
     inspectorDiagnostics.addEventListener('click', () => toggleInspector('diagnostics'));
     inspectorClose.addEventListener('click', () => closeInspector());
+    routeSelect.addEventListener('pointerdown', () => beginRouteSelectInteraction());
+    routeSelect.addEventListener('focus', () => beginRouteSelectInteraction());
+    routeSelect.addEventListener('blur', () => {
+      routeSelectInteractionActive = false;
+      if (routeSelectStoppedPlayback) {
+        routeSelectStoppedPlayback = false;
+        renderPlaybackPlan();
+      } else if (routeSelectNeedsSync) {
+        renderRouteSwitcher();
+      }
+    });
     routeSelect.addEventListener('change', () => {
       const routeId = routeSelect.value;
+      const hadDeferredRouteSync = routeSelectNeedsSync;
+      routeSelectInteractionActive = false;
+      routeSelectNeedsSync = false;
+      routeSelectStoppedPlayback = false;
       if (!routeId || routeId === activeRouteId) {
+        renderPlaybackPlan();
         return;
       }
-      switchActiveRoute(routeId);
+      if (!switchActiveRoute(routeId) && hadDeferredRouteSync) {
+        renderRouteSwitcher();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (stageBranchMenu.dataset.open === 'true') {
+        closeStageBranchMenu();
+        event.stopPropagation();
+        return;
+      }
+      if (playbackInspector.dataset.open === 'true') {
+        closeInspector();
+        event.stopPropagation();
+      }
     });
 
     window.addEventListener('message', (event) => {
@@ -1510,8 +1672,11 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const routeResolution = resolveEffectiveRoutes(plan);
       effectiveRoutes = routeResolution.routes;
       routeDiagnostics = routeResolution.diagnostics;
-      activeRouteId = effectiveRoutes[0]?.id || null;
+      activeRouteId = resolveDefaultRouteId(effectiveRoutes);
       branchSelections = {};
+      routeSelectOptionsKey = '';
+      routeSelectNeedsSync = true;
+      routeSelectStoppedPlayback = false;
       route = buildInitialRoute(plan);
       activeUnitId = route[0] || null;
       renderedStageKey = null;
@@ -1542,9 +1707,10 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       previewPrevious.disabled = index <= 0;
       previewNext.disabled = !resolveNextStep();
       previewPlay.disabled = !unit || !canPreviewAutoAdvance();
-      previewPlay.textContent = isPlaying ? t('pause') : t('play');
+      previewPlayLabel.textContent = isPlaying ? t('pause') : t('play');
       previewPlay.setAttribute('aria-label', isPlaying ? t('pause') : t('play'));
       previewPlay.title = isPlaying ? t('pause') : t('play');
+      previewPlay.dataset.playing = isPlaying ? 'true' : 'false';
       unitKind.textContent = unit ? formatKindLabel(unit.kind) : t('defaultUnitLabel');
       stageContent.dataset.kind = unit ? unit.kind : 'node';
       stageContent.dataset.renderMode = unit ? unit.renderMode : 'select-node';
@@ -1558,23 +1724,125 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       renderMeta(unit);
       renderChoices(unit);
       renderDiagnostics(diagnostics);
-      renderInspectorActions();
+      renderInspectorActions(diagnostics);
+      renderStageNavigation(unit, index, diagnostics);
     }
 
     function renderRouteSwitcher() {
-      routeSelect.replaceChildren();
+      if (routeSelectInteractionActive) {
+        routeSelectNeedsSync = true;
+        return;
+      }
       if (!effectiveRoutes || effectiveRoutes.length <= 1) {
         routeSwitcher.dataset.visible = 'false';
+        routeHint.dataset.visible = 'false';
+        routeHint.textContent = '';
+        routeSelectOptionsKey = '';
+        routeSelectNeedsSync = false;
+        routeSelect.replaceChildren();
         return;
       }
       routeSwitcher.dataset.visible = 'true';
-      for (const candidate of effectiveRoutes) {
-        const option = document.createElement('option');
-        option.value = candidate.id;
-        option.textContent = formatRouteTitle(candidate);
-        routeSelect.appendChild(option);
+      const hasExplicitEntry = effectiveRoutes.some((candidate) => isExplicitEntryRoute(candidate));
+      const hasFallbackFragments = effectiveRoutes.some((candidate) => isFragmentRoute(candidate));
+      routeHint.dataset.visible = !hasExplicitEntry && hasFallbackFragments ? 'true' : 'false';
+      routeHint.textContent = !hasExplicitEntry && hasFallbackFragments ? t('routeAmbiguousEntryHint') : '';
+      const optionsKey = createRouteSelectOptionsKey();
+      if (routeSelectOptionsKey !== optionsKey) {
+        const fragment = document.createDocumentFragment();
+        for (const group of groupRouteCandidates(effectiveRoutes)) {
+          if (group.routes.length === 0) {
+            continue;
+          }
+          const optionGroup = document.createElement('optgroup');
+          optionGroup.label = group.label;
+          for (const candidate of group.routes) {
+            const option = document.createElement('option');
+            option.value = candidate.id;
+            option.textContent = formatRouteTitle(candidate);
+            optionGroup.appendChild(option);
+          }
+          fragment.appendChild(optionGroup);
+        }
+        routeSelect.replaceChildren(fragment);
+        routeSelectOptionsKey = optionsKey;
       }
-      routeSelect.value = activeRouteId || effectiveRoutes[0]?.id || '';
+      const nextValue = activeRouteId || effectiveRoutes[0]?.id || '';
+      if (routeSelect.value !== nextValue) {
+        routeSelect.value = nextValue;
+      }
+      routeSelectNeedsSync = false;
+    }
+
+    function groupRouteCandidates(candidates) {
+      const currentSelection = candidates.filter((candidate) => candidate.sourceKind === 'selection');
+      const mainEntries = candidates.filter((candidate) => isMainEntryRoute(candidate));
+      const fallbackMain = mainEntries.length > 0
+        ? []
+        : candidates.filter((candidate) => candidate.sourceKind !== 'selection').slice(0, 1);
+      const fallbackMainIds = new Set(fallbackMain.map((candidate) => candidate.id));
+      const sceneFragments = candidates.filter((candidate) => !fallbackMainIds.has(candidate.id) && (candidate.sourceKind === 'scene' || candidate.sourceKind === 'container'));
+      const isolatedFragments = candidates.filter((candidate) => !fallbackMainIds.has(candidate.id) && (candidate.sourceKind === 'component' || candidate.sourceKind === 'single-unit'));
+      return [
+        {
+          label: t('routeMainEntryGroup'),
+          routes: mainEntries.length > 0 ? mainEntries : fallbackMain,
+        },
+        { label: t('routeCurrentSelectionGroup'), routes: currentSelection },
+        { label: t('routeSceneFragmentGroup'), routes: sceneFragments },
+        { label: t('routeIsolatedFragmentGroup'), routes: isolatedFragments },
+      ];
+    }
+
+    function resolveDefaultRouteId(candidates) {
+      const explicitEntry = candidates.find((candidate) => isExplicitEntryRoute(candidate));
+      if (explicitEntry) {
+        return explicitEntry.id;
+      }
+      const autoEntry = candidates.find((candidate) => candidate.sourceKind === 'auto-entry');
+      if (autoEntry) {
+        return autoEntry.id;
+      }
+      return candidates[0]?.id || null;
+    }
+
+    function isMainEntryRoute(candidate) {
+      return isExplicitEntryRoute(candidate) || candidate?.sourceKind === 'auto-entry';
+    }
+
+    function isExplicitEntryRoute(candidate) {
+      return candidate?.sourceKind === 'entry';
+    }
+
+    function isFragmentRoute(candidate) {
+      return (
+        candidate?.sourceKind === 'scene' ||
+        candidate?.sourceKind === 'container' ||
+        candidate?.sourceKind === 'component' ||
+        candidate?.sourceKind === 'single-unit'
+      );
+    }
+
+    function beginRouteSelectInteraction() {
+      routeSelectInteractionActive = true;
+      if (!isPlaying) {
+        return;
+      }
+      stopPlayback();
+      routeSelectStoppedPlayback = true;
+    }
+
+    function createRouteSelectOptionsKey() {
+      return (effectiveRoutes || [])
+        .map((candidate) => [
+          candidate.id,
+          candidate.entryUnitId,
+          candidate.sourceKind,
+          candidate.unitIds.join(','),
+          formatRouteTitle(candidate),
+          getRouteGroupLabel(candidate),
+        ].join(':'))
+        .join('|');
     }
 
     function renderPlaybackTime(unit, index) {
@@ -2085,7 +2353,15 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
       const detail = document.createElement('span');
       detail.className = 'stage-detail';
-      detail.textContent = label + ': ' + formatValue(value);
+      const detailLabel = document.createElement('span');
+      detailLabel.className = 'stage-detail-label';
+      detailLabel.textContent = label;
+      const detailValue = document.createElement('span');
+      detailValue.className = 'stage-detail-value';
+      detailValue.textContent = formatValue(value);
+      detailValue.title = detailValue.textContent;
+      detail.append(detailLabel, detailValue);
+      detail.title = label + ': ' + detailValue.textContent;
       stageDetails.appendChild(detail);
     }
 
@@ -2143,7 +2419,13 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
       const item = document.createElement('div');
       item.className = 'meta-item';
-      item.textContent = label + ': ' + formatValue(value);
+      const itemLabel = document.createElement('span');
+      itemLabel.className = 'meta-label';
+      itemLabel.textContent = label;
+      const itemValue = document.createElement('span');
+      itemValue.className = 'meta-value';
+      itemValue.textContent = formatValue(value);
+      item.append(itemLabel, itemValue);
       unitMeta.appendChild(item);
     }
 
@@ -2217,7 +2499,9 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     function renderChoices(unit) {
       unitChoices.replaceChildren();
       unitBranchMeta.replaceChildren();
+      stageBranchMenu.replaceChildren();
       if (!unit) {
+        closeStageBranchMenu();
         return;
       }
       const choices = getOutgoingTransitions(unit.id);
@@ -2231,31 +2515,40 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         unitBranchMeta.appendChild(item);
       }
       if (choices.length <= 1) {
+        closeStageBranchMenu();
         return;
       }
       for (const choice of choices) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = formatChoiceLabel(choice);
-        button.title = button.textContent;
-        button.addEventListener('click', () => {
-          stopPlayback();
-          const sourceUnit = getCurrentUnit();
-          if (sourceUnit) {
-            branchSelections = { ...branchSelections, [sourceUnit.id]: choice.id };
-          }
-          route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
-          setActiveUnit(choice.targetUnitId, false, 0);
-          if (sourceUnit) {
-            postPreviewHostMessage({
-              type: 'canvas:choiceMade',
-              requestId: createRequestId('choice'),
-              fromNodeId: sourceUnit.sourceNodeId,
-              toNodeId: getCurrentUnit()?.sourceNodeId || choice.targetUnitId,
-            });
-          }
+        unitChoices.appendChild(createChoiceButton(choice));
+        stageBranchMenu.appendChild(createChoiceButton(choice));
+      }
+    }
+
+    function createChoiceButton(choice) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = formatChoiceLabel(choice);
+      button.title = button.textContent;
+      button.addEventListener('click', () => commitChoice(choice));
+      return button;
+    }
+
+    function commitChoice(choice) {
+      closeStageBranchMenu();
+      stopPlayback();
+      const sourceUnit = getCurrentUnit();
+      if (sourceUnit) {
+        branchSelections = { ...branchSelections, [sourceUnit.id]: choice.id };
+      }
+      route = appendTargetToRoute(route, getCurrentIndex(), activeUnitId, choice.targetUnitId);
+      setActiveUnit(choice.targetUnitId, false, 0);
+      if (sourceUnit) {
+        postPreviewHostMessage({
+          type: 'canvas:choiceMade',
+          requestId: createRequestId('choice'),
+          fromNodeId: sourceUnit.sourceNodeId,
+          toNodeId: getCurrentUnit()?.sourceNodeId || choice.targetUnitId,
         });
-        unitChoices.appendChild(button);
       }
     }
 
@@ -2269,17 +2562,69 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       }
     }
 
-    function renderInspectorActions() {
-      const diagnostics = Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : [];
+    function renderInspectorActions(diagnostics) {
+      const activeDiagnostics = Array.isArray(diagnostics)
+        ? diagnostics
+        : [
+            ...(Array.isArray(playbackPlan?.diagnostics) ? playbackPlan.diagnostics : []),
+            ...routeDiagnostics,
+          ];
       const unit = getCurrentUnit();
       const choices = unit ? getOutgoingTransitions(unit.id) : [];
       inspectorInfo.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'info' ? 'true' : 'false';
       inspectorBranches.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'branches' ? 'true' : 'false';
       inspectorDiagnostics.dataset.active = playbackInspector.dataset.open === 'true' && playbackInspector.dataset.section === 'diagnostics' ? 'true' : 'false';
       inspectorBranches.disabled = choices.length === 0;
-      inspectorDiagnostics.disabled = diagnostics.length === 0;
+      inspectorDiagnostics.disabled = activeDiagnostics.length === 0;
       inspectorBranches.title = choices.length > 0 ? t('branches') : t('noBranches');
-      inspectorDiagnostics.title = diagnostics.length > 0 ? t('diagnostics') : t('noDiagnostics');
+      inspectorDiagnostics.title = activeDiagnostics.length > 0 ? t('diagnostics') : t('noDiagnostics');
+    }
+
+    function renderStageNavigation(unit, index, diagnostics) {
+      const choices = unit ? getOutgoingTransitions(unit.id) : [];
+      const next = resolveNextStep();
+      const hasBranches = choices.length > 1;
+      const canStepNext = Boolean(next);
+      stagePrevious.disabled = index <= 0;
+      stagePrevious.dataset.visible = index > 0 ? 'true' : 'false';
+      stageNext.disabled = !hasBranches && !canStepNext;
+      stageNext.dataset.visible = hasBranches || canStepNext ? 'true' : 'false';
+      stageNext.dataset.mode = hasBranches ? 'branches' : 'next';
+      stageNext.title = hasBranches ? t('branches') : t('next');
+      stageNext.setAttribute('aria-label', hasBranches ? t('branches') : t('next'));
+      stageNext.setAttribute('aria-expanded', stageBranchMenu.dataset.open === 'true' ? 'true' : 'false');
+      if (!hasBranches) {
+        closeStageBranchMenu();
+      }
+      inspectorInfo.dataset.visible = 'true';
+      inspectorBranches.dataset.visible = 'false';
+      inspectorDiagnostics.dataset.visible = diagnostics.length > 0 ? 'true' : 'false';
+      if (
+        playbackInspector.dataset.open === 'true' &&
+        ((playbackInspector.dataset.section === 'branches' && choices.length === 0) ||
+          (playbackInspector.dataset.section === 'diagnostics' && diagnostics.length === 0))
+      ) {
+        closeInspector();
+      }
+    }
+
+    function getCurrentChoices() {
+      const unit = getCurrentUnit();
+      return unit ? getOutgoingTransitions(unit.id) : [];
+    }
+
+    function toggleStageBranchMenu() {
+      const nextOpen = stageBranchMenu.dataset.open !== 'true';
+      if (nextOpen) {
+        closeInspector();
+      }
+      stageBranchMenu.dataset.open = nextOpen ? 'true' : 'false';
+      stageNext.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+    }
+
+    function closeStageBranchMenu() {
+      stageBranchMenu.dataset.open = 'false';
+      stageNext.setAttribute('aria-expanded', 'false');
     }
 
     function toggleInspector(section) {
@@ -2287,6 +2632,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         closeInspector();
         return;
       }
+      closeStageBranchMenu();
       playbackInspector.dataset.open = 'true';
       playbackInspector.dataset.section = section;
       inspectorTitle.textContent = section === 'branches'
@@ -2396,7 +2742,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     function switchActiveRoute(routeId) {
       const candidate = effectiveRoutes.find((item) => item.id === routeId);
       if (!candidate) {
-        return;
+        return false;
       }
       stopPlayback();
       disposeActiveMediaSurface();
@@ -2410,6 +2756,7 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       playbackStartElapsedMs = 0;
       renderPlaybackPlan();
       postPlaybackHighlight();
+      return true;
     }
 
     function buildInitialRoute(plan) {
@@ -2664,9 +3011,47 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const count = Array.isArray(candidate.unitIds) ? candidate.unitIds.length : 0;
       return t('routeTitle', {
         title,
-        sourceKind: candidate.sourceKind || 'entry',
+        sourceKind: getRouteDisplayTag(candidate),
         count,
       });
+    }
+
+    function getRouteDisplayTag(candidate) {
+      if (!candidate) {
+        return t('routeAutoEntryTag');
+      }
+      if (candidate.sourceKind === 'entry') {
+        return t('routeMainEntryTag');
+      }
+      if (candidate.sourceKind === 'auto-entry') {
+        return t('routeAutoEntryTag');
+      }
+      if (candidate.sourceKind === 'selection') {
+        return t('routeSelectionTag');
+      }
+      if (isFragmentRoute(candidate)) {
+        return t('routeFragmentTag');
+      }
+      return candidate.sourceKind || t('routeAutoEntryTag');
+    }
+
+    function getRouteGroupLabel(candidate) {
+      if (!candidate) {
+        return t('routeMainEntryGroup');
+      }
+      if (candidate.sourceKind === 'selection') {
+        return t('routeCurrentSelectionGroup');
+      }
+      if (candidate.sourceKind === 'entry') {
+        return t('routeMainEntryGroup');
+      }
+      if (candidate.sourceKind === 'auto-entry') {
+        return t('routeMainEntryGroup');
+      }
+      if (candidate.sourceKind === 'scene' || candidate.sourceKind === 'container') {
+        return t('routeSceneFragmentGroup');
+      }
+      return t('routeIsolatedFragmentGroup');
     }
 
     function formatDiagnosticMessage(diagnostic) {
@@ -2896,6 +3281,24 @@ function createNarrativePreviewI18n(): NarrativePreviewI18n {
     info: t('neko.canvas.preview.info', 'Info'),
     route: t('neko.canvas.preview.route', 'Route'),
     routeTitle: t('neko.canvas.preview.routeTitle', '{title} · {sourceKind} · {count} units'),
+    routeMainEntryGroup: t('neko.canvas.preview.routeMainEntryGroup', 'Main entry'),
+    routeCurrentSelectionGroup: t(
+      'neko.canvas.preview.routeCurrentSelectionGroup',
+      'Current selection',
+    ),
+    routeSceneFragmentGroup: t('neko.canvas.preview.routeSceneFragmentGroup', 'Scene fragments'),
+    routeIsolatedFragmentGroup: t(
+      'neko.canvas.preview.routeIsolatedFragmentGroup',
+      'Isolated fragments',
+    ),
+    routeMainEntryTag: t('neko.canvas.preview.routeMainEntryTag', 'Main entry'),
+    routeAutoEntryTag: t('neko.canvas.preview.routeAutoEntryTag', 'Auto entry'),
+    routeSelectionTag: t('neko.canvas.preview.routeSelectionTag', 'Current selection'),
+    routeFragmentTag: t('neko.canvas.preview.routeFragmentTag', 'Fragment preview'),
+    routeAmbiguousEntryHint: t(
+      'neko.canvas.preview.routeAmbiguousEntryHint',
+      'Auto-inferred entry is being used. Set a playback entry on a node to make the main route explicit.',
+    ),
     missingRouteCandidates: t(
       'neko.canvas.preview.missingRouteCandidates',
       'Playback plan has no route candidates.',
