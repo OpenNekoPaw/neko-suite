@@ -331,6 +331,22 @@ describe('applyAudioOperation', () => {
       expect(restored.masterVolume).toBe(0.8);
     });
 
+    it('removes master volume when inverting an operation from a legacy default', () => {
+      const project = createAudioProject();
+      const op = {
+        type: 'audio.setMasterVolume' as const,
+        meta: meta(),
+        payload: { masterVolume: 1.2 },
+        before: {},
+      };
+
+      const updated = applyOperation(project, op) as AudioProjectData;
+      const restored = applyOperation(updated, invertOperation(op)) as AudioProjectData;
+
+      expect(updated.masterVolume).toBe(1.2);
+      expect(restored).not.toHaveProperty('masterVolume');
+    });
+
     it('rejects master volume outside persisted range', () => {
       const project = createAudioProject();
 

@@ -492,9 +492,24 @@
     color: var(--activity-fg);
   }
 
+  .neko-master-strip {
+    grid-template-rows: 4px 32px 22px 34px 34px;
+    border-left: 1px solid var(--editor-border);
+    background: color-mix(in srgb, var(--toolbar-bg) 85%, var(--accent) 15%);
+  }
+
   .neko-channel-color {
     height: 4px;
     border-radius: 2px;
+  }
+
+  .neko-master-color {
+    background: linear-gradient(
+      90deg,
+      var(--level-green),
+      var(--level-yellow),
+      var(--level-red)
+    );
   }
 
   .neko-channel-head {
@@ -524,6 +539,23 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+  }
+
+  .neko-master-meter {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 3px;
+    align-self: center;
+    min-width: 0;
+  }
+
+  .neko-master-meter span {
+    height: 7px;
+    border-radius: 999px;
+    background:
+      linear-gradient(90deg, var(--level-green), var(--level-yellow), var(--level-red)),
+      var(--btn-bg);
+    opacity: 0.26;
   }
 
   .neko-channel-fx {

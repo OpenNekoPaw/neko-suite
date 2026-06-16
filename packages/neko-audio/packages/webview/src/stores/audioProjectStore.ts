@@ -203,6 +203,7 @@ export interface AudioProjectStore {
   updateMarker: (markerId: string, updates: Partial<Omit<AudioMarkerSnapshot, 'id'>>) => void;
   setBpm: (bpm: number) => void;
   setTimeSignature: (numerator: number, denominator: number) => void;
+  setMasterVolume: (volume: number) => void;
 
   // Convenience: tracks
   addTrack: (track: TimelineTrack, index?: number) => void;
@@ -563,6 +564,19 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
         numerator: currentSignature.numerator,
         denominator: currentSignature.denominator,
       },
+    });
+  },
+
+  setMasterVolume: (volume) => {
+    const data = get().audioProjectData;
+    if (!data) return;
+    const current = data.masterVolume ?? 1;
+    const before = data.masterVolume === undefined ? {} : { masterVolume: current };
+    get().dispatch({
+      type: 'audio.setMasterVolume',
+      meta: createMeta('user', 'Set master volume'),
+      payload: { masterVolume: clamp(volume, 0, 2) },
+      before,
     });
   },
 

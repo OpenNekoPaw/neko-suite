@@ -244,6 +244,9 @@ const audio: MessageBundle = {
   'audio.mixer.panShort': '声像',
   'audio.mixer.center': '居中',
   'audio.mixer.levelDb': '电平 {value} dB',
+  'audio.mixer.gainDb': '增益 {value} dB',
+  'audio.mixer.master': '主控',
+  'audio.mixer.masterMeterPending': '主输出电平等待接入实时引擎数据',
   'audio.mixer.volumePercent': '音量：{value}%',
   'audio.mixer.panValue': '声像：{value}',
 };

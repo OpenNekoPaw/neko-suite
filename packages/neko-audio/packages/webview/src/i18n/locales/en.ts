@@ -244,6 +244,9 @@ const audio: MessageBundle = {
   'audio.mixer.panShort': 'Pan',
   'audio.mixer.center': 'Center',
   'audio.mixer.levelDb': 'Level {value} dB',
+  'audio.mixer.gainDb': 'Gain {value} dB',
+  'audio.mixer.master': 'Master',
+  'audio.mixer.masterMeterPending': 'Master output meter pending live engine levels',
   'audio.mixer.volumePercent': 'Volume: {value}%',
   'audio.mixer.panValue': 'Pan: {value}',
 };

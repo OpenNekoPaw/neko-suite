@@ -316,6 +316,34 @@ describe('audioProjectStore track mix state', () => {
     });
   });
 
+  it('persists master volume for the master mixer strip', () => {
+    getState().initProject(createProject({ masterVolume: 0.9 }));
+
+    getState().setMasterVolume(1.35);
+
+    expect(getState().audioProjectData?.masterVolume).toBe(1.35);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'operationApplied',
+        operation: expect.objectContaining({
+          type: 'audio.setMasterVolume',
+          payload: { masterVolume: 1.35 },
+          before: { masterVolume: 0.9 },
+        }),
+      }),
+    );
+  });
+
+  it('undo restores an omitted master volume field for legacy projects', () => {
+    getState().initProject(createProject());
+
+    getState().setMasterVolume(1.2);
+    expect(getState().audioProjectData?.masterVolume).toBe(1.2);
+
+    getState().opUndo();
+    expect(getState().audioProjectData).not.toHaveProperty('masterVolume');
+  });
+
   it('supports undo across TrackHeader and MixerPanel persisted edits', () => {
     getState().initProject(
       createProject({

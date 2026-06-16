@@ -10,8 +10,9 @@ import { t } from '../i18n';
 
 export function MixerPanel() {
   const tracks = useAudioProjectStore((state) => state.audioProjectData?.tracks ?? []);
+  const projectLoaded = useAudioProjectStore((state) => state.audioProjectData !== null);
 
-  if (tracks.length === 0) {
+  if (!projectLoaded) {
     return (
       <div className="neko-mixer-panel">
         <div className="neko-mixer-empty" />
@@ -25,6 +26,7 @@ export function MixerPanel() {
         {tracks.map((track) => (
           <ChannelStrip key={track.id} track={track} />
         ))}
+        <MasterStrip />
       </div>
     </div>
   );
@@ -97,10 +99,7 @@ function ChannelStrip({ track }: ChannelStripProps) {
           </span>
           {hasAiTrackHighlight && <span className="neko-ai-badge">AI</span>}
         </span>
-        <span
-          className="neko-channel-meter"
-          aria-label={t('audio.mixer.levelDb', { value: formatDb(uiState.volume) })}
-        >
+        <span className="neko-channel-meter" aria-label={formatGainLabel(draftVolume)}>
           {formatDb(draftVolume)}
         </span>
       </div>
@@ -164,10 +163,74 @@ function ChannelStrip({ track }: ChannelStripProps) {
   );
 }
 
+function MasterStrip() {
+  const masterVolume = useAudioProjectStore((state) => state.audioProjectData?.masterVolume ?? 1);
+  const setMasterVolume = useAudioProjectStore((state) => state.setMasterVolume);
+  const [draftVolume, setDraftVolume] = useState(masterVolume);
+  const committedVolumeRef = useRef(masterVolume);
+
+  useEffect(() => {
+    committedVolumeRef.current = masterVolume;
+    setDraftVolume(masterVolume);
+  }, [masterVolume]);
+
+  const handleVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setDraftVolume(Number.parseFloat(event.target.value));
+  }, []);
+
+  const handleVolumeCommit = useCallback(() => {
+    if (draftVolume !== committedVolumeRef.current) {
+      committedVolumeRef.current = draftVolume;
+      setMasterVolume(draftVolume);
+    }
+  }, [draftVolume, setMasterVolume]);
+
+  return (
+    <div className="neko-channel-strip neko-master-strip">
+      <div className="neko-channel-color neko-master-color" />
+      <div className="neko-channel-head">
+        <span className="flex items-center gap-1 min-w-0">
+          <span className="neko-channel-name" title={t('audio.mixer.master')}>
+            {t('audio.mixer.master')}
+          </span>
+        </span>
+        <span className="neko-channel-meter" aria-label={formatGainLabel(draftVolume)}>
+          {formatDb(draftVolume)}
+        </span>
+      </div>
+
+      <div className="neko-master-meter" aria-label={t('audio.mixer.masterMeterPending')}>
+        <span />
+        <span />
+      </div>
+
+      <label className="neko-channel-control">
+        <span>{t('audio.mixer.volumeShort')}</span>
+        <input
+          type="range"
+          min="0"
+          max="2"
+          step="0.01"
+          value={draftVolume}
+          onChange={handleVolumeChange}
+          onPointerUp={handleVolumeCommit}
+          onBlur={handleVolumeCommit}
+          className="neko-fader"
+          title={t('audio.mixer.volumePercent', { value: Math.round(draftVolume * 100) })}
+        />
+      </label>
+    </div>
+  );
+}
+
 function formatDb(volume: number): string {
   if (volume <= 0) return '-inf';
   const db = 20 * Math.log10(volume);
   return `${db >= 0 ? '+' : ''}${db.toFixed(1)}`;
+}
+
+function formatGainLabel(volume: number): string {
+  return t('audio.mixer.gainDb', { value: formatDb(volume) });
 }
 
 function formatPan(pan: number): string {
