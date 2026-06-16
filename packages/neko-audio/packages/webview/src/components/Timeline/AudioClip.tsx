@@ -11,6 +11,7 @@ import { useAudioStore } from '../../stores/audioStore';
 import { useClipInteraction } from '../../hooks/useClipInteraction';
 import { PositionedContextMenu as ContextMenu, type MenuItem } from '@neko/ui/primitives';
 import { t } from '../../i18n';
+import { getWaveformChannels, type WaveformChannel } from './waveformChannels';
 
 interface AudioClipProps {
   element: TimelineElement;
@@ -43,35 +44,72 @@ function downsamplePeaks(peaks: number[], targetWidth: number): number[] {
 }
 
 function WaveformThumbnail({
-  peaks,
+  channels,
   width,
   height,
   color,
 }: {
-  peaks: number[];
+  channels: WaveformChannel[];
   width: number;
   height: number;
   color: string;
 }) {
-  const samples = useMemo(() => downsamplePeaks(peaks, Math.floor(width)), [peaks, width]);
-  const mid = height / 2;
+  const channelSamples = useMemo(
+    () =>
+      channels.map((channel) => ({
+        label: channel.label,
+        samples: downsamplePeaks(channel.peaks, Math.floor(width)),
+      })),
+    [channels, width],
+  );
 
-  const pathD = useMemo(() => {
-    if (samples.length === 0) return '';
-    const barWidth = width / samples.length;
-    // Draw as mirrored bars
-    let d = '';
-    for (let i = 0; i < samples.length; i++) {
-      const x = i * barWidth;
-      const amp = samples[i]! * mid * 0.9;
-      d += `M${x},${mid - amp} L${x},${mid + amp} `;
-    }
-    return d;
-  }, [samples, width, mid]);
+  const paths = useMemo(() => {
+    if (channelSamples.length === 0) return [];
+    const laneHeight = height / channelSamples.length;
+    return channelSamples.map((channel, channelIndex) => {
+      if (channel.samples.length === 0) {
+        return { label: channel.label, d: '', mid: channelIndex * laneHeight + laneHeight / 2 };
+      }
+      const barWidth = width / channel.samples.length;
+      const mid = channelIndex * laneHeight + laneHeight / 2;
+      let d = '';
+      for (let i = 0; i < channel.samples.length; i++) {
+        const x = i * barWidth;
+        const amp = channel.samples[i]! * laneHeight * 0.42;
+        d += `M${x},${mid - amp} L${x},${mid + amp} `;
+      }
+      return { label: channel.label, d, mid };
+    });
+  }, [channelSamples, width, height]);
+
+  if (paths.length === 0) return null;
+
+  const laneHeight = height / paths.length;
+  const showLabels = paths.length > 1 && laneHeight >= 12 && width >= 36;
 
   return (
-    <svg width={width} height={height} className="block">
-      <path d={pathD} stroke={color} strokeWidth={1} fill="none" />
+    <svg width={width} height={height} className="block" aria-hidden="true">
+      {paths.map((path, index) => (
+        <g key={`${path.label}-${index}`}>
+          {index > 0 && (
+            <line
+              x1={0}
+              x2={width}
+              y1={path.mid - laneHeight / 2}
+              y2={path.mid - laneHeight / 2}
+              stroke={color}
+              strokeWidth={0.5}
+              opacity={0.22}
+            />
+          )}
+          <path d={path.d} stroke={color} strokeWidth={1} fill="none" />
+          {showLabels && (
+            <text x={3} y={path.mid + 3} fill={color} opacity={0.7} fontSize={9}>
+              {path.label}
+            </text>
+          )}
+        </g>
+      ))}
     </svg>
   );
 }
@@ -90,6 +128,7 @@ export function AudioClip({
 }: AudioClipProps) {
   const clipName = element.name || 'Untitled';
   const isMuted = element.muted;
+  const waveformChannels = useMemo(() => getWaveformChannels(waveform), [waveform]);
 
   const updateElement = useAudioProjectStore((s) => s.updateElement);
   const removeElement = useAudioProjectStore((s) => s.removeElement);
@@ -205,10 +244,10 @@ export function AudioClip({
         {clipName}
       </div>
 
-      {waveform && previewWidth > 10 && (
+      {waveformChannels.length > 0 && previewWidth > 10 && (
         <div className="absolute top-3.5 left-0 right-0 bottom-0">
           <WaveformThumbnail
-            peaks={waveform.peaks}
+            channels={waveformChannels}
             width={Math.max(previewWidth - 2, 1)}
             height={Math.max(height - 16, 1)}
             color={isMuted ? 'var(--activity-inactive)' : 'var(--clip-waveform)'}
