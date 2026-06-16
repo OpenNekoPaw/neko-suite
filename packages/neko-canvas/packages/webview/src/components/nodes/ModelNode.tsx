@@ -8,6 +8,7 @@
 
 import { useEffect } from 'react';
 import type { ModelCanvasNode, CanvasViewport } from '@neko/shared';
+import { CheckIcon, PackageIcon, SettingsIcon, RefreshIcon, LayersIcon } from '@neko/shared/icons';
 import { BaseNode } from './BaseNode';
 
 // =============================================================================
@@ -40,13 +41,6 @@ export interface ModelNodeProps {
 // =============================================================================
 // Helpers
 // =============================================================================
-
-const MODEL_TYPE_ICON: Record<string, string> = {
-  lora: '🔧',
-  checkpoint: '🏗',
-  controlnet: '🎛',
-  vae: '⚙️',
-};
 
 const MODEL_TYPE_COLOR: Record<string, string> = {
   lora: '#a78bfa',
@@ -84,7 +78,6 @@ export function ModelNode({
     }
   }, [node.id, modelPath, installed, onCheckInstalled]);
 
-  const icon = MODEL_TYPE_ICON[modelType] ?? '📦';
   const color = MODEL_TYPE_COLOR[modelType] ?? 'var(--node-fg-secondary)';
   const typeLabel = modelType.charAt(0).toUpperCase() + modelType.slice(1);
 
@@ -93,7 +86,10 @@ export function ModelNode({
       return <span style={{ color: 'var(--node-fg-secondary)', fontSize: 9 }}>检查中…</span>;
     if (installed)
       return (
-        <span style={{ color: '#34d399', fontSize: 9 }}>✓ {installedVersion ?? '已安装'}</span>
+        <span className="inline-flex items-center gap-1" style={{ color: '#34d399', fontSize: 9 }}>
+          <CheckIcon size={10} strokeWidth={2.2} />
+          {installedVersion ?? '已安装'}
+        </span>
       );
     return <span style={{ color: '#f87171', fontSize: 9 }}>未安装</span>;
   };
@@ -119,7 +115,16 @@ export function ModelNode({
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          <span style={{ fontSize: 14 }}>{icon}</span>
+          <span
+            className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded"
+            style={{
+              border: `1px solid ${color}55`,
+              backgroundColor: `${color}18`,
+              color,
+            }}
+          >
+            <ModelTypeIcon type={modelType} />
+          </span>
           <span className="flex-1 truncate font-medium" style={{ color: 'var(--node-fg)' }}>
             {modelName}
           </span>
@@ -196,4 +201,18 @@ export function ModelNode({
       </div>
     </BaseNode>
   );
+}
+
+function ModelTypeIcon({ type }: { readonly type: string }) {
+  const props = { size: 12, strokeWidth: 1.8 };
+  if (type === 'lora') {
+    return <LayersIcon {...props} />;
+  }
+  if (type === 'controlnet') {
+    return <SettingsIcon {...props} />;
+  }
+  if (type === 'vae') {
+    return <RefreshIcon {...props} />;
+  }
+  return <PackageIcon {...props} />;
 }

@@ -1,6 +1,8 @@
+import { isValidElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { CanvasNode, CanvasSubsystemManifest } from '@neko/shared';
 import {
+  createCanvasNodeLibraryIcon,
   mapCanvasNodeLibraryGroupToTreeItems,
   mapCanvasNodePropertyCommit,
   mapCanvasNodeTransformToProperties,
@@ -57,6 +59,7 @@ describe('sharedCanvasUiAdapter', () => {
       draggable: true,
       disabled: false,
     });
+    expect(items[0]?.children?.[0]?.icon).not.toBe('T');
     expect(items[0]?.children?.[1]).toMatchObject({
       id: 'media',
       draggable: false,
@@ -82,7 +85,26 @@ describe('sharedCanvasUiAdapter', () => {
       group,
     });
 
-    expect(items[0]?.badges?.[0]?.label).toBe('Active');
+    expect(items[0]?.badges?.[0]).toMatchObject({ id: 'subsystem-state-active' });
+  });
+
+  it('uses a consistent inline SVG wrapper for node library icons', () => {
+    const icon = createCanvasNodeLibraryIcon('media', '#3b82f6');
+
+    expect(isValidElement(icon)).toBe(true);
+    expect(icon).toMatchObject({
+      type: 'span',
+      props: {
+        className: 'canvas-node-library-icon',
+        'data-node-library-icon': 'media',
+      },
+    });
+    expect(icon).toHaveProperty(['props', 'children', 'type'], 'svg');
+    expect(icon).toHaveProperty(
+      ['props', 'children', 'props', 'data-node-library-icon-glyph'],
+      'image',
+    );
+    expect(icon).toHaveProperty(['props', 'children', 'props', 'viewBox'], '0 0 24 24');
   });
 });
 

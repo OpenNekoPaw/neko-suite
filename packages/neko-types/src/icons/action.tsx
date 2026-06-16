@@ -210,3 +210,18 @@ export function MoreHorizontalIcon({ size = 16, className, strokeWidth = 2 }: Ic
     </svg>
   );
 }
+
+export function ClockIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      {...base(strokeWidth)}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}

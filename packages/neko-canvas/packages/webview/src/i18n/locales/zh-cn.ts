@@ -72,7 +72,7 @@ export const zhCN = {
   // Status bar
   'status.zoom': '缩放: {level}%',
   'status.pan': '平移: ({x}, {y})',
-  'status.connecting': '🔗 点击另一个锚点完成连接（Esc 取消）',
+  'status.connecting': '点击另一个锚点完成连接（Esc 取消）',
   'status.selected': '已选择 {count} 个',
   'status.subsystems': '子系统',
   'status.noSubsystems': '基础画布',

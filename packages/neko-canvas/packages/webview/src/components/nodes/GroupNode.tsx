@@ -5,6 +5,7 @@
 
 import type { CanvasViewport, GroupCanvasNode, CanvasNode } from '@neko/shared';
 import { getContainerChildIds } from '@neko/shared';
+import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
 import { BaseNode } from './BaseNode';
 import { t } from '../../i18n';
 
@@ -38,13 +39,13 @@ export interface GroupNodeProps {
 // Constants
 // =============================================================================
 
-const NODE_TYPE_ICONS: Record<string, string> = {
-  media: '🎬',
-  storyboard: '🎬',
-  annotation: '📝',
-  text: 'T',
-  artboard: '🖼',
-  group: '📁',
+const NODE_TYPE_ICONS: Record<string, CodiconName> = {
+  media: 'symbol-misc',
+  storyboard: 'symbol-structure',
+  annotation: 'edit',
+  text: 'symbol-misc',
+  artboard: 'symbol-color',
+  group: 'symbol-namespace',
 };
 
 // =============================================================================
@@ -101,7 +102,11 @@ export function GroupNode({
             color: 'var(--toolbar-fg)',
           }}
         >
-          <span style={{ color: groupColor }}>📁</span>
+          <span
+            className={toCodiconClassName('symbol-namespace')}
+            style={{ color: groupColor }}
+            aria-hidden="true"
+          />
           <span className="font-medium truncate">{label || t('node.group')}</span>
           <span
             className="ml-auto text-[10px] px-1.5 py-0.5 rounded"
@@ -138,7 +143,7 @@ export function GroupNode({
 
 function ChildNodeItem({ node }: { node: CanvasNode }) {
   const nodeType = node.type as string;
-  const icon = NODE_TYPE_ICONS[nodeType] ?? '●';
+  const icon = NODE_TYPE_ICONS[nodeType] ?? 'circle-large-filled';
   const data = node.data as Record<string, unknown>;
   const name =
     (data.label as string) ?? (data.title as string) ?? (data.name as string) ?? `${nodeType}`;
@@ -151,7 +156,7 @@ function ChildNodeItem({ node }: { node: CanvasNode }) {
         backgroundColor: 'var(--control-bg)',
       }}
     >
-      <span className="text-[9px] opacity-70">{icon}</span>
+      <span className={`${toCodiconClassName(icon)} text-[10px] opacity-70`} aria-hidden="true" />
       <span className="truncate">{name}</span>
     </div>
   );

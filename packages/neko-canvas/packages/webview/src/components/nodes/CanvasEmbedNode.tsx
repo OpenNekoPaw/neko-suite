@@ -1,4 +1,5 @@
 import type { CanvasEmbedCanvasNode, CanvasViewport } from '@neko/shared';
+import { LayersIcon } from '@neko/shared/icons';
 import { BaseNode } from './BaseNode';
 import { t } from '../../i18n';
 
@@ -63,7 +64,9 @@ export function CanvasEmbedNode({
               draggable={false}
             />
           ) : (
-            <span style={{ fontSize: 36, opacity: 0.4 }}>🗂️</span>
+            <span style={{ color: 'var(--node-fg-secondary)', opacity: 0.58 }}>
+              <LayersIcon size={36} strokeWidth={1.45} />
+            </span>
           )}
 
           <div

@@ -103,7 +103,7 @@ export function NodeLibraryPanel({
       }}
     >
       <div
-        className="flex h-10 items-center px-3 text-xs font-semibold uppercase"
+        className="flex h-10 items-center px-3 text-xs font-semibold"
         style={{ borderBottom: '1px solid var(--toolbar-border)' }}
       >
         {t('library.title')}
@@ -117,13 +117,22 @@ export function NodeLibraryPanel({
             group,
           });
           const nodeItems = treeItems[0]?.children ?? [];
+          const groupActive =
+            group.subsystemId === undefined || activeSubsystemIds.includes(group.subsystemId);
+          const groupState = group.subsystemId ? (groupActive ? 'active' : 'available') : 'core';
           return (
-            <section key={group.id} className="mb-2" data-node-library-group-id={group.id}>
+            <section
+              key={group.id}
+              className="canvas-node-library-section"
+              data-node-library-group-id={group.id}
+              data-node-library-section-state={groupState}
+            >
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs"
+                aria-expanded={isExpanded}
+                className="canvas-node-library-group flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[var(--vscode-focusBorder)]"
+                data-node-library-group-expanded={isExpanded ? 'true' : 'false'}
                 style={{
-                  backgroundColor: isExpanded ? 'var(--control-active)' : 'transparent',
                   color: 'var(--toolbar-fg)',
                 }}
                 onClick={() => {
@@ -145,60 +154,62 @@ export function NodeLibraryPanel({
                   aria-hidden="true"
                   className={toCodiconClassName(isExpanded ? 'chevron-down' : 'chevron-right')}
                 />
-                <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                <span className="canvas-node-library-section-title min-w-0 flex-1 truncate">
+                  {group.label}
+                </span>
+                <span
+                  className="canvas-node-library-count"
+                  aria-label={`${group.nodeTypes.length}`}
+                >
+                  {group.nodeTypes.length}
+                </span>
                 {group.subsystemId && (
                   <span
-                    className="rounded px-1.5 py-0.5 text-[10px]"
-                    style={{
-                      backgroundColor: activeSubsystemIds.includes(group.subsystemId)
-                        ? 'var(--selection-bg)'
-                        : 'var(--badge-neutral-bg)',
-                      color: activeSubsystemIds.includes(group.subsystemId)
-                        ? 'var(--badge-fg)'
-                        : 'var(--toolbar-fg-secondary)',
-                    }}
+                    className="canvas-node-library-subsystem-badge"
+                    data-node-library-subsystem-state={groupActive ? 'active' : 'available'}
                   >
-                    {activeSubsystemIds.includes(group.subsystemId)
-                      ? t('library.active')
-                      : t('library.available')}
+                    {groupActive ? t('library.active') : t('library.available')}
                   </span>
                 )}
               </button>
 
               {isExpanded && (
-                <TreeView
-                  className="mt-1 border-0 bg-transparent"
-                  height={Math.min(320, 32 + group.nodeTypes.length * 28)}
-                  items={nodeItems}
-                  label={group.label}
-                  virtualization={{ itemHeight: 28, threshold: 200 }}
-                  onDragStart={(id, event) => {
-                    const nodeType = id as CanvasNodeType;
-                    const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
-                    if (group.subsystemId) {
-                      requestSubsystemLoad(group.subsystemId);
-                    }
-                    if (!creationPolicy.canDragToCreate || !event.dataTransfer) {
-                      event.preventDefault();
-                      return;
-                    }
-                    writeNodeLibraryDragPayload(event.dataTransfer, nodeType);
-                  }}
-                  onSelect={(id) => {
-                    const nodeType = id as CanvasNodeType;
-                    const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
-                    if (group.subsystemId) {
-                      requestSubsystemLoad(group.subsystemId);
-                    }
-                    if (creationPolicy.kind === 'create') {
-                      onCreateNode(nodeType);
-                      return;
-                    }
-                    if (creationPolicy.pickerMessageType) {
-                      onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
-                    }
-                  }}
-                />
+                <div className="canvas-node-library-items">
+                  <TreeView
+                    className="border-0 bg-transparent"
+                    height={Math.min(320, 32 + group.nodeTypes.length * 28)}
+                    items={nodeItems}
+                    label={group.label}
+                    showStaticStateIndicators={false}
+                    virtualization={{ itemHeight: 28, threshold: 200 }}
+                    onDragStart={(id, event) => {
+                      const nodeType = id as CanvasNodeType;
+                      const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
+                      if (group.subsystemId) {
+                        requestSubsystemLoad(group.subsystemId);
+                      }
+                      if (!creationPolicy.canDragToCreate || !event.dataTransfer) {
+                        event.preventDefault();
+                        return;
+                      }
+                      writeNodeLibraryDragPayload(event.dataTransfer, nodeType);
+                    }}
+                    onSelect={(id) => {
+                      const nodeType = id as CanvasNodeType;
+                      const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
+                      if (group.subsystemId) {
+                        requestSubsystemLoad(group.subsystemId);
+                      }
+                      if (creationPolicy.kind === 'create') {
+                        onCreateNode(nodeType);
+                        return;
+                      }
+                      if (creationPolicy.pickerMessageType) {
+                        onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
+                      }
+                    }}
+                  />
+                </div>
               )}
             </section>
           );

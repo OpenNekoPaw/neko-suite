@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
+import { EditIcon } from '@neko/shared/icons';
 import type { ShotScale, CameraMovement, CameraAngle } from '@neko/shared';
 import { t } from '../../i18n';
 import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
@@ -328,7 +329,10 @@ export function GenerationPromptPanel({
                     opacity: isLoadingPrompt ? 0.6 : 1,
                   }}
                 >
-                  {isLoadingPrompt ? '生成中…' : '✨ 自动填写'}
+                  <span className="inline-flex items-center gap-1">
+                    {!isLoadingPrompt && <EditIcon size={12} strokeWidth={1.8} />}
+                    <span>{isLoadingPrompt ? '生成中…' : '自动填写'}</span>
+                  </span>
                 </button>
               )}
             </div>

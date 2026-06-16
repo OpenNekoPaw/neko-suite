@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react';
 import type { ScriptCanvasNode, CanvasViewport } from '@neko/shared';
+import { FileIcon } from '@neko/shared/icons';
 import { BaseNode } from './BaseNode';
 import { normalizeScriptScenes } from '../../utils/scriptScenes';
 
@@ -108,7 +109,9 @@ export function ScriptNode({
             backgroundColor: 'var(--node-header-bg)',
           }}
         >
-          <span style={{ fontSize: 14 }}>📄</span>
+          <span style={{ color: 'var(--node-fg-secondary)' }} aria-hidden="true">
+            <FileIcon size={14} strokeWidth={1.8} />
+          </span>
           <span className="flex-1 truncate font-medium" style={{ color: 'var(--node-fg)' }}>
             {scriptTitle || fileName}
           </span>

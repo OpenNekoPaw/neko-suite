@@ -8,9 +8,10 @@
 
 :root {
   /* ── Canvas ─────────────────────────────────────────────────────────────── */
-  --canvas-bg:         var(--vscode-editor-background, #1c1c1e);
-  --canvas-grid:       color-mix(in srgb, var(--neko-fg) 8%, transparent);
-  --canvas-grid-major: color-mix(in srgb, var(--neko-fg) 16%, transparent);
+  --canvas-bg:         color-mix(in srgb, var(--vscode-editor-background, #1c1c1e) 94%, var(--neko-surface) 6%);
+  --canvas-grid:       color-mix(in srgb, var(--neko-fg) 10%, transparent);
+  --canvas-grid-major: color-mix(in srgb, var(--neko-fg) 18%, transparent);
+  --canvas-vignette:   radial-gradient(circle at 50% 24%, color-mix(in srgb, var(--neko-accent) 8%, transparent), transparent 32%);
 
   /* ── Toolbar / Panel ─────────────────────────────────────────────────────── */
   --toolbar-bg:           color-mix(in srgb, var(--neko-surface) 94%, var(--neko-elevated) 6%);
@@ -37,14 +38,14 @@
   --statusbar-fg: #ffffff;
 
   /* ── Nodes ───────────────────────────────────────────────────────────────── */
-  --node-bg:         color-mix(in srgb, var(--neko-surface) 72%, var(--neko-elevated) 28%);
-  --node-border:     color-mix(in srgb, var(--neko-fg) 12%, transparent);
+  --node-bg:         color-mix(in srgb, var(--neko-surface) 78%, var(--neko-elevated) 22%);
+  --node-border:     color-mix(in srgb, var(--neko-fg) 16%, transparent);
   --node-selected:   var(--neko-accent);
-  --node-header-bg:  color-mix(in srgb, var(--node-bg) 88%, var(--neko-fg) 12%);
-  --node-divider:    var(--neko-divider);
+  --node-header-bg:  linear-gradient(180deg, color-mix(in srgb, var(--node-bg) 88%, var(--neko-fg) 9%), color-mix(in srgb, var(--node-bg) 96%, var(--neko-fg) 4%));
+  --node-divider:    color-mix(in srgb, var(--neko-fg) 12%, transparent);
   --node-radius:     10px;
-  --node-shadow:     var(--neko-shadow-lg);
-  --node-shadow-sel: 0 0 0 1.5px var(--node-selected), 0 10px 28px var(--neko-accent-soft);
+  --node-shadow:     0 10px 30px color-mix(in srgb, black 22%, transparent), 0 1px 0 color-mix(in srgb, white 34%, transparent) inset;
+  --node-shadow-sel: 0 0 0 1.5px var(--node-selected), 0 16px 38px var(--neko-accent-soft), 0 1px 0 color-mix(in srgb, white 38%, transparent) inset;
   --node-fg:         var(--neko-fg);
   --node-fg-secondary: var(--neko-fg-secondary);
   --selection-bg:      var(--neko-accent-soft);
@@ -96,7 +97,7 @@
   --danger-border-strong: color-mix(in srgb, var(--neko-danger) 55%, transparent);
 
   /* ── Connections ─────────────────────────────────────────────────────────── */
-  --connection-default:   color-mix(in srgb, var(--neko-fg-secondary) 76%, transparent);
+  --connection-default:   color-mix(in srgb, var(--neko-fg-secondary) 64%, transparent);
   --connection-sequence:  #30d158;
   --connection-reference: #ff9f0a;
   --connection-choice:    #f97316;
@@ -177,6 +178,145 @@ body,
   overflow: hidden;
 }
 
+/* =============================================================================
+   Node library
+   ============================================================================= */
+
+#canvas-right-node-tree-panel .canvas-node-library-group:hover {
+  background: color-mix(in srgb, var(--control-hover) 82%, var(--toolbar-fg) 4%);
+}
+
+#canvas-right-node-tree-panel
+  .canvas-node-library-group[data-node-library-group-expanded="true"] {
+  background: color-mix(in srgb, var(--control-active) 88%, var(--toolbar-fg) 4%);
+}
+
+.canvas-node-library-section {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--toolbar-border) 82%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--toolbar-bg) 94%, var(--toolbar-fg) 3%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
+}
+
+.canvas-node-library-section + .canvas-node-library-section {
+  margin-top: 10px;
+}
+
+.canvas-node-library-section::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--toolbar-border);
+}
+
+.canvas-node-library-section[data-node-library-section-state='core']::before {
+  background: color-mix(in srgb, var(--accent-blue) 70%, var(--toolbar-border));
+}
+
+.canvas-node-library-section[data-node-library-section-state='active']::before {
+  background: color-mix(in srgb, var(--accent-blue) 86%, var(--badge-border));
+}
+
+.canvas-node-library-section[data-node-library-section-state='available']::before {
+  background: color-mix(in srgb, var(--toolbar-fg-secondary) 42%, var(--toolbar-border));
+}
+
+.canvas-node-library-section .canvas-node-library-group {
+  min-height: 34px;
+  border-radius: 0;
+  padding-left: 12px;
+  padding-right: 8px;
+}
+
+.canvas-node-library-section-title {
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.canvas-node-library-items {
+  margin: 0 6px 8px 10px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--toolbar-border) 72%, transparent);
+}
+
+#canvas-right-node-tree-panel [role="treeitem"] {
+  border-radius: var(--radius-sm);
+  color: var(--toolbar-fg);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+#canvas-right-node-tree-panel [role="treeitem"]:hover {
+  background: var(--control-hover);
+}
+
+.canvas-node-library-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--node-library-icon-color) 34%, transparent);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--node-library-icon-color) 14%, transparent),
+    color-mix(in srgb, var(--node-library-icon-color) 7%, transparent)
+  );
+  color: color-mix(in srgb, var(--node-library-icon-color) 84%, var(--toolbar-fg) 16%);
+}
+
+.canvas-node-library-icon-svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.canvas-node-library-count,
+.canvas-node-library-subsystem-badge,
+#canvas-right-node-tree-panel [data-node-library-badge] {
+  display: inline-flex;
+  height: 18px;
+  min-width: 18px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.canvas-node-library-count {
+  border: 1px solid var(--badge-neutral-border);
+  background: var(--badge-neutral-bg);
+  color: var(--toolbar-fg-secondary);
+}
+
+.canvas-node-library-subsystem-badge[data-node-library-subsystem-state="active"] {
+  border: 1px solid var(--badge-border);
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+}
+
+.canvas-node-library-subsystem-badge[data-node-library-subsystem-state="available"] {
+  border: 1px solid var(--badge-neutral-border);
+  background: var(--badge-neutral-bg);
+  color: var(--toolbar-fg-secondary);
+}
+
+#canvas-right-node-tree-panel [data-node-library-badge] {
+  border: 1px solid var(--badge-neutral-border);
+  background: var(--badge-neutral-bg);
+  color: var(--toolbar-fg-secondary);
+}
+
 .canvas-main-panel,
 .canvas-main-surface {
   display: flex;
@@ -188,6 +328,21 @@ body,
 
 .canvas-main-surface {
   position: relative;
+  background:
+    var(--canvas-vignette),
+    linear-gradient(180deg, color-mix(in srgb, var(--canvas-bg) 96%, var(--neko-fg) 2%), var(--canvas-bg));
+}
+
+.canvas-main-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px color-mix(in srgb, black 10%, transparent);
+}
+
+.canvas-hud-controls {
+  filter: drop-shadow(0 16px 34px color-mix(in srgb, black 18%, transparent));
 }
 
 .canvas-left-toolbar.neko-vtoolbar {
@@ -346,7 +501,7 @@ select:focus {
   box-shadow: var(--node-shadow);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .node-card.selected {
@@ -365,8 +520,20 @@ select:focus {
 
 .node-header {
   background: var(--node-header-bg);
-  border-bottom: 1px solid var(--node-border);
+  border-bottom: 1px solid var(--node-divider);
   border-radius: var(--node-radius) var(--node-radius) 0 0;
+}
+
+[data-node-id] > div:first-of-type {
+  box-shadow: var(--node-shadow);
+}
+
+[data-node-id] > div:first-of-type:hover {
+  border-color: var(--hover-border);
+}
+
+[data-node-id][data-playback-active='true'] > div:first-of-type {
+  box-shadow: var(--node-shadow-sel);
 }
 
 /* =============================================================================

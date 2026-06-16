@@ -22,6 +22,8 @@ import { useCanvasStore } from '../../stores/canvasStore';
 import { clampNodeRenderSize, clampNodeSize, resolveNodeMinSize } from '../../utils/nodeSizing';
 import type { NodeSize } from '../../utils/nodeSizing';
 import clsx from 'clsx';
+import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
+import { t } from '../../i18n';
 
 // =============================================================================
 // Types
@@ -118,12 +120,16 @@ const RESIZE_HANDLES: { handle: ResizeHandle; cursor: string; style: React.CSSPr
 // DeriveButton — "+" with type picker popup
 // =============================================================================
 
-const DERIVE_NODE_TYPES = [
-  { type: 'shot', icon: '🎬', label: '镜头' },
-  { type: 'scene', icon: '📋', label: '场景' },
-  { type: 'gallery', icon: '🖼', label: '画廊' },
-  { type: 'media', icon: '📷', label: '素材' },
-  { type: 'annotation', icon: '📝', label: '注释' },
+const DERIVE_NODE_TYPES: readonly {
+  readonly type: CanvasNodeType;
+  readonly icon: CodiconName;
+  readonly labelKey: string;
+}[] = [
+  { type: 'shot', icon: 'symbol-color', labelKey: 'node.shot' },
+  { type: 'scene', icon: 'symbol-structure', labelKey: 'node.sceneGroup' },
+  { type: 'gallery', icon: 'symbol-misc', labelKey: 'node.gallery' },
+  { type: 'media', icon: 'symbol-misc', labelKey: 'node.media' },
+  { type: 'annotation', icon: 'edit', labelKey: 'node.note' },
 ] as const;
 
 function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
@@ -198,7 +204,7 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
             minWidth: 100,
           }}
         >
-          {allowedTypes.map(({ type, icon, label }) => (
+          {allowedTypes.map(({ type, icon, labelKey }) => (
             <button
               key={type}
               className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
@@ -215,8 +221,8 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
                 setOpen(false);
               }}
             >
-              <span>{icon}</span>
-              <span>{label}</span>
+              <span className={toCodiconClassName(icon)} aria-hidden="true" />
+              <span>{t(labelKey)}</span>
             </button>
           ))}
         </div>
@@ -457,11 +463,9 @@ export function BaseNode({
       <div
         ref={contentRef}
         className={clsx(
-          'w-full h-full rounded-lg border-2 shadow-lg overflow-hidden',
-          'bg-[var(--node-bg)] transition-colors duration-150',
-          isSelected || isPlaybackActive
-            ? 'border-[var(--node-selected)]'
-            : 'border-[var(--node-border)]',
+          'node-card w-full h-full overflow-hidden',
+          'transition-colors duration-150',
+          (isSelected || isPlaybackActive) && 'selected',
           isPlaybackActive && !isSelected && 'ring-2 ring-[var(--node-selected)] ring-offset-2',
           (isDragging || isResizing) && 'shadow-2xl',
         )}
@@ -577,7 +581,11 @@ export function BaseNode({
         ))}
 
       {/* Lock indicator */}
-      {node.locked && <div className="absolute top-1 right-1 text-xs text-gray-500">🔒</div>}
+      {node.locked && (
+        <div className="absolute top-1 right-1 text-xs text-gray-500">
+          <span className={toCodiconClassName('lock')} aria-hidden="true" />
+        </div>
+      )}
     </div>
   );
 }

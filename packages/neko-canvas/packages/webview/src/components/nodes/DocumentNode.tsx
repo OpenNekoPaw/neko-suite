@@ -4,6 +4,7 @@
  */
 
 import type { DocumentCanvasNode, CanvasViewport } from '@neko/shared';
+import { FileIcon } from '@neko/shared/icons';
 import { BaseNode } from './BaseNode';
 
 // =============================================================================
@@ -37,13 +38,6 @@ export interface DocumentNodeProps {
 // Helpers
 // =============================================================================
 
-const DOC_TYPE_ICON: Record<string, string> = {
-  pdf: '📕',
-  docx: '📘',
-  epub: '📗',
-  cbz: '📙',
-};
-
 const DOC_TYPE_LABEL: Record<string, string> = {
   pdf: 'PDF',
   docx: 'Word',
@@ -69,7 +63,6 @@ export function DocumentNode({
 }: DocumentNodeProps) {
   const { docPath, docType, title, thumbnailData } = node.data;
 
-  const icon = DOC_TYPE_ICON[docType] ?? '📄';
   const typeLabel = DOC_TYPE_LABEL[docType] ?? docType.toUpperCase();
   const fileName = docPath.split('/').pop() ?? docPath;
 
@@ -99,7 +92,9 @@ export function DocumentNode({
               draggable={false}
             />
           ) : (
-            <span style={{ fontSize: 40, opacity: 0.4 }}>{icon}</span>
+            <span style={{ color: 'var(--node-fg-secondary)', opacity: 0.58 }}>
+              <FileIcon size={38} strokeWidth={1.5} />
+            </span>
           )}
 
           {/* Type badge */}

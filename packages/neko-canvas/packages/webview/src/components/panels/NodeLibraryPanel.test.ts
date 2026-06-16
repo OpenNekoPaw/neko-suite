@@ -75,6 +75,19 @@ describe('NodeLibraryPanel', () => {
 
     expect(markup).toContain('draggable="true"');
     expect(markup).toContain('Text');
+    expect(markup).toContain('canvas-node-library-icon');
+    expect(markup).toContain('data-node-library-icon="annotation"');
+    expect(markup).toContain('canvas-node-library-icon-svg');
+    expect(markup).toContain('data-node-library-icon-glyph="note"');
+    expect(markup).toContain('canvas-node-library-section');
+    expect(markup).toContain('canvas-node-library-section-title');
+    expect(markup).toContain('canvas-node-library-items');
+    expect(markup).toContain('data-node-library-section-state="core"');
+    expect(markup).not.toContain('📝');
+    expect(markup).not.toContain('🔤');
+    expect(markup).not.toContain('codicon-file-media');
+    expect(markup).not.toContain('aria-label="Visible"');
+    expect(markup).not.toContain('aria-label="Unlocked"');
   });
 
   it('renders as the right node tree panel surface', () => {
@@ -111,7 +124,28 @@ describe('NodeLibraryPanel', () => {
     expect(markup).toContain('文件引用');
     expect(markup).toContain('媒体');
     expect(markup).toContain('文件');
+    expect(markup).toContain('data-node-library-badge="library.badge.file"');
     expect(markup).not.toContain('draggable="false"');
+  });
+
+  it('renders subsystem badges with explicit active and available states', () => {
+    setLocale('zh-cn');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeLibraryPanel, {
+        activeSubsystemIds: ['storyboard'],
+        coreDescriptors: createCoreNodeTypeDescriptors(),
+        subsystemManifests: BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS,
+        onCreateNode: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('data-node-library-subsystem-state="active"');
+    expect(markup).toContain('data-node-library-subsystem-state="available"');
+    expect(markup).toContain('data-node-library-section-state="active"');
+    expect(markup).toContain('data-node-library-section-state="available"');
+    expect(markup).toContain('已激活');
+    expect(markup).toContain('可用');
   });
 
   it('opens pickers for visible file reference entries', () => {

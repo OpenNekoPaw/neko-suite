@@ -36,6 +36,7 @@ export {
   SearchIcon,
   CloseIcon,
   MoreHorizontalIcon,
+  ClockIcon,
 } from './action';
 
 export { ErrorIcon, WarningIcon, SuccessIcon, LoadingIcon, InfoIcon } from './status';

@@ -6,6 +6,7 @@ import {
   projectCanvasShotPrompt,
   writeFieldBinding,
 } from '@neko/shared';
+import { CloseIcon } from '@neko/shared/icons';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { ContainerRenderer } from '../content/ContainerRenderer';
 import { ContainerActionBar, readNumber, readString } from '../content/node-card';
@@ -125,7 +126,7 @@ function OverlayHeader({ node, onClose }: { node: CanvasNode; onClose: () => voi
         style={{ color: 'var(--node-fg-secondary)' }}
         onClick={onClose}
       >
-        ✕
+        <CloseIcon size={13} strokeWidth={1.9} />
       </button>
     </div>
   );

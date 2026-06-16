@@ -1,3 +1,5 @@
+import { ArrowRightIcon, ChevronDownIcon, ChevronRightIcon, ZoomInIcon } from '@neko/shared/icons';
+
 export interface NodeHeaderBadge {
   label: string;
   tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
@@ -45,7 +47,11 @@ export function NodeHeader({
             onToggleCollapse?.();
           }}
         >
-          {isCollapsed ? '▶' : '▼'}
+          {isCollapsed ? (
+            <ChevronRightIcon size={12} strokeWidth={2} />
+          ) : (
+            <ChevronDownIcon size={12} strokeWidth={2} />
+          )}
         </button>
       )}
       <span
@@ -79,7 +85,7 @@ export function NodeHeader({
             onExpand();
           }}
         >
-          ⛶
+          <ZoomInIcon size={13} strokeWidth={1.9} />
         </button>
       )}
       {onOpenPreview && (
@@ -93,7 +99,7 @@ export function NodeHeader({
             onOpenPreview();
           }}
         >
-          ↗
+          <ArrowRightIcon size={13} strokeWidth={1.9} />
         </button>
       )}
     </div>

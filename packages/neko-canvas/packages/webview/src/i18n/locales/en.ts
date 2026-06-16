@@ -72,7 +72,7 @@ export const en = {
   // Status bar
   'status.zoom': 'Zoom: {level}%',
   'status.pan': 'Pan: ({x}, {y})',
-  'status.connecting': '🔗 Click another anchor to connect (Esc to cancel)',
+  'status.connecting': 'Click another anchor to connect (Esc to cancel)',
   'status.selected': '{count} selected',
   'status.subsystems': 'Subsystems',
   'status.noSubsystems': 'Basic canvas',
