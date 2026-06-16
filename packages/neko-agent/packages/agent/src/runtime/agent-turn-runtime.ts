@@ -136,6 +136,7 @@ export interface AgentTurnTimelineContextInput<TContext extends object> {
 
 export interface AgentTurnStreamProcessorInput {
   readonly conversationId: string;
+  readonly messageId: string;
   readonly events: AsyncIterable<AgentEvent>;
   readonly onPhaseChange: (phase: AgentPhase, toolName?: string) => void;
 }
@@ -525,8 +526,10 @@ export async function executeAgentTurn<
       agentRunner,
     });
 
+    const assistantMessageId = input.generateMessageId();
     const stream = await input.processStream({
       conversationId: input.conversationId,
+      messageId: assistantMessageId,
       events: agentRunner.execute(input.message, context),
       onPhaseChange: (phase, toolName) => {
         input.onPhaseChange?.({
@@ -539,7 +542,7 @@ export async function executeAgentTurn<
     });
 
     const assistantMessage = buildAgentAssistantMessageFromStream({
-      id: input.generateMessageId(),
+      id: assistantMessageId,
       timestamp: now(),
       stream,
     });

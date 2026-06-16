@@ -64,6 +64,33 @@ tmp/*.json
     ]);
   });
 
+  it('returns stable ranked mention results before applying the display limit', async () => {
+    vi.mocked(vscode.workspace.findFiles).mockResolvedValue([
+      vscode.Uri.file('/workspace/src/deep/painted-app.png'),
+      vscode.Uri.file('/workspace/docs/app.md'),
+      vscode.Uri.file('/workspace/src/app.ts'),
+      vscode.Uri.file('/workspace/app.json'),
+      vscode.Uri.file('/workspace/src/App 10.png'),
+      vscode.Uri.file('/workspace/src/App 2.png'),
+    ]);
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(''));
+
+    await expect(
+      searchVSCodeProjectFiles({
+        includePattern: '**/*app*',
+        excludePattern: '**/.git/**',
+        limit: 4,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ relativePath: 'app.json' }),
+      expect.objectContaining({ relativePath: 'docs/app.md' }),
+      expect.objectContaining({ relativePath: 'src/App 2.png' }),
+      expect.objectContaining({ relativePath: 'src/App 10.png' }),
+    ]);
+
+    expect(vscode.workspace.findFiles).toHaveBeenCalledWith('**/*app*', '**/.git/**', 16);
+  });
+
   it('prevents direct @file reads from ignored paths', async () => {
     vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
       if (uri.fsPath.endsWith('/.gitignore')) {

@@ -18,7 +18,7 @@ export async function searchVSCodeProjectFiles(
   const files = await vscode.workspace.findFiles(
     plan.includePattern,
     plan.excludePattern,
-    plan.limit,
+    Math.max(plan.limit * 4, plan.limit),
   );
   const filters = await Promise.all(
     workspaceFolders.map(async (folder) => ({
@@ -42,7 +42,54 @@ export async function searchVSCodeProjectFiles(
         icon: iconForWorkspaceFile(relativePath, mediaType),
         ...(mediaType ? { mediaType } : {}),
       };
-    });
+    })
+    .sort((left, right) => compareWorkspaceFileCandidates(left, right, plan))
+    .slice(0, plan.limit);
+}
+
+function compareWorkspaceFileCandidates(
+  left: AgentProjectFileCandidate,
+  right: AgentProjectFileCandidate,
+  plan: AgentProjectFileSearchPlan,
+): number {
+  const filter = extractSearchFilter(plan.includePattern);
+  const rankOrder =
+    scoreWorkspaceFileCandidate(left.relativePath, filter) -
+    scoreWorkspaceFileCandidate(right.relativePath, filter);
+  if (rankOrder !== 0) return rankOrder;
+
+  const depthOrder = getPathDepth(left.relativePath) - getPathDepth(right.relativePath);
+  if (depthOrder !== 0) return depthOrder;
+
+  return left.relativePath.localeCompare(right.relativePath, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function scoreWorkspaceFileCandidate(relativePath: string, filter: string): number {
+  if (!filter) return 0;
+  const path = relativePath.toLowerCase();
+  const fileName = getPathBaseName(path);
+  if (fileName === filter) return 0;
+  if (fileName.startsWith(filter)) return 1;
+  if (path.includes(`/${filter}`)) return 2;
+  if (fileName.includes(filter)) return 3;
+  if (path.includes(filter)) return 4;
+  return 5;
+}
+
+function extractSearchFilter(includePattern: string): string {
+  const match = includePattern.match(/^\*\*\/\*(.*)\*$/);
+  return (match?.[1] ?? '').toLowerCase();
+}
+
+function getPathDepth(relativePath: string): number {
+  return relativePath.split(/[\\/]/).filter(Boolean).length;
+}
+
+function getPathBaseName(relativePath: string): string {
+  return relativePath.split(/[\\/]/).pop() ?? relativePath;
 }
 
 function isIgnoredWorkspaceFile(

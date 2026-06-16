@@ -129,7 +129,7 @@ export class AgentTurnBridge {
             getMessageCount: (id) => this.deps.conversations.get(id)?.messages.length ?? 0,
             getFullHistory: (id) => this.deps.conversations.toAgentHistory(id),
             addAssistantMessage: (id, assistantMessage) =>
-              this.deps.conversations.addMessageToConversation(id, assistantMessage),
+              this.deps.conversations.upsertMessageToConversation(id, assistantMessage),
           },
           getBaseSystemPrompt: this.deps.getSystemPrompt,
           isPlanMode: this.deps.isPlanMode,
@@ -142,8 +142,9 @@ export class AgentTurnBridge {
           getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
           getAmbientCanvas: (id) => getCanvasSelection(id),
           timelineContextRuntime: this.timelineContextRuntime,
-          processStream: ({ conversationId, events, onPhaseChange }) =>
+          processStream: ({ conversationId, messageId, events, onPhaseChange }) =>
             this.deps.streamProcessor.processStream(input.webview, conversationId, events, {
+              messageId,
               onPhaseChange,
             }),
           ensureSubAgentEventSubscription: ({ conversationId, agentRunner }) =>

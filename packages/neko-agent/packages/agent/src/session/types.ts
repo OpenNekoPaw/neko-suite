@@ -420,6 +420,9 @@ export interface AgentEvent {
   /** Text content */
   content?: string;
 
+  /** Number of user messages waiting behind the active run. */
+  pendingCount?: number;
+
   /** Extended thinking content */
   thinking?: string;
 

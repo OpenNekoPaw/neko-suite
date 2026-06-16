@@ -81,9 +81,11 @@ export class AgentSessionRunner<TContext> {
 
     if (this._isRunning) {
       this._pendingMessages.push(input);
+      const pendingCount = this._pendingMessages.length;
       yield {
         type: 'messageQueued',
-        content: `Message queued (${this._pendingMessages.length} pending)`,
+        content: `Message queued (${pendingCount} pending)`,
+        pendingCount,
       };
       return;
     }

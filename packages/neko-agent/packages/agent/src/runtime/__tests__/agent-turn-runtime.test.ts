@@ -314,6 +314,30 @@ describe('executeAgentTurn', () => {
     });
   });
 
+  it('uses the same assistant id for stream projection and final persistence', async () => {
+    const processStream = vi.fn(async () => ({
+      accumulatedResponse: 'done',
+      accumulatedThinking: '',
+      hasError: false,
+      collectedToolCalls: [],
+      contentBlocks: [],
+    }));
+    const { input } = createBaseInput({ processStream });
+
+    await executeAgentTurn(input);
+
+    expect(processStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        messageId: 'assistant-1',
+      }),
+    );
+    expect(input.conversations.addAssistantMessage).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ id: 'assistant-1' }),
+    );
+  });
+
   it('routes phase changes and tool confirmations through host callbacks', async () => {
     const onPhaseChange = vi.fn();
     const onToolConfirmation = vi.fn();
@@ -778,6 +802,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
 
     await runtimeInput.processStream({
       conversationId: 'conv-1',
+      messageId: 'assistant-1',
       events: emptyEvents(),
       onPhaseChange: vi.fn(),
     });

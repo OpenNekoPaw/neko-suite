@@ -43,6 +43,7 @@ function createMockWebview() {
 
 function createMockCallbacks() {
   return {
+    messageId: 'assistant-stream',
     onPhaseChange: vi.fn(),
   };
 }
@@ -114,6 +115,34 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks[0]!.content).toBe('Hello world!');
       expect(result.contentBlocks[0]!.isStreaming).toBe(false); // Marked complete at end
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('streaming', undefined);
+    });
+
+    it('persists partial assistant snapshots using the provided stream message id', async () => {
+      const conversations = {
+        get: vi.fn(() => ({
+          id: 'conv-1',
+          messages: [{ id: 'user-1', role: 'user', content: 'hello', timestamp: 1 }],
+        })),
+        upsertMessageToConversation: vi.fn(),
+      };
+      processor = new AgentStreamProcessor({ conversations: conversations as any });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([{ type: 'text', content: 'Hello' }]),
+        { ...callbacks, messageId: 'assistant-stream' },
+      );
+
+      expect(conversations.upsertMessageToConversation).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({
+          id: 'assistant-stream',
+          role: 'assistant',
+          content: 'Hello',
+          isStreaming: true,
+        }),
+      );
     });
 
     it('posts runtime-projected entity memory contribution payloads on stream completion', async () => {
@@ -767,12 +796,18 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('should handle messageQueued events', async () => {
-      const events = toAsyncIterable([{ type: 'messageQueued', content: 'Queued message' }]);
+      const events = toAsyncIterable([
+        { type: 'messageQueued', content: 'Queued message', pendingCount: 2 },
+      ]);
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'messageQueued', content: 'Queued message' }),
+        expect.objectContaining({
+          type: 'messageQueued',
+          content: 'Queued message',
+          pendingCount: 2,
+        }),
       );
     });
 

@@ -289,7 +289,8 @@ function createPromotedGeneratedResourceRef(
 ): ResourceRef {
   return createGeneratedAssetResourceRef({
     assetId: readGeneratedAssetId(result, asset),
-    path: result.contractedPath ?? result.outputPath ?? asset.path,
+    path:
+      result.contractedPath ?? result.outputPath ?? asset.path ?? assetIdForGeneratedAsset(asset),
     mimeType: mimeTypeForAsset(asset),
     scope: 'project',
   });

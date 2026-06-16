@@ -846,12 +846,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _getHtmlForWebview(webview: vscode.Webview): string {
     const nonce = getNonce();
     const locale = vscode.env.language;
+    const assetVersion = encodeURIComponent(nonce);
 
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant.js'),
+    const scriptUri = appendWebviewAssetVersion(
+      webview.asWebviewUri(
+        vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant.js'),
+      ),
+      assetVersion,
     );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant-style.css'),
+    const styleUri = appendWebviewAssetVersion(
+      webview.asWebviewUri(
+        vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'assets', 'assistant-style.css'),
+      ),
+      assetVersion,
     );
 
     return `<!DOCTYPE html>
@@ -989,4 +996,10 @@ function getNonce(): string {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+function appendWebviewAssetVersion(uri: vscode.Uri, version: string): string {
+  const uriText = uri.toString();
+  const separator = uriText.includes('?') ? '&' : '?';
+  return `${uriText}${separator}v=${version}`;
 }

@@ -126,7 +126,7 @@ export function buildSkillDefs(input: {
     ...input.builtinSkills.map((skill) => toBuiltinSkillDef(skill, input.locales?.[skill.name])),
     ...toFileSkillDefs(input.scan),
   ];
-  const visibleEntries = entries.filter((entry) => entry.catalog.visibility !== 'hidden');
+  const visibleEntries = entries.filter((entry) => entry.catalog?.visibility !== 'hidden');
   return applySkillSourcePrecedence(visibleEntries);
 }
 

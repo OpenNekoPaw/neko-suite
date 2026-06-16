@@ -211,6 +211,25 @@ export class ConversationBridge {
   }
 
   /**
+   * Add a message or replace the existing message with the same id.
+   */
+  upsertMessageToConversation(conversationId: string, message: Message): void {
+    const conversation = this._conversationManager.get(conversationId);
+    if (!conversation) return;
+
+    const existingIndex = conversation.messages.findIndex((item) => item.id === message.id);
+    if (existingIndex === -1) {
+      this.addMessageToConversation(conversationId, message);
+      return;
+    }
+
+    const messages = conversation.messages.map((item, index) =>
+      index === existingIndex ? message : item,
+    );
+    this.updateMessagesForConversation(conversationId, messages);
+  }
+
+  /**
    * Replace messages for a specific conversation and keep the shared resume layer in sync.
    */
   updateMessagesForConversation(conversationId: string, messages: Message[]): void {

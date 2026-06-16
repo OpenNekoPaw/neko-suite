@@ -371,6 +371,7 @@ export {
   type CharacterEvidenceMetadata,
   type CharacterEvidenceMetadataValue,
   type CharacterEvidenceMode,
+  type CharacterEvidenceOccurrenceReader,
   type CharacterEvidenceOmission,
   type CharacterEvidenceOmissionReason,
   type CharacterEvidencePathResolutionInput,

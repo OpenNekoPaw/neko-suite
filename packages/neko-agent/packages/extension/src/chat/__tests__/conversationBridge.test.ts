@@ -171,6 +171,47 @@ describe('ConversationBridge', () => {
     });
   });
 
+  describe('upsertMessageToConversation', () => {
+    it('adds a message when no message with the same id exists', () => {
+      const id = handler.ensureActive();
+
+      handler.upsertMessageToConversation(id, {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'partial',
+        timestamp: 1,
+        isStreaming: true,
+      });
+
+      expect(handler.get(id)?.messages).toEqual([
+        expect.objectContaining({ id: 'assistant-1', content: 'partial', isStreaming: true }),
+      ]);
+    });
+
+    it('replaces an existing message with the same id', () => {
+      const id = handler.ensureActive();
+      handler.upsertMessageToConversation(id, {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'partial',
+        timestamp: 1,
+        isStreaming: true,
+      });
+
+      handler.upsertMessageToConversation(id, {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'final',
+        timestamp: 2,
+      });
+
+      expect(handler.get(id)?.messages).toEqual([
+        expect.objectContaining({ id: 'assistant-1', content: 'final' }),
+      ]);
+      expect(handler.get(id)?.messages[0]).not.toHaveProperty('isStreaming');
+    });
+  });
+
   describe('sendConversationList', () => {
     it('should post conversationList with mapped summaries', () => {
       const webview = createMockWebview();

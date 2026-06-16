@@ -5,6 +5,7 @@ import type { AgentWorkItem } from './work-item';
 export interface ConversationStreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
+  queuedMessageCount?: number;
 }
 
 export interface ActiveConversationPayload {

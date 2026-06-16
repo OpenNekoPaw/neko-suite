@@ -111,7 +111,7 @@ export class SessionArtifactFacade {
     await (this._artifactService?.flush?.() ?? Promise.resolve());
   }
 
-  getRecordsForRun(runId: string): readonly ArtifactRecord[] {
+  getRecordsForRun(runId: string): readonly AnyArtifactRecord[] {
     return this._artifactService?.listByRunId(runId) ?? [];
   }
 

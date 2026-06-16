@@ -870,6 +870,7 @@ export function projectAgentProjectFilesMessage(
   return {
     type: 'projectFiles',
     conversationId: input.conversationId,
+    filter: input.filter ?? '',
     files: projectAgentFileMentions(input.files),
     mentionExtras: projectAgentMentionExtras(
       input.canvasNodes ?? [],

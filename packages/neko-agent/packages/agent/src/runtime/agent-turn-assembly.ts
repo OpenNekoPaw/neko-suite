@@ -96,6 +96,7 @@ export interface AgentTurnHostAdapters<
     | undefined;
   readonly processStream: (input: {
     readonly conversationId: string;
+    readonly messageId: string;
     readonly events: AsyncIterable<AgentEvent>;
     readonly onPhaseChange: (phase: AgentPhase, toolName?: string) => void;
   }) => Promise<AgentStreamPersistenceSnapshot>;

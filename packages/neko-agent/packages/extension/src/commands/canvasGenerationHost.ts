@@ -68,6 +68,7 @@ export function createCanvasGenerationRuntime(
   services: ServiceCollection,
 ): CanvasGenerationRuntime {
   const platform = services.get(IPlatform);
+  const media = platform?.media;
 
   return new CanvasGenerationRuntime({
     ...(platform
@@ -86,11 +87,11 @@ export function createCanvasGenerationRuntime(
           },
         }
       : {}),
-    ...(platform?.media
+    ...(media
       ? {
           media: {
-            generateImage: (request) => platform.media.generateImage(request),
-            waitForTask: (taskId, timeoutMs) => platform.media.waitForTask(taskId, timeoutMs),
+            generateImage: (request) => media.generateImage(request),
+            waitForTask: (taskId, timeoutMs) => media.waitForTask(taskId, timeoutMs),
           },
         }
       : {}),

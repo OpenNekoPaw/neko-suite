@@ -84,7 +84,9 @@ type MessageWithLegacyToolCalls = Message & {
   toolCalls?: ToolCall[];
 };
 
-function messageHasLegacyToolCalls(message: Message): message is MessageWithLegacyToolCalls {
+function messageHasLegacyToolCalls(
+  message: Message,
+): message is Message & { readonly toolCalls: readonly ToolCall[] } {
   return Array.isArray((message as { toolCalls?: unknown }).toolCalls);
 }
 

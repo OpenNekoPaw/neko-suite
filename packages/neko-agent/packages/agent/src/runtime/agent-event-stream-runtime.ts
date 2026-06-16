@@ -1,4 +1,9 @@
-import type { AgentPhase, TaskCreatedMessage, TaskUpdatedMessage } from '@neko-agent/types';
+import type {
+  AgentPhase,
+  Message,
+  TaskCreatedMessage,
+  TaskUpdatedMessage,
+} from '@neko-agent/types';
 import type { AgentEvent } from '../session/types';
 import {
   applyAgentStreamEventToState,
@@ -18,6 +23,7 @@ import {
 } from './agent-stream-task-observer';
 import type { AgentStreamPersistenceSnapshot } from './message-runtime';
 import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-background-task';
+import { buildAgentAssistantMessageFromStream } from './message-runtime';
 
 export type AgentEventStreamRuntimeMessage =
   | AgentStreamWebviewMessage
@@ -68,9 +74,13 @@ export interface ProcessAgentEventStreamRuntimeInput<
   readonly createMessageId?: () => string;
   readonly postMessage: (message: AgentEventStreamRuntimeMessage) => void | Promise<void>;
   readonly onPhaseChange?: (phase: AgentPhase, toolName?: string) => void;
+  readonly onPartialAssistantMessage?: (message: Message) => void;
+  readonly partialAssistantSnapshotIntervalMs?: number;
   readonly backgroundTasks?: AgentEventStreamRuntimeBackgroundTasks<TSourceTask, TDeliveryPlan>;
   readonly now?: () => number;
 }
+
+const DEFAULT_PARTIAL_ASSISTANT_SNAPSHOT_INTERVAL_MS = 250;
 
 export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPlan = unknown> {
   private readonly progressSubscriptionsByConversation = new Map<string, Set<() => void>>();
@@ -81,10 +91,14 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     const streamingMessageId =
       input.messageId ?? input.createMessageId?.() ?? createAgentStreamMessageId();
     const streamState = createAgentStreamProjectionState();
+    const partialSnapshotIntervalMs =
+      input.partialAssistantSnapshotIntervalMs ?? DEFAULT_PARTIAL_ASSISTANT_SNAPSHOT_INTERVAL_MS;
+    let lastPartialSnapshotAt = 0;
 
     for await (const event of input.events) {
+      const eventTime = input.now?.() ?? Date.now();
       const stateUpdate = applyAgentStreamEventToState(streamState, event, {
-        now: input.now,
+        now: () => eventTime,
       });
       if (stateUpdate.phaseChange) {
         input.onPhaseChange?.(stateUpdate.phaseChange.phase, stateUpdate.phaseChange.toolName);
@@ -105,6 +119,36 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
 
       if (event.type === 'tool_result') {
         this.subscribeToBackgroundTaskProgress(input, streamingMessageId, event);
+      }
+
+      if (
+        shouldEmitPartialAssistantSnapshot({
+          event,
+          eventTime,
+          lastPartialSnapshotAt,
+          partialSnapshotIntervalMs,
+        })
+      ) {
+        const partialMessage = buildAgentAssistantMessageFromStream({
+          id: streamingMessageId,
+          timestamp: eventTime,
+          stream: {
+            accumulatedResponse: streamState.accumulatedResponse,
+            accumulatedThinking: streamState.accumulatedThinking,
+            hasError: streamState.hasError,
+            ...(streamState.errorMessage ? { errorMessage: streamState.errorMessage } : {}),
+            collectedToolCalls: streamState.collectedToolCalls,
+            contentBlocks: streamState.contentBlocks,
+          },
+        });
+        if (partialMessage) {
+          lastPartialSnapshotAt = eventTime;
+          input.onPartialAssistantMessage?.({
+            ...partialMessage,
+            isStreaming: true,
+            contentBlocks: partialMessage.contentBlocks?.map((block) => ({ ...block })),
+          });
+        }
       }
     }
 
@@ -205,4 +249,46 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     subscriptions.add(unsubscribe);
     this.progressSubscriptionsByConversation.set(conversationId, subscriptions);
   }
+}
+
+function shouldEmitPartialAssistantSnapshot(input: {
+  readonly event: AgentEvent;
+  readonly eventTime: number;
+  readonly lastPartialSnapshotAt: number;
+  readonly partialSnapshotIntervalMs: number;
+}): boolean {
+  if (!isPersistablePartialEvent(input.event)) {
+    return false;
+  }
+  if (input.lastPartialSnapshotAt === 0) {
+    return true;
+  }
+  if (input.partialSnapshotIntervalMs <= 0) {
+    return true;
+  }
+  if (isStructuralPartialEvent(input.event)) {
+    return true;
+  }
+  return input.eventTime - input.lastPartialSnapshotAt >= input.partialSnapshotIntervalMs;
+}
+
+function isPersistablePartialEvent(event: AgentEvent): boolean {
+  return (
+    event.type === 'thinking_content' ||
+    event.type === 'text' ||
+    event.type === 'text_delta' ||
+    event.type === 'tool_call' ||
+    event.type === 'tool_result' ||
+    event.type === 'tool_result_backfill' ||
+    event.type === 'error'
+  );
+}
+
+function isStructuralPartialEvent(event: AgentEvent): boolean {
+  return (
+    event.type === 'tool_call' ||
+    event.type === 'tool_result' ||
+    event.type === 'tool_result_backfill' ||
+    event.type === 'error'
+  );
 }

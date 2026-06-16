@@ -100,6 +100,77 @@ describe('agent event stream runtime processor', () => {
     expect(onPhaseChange).toHaveBeenCalledWith('idle', undefined);
   });
 
+  it('emits resumable partial assistant snapshots with the stream message id', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor();
+    const onPartialAssistantMessage = vi.fn();
+    const now = vi.fn(() => 100);
+
+    await processor.process({
+      conversationId: 'conv-1',
+      messageId: 'assistant-stream',
+      events: toAsyncIterable<AgentEvent>([
+        { type: 'thinking_content', thinking: 'Think' },
+        { type: 'text', content: 'Hello' },
+      ]),
+      postMessage: vi.fn(),
+      onPartialAssistantMessage,
+      partialAssistantSnapshotIntervalMs: 0,
+      now,
+    });
+
+    expect(onPartialAssistantMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        id: 'assistant-stream',
+        role: 'assistant',
+        content: 'Hello',
+        isStreaming: true,
+        contentBlocks: expect.arrayContaining([
+          expect.objectContaining({ type: 'text', isStreaming: true }),
+        ]),
+      }),
+    );
+  });
+
+  it('throttles text partial snapshots while always persisting structural events', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor();
+    const onPartialAssistantMessage = vi.fn();
+    const times = [100, 120, 140, 160];
+    const now = vi.fn(() => times.shift() ?? 160);
+
+    await processor.process({
+      conversationId: 'conv-1',
+      messageId: 'assistant-stream',
+      events: toAsyncIterable<AgentEvent>([
+        { type: 'text_delta', content: 'A' },
+        { type: 'text_delta', content: 'B' },
+        {
+          type: 'tool_call',
+          toolCall: { id: 'tool-1', name: 'read_file', arguments: {} },
+        },
+        { type: 'text_delta', content: 'C' },
+      ]),
+      postMessage: vi.fn(),
+      onPartialAssistantMessage,
+      partialAssistantSnapshotIntervalMs: 250,
+      now,
+    });
+
+    expect(onPartialAssistantMessage).toHaveBeenCalledTimes(2);
+    expect(onPartialAssistantMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ content: 'A' }),
+    );
+    expect(onPartialAssistantMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        contentBlocks: expect.arrayContaining([
+          expect.objectContaining({ type: 'text', content: 'AB', isStreaming: false }),
+          expect.objectContaining({ type: 'tool_call' }),
+        ]),
+      }),
+    );
+  });
+
   it('starts background task observers and clears subscriptions by conversation', async () => {
     const processor = new AgentEventStreamRuntimeProcessor<
       SourceTask,

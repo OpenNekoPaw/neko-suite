@@ -111,6 +111,7 @@ export type AgentStreamWebviewMessage =
       type: 'messageQueued';
       conversationId: string;
       content?: string;
+      pendingCount?: number;
     }
   | {
       type: 'streamComplete';
@@ -245,6 +246,7 @@ export function projectAgentStreamEventToWebviewMessages(
           type: 'messageQueued',
           conversationId,
           content: event.content,
+          pendingCount: event.pendingCount,
         },
       ];
     case 'done': {

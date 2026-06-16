@@ -115,6 +115,7 @@ describe('AgentSessionRunner', () => {
       expect.objectContaining({
         type: 'messageQueued',
         content: expect.stringContaining('1 pending'),
+        pendingCount: 1,
       }),
     ]);
     expect(runner.getPendingMessagesCount()).toBe(1);

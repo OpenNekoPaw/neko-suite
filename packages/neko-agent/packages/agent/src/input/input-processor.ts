@@ -205,14 +205,11 @@ export class InputProcessor implements IInputProcessor {
    */
   parseReferences(input: string): FileReference[] {
     const references: FileReference[] = [];
-    // Match @path patterns, including line ranges like @file.ts:10-20
-    const pattern = /@([^\s@]+)/g;
-    let match;
 
-    while ((match = pattern.exec(input)) !== null) {
-      const fullRef = match[1];
-      const ref = this._parseReference(fullRef);
+    for (const token of scanReferenceTokens(input)) {
+      const ref = this._parseReference(token.value);
       if (ref) {
+        ref.original = token.original;
         references.push(ref);
       }
     }
@@ -362,6 +359,83 @@ export class InputProcessor implements IInputProcessor {
   private _shouldExclude(filePath: string): boolean {
     return isMentionExcludedPath(filePath, this._options.excludePatterns);
   }
+}
+
+interface ReferenceToken {
+  original: string;
+  value: string;
+}
+
+function scanReferenceTokens(input: string): ReferenceToken[] {
+  const references: ReferenceToken[] = [];
+  let index = 0;
+
+  while (index < input.length) {
+    const atIndex = input.indexOf('@', index);
+    if (atIndex === -1) break;
+
+    const previous = atIndex > 0 ? input[atIndex - 1] : undefined;
+    if (previous && !/\s/.test(previous)) {
+      index = atIndex + 1;
+      continue;
+    }
+
+    if (input[atIndex + 1] === '"') {
+      const quoted = readQuotedReference(input, atIndex);
+      if (quoted) {
+        references.push(quoted);
+        index = atIndex + quoted.original.length;
+        continue;
+      }
+    }
+
+    const unquoted = readUnquotedReference(input, atIndex);
+    if (unquoted) {
+      references.push(unquoted);
+      index = atIndex + unquoted.original.length;
+      continue;
+    }
+
+    index = atIndex + 1;
+  }
+
+  return references;
+}
+
+function readUnquotedReference(input: string, atIndex: number): ReferenceToken | null {
+  let end = atIndex + 1;
+  while (end < input.length && !/\s|@/.test(input[end] ?? '')) {
+    end += 1;
+  }
+
+  if (end === atIndex + 1) return null;
+  const original = input.slice(atIndex, end);
+  return { original, value: original.slice(1) };
+}
+
+function readQuotedReference(input: string, atIndex: number): ReferenceToken | null {
+  let end = atIndex + 2;
+  let value = '';
+
+  while (end < input.length) {
+    const char = input[end];
+    if (char === '\\') {
+      const next = input[end + 1];
+      if (next) {
+        value += next;
+        end += 2;
+        continue;
+      }
+    }
+    if (char === '"') {
+      const original = input.slice(atIndex, end + 1);
+      return value ? { original, value } : null;
+    }
+    value += char;
+    end += 1;
+  }
+
+  return null;
 }
 
 /**

@@ -364,6 +364,7 @@ export interface ProjectMentionExtra {
 export interface ProjectFilesWebviewMessage {
   type: 'projectFiles';
   conversationId: string;
+  filter?: string;
   files?: ProjectFileMentionInfo[];
   mentionExtras?: ProjectMentionExtra[];
 }
@@ -410,6 +411,7 @@ export interface MessageQueuedMessage {
   type: 'messageQueued';
   content?: string;
   conversationId: string;
+  pendingCount?: number;
 }
 
 export interface AgentPhaseMessage {

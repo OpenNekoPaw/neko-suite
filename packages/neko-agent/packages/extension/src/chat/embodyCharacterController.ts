@@ -375,6 +375,7 @@ export function createPlatformEmbodyCharacterResponder(input: {
         metadata: {
           toolPolicy: config.toolPolicy.kind,
           capabilityPolicy: config.capabilityPolicy.kind,
+          model: null,
         },
       };
     }

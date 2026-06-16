@@ -23,7 +23,7 @@ import {
 } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
 import type { GeneratedAsset, ToolResultBackfillPayload } from '@neko/shared';
-import { type AgentPhase, type ContentBlock } from '@neko-agent/types';
+import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
@@ -54,6 +54,7 @@ export interface StreamProcessingResult {
  * Callbacks for stream events
  */
 export interface StreamCallbacks {
+  messageId: string;
   onPhaseChange: (phase: AgentPhase, toolName?: string) => void;
 }
 
@@ -135,6 +136,7 @@ export class AgentStreamProcessor {
 
     const result = await this.streamRuntime.process({
       conversationId,
+      messageId: callbacks.messageId,
       events: observeEntityMemoryContributionAutomation({
         events,
         automation: this.deps.entityMemoryContributionAutomation,
@@ -142,6 +144,9 @@ export class AgentStreamProcessor {
       }),
       postMessage: postProjectedMessage,
       onPhaseChange: callbacks.onPhaseChange,
+      onPartialAssistantMessage: (message) => {
+        this.upsertPartialAssistantMessage(conversationId, message);
+      },
       backgroundTasks: {
         ...(media
           ? {
@@ -247,6 +252,10 @@ export class AgentStreamProcessor {
     }
 
     return result;
+  }
+
+  private upsertPartialAssistantMessage(conversationId: string, message: Message): void {
+    this.deps.conversations?.upsertMessageToConversation(conversationId, message);
   }
 
   /**

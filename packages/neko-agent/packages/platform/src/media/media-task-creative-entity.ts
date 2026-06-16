@@ -264,18 +264,22 @@ function buildCreativeEntityActions(input: {
       })),
   );
 
-  const requirementActions: MediaTaskCreativeEntityAction[] = input.requirements.flatMap(
+  const characterRequirements = input.requirements.filter(
+    (requirement) => requirement.entityKind === 'character',
+  );
+
+  const requirementActions: MediaTaskCreativeEntityAction[] = characterRequirements.flatMap(
     (requirement) => [
       {
         kind: 'generate-missing-representation' as const,
         entityId: requirement.entityId,
-        entityKind: requirement.entityKind,
+        entityKind: 'character' as const,
         requiredKinds: requirement.requiredKinds,
       },
       {
         kind: 'bind-existing' as const,
         entityId: requirement.entityId,
-        entityKind: requirement.entityKind,
+        entityKind: 'character' as const,
         requiredKinds: requirement.requiredKinds,
       },
     ],

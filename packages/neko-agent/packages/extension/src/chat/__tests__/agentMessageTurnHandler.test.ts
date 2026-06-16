@@ -196,6 +196,15 @@ function createMockConversations() {
   return {
     ensureActive: vi.fn().mockReturnValue('conv-1'),
     addMessageToConversation: vi.fn((_id: string, msg: unknown) => msgs.push(msg)),
+    upsertMessageToConversation: vi.fn((_id: string, msg: unknown) => {
+      const message = msg as { id?: string };
+      const index = msgs.findIndex((item) => (item as { id?: string }).id === message.id);
+      if (index === -1) {
+        msgs.push(msg);
+      } else {
+        msgs[index] = msg;
+      }
+    }),
     addMessage: vi.fn(),
     getActiveId: vi.fn().mockReturnValue('conv-1'),
     get: vi.fn().mockReturnValue({ id: 'conv-1', messages: msgs }),
@@ -794,11 +803,12 @@ describe('AgentMessageTurnHandler', () => {
       expect(vscode.workspace.findFiles).toHaveBeenCalledWith(
         '**/*app*',
         DEFAULT_MENTION_EXCLUDE_GLOB,
-        30,
+        120,
       );
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'projectFiles',
         conversationId: 'conv-search',
+        filter: 'app',
         files: [
           {
             path: 'src/app.ts',
@@ -901,6 +911,7 @@ describe('AgentMessageTurnHandler', () => {
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'projectFiles',
         conversationId: 'conv-search',
+        filter: 'hero',
         files: [],
         mentionExtras: expect.arrayContaining([
           expect.objectContaining({

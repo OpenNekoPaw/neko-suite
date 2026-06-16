@@ -258,6 +258,8 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     expect(webview.html).toContain('<!DOCTYPE html>');
+    expect(webview.html).toMatch(/assistant\.js\?v=[A-Za-z0-9]+/);
+    expect(webview.html).toMatch(/assistant-style\.css\?v=[A-Za-z0-9]+/);
     expect(webview.onDidReceiveMessage).toHaveBeenCalled();
 
     provider.dispose();

@@ -493,8 +493,8 @@ export class CharacterDialogueController implements vscode.Disposable {
         enrichProfile: async (profileInput) =>
           (await this.deps.enrichProfile?.(profileInput)) ??
           (await this.createDefaultProfileEnrichment(profileInput)),
-        promptUserSupplement: (supplementInput) =>
-          this.deps.promptUserSupplement?.(supplementInput),
+        promptUserSupplement: async (supplementInput) =>
+          (await this.deps.promptUserSupplement?.(supplementInput)) ?? undefined,
         evaluateTranscript: async (evaluationInput) =>
           (await this.deps.evaluateTranscript?.(evaluationInput)) ??
           (await this.createDefaultEvaluationReport(evaluationInput.artifact)),
@@ -1622,7 +1622,7 @@ function relationshipProjectionKey(relationship: CreativeEntityRelationshipProje
 
 function occurrenceProjectionKey(occurrence: CreativeEntityOccurrenceProjection): string {
   return [
-    occurrence.entityRef.entityId,
+    occurrence.entityRef?.entityId ?? '',
     occurrence.source.sourceRef ?? occurrence.location,
     occurrence.role,
     occurrence.label,

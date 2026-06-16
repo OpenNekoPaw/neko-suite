@@ -79,7 +79,11 @@ export class ContextHandler {
   private getPersistedConversationTokenCount(conversationId: string): number {
     const conversation = this.deps.conversations.get(conversationId);
     const storedTokenCount = conversation?.tokenCount;
-    if (Number.isFinite(storedTokenCount) && storedTokenCount > 0) {
+    if (
+      storedTokenCount !== undefined &&
+      Number.isFinite(storedTokenCount) &&
+      storedTokenCount > 0
+    ) {
       return storedTokenCount;
     }
 

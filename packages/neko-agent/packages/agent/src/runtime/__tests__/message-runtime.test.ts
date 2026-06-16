@@ -617,6 +617,7 @@ describe('message runtime helpers', () => {
     ).toEqual({
       type: 'projectFiles',
       conversationId: 'conv-1',
+      filter: '',
       files: [{ path: 'src/app.ts', name: 'app.ts', type: 'file' }],
       mentionExtras: [
         {
@@ -646,6 +647,7 @@ describe('message runtime helpers', () => {
     ).resolves.toEqual({
       type: 'projectFiles',
       conversationId: 'conv-1',
+      filter: 'app',
       files: [
         { path: 'src/app.ts', name: 'app.ts', type: 'file' },
         { path: 'docs/intro.md', name: 'intro.md', type: 'file' },
@@ -683,6 +685,7 @@ describe('message runtime helpers', () => {
     ).resolves.toEqual({
       type: 'projectFiles',
       conversationId: 'conv-1',
+      filter: 'missing',
       files: [],
       mentionExtras: [],
     });

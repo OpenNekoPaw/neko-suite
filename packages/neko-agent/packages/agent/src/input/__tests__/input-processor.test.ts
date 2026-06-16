@@ -73,6 +73,22 @@ describe('InputProcessor', () => {
       expect(refs[1].path).toBe('src/b.ts');
     });
 
+    it('should parse quoted file references with spaces', () => {
+      const processor = createInputProcessor({
+        workspaceRoot: '/workspace',
+      });
+
+      const refs = processor.parseReferences('Check @"assets/ref file.zip" and @src/b.ts');
+
+      expect(refs).toHaveLength(2);
+      expect(refs[0]).toEqual({
+        original: '@"assets/ref file.zip"',
+        path: 'assets/ref file.zip',
+        type: 'file',
+      });
+      expect(refs[1].path).toBe('src/b.ts');
+    });
+
     it('should parse line range reference', () => {
       const processor = createInputProcessor({
         workspaceRoot: '/workspace',
