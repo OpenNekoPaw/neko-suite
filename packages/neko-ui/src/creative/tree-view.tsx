@@ -27,6 +27,7 @@ export interface TreeViewProps {
   readonly onContextMenu?: (id: string, event: React.MouseEvent) => void;
   readonly onDragStart?: (id: string, event: React.DragEvent) => void;
   readonly onFocusItem?: (id: string) => void;
+  readonly showStaticStateIndicators?: boolean;
   readonly visibilityDisabled?: boolean;
   readonly visibilityLabels?: TreeViewVisibilityLabels;
   readonly lockDisabled?: boolean;
@@ -72,6 +73,7 @@ export function TreeView({
   onToggleVisibility,
   scrollTop = 0,
   selectedIds,
+  showStaticStateIndicators = true,
   virtualization,
   lockDisabled,
   lockLabels = DEFAULT_TREE_VIEW_LOCK_LABELS,
@@ -210,6 +212,7 @@ export function TreeView({
               onToggleExpand={toggleExpand}
               onToggleLock={onToggleLock}
               onToggleVisibility={onToggleVisibility}
+              showStaticStateIndicators={showStaticStateIndicators}
               lockDisabled={lockDisabled}
               lockLabels={lockLabels}
               visibilityDisabled={visibilityDisabled}
@@ -235,6 +238,7 @@ function TreeViewRow({
   onToggleLock,
   onToggleVisibility,
   row,
+  showStaticStateIndicators,
   visibilityDisabled,
   visibilityLabels,
 }: {
@@ -250,6 +254,7 @@ function TreeViewRow({
   readonly onToggleExpand?: TreeViewProps['onToggleExpand'];
   readonly onToggleLock?: TreeViewProps['onToggleLock'];
   readonly onToggleVisibility?: TreeViewProps['onToggleVisibility'];
+  readonly showStaticStateIndicators: boolean;
   readonly visibilityDisabled?: boolean;
   readonly visibilityLabels: TreeViewVisibilityLabels;
 }): React.ReactElement {
@@ -267,7 +272,10 @@ function TreeViewRow({
       aria-label={item.label}
       aria-selected={row.selected}
       className={cn(
-        'grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-1 px-1 text-xs outline-none',
+        'grid items-center gap-1 px-1 text-xs outline-none',
+        showStaticStateIndicators
+          ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
+          : 'grid-cols-[auto_minmax(0,1fr)_auto]',
         'text-[var(--vscode-foreground)] hover:bg-[var(--neko-hover)]',
         row.selected
           ? 'bg-[var(--vscode-list-activeSelectionBackground,var(--neko-accent-muted))]'
@@ -364,7 +372,7 @@ function TreeViewRow({
             )}
           />
         </button>
-      ) : (
+      ) : showStaticStateIndicators ? (
         <span
           aria-label={visible ? 'Visible' : 'Hidden'}
           className={cn(
@@ -373,7 +381,7 @@ function TreeViewRow({
           )}
           role="img"
         />
-      )}
+      ) : null}
       {onToggleLock ? (
         <button
           aria-label={lockLabel}
@@ -400,7 +408,7 @@ function TreeViewRow({
             )}
           />
         </button>
-      ) : (
+      ) : showStaticStateIndicators ? (
         <span
           aria-label={locked ? 'Locked' : 'Unlocked'}
           className={cn(
@@ -411,7 +419,7 @@ function TreeViewRow({
           )}
           role="img"
         />
-      )}
+      ) : null}
       {item.actions?.length ? (
         <span className="flex items-center justify-end gap-0.5">
           {item.actions.map((action) => (

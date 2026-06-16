@@ -185,6 +185,21 @@ describe('@neko/ui TreeView', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it('can hide static visibility and lock indicators for picker-style trees', () => {
+    act(() => {
+      root.render(
+        <TreeView
+          items={[{ id: 'node', label: 'Node', locked: false, visible: true }]}
+          showStaticStateIndicators={false}
+        />,
+      );
+    });
+
+    expect(host.querySelector('[data-tree-item-id="node"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Visible"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Unlocked"]')).toBeNull();
+  });
+
   it('can delegate lock toggles, row actions, context menus, and drag start', () => {
     const onAction = vi.fn();
     const onContextMenu = vi.fn();
