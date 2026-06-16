@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import type { SketchImportContext } from '@neko/shared';
 import { createNewFile } from '@neko/shared/vscode/extension';
 import { isRecord, readNonEmptyString } from '@neko/shared/vscode/extension/command-args';
-import type { SketchEditorProvider } from '../editor/sketchEditorProvider';
+import { SketchEditorProvider } from '../editor';
 import { handleError } from '../utils/errorHandler';
 
 /** Default .nks document template */
@@ -72,6 +72,13 @@ export function registerCommands(
           ext: '.nks',
           template: (title) => getSketchTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.sketch.new.noFolder'),
+          onCreated: async (fileUri) => {
+            await vscode.commands.executeCommand(
+              'vscode.openWith',
+              fileUri,
+              SketchEditorProvider.viewType,
+            );
+          },
           onError: (error) => void handleError(error, { showToUser: true }),
         });
       } catch (error) {

@@ -109,6 +109,13 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
         ext: '.nkm',
         template: (title) => getModelTemplate(title),
         noFolderErrorMessage: vscode.l10n.t('neko.model.new.noFolder'),
+        onCreated: async (fileUri) => {
+          await vscode.commands.executeCommand(
+            'vscode.openWith',
+            fileUri,
+            ModelEditorProvider.viewType,
+          );
+        },
       });
     }),
   );

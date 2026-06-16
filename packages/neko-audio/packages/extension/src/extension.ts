@@ -191,6 +191,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
           ext: '.nka',
           template: (title) => getAudioProjectTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.audio.new.noFolder'),
+          onCreated: async (fileUri) => {
+            await vscode.commands.executeCommand(
+              'vscode.openWith',
+              fileUri,
+              AudioProjectProvider.viewType,
+            );
+          },
           onError: (error) => void handleError(error, { showToUser: true }),
         });
         logger.info('Created audio project');

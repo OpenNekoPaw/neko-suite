@@ -545,6 +545,10 @@ export function activate(context: vscode.ExtensionContext) {
         ext: '.fountain',
         template: (title) => getStoryTemplate(title),
         noFolderErrorMessage: vscode.l10n.t('neko.story.newFile.noFolder'),
+        onCreated: async (fileUri) => {
+          const document = await vscode.workspace.openTextDocument(fileUri);
+          await vscode.window.showTextDocument(document, { preserveFocus: false });
+        },
         onError: (error) => void handleError(error, { showToUser: true }),
       });
     }),

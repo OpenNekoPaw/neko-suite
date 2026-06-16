@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { createNewFile } from '@neko/shared/vscode/extension';
 import { handleError } from '../utils/errorHandler';
+import { PuppetEditorProvider } from '../editor';
 import type { PuppetLiveModeService } from '../live';
 import { Live2dBundleLoader } from '../live2d';
 import { PuppetAssetExportService } from '../export/PuppetAssetExportService';
@@ -56,6 +57,13 @@ export function registerCommands(
           ext: '.nkp',
           template: (title) => getPuppetTemplate(title),
           noFolderErrorMessage: vscode.l10n.t('neko.puppet.new.noFolder'),
+          onCreated: async (fileUri) => {
+            await vscode.commands.executeCommand(
+              'vscode.openWith',
+              fileUri,
+              PuppetEditorProvider.viewType,
+            );
+          },
         });
       } catch (error) {
         await handleError(error, { showToUser: true });
