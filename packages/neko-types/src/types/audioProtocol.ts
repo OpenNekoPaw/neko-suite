@@ -107,9 +107,14 @@ export interface AudioInfoMessage {
 }
 
 export interface WaveformDataMessage {
+  /** Downmixed mono peaks kept for compatibility with older Webview callers. */
   peaks: number[];
+  /** Optional per-channel peaks: channelPeaks[channel][sampleIndex]. */
+  channelPeaks?: number[][];
   duration: number;
   sampleRate: number;
+  channels?: number;
+  peaksPerSecond?: number;
 }
 
 export interface AudioInitMessage extends AudioResponseBase {

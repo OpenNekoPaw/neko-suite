@@ -14,9 +14,14 @@ export interface AudioInfo {
 }
 
 export interface WaveformData {
+  /** Downmixed mono peaks kept for compatibility with existing callers. */
   peaks: number[];
+  /** Optional per-channel peaks: channelPeaks[channel][sampleIndex]. */
+  channelPeaks?: number[][];
   duration: number;
   sampleRate: number;
+  channels?: number;
+  peaksPerSecond?: number;
 }
 
 export interface NekoAudioAPI {

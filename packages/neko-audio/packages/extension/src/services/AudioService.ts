@@ -125,8 +125,11 @@ export class AudioService implements vscode.Disposable {
     const wf = await this._client.waveform(filePath);
     return {
       peaks: wf.peaks,
+      channelPeaks: wf.channelPeaks,
       duration: wf.duration,
       sampleRate: wf.sampleRate,
+      channels: wf.channels,
+      peaksPerSecond: wf.peaksPerSecond,
     };
   }
 

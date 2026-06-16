@@ -342,9 +342,12 @@ export interface ProbeResult {
   audioBitrate?: number;
 }
 
-/** Mono waveform result — multi-channel peaks downmixed */
+/** Waveform result with downmixed mono peaks plus optional per-channel peaks. */
 export interface WaveformResult {
+  /** Downmixed mono peaks kept for compatibility with existing callers. */
   peaks: number[];
+  /** Per-channel peaks from Engine when available. */
+  channelPeaks?: number[][];
   sampleRate: number;
   channels: number;
   duration: number;

@@ -1254,7 +1254,7 @@ export class EngineClient {
   /**
    * Generate waveform peaks for an audio file.
    * Dispatches `audios:waveform`.
-   * Unwraps nested Rust response and downmixes multi-channel peaks to mono.
+   * Unwraps nested Rust response and keeps mono + per-channel peaks.
    */
   async waveform(source: string, opts?: { peaksPerSecond?: number }): Promise<WaveformResult> {
     const resolvedSource = this.resolveExecutionSource(source, 'audios:waveform');
@@ -1274,6 +1274,7 @@ export class EngineClient {
 
     return {
       peaks: downmixPeaks(wf.peaks),
+      channelPeaks: wf.peaks,
       sampleRate: wf.sampleRate,
       channels: wf.channels,
       duration: wf.duration,

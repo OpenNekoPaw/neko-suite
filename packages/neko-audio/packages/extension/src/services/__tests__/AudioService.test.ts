@@ -213,6 +213,10 @@ describe('AudioService', () => {
 
       mockWaveform.mockResolvedValue({
         peaks: [0.3, 0.5],
+        channelPeaks: [
+          [0.1, 0.5],
+          [0.3, 0.2],
+        ],
         sampleRate: 44100,
         channels: 2,
         duration: 1,
@@ -221,6 +225,12 @@ describe('AudioService', () => {
 
       const waveform = await service.getWaveform('/test/stereo.wav');
       expect(waveform.peaks).toEqual([0.3, 0.5]);
+      expect(waveform.channelPeaks).toEqual([
+        [0.1, 0.5],
+        [0.3, 0.2],
+      ]);
+      expect(waveform.channels).toBe(2);
+      expect(waveform.peaksPerSecond).toBe(10);
     });
 
     it('handles empty peaks array', async () => {

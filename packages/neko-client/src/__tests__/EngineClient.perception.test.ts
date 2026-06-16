@@ -137,6 +137,41 @@ describe('EngineClient perception facade', () => {
     );
   });
 
+  it('keeps per-channel waveform peaks while exposing legacy downmixed peaks', async () => {
+    mockDispatchResponse({
+      waveform: {
+        sampleRate: 48_000,
+        channels: 2,
+        peaksPerSecond: 100,
+        duration: 1,
+        peaks: [
+          [0.1, 0.8, 0.2],
+          [0.4, 0.3, 0.7],
+        ],
+      },
+    });
+    const client = new EngineClient(7788);
+
+    await expect(client.waveform('/tmp/stereo.wav')).resolves.toEqual({
+      peaks: [0.4, 0.8, 0.7],
+      channelPeaks: [
+        [0.1, 0.8, 0.2],
+        [0.4, 0.3, 0.7],
+      ],
+      sampleRate: 48_000,
+      channels: 2,
+      duration: 1,
+      peaksPerSecond: 100,
+    });
+    expect(lastDispatchBody()).toEqual(
+      expect.objectContaining({
+        group: 'audios',
+        action: 'waveform',
+        options: { source: '/tmp/stereo.wav' },
+      }),
+    );
+  });
+
   it('returns null when audio segment dispatch fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
