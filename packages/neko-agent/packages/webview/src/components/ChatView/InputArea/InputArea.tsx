@@ -587,7 +587,7 @@ export function InputArea({
         </div>
       )}
 
-      <div className="border-t border-[var(--agent-composer-rail-border)] bg-[var(--agent-composer-rail-bg)]">
+      <div className="agent-composer-rail">
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         <div className="flex items-center px-2 py-1 gap-0.5">
           {/* Left: session mode */}
