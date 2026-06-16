@@ -579,14 +579,100 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().cameraTarget[1]).toBeCloseTo(1);
   });
 
-  it('supports close-up meter-scale zoom below the old 0.5m floor', () => {
-    useModelStore.setState({ cameraRadius: 0.2 });
+  it('supports close-up meter-scale zoom below the old 0.5m floor without scene bounds', () => {
+    useModelStore.setState({ sceneNodes: [], cameraRadius: 0.2 });
 
     useModelStore.getState().zoomCamera(-0.12);
     expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.08);
 
     useModelStore.getState().zoomCamera(-1);
     expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.05);
+  });
+
+  it('keeps zoom outside the focused scene bounds near the engine near clip plane', () => {
+    useModelStore.setState({
+      sceneNodes: [{ ...node, kind: 'mesh' }],
+      selectedNodeId: 'node_1',
+      selectedTargets: [{ kind: 'node', nodeId: 'node_1' }],
+      cameraTheta: 0,
+      cameraPhi: Math.PI / 2,
+      cameraRadius: 2,
+      cameraTarget: [0, 0, 0],
+    });
+
+    useModelStore.getState().zoomCamera(-5);
+
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.62);
+  });
+
+  it('uses selected subtree bounds for camera clipping safety', () => {
+    useModelStore.setState({
+      sceneNodes: [
+        {
+          ...node,
+          nodeId: 'near',
+          kind: 'mesh',
+          transform: {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          },
+        },
+        {
+          ...node,
+          nodeId: 'far',
+          kind: 'mesh',
+          transform: {
+            position: { x: 0, y: 0, z: -5 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 4, y: 4, z: 4 },
+          },
+        },
+      ],
+      selectedNodeId: 'near',
+      selectedTargets: [{ kind: 'node', nodeId: 'near' }],
+      cameraTheta: 0,
+      cameraPhi: Math.PI / 2,
+      cameraRadius: 2,
+      cameraTarget: [0, 0, 0],
+    });
+
+    useModelStore.getState().zoomCamera(-5);
+
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.62);
+  });
+
+  it('preserves close-up zoom when the orbit target is outside scene bounds', () => {
+    useModelStore.setState({
+      sceneNodes: [node],
+      selectedNodeId: null,
+      selectedTargets: [],
+      cameraTheta: 0,
+      cameraPhi: Math.PI / 2,
+      cameraRadius: 0.2,
+      cameraTarget: [3, 0, 0],
+    });
+
+    useModelStore.getState().zoomCamera(-1);
+
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.05);
+  });
+
+  it('clamps restored camera state to the focused scene clipping guard', () => {
+    useModelStore.setState({
+      sceneNodes: [{ ...node, kind: 'mesh' }],
+      selectedNodeId: 'node_1',
+      selectedTargets: [{ kind: 'node', nodeId: 'node_1' }],
+    });
+
+    useModelStore.getState().restoreEditorState({
+      cameraTheta: 0,
+      cameraPhi: Math.PI / 2,
+      cameraRadius: 0.05,
+      cameraTarget: [0, 0, 0],
+    });
+
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.62);
   });
 
   it('persists the viewport grid visibility in editor state', () => {

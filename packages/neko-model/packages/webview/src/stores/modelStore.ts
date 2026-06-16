@@ -78,6 +78,8 @@ const DEFAULT_CAMERA_TARGET: Vec3 = [0, 0.8, 0];
 const EDITOR_CAMERA_FOV_RAD = (45 * Math.PI) / 180;
 const MIN_CAMERA_RADIUS = 0.05;
 const MIN_FRAME_CAMERA_RADIUS = 0.12;
+const EDITOR_CAMERA_NEAR_CLIP = 0.1;
+const CAMERA_CLIPPING_MARGIN = 0.02;
 const MAX_CAMERA_RADIUS = 8;
 const MIN_NODE_EXTENT = 0.01;
 const CAMERA_FIT_PADDING = 1.25;
@@ -969,13 +971,12 @@ export const useModelStore = create<ModelState>((set, get) => ({
     }),
 
   zoomCamera: (deltaRadius) =>
-    set((state) => ({
-      cameraRadius: clampNumber(
-        state.cameraRadius + deltaRadius,
-        MIN_CAMERA_RADIUS,
-        MAX_CAMERA_RADIUS,
-      ),
-    })),
+    set((state) => {
+      const minRadius = minCameraRadiusForState(state);
+      return {
+        cameraRadius: clampNumber(state.cameraRadius + deltaRadius, minRadius, MAX_CAMERA_RADIUS),
+      };
+    }),
 
   resetCamera: () =>
     set({
@@ -1064,37 +1065,44 @@ export const useModelStore = create<ModelState>((set, get) => ({
   },
 
   restoreEditorState: (state) =>
-    set({
-      selectedNodeId: (state['selectedNodeId'] as string | null) ?? null,
-      transformMode: (state['transformMode'] as ModelState['transformMode']) ?? 'translate',
-      isFaceEditorOpen: (state['isFaceEditorOpen'] as boolean) ?? false,
-      isBoneExpressionOpen: (state['isBoneExpressionOpen'] as boolean) ?? false,
-      isCsgPanelOpen: (state['isCsgPanelOpen'] as boolean) ?? false,
-      isTextEditorOpen: (state['isTextEditorOpen'] as boolean) ?? false,
-      isShapeCreatorOpen: (state['isShapeCreatorOpen'] as boolean) ?? false,
-      isSculptBrushOpen: (state['isSculptBrushOpen'] as boolean) ?? false,
-      faceParams: (state['faceParams'] as Record<string, number>) ?? {},
-      keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
-      currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
-      environmentPlacement:
-        parseEnvironmentPlacementState(state['environmentPlacement']) ?? get().environmentPlacement,
-      isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
-      rootMotionEnabled: (state['rootMotionEnabled'] as boolean | undefined) ?? true,
-      rootMotionNodeId: (state['rootMotionNodeId'] as string | null | undefined) ?? null,
-      cameraTheta: (state['cameraTheta'] as number) ?? 0,
-      cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
-      cameraRadius: clampNumber(
-        (state['cameraRadius'] as number) ?? DEFAULT_CAMERA_RADIUS,
-        MIN_CAMERA_RADIUS,
-        MAX_CAMERA_RADIUS,
-      ),
-      cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
-      showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
-      isPerformanceMetricsVisible:
-        typeof state['isPerformanceMetricsVisible'] === 'boolean'
-          ? state['isPerformanceMetricsVisible']
-          : false,
-      viewportStreamQuality: normalizeViewportStreamQualityPreset(state['viewportStreamQuality']),
+    set((current) => {
+      const selectedNodeId = (state['selectedNodeId'] as string | null) ?? null;
+      const cameraPatch = {
+        cameraTheta: (state['cameraTheta'] as number) ?? 0,
+        cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
+        cameraRadius: (state['cameraRadius'] as number) ?? DEFAULT_CAMERA_RADIUS,
+        cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
+      };
+      const minRadius = minCameraRadiusForState({ ...current, ...cameraPatch, selectedNodeId });
+      return {
+        selectedNodeId,
+        transformMode: (state['transformMode'] as ModelState['transformMode']) ?? 'translate',
+        isFaceEditorOpen: (state['isFaceEditorOpen'] as boolean) ?? false,
+        isBoneExpressionOpen: (state['isBoneExpressionOpen'] as boolean) ?? false,
+        isCsgPanelOpen: (state['isCsgPanelOpen'] as boolean) ?? false,
+        isTextEditorOpen: (state['isTextEditorOpen'] as boolean) ?? false,
+        isShapeCreatorOpen: (state['isShapeCreatorOpen'] as boolean) ?? false,
+        isSculptBrushOpen: (state['isSculptBrushOpen'] as boolean) ?? false,
+        faceParams: (state['faceParams'] as Record<string, number>) ?? {},
+        keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
+        currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
+        environmentPlacement:
+          parseEnvironmentPlacementState(state['environmentPlacement']) ??
+          get().environmentPlacement,
+        isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
+        rootMotionEnabled: (state['rootMotionEnabled'] as boolean | undefined) ?? true,
+        rootMotionNodeId: (state['rootMotionNodeId'] as string | null | undefined) ?? null,
+        cameraTheta: cameraPatch.cameraTheta,
+        cameraPhi: cameraPatch.cameraPhi,
+        cameraRadius: clampNumber(cameraPatch.cameraRadius, minRadius, MAX_CAMERA_RADIUS),
+        cameraTarget: cameraPatch.cameraTarget,
+        showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
+        isPerformanceMetricsVisible:
+          typeof state['isPerformanceMetricsVisible'] === 'boolean'
+            ? state['isPerformanceMetricsVisible']
+            : false,
+        viewportStreamQuality: normalizeViewportStreamQualityPreset(state['viewportStreamQuality']),
+      };
     }),
 }));
 
@@ -1136,6 +1144,44 @@ function cameraPositionFromState(
     cameraTarget[1] + cameraRadius * Math.cos(cameraPhi),
     cameraTarget[2] + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
   ];
+}
+
+function minCameraRadiusForState(
+  state: Pick<
+    ModelState,
+    | 'cameraTheta'
+    | 'cameraPhi'
+    | 'cameraRadius'
+    | 'cameraTarget'
+    | 'sceneNodes'
+    | 'selectedNodeId'
+    | 'selectedTargets'
+  >,
+): number {
+  const bounds = computeCameraSafetyBounds(state);
+  if (!bounds) return MIN_CAMERA_RADIUS;
+
+  const targetBoundsDistance = distanceFromPointToBounds(state.cameraTarget, bounds);
+  const targetTolerance = Math.max(
+    EDITOR_CAMERA_NEAR_CLIP + CAMERA_CLIPPING_MARGIN,
+    boundsDiagonal(bounds) * 0.05,
+  );
+  if (targetBoundsDistance > targetTolerance) {
+    return MIN_CAMERA_RADIUS;
+  }
+
+  const cameraPosition = cameraPositionFromState(state);
+  const targetToCamera = subVec3(cameraPosition, state.cameraTarget);
+  const targetToCameraLength = lengthVec3(targetToCamera);
+  if (targetToCameraLength < EPSILON) return MIN_CAMERA_RADIUS;
+
+  const direction = scaleVec3(targetToCamera, 1 / targetToCameraLength);
+  const frontDepth = projectedBoundsDepthFromPoint(bounds, state.cameraTarget, direction);
+  return clampNumber(
+    Math.max(MIN_CAMERA_RADIUS, frontDepth + EDITOR_CAMERA_NEAR_CLIP + CAMERA_CLIPPING_MARGIN),
+    MIN_CAMERA_RADIUS,
+    MAX_CAMERA_RADIUS,
+  );
 }
 
 function defaultCameraTarget(): Vec3 {
@@ -1213,6 +1259,65 @@ function computeSceneBounds(nodes: readonly SceneNodeSnapshot[]): SceneBounds | 
   }
 
   return bounds;
+}
+
+function computeCameraSafetyBounds(
+  state: Pick<ModelState, 'sceneNodes' | 'selectedNodeId' | 'selectedTargets'>,
+): SceneBounds | null {
+  const selectedNodeIds = selectedNodeIdsFromState(state);
+  if (selectedNodeIds.size > 0) {
+    const selectedBounds = computeSceneBoundsForSelectedSubtrees(state.sceneNodes, selectedNodeIds);
+    if (selectedBounds) return selectedBounds;
+  }
+
+  return computeSceneBounds(state.sceneNodes);
+}
+
+function computeSceneBoundsForSelectedSubtrees(
+  nodes: readonly SceneNodeSnapshot[],
+  selectedNodeIds: ReadonlySet<string>,
+): SceneBounds | null {
+  const nodeMap = new Map(nodes.map((node) => [node.nodeId, node]));
+  const frameCache = new Map<string, NodeWorldFrame>();
+  let bounds: SceneBounds | null = null;
+
+  for (const node of nodes) {
+    if (!isRenderableNode(node) || !isNodeInSelectedSubtree(node, nodeMap, selectedNodeIds))
+      continue;
+    const nodeBounds =
+      boundsFromSnapshotNode(node) ?? boundsFromNodeFrame(node, nodeMap, frameCache);
+    bounds = bounds ? mergeBounds(bounds, nodeBounds) : nodeBounds;
+  }
+
+  return bounds;
+}
+
+function selectedNodeIdsFromState(
+  state: Pick<ModelState, 'selectedNodeId' | 'selectedTargets'>,
+): Set<string> {
+  const nodeIds = new Set<string>();
+  if (state.selectedNodeId) {
+    nodeIds.add(state.selectedNodeId);
+  }
+  for (const target of state.selectedTargets) {
+    if (typeof target.nodeId === 'string' && target.nodeId.length > 0) {
+      nodeIds.add(target.nodeId);
+    }
+  }
+  return nodeIds;
+}
+
+function isNodeInSelectedSubtree(
+  node: SceneNodeSnapshot,
+  nodeMap: ReadonlyMap<string, SceneNodeSnapshot>,
+  selectedNodeIds: ReadonlySet<string>,
+): boolean {
+  let current: SceneNodeSnapshot | undefined = node;
+  while (current) {
+    if (selectedNodeIds.has(current.nodeId)) return true;
+    current = current.parentId ? nodeMap.get(current.parentId) : undefined;
+  }
+  return false;
 }
 
 function boundsFromSnapshotNode(node: SceneNodeSnapshot): SceneBounds | null {
@@ -1294,6 +1399,38 @@ function mergeBounds(a: SceneBounds, b: SceneBounds): SceneBounds {
   };
 }
 
+function boundsDiagonal(bounds: SceneBounds): number {
+  return lengthVec3(subVec3(bounds.max, bounds.min));
+}
+
+function distanceFromPointToBounds(point: Vec3, bounds: SceneBounds): number {
+  const dx = Math.max(bounds.min[0] - point[0], 0, point[0] - bounds.max[0]);
+  const dy = Math.max(bounds.min[1] - point[1], 0, point[1] - bounds.max[1]);
+  const dz = Math.max(bounds.min[2] - point[2], 0, point[2] - bounds.max[2]);
+  return Math.hypot(dx, dy, dz);
+}
+
+function projectedBoundsDepthFromPoint(bounds: SceneBounds, point: Vec3, direction: Vec3): number {
+  let depth = 0;
+  for (const corner of boundsCorners(bounds)) {
+    depth = Math.max(depth, dotVec3(subVec3(corner, point), direction));
+  }
+  return depth;
+}
+
+function boundsCorners(bounds: SceneBounds): Vec3[] {
+  return [
+    [bounds.min[0], bounds.min[1], bounds.min[2]],
+    [bounds.min[0], bounds.min[1], bounds.max[2]],
+    [bounds.min[0], bounds.max[1], bounds.min[2]],
+    [bounds.min[0], bounds.max[1], bounds.max[2]],
+    [bounds.max[0], bounds.min[1], bounds.min[2]],
+    [bounds.max[0], bounds.min[1], bounds.max[2]],
+    [bounds.max[0], bounds.max[1], bounds.min[2]],
+    [bounds.max[0], bounds.max[1], bounds.max[2]],
+  ];
+}
+
 function normalizeBounds(bounds: SceneBounds): SceneBounds {
   return {
     min: [
@@ -1354,6 +1491,10 @@ function mulVec3(a: Vec3, b: Vec3): Vec3 {
 
 function crossVec3(a: Vec3, b: Vec3): Vec3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+function dotVec3(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 function normalizeVec3(v: Vec3): Vec3 {
