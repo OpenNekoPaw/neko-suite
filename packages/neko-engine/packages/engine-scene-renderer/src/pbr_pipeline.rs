@@ -24,19 +24,22 @@ const MAX_LIGHTS: usize = 16;
 
 /// Maximum joints per skeleton for GPU skinning
 const MAX_JOINTS: usize = 256;
-const VIEWPORT_GRID_EXTENT: f32 = 5.0;
-const VIEWPORT_GRID_STEP: f32 = 0.1;
-const VIEWPORT_GRID_HALF_STEPS: u32 = 50;
+const VIEWPORT_GRID_EXTENT: f32 = 10.0;
+const VIEWPORT_GRID_STEP: f32 = 0.5;
+const VIEWPORT_GRID_HALF_STEPS: u32 = 20;
 const VIEWPORT_GRID_COORD_COUNT: u32 = VIEWPORT_GRID_HALF_STEPS * 2 + 1;
-const VIEWPORT_GRID_VERTEX_COUNT: u32 = VIEWPORT_GRID_COORD_COUNT * 2 * 2 * 3;
+const VIEWPORT_GRID_VERTEX_COUNT: u32 = VIEWPORT_GRID_COORD_COUNT * 2 * 2;
+const DEFAULT_VIEWPORT_BACKGROUND_COLOR: [f32; 4] = [0.42, 0.47, 0.52, 1.0];
 const DEFAULT_KEY_LIGHT_INTENSITY: f32 = 3.5;
 const DEFAULT_FILL_LIGHT_INTENSITY: f32 = 1.0;
 const DEFAULT_RIM_LIGHT_INTENSITY: f32 = 1.4;
 const CLAY_BASE_COLOR: [f32; 4] = [0.78, 0.76, 0.72, 1.0];
 const CLAY_ROUGHNESS: f32 = 0.86;
 const CLAY_METALLIC: f32 = 0.0;
-const REALTIME_STREAM_SSAA_SCALE: f32 = 1.5;
-const REALTIME_STREAM_SSAA_MAX_OUTPUT_PIXELS: u64 = 1_920 * 1_080;
+const REALTIME_STREAM_SSAA_FULL_SCALE: f32 = 1.5;
+const REALTIME_STREAM_SSAA_BALANCED_SCALE: f32 = 1.25;
+const REALTIME_STREAM_SSAA_FULL_MAX_OUTPUT_PIXELS: u64 = 1_920 * 1_080;
+const REALTIME_STREAM_SSAA_BALANCED_MAX_OUTPUT_PIXELS: u64 = 3_840 * 2_160;
 
 const ENVIRONMENT_BACKGROUND_SHADER: &str = r#"
 struct EnvironmentBackgroundUniforms {
@@ -177,7 +180,7 @@ struct VertexOutput {
 
 @group(0) @binding(0) var<uniform> grid: ViewportGridUniforms;
 
-const GRID_MAJOR_EVERY: u32 = 5u;
+const GRID_MAJOR_EVERY: u32 = 2u;
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
@@ -185,93 +188,52 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     let coord_count = half_steps * 2u + 1u;
     let line_vertex = vertex_index % 2u;
     let line_index = vertex_index / 2u;
-    let plane_line_count = coord_count * 2u;
-    let plane = line_index / plane_line_count;
-    let local_line = line_index % plane_line_count;
-    let direction = local_line / coord_count;
-    let coord_index = local_line % coord_count;
+    let direction = line_index / coord_count;
+    let coord_index = line_index % coord_count;
     let offset = (f32(coord_index) - f32(half_steps)) * grid.step;
-    let world = plane_point(plane, direction, offset, line_vertex);
+    let world = ground_plane_point(direction, offset, line_vertex);
 
     var out: VertexOutput;
     out.position = grid.view_projection * vec4<f32>(world, 1.0);
-    out.color = line_color(plane, direction, coord_index, half_steps);
+    out.color = line_color(direction, coord_index, half_steps);
     return out;
 }
 
-fn plane_point(plane: u32, direction: u32, offset: f32, endpoint: u32) -> vec3<f32> {
+fn ground_plane_point(direction: u32, offset: f32, endpoint: u32) -> vec3<f32> {
     let span = select(-grid.extent, grid.extent, endpoint == 1u);
-    if (plane == 0u) {
-        if (direction == 0u) {
-            return vec3<f32>(span, 0.0, offset);
-        }
-        return vec3<f32>(offset, 0.0, span);
-    }
-    if (plane == 1u) {
-        if (direction == 0u) {
-            return vec3<f32>(span, offset, 0.0);
-        }
-        return vec3<f32>(offset, span, 0.0);
-    }
     if (direction == 0u) {
-        return vec3<f32>(0.0, offset, span);
+        return vec3<f32>(span, 0.0, offset);
     }
-    return vec3<f32>(0.0, span, offset);
+    return vec3<f32>(offset, 0.0, span);
 }
 
-fn plane_normal(plane: u32) -> vec3<f32> {
-    if (plane == 0u) {
-        return vec3<f32>(0.0, 1.0, 0.0);
-    }
-    if (plane == 1u) {
-        return vec3<f32>(0.0, 0.0, 1.0);
-    }
-    return vec3<f32>(1.0, 0.0, 0.0);
+fn is_x_axis(direction: u32, coord_index: u32, half_steps: u32) -> bool {
+    return direction == 0u && coord_index == half_steps;
 }
 
-fn plane_visibility(plane: u32) -> f32 {
-    let camera_to_grid = -grid.camera_position;
-    let view_dir = camera_to_grid / max(length(camera_to_grid), 0.00001);
-    let incidence = abs(dot(view_dir, plane_normal(plane)));
-    return smoothstep(0.04, 0.18, incidence);
+fn is_z_axis(direction: u32, coord_index: u32, half_steps: u32) -> bool {
+    return direction == 1u && coord_index == half_steps;
 }
 
-fn is_x_axis(plane: u32, direction: u32) -> bool {
-    return (plane == 0u && direction == 0u) || (plane == 1u && direction == 0u);
-}
-
-fn is_y_axis(plane: u32, direction: u32) -> bool {
-    return (plane == 1u && direction == 1u) || (plane == 2u && direction == 1u);
-}
-
-fn is_z_axis(plane: u32, direction: u32) -> bool {
-    return (plane == 0u && direction == 1u) || (plane == 2u && direction == 0u);
-}
-
-fn line_color(plane: u32, direction: u32, coord_index: u32, half_steps: u32) -> vec4<f32> {
-    let on_axis = coord_index == half_steps;
+fn line_color(direction: u32, coord_index: u32, half_steps: u32) -> vec4<f32> {
     let major = (coord_index % GRID_MAJOR_EVERY) == 0u;
-    var color = vec3<f32>(0.34, 0.38, 0.42);
-    var alpha = 0.10;
+    var color = vec3<f32>(0.30, 0.33, 0.36);
+    var alpha = 0.12;
 
     if (major) {
-        color = vec3<f32>(0.42, 0.47, 0.52);
-        alpha = 0.18;
+        color = vec3<f32>(0.38, 0.42, 0.46);
+        alpha = 0.20;
     }
-    if (on_axis && is_x_axis(plane, direction)) {
+    if (is_x_axis(direction, coord_index, half_steps)) {
         color = vec3<f32>(0.72, 0.24, 0.22);
-        alpha = 0.42;
+        alpha = 0.55;
     }
-    if (on_axis && is_y_axis(plane, direction)) {
-        color = vec3<f32>(0.25, 0.72, 0.32);
-        alpha = 0.42;
-    }
-    if (on_axis && is_z_axis(plane, direction)) {
+    if (is_z_axis(direction, coord_index, half_steps)) {
         color = vec3<f32>(0.24, 0.48, 0.88);
-        alpha = 0.42;
+        alpha = 0.55;
     }
 
-    return vec4<f32>(color, alpha * plane_visibility(plane));
+    return vec4<f32>(color, alpha);
 }
 
 @fragment
@@ -1077,6 +1039,8 @@ impl PbrRenderer {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("pbr_render_graph_encoder"),
                 });
+        let effective_background_color =
+            viewport_background_color(request.background_color, request.graph_output);
         let mut executor = PbrRenderGraphPassExecutor {
             renderer: self,
             render_world: request.render_world,
@@ -1085,7 +1049,7 @@ impl PbrRenderer {
             viewport: request.descriptor,
             output_size: request.output_size,
             scaled_output_size,
-            background_color: request.background_color,
+            background_color: effective_background_color,
             environment_background: request.environment_background,
             post_process_settings: post_process_settings_for_descriptor(request.descriptor),
             output: None,
@@ -2117,20 +2081,33 @@ fn render_scale_for_viewport(
     if graph_output != ViewportRenderGraphOutput::RealtimeStream || !post_process_enabled {
         return 1.0;
     }
-    if u64::from(output_size.0) * u64::from(output_size.1) > REALTIME_STREAM_SSAA_MAX_OUTPUT_PIXELS
-    {
-        return 1.0;
-    }
     if descriptor.post_process.taa
         && matches!(
             descriptor.render_mode,
             ViewportRenderMode::Pbr | ViewportRenderMode::Clay
         )
     {
-        REALTIME_STREAM_SSAA_SCALE
+        let output_pixels = u64::from(output_size.0) * u64::from(output_size.1);
+        if output_pixels <= REALTIME_STREAM_SSAA_FULL_MAX_OUTPUT_PIXELS {
+            return REALTIME_STREAM_SSAA_FULL_SCALE;
+        }
+        if output_pixels <= REALTIME_STREAM_SSAA_BALANCED_MAX_OUTPUT_PIXELS {
+            return REALTIME_STREAM_SSAA_BALANCED_SCALE;
+        }
+        1.0
     } else {
         1.0
     }
+}
+
+fn viewport_background_color(
+    background_color: Option<[f32; 4]>,
+    graph_output: ViewportRenderGraphOutput,
+) -> Option<[f32; 4]> {
+    background_color.or_else(|| {
+        (graph_output == ViewportRenderGraphOutput::RealtimeStream)
+            .then_some(DEFAULT_VIEWPORT_BACKGROUND_COLOR)
+    })
 }
 
 fn scaled_render_output_size(output_size: (u32, u32), scale: f32) -> (u32, u32) {
@@ -2317,17 +2294,35 @@ mod tests {
     }
 
     #[test]
-    fn viewport_helper_grid_is_three_dimensional() {
-        assert_eq!(VIEWPORT_GRID_STEP, 0.1);
-        assert_eq!(VIEWPORT_GRID_EXTENT, 5.0);
-        assert_eq!(VIEWPORT_GRID_VERTEX_COUNT, 1212);
-        assert!(VIEWPORT_GRID_SHADER.contains("fn plane_point"));
+    fn viewport_helper_grid_is_ground_plane_only_and_low_noise() {
+        assert_eq!(VIEWPORT_GRID_STEP, 0.5);
+        assert_eq!(VIEWPORT_GRID_EXTENT, 10.0);
+        assert_eq!(VIEWPORT_GRID_VERTEX_COUNT, 164);
+        assert!(VIEWPORT_GRID_SHADER.contains("fn ground_plane_point"));
         assert!(VIEWPORT_GRID_SHADER.contains("fn line_color"));
-        assert!(VIEWPORT_GRID_SHADER.contains("fn plane_visibility"));
-        assert!(VIEWPORT_GRID_SHADER.contains("plane == 0u"));
-        assert!(VIEWPORT_GRID_SHADER.contains("plane == 1u"));
-        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, offset, span)"));
-        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, span, offset)"));
+        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(span, 0.0, offset)"));
+        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(offset, 0.0, span)"));
+        assert!(!VIEWPORT_GRID_SHADER.contains("fn plane_visibility"));
+        assert!(!VIEWPORT_GRID_SHADER.contains("plane == 1u"));
+    }
+
+    #[test]
+    fn realtime_stream_uses_unity_like_background_without_changing_capture_contracts() {
+        assert_eq!(
+            viewport_background_color(None, ViewportRenderGraphOutput::RealtimeStream),
+            Some(DEFAULT_VIEWPORT_BACKGROUND_COLOR)
+        );
+        assert_eq!(
+            viewport_background_color(None, ViewportRenderGraphOutput::QualityCapture),
+            None
+        );
+        assert_eq!(
+            viewport_background_color(
+                Some([0.1, 0.2, 0.3, 1.0]),
+                ViewportRenderGraphOutput::RealtimeStream
+            ),
+            Some([0.1, 0.2, 0.3, 1.0])
+        );
     }
 
     #[test]
@@ -2379,7 +2374,7 @@ mod tests {
                 true,
                 (1_920, 1_080)
             ),
-            REALTIME_STREAM_SSAA_SCALE
+            REALTIME_STREAM_SSAA_FULL_SCALE
         );
 
         descriptor.render_mode = ViewportRenderMode::Clay;
@@ -2390,7 +2385,7 @@ mod tests {
                 true,
                 (1_920, 1_080)
             ),
-            REALTIME_STREAM_SSAA_SCALE
+            REALTIME_STREAM_SSAA_FULL_SCALE
         );
     }
 
@@ -2431,7 +2426,7 @@ mod tests {
     }
 
     #[test]
-    fn ssaa_policy_skips_high_dpr_output_sizes() {
+    fn ssaa_policy_uses_balanced_scale_for_4k_and_skips_oversized_outputs() {
         let mut descriptor = default_pbr_viewport_descriptor();
         descriptor.post_process.taa = true;
 
@@ -2441,6 +2436,15 @@ mod tests {
                 ViewportRenderGraphOutput::RealtimeStream,
                 true,
                 (2_976, 2_160)
+            ),
+            REALTIME_STREAM_SSAA_BALANCED_SCALE
+        );
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                true,
+                (4_096, 3_072)
             ),
             1.0
         );

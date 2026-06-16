@@ -50,7 +50,7 @@ describe('Model Toolbar', () => {
     useModelStore.setState({
       showViewportGrid: true,
       isPerformanceMetricsVisible: false,
-      viewportStreamQuality: 'quarter',
+      viewportStreamQuality: 'half',
     });
   });
 
@@ -268,13 +268,13 @@ describe('Model Toolbar', () => {
     const toggle = buttonByLabel(host, 'toolbar.viewportQuality');
 
     expect(toggle).not.toBeNull();
-    expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
+    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
 
     act(() => {
       toggle?.click();
     });
 
-    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
+    expect(useModelStore.getState().viewportStreamQuality).toBe('native');
   });
 });
 

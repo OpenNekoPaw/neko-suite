@@ -9,6 +9,7 @@ export interface ViewportStreamQualityConfig {
   readonly maxHeight: number;
   readonly maxDevicePixelRatio: number;
   readonly pixelFraction: number;
+  readonly maxPixelCount: number;
 }
 
 export interface ViewportStreamRect {
@@ -19,6 +20,9 @@ export interface ViewportStreamRect {
 const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
 const UHD_4K_PIXEL_COUNT = 3840 * 2160;
+const PERFORMANCE_PIXEL_COUNT_LIMIT = 2880 * 1620;
+const CLEAR_PIXEL_COUNT_LIMIT = UHD_4K_PIXEL_COUNT;
+const INSPECT_PIXEL_COUNT_LIMIT = 4096 * 3072;
 
 export const VIEWPORT_STREAM_QUALITY_CONFIGS: Readonly<
   Record<ViewportStreamQualityPreset, ViewportStreamQualityConfig>
@@ -29,7 +33,8 @@ export const VIEWPORT_STREAM_QUALITY_CONFIGS: Readonly<
     maxWidth: 4096,
     maxHeight: 4096,
     maxDevicePixelRatio: 2,
-    pixelFraction: 0.25,
+    pixelFraction: 0.5625,
+    maxPixelCount: PERFORMANCE_PIXEL_COUNT_LIMIT,
   },
   half: {
     preset: 'half',
@@ -37,7 +42,8 @@ export const VIEWPORT_STREAM_QUALITY_CONFIGS: Readonly<
     maxWidth: 4096,
     maxHeight: 4096,
     maxDevicePixelRatio: 2,
-    pixelFraction: 0.5,
+    pixelFraction: 1,
+    maxPixelCount: CLEAR_PIXEL_COUNT_LIMIT,
   },
   native: {
     preset: 'native',
@@ -45,11 +51,12 @@ export const VIEWPORT_STREAM_QUALITY_CONFIGS: Readonly<
     maxWidth: 4096,
     maxHeight: 4096,
     maxDevicePixelRatio: 2,
-    pixelFraction: 1,
+    pixelFraction: 1.25,
+    maxPixelCount: INSPECT_PIXEL_COUNT_LIMIT,
   },
 };
 
-export const DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'quarter';
+export const DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET: ViewportStreamQualityPreset = 'half';
 
 export const VIEWPORT_STREAM_QUALITY_ORDER: readonly ViewportStreamQualityPreset[] = [
   'quarter',
@@ -58,11 +65,14 @@ export const VIEWPORT_STREAM_QUALITY_ORDER: readonly ViewportStreamQualityPreset
 ];
 
 export function normalizeViewportStreamQualityPreset(value: unknown): ViewportStreamQualityPreset {
-  if (value === 'responsive' || value === 'sharp') {
+  if (value === 'responsive') {
     return 'quarter';
   }
-  if (value === 'ultra') {
+  if (value === 'sharp') {
     return 'half';
+  }
+  if (value === 'ultra') {
+    return 'native';
   }
   return isViewportStreamQualityPreset(value) ? value : DEFAULT_VIEWPORT_STREAM_QUALITY_PRESET;
 }
@@ -103,7 +113,10 @@ export function createViewportStreamSize(
   const physicalWidth = cssWidth * pixelRatio;
   const physicalHeight = cssHeight * pixelRatio;
   const physicalPixels = physicalWidth * physicalHeight;
-  const targetPixels = Math.max(physicalPixels, UHD_4K_PIXEL_COUNT) * config.pixelFraction;
+  const targetPixels = Math.min(
+    Math.max(physicalPixels, UHD_4K_PIXEL_COUNT) * config.pixelFraction,
+    config.maxPixelCount,
+  );
   let height = Math.sqrt(targetPixels / aspectRatio);
   let width = height * aspectRatio;
   if (height < config.minHeight) {

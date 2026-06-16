@@ -37,7 +37,7 @@ describe('modelStore transform prediction layer', () => {
       cameraTarget: [0, 0.9, 0],
       showViewportGrid: true,
       isPerformanceMetricsVisible: false,
-      viewportStreamQuality: 'quarter',
+      viewportStreamQuality: 'half',
       lookDev: {
         requestedMode: null,
         appliedMode: 'pbr',
@@ -621,8 +621,18 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
 
     useModelStore.getState().restoreEditorState({
+      viewportStreamQuality: 'sharp',
+    });
+    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
+
+    useModelStore.getState().restoreEditorState({
+      viewportStreamQuality: 'ultra',
+    });
+    expect(useModelStore.getState().viewportStreamQuality).toBe('native');
+
+    useModelStore.getState().restoreEditorState({
       viewportStreamQuality: 'invalid',
     });
-    expect(useModelStore.getState().viewportStreamQuality).toBe('quarter');
+    expect(useModelStore.getState().viewportStreamQuality).toBe('half');
   });
 });

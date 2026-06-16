@@ -12,12 +12,12 @@ vi.mock('../i18n/I18nContext', () => ({
       const messages: Record<string, string> = {
         'viewport.quality.aria': '视口视频流质量',
         'viewport.quality.label': '质量',
-        'viewport.quality.quarterShort': '1/4',
-        'viewport.quality.halfShort': '1/2',
-        'viewport.quality.nativeShort': '1:1',
-        'viewport.qualityTitle.quarter': '四分之一物理像素',
-        'viewport.qualityTitle.half': '二分之一物理像素',
-        'viewport.qualityTitle.native': '原生 1:1',
+        'viewport.quality.quarterShort': '性能',
+        'viewport.quality.halfShort': '清晰',
+        'viewport.quality.nativeShort': '极清',
+        'viewport.qualityTitle.quarter': '低延迟预览',
+        'viewport.qualityTitle.half': '默认编辑预览',
+        'viewport.qualityTitle.native': '细节检查预览',
       };
       return messages[key] ?? key;
     },
@@ -41,29 +41,34 @@ describe('ViewportQualityControls', () => {
     host.remove();
   });
 
-  it('renders explicit quarter/half/native quality choices', () => {
+  it('renders semantic performance/clear/inspect quality choices', () => {
     const onQualityChange = vi.fn();
     act(() => {
       root.render(<ViewportQualityControls quality="half" onQualityChange={onQualityChange} />);
     });
 
     expect(host.querySelector('[aria-label="视口视频流质量"]')).not.toBeNull();
-    expect(buttonByText('1/4').getAttribute('aria-checked')).toBe('false');
-    expect(buttonByText('1/2').getAttribute('aria-checked')).toBe('true');
-    expect(buttonByText('1:1').getAttribute('aria-checked')).toBe('false');
+    expect(selectByLabel('视口视频流质量').value).toBe('half');
+    expect(
+      Array.from(selectByLabel('视口视频流质量').options).map((option) => option.text),
+    ).toEqual(['性能', '清晰', '极清']);
 
     act(() => {
-      buttonByText('1:1').click();
+      changeSelect('视口视频流质量', 'native');
     });
 
     expect(onQualityChange).toHaveBeenCalledWith('native');
   });
 
-  function buttonByText(text: string): HTMLButtonElement {
-    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (item) => item.textContent === text,
-    );
-    if (!button) throw new Error(`Button not found: ${text}`);
-    return button;
+  function selectByLabel(label: string): HTMLSelectElement {
+    const select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+    if (!select) throw new Error(`Select not found: ${label}`);
+    return select;
+  }
+
+  function changeSelect(label: string, value: string): void {
+    const select = selectByLabel(label);
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
   }
 });
