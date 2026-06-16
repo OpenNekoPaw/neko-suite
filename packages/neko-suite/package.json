@@ -29,13 +29,17 @@
   "extensionPack": [
     "neko.neko-engine",
     "neko.neko-tools",
+    "neko.neko-preview",
     "neko.neko-cut",
     "neko.neko-canvas",
     "neko.neko-sketch",
     "neko.neko-puppet",
+    "neko.neko-model",
     "neko.neko-audio",
     "neko.neko-assets",
     "neko.neko-agent",
+    "neko.neko-market",
+    "neko.neko-dashboard",
     "neko.neko-live",
     "neko.neko-story"
   ],

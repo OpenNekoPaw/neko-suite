@@ -23,8 +23,12 @@ neko-suite (Extension Pack)
   ├── neko-cut        → 专业视频剪辑器
   ├── neko-canvas     → 画布/节点图编辑器
   ├── neko-sketch     → 压感绘图工具（依赖 neko-canvas）
+  ├── neko-puppet     → 2D 骨骼/Live2D 角色动画
+  ├── neko-model      → 3D 模型与角色视口
   ├── neko-audio      → 音频工作站
   ├── neko-agent      → AI Agent 助手
+  ├── neko-market     → 技能/素材/模型市场安装
+  ├── neko-dashboard  → 创作套件入口与统一实体面板
   ├── neko-live       → 虚拟制片/动捕直播
   ├── neko-story      → 剧本编辑器（LSP）
   └── neko-assets     → 资产管理（Git/LFS/云同步）
@@ -37,6 +41,8 @@ neko-engine, neko-tools          ← 基础（无依赖）
 neko-preview                     → neko-engine
 neko-cut, neko-canvas, neko-agent → neko-engine + neko-tools
 neko-sketch                      → neko-canvas
+neko-model, neko-puppet          → neko-engine
+neko-dashboard                   → 汇总各子扩展运行态，不直接承载领域逻辑
 ```
 
 ### 按需安装方式
