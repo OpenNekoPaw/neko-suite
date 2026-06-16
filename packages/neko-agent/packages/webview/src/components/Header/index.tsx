@@ -1,4 +1,4 @@
-import type { ConversationSummary, TabType } from '@neko-agent/types';
+import type { TabType } from '@neko-agent/types';
 import { TabBar } from '@/components/Header/TabBar';
 import { HistoryMenu } from '@/components/Header/HistoryMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -6,19 +6,22 @@ import { AccountBar } from '@/components/AccountBar';
 import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { PlusIcon } from '@neko/shared/icons';
 import type { DisplayTab } from '@/presenters/tab-display-presenter';
+import type { HistoryConversationItem } from '@/presenters/history-menu-presenter';
 
 interface HeaderProps {
   tabs: DisplayTab[];
   activeTabId: string | null;
   activeView: TabType;
-  conversations: ConversationSummary[];
+  historyConversations: HistoryConversationItem[];
   activeConversationId: string | null;
   onSwitchTab: (tabId: string) => void;
   onCloseTab: (tabId: string, e?: React.MouseEvent) => void;
   onNewChat: () => void;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
-  onClearAllConversations?: () => void;
+  onClearClosedConversations?: () => void;
+  clearableConversationCount?: number;
+  protectedConversationCount?: number;
   // AccountBar props (replaces settings gear)
   ssoSession: SsoSession | null;
   configuredProviders: ConfiguredProvider[];
@@ -29,14 +32,16 @@ export function Header({
   tabs,
   activeTabId,
   activeView,
-  conversations,
+  historyConversations,
   activeConversationId,
   onSwitchTab,
   onCloseTab,
   onNewChat,
   onOpenConversation,
   onDeleteConversation,
-  onClearAllConversations,
+  onClearClosedConversations,
+  clearableConversationCount,
+  protectedConversationCount,
   ssoSession,
   configuredProviders,
   onOpenOnboarding,
@@ -69,11 +74,13 @@ export function Header({
 
         {/* History dropdown */}
         <HistoryMenu
-          conversations={conversations}
+          conversations={historyConversations}
           activeConversationId={activeConversationId}
           onOpenConversation={onOpenConversation}
           onDeleteConversation={onDeleteConversation}
-          onClearAllConversations={onClearAllConversations}
+          onClearClosedConversations={onClearClosedConversations}
+          clearableConversationCount={clearableConversationCount}
+          protectedConversationCount={protectedConversationCount}
         />
 
         {/* AccountBar — replaces settings gear */}

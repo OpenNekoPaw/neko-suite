@@ -1,14 +1,16 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { ConversationSummary } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ClockIcon, CloseIcon, SearchIcon, TrashIcon } from '@neko/shared/icons';
+import type { HistoryConversationItem } from '@/presenters/history-menu-presenter';
 
 interface HistoryMenuProps {
-  conversations: ConversationSummary[];
+  conversations: HistoryConversationItem[];
   activeConversationId: string | null;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
-  onClearAllConversations?: () => void;
+  onClearClosedConversations?: () => void;
+  clearableConversationCount?: number;
+  protectedConversationCount?: number;
 }
 
 // Format relative time
@@ -34,7 +36,9 @@ export function HistoryMenu({
   activeConversationId,
   onOpenConversation,
   onDeleteConversation,
-  onClearAllConversations,
+  onClearClosedConversations,
+  clearableConversationCount,
+  protectedConversationCount = 0,
 }: HistoryMenuProps) {
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
@@ -70,6 +74,8 @@ export function HistoryMenu({
     const query = searchQuery.toLowerCase();
     return conversations.filter((conv) => conv.title.toLowerCase().includes(query)).slice(0, 20);
   }, [conversations, searchQuery]);
+  const resolvedClearableConversationCount =
+    clearableConversationCount ?? conversations.filter((conv) => conv.canDelete).length;
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -159,17 +165,47 @@ export function HistoryMenu({
                       <span>{t('history.messageCount', { count: conv.messageCount })}</span>
                       <span aria-hidden="true">•</span>
                       <span>{formatRelativeTime(conv.updatedAt, t)}</span>
+                      {conv.isOpen && (
+                        <>
+                          <span aria-hidden="true">•</span>
+                          <span>{t('history.status.open')}</span>
+                        </>
+                      )}
+                      {conv.executionStatus && (
+                        <>
+                          <span aria-hidden="true">•</span>
+                          <span
+                            className={`agent-history-menu-status agent-history-menu-status-${conv.executionStatus}`}
+                          >
+                            {t(`history.status.${conv.executionStatus}`)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </button>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (!conv.canDelete) return;
                       onDeleteConversation(conv.id);
                     }}
-                    className="agent-menu-icon-button agent-history-delete-button flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                    title={t('history.deleteConversation')}
-                    aria-label={t('history.deleteConversation')}
+                    className="agent-menu-icon-button agent-history-delete-button flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    disabled={!conv.canDelete}
+                    title={
+                      conv.canDelete
+                        ? t('history.deleteConversation')
+                        : conv.protectedReason === 'running'
+                          ? t('history.deleteDisabled.running')
+                          : t('history.deleteDisabled.open')
+                    }
+                    aria-label={
+                      conv.canDelete
+                        ? t('history.deleteConversation')
+                        : conv.protectedReason === 'running'
+                          ? t('history.deleteDisabled.running')
+                          : t('history.deleteDisabled.open')
+                    }
                   >
                     <TrashIcon className="w-3 h-3" />
                   </button>
@@ -180,24 +216,26 @@ export function HistoryMenu({
 
           {conversations.length > 0 && (
             <div className="agent-header-menu-footer agent-history-menu-footer">
-              {conversations.length > 10 && !searchQuery && (
-                <span className="agent-history-menu-footer-hint">
-                  {t('history.searchHint', { count: conversations.length })}
-                </span>
-              )}
-              {conversations.length <= 10 || searchQuery ? <span /> : null}
-              {onClearAllConversations && (
+              <span className="agent-history-menu-footer-hint">
+                {protectedConversationCount > 0
+                  ? t('history.protectedCount', { count: protectedConversationCount })
+                  : conversations.length > 10 && !searchQuery
+                    ? t('history.searchHint', { count: conversations.length })
+                    : ''}
+              </span>
+              {onClearClosedConversations && (
                 <button
                   type="button"
                   onClick={() => {
-                    onClearAllConversations();
+                    onClearClosedConversations();
                     setShowMenu(false);
                     setSearchQuery('');
                   }}
+                  disabled={resolvedClearableConversationCount === 0}
                   className="agent-danger-link agent-history-clear-button"
-                  title={t('history.clearAll')}
+                  title={t('history.clearClosed')}
                 >
-                  {t('history.clearAll')}
+                  {t('history.clearClosed')}
                 </button>
               )}
             </div>

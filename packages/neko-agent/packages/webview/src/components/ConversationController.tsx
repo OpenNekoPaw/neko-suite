@@ -18,7 +18,6 @@ import type { AgentContextPayload } from '@neko/shared';
 import type {
   SettingsState,
   AgentState,
-  ConversationSummary,
   Message,
   OpenTab,
   PromptMode,
@@ -43,7 +42,6 @@ import { useMessageHandler, type BoundActiveSkillIndicator } from '@/handlers';
 import { ChatWorkspace } from './ChatWorkspace';
 import {
   isCharacterRoleConversationKind,
-  isCharacterRoleTab,
   projectCharacterRoleSessionView,
 } from '@/presenters/character-role-session-presenter';
 import {
@@ -52,6 +50,11 @@ import {
   projectDisplayTabs,
   type DisplayTab,
 } from '@/presenters/tab-display-presenter';
+import {
+  projectHistoryCleanup,
+  projectHistoryConversationItems,
+  type HistoryConversationItem,
+} from '@/presenters/history-menu-presenter';
 
 // =============================================================================
 // Props
@@ -61,14 +64,16 @@ interface HeaderRenderProps {
   tabs: DisplayTab[];
   activeTabId: string | null;
   activeView: TabType;
-  conversations: ConversationSummary[];
+  historyConversations: HistoryConversationItem[];
   activeConversationId: string | null;
   onSwitchTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onNewChat: () => void;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
-  onClearAllConversations: () => void;
+  onClearClosedConversations: () => void;
+  clearableConversationCount: number;
+  protectedConversationCount: number;
 }
 
 export interface ConversationControllerProps {
@@ -279,6 +284,8 @@ export function ConversationController({
       // Delegate to ChatWorkspace's useConversationSession (cleans input/attachment caches)
       sessionCleanupRef.current?.cleanupConversation(conversationId);
       // Also clean shared refs not covered by useConversationSession
+      conversationTokenCountRef.current.delete(conversationId);
+      conversationCompressingRef.current.delete(conversationId);
       conversationMediaCallCountRef.current.delete(conversationId);
       setWorkItemsByConversation((prev) => removeConversationWorkItems(prev, conversationId));
       setContextChipsByConversation((prev) => {
@@ -302,15 +309,6 @@ export function ConversationController({
     },
     [setWorkItemsByConversation],
   );
-
-  const cleanupAllConversations = useCallback(() => {
-    sessionCleanupRef.current?.cleanupAllConversations();
-    conversationMediaCallCountRef.current.clear();
-    setWorkItemsByConversation(() => new Map());
-    setContextChipsByConversation(() => new Map());
-    setActiveSkillByConversation(() => new Map());
-    setPromptModeByConversation(() => new Map());
-  }, [setWorkItemsByConversation]);
 
   // ---- Derived state for current conversation ----
   const contextTokenCount = activeConversationId
@@ -532,48 +530,79 @@ export function ConversationController({
     setActiveTab('chat');
   }, []);
 
-  const handleDeleteConversation = useCallback(
+  const isProtectedConversation = useCallback(
+    (conversationId: string): boolean => {
+      const cachedStreaming = conversationStreamingRef.current.get(conversationId);
+      const cachedAgentState = conversationAgentStateRef.current.get(conversationId);
+      return Boolean(
+        openTabs.some((tab) => tab.conversationId === conversationId) ||
+        activeConversationId === conversationId ||
+        cachedStreaming?.isThinking ||
+        cachedStreaming?.streamingMessageId ||
+        (cachedAgentState && cachedAgentState.phase !== 'idle'),
+      );
+    },
+    [activeConversationId, conversationStreamingRef, conversationAgentStateRef, openTabs],
+  );
+
+  const cleanupClosedConversation = useCallback(
     (conversationId: string) => {
       cleanupConversation(conversationId);
-      const tab = openTabs.find((t) => t.conversationId === conversationId);
-      if (tab) {
-        const tabIndex = openTabs.findIndex((t) => t.id === tab.id);
-        const newTabs = openTabs.filter((t) => t.id !== tab.id);
-        setOpenTabs(newTabs);
-        if (activeTabId === tab.id && newTabs.length > 0) {
-          const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
-          const newActiveTab = newTabs[newActiveIndex];
-          if (newActiveTab) {
-            setActiveTabId(newActiveTab.id);
-            if (isCharacterRoleTab(newActiveTab)) {
-              activateCharacterRoleTab(newActiveTab);
-            } else {
-              VSCodeMessages.switchConversation(newActiveTab.conversationId);
-            }
-          }
-        } else if (newTabs.length === 0) {
-          setActiveTabId(null);
-        }
-      }
-      VSCodeMessages.deleteConversation(conversationId);
+      conversationMessagesRef.current.delete(conversationId);
+      conversationStreamingRef.current.delete(conversationId);
+      conversationAgentStateRef.current.delete(conversationId);
+      setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));
     },
     [
-      openTabs,
-      activeTabId,
       cleanupConversation,
-      setOpenTabs,
-      setActiveTabId,
-      activateCharacterRoleTab,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      conversationAgentStateRef,
+      setConversations,
     ],
   );
 
-  const handleClearAllConversations = useCallback(() => {
-    cleanupAllConversations();
-    setOpenTabs([]);
-    setActiveTabId(null);
-    clearMessages();
-    VSCodeMessages.clearAllConversations();
-  }, [cleanupAllConversations, setOpenTabs, setActiveTabId, clearMessages]);
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => {
+      if (isProtectedConversation(conversationId)) {
+        return;
+      }
+
+      cleanupClosedConversation(conversationId);
+      VSCodeMessages.deleteConversation(conversationId);
+    },
+    [cleanupClosedConversation, isProtectedConversation],
+  );
+
+  const handleClearClosedConversations = useCallback(() => {
+    const historyItems = projectHistoryConversationItems({
+      conversations,
+      openTabs,
+      activeConversationId,
+      activeStreaming: {
+        streamingMessageId,
+        isThinking,
+        queuedMessageCount,
+      },
+      streamingByConversation: conversationStreamingRef.current,
+      agentStateByConversation: conversationAgentStateRef.current,
+    });
+    const cleanup = projectHistoryCleanup({ historyItems });
+    for (const conversationId of cleanup.deletableConversationIds) {
+      cleanupClosedConversation(conversationId);
+      VSCodeMessages.deleteConversation(conversationId);
+    }
+  }, [
+    activeConversationId,
+    conversations,
+    openTabs,
+    streamingMessageId,
+    isThinking,
+    queuedMessageCount,
+    conversationStreamingRef,
+    conversationAgentStateRef,
+    cleanupClosedConversation,
+  ]);
 
   // ---- Tab management ----
   const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
@@ -626,6 +655,34 @@ export function ConversationController({
       projectionVersion,
     ],
   );
+  const historyConversations = useMemo(
+    () =>
+      projectHistoryConversationItems({
+        conversations,
+        openTabs,
+        activeConversationId,
+        activeStreaming: {
+          streamingMessageId,
+          isThinking,
+          queuedMessageCount,
+        },
+        streamingByConversation: conversationStreamingRef.current,
+        agentStateByConversation: conversationAgentStateRef.current,
+      }),
+    [
+      conversations,
+      openTabs,
+      activeConversationId,
+      streamingMessageId,
+      isThinking,
+      queuedMessageCount,
+      projectionVersion,
+    ],
+  );
+  const historyCleanup = useMemo(
+    () => projectHistoryCleanup({ historyItems: historyConversations }),
+    [historyConversations],
+  );
 
   return (
     <>
@@ -633,14 +690,16 @@ export function ConversationController({
         tabs: displayTabs,
         activeTabId,
         activeView: activeTab,
-        conversations,
+        historyConversations,
         activeConversationId,
         onSwitchTab: handleSwitchTab,
         onCloseTab: handleCloseTab,
         onNewChat: handleNewChat,
         onOpenConversation: handleOpenTab,
         onDeleteConversation: handleDeleteConversation,
-        onClearAllConversations: handleClearAllConversations,
+        onClearClosedConversations: handleClearClosedConversations,
+        clearableConversationCount: historyCleanup.deletableConversationIds.length,
+        protectedConversationCount: historyCleanup.protectedConversationCount,
       })}
 
       {activeTab === 'chat' ? (

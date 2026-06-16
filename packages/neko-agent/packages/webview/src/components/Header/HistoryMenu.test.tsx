@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ConversationSummary } from '@neko-agent/types';
+import type { HistoryConversationItem } from '@/presenters/history-menu-presenter';
 import { HistoryMenu } from './HistoryMenu';
 
 const translations: Record<string, string> = {
@@ -17,8 +17,14 @@ const translations: Record<string, string> = {
   'history.timeAgo.days': '{count} days ago',
   'history.searchHint': 'Search {count} conversations',
   'history.clearSearch': 'Clear search',
-  'history.clearAll': 'Clear all',
+  'history.clearClosed': 'Clear closed',
+  'history.protectedCount': '{count} protected',
   'history.deleteConversation': 'Delete conversation',
+  'history.deleteDisabled.open': 'Close tab before deleting',
+  'history.deleteDisabled.running': 'Wait for run to finish',
+  'history.status.open': 'Open',
+  'history.status.running': 'Running',
+  'history.status.completed': 'Completed',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -46,7 +52,7 @@ describe('HistoryMenu', () => {
         activeConversationId="conv-2"
         onOpenConversation={onOpenConversation}
         onDeleteConversation={vi.fn()}
-        onClearAllConversations={vi.fn()}
+        onClearClosedConversations={vi.fn()}
       />,
     );
 
@@ -73,13 +79,17 @@ describe('HistoryMenu', () => {
     expect(activeItem.querySelector('.agent-history-menu-meta')?.textContent).toContain(
       '8 messages',
     );
+    expect(activeItem.querySelector('.agent-history-menu-meta')?.textContent).toContain('Open');
+    expect(activeItem.querySelector('.agent-history-menu-meta')?.textContent).toContain(
+      'Completed',
+    );
 
     fireEvent.click(activeItem);
     expect(onOpenConversation).toHaveBeenCalledWith('conv-2', 'Storyboard');
   });
 
-  it('clears all conversations from the compact footer action', () => {
-    const onClearAllConversations = vi.fn();
+  it('clears closed conversations from the compact footer action', () => {
+    const onClearClosedConversations = vi.fn();
 
     render(
       <HistoryMenu
@@ -87,7 +97,9 @@ describe('HistoryMenu', () => {
         activeConversationId={null}
         onOpenConversation={vi.fn()}
         onDeleteConversation={vi.fn()}
-        onClearAllConversations={onClearAllConversations}
+        onClearClosedConversations={onClearClosedConversations}
+        clearableConversationCount={11}
+        protectedConversationCount={1}
       />,
     );
 
@@ -95,12 +107,12 @@ describe('HistoryMenu', () => {
 
     expect(document.querySelector('.agent-history-menu-footer')).toBeTruthy();
     expect(document.querySelector('.agent-history-menu-footer-hint')?.textContent).toBe(
-      'Search 12 conversations',
+      '1 protected',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear closed' }));
 
-    expect(onClearAllConversations).toHaveBeenCalledTimes(1);
+    expect(onClearClosedConversations).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
@@ -142,9 +154,41 @@ describe('HistoryMenu', () => {
     expect(onDeleteConversation).toHaveBeenCalledWith('conv-1');
     expect(document.querySelector('.agent-history-delete-button svg polyline')).toBeTruthy();
   });
+
+  it('disables row deletion for open or running conversations', () => {
+    const onDeleteConversation = vi.fn();
+
+    render(
+      <HistoryMenu
+        conversations={[
+          {
+            id: 'conv-open',
+            title: 'Open chat',
+            messageCount: 2,
+            updatedAt: Date.now(),
+            isOpen: true,
+            isActive: true,
+            executionStatus: 'running',
+            canDelete: false,
+            protectedReason: 'running',
+          },
+        ]}
+        activeConversationId="conv-open"
+        onOpenConversation={vi.fn()}
+        onDeleteConversation={onDeleteConversation}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    const deleteButton = screen.getByRole('button', { name: 'Wait for run to finish' });
+
+    expect(deleteButton.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(deleteButton);
+    expect(onDeleteConversation).not.toHaveBeenCalled();
+  });
 });
 
-function createConversations(): ConversationSummary[] {
+function createConversations(): HistoryConversationItem[] {
   const now = Date.now();
   return [
     {
@@ -152,22 +196,36 @@ function createConversations(): ConversationSummary[] {
       title: 'Draft outline',
       messageCount: 4,
       updatedAt: now - 120_000,
+      isOpen: false,
+      isActive: false,
+      executionStatus: 'completed',
+      canDelete: true,
     },
     {
       id: 'conv-2',
       title: 'Storyboard',
       messageCount: 8,
       updatedAt: now - 3_600_000,
+      isOpen: true,
+      isActive: true,
+      executionStatus: 'completed',
+      canDelete: false,
+      protectedReason: 'open',
     },
   ];
 }
 
-function createManyConversations(): ConversationSummary[] {
+function createManyConversations(): HistoryConversationItem[] {
   const now = Date.now();
   return Array.from({ length: 12 }, (_, index) => ({
     id: `conv-${index + 1}`,
     title: `Conversation ${index + 1}`,
     messageCount: index + 1,
     updatedAt: now - index * 60_000,
+    isOpen: index === 0,
+    isActive: false,
+    executionStatus: index === 0 ? 'running' : 'completed',
+    canDelete: index !== 0,
+    ...(index === 0 ? { protectedReason: 'running' as const } : {}),
   }));
 }
