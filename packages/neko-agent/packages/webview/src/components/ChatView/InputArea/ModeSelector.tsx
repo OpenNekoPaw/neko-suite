@@ -86,9 +86,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
               role="menuitem"
             >
               <div>{t(option.labelKey)}</div>
-              <div className="text-[9px] text-[var(--vscode-descriptionForeground)]">
-                {t(option.descriptionKey)}
-              </div>
+              <div className="agent-dropdown-item-description">{t(option.descriptionKey)}</div>
             </button>
           ))}
         </div>
