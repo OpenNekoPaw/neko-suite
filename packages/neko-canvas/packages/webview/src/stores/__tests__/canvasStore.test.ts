@@ -203,6 +203,34 @@ describe('canvasStore scene container actions', () => {
     expect(recordNodeUpdateSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('sets a durable playback entry and records history once', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([createSceneNode(), createShotNode('shot-1', 160, 220)]),
+      playback: {
+        version: 1,
+        adapterId: 'storyboard',
+        mode: 'linear',
+        entryIds: ['old-entry'],
+        nodeOverrides: { 'shot-1': { durationMs: 2500 } },
+      },
+    });
+
+    useCanvasStore.getState().setPlaybackEntry('scene-1');
+
+    expect(useCanvasStore.getState().canvasData?.playback).toEqual({
+      version: 1,
+      adapterId: 'storyboard',
+      mode: 'linear',
+      entryIds: ['scene-1'],
+      nodeOverrides: { 'shot-1': { durationMs: 2500 } },
+    });
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useCanvasStore.getState().setPlaybackEntry('scene-1');
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+  });
+
   it('does not record resize or rotation gestures when the committed value is unchanged', () => {
     useCanvasStore.getState().setCanvasData(createCanvasData([createShotNode('shot-1', 100, 100)]));
 

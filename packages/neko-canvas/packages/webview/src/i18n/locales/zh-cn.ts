@@ -132,6 +132,7 @@ export const zhCN = {
   'menu.unlock': '解锁',
   'menu.bringToFront': '置于顶层',
   'menu.sendToBack': '置于底层',
+  'menu.setPlaybackEntry': '设为播放起点',
   'menu.group': '编组',
   'menu.ungroup': '取消编组',
   'menu.undo': '撤销',

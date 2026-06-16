@@ -51,6 +51,7 @@ export interface UseContextMenuOptions {
   onEditInSketch?: () => void;
   onGenerateVideo?: () => void;
   onEditWithControlNet?: () => void;
+  onSetPlaybackEntry?: (nodeId: string) => void;
 }
 
 export interface UseContextMenuReturn {
@@ -93,6 +94,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     onEditInSketch,
     onGenerateVideo,
     onEditWithControlNet,
+    onSetPlaybackEntry,
   } = options;
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -105,14 +107,23 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       const canvasPos = screenToCanvas(e.clientX, e.clientY);
 
       // Detect whether the right-click landed on a node or on blank canvas
-      const clickedOnNode = (e.target as HTMLElement).closest('[data-node-id]') !== null;
-      const showNodeMenu = clickedOnNode && selectedNodeIds.length > 0;
+      const clickedNodeElement = (e.target as HTMLElement).closest('[data-node-id]');
+      const contextNodeId = clickedNodeElement?.getAttribute('data-node-id') ?? undefined;
+      const clickedOnNode = contextNodeId !== undefined;
+      const effectiveSelectedNodeIds =
+        contextNodeId && !selectedNodeIds.includes(contextNodeId)
+          ? [contextNodeId]
+          : selectedNodeIds;
+      if (contextNodeId && !selectedNodeIds.includes(contextNodeId)) {
+        useCanvasStore.getState().selectNode(contextNodeId);
+      }
+      const showNodeMenu = clickedOnNode;
 
-      const selectedNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
+      const selectedNodes = nodes.filter((n) => effectiveSelectedNodeIds.includes(n.id));
       const menuCtx = {
         canvasPosition: canvasPos,
         hasSelection: showNodeMenu,
-        selectedCount: selectedNodeIds.length,
+        selectedCount: effectiveSelectedNodeIds.length,
         onAddText: addTextAt,
         onAddScene: addSceneGroupAt,
         onAddShot: addShotAt,
@@ -133,10 +144,12 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onDuplicate: handleDuplicate,
         onGroup: handleGroup,
         onUngroup: handleUngroup,
-        canGroup: selectedNodeIds.length >= 2,
+        onSetPlaybackEntry,
+        contextNodeId,
+        canGroup: effectiveSelectedNodeIds.length >= 2,
         canUngroup:
-          selectedNodeIds.length === 1 &&
-          (nodes.find((n) => n.id === selectedNodeIds[0])?.type as string) === 'group',
+          effectiveSelectedNodeIds.length === 1 &&
+          (nodes.find((n) => n.id === effectiveSelectedNodeIds[0])?.type as string) === 'group',
         onUndo: undo,
         onRedo: redo,
         canPaste: useClipboardStore.getState().canPaste(),
@@ -187,6 +200,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       onEditInSketch,
       onGenerateVideo,
       onEditWithControlNet,
+      onSetPlaybackEntry,
     ],
   );
 

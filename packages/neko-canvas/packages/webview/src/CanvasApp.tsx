@@ -242,6 +242,7 @@ export function CanvasApp() {
   const updateNode = useCanvasStore((state) => state.updateNode);
   const updateConnection = useCanvasStore((state) => state.updateConnection);
   const deleteSelected = useCanvasStore((state) => state.deleteSelected);
+  const setPlaybackEntry = useCanvasStore((state) => state.setPlaybackEntry);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const startConnection = useCanvasStore((state) => state.startConnection);
   const completeConnection = useCanvasStore((state) => state.completeConnection);
@@ -1011,6 +1012,7 @@ export function CanvasApp() {
     onEditInSketch: handleEditInSketch,
     onGenerateVideo: handleGenerateVideo,
     onEditWithControlNet: handleEditWithControlNet,
+    onSetPlaybackEntry: setPlaybackEntry,
   });
 
   const closeTransientKeyboardSurface = useCallback(() => {

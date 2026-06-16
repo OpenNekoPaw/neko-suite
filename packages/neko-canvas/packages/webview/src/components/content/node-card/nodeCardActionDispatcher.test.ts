@@ -271,6 +271,7 @@ function createCanvasStore(canvasData: CanvasData | null = null): CanvasStore {
     closeContentOverlay: vi.fn(),
     setCanvasData: vi.fn(),
     updateCanvasData: vi.fn(),
+    setPlaybackEntry: vi.fn(),
     addNode: vi.fn(),
     addNodes: vi.fn(),
     updateNode: vi.fn(),

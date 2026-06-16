@@ -2,7 +2,6 @@
  * ContextMenu - Canvas right-click context menu
  *
  * Re-exports the shared macOS glass ContextMenu.
- * Emoji icon strings are valid ReactNode values and work transparently.
  */
 
 export {
@@ -15,11 +14,33 @@ export type {
   PositionedContextMenuProps,
   PositionedContextMenuProps as ContextMenuProps,
 } from '@neko/ui/primitives';
+import type { ReactElement } from 'react';
 import type { MenuItem } from '@neko/ui/primitives';
-import { buildAIMenuSection } from '@neko/ui/primitives';
+import {
+  CameraIcon,
+  CopyIcon,
+  EditIcon,
+  LayersIcon,
+  PackageIcon,
+  PlusIcon,
+  RefreshIcon,
+  ScissorsIcon,
+  SendIcon,
+  TrashIcon,
+  UndoIcon,
+  RedoIcon,
+  UploadIcon,
+  PlayIcon,
+} from '@neko/shared/icons/index';
 import { t } from '../../i18n';
 
 export type MenuEntry = MenuItem;
+
+const MENU_ICON_SIZE = 13;
+
+function menuIcon(icon: ReactElement): ReactElement {
+  return icon;
+}
 
 // =============================================================================
 // Menu Builders
@@ -49,6 +70,8 @@ export interface CanvasMenuContext {
   onRedo?: () => void;
   onGroup?: () => void;
   onUngroup?: () => void;
+  onSetPlaybackEntry?: (nodeId: string) => void;
+  contextNodeId?: string;
   canGroup?: boolean;
   canUngroup?: boolean;
   canPaste?: boolean;
@@ -74,49 +97,53 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
   return [
     {
       label: t('toolbar.addNode'),
-      icon: '✚',
+      icon: menuIcon(<PlusIcon size={MENU_ICON_SIZE} />),
       onClick: () => {},
       submenu: [
         {
           label: t('menu.addShot'),
-          icon: '🎬',
+          icon: menuIcon(<CameraIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onAddShot?.(ctx.canvasPosition),
         },
         {
           label: t('menu.addScene'),
-          icon: '🎞',
+          icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onAddScene(ctx.canvasPosition),
         },
         {
           label: t('menu.addGallery'),
-          icon: '🖼',
+          icon: menuIcon(<CameraIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
         },
         {
           label: t('menu.addTable'),
-          icon: '📊',
+          icon: menuIcon(<PackageIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onAddTable?.(ctx.canvasPosition),
         },
         { separator: true },
-        { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
+        {
+          label: t('menu.addText'),
+          icon: menuIcon(<EditIcon size={MENU_ICON_SIZE} />),
+          onClick: () => ctx.onAddText(ctx.canvasPosition),
+        },
       ],
     },
     {
       label: t('menu.importFile'),
-      icon: '📂',
+      icon: menuIcon(<UploadIcon size={MENU_ICON_SIZE} />),
       onClick: () => ctx.onImportFile?.(),
     },
     { separator: true },
     {
       label: t('menu.paste'),
-      icon: '📋',
+      icon: menuIcon(<CopyIcon size={MENU_ICON_SIZE} />),
       shortcut: '⌘V',
       onClick: () => ctx.onPaste?.(),
       disabled: !ctx.canPaste,
     },
     {
       label: t('menu.pasteInPlace'),
-      icon: '📌',
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
       shortcut: '⇧⌘V',
       onClick: () => ctx.onPasteInPlace?.(),
       disabled: !ctx.canPaste,
@@ -124,22 +151,35 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
     { separator: true },
     {
       label: t('menu.undo'),
-      icon: '↩',
+      icon: menuIcon(<UndoIcon size={MENU_ICON_SIZE} />),
       shortcut: '⌘Z',
       onClick: () => ctx.onUndo?.(),
       disabled: !ctx.canUndo,
     },
     {
       label: t('menu.redo'),
-      icon: '↪',
+      icon: menuIcon(<RedoIcon size={MENU_ICON_SIZE} />),
       shortcut: '⇧⌘Z',
       onClick: () => ctx.onRedo?.(),
       disabled: !ctx.canRedo,
     },
     { separator: true },
-    { label: t('menu.selectAll'), icon: '☐', shortcut: '⌘A', onClick: ctx.onSelectAll },
-    { label: t('menu.fitContent'), icon: '⊞', onClick: ctx.onFitContent },
-    { label: t('menu.resetView'), icon: '↺', onClick: ctx.onResetView },
+    {
+      label: t('menu.selectAll'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      shortcut: '⌘A',
+      onClick: ctx.onSelectAll,
+    },
+    {
+      label: t('menu.fitContent'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      onClick: ctx.onFitContent,
+    },
+    {
+      label: t('menu.resetView'),
+      icon: menuIcon(<RefreshIcon size={MENU_ICON_SIZE} />),
+      onClick: ctx.onResetView,
+    },
   ];
 }
 
@@ -148,86 +188,121 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
  */
 export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
   return [
-    { label: t('menu.copy'), icon: '📄', shortcut: '⌘C', onClick: () => ctx.onCopy?.() },
-    { label: t('menu.cut'), icon: '✂️', shortcut: '⌘X', onClick: () => ctx.onCut?.() },
-    { label: t('menu.duplicate'), icon: '⧉', shortcut: '⌘D', onClick: () => ctx.onDuplicate?.() },
+    {
+      label: t('menu.copy'),
+      icon: menuIcon(<CopyIcon size={MENU_ICON_SIZE} />),
+      shortcut: '⌘C',
+      onClick: () => ctx.onCopy?.(),
+    },
+    {
+      label: t('menu.cut'),
+      icon: menuIcon(<ScissorsIcon size={MENU_ICON_SIZE} />),
+      shortcut: '⌘X',
+      onClick: () => ctx.onCut?.(),
+    },
+    {
+      label: t('menu.duplicate'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      shortcut: '⌘D',
+      onClick: () => ctx.onDuplicate?.(),
+    },
     { separator: true },
-    { label: t('menu.delete'), icon: '🗑', shortcut: '⌫', onClick: ctx.onDelete },
+    {
+      label: t('menu.delete'),
+      icon: menuIcon(<TrashIcon size={MENU_ICON_SIZE} />),
+      shortcut: '⌫',
+      onClick: ctx.onDelete,
+    },
     { separator: true },
     {
       label: t('menu.group'),
-      icon: '📁',
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
       shortcut: '⌘G',
       onClick: () => ctx.onGroup?.(),
       disabled: !ctx.canGroup,
     },
     {
       label: t('menu.ungroup'),
-      icon: '📂',
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
       shortcut: '⇧⌘G',
       onClick: () => ctx.onUngroup?.(),
       disabled: !ctx.canUngroup,
     },
     { separator: true },
-    { label: t('menu.bringToFront'), icon: '⬆', onClick: () => {} },
-    { label: t('menu.sendToBack'), icon: '⬇', onClick: () => {} },
+    {
+      label: t('menu.bringToFront'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      onClick: () => {},
+    },
+    {
+      label: t('menu.sendToBack'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      onClick: () => {},
+    },
+    {
+      label: t('menu.setPlaybackEntry'),
+      icon: menuIcon(<PlayIcon size={MENU_ICON_SIZE} />),
+      onClick: () => {
+        if (ctx.contextNodeId) {
+          ctx.onSetPlaybackEntry?.(ctx.contextNodeId);
+        }
+      },
+      disabled: !ctx.contextNodeId || !ctx.onSetPlaybackEntry,
+    },
     // ── AI section (unified shell) ──
-    ...buildAIMenuSection({
-      quickActions: [
+    { separator: true },
+    {
+      label: t('menu.ai.generateImage'),
+      icon: menuIcon(<CameraIcon size={MENU_ICON_SIZE} />),
+      disabled: !ctx.hasShotSelected,
+      onClick: () => ctx.onGenerateSelected?.(),
+    },
+    {
+      label: t('menu.ai.batchGenerate'),
+      icon: menuIcon(<LayersIcon size={MENU_ICON_SIZE} />),
+      disabled: !ctx.hasShotSelected || (ctx.selectedCount ?? 0) < 2,
+      onClick: () => ctx.onBatchGenerate?.(),
+    },
+    {
+      label: t('menu.ai.editInSketch'),
+      icon: menuIcon(<EditIcon size={MENU_ICON_SIZE} />),
+      disabled: !ctx.hasShotWithImage,
+      onClick: () => ctx.onEditInSketch?.(),
+    },
+    {
+      label: t('menu.ai.editWithControlNet'),
+      icon: menuIcon(<EditIcon size={MENU_ICON_SIZE} />),
+      disabled: !ctx.hasShotWithImage,
+      onClick: () => ctx.onEditWithControlNet?.(),
+    },
+    {
+      label: t('menu.ai.generateVideo'),
+      icon: menuIcon(<PlayIcon size={MENU_ICON_SIZE} />),
+      disabled: !ctx.hasShotWithImage,
+      onClick: () => ctx.onGenerateVideo?.(),
+    },
+    { separator: true },
+    {
+      label: t('menu.ai.sendToAgent'),
+      icon: menuIcon(<SendIcon size={MENU_ICON_SIZE} />),
+      onClick: () => {},
+      submenu: [
         {
-          id: 'generate-image',
-          label: t('menu.ai.generateImage'),
-          icon: '✨',
-          disabled: !ctx.hasShotSelected,
-          onClick: () => ctx.onGenerateSelected?.(),
-        },
-        {
-          id: 'batch-generate',
-          label: t('menu.ai.batchGenerate'),
-          icon: '⚡',
-          disabled: !ctx.hasShotSelected || (ctx.selectedCount ?? 0) < 2,
-          onClick: () => ctx.onBatchGenerate?.(),
-        },
-        {
-          id: 'edit-in-sketch',
-          label: t('menu.ai.editInSketch'),
-          icon: '🎨',
-          disabled: !ctx.hasShotWithImage,
-          onClick: () => ctx.onEditInSketch?.(),
-        },
-        {
-          id: 'edit-with-controlnet',
-          label: t('menu.ai.editWithControlNet'),
-          icon: '🎛',
-          disabled: !ctx.hasShotWithImage,
-          onClick: () => ctx.onEditWithControlNet?.(),
-        },
-        {
-          id: 'generate-video',
-          label: t('menu.ai.generateVideo'),
-          icon: '🎥',
-          disabled: !ctx.hasShotWithImage,
-          onClick: () => ctx.onGenerateVideo?.(),
-        },
-      ],
-      agentActions: [
-        {
-          id: 'optimize-desc',
           label: t('menu.ai.optimizeDesc'),
+          icon: menuIcon(<EditIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onSendToAgent?.('optimize'),
         },
         {
-          id: 'adjust-camera',
           label: t('menu.ai.adjustCamera'),
+          icon: menuIcon(<CameraIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onSendToAgent?.('camera'),
         },
         {
-          id: 'understand',
           label: t('menu.ai.understand'),
+          icon: menuIcon(<SendIcon size={MENU_ICON_SIZE} />),
           onClick: () => ctx.onSendToAgent?.('understand'),
         },
       ],
-      sendToAgentLabel: t('menu.ai.sendToAgent'),
-    }),
+    },
   ];
 }

@@ -133,6 +133,7 @@ export const en = {
   'menu.unlock': 'Unlock',
   'menu.bringToFront': 'Bring to Front',
   'menu.sendToBack': 'Send to Back',
+  'menu.setPlaybackEntry': 'Set as Playback Start',
   'menu.group': 'Group',
   'menu.ungroup': 'Ungroup',
   'menu.undo': 'Undo',

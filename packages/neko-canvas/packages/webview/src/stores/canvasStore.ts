@@ -126,6 +126,7 @@ export interface CanvasStore {
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
   updateCanvasData: (updates: Partial<CanvasData>) => void;
+  setPlaybackEntry: (nodeId: string) => void;
 
   // ==================== Node Actions ====================
   addNode: (node: Omit<CanvasNode, 'id'>) => string;
@@ -515,6 +516,29 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         ...updates,
+      }),
+    });
+  },
+
+  setPlaybackEntry: (nodeId) => {
+    const { canvasData } = get();
+    if (!canvasData || !canvasData.nodes.some((node) => node.id === nodeId)) return;
+    if (
+      canvasData.playback?.entryIds?.[0] === nodeId &&
+      canvasData.playback.entryIds.length === 1
+    ) {
+      return;
+    }
+
+    recordHistory(canvasData);
+    set({
+      canvasData: withSubsystemMetadataDefaults({
+        ...canvasData,
+        playback: {
+          ...(canvasData.playback ?? { version: 1 }),
+          version: 1,
+          entryIds: [nodeId],
+        },
       }),
     });
   },
