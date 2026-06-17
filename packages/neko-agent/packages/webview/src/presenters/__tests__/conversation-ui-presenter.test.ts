@@ -32,14 +32,14 @@ describe('conversation UI presenter', () => {
           isError: true,
         },
       ],
-      streaming: { streamingMessageId: null, isThinking: false },
+      streaming: { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 },
     });
   });
 
   it('projects history cleared into empty messages and idle streaming', () => {
     expect(projectHistoryClearedConversation()).toEqual({
       messages: [],
-      streaming: { streamingMessageId: null, isThinking: false },
+      streaming: { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 },
     });
   });
 
@@ -85,7 +85,11 @@ describe('conversation UI presenter', () => {
       { id: 'tab-1767225600000', title: 'Generated assets', conversationId: 'conv-1' },
     ]);
     expect(projected.activeTabId).toBe('tab-1767225600000');
-    expect(projected.streaming).toEqual({ streamingMessageId: null, isThinking: false });
+    expect(projected.streaming).toEqual({
+      streamingMessageId: null,
+      isThinking: false,
+      queuedMessageCount: 0,
+    });
     expect(projected.workItems).toMatchObject([
       {
         id: 'task-1',
@@ -142,6 +146,7 @@ describe('conversation UI presenter', () => {
     expect(projected.streaming).toEqual({
       streamingMessageId: 'assistant-stream',
       isThinking: true,
+      queuedMessageCount: 0,
     });
   });
 
@@ -153,7 +158,7 @@ describe('conversation UI presenter', () => {
     expect(projected).toMatchObject({
       activeConversationId: null,
       messages: [],
-      streaming: { streamingMessageId: null, isThinking: false },
+      streaming: { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 },
       activeTabId: null,
       activeTab: 'chat',
       workItems: [],
