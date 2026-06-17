@@ -73,7 +73,7 @@ Market 需要 Auth 提供 registry token、entitlement 和用户身份状态。A
 
 ## 与创作领域的关系
 
-领域文档可以描述“视频创作如何安装 LUT 包”“模型创作如何安装材质包”“2D 创作如何安装 Puppet 包”，但 Marketplace 的协议、trust 和客户端/服务端边界由本文定义。
+领域文档可以描述“视频创作如何安装 LUT 包”“场景创作如何安装材质包”“角色创作如何安装 Puppet 包”，但 Marketplace 的协议、trust 和客户端/服务端边界由本文定义。
 
 ## 吸收的稳定主题
 

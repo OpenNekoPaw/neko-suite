@@ -13,7 +13,7 @@
 
 - Engine、Proto、Client、GPU、stream 的通用约束：见 `docs/architecture/package-boundaries.md`。
 - 通用 UI、状态栏、Webview 沙箱和 Extension Host 边界：见 `docs/architecture/package-boundaries.md`。
-- 音频后期、3D 模型、2D 绘画和互动运行态：见对应创作领域。
+- 音频后期、图像绘制、场景/角色编辑和互动画布：见对应创作领域。
 
 ## 参与包与横切能力
 

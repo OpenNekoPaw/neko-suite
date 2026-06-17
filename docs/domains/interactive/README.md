@@ -1,26 +1,28 @@
-# 互动创作领域
+# 互动画布领域
 
-本目录记录面向互动体验和创作运行态的领域架构，包括互动叙事、画布交互、实时合成、设备输入、XR/Viewport 控制和 live authoring。
+本目录记录面向互动画布的领域架构，包括节点、连接、容器、触发器、route、preview session、Agent workflow node 和跨领域资产引用。`interactive` 在本仓库中特指互动画布，不泛指所有 Live、设备或运行态能力。
 
 ## 范围
 
-- 互动叙事和多路径预览。
-- 画布节点、连接、容器和运行态 route。
-- 实时合成、设备输入、OSC/VMC、live 控制。
-- 与模型、音频、视频、Agent、Engine、UI 的集成边界。
+- 节点图、容器、连接、端口、触发器和可执行创作流。
+- Storyboard、SceneGroup、Shot、Gallery、Script、Document、Model、CanvasEmbed 等引用节点。
+- preview route、preview session、节点执行摘要和 Agent workflow node。
+- 与 Story、Image、Scene、Character、Audio、Video、Agent、Engine、UI 的集成边界。
 
 ## 不负责范围
 
-- 单纯视频导出：见 `docs/domains/video/`。
-- 单纯音频后期：见 `docs/domains/audio/`。
-- 单纯模型编辑：见 `docs/domains/model/`。
+- 剧本文本和叙事索引：见 [`../story/`](../story/)。
+- 图像绘制、PSD 和精灵表：见 [`../image/`](../image/)。
+- 2D/3D 场景和 Live 舞台：见 [`../scene/`](../scene/)。
+- 角色、Live2D、Puppet 和 tracking 映射：见 [`../character/`](../character/)。
+- 单纯音频后期或视频导出：见 [`../audio/`](../audio/) 与 [`../video/`](../video/)。
 
 ## 参与包与横切能力
 
 | 类型       | 参与者                                                   |
 | ---------- | -------------------------------------------------------- |
-| 主要创作包 | `neko-canvas`, `neko-live`                               |
-| 关联创作包 | `neko-story`, `neko-model`, `neko-audio`, `neko-preview` |
+| 主要创作包 | `neko-canvas`                                            |
+| 关联创作包 | `neko-story`, `neko-agent`, `neko-preview`, `neko-assets` |
 | 横切能力   | Agent、Engine、Client、Proto、UI、Assets/Entity/Search   |
 
 ## 阅读路径

@@ -12,7 +12,7 @@
 ## 不负责范围
 
 - Engine audio/device 的通用权威边界：见 `docs/architecture/package-boundaries.md`。
-- 视频剪辑、3D 模型、2D 绘画和互动叙事：见对应创作领域。
+- 视频剪辑、图像绘制、场景/角色编辑和互动画布：见对应创作领域。
 
 ## 参与包与横切能力
 

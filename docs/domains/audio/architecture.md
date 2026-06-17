@@ -22,6 +22,17 @@
 - 文件元数据等被动状态进入 native StatusBar，波形交互和编辑控件留在 Webview。
 - Live 设备能力不绕过 Engine/device client 直接进入 Webview。
 
+## 基础模式与专业模式
+
+音频编辑器按“快速改善声音”和“完整 DAW 控制”区分模式。两种模式共享同一音频项目、效果链和 Engine audio runtime；基础模式不创建与专业模式平行的处理结果格式。
+
+| 模式     | 定位                            | 能力边界                                                                                                                            |
+| -------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 基础模式 | AI 辅助音频清理、母带和快速导出 | 降噪、响度标准化、AI 母带、播客清理、推荐效果链、简单录音、基础剪切、淡入淡出和快速导出                                             |
+| 专业模式 | DAW 级编辑和混音                | 多轨 timeline、mixer、bus/send、effect chain 精调、automation、markers/regions、preset、频谱/响度分析、录音路由、设备输入和导出参数 |
+
+右侧 Dock 在基础模式显示快速处理、推荐链、录音/导出摘要和关键基础参数；专业模式显示 Effects、Recording、Export、Presets、Mixer、Automation 和分析面板。AI 在专业模式中作为效果链建议、问题解释和批处理辅助，不替代可审计的效果参数。
+
 ## 历史 ADR 归并
 
 - AI DAW analysis、audio workstation evolution、audio workstation assessment：稳定边界进入本领域，能力差距进入 status/research。
