@@ -13,7 +13,11 @@ import { useState, useRef } from 'react';
 import type { ChatModelOption } from '@neko/shared';
 import type { MediaCategory } from '@/components/ChatView/InputAreaContext';
 import { useClickOutsideSingle } from './useClickOutside';
-import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
+import {
+  dropdownPositionClass,
+  useDropdownPlacement,
+  type DropdownPlacement,
+} from './useDropdownDirection';
 import { getCategoryColor } from './ModelIcon';
 import { ModelDot } from './ModelIcon';
 import { MediaCategoryIcon } from './ComposerIcons';
@@ -42,10 +46,16 @@ export interface CategoryChipProps {
 export function CategoryChip({ category, Icon, selectedId, models, onSelect }: CategoryChipProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('up');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'up',
+    alignment: 'start',
+  });
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
-  const getDirection = useDropdownDirection(ref, 'up');
+  const getPlacement = useDropdownPlacement(ref, {
+    preferredDirection: 'up',
+    estimatedWidth: 360,
+  });
 
   const color = getCategoryColor(category);
   const selected = models.find((m) => m.id === selectedId);
@@ -55,7 +65,7 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
 
   const handleOpen = () => {
     if (!hasModels) return; // no dropdown if no models available
-    if (!open) setDirection(getDirection());
+    if (!open) setPlacement(getPlacement());
     setOpen((v) => !v);
   };
 
@@ -92,7 +102,7 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
 
       {open && hasModels && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {/* None option */}

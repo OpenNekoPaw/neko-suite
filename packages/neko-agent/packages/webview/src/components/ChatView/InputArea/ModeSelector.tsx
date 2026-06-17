@@ -7,7 +7,11 @@ import { useState, useRef } from 'react';
 import { ShellExecutionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
-import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
+import {
+  dropdownPositionClass,
+  useDropdownPlacement,
+  type DropdownPlacement,
+} from './useDropdownDirection';
 import { useTranslation } from '@/i18n/I18nContext';
 
 interface ModeSelectorProps {
@@ -18,11 +22,17 @@ interface ModeSelectorProps {
 export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('up');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'up',
+    alignment: 'start',
+  });
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
-  const getDirection = useDropdownDirection(menuRef, 'up');
+  const getPlacement = useDropdownPlacement(menuRef, {
+    preferredDirection: 'up',
+    estimatedWidth: 220,
+  });
 
   const MODE_OPTIONS: Array<{
     value: ShellExecutionMode;
@@ -53,7 +63,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
       <button
         type="button"
         onClick={() => {
-          if (!isOpen) setDirection(getDirection());
+          if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-haspopup="menu"
@@ -69,7 +79,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {MODE_OPTIONS.map((option) => (

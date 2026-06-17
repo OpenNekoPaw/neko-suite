@@ -14,7 +14,11 @@ import { useState, useRef } from 'react';
 import { CloseIcon, SettingsIcon } from '@neko/shared/icons';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useClickOutsideSingle } from './useClickOutside';
-import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
+import {
+  dropdownPositionClass,
+  useDropdownPlacement,
+  type DropdownPlacement,
+} from './useDropdownDirection';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { GenCategory, GenerationParams } from './types';
@@ -36,14 +40,20 @@ interface ParamDropdownProps {
 
 function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDropdownProps) {
   const [open, setOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('down');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'down',
+    alignment: 'start',
+  });
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
-  const getDirection = useDropdownDirection(ref, 'down');
+  const getPlacement = useDropdownPlacement(ref, {
+    preferredDirection: 'down',
+    estimatedWidth: 176,
+  });
   const selected = options.find((o) => o.value === value);
 
   const handleOpen = () => {
-    if (!open) setDirection(getDirection());
+    if (!open) setPlacement(getPlacement());
     setOpen((v) => !v);
   };
 
@@ -64,7 +74,7 @@ function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDrop
 
       {open && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {options.map((opt) => (
@@ -107,15 +117,21 @@ interface CategorySelectorProps {
 function CategorySelector({ category, onChange }: CategorySelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('down');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'down',
+    alignment: 'start',
+  });
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
-  const getDirection = useDropdownDirection(ref, 'down');
+  const getPlacement = useDropdownPlacement(ref, {
+    preferredDirection: 'down',
+    estimatedWidth: 176,
+  });
   const color = SESSION_MODE_COLORS[category];
   const categoryLabel = getCategoryLabel(t, category);
 
   const handleOpen = () => {
-    if (!open) setDirection(getDirection());
+    if (!open) setPlacement(getPlacement());
     setOpen((v) => !v);
   };
 
@@ -137,7 +153,7 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
 
       {open && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-compact absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {(['image', 'video', 'audio'] as GenCategory[]).map((cat) => (
@@ -182,10 +198,16 @@ function InlineMediaModelChip({
 }: InlineMediaModelChipProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('down');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'down',
+    alignment: 'start',
+  });
   const ref = useRef<HTMLDivElement>(null);
   useClickOutsideSingle(ref, () => setOpen(false));
-  const getDirection = useDropdownDirection(ref, 'down');
+  const getPlacement = useDropdownPlacement(ref, {
+    preferredDirection: 'down',
+    estimatedWidth: 360,
+  });
 
   const color = getCategoryColor(category);
   const selected = models.find((m) => m.id === selectedId);
@@ -195,7 +217,7 @@ function InlineMediaModelChip({
 
   const handleOpen = () => {
     if (!hasModels) return;
-    if (!open) setDirection(getDirection());
+    if (!open) setPlacement(getPlacement());
     setOpen((v) => !v);
   };
 
@@ -233,7 +255,7 @@ function InlineMediaModelChip({
 
       {open && hasModels && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           <button

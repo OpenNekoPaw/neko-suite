@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChatModelOption } from '@neko/shared';
 import { ModeSelector } from './ModeSelector';
 import { ModelSelector } from './ModelSelector';
@@ -50,6 +50,10 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 describe('dropdown overlay presentation contract', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('keeps the chat model menu on the shared model overlay shell', () => {
     render(<ModelSelector selectedModel="auto" models={models} onSelect={vi.fn()} />);
 
@@ -74,4 +78,49 @@ describe('dropdown overlay presentation contract', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(screen.getByRole('menu').className).toContain('agent-dropdown-menu-mode');
   });
+
+  it('aligns the execution mode menu inward near the composer right edge', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.classList.contains('agent-composer-rail')) {
+        return createRect({ left: 0, right: 432, top: 0, bottom: 520 });
+      }
+      return createRect({ left: 342, right: 420, top: 460, bottom: 488 });
+    });
+
+    render(
+      <div className="agent-composer-rail">
+        <ModeSelector mode="auto" onChange={vi.fn()} />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auto' }));
+
+    expect(screen.getByRole('menu').className).toContain('right-0');
+  });
 });
+
+function createRect({
+  left,
+  right,
+  top,
+  bottom,
+}: {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}): DOMRect {
+  return {
+    left,
+    right,
+    top,
+    bottom,
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}

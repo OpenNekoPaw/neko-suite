@@ -5,7 +5,11 @@
 import { useState, useRef, useMemo } from 'react';
 import type { ChatModelOption, ModelType } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
-import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
+import {
+  dropdownPositionClass,
+  useDropdownPlacement,
+  type DropdownPlacement,
+} from './useDropdownDirection';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ModelDot, getProviderColor } from './ModelIcon';
@@ -28,11 +32,17 @@ const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = 
 export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('up');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'up',
+    alignment: 'start',
+  });
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
-  const getDirection = useDropdownDirection(menuRef, 'up');
+  const getPlacement = useDropdownPlacement(menuRef, {
+    preferredDirection: 'up',
+    estimatedWidth: 360,
+  });
 
   // Group models by category
   const groupedModels = useMemo(() => {
@@ -90,7 +100,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
       <button
         type="button"
         onClick={() => {
-          if (!isOpen) setDirection(getDirection());
+          if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-label={t('chat.selectModel')}
@@ -106,7 +116,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {/* Auto option */}

@@ -11,7 +11,11 @@
 import { useState, useRef } from 'react';
 import type { SessionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
-import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
+import {
+  dropdownPositionClass,
+  useDropdownPlacement,
+  type DropdownPlacement,
+} from './useDropdownDirection';
 import { useTranslation } from '@/i18n/I18nContext';
 import { SessionModeIcon } from './ComposerIcons';
 
@@ -37,11 +41,17 @@ export const SESSION_MODE_COLORS: Record<SessionMode, string> = {
 export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('up');
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'up',
+    alignment: 'start',
+  });
   const menuRef = useRef<HTMLDivElement>(null);
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
-  const getDirection = useDropdownDirection(menuRef, 'up');
+  const getPlacement = useDropdownPlacement(menuRef, {
+    preferredDirection: 'up',
+    estimatedWidth: 220,
+  });
 
   const OPTIONS: ModeOption[] = [
     {
@@ -77,7 +87,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
       <button
         type="button"
         onClick={() => {
-          if (!isOpen) setDirection(getDirection());
+          if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-label={t(current.labelKey)}
@@ -92,7 +102,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
 
       {isOpen && (
         <div
-          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(direction)} left-0`}
+          className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(placement)}`}
           role="menu"
         >
           {OPTIONS.map((opt) => (
