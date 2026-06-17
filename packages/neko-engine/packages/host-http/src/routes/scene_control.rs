@@ -212,6 +212,8 @@ async fn handle_client_message(
             target,
             up,
             fov_y,
+            near,
+            far,
             resolution,
             stream_profile,
             profile_ttl_ms,
@@ -225,6 +227,8 @@ async fn handle_client_message(
                 target,
                 up,
                 fov_y,
+                near,
+                far,
                 resolution,
                 stream_profile,
                 profile_ttl_ms,
@@ -2335,6 +2339,10 @@ enum SceneControlClientMessage {
         #[serde(default, rename = "fovY", alias = "fovYRad", alias = "fov_y")]
         fov_y: Option<f32>,
         #[serde(default)]
+        near: Option<f32>,
+        #[serde(default)]
+        far: Option<f32>,
+        #[serde(default)]
         resolution: Option<ViewportResolutionPayload>,
         #[serde(default, rename = "streamProfile")]
         stream_profile: Option<String>,
@@ -3156,6 +3164,8 @@ struct ViewportCameraPayload {
     target: Vec3Payload,
     up: Option<Vec3Payload>,
     fov_y: Option<f32>,
+    near: Option<f32>,
+    far: Option<f32>,
     resolution: Option<ViewportResolutionPayload>,
     stream_profile: Option<String>,
     profile_ttl_ms: Option<u64>,
@@ -3185,7 +3195,8 @@ impl ViewportCameraPayload {
             target,
             up: up.normalize(),
             fov_y: normalize_camera_fov_y(self.fov_y)?,
-            ..CameraParams::default()
+            near: normalize_camera_near(self.near)?,
+            far: normalize_camera_far(self.far, self.near)?,
         })
     }
 }
@@ -3267,6 +3278,23 @@ fn normalize_camera_fov_y(value: Option<f32>) -> Result<f32, String> {
         value
     };
     Ok(radians.clamp(1.0_f32.to_radians(), 179.0_f32.to_radians()))
+}
+
+fn normalize_camera_near(value: Option<f32>) -> Result<f32, String> {
+    let value = value.unwrap_or(CameraParams::default().near);
+    if !value.is_finite() || value <= 0.0 {
+        return Err("camera near must be a positive finite number".to_string());
+    }
+    Ok(value)
+}
+
+fn normalize_camera_far(value: Option<f32>, near: Option<f32>) -> Result<f32, String> {
+    let normalized_near = normalize_camera_near(near)?;
+    let value = value.unwrap_or(CameraParams::default().far);
+    if !value.is_finite() || value <= normalized_near {
+        return Err("camera far must be greater than near".to_string());
+    }
+    Ok(value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -3659,7 +3687,7 @@ mod tests {
     #[test]
     fn parses_viewport_camera_message_to_camera_params() {
         let message: SceneControlClientMessage = serde_json::from_str(
-            r#"{"type":"viewportCamera","sceneId":"scene-a","sceneRevision":8,"viewportId":"main","position":[0,1,5],"target":{"x":0,"y":0,"z":0},"up":[0,1,0],"fovY":45,"resolution":{"width":960,"height":540,"pixelRatio":1.25},"streamProfile":"interactive","profileTtlMs":700}"#,
+            r#"{"type":"viewportCamera","sceneId":"scene-a","sceneRevision":8,"viewportId":"main","position":[0,1,5],"target":{"x":0,"y":0,"z":0},"up":[0,1,0],"fovY":45,"near":0.0125,"far":250,"resolution":{"width":960,"height":540,"pixelRatio":1.25},"streamProfile":"interactive","profileTtlMs":700}"#,
         )
         .unwrap();
 
@@ -3672,6 +3700,8 @@ mod tests {
                 target,
                 up,
                 fov_y,
+                near,
+                far,
                 resolution,
                 stream_profile,
                 profile_ttl_ms,
@@ -3695,6 +3725,8 @@ mod tests {
                     target,
                     up,
                     fov_y,
+                    near,
+                    far,
                     resolution,
                     stream_profile,
                     profile_ttl_ms,
@@ -3704,6 +3736,8 @@ mod tests {
                 assert_eq!(params.position.to_array(), [0.0, 1.0, 5.0]);
                 assert_eq!(params.target.to_array(), [0.0, 0.0, 0.0]);
                 assert!((params.fov_y - 45.0_f32.to_radians()).abs() < f32::EPSILON);
+                assert!((params.near - 0.0125).abs() < f32::EPSILON);
+                assert!((params.far - 250.0).abs() < f32::EPSILON);
             }
             _ => panic!("expected viewport camera message"),
         }
@@ -3832,6 +3866,8 @@ mod tests {
                 target,
                 up,
                 fov_y,
+                near,
+                far,
                 resolution,
                 ..
             } => {
@@ -3844,6 +3880,8 @@ mod tests {
                     target,
                     up,
                     fov_y,
+                    near,
+                    far,
                     resolution,
                     stream_profile: None,
                     profile_ttl_ms: None,
@@ -3872,6 +3910,8 @@ mod tests {
                 target,
                 up,
                 fov_y,
+                near,
+                far,
                 resolution,
                 ..
             } => {
@@ -3884,6 +3924,8 @@ mod tests {
                     target,
                     up,
                     fov_y,
+                    near,
+                    far,
                     resolution,
                     stream_profile: None,
                     profile_ttl_ms: None,

@@ -47,6 +47,8 @@ export const en = {
     'Default editing preview: full 4K-class pixel budget to control aliasing',
   'viewport.qualityTitle.native':
     'Detail inspection preview: above-4K pixel budget, capped at 4096 wide and 12MP',
+  'viewport.zoomFeedback.clamped': 'Zoom clamp: surface protected',
+  'viewport.zoomFeedback.bypass': 'Clipping guard bypass',
 
   // Viewport HUD
   'lookdev.aria.renderModes': 'Model LookDev render modes',

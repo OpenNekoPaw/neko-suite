@@ -486,6 +486,18 @@
   "viewportDescriptor": {
     "viewportId": "viewport-main",
     "sceneId": "scene-main",
+    "cameraRef": {
+      "kind": "editorCamera",
+      "rig": {
+        "position": { "x": 0, "y": 1.5, "z": 4 },
+        "target": { "x": 0, "y": 1, "z": 0 },
+        "up": { "x": 0, "y": 1, "z": 0 },
+        "fov": 45,
+        "mode": "orbit",
+        "near": 0.0125,
+        "far": 250
+      }
+    },
     "renderMode": "clay",
     "debugView": "albedo",
     "resolution": { "width": 1280, "height": 720, "pixelRatio": 1 },

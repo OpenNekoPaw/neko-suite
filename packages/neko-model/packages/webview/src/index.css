@@ -637,6 +637,31 @@
     height: 100%;
   }
 
+  .model-viewport-zoom-feedback {
+    pointer-events: none;
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    z-index: 36;
+    max-width: min(320px, calc(100% - 32px));
+    transform: translateX(-50%);
+    border: 1px solid color-mix(in srgb, var(--model-fg) 18%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--model-elevated) 86%, transparent);
+    box-shadow: var(--model-viewport-control-shadow);
+    padding: 4px 8px;
+    color: var(--model-fg);
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .model-viewport-zoom-feedback[data-zoom-feedback='bypass'] {
+    border-color: color-mix(in srgb, var(--model-status-waiting) 48%, transparent);
+    color: var(--model-status-waiting);
+  }
+
   .model-viewport-protocol-toolbar {
     pointer-events: auto;
     position: absolute;

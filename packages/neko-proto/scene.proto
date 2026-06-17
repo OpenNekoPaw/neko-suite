@@ -847,6 +847,8 @@ message EditorCameraRig {
   Vec3 up = 3;
   float fov = 4;
   optional string mode = 5;
+  optional float near = 6;
+  optional float far = 7;
 }
 
 message ViewportCameraRef {
@@ -1078,6 +1080,8 @@ message RenderFrameDiagnostics {
   optional string latency_mode = 46;
   optional bool post_process_enabled = 47;
   optional bool helper_passes_enabled = 48;
+  optional uint32 stale_decoded_outputs_dropped = 49;
+  optional ViewportRenderMode render_mode = 50;
 }
 
 message RenderFrameMeta {

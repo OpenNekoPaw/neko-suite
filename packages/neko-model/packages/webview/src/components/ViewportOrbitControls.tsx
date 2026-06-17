@@ -4,7 +4,9 @@ import { useModelStore } from '../stores/modelStore';
 
 export interface ViewportOrbitControlsProps {
   viewportId?: string;
+  sceneRevision?: number;
   onClickSelect?: (normalizedX: number, normalizedY: number) => void;
+  onSurfaceHitRequest?: (normalizedX: number, normalizedY: number) => void;
   onCameraChange?: (options?: { readonly immediate?: boolean }) => void;
   onInteractionActivity?: (options?: { readonly immediate?: boolean }) => void;
   onCameraMutated?: () => void;
@@ -23,7 +25,10 @@ const MIN_KEYBOARD_ZOOM_STEP = 0.005;
 type DragMode = 'select' | 'orbit' | 'pan' | 'zoom';
 
 export function ViewportOrbitControls({
+  viewportId = 'main',
+  sceneRevision = 0,
   onClickSelect,
+  onSurfaceHitRequest,
   onCameraChange,
   onInteractionActivity,
   onCameraMutated,
@@ -77,6 +82,7 @@ export function ViewportOrbitControls({
 
       const startX = e.clientX;
       const startY = e.clientY;
+      const zoomBypass = mode === 'zoom' && e.shiftKey;
       let lastX = startX;
       let lastY = startY;
       let dragged = false;
@@ -99,7 +105,11 @@ export function ViewportOrbitControls({
         if (mode === 'pan') {
           panByPixels(dx, dy);
         } else if (mode === 'zoom') {
-          zoomByPixels(dy);
+          zoomByPixels(dy, {
+            viewportId,
+            sceneRevision,
+            bypassClippingGuard: zoomBypass,
+          });
         } else if (mode === 'orbit' || mode === 'select') {
           useModelStore.getState().orbitCamera(-dx * ORBIT_SENSITIVITY, dy * ORBIT_SENSITIVITY);
         } else {
@@ -129,7 +139,15 @@ export function ViewportOrbitControls({
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
     },
-    [throttledSendCamera, sendCamera, onClickSelect, onInteractionActivity, onCameraMutated],
+    [
+      viewportId,
+      sceneRevision,
+      throttledSendCamera,
+      sendCamera,
+      onClickSelect,
+      onInteractionActivity,
+      onCameraMutated,
+    ],
   );
 
   useEffect(() => {
@@ -138,7 +156,16 @@ export function ViewportOrbitControls({
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      zoomByPixels(event.deltaY);
+      const rect = element.getBoundingClientRect();
+      const normalizedX = clampUnit((event.clientX - rect.left) / Math.max(1, rect.width));
+      const normalizedY = clampUnit((event.clientY - rect.top) / Math.max(1, rect.height));
+      onSurfaceHitRequest?.(normalizedX, normalizedY);
+      zoomByPixels(event.deltaY, {
+        viewportId,
+        sceneRevision,
+        normalizedCursor: { x: normalizedX, y: normalizedY },
+        bypassClippingGuard: event.shiftKey,
+      });
       onInteractionActivity?.({ immediate: true });
       onCameraMutated?.();
       throttledSendCamera();
@@ -148,7 +175,14 @@ export function ViewportOrbitControls({
     return () => {
       element.removeEventListener('wheel', handleWheel);
     };
-  }, [throttledSendCamera, onInteractionActivity, onCameraMutated]);
+  }, [
+    viewportId,
+    sceneRevision,
+    throttledSendCamera,
+    onSurfaceHitRequest,
+    onInteractionActivity,
+    onCameraMutated,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -237,12 +271,25 @@ function panByPixels(dx: number, dy: number): void {
   store.panCamera(dx * scale, dy * scale);
 }
 
-function zoomByPixels(deltaY: number): void {
+function zoomByPixels(
+  deltaY: number,
+  options?: {
+    viewportId?: string;
+    sceneRevision?: number;
+    normalizedCursor?: { x: number; y: number };
+    bypassClippingGuard?: boolean;
+  },
+): void {
   const store = useModelStore.getState();
   const direction = Math.sign(deltaY);
   const scaledDelta = deltaY * ZOOM_SENSITIVITY * store.cameraRadius;
   const minDelta = direction * MIN_KEYBOARD_ZOOM_STEP;
   store.zoomCamera(
     Math.abs(scaledDelta) >= MIN_KEYBOARD_ZOOM_STEP || direction === 0 ? scaledDelta : minDelta,
+    options,
   );
+}
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

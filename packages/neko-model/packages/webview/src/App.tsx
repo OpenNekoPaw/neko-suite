@@ -215,6 +215,7 @@ export function App(): React.JSX.Element {
       const store = useModelStore.getState();
       const position = store.getCameraPosition();
       const target = store.cameraTarget;
+      const projection = store.getEditorCameraProjection();
       const socket = sceneControlRef.current;
 
       if (!socket?.isOpen()) {
@@ -228,6 +229,8 @@ export function App(): React.JSX.Element {
           viewportId: 'main',
           position,
           target,
+          near: projection.near,
+          far: projection.far,
         };
         socket.sendViewportCameraLatest({
           ...update,

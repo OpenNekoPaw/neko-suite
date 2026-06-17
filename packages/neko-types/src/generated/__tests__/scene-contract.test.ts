@@ -139,6 +139,9 @@ describe('scene contract fixtures', () => {
     const result = JSON.parse(JSON.stringify(fixture.selectionQueryResult)) as SelectionQueryResult;
 
     expect(viewport.renderMode).toBe('clay');
+    expect(viewport.cameraRef?.kind).toBe('editorCamera');
+    expect(viewport.cameraRef?.rig?.near).toBe(0.0125);
+    expect(viewport.cameraRef?.rig?.far).toBe(250);
     expect(viewport.allowFpsDegrade).toBe(false);
     expect(viewport.allowQualityDegrade).toBe(false);
     expect(viewport.h264?.gopSize).toBe(6);

@@ -217,6 +217,54 @@ describe('EngineClient scene operations', () => {
     });
   });
 
+  it('preserves optional editor camera projection fields in stream descriptor options', async () => {
+    mockDispatchResponse({
+      streamId: 'stream-main',
+      viewportId: 'main',
+      container: 'h264-annexb',
+      width: 640,
+      height: 360,
+      fps: 30,
+    });
+    const client = new EngineClient(7788);
+
+    await client.startSceneRenderStream({
+      viewportId: 'main',
+      sceneId: 'scene-main',
+      cameraRef: {
+        kind: 'editorCamera',
+        rig: {
+          position: { x: 0, y: 1, z: 2 },
+          target: { x: 0, y: 0.5, z: 0 },
+          up: { x: 0, y: 1, z: 0 },
+          fov: 45,
+          mode: 'orbit',
+          near: 0.01,
+          far: 200,
+        },
+      },
+      renderMode: 'pbr',
+      resolution: { width: 640, height: 360, pixelRatio: 1 },
+      fps: 30,
+    });
+
+    expect(lastDispatchBody()).toEqual(
+      expect.objectContaining({
+        group: 'scenes',
+        action: 'stream',
+        options: expect.objectContaining({
+          cameraRef: expect.objectContaining({
+            kind: 'editorCamera',
+            rig: expect.objectContaining({
+              near: 0.01,
+              far: 200,
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('builds typed scene command envelopes and default lookdev capabilities', () => {
     expect(
       createSceneCommandEnvelope({

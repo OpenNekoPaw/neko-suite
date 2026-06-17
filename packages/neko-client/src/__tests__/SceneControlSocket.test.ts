@@ -827,6 +827,8 @@ describe('SceneControlSocket', () => {
         viewportId: 'main',
         position: [0, 1, 5],
         target: [0, 0, 0],
+        near: 0.0125,
+        far: 250,
         resolution: { width: 960, height: 540, pixelRatio: 1.25 },
       },
       'camera-1',
@@ -840,6 +842,8 @@ describe('SceneControlSocket', () => {
       viewportId: 'main',
       position: [0, 1, 5],
       target: [0, 0, 0],
+      near: 0.0125,
+      far: 250,
       resolution: { width: 960, height: 540, pixelRatio: 1.25 },
     });
 
@@ -873,6 +877,8 @@ describe('SceneControlSocket', () => {
       viewportId: 'main',
       position: [0, 1, 5],
       target: [0, 0, 0],
+      near: 0.0125,
+      far: 250,
       streamProfile: 'interactive',
       profileTtlMs: 700,
     });
@@ -884,6 +890,8 @@ describe('SceneControlSocket', () => {
       viewportId: 'main',
       position: [0, 1, 5],
       target: [0, 0, 0],
+      near: 0.0125,
+      far: 250,
       streamProfile: 'interactive',
       profileTtlMs: 700,
     });

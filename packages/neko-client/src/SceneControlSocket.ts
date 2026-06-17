@@ -98,6 +98,8 @@ export interface SceneViewportCameraUpdate {
   target: [number, number, number];
   up?: [number, number, number];
   fovY?: number;
+  near?: number;
+  far?: number;
   resolution?: SceneViewportResolution;
   streamProfile?: 'default' | 'interactive';
   profileTtlMs?: number;
@@ -1168,6 +1170,8 @@ function cameraUpdateToMessage(update: SceneViewportCameraUpdate): Record<string
     target: update.target,
     up: update.up,
     fovY: update.fovY,
+    near: update.near,
+    far: update.far,
     resolution: update.resolution,
     streamProfile: update.streamProfile,
     profileTtlMs: update.profileTtlMs,

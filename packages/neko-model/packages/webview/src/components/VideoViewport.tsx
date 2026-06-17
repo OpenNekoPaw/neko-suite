@@ -33,6 +33,7 @@ import {
   type ViewportStreamQualityPreset,
 } from '../viewport/viewportStreamQuality';
 import { modelErrorMessage, toError, webviewErrorHandler } from '../platform/errors';
+import { t } from '../i18n';
 
 export interface VideoViewportProps {
   enginePort: number;
@@ -176,6 +177,7 @@ function createViewportDescriptor(
   renderMode: ViewportRenderMode,
   cameraPosition: [number, number, number],
   cameraTarget: [number, number, number],
+  cameraProjection: { readonly near: number; readonly far: number },
   streamSize: ViewportStreamSize,
   helperPassesEnabled: boolean,
 ): ViewportDescriptor {
@@ -212,6 +214,8 @@ function createViewportDescriptor(
         position: { x: cameraPosition[0], y: cameraPosition[1], z: cameraPosition[2] },
         target: { x: cameraTarget[0], y: cameraTarget[1], z: cameraTarget[2] },
         fov: 45,
+        near: cameraProjection.near,
+        far: cameraProjection.far,
       },
     },
   };
@@ -256,6 +260,7 @@ export function VideoViewport({
   const latestResizeSizeRef = useRef<ViewportStreamSize | null>(null);
   const pendingCameraFlushTimerRef = useRef<number | null>(null);
   const pendingStreamProfileRestoreRef = useRef<number | null>(null);
+  const latestSurfaceHitRequestRef = useRef(0);
   const streamProfileRef = useRef<ViewportStreamProfile>('default');
   const lastInteractionSignalRef = useRef(interactionSignal);
   const lastCameraSendAtRef = useRef(0);
@@ -427,12 +432,15 @@ export function VideoViewport({
       const store = useModelStore.getState();
       const position = store.getCameraPosition();
       const target = store.cameraTarget;
+      const projection = store.getEditorCameraProjection();
       sceneControlSocket.sendViewportCameraLatest({
         sceneId,
         sceneRevision,
         viewportId: MAIN_VIEWPORT_ID,
         position,
         target,
+        near: projection.near,
+        far: projection.far,
         resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
       });
       const now = performance.now();
@@ -560,6 +568,7 @@ export function VideoViewport({
             streamRenderMode,
             store.getCameraPosition(),
             store.cameraTarget,
+            store.getEditorCameraProjection(),
             viewportSize,
             helperPassesEnabled,
           ),
@@ -855,6 +864,68 @@ export function VideoViewport({
     [modelController, sceneId, sceneRevision, viewportSize],
   );
 
+  const requestViewportSurfaceHit = React.useCallback(
+    (normalizedX: number, normalizedY: number) => {
+      if (!sceneControlSocket?.isOpen()) {
+        return;
+      }
+
+      const requestId = ++latestSurfaceHitRequestRef.current;
+      const query: ViewportSerializableRecord = {
+        viewportId: MAIN_VIEWPORT_ID,
+        sceneId,
+        sceneRevision,
+        x: normalizedX,
+        y: normalizedY,
+        mask: ['node', 'submesh', 'materialSlot', 'primitive'] as const,
+        mode: 'replace' as const,
+        ...(viewportSize
+          ? {
+              resolution: {
+                width: viewportSize.width,
+                height: viewportSize.height,
+                pixelRatio: viewportSize.pixelRatio,
+              },
+            }
+          : {}),
+      };
+
+      void sceneControlSocket
+        .query('selectionQuery', query, `viewport-surface-hit-${requestId}`)
+        .then((result) => {
+          const surfaceHit = readSurfaceHitQueryResult(result);
+          if (
+            latestSurfaceHitRequestRef.current !== requestId ||
+            (surfaceHit !== null &&
+              (surfaceHit.viewportId !== MAIN_VIEWPORT_ID || surfaceHit.revision !== sceneRevision))
+          ) {
+            return;
+          }
+
+          if (!surfaceHit) {
+            useModelStore.getState().clearViewportSurfaceHit();
+            return;
+          }
+
+          useModelStore.getState().recordViewportSurfaceHit({
+            viewportId: MAIN_VIEWPORT_ID,
+            sceneRevision: surfaceHit.revision,
+            normalizedX,
+            normalizedY,
+            worldPosition: surfaceHit.worldPosition,
+            recordedAtMs: performance.now(),
+          });
+        })
+        .catch((error) => {
+          void webviewErrorHandler.handleError(toError(error), {
+            showToUser: false,
+            severity: 'warning',
+          });
+        });
+    },
+    [sceneControlSocket, sceneId, sceneRevision, viewportSize],
+  );
+
   const handleViewportQueryError = React.useCallback((error: Error) => {
     void webviewErrorHandler.handleError(error, {
       showToUser: false,
@@ -909,7 +980,9 @@ export function VideoViewport({
             />
             <ViewportOrbitControls
               viewportId={MAIN_VIEWPORT_ID}
+              sceneRevision={sceneRevision}
               onClickSelect={handleClickSelect}
+              onSurfaceHitRequest={requestViewportSurfaceHit}
               onCameraChange={(options) => {
                 markInteractiveStreamActivity();
                 scheduleViewportCamera(options);
@@ -922,6 +995,7 @@ export function VideoViewport({
               }}
               onCameraMutated={onCameraMutated}
             />
+            <ViewportZoomFeedbackBadge />
           </>
         )}
         renderToolbar={() => null}
@@ -944,6 +1018,31 @@ export function VideoViewport({
   );
 }
 
+function ViewportZoomFeedbackBadge(): React.JSX.Element | null {
+  const feedback = useModelStore((state) => state.viewportZoomFeedback);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const remaining = feedback.expiresAtMs - Date.now();
+    if (remaining <= 0) return undefined;
+    const timer = window.setTimeout(() => setTick((value) => value + 1), remaining);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  if (!feedback || feedback.expiresAtMs <= Date.now()) {
+    return null;
+  }
+
+  return (
+    <div className="model-viewport-zoom-feedback" data-zoom-feedback={feedback.kind}>
+      {feedback.kind === 'bypass'
+        ? t('viewport.zoomFeedback.bypass')
+        : t('viewport.zoomFeedback.clamped')}
+    </div>
+  );
+}
+
 function renderModeFromStreamDescriptor(
   descriptor: RenderStreamDescriptor,
 ): ViewportRenderMode | null {
@@ -962,6 +1061,46 @@ function renderModeFromFrameMeta(meta: RenderFrameMeta): ViewportRenderMode | nu
   }
   const diagnostics = value['diagnostics'];
   return isRecord(diagnostics) ? readViewportRenderMode(diagnostics['renderMode']) : null;
+}
+
+function readSurfaceHitQueryResult(
+  value: unknown,
+): { viewportId: string; revision: number; worldPosition: [number, number, number] } | null {
+  if (!isRecord(value)) return null;
+  const viewportId = typeof value['viewportId'] === 'string' ? value['viewportId'] : null;
+  const revision = typeof value['revision'] === 'number' ? value['revision'] : null;
+  const candidates = Array.isArray(value['candidates']) ? value['candidates'] : [];
+  if (!viewportId || revision === null) return null;
+
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+    const hit = candidate['hit'];
+    if (!isRecord(hit)) continue;
+    const worldPosition = readVec3Tuple(hit['worldPosition'] ?? hit['world_position']);
+    if (worldPosition) {
+      return { viewportId, revision, worldPosition };
+    }
+  }
+
+  return null;
+}
+
+function readVec3Tuple(value: unknown): [number, number, number] | null {
+  if (Array.isArray(value)) {
+    const x = finiteNumber(value[0]);
+    const y = finiteNumber(value[1]);
+    const z = finiteNumber(value[2]);
+    return x === null || y === null || z === null ? null : [x, y, z];
+  }
+  if (!isRecord(value)) return null;
+  const x = finiteNumber(value['x']);
+  const y = finiteNumber(value['y']);
+  const z = finiteNumber(value['z']);
+  return x === null || y === null || z === null ? null : [x, y, z];
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function readViewportRenderMode(value: unknown): ViewportRenderMode | null {

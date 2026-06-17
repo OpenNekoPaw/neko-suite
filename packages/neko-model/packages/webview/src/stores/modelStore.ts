@@ -78,12 +78,25 @@ const DEFAULT_CAMERA_TARGET: Vec3 = [0, 0.8, 0];
 const EDITOR_CAMERA_FOV_RAD = (45 * Math.PI) / 180;
 const MIN_CAMERA_RADIUS = 0.05;
 const MIN_FRAME_CAMERA_RADIUS = 0.12;
-const EDITOR_CAMERA_NEAR_CLIP = 0.1;
-const CAMERA_CLIPPING_MARGIN = 0.02;
+const EDITOR_CAMERA_MIN_NEAR_CLIP = 0.0005;
+const EDITOR_CAMERA_MAX_NEAR_CLIP = 0.1;
+const EDITOR_CAMERA_NEAR_SCALE = 0.005;
+const EDITOR_CAMERA_DEFAULT_FAR_CLIP = 1000;
+const EDITOR_CAMERA_MIN_FAR_CLIP = 0.1;
+const EDITOR_CAMERA_MAX_FAR_CLIP = 10000;
+const EDITOR_CAMERA_MAX_FAR_NEAR_RATIO = 100000;
+const CAMERA_CLIPPING_MARGIN_SCALE = 0.5;
+const CAMERA_CLIPPING_MIN_MARGIN = 0.00025;
+const CAMERA_CLIPPING_MAX_MARGIN = 0.02;
+const MIN_DYNAMIC_CAMERA_RADIUS = 0.0005;
+const CAMERA_RADIUS_FLOOR_SCALE = 0.02;
 const MAX_CAMERA_RADIUS = 8;
 const MIN_NODE_EXTENT = 0.01;
 const CAMERA_FIT_PADDING = 1.25;
 const EPSILON = 0.000001;
+const SURFACE_HIT_TTL_MS = 180;
+const SURFACE_HIT_CURSOR_TOLERANCE = 0.015;
+const VIEWPORT_ZOOM_FEEDBACK_TTL_MS = 1200;
 const LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC = 'lookdev.modeUnavailable';
 const RENDER_FRAME_METRICS_SAMPLE_INTERVAL_US = 200_000;
 
@@ -97,6 +110,56 @@ interface CameraStatePatch {
 interface SceneBounds {
   min: Vec3;
   max: Vec3;
+}
+
+export interface EditorCameraProjection {
+  near: number;
+  far: number;
+}
+
+export interface ViewportZoomFeedback {
+  kind: 'clamped' | 'bypass';
+  updatedAtMs: number;
+  expiresAtMs: number;
+}
+
+export interface ViewportSurfaceHitInput {
+  viewportId: string;
+  sceneRevision: number;
+  normalizedX: number;
+  normalizedY: number;
+  worldPosition: Vec3 | { x: number; y: number; z: number };
+  recordedAtMs?: number;
+}
+
+export interface ZoomCameraOptions {
+  viewportId?: string;
+  sceneRevision?: number;
+  normalizedCursor?: { x: number; y: number };
+  bypassClippingGuard?: boolean;
+  nowMs?: number;
+}
+
+interface EditorCameraProjectionPolicy extends EditorCameraProjection {
+  margin: number;
+  minRadiusFloor: number;
+}
+
+interface ViewportSurfaceHitCacheEntry {
+  viewportId: string;
+  sceneRevision: number;
+  normalizedX: number;
+  normalizedY: number;
+  selectionKey: string;
+  worldPosition: Vec3;
+  recordedAtMs: number;
+}
+
+interface CameraZoomPolicy {
+  projection: EditorCameraProjectionPolicy;
+  safeMinRadius: number;
+  guardMinRadius: number;
+  anchor: 'surface-hit' | 'bounds' | 'none';
 }
 
 interface NodeWorldFrame {
@@ -188,6 +251,8 @@ export interface ModelState {
   cameraPhi: number;
   cameraRadius: number;
   cameraTarget: Vec3;
+  viewportSurfaceHit: ViewportSurfaceHitCacheEntry | null;
+  viewportZoomFeedback: ViewportZoomFeedback | null;
   lastAutoFramedSceneSignature: string | null;
 
   // Phase 2 panels
@@ -298,8 +363,10 @@ export interface ModelState {
   // Actions — Camera
   orbitCamera: (deltaTheta: number, deltaPhi: number) => void;
   panCamera: (dx: number, dy: number) => void;
-  zoomCamera: (deltaRadius: number) => void;
+  zoomCamera: (deltaRadius: number, options?: ZoomCameraOptions) => void;
   resetCamera: () => void;
+  recordViewportSurfaceHit: (hit: ViewportSurfaceHitInput) => void;
+  clearViewportSurfaceHit: () => void;
   setViewportGridVisible: (visible: boolean) => void;
   toggleViewportGrid: () => void;
   setPerformanceMetricsVisible: (visible: boolean) => void;
@@ -309,6 +376,7 @@ export interface ModelState {
   frameSceneCamera: (snapshot: SceneSnapshot) => boolean;
   markSceneCameraFramed: (snapshot: SceneSnapshot) => void;
   getCameraPosition: () => Vec3;
+  getEditorCameraProjection: () => EditorCameraProjection;
 
   // Actions — Project
   getEditorState: () => Record<string, unknown>;
@@ -380,6 +448,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
   cameraPhi: DEFAULT_CAMERA_PHI,
   cameraRadius: DEFAULT_CAMERA_RADIUS,
   cameraTarget: defaultCameraTarget(),
+  viewportSurfaceHit: null,
+  viewportZoomFeedback: null,
   lastAutoFramedSceneSignature: null,
   keyframeTracks: [],
   selectedKeyframeIds: new Set<string>(),
@@ -970,11 +1040,28 @@ export const useModelStore = create<ModelState>((set, get) => ({
       };
     }),
 
-  zoomCamera: (deltaRadius) =>
+  zoomCamera: (deltaRadius, options) =>
     set((state) => {
-      const minRadius = minCameraRadiusForState(state);
+      const policy = cameraZoomPolicyForState(state, options);
+      const minRadius =
+        options?.bypassClippingGuard === true ? policy.safeMinRadius : policy.guardMinRadius;
+      const nextRadius = clampNumber(
+        state.cameraRadius + deltaRadius,
+        minRadius,
+        Math.max(MAX_CAMERA_RADIUS, policy.projection.far),
+      );
+      const wasClamped =
+        options?.bypassClippingGuard !== true &&
+        deltaRadius < 0 &&
+        state.cameraRadius + deltaRadius < policy.guardMinRadius - EPSILON;
       return {
-        cameraRadius: clampNumber(state.cameraRadius + deltaRadius, minRadius, MAX_CAMERA_RADIUS),
+        cameraRadius: nextRadius,
+        viewportZoomFeedback:
+          options?.bypassClippingGuard === true && deltaRadius < 0
+            ? createViewportZoomFeedback('bypass', options.nowMs)
+            : wasClamped
+              ? createViewportZoomFeedback('clamped', options?.nowMs)
+              : state.viewportZoomFeedback,
       };
     }),
 
@@ -984,7 +1071,28 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraPhi: DEFAULT_CAMERA_PHI,
       cameraRadius: DEFAULT_CAMERA_RADIUS,
       cameraTarget: defaultCameraTarget(),
+      viewportSurfaceHit: null,
+      viewportZoomFeedback: null,
     }),
+
+  recordViewportSurfaceHit: (hit) =>
+    set((state) => {
+      const worldPosition = vec3FromValue(hit.worldPosition);
+      if (!worldPosition) return {};
+      return {
+        viewportSurfaceHit: {
+          viewportId: hit.viewportId,
+          sceneRevision: hit.sceneRevision,
+          normalizedX: clampNumber(hit.normalizedX, 0, 1),
+          normalizedY: clampNumber(hit.normalizedY, 0, 1),
+          selectionKey: selectionKeyForState(state),
+          worldPosition,
+          recordedAtMs: hit.recordedAtMs ?? Date.now(),
+        },
+      };
+    }),
+
+  clearViewportSurfaceHit: () => set({ viewportSurfaceHit: null }),
 
   setViewportGridVisible: (visible) => set({ showViewportGrid: visible }),
 
@@ -1035,6 +1143,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
     return cameraPositionFromState(get());
   },
 
+  getEditorCameraProjection: () => {
+    return cameraProjectionPolicyForState(get());
+  },
+
   // Project actions
   getEditorState: () => {
     const s = get();
@@ -1073,7 +1185,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
         cameraRadius: (state['cameraRadius'] as number) ?? DEFAULT_CAMERA_RADIUS,
         cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
       };
-      const minRadius = minCameraRadiusForState({ ...current, ...cameraPatch, selectedNodeId });
+      const policy = cameraZoomPolicyForState({ ...current, ...cameraPatch, selectedNodeId });
       return {
         selectedNodeId,
         transformMode: (state['transformMode'] as ModelState['transformMode']) ?? 'translate',
@@ -1094,7 +1206,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
         rootMotionNodeId: (state['rootMotionNodeId'] as string | null | undefined) ?? null,
         cameraTheta: cameraPatch.cameraTheta,
         cameraPhi: cameraPatch.cameraPhi,
-        cameraRadius: clampNumber(cameraPatch.cameraRadius, minRadius, MAX_CAMERA_RADIUS),
+        cameraRadius: clampNumber(
+          cameraPatch.cameraRadius,
+          policy.guardMinRadius,
+          MAX_CAMERA_RADIUS,
+        ),
         cameraTarget: cameraPatch.cameraTarget,
         showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
         isPerformanceMetricsVisible:
@@ -1146,7 +1262,7 @@ function cameraPositionFromState(
   ];
 }
 
-function minCameraRadiusForState(
+function cameraZoomPolicyForState(
   state: Pick<
     ModelState,
     | 'cameraTheta'
@@ -1156,32 +1272,161 @@ function minCameraRadiusForState(
     | 'sceneNodes'
     | 'selectedNodeId'
     | 'selectedTargets'
+    | 'sceneRevision'
+    | 'viewportSurfaceHit'
   >,
-): number {
+  options?: ZoomCameraOptions,
+): CameraZoomPolicy {
+  const projection = cameraProjectionPolicyForState(state);
+  const safeMinRadius = Math.max(MIN_DYNAMIC_CAMERA_RADIUS, projection.minRadiusFloor);
   const bounds = computeCameraSafetyBounds(state);
-  if (!bounds) return MIN_CAMERA_RADIUS;
-
-  const targetBoundsDistance = distanceFromPointToBounds(state.cameraTarget, bounds);
-  const targetTolerance = Math.max(
-    EDITOR_CAMERA_NEAR_CLIP + CAMERA_CLIPPING_MARGIN,
-    boundsDiagonal(bounds) * 0.05,
-  );
-  if (targetBoundsDistance > targetTolerance) {
-    return MIN_CAMERA_RADIUS;
+  if (!bounds) {
+    return {
+      projection,
+      safeMinRadius,
+      guardMinRadius: safeMinRadius,
+      anchor: 'none',
+    };
   }
 
   const cameraPosition = cameraPositionFromState(state);
   const targetToCamera = subVec3(cameraPosition, state.cameraTarget);
   const targetToCameraLength = lengthVec3(targetToCamera);
-  if (targetToCameraLength < EPSILON) return MIN_CAMERA_RADIUS;
+  if (targetToCameraLength < EPSILON) {
+    return {
+      projection,
+      safeMinRadius,
+      guardMinRadius: safeMinRadius,
+      anchor: 'none',
+    };
+  }
 
   const direction = scaleVec3(targetToCamera, 1 / targetToCameraLength);
-  const frontDepth = projectedBoundsDepthFromPoint(bounds, state.cameraTarget, direction);
-  return clampNumber(
-    Math.max(MIN_CAMERA_RADIUS, frontDepth + EDITOR_CAMERA_NEAR_CLIP + CAMERA_CLIPPING_MARGIN),
-    MIN_CAMERA_RADIUS,
-    MAX_CAMERA_RADIUS,
+  const surfaceHit = validViewportSurfaceHitForState(state, options);
+  if (surfaceHit) {
+    const frontDepth = Math.max(
+      0,
+      dotVec3(subVec3(surfaceHit.worldPosition, state.cameraTarget), direction),
+    );
+    return {
+      projection,
+      safeMinRadius,
+      guardMinRadius: clampNumber(
+        Math.max(safeMinRadius, frontDepth + projection.near + projection.margin),
+        safeMinRadius,
+        Math.max(MAX_CAMERA_RADIUS, projection.far),
+      ),
+      anchor: 'surface-hit',
+    };
+  }
+
+  const targetBoundsDistance = distanceFromPointToBounds(state.cameraTarget, bounds);
+  const targetTolerance = Math.max(
+    projection.near + projection.margin,
+    boundsDiagonal(bounds) * 0.05,
   );
+  if (targetBoundsDistance > targetTolerance) {
+    return {
+      projection,
+      safeMinRadius,
+      guardMinRadius: safeMinRadius,
+      anchor: 'none',
+    };
+  }
+
+  const frontDepth = projectedBoundsDepthFromPoint(bounds, state.cameraTarget, direction);
+  return {
+    projection,
+    safeMinRadius,
+    guardMinRadius: clampNumber(
+      Math.max(safeMinRadius, frontDepth + projection.near + projection.margin),
+      safeMinRadius,
+      Math.max(MAX_CAMERA_RADIUS, projection.far),
+    ),
+    anchor: 'bounds',
+  };
+}
+
+function cameraProjectionPolicyForState(
+  state: Pick<ModelState, 'sceneNodes' | 'selectedNodeId' | 'selectedTargets' | 'cameraTarget'>,
+): EditorCameraProjectionPolicy {
+  const bounds = computeCameraSafetyBounds(state);
+  const diagonal = bounds ? Math.max(boundsDiagonal(bounds), MIN_DYNAMIC_CAMERA_RADIUS) : 1;
+  const sceneBounds = computeSceneBounds(state.sceneNodes);
+  const sceneDiagonal = sceneBounds ? Math.max(boundsDiagonal(sceneBounds), diagonal) : diagonal;
+  const near = clampNumber(
+    diagonal * EDITOR_CAMERA_NEAR_SCALE,
+    EDITOR_CAMERA_MIN_NEAR_CLIP,
+    EDITOR_CAMERA_MAX_NEAR_CLIP,
+  );
+  const margin = clampNumber(
+    near * CAMERA_CLIPPING_MARGIN_SCALE,
+    CAMERA_CLIPPING_MIN_MARGIN,
+    CAMERA_CLIPPING_MAX_MARGIN,
+  );
+  const visibleFar = Math.max(
+    EDITOR_CAMERA_MIN_FAR_CLIP,
+    distanceFromPointToBounds(state.cameraTarget, sceneBounds ?? bounds ?? unitBounds()) +
+      sceneDiagonal * CAMERA_FIT_PADDING +
+      near +
+      margin,
+  );
+  const ratioLimitedFar = Math.max(near * 2, near * EDITOR_CAMERA_MAX_FAR_NEAR_RATIO);
+  const far = clampNumber(
+    Math.max(visibleFar, EDITOR_CAMERA_DEFAULT_FAR_CLIP),
+    EDITOR_CAMERA_MIN_FAR_CLIP,
+    Math.min(EDITOR_CAMERA_MAX_FAR_CLIP, ratioLimitedFar),
+  );
+  return {
+    near,
+    far: Math.max(far, near * 2),
+    margin,
+    minRadiusFloor: clampNumber(
+      diagonal * CAMERA_RADIUS_FLOOR_SCALE,
+      MIN_DYNAMIC_CAMERA_RADIUS,
+      MIN_CAMERA_RADIUS,
+    ),
+  };
+}
+
+function validViewportSurfaceHitForState(
+  state: Pick<
+    ModelState,
+    'viewportSurfaceHit' | 'sceneRevision' | 'selectedNodeId' | 'selectedTargets'
+  >,
+  options?: ZoomCameraOptions,
+): ViewportSurfaceHitCacheEntry | null {
+  const hit = state.viewportSurfaceHit;
+  if (!hit || !options?.viewportId || !options.normalizedCursor) return null;
+  const sceneRevision = options.sceneRevision ?? state.sceneRevision;
+  if (hit.viewportId !== options.viewportId || hit.sceneRevision !== sceneRevision) return null;
+  if (hit.selectionKey !== selectionKeyForState(state)) return null;
+  const nowMs = options.nowMs ?? Date.now();
+  if (nowMs - hit.recordedAtMs > SURFACE_HIT_TTL_MS) return null;
+  const dx = Math.abs(hit.normalizedX - options.normalizedCursor.x);
+  const dy = Math.abs(hit.normalizedY - options.normalizedCursor.y);
+  return dx <= SURFACE_HIT_CURSOR_TOLERANCE && dy <= SURFACE_HIT_CURSOR_TOLERANCE ? hit : null;
+}
+
+function selectionKeyForState(
+  state: Pick<ModelState, 'selectedNodeId' | 'selectedTargets'>,
+): string {
+  return [...selectedNodeIdsFromState(state)].sort().join('|');
+}
+
+function createViewportZoomFeedback(
+  kind: ViewportZoomFeedback['kind'],
+  nowMs = Date.now(),
+): ViewportZoomFeedback {
+  return {
+    kind,
+    updatedAtMs: nowMs,
+    expiresAtMs: nowMs + VIEWPORT_ZOOM_FEEDBACK_TTL_MS,
+  };
+}
+
+function unitBounds(): SceneBounds {
+  return { min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] };
 }
 
 function defaultCameraTarget(): Vec3 {

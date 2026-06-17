@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: 373a156d2ce01974
+// Source hash: 0771bf1ff858e3a2
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -801,6 +801,8 @@ export interface EngineEditorCameraRig {
   up?: EngineVec3;
   fov: number;
   mode?: string;
+  near?: number;
+  far?: number;
 }
 
 export interface EngineViewportCameraRef {
@@ -923,7 +925,6 @@ export interface EngineRenderFrameDiagnostics {
   decodeSubmitToOutputMs?: number;
   droppedBeforeDecode?: number;
   decodedDroppedBeforePresent?: number;
-  staleDecodedOutputsDropped?: number;
   packetToPresentedMs?: number;
   presentIntervalMs?: number;
   presentFps?: number;
@@ -955,6 +956,7 @@ export interface EngineRenderFrameDiagnostics {
   latencyMode?: string;
   postProcessEnabled?: boolean;
   helperPassesEnabled?: boolean;
+  staleDecodedOutputsDropped?: number;
   renderMode?: EngineViewportRenderMode;
 }
 

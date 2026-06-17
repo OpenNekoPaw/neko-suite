@@ -901,13 +901,36 @@ fn parse_camera_ref_to_params(value: Option<&Value>) -> Option<CameraParams> {
         .get("fov")
         .and_then(|f| f.as_f64())
         .map(|f| (f as f32).to_radians());
+    let near = rig
+        .get("near")
+        .and_then(|value| value.as_f64())
+        .map(|value| value as f32);
+    let far = rig
+        .get("far")
+        .and_then(|value| value.as_f64())
+        .map(|value| value as f32);
+    let defaults = CameraParams::default();
     Some(CameraParams {
         position,
         target,
         up: up.unwrap_or(glam::Vec3::Y),
         fov_y: fov_y.unwrap_or(45.0_f32.to_radians()),
-        ..CameraParams::default()
+        near: normalize_camera_clip_plane(near, defaults.near),
+        far: normalize_camera_far_clip(far, near, defaults.far),
     })
+}
+
+fn normalize_camera_clip_plane(value: Option<f32>, fallback: f32) -> f32 {
+    value
+        .filter(|candidate| candidate.is_finite() && *candidate > 0.0)
+        .unwrap_or(fallback)
+}
+
+fn normalize_camera_far_clip(value: Option<f32>, near: Option<f32>, fallback: f32) -> f32 {
+    let normalized_near = normalize_camera_clip_plane(near, CameraParams::default().near);
+    value
+        .filter(|candidate| candidate.is_finite() && *candidate > normalized_near)
+        .unwrap_or(fallback.max(normalized_near * 2.0))
 }
 
 fn parse_post_process(value: Option<&Value>) -> ViewportPostProcess {
@@ -2847,6 +2870,27 @@ mod tests {
 
         let stream_id = data["streamId"].as_str().unwrap();
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[test]
+    fn parses_editor_camera_projection_from_viewport_camera_ref() {
+        let camera = parse_camera_ref_to_params(Some(&serde_json::json!({
+            "kind": "editorCamera",
+            "rig": {
+                "position": { "x": 0, "y": 1, "z": 4 },
+                "target": { "x": 0, "y": 1, "z": 0 },
+                "up": { "x": 0, "y": 1, "z": 0 },
+                "fov": 45,
+                "near": 0.0125,
+                "far": 250.0
+            }
+        })))
+        .expect("editor camera ref should parse");
+
+        assert_eq!(camera.position.to_array(), [0.0, 1.0, 4.0]);
+        assert_eq!(camera.target.to_array(), [0.0, 1.0, 0.0]);
+        assert!((camera.near - 0.0125).abs() < f32::EPSILON);
+        assert!((camera.far - 250.0).abs() < f32::EPSILON);
     }
 
     #[tokio::test]

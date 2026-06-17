@@ -44,6 +44,8 @@ export const zhCN = {
   'viewport.qualityTitle.quarter': '低延迟预览：约 0.75x 线性分辨率，输出至少 1440p',
   'viewport.qualityTitle.half': '默认编辑预览：完整 4K 级像素预算，控制锯齿',
   'viewport.qualityTitle.native': '细节检查预览：高于 4K 的像素预算，上限 4096 宽和 12MP',
+  'viewport.zoomFeedback.clamped': '缩放已限位：保护表面',
+  'viewport.zoomFeedback.bypass': '已旁路裁剪保护',
 
   // Viewport HUD
   'lookdev.aria.renderModes': '模型 LookDev 渲染模式',
