@@ -25,6 +25,11 @@ export const zhCN = {
   'toolbar.hideBottomPanel': '隐藏底部区域',
   'toolbar.showRightDock': '显示右侧面板',
   'toolbar.hideRightDock': '折叠右侧面板',
+  'rightDock.mode.label': '创作模式',
+  'rightDock.mode.basic': '基础',
+  'rightDock.mode.basic.description': '场景属性与常用创作控制',
+  'rightDock.mode.professional': '专业',
+  'rightDock.mode.professional.description': '场景结构、高级编辑与工作流',
 
   // Toolbar (continued)
   'toolbar.keyframes': '关键帧',

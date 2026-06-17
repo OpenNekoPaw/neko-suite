@@ -104,6 +104,7 @@ const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities 
   },
 };
 type SceneCommandType = NonNullable<SceneCommandEnvelope['command']>['type'];
+type ModelRightDockMode = 'basic' | 'professional';
 
 /**
  * Root application component for the 3D Model Editor webview.
@@ -134,6 +135,7 @@ export function App(): React.JSX.Element {
   const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
   const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(true);
   const [isRightDockVisible, setIsRightDockVisible] = useState(true);
+  const [rightDockMode, setRightDockMode] = useState<ModelRightDockMode>('basic');
   const [viewportInteractionSignal, setViewportInteractionSignal] = useState(0);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
@@ -1377,7 +1379,25 @@ export function App(): React.JSX.Element {
 
   const selectedTarget = selectedTargets[0] ?? null;
   const inspectorRoute = resolveInspectorRoute(selectedNode, selectedTarget, environmentState);
-  const propertiesPanel = isScene2DProfile ? (
+  const basicPropertiesPanel = isScene2DProfile ? (
+    <Scene2DProfilePanel routeAReady={routeAReady} sceneControlStatus={sceneControlStatus} />
+  ) : isExpressionPresetOpen ? (
+    <ExpressionPresetPanel
+      onApplyExpression={handleApplyExpression}
+      characterId={selectedCharacterId}
+      disabled={panelCommandDisabled}
+    />
+  ) : (
+    <TransformPanel
+      node={selectedNode}
+      transformMode={transformMode}
+      onTransformModeChange={setTransformMode}
+      onTransformCommit={handleTransformCommit}
+      disabled={sceneControlStatus !== 'ready'}
+      availability={transformAvailability}
+    />
+  );
+  const professionalPropertiesPanel = isScene2DProfile ? (
     <Scene2DProfilePanel routeAReady={routeAReady} sceneControlStatus={sceneControlStatus} />
   ) : isExpressionPresetOpen ? (
     <ExpressionPresetPanel
@@ -1463,6 +1483,8 @@ export function App(): React.JSX.Element {
       availability={transformAvailability}
     />
   );
+  const propertiesPanel =
+    rightDockMode === 'professional' ? professionalPropertiesPanel : basicPropertiesPanel;
 
   return (
     <div
@@ -1630,6 +1652,23 @@ export function App(): React.JSX.Element {
                 className: 'model-right-dock',
                 contentClassName: 'model-right-dock-content',
                 resizeHandleClassName: 'model-resize-handle model-right-dock-resize-handle',
+                groups: {
+                  label: t('rightDock.mode.label'),
+                  activeId: rightDockMode,
+                  onActiveIdChange: (id) => setRightDockMode(toModelRightDockMode(id)),
+                  items: [
+                    {
+                      id: 'basic',
+                      label: t('rightDock.mode.basic'),
+                      description: t('rightDock.mode.basic.description'),
+                    },
+                    {
+                      id: 'professional',
+                      label: t('rightDock.mode.professional'),
+                      description: t('rightDock.mode.professional.description'),
+                    },
+                  ],
+                },
                 containerProps: getKeyboardBoundaryMetadata({
                   scope: 'property-panel',
                   ownerId: 'model-right-dock',
@@ -1646,6 +1685,7 @@ export function App(): React.JSX.Element {
                 }),
                 children: (
                   <RightDock
+                    mode={rightDockMode}
                     outliner={
                       <SceneTree
                         nodes={sceneNodes}
@@ -1666,6 +1706,10 @@ export function App(): React.JSX.Element {
       />
     </div>
   );
+}
+
+function toModelRightDockMode(id: string): ModelRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
 }
 
 interface Scene2DProfileStatusProps {
@@ -1728,11 +1772,12 @@ function Scene2DViewportOverlay({
 }
 
 interface RightDockProps {
+  mode: ModelRightDockMode;
   outliner: React.ReactNode;
   properties: React.ReactNode;
 }
 
-function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element {
+function RightDock({ mode, outliner, properties }: RightDockProps): React.JSX.Element {
   const { t } = useTranslation();
   const outlinerSpec = MODEL_RESIZE_PANELS.outlinerSplit;
   const [dockHeight, setDockHeight] = useState(0);
@@ -1786,18 +1831,22 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
 
   return (
     <div ref={splitResizeRef} className="model-right-dock-stack">
-      <section
-        className="model-dock-pane model-outliner-pane"
-        style={{ height: effectiveOutlinerSize }}
-        data-resizing={isSplitResizing ? 'true' : 'false'}
-      >
-        <div className="model-dock-title">{t('workbench.outliner')}</div>
-        <div className="model-dock-content">{outliner}</div>
-      </section>
-      <ResizeHandle
-        handleProps={splitHandleProps}
-        className="model-resize-handle model-outliner-resize-handle"
-      />
+      {mode === 'professional' ? (
+        <>
+          <section
+            className="model-dock-pane model-outliner-pane"
+            style={{ height: effectiveOutlinerSize }}
+            data-resizing={isSplitResizing ? 'true' : 'false'}
+          >
+            <div className="model-dock-title">{t('workbench.outliner')}</div>
+            <div className="model-dock-content">{outliner}</div>
+          </section>
+          <ResizeHandle
+            handleProps={splitHandleProps}
+            className="model-resize-handle model-outliner-resize-handle"
+          />
+        </>
+      ) : null}
       <section className="model-dock-pane model-properties-pane">
         <div className="model-dock-title">{t('workbench.properties')}</div>
         <div className="model-dock-content">{properties}</div>

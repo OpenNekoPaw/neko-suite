@@ -25,6 +25,11 @@ export const en = {
   'toolbar.hideBottomPanel': 'Hide bottom panel',
   'toolbar.showRightDock': 'Show right panels',
   'toolbar.hideRightDock': 'Hide right panels',
+  'rightDock.mode.label': 'Creation mode',
+  'rightDock.mode.basic': 'Basic',
+  'rightDock.mode.basic.description': 'Scene properties and common creation controls',
+  'rightDock.mode.professional': 'Professional',
+  'rightDock.mode.professional.description': 'Scene outliner, advanced editing, and workflows',
 
   // Toolbar (continued)
   'toolbar.keyframes': 'Keyframes',

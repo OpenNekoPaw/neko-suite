@@ -222,6 +222,15 @@ describe('Route A webview boundaries', () => {
     expect(app).not.toMatch(/timelineControlsHidden/);
     expect(app).toMatch(/rightDock=\{\s*isRightDockVisible/);
     expect(app).toMatch(/panelId: MODEL_RESIZE_PANELS\.rightDock\.panelId/);
+    expect(app).toMatch(/type ModelRightDockMode = 'basic' \| 'professional'/);
+    expect(app).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<ModelRightDockMode>\('basic'\)/,
+    );
+    expect(app).toMatch(/groups: \{/);
+    expect(app).toMatch(/activeId: rightDockMode/);
+    expect(app).toMatch(/label: t\('rightDock\.mode\.basic'\)/);
+    expect(app).toMatch(/label: t\('rightDock\.mode\.professional'\)/);
+    expect(app).toMatch(/mode=\{rightDockMode\}/);
     expect(app).toMatch(/const \[dockHeight, setDockHeight\] = useState\(0\)/);
     expect(app).toMatch(/constrainOutlinerSplitSize\(outlinerResize\.size, dockHeight\)/);
     expect(app).toMatch(/new ResizeObserver\(updateDockHeight\)/);

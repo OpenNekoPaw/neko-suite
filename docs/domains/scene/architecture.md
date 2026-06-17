@@ -50,7 +50,7 @@ Scene 编辑器按“快速搭建可预览场景”和“完整 Scene/LookDev au
 | 基础模式 | AI 辅助场景搭建和快速预览       | 场景模板、素材摆放、基础 camera/light/environment、AI LookDev 建议、构图/镜头建议、角色或道具快速摆放、快速预览                                              |
 | 专业模式 | Scene graph、LookDev 和建模精修 | Outliner、Transform、Light、Environment、Material、动画时间线、viewport quality、selection workflow、Sculpt、CSG、Text、Shape、角色控制、诊断和 Route A 状态 |
 
-右侧 Dock 在基础模式显示模板、当前对象基础属性、灯光/环境摘要和 AI 建议；专业模式显示 Outliner、完整 Inspector、Light/Environment/Material、建模工具、动画和诊断。基础模式操作必须编译为 Engine scene commands 或 `.nkm` 可恢复字段，不能只保存在 Webview 私有状态。
+右侧 Dock 的当前实现按同一 Inspector 路由裁剪：基础模式显示 Scene2D profile 摘要、Expression Presets 或 Transform；专业模式在此基础上开放 Outliner、Latency Tester、Face/Bone expression、Shape、Text、CSG、Sculpt、Light、Environment 和 Selection Target 检查器。基础模式操作必须编译为 Engine scene commands 或 `.nkm` 可恢复字段，不能只保存在 Webview 私有状态。
 
 ## 稳定边界
 

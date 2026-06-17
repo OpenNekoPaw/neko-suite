@@ -84,6 +84,9 @@ describe('Model resize layout contract', () => {
     const app = readSource('App.tsx');
 
     expect(app).toMatch(/panelId: MODEL_RESIZE_PANELS\.rightDock\.panelId/);
+    expect(app).toMatch(/groups: \{/);
+    expect(app).toMatch(/activeId: rightDockMode/);
+    expect(app).toMatch(/mode === 'professional' \? \(/);
     expect(app).not.toMatch(/usePersistedResize\(dockSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(outlinerSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(timelineSpec\.panelId/);
