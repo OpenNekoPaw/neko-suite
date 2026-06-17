@@ -232,9 +232,10 @@ export function useTimelineDragDrop({
       const filesSnapshot: Array<{ name: string; path: string; file?: File }> = [];
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
         const file = e.dataTransfer.files[i]!;
+        const filePath = (file as File & { path?: string }).path;
         filesSnapshot.push({
           name: file.name,
-          path: (file as File & { path?: string }).path ?? file.name,
+          path: filePath ?? '',
           file,
         });
       }
@@ -349,6 +350,30 @@ export function useTimelineDragDrop({
         // Priority 3: OS file manager drop (files extracted synchronously above)
         for (let i = 0; i < filesSnapshot.length; i++) {
           const file = filesSnapshot[i]!;
+          if (!file.path) {
+            postMessage({
+              type: 'project:addSource',
+              request: {
+                requestId: `timeline-drop-${Date.now()}-${i}`,
+                kind: 'drag-drop',
+                formatId: 'nkv',
+                browserFile: {
+                  name: file.name,
+                  size: file.file?.size,
+                  type: file.file?.type,
+                  lastModified: file.file?.lastModified,
+                },
+                destination: {
+                  kind: 'project',
+                  copyMode: 'register',
+                },
+              },
+            });
+            onError?.(
+              `Dropped file ${file.name} needs to be imported or registered before it can be saved.`,
+            );
+            continue;
+          }
           await addFileToTrack(file.path, file.name, dropTime + i * 0.5, file.file);
         }
       };

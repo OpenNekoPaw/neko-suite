@@ -21,7 +21,11 @@ import {
   ProjectData,
   ContextMenuItem,
   applyOperation,
+  handleProjectSourceAddRequest,
+  type ContentIngestRequest,
+  type ContentIngestResult,
   type EditOperation,
+  type ProjectSourceAddRequest,
 } from '@neko/shared';
 import { getLogger } from '../../base';
 import {
@@ -73,6 +77,10 @@ export class MessageHandler {
 
       case 'addMediaToTimeline':
         await this.handleAddMedia(message.path);
+        break;
+
+      case 'project:addSource':
+        await this.handleProjectAddSource(message.request);
         break;
 
       case 'saveBlob':
@@ -323,6 +331,50 @@ export class MessageHandler {
       logger.error('Add media error', error);
       this.sendError(`Failed to add media: ${relativePath}`);
     }
+  }
+
+  private async handleProjectAddSource(request: ProjectSourceAddRequest): Promise<void> {
+    const result = await handleProjectSourceAddRequest(request, {
+      ingest: (ingestRequest) => this.ingestProjectSource(ingestRequest),
+    });
+    this.webview.postMessage({ type: 'project:sourceAdded', result });
+    if (result.ok && result.durablePath) {
+      await this.handleAddMedia(result.durablePath);
+    }
+  }
+
+  private async ingestProjectSource(request: ContentIngestRequest): Promise<ContentIngestResult> {
+    const sourcePath = request.sourcePath;
+    if (!sourcePath) {
+      return {
+        status: 'missing-source',
+        request,
+        error: request.fileName
+          ? `Dropped file ${request.fileName} does not expose a durable source path.`
+          : 'No source path was provided.',
+      };
+    }
+
+    const baseDir = path.dirname(this.model.uri.fsPath);
+    let durablePath = sourcePath;
+    if (path.isAbsolute(sourcePath)) {
+      if (!sourcePath.startsWith(baseDir)) {
+        return {
+          status: 'non-portable',
+          request,
+          error:
+            'External media must be imported or registered under a configured media root before saving.',
+        };
+      }
+      durablePath = path.relative(baseDir, sourcePath).split(path.sep).join('/');
+    }
+
+    return {
+      status: 'ready',
+      request,
+      source: { kind: 'file', path: durablePath },
+      contractedPath: durablePath,
+    };
   }
 
   /**

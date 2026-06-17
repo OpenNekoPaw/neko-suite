@@ -89,6 +89,74 @@ describe('MessageHandler save', () => {
     expect(webview.postMessage).not.toHaveBeenCalledWith({ type: 'saved' });
   });
 
+  it('registers project add-source requests and posts durable source results', async () => {
+    const handler = createHandler();
+
+    await handler.handleMessage({
+      type: 'project:addSource',
+      request: {
+        requestId: 'add-1',
+        kind: 'drag-drop',
+        formatId: 'nkv',
+        sourcePath: '/workspace/project/media/clip.mp4',
+        destination: {
+          kind: 'project',
+          projectRoot: '/workspace/project',
+          copyMode: 'register',
+        },
+      },
+    });
+
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'project:sourceAdded',
+        result: expect.objectContaining({
+          ok: true,
+          durablePath: 'media/clip.mp4',
+        }),
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'fileAdded',
+      path: 'media/clip.mp4',
+      mediaType: 'video',
+    });
+  });
+
+  it('rejects add-source requests that only contain a browser file name', async () => {
+    const handler = createHandler();
+
+    await handler.handleMessage({
+      type: 'project:addSource',
+      request: {
+        requestId: 'add-2',
+        kind: 'drag-drop',
+        formatId: 'nkv',
+        browserFile: { name: 'clip.mp4', type: 'video/mp4' },
+        destination: {
+          kind: 'project',
+          projectRoot: '/workspace/project',
+          copyMode: 'register',
+        },
+      },
+    });
+
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'project:sourceAdded',
+        result: expect.objectContaining({
+          ok: false,
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({ code: 'missing-source' }),
+          ]),
+        }),
+      }),
+    );
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fileAdded' }),
+    );
+  });
+
   function createHandler(): MessageHandler {
     return new MessageHandler(
       webview as never,

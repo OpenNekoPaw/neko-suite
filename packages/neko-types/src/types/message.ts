@@ -5,6 +5,7 @@
 import { ProjectData } from './project';
 import { ConfigState, MCPServerConfig, PromptPresetConfig, ProviderConfig } from './config';
 import type { EditOperation } from '../operations';
+import type { ProjectSourceAddRequest, ProjectSourceAddResult } from '../project-file-io/ingest';
 
 // =============================================================================
 // Attachment Types (Chat UI DTO)
@@ -198,6 +199,7 @@ export interface TemplateStepMessage {
 export type MessageToWebview =
   | { type: 'update'; content: ProjectData }
   | { type: 'fileAdded'; path: string; mediaType: 'video' | 'audio' | 'image' }
+  | { type: 'project:sourceAdded'; result: ProjectSourceAddResult }
   | { type: 'error'; message: string }
   | { type: 'saved' }
   | { type: 'fileUri'; path: string; uri: string; isBase64?: boolean }
@@ -376,6 +378,7 @@ export type MessageFromWebview =
   | { type: 'save'; content: ProjectData }
   | { type: 'requestFile'; path: string }
   | { type: 'addMediaToTimeline'; path: string }
+  | { type: 'project:addSource'; request: ProjectSourceAddRequest }
   | { type: 'saveBlob'; data: ArrayBuffer; filename: string; mimeType: string }
   | { type: 'selectExportPath'; filename: string; format: string }
   | { type: 'saveBlobToPath'; data: ArrayBuffer; path: string; mimeType: string }
