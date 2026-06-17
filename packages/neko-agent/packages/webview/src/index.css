@@ -102,8 +102,8 @@
   --agent-chat-row-hover: color-mix(in srgb, var(--agent-fg) 3%, transparent);
   --agent-empty-panel-bg: color-mix(in srgb, var(--agent-elevated) 54%, transparent);
   --agent-empty-panel-border: color-mix(in srgb, var(--agent-fg) 8%, transparent);
-  --agent-empty-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
+  --agent-empty-panel-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
   --agent-empty-copy: var(--agent-fg-secondary);
   --agent-empty-muted: var(--agent-fg-muted);
   --agent-empty-action-bg: color-mix(in srgb, var(--agent-elevated) 58%, transparent);
@@ -115,9 +115,10 @@
   --agent-bubble-user-bg: color-mix(in srgb, var(--agent-accent) 12%, var(--agent-elevated) 88%);
   --agent-bubble-user-border: color-mix(in srgb, var(--agent-accent) 28%, var(--agent-fg) 6%);
   --agent-bubble-user-fg: var(--agent-fg);
-  --agent-bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
-  --agent-bubble-user-shadow: 0 1px 4px color-mix(in srgb, var(--agent-accent) 12%, transparent),
+  --agent-bubble-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12), inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
+  --agent-bubble-user-shadow:
+    0 1px 4px color-mix(in srgb, var(--agent-accent) 12%, transparent),
     inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent);
   --agent-composer-rail-bg: color-mix(in srgb, var(--agent-bg) 92%, var(--agent-elevated) 8%);
   --agent-composer-rail-border: color-mix(in srgb, var(--agent-fg) 8%, transparent);
@@ -125,9 +126,10 @@
   --agent-composer-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
   --agent-composer-focus-border: color-mix(in srgb, var(--agent-accent) 50%, var(--agent-fg) 8%);
   --agent-composer-divider: color-mix(in srgb, var(--agent-fg) 7%, transparent);
-  --agent-composer-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
-  --agent-composer-focus-shadow: 0 0 0 1px color-mix(in srgb, var(--agent-accent) 18%, transparent),
+  --agent-composer-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12), inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
+  --agent-composer-focus-shadow:
+    0 0 0 1px color-mix(in srgb, var(--agent-accent) 18%, transparent),
     0 0 0 3px color-mix(in srgb, var(--agent-accent) 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 5%, transparent);
   --agent-control-muted-bg: color-mix(in srgb, var(--agent-fg) 7%, transparent);
@@ -241,8 +243,8 @@ body.vscode-light,
 body[data-vscode-theme-kind='vscode-light'] {
   --agent-empty-panel-bg: color-mix(in srgb, var(--agent-bg) 84%, #f3f3f3 16%);
   --agent-empty-panel-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
-  --agent-empty-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  --agent-empty-panel-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.68);
   --agent-empty-copy: color-mix(in srgb, var(--agent-fg) 66%, transparent);
   --agent-empty-muted: color-mix(in srgb, var(--agent-fg) 32%, transparent);
   --agent-empty-action-bg: color-mix(in srgb, var(--agent-bg) 72%, #ffffff 28%);
@@ -282,7 +284,10 @@ body {
   border-radius: 8px;
   font-size: 13px;
   line-height: 18px;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
   box-shadow: 0 2px 10px color-mix(in srgb, var(--agent-accent) 22%, transparent);
 }
 
@@ -322,7 +327,9 @@ body {
   line-height: 18px;
   outline: none;
   border-radius: 8px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .vscode-input:focus {
@@ -343,7 +350,9 @@ body {
   font-size: 13px;
   outline: none;
   border-radius: 8px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .vscode-dropdown:focus {
@@ -477,7 +486,10 @@ body {
   cursor: pointer;
   color: var(--agent-fg-secondary);
   opacity: 0.8;
-  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .icon-button:hover {
@@ -560,9 +572,15 @@ body {
 }
 
 @keyframes neko-gradient-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 /* Elevated floating card — deep shadow + large radius for modals/overlays */
@@ -618,7 +636,9 @@ body {
 
 .agent-empty-action-icon {
   color: var(--agent-fg-secondary);
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition:
+    color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .agent-empty-action:hover .agent-empty-action-icon,
@@ -650,7 +670,10 @@ body {
   border: 1px solid var(--agent-composer-border);
   border-radius: 14px;
   box-shadow: var(--agent-composer-shadow);
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .agent-composer-shell:focus-within {
@@ -766,7 +789,10 @@ body {
   color: var(--agent-fg);
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .agent-composer-popover-row:hover,
@@ -921,7 +947,10 @@ body {
   font-size: 11.5px;
   line-height: 1;
   user-select: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
     opacity 0.15s ease;
 }
 
@@ -1009,7 +1038,10 @@ body {
   color: var(--agent-fg-secondary);
   cursor: pointer;
   opacity: 0.78;
-  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .agent-reference-remove:hover,
@@ -1052,7 +1084,10 @@ body {
   font-size: 11px;
   font-weight: 600;
   text-overflow: ellipsis;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
   white-space: nowrap;
 }
 
@@ -1077,7 +1112,10 @@ body {
   line-height: 16px;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
     opacity 0.15s ease;
 }
 
@@ -1235,7 +1273,9 @@ body {
   line-height: 16px;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .agent-dropdown-item-label {
@@ -1344,7 +1384,10 @@ body {
   background: transparent;
   color: var(--vscode-descriptionForeground);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
     opacity 0.15s ease;
 }
 
@@ -1392,7 +1435,10 @@ body {
   flex: 0 0 26px;
   border: 1px solid transparent;
   border-radius: 999px;
-  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .agent-composer-action-button:disabled {
@@ -1502,7 +1548,10 @@ body {
   cursor: pointer;
   flex: 0 0 28px;
   line-height: 1;
-  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .agent-header-action:hover,
@@ -1597,7 +1646,9 @@ body {
   font-size: 11px;
   line-height: 16px;
   text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .agent-header-menu-item:hover,
@@ -1637,7 +1688,10 @@ body {
   background: transparent;
   color: var(--agent-fg-secondary);
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
     opacity 0.12s ease;
 }
 
@@ -1784,7 +1838,10 @@ body {
   border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .agent-tab:hover {
@@ -2095,7 +2152,9 @@ body {
 .agent-danger-link {
   color: var(--agent-danger);
   border-radius: 6px;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .agent-danger-link:hover {
