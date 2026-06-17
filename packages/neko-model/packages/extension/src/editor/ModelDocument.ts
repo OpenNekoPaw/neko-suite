@@ -1,10 +1,23 @@
 import * as vscode from 'vscode';
-import type { NkmProjectData } from '@neko/shared';
-import { createDefaultNkmProject } from '@neko/shared';
+import {
+  createDefaultNkmProject,
+  createDefaultProjectFormatCodecRegistry,
+  isWorkspaceMediaPathResolvedLocal,
+  nkmSourcePathPolicy,
+  ProjectFileStore,
+  resolveWorkspaceMediaPath,
+  type NkmProjectData,
+} from '@neko/shared';
+import { createVSCodeProjectFileIoAdapter } from '@neko/shared/vscode/extension';
 import * as path from 'path';
 import { getLogger } from '../logger';
 
 const logger = getLogger('ModelDocument');
+const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+const projectFileStore = new ProjectFileStore({
+  registry: createDefaultProjectFormatCodecRegistry(),
+  fileOps: projectFileAdapter.fileOps,
+});
 
 /**
  * ModelDocument — Custom document for .nkm project files.
@@ -33,20 +46,12 @@ export class ModelDocument implements vscode.CustomDocument {
 
   /** Create from a .nkm project file */
   static async fromNkm(uri: vscode.Uri): Promise<ModelDocument> {
-    const data = await vscode.workspace.fs.readFile(uri);
-    const text = new TextDecoder().decode(data);
-    const parsed = JSON.parse(text) as NkmProjectData;
-
-    // Migrate v1 → v2 (new fields have defaults in createDefaultNkmProject)
-    if (parsed.version < 2) {
-      parsed.version = 2;
-      parsed.faceParams ??= {};
-      parsed.customClips ??= [];
-      parsed.camera ??= null;
-      parsed.editorState ??= {};
+    const result = await loadNkmProject(uri);
+    if (!result.project) {
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to load .nkm file'));
     }
 
-    return new ModelDocument(uri, parsed);
+    return new ModelDocument(uri, result.project);
   }
 
   /** Create from a raw model file (.gltf/.glb/.vrm) */
@@ -101,15 +106,13 @@ export class ModelDocument implements vscode.CustomDocument {
       return;
     }
 
-    const content = new TextEncoder().encode(this.toJSON());
-    await vscode.workspace.fs.writeFile(this.uri, content);
+    await saveNkmProject(this.uri, this._projectData);
     this._isDirty = false;
   }
 
   /** Save to a specific URI */
   async saveAs(targetUri: vscode.Uri): Promise<void> {
-    const content = new TextEncoder().encode(this.toJSON());
-    await vscode.workspace.fs.writeFile(targetUri, content);
+    await saveNkmProject(targetUri, this._projectData);
     this._isDirty = false;
   }
 
@@ -117,9 +120,13 @@ export class ModelDocument implements vscode.CustomDocument {
   async revert(): Promise<void> {
     if (!this.isNkmFile) return;
 
-    const data = await vscode.workspace.fs.readFile(this.uri);
-    const text = new TextDecoder().decode(data);
-    this._projectData = JSON.parse(text) as NkmProjectData;
+    const result = await loadNkmProject(this.uri);
+    if (!result.project) {
+      throw new Error(
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to revert .nkm file'),
+      );
+    }
+    this._projectData = result.project;
     this._isDirty = false;
     this._onDidChange.fire();
   }
@@ -129,4 +136,99 @@ export class ModelDocument implements vscode.CustomDocument {
     this._onDidDispose.fire();
     this._onDidDispose.dispose();
   }
+}
+
+export interface NkmProjectLoadResult {
+  readonly project?: NkmProjectData;
+  readonly readOnly: boolean;
+  readonly diagnostics: readonly { readonly message: string; readonly code?: string }[];
+}
+
+export async function loadNkmProject(uri: vscode.Uri): Promise<NkmProjectLoadResult> {
+  const result = await projectFileStore.load<NkmProjectData>({
+    filePath: uri.fsPath,
+    formatId: 'nkm',
+    sourcePolicy: nkmSourcePathPolicy,
+    sourcePolicyOptions: createNkmSourcePolicyOptions(uri),
+  });
+
+  return {
+    project: result.document,
+    readOnly: result.readOnly,
+    diagnostics: result.diagnostics,
+  };
+}
+
+export async function saveNkmProject(uri: vscode.Uri, project: NkmProjectData): Promise<void> {
+  const result = await projectFileStore.save({
+    filePath: uri.fsPath,
+    formatId: 'nkm',
+    document: project,
+    sourcePolicy: nkmSourcePathPolicy,
+    sourcePolicyOptions: createNkmSourcePolicyOptions(uri),
+  });
+
+  if (!result.ok) {
+    throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkm file'));
+  }
+}
+
+export async function updateNkmProject(
+  uri: vscode.Uri,
+  update: (project: NkmProjectData) => NkmProjectData,
+): Promise<NkmProjectData | undefined> {
+  const loaded = await loadNkmProject(uri);
+  if (!loaded.project) {
+    logger.warn(formatProjectFileDiagnostics(loaded.diagnostics, 'Cannot update .nkm file'));
+    return undefined;
+  }
+
+  const next = update(loaded.project);
+  await saveNkmProject(uri, next);
+  return next;
+}
+
+export async function resolveNkmProjectModelSource(uri: vscode.Uri): Promise<string | undefined> {
+  const loaded = await loadNkmProject(uri);
+  const src = loaded.project?.model.src;
+  if (!src) return undefined;
+
+  const resolved = resolveWorkspaceMediaPath({
+    source: src,
+    context: createNkmSourcePolicyOptions(uri).context,
+  });
+
+  return isWorkspaceMediaPathResolvedLocal(resolved) ? resolved.path : undefined;
+}
+
+export function createNkmSourcePolicyOptions(
+  uri: vscode.Uri,
+): Parameters<ProjectFileStore['save']>[0]['sourcePolicyOptions'] {
+  const documentDir = path.dirname(uri.fsPath);
+  const context = projectFileAdapter.createWorkspaceMediaPathContext({
+    documentUri: uri,
+    pathVariables: new Map([['PROJECT', documentDir]]),
+    allowedRoots: [
+      documentDir,
+      ...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+    ],
+  });
+  const pathVariables = new Map(context.pathVariables ?? []);
+  pathVariables.set('PROJECT', documentDir);
+  return {
+    context: {
+      ...context,
+      owningWorkspaceRoot: documentDir,
+      documentDir,
+      pathVariables,
+    },
+  };
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

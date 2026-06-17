@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EngineSceneSnapshot } from '@neko/shared';
+import * as vscode from 'vscode';
 import {
   isEngineSceneSnapshot,
   mapEngineSceneSnapshotToModelGraph,
@@ -305,6 +306,42 @@ describe('ModelEditorProvider model API mapping', () => {
     expect(graph?.nodes[0]?.id).toBe('node-body');
     expect(internals.lastSceneSnapshot?.sceneId).toBe('scene-main');
   });
+
+  it('routes .nkm profile: 2d without creating 3D default cube content', async () => {
+    const provider = new ModelEditorProvider(createExtensionContext());
+    const internals = provider as unknown as ModelEditorProviderInternals;
+    const panel = createWebviewPanel();
+    const document = { uri: { fsPath: '/workspace/scene.nkm', scheme: 'file' } };
+    const loadProject = vi.fn(async () => ({
+      snapshot: {
+        sceneId: 'scene-main',
+        revision: 1,
+        nodes: [],
+        animations: [],
+      },
+      editorState: {},
+    }));
+    internals.activeWebviewPanel = panel;
+    internals.activeDocument = document;
+    internals.panelGeneration = 1;
+    internals.engineClient = { loadProject };
+    vi.mocked(vscode.workspace.fs.writeFile).mockClear();
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValueOnce(
+      new TextEncoder().encode(JSON.stringify(createNkmProject({ profile: '2d' }))),
+    );
+
+    await internals.handleWebviewMessage({ type: 'ready' }, panel, document, 1);
+
+    expect(loadProject).toHaveBeenCalledWith('/workspace/scene.nkm');
+    expect(vscode.workspace.fs.writeFile).not.toHaveBeenCalled();
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'projectLoaded',
+        sceneProfile: '2d',
+        snapshot: expect.objectContaining({ nodes: [] }),
+      }),
+    );
+  });
 });
 
 interface ModelEditorProviderInternals {
@@ -315,12 +352,16 @@ interface ModelEditorProviderInternals {
   activeModelPath: string | undefined;
   engineClient:
     | {
-        updateEditorCamera(
+        loadProject?: (filePath: string) => Promise<{
+          snapshot: EngineSceneSnapshot;
+          editorState: unknown;
+        }>;
+        updateEditorCamera?: (
           position: [number, number, number],
           target: [number, number, number],
           fovY?: number,
           viewportId?: string,
-        ): Promise<void>;
+        ) => Promise<void>;
         getSceneSnapshot?: () => Promise<unknown>;
       }
     | undefined;
@@ -361,6 +402,20 @@ function createSceneSnapshot(): EngineSceneSnapshot {
       },
     ],
     animations: [{ name: 'Idle', duration: 2.5 }],
+  };
+}
+
+function createNkmProject(options: { readonly profile: '2d' | '3d' | 'live' }) {
+  return {
+    version: 2,
+    name: 'Scene',
+    profile: options.profile,
+    model: { src: null },
+    faceParams: {},
+    customClips: [],
+    camera: null,
+    viewport: { zoom: 1 },
+    editorState: {},
   };
 }
 

@@ -18,6 +18,7 @@ import type {
   ModelSceneNodeKind,
   ModelViewportCameraUpdate,
   NekoModelAPI,
+  NkmSceneProfile,
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
@@ -30,7 +31,12 @@ import {
   type FocusedWebviewDisposable,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
-import { ModelDocument } from './ModelDocument';
+import {
+  loadNkmProject,
+  ModelDocument,
+  resolveNkmProjectModelSource,
+  updateNkmProject,
+} from './ModelDocument';
 import type { ModelStatusProjection, ModelStatusSnapshot } from './modelStatusProjection';
 import { getDefaultModelStatusSnapshot } from './modelStatusProjection';
 import {
@@ -292,11 +298,18 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const isProject = filePath.endsWith('.nkm');
 
         if (isProject) {
+          const sceneProfile = await this.readNkmSceneProfile(filePath);
+
           // Load .nkm project file via engine backend
-          const loaded = await this.loadProjectInEngine(filePath, webviewPanel, generation);
+          const loaded = await this.loadProjectInEngine(
+            filePath,
+            webviewPanel,
+            generation,
+            sceneProfile,
+          );
 
           // Empty projects start with Blender-style default scene content.
-          if (loaded && loaded.snapshot?.nodes?.length === 0) {
+          if (sceneProfile === '3d' && loaded && loaded.snapshot?.nodes?.length === 0) {
             const restored = await this.tryLoadModelFromProject(filePath, webviewPanel, generation);
             if (!restored) {
               await this.ensureDefaultCubeModelForProject(
@@ -867,13 +880,11 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           );
         }
 
-        const nkmData = await vscode.workspace.fs.readFile(document.uri);
-        const project = JSON.parse(new TextDecoder().decode(nkmData)) as Record<string, unknown>;
-        (project as { model?: { src?: string } }).model = { src: projectModelSrc };
-        await vscode.workspace.fs.writeFile(
-          document.uri,
-          new TextEncoder().encode(JSON.stringify(project, null, 2)),
-        );
+        const updated = await updateNkmProject(document.uri, (project) => ({
+          ...project,
+          model: { ...project.model, src: projectModelSrc },
+        }));
+        if (!updated) return;
       } catch (err) {
         this.logError('updateNkmModelSrc', err);
         return;
@@ -969,6 +980,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     filePath: string,
     webviewPanel: vscode.WebviewPanel,
     generation: number,
+    sceneProfile: NkmSceneProfile = '3d',
   ): Promise<{ snapshot: EngineSceneSnapshot; editorState: unknown } | undefined> {
     const client = await this.ensureEngineClient();
     if (!client) return undefined;
@@ -982,6 +994,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         type: 'projectLoaded',
         snapshot: result.snapshot,
         editorState: result.editorState,
+        sceneProfile,
       });
       return result;
     } catch (err) {
@@ -1003,17 +1016,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
     try {
       const nkmUri = vscode.Uri.file(nkmPath);
-      const data = await vscode.workspace.fs.readFile(nkmUri);
-      const project = JSON.parse(new TextDecoder().decode(data)) as {
-        model?: { src?: string | null };
-      };
-
-      const modelSrc = project.model?.src;
-      if (!modelSrc) return false;
-
-      // Resolve relative path from .nkm directory
-      const nkmDir = path.dirname(nkmPath);
-      const modelPath = path.resolve(nkmDir, modelSrc);
+      const modelPath = await resolveNkmProjectModelSource(nkmUri);
+      if (!modelPath) return false;
 
       // Check file exists
       try {
@@ -1027,6 +1031,20 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     } catch (err) {
       this.logError('tryLoadModelFromProject', err);
       return false;
+    }
+  }
+
+  /**
+   * Read the profile before Engine load so empty 2D/Live projects do not fall
+   * into 3D default content creation.
+   */
+  private async readNkmSceneProfile(nkmPath: string): Promise<NkmSceneProfile> {
+    try {
+      const loaded = await loadNkmProject(vscode.Uri.file(nkmPath));
+      return loaded.project?.profile ?? '3d';
+    } catch (err) {
+      this.logError('readNkmSceneProfile', err);
+      return '3d';
     }
   }
 

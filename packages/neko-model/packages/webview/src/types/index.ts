@@ -3,6 +3,7 @@ import type {
   EditorKeyframeTrack,
   EnvironmentPatch,
   EnvironmentPlacement,
+  NkmSceneProfile,
   SceneDelta,
   SceneSnapshot,
 } from '@neko/shared';
@@ -31,7 +32,12 @@ export type ExtensionMessage =
   | { type: 'latency:response'; timestamp: number }
   | { type: 'exportComplete'; success: boolean; filePath?: string; error?: string }
   | { type: 'projectSaved'; success: boolean; filePath?: string; error?: string }
-  | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown }
+  | {
+      type: 'projectLoaded';
+      snapshot: SceneSnapshot;
+      editorState: unknown;
+      sceneProfile?: NkmSceneProfile;
+    }
   | { type: 'liveExpressions'; expressions: Partial<Record<VRMExpressionPreset, number>> }
   | { type: 'environmentPlacement'; placement: EnvironmentPlacement }
   | { type: 'environmentCommand'; patch: EnvironmentPatch; placement: EnvironmentPlacement }
