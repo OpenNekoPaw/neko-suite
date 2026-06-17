@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { VSCodeMessages } from '@/messages';
@@ -9,6 +9,12 @@ interface AccountBarProps {
   configuredProviders: ConfiguredProvider[];
   onOpenOnboarding: () => void;
 }
+
+const ACCOUNT_MENU_STYLE: CSSProperties = {
+  width: 'max-content',
+  minWidth: '196px',
+  maxWidth: 'var(--agent-overlay-inline-size)',
+};
 
 export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }: AccountBarProps) {
   const { t } = useTranslation();
@@ -77,6 +83,7 @@ export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }
       {open && (
         <div
           className="agent-header-menu agent-account-menu absolute right-0 top-full z-50 mt-1.5"
+          style={ACCOUNT_MENU_STYLE}
           role="menu"
         >
           {ssoSession ? (

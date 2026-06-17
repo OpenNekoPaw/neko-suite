@@ -59,6 +59,9 @@ describe('AccountBar', () => {
 
     const menu = screen.getByRole('menu');
     expect(menu.getAttribute('class')).toContain('agent-account-menu');
+    expect(menu.style.width).toBe('max-content');
+    expect(menu.style.minWidth).toBe('196px');
+    expect(menu.style.maxWidth).toBe('var(--agent-overlay-inline-size)');
     expect(screen.getByRole('menuitem', { name: 'Change API Key' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Models & Generation' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Open Config File' })).toBeTruthy();
