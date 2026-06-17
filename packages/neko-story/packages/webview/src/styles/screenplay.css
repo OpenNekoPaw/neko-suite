@@ -158,54 +158,56 @@ body {
 
 .story-table-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   gap: 16px;
-  min-height: 52px;
-  padding: 10px 16px 9px;
+  min-height: 46px;
+  padding: 8px 16px;
 }
 
 .story-table-heading {
   display: flex;
-  min-height: 30px;
+  min-height: 26px;
   min-width: 0;
   align-items: center;
-  border-left: 3px solid var(--vscode-focusBorder, var(--vscode-button-background));
-  padding-left: 11px;
 }
 
 .story-table-title-row {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
 
 .story-table-title {
+  flex: 0 0 auto;
   color: var(--vscode-foreground);
-  font-size: 16px;
-  font-weight: 750;
-  line-height: 22px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
   letter-spacing: 0;
 }
 
 .story-table-metrics {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   min-width: 0;
   align-items: center;
+  overflow: hidden;
 }
 
 .story-table-metric-chip {
   display: inline-flex;
   align-items: center;
+  overflow: hidden;
   min-height: 18px;
   padding: 0;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
   line-height: 16px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -247,15 +249,16 @@ body {
 }
 
 .story-table-column-heading {
-  border-bottom: 1px solid var(--vscode-panel-border);
-  padding: 7px 14px;
-  color: var(--vscode-descriptionForeground);
+  border-top: 1px solid var(--vscode-panel-border);
+  border-bottom: 3px solid color-mix(in srgb, var(--vscode-panel-border) 82%, var(--vscode-foreground) 18%);
+  padding: 10px 14px;
+  color: var(--vscode-foreground);
   background: color-mix(
     in srgb,
-    var(--vscode-editor-background) 88%,
-    var(--vscode-sideBar-background, transparent)
+    var(--vscode-sideBar-background, var(--vscode-editor-background)) 68%,
+    var(--vscode-editor-background) 32%
   );
-  font: 700 10px/14px var(--vscode-font-family, system-ui, sans-serif);
+  font: 800 11px/16px var(--vscode-font-family, system-ui, sans-serif);
   letter-spacing: 0;
   text-align: left;
   text-transform: uppercase;
@@ -264,15 +267,13 @@ body {
 
 @media (max-width: 640px) {
   .story-table-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 10px;
+    padding: 8px 12px;
   }
 
   .story-table-actions {
     justify-content: flex-end;
-    border-left: 0;
-    padding-left: 0;
+    padding-left: 10px;
   }
 
   .story-table-action-button {

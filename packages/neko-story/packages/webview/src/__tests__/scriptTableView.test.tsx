@@ -58,7 +58,7 @@ function renderTable(props: Partial<React.ComponentProps<typeof ScriptTableView>
 
 describe('ScriptTableView', () => {
   it('renders the storyboard table as a whole-table input preview', () => {
-    renderTable();
+    const { container } = renderTable();
 
     expect(screen.getByRole('heading', { name: 'Breakdown' })).toBeInTheDocument();
     expect(
@@ -66,6 +66,12 @@ describe('ScriptTableView', () => {
     ).not.toBeInTheDocument();
     const headers = screen.getAllByRole('columnheader').map((header) => header.textContent);
     expect(headers).toEqual(['#', 'Scene', 'Characters']);
+    expect(container.querySelector('.story-table-heading')).toBeTruthy();
+    expect(container.querySelector('.story-table-heading')).not.toHaveClass(
+      'story-table-column-heading',
+    );
+    expect(screen.getAllByRole('columnheader')[0]).toHaveClass('story-table-column-heading');
+    expect(container.querySelector('.story-table-toolbar')?.children).toHaveLength(2);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('Progress / Issues')).not.toBeInTheDocument();
     expect(screen.queryByText('Status')).not.toBeInTheDocument();
