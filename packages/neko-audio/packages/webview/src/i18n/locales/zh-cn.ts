@@ -47,6 +47,11 @@ const audio: MessageBundle = {
   'audio.sidePanel.show': '显示右侧面板',
   'audio.sidePanel.hide': '隐藏右侧面板',
   'audio.sidePanel.tabs': '右侧面板分区',
+  'audio.rightDock.mode.label': '创作模式',
+  'audio.rightDock.mode.basic': '基础',
+  'audio.rightDock.mode.basic.description': 'AI 清理与常用音频控制',
+  'audio.rightDock.mode.professional': '专业',
+  'audio.rightDock.mode.professional.description': 'DAW 编辑、路由与精细处理',
 
   // Effects
   'audio.effects.title': '效果器',

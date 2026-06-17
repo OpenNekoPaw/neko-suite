@@ -11,7 +11,13 @@ import { createMeta } from '../../stores/utils/operation-helpers';
 import type { TimelineElement, EasingType, ProjectDefaults } from '../../types';
 import type { EditOperation } from '@neko/shared';
 
-export const PropertyPanelInline = memo(function PropertyPanelInline() {
+interface PropertyPanelInlineProps {
+  readonly mode: 'basic' | 'professional';
+}
+
+export const PropertyPanelInline = memo(function PropertyPanelInline({
+  mode,
+}: PropertyPanelInlineProps) {
   const project = useEditorStore((s) => s.project);
   const selectedElements = useEditorStore((s) => s.selectedElements);
   const currentTime = useEditorStore((s) => s.currentTime);
@@ -134,6 +140,7 @@ export const PropertyPanelInline = memo(function PropertyPanelInline() {
 
   return (
     <PropertyPanel
+      mode={mode}
       element={selectedElement}
       projectDefaults={project?.defaults ?? null}
       currentTime={currentTime}

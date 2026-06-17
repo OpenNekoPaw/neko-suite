@@ -25,6 +25,33 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/<FrameTimeline isKeyboardFocusedRef=\{isKeyboardFocusedRef\} \/>/);
   });
 
+  it('exposes basic and professional right-dock tabs through the shared shell', () => {
+    expect(appSource).toMatch(/type SketchRightDockMode = 'basic' \| 'professional'/);
+    expect(appSource).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<SketchRightDockMode>\('basic'\)/,
+    );
+    expect(appSource).toMatch(/groups: \{/);
+    expect(appSource).toMatch(/activeId: rightDockMode/);
+    expect(appSource).toMatch(
+      /onActiveIdChange: \(id\) => setRightDockMode\(toSketchRightDockMode\(id\)\)/,
+    );
+    expect(appSource).toMatch(/label: i18nService\.t\('sketch\.rightDock\.mode\.basic'\)/);
+    expect(appSource).toMatch(/label: i18nService\.t\('sketch\.rightDock\.mode\.professional'\)/);
+    expect(appSource).toMatch(/mode=\{rightDockMode\}/);
+  });
+
+  it('keeps local sidebar button styling from overriding the shared segmented control', () => {
+    expect(cssSource).toContain(
+      '.sketch-right-sidebar button:not(.neko-collapsible-header):not(.neko-segmented-control-item)',
+    );
+    expect(cssSource).toContain(
+      '.sketch-right-sidebar button:not(.neko-collapsible-header):not(.neko-segmented-control-item):hover:not(',
+    );
+    expect(cssSource).not.toContain(
+      '.sketch-right-sidebar button:not(.neko-collapsible-header) {\n  border-color:',
+    );
+  });
+
   it('separates keyboard focus ownership from sidebar resize geometry', () => {
     expect(appSource).toMatch(/const keyboardRootRef = useRef<HTMLDivElement \| null>\(null\)/);
     expect(appSource).not.toMatch(/sidebarResizeRef/);
@@ -100,6 +127,7 @@ describe('Sketch creative workbench layout boundary', () => {
     const brushIndex = inspectorSource.indexOf('<BrushPanel');
     const paletteIndex = inspectorSource.indexOf('<PalettePanel');
     const layerIndex = inspectorSource.indexOf('<LayerPanel');
+    const aiIndex = inspectorSource.indexOf('<AIPanel');
     const frameIndex = inspectorSource.indexOf('<FrameControls');
     const advancedIndex = inspectorSource.indexOf(
       '<CollapsiblePanel titleKey="sketch.panel.advanced" defaultExpanded={false}>',
@@ -107,27 +135,32 @@ describe('Sketch creative workbench layout boundary', () => {
     const spritesheetIndex = inspectorSource.indexOf('<SpriteSheetPlayer');
     const filterIndex = inspectorSource.indexOf('<FilterPanel');
     const perspectiveIndex = inspectorSource.indexOf('<PerspectiveGridPanel');
-    const aiIndex = inspectorSource.indexOf('<AIPanel');
     const particleIndex = inspectorSource.indexOf('<ParticlePanel');
     const sceneIndex = inspectorSource.indexOf('<ScenePanel');
 
     expect(inspectorSource).toMatch(
-      /showFrameTimeline && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.frames"/,
+      /showAIInspector && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.ai" defaultExpanded=\{false\}>/,
+    );
+    expect(inspectorSource).toMatch(
+      /mode === 'professional' && showFrameTimeline && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.frames"/,
     );
     expect(inspectorSource).toMatch(
       /showFrameTimeline && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.spritesheet" defaultExpanded=\{false\}/,
+    );
+    expect(inspectorSource).toMatch(
+      /mode === 'professional' && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.advanced" defaultExpanded=\{false\}>/,
     );
 
     expect(brushIndex).toBeGreaterThan(-1);
     expect(paletteIndex).toBeGreaterThan(brushIndex);
     expect(layerIndex).toBeGreaterThan(paletteIndex);
-    expect(frameIndex).toBeGreaterThan(layerIndex);
+    expect(aiIndex).toBeGreaterThan(layerIndex);
+    expect(frameIndex).toBeGreaterThan(aiIndex);
     expect(advancedIndex).toBeGreaterThan(frameIndex);
     for (const advancedPanelIndex of [
       spritesheetIndex,
       filterIndex,
       perspectiveIndex,
-      aiIndex,
       particleIndex,
       sceneIndex,
     ]) {

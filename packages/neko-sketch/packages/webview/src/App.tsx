@@ -56,6 +56,8 @@ import { I18nProvider } from './i18n/I18nContext';
 import type { SketchRuntimeFeatureFlags, SupportedLocale } from '@neko/shared';
 import type { CanvasConfig, LayerData, ToolType } from './types';
 
+type SketchRightDockMode = 'basic' | 'professional';
+
 interface AppSketchAIApplySnapshot extends SketchAIApplySnapshot {
   readonly wasDirty: boolean;
 }
@@ -123,6 +125,7 @@ export function App() {
   const [aiRuns, setAIRuns] = useState<readonly SketchAIRun[]>(() => aiSessionStore.list());
   const [featureFlags, setFeatureFlags] =
     useState<SketchRuntimeFeatureFlags>(DEFAULT_FEATURE_FLAGS);
+  const [rightDockMode, setRightDockMode] = useState<SketchRightDockMode>('basic');
 
   // Drag-over visual state
   const [isDragOver, setIsDragOver] = useState(false);
@@ -615,8 +618,28 @@ export function App() {
                   minSize: 220,
                   maxSize: 440,
                   onSizeChange: setSidebarWidth,
+                  groups: {
+                    label: i18nService.t('sketch.rightDock.mode.label'),
+                    activeId: rightDockMode,
+                    onActiveIdChange: (id) => setRightDockMode(toSketchRightDockMode(id)),
+                    items: [
+                      {
+                        id: 'basic',
+                        label: i18nService.t('sketch.rightDock.mode.basic'),
+                        description: i18nService.t('sketch.rightDock.mode.basic.description'),
+                      },
+                      {
+                        id: 'professional',
+                        label: i18nService.t('sketch.rightDock.mode.professional'),
+                        description: i18nService.t(
+                          'sketch.rightDock.mode.professional.description',
+                        ),
+                      },
+                    ],
+                  },
                   children: (
                     <SketchInspectorStack
+                      mode={rightDockMode}
                       activeTool={activeTool}
                       featureFlags={featureFlags}
                       showFrameTimeline={showFrameTimeline}
@@ -637,7 +660,12 @@ export function App() {
   );
 }
 
+function toSketchRightDockMode(id: string): SketchRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
+}
+
 interface SketchInspectorStackProps {
+  readonly mode: SketchRightDockMode;
   readonly activeTool: ToolType;
   readonly featureFlags: SketchRuntimeFeatureFlags;
   readonly showFrameTimeline: boolean;
@@ -649,6 +677,7 @@ interface SketchInspectorStackProps {
 }
 
 function SketchInspectorStack({
+  mode,
   activeTool,
   featureFlags,
   showFrameTimeline,
@@ -681,38 +710,40 @@ function SketchInspectorStack({
       <CollapsiblePanel titleKey="sketch.panel.layers">
         <LayerPanel />
       </CollapsiblePanel>
-      {showFrameTimeline && (
+      {showAIInspector && (
+        <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
+          <AIPanel
+            operationAvailability={featureFlags.aiOps.operations}
+            onOpenAgent={onOpenAgentForAI}
+          />
+        </CollapsiblePanel>
+      )}
+      {mode === 'professional' && showFrameTimeline && (
         <CollapsiblePanel titleKey="sketch.panel.frames">
           <FrameControls />
         </CollapsiblePanel>
       )}
-      <CollapsiblePanel titleKey="sketch.panel.advanced" defaultExpanded={false}>
-        {showFrameTimeline && (
-          <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
-            <SpriteSheetPlayer />
+      {mode === 'professional' && (
+        <CollapsiblePanel titleKey="sketch.panel.advanced" defaultExpanded={false}>
+          {showFrameTimeline && (
+            <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
+              <SpriteSheetPlayer />
+            </CollapsiblePanel>
+          )}
+          <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
+            <FilterPanel />
           </CollapsiblePanel>
-        )}
-        <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
-          <FilterPanel />
-        </CollapsiblePanel>
-        <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
-          <PerspectiveGridPanel />
-        </CollapsiblePanel>
-        {showAIInspector && (
-          <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
-            <AIPanel
-              operationAvailability={featureFlags.aiOps.operations}
-              onOpenAgent={onOpenAgentForAI}
-            />
+          <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
+            <PerspectiveGridPanel />
           </CollapsiblePanel>
-        )}
-        <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
-          <ParticlePanel />
+          <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
+            <ParticlePanel />
+          </CollapsiblePanel>
+          <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
+            <ScenePanel />
+          </CollapsiblePanel>
         </CollapsiblePanel>
-        <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
-          <ScenePanel />
-        </CollapsiblePanel>
-      </CollapsiblePanel>
+      )}
     </div>
   );
 }

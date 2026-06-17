@@ -14,7 +14,21 @@ describe('AudioEditor workbench layout boundary', () => {
     expect(source).toMatch(/rightDock=\{\s*activeSidePanel/);
     expect(source).toMatch(/id: 'audio-side-panel'/);
     expect(source).toMatch(/panelId: 'audio\.sidePanel'/);
-    expect(source).toMatch(/children: <SidePanel \/>/);
+    expect(source).toMatch(/children: <SidePanel mode=\{rightDockMode\} \/>/);
+  });
+
+  it('exposes basic and professional right-dock tabs through the shared shell', () => {
+    expect(source).toMatch(/type AudioRightDockMode = 'basic' \| 'professional'/);
+    expect(source).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<AudioRightDockMode>\('basic'\)/,
+    );
+    expect(source).toMatch(/groups: \{/);
+    expect(source).toMatch(/activeId: rightDockMode/);
+    expect(source).toMatch(
+      /onActiveIdChange: \(id\) => setRightDockMode\(toAudioRightDockMode\(id\)\)/,
+    );
+    expect(source).toMatch(/label: t\('audio\.rightDock\.mode\.basic'\)/);
+    expect(source).toMatch(/label: t\('audio\.rightDock\.mode\.professional'\)/);
   });
 
   it('moves analysis controls into the left rail instead of a horizontal main-panel toolbar', () => {

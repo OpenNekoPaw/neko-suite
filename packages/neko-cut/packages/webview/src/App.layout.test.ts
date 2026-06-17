@@ -25,6 +25,20 @@ describe('Cut creative workbench layout boundary', () => {
     expect(appSource).toMatch(/contentClassName:\s*'cut-property-panel-content/);
   });
 
+  it('exposes basic and professional right-dock tabs through the shared shell', () => {
+    expect(appSource).toMatch(/type CutRightDockMode = 'basic' \| 'professional'/);
+    expect(appSource).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<CutRightDockMode>\('basic'\)/,
+    );
+    expect(appSource).toMatch(/groups: \{/);
+    expect(appSource).toMatch(/activeId: rightDockMode/);
+    expect(appSource).toMatch(
+      /onActiveIdChange: \(id\) => setRightDockMode\(toCutRightDockMode\(id\)\)/,
+    );
+    expect(appSource).toMatch(/label: t\('rightDock\.mode\.basic'\)/);
+    expect(appSource).toMatch(/label: t\('rightDock\.mode\.professional'\)/);
+  });
+
   it('keeps preview, timeline surfaces, and timeline controls inside the main panel', () => {
     expect(appSource).toMatch(/className="cut-preview-timeline-panel"/);
     expect(appSource).toMatch(/<PreviewControls/);

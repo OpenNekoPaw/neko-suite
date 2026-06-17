@@ -31,7 +31,7 @@ Sketch 基础模式面向 AI 辅助绘画和常用图像编辑，专业模式面
 | 基础模式 | AI 绘画和低门槛图像创作  | 文生图、局部重绘、扩图、上色、风格化、基础画笔、基础图层、调色板、参考图、结果预览、应用和回滚                                                                          |
 | 专业模式 | 图像、图层和逐帧动画精修 | 高级画笔参数、完整 layer tree、blend mode、selection/mask、vector、fill、filter、perspective grid、particles、scene/parallax、frame timeline、spritesheet import/export |
 
-右侧 Dock 在基础模式显示 AI 操作、画笔/调色板/基础图层和当前选择基础属性；专业模式显示完整 Brush、Layer、Palette、Vector、Fill、Filter、Perspective、Particle、Scene、Frame 和 Spritesheet 面板。AI 结果必须能作为图层、选区或帧变更进入历史栈并可回滚。
+右侧 Dock 的当前实现按 Inspector stack 裁剪：基础模式显示 Brush/Eraser、Vector/Fill 上下文面板、Palette、Layers 和 AI 操作；专业模式在此基础上开放 Frames、Spritesheet、Filter、Perspective、Particles 和 Scene 面板。AI 结果必须能作为图层、选区或帧变更进入历史栈并可回滚。
 
 ## 格式边界
 

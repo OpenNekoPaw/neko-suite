@@ -719,7 +719,7 @@ body[data-vscode-theme-kind='vscode-high-contrast-light'] .sketch-inspector-comp
   accent-color: var(--sketch-accent);
 }
 
-.sketch-right-sidebar button:not(.neko-collapsible-header) {
+.sketch-right-sidebar button:not(.neko-collapsible-header):not(.neko-segmented-control-item) {
   border-color: var(--sketch-inspector-field-border, var(--sketch-border));
   background: color-mix(in srgb, var(--sketch-surface-elevated) 58%, var(--sketch-surface));
   cursor: pointer;
@@ -729,7 +729,9 @@ body[data-vscode-theme-kind='vscode-high-contrast-light'] .sketch-inspector-comp
     color 0.12s ease;
 }
 
-.sketch-right-sidebar button:not(.neko-collapsible-header):hover:not(:disabled) {
+.sketch-right-sidebar button:not(.neko-collapsible-header):not(.neko-segmented-control-item):hover:not(
+    :disabled
+  ) {
   border-color: color-mix(in srgb, var(--sketch-accent) 32%, var(--sketch-inspector-field-border));
   background: color-mix(in srgb, var(--sketch-hover) 72%, var(--sketch-surface-elevated));
 }

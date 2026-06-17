@@ -5,7 +5,7 @@
  * Transport remains part of the main audio surface.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   isKeyboardFocusMessage,
   useFocusedWebviewRoot,
@@ -44,6 +44,8 @@ import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import '@neko/ui/keyboard/focus.css';
 import '../styles/editor.css';
 
+type AudioRightDockMode = 'basic' | 'professional';
+
 export function AudioEditor() {
   useVscodeReady();
 
@@ -67,6 +69,7 @@ export function AudioEditor() {
   } = useAudioStore();
   const { togglePlay, seek, stop, audioClientRef } = useAudioPlayback();
   const isSidePanelVisible = activeSidePanel !== null;
+  const [rightDockMode, setRightDockMode] = useState<AudioRightDockMode>('basic');
 
   const handleToggleSidePanel = useCallback(() => {
     if (activeSidePanel) {
@@ -279,7 +282,24 @@ export function AudioEditor() {
                 contentClassName: 'audio-side-panel-content flex flex-col min-h-0',
                 resizeHandleClassName: 'neko-resize-handle',
                 resizePersistence: { api: getVsCodeApi() },
-                children: <SidePanel />,
+                groups: {
+                  label: t('audio.rightDock.mode.label'),
+                  activeId: rightDockMode,
+                  onActiveIdChange: (id) => setRightDockMode(toAudioRightDockMode(id)),
+                  items: [
+                    {
+                      id: 'basic',
+                      label: t('audio.rightDock.mode.basic'),
+                      description: t('audio.rightDock.mode.basic.description'),
+                    },
+                    {
+                      id: 'professional',
+                      label: t('audio.rightDock.mode.professional'),
+                      description: t('audio.rightDock.mode.professional.description'),
+                    },
+                  ],
+                },
+                children: <SidePanel mode={rightDockMode} />,
               }
             : undefined
         }
@@ -296,6 +316,10 @@ export function AudioEditor() {
       <Toast />
     </div>
   );
+}
+
+function toAudioRightDockMode(id: string): AudioRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
 }
 
 function handleUserCommand(message: AudioCommandMessage): void {

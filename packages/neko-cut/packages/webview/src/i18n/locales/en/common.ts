@@ -22,4 +22,9 @@ export const common = {
   'common.connected': 'Connected',
   'common.failed': 'Failed',
   'common.optional': 'optional',
+  'rightDock.mode.label': 'Creation mode',
+  'rightDock.mode.basic': 'Basic',
+  'rightDock.mode.basic.description': 'AI-assisted cuts and common properties',
+  'rightDock.mode.professional': 'Professional',
+  'rightDock.mode.professional.description': 'Advanced editing, keyframes, and precision controls',
 } as const satisfies MessageBundle;

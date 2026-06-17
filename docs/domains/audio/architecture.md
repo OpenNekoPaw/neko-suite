@@ -31,7 +31,7 @@
 | 基础模式 | AI 辅助音频清理、母带和快速导出 | 降噪、响度标准化、AI 母带、播客清理、推荐效果链、简单录音、基础剪切、淡入淡出和快速导出                                             |
 | 专业模式 | DAW 级编辑和混音                | 多轨 timeline、mixer、bus/send、effect chain 精调、automation、markers/regions、preset、频谱/响度分析、录音路由、设备输入和导出参数 |
 
-右侧 Dock 在基础模式显示快速处理、推荐链、录音/导出摘要和关键基础参数；专业模式显示 Effects、Recording、Export、Presets、Mixer、Automation 和分析面板。AI 在专业模式中作为效果链建议、问题解释和批处理辅助，不替代可审计的效果参数。
+右侧 Dock 的当前实现按同一 `SidePanel` 裁剪入口：基础模式保留 Recording、Export 和 Presets，用于录制、套用预设与快速导出；专业模式在此基础上开放 Effects chain 入口，后续 Mixer、Automation 和分析面板继续作为专业能力接入。AI 在专业模式中作为效果链建议、问题解释和批处理辅助，不替代可审计的效果参数。
 
 ## 历史 ADR 归并
 

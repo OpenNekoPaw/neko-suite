@@ -638,6 +638,7 @@ function normalizeColorInputValue(value: string): string {
 // =============================================================================
 
 interface PropertyPanelProps {
+  mode: 'basic' | 'professional';
   element: TimelineElement | null;
   projectDefaults: ProjectDefaults | null;
   currentTime: number;
@@ -667,6 +668,7 @@ function getElementTransition(
 }
 
 export const PropertyPanel = memo(function PropertyPanel({
+  mode,
   element,
   projectDefaults,
   currentTime,
@@ -678,6 +680,7 @@ export const PropertyPanel = memo(function PropertyPanel({
   onExecuteAIAction,
 }: PropertyPanelProps) {
   const { t } = useTranslation();
+  const isProfessionalMode = mode === 'professional';
 
   // Determine if we're editing defaults or an element
   const isEditingDefaults = !element;
@@ -1138,35 +1141,36 @@ export const PropertyPanel = memo(function PropertyPanel({
         defaultExpanded={!isDisabled}
       >
         {renderSharedPropertyRows(sharedTransformProperties)}
-        {/* Blend Mode selector */}
-        <div className="nk-prop-row">
-          <label className="nk-prop-label">{t('blendMode.title')}</label>
-          <select
-            className="nk-prop-input"
-            value={element?.blendMode ?? 'normal'}
-            onChange={(e) => handleBlendModeChange(e.target.value)}
-            disabled={isDisabled}
-          >
-            {(
-              [
-                'normal',
-                'darken',
-                'lighten',
-                'contrast',
-                'inversion',
-                'component',
-              ] as BlendModeCategory[]
-            ).map((cat) => (
-              <optgroup key={cat} label={t(BLEND_MODE_CATEGORY_I18N_KEYS[cat])}>
-                {BLEND_MODE_DEFINITIONS.filter((d) => d.category === cat).map((d) => (
-                  <option key={d.mode} value={d.mode}>
-                    {t(d.nameKey)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
+        {isProfessionalMode ? (
+          <div className="nk-prop-row">
+            <label className="nk-prop-label">{t('blendMode.title')}</label>
+            <select
+              className="nk-prop-input"
+              value={element?.blendMode ?? 'normal'}
+              onChange={(e) => handleBlendModeChange(e.target.value)}
+              disabled={isDisabled}
+            >
+              {(
+                [
+                  'normal',
+                  'darken',
+                  'lighten',
+                  'contrast',
+                  'inversion',
+                  'component',
+                ] as BlendModeCategory[]
+              ).map((cat) => (
+                <optgroup key={cat} label={t(BLEND_MODE_CATEGORY_I18N_KEYS[cat])}>
+                  {BLEND_MODE_DEFINITIONS.filter((d) => d.category === cat).map((d) => (
+                    <option key={d.mode} value={d.mode}>
+                      {t(d.nameKey)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </PropertyGroup>
 
       {/* Text Properties */}
@@ -1207,70 +1211,72 @@ export const PropertyPanel = memo(function PropertyPanel({
         )}
       </PropertyGroup>
 
-      {/* Speed Control - always show */}
-      <PropertyGroup
-        titleKey="propertyPanel.group.speed"
-        defaultExpanded={false}
-        disabled={isDisabled}
-      >
-        <SpeedControl
-          speed={element?.speed}
-          originalDuration={element?.duration ?? 0}
-          onChange={handleSpeedChange}
-          disabled={isDisabled}
-        />
-      </PropertyGroup>
+      {isProfessionalMode ? (
+        <>
+          <PropertyGroup
+            titleKey="propertyPanel.group.speed"
+            defaultExpanded={false}
+            disabled={isDisabled}
+          >
+            <SpeedControl
+              speed={element?.speed}
+              originalDuration={element?.duration ?? 0}
+              onChange={handleSpeedChange}
+              disabled={isDisabled}
+            />
+          </PropertyGroup>
 
-      {/* Entry Transition - always show */}
-      <PropertyGroup
-        titleKey="propertyPanel.group.inTransition"
-        defaultExpanded={false}
-        disabled={isDisabled}
-      >
-        <TransitionPicker
-          transition={getElementTransition(element, 'transitionIn')}
-          onChange={handleInTransitionChange}
-          showDuration={true}
-          disabled={isDisabled}
-        />
-      </PropertyGroup>
+          <PropertyGroup
+            titleKey="propertyPanel.group.inTransition"
+            defaultExpanded={false}
+            disabled={isDisabled}
+          >
+            <TransitionPicker
+              transition={getElementTransition(element, 'transitionIn')}
+              onChange={handleInTransitionChange}
+              showDuration={true}
+              disabled={isDisabled}
+            />
+          </PropertyGroup>
 
-      {/* Exit Transition - always show */}
-      <PropertyGroup
-        titleKey="propertyPanel.group.outTransition"
-        defaultExpanded={false}
-        disabled={isDisabled}
-      >
-        <TransitionPicker
-          transition={getElementTransition(element, 'transitionOut')}
-          onChange={handleOutTransitionChange}
-          showDuration={true}
-          disabled={isDisabled}
-        />
-      </PropertyGroup>
+          <PropertyGroup
+            titleKey="propertyPanel.group.outTransition"
+            defaultExpanded={false}
+            disabled={isDisabled}
+          >
+            <TransitionPicker
+              transition={getElementTransition(element, 'transitionOut')}
+              onChange={handleOutTransitionChange}
+              showDuration={true}
+              disabled={isDisabled}
+            />
+          </PropertyGroup>
 
-      {/* Color Correction - always show */}
-      <PropertyGroup titleKey="colorCorrection.title" defaultExpanded={false} disabled={isDisabled}>
-        <ColorCorrectionPanel
-          colorCorrection={element?.colorCorrection}
-          onChange={handleColorCorrectionChange}
-          disabled={isDisabled}
-        />
-      </PropertyGroup>
+          <PropertyGroup
+            titleKey="colorCorrection.title"
+            defaultExpanded={false}
+            disabled={isDisabled}
+          >
+            <ColorCorrectionPanel
+              colorCorrection={element?.colorCorrection}
+              onChange={handleColorCorrectionChange}
+              disabled={isDisabled}
+            />
+          </PropertyGroup>
 
-      {/* Effects - always show */}
-      <PropertyGroup titleKey="effects.title" defaultExpanded={false} disabled={isDisabled}>
-        <EffectsPanel
-          effects={element?.effects}
-          onChange={handleEffectsChange}
-          disabled={isDisabled}
-        />
-      </PropertyGroup>
+          <PropertyGroup titleKey="effects.title" defaultExpanded={false} disabled={isDisabled}>
+            <EffectsPanel
+              effects={element?.effects}
+              onChange={handleEffectsChange}
+              disabled={isDisabled}
+            />
+          </PropertyGroup>
 
-      {/* Masks - always show */}
-      <PropertyGroup titleKey="masks.title" defaultExpanded={false} disabled={isDisabled}>
-        <MaskPanel masks={element?.masks} onChange={handleMasksChange} disabled={isDisabled} />
-      </PropertyGroup>
+          <PropertyGroup titleKey="masks.title" defaultExpanded={false} disabled={isDisabled}>
+            <MaskPanel masks={element?.masks} onChange={handleMasksChange} disabled={isDisabled} />
+          </PropertyGroup>
+        </>
+      ) : null}
     </div>
   );
 });

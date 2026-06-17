@@ -54,7 +54,7 @@ describe('Audio SidePanel', () => {
     useAudioStore.getState().openSidePanel('effects');
 
     act(() => {
-      root.render(<SidePanel />);
+      root.render(<SidePanel mode="professional" />);
     });
 
     expect(host.querySelector('#audio-side-panel')).toBeNull();
@@ -68,6 +68,21 @@ describe('Audio SidePanel', () => {
       tabs[1]?.click();
     });
 
+    expect(useAudioStore.getState().activeSidePanel).toBe('recording');
+  });
+
+  it('hides professional effects chain from basic mode and falls back to recording', () => {
+    useAudioStore.getState().openSidePanel('effects');
+
+    act(() => {
+      root.render(<SidePanel mode="basic" />);
+    });
+
+    expect(host.querySelector('[data-testid="effects-panel"]')).toBeNull();
+    expect(host.querySelector('[data-testid="recording-panel"]')).not.toBeNull();
+
+    const tabs = host.querySelectorAll<HTMLButtonElement>('.audio-side-panel-tabs button');
+    expect(tabs).toHaveLength(3);
     expect(useAudioStore.getState().activeSidePanel).toBe('recording');
   });
 });

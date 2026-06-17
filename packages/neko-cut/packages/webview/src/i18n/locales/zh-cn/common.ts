@@ -22,4 +22,9 @@ export const common = {
   'common.connected': '已连接',
   'common.failed': '失败',
   'common.optional': '可选',
+  'rightDock.mode.label': '创作模式',
+  'rightDock.mode.basic': '基础',
+  'rightDock.mode.basic.description': 'AI 辅助剪辑与常用属性',
+  'rightDock.mode.professional': '专业',
+  'rightDock.mode.professional.description': '高级编辑、关键帧与精细控制',
 } as const satisfies MessageBundle;

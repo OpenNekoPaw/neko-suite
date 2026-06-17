@@ -22,6 +22,12 @@ export const en: MessageBundle = {
   'sketch.toolbar.ariaLabel': 'Drawing tools',
   'sketch.sidebar.toggle': 'Toggle Sidebar',
   'sketch.common.enabled': 'Enabled',
+  'sketch.rightDock.mode.label': 'Creation mode',
+  'sketch.rightDock.mode.basic': 'Basic',
+  'sketch.rightDock.mode.basic.description': 'AI-assisted drawing and core painting panels',
+  'sketch.rightDock.mode.professional': 'Professional',
+  'sketch.rightDock.mode.professional.description':
+    'Animation, filters, scene, and precision tools',
 
   // Layer panel
   'sketch.layer.new': 'New Layer',

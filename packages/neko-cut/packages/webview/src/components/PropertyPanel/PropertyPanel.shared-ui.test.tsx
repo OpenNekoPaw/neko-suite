@@ -63,18 +63,7 @@ describe('Cut PropertyPanel shared UI migration', () => {
     const element = createElement();
 
     act(() => {
-      root.render(
-        <PropertyPanel
-          currentTime={0}
-          element={element}
-          projectDefaults={createDefaults()}
-          onAddKeyframe={vi.fn()}
-          onDefaultsChange={vi.fn()}
-          onElementChange={onElementChange}
-          onElementCommit={onElementCommit}
-          onRemoveKeyframe={vi.fn()}
-        />,
-      );
+      renderPropertyPanel({ element, onElementChange, onElementCommit });
     });
 
     const opacityInput = host.querySelector<HTMLInputElement>(
@@ -108,18 +97,7 @@ describe('Cut PropertyPanel shared UI migration', () => {
     element.animTransform!.opacity.keyframes = [];
 
     act(() => {
-      root.render(
-        <PropertyPanel
-          currentTime={0}
-          element={element}
-          projectDefaults={createDefaults()}
-          onAddKeyframe={onAddKeyframe}
-          onDefaultsChange={vi.fn()}
-          onElementChange={vi.fn()}
-          onElementCommit={vi.fn()}
-          onRemoveKeyframe={onRemoveKeyframe}
-        />,
-      );
+      renderPropertyPanel({ element, onAddKeyframe, onRemoveKeyframe });
     });
 
     const keyframeButton = host.querySelector<HTMLButtonElement>(
@@ -136,18 +114,7 @@ describe('Cut PropertyPanel shared UI migration', () => {
 
   it('renders shared rows through the cut compact inspector adapter', () => {
     act(() => {
-      root.render(
-        <PropertyPanel
-          currentTime={0}
-          element={createElement()}
-          projectDefaults={createDefaults()}
-          onAddKeyframe={vi.fn()}
-          onDefaultsChange={vi.fn()}
-          onElementChange={vi.fn()}
-          onElementCommit={vi.fn()}
-          onRemoveKeyframe={vi.fn()}
-        />,
-      );
+      renderPropertyPanel({ element: createElement() });
     });
 
     const opacityRow = host.querySelector<HTMLElement>(
@@ -164,18 +131,7 @@ describe('Cut PropertyPanel shared UI migration', () => {
 
   it('keeps migrated collapsible shell expanded by default and toggles content', () => {
     act(() => {
-      root.render(
-        <PropertyPanel
-          currentTime={0}
-          element={createElement()}
-          projectDefaults={createDefaults()}
-          onAddKeyframe={vi.fn()}
-          onDefaultsChange={vi.fn()}
-          onElementChange={vi.fn()}
-          onElementCommit={vi.fn()}
-          onRemoveKeyframe={vi.fn()}
-        />,
-      );
+      renderPropertyPanel({ element: createElement() });
     });
 
     const basicHeader = getGroupHeader('propertyPanel.group.basic');
@@ -193,18 +149,7 @@ describe('Cut PropertyPanel shared UI migration', () => {
 
   it('keeps disabled migrated collapsible shell closed without rendering rows', () => {
     act(() => {
-      root.render(
-        <PropertyPanel
-          currentTime={0}
-          element={null}
-          projectDefaults={null}
-          onAddKeyframe={vi.fn()}
-          onDefaultsChange={vi.fn()}
-          onElementChange={vi.fn()}
-          onElementCommit={vi.fn()}
-          onRemoveKeyframe={vi.fn()}
-        />,
-      );
+      renderPropertyPanel({ element: null, projectDefaults: null });
     });
 
     const basicHeader = getGroupHeader('propertyPanel.group.basic');
@@ -214,11 +159,73 @@ describe('Cut PropertyPanel shared UI migration', () => {
     expect(host.querySelector('[data-property-id="name"]')).toBeNull();
   });
 
+  it('keeps advanced edit groups out of basic mode and restores them in professional mode', () => {
+    act(() => {
+      renderPropertyPanel({ element: createElement(), mode: 'basic' });
+    });
+
+    expect(getGroupHeader('propertyPanel.group.basic')).not.toBeNull();
+    expect(getGroupHeader('propertyPanel.group.transform')).not.toBeNull();
+    expect(getGroupHeader('propertyPanel.group.audio')).not.toBeNull();
+    expect(getGroupHeader('propertyPanel.group.speed')).toBeNull();
+    expect(getGroupHeader('propertyPanel.group.inTransition')).toBeNull();
+    expect(getGroupHeader('colorCorrection.title')).toBeNull();
+    expect(host.textContent).not.toContain('blendMode.title');
+
+    act(() => {
+      renderPropertyPanel({ element: createElement(), mode: 'professional' });
+    });
+
+    expect(getGroupHeader('propertyPanel.group.speed')).not.toBeNull();
+    expect(getGroupHeader('propertyPanel.group.inTransition')).not.toBeNull();
+    expect(getGroupHeader('propertyPanel.group.outTransition')).not.toBeNull();
+    expect(getGroupHeader('colorCorrection.title')).not.toBeNull();
+    expect(getGroupHeader('effects.title')).not.toBeNull();
+    expect(getGroupHeader('masks.title')).not.toBeNull();
+    expect(host.textContent).toContain('blendMode.title');
+  });
+
   function getGroupHeader(label: string): HTMLButtonElement | null {
     return (
       Array.from(host.querySelectorAll<HTMLButtonElement>('.neko-collapsible-header')).find(
         (button) => button.textContent?.includes(label),
       ) ?? null
+    );
+  }
+
+  function renderPropertyPanel({
+    currentTime = 0,
+    element,
+    mode = 'basic',
+    onAddKeyframe = vi.fn(),
+    onDefaultsChange = vi.fn(),
+    onElementChange = vi.fn(),
+    onElementCommit = vi.fn(),
+    onRemoveKeyframe = vi.fn(),
+    projectDefaults = createDefaults(),
+  }: {
+    currentTime?: number;
+    element: TimelineElement | null;
+    mode?: 'basic' | 'professional';
+    onAddKeyframe?: Parameters<typeof PropertyPanel>[0]['onAddKeyframe'];
+    onDefaultsChange?: Parameters<typeof PropertyPanel>[0]['onDefaultsChange'];
+    onElementChange?: Parameters<typeof PropertyPanel>[0]['onElementChange'];
+    onElementCommit?: Parameters<typeof PropertyPanel>[0]['onElementCommit'];
+    onRemoveKeyframe?: Parameters<typeof PropertyPanel>[0]['onRemoveKeyframe'];
+    projectDefaults?: ProjectDefaults | null;
+  }): void {
+    root.render(
+      <PropertyPanel
+        currentTime={currentTime}
+        element={element}
+        mode={mode}
+        projectDefaults={projectDefaults}
+        onAddKeyframe={onAddKeyframe}
+        onDefaultsChange={onDefaultsChange}
+        onElementChange={onElementChange}
+        onElementCommit={onElementCommit}
+        onRemoveKeyframe={onRemoveKeyframe}
+      />,
     );
   }
 });

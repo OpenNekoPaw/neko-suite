@@ -47,6 +47,11 @@ const audio: MessageBundle = {
   'audio.sidePanel.show': 'Show side panel',
   'audio.sidePanel.hide': 'Hide side panel',
   'audio.sidePanel.tabs': 'Side panel sections',
+  'audio.rightDock.mode.label': 'Creation mode',
+  'audio.rightDock.mode.basic': 'Basic',
+  'audio.rightDock.mode.basic.description': 'AI cleanup and common audio controls',
+  'audio.rightDock.mode.professional': 'Professional',
+  'audio.rightDock.mode.professional.description': 'DAW editing, routing, and detailed processing',
 
   // Effects
   'audio.effects.title': 'Effects',

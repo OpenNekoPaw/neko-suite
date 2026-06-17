@@ -22,6 +22,11 @@ export const zhCN: MessageBundle = {
   'sketch.toolbar.ariaLabel': '绘图工具',
   'sketch.sidebar.toggle': '切换侧栏',
   'sketch.common.enabled': '已启用',
+  'sketch.rightDock.mode.label': '创作模式',
+  'sketch.rightDock.mode.basic': '基础',
+  'sketch.rightDock.mode.basic.description': 'AI 辅助绘画与核心绘制面板',
+  'sketch.rightDock.mode.professional': '专业',
+  'sketch.rightDock.mode.professional.description': '动画、滤镜、场景与精细工具',
 
   // Layer panel
   'sketch.layer.new': '新建图层',

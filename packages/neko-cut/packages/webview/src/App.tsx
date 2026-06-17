@@ -12,6 +12,7 @@ import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
 import { PropertyPanelInline } from './components/PropertyPanel/PropertyPanelInline';
 import { CUT_PROPERTY_PANEL_WIDTH_BOUNDS } from './components/PreviewControls.presenter';
+import { useTranslation } from './i18n/I18nContext';
 import { useEditorStore } from './stores/editor-store';
 import { getLogger } from './utils/logger';
 const logger = getLogger('App');
@@ -21,7 +22,10 @@ const DEFAULT_PREVIEW_RATIO = 0.5; // 默认 Preview 占 50%
 const MIN_PREVIEW_RATIO = 0.2; // Preview 最小 20%
 const MAX_PREVIEW_RATIO = 0.8; // Preview 最大 80%
 
+type CutRightDockMode = 'basic' | 'professional';
+
 function App() {
+  const { t } = useTranslation();
   const {
     project,
     isPlaying,
@@ -70,6 +74,7 @@ function App() {
   const lastSeekTimeRef = useRef<number>(currentTime); // Track last known currentTime
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [rightDockMode, setRightDockMode] = useState<CutRightDockMode>('basic');
 
   // Cross-extension drag-and-drop: allow dropping generated assets from agent (ADR-5 P1)
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -325,13 +330,34 @@ function App() {
                 minSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.minSize,
                 maxSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.maxSize,
                 onSizeChange: setPropertyPanelWidth,
-                children: <PropertyPanelInline />,
+                groups: {
+                  label: t('rightDock.mode.label'),
+                  activeId: rightDockMode,
+                  onActiveIdChange: (id) => setRightDockMode(toCutRightDockMode(id)),
+                  items: [
+                    {
+                      id: 'basic',
+                      label: t('rightDock.mode.basic'),
+                      description: t('rightDock.mode.basic.description'),
+                    },
+                    {
+                      id: 'professional',
+                      label: t('rightDock.mode.professional'),
+                      description: t('rightDock.mode.professional.description'),
+                    },
+                  ],
+                },
+                children: <PropertyPanelInline mode={rightDockMode} />,
               }
             : undefined
         }
       />
     </div>
   );
+}
+
+function toCutRightDockMode(id: string): CutRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
 }
 
 export default App;
