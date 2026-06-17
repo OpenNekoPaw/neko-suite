@@ -12,12 +12,14 @@ export type MessageListItemKind =
   | 'message'
   | 'content_block'
   | 'process_group'
+  | 'skill_notice'
   | 'thinking_indicator';
 
 export type MessageListProjectionItem =
   | MessageListMessageItemProjection
   | MessageListContentBlockItemProjection
   | MessageListProcessGroupItemProjection
+  | MessageListSkillNoticeItemProjection
   | MessageListThinkingItemProjection;
 
 export interface MessageListMessageItemProjection {
@@ -58,11 +60,24 @@ export interface MessageListThinkingItemProjection {
   estimatedHeight: number;
 }
 
+export interface MessageListSkillNoticeProjection {
+  skillName: string;
+  allowedTools?: readonly string[];
+}
+
+export interface MessageListSkillNoticeItemProjection {
+  kind: 'skill_notice';
+  notice: MessageListSkillNoticeProjection;
+  ownerMessageId: null;
+  estimatedHeight: number;
+}
+
 export interface MessageListProjectionInput {
   messages: readonly Message[];
   isThinking: boolean;
   streamingMessageId: string | null;
   plugins?: PluginsAvailable;
+  activeSkillNotice?: MessageListSkillNoticeProjection | null;
 }
 
 export interface MessageListProjection {
@@ -75,11 +90,13 @@ export interface MessageListProjection {
 const MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT = 80;
 const MESSAGE_LIST_ESTIMATED_CONTENT_BLOCK_HEIGHT = 60;
 const MESSAGE_LIST_THINKING_INDICATOR_HEIGHT = 50;
+const MESSAGE_LIST_SKILL_NOTICE_HEIGHT = 46;
 
 export function projectMessageList(input: MessageListProjectionInput): MessageListProjection {
   const showThinkingIndicator = input.isThinking && !input.streamingMessageId;
   const items = projectMessageListItems(input.messages, showThinkingIndicator, {
     plugins: input.plugins,
+    activeSkillNotice: input.activeSkillNotice,
   });
 
   return {
@@ -93,11 +110,20 @@ export function projectMessageList(input: MessageListProjectionInput): MessageLi
 export function projectMessageListItems(
   messages: readonly Message[],
   showThinkingIndicator: boolean,
-  options: Pick<MessageListProjectionInput, 'plugins'> = {},
+  options: Pick<MessageListProjectionInput, 'plugins' | 'activeSkillNotice'> = {},
 ): MessageListProjectionItem[] {
   const items: MessageListProjectionItem[] = [];
   let prevRole: Message['role'] | null = null;
   let prevTimestamp = 0;
+
+  if (options.activeSkillNotice) {
+    items.push({
+      kind: 'skill_notice',
+      notice: options.activeSkillNotice,
+      ownerMessageId: null,
+      estimatedHeight: MESSAGE_LIST_SKILL_NOTICE_HEIGHT,
+    });
+  }
 
   for (const message of messages) {
     const timeDiff = message.timestamp - prevTimestamp;

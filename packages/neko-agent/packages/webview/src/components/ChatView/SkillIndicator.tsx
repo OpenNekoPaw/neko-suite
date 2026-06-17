@@ -3,35 +3,39 @@
  *
  * Shows when a skill is actively injected into the conversation.
  */
+import { PackageIcon } from '@neko/shared/icons';
+import { useTranslation } from '@/i18n/I18nContext';
+
 export interface ActiveSkillIndicator {
   skillName: string;
-  allowedTools?: string[];
+  allowedTools?: readonly string[];
 }
 
 interface SkillIndicatorProps {
   skill: ActiveSkillIndicator;
-  onClear: () => void;
+  onClear?: () => void;
 }
 
 export function SkillIndicator({ skill, onClear }: SkillIndicatorProps) {
+  const { t } = useTranslation();
+
   return (
-    <div className="mx-4 my-1 px-3 py-1.5 rounded-md flex items-center gap-2 bg-[var(--vscode-textBlockQuote-background)] border border-[var(--vscode-textBlockQuote-border)]">
-      <span className="text-sm">🎯</span>
-      <span className="text-sm font-medium text-[var(--vscode-foreground)]">Skill 已激活:</span>
-      <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
-        {skill.skillName}
-      </code>
-      {skill.allowedTools && skill.allowedTools.length > 0 && (
-        <span className="text-xs text-[var(--vscode-descriptionForeground)]">
-          (工具限制: {skill.allowedTools.length})
+    <div className="agent-skill-notice" role="note" aria-label={t('chat.skill.active')}>
+      <span className="agent-skill-notice-icon" aria-hidden="true">
+        <PackageIcon size={14} />
+      </span>
+      <span className="agent-skill-notice-label">{t('chat.skill.active')}</span>
+      <code className="agent-skill-notice-name">{skill.skillName}</code>
+      {skill.allowedTools && skill.allowedTools.length > 0 ? (
+        <span className="agent-skill-notice-meta">
+          {t('chat.skill.toolLimit', { count: skill.allowedTools.length })}
         </span>
-      )}
-      <button
-        onClick={onClear}
-        className="ml-auto text-xs text-[var(--vscode-textLink-foreground)] hover:underline"
-      >
-        清除
-      </button>
+      ) : null}
+      {onClear ? (
+        <button type="button" onClick={onClear} className="agent-skill-notice-clear">
+          {t('chat.skill.clear')}
+        </button>
+      ) : null}
     </div>
   );
 }

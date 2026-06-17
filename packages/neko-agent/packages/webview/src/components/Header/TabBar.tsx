@@ -38,15 +38,18 @@ export function TabBar({ tabs, activeTabId, activeView, onSwitchTab, onCloseTab 
               aria-selected={isActive}
               aria-label={statusLabel ? `${tab.title} - ${statusLabel}` : tab.title}
             >
-              {tab.displayStatus ? (
+              <span className="agent-tab-title truncate">{tab.title}</span>
+              {tab.displayStatus && statusLabel ? (
                 <span
                   className={`agent-tab-status agent-tab-status-${tab.displayStatus}`}
                   data-status={tab.displayStatus}
-                  title={statusLabel ?? undefined}
+                  title={statusLabel}
                   aria-hidden="true"
-                />
+                >
+                  <span className="agent-tab-status-dot" />
+                  <span className="agent-tab-status-label">{statusLabel}</span>
+                </span>
               ) : null}
-              <span className="truncate">{tab.title}</span>
             </button>
             <button
               type="button"

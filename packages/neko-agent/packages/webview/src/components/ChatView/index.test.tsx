@@ -26,6 +26,14 @@ vi.mock('@/components/ChatView/InputArea', () => ({
   InputArea: () => <div data-testid="input-area" />,
 }));
 
+vi.mock('@/components/ChatView/MessageList', () => ({
+  MessageList: ({ activeSkillNotice }: { activeSkillNotice?: { skillName: string } | null }) => (
+    <div data-testid="message-list">
+      {activeSkillNotice ? <span>{activeSkillNotice.skillName}</span> : null}
+    </div>
+  ),
+}));
+
 vi.mock('@/components/ChatView/CharacterDialogueHeader', () => ({
   CharacterDialogueHeader: () => <div data-testid="character-dialogue-header" />,
 }));
@@ -52,6 +60,26 @@ describe('ChatView empty state', () => {
     expect(screen.queryByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Analyze current project structure/ })).toBeNull();
     expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
+  });
+
+  it('does not render a separate agent execution status row inside the chat body', () => {
+    renderChatView({
+      isThinking: true,
+      agentState: { phase: 'acting', toolName: 'ReadDocument', startedAt: Date.now() },
+    });
+
+    expect(screen.queryByText('Acting')).toBeNull();
+  });
+
+  it('passes active skill context into the conversation message list', () => {
+    renderChatView({
+      activeSkill: { skillName: 'comic-to-storyboard', allowedTools: ['ReadDocument'] },
+      onClearActiveSkill: vi.fn(),
+    });
+
+    expect(screen.getByTestId('message-list')).toBeTruthy();
+    expect(screen.getByText('comic-to-storyboard')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeNull();
   });
 });
 

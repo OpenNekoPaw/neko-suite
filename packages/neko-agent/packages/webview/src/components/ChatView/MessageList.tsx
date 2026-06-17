@@ -12,6 +12,7 @@ import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
+import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
   type MessageIdentityMap,
@@ -28,6 +29,8 @@ interface MessageListProps {
   streamingMessageId: string | null;
   activeConversationId: string | null;
   identities?: MessageIdentityMap;
+  activeSkillNotice?: ActiveSkillIndicator | null;
+  onClearActiveSkill?: () => void;
 }
 
 export function MessageList({
@@ -36,6 +39,8 @@ export function MessageList({
   streamingMessageId,
   activeConversationId,
   identities = DEFAULT_MESSAGE_IDENTITIES,
+  activeSkillNotice,
+  onClearActiveSkill,
 }: MessageListProps) {
   const { pluginsAvailable } = useMessageActions();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -45,8 +50,14 @@ export function MessageList({
 
   const projection = useMemo(
     () =>
-      projectMessageList({ messages, isThinking, streamingMessageId, plugins: pluginsAvailable }),
-    [messages, isThinking, streamingMessageId, pluginsAvailable],
+      projectMessageList({
+        messages,
+        isThinking,
+        streamingMessageId,
+        plugins: pluginsAvailable,
+        activeSkillNotice,
+      }),
+    [messages, isThinking, streamingMessageId, pluginsAvailable, activeSkillNotice],
   );
 
   const flattenedItems = projection.items;
@@ -147,7 +158,11 @@ export function MessageList({
               }}
             >
               <div className="agent-message-list-item py-0.5">
-                {item.kind === 'thinking_indicator' ? (
+                {item.kind === 'skill_notice' ? (
+                  <div className="px-3 py-1">
+                    <SkillIndicator skill={item.notice} onClear={onClearActiveSkill} />
+                  </div>
+                ) : item.kind === 'thinking_indicator' ? (
                   <ThinkingIndicator identity={identities.assistant} />
                 ) : item.kind === 'content_block' ? (
                   <ContentBlockItem

@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock } from '@neko-agent/types';
-import { projectMessageListItems } from '../message-list-presenter';
+import { projectMessageList, projectMessageListItems } from '../message-list-presenter';
 
 describe('message-list-presenter', () => {
+  it('projects an active skill notice as a conversation-scoped list item', () => {
+    const projection = projectMessageList({
+      messages: [],
+      isThinking: false,
+      streamingMessageId: null,
+      activeSkillNotice: {
+        skillName: 'comic-to-storyboard',
+        allowedTools: ['ReadDocument'],
+      },
+    });
+
+    expect(projection.items).toEqual([
+      {
+        kind: 'skill_notice',
+        notice: {
+          skillName: 'comic-to-storyboard',
+          allowedTools: ['ReadDocument'],
+        },
+        ownerMessageId: null,
+        estimatedHeight: 46,
+      },
+    ]);
+  });
+
   it('projects repeated assistant tool blocks as a single grouped list item', () => {
     const items = projectMessageListItems(
       [

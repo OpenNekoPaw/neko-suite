@@ -16,8 +16,7 @@ import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
-import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
-import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
+import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
 import { projectMessageIdentities } from '@/components/ChatView/message-identity';
@@ -107,9 +106,9 @@ export function ChatView({
   onAttachedFilesChange,
   selectedFileReferences,
   onSelectedFileReferencesChange,
-  agentState,
+  agentState: _agentState,
 }: ChatViewProps) {
-  const isEmpty = messages.length === 0 && !isThinking;
+  const isEmpty = messages.length === 0 && !isThinking && !activeSkill;
   const messageIdentities = useMemo(
     () =>
       projectMessageIdentities({
@@ -134,18 +133,6 @@ export function ChatView({
   return (
     <DropZone onFilesDropped={handleFilesDropped} disabled={isThinking}>
       <div className="agent-chat-view flex-1 flex flex-col overflow-hidden relative h-full">
-        {/* Active Skill Indicator */}
-        {activeSkill && onClearActiveSkill && (
-          <SkillIndicator skill={activeSkill} onClear={onClearActiveSkill} />
-        )}
-
-        {/* Agent State Indicator - shows when agent is thinking/acting/streaming */}
-        {agentState && (
-          <div className="px-3 py-1.5 border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)]">
-            <AgentStateIndicatorCompact agentState={agentState} />
-          </div>
-        )}
-
         {conversationKind === 'character-dialogue' && characterDialogueSession && (
           <CharacterDialogueHeader session={characterDialogueSession} />
         )}
@@ -183,6 +170,8 @@ export function ChatView({
               streamingMessageId={streamingMessageId}
               activeConversationId={activeConversationId}
               identities={messageIdentities}
+              activeSkillNotice={activeSkill}
+              onClearActiveSkill={onClearActiveSkill}
             />
           </MessageActionsProvider>
         )}

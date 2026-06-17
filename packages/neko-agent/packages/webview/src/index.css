@@ -1896,6 +1896,77 @@ body {
   }
 }
 
+.agent-skill-notice {
+  display: flex;
+  width: fit-content;
+  max-width: min(720px, 100%);
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--agent-accent) 8%, var(--agent-surface));
+  color: var(--agent-fg);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.agent-skill-notice-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent-accent) 16%, transparent);
+  color: var(--agent-accent);
+}
+
+.agent-skill-notice-label {
+  flex: 0 0 auto;
+  color: var(--agent-fg-secondary);
+  font-weight: 500;
+}
+
+.agent-skill-notice-name {
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--agent-fg) 9%, transparent);
+  color: var(--agent-fg);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-skill-notice-meta {
+  flex: 0 0 auto;
+  color: var(--agent-fg-secondary);
+}
+
+.agent-skill-notice-clear {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--agent-accent);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.agent-skill-notice-clear:hover,
+.agent-skill-notice-clear:focus-visible {
+  background: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+  outline: none;
+}
+
 .agent-card {
   background: color-mix(in srgb, var(--agent-elevated) 92%, transparent);
   border: 1px solid var(--agent-border);

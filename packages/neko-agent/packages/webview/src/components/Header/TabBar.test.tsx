@@ -73,6 +73,8 @@ describe('TabBar', () => {
     expect(screen.getByRole('tab', { name: 'Draft - Running' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Review - Completed' })).toBeTruthy();
     expect(screen.getByText('Draft')).toBeTruthy();
+    expect(screen.getByText('Running')).toBeTruthy();
+    expect(screen.getByText('Completed')).toBeTruthy();
     expect(document.querySelector('[data-status="running"]')).toBeTruthy();
     expect(document.querySelector('[data-status="completed"]')).toBeTruthy();
   });

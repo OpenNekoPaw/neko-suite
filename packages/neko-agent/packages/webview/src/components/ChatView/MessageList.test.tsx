@@ -132,6 +132,34 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByText(/Analyze source pages/)).toBeTruthy();
     expect(screen.getByText('ReadDocument')).toBeTruthy();
   });
+
+  it('renders the active skill notice inside the virtualized conversation list', () => {
+    const onClearActiveSkill = vi.fn();
+    virtualItems = [{ index: 0, key: 'skill-notice', start: 0 }];
+
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          activeSkillNotice={{
+            skillName: 'comic-to-storyboard',
+            allowedTools: ['ReadDocument'],
+          }}
+          onClearActiveSkill={onClearActiveSkill}
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.getByText('Skill active')).toBeTruthy();
+    expect(screen.getByText('comic-to-storyboard')).toBeTruthy();
+    expect(screen.getByText('Tool limit: 1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(onClearActiveSkill).toHaveBeenCalledOnce();
+  });
 });
 
 function renderWithI18n(node: React.ReactElement) {

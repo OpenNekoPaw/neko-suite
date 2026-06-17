@@ -26,6 +26,9 @@ export const chat = {
   'chat.emptyState.suggestion1': 'Analyze current project structure',
   'chat.emptyState.suggestion2': 'Help me optimize the timeline',
   'chat.emptyState.suggestion3': 'Write a narration script',
+  'chat.skill.active': 'Skill active',
+  'chat.skill.toolLimit': 'Tool limit: {count}',
+  'chat.skill.clear': 'Clear',
   'chat.structuredArtifact.generating': 'Generating structured content...',
 
   'chat.input.placeholder':
