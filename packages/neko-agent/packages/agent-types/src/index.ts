@@ -19,9 +19,13 @@ export type {
 } from './message';
 export {
   COMPOSITE_CONTENT_FENCE_LANGUAGES,
+  extractCompositeContentFenceCandidates,
   extractCompositeContentBlocks,
+  isCompositeContentFenceLanguage,
+  parseCompositeContentJsonCandidates,
   parseCompositeContentJson,
   type CompositeContentExtraction,
+  type CompositeContentFenceCandidate,
 } from './composite-content-contract';
 export type {
   CloseCurrentConversationTabInput,

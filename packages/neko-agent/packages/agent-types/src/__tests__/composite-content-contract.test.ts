@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractCompositeContentBlocks, parseCompositeContentJson } from '../index';
+import {
+  extractCompositeContentBlocks,
+  extractCompositeContentFenceCandidates,
+  parseCompositeContentJson,
+} from '../index';
 
 describe('composite content contract', () => {
   it('extracts fenced storyboard composite blocks from markdown', () => {
@@ -371,6 +375,97 @@ Done.`);
           ],
         },
       ],
+    });
+  });
+
+  it('extracts uppercase neko fenced composite artifacts', () => {
+    const result = extractCompositeContentBlocks(`Summary.
+
+\`\`\`NEKO
+{
+  "schemaVersion": 1,
+  "kind": "composite-artifact",
+  "artifactId": "artifact-storyboard",
+  "title": "Comic artifact",
+  "blocks": [
+    {
+      "blockId": "storyboard-domain",
+      "kind": "domain",
+      "title": "Storyboard Payload",
+      "domainKind": "StoryboardTable",
+      "schemaVersion": 1,
+      "payload": {
+        "schemaVersion": 1,
+        "kind": "storyboard-table",
+        "title": "Opening",
+        "scenes": [
+          {
+            "sceneId": "scene-1",
+            "sceneTitle": "Page 1",
+            "shots": [
+              {
+                "shotNumber": 1,
+                "duration": 3,
+                "visualDescription": "Panel action and composition.",
+                "characterAction": "Rin enters the frame.",
+                "imageStrategy": "use-as-reference"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+\`\`\`
+
+Done.`);
+
+    expect(result.text).toBe('Summary.\n\nDone.');
+    expect(result.composites[0]).toMatchObject({
+      template: 'storyboard-table',
+      title: 'Storyboard Payload',
+      storyboardTable: {
+        kind: 'storyboard-table',
+        title: 'Opening',
+      },
+      sections: [
+        {
+          heading: 'Page 1 / Shot 1',
+          content: 'Panel action and composition.',
+          layout: 'table-row',
+        },
+      ],
+    });
+  });
+
+  it('extracts shared fenced JSON candidates from neko aliases and envelopes', () => {
+    const result = extractCompositeContentFenceCandidates(`Payload.
+
+\`\`\`NEKO
+{
+  "kind": "neko-composite",
+  "composites": [
+    {
+      "schemaVersion": 1,
+      "kind": "composite-artifact",
+      "artifactId": "artifact-review",
+      "title": "Review Artifact",
+      "blocks": [
+        { "blockId": "summary", "kind": "text", "text": "Review summary." }
+      ]
+    }
+  ]
+}
+\`\`\``);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.language).toBe('neko');
+    expect(result[0]?.value).toMatchObject({
+      schemaVersion: 1,
+      kind: 'composite-artifact',
+      artifactId: 'artifact-review',
+      title: 'Review Artifact',
     });
   });
 

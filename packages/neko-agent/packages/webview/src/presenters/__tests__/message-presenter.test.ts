@@ -622,6 +622,38 @@ describe('message presenter', () => {
     });
   });
 
+  it('extracts uppercase neko composite artifacts when completing local streaming blocks', () => {
+    const created = projectStreamingTextIntoMessages({
+      messages: [],
+      streamingMessageId: null,
+      messageId: 'msg-1',
+      content:
+        'Storyboard\n\n```NEKO\n{"schemaVersion":1,"kind":"composite-artifact","artifactId":"artifact-storyboard","blocks":[{"blockId":"storyboard-domain","kind":"domain","domainKind":"StoryboardTable","payload":{"schemaVersion":1,"kind":"storyboard-table","title":"Opening","scenes":[{"sceneId":"scene-1","sceneTitle":"Page 1","shots":[{"shotNumber":1,"duration":3,"visualDescription":"Panel action and composition.","characterAction":"Rin enters the frame.","imageStrategy":"use-as-reference"}]}]}}]}\n```',
+      now: () => 1000,
+    });
+
+    const completed = projectStreamingCompleteIntoMessages({
+      messages: created.messages,
+      streamingMessageId: 'msg-1',
+    });
+
+    expect(completed.messages[0]?.content).toBe('Storyboard');
+    expect(completed.messages[0]?.contentBlocks).toHaveLength(2);
+    expect(completed.messages[0]?.contentBlocks?.[1]?.composite).toMatchObject({
+      template: 'storyboard-table',
+      storyboardTable: {
+        kind: 'storyboard-table',
+        title: 'Opening',
+      },
+      sections: [
+        {
+          heading: 'Page 1 / Shot 1',
+          content: 'Panel action and composition.',
+        },
+      ],
+    });
+  });
+
   it('appends queued system messages', () => {
     expect(
       projectQueuedMessageIntoMessages({

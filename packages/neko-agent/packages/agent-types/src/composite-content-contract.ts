@@ -11,15 +11,27 @@ import {
   type StoryboardValidationDiagnostic,
 } from '@neko/shared';
 
-export const COMPOSITE_CONTENT_FENCE_LANGUAGES = ['neko-composite', 'neko-composite-json'] as const;
+export const COMPOSITE_CONTENT_FENCE_LANGUAGES = [
+  'neko',
+  'neko-json',
+  'neko-composite',
+  'neko-composite-json',
+  'json',
+] as const;
 
 export interface CompositeContentExtraction {
   readonly text: string;
   readonly composites: readonly CompositeBlockData[];
 }
 
+export interface CompositeContentFenceCandidate {
+  readonly language: string;
+  readonly rawJson: string;
+  readonly value: unknown;
+}
+
 interface CompositeContentEnvelope {
-  readonly kind?: 'neko-composite';
+  readonly kind?: string;
   readonly composite?: unknown;
   readonly composites?: unknown;
 }
@@ -30,13 +42,14 @@ const MAX_STORYBOARD_DIAGNOSTIC_SECTIONS = 8;
 const STORYBOARD_DOMAIN_KIND = 'StoryboardTable';
 const ANIMATION_PLAN_DOMAIN_KIND = 'AnimationPlan';
 
-const COMPOSITE_CONTENT_FENCE_PATTERN =
-  /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
+const COMPOSITE_CONTENT_FENCE_LANGUAGE_SET = new Set<string>(COMPOSITE_CONTENT_FENCE_LANGUAGES);
+const COMPOSITE_CONTENT_FENCE_PATTERN = /```([^\n`]*)\n([\s\S]*?)```/g;
 
 export function extractCompositeContentBlocks(markdown: string): CompositeContentExtraction {
   const composites: CompositeBlockData[] = [];
   const text = markdown
-    .replace(COMPOSITE_CONTENT_FENCE_PATTERN, (match, json: string) => {
+    .replace(COMPOSITE_CONTENT_FENCE_PATTERN, (match, info: string, json: string) => {
+      if (!isCompositeContentFenceLanguage(info)) return match;
       const parsed = parseCompositeContentJson(json);
       if (parsed.length === 0) return match;
       for (const composite of parsed) {
@@ -50,7 +63,29 @@ export function extractCompositeContentBlocks(markdown: string): CompositeConten
   return { text, composites };
 }
 
-export function parseCompositeContentJson(json: string): readonly CompositeBlockData[] {
+export function isCompositeContentFenceLanguage(info: string | undefined): boolean {
+  const language = normalizeFenceLanguage(info);
+  return language !== '' && COMPOSITE_CONTENT_FENCE_LANGUAGE_SET.has(language);
+}
+
+export function extractCompositeContentFenceCandidates(
+  markdown: string,
+): readonly CompositeContentFenceCandidate[] {
+  const candidates: CompositeContentFenceCandidate[] = [];
+  for (const match of markdown.matchAll(COMPOSITE_CONTENT_FENCE_PATTERN)) {
+    const info = match[1];
+    const rawJson = match[2];
+    if (!isCompositeContentFenceLanguage(info) || !rawJson) continue;
+
+    const language = normalizeFenceLanguage(info);
+    for (const value of parseCompositeContentJsonCandidates(rawJson)) {
+      candidates.push({ language, rawJson, value });
+    }
+  }
+  return candidates;
+}
+
+export function parseCompositeContentJsonCandidates(json: string): readonly unknown[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -58,16 +93,18 @@ export function parseCompositeContentJson(json: string): readonly CompositeBlock
     return [];
   }
 
-  const candidates = Array.isArray(parsed)
-    ? parsed
-    : isRecord(parsed)
-      ? readEnvelopeCandidates(parsed)
-      : [];
+  return Array.isArray(parsed) ? parsed : isRecord(parsed) ? readEnvelopeCandidates(parsed) : [];
+}
 
-  return candidates.flatMap((candidate) => {
+export function parseCompositeContentJson(json: string): readonly CompositeBlockData[] {
+  return parseCompositeContentJsonCandidates(json).flatMap((candidate) => {
     const composite = normalizeCompositeBlock(candidate);
     return composite ? [composite] : [];
   });
+}
+
+function normalizeFenceLanguage(info: string | undefined): string {
+  return info?.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
 }
 
 function readEnvelopeCandidates(envelope: CompositeContentEnvelope): readonly unknown[] {

@@ -9,6 +9,7 @@ import type {
 } from '@neko/shared';
 import { isEntityMemoryContribution } from '@neko/shared';
 import type { AgentEvent } from '@neko/agent';
+import { extractCompositeContentFenceCandidates } from '@neko-agent/types';
 
 export interface EntityMemoryContributionAutomationDecision {
   readonly kind: string;
@@ -297,37 +298,7 @@ function readArtifactFromTransfer(
 }
 
 function parseCompositeJsonFenceCandidates(markdown: string): readonly unknown[] {
-  const candidates: unknown[] = [];
-  const pattern = /```(?:neko-composite|neko-composite-json|json)\s*\n([\s\S]*?)```/g;
-  for (const match of markdown.matchAll(pattern)) {
-    const rawJson = match[1];
-    if (!rawJson) {
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(rawJson) as unknown;
-      candidates.push(...readCompositeEnvelopeCandidates(parsed));
-    } catch {
-      // Ignore invalid presentation JSON. Validation diagnostics are handled by renderers.
-    }
-  }
-  return candidates;
-}
-
-function readCompositeEnvelopeCandidates(value: unknown): readonly unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (!isRecord(value)) {
-    return [];
-  }
-  if (Array.isArray(value['composites'])) {
-    return value['composites'];
-  }
-  if (value['composite'] !== undefined) {
-    return [value['composite']];
-  }
-  return [value];
+  return extractCompositeContentFenceCandidates(markdown).map((candidate) => candidate.value);
 }
 
 function readCompositeArtifactId(value: unknown): string | undefined {

@@ -88,7 +88,7 @@ export function parseMarkdown(input: string): MarkdownNode[] {
     }
 
     // Code block
-    const codeMatch = /^```(\w*)/.exec(line);
+    const codeMatch = /^```([^\s`]*)/.exec(line);
     if (codeMatch) {
       const language = codeMatch[1] || undefined;
       const codeLines: string[] = [];

@@ -26,6 +26,7 @@ export const chat = {
   'chat.emptyState.suggestion1': '分析当前项目结构',
   'chat.emptyState.suggestion2': '帮我优化时间轴剪辑',
   'chat.emptyState.suggestion3': '生成一段旁白脚本',
+  'chat.structuredArtifact.generating': '正在生成结构化内容...',
 
   'chat.input.placeholder': '输入任何问题... (/ 命令, @ 文件, Shift+Enter 换行)',
   'chat.input.thinkingPlaceholder': '输入下一条消息... (将加入队列)',

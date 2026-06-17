@@ -542,6 +542,64 @@ describe('AgentStreamProcessor', () => {
       });
     });
 
+    it('automates entity memory contributions embedded in uppercase neko fenced artifacts', async () => {
+      const contribution = makeEntityMemoryContribution();
+      const automation = {
+        processContribution: vi.fn().mockResolvedValue({
+          contributionId: contribution.contributionId,
+          decisions: [{ kind: 'matched-candidate', candidateId: 'candidate:hero' }],
+        }),
+      };
+      processor = new AgentStreamProcessor({
+        entityMemoryContributionAutomation: automation,
+      });
+      const text =
+        '分析完成。\n\n```NEKO\n' +
+        JSON.stringify({
+          schemaVersion: 1,
+          kind: 'composite-artifact',
+          artifactId: 'comic-storyboard-plan',
+          title: 'Comic Storyboard Plan',
+          extensions: {
+            'neko.entityMemoryContributionPayload': contribution,
+          },
+          blocks: [{ blockId: 'summary', kind: 'text', text: 'summary' }],
+        }) +
+        '\n```';
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc-memory',
+              name: 'ReadImage',
+              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-memory',
+              success: true,
+              data: { imagePaths: ['/tmp/page-1.jpg'] },
+            },
+          },
+          { type: 'text', content: text },
+          { type: 'done' },
+        ]),
+        callbacks,
+      );
+
+      expect(automation.processContribution).toHaveBeenCalledWith({
+        contribution,
+        toolCallId: 'tc-memory',
+        sourceArtifactId: 'comic-storyboard-plan',
+      });
+    });
+
     it('projects document image paths to webview URIs only for webview delivery', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
