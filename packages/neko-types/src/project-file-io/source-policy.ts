@@ -1,4 +1,5 @@
 import {
+  classifyWorkspaceMediaPath,
   contractWorkspaceMediaPath,
   resolveWorkspaceMediaPath,
   type WorkspaceMediaPathContext,
@@ -84,6 +85,11 @@ export function applyPortableSourcePathPolicy<TDocument>(
           }),
         );
       }
+      continue;
+    }
+
+    const classification = classifyWorkspaceMediaPath(descriptor.path);
+    if (classification.kind === 'workspace-relative' || classification.kind === 'variable') {
       continue;
     }
 

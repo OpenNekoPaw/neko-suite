@@ -212,8 +212,9 @@ export class MessageHandler {
       const normalizedContent = await normalizePathsForSave(content, this.model.uri.fsPath, {
         documentUri: this.model.uri,
       });
-      const success = await this.model.updateProjectData(normalizedContent);
-      if (success) {
+      const updated = await this.model.updateProjectData(normalizedContent);
+      const saved = updated && (await this.model.save());
+      if (saved) {
         this.webview.postMessage({ type: 'saved' });
       } else {
         this.sendError('Failed to save project');

@@ -51,6 +51,7 @@ export function useVSCodeMessaging() {
   } = useEditorStore();
   const projectRef = useRef(project);
   const lastSavedRef = useRef<string>('');
+  const pendingSaveRef = useRef<string | null>(null);
 
   projectRef.current = project;
 
@@ -86,7 +87,7 @@ export function useVSCodeMessaging() {
       const content = JSON.stringify(projectRef.current);
       // Only save if content has changed
       if (content !== lastSavedRef.current) {
-        lastSavedRef.current = content;
+        pendingSaveRef.current = content;
         logger.info('Manual save triggered, tracks:', projectRef.current.tracks?.length);
         sendMessage({ type: 'save', content: projectRef.current });
       } else {
@@ -215,7 +216,16 @@ export function useVSCodeMessaging() {
 
         case 'saved':
           // Confirmation that file was saved
+          if (pendingSaveRef.current) {
+            lastSavedRef.current = pendingSaveRef.current;
+            pendingSaveRef.current = null;
+          }
           logger.info('Project saved successfully');
+          break;
+
+        case 'error':
+          pendingSaveRef.current = null;
+          logger.error('Error from extension:', message.message);
           break;
 
         case 'externalChange':
@@ -269,10 +279,6 @@ export function useVSCodeMessaging() {
               }
             }
           }
-          break;
-
-        case 'error':
-          logger.error('Error from extension:', message.message);
           break;
 
         case 'exportProgress':

@@ -7,7 +7,9 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   PathResolver,
+  applyPortableSourcePathPolicy,
   contractWorkspaceMediaPath,
+  nkvSourcePathPolicy,
   resolveWorkspaceMediaPath,
   type ProjectData,
   type TimelineElement,
@@ -105,7 +107,7 @@ async function contractPath(
   absolutePath: string,
   baseDir: string,
   options: CutMediaPathContextOptions = {},
-): Promise<string> {
+): Promise<string | undefined> {
   const context = createCutWorkspaceMediaPathContext(baseDir, options);
   const commandContext = createAssetPathCommandContext(context, options);
 
@@ -129,9 +131,7 @@ async function contractPath(
     return contracted.path;
   }
 
-  let relativePath = path.relative(baseDir, absolutePath);
-  relativePath = relativePath.split(path.sep).join('/');
-  return relativePath;
+  return undefined;
 }
 
 /**
@@ -208,30 +208,40 @@ export async function normalizePathsForSave(
 
   const baseDir = path.dirname(projectFilePath);
   const contextOptions = { ...options, projectFilePath };
+  const context = createCutWorkspaceMediaPathContext(baseDir, contextOptions);
+  const precontracted = await contractSourcesWithAssetCommand(project, baseDir, contextOptions);
+  const result = applyPortableSourcePathPolicy(precontracted, nkvSourcePathPolicy, { context });
 
-  const tracks = await Promise.all(
-    project.tracks.map(async (track) => ({
-      ...track,
-      elements: await Promise.all(
-        track.elements.map(async (element) => {
-          if (
-            (element.type === 'media' ||
-              element.type === 'audio' ||
-              element.type === 'scene3d' ||
-              element.type === 'puppet') &&
-            typeof element.src === 'string' &&
-            path.isAbsolute(element.src)
-          ) {
-            const portable = await contractPath(element.src, baseDir, contextOptions);
-            return { ...element, src: portable } as TimelineElement;
-          }
-          return element;
-        }),
-      ),
-    })),
+  if (result.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+    throw new Error(
+      `Unable to normalize NKV media paths: ${result.diagnostics
+        .map((diagnostic) => diagnostic.message)
+        .join('; ')}`,
+    );
+  }
+
+  return result.document;
+}
+
+async function contractSourcesWithAssetCommand(
+  project: ProjectData,
+  baseDir: string,
+  options: CutMediaPathContextOptions,
+): Promise<ProjectData> {
+  const replacements = await Promise.all(
+    nkvSourcePathPolicy
+      .listSources(project)
+      .filter((descriptor) => path.isAbsolute(descriptor.path))
+      .map(async (descriptor) => {
+        const contracted = await contractPath(descriptor.path, baseDir, options);
+        return contracted ? { descriptor, path: contracted } : undefined;
+      }),
   );
-
-  return { ...project, tracks };
+  const compact = replacements.filter(
+    (replacement): replacement is NonNullable<(typeof replacements)[number]> =>
+      replacement !== undefined,
+  );
+  return compact.length > 0 ? nkvSourcePathPolicy.replaceSources(project, compact) : project;
 }
 
 export async function resolveProjectMediaSourcesForRuntime(
@@ -285,7 +295,7 @@ export function createCutWorkspaceMediaPathContext(
   const owningWorkspaceRoot =
     options.owningWorkspaceRoot ??
     findOwningWorkspaceRoot(documentPath ?? documentDir, workspaceRoots) ??
-    workspaceRoots[0];
+    documentDir;
   const pathVariables = new Map<string, string>();
   if (owningWorkspaceRoot) {
     pathVariables.set('WORKSPACE', owningWorkspaceRoot);

@@ -12,8 +12,13 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { ProjectData } from '@neko/shared';
-import { createDefaultProject } from '@neko/shared';
+import type { ProjectData, ProjectFileOps } from '@neko/shared';
+import {
+  ProjectFileStore,
+  createDefaultProject,
+  createDefaultProjectFormatCodecRegistry,
+  nkvSourcePathPolicy,
+} from '@neko/shared';
 import { createServiceId } from '../base';
 
 export interface ProjectSessionInfo {
@@ -39,7 +44,14 @@ export const IProjectSessionService =
 
 export class ProjectSessionService implements IProjectSessionService {
   private session: { info: ProjectSessionInfo; project: ProjectData } | null = null;
-  private pendingWrite: Promise<void> | null = null;
+  private readonly store: ProjectFileStore;
+
+  constructor(fileOps: ProjectFileOps = createNodeProjectFileOps()) {
+    this.store = new ProjectFileStore({
+      registry: createDefaultProjectFormatCodecRegistry(),
+      fileOps,
+    });
+  }
 
   async load(filePath: string): Promise<void> {
     if (!filePath || typeof filePath !== 'string') {
@@ -47,24 +59,20 @@ export class ProjectSessionService implements IProjectSessionService {
     }
 
     const normalizedPath = path.resolve(filePath);
-    const content = await fs.readFile(normalizedPath, 'utf8');
+    const result = await this.store.load<ProjectData>({
+      filePath: normalizedPath,
+      formatId: 'nkv',
+    });
 
-    let project: ProjectData;
-    if (!content || content.trim() === '') {
-      project = createDefaultProject();
-    } else {
-      try {
-        project = JSON.parse(content) as ProjectData;
-      } catch (error) {
-        throw new Error(
-          `Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    if (!result.document || !result.ok) {
+      throw new Error(
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to load NKV project'),
+      );
     }
 
     this.session = {
       info: { loaded: true, path: normalizedPath, source: 'file' },
-      project,
+      project: result.document,
     };
   }
 
@@ -113,17 +121,25 @@ export class ProjectSessionService implements IProjectSessionService {
       return;
     }
 
-    const doWrite = async (): Promise<void> => {
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
-    };
-
-    // 串行化写入，避免并发覆盖
-    if (this.pendingWrite) {
-      await this.pendingWrite;
+    const result = await this.store.save({
+      filePath,
+      formatId: 'nkv',
+      document: data,
+      sourcePolicy: nkvSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: {
+          owningWorkspaceRoot: path.dirname(filePath),
+          workspaceRoots: [path.dirname(filePath)],
+          documentDir: path.dirname(filePath),
+          pathVariables: new Map([['PROJECT', path.dirname(filePath)]]),
+        },
+      },
+    });
+    if (!result.ok) {
+      throw new Error(
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
+      );
     }
-    this.pendingWrite = doWrite();
-    await this.pendingWrite;
-    this.pendingWrite = null;
   }
 
   clear(): void {
@@ -133,4 +149,27 @@ export class ProjectSessionService implements IProjectSessionService {
   dispose(): void {
     this.clear();
   }
+}
+
+function createNodeProjectFileOps(): ProjectFileOps {
+  return {
+    readFile: async (filePath) => new Uint8Array(await fs.readFile(filePath)),
+    writeFile: async (filePath, content) => {
+      await fs.writeFile(filePath, content);
+    },
+    deleteFile: async (filePath) => {
+      await fs.rm(filePath, { force: true });
+    },
+    renameFile: async (fromPath, toPath) => {
+      await fs.rename(fromPath, toPath);
+    },
+  };
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

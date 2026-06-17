@@ -174,7 +174,10 @@ describe('normalizePathsForSave', () => {
   it('converts absolute src paths to relative', async () => {
     const el = makeElement({ id: 'e1', src: '/home/user/project/assets/clip.mp4' });
     const project = makeProject([makeTrack([el])]);
-    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko', {
+      owningWorkspaceRoot: '/home/user/project',
+      workspaceRoots: ['/home/user/project'],
+    });
     const resultEl = result.tracks[0]!.elements[0]! as unknown as { src: string };
     expect(resultEl.src).toBe('assets/clip.mp4');
   });
@@ -210,7 +213,10 @@ describe('normalizePathsForSave', () => {
     const el = makeElement({ id: 'e1', src: '/home/user/project/assets/clip.mp4' });
     const project = makeProject([makeTrack([el])]);
     const originalSrc = (project.tracks[0]!.elements[0]! as MediaElement).src;
-    await normalizePathsForSave(project, '/home/user/project/project.neko');
+    await normalizePathsForSave(project, '/home/user/project/project.neko', {
+      owningWorkspaceRoot: '/home/user/project',
+      workspaceRoots: ['/home/user/project'],
+    });
     expect((project.tracks[0]!.elements[0]! as MediaElement).src).toBe(originalSrc);
   });
 
@@ -222,7 +228,10 @@ describe('normalizePathsForSave', () => {
       makeTrack([e1], { id: 'track-1' }),
       makeTrack([e2, e3], { id: 'track-2' }),
     ]);
-    const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
+    const result = await normalizePathsForSave(project, '/home/user/project/project.neko', {
+      owningWorkspaceRoot: '/home/user/project',
+      workspaceRoots: ['/home/user/project'],
+    });
     expect((result.tracks[0]!.elements[0]! as unknown as { src: string }).src).toBe('a.mp4');
     expect((result.tracks[1]!.elements[0]! as unknown as { src: string }).src).toBe('sub/b.mp4');
   });
@@ -231,6 +240,17 @@ describe('normalizePathsForSave', () => {
     const project = makeProject([]);
     const result = await normalizePathsForSave(project, '/home/user/project/project.neko');
     expect(result.tracks).toEqual([]);
+  });
+
+  it('rejects non-portable absolute media paths instead of saving ../ references', async () => {
+    const el = makeElement({ id: 'e1', src: '/outside/media/clip.mp4' });
+    const project = makeProject([makeTrack([el])]);
+    await expect(
+      normalizePathsForSave(project, '/home/user/project/project.neko', {
+        owningWorkspaceRoot: '/home/user/project',
+        workspaceRoots: ['/home/user/project'],
+      }),
+    ).rejects.toThrow('absolute local path that cannot be made portable');
   });
 });
 

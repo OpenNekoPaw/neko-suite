@@ -299,6 +299,23 @@ describe('portable source path policy', () => {
     expect(element?.type === 'media' ? element.src : undefined).toBe('${MEDIA}/clip.mp4');
   });
 
+  it('keeps already portable relative sources during save', () => {
+    const result = applyPortableSourcePathPolicy(
+      createProject('relative', 'media/clip.mp4'),
+      createNkvSourcePolicy(),
+      {
+        context: {
+          owningWorkspaceRoot: '/workspace/project',
+          workspaceRoots: ['/workspace/project'],
+          pathVariables: new Map([['WORKSPACE', '/workspace/project']]),
+        },
+      },
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.replacements).toEqual([]);
+  });
+
   it('reports missing variables, missing sources, and unauthorized roots during resolution', () => {
     const missingVariable = resolveProjectSourceDiagnostics(
       createProject('missing-var', '${MEDIA}/clip.mp4'),
