@@ -328,6 +328,13 @@ export interface NkpViewportState {
   readonly zoom: number;
 }
 
+export interface NkpSceneAuthoringDiagnostic {
+  readonly code: 'wrong-domain-field';
+  readonly severity: 'error';
+  readonly message: string;
+  readonly path: readonly (string | number)[];
+}
+
 export interface NkpLive2dBundleReference {
   /** Path to the source ZIP, stored as relative path or ${VAR}/path. */
   path: string;
@@ -463,6 +470,53 @@ export function isNkpProjectData(value: unknown): value is NkpProjectData {
     (value['faceParameters'] === undefined || isNumberRecord(value['faceParameters'])) &&
     isNkpViewportState(value['viewport'])
   );
+}
+
+const NKP_SCENE_AUTHORING_FIELD_MESSAGES: ReadonlyMap<string, string> = new Map([
+  ['scene2d', '2D Scene authoring state belongs to .nkm profile: 2d, not .nkp.'],
+  ['sprites', 'Sprite scene authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['tilemap', 'Tilemap authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['tilemaps', 'Tilemap authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['sceneCamera', 'Scene camera authoring belongs to .nkm profile: 2d or live, not .nkp.'],
+  ['stageCamera', 'Stage camera authoring belongs to .nkm profile: live, not .nkp.'],
+  ['cameraRig', 'Scene camera rig authoring belongs to .nkm, not .nkp.'],
+  ['sceneLights', 'Scene light authoring belongs to .nkm profile: 2d or 3d, not .nkp.'],
+  ['lights', 'Scene light authoring belongs to .nkm profile: 2d or 3d, not .nkp.'],
+  ['parallax', 'Parallax scene authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['parallaxLayers', 'Parallax scene authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['particles', 'Particle scene authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['particleEmitters', 'Particle scene authoring belongs to .nkm profile: 2d, not .nkp.'],
+  ['sceneGraph', 'Generic scene graph authoring belongs to .nkm, not .nkp.'],
+  ['sceneSwitching', 'Scene switching belongs to .nkm profile: live, not .nkp.'],
+  ['stage', 'Live stage authoring belongs to .nkm profile: live, not .nkp.'],
+]);
+
+export function diagnoseNkpSceneAuthoringFields(value: unknown): NkpSceneAuthoringDiagnostic[] {
+  if (!isRecord(value)) return [];
+
+  const diagnostics: NkpSceneAuthoringDiagnostic[] = [];
+  for (const [field, message] of NKP_SCENE_AUTHORING_FIELD_MESSAGES) {
+    if (Object.prototype.hasOwnProperty.call(value, field)) {
+      diagnostics.push({
+        code: 'wrong-domain-field',
+        severity: 'error',
+        message: `${field}: ${message}`,
+        path: [field],
+      });
+    }
+  }
+
+  const puppet = value['puppet'];
+  if (isRecord(puppet) && Object.prototype.hasOwnProperty.call(puppet, 'scene')) {
+    diagnostics.push({
+      code: 'wrong-domain-field',
+      severity: 'error',
+      message: 'puppet.scene: Generic scene authoring belongs to .nkm, not .nkp.',
+      path: ['puppet', 'scene'],
+    });
+  }
+
+  return diagnostics;
 }
 
 export function isNkpNativeProjectData(value: unknown): value is NkpNativeProjectData {

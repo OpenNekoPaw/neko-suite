@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import nativePuppetV2Fixture from '../__fixtures__/native-puppet-v2.json';
 import {
+  diagnoseNkpSceneAuthoringFields,
   isNkpNativeProjectData,
   isNkpProjectData,
   isPuppetCommandAck,
@@ -151,5 +152,25 @@ describe('nkp bundle contract', () => {
         result: null,
       }),
     ).toBe(true);
+  });
+
+  it('reports generic 2D scene authoring fields as wrong-domain NKP data', () => {
+    const diagnostics = diagnoseNkpSceneAuthoringFields({
+      version: '2.0',
+      name: 'Wrong Domain',
+      puppet: { src: './model.moc3', scene: { nodes: [] } },
+      tilemaps: [],
+      sceneCamera: { position: [0, 0], zoom: 1 },
+      parameters: {},
+      viewport: { zoom: 1 },
+    });
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'wrong-domain-field', path: ['tilemaps'] }),
+        expect.objectContaining({ code: 'wrong-domain-field', path: ['sceneCamera'] }),
+        expect.objectContaining({ code: 'wrong-domain-field', path: ['puppet', 'scene'] }),
+      ]),
+    );
   });
 });

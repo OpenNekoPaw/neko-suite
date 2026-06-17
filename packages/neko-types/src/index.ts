@@ -33,6 +33,9 @@ export * from './theme/index';
 // Path resolution (PathResolver + variable expansion)
 export * from './path/index';
 
+// Project file I/O contracts and host-agnostic helpers
+export * from './project-file-io/index';
+
 // Entity URI (entity:// protocol parsing + building)
 export * from './entity-uri/index';
 

@@ -156,6 +156,12 @@ export {
   createVSCodeWorkspacePathResolver,
 } from './workspace-media-path';
 export type { VSCodeWorkspaceMediaPathContextInput } from './workspace-media-path';
+export { createVSCodeProjectFileIoAdapter } from './project-file-io';
+export type {
+  VSCodeProjectFileContextInput,
+  VSCodeProjectFileIoAdapter,
+  VSCodeProjectFileIoAdapterOptions,
+} from './project-file-io';
 
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {
