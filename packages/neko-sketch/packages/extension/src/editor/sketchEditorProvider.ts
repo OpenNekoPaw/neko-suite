@@ -6,8 +6,14 @@
  */
 import * as vscode from 'vscode';
 import {
+  createDefaultProjectFormatCodecRegistry,
+  nksSourcePathPolicy,
+  ProjectFileStore,
+} from '@neko/shared';
+import {
   createProjectSnapshotPackage,
   createFocusedWebviewRegistry,
+  createVSCodeProjectFileIoAdapter,
   injectLocaleAttribute,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
@@ -115,6 +121,11 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private activeDocument: vscode.CustomDocument | undefined;
+  private readonly projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  private readonly projectFileStore = new ProjectFileStore({
+    registry: createDefaultProjectFormatCodecRegistry(),
+    fileOps: this.projectFileAdapter.fileOps,
+  });
 
   // External providers for VSCode integration
   private outlineProvider: LayerOutlineProvider | undefined;
@@ -704,6 +715,41 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     };
   }
 
+  private async loadSketchProject(uri: vscode.Uri): Promise<{
+    readonly ok: boolean;
+    readonly data: NksDocument | null;
+    readonly diagnostics: readonly { readonly message: string }[];
+  }> {
+    const result = await this.projectFileStore.load<NksDocument>({
+      filePath: uri.fsPath,
+      formatId: 'nks',
+      sourcePolicy: nksSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: this.projectFileAdapter.createWorkspaceMediaPathContext({ documentUri: uri }),
+      },
+    });
+    return {
+      ok: result.ok,
+      data: result.document ?? null,
+      diagnostics: result.diagnostics,
+    };
+  }
+
+  private async saveSketchProject(uri: vscode.Uri, data: NksDocument): Promise<void> {
+    const result = await this.projectFileStore.save({
+      filePath: uri.fsPath,
+      formatId: 'nks',
+      document: data,
+      sourcePolicy: nksSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: this.projectFileAdapter.createWorkspaceMediaPathContext({ documentUri: uri }),
+      },
+    });
+    if (!result.ok) {
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKS'));
+    }
+  }
+
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
@@ -714,9 +760,14 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.focusedWebviews.syncFocus(document.uri.toString());
         await this.postFeatureFlags(webviewPanel);
         try {
-          const fileData = await vscode.workspace.fs.readFile(document.uri);
-          const content = Buffer.from(fileData).toString('utf-8');
-          const data = content.trim() ? (JSON.parse(content) as NksDocument) : null;
+          const result = await this.loadSketchProject(document.uri);
+          const data = result.data;
+          if (!result.ok && result.diagnostics.length > 0) {
+            logger.warn(
+              'NKS validation errors:',
+              result.diagnostics.map((diagnostic) => diagnostic.message).join('; '),
+            );
+          }
           webviewPanel.webview.postMessage({ type: 'document:load', data });
           if (data) {
             this.syncOutline(data);
@@ -760,9 +811,8 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'document:save': {
         try {
-          const data = message.data as Record<string, unknown>;
-          const content = JSON.stringify(data, null, 2);
-          await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
+          const data = message.data as NksDocument;
+          await this.saveSketchProject(document.uri, data);
           if (data) {
             this.syncOutline(data as unknown as NksDocument);
           }
@@ -1430,4 +1480,12 @@ function appendIssueSample(samples: readonly string[], layerPath: string): reado
     return samples;
   }
   return [...samples, layerPath];
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

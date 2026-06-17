@@ -59,8 +59,21 @@ vi.mock('vscode', () => ({
       delete: vi.fn(async (uri: InstanceType<typeof mockState.MockUri>) => {
         mockState.deletedUris.add(uri.toString());
       }),
+      rename: vi.fn(
+        async (
+          from: InstanceType<typeof mockState.MockUri>,
+          to: InstanceType<typeof mockState.MockUri>,
+        ) => {
+          const content = mockState.fsWrites.get(from.toString());
+          if (content) {
+            mockState.fsWrites.set(to.toString(), content);
+          }
+          mockState.fsWrites.delete(from.toString());
+        },
+      ),
       readFile: mockState.readFile,
     },
+    workspaceFolders: [],
     getConfiguration: () => ({
       get: (_key: string, defaultValue: boolean) => defaultValue,
     }),
@@ -86,6 +99,32 @@ vi.mock('vscode', () => ({
 
 vi.mock('@neko/shared/vscode/extension', () => ({
   injectLocaleAttribute: () => '',
+  createVSCodeProjectFileIoAdapter: () => ({
+    fileOps: {
+      readFile: async (filePath: string) =>
+        mockState.readFile(mockState.MockUri.file(filePath)) as Promise<Uint8Array>,
+      writeFile: async (filePath: string, data: Uint8Array) => {
+        mockState.fsWrites.set(`file://${filePath}`, data);
+      },
+      deleteFile: async (filePath: string) => {
+        mockState.deletedUris.add(`file://${filePath}`);
+      },
+      renameFile: async (fromPath: string, toPath: string) => {
+        const content = mockState.fsWrites.get(`file://${fromPath}`);
+        if (content) {
+          mockState.fsWrites.set(`file://${toPath}`, content);
+        }
+        mockState.fsWrites.delete(`file://${fromPath}`);
+      },
+    },
+    createWorkspaceMediaPathContext: () => ({
+      workspaceRoots: [],
+      pathVariables: new Map(),
+      allowedRoots: [],
+    }),
+    toFilePath: (uriOrPath: string | { fsPath: string }) =>
+      typeof uriOrPath === 'string' ? uriOrPath : uriOrPath.fsPath,
+  }),
   createFocusedWebviewRegistry: () => ({
     createController: vi.fn(() => ({
       dispose: vi.fn(),

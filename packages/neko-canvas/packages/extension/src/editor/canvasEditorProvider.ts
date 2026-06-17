@@ -20,6 +20,7 @@ import {
   ThumbnailResourceCacheProvider,
   createVSCodeWorkspaceMediaPathContext,
   createProjectSnapshotPackage,
+  createVSCodeProjectFileIoAdapter,
   hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
   normalizeLocalFilePath,
@@ -49,7 +50,9 @@ import {
   isCreativeEntityRef,
   isProjectedCanvasData,
   isProjectedCanvasSource,
-  loadNkc,
+  createDefaultProjectFormatCodecRegistry,
+  nkcSourcePathPolicy,
+  ProjectFileStore,
   createProjectionAdapterRegistry,
   NEKO_EXTENSION_IDS,
   normalizeNarrativePreviewFeatureToggles,
@@ -224,6 +227,14 @@ function assertCanvasNodeType(type: CanvasNodeType | undefined): void {
   if (type !== undefined && !isCanvasNodeType(type)) {
     throw new Error(`Unsupported Canvas node type "${type}"`);
   }
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }
 
 function readCreativeEntityChangedRefs(event: unknown): CreativeEntityChangedRef[] {
@@ -666,6 +677,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     createProjectionAdapterRegistry();
   private readonly projectionSubscriptions = new Map<string, ProjectionDisposable>();
   private readonly focusedWebviews: IFocusedWebviewRegistry;
+  private readonly projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  private readonly projectFileStore = new ProjectFileStore({
+    registry: createDefaultProjectFormatCodecRegistry(),
+    fileOps: this.projectFileAdapter.fileOps,
+  });
   private entityChangeSubscription: vscode.Disposable | undefined;
 
   constructor(
@@ -2056,6 +2072,51 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return text;
   }
 
+  private async loadCanvasProject(uri: vscode.Uri): Promise<{
+    readonly ok: boolean;
+    readonly data: CanvasData | null;
+    readonly diagnostics: readonly { readonly message: string }[];
+  }> {
+    const result = await this.projectFileStore.load<CanvasData>({
+      filePath: uri.fsPath,
+      formatId: 'nkc',
+      sourcePolicy: nkcSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: this.createCanvasProjectFileContext(uri),
+      },
+    });
+    return {
+      ok: result.ok,
+      data: result.document ?? null,
+      diagnostics: result.diagnostics,
+    };
+  }
+
+  private async saveCanvasProject(uri: vscode.Uri, data: CanvasData): Promise<void> {
+    const result = await this.projectFileStore.save({
+      filePath: uri.fsPath,
+      formatId: 'nkc',
+      document: data,
+      sourcePolicy: nkcSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: this.createCanvasProjectFileContext(uri),
+      },
+    });
+    if (!result.ok) {
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKC'));
+    }
+  }
+
+  private createCanvasProjectFileContext(uri: vscode.Uri) {
+    return this.projectFileAdapter.createWorkspaceMediaPathContext({
+      documentUri: uri,
+      allowedRoots: [
+        path.dirname(uri.fsPath),
+        ...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+      ],
+    });
+  }
+
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
@@ -2067,14 +2128,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.canvasDataReadyDocumentUris.delete(document.uri.toString());
         // Read file content and send to webview
         try {
-          const fileData = await vscode.workspace.fs.readFile(document.uri);
-          const content = Buffer.from(fileData).toString('utf-8');
-          const result = content.trim() ? loadNkc(content) : null;
-          const data = result?.data ?? null;
-          if (result && !result.validation.valid) {
+          const result = await this.loadCanvasProject(document.uri);
+          const data = result.data;
+          if (!result.ok && result.diagnostics.length > 0) {
             logger.warn(
               'NKC validation errors:',
-              result.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+              result.diagnostics.map((diagnostic) => diagnostic.message).join('; '),
             );
           }
           if (data) {
@@ -2170,13 +2229,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const targetUri = isProjectedCanvasData(projectedCanvas)
             ? this.getProjectionCacheUri(projectedCanvas.projectionSource)
             : document.uri;
-          const content = JSON.stringify(data, null, 2);
           if (targetUri.toString() !== document.uri.toString()) {
             await vscode.workspace.fs.createDirectory(
               vscode.Uri.file(path.dirname(targetUri.fsPath)),
             );
+            await vscode.workspace.fs.writeFile(
+              targetUri,
+              Buffer.from(JSON.stringify(data, null, 2), 'utf-8'),
+            );
+          } else {
+            await this.saveCanvasProject(targetUri, data as unknown as CanvasData);
           }
-          await vscode.workspace.fs.writeFile(targetUri, Buffer.from(content, 'utf-8'));
           // Sync outline & status bar on every save
           this.rememberCanvasSnapshot(document, data);
           if (this.isActiveCanvasDocument(document)) {
