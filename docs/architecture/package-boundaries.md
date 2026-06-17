@@ -72,6 +72,13 @@
 
 `packages/neko-ui` 是 L2 React UI 公共层，当前公共入口包括 `viewport`、`primitives`、`creative`、`icons`、`hooks`、`workbench`、`keyboard`、`utils` 和 `test-utils`。
 
+新增 Webview/React 组件前必须做组件复用审计：
+
+- 先搜索 `packages/neko-ui/src`、当前包 `components/`、`hooks/`、`shared/`、相邻领域包和已有测试，确认是否已有按钮、选择器、面板、空状态、工具栏、列表、卡片、输入区、Header/Input 或 creative primitive 可增强。
+- 优先增强既有组件的 prop、slot、variant、composition hook 或 package-local adapter，而不是复制一个视觉相近的新组件。
+- 仅当职责、状态生命周期、交互契约、可访问性语义或领域边界明显不同，且增强旧组件会增加耦合或破坏既有使用方时，才新增组件。
+- 新增组件要在 OpenSpec、PR 或交付说明中记录复用审计结论：查过哪些组件、为何不复用、为何不抽到 `@neko/ui`、新增测试覆盖什么。
+
 约束：
 
 - 不导入 `vscode`、Node-only module、功能包或 `acquireVsCodeApi`。
