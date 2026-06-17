@@ -183,6 +183,7 @@ body,
    ============================================================================= */
 
 .canvas-right-node-tree-panel {
+  display: flex;
   flex: 0 0 auto;
   min-width: 220px;
   max-width: 420px;
