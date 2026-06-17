@@ -200,6 +200,29 @@ describe('@neko/ui TreeView', () => {
     expect(host.querySelector('[aria-label="Unlocked"]')).toBeNull();
   });
 
+  it('uses an explicit height as the scroll viewport even for small trees', () => {
+    act(() => {
+      root.render(
+        <TreeView
+          height={96}
+          items={Array.from(
+            { length: 20 },
+            (_, index): TreeViewItem => ({
+              id: `item-${index}`,
+              label: `Item ${index}`,
+            }),
+          )}
+          virtualization={{ threshold: 200 }}
+        />,
+      );
+    });
+
+    const tree = host.querySelector<HTMLElement>('[role="tree"]');
+    expect(tree?.style.height).toBe('96px');
+    expect(tree?.style.overflow).toBe('auto');
+    expect(host.querySelector('[data-virtualized="false"]')).not.toBeNull();
+  });
+
   it('can delegate lock toggles, row actions, context menus, and drag start', () => {
     const onAction = vi.fn();
     const onContextMenu = vi.fn();

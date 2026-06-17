@@ -56,11 +56,13 @@ interface FlatTreeItem {
   readonly selected: boolean;
 }
 
+const DEFAULT_TREE_VIEW_HEIGHT = 240;
+
 export function TreeView({
   className,
   expandedIds,
   focusedId,
-  height = 240,
+  height,
   items,
   label = 'Tree',
   onFocusItem,
@@ -80,6 +82,7 @@ export function TreeView({
   visibilityDisabled,
   visibilityLabels = DEFAULT_TREE_VIEW_VISIBILITY_LABELS,
 }: TreeViewProps): React.ReactElement {
+  const viewportHeight = height ?? DEFAULT_TREE_VIEW_HEIGHT;
   const defaultExpandedIds = useMemo(() => collectDefaultExpandedIds(items), [items]);
   const itemIds = useMemo(() => collectTreeItemIds(items), [items]);
   const knownItemIdsRef = useRef<ReadonlySet<string>>(new Set());
@@ -101,12 +104,16 @@ export function TreeView({
   const useVirtualization = options.enabled && flatItems.length >= options.threshold;
   const visibleRows = useVirtualization
     ? getVirtualRows(flatItems, {
-        height,
+        height: viewportHeight,
         itemHeight: options.itemHeight,
         overscan: options.overscan ?? 0,
         scrollTop,
       })
     : { rows: flatItems, offsetTop: 0, totalHeight: flatItems.length * options.itemHeight };
+  const viewportStyle =
+    height !== undefined || useVirtualization
+      ? { height: viewportHeight, minHeight: 0, overflow: 'auto' }
+      : undefined;
   const toggleExpand = (id: string, expanded: boolean): void => {
     if (!controlledExpanded) {
       setInternalExpandedIds((current) => {
@@ -161,7 +168,7 @@ export function TreeView({
         className,
       )}
       role="tree"
-      style={useVirtualization ? { height } : undefined}
+      style={viewportStyle}
       tabIndex={0}
       {...getKeyboardBoundaryMetadata({
         scope: 'tree',
