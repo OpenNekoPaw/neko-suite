@@ -25,9 +25,11 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
 
   if (!document) {
     return (
-      <div className="empty-state">
-        <h2>{t('script.empty.title')}</h2>
-        <p>{t('script.empty.hint')}</p>
+      <div className="story-screenplay-scroll">
+        <div className="empty-state">
+          <h2>{t('script.empty.title')}</h2>
+          <p>{t('script.empty.hint')}</p>
+        </div>
       </div>
     );
   }
@@ -115,7 +117,11 @@ export function ScriptRenderer({ document }: ScriptRendererProps) {
     i++;
   }
 
-  return <div className="screenplay">{rendered}</div>;
+  return (
+    <div className="story-screenplay-scroll">
+      <div className="screenplay">{rendered}</div>
+    </div>
+  );
 }
 
 // Simple inline renderers for less common elements

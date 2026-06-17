@@ -41,6 +41,7 @@ describe('ScriptRenderer', () => {
   it('renders empty screenplay when document has no elements', () => {
     const doc: FountainDocument = { titlePage: null, elements: [] };
     const { container } = renderWithI18n(<ScriptRenderer document={doc} />);
+    expect(container.querySelector('.story-screenplay-scroll')).toBeInTheDocument();
     expect(container.querySelector('.screenplay')).toBeInTheDocument();
   });
 

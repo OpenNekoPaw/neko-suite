@@ -142,6 +142,11 @@ body {
   overflow: hidden;
 }
 
+.story-screenplay-scroll {
+  height: 100%;
+  overflow: auto;
+}
+
 .story-table-scroll {
   height: 100%;
   overflow: auto;
