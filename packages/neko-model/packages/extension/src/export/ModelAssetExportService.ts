@@ -219,13 +219,22 @@ function parseNkmProjectData(value: unknown): NkmProjectData {
   return {
     version: parseVersion(value.version),
     name: parseNonEmptyString(value.name, 'name'),
+    profile: parseNkmProfile(value.profile, 'profile'),
     model: parseModelRef(value.model),
+    scene2d: parseOptionalRecord(value.scene2d, 'scene2d'),
+    live: parseOptionalRecord(value.live, 'live'),
     faceParams: parseFaceParams(value.faceParams, 'faceParams'),
     customClips: parseCustomClips(value.customClips, 'customClips'),
     camera: parseCamera(value.camera, 'camera'),
     viewport: parseViewport(value.viewport, 'viewport'),
     editorState: parseEditorState(value.editorState, 'editorState'),
   };
+}
+
+function parseNkmProfile(value: unknown, field: string): NkmProjectData['profile'] {
+  if (value === undefined) return undefined;
+  if (value === '2d' || value === '3d' || value === 'live') return value;
+  throw new Error(`Invalid .nkm project: ${field} must be 2d, 3d, or live.`);
 }
 
 function parseVersion(value: unknown): number {
@@ -243,6 +252,14 @@ function parseModelRef(value: unknown): NkmProjectData['model'] {
     return { src: value.src };
   }
   throw new Error('Invalid .nkm project: model.src must be a string or null.');
+}
+
+function parseOptionalRecord(value: unknown, field: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error(`Invalid .nkm project: ${field} must be an object.`);
+  }
+  return value;
 }
 
 function parseFaceParams(value: unknown, field: string): Record<string, number> {

@@ -1,20 +1,21 @@
 # Neko Puppet
 
-> Live2D MOC3 骨骼动画编辑器：参数驱动 + bevy_animation 回放 + 60fps WebSocket 实时流
+> Live2D/Puppet 角色编辑器：参数驱动 + motion/expression + 60fps WebSocket 实时流
 
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
 - 架构：Extension Host（CustomEditorProvider .nkp）+ Webview（React 18）+ neko-engine（runtime-puppet sidecar）
 - 2D 绘画：独立子插件 [neko-sketch](../neko-sketch/)
+- 2D Scene：由 [neko-model](../neko-model/) 的 `.nkm profile: 2d` 负责；Puppet 不保存 tilemap、scene camera、2D light、parallax、particle 或 generic scene graph 真值。
 
 ## Quick Reference
 
-- **职责**：Live2D MOC3 立绘预览、参数滑块驱动、骨骼动画回放、WebSocket 实时流（供 neko-live）
+- **职责**：`.nkp profile: live2d` 的 Live2D/MOC3 预览、参数滑块驱动、motion/expression/physics/tracking 映射，以及 `.nkp profile: neko-puppet` 的 native Puppet rig/BlendShape/动画编辑
 - **入口**：`packages/extension/src/extension.ts`
 - **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 runtime-puppet）
 - **激活依赖**：`neko-engine`（extensionDependency，runtime-puppet sidecar）
-- **文件格式**：`.nkp`（JSON 项目）、`.moc3`（Live2D MOC3 二进制）
+- **文件格式**：`.nkp`（Character/Puppet JSON 项目）、`.moc3`（Live2D MOC3 二进制）；generic 2D Scene 使用 `.nkm profile: 2d`
 - **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏承接导入、适配视图、洋葱皮开关等常用命令，并通过底部显隐组控制右侧面板；viewport 展示表面保持长显，不再单独渲染横向 viewport 工具条；右侧 NodeTree / Parameters / ControlDrivers / Animation 面板栈使用可持久化 ResizeHandle，默认 280px，宽度约束为 200-400px。当前没有独立被动状态投影，也不在 Webview 重建状态栏或顶栏。
 
 ## Architecture
@@ -80,6 +81,7 @@ Webview → Extension:
 | MOC3 clean-room parser | Zero external dependency; clean-room implementation based on OpenL2D spec |
 | WS /v1/puppets/stream | Real-time face-tracking (neko-live) requires <2ms latency; HTTP round-trip not sufficient at 60fps |
 | Split from neko-sketch | Independent install granularity; sketch is pure frontend, puppet needs engine + @neko/neko-client |
+| 2D Scene stays in neko-model | `.nkm profile: 2d` owns sprite/tilemap/light/camera/parallax/particle scene truth; `.nkp` owns character parameters, motion, expression, physics, and tracking |
 
 ## Technology Stack
 

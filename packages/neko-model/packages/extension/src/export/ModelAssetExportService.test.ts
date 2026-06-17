@@ -46,6 +46,32 @@ describe('ModelAssetExportService', () => {
     expect(fs.files.has('/repo/out/hero-config.nkmc.manifest.json')).toBe(true);
   });
 
+  it('accepts .nkm profile: 2d scene projects for config export', async () => {
+    const fs = createFs({
+      '/repo/scene.nkm': JSON.stringify({
+        ...projectFixture(),
+        name: '2D Scene',
+        profile: '2d',
+        model: { src: null },
+        scene2d: {
+          sprites: [{ id: 'sprite-1', assetRef: './hero.png' }],
+          camera: { position: [0, 0], zoom: 1 },
+        },
+      }),
+    });
+    const service = new ModelAssetExportService({ fs });
+
+    await service.exportConfig({
+      sourcePath: '/repo/scene.nkm',
+      outputPath: '/repo/out/scene-config.nkmc',
+    });
+
+    expect(JSON.parse(String(fs.files.get('/repo/out/scene-config.nkmc')))).toMatchObject({
+      format: 'nkmc',
+      faceParams: { Blink: 0.5 },
+    });
+  });
+
   it('rejects malformed .nkm project data before export', async () => {
     const fs = createFs({
       '/repo/broken.nkm': JSON.stringify({
@@ -83,6 +109,7 @@ function projectFixture() {
   return {
     version: 2,
     name: 'Hero',
+    profile: '3d',
     model: { src: './hero.glb' },
     faceParams: { Blink: 0.5 },
     customClips: [
