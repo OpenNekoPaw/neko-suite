@@ -19,10 +19,10 @@
  * }
  *
  * Data flow:
- * 1. Open .nka → loadNka() → cache project data → probe tracks → waveforms
+ * 1. Open .nka → ProjectFileStore → cache project data → probe tracks → waveforms
  * 2. Send project:init to Webview (projectData + waveforms)
  * 3. Webview edits → operationApplied → apply to cache → fire onDidChangeCustomDocument
- * 4. Save → saveNka(cache) → write .nka
+ * 4. Save → ProjectFileStore(cache) → write .nka
  */
 
 import * as vscode from 'vscode';
@@ -42,6 +42,9 @@ import type {
 } from '@neko/shared';
 import {
   contractWorkspaceMediaPath,
+  createDefaultProjectFormatCodecRegistry,
+  nkaSourcePathPolicy,
+  ProjectFileStore,
   resolveWorkspaceMediaPath,
   type WorkspaceMediaPathContext,
 } from '@neko/shared';
@@ -49,6 +52,7 @@ import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
   createProjectSnapshotPackage,
+  createVSCodeProjectFileIoAdapter,
   createVSCodeWorkspaceMediaPathContext,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
@@ -66,7 +70,6 @@ import {
   buildMixConfig,
   CURRENT_NKA_VERSION,
   invertOperation,
-  loadNka,
   saveNka,
   type AudioProjectData,
   type EditOperation,
@@ -171,6 +174,11 @@ export class AudioProjectProvider
   private readonly _projectCompatibilityCache = new Map<string, NkaCompatibilityMetadata>();
   private readonly _documents = new Map<string, vscode.CustomDocument>();
   private readonly _focusedWebviews: IFocusedWebviewRegistry;
+  private readonly _projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  private readonly _projectFileStore = new ProjectFileStore({
+    registry: createDefaultProjectFormatCodecRegistry(),
+    fileOps: this._projectFileAdapter.fileOps,
+  });
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentEditEvent<vscode.CustomDocument>
@@ -284,9 +292,8 @@ export class AudioProjectProvider
 
     // Normalize paths for portable .nka files
     const normalized = await this.normalizePathsForSave(cached, document.uri);
-    const content = await this.serializeProjectForSave(document.uri, normalized);
-    if (content === null) return;
-    await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
+    const saved = await this.saveProjectWithStore(document.uri, document.uri, normalized);
+    if (!saved) return;
     this._projectCompatibilityCache.set(docKey, {
       loadedVersion: CURRENT_NKA_VERSION,
       currentVersion: CURRENT_NKA_VERSION,
@@ -305,9 +312,8 @@ export class AudioProjectProvider
     if (!cached) return;
 
     const normalized = await this.normalizePathsForSave(cached, destination);
-    const content = await this.serializeProjectForSave(document.uri, normalized);
-    if (content === null) return;
-    await vscode.workspace.fs.writeFile(destination, Buffer.from(content, 'utf-8'));
+    const saved = await this.saveProjectWithStore(destination, document.uri, normalized);
+    if (!saved) return;
     this._projectCompatibilityCache.set(destination.toString(), {
       loadedVersion: CURRENT_NKA_VERSION,
       currentVersion: CURRENT_NKA_VERSION,
@@ -1062,20 +1068,17 @@ export class AudioProjectProvider
 
       if (!projectData) {
         // First open: read from disk
-        const raw = await vscode.workspace.fs.readFile(nkaUri);
-        const content = Buffer.from(raw).toString('utf-8');
-        const nkaResult = loadNka(content);
-        if (!nkaResult.validation.valid) {
-          logger.warn(
-            'NKA validation errors:',
-            nkaResult.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
-          );
+        const loaded = await this.loadProjectWithStore(nkaUri);
+        if (!loaded.projectData) {
+          throw new Error(formatProjectFileDiagnostics(loaded.diagnostics, 'Failed to load NKA'));
         }
-        projectData = nkaResult.data;
+        projectData = loaded.projectData;
         this._projectDataCache.set(docKey, projectData);
-        this._projectCompatibilityCache.set(docKey, nkaResult.compatibility);
-        if (nkaResult.compatibility.warnings.length > 0) {
-          logger.warn('NKA compatibility warnings:', nkaResult.compatibility.warnings.join('; '));
+        if (loaded.compatibility) {
+          this._projectCompatibilityCache.set(docKey, loaded.compatibility);
+          if (loaded.compatibility.warnings.length > 0) {
+            logger.warn('NKA compatibility warnings:', loaded.compatibility.warnings.join('; '));
+          }
         }
       }
 
@@ -1137,9 +1140,9 @@ export class AudioProjectProvider
 
     // Fallback: read from disk
     try {
-      const raw = await vscode.workspace.fs.readFile(nkaUri);
-      const nkaResult = loadNka(Buffer.from(raw).toString('utf-8'));
-      const parsed = nkaResult.data;
+      const loaded = await this.loadProjectWithStore(nkaUri);
+      const parsed = loaded.projectData;
+      if (!parsed) return null;
 
       for (const track of parsed.tracks) {
         for (const element of track.elements) {
@@ -1433,10 +1436,7 @@ export class AudioProjectProvider
     };
   }
 
-  private async serializeProjectForSave(
-    sourceUri: vscode.Uri,
-    project: AudioProjectData,
-  ): Promise<string | null> {
+  private async serializeProjectForSave(sourceUri: vscode.Uri): Promise<boolean> {
     const compatibility = this._projectCompatibilityCache.get(sourceUri.toString());
     if (compatibility?.readOnly) {
       const choice = await vscode.window.showWarningMessage(
@@ -1449,11 +1449,57 @@ export class AudioProjectProvider
       );
       if (choice !== vscode.l10n.t('Save and Downgrade')) {
         logger.info('Cancelled future-version NKA downgrade save');
-        return null;
+        return false;
       }
     }
 
-    return saveNka(project);
+    return true;
+  }
+
+  private async loadProjectWithStore(nkaUri: vscode.Uri): Promise<{
+    readonly projectData?: AudioProjectData;
+    readonly diagnostics: readonly { readonly message: string }[];
+    readonly compatibility?: NkaCompatibilityMetadata;
+  }> {
+    const context = this.createWorkspaceMediaPathContext(nkaUri);
+    const result = await this._projectFileStore.load<AudioProjectData>({
+      filePath: nkaUri.fsPath,
+      formatId: 'nka',
+      sourcePolicy: nkaSourcePathPolicy,
+      sourcePolicyOptions: {
+        context,
+        fileExists: isExistingLocalFile,
+        isPathAuthorized: (filePath) => isPathAuthorized(filePath, context.allowedRoots),
+      },
+    });
+    return {
+      projectData: result.document,
+      diagnostics: result.diagnostics,
+      compatibility: result.loadResult?.compatibility as NkaCompatibilityMetadata | undefined,
+    };
+  }
+
+  private async saveProjectWithStore(
+    targetUri: vscode.Uri,
+    sourceUri: vscode.Uri,
+    project: AudioProjectData,
+  ): Promise<boolean> {
+    if (!(await this.serializeProjectForSave(sourceUri))) {
+      return false;
+    }
+    const result = await this._projectFileStore.save({
+      filePath: targetUri.fsPath,
+      formatId: 'nka',
+      document: project,
+      sourcePolicy: nkaSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: this.createWorkspaceMediaPathContext(targetUri),
+      },
+    });
+    if (!result.ok) {
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKA'));
+    }
+    return true;
   }
 
   // =========================================================================
@@ -1467,4 +1513,12 @@ export class AudioProjectProvider
     this._projectCompatibilityCache.clear();
     this._documents.clear();
   }
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }
