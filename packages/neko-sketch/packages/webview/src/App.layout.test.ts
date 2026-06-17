@@ -68,7 +68,7 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/rightDock=\{\s*showSidebar\s*\?/);
     expect(appSource).toMatch(/id: 'sketch-right-sidebar'/);
     expect(appSource).toMatch(/className: 'sketch-right-sidebar'/);
-    expect(appSource).toMatch(/contentClassName: 'sketch-right-sidebar-stack'/);
+    expect(appSource).toMatch(/contentClassName: 'sketch-right-sidebar-content'/);
     expect(appSource).toMatch(/resizeHandleClassName: 'sketch-right-sidebar-resize-handle'/);
     expect(appSource).toMatch(/size: sidebarWidth/);
     expect(appSource).toMatch(/<SketchInspectorStack/);

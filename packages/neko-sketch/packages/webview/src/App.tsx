@@ -609,7 +609,7 @@ export function App() {
               ? {
                   id: 'sketch-right-sidebar',
                   className: 'sketch-right-sidebar',
-                  contentClassName: 'sketch-right-sidebar-stack',
+                  contentClassName: 'sketch-right-sidebar-content',
                   resizeHandleClassName: 'sketch-right-sidebar-resize-handle',
                   size: sidebarWidth,
                   minSize: 220,

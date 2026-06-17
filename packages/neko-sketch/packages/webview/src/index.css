@@ -279,6 +279,14 @@ html, body, #root {
   overflow-y: auto;
 }
 
+.sketch-right-sidebar-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sketch-inspector-compact {
   --sketch-inspector-pad-x: 12px;
   --sketch-inspector-row-h: 30px;
