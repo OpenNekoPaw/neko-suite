@@ -34,13 +34,11 @@ export interface CreativeWorkbenchShellProps {
   readonly main: React.ReactNode;
   readonly mainKind: CreativeWorkbenchMainKind;
   readonly rightDock?: CreativeWorkbenchRightDockProps;
-  readonly rightPanel?: React.ReactNode;
   readonly bottomPanel?: React.ReactNode;
   readonly className?: string;
   readonly bodyClassName?: string;
   readonly leftRailClassName?: string;
   readonly mainClassName?: string;
-  readonly rightPanelClassName?: string;
   readonly bottomPanelClassName?: string;
 }
 
@@ -63,6 +61,16 @@ interface CreativeWorkbenchRightDockBaseProps {
   readonly disabled?: boolean;
 }
 
+export interface CreativeWorkbenchResizePersistenceApi {
+  getState(): unknown;
+  setState(state: unknown): void;
+}
+
+export interface CreativeWorkbenchRightDockResizePersistenceOptions {
+  readonly api?: CreativeWorkbenchResizePersistenceApi | null;
+  readonly persistDebounceMs?: number;
+}
+
 export interface CreativeWorkbenchControlledRightDockProps extends CreativeWorkbenchRightDockBaseProps {
   readonly size: number;
   readonly onSizeChange: (size: number) => void;
@@ -73,7 +81,7 @@ export interface CreativeWorkbenchControlledRightDockProps extends CreativeWorkb
 export interface CreativeWorkbenchPersistedRightDockProps extends CreativeWorkbenchRightDockBaseProps {
   readonly panelId: string;
   readonly defaultSize: number;
-  readonly resizePersistence?: Pick<PersistedResizeOptions, 'api' | 'persistDebounceMs'>;
+  readonly resizePersistence?: CreativeWorkbenchRightDockResizePersistenceOptions;
   readonly size?: never;
   readonly onSizeChange?: never;
 }
@@ -139,8 +147,6 @@ export function CreativeWorkbenchShell({
   mainClassName,
   mainKind,
   rightDock,
-  rightPanel,
-  rightPanelClassName,
 }: CreativeWorkbenchShellProps): React.ReactElement {
   return (
     <div className={cn('neko-creative-workbench-shell', className)}>
@@ -160,11 +166,6 @@ export function CreativeWorkbenchShell({
           ) : null}
         </main>
         {rightDock ? <CreativeWorkbenchRightDock {...rightDock} /> : null}
-        {!rightDock && rightPanel ? (
-          <aside className={cn('neko-creative-workbench-right-panel', rightPanelClassName)}>
-            {rightPanel}
-          </aside>
-        ) : null}
       </div>
     </div>
   );
@@ -189,7 +190,7 @@ function CreativeWorkbenchPersistedRightDock(
       minSize: props.minSize,
       maxSize: props.maxSize,
     },
-    resizePersistence,
+    toPersistedResizeOptions(resizePersistence),
   );
 
   return (
@@ -199,6 +200,27 @@ function CreativeWorkbenchPersistedRightDock(
       onSizeChange={resize.setSize}
     />
   );
+}
+
+function toPersistedResizeOptions(
+  options: CreativeWorkbenchRightDockResizePersistenceOptions | undefined,
+): PersistedResizeOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  const { api, persistDebounceMs } = options;
+  if (api === undefined || api === null) {
+    return { api, persistDebounceMs };
+  }
+
+  return {
+    persistDebounceMs,
+    api: {
+      getState: <T = unknown,>() => api.getState() as T | undefined,
+      setState: <T = unknown,>(state: T) => api.setState(state),
+    },
+  };
 }
 
 function CreativeWorkbenchControlledRightDock(
