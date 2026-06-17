@@ -41,7 +41,10 @@ describe('Sketch CollapsiblePanel shared UI migration', () => {
     });
 
     const header = host.querySelector<HTMLButtonElement>('.neko-collapsible-header');
+    const panel = host.querySelector<HTMLElement>('.neko-collapsible');
     expect(header).not.toBeNull();
+    expect(panel?.classList.contains('expanded')).toBe(true);
+    expect(header?.dataset.expanded).toBe('true');
     expect(header?.textContent).toContain('sketch.panel.layers');
     expect(header?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('[data-testid="panel-body"]')).not.toBeNull();
@@ -51,6 +54,8 @@ describe('Sketch CollapsiblePanel shared UI migration', () => {
     });
 
     expect(header?.getAttribute('aria-expanded')).toBe('false');
+    expect(header?.dataset.expanded).toBe('false');
+    expect(panel?.classList.contains('collapsed')).toBe(true);
     expect(host.querySelector('[data-testid="panel-body"]')).toBeNull();
   });
 
@@ -64,7 +69,10 @@ describe('Sketch CollapsiblePanel shared UI migration', () => {
     });
 
     const header = host.querySelector<HTMLButtonElement>('.neko-collapsible-header');
+    const panel = host.querySelector<HTMLElement>('.neko-collapsible');
     expect(header?.getAttribute('aria-expanded')).toBe('false');
+    expect(header?.dataset.expanded).toBe('false');
+    expect(panel?.classList.contains('collapsed')).toBe(true);
     expect(host.querySelector('[data-testid="panel-body"]')).toBeNull();
   });
 });

@@ -86,27 +86,30 @@ export function FilterPanel() {
 
       {/* Presets (Looks) */}
       <div className="flex flex-wrap gap-1 mb-1">
-        {BUILTIN_PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--vscode-input-border)] hover:bg-[var(--vscode-list-hoverBackground)]"
-            title={preset.name}
-            onClick={() => {
-              // Replace current filter stack with preset filters
-              const state = useSketchStore.getState();
-              // Clear existing filters
-              for (const f of state.filters) {
-                state.removeFilter(f.id);
-              }
-              // Apply preset filters
-              for (const pf of preset.filters) {
-                state.addFilter(pf.filterId, pf.params);
-              }
-            }}
-          >
-            {preset.name}
-          </button>
-        ))}
+        {BUILTIN_PRESETS.map((preset) => {
+          const presetName = preset.nameKey ? t(preset.nameKey) : preset.name;
+          return (
+            <button
+              key={preset.id}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--vscode-input-border)] hover:bg-[var(--vscode-list-hoverBackground)]"
+              title={presetName}
+              onClick={() => {
+                // Replace current filter stack with preset filters
+                const state = useSketchStore.getState();
+                // Clear existing filters
+                for (const f of state.filters) {
+                  state.removeFilter(f.id);
+                }
+                // Apply preset filters
+                for (const pf of preset.filters) {
+                  state.addFilter(pf.filterId, pf.params);
+                }
+              }}
+            >
+              {presetName}
+            </button>
+          );
+        })}
       </div>
 
       {/* Add filter selector */}

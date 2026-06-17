@@ -4,6 +4,7 @@
  * macOS-style icon toolbar. Uses shared VerticalToolbar + ToolbarButton
  * from @neko/ui/primitives with the unified .neko-toolbar-btn CSS class.
  */
+import type { ReactNode } from 'react';
 import {
   VerticalToolbar,
   ToolbarButton,
@@ -21,22 +22,36 @@ import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
 
-const TOOLS: { type: ToolType; icon: React.ReactNode; key: string }[] = [
-  { type: 'brush', icon: <BrushIcon />, key: 'sketch.toolbar.brush' },
-  { type: 'eraser', icon: <EraserIcon />, key: 'sketch.toolbar.eraser' },
-  { type: 'select-rect', icon: <SelectIcon />, key: 'sketch.toolbar.select' },
-  { type: 'select-lasso', icon: <LassoIcon />, key: 'sketch.toolbar.lasso' },
-  { type: 'select-wand', icon: <WandIcon />, key: 'sketch.toolbar.wand' },
-  { type: 'move', icon: <MoveIcon />, key: 'sketch.toolbar.move' },
-  { type: 'shape', icon: <ShapeIcon />, key: 'sketch.toolbar.shape' },
-  { type: 'vector', icon: <VectorNodeIcon />, key: 'sketch.toolbar.vector' },
-  { type: 'transform', icon: <TransformIcon />, key: 'sketch.toolbar.transform' },
-  { type: 'eyedropper', icon: <EyedropperIcon />, key: 'sketch.toolbar.eyedropper' },
-  { type: 'fill', icon: <FillIcon />, key: 'sketch.toolbar.fill' },
-  { type: 'gradient', icon: <GradientIcon />, key: 'sketch.toolbar.gradient' },
-  { type: 'text', icon: <TextIcon />, key: 'sketch.toolbar.text' },
-  { type: 'clone', icon: <CloneIcon />, key: 'sketch.toolbar.clone' },
-  { type: 'zoom', icon: <ZoomIcon />, key: 'sketch.toolbar.zoom' },
+interface ToolButtonConfig {
+  readonly type: ToolType;
+  readonly icon: ReactNode;
+  readonly key: string;
+}
+
+const TOOL_GROUPS: readonly (readonly ToolButtonConfig[])[] = [
+  [
+    { type: 'brush', icon: <BrushIcon />, key: 'sketch.toolbar.brush' },
+    { type: 'eraser', icon: <EraserIcon />, key: 'sketch.toolbar.eraser' },
+    { type: 'fill', icon: <FillIcon />, key: 'sketch.toolbar.fill' },
+    { type: 'gradient', icon: <GradientIcon />, key: 'sketch.toolbar.gradient' },
+    { type: 'eyedropper', icon: <EyedropperIcon />, key: 'sketch.toolbar.eyedropper' },
+  ],
+  [
+    { type: 'select-rect', icon: <SelectIcon />, key: 'sketch.toolbar.select' },
+    { type: 'select-lasso', icon: <LassoIcon />, key: 'sketch.toolbar.lasso' },
+    { type: 'select-wand', icon: <WandIcon />, key: 'sketch.toolbar.wand' },
+  ],
+  [
+    { type: 'move', icon: <MoveIcon />, key: 'sketch.toolbar.move' },
+    { type: 'transform', icon: <TransformIcon />, key: 'sketch.toolbar.transform' },
+    { type: 'clone', icon: <CloneIcon />, key: 'sketch.toolbar.clone' },
+  ],
+  [
+    { type: 'shape', icon: <ShapeIcon />, key: 'sketch.toolbar.shape' },
+    { type: 'vector', icon: <VectorNodeIcon />, key: 'sketch.toolbar.vector' },
+    { type: 'text', icon: <TextIcon />, key: 'sketch.toolbar.text' },
+  ],
+  [{ type: 'zoom', icon: <ZoomIcon />, key: 'sketch.toolbar.zoom' }],
 ];
 
 export interface ToolbarProps {
@@ -75,15 +90,14 @@ export function Toolbar({ onOpenExport, onOpenPackage }: ToolbarProps = {}) {
       )}
       {(onOpenExport || onOpenPackage) && <ToolbarSeparator />}
 
-      {TOOLS.map((tool) => (
-        <ToolbarButton
-          key={tool.type}
-          data-creative-left-rail-action={`select-${tool.type}`}
-          data-creative-left-rail-kind="common-action"
-          icon={tool.icon}
-          title={t(tool.key)}
-          active={activeTool === tool.type}
-          onClick={() => setActiveTool(tool.type)}
+      {TOOL_GROUPS.map((group, groupIndex) => (
+        <ToolGroup
+          key={groupIndex}
+          activeTool={activeTool}
+          group={group}
+          showSeparator={groupIndex < TOOL_GROUPS.length - 1}
+          setActiveTool={setActiveTool}
+          translate={t}
         />
       ))}
 
@@ -118,6 +132,37 @@ export function Toolbar({ onOpenExport, onOpenPackage }: ToolbarProps = {}) {
         onClick={toggleSidebar}
       />
     </VerticalToolbar>
+  );
+}
+
+function ToolGroup({
+  activeTool,
+  group,
+  showSeparator,
+  setActiveTool,
+  translate,
+}: {
+  readonly activeTool: ToolType;
+  readonly group: readonly ToolButtonConfig[];
+  readonly showSeparator: boolean;
+  readonly setActiveTool: (tool: ToolType) => void;
+  readonly translate: (key: string) => string;
+}) {
+  return (
+    <>
+      {group.map((tool) => (
+        <ToolbarButton
+          key={tool.type}
+          data-creative-left-rail-action={`select-${tool.type}`}
+          data-creative-left-rail-kind="common-action"
+          icon={tool.icon}
+          title={translate(tool.key)}
+          active={activeTool === tool.type}
+          onClick={() => setActiveTool(tool.type)}
+        />
+      ))}
+      {showSeparator && <ToolbarSeparator />}
+    </>
   );
 }
 

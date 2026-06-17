@@ -106,6 +106,37 @@ describe('Sketch LayerPanel shared UI migration', () => {
 
     expect(useSketchStore.getState().activeLayerId).toBe('layer-498');
   });
+
+  it('localizes adjustment actions and layer status badges', () => {
+    useSketchStore.setState({
+      activeLayerId: 'adjustment-layer',
+      layers: [
+        createLayer({
+          id: 'adjustment-layer',
+          name: 'Adjustment',
+          type: 'adjustment',
+          clippingMask: true,
+          alphaLock: true,
+        }),
+      ],
+    });
+
+    act(() => {
+      root.render(<LayerPanel />);
+    });
+
+    expect(
+      host.querySelector<HTMLButtonElement>('[aria-label="sketch.layer.addAdjustment"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('sketch.layer.badge.adjustment');
+    expect(host.textContent).toContain('sketch.layer.badge.clippingMask');
+    expect(host.textContent).toContain('sketch.layer.badge.alphaLock');
+
+    const removeAction = host.querySelector<HTMLButtonElement>(
+      '[data-tree-item-id="adjustment-layer"] button[aria-label="sketch.layer.remove"]',
+    );
+    expect(removeAction).not.toBeNull();
+  });
 });
 
 function createLayer(overrides: Partial<LayerData>): LayerData {

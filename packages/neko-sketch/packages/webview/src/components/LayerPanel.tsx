@@ -18,10 +18,10 @@ import { getLayerIndex, mapSketchLayersToTreeViewItems } from './adapters/shared
 
 /** Adjustment layer types that map to FilterRegistry IDs */
 const ADJUSTMENT_TYPES = [
-  { id: 'brightness-contrast', label: 'Brightness / Contrast' },
-  { id: 'hue-saturation', label: 'Hue / Saturation' },
-  { id: 'exposure', label: 'Exposure' },
-  { id: 'temperature', label: 'Temperature' },
+  { id: 'brightness-contrast', labelKey: 'sketch.layer.adjustment.brightnessContrast' },
+  { id: 'hue-saturation', labelKey: 'sketch.layer.adjustment.hueSaturation' },
+  { id: 'exposure', labelKey: 'sketch.layer.adjustment.exposure' },
+  { id: 'temperature', labelKey: 'sketch.layer.adjustment.temperature' },
 ] as const;
 
 export function LayerPanel() {
@@ -45,8 +45,17 @@ export function LayerPanel() {
   );
 
   const treeItems = useMemo(
-    () => mapSketchLayersToTreeViewItems(layers, activeLayerId),
-    [activeLayerId, layers],
+    () =>
+      mapSketchLayersToTreeViewItems(layers, activeLayerId, {
+        removeLabel: t('sketch.layer.remove'),
+        adjustmentBadgeLabel: t('sketch.layer.badge.adjustment'),
+        adjustmentBadgeTitle: t('sketch.layer.badge.adjustmentTitle'),
+        clippingMaskBadgeLabel: t('sketch.layer.badge.clippingMask'),
+        clippingMaskBadgeTitle: t('sketch.layer.badge.clippingMaskTitle'),
+        alphaLockBadgeLabel: t('sketch.layer.badge.alphaLock'),
+        alphaLockBadgeTitle: t('sketch.layer.badge.alphaLockTitle'),
+      }),
+    [activeLayerId, layers, t],
   );
 
   if (!show) return null;
@@ -84,7 +93,7 @@ export function LayerPanel() {
             trigger={
               <IconButton
                 icon={<Codicon name="settings" />}
-                label="Add adjustment layer"
+                label={t('sketch.layer.addAdjustment')}
                 size="xs"
                 variant="ghost"
               />
@@ -102,7 +111,7 @@ export function LayerPanel() {
                     setShowAdjustmentMenu(false);
                   }}
                 >
-                  {adjustment.label}
+                  {t(adjustment.labelKey)}
                 </Button>
               ))}
             </div>
@@ -217,7 +226,9 @@ function createLayerContextMenuItems({
     { id: 'separator-mask', type: 'separator' },
     {
       id: 'clipping-mask',
-      label: layer?.clippingMask ? 'Release Clipping Mask' : 'Create Clipping Mask',
+      label: layer?.clippingMask
+        ? t('sketch.layer.releaseClippingMask')
+        : t('sketch.layer.createClippingMask'),
       disabled,
       onSelect: () => {
         if (layer) updateLayerProps(layer.id, { clippingMask: !layer.clippingMask });
@@ -225,7 +236,7 @@ function createLayerContextMenuItems({
     },
     {
       id: 'alpha-lock',
-      label: layer?.alphaLock ? 'Unlock Alpha' : 'Lock Alpha',
+      label: layer?.alphaLock ? t('sketch.layer.unlockAlpha') : t('sketch.layer.lockAlpha'),
       disabled,
       onSelect: () => {
         if (layer) updateLayerProps(layer.id, { alphaLock: !layer.alphaLock });

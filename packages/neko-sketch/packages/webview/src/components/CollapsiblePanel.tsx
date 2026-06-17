@@ -24,12 +24,17 @@ export function CollapsiblePanel({
 
   return (
     <Collapsible
-      className="neko-collapsible"
+      className={`neko-collapsible ${expanded ? 'expanded' : 'collapsed'}`}
       contentClassName="neko-collapsible-body"
       onOpenChange={setExpanded}
       open={expanded}
       trigger={
-        <button aria-expanded={expanded} className="neko-collapsible-header" type="button">
+        <button
+          aria-expanded={expanded}
+          className="neko-collapsible-header"
+          data-expanded={expanded ? 'true' : 'false'}
+          type="button"
+        >
           <span className={`neko-collapsible-chevron${expanded ? ' expanded' : ''}`}>
             <ChevronIcon />
           </span>

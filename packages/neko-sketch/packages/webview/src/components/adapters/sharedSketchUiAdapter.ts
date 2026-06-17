@@ -33,6 +33,16 @@ export interface SketchBrushAdapterResult {
   readonly groups: readonly PropertyGroupDefinition[];
 }
 
+export interface SketchLayerAdapterOptions {
+  readonly removeLabel?: string;
+  readonly adjustmentBadgeLabel?: string;
+  readonly adjustmentBadgeTitle?: string;
+  readonly clippingMaskBadgeLabel?: string;
+  readonly clippingMaskBadgeTitle?: string;
+  readonly alphaLockBadgeLabel?: string;
+  readonly alphaLockBadgeTitle?: string;
+}
+
 export type SketchBrushPropertyId =
   | 'brush.type'
   | 'brush.size'
@@ -87,7 +97,7 @@ export function mapSketchBrushToProperties({
   pushBrushProperty({
     id: 'brush.size',
     kind: 'slider',
-    label: translate('sketch.brush.size', { size: brushSettings.size }),
+    label: translate('sketch.brush.size'),
     value: brushSettings.size,
     min: 1,
     max: 500,
@@ -98,9 +108,7 @@ export function mapSketchBrushToProperties({
   pushBrushProperty({
     id: 'brush.opacity',
     kind: 'slider',
-    label: translate('sketch.brush.opacity', {
-      opacity: Math.round(brushSettings.opacity * 100),
-    }),
+    label: translate('sketch.brush.opacity'),
     value: Math.round(brushSettings.opacity * 100),
     min: 0,
     max: 100,
@@ -112,9 +120,7 @@ export function mapSketchBrushToProperties({
     pushBrushProperty({
       id: 'brush.hardness',
       kind: 'slider',
-      label: translate('sketch.brush.hardness', {
-        hardness: Math.round(brushSettings.hardness * 100),
-      }),
+      label: translate('sketch.brush.hardness'),
       value: Math.round(brushSettings.hardness * 100),
       min: 0,
       max: 100,
@@ -134,9 +140,7 @@ export function mapSketchBrushToProperties({
     pushBrushProperty({
       id: 'brush.spacing',
       kind: 'slider',
-      label: translate('sketch.brush.spacing', {
-        spacing: Math.round((brushSettings.spacing ?? 0.65) * 100),
-      }),
+      label: translate('sketch.brush.spacing'),
       value: Math.round((brushSettings.spacing ?? 0.65) * 100),
       min: 10,
       max: 200,
@@ -149,9 +153,12 @@ export function mapSketchBrushToProperties({
     pushBrushProperty({
       id: 'symmetry.mode',
       kind: 'select',
-      label: 'Symmetry',
+      label: translate('sketch.brush.symmetry'),
       value: symmetry.mode,
-      options: SYMMETRY_OPTIONS,
+      options: SYMMETRY_OPTIONS.map((option) => ({
+        value: option.value,
+        label: translate(option.label),
+      })),
     });
     pushBrushProperty({
       id: 'brush.color',
@@ -202,8 +209,11 @@ export function mapSketchBrushPropertyCommit(
 export function mapSketchLayersToTreeViewItems(
   layers: readonly LayerData[],
   activeLayerId: string | null,
+  options: SketchLayerAdapterOptions = {},
 ): readonly TreeViewItem[] {
-  return [...layers].reverse().map((layer) => mapSketchLayerToTreeViewItem(layer, activeLayerId));
+  return [...layers]
+    .reverse()
+    .map((layer) => mapSketchLayerToTreeViewItem(layer, activeLayerId, options));
 }
 
 export function getLayerIndex(layers: readonly LayerData[], layerId: string): number {
@@ -213,17 +223,20 @@ export function getLayerIndex(layers: readonly LayerData[], layerId: string): nu
 function mapSketchLayerToTreeViewItem(
   layer: LayerData,
   activeLayerId: string | null,
+  options: SketchLayerAdapterOptions,
 ): TreeViewItem {
   return {
     id: layer.id,
     label: layer.name,
-    children: layer.children.map((child) => mapSketchLayerToTreeViewItem(child, activeLayerId)),
+    children: layer.children.map((child) =>
+      mapSketchLayerToTreeViewItem(child, activeLayerId, options),
+    ),
     expanded: true,
     selected: layer.id === activeLayerId,
     visible: layer.visible,
     locked: layer.locked,
-    badges: createLayerBadges(layer),
-    actions: [REMOVE_LAYER_ACTION],
+    badges: createLayerBadges(layer, options),
+    actions: [createRemoveLayerAction(options.removeLabel)],
     metadata: {
       type: layer.type,
       opacity: layer.opacity,
@@ -234,16 +247,31 @@ function mapSketchLayerToTreeViewItem(
   };
 }
 
-function createLayerBadges(layer: LayerData): readonly TreeViewBadge[] {
+function createLayerBadges(
+  layer: LayerData,
+  options: SketchLayerAdapterOptions,
+): readonly TreeViewBadge[] {
   const badges: TreeViewBadge[] = [];
   if (layer.type === 'adjustment') {
-    badges.push({ id: 'adjustment', label: 'ADJ' });
+    badges.push({
+      id: 'adjustment',
+      label: options.adjustmentBadgeLabel ?? 'ADJ',
+      title: options.adjustmentBadgeTitle,
+    });
   }
   if (layer.clippingMask) {
-    badges.push({ id: 'clipping-mask', label: 'Clip', title: 'Clipping mask' });
+    badges.push({
+      id: 'clipping-mask',
+      label: options.clippingMaskBadgeLabel ?? 'Clip',
+      title: options.clippingMaskBadgeTitle ?? 'Clipping mask',
+    });
   }
   if (layer.alphaLock) {
-    badges.push({ id: 'alpha-lock', label: 'Alpha', title: 'Alpha lock' });
+    badges.push({
+      id: 'alpha-lock',
+      label: options.alphaLockBadgeLabel ?? 'Alpha',
+      title: options.alphaLockBadgeTitle ?? 'Alpha lock',
+    });
   }
   return badges;
 }
@@ -293,16 +321,18 @@ const BRUSH_TYPE_OPTIONS: readonly { type: BrushType; key: string }[] = [
 ];
 
 const SYMMETRY_OPTIONS: readonly PropertyOption[] = [
-  { value: 'none', label: 'Off' },
-  { value: 'vertical', label: 'Vertical' },
-  { value: 'horizontal', label: 'Horizontal' },
-  { value: 'both', label: 'Both' },
-  { value: 'radial', label: 'Radial' },
+  { value: 'none', label: 'sketch.brush.symmetry.off' },
+  { value: 'vertical', label: 'sketch.brush.symmetry.vertical' },
+  { value: 'horizontal', label: 'sketch.brush.symmetry.horizontal' },
+  { value: 'both', label: 'sketch.brush.symmetry.both' },
+  { value: 'radial', label: 'sketch.brush.symmetry.radial' },
 ];
 
-const REMOVE_LAYER_ACTION: TreeViewAction = {
-  id: 'remove',
-  label: 'Remove layer',
-  icon: createElement('span', { 'aria-hidden': 'true', className: toCodiconClassName('close') }),
-  danger: true,
-};
+function createRemoveLayerAction(label = 'Remove layer'): TreeViewAction {
+  return {
+    id: 'remove',
+    label,
+    icon: createElement('span', { 'aria-hidden': 'true', className: toCodiconClassName('close') }),
+    danger: true,
+  };
+}

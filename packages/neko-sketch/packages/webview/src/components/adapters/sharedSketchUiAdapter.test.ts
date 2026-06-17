@@ -50,6 +50,13 @@ describe('sharedSketchUiAdapter', () => {
       kind: 'color',
       value: '#ff00ff',
     });
+    expect(result.properties.find((property) => property.id === 'symmetry.mode')).toMatchObject({
+      kind: 'select',
+      options: expect.arrayContaining([
+        { value: 'none', label: 'sketch.brush.symmetry.off' },
+        { value: 'radial', label: 'sketch.brush.symmetry.radial' },
+      ]),
+    });
   });
 
   it('maps stamp-only controls and commit patches', () => {
@@ -83,6 +90,15 @@ describe('sharedSketchUiAdapter', () => {
         }),
       ],
       'top',
+      {
+        removeLabel: '移除图层',
+        adjustmentBadgeLabel: '调整',
+        adjustmentBadgeTitle: '调整图层',
+        clippingMaskBadgeLabel: '剪贴',
+        clippingMaskBadgeTitle: '剪贴蒙版',
+        alphaLockBadgeLabel: '锁透',
+        alphaLockBadgeTitle: '透明像素锁定',
+      },
     );
 
     expect(items.map((item) => item.id)).toEqual(['top', 'bottom']);
@@ -97,7 +113,13 @@ describe('sharedSketchUiAdapter', () => {
       'clipping-mask',
       'alpha-lock',
     ]);
+    expect(items[0]?.badges).toEqual([
+      { id: 'adjustment', label: '调整', title: '调整图层' },
+      { id: 'clipping-mask', label: '剪贴', title: '剪贴蒙版' },
+      { id: 'alpha-lock', label: '锁透', title: '透明像素锁定' },
+    ]);
     expect(items[0]?.actions?.[0]?.id).toBe('remove');
+    expect(items[0]?.actions?.[0]?.label).toBe('移除图层');
     expect(items[1]?.visible).toBe(false);
   });
 });

@@ -42,7 +42,7 @@ export function BrushPanel() {
 
   const isEraser = activeTool === 'eraser';
   const isStamp = brushSettings.type === 'stamp';
-  const { groups, properties } = mapSketchBrushToProperties({
+  const { properties } = mapSketchBrushToProperties({
     activeTool,
     brushSettings,
     symmetry,
@@ -72,7 +72,6 @@ export function BrushPanel() {
       </h3>
 
       <PropertyPanel
-        groups={groups}
         properties={properties}
         onCommit={handlePropertyChange}
         onPreviewChange={handlePropertyChange}

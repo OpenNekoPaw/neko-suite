@@ -12,6 +12,7 @@ import type { AppliedFilter } from './filter';
 export interface FilterPreset {
   readonly id: string;
   readonly name: string;
+  readonly nameKey?: string;
   readonly category: string;
   /** Ordered filter stack with parameter overrides */
   readonly filters: readonly AppliedFilter[];
@@ -56,6 +57,7 @@ export const BUILTIN_PRESETS: readonly FilterPreset[] = [
   {
     id: 'warm-sunset',
     name: 'Warm Sunset',
+    nameKey: 'sketch.filter.preset.warmSunset',
     category: 'color',
     filters: [
       { id: 'p1', filterId: 'temperature', params: { u_temperature: 0.4 }, enabled: true },
@@ -67,6 +69,7 @@ export const BUILTIN_PRESETS: readonly FilterPreset[] = [
   {
     id: 'cool-blue',
     name: 'Cool Blue',
+    nameKey: 'sketch.filter.preset.coolBlue',
     category: 'color',
     filters: [
       { id: 'p1', filterId: 'temperature', params: { u_temperature: -0.3 }, enabled: true },
@@ -82,6 +85,7 @@ export const BUILTIN_PRESETS: readonly FilterPreset[] = [
   {
     id: 'vintage-film',
     name: 'Vintage Film',
+    nameKey: 'sketch.filter.preset.vintageFilm',
     category: 'stylize',
     filters: [
       {
@@ -98,6 +102,7 @@ export const BUILTIN_PRESETS: readonly FilterPreset[] = [
   {
     id: 'high-contrast-bw',
     name: 'High Contrast B&W',
+    nameKey: 'sketch.filter.preset.highContrastBw',
     category: 'color',
     filters: [
       {

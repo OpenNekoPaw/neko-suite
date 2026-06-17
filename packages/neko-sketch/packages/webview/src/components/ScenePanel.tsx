@@ -281,6 +281,11 @@ interface LightingSectionProps {
   ) => void;
 }
 
+interface LightEntry {
+  readonly layerId: string;
+  readonly light: import('../types/scene').LightSceneObject;
+}
+
 function LightingSection(props: LightingSectionProps) {
   const { t } = useTranslation();
   const {
@@ -299,7 +304,7 @@ function LightingSection(props: LightingSectionProps) {
   const [selectedLightId, setSelectedLightId] = useState<string | null>(null);
 
   // Collect all light objects across scene layers
-  const lightEntries: { layerId: string; light: import('../types/scene').LightSceneObject }[] = [];
+  const lightEntries: LightEntry[] = [];
   for (const sl of sceneLayers) {
     for (const obj of sl.objects) {
       if (isLightObject(obj)) {
@@ -314,7 +319,7 @@ function LightingSection(props: LightingSectionProps) {
       let targetLayerId: string | undefined;
       if (sceneLayers.length === 0) {
         addSceneLayer(sceneId, {
-          name: 'Lights',
+          name: t('sketch.scene.lightsLayer'),
           type: 'effect' as import('../types/scene').SceneLayerType,
           zIndex: 0,
           parallaxFactor: [1, 1],
@@ -341,7 +346,7 @@ function LightingSection(props: LightingSectionProps) {
         properties: { ...DEFAULT_LIGHT_PROPERTIES, lightType },
       });
     },
-    [sceneId, sceneLayers, addSceneLayer, addSceneObject],
+    [sceneId, sceneLayers, addSceneLayer, addSceneObject, t],
   );
 
   const selectedEntry = lightEntries.find((e) => e.light.id === selectedLightId);
@@ -349,7 +354,7 @@ function LightingSection(props: LightingSectionProps) {
   return (
     <div className="mt-1 pt-1" style={{ borderTop: '1px solid var(--sketch-divider)' }}>
       <div className="flex items-center gap-1 mb-1">
-        <p className="sketch-panel-title m-0 flex-1">Lighting</p>
+        <p className="sketch-panel-title m-0 flex-1">{t('sketch.scene.lighting')}</p>
         <label className="flex items-center gap-0.5 text-[10px]">
           <input
             type="checkbox"
@@ -364,7 +369,7 @@ function LightingSection(props: LightingSectionProps) {
         <>
           {/* Ambient light */}
           <div className="flex items-center gap-1 text-[10px] mb-0.5">
-            <span className="w-14 opacity-60">Ambient</span>
+            <span className="w-14 opacity-60">{t('sketch.scene.ambient')}</span>
             <input
               type="range"
               min={0}
@@ -375,44 +380,44 @@ function LightingSection(props: LightingSectionProps) {
                 updateAmbientLight(sceneId, { intensity: parseFloat(e.target.value) })
               }
               className="sketch-slider flex-1"
-              aria-label="Ambient intensity"
+              aria-label={t('sketch.scene.ambientIntensity')}
             />
             <span className="w-8 text-right tabular-nums">{ambientLight.intensity.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-1 text-[10px] mb-1">
-            <span className="w-14 opacity-60">Color</span>
+            <span className="w-14 opacity-60">{t('sketch.scene.ambientColor')}</span>
             <input
               type="color"
               value={rgbToHex(ambientLight.color)}
               onChange={(e) => updateAmbientLight(sceneId, { color: hexToRgb(e.target.value) })}
               className="w-6 h-4 p-0 border-0 cursor-pointer"
-              aria-label="Ambient color"
+              aria-label={t('sketch.scene.ambientColor')}
             />
           </div>
 
           {/* Light list */}
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-xs opacity-60 flex-1">Lights</span>
+            <span className="text-xs opacity-60 flex-1">{t('sketch.scene.lights')}</span>
             <button
               className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
               onClick={() => handleAddLight('point')}
-              aria-label="Add point light"
+              aria-label={t('sketch.scene.addPointLight')}
             >
-              P
+              {t('sketch.light.type.pointShort')}
             </button>
             <button
               className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
               onClick={() => handleAddLight('directional')}
-              aria-label="Add directional light"
+              aria-label={t('sketch.scene.addDirectionalLight')}
             >
-              D
+              {t('sketch.light.type.directionalShort')}
             </button>
             <button
               className="text-xs px-1 rounded border border-[var(--vscode-button-border)]"
               onClick={() => handleAddLight('spot')}
-              aria-label="Add spot light"
+              aria-label={t('sketch.scene.addSpotLight')}
             >
-              S
+              {t('sketch.light.type.spotShort')}
             </button>
           </div>
 
@@ -427,7 +432,9 @@ function LightingSection(props: LightingSectionProps) {
               onClick={() => setSelectedLightId(light.id)}
             >
               <span className="opacity-40">&#9728;</span>
-              <span className="flex-1 truncate">{light.properties.lightType}</span>
+              <span className="flex-1 truncate">
+                {t(lightTypeLabelKey(light.properties.lightType))}
+              </span>
               <span className="opacity-40 tabular-nums">
                 ({Math.round(light.x)}, {Math.round(light.y)})
               </span>
@@ -438,7 +445,7 @@ function LightingSection(props: LightingSectionProps) {
                   removeSceneObject(sceneId, layerId, light.id);
                   if (selectedLightId === light.id) setSelectedLightId(null);
                 }}
-                aria-label="Remove light"
+                aria-label={t('sketch.scene.removeLight')}
               >
                 ✕
               </button>
@@ -480,6 +487,17 @@ function hexToRgb(hex: string): readonly [number, number, number] {
   const g = parseInt(hex.slice(3, 5), 16) / 255;
   const b = parseInt(hex.slice(5, 7), 16) / 255;
   return [r, g, b] as const;
+}
+
+function lightTypeLabelKey(type: LightType): string {
+  switch (type) {
+    case 'directional':
+      return 'sketch.light.type.directional';
+    case 'spot':
+      return 'sketch.light.type.spot';
+    case 'point':
+      return 'sketch.light.type.point';
+  }
 }
 
 /* ── Atmosphere sub-section (previously a standalone panel) ─────────── */

@@ -21,10 +21,10 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
   showBrushPanel: true,
   showLayerPanel: true,
   showFrameTimeline: true,
-  sidebarWidth: 240,
+  sidebarWidth: 300,
   toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
   toggleBrushPanel: () => set((s) => ({ showBrushPanel: !s.showBrushPanel })),
   toggleLayerPanel: () => set((s) => ({ showLayerPanel: !s.showLayerPanel })),
   toggleFrameTimeline: () => set((s) => ({ showFrameTimeline: !s.showFrameTimeline })),
-  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(200, Math.min(400, width)) }),
+  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(220, Math.min(440, width)) }),
 });

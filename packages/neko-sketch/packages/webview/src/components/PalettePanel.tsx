@@ -4,6 +4,7 @@
  * Built-in and custom palettes with color selection.
  */
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Button, Select } from '@neko/ui/primitives';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { encodeAsePalette, normalizeHexColor, parsePaletteFile } from '../utils/palette-file';
@@ -132,6 +133,11 @@ export function PalettePanel() {
 
   const palettes = useMemo(() => [...BUILTIN_PALETTES, ...customPalettes], [customPalettes]);
   const palette = palettes.find((item) => item.id === selectedPaletteId) ?? BUILTIN_PALETTES[0];
+  const paletteOptions = useMemo(
+    () => palettes.map((item) => ({ value: item.id, label: item.name })),
+    [palettes],
+  );
+  const selectedBrushColor = normalizeHexColor(brushColor);
 
   useEffect(() => {
     const handleCustomPalettesChanged = () => setCustomPalettes(loadCustomPalettes());
@@ -224,45 +230,28 @@ export function PalettePanel() {
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.palette')}>
       <div className="flex items-center gap-1 mb-1">
         <h3 className="sketch-panel-title m-0 flex-1">{t('sketch.panel.palette')}</h3>
-        <select
-          className="text-xs bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0.5"
+        <Select
+          className="h-6 min-w-24 text-[11px]"
+          label={t('sketch.palette.select')}
+          options={paletteOptions}
           value={palette?.id ?? ''}
-          onChange={(e) => setSelectedPaletteId(e.target.value)}
-          aria-label={t('sketch.palette.select')}
-        >
-          {palettes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={setSelectedPaletteId}
+        />
       </div>
 
       <div className="flex flex-wrap gap-1 mb-1">
-        <button
-          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
-          onClick={handleNewPalette}
-        >
+        <Button size="xs" variant="secondary" onClick={handleNewPalette}>
           {t('sketch.palette.new')}
-        </button>
-        <button
-          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
-          onClick={handleAddBrushColor}
-        >
+        </Button>
+        <Button size="xs" variant="secondary" onClick={handleAddBrushColor}>
           {t('sketch.palette.addColor')}
-        </button>
-        <button
-          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
-          onClick={() => importInputRef.current?.click()}
-        >
+        </Button>
+        <Button size="xs" variant="secondary" onClick={() => importInputRef.current?.click()}>
           {t('sketch.palette.import')}
-        </button>
-        <button
-          className="text-[10px] px-1 rounded border border-[var(--vscode-button-border)]"
-          onClick={handleExportPalette}
-        >
+        </Button>
+        <Button size="xs" variant="secondary" onClick={handleExportPalette}>
           {t('sketch.palette.export')}
-        </button>
+        </Button>
         <input
           ref={importInputRef}
           type="file"
@@ -276,22 +265,34 @@ export function PalettePanel() {
         />
       </div>
 
-      {importError && <p className="text-[10px] text-red-400 m-0 mb-1">{importError}</p>}
+      {importError && (
+        <p className="text-[10px] text-red-400 m-0 mb-1" role="alert">
+          {importError}
+        </p>
+      )}
 
       {palette && (
         <div className="grid grid-cols-8 gap-0.5" role="listbox" aria-label={palette.name}>
-          {palette.colors.map((color, i) => (
-            <button
-              key={`${color}-${i}`}
-              role="option"
-              aria-selected={false}
-              aria-label={color}
-              className="w-5 h-5 rounded border border-[var(--vscode-input-border)] cursor-pointer hover:ring-1 hover:ring-[var(--vscode-focusBorder)]"
-              style={{ backgroundColor: color }}
-              onClick={() => handleColorClick(color)}
-              title={color}
-            />
-          ))}
+          {palette.colors.map((color, i) => {
+            const normalizedColor = normalizeHexColor(color);
+            const isSelected =
+              normalizedColor !== null &&
+              selectedBrushColor !== null &&
+              normalizedColor === selectedBrushColor;
+
+            return (
+              <button
+                key={`${color}-${i}`}
+                role="option"
+                aria-selected={isSelected}
+                aria-label={t('sketch.color.colorLabel', { color })}
+                className={`sketch-palette-swatch${isSelected ? ' selected' : ''}`}
+                style={{ backgroundColor: color }}
+                onClick={() => handleColorClick(color)}
+                title={color}
+              />
+            );
+          })}
         </div>
       )}
     </div>

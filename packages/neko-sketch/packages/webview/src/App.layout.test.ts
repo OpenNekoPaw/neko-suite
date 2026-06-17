@@ -54,6 +54,8 @@ describe('Sketch creative workbench layout boundary', () => {
     const uiSliceSource = readFileSync(resolve(__dirname, 'stores/slices/uiSlice.ts'), 'utf8');
 
     expect(uiSliceSource).toMatch(/showSidebar: false/);
+    expect(uiSliceSource).toMatch(/sidebarWidth: 300/);
+    expect(uiSliceSource).toMatch(/Math\.max\(220, Math\.min\(440, width\)\)/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="common-action"/);
@@ -67,7 +69,7 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/ref=\{sidebarResizeRef\}/);
     expect(appSource).toMatch(/className="sketch-right-sidebar"/);
     expect(appSource).toMatch(/style=\{\{ width: sidebarWidth \}\}/);
-    expect(appSource).toMatch(/className="sketch-right-sidebar-stack"/);
+    expect(appSource).toMatch(/<SketchInspectorStack/);
     for (const token of [
       '<BrushPanel',
       '<PalettePanel',
@@ -77,6 +79,57 @@ describe('Sketch creative workbench layout boundary', () => {
       '<ScenePanel',
     ]) {
       expect(appSource).toMatch(new RegExp(token.replace('<', '<')));
+    }
+  });
+
+  it('models the sketch inspector as default, contextual, animation, and advanced panels', () => {
+    const inspectorSource = appSource.slice(
+      appSource.indexOf('function SketchInspectorStack'),
+      appSource.indexOf('function AIRunMonitor'),
+    );
+
+    expect(appSource).toMatch(/function SketchInspectorStack/);
+    expect(appSource).toMatch(/VECTOR_INSPECTOR_TOOLS/);
+    expect(appSource).toMatch(/FILL_INSPECTOR_TOOLS/);
+    expect(inspectorSource).toContain(
+      'className="sketch-right-sidebar-stack sketch-inspector-compact"',
+    );
+
+    const brushIndex = inspectorSource.indexOf('<BrushPanel');
+    const paletteIndex = inspectorSource.indexOf('<PalettePanel');
+    const layerIndex = inspectorSource.indexOf('<LayerPanel');
+    const frameIndex = inspectorSource.indexOf('<FrameControls');
+    const advancedIndex = inspectorSource.indexOf(
+      '<CollapsiblePanel titleKey="sketch.panel.advanced" defaultExpanded={false}>',
+    );
+    const spritesheetIndex = inspectorSource.indexOf('<SpriteSheetPlayer');
+    const filterIndex = inspectorSource.indexOf('<FilterPanel');
+    const perspectiveIndex = inspectorSource.indexOf('<PerspectiveGridPanel');
+    const aiIndex = inspectorSource.indexOf('<AIPanel');
+    const particleIndex = inspectorSource.indexOf('<ParticlePanel');
+    const sceneIndex = inspectorSource.indexOf('<ScenePanel');
+
+    expect(inspectorSource).toMatch(
+      /showFrameTimeline && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.frames"/,
+    );
+    expect(inspectorSource).toMatch(
+      /showFrameTimeline && \(\s*<CollapsiblePanel titleKey="sketch\.panel\.spritesheet" defaultExpanded=\{false\}/,
+    );
+
+    expect(brushIndex).toBeGreaterThan(-1);
+    expect(paletteIndex).toBeGreaterThan(brushIndex);
+    expect(layerIndex).toBeGreaterThan(paletteIndex);
+    expect(frameIndex).toBeGreaterThan(layerIndex);
+    expect(advancedIndex).toBeGreaterThan(frameIndex);
+    for (const advancedPanelIndex of [
+      spritesheetIndex,
+      filterIndex,
+      perspectiveIndex,
+      aiIndex,
+      particleIndex,
+      sceneIndex,
+    ]) {
+      expect(advancedPanelIndex).toBeGreaterThan(advancedIndex);
     }
   });
 
@@ -93,11 +146,17 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(cssSource).toMatch(/\.sketch-right-sidebar-host\s*\{/);
     expect(cssSource).toMatch(/\.sketch-right-sidebar\s*\{/);
     expect(cssSource).toMatch(/flex:\s*0 0 auto/);
-    expect(cssSource).toMatch(/min-width:\s*200px/);
-    expect(cssSource).toMatch(/max-width:\s*400px/);
+    expect(cssSource).toMatch(/min-width:\s*220px/);
+    expect(cssSource).toMatch(/max-width:\s*440px/);
     expect(cssSource).toMatch(/\.sketch-right-sidebar-stack\s*\{/);
     expect(cssSource).toMatch(/overflow-x:\s*hidden/);
     expect(cssSource).toMatch(/overflow-y:\s*auto/);
     expect(cssSource).toMatch(/\.sketch-right-sidebar input\[type='range'\]/);
+    expect(cssSource).toMatch(/\.neko-collapsible\s*\{/);
+    expect(cssSource).toMatch(/\.neko-collapsible\.expanded\s*\{/);
+    expect(cssSource).toMatch(/\.neko-collapsible-body > \.sketch-panel > h3\.sketch-panel-title/);
+    expect(cssSource).not.toMatch(
+      /\.sketch-inspector-compact \.sketch-panel-title\s*\{\s*display:\s*none/,
+    );
   });
 });

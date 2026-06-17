@@ -56,7 +56,7 @@ import type {
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider } from './i18n/I18nContext';
 import type { SketchRuntimeFeatureFlags, SupportedLocale } from '@neko/shared';
-import type { CanvasConfig, LayerData } from './types';
+import type { CanvasConfig, LayerData, ToolType } from './types';
 
 interface AppSketchAIApplySnapshot extends SketchAIApplySnapshot {
   readonly wasDirty: boolean;
@@ -85,6 +85,9 @@ const DEFAULT_FEATURE_FLAGS: SketchRuntimeFeatureFlags = {
     operations: {},
   },
 };
+
+const VECTOR_INSPECTOR_TOOLS = new Set<ToolType>(['shape', 'vector']);
+const FILL_INSPECTOR_TOOLS = new Set<ToolType>(['fill', 'gradient']);
 
 function isSketchAIOperationEnabled(
   flags: SketchRuntimeFeatureFlags,
@@ -627,55 +630,12 @@ export function App() {
                   handleProps={sidebarResizeHandleProps}
                   className="sketch-right-sidebar-resize-handle"
                 />
-                <div className="sketch-right-sidebar-stack">
-                  <CollapsiblePanel
-                    titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}
-                  >
-                    <BrushPanel />
-                  </CollapsiblePanel>
-                  {activeTool === 'shape' && (
-                    <CollapsiblePanel titleKey="sketch.panel.vector">
-                      <VectorToolbar />
-                    </CollapsiblePanel>
-                  )}
-                  {activeTool === 'fill' && (
-                    <CollapsiblePanel titleKey="sketch.panel.fill">
-                      <FillPanel />
-                    </CollapsiblePanel>
-                  )}
-                  <CollapsiblePanel titleKey="sketch.panel.palette">
-                    <PalettePanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
-                    <PerspectiveGridPanel />
-                  </CollapsiblePanel>
-                  {hasAvailableSketchAIOperations(featureFlags) && (
-                    <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
-                      <AIPanel
-                        operationAvailability={featureFlags.aiOps.operations}
-                        onOpenAgent={handleOpenAgentForAI}
-                      />
-                    </CollapsiblePanel>
-                  )}
-                  <CollapsiblePanel titleKey="sketch.panel.layers">
-                    <LayerPanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
-                    <FilterPanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
-                    <FrameControls />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
-                    <SpriteSheetPlayer />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
-                    <ParticlePanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
-                    <ScenePanel />
-                  </CollapsiblePanel>
-                </div>
+                <SketchInspectorStack
+                  activeTool={activeTool}
+                  featureFlags={featureFlags}
+                  showFrameTimeline={showFrameTimeline}
+                  onOpenAgentForAI={handleOpenAgentForAI}
+                />
               </aside>
             ) : undefined
           }
@@ -687,6 +647,86 @@ export function App() {
         />
       </div>
     </I18nProvider>
+  );
+}
+
+interface SketchInspectorStackProps {
+  readonly activeTool: ToolType;
+  readonly featureFlags: SketchRuntimeFeatureFlags;
+  readonly showFrameTimeline: boolean;
+  readonly onOpenAgentForAI: (
+    operation: SketchAIOperationType,
+    prompt: string,
+    params: SketchAIOperationParams,
+  ) => void;
+}
+
+function SketchInspectorStack({
+  activeTool,
+  featureFlags,
+  showFrameTimeline,
+  onOpenAgentForAI,
+}: SketchInspectorStackProps): JSX.Element {
+  const showVectorInspector = VECTOR_INSPECTOR_TOOLS.has(activeTool);
+  const showFillInspector = FILL_INSPECTOR_TOOLS.has(activeTool);
+  const showAIInspector = hasAvailableSketchAIOperations(featureFlags);
+
+  return (
+    <div className="sketch-right-sidebar-stack sketch-inspector-compact">
+      <CollapsiblePanel
+        titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}
+      >
+        <BrushPanel />
+      </CollapsiblePanel>
+      {showVectorInspector && (
+        <CollapsiblePanel titleKey="sketch.panel.vector">
+          <VectorToolbar />
+        </CollapsiblePanel>
+      )}
+      {showFillInspector && (
+        <CollapsiblePanel titleKey="sketch.panel.fill">
+          <FillPanel />
+        </CollapsiblePanel>
+      )}
+      <CollapsiblePanel titleKey="sketch.panel.palette">
+        <PalettePanel />
+      </CollapsiblePanel>
+      <CollapsiblePanel titleKey="sketch.panel.layers">
+        <LayerPanel />
+      </CollapsiblePanel>
+      {showFrameTimeline && (
+        <CollapsiblePanel titleKey="sketch.panel.frames">
+          <FrameControls />
+        </CollapsiblePanel>
+      )}
+      <CollapsiblePanel titleKey="sketch.panel.advanced" defaultExpanded={false}>
+        {showFrameTimeline && (
+          <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
+            <SpriteSheetPlayer />
+          </CollapsiblePanel>
+        )}
+        <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
+          <FilterPanel />
+        </CollapsiblePanel>
+        <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
+          <PerspectiveGridPanel />
+        </CollapsiblePanel>
+        {showAIInspector && (
+          <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
+            <AIPanel
+              operationAvailability={featureFlags.aiOps.operations}
+              onOpenAgent={onOpenAgentForAI}
+            />
+          </CollapsiblePanel>
+        )}
+        <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
+          <ParticlePanel />
+        </CollapsiblePanel>
+        <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
+          <ScenePanel />
+        </CollapsiblePanel>
+      </CollapsiblePanel>
+    </div>
   );
 }
 

@@ -6,6 +6,7 @@
  */
 import type { LightSceneObject, SceneObject } from '../types/scene';
 import type { LightProperties, LightType } from '../types/light';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface LightPanelProps {
   sceneId: string;
@@ -20,6 +21,7 @@ interface LightPanelProps {
 }
 
 export function LightPanel({ sceneId, layerId, light, updateSceneObject }: LightPanelProps) {
+  const { t } = useTranslation();
   const props = light.properties;
 
   const updateProp = (updates: Partial<LightProperties>) => {
@@ -39,20 +41,22 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
 
   return (
     <div className="mt-1 pt-1 text-[10px]" style={{ borderTop: '1px solid var(--sketch-divider)' }}>
-      <p className="opacity-60 mb-0.5">{lightTypeLabel(props.lightType)} Light</p>
+      <p className="opacity-60 mb-0.5">
+        {t('sketch.light.selected', { type: t(lightTypeLabelKey(props.lightType)) })}
+      </p>
 
       {/* Type */}
       <div className="flex items-center gap-1 mb-0.5">
-        <span className="w-14 opacity-60">Type</span>
+        <span className="w-14 opacity-60">{t('sketch.light.type')}</span>
         <select
           value={props.lightType}
           onChange={(e) => updateProp({ lightType: parseLightType(e.target.value) })}
           className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0"
-          aria-label="Light type"
+          aria-label={t('sketch.light.type')}
         >
-          <option value="point">Point</option>
-          <option value="directional">Directional</option>
-          <option value="spot">Spot</option>
+          <option value="point">{t('sketch.light.type.point')}</option>
+          <option value="directional">{t('sketch.light.type.directional')}</option>
+          <option value="spot">{t('sketch.light.type.spot')}</option>
         </select>
       </div>
 
@@ -65,7 +69,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
             value={Math.round(light.x)}
             onChange={(e) => updatePosition('x', parseFloat(e.target.value) || 0)}
             className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
-            aria-label="Light X position"
+            aria-label={t('sketch.light.xPosition')}
           />
           <span className="w-4 opacity-60">Y</span>
           <input
@@ -73,26 +77,26 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
             value={Math.round(light.y)}
             onChange={(e) => updatePosition('y', parseFloat(e.target.value) || 0)}
             className="flex-1 text-[10px] bg-transparent border border-[var(--vscode-input-border)] rounded px-1 py-0 w-16"
-            aria-label="Light Y position"
+            aria-label={t('sketch.light.yPosition')}
           />
         </div>
       )}
 
       {/* Color */}
       <div className="flex items-center gap-1 mb-0.5">
-        <span className="w-14 opacity-60">Color</span>
+        <span className="w-14 opacity-60">{t('sketch.light.color')}</span>
         <input
           type="color"
           value={rgbToHex(props.color)}
           onChange={(e) => updateProp({ color: hexToRgb(e.target.value) })}
           className="w-6 h-4 p-0 border-0 cursor-pointer"
-          aria-label="Light color"
+          aria-label={t('sketch.light.color')}
         />
       </div>
 
       {/* Intensity */}
       <div className="flex items-center gap-1 mb-0.5">
-        <span className="w-14 opacity-60">Intensity</span>
+        <span className="w-14 opacity-60">{t('sketch.light.intensity')}</span>
         <input
           type="range"
           min={0}
@@ -101,7 +105,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
           value={props.intensity}
           onChange={(e) => updateProp({ intensity: parseFloat(e.target.value) })}
           className="sketch-slider flex-1"
-          aria-label="Light intensity"
+          aria-label={t('sketch.light.intensity')}
         />
         <span className="w-8 text-right tabular-nums">{props.intensity.toFixed(1)}</span>
       </div>
@@ -109,7 +113,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
       {/* Radius */}
       {showRadius && (
         <div className="flex items-center gap-1 mb-0.5">
-          <span className="w-14 opacity-60">Radius</span>
+          <span className="w-14 opacity-60">{t('sketch.light.radius')}</span>
           <input
             type="range"
             min={10}
@@ -118,7 +122,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
             value={props.radius}
             onChange={(e) => updateProp({ radius: parseFloat(e.target.value) })}
             className="sketch-slider flex-1"
-            aria-label="Light radius"
+            aria-label={t('sketch.light.radius')}
           />
           <span className="w-8 text-right tabular-nums">{props.radius}px</span>
         </div>
@@ -127,7 +131,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
       {/* Direction */}
       {showDirection && (
         <div className="flex items-center gap-1 mb-0.5">
-          <span className="w-14 opacity-60">Direction</span>
+          <span className="w-14 opacity-60">{t('sketch.light.direction')}</span>
           <input
             type="range"
             min={-180}
@@ -138,7 +142,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
               updateProp({ direction: degreesToRadians(parseFloat(e.target.value)) })
             }
             className="sketch-slider flex-1"
-            aria-label="Light direction"
+            aria-label={t('sketch.light.direction')}
           />
           <span className="w-8 text-right tabular-nums">
             {Math.round(radiansToDegrees(props.direction))}°
@@ -150,7 +154,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
       {showCone && (
         <>
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="w-14 opacity-60">Cone</span>
+            <span className="w-14 opacity-60">{t('sketch.light.cone')}</span>
             <input
               type="range"
               min={5}
@@ -161,14 +165,14 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
                 updateProp({ coneAngle: degreesToRadians(parseFloat(e.target.value)) })
               }
               className="sketch-slider flex-1"
-              aria-label="Spotlight cone angle"
+              aria-label={t('sketch.light.cone')}
             />
             <span className="w-8 text-right tabular-nums">
               {Math.round(radiansToDegrees(props.coneAngle))}°
             </span>
           </div>
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="w-14 opacity-60">Softness</span>
+            <span className="w-14 opacity-60">{t('sketch.light.softness')}</span>
             <input
               type="range"
               min={0}
@@ -177,7 +181,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
               value={props.coneSoftness}
               onChange={(e) => updateProp({ coneSoftness: parseFloat(e.target.value) })}
               className="sketch-slider flex-1"
-              aria-label="Spotlight cone softness"
+              aria-label={t('sketch.light.softness')}
             />
             <span className="w-8 text-right tabular-nums">{props.coneSoftness.toFixed(2)}</span>
           </div>
@@ -186,7 +190,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
 
       {/* Height (Z-axis simulation) */}
       <div className="flex items-center gap-1">
-        <span className="w-14 opacity-60">Height</span>
+        <span className="w-14 opacity-60">{t('sketch.light.height')}</span>
         <input
           type="range"
           min={0}
@@ -195,7 +199,7 @@ export function LightPanel({ sceneId, layerId, light, updateSceneObject }: Light
           value={props.height}
           onChange={(e) => updateProp({ height: parseFloat(e.target.value) })}
           className="sketch-slider flex-1"
-          aria-label="Light height"
+          aria-label={t('sketch.light.height')}
         />
         <span className="w-8 text-right tabular-nums">{props.height}</span>
       </div>
@@ -225,14 +229,14 @@ function hexToRgb(hex: string): readonly [number, number, number] {
   return [r, g, b] as const;
 }
 
-function lightTypeLabel(type: LightType): string {
+function lightTypeLabelKey(type: LightType): string {
   switch (type) {
     case 'directional':
-      return 'Directional';
+      return 'sketch.light.type.directional';
     case 'spot':
-      return 'Spot';
+      return 'sketch.light.type.spot';
     case 'point':
-      return 'Point';
+      return 'sketch.light.type.point';
   }
 }
 
