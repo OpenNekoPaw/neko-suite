@@ -722,21 +722,21 @@ export interface NekoSketchAPI {
 
 /**
  * NekoPuppet Extension API
- * Exported by neko-puppet extension for programmatic face parameter access.
+ * Exported by neko-puppet extension for programmatic Live2D/Puppet character parameter access.
  *
  * The standard face parameters are defined in puppet-face-params.ts (32 params).
  * Values are keyed by the stable `PuppetFaceParameter.id` field.
  */
 export interface NekoPuppetAPI {
   /**
-   * Get the current face parameter values for the active puppet model.
+   * Get the current face parameter values for the active puppet character.
    * Returns a Record keyed by parameter id (e.g. "faceWidth", "eyeOpenL") with numeric values.
    * Returns an empty record when no puppet editor is open.
    */
   getCurrentFaceParams(): Record<string, number>;
 
   /**
-   * Set one or more face parameters on the active puppet model.
+   * Set one or more face parameters on the active puppet character.
    * Keys must be valid PuppetFaceParameter ids. Values are clamped to each parameter's [min, max].
    * Silently no-ops when no puppet editor is open.
    */

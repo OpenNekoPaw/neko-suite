@@ -94,6 +94,7 @@ export type MediaKind =
   | 'image'
   | 'sequence'
   | '3d-model'
+  | 'model-2d-scene'
   | 'model-3d'
   | 'model-motion'
   | 'model-config'
@@ -109,6 +110,7 @@ export const MEDIA_KINDS: readonly MediaKind[] = [
   'image',
   'sequence',
   '3d-model',
+  'model-2d-scene',
   'model-3d',
   'model-motion',
   'model-config',
@@ -129,6 +131,12 @@ export interface MediaMetadata {
   '3d-model'?: {
     format: 'glb' | 'gltf' | 'fbx' | 'obj' | 'vrm' | 'mmd';
     vertexCount?: number;
+  };
+  'model-2d-scene'?: {
+    format: 'nkm';
+    profile: '2d';
+    spriteCount?: number;
+    tilemapCount?: number;
   };
   'model-3d'?: {
     format: 'glb' | 'gltf' | 'fbx' | 'obj' | 'vrm' | 'mmd';

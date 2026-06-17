@@ -208,6 +208,7 @@ describe('AssetManifest v4 contract', () => {
     const kinds = [
       'puppet-model',
       'puppet-config',
+      'model-2d-scene',
       'model-3d',
       'model-motion',
       'model-config',
