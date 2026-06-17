@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import type { EasingType, EditorKeyframeTrack } from '@neko/shared';
-import { createPortal } from 'react-dom';
 import { getKeyboardBoundaryMetadata } from '../keyboard';
+import { PositionedContextMenu } from '../primitives';
+import type { MenuItem } from '../primitives';
 import { KeyframeDiamond } from './keyframe-diamond';
 import { TimelineRuler } from './timeline-ruler';
 
@@ -266,107 +267,45 @@ function KeyframeContextMenu({
   onKeyframeRemove,
   onKeyframeUpdate,
   state,
-}: KeyframeContextMenuProps): React.ReactPortal {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && menuRef.current?.contains(target)) return;
-      onClose();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    const handleScroll = () => onClose();
-    const handleBlur = () => onClose();
-
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, [onClose]);
-
+}: KeyframeContextMenuProps): React.ReactElement {
   const items = useMemo(
-    () => [
+    (): readonly MenuItem[] => [
       {
-        id: 'delete',
         label: 'Delete Keyframe',
         onClick: () => {
           onKeyframeRemove(state.trackProperty, state.keyframeId);
-          onClose();
         },
       },
-      { id: 'separator', separator: true },
+      { separator: true },
       {
-        id: 'linear',
         label: 'Linear',
         onClick: () => {
           onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'linear' });
-          onClose();
         },
       },
       {
-        id: 'ease-in',
         label: 'Ease In',
         onClick: () => {
           onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'ease-in-cubic' });
-          onClose();
         },
       },
       {
-        id: 'ease-out',
         label: 'Ease Out',
         onClick: () => {
           onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'ease-out-cubic' });
-          onClose();
         },
       },
       {
-        id: 'ease-in-out',
         label: 'Ease In-Out',
         onClick: () => {
           onKeyframeUpdate?.(state.trackProperty, state.keyframeId, {
             easing: 'ease-in-out-cubic',
           });
-          onClose();
         },
       },
     ],
-    [onClose, onKeyframeRemove, onKeyframeUpdate, state],
+    [onKeyframeRemove, onKeyframeUpdate, state],
   );
 
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="neko-menu"
-      role="menu"
-      style={{ left: state.x, top: state.y }}
-      tabIndex={-1}
-      {...getKeyboardBoundaryMetadata({
-        scope: 'menu',
-        ownerId: 'keyframe-context-menu',
-        priority: 40,
-        ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
-      })}
-    >
-      {items.map((item) =>
-        'separator' in item ? (
-          <div key={item.id} className="neko-menu-sep" role="separator" />
-        ) : (
-          <button key={item.id} className="neko-menu-item" role="menuitem" onClick={item.onClick}>
-            <span className="neko-menu-item-label">{item.label}</span>
-          </button>
-        ),
-      )}
-    </div>,
-    document.body,
-  );
+  return <PositionedContextMenu x={state.x} y={state.y} items={items} onClose={onClose} />;
 }

@@ -26,6 +26,7 @@ describe('creative workbench shell primitives', () => {
 
   it('renders shell slots without owning domain content', () => {
     const onRightDockSizeChange = vi.fn();
+    const onRightDockGroupChange = vi.fn();
 
     act(() => {
       root.render(
@@ -39,6 +40,15 @@ describe('creative workbench shell primitives', () => {
             minSize: 200,
             maxSize: 420,
             onSizeChange: onRightDockSizeChange,
+            groups: {
+              label: 'Edit mode',
+              activeId: 'basic',
+              onActiveIdChange: onRightDockGroupChange,
+              items: [
+                { id: 'basic', label: 'Basic' },
+                { id: 'professional', label: 'Professional' },
+              ],
+            },
             children: <div data-testid="right" />,
           }}
           bottomPanel={<div data-testid="bottom" />}
@@ -62,6 +72,33 @@ describe('creative workbench shell primitives', () => {
       'width: 320px',
     );
     expect(host.querySelector('.neko-creative-workbench-right-resize-handle')).not.toBeNull();
+    expect(host.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Edit mode');
+    expect(host.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    const tablist = host.querySelector<HTMLElement>('[role="tablist"]');
+    const activeTab = tabs[0];
+    expect(activeTab?.getAttribute('aria-selected')).toBe('true');
+    expect(tablist?.style.borderRadius).toBe('999px');
+    expect(tablist?.style.gap).toBe('0');
+    expect(tablist?.style.width).toBe('100%');
+    expect(tablist?.style.maxWidth).toBe('176px');
+    expect(tablist?.style.margin).toBe('0px auto');
+    expect(tablist?.style.overflow).toBe('hidden');
+    expect(tablist?.style.boxShadow).toContain('inset 0 1px 2px');
+    const thumb = host.querySelector<HTMLElement>('.neko-segmented-control-thumb');
+    expect(thumb?.style.width).toBe('50%');
+    expect(thumb?.style.transform).toBe('translateX(0%)');
+    expect(host.querySelector('.neko-creative-workbench-right-panel-groups')).not.toBeNull();
+    expect(activeTab?.style.borderRadius).toBe('999px');
+    expect(activeTab?.style.height).toBe('24px');
+    expect(activeTab?.style.background).toBe('transparent');
+    expect(activeTab?.style.zIndex).toBe('1');
+
+    act(() => {
+      tabs[1]?.click();
+    });
+
+    expect(onRightDockGroupChange).toHaveBeenCalledWith('professional');
   });
 
   it('forwards visibility toggle state from left rail actions', () => {

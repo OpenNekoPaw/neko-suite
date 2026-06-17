@@ -24,6 +24,7 @@ export function PropertyPanel({
   onToggleKeyframe,
   properties,
   renderRow,
+  resetLabel,
 }: PropertyPanelProps): React.ReactElement {
   if (properties.length === 0) {
     return (
@@ -34,7 +35,7 @@ export function PropertyPanel({
   }
 
   const propertyById = new Map(properties.map((property) => [property.id, property]));
-  const rowProps = { onCommit, onPreviewChange, onReset, onToggleKeyframe };
+  const rowProps = { onCommit, onPreviewChange, onReset, onToggleKeyframe, resetLabel };
 
   if (groups && groups.length > 0) {
     return (
@@ -99,6 +100,7 @@ export function PropertyRow({
   onReset,
   onToggleKeyframe,
   property,
+  resetLabel,
 }: PropertyRowProps): React.ReactElement {
   return (
     <div
@@ -122,7 +124,7 @@ export function PropertyRow({
             size="xs"
             variant="ghost"
           >
-            Reset
+            {resetLabel ?? 'Reset'}
           </Button>
         ) : null}
         {property.animatable ? (

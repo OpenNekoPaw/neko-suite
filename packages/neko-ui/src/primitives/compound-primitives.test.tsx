@@ -1,8 +1,19 @@
+// @vitest-environment jsdom
+
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Button, Collapsible, ContextMenu, Dialog, ScrollArea, Tabs, ToggleGroup } from './index';
+import {
+  Button,
+  Collapsible,
+  ContextMenu,
+  Dialog,
+  ScrollArea,
+  SegmentedControl,
+  Tabs,
+  ToggleGroup,
+} from './index';
 
 class TestResizeObserver {
   observe(): void {}
@@ -136,5 +147,39 @@ describe('@neko/ui compound primitives', () => {
     expect(host.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Brush mode');
     expect(host.querySelector('[data-state="on"]')?.textContent).toBe('Draw');
     expect(host.querySelector('[data-disabled]')?.textContent).toBe('Erase');
+  });
+
+  it('renders SegmentedControl with a single animated thumb', () => {
+    const onValueChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <SegmentedControl
+          label="Creation mode"
+          value="professional"
+          onValueChange={onValueChange}
+          options={[
+            { value: 'basic', label: 'Basic' },
+            { value: 'professional', label: 'Professional' },
+          ]}
+        />,
+      );
+    });
+
+    const control = host.querySelector<HTMLElement>('.neko-segmented-control');
+    const thumb = host.querySelector<HTMLElement>('.neko-segmented-control-thumb');
+    const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+
+    expect(control?.getAttribute('aria-label')).toBe('Creation mode');
+    expect(control?.style.maxWidth).toBe('176px');
+    expect(thumb?.style.width).toBe('50%');
+    expect(thumb?.style.transform).toBe('translateX(100%)');
+    expect(tabs[1]?.getAttribute('aria-selected')).toBe('true');
+
+    act(() => {
+      tabs[0]?.click();
+    });
+
+    expect(onValueChange).toHaveBeenCalledWith('basic');
   });
 });

@@ -10,6 +10,7 @@ export interface PropertyPanelProps {
   readonly properties: readonly PropertyDefinition[];
   readonly groups?: readonly PropertyGroupDefinition[];
   readonly emptyState?: ReactNode;
+  readonly resetLabel?: ReactNode;
   readonly renderRow?: PropertyRowRenderer;
   readonly onPreviewChange?: PropertyPreviewChangeHandler;
   readonly onCommit?: PropertyCommitHandler;
@@ -26,6 +27,7 @@ export interface PropertyGroupDefinition {
 
 export interface PropertyRowProps {
   readonly property: PropertyDefinition;
+  readonly resetLabel?: ReactNode;
   readonly onPreviewChange?: PropertyPreviewChangeHandler;
   readonly onCommit?: PropertyCommitHandler;
   readonly onReset?: PropertyResetHandler;

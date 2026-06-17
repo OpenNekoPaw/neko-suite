@@ -12,6 +12,8 @@ export type {
   CreativeLeftRailProps,
   CreativeWorkbenchControlledRightDockProps,
   CreativeWorkbenchResizePersistenceApi,
+  CreativeWorkbenchRightDockGroup,
+  CreativeWorkbenchRightDockGroupsProps,
   CreativeWorkbenchRightDockContainerProps,
   CreativeWorkbenchRightDockResizePersistenceOptions,
   CreativeWorkbenchMainKind,

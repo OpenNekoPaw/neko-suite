@@ -35,6 +35,7 @@ describe('@neko/ui PropertyPanel', () => {
           onCommit={onCommit}
           onPreviewChange={onPreviewChange}
           onReset={onReset}
+          resetLabel="Restore"
           onToggleKeyframe={onToggleKeyframe}
           properties={[
             {
@@ -69,7 +70,7 @@ describe('@neko/ui PropertyPanel', () => {
     expect(onCommit).toHaveBeenCalledWith('opacity', 72);
 
     const resetButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Reset',
+      (button) => button.textContent === 'Restore',
     );
     act(() => {
       resetButton?.click();

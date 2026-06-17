@@ -3,6 +3,7 @@ import { usePersistedResize, useResizable } from '../hooks';
 import type { PersistedResizeOptions } from '../hooks';
 import {
   ResizeHandle,
+  SegmentedControl,
   ToolbarButton,
   ToolbarSeparator,
   ToolbarSpacer,
@@ -54,11 +55,27 @@ interface CreativeWorkbenchRightDockBaseProps {
   readonly contentClassName?: string;
   readonly resizeHandleClassName?: string;
   readonly containerProps?: CreativeWorkbenchRightDockContainerProps;
+  readonly groups?: CreativeWorkbenchRightDockGroupsProps;
   readonly label?: string;
   readonly role?: React.AriaRole;
   readonly minSize?: number;
   readonly maxSize?: number;
   readonly disabled?: boolean;
+}
+
+export interface CreativeWorkbenchRightDockGroup {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly disabled?: boolean;
+}
+
+export interface CreativeWorkbenchRightDockGroupsProps {
+  readonly label: string;
+  readonly activeId: string;
+  readonly items: readonly CreativeWorkbenchRightDockGroup[];
+  readonly onActiveIdChange: (id: string) => void;
+  readonly className?: string;
 }
 
 export interface CreativeWorkbenchResizePersistenceApi {
@@ -246,6 +263,7 @@ function CreativeWorkbenchRightDockSurface({
   contentClassName,
   containerProps,
   disabled,
+  groups,
   id,
   label,
   maxSize,
@@ -280,12 +298,71 @@ function CreativeWorkbenchRightDockSurface({
         handleProps={handleProps}
         className={cn('neko-creative-workbench-right-resize-handle', resizeHandleClassName)}
       />
-      <div className={cn('neko-creative-workbench-right-panel-content', contentClassName)}>
-        {children}
+      <div className="neko-creative-workbench-right-panel-body" style={RIGHT_DOCK_BODY_STYLE}>
+        {groups ? <CreativeWorkbenchRightDockGroups groups={groups} dockId={id} /> : null}
+        <div
+          className={cn('neko-creative-workbench-right-panel-content', contentClassName)}
+          data-right-dock-group={groups?.activeId}
+          style={RIGHT_DOCK_CONTENT_STYLE}
+        >
+          {children}
+        </div>
       </div>
     </aside>
   );
 }
+
+function CreativeWorkbenchRightDockGroups({
+  dockId,
+  groups,
+}: {
+  readonly dockId: string;
+  readonly groups: CreativeWorkbenchRightDockGroupsProps;
+}): React.ReactElement {
+  return (
+    <div
+      className="neko-creative-workbench-right-panel-groups-shell"
+      style={RIGHT_DOCK_GROUPS_SHELL_STYLE}
+    >
+      <SegmentedControl
+        className={cn('neko-creative-workbench-right-panel-groups', groups.className)}
+        controls={dockId}
+        label={groups.label}
+        value={groups.activeId}
+        onValueChange={groups.onActiveIdChange}
+        options={groups.items.map((item) => ({
+          value: item.id,
+          label: item.label,
+          description: item.description,
+          disabled: item.disabled,
+        }))}
+      />
+    </div>
+  );
+}
+
+const RIGHT_DOCK_BODY_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flex: '1 1 auto',
+  flexDirection: 'column',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
+};
+
+const RIGHT_DOCK_CONTENT_STYLE: React.CSSProperties = {
+  flex: '1 1 auto',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
+};
+
+const RIGHT_DOCK_GROUPS_SHELL_STYLE: React.CSSProperties = {
+  flexShrink: 0,
+  padding: '8px 14px 10px',
+  borderBottom: '1px solid var(--vscode-panel-border, var(--neko-border, #3c3c3c))',
+  background: 'var(--vscode-sideBar-background, var(--neko-surface, #f3f3f3))',
+};
 
 export function CreativeLeftRail({
   actions = [],

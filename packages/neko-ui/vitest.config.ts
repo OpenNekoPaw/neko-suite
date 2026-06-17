@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@neko/shared/icons': resolve(__dirname, '../neko-types/src/icons/index.ts'),
       '@neko/shared': resolve(__dirname, '../neko-types/src'),
     },
   },

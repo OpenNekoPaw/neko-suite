@@ -43,6 +43,8 @@ export { ScrollArea } from './scroll-area';
 export type { ScrollAreaProps } from './scroll-area';
 export { Select } from './select';
 export type { SelectOption, SelectProps } from './select';
+export { SegmentedControl } from './segmented-control';
+export type { SegmentedControlOption, SegmentedControlProps } from './segmented-control';
 export { Slider } from './slider';
 export type { SliderProps } from './slider';
 export { Tabs } from './tabs';
