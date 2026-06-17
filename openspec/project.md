@@ -213,6 +213,16 @@ Shared foundation expectations:
 - Use `@neko/ui` for reusable Webview React controls, creative UI primitives,
   keyboard/focus behavior, accessibility affordances, and theme-aware UI
   composition when a suitable primitive exists.
+- Before adding a new Webview/React component, perform a component reuse audit:
+  search `@neko/ui`, the owning package's `components/`, `hooks/`, `shared/`,
+  adjacent domain packages, and existing tests. Prefer enhancing an existing
+  component with props, slots, variants, composition hooks, or package-local
+  adapters over generating a parallel component.
+- Add a new component only when responsibility, state lifecycle, interaction
+  contract, accessibility semantics, or domain boundary is genuinely different,
+  and when enhancing an existing component would increase coupling or break
+  existing users. Record the audit in OpenSpec, PR notes, or the delivery
+  summary.
 - Use the shared Tailwind preset, VSCode CSS variables, and shared theme tokens
   for Webview styling. Avoid package-local design systems, hard-coded color
   palettes, duplicated spacing scales, or one-off component styling that should
@@ -392,6 +402,9 @@ Shared UI constraints:
   stable public APIs.
 - Domain packages own store wiring, command dispatch, engine/client calls,
   package-specific i18n, and specialized creative behavior.
+- Do not create package-local copies of existing buttons, selectors, panels,
+  empty states, toolbars, lists, cards, input surfaces, Header/Input patterns, or
+  creative primitives without a recorded reuse audit.
 - Keep Workbench-style creative editors consistent: left rail for common tools
   and panel toggles, main panel for creative surface, right panel for inspector
   or local sections, VSCode StatusBar for passive status.
@@ -526,6 +539,8 @@ Before review, answer:
 1. Does this fit the existing architecture?
 2. How does this reduce coupling?
 3. Is it easy to extend and test?
+4. For Webview/React changes, which existing components, hooks, shared
+   primitives, or tests were audited before adding any new component?
 
 Validation expectations:
 

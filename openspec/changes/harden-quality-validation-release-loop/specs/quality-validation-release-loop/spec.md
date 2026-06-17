@@ -52,6 +52,17 @@ Changes that affect Webview runtime behavior, Extension/Webview messaging, layou
 - **THEN** the default runtime validation MUST use an Extension Development Host observed through the `vscode-extension-debugger` Skill
 - **AND** Chrome, the generic Browser plugin, Playwright, regular browser, or Vite localhost validation MUST NOT be used as the default runtime acceptance evidence unless the user explicitly requests browser-compatibility validation
 
+### Requirement: Component reuse audit
+
+Webview and React changes SHALL prefer enhancing existing components, hooks, shared primitives, or package-local adapters over generating parallel components.
+
+#### Scenario: Webview component is added
+
+- **WHEN** a change adds a Webview or React component
+- **THEN** the proposal, design, tasks, PR notes, or delivery summary MUST record which existing `@neko/ui`, owning-package, adjacent-domain, and test surfaces were checked for reuse
+- **AND** the record MUST explain why the existing component could not be enhanced safely through props, slots, variants, composition hooks, or package-local adapters
+- **AND** the change MUST include focused validation for the new component or for the enhanced existing component
+
 ### Requirement: Pre-implementation feasibility check
 
 High-risk or unclear feature requests SHALL include a feasibility check before broad implementation.

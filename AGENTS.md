@@ -103,9 +103,13 @@
   - `packages/neko-types/src/`
   - `packages/neko-client/src/`
   - `packages/neko-proto/`
+  - `packages/neko-ui/src/`
   - `packages/neko-cut/packages/webview/src/components/`
   - `packages/neko-cut/packages/webview/src/hooks/`
   - `packages/neko-agent/packages/platform/src/`
+- 新增 Webview/React 组件前必须先做组件复用审计：搜索 `@neko/ui`、同包 `components/`、`hooks/`、`shared/`、相邻领域包和已有测试，优先增强旧组件、提取 prop/slot/variant、或抽出 package-local adapter。
+- 只有在职责、状态生命周期、交互契约或可访问性语义明显不同，且增强旧组件会增加耦合或破坏既有使用方时，才新增组件；新增时需在 OpenSpec、PR 或交付说明中写明复用审计结论。
+- 不要为单个页面复制按钮、选择器、面板、空状态、工具栏、列表、卡片、输入区、Header/Input 等已有模式；跨两个以上 Webview 复用的无业务 UI 优先进入 `@neko/ui`，领域专属适配留在 owning package。
 
 ## 禁止与推荐
 

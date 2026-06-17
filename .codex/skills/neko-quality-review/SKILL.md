@@ -84,12 +84,13 @@ Always check:
 - Paths are relative or `${VAR}/path`, not hard-coded absolute paths.
 - Async flows handle errors, cancellation, resource disposal, and races.
 - Public contracts include tests or clear validation evidence.
+- New Webview/React components include component reuse audit evidence: checked `@neko/ui`, owning-package components/hooks/shared modules, adjacent domains, and tests; explained why enhancing an existing component would be unsafe or too coupled.
 - Prelaunch breaking changes identify what breaks, the old-data strategy, and why compatibility shims are avoided; they do not relax runtime, security, trust, or valuable local-data boundaries.
 - Docs are updated when behavior, architecture, config, package entry points, or public contracts change.
 
 Add domain checks as needed:
 
-- Webview/UX: layout, theme, focus, keyboard, i18n, and runtime evidence from `pnpm smoke:webview:runtime` or an equivalent VS Code debugger Skill run; Chrome/Browser/Playwright screenshots do not count as default VS Code Webview acceptance evidence.
+- Webview/UX: component reuse audit, layout, theme, focus, keyboard, i18n, and runtime evidence from `pnpm smoke:webview:runtime` or an equivalent VS Code debugger Skill run; Chrome/Browser/Playwright screenshots do not count as default VS Code Webview acceptance evidence.
 - Engine/media: `cargo test`, CLI smoke, `serve` integration, performance before/after when relevant.
 - Proto/shared: generated types are synchronized and callers are migrated.
 - Agent/AI: tool contracts, permissions, Journal/traceability, failure recovery.

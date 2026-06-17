@@ -4,6 +4,7 @@
 - [x] 1.2 Define Engine and Webview as explicit validation surfaces in the new spec.
 - [x] 1.3 Define pre-implementation feasibility expectations for L3/L4 changes.
 - [x] 1.4 Document prelaunch breaking compatibility policy and validation expectations.
+- [x] 1.5 Document component reuse audit expectations before adding Webview/React components.
 
 ## 2. Quality Gate Implementation
 

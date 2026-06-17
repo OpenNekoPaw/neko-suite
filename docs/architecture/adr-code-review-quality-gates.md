@@ -96,6 +96,18 @@ Engine 变更涉及 Rust action、stream、file access、runtime state、native 
 
 普通浏览器、Chrome、Browser 插件、Playwright 或 Vite/localhost 只能作为热重载和显式浏览器兼容性辅助；它们不经过 VS Code Webview CSP、`webview.asWebviewUri(...)`、Extension/Webview message、焦点生命周期或 VS Code 主题注入，因此不能作为 Extension Webview 视觉/交互变更的默认验收证据。此类变更必须使用 Extension Development Host + `vscode-extension-debugger` Skill，运行 `pnpm smoke:webview:runtime` 或等价命令；若无法运行，必须记录原因、剩余风险和关闭方式。
 
+## 组件复用审计
+
+Webview/React 变更新增组件前，review 必须确认已经做过组件复用审计：
+
+- 是否搜索过 `@neko/ui`、当前包 `components/`、`hooks/`、`shared/`、相邻领域包和已有测试。
+- 是否可以通过增强已有组件的 prop、slot、variant、composition hook 或 package-local adapter 完成需求。
+- 新组件与旧组件的职责、状态生命周期、交互契约、可访问性语义或领域边界是否真的不同。
+- 如果跨两个以上 Webview 复用，是否应进入 `@neko/ui`；如果只服务某个领域，是否留在 owning package。
+- PR/OpenSpec/交付说明是否记录了查过哪些组件、为何不复用、为何不抽共享层以及新增/回归测试。
+
+没有复用审计证据的新增按钮、选择器、面板、空状态、工具栏、列表、卡片、输入区、Header/Input 等模式，应视为功能偏离或维护风险，而不是普通实现细节。
+
 ## 功能偏离检查
 
 OpenSpec 变更必须把需求、实现和验证连起来：

@@ -504,6 +504,7 @@ docs: update ARCHITECTURE.md with streaming flow
 - [ ] `pnpm test` passes
 - [ ] Rust changes: `cargo test` + `cargo clippy` pass
 - [ ] New interfaces have unit tests
+- [ ] New Webview/React components include a reuse audit and explain why existing components could not be enhanced or moved into `@neko/ui`
 - [ ] Architecture changes: corresponding ADR or package README updated
 - [ ] No `any` types, no `console.log`, no `as Type` assertions
 
@@ -512,7 +513,8 @@ docs: update ARCHITECTURE.md with streaming flow
 1. Does it follow SOLID principles (single responsibility, dependency inversion)?
 2. Does the Webview misuse Node.js/VS Code APIs?
 3. Does it introduce circular dependencies?
-4. Does the Rust code have risky `unwrap()` calls?
+4. Did new components audit and prefer enhancing existing `@neko/ui` or package-local components?
+5. Does the Rust code have risky `unwrap()` calls?
 
 ---
 

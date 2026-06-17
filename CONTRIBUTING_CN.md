@@ -502,6 +502,7 @@ docs: update ARCHITECTURE.md with streaming flow
 - [ ] `pnpm test` 测试通过
 - [ ] Rust 变更：`cargo test` + `cargo clippy` 通过
 - [ ] 新接口有单元测试
+- [ ] 新增 Webview/React 组件前已做复用审计，并说明为何不能增强既有组件或抽到 `@neko/ui`
 - [ ] 涉及架构变更：更新对应 ADR 或 package README
 - [ ] 无 `any` 类型、无 `console.log`、无 `as Type` 强制断言
 
@@ -510,7 +511,8 @@ docs: update ARCHITECTURE.md with streaming flow
 1. 是否符合 SOLID 原则（单一职责、依赖倒置）
 2. Webview 是否误用 Node.js/VS Code API
 3. 是否引入循环依赖
-4. Rust 代码是否有 `unwrap()` 隐患
+4. 新增组件是否先审计并优先增强了既有 `@neko/ui` 或包内组件
+5. Rust 代码是否有 `unwrap()` 隐患
 
 ---
 
