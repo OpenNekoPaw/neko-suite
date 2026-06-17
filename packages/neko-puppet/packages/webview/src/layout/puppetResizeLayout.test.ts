@@ -45,9 +45,14 @@ describe('Puppet right panel resize layout', () => {
     const app = readSource('PuppetApp.tsx');
 
     expect(app).not.toMatch(/w-60/);
-    expect(app).toMatch(/className="puppet-right-panel"/);
-    expect(app).toMatch(/usePersistedResize\(\s*PUPPET_RIGHT_PANEL_RESIZE\.panelId/);
-    expect(app).toMatch(/<ResizeHandle\s+handleProps=\{rightPanelResizeHandleProps\}/);
+    expect(app).toMatch(/className: 'puppet-right-panel'/);
+    expect(app).toMatch(/rightDock=\{\s*isRightPanelVisible/);
+    expect(app).toMatch(/panelId: PUPPET_RIGHT_PANEL_RESIZE\.panelId/);
+    expect(app).toMatch(/defaultSize: PUPPET_RIGHT_PANEL_RESIZE\.defaultSize/);
+    expect(app).toMatch(
+      /resizeHandleClassName: 'puppet-resize-handle puppet-right-panel-resize-handle'/,
+    );
+    expect(app).not.toMatch(/rightPanelResizeHandleProps/);
     for (const component of [
       'PuppetNodeTree',
       'ParameterPanel',
@@ -57,6 +62,7 @@ describe('Puppet right panel resize layout', () => {
     ]) {
       expect(app).toMatch(new RegExp(`<${component}\\b`));
     }
+    expect(app).toMatch(/viewportController=\{puppetViewportController\}/);
     expect(app).toMatch(/handlePuppetContextMenuAction/);
   });
 
@@ -64,8 +70,8 @@ describe('Puppet right panel resize layout', () => {
     const app = readSource('PuppetApp.tsx');
     const css = readSource('index.css');
 
-    expect(app).toMatch(/createIdlePuppetSceneController/);
-    expect(app).toMatch(/noPuppetSource \|\| \(puppetLoaded && puppetSceneController\)/);
+    expect(app).toMatch(/createIdlePuppetViewportController/);
+    expect(app).toMatch(/noPuppetSource \|\| \(puppetLoaded && puppetViewportController\)/);
     expect(app).toMatch(/<PuppetCanvas/);
     expect(app).toMatch(/emptyViewport=\{noPuppetSource\}/);
     expect(app).toMatch(/<PuppetEmptyState\s+onDropMoc3=\{handleDropMoc3\}/);
@@ -103,10 +109,40 @@ describe('Puppet right panel resize layout', () => {
     expect(app).toMatch(
       /const \[isRightPanelVisible, setIsRightPanelVisible\] = useState\(false\)/,
     );
-    expect(app).toMatch(/rightPanel=\{\s*isRightPanelVisible \? \(/);
+    expect(app).toMatch(/rightDock=\{\s*isRightPanelVisible/);
     expect(css).not.toMatch(/\.puppet-viewport-toolbar/);
     expect(css).toMatch(/\.puppet-main-panel\s*\{/);
     expect(css).not.toMatch(/\.puppet-viewport-controls\s*\{/);
     expect(css).toMatch(/\.puppet-right-panel-stack/);
+  });
+
+  it('keeps Puppet UI scoped to Live2D and native puppet tools, not generic 2D Scene authoring', () => {
+    const app = readSource('PuppetApp.tsx');
+    const toolbar = readSource('components/PuppetToolbar.tsx');
+    const parameterPanel = readSource('components/ParameterPanel.tsx');
+    const controller = readSource('viewport/PuppetViewportController.ts');
+    const combined = [app, toolbar, parameterPanel, controller].join('\n');
+
+    for (const forbidden of [
+      'tilemap',
+      'tile map',
+      'stage camera',
+      'scene camera',
+      'scene light',
+      'parallax',
+      'particle',
+      'scene graph',
+      'sceneGraph',
+    ]) {
+      expect(combined.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+    expect(toolbar).toMatch(/puppet\.toolbar\.import/);
+    expect(toolbar).toMatch(/puppet\.toolbar\.onionSkin/);
+    expect(app).toMatch(/<ParameterPanel\b/);
+    expect(app).toMatch(/<ControlDriverPanel\b/);
+    expect(app).toMatch(/<AnimationPanel\b/);
+    expect(app).toMatch(/<PuppetKeyframeTimeline\b/);
+    expect(controller).toMatch(/scene:puppet:set-blendshape/);
+    expect(controller).toMatch(/scene:puppet:toggle-onion-skin/);
   });
 });

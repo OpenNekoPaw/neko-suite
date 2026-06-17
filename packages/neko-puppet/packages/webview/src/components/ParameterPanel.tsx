@@ -11,7 +11,7 @@ import { usePuppetStore } from '../stores/puppet-store';
 import { useTranslation } from '../i18n/I18nContext';
 import { PUPPET_FACE_PARAMETERS } from '@neko/shared';
 import type { IPuppetController } from '../animation';
-import type { PuppetSceneController } from '../viewport/PuppetSceneController';
+import type { PuppetViewportController } from '../viewport/PuppetViewportController';
 import {
   mapNativeBlendShapesToProperties,
   mapPuppetFaceParametersToProperties,
@@ -20,10 +20,10 @@ import {
 
 interface ParameterPanelProps {
   controller: IPuppetController | null;
-  sceneController?: PuppetSceneController | null;
+  viewportController?: PuppetViewportController | null;
 }
 
-export function ParameterPanel({ controller, sceneController }: ParameterPanelProps) {
+export function ParameterPanel({ controller, viewportController }: ParameterPanelProps) {
   const { t } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const parameters = usePuppetStore((s) => s.puppetParameters);
@@ -55,7 +55,7 @@ export function ParameterPanel({ controller, sceneController }: ParameterPanelPr
 
   const handleNativeBlendShapeCommit = useCallback(
     (name: string, value: number) => {
-      void sceneController
+      void viewportController
         ?.setBlendShape(name, value)
         .then(async (event) => {
           if (event.status === 'error') return;
@@ -69,7 +69,7 @@ export function ParameterPanel({ controller, sceneController }: ParameterPanelPr
           });
         });
     },
-    [controller, sceneController],
+    [controller, viewportController],
   );
 
   const handleParameterValue = useCallback(

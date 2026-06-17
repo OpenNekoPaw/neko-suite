@@ -26,7 +26,7 @@ export type PuppetViewportAction =
   | 'scene:puppet:set-driver-weight'
   | 'scene:puppet:toggle-onion-skin';
 
-export interface PuppetSceneControllerOptions {
+export interface PuppetViewportControllerOptions {
   readonly sceneId: string;
   readonly viewportId: string;
   readonly controller: IPuppetController;
@@ -66,7 +66,7 @@ interface PuppetBoneDragState {
 
 const BONE_DRAG_COMMIT_EPSILON = 0.5;
 
-class IdlePuppetSceneController implements ISceneController {
+class IdlePuppetViewportController implements ISceneController {
   readonly sceneId = 'puppet-main';
   readonly sceneType = '2d' as const;
 
@@ -89,21 +89,21 @@ class IdlePuppetSceneController implements ISceneController {
   handleViewportEvent(_event: ViewportEvent): void {}
 }
 
-export function createIdlePuppetSceneController(): ISceneController {
-  return new IdlePuppetSceneController();
+export function createIdlePuppetViewportController(): ISceneController {
+  return new IdlePuppetViewportController();
 }
 
-export class PuppetSceneController implements ISceneController {
+export class PuppetViewportController implements ISceneController {
   readonly sceneType = '2d' as const;
 
-  private readonly options: PuppetSceneControllerOptions;
+  private readonly options: PuppetViewportControllerOptions;
   private readonly predictions = new ViewportPredictionLayer();
   private latestFrameMeta: ViewportFrameMeta | null = null;
   private activeBoneDrag: PuppetBoneDragState | null = null;
   private onionSkinEnabled = false;
   private lastControlError: string | null = null;
 
-  constructor(options: PuppetSceneControllerOptions) {
+  constructor(options: PuppetViewportControllerOptions) {
     this.options = options;
   }
 
@@ -538,7 +538,7 @@ export function handlePuppetMenuAction(item: ViewportMenuItem): void {
 
 export async function handlePuppetToolbarAction(
   item: ViewportToolbarItem,
-  controller?: PuppetSceneController | null,
+  controller?: PuppetViewportController | null,
 ): Promise<void> {
   if (item.action === 'scene:puppet:toggle-onion-skin') {
     const enabled = readOptionalBoolean(item.payload?.['enabled']) ?? item.toggled !== true;

@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PuppetCommandAck } from '@neko/shared';
 import {
-  PuppetSceneController,
-  createIdlePuppetSceneController,
+  PuppetViewportController,
+  createIdlePuppetViewportController,
   handlePuppetToolbarAction,
   handlePuppetMenuAction,
   puppetCommandFromViewportCommand,
-} from './PuppetSceneController';
+} from './PuppetViewportController';
 import { drawOverlayDescriptors } from '@neko/ui';
 import { usePuppetStore } from '../stores/puppet-store';
 import type { IPuppetController } from '../animation/puppet-controller';
 
-describe('PuppetSceneController', () => {
+describe('PuppetViewportController', () => {
   beforeEach(() => {
     usePuppetStore.setState({
       puppetLoaded: true,
@@ -56,7 +56,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('provides an idle viewport controller for empty puppet documents', () => {
-    const controller = createIdlePuppetSceneController();
+    const controller = createIdlePuppetViewportController();
 
     expect(controller.sceneId).toBe('puppet-main');
     expect(controller.sceneType).toBe('2d');
@@ -66,7 +66,7 @@ describe('PuppetSceneController', () => {
 
   it('maps drag bone and BlendShape actions to native puppet commands', async () => {
     const engine = createControllerHarness();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -99,7 +99,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('provides skeleton overlays and context menu selection actions', () => {
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness(),
@@ -136,7 +136,7 @@ describe('PuppetSceneController', () => {
     const engine = createControllerHarness({
       applyNativeCommand: vi.fn(() => pendingAck.promise),
     });
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -182,7 +182,7 @@ describe('PuppetSceneController', () => {
       ),
     });
     const onError = vi.fn();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -201,7 +201,7 @@ describe('PuppetSceneController', () => {
 
   it('invalidates stale native edit predictions when frame metadata supersedes their base revision', () => {
     const pendingAck = deferred<PuppetCommandAck>();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness({
@@ -230,7 +230,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('aligns puppet bone overlays with viewport frame metadata transforms', () => {
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness(),
@@ -257,7 +257,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('uses active frame metadata view transform for bone hit testing', () => {
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness(),
@@ -285,7 +285,7 @@ describe('PuppetSceneController', () => {
 
   it('dispatches pointer drag commit through native puppet command envelopes', async () => {
     const engine = createControllerHarness();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -316,7 +316,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('rejects stale puppet hit testing when frame metadata is ahead of the native snapshot', () => {
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness(),
@@ -358,7 +358,7 @@ describe('PuppetSceneController', () => {
       ),
     });
     const onError = vi.fn();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -382,7 +382,7 @@ describe('PuppetSceneController', () => {
     const engine = createControllerHarness({
       applyNativeCommand: vi.fn(() => pendingAck.promise),
     });
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -407,7 +407,7 @@ describe('PuppetSceneController', () => {
 
   it('applies driver and vertex edit UI state only after native command ack', async () => {
     const engine = createControllerHarness();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -436,7 +436,7 @@ describe('PuppetSceneController', () => {
     const engine = createControllerHarness({
       applyNativeCommand: vi.fn(() => pendingAck.promise),
     });
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -475,7 +475,7 @@ describe('PuppetSceneController', () => {
 
   it('routes onion-skin toolbar state through native command ack', async () => {
     const engine = createControllerHarness();
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: engine,
@@ -501,7 +501,7 @@ describe('PuppetSceneController', () => {
   });
 
   it('keeps puppet overlay coordinate projection within half a pixel tolerance', () => {
-    const controller = new PuppetSceneController({
+    const controller = new PuppetViewportController({
       sceneId: 'puppet-a',
       viewportId: 'main',
       controller: createControllerHarness(),
@@ -593,7 +593,7 @@ describe('PuppetSceneController', () => {
 function pointerInput(
   phase: 'down' | 'move' | 'up' = 'down',
   position: readonly [number, number] = [0, 0],
-): Parameters<PuppetSceneController['onPointerDown']>[0] {
+): Parameters<PuppetViewportController['onPointerDown']>[0] {
   return {
     kind: 'pointer',
     sceneId: 'puppet-a',

@@ -17,17 +17,15 @@ import { PuppetCanvas } from './components/PuppetCanvas';
 import { PuppetEmptyState } from './components/empty-state/PuppetEmptyState';
 import { PuppetController } from './animation';
 import {
-  PuppetSceneController,
-  createIdlePuppetSceneController,
+  PuppetViewportController,
+  createIdlePuppetViewportController,
   handlePuppetMenuAction,
-} from './viewport/PuppetSceneController';
+} from './viewport/PuppetViewportController';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import type { NkpNativeProjectData, SupportedLocale } from '@neko/shared';
 import type { ViewportFrameMeta, ViewportMenuItem } from '@neko/shared';
-import { usePersistedResize, useResizable } from '@neko/ui/hooks';
-import { ResizeHandle } from '@neko/ui/primitives';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import { EngineClient } from '@neko/neko-client';
 import { OverlayRenderer, ViewportShell } from '@neko/ui';
@@ -307,19 +305,24 @@ export function PuppetApp() {
     [loadPuppetMessage],
   );
 
-  const puppetSceneController = React.useMemo(() => {
+  const puppetViewportController = React.useMemo(() => {
     const controller = controllerRef.current;
     if (!controller) return null;
-    return new PuppetSceneController({
+    return new PuppetViewportController({
       sceneId: 'puppet-main',
       viewportId: 'main',
       controller,
       onError: (message) => usePuppetStore.getState().setLoadError(message),
     });
   }, [controllerVersion]);
-  const idlePuppetSceneController = React.useMemo(() => createIdlePuppetSceneController(), []);
-  const activePuppetSceneController =
-    puppetLoaded && puppetSceneController ? puppetSceneController : idlePuppetSceneController;
+  const idlePuppetViewportController = React.useMemo(
+    () => createIdlePuppetViewportController(),
+    [],
+  );
+  const activePuppetViewportController =
+    puppetLoaded && puppetViewportController
+      ? puppetViewportController
+      : idlePuppetViewportController;
   const puppetFrameMeta = React.useMemo<ViewportFrameMeta>(
     () => ({
       protocolVersion: 1,
@@ -356,36 +359,13 @@ export function PuppetApp() {
     setFitViewRequest((value) => value + 1);
   }, []);
   const handleToggleOnionSkin = useCallback(() => {
-    if (!puppetSceneController) return;
+    if (!puppetViewportController) return;
     const next = !isOnionSkinEnabled;
     setIsOnionSkinEnabled(next);
-    void puppetSceneController.setOnionSkin(next).catch(() => {
+    void puppetViewportController.setOnionSkin(next).catch(() => {
       setIsOnionSkinEnabled(!next);
     });
-  }, [isOnionSkinEnabled, puppetSceneController]);
-  const rightPanelResize = usePersistedResize(
-    PUPPET_RIGHT_PANEL_RESIZE.panelId,
-    PUPPET_RIGHT_PANEL_RESIZE.defaultSize,
-    {
-      minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
-      maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
-    },
-    {
-      api: vscode,
-    },
-  );
-  const {
-    containerRef: rightPanelResizeRef,
-    handleProps: rightPanelResizeHandleProps,
-    isResizing: isRightPanelResizing,
-  } = useResizable<HTMLElement>({
-    edge: 'right',
-    mode: 'pixel',
-    size: rightPanelResize.size,
-    minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
-    maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
-    onSizeChange: rightPanelResize.setSize,
-  });
+  }, [isOnionSkinEnabled, puppetViewportController]);
   useEffect(() => {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -431,11 +411,11 @@ export function PuppetApp() {
               <div className="flex-1 flex items-center justify-center text-sm text-[var(--vscode-errorForeground)]">
                 <PuppetLoadErrorPlaceholder message={loadError} />
               </div>
-            ) : noPuppetSource || (puppetLoaded && puppetSceneController) ? (
+            ) : noPuppetSource || (puppetLoaded && puppetViewportController) ? (
               <ViewportShell
                 sceneId="puppet-main"
                 viewportId="main"
-                controller={activePuppetSceneController}
+                controller={activePuppetViewportController}
                 frameMeta={puppetFrameMeta}
                 className="puppet-viewport-shell flex-1 relative overflow-hidden"
                 surface={{
@@ -476,24 +456,25 @@ export function PuppetApp() {
             )}
           </>
         }
-        rightPanel={
-          isRightPanelVisible ? (
-            <aside
-              id="puppet-right-panel"
-              ref={rightPanelResizeRef}
-              className="puppet-right-panel"
-              style={{ width: rightPanelResize.size }}
-              data-resizing={isRightPanelResizing ? 'true' : 'false'}
-            >
-              <ResizeHandle
-                handleProps={rightPanelResizeHandleProps}
-                className="puppet-resize-handle puppet-right-panel-resize-handle"
-              />
-              <div className="puppet-right-panel-stack">
-                {puppetLoaded && (
+        rightDock={
+          isRightPanelVisible
+            ? {
+                id: 'puppet-right-panel',
+                panelId: PUPPET_RIGHT_PANEL_RESIZE.panelId,
+                defaultSize: PUPPET_RIGHT_PANEL_RESIZE.defaultSize,
+                minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
+                maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
+                className: 'puppet-right-panel',
+                contentClassName: 'puppet-right-panel-stack',
+                resizeHandleClassName: 'puppet-resize-handle puppet-right-panel-resize-handle',
+                resizePersistence: { api: vscode },
+                children: puppetLoaded ? (
                   <>
                     <PuppetNodeTree />
-                    <ParameterPanel controller={controllerRef.current} />
+                    <ParameterPanel
+                      controller={controllerRef.current}
+                      viewportController={puppetViewportController}
+                    />
                     <ControlDriverPanel />
                     <AnimationPanel
                       onPlay={onPlay}
@@ -502,10 +483,9 @@ export function PuppetApp() {
                       onCrossfade={onCrossfade}
                     />
                   </>
-                )}
-              </div>
-            </aside>
-          ) : undefined
+                ) : null,
+              }
+            : undefined
         }
         bottomPanel={
           puppetLoaded ? (
