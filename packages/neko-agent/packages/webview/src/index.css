@@ -1146,6 +1146,7 @@ body {
 .agent-composer-control-row {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 8px 5px;
 }
@@ -1170,17 +1171,14 @@ body {
 .agent-composer-control-group-config {
   flex: 1 1 0;
   justify-content: flex-end;
+  min-width: min(100%, 180px);
 }
 
 .agent-composer-control-group-config .agent-generation-params {
   width: 100%;
 }
 
-@media (max-width: 520px) {
-  .agent-composer-control-row {
-    flex-wrap: wrap;
-  }
-
+@media (max-width: 340px) {
   .agent-composer-control-group-mode,
   .agent-composer-control-group-config {
     flex: 1 1 100%;
