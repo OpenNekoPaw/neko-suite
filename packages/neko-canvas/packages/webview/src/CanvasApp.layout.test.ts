@@ -12,6 +12,7 @@ describe('Canvas creative workbench layout boundary', () => {
     resolve(__dirname, 'components/panels/NodeLibraryPanel.tsx'),
     'utf8',
   );
+  const cssSource = readFileSync(resolve(__dirname, 'index.css'), 'utf8');
   const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
   const canvasStoreSource = readFileSync(resolve(__dirname, 'stores/canvasStore.ts'), 'utf8');
   const infiniteCanvasSource = readFileSync(
@@ -144,10 +145,42 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/rightDock=\{\s*isRightNodeTreeVisible/);
     expect(appSource).toMatch(/id: 'canvas-right-node-tree-panel'/);
     expect(appSource).toMatch(/panelId: 'canvas\.nodeLibraryDock'/);
+    expect(appSource).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<CanvasRightDockMode>\('basic'\)/,
+    );
+    expect(appSource).toMatch(/groups: \{/);
+    expect(appSource).toMatch(/activeId: rightDockMode/);
+    expect(appSource).toMatch(/label: t\('rightDock\.mode\.basic'\)/);
+    expect(appSource).toMatch(/label: t\('rightDock\.mode\.professional'\)/);
+    expect(appSource).toMatch(
+      /const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId\[] = \['storyboard'\]/,
+    );
+    expect(appSource).toMatch(/basicNodeLibrarySubsystemManifests/);
+    expect(appSource).toMatch(/basicNodeLibraryDescriptors/);
+    expect(appSource).toMatch(
+      /rightDockMode === 'professional'\s*\?\s*WEBVIEW_SUBSYSTEM_REGISTRY\.manifests\s*:\s*basicNodeLibrarySubsystemManifests/,
+    );
     expect(appSource).toMatch(/<NodeLibraryPanel/);
     expect(appSource).toMatch(/'data-canvas-right-node-tree': 'true'/);
     expect(nodeLibrarySource).not.toMatch(/id="canvas-right-node-tree-panel"/);
     expect(nodeLibrarySource).not.toMatch(/data-canvas-right-node-tree="true"/);
+  });
+
+  it('keeps the node library visually integrated with the right dock', () => {
+    expect(nodeLibrarySource).toContain('className="canvas-node-library-panel');
+    expect(nodeLibrarySource).toContain('className="canvas-node-library-header');
+    expect(nodeLibrarySource).toContain('className="canvas-node-library-scroll');
+    expect(cssSource).toMatch(/\.canvas-right-node-tree-panel-content\s*\{[^}]*width:\s*100%/);
+    expect(cssSource).toMatch(/\.canvas-node-library-panel\s*\{[^}]*width:\s*100%/);
+    expect(cssSource).toMatch(/\.canvas-node-library-section\s*\{[^}]*background:\s*transparent/);
+    expect(cssSource).toMatch(/\.canvas-node-library-section\s*\{[^}]*box-shadow:\s*none/);
+    expect(cssSource).toMatch(/#canvas-right-node-tree-panel \.neko-creative-tree-view/);
+    expect(cssSource).toMatch(
+      /#canvas-right-node-tree-panel \[role="treeitem"\] > button:first-child/,
+    );
+    expect(cssSource).toMatch(
+      /#canvas-right-node-tree-panel \[role="treeitem"\] > button:first-child\.invisible\s*\{[^}]*display:\s*none/,
+    );
   });
 
   it('marks primary canvas tools and visibility toggles by responsibility', () => {

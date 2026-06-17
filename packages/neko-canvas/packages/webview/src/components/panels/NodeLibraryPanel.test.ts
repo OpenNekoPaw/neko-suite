@@ -75,6 +75,9 @@ describe('NodeLibraryPanel', () => {
 
     expect(markup).toContain('draggable="true"');
     expect(markup).toContain('Text');
+    expect(markup).toContain('canvas-node-library-panel');
+    expect(markup).toContain('canvas-node-library-header');
+    expect(markup).toContain('canvas-node-library-scroll');
     expect(markup).toContain('canvas-node-library-icon');
     expect(markup).toContain('data-node-library-icon="annotation"');
     expect(markup).toContain('canvas-node-library-icon-svg');
@@ -88,6 +91,57 @@ describe('NodeLibraryPanel', () => {
     expect(markup).not.toContain('codicon-file-media');
     expect(markup).not.toContain('aria-label="Visible"');
     expect(markup).not.toContain('aria-label="Unlocked"');
+  });
+
+  it('groups basic mode entries into basic, storyboard, and file references', () => {
+    setLocale('zh-cn');
+
+    const storyboardManifest = BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS.find(
+      (manifest) => manifest.id === 'storyboard',
+    );
+    expect(storyboardManifest).toBeDefined();
+    if (!storyboardManifest) {
+      throw new Error('Missing storyboard manifest fixture');
+    }
+
+    const groups = createNodeLibraryGroups(createCoreNodeTypeDescriptors(), [storyboardManifest]);
+
+    expect(groups.map((group) => group.id)).toEqual(['core', 'storyboard', 'file-references']);
+    expect(groups.find((group) => group.id === 'core')?.nodeTypes).toEqual([
+      'annotation',
+      'group',
+      'text',
+    ]);
+    expect(groups.find((group) => group.id === 'storyboard')?.nodeTypes).toEqual([
+      'storyboard',
+      'shot',
+      'scene',
+      'gallery',
+      'table',
+    ]);
+    expect(groups.find((group) => group.id === 'file-references')?.nodeTypes).toEqual([
+      'media',
+      'script',
+      'document',
+      'model',
+      'canvas-embed',
+      'project',
+    ]);
+  });
+
+  it('sizes each expanded tree to actual node rows without extra footer whitespace', () => {
+    setLocale('en');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeLibraryPanel, {
+        coreDescriptors: createCoreNodeTypeDescriptors(),
+        subsystemManifests: [],
+        onCreateNode: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('height:84px');
+    expect(markup).not.toContain('height:116px');
   });
 
   it('renders node library content without owning the right dock shell', () => {

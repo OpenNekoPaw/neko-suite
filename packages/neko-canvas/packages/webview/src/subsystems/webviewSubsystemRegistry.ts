@@ -14,6 +14,7 @@ export interface WebviewSubsystemRegistry {
   readonly manifests: readonly CanvasSubsystemManifest[];
   getActiveSubsystems(canvas: Pick<CanvasData, 'nodes'>): readonly CanvasSubsystemId[];
   getNodeTypeSummary(canvas: Pick<CanvasData, 'nodes'>): Readonly<Record<string, number>>;
+  getManifest(id: CanvasSubsystemId): CanvasSubsystemManifest | undefined;
   getSubsystemForNodeType(type: CanvasNodeType): CanvasSubsystemManifest | undefined;
   getCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry;
   load(id: CanvasSubsystemId): Promise<WebviewSubsystemRegistration>;
@@ -43,6 +44,9 @@ export function createBuiltInWebviewSubsystemRegistry(
     },
     getNodeTypeSummary(canvas) {
       return summarizeCanvasSubsystems(canvas, manifests).nodeTypeSummary;
+    },
+    getManifest(id) {
+      return manifests.find((manifest) => manifest.id === id);
     },
     getSubsystemForNodeType(type) {
       return manifests.find((manifest) => manifest.triggerNodeTypes.includes(type));

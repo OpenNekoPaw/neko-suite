@@ -57,6 +57,7 @@ import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { getImportedGeneratedAssetNodeInput } from './utils/importedGeneratedAsset';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
+import { createStoryboardNodeTypeDescriptors } from './subsystems/storyboard/descriptors';
 import type { FloatingPanelDefinition } from './subsystems';
 import type { NodeTypeDescriptorRegistry } from './components/nodes/nodeTypeDescriptor';
 import { DEFAULT_RUNTIME_VIEWPORT } from './stores/runtimeViewportStore';
@@ -91,7 +92,9 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 };
 
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
+const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId[] = ['storyboard'];
 const logger = getLogger('CanvasApp');
+type CanvasRightDockMode = 'basic' | 'professional';
 
 function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
   return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
@@ -203,6 +206,7 @@ export function CanvasApp() {
   const [interactionTool, setInteractionTool] = useState<'select' | 'pan'>('select');
   const [isSpacePanActive, setIsSpacePanActive] = useState(false);
   const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(false);
+  const [rightDockMode, setRightDockMode] = useState<CanvasRightDockMode>('basic');
   const [isHudVisible, setIsHudVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
@@ -282,6 +286,15 @@ export function CanvasApp() {
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getCoreNodeTypeDescriptors(),
     [],
   );
+  const basicNodeLibrarySubsystemManifests = useMemo(
+    () =>
+      BASIC_CANVAS_SUBSYSTEM_IDS.flatMap((id) => {
+        const manifest = WEBVIEW_SUBSYSTEM_REGISTRY.getManifest(id);
+        return manifest ? [manifest] : [];
+      }),
+    [],
+  );
+  const basicNodeLibraryDescriptors = useMemo(() => createStoryboardNodeTypeDescriptors(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1583,6 +1596,23 @@ export function CanvasApp() {
                 contentClassName: 'canvas-right-node-tree-panel-content',
                 resizeHandleClassName: 'canvas-right-node-tree-resize-handle',
                 resizePersistence: { api: vscode },
+                groups: {
+                  label: t('rightDock.mode.label'),
+                  activeId: rightDockMode,
+                  onActiveIdChange: (id) => setRightDockMode(toCanvasRightDockMode(id)),
+                  items: [
+                    {
+                      id: 'basic',
+                      label: t('rightDock.mode.basic'),
+                      description: t('rightDock.mode.basic.description'),
+                    },
+                    {
+                      id: 'professional',
+                      label: t('rightDock.mode.professional'),
+                      description: t('rightDock.mode.professional.description'),
+                    },
+                  ],
+                },
                 containerProps: {
                   'data-canvas-right-node-tree': 'true',
                   ...getKeyboardBoundaryMetadata({
@@ -1604,9 +1634,17 @@ export function CanvasApp() {
                 children: (
                   <NodeLibraryPanel
                     coreDescriptors={coreNodeTypeDescriptors}
-                    subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
-                    nodeTypeDescriptors={subsystemNodeTypeDescriptors}
-                    activeSubsystemIds={activeSubsystemIds}
+                    subsystemManifests={
+                      rightDockMode === 'professional'
+                        ? WEBVIEW_SUBSYSTEM_REGISTRY.manifests
+                        : basicNodeLibrarySubsystemManifests
+                    }
+                    nodeTypeDescriptors={
+                      rightDockMode === 'professional'
+                        ? subsystemNodeTypeDescriptors
+                        : basicNodeLibraryDescriptors
+                    }
+                    activeSubsystemIds={rightDockMode === 'professional' ? activeSubsystemIds : []}
                     onCreateNode={handleCreateLibraryNode}
                     onPickNodeSource={handlePickLibraryNodeSource}
                     onLoadSubsystem={handleLoadSubsystem}
@@ -1618,6 +1656,10 @@ export function CanvasApp() {
       />
     </div>
   );
+}
+
+function toCanvasRightDockMode(id: string): CanvasRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
 }
 
 function CanvasBoardNavigationBar({

@@ -34,6 +34,7 @@ export interface NodeLibraryGroup {
 }
 
 const FILE_REFERENCE_GROUP_ID = 'file-references';
+const NODE_LIBRARY_ITEM_HEIGHT = 28;
 
 export function NodeLibraryPanel({
   coreDescriptors,
@@ -75,28 +76,17 @@ export function NodeLibraryPanel({
   }, [expandedGroupIds, groups, requestSubsystemLoad]);
 
   return (
-    <div
-      className="flex h-full min-w-0 flex-col overflow-hidden"
-      style={{
-        backgroundColor: 'var(--toolbar-bg)',
-        color: 'var(--toolbar-fg)',
-      }}
-    >
-      <div
-        className="flex h-10 items-center px-3 text-xs font-semibold"
-        style={{ borderBottom: '1px solid var(--toolbar-border)' }}
-      >
+    <div className="canvas-node-library-panel flex h-full w-full min-w-0 flex-col overflow-hidden">
+      <div className="canvas-node-library-header flex h-9 items-center px-3 text-xs font-semibold">
         {t('library.title')}
       </div>
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="canvas-node-library-scroll flex-1 overflow-y-auto">
         {groups.map((group) => {
           const isExpanded = expandedGroupIds.has(group.id);
           const treeItems = mapCanvasNodeLibraryGroupToTreeItems({
-            activeSubsystemIds,
             descriptors,
             group,
           });
-          const nodeItems = treeItems[0]?.children ?? [];
           const groupActive =
             group.subsystemId === undefined || activeSubsystemIds.includes(group.subsystemId);
           const groupState = group.subsystemId ? (groupActive ? 'active' : 'available') : 'core';
@@ -157,11 +147,17 @@ export function NodeLibraryPanel({
                 <div className="canvas-node-library-items">
                   <TreeView
                     className="border-0 bg-transparent"
-                    height={Math.min(320, 32 + group.nodeTypes.length * 28)}
-                    items={nodeItems}
+                    height={Math.min(
+                      320,
+                      Math.max(
+                        NODE_LIBRARY_ITEM_HEIGHT,
+                        treeItems.length * NODE_LIBRARY_ITEM_HEIGHT,
+                      ),
+                    )}
+                    items={treeItems}
                     label={group.label}
                     showStaticStateIndicators={false}
-                    virtualization={{ itemHeight: 28, threshold: 200 }}
+                    virtualization={{ itemHeight: NODE_LIBRARY_ITEM_HEIGHT, threshold: 200 }}
                     onDragStart={(id, event) => {
                       const nodeType = id as CanvasNodeType;
                       const creationPolicy = getNodeLibraryCreationPolicy(nodeType);

@@ -139,41 +139,19 @@ export function mapCanvasNodePropertyCommit(
 }
 
 export function mapCanvasNodeLibraryGroupToTreeItems({
-  activeSubsystemIds,
   descriptors,
   group,
 }: {
-  readonly activeSubsystemIds: readonly string[];
   readonly descriptors: NodeTypeDescriptorRegistry;
   readonly group: NodeLibraryGroup;
 }): readonly TreeViewItem[] {
-  const groupActive = group.subsystemId ? activeSubsystemIds.includes(group.subsystemId) : true;
-  return [
-    {
-      id: group.id,
-      label: group.label,
-      expanded: true,
-      badges: group.subsystemId
-        ? [
-            {
-              id: `subsystem-state-${groupActive ? 'active' : 'available'}`,
-              label: groupActive ? t('library.active') : t('library.available'),
-            },
-          ]
-        : [],
-      metadata: {
-        kind: 'group',
-        subsystemId: group.subsystemId,
-      },
-      children: group.nodeTypes.map((nodeType) =>
-        mapCanvasNodeLibraryTypeToTreeItem({
-          descriptors,
-          nodeType,
-          subsystemId: group.subsystemId,
-        }),
-      ),
-    },
-  ];
+  return group.nodeTypes.map((nodeType) =>
+    mapCanvasNodeLibraryTypeToTreeItem({
+      descriptors,
+      nodeType,
+      subsystemId: group.subsystemId,
+    }),
+  );
 }
 
 function mapCanvasNodeLibraryTypeToTreeItem({

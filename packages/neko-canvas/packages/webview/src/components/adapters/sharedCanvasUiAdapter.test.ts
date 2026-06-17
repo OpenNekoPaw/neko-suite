@@ -39,7 +39,6 @@ describe('sharedCanvasUiAdapter', () => {
     };
 
     const items = mapCanvasNodeLibraryGroupToTreeItems({
-      activeSubsystemIds: [],
       descriptors: {
         text: {
           type: 'text',
@@ -53,25 +52,25 @@ describe('sharedCanvasUiAdapter', () => {
       group,
     });
 
-    expect(items[0]?.children?.[0]).toMatchObject({
+    expect(items[0]).toMatchObject({
       id: 'text',
       label: 'Text',
       draggable: true,
       disabled: false,
     });
-    expect(items[0]?.children?.[0]?.icon).not.toBe('T');
-    expect(items[0]?.children?.[1]).toMatchObject({
+    expect(items[0]?.icon).not.toBe('T');
+    expect(items[1]).toMatchObject({
       id: 'media',
       draggable: false,
       disabled: false,
     });
-    expect(items[0]?.children?.[1]?.metadata).toMatchObject({
+    expect(items[1]?.metadata).toMatchObject({
       kind: 'node-type',
       nodeType: 'media',
     });
   });
 
-  it('marks active subsystem groups with a badge', () => {
+  it('marks subsystem node entries with subsystem metadata', () => {
     const group: NodeLibraryGroup = {
       id: 'storyboard',
       label: 'Storyboard',
@@ -80,12 +79,15 @@ describe('sharedCanvasUiAdapter', () => {
     };
 
     const items = mapCanvasNodeLibraryGroupToTreeItems({
-      activeSubsystemIds: ['storyboard'],
       descriptors: {},
       group,
     });
 
-    expect(items[0]?.badges?.[0]).toMatchObject({ id: 'subsystem-state-active' });
+    expect(items[0]?.metadata).toMatchObject({
+      kind: 'node-type',
+      nodeType: 'shot',
+      subsystemId: 'storyboard',
+    });
   });
 
   it('uses a consistent inline SVG wrapper for node library icons', () => {
