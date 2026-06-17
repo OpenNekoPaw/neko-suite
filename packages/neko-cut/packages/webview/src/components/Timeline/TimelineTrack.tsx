@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, memo, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, memo, useMemo } from 'react';
 import { useEditorStore } from '../../stores/editor-store';
 import { TimelineElementContent } from './TimelineElementContent';
 import { ContextMenu, MenuItem } from '../ContextMenu';
@@ -43,6 +43,23 @@ interface DragState {
   startTrimEnd: number;
 }
 
+const idleDragState: DragState = {
+  isDragging: false,
+  isResizing: false,
+  resizeDirection: null,
+  elementId: null,
+  startX: 0,
+  startLeft: 0,
+  startWidth: 0,
+  startTrimStart: 0,
+  startTrimEnd: 0,
+};
+
+interface ActivePointerDrag {
+  cancel: () => void;
+  dispose: () => void;
+}
+
 export const TimelineTrack = memo(function TimelineTrack({
   track,
   zoomLevel,
@@ -85,17 +102,7 @@ export const TimelineTrack = memo(function TimelineTrack({
   // Get snappingEnabled via getState() to avoid re-render on toggle
   const getSnappingEnabled = useCallback(() => useEditorStore.getState().snappingEnabled, []);
 
-  const [dragState, setDragState] = useState<DragState>({
-    isDragging: false,
-    isResizing: false,
-    resizeDirection: null,
-    elementId: null,
-    startX: 0,
-    startLeft: 0,
-    startWidth: 0,
-    startTrimStart: 0,
-    startTrimEnd: 0,
-  });
+  const [dragState, setDragState] = useState<DragState>(idleDragState);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -212,15 +219,27 @@ export const TimelineTrack = memo(function TimelineTrack({
   // Pointer ID for tracking captured pointer
   const capturedPointerIdRef = useRef<number | null>(null);
   const dragElementRef = useRef<HTMLElement | null>(null);
+  const activePointerDragRef = useRef<ActivePointerDrag | null>(null);
+
+  useEffect(() => {
+    return () => {
+      activePointerDragRef.current?.dispose();
+    };
+  }, []);
 
   const handleMouseDown = useCallback(
     (e: React.PointerEvent, element: TimelineElement, resizeDir: ResizeDirection = null) => {
       e.stopPropagation();
       e.preventDefault();
 
-      // Capture pointer to receive events even when pointer leaves the webview
       const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
+      activePointerDragRef.current?.cancel();
+
+      try {
+        target.setPointerCapture(e.pointerId);
+      } catch {
+        // Window-level listeners still keep the drag lifecycle recoverable.
+      }
       capturedPointerIdRef.current = e.pointerId;
       dragElementRef.current = target;
 
@@ -276,7 +295,196 @@ export const TimelineTrack = memo(function TimelineTrack({
         }
       }
 
-      const handlePointerMove = (moveEvent: PointerEvent) => {
+      let hasEnded = false;
+      const eventOptions = { capture: true };
+
+      function cleanupListeners() {
+        window.removeEventListener('pointermove', handlePointerMove, eventOptions);
+        window.removeEventListener('pointerup', handlePointerUp, eventOptions);
+        window.removeEventListener('pointercancel', handlePointerCancel, eventOptions);
+        window.removeEventListener('blur', handleWindowBlur, eventOptions);
+        document.removeEventListener('visibilitychange', handleVisibilityChange, eventOptions);
+        target.removeEventListener('lostpointercapture', handleLostPointerCapture, eventOptions);
+      }
+
+      function releasePointerCapture() {
+        if (capturedPointerIdRef.current === null) {
+          return;
+        }
+
+        const capturedElement = dragElementRef.current;
+        if (capturedElement?.hasPointerCapture(capturedPointerIdRef.current)) {
+          try {
+            capturedElement.releasePointerCapture(capturedPointerIdRef.current);
+          } catch {
+            // Ignore errors if pointer was already released by the host.
+          }
+        }
+
+        capturedPointerIdRef.current = null;
+        dragElementRef.current = null;
+      }
+
+      function resetDragUi() {
+        setSnapIndicatorTime(null);
+        setDragTargetTrackId(null);
+        setDragState(idleDragState);
+      }
+
+      function commitDragOperation() {
+        const latestProject = useEditorStore.getState().project;
+        if (!latestProject) {
+          return;
+        }
+
+        const currentElement = latestProject.tracks
+          .find((t) => t.id === track.id)
+          ?.elements.find((candidate) => candidate.id === element.id);
+
+        if (!currentElement) {
+          return;
+        }
+
+        const hasChanged =
+          currentElement.startTime !== originalElement.startTime ||
+          currentElement.trimStart !== originalElement.trimStart ||
+          currentElement.trimEnd !== originalElement.trimEnd ||
+          currentElement.duration !== originalElement.duration;
+
+        if (!hasChanged) {
+          return;
+        }
+
+        // Build update/before diff for changed properties
+        const updates: Record<string, unknown> = {};
+        const beforeUpdates: Record<string, unknown> = {};
+
+        if (currentElement.startTime !== originalElement.startTime) {
+          updates.startTime = currentElement.startTime;
+          beforeUpdates.startTime = originalElement.startTime;
+        }
+        if (currentElement.trimStart !== originalElement.trimStart) {
+          updates.trimStart = currentElement.trimStart;
+          beforeUpdates.trimStart = originalElement.trimStart;
+        }
+        if (currentElement.trimEnd !== originalElement.trimEnd) {
+          updates.trimEnd = currentElement.trimEnd;
+          beforeUpdates.trimEnd = originalElement.trimEnd;
+        }
+        if (currentElement.duration !== originalElement.duration) {
+          updates.duration = currentElement.duration;
+          beforeUpdates.duration = originalElement.duration;
+        }
+
+        const op: EditOperation = {
+          type: 'element.update',
+          meta: createMeta('user', 'Drag element'),
+          payload: {
+            trackId: track.id,
+            elementId: element.id,
+            updates,
+          },
+          before: { updates: beforeUpdates },
+        };
+
+        const latestTrack = latestProject.tracks.find((candidate) => candidate.id === track.id);
+
+        const shouldRipple = rippleEditingEnabled && originalPositions.size === 1 && !resizeDir;
+
+        const isRightResizeRipple = rippleEditingEnabled && resizeDir === 'right';
+
+        if (shouldRipple || isRightResizeRipple) {
+          const originalEffectiveDuration =
+            originalElement.duration - originalElement.trimStart - originalElement.trimEnd;
+          const currentEffectiveDuration =
+            currentElement.duration - currentElement.trimStart - currentElement.trimEnd;
+          const originalEnd = originalElement.startTime + originalEffectiveDuration;
+          const delta = !resizeDir
+            ? currentElement.startTime - originalElement.startTime
+            : currentEffectiveDuration - originalEffectiveDuration;
+
+          const rippleOps: EditOperation[] =
+            latestTrack?.elements
+              .filter(
+                (candidate) => candidate.id !== element.id && candidate.startTime >= originalEnd,
+              )
+              .map((candidate) => {
+                const nextStartTime = Math.max(0, candidate.startTime + delta);
+
+                if (nextStartTime === candidate.startTime) {
+                  return null;
+                }
+
+                updateElement(track.id, candidate.id, {
+                  startTime: nextStartTime,
+                });
+
+                const rippleOp: EditOperation = {
+                  type: 'element.update' as const,
+                  meta: createMeta('user', 'Ripple edit'),
+                  payload: {
+                    trackId: track.id,
+                    elementId: candidate.id,
+                    updates: {
+                      startTime: nextStartTime,
+                    },
+                  },
+                  before: {
+                    updates: {
+                      startTime: candidate.startTime,
+                    },
+                  },
+                };
+                return rippleOp;
+              })
+              .filter((candidate) => candidate !== null) ?? [];
+
+          if (rippleOps.length > 0) {
+            pushOperation({
+              type: 'batch',
+              meta: createMeta('user', 'Ripple edit'),
+              payload: {
+                operations: [op, ...rippleOps],
+              },
+            });
+          } else {
+            pushOperation(op);
+          }
+        } else {
+          pushOperation(op);
+        }
+      }
+
+      function cancelDrag() {
+        if (hasEnded) {
+          return;
+        }
+
+        hasEnded = true;
+        cleanupListeners();
+        releasePointerCapture();
+        commitDragOperation();
+        resetDragUi();
+        activePointerDragRef.current = null;
+      }
+
+      function disposeDrag() {
+        if (hasEnded) {
+          return;
+        }
+
+        hasEnded = true;
+        cleanupListeners();
+        releasePointerCapture();
+        activePointerDragRef.current = null;
+      }
+
+      function handlePointerMove(moveEvent: PointerEvent) {
+        if (moveEvent.pointerId !== e.pointerId) {
+          return;
+        }
+
+        moveEvent.preventDefault();
         const deltaX = moveEvent.clientX - e.clientX;
         const deltaTime = deltaX / (pixelsPerSecond * zoomLevel);
 
@@ -429,22 +637,23 @@ export const TimelineTrack = memo(function TimelineTrack({
             }
           }
         }
-      };
+      }
 
-      const handlePointerUp = (upEvent: PointerEvent) => {
-        // Release pointer capture
-        if (dragElementRef.current && capturedPointerIdRef.current !== null) {
-          try {
-            dragElementRef.current.releasePointerCapture(capturedPointerIdRef.current);
-          } catch {
-            // Ignore errors if pointer was already released
-          }
+      function handlePointerUp(upEvent: PointerEvent) {
+        if (upEvent.pointerId !== e.pointerId || hasEnded) {
+          return;
         }
-        capturedPointerIdRef.current = null;
-        dragElementRef.current = null;
+
+        hasEnded = true;
+        cleanupListeners();
+        releasePointerCapture();
 
         // Clear snap indicator
         setSnapIndicatorTime(null);
+
+        // Commit drag operation to history for undo/redo before any cross-track move.
+        // updateElement uses raw set() during drag, so this also syncs Extension state.
+        commitDragOperation();
 
         // Handle cross-track move if not resizing and single element
         if (
@@ -470,147 +679,43 @@ export const TimelineTrack = memo(function TimelineTrack({
         // Clear drag target
         setDragTargetTrackId(null);
 
-        // Commit drag operation to history for undo/redo
-        // (updateElement uses raw set() during drag, so we record the operation here)
-        if (project) {
-          const currentElement = project.tracks
-            .find((t) => t.id === track.id)
-            ?.elements.find((e) => e.id === element.id);
+        setDragState(idleDragState);
+        activePointerDragRef.current = null;
+      }
 
-          if (currentElement) {
-            const hasChanged =
-              currentElement.startTime !== originalElement.startTime ||
-              currentElement.trimStart !== originalElement.trimStart ||
-              currentElement.trimEnd !== originalElement.trimEnd ||
-              currentElement.duration !== originalElement.duration;
-
-            if (hasChanged) {
-              // Build update/before diff for changed properties
-              const updates: Record<string, unknown> = {};
-              const beforeUpdates: Record<string, unknown> = {};
-
-              if (currentElement.startTime !== originalElement.startTime) {
-                updates.startTime = currentElement.startTime;
-                beforeUpdates.startTime = originalElement.startTime;
-              }
-              if (currentElement.trimStart !== originalElement.trimStart) {
-                updates.trimStart = currentElement.trimStart;
-                beforeUpdates.trimStart = originalElement.trimStart;
-              }
-              if (currentElement.trimEnd !== originalElement.trimEnd) {
-                updates.trimEnd = currentElement.trimEnd;
-                beforeUpdates.trimEnd = originalElement.trimEnd;
-              }
-              if (currentElement.duration !== originalElement.duration) {
-                updates.duration = currentElement.duration;
-                beforeUpdates.duration = originalElement.duration;
-              }
-
-              const op: EditOperation = {
-                type: 'element.update',
-                meta: createMeta('user', 'Drag element'),
-                payload: {
-                  trackId: track.id,
-                  elementId: element.id,
-                  updates,
-                },
-                before: { updates: beforeUpdates },
-              };
-
-              const latestProject = useEditorStore.getState().project;
-              const latestTrack = latestProject?.tracks.find(
-                (candidate) => candidate.id === track.id,
-              );
-
-              const shouldRipple =
-                rippleEditingEnabled && originalPositions.size === 1 && !resizeDir;
-
-              const isRightResizeRipple = rippleEditingEnabled && resizeDir === 'right';
-
-              if (shouldRipple || isRightResizeRipple) {
-                const originalEffectiveDuration =
-                  originalElement.duration - originalElement.trimStart - originalElement.trimEnd;
-                const currentEffectiveDuration =
-                  currentElement.duration - currentElement.trimStart - currentElement.trimEnd;
-                const originalEnd = originalElement.startTime + originalEffectiveDuration;
-                const delta = !resizeDir
-                  ? currentElement.startTime - originalElement.startTime
-                  : currentEffectiveDuration - originalEffectiveDuration;
-
-                const rippleOps: EditOperation[] =
-                  latestTrack?.elements
-                    .filter(
-                      (candidate) =>
-                        candidate.id !== element.id && candidate.startTime >= originalEnd,
-                    )
-                    .map((candidate) => {
-                      const nextStartTime = Math.max(0, candidate.startTime + delta);
-
-                      if (nextStartTime === candidate.startTime) {
-                        return null;
-                      }
-
-                      updateElement(track.id, candidate.id, {
-                        startTime: nextStartTime,
-                      });
-
-                      const rippleOp: EditOperation = {
-                        type: 'element.update' as const,
-                        meta: createMeta('user', 'Ripple edit'),
-                        payload: {
-                          trackId: track.id,
-                          elementId: candidate.id,
-                          updates: {
-                            startTime: nextStartTime,
-                          },
-                        },
-                        before: {
-                          updates: {
-                            startTime: candidate.startTime,
-                          },
-                        },
-                      };
-                      return rippleOp;
-                    })
-                    .filter((candidate) => candidate !== null) ?? [];
-
-                if (rippleOps.length > 0) {
-                  pushOperation({
-                    type: 'batch',
-                    meta: createMeta('user', 'Ripple edit'),
-                    payload: {
-                      operations: [op, ...rippleOps],
-                    },
-                  });
-                } else {
-                  pushOperation(op);
-                }
-              } else {
-                pushOperation(op);
-              }
-            }
-          }
+      function handlePointerCancel(cancelEvent: PointerEvent) {
+        if (cancelEvent.pointerId === e.pointerId) {
+          cancelDrag();
         }
+      }
 
-        setDragState({
-          isDragging: false,
-          isResizing: false,
-          resizeDirection: null,
-          elementId: null,
-          startX: 0,
-          startLeft: 0,
-          startWidth: 0,
-          startTrimStart: 0,
-          startTrimEnd: 0,
-        });
-        target.removeEventListener('pointermove', handlePointerMove);
-        target.removeEventListener('pointerup', handlePointerUp);
-        target.removeEventListener('pointercancel', handlePointerUp);
+      function handleLostPointerCapture(lostEvent: PointerEvent) {
+        if (lostEvent.pointerId === e.pointerId) {
+          cancelDrag();
+        }
+      }
+
+      function handleWindowBlur() {
+        cancelDrag();
+      }
+
+      function handleVisibilityChange() {
+        if (document.visibilityState === 'hidden') {
+          cancelDrag();
+        }
+      }
+
+      window.addEventListener('pointermove', handlePointerMove, eventOptions);
+      window.addEventListener('pointerup', handlePointerUp, eventOptions);
+      window.addEventListener('pointercancel', handlePointerCancel, eventOptions);
+      window.addEventListener('blur', handleWindowBlur, eventOptions);
+      document.addEventListener('visibilitychange', handleVisibilityChange, eventOptions);
+      target.addEventListener('lostpointercapture', handleLostPointerCapture, eventOptions);
+
+      activePointerDragRef.current = {
+        cancel: cancelDrag,
+        dispose: disposeDrag,
       };
-
-      target.addEventListener('pointermove', handlePointerMove);
-      target.addEventListener('pointerup', handlePointerUp);
-      target.addEventListener('pointercancel', handlePointerUp);
     },
     [
       track.id,
