@@ -53,6 +53,14 @@ describe('PuppetMediaInstallTarget', () => {
       'cannot install media kind',
     );
   });
+
+  it('rejects 2D Scene templates because they belong to neko-model .nkm projects', () => {
+    const target = new PuppetModelInstallTarget('/tmp/puppet-model');
+
+    expect(() => target.validateManifest(puppetMediaManifest('model-2d-scene'))).toThrow(
+      'cannot install media kind',
+    );
+  });
 });
 
 function puppetMotionManifest(): AssetManifest {
