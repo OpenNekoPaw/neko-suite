@@ -1146,8 +1146,8 @@ body {
 .agent-composer-control-row {
   display: flex;
   align-items: flex-start;
-  flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
   padding: 6px 8px 5px;
 }
 
@@ -1164,34 +1164,19 @@ body {
 }
 
 .agent-composer-control-group-mode {
-  flex: 0 1 auto;
-  max-width: min(46%, 260px);
+  flex: 0 1 max-content;
+  max-width: min(42%, 260px);
 }
 
 .agent-composer-control-group-config {
   flex: 1 1 0;
   justify-content: flex-end;
-  min-width: min(100%, 180px);
+  overflow: hidden;
 }
 
 .agent-composer-control-group-config .agent-generation-params {
   width: 100%;
-}
-
-@media (max-width: 340px) {
-  .agent-composer-control-group-mode,
-  .agent-composer-control-group-config {
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
-
-  .agent-composer-control-group-config {
-    justify-content: flex-start;
-  }
-
-  .agent-composer-control-group-config .agent-generation-params {
-    justify-content: flex-start;
-  }
+  overflow: hidden;
 }
 
 .agent-dropdown-menu {
