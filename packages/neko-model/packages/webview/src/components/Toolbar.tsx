@@ -14,6 +14,7 @@ import {
   SettingsIcon,
 } from '@neko/ui/icons';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
+import type { NkmSceneProfile } from '@neko/shared';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
 import { CreativeLeftRail } from '@neko/ui/workbench';
 import { useTranslation } from '../i18n/I18nContext';
@@ -27,6 +28,7 @@ import {
 interface ModelSideToolbarProps {
   readonly className?: string;
   readonly width?: number;
+  readonly sceneProfile?: NkmSceneProfile;
   readonly isViewportHudVisible?: boolean;
   readonly onToggleViewportHud?: () => void;
   readonly isBottomPanelVisible?: boolean;
@@ -121,6 +123,7 @@ const VIEWPORT_COMMANDS: readonly ViewportCommandItem[] = [
 export const ModelSideToolbar = memo(function ModelSideToolbar({
   className,
   width,
+  sceneProfile = '3d',
   isViewportHudVisible = true,
   onToggleViewportHud,
   isBottomPanelVisible = true,
@@ -180,23 +183,25 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
 
         <ToolbarSeparator />
 
-        {VIEWPORT_COMMANDS.map((item) => {
-          if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
+        {VIEWPORT_COMMANDS.filter((item) => shouldShowViewportCommand(item, sceneProfile)).map(
+          (item) => {
+            if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
 
-          const tool = viewportToggleTool(item.key, toolbarState);
-          return (
-            <ToolbarButton
-              key={item.key}
-              data-creative-left-rail-action={`toggle-${item.key}`}
-              data-creative-left-rail-kind="common-action"
-              data-model-toolbar-action={`toggle-${item.key}`}
-              icon={item.icon}
-              title={t(item.titleKey)}
-              active={tool.active}
-              onClick={tool.toggle}
-            />
-          );
-        })}
+            const tool = viewportToggleTool(item.key, toolbarState);
+            return (
+              <ToolbarButton
+                key={item.key}
+                data-creative-left-rail-action={`toggle-${item.key}`}
+                data-creative-left-rail-kind="common-action"
+                data-model-toolbar-action={`toggle-${item.key}`}
+                icon={item.icon}
+                title={t(item.titleKey)}
+                active={tool.active}
+                onClick={tool.toggle}
+              />
+            );
+          },
+        )}
 
         <ToolbarSeparator />
 
@@ -309,6 +314,15 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
     </div>
   );
 });
+
+function shouldShowViewportCommand(
+  item: ViewportCommandItem,
+  sceneProfile: NkmSceneProfile,
+): boolean {
+  if (item === 'separator') return sceneProfile !== '2d';
+  if (sceneProfile !== '2d') return true;
+  return item.key === 'keyframe';
+}
 
 function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStoreState {
   return {

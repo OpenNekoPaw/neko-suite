@@ -246,6 +246,24 @@ export const en = {
   'sceneTree.hideNode': 'Hide node rendering',
   'sceneTree.showNode': 'Show node rendering',
 
+  // 2D Scene profile
+  'scene2d.profile': '2D Scene',
+  'scene2d.panel.title': '2D Scene Profile',
+  'scene2d.panel.subtitle': 'Sprite, tilemap, camera, light, and particle tools load here.',
+  'scene2d.panel.profileLabel': 'Project truth',
+  'scene2d.panel.profileValue': '.nkm profile: 2d',
+  'scene2d.panel.runtimeLabel': 'Runtime',
+  'scene2d.panel.runtimeValue': 'Engine Scene / Viewport commands',
+  'scene2d.panel.authoringLabel': 'Authoring tools',
+  'scene2d.panel.authoringValue': 'First-slice controls pending',
+  'scene2d.overlay.aria': '2D Scene profile status',
+  'scene2d.overlay.title': '.nkm 2D Scene',
+  'scene2d.status.ready': 'Scene route ready',
+  'scene2d.status.connecting': 'Connecting engine',
+  'scene2d.status.disconnected': 'Engine disconnected',
+  'scene2d.status.error': 'Scene route unavailable',
+  'scene2d.status.waitingForRouteA': 'Waiting for Scene route',
+
   // Animation player
   'animation.selectPlaceholder': '-- Select Animation --',
   'animation.play': 'Play',

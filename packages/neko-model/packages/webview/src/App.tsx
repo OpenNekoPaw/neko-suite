@@ -11,6 +11,7 @@ import type {
   CharacterPreviewModeId,
   EnvironmentPatch,
   LightPatch,
+  NkmSceneProfile,
   SelectionTarget,
   ViewportLookDevSettings,
   ViewportRenderMode,
@@ -43,6 +44,7 @@ import type {
   ExtensionMessage,
   SceneNodeSnapshot,
   SceneSnapshot,
+  SceneControlStatusView,
   WebviewMessage,
 } from './types';
 import type { SceneCommandEnvelope } from '@neko/shared';
@@ -126,6 +128,7 @@ export function App(): React.JSX.Element {
   const initialWebviewVisible = true;
   const webviewVisibleRef = useRef(initialWebviewVisible);
   const [enginePort, setEnginePort] = useState<number | null>(null);
+  const [sceneProfile, setSceneProfile] = useState<NkmSceneProfile>('3d');
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
   const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
@@ -192,6 +195,7 @@ export function App(): React.JSX.Element {
   const setTransformMode = useModelStore((s) => s.setTransformMode);
   const setViewportStreamQuality = useModelStore((s) => s.setViewportStreamQuality);
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
+  const isScene2DProfile = sceneProfile === '2d';
 
   useEffect(() => {
     latestRevisionRef.current = sceneRevision;
@@ -510,6 +514,7 @@ export function App(): React.JSX.Element {
         case 'projectLoaded': {
           // Restore scene and editor state from .nkm project
           const { snapshot: projSnapshot, editorState } = message;
+          setSceneProfile(message.sceneProfile ?? '3d');
           applyEngineSceneSnapshot(projSnapshot, {
             restoreCamera: hasRestorableCameraState(editorState),
           });
@@ -1349,12 +1354,13 @@ export function App(): React.JSX.Element {
     t,
   });
   const shouldShowCharacterPreviewControls =
-    previewCharacterId !== null ||
-    characterPreview.requestedMode !== null ||
-    characterPreview.appliedMode !== null ||
-    characterPreview.diagnostics.length > 0 ||
-    characterPreview.state?.playback.state === 'playing' ||
-    characterPreview.state?.playback.state === 'paused';
+    !isScene2DProfile &&
+    (previewCharacterId !== null ||
+      characterPreview.requestedMode !== null ||
+      characterPreview.appliedMode !== null ||
+      characterPreview.diagnostics.length > 0 ||
+      characterPreview.state?.playback.state === 'playing' ||
+      characterPreview.state?.playback.state === 'paused');
   const modelKeyboardState = useMemo<ModelKeyboardState>(
     () => ({
       hasSelection: selectedNodeId !== null,
@@ -1371,7 +1377,9 @@ export function App(): React.JSX.Element {
 
   const selectedTarget = selectedTargets[0] ?? null;
   const inspectorRoute = resolveInspectorRoute(selectedNode, selectedTarget, environmentState);
-  const propertiesPanel = isExpressionPresetOpen ? (
+  const propertiesPanel = isScene2DProfile ? (
+    <Scene2DProfilePanel routeAReady={routeAReady} sceneControlStatus={sceneControlStatus} />
+  ) : isExpressionPresetOpen ? (
     <ExpressionPresetPanel
       onApplyExpression={handleApplyExpression}
       characterId={selectedCharacterId}
@@ -1475,6 +1483,7 @@ export function App(): React.JSX.Element {
           <ModelSideToolbar
             className="model-left-toolbar"
             width={48}
+            sceneProfile={sceneProfile}
             isViewportHudVisible={isViewportHudVisible}
             onToggleViewportHud={toggleViewportHud}
             isBottomPanelVisible={isBottomPanelVisible}
@@ -1490,6 +1499,11 @@ export function App(): React.JSX.Element {
             <section className="model-viewport-area">
               {isViewportHudVisible ? (
                 <div id="model-viewport-hud" aria-label={t('toolbar.viewportControls')}>
+                  {isScene2DProfile ? (
+                    <div className="model-scene-profile-chip" data-scene-profile="2d">
+                      {t('scene2d.profile')}
+                    </div>
+                  ) : null}
                   <SelectionModeControls
                     workflow={selectionWorkflow}
                     typedPickingAvailable={lookDevCapabilities.typedPicking}
@@ -1560,6 +1574,12 @@ export function App(): React.JSX.Element {
                     />
                   </div>
                 ) : null}
+                {isScene2DProfile ? (
+                  <Scene2DViewportOverlay
+                    routeAReady={routeAReady}
+                    sceneControlStatus={sceneControlStatus}
+                  />
+                ) : null}
                 {isPerformanceMetricsVisible ? <ViewportPerformanceOverlay /> : null}
               </div>
             </section>
@@ -1599,25 +1619,110 @@ export function App(): React.JSX.Element {
             ) : null}
           </>
         }
-        rightPanel={
-          isRightDockVisible ? (
-            <RightDock
-              outliner={
-                <SceneTree
-                  nodes={sceneNodes}
-                  selectedNodeId={selectedNodeId}
-                  selectedTargets={selectedTargets}
-                  onSelectNode={handleOutlinerSelectNode}
-                  onSetNodeVisible={handleSetNodeVisible}
-                  visibilityDisabled={panelCommandDisabled}
-                  showHeader={false}
-                />
+        rightDock={
+          isRightDockVisible
+            ? {
+                id: 'model-right-dock',
+                panelId: MODEL_RESIZE_PANELS.rightDock.panelId,
+                defaultSize: MODEL_RESIZE_PANELS.rightDock.defaultSize,
+                minSize: MODEL_RESIZE_PANELS.rightDock.minSize,
+                maxSize: MODEL_RESIZE_PANELS.rightDock.maxSize,
+                className: 'model-right-dock',
+                contentClassName: 'model-right-dock-content',
+                resizeHandleClassName: 'model-resize-handle model-right-dock-resize-handle',
+                containerProps: getKeyboardBoundaryMetadata({
+                  scope: 'property-panel',
+                  ownerId: 'model-right-dock',
+                  ownedKeys: [
+                    'Enter',
+                    'Escape',
+                    'Space',
+                    'Tab',
+                    'ArrowUp',
+                    'ArrowDown',
+                    'ArrowLeft',
+                    'ArrowRight',
+                  ],
+                }),
+                children: (
+                  <RightDock
+                    outliner={
+                      <SceneTree
+                        nodes={sceneNodes}
+                        selectedNodeId={selectedNodeId}
+                        selectedTargets={selectedTargets}
+                        onSelectNode={handleOutlinerSelectNode}
+                        onSetNodeVisible={handleSetNodeVisible}
+                        visibilityDisabled={panelCommandDisabled}
+                        showHeader={false}
+                      />
+                    }
+                    properties={propertiesPanel}
+                  />
+                ),
               }
-              properties={propertiesPanel}
-            />
-          ) : undefined
+            : undefined
         }
       />
+    </div>
+  );
+}
+
+interface Scene2DProfileStatusProps {
+  readonly routeAReady: boolean;
+  readonly sceneControlStatus: SceneControlStatusView;
+}
+
+function Scene2DProfilePanel({
+  routeAReady,
+  sceneControlStatus,
+}: Scene2DProfileStatusProps): React.JSX.Element {
+  const { t } = useTranslation();
+  const statusLabel = scene2DStatusLabel(routeAReady, sceneControlStatus, t);
+
+  return (
+    <section className="model-panel-section model-scene2d-profile-panel">
+      <div className="model-scene2d-panel-header">
+        <div>
+          <h2 className="model-section-title">{t('scene2d.panel.title')}</h2>
+          <p className="model-subtitle">{t('scene2d.panel.subtitle')}</p>
+        </div>
+        <span data-scene2d-status={scene2DStatusTone(routeAReady, sceneControlStatus)}>
+          {statusLabel}
+        </span>
+      </div>
+      <dl className="model-scene2d-panel-grid">
+        <div>
+          <dt>{t('scene2d.panel.profileLabel')}</dt>
+          <dd>{t('scene2d.panel.profileValue')}</dd>
+        </div>
+        <div>
+          <dt>{t('scene2d.panel.runtimeLabel')}</dt>
+          <dd>{t('scene2d.panel.runtimeValue')}</dd>
+        </div>
+        <div>
+          <dt>{t('scene2d.panel.authoringLabel')}</dt>
+          <dd>{t('scene2d.panel.authoringValue')}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function Scene2DViewportOverlay({
+  routeAReady,
+  sceneControlStatus,
+}: Scene2DProfileStatusProps): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="model-scene2d-viewport-status"
+      data-scene2d-status={scene2DStatusTone(routeAReady, sceneControlStatus)}
+      role="status"
+      aria-label={t('scene2d.overlay.aria')}
+    >
+      <span>{t('scene2d.overlay.title')}</span>
+      <strong>{scene2DStatusLabel(routeAReady, sceneControlStatus, t)}</strong>
     </div>
   );
 }
@@ -1629,28 +1734,11 @@ interface RightDockProps {
 
 function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element {
   const { t } = useTranslation();
-  const dockSpec = MODEL_RESIZE_PANELS.rightDock;
   const outlinerSpec = MODEL_RESIZE_PANELS.outlinerSplit;
   const [dockHeight, setDockHeight] = useState(0);
-  const dockResize = usePersistedResize(dockSpec.panelId, dockSpec.defaultSize, {
-    minSize: dockSpec.minSize,
-    maxSize: dockSpec.maxSize,
-  });
   const outlinerResize = usePersistedResize(outlinerSpec.panelId, outlinerSpec.defaultSize, {
     minSize: outlinerSpec.minSize,
     maxSize: outlinerSpec.maxSize,
-  });
-  const {
-    containerRef: dockResizeRef,
-    handleProps: dockHandleProps,
-    isResizing: isDockResizing,
-  } = useResizable<HTMLElement>({
-    edge: 'right',
-    mode: 'pixel',
-    size: dockResize.size,
-    minSize: dockSpec.minSize,
-    maxSize: dockSpec.maxSize,
-    onSizeChange: dockResize.setSize,
   });
   const effectiveOutlinerSize = constrainOutlinerSplitSize(outlinerResize.size, dockHeight);
   const handleOutlinerSizeChange = useCallback(
@@ -1673,7 +1761,7 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
   });
 
   useEffect(() => {
-    const dock = dockResizeRef.current;
+    const dock = splitResizeRef.current;
     if (!dock) return;
 
     const updateDockHeight = () => {
@@ -1687,7 +1775,7 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
     const observer = new ResizeObserver(updateDockHeight);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, [dockResizeRef]);
+  }, [splitResizeRef]);
 
   useEffect(() => {
     const constrainedSize = constrainOutlinerSplitSize(outlinerResize.size, dockHeight);
@@ -1697,50 +1785,24 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
   }, [dockHeight, outlinerResize.setSize, outlinerResize.size]);
 
   return (
-    <aside
-      id="model-right-dock"
-      ref={dockResizeRef}
-      className="model-right-dock"
-      {...getKeyboardBoundaryMetadata({
-        scope: 'property-panel',
-        ownerId: 'model-right-dock',
-        ownedKeys: [
-          'Enter',
-          'Escape',
-          'Space',
-          'Tab',
-          'ArrowUp',
-          'ArrowDown',
-          'ArrowLeft',
-          'ArrowRight',
-        ],
-      })}
-      style={{ width: dockResize.size }}
-      data-resizing={isDockResizing ? 'true' : 'false'}
-    >
+    <div ref={splitResizeRef} className="model-right-dock-stack">
+      <section
+        className="model-dock-pane model-outliner-pane"
+        style={{ height: effectiveOutlinerSize }}
+        data-resizing={isSplitResizing ? 'true' : 'false'}
+      >
+        <div className="model-dock-title">{t('workbench.outliner')}</div>
+        <div className="model-dock-content">{outliner}</div>
+      </section>
       <ResizeHandle
-        handleProps={dockHandleProps}
-        className="model-resize-handle model-right-dock-resize-handle"
+        handleProps={splitHandleProps}
+        className="model-resize-handle model-outliner-resize-handle"
       />
-      <div ref={splitResizeRef} className="model-right-dock-stack">
-        <section
-          className="model-dock-pane model-outliner-pane"
-          style={{ height: effectiveOutlinerSize }}
-          data-resizing={isSplitResizing ? 'true' : 'false'}
-        >
-          <div className="model-dock-title">{t('workbench.outliner')}</div>
-          <div className="model-dock-content">{outliner}</div>
-        </section>
-        <ResizeHandle
-          handleProps={splitHandleProps}
-          className="model-resize-handle model-outliner-resize-handle"
-        />
-        <section className="model-dock-pane model-properties-pane">
-          <div className="model-dock-title">{t('workbench.properties')}</div>
-          <div className="model-dock-content">{properties}</div>
-        </section>
-      </div>
-    </aside>
+      <section className="model-dock-pane model-properties-pane">
+        <div className="model-dock-title">{t('workbench.properties')}</div>
+        <div className="model-dock-content">{properties}</div>
+      </section>
+    </div>
   );
 }
 
@@ -2054,6 +2116,32 @@ function characterPreviewStatusText({
     return t('characterPreview.status.ready');
   }
   return undefined;
+}
+
+function scene2DStatusLabel(
+  routeAReady: boolean,
+  status: SceneControlStatusView,
+  t: (key: string) => string,
+): string {
+  if (routeAReady) return t('scene2d.status.ready');
+  switch (status) {
+    case 'connecting':
+      return t('scene2d.status.connecting');
+    case 'error':
+      return t('scene2d.status.error');
+    case 'ready':
+      return t('scene2d.status.waitingForRouteA');
+    case 'disconnected':
+      return t('scene2d.status.disconnected');
+  }
+}
+
+function scene2DStatusTone(
+  routeAReady: boolean,
+  status: SceneControlStatusView,
+): 'ready' | 'connecting' | 'disconnected' | 'error' {
+  if (routeAReady) return 'ready';
+  return status === 'ready' ? 'connecting' : status;
 }
 
 function sceneCommandPredictionKind(

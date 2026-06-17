@@ -241,6 +241,24 @@ export const zhCN = {
   'sceneTree.hideNode': '隐藏节点渲染',
   'sceneTree.showNode': '显示节点渲染',
 
+  // 2D Scene profile
+  'scene2d.profile': '2D 场景',
+  'scene2d.panel.title': '2D 场景 Profile',
+  'scene2d.panel.subtitle': '精灵、瓦片地图、相机、灯光与粒子工具将在这里加载。',
+  'scene2d.panel.profileLabel': '项目真相',
+  'scene2d.panel.profileValue': '.nkm profile: 2d',
+  'scene2d.panel.runtimeLabel': '运行时',
+  'scene2d.panel.runtimeValue': 'Engine Scene / Viewport 命令',
+  'scene2d.panel.authoringLabel': '创作工具',
+  'scene2d.panel.authoringValue': '首批控制仍在接入中',
+  'scene2d.overlay.aria': '2D 场景 profile 状态',
+  'scene2d.overlay.title': '.nkm 2D 场景',
+  'scene2d.status.ready': '场景路由已就绪',
+  'scene2d.status.connecting': '正在连接引擎',
+  'scene2d.status.disconnected': '引擎未连接',
+  'scene2d.status.error': '场景路由不可用',
+  'scene2d.status.waitingForRouteA': '等待 Scene 路由',
+
   // Animation player
   'animation.selectPlaceholder': '-- 选择动画 --',
   'animation.play': '播放',

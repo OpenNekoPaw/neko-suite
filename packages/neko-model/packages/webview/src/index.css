@@ -649,6 +649,63 @@
     background: var(--model-viewport-bg);
   }
 
+  .model-scene-profile-chip {
+    display: inline-flex;
+    height: 24px;
+    flex: 0 0 auto;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--model-accent) 34%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--model-accent) 14%, transparent);
+    padding: 0 8px;
+    color: var(--model-fg);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .model-scene2d-viewport-status {
+    pointer-events: none;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 32;
+    display: grid;
+    min-width: 178px;
+    max-width: min(280px, calc(100% - 24px));
+    gap: 3px;
+    border: 1px solid var(--model-left-toolbar-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--model-elevated) 90%, transparent);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    padding: 7px 8px;
+    color: var(--model-fg-secondary);
+    font-size: 11px;
+    line-height: 1.25;
+    contain: layout paint;
+  }
+
+  .model-scene2d-viewport-status strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--model-fg);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .model-scene2d-viewport-status[data-scene2d-status='ready'] strong {
+    color: var(--model-status-ready);
+  }
+
+  .model-scene2d-viewport-status[data-scene2d-status='connecting'] strong {
+    color: var(--model-status-waiting);
+  }
+
+  .model-scene2d-viewport-status[data-scene2d-status='error'] strong {
+    color: var(--model-status-error);
+  }
+
   .model-viewport-frame,
   .model-quality-preview-overlay {
     background: var(--model-viewport-bg);
@@ -1137,6 +1194,70 @@
     color: var(--model-fg-muted);
   }
 
+  .model-scene2d-profile-panel {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    gap: 12px;
+    overflow: auto;
+    color: var(--model-fg-secondary);
+  }
+
+  .model-scene2d-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .model-scene2d-panel-header span {
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--model-fg) 14%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--model-fg) 6%, transparent);
+    padding: 2px 6px;
+    color: var(--model-fg-secondary);
+    font-size: 10px;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .model-scene2d-panel-header span[data-scene2d-status='ready'] {
+    border-color: color-mix(in srgb, var(--model-status-ready) 42%, transparent);
+    color: var(--model-status-ready);
+  }
+
+  .model-scene2d-panel-header span[data-scene2d-status='error'] {
+    border-color: color-mix(in srgb, var(--model-status-error) 42%, transparent);
+    color: var(--model-status-error);
+  }
+
+  .model-scene2d-panel-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .model-scene2d-panel-grid div {
+    display: grid;
+    gap: 2px;
+    border-top: 1px solid var(--model-divider);
+    padding-top: 8px;
+  }
+
+  .model-scene2d-panel-grid dt {
+    color: var(--model-fg-secondary);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .model-scene2d-panel-grid dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--model-fg);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   @media (max-width: 820px) {
     #model-viewport-hud {
       flex-wrap: wrap;
@@ -1186,6 +1307,14 @@
     min-height: 0;
     flex: 1;
     flex-direction: column;
+  }
+
+  .model-right-dock-content {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
   }
 
   .model-dock-pane {

@@ -220,7 +220,8 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/id="model-timeline-controls"/);
     expect(app).toMatch(/id="model-timeline-dock"/);
     expect(app).not.toMatch(/timelineControlsHidden/);
-    expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
+    expect(app).toMatch(/rightDock=\{\s*isRightDockVisible/);
+    expect(app).toMatch(/panelId: MODEL_RESIZE_PANELS\.rightDock\.panelId/);
     expect(app).toMatch(/const \[dockHeight, setDockHeight\] = useState\(0\)/);
     expect(app).toMatch(/constrainOutlinerSplitSize\(outlinerResize\.size, dockHeight\)/);
     expect(app).toMatch(/new ResizeObserver\(updateDockHeight\)/);
@@ -268,6 +269,33 @@ describe('Route A webview boundaries', () => {
     expect(previewModesRule).not.toMatch(/position: absolute/);
     expect(previewModesRule).not.toMatch(/(?:^|\s)(?:left|right|top):/);
     expect(previewModesRule).not.toMatch(/left: 56px;/);
+  });
+
+  it('routes .nkm profile: 2d through the Model Scene editor path with a degraded 2D state', () => {
+    const app = readSource('App.tsx');
+    const types = readSource('types/index.ts');
+    const toolbar = readSource('components/Toolbar.tsx');
+    const extension = readSource('../../extension/src/editor/ModelEditorProvider.ts');
+    const css = readSource('index.css');
+
+    expect(types).toMatch(/sceneProfile\?: NkmSceneProfile/);
+    expect(extension).toMatch(/readNkmSceneProfile/);
+    expect(extension).toMatch(/sceneProfile === '3d' && loaded && loaded\.snapshot\?\.nodes/);
+    expect(extension).toMatch(/sceneProfile,/);
+    expect(app).toMatch(/useState<NkmSceneProfile>\('3d'\)/);
+    expect(app).toMatch(/setSceneProfile\(message\.sceneProfile \?\? '3d'\)/);
+    expect(app).toMatch(/const isScene2DProfile = sceneProfile === '2d'/);
+    expect(app).toMatch(/<Scene2DProfilePanel\b/);
+    expect(app).toMatch(/<Scene2DViewportOverlay\b/);
+    expect(app).toMatch(/data-scene-profile="2d"/);
+    expect(app).toMatch(/sendSceneCommand\('node-add', \{ kind: 'primitive'/);
+    expect(app).toMatch(/sendSceneCommand\('node-add', \{ kind: 'text'/);
+    expect(app).toMatch(/sendRouteACommand/);
+    expect(toolbar).toMatch(/sceneProfile\?: NkmSceneProfile/);
+    expect(toolbar).toMatch(/shouldShowViewportCommand/);
+    expect(toolbar).toMatch(/return item\.key === 'keyframe'/);
+    expect(css).toMatch(/\.model-scene2d-profile-panel\s*\{/);
+    expect(css).toMatch(/\.model-scene2d-viewport-status\s*\{/);
   });
 
   it('keeps viewport performance metrics as a toggleable read-only Route A overlay', () => {
@@ -346,7 +374,7 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/const \[isRightDockVisible, setIsRightDockVisible\] = useState\(true\)/);
     expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
     expect(app).toMatch(/onToggleRightDock=\{toggleRightDock\}/);
-    expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
+    expect(app).toMatch(/rightDock=\{\s*isRightDockVisible/);
   });
 
   it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {

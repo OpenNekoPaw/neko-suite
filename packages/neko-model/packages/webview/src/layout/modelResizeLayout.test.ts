@@ -83,13 +83,17 @@ describe('Model resize layout contract', () => {
   it('wires resize handles without changing viewport semantic control ownership', () => {
     const app = readSource('App.tsx');
 
-    expect(app).toMatch(/usePersistedResize\(dockSpec\.panelId/);
+    expect(app).toMatch(/panelId: MODEL_RESIZE_PANELS\.rightDock\.panelId/);
+    expect(app).not.toMatch(/usePersistedResize\(dockSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(outlinerSpec\.panelId/);
     expect(app).toMatch(/usePersistedResize\(timelineSpec\.panelId/);
     expect(app).toMatch(/const \[dockHeight, setDockHeight\] = useState\(0\)/);
     expect(app).toMatch(/constrainOutlinerSplitSize\(outlinerResize\.size, dockHeight\)/);
     expect(app).toMatch(/new ResizeObserver\(updateDockHeight\)/);
-    expect(app).toMatch(/<ResizeHandle\s+handleProps=\{dockHandleProps\}/);
+    expect(app).toMatch(
+      /resizeHandleClassName: 'model-resize-handle model-right-dock-resize-handle'/,
+    );
+    expect(app).not.toMatch(/dockHandleProps/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{splitHandleProps\}/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{handleProps\}/);
     expect(app).toMatch(/\.sendViewportCameraLatest\(/);
