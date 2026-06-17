@@ -4,11 +4,17 @@ import {
   ModelAssetInstallTarget,
   ModelConfigInstallTarget,
   ModelMotionInstallTarget,
+  ModelScene2DInstallTarget,
 } from './ModelMediaInstallTarget';
 
 describe('ModelMediaInstallTarget', () => {
   it('routes model media packages to separate model roots', () => {
     const cases = [
+      {
+        kind: 'model-2d-scene',
+        target: new ModelScene2DInstallTarget('/tmp/models/2d-scene'),
+        expected: '/tmp/models/2d-scene/studio/sakura',
+      },
       {
         kind: 'model-3d',
         target: new ModelAssetInstallTarget('/tmp/models/3d'),

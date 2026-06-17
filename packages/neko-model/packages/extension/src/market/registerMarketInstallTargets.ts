@@ -5,6 +5,7 @@ import {
   ModelAssetInstallTarget,
   ModelConfigInstallTarget,
   ModelMotionInstallTarget,
+  ModelScene2DInstallTarget,
 } from './ModelMediaInstallTarget';
 
 export async function registerMarketInstallTargets(
@@ -20,6 +21,7 @@ export async function registerMarketInstallTargets(
   try {
     const market = extension.isActive ? extension.exports : await extension.activate();
     context.subscriptions.push(
+      market.registerInstallTarget(new ModelScene2DInstallTarget(), 'model-2d-scene'),
       market.registerInstallTarget(new ModelAssetInstallTarget(), 'model-3d'),
       market.registerInstallTarget(new ModelMotionInstallTarget(), 'model-motion'),
       market.registerInstallTarget(new ModelConfigInstallTarget(), 'model-config'),

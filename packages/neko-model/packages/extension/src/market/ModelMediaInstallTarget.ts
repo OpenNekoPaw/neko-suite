@@ -2,7 +2,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AssetManifest, IInstallTarget } from '@neko/shared';
 
-export type ModelMediaInstallKind = 'model-3d' | 'model-motion' | 'model-config';
+export type ModelMediaInstallKind = 'model-2d-scene' | 'model-3d' | 'model-motion' | 'model-config';
 
 const MARKET_MODEL_ROOT = path.join(os.homedir(), '.neko', 'models');
 
@@ -41,6 +41,15 @@ abstract class BaseModelMediaInstallTarget implements IInstallTarget<'media'> {
 export class ModelAssetInstallTarget extends BaseModelMediaInstallTarget {
   constructor(baseDir = path.join(MARKET_MODEL_ROOT, '3d'), reloadAssets?: () => Promise<void>) {
     super('model-3d', baseDir, reloadAssets);
+  }
+}
+
+export class ModelScene2DInstallTarget extends BaseModelMediaInstallTarget {
+  constructor(
+    baseDir = path.join(MARKET_MODEL_ROOT, '2d-scene'),
+    reloadAssets?: () => Promise<void>,
+  ) {
+    super('model-2d-scene', baseDir, reloadAssets);
   }
 }
 
