@@ -9,7 +9,16 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createProjectSnapshotPackage, injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createDefaultProjectFormatCodecRegistry,
+  nkpSourcePathPolicy,
+  ProjectFileStore,
+} from '@neko/shared';
+import {
+  createProjectSnapshotPackage,
+  createVSCodeProjectFileIoAdapter,
+  injectLocaleAttribute,
+} from '@neko/shared/vscode/extension';
 import { Live2dBundleLoader } from '../live2d';
 import { getLogger } from '../utils/logger';
 
@@ -66,6 +75,11 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   private enginePort: number | undefined;
   private activeParameterNames = new Set<string>();
   private readonly live2dBundleLoader = new Live2dBundleLoader();
+  private readonly projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  private readonly projectFileStore = new ProjectFileStore({
+    registry: createDefaultProjectFormatCodecRegistry(),
+    fileOps: this.projectFileAdapter.fileOps,
+  });
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentContentChangeEvent<PuppetDocument>
@@ -82,13 +96,18 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     const doc = new PuppetDocument(uri);
 
     if (!doc.isSourceFile) {
-      // Parse .nkp JSON
-      try {
-        const fileData = await vscode.workspace.fs.readFile(uri);
-        const json = Buffer.from(fileData).toString('utf-8');
-        doc.projectData = JSON.parse(json) as NkpProjectData;
-      } catch (err) {
-        logger.error(`Failed to parse .nkp file: ${err}`);
+      const result = await this.projectFileStore.load<NkpProjectData>({
+        filePath: uri.fsPath,
+        formatId: 'nkp',
+        sourcePolicy: nkpSourcePathPolicy,
+        sourcePolicyOptions: this.createSourcePolicyOptions(uri),
+      });
+      if (result.document) {
+        doc.projectData = result.document;
+      } else {
+        logger.error(
+          formatProjectFileDiagnostics(result.diagnostics, 'Failed to load .nkp project'),
+        );
       }
     }
 
@@ -129,8 +148,16 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     if (document.isSourceFile || !document.projectData) return;
-    const json = JSON.stringify(document.projectData, null, 2);
-    await vscode.workspace.fs.writeFile(document.uri, Buffer.from(json, 'utf-8'));
+    const result = await this.projectFileStore.save({
+      filePath: document.uri.fsPath,
+      formatId: 'nkp',
+      document: document.projectData,
+      sourcePolicy: nkpSourcePathPolicy,
+      sourcePolicyOptions: this.createSourcePolicyOptions(document.uri),
+    });
+    if (!result.ok) {
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkp file'));
+    }
     document.dirty = false;
   }
 
@@ -140,8 +167,19 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     if (!document.projectData) return;
-    const json = JSON.stringify(document.projectData, null, 2);
-    await vscode.workspace.fs.writeFile(destination, Buffer.from(json, 'utf-8'));
+    const result = await this.projectFileStore.saveAs({
+      filePath: destination.fsPath,
+      formatId: 'nkp',
+      document: document.projectData,
+      sourcePolicy: nkpSourcePathPolicy,
+      sourcePolicyOptions: this.createSourcePolicyOptions(destination),
+    });
+    if (!result.ok) {
+      throw new Error(
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkp file as target'),
+      );
+    }
+    document.dirty = false;
   }
 
   async revertCustomDocument(
@@ -149,21 +187,26 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     if (document.isSourceFile) return;
-    try {
-      const fileData = await vscode.workspace.fs.readFile(document.uri);
-      const json = Buffer.from(fileData).toString('utf-8');
-      document.projectData = JSON.parse(json) as NkpProjectData;
-      document.dirty = false;
+    const result = await this.projectFileStore.revert<NkpProjectData>({
+      filePath: document.uri.fsPath,
+      formatId: 'nkp',
+      sourcePolicy: nkpSourcePathPolicy,
+      sourcePolicyOptions: this.createSourcePolicyOptions(document.uri),
+    });
+    if (!result.document || !result.ok) {
+      throw new Error(
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to revert .nkp file'),
+      );
+    }
+    document.projectData = result.document;
+    document.dirty = false;
 
-      // Notify webview of restored state
-      if (this.activeWebviewPanel && document.projectData) {
-        this.activeWebviewPanel.webview.postMessage({
-          type: 'loadState',
-          parameters: document.projectData.parameters,
-        });
-      }
-    } catch (err) {
-      logger.error(`Failed to revert .nkp file: ${err}`);
+    // Notify webview of restored state
+    if (this.activeWebviewPanel) {
+      this.activeWebviewPanel.webview.postMessage({
+        type: 'loadState',
+        parameters: document.projectData.parameters,
+      });
     }
   }
 
@@ -173,8 +216,19 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<vscode.CustomDocumentBackup> {
     if (document.projectData) {
-      const json = JSON.stringify(document.projectData, null, 2);
-      await vscode.workspace.fs.writeFile(context.destination, Buffer.from(json, 'utf-8'));
+      const result = await this.projectFileStore.backup({
+        filePath: document.uri.fsPath,
+        backupPath: context.destination.fsPath,
+        formatId: 'nkp',
+        document: document.projectData,
+        sourcePolicy: nkpSourcePathPolicy,
+        sourcePolicyOptions: this.createSourcePolicyOptions(document.uri),
+      });
+      if (!result.ok) {
+        throw new Error(
+          formatProjectFileDiagnostics(result.diagnostics, 'Failed to backup .nkp file'),
+        );
+      }
     }
     return {
       id: context.destination.toString(),
@@ -521,6 +575,30 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     return text;
   }
 
+  private createSourcePolicyOptions(
+    uri: vscode.Uri,
+  ): Parameters<ProjectFileStore['save']>[0]['sourcePolicyOptions'] {
+    const documentDir = path.dirname(uri.fsPath);
+    const context = this.projectFileAdapter.createWorkspaceMediaPathContext({
+      documentUri: uri,
+      pathVariables: new Map([['PROJECT', documentDir]]),
+      allowedRoots: [
+        documentDir,
+        ...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+      ],
+    });
+    const pathVariables = new Map(context.pathVariables ?? []);
+    pathVariables.set('PROJECT', documentDir);
+    return {
+      context: {
+        ...context,
+        owningWorkspaceRoot: documentDir,
+        documentDir,
+        pathVariables,
+      },
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Public API (NekoPuppetAPI)
   // ---------------------------------------------------------------------------
@@ -556,4 +634,12 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       parameters: nextParameters,
     });
   }
+}
+
+function formatProjectFileDiagnostics(
+  diagnostics: readonly { readonly message: string }[],
+  fallback: string,
+): string {
+  if (diagnostics.length === 0) return fallback;
+  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }
