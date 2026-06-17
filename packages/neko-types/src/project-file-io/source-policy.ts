@@ -12,6 +12,7 @@ export type ProjectSourceRole =
   | 'audio'
   | 'model'
   | 'puppet'
+  | 'scene3d'
   | 'image'
   | 'document'
   | 'generated'

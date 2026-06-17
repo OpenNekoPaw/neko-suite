@@ -24,7 +24,6 @@ import {
   ProjectFormatCodecRegistry,
   type ProjectFormatCodec,
   type ProjectFormatCompatibility,
-  type ProjectFormatLoadResult,
   type ProjectFormatMigrationMetadata,
 } from './codec';
 
@@ -78,7 +77,7 @@ export const nkcProjectFormatCodec: ProjectFormatCodec<CanvasData> = {
       ? {
           fromVersion: result.migration.fromVersion,
           toVersion: result.migration.toVersion,
-          appliedMigrations: result.migration.appliedMigrations,
+          appliedMigrations: result.migration.steps.map((step) => step.description),
           warnings: result.migration.warnings,
         }
       : undefined;

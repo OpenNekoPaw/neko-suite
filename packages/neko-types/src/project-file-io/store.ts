@@ -27,11 +27,19 @@ export interface ProjectFileOps {
   ): Promise<void>;
 }
 
+export interface ProjectTextEncoder {
+  encode(input?: string): Uint8Array;
+}
+
+export interface ProjectTextDecoder {
+  decode(input?: Uint8Array): string;
+}
+
 export interface ProjectFileStoreOptions {
   readonly registry: ProjectFormatCodecRegistry;
   readonly fileOps: ProjectFileOps;
-  readonly textEncoder?: TextEncoder;
-  readonly textDecoder?: TextDecoder;
+  readonly textEncoder?: ProjectTextEncoder;
+  readonly textDecoder?: ProjectTextDecoder;
 }
 
 export interface ProjectFileLoadRequest<TDocument> {
@@ -75,8 +83,8 @@ export interface ProjectFileSaveResponse {
 export class ProjectFileStore {
   private readonly registry: ProjectFormatCodecRegistry;
   private readonly fileOps: ProjectFileOps;
-  private readonly textEncoder: TextEncoder;
-  private readonly textDecoder: TextDecoder;
+  private readonly textEncoder: ProjectTextEncoder;
+  private readonly textDecoder: ProjectTextDecoder;
   private readonly writeQueues = new Map<string, Promise<void>>();
 
   constructor(options: ProjectFileStoreOptions) {

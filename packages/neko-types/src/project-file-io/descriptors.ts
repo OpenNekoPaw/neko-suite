@@ -1,12 +1,6 @@
 import type { AudioProjectData } from '../types/audioProject';
 import type { CanvasData } from '../types/canvas';
-import type {
-  NkmLiveActorRef,
-  NkmProjectData,
-  NkmScene2DParallaxLayer,
-  NkmScene2DSprite,
-  NkmScene2DTilemap,
-} from '../types/model-project';
+import type { NkmProjectData } from '../types/model-project';
 import type { ProjectData } from '../types/project';
 import type { NkpProjectData } from '../types/puppet';
 import type { NksDocument } from '../types/sketch';
@@ -497,7 +491,7 @@ function replaceNkmIndexedSource(
         scene2d: document.scene2d
           ? {
               ...document.scene2d,
-              sprites: replaceIndexedAssetRef<NkmScene2DSprite>(
+              sprites: replaceIndexedAssetRef(
                 document.scene2d.sprites,
                 index,
                 'assetRef',
@@ -512,7 +506,7 @@ function replaceNkmIndexedSource(
         scene2d: document.scene2d
           ? {
               ...document.scene2d,
-              tilemaps: replaceIndexedAssetRef<NkmScene2DTilemap>(
+              tilemaps: replaceIndexedAssetRef(
                 document.scene2d.tilemaps,
                 index,
                 'tilesetRef',
@@ -527,7 +521,7 @@ function replaceNkmIndexedSource(
         scene2d: document.scene2d
           ? {
               ...document.scene2d,
-              parallaxLayers: replaceIndexedAssetRef<NkmScene2DParallaxLayer>(
+              parallaxLayers: replaceIndexedAssetRef(
                 document.scene2d.parallaxLayers,
                 index,
                 'assetRef',
@@ -542,12 +536,7 @@ function replaceNkmIndexedSource(
         live: document.live
           ? {
               ...document.live,
-              actors: replaceIndexedAssetRef<NkmLiveActorRef>(
-                document.live.actors,
-                index,
-                'ref',
-                replacement.path,
-              ),
+              actors: replaceIndexedAssetRef(document.live.actors, index, 'ref', replacement.path),
             }
           : document.live,
       };
