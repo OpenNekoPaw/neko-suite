@@ -20,8 +20,9 @@ describe('Cut creative workbench layout boundary', () => {
     expect(appSource).toMatch(/mainKind="preview-timeline"/);
     expect(appSource).toMatch(/leftRail=\{\s*<CutSideToolbar/);
     expect(appSource).toMatch(/mainClassName="cut-main-panel"/);
-    expect(appSource).toMatch(/rightPanel=\{\s*propertyPanelVisible \? \(/);
-    expect(appSource).toMatch(/id="cut-property-panel"/);
+    expect(appSource).toMatch(/rightDock=\{\s*propertyPanelVisible\s*\?/);
+    expect(appSource).toMatch(/id: 'cut-property-panel'/);
+    expect(appSource).toMatch(/contentClassName:\s*'cut-property-panel-content/);
   });
 
   it('keeps preview, timeline surfaces, and timeline controls inside the main panel', () => {

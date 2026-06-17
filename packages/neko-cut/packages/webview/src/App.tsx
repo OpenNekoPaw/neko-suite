@@ -146,18 +146,7 @@ function App() {
       (event.clientY - containerRect.top) / (containerRect.height - 4),
   });
 
-  const {
-    isResizing: isHResizing,
-    containerRef: rootRef,
-    handleProps: propertyPanelResizeHandleProps,
-  } = useResizable<HTMLDivElement>({
-    edge: 'right',
-    mode: 'pixel',
-    size: propertyPanelWidth,
-    minSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.minSize,
-    maxSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.maxSize,
-    onSizeChange: setPropertyPanelWidth,
-  });
+  const rootRef = useRef<HTMLDivElement>(null);
   const { isKeyboardFocused, setKeyboardFocused } = useFocusedWebviewRoot(rootRef);
 
   // Playback loop with optimized timing (avoid excessive store updates)
@@ -323,29 +312,22 @@ function App() {
             )}
           </div>
         }
-        rightPanel={
-          propertyPanelVisible ? (
-            <>
-              <ResizeHandle
-                handleProps={propertyPanelResizeHandleProps}
-                className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
-                  isHResizing
-                    ? 'bg-[var(--vscode-button-background)]'
-                    : 'bg-[var(--vscode-panel-border)] hover:bg-[var(--vscode-button-background)]'
-                }`}
-              />
-              <div
-                id="cut-property-panel"
-                className="flex-shrink-0 overflow-hidden border-l border-[var(--vscode-panel-border)]"
-                style={{
-                  width: propertyPanelWidth,
-                  background: 'var(--vscode-sideBar-background)',
-                }}
-              >
-                <PropertyPanelInline />
-              </div>
-            </>
-          ) : undefined
+        rightDock={
+          propertyPanelVisible
+            ? {
+                id: 'cut-property-panel',
+                className: 'cut-property-panel-shell',
+                contentClassName:
+                  'cut-property-panel-content flex h-full min-h-0 flex-col overflow-hidden',
+                resizeHandleClassName:
+                  'cut-property-panel-resize-handle h-full w-1 flex-shrink-0 cursor-ew-resize transition-colors',
+                size: propertyPanelWidth,
+                minSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.minSize,
+                maxSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.maxSize,
+                onSizeChange: setPropertyPanelWidth,
+                children: <PropertyPanelInline />,
+              }
+            : undefined
         }
       />
     </div>

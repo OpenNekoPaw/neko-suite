@@ -15,7 +15,7 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/import \{ CreativeWorkbenchShell \} from '@neko\/ui\/workbench'/);
     expect(appSource).toMatch(/<CreativeWorkbenchShell/);
     expect(appSource).toMatch(/mainKind="drawing-canvas"/);
-    expect(appSource).toMatch(/rightPanelClassName="sketch-right-sidebar-host"/);
+    expect(appSource).toMatch(/rightDock=\{\s*showSidebar\s*\?/);
     expect(appSource).toMatch(
       /leftRail=\{<Toolbar onOpenExport=\{handleOpenExport\} onOpenPackage=\{handleOpenPackage\} \/>}/,
     );
@@ -27,10 +27,11 @@ describe('Sketch creative workbench layout boundary', () => {
 
   it('separates keyboard focus ownership from sidebar resize geometry', () => {
     expect(appSource).toMatch(/const keyboardRootRef = useRef<HTMLDivElement \| null>\(null\)/);
-    expect(appSource).toMatch(/containerRef: sidebarResizeRef/);
+    expect(appSource).not.toMatch(/sidebarResizeRef/);
     expect(appSource).toMatch(/useFocusedWebviewRoot\(\s*keyboardRootRef/);
     expect(appSource).toMatch(/useReportWebviewKeyboardFocus\(keyboardRootRef, vscode\)/);
     expect(appSource).toMatch(/ref=\{keyboardRootRef\}/);
+    expect(appSource).toMatch(/onSizeChange: setSidebarWidth/);
   });
 
   it('captures sketch shortcuts before browser text selection can run', () => {
@@ -64,11 +65,12 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="right-panel"/);
     expect(toolbarSource).toMatch(/aria-controls="sketch-frame-timeline"/);
     expect(toolbarSource).toMatch(/aria-controls="sketch-right-sidebar"/);
-    expect(appSource).toMatch(/rightPanel=\{\s*showSidebar \? \(/);
-    expect(appSource).toMatch(/id="sketch-right-sidebar"/);
-    expect(appSource).toMatch(/ref=\{sidebarResizeRef\}/);
-    expect(appSource).toMatch(/className="sketch-right-sidebar"/);
-    expect(appSource).toMatch(/style=\{\{ width: sidebarWidth \}\}/);
+    expect(appSource).toMatch(/rightDock=\{\s*showSidebar\s*\?/);
+    expect(appSource).toMatch(/id: 'sketch-right-sidebar'/);
+    expect(appSource).toMatch(/className: 'sketch-right-sidebar'/);
+    expect(appSource).toMatch(/contentClassName: 'sketch-right-sidebar-stack'/);
+    expect(appSource).toMatch(/resizeHandleClassName: 'sketch-right-sidebar-resize-handle'/);
+    expect(appSource).toMatch(/size: sidebarWidth/);
     expect(appSource).toMatch(/<SketchInspectorStack/);
     for (const token of [
       '<BrushPanel',

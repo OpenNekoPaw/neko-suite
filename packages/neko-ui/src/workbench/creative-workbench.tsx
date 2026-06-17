@@ -1,5 +1,12 @@
 import type React from 'react';
-import { ToolbarButton, ToolbarSeparator, ToolbarSpacer, VerticalToolbar } from '../primitives';
+import { usePersistedResize, useResizable } from '../hooks';
+import {
+  ResizeHandle,
+  ToolbarButton,
+  ToolbarSeparator,
+  ToolbarSpacer,
+  VerticalToolbar,
+} from '../primitives';
 import { cn } from '../utils';
 
 export type CreativeWorkbenchMainKind =
@@ -25,6 +32,7 @@ export interface CreativeWorkbenchShellProps {
   readonly leftRail: React.ReactNode;
   readonly main: React.ReactNode;
   readonly mainKind: CreativeWorkbenchMainKind;
+  readonly rightDock?: CreativeWorkbenchRightDockProps;
   readonly rightPanel?: React.ReactNode;
   readonly bottomPanel?: React.ReactNode;
   readonly className?: string;
@@ -34,6 +42,37 @@ export interface CreativeWorkbenchShellProps {
   readonly rightPanelClassName?: string;
   readonly bottomPanelClassName?: string;
 }
+
+interface CreativeWorkbenchRightDockBaseProps {
+  readonly id: string;
+  readonly children: React.ReactNode;
+  readonly className?: string;
+  readonly contentClassName?: string;
+  readonly resizeHandleClassName?: string;
+  readonly label?: string;
+  readonly role?: React.AriaRole;
+  readonly minSize?: number;
+  readonly maxSize?: number;
+  readonly disabled?: boolean;
+}
+
+export interface CreativeWorkbenchControlledRightDockProps extends CreativeWorkbenchRightDockBaseProps {
+  readonly size: number;
+  readonly onSizeChange: (size: number) => void;
+  readonly panelId?: never;
+  readonly defaultSize?: never;
+}
+
+export interface CreativeWorkbenchPersistedRightDockProps extends CreativeWorkbenchRightDockBaseProps {
+  readonly panelId: string;
+  readonly defaultSize: number;
+  readonly size?: never;
+  readonly onSizeChange?: never;
+}
+
+export type CreativeWorkbenchRightDockProps =
+  | CreativeWorkbenchControlledRightDockProps
+  | CreativeWorkbenchPersistedRightDockProps;
 
 interface CreativeLeftRailBaseAction {
   readonly id: string;
@@ -91,6 +130,7 @@ export function CreativeWorkbenchShell({
   main,
   mainClassName,
   mainKind,
+  rightDock,
   rightPanel,
   rightPanelClassName,
 }: CreativeWorkbenchShellProps): React.ReactElement {
@@ -111,13 +151,101 @@ export function CreativeWorkbenchShell({
             </div>
           ) : null}
         </main>
-        {rightPanel ? (
+        {rightDock ? <CreativeWorkbenchRightDock {...rightDock} /> : null}
+        {!rightDock && rightPanel ? (
           <aside className={cn('neko-creative-workbench-right-panel', rightPanelClassName)}>
             {rightPanel}
           </aside>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function CreativeWorkbenchRightDock(props: CreativeWorkbenchRightDockProps): React.ReactElement {
+  if (props.panelId !== undefined) {
+    return <CreativeWorkbenchPersistedRightDock {...props} />;
+  }
+
+  return <CreativeWorkbenchControlledRightDock {...props} />;
+}
+
+function CreativeWorkbenchPersistedRightDock(
+  props: CreativeWorkbenchPersistedRightDockProps,
+): React.ReactElement {
+  const resize = usePersistedResize(props.panelId, props.defaultSize, {
+    minSize: props.minSize,
+    maxSize: props.maxSize,
+  });
+
+  return (
+    <CreativeWorkbenchRightDockSurface
+      {...props}
+      size={resize.size}
+      onSizeChange={resize.setSize}
+    />
+  );
+}
+
+function CreativeWorkbenchControlledRightDock(
+  props: CreativeWorkbenchControlledRightDockProps,
+): React.ReactElement {
+  return (
+    <CreativeWorkbenchRightDockSurface
+      {...props}
+      size={props.size}
+      onSizeChange={props.onSizeChange}
+    />
+  );
+}
+
+interface CreativeWorkbenchRightDockSurfaceProps extends CreativeWorkbenchRightDockBaseProps {
+  readonly size: number;
+  readonly onSizeChange: (size: number) => void;
+}
+
+function CreativeWorkbenchRightDockSurface({
+  children,
+  className,
+  contentClassName,
+  disabled,
+  id,
+  label,
+  maxSize,
+  minSize,
+  onSizeChange,
+  resizeHandleClassName,
+  role,
+  size,
+}: CreativeWorkbenchRightDockSurfaceProps): React.ReactElement {
+  const { containerRef, handleProps, isResizing } = useResizable<HTMLElement>({
+    edge: 'right',
+    mode: 'pixel',
+    size,
+    minSize,
+    maxSize,
+    disabled,
+    onSizeChange,
+  });
+
+  return (
+    <aside
+      id={id}
+      ref={containerRef}
+      aria-label={label}
+      className={cn('neko-creative-workbench-right-panel', className)}
+      data-resizing={isResizing ? 'true' : 'false'}
+      role={role}
+      style={{ width: size }}
+    >
+      <ResizeHandle
+        handleProps={handleProps}
+        className={cn('neko-creative-workbench-right-resize-handle', resizeHandleClassName)}
+      />
+      <div className={cn('neko-creative-workbench-right-panel-content', contentClassName)}>
+        {children}
+      </div>
+    </aside>
   );
 }
 

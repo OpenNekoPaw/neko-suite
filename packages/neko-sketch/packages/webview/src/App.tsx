@@ -11,8 +11,6 @@ import {
   useFocusedWebviewRoot,
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
-import { useResizable } from '@neko/ui/hooks';
-import { ResizeHandle } from '@neko/ui/primitives';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
@@ -130,16 +128,6 @@ export function App() {
   const [isDragOver, setIsDragOver] = useState(false);
   const keyboardRootRef = useRef<HTMLDivElement | null>(null);
 
-  const {
-    isResizing: isHResizing,
-    containerRef: sidebarResizeRef,
-    handleProps: sidebarResizeHandleProps,
-  } = useResizable<HTMLElement>({
-    edge: 'right',
-    mode: 'pixel',
-    size: sidebarWidth,
-    onSizeChange: setSidebarWidth,
-  });
   const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
     keyboardRootRef,
     false,
@@ -610,34 +598,33 @@ export function App() {
           bodyClassName="sketch-workbench-body"
           mainClassName="sketch-main-panel"
           mainKind="drawing-canvas"
-          rightPanelClassName="sketch-right-sidebar-host"
           leftRail={<Toolbar onOpenExport={handleOpenExport} onOpenPackage={handleOpenPackage} />}
           main={
             <div className="sketch-canvas-container">
               <SketchCanvas isKeyboardFocusedRef={isKeyboardFocusedRef} />
             </div>
           }
-          rightPanel={
-            showSidebar ? (
-              <aside
-                id="sketch-right-sidebar"
-                ref={sidebarResizeRef}
-                className="sketch-right-sidebar"
-                style={{ width: sidebarWidth }}
-                data-resizing={isHResizing ? 'true' : 'false'}
-              >
-                <ResizeHandle
-                  handleProps={sidebarResizeHandleProps}
-                  className="sketch-right-sidebar-resize-handle"
-                />
-                <SketchInspectorStack
-                  activeTool={activeTool}
-                  featureFlags={featureFlags}
-                  showFrameTimeline={showFrameTimeline}
-                  onOpenAgentForAI={handleOpenAgentForAI}
-                />
-              </aside>
-            ) : undefined
+          rightDock={
+            showSidebar
+              ? {
+                  id: 'sketch-right-sidebar',
+                  className: 'sketch-right-sidebar',
+                  contentClassName: 'sketch-right-sidebar-stack',
+                  resizeHandleClassName: 'sketch-right-sidebar-resize-handle',
+                  size: sidebarWidth,
+                  minSize: 220,
+                  maxSize: 440,
+                  onSizeChange: setSidebarWidth,
+                  children: (
+                    <SketchInspectorStack
+                      activeTool={activeTool}
+                      featureFlags={featureFlags}
+                      showFrameTimeline={showFrameTimeline}
+                      onOpenAgentForAI={handleOpenAgentForAI}
+                    />
+                  ),
+                }
+              : undefined
           }
           bottomPanel={
             showFrameTimeline ? (

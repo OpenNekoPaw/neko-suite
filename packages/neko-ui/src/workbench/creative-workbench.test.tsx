@@ -25,13 +25,22 @@ describe('creative workbench shell primitives', () => {
   });
 
   it('renders shell slots without owning domain content', () => {
+    const onRightDockSizeChange = vi.fn();
+
     act(() => {
       root.render(
         <CreativeWorkbenchShell
           mainKind="viewport-timeline"
           leftRail={<div data-testid="left" />}
           main={<div data-testid="main" />}
-          rightPanel={<div data-testid="right" />}
+          rightDock={{
+            id: 'workbench-right-dock',
+            size: 320,
+            minSize: 200,
+            maxSize: 420,
+            onSizeChange: onRightDockSizeChange,
+            children: <div data-testid="right" />,
+          }}
           bottomPanel={<div data-testid="bottom" />}
         />,
       );
@@ -45,6 +54,14 @@ describe('creative workbench shell primitives', () => {
     expect(host.querySelector('[data-testid="main"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="right"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="bottom"]')).not.toBeNull();
+    expect(host.querySelector('#workbench-right-dock')).not.toBeNull();
+    expect(host.querySelector('#workbench-right-dock')?.getAttribute('data-resizing')).toBe(
+      'false',
+    );
+    expect(host.querySelector('#workbench-right-dock')?.getAttribute('style')).toContain(
+      'width: 320px',
+    );
+    expect(host.querySelector('.neko-creative-workbench-right-resize-handle')).not.toBeNull();
   });
 
   it('forwards visibility toggle state from left rail actions', () => {

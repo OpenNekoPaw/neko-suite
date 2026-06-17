@@ -34,6 +34,7 @@ describe('@neko/ui public entrypoints', () => {
     expect(workbench.CreativeWorkbenchShell).toBe(ui.CreativeWorkbenchShell);
     expect(workbench.CreativeLeftRail).toBe(ui.CreativeLeftRail);
     expect(workbench.MainPanelControlLayer).toBe(ui.MainPanelControlLayer);
+    expect(workbench).toHaveProperty('CreativeWorkbenchShell');
     expect(ui.ResizeHandle).toBeTypeOf('function');
     expect(testUtils.hasAccessibleName).toBeTypeOf('function');
     expect(keyboard.KeyboardBoundary).toBe(ui.KeyboardBoundary);
