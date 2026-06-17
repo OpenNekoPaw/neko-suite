@@ -47,6 +47,10 @@ describe('Model SceneTree shared UI migration', () => {
     });
 
     expect(host.querySelector('[role="tree"]')?.getAttribute('aria-label')).toBe('sceneTree.title');
+    expect(host.querySelector('.model-scene-tree-viewport')).not.toBeNull();
+    expect(host.querySelector('.model-scene-tree-list')?.getAttribute('data-neko-tree-view')).toBe(
+      'true',
+    );
 
     act(() => {
       host.querySelector<HTMLElement>('[data-tree-item-id="mesh"]')?.click();
@@ -81,6 +85,37 @@ describe('Model SceneTree shared UI migration', () => {
     expect(host.querySelector('[data-tree-item-id="node-15"]')?.getAttribute('aria-selected')).toBe(
       'true',
     );
+    expect(host.querySelector('[data-tree-item-id="node-15"]')?.getAttribute('data-selected')).toBe(
+      'true',
+    );
+  });
+
+  it('shows selected feedback for every selected node target', () => {
+    act(() => {
+      root.render(
+        <SceneTree
+          nodes={[
+            createNode('root', 'Root', null, true, ['body', 'hair']),
+            createNode('body', 'Body', 'root'),
+            createNode('hair', 'Hair', 'root'),
+          ]}
+          onSelectNode={vi.fn()}
+          selectedNodeId="body"
+          selectedTargets={[
+            { kind: 'node', nodeId: 'body' },
+            { kind: 'materialSlot', nodeId: 'hair', materialSlotId: 'slot-0' },
+          ]}
+          showHeader={false}
+        />,
+      );
+    });
+
+    expect(host.querySelector('[data-tree-item-id="body"]')?.getAttribute('data-selected')).toBe(
+      'true',
+    );
+    expect(host.querySelector('[data-tree-item-id="hair"]')?.getAttribute('data-selected')).toBe(
+      'true',
+    );
   });
 });
 
@@ -89,6 +124,7 @@ function createNode(
   name: string,
   parentId: string | null,
   visible = true,
+  children: string[] = [],
 ): SceneNodeSnapshot {
   return {
     nodeId,
@@ -96,6 +132,6 @@ function createNode(
     parentId,
     kind: 'mesh',
     visible,
-    children: [],
+    children,
   } as SceneNodeSnapshot;
 }

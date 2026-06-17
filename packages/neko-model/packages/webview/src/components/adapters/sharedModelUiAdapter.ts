@@ -3,6 +3,7 @@ import type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
 import { MODEL_COMPONENT_SCHEMA_REGISTRY } from '../../scene/ComponentSchemaRegistry';
 import type { SceneNodeSnapshot } from '../../types';
 import type { FaceParameter } from '../../types/faceParameters';
+import type { SelectionTarget } from '@neko/shared';
 
 export interface ModelPropertyAdapterResult {
   readonly properties: readonly PropertyDefinition[];
@@ -94,13 +95,15 @@ export function mapModelFaceParametersToProperties(
 export function mapModelSceneNodesToTreeViewItems(
   nodes: readonly SceneNodeSnapshot[],
   selectedNodeId: string | null,
+  selectedTargets: readonly SelectionTarget[] = [],
 ): readonly TreeViewItem[] {
   const nodeMap = new Map<string, MutableTreeViewItem>();
   const parentByChildId = new Map<string, string>();
   const roots: MutableTreeViewItem[] = [];
+  const selectedNodeIds = collectSelectedNodeIds(selectedNodeId, selectedTargets);
 
   for (const node of nodes) {
-    nodeMap.set(node.nodeId, createModelTreeItem(node, selectedNodeId));
+    nodeMap.set(node.nodeId, createModelTreeItem(node, selectedNodeIds));
   }
 
   for (const node of nodes) {
@@ -136,13 +139,13 @@ export function mapModelSceneNodesToTreeViewItems(
 
 function createModelTreeItem(
   node: SceneNodeSnapshot,
-  selectedNodeId: string | null,
+  selectedNodeIds: ReadonlySet<string>,
 ): MutableTreeViewItem {
   return {
     id: node.nodeId,
     label: node.name,
     children: [],
-    selected: node.nodeId === selectedNodeId,
+    selected: selectedNodeIds.has(node.nodeId),
     visible: node.visible !== false,
     locked: false,
     metadata: {
@@ -150,6 +153,22 @@ function createModelTreeItem(
       hasMesh: Boolean(node.mesh),
     },
   };
+}
+
+function collectSelectedNodeIds(
+  selectedNodeId: string | null,
+  selectedTargets: readonly SelectionTarget[],
+): ReadonlySet<string> {
+  const selectedNodeIds = new Set<string>();
+  if (selectedNodeId) {
+    selectedNodeIds.add(selectedNodeId);
+  }
+  for (const target of selectedTargets) {
+    if (typeof target.nodeId === 'string' && target.nodeId.length > 0) {
+      selectedNodeIds.add(target.nodeId);
+    }
+  }
+  return selectedNodeIds;
 }
 
 type MutableTreeViewItem = Omit<TreeViewItem, 'children' | 'expanded'> & {

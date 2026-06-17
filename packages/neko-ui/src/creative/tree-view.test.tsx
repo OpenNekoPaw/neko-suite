@@ -59,6 +59,12 @@ describe('@neko/ui TreeView', () => {
     expect(host.querySelector('[aria-selected="true"]')?.getAttribute('data-tree-item-id')).toBe(
       'child-a',
     );
+    expect(host.querySelector('[data-tree-item-id="child-a"]')?.getAttribute('data-selected')).toBe(
+      'true',
+    );
+    expect(host.querySelector('[data-tree-item-id="child-a"]')?.getAttribute('data-focused')).toBe(
+      'true',
+    );
     expect(host.querySelector('[aria-label="Locked"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Hidden"]')).not.toBeNull();
 
@@ -303,5 +309,27 @@ describe('@neko/ui TreeView', () => {
     expect(host.querySelector('[data-tree-item-id="item-15"]')?.getAttribute('aria-selected')).toBe(
       'true',
     );
+  });
+
+  it('reports row focus when users click an item', () => {
+    const onFocusItem = vi.fn();
+    const onSelect = vi.fn();
+
+    act(() => {
+      root.render(
+        <TreeView
+          items={[{ id: 'node-a', label: 'Node A' }]}
+          onFocusItem={onFocusItem}
+          onSelect={onSelect}
+        />,
+      );
+    });
+
+    act(() => {
+      host.querySelector<HTMLElement>('[data-tree-item-id="node-a"]')?.click();
+    });
+
+    expect(onFocusItem).toHaveBeenCalledWith('node-a');
+    expect(onSelect).toHaveBeenCalledWith('node-a', { multi: false, range: false });
   });
 });

@@ -297,6 +297,44 @@
     color: var(--model-fg);
   }
 
+  .model-scene-tree {
+    min-height: 0;
+  }
+
+  .model-scene-tree-viewport {
+    overflow: hidden;
+  }
+
+  .model-scene-tree-list {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .model-scene-tree-list [role='treeitem'] {
+    border-radius: 4px;
+  }
+
+  .model-scene-tree-list [role='treeitem'][data-selected='true'] {
+    background: color-mix(
+      in srgb,
+      var(--vscode-list-activeSelectionBackground, var(--model-accent)) 88%,
+      transparent
+    );
+    color: var(--vscode-list-activeSelectionForeground, var(--model-fg));
+  }
+
+  .model-scene-tree-list [role='treeitem'][data-focused='true'] {
+    box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, var(--model-accent));
+  }
+
+  .model-scene-tree-list [role='treeitem'][data-selected='true'][data-focused='true'] {
+    box-shadow:
+      inset 2px 0 0 var(--vscode-focusBorder, var(--model-accent)),
+      inset 0 0 0 1px var(--vscode-focusBorder, var(--model-accent));
+  }
+
   .model-bottom-panel {
     background: var(--model-overlay);
     color: var(--model-fg);
@@ -1160,11 +1198,14 @@
     flex: 0 0 auto;
     min-height: 150px;
     max-height: calc(100% - 124px);
+    overflow: hidden;
   }
 
   .model-properties-pane {
     flex: 1;
     min-height: 0;
+    border-top: 1px solid var(--model-divider);
+    overflow: hidden;
   }
 
   .model-dock-title {

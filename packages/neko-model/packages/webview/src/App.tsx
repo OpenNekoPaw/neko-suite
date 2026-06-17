@@ -1606,6 +1606,7 @@ export function App(): React.JSX.Element {
                 <SceneTree
                   nodes={sceneNodes}
                   selectedNodeId={selectedNodeId}
+                  selectedTargets={selectedTargets}
                   onSelectNode={handleOutlinerSelectNode}
                   onSetNodeVisible={handleSetNodeVisible}
                   visibilityDisabled={panelCommandDisabled}

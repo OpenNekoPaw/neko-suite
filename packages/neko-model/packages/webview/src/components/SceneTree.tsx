@@ -1,5 +1,6 @@
 import React from 'react';
 import { TreeView } from '@neko/ui/creative';
+import type { SelectionTarget } from '@neko/shared';
 import type { SceneNodeSnapshot } from '../types';
 import { useTranslation } from '../i18n/I18nContext';
 import { mapModelSceneNodesToTreeViewItems } from './adapters/sharedModelUiAdapter';
@@ -7,6 +8,7 @@ import { mapModelSceneNodesToTreeViewItems } from './adapters/sharedModelUiAdapt
 interface SceneTreeProps {
   nodes: SceneNodeSnapshot[];
   selectedNodeId: string | null;
+  selectedTargets?: readonly SelectionTarget[];
   onSelectNode: (id: string) => void;
   onSetNodeVisible?: (id: string, visible: boolean) => void;
   visibilityDisabled?: boolean;
@@ -24,6 +26,7 @@ interface VisibilityLabels {
 export function SceneTree({
   nodes,
   selectedNodeId,
+  selectedTargets = [],
   onSelectNode,
   onSetNodeVisible,
   visibilityDisabled = false,
@@ -38,8 +41,12 @@ export function SceneTree({
   };
   const [focusedId, setFocusedId] = React.useState<string | undefined>(selectedNodeId ?? undefined);
   const treeItems = React.useMemo(
-    () => mapModelSceneNodesToTreeViewItems(nodes, selectedNodeId),
-    [nodes, selectedNodeId],
+    () => mapModelSceneNodesToTreeViewItems(nodes, selectedNodeId, selectedTargets),
+    [nodes, selectedNodeId, selectedTargets],
+  );
+  const selectedTreeIds = React.useMemo(
+    () => collectSelectedTreeIds(selectedNodeId, selectedTargets),
+    [selectedNodeId, selectedTargets],
   );
 
   React.useEffect(() => {
@@ -60,15 +67,15 @@ export function SceneTree({
   }, []);
 
   return (
-    <div className="model-tree-panel flex h-full min-h-0 w-full flex-col overflow-hidden text-xs">
+    <div className="model-tree-panel model-scene-tree flex h-full min-h-0 w-full flex-col overflow-hidden text-xs">
       {showHeader && (
         <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
           {t('sceneTree.title')}
         </div>
       )}
-      <div ref={treeContainerRef} className="min-h-0 flex-1 p-1">
+      <div ref={treeContainerRef} className="model-scene-tree-viewport min-h-0 flex-1 p-1">
         <TreeView
-          className="h-full"
+          className="model-scene-tree-list h-full"
           focusedId={focusedId ?? selectedNodeId ?? nodes[0]?.nodeId}
           height={treeHeight}
           items={treeItems}
@@ -79,7 +86,7 @@ export function SceneTree({
             onSelectNode(id);
           }}
           onToggleVisibility={onSetNodeVisible}
-          selectedIds={selectedNodeId ? [selectedNodeId] : undefined}
+          selectedIds={selectedTreeIds.length > 0 ? selectedTreeIds : undefined}
           visibilityDisabled={visibilityDisabled || !onSetNodeVisible}
           visibilityLabels={visibilityLabels}
           virtualization={MODEL_SCENE_TREE_VIRTUALIZATION}
@@ -94,3 +101,19 @@ const MODEL_SCENE_TREE_VIRTUALIZATION = {
   overscan: 8,
   threshold: 200,
 } as const;
+
+function collectSelectedTreeIds(
+  selectedNodeId: string | null,
+  selectedTargets: readonly SelectionTarget[],
+): readonly string[] {
+  const selectedIds = new Set<string>();
+  if (selectedNodeId) {
+    selectedIds.add(selectedNodeId);
+  }
+  for (const target of selectedTargets) {
+    if (typeof target.nodeId === 'string' && target.nodeId.length > 0) {
+      selectedIds.add(target.nodeId);
+    }
+  }
+  return [...selectedIds];
+}

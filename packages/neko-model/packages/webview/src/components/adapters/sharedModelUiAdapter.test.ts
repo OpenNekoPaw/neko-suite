@@ -64,6 +64,24 @@ describe('Model shared UI adapter', () => {
     });
   });
 
+  it('marks all node targets as selected for multi-part scene feedback', () => {
+    const tree = mapModelSceneNodesToTreeViewItems(
+      [
+        createNode('root', 'Root', undefined, 'character', true, ['body', 'hair']),
+        createNode('body', 'Body', 'root', 'mesh'),
+        createNode('hair', 'Hair', 'root', 'mesh'),
+      ],
+      'body',
+      [
+        { kind: 'node', nodeId: 'body' },
+        { kind: 'materialSlot', nodeId: 'hair', materialSlotId: 'slot-0' },
+      ],
+    );
+
+    expect(tree[0]?.children?.[0]).toMatchObject({ id: 'body', selected: true });
+    expect(tree[0]?.children?.[1]).toMatchObject({ id: 'hair', selected: true });
+  });
+
   it('reconstructs scene hierarchy from children edges when parentId is absent', () => {
     const tree = mapModelSceneNodesToTreeViewItems(
       [

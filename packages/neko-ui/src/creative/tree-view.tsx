@@ -163,10 +163,11 @@ export function TreeView({
     <div
       aria-label={label}
       className={cn(
-        'relative min-h-0 overflow-auto rounded-[var(--neko-radius-sm,6px)]',
+        'neko-creative-tree-view relative min-h-0 overflow-auto rounded-[var(--neko-radius-sm,6px)]',
         'border border-[var(--neko-border)] bg-[var(--vscode-editor-background)]',
         className,
       )}
+      data-neko-tree-view="true"
       role="tree"
       style={viewportStyle}
       tabIndex={0}
@@ -216,6 +217,7 @@ export function TreeView({
               onAction={onAction}
               onContextMenu={onContextMenu}
               onDragStart={onDragStart}
+              onFocusItem={onFocusItem}
               onToggleExpand={toggleExpand}
               onToggleLock={onToggleLock}
               onToggleVisibility={onToggleVisibility}
@@ -240,6 +242,7 @@ function TreeViewRow({
   onAction,
   onContextMenu,
   onDragStart,
+  onFocusItem,
   onSelect,
   onToggleExpand,
   onToggleLock,
@@ -257,6 +260,7 @@ function TreeViewRow({
   readonly onAction?: TreeViewProps['onAction'];
   readonly onContextMenu?: TreeViewProps['onContextMenu'];
   readonly onDragStart?: TreeViewProps['onDragStart'];
+  readonly onFocusItem?: TreeViewProps['onFocusItem'];
   readonly onSelect?: TreeViewProps['onSelect'];
   readonly onToggleExpand?: TreeViewProps['onToggleExpand'];
   readonly onToggleLock?: TreeViewProps['onToggleLock'];
@@ -279,17 +283,20 @@ function TreeViewRow({
       aria-label={item.label}
       aria-selected={row.selected}
       className={cn(
-        'grid items-center gap-1 px-1 text-xs outline-none',
+        'group relative grid items-center gap-1 px-1 text-xs outline-none',
         showStaticStateIndicators
           ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
           : 'grid-cols-[auto_minmax(0,1fr)_auto]',
-        'text-[var(--vscode-foreground)] hover:bg-[var(--neko-hover)]',
+        'text-[var(--vscode-foreground)] transition-colors duration-100 hover:bg-[var(--neko-hover)]',
         row.selected
-          ? 'bg-[var(--vscode-list-activeSelectionBackground,var(--neko-accent-muted))]'
+          ? 'bg-[var(--vscode-list-activeSelectionBackground,var(--neko-accent-muted))] text-[var(--vscode-list-activeSelectionForeground,var(--vscode-foreground))] before:absolute before:inset-y-[3px] before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--vscode-focusBorder,var(--neko-accent))]'
           : null,
-        focused ? 'ring-1 ring-inset ring-[var(--vscode-focusBorder)]' : null,
+        focused && !row.selected ? 'ring-1 ring-inset ring-[var(--vscode-focusBorder)]' : null,
+        focused && row.selected ? 'ring-1 ring-inset ring-[var(--vscode-focusBorder)]' : null,
         item.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-default',
       )}
+      data-focused={focused ? 'true' : 'false'}
+      data-selected={row.selected ? 'true' : 'false'}
       data-tree-item-id={item.id}
       draggable={item.draggable && !item.disabled ? true : undefined}
       role="treeitem"
@@ -297,6 +304,7 @@ function TreeViewRow({
       tabIndex={focused ? 0 : -1}
       onClick={(event) => {
         if (!item.disabled) {
+          onFocusItem?.(item.id);
           onSelect?.(item.id, {
             multi: event.metaKey || event.ctrlKey,
             range: event.shiftKey,
@@ -341,7 +349,7 @@ function TreeViewRow({
       </button>
       <span className="flex min-w-0 items-center gap-1 truncate">
         {item.icon ? <span className="shrink-0">{item.icon}</span> : null}
-        <span className="truncate">{item.label}</span>
+        <span className={cn('truncate', row.selected ? 'font-medium' : null)}>{item.label}</span>
         {item.badges?.map((badge) => (
           <span
             key={badge.id}

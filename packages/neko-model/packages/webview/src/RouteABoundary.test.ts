@@ -453,7 +453,9 @@ describe('Route A webview boundaries', () => {
   });
 
   it('sizes the scene tree from its dock container instead of a fixed virtual list height', () => {
+    const app = readSource('App.tsx');
     const sceneTree = readSource('components/SceneTree.tsx');
+    const css = readSource('index.css');
 
     expect(sceneTree).toMatch(/treeContainerRef/);
     expect(sceneTree).toMatch(/const \[treeHeight, setTreeHeight\] = React\.useState\(240\)/);
@@ -461,6 +463,13 @@ describe('Route A webview boundaries', () => {
     expect(sceneTree).toMatch(/height=\{treeHeight\}/);
     expect(sceneTree).not.toMatch(/height=\{240\}/);
     expect(sceneTree).toMatch(/flex h-full min-h-0 w-full flex-col overflow-hidden/);
+    expect(sceneTree).toMatch(/model-scene-tree-viewport/);
+    expect(sceneTree).toMatch(/model-scene-tree-list h-full/);
+    expect(sceneTree).toMatch(/selectedTargets = \[\]/);
+    expect(app).toMatch(/selectedTargets=\{selectedTargets\}/);
+    expect(readCssRule(css, '.model-scene-tree-viewport')).toMatch(/overflow:\s*hidden/);
+    expect(readCssRule(css, '.model-scene-tree-list')).toMatch(/scrollbar-gutter:\s*stable/);
+    expect(css).toMatch(/\.model-scene-tree-list \[role='treeitem'\]\[data-selected='true'\]/);
   });
 
   it('presents Route A decoded frames without per-frame store backpressure', () => {
