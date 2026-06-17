@@ -24,4 +24,14 @@ describe('AudioProjectProvider workspace media path contract', () => {
     expect(providerSource).toContain('this.createWorkspacePathCommandContext(projectUri, context)');
     expect(providerSource).toContain('createVSCodeWorkspaceMediaPathContext({');
   });
+
+  it('routes .nka host persistence through the shared project file store', () => {
+    expect(providerSource).toContain('new ProjectFileStore({');
+    expect(providerSource).toContain('createDefaultProjectFormatCodecRegistry()');
+    expect(providerSource).toContain('sourcePolicy: nkaSourcePathPolicy');
+    expect(providerSource).toContain('this._projectFileStore.save({');
+    expect(providerSource).not.toContain(
+      "await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'))",
+    );
+  });
 });
