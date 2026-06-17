@@ -12,7 +12,7 @@ import { getLogger } from '../utils/logger';
 const logger = getLogger('useVscodeMessage');
 
 // Acquire VSCode API (available in webview context)
-interface VsCodeApi {
+export interface VsCodeApi {
   postMessage(message: unknown): void;
   getState(): unknown;
   setState(state: unknown): void;
@@ -20,7 +20,7 @@ interface VsCodeApi {
 
 let vscodeApi: VsCodeApi | null = null;
 
-function getVsCodeApi(): VsCodeApi {
+export function getVsCodeApi(): VsCodeApi {
   if (!vscodeApi) {
     vscodeApi = window.acquireVsCodeApi?.() ?? null;
     if (!vscodeApi) {

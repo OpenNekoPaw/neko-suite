@@ -11,7 +11,12 @@ import {
   useFocusedWebviewRoot,
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
-import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useVscodeMessage';
+import {
+  getVsCodeApi,
+  useExtensionMessage,
+  useVscodeReady,
+  postMessage,
+} from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
@@ -261,7 +266,23 @@ export function AudioEditor() {
             </div>
           </>
         }
-        rightPanel={activeSidePanel ? <SidePanel /> : undefined}
+        rightDock={
+          activeSidePanel
+            ? {
+                id: 'audio-side-panel',
+                panelId: 'audio.sidePanel',
+                defaultSize: 260,
+                minSize: 200,
+                maxSize: 400,
+                className:
+                  'audio-side-panel-shell flex flex-col shrink-0 bg-[var(--toolbar-bg)] border-l border-[var(--editor-border)] overflow-hidden',
+                contentClassName: 'audio-side-panel-content flex flex-col min-h-0',
+                resizeHandleClassName: 'neko-resize-handle',
+                resizePersistence: { api: getVsCodeApi() },
+                children: <SidePanel />,
+              }
+            : undefined
+        }
       />
 
       {isDragOver && projectMode && (

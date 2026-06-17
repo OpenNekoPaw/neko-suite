@@ -57,7 +57,7 @@ describe('Audio SidePanel', () => {
       root.render(<SidePanel />);
     });
 
-    expect(host.querySelector('#audio-side-panel')).not.toBeNull();
+    expect(host.querySelector('#audio-side-panel')).toBeNull();
     expect(host.querySelector('[data-testid="effects-panel"]')).not.toBeNull();
 
     const tabs = host.querySelectorAll<HTMLButtonElement>('.audio-side-panel-tabs button');

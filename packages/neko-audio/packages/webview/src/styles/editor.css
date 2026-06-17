@@ -436,7 +436,10 @@
     background: transparent;
     transition: background 0.15s;
   }
-  .neko-resize-handle:hover { background: var(--accent); }
+  .neko-resize-handle:hover,
+  .audio-side-panel-shell[data-resizing='true'] > .neko-resize-handle {
+    background: var(--accent);
+  }
 
   /* Project workstation — timeline with a persistent bottom mixer band */
   .neko-project-workstation {

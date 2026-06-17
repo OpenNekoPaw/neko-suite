@@ -2,10 +2,8 @@
  * SidePanel - Right-side panel container for Effects / Recording / Export.
  *
  * Renders one panel at a time based on activeSidePanel state.
- * Supports horizontal resize via drag handle.
  */
 
-import { useState, useCallback, useRef } from 'react';
 import { CloseIcon } from '@neko/ui/icons';
 import { useAudioStore } from '../stores/audioStore';
 import type { SidePanelType } from '../stores/audioStore';
@@ -25,92 +23,46 @@ const PANEL_TITLES: Record<SidePanelType, string> = {
   presets: 'audio.presets.title',
 };
 
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 400;
-const DEFAULT_WIDTH = 260;
-
 export function SidePanel() {
   const { activeSidePanel, closeSidePanel, openSidePanel } = useAudioStore();
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const rootRef = useRef<HTMLDivElement>(null);
   const effectsChain = useEffectsChain();
-
-  // Horizontal resize handler
-  const handleResizeStart = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startWidth = width;
-
-      const handleMove = (moveEvent: PointerEvent) => {
-        const delta = startX - moveEvent.clientX;
-        setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta)));
-      };
-
-      const handleUp = () => {
-        document.removeEventListener('pointermove', handleMove);
-        document.removeEventListener('pointerup', handleUp);
-      };
-
-      document.addEventListener('pointermove', handleMove);
-      document.addEventListener('pointerup', handleUp);
-    },
-    [width],
-  );
 
   if (!activeSidePanel) return null;
 
   return (
     <>
-      {/* Resize handle */}
-      <div className="neko-resize-handle" onPointerDown={handleResizeStart} />
-
-      {/* Panel */}
-      <div
-        id="audio-side-panel"
-        ref={rootRef}
-        className="flex flex-col shrink-0 bg-[var(--toolbar-bg)] border-l border-[var(--editor-border)] overflow-hidden"
-        style={{ width }}
-      >
-        {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 min-h-9 text-xs font-medium border-b border-[var(--editor-border)]">
-          <span className="flex-1">{t(PANEL_TITLES[activeSidePanel])}</span>
-          <AudioIconButton
-            label={t('audio.common.close')}
-            onClick={closeSidePanel}
-            title={t('audio.common.close')}
-          >
-            <CloseIcon className="h-3 w-3" />
-          </AudioIconButton>
-        </div>
-
-        <div
-          className="audio-side-panel-tabs"
-          role="tablist"
-          aria-label={t('audio.sidePanel.tabs')}
+      <div className="flex items-center gap-2 px-3 py-2 min-h-9 text-xs font-medium border-b border-[var(--editor-border)]">
+        <span className="flex-1">{t(PANEL_TITLES[activeSidePanel])}</span>
+        <AudioIconButton
+          label={t('audio.common.close')}
+          onClick={closeSidePanel}
+          title={t('audio.common.close')}
         >
-          {audioSidePanelItems.map((item) => (
-            <button
-              key={item.panel}
-              type="button"
-              role="tab"
-              aria-selected={activeSidePanel === item.panel}
-              className={activeSidePanel === item.panel ? 'active' : undefined}
-              title={t(item.titleKey)}
-              onClick={() => openSidePanel(item.panel)}
-            >
-              {item.icon}
-            </button>
-          ))}
-        </div>
+          <CloseIcon className="h-3 w-3" />
+        </AudioIconButton>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
-          {activeSidePanel === 'effects' && <EffectsPanel chain={effectsChain} />}
-          {activeSidePanel === 'recording' && <RecordingPanel />}
-          {activeSidePanel === 'export' && <ExportPanel />}
-          {activeSidePanel === 'presets' && <PresetBrowser />}
-        </div>
+      <div className="audio-side-panel-tabs" role="tablist" aria-label={t('audio.sidePanel.tabs')}>
+        {audioSidePanelItems.map((item) => (
+          <button
+            key={item.panel}
+            type="button"
+            role="tab"
+            aria-selected={activeSidePanel === item.panel}
+            className={activeSidePanel === item.panel ? 'active' : undefined}
+            title={t(item.titleKey)}
+            onClick={() => openSidePanel(item.panel)}
+          >
+            {item.icon}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {activeSidePanel === 'effects' && <EffectsPanel chain={effectsChain} />}
+        {activeSidePanel === 'recording' && <RecordingPanel />}
+        {activeSidePanel === 'export' && <ExportPanel />}
+        {activeSidePanel === 'presets' && <PresetBrowser />}
       </div>
     </>
   );

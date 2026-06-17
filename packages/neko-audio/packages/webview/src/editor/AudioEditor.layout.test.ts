@@ -11,7 +11,10 @@ describe('AudioEditor workbench layout boundary', () => {
     expect(source).toMatch(/<CreativeWorkbenchShell/);
     expect(source).toMatch(/mainKind="waveform-timeline"/);
     expect(source).toMatch(/leftRail=\{/);
-    expect(source).toMatch(/rightPanel=\{activeSidePanel \? <SidePanel \/> : undefined}/);
+    expect(source).toMatch(/rightDock=\{\s*activeSidePanel/);
+    expect(source).toMatch(/id: 'audio-side-panel'/);
+    expect(source).toMatch(/panelId: 'audio\.sidePanel'/);
+    expect(source).toMatch(/children: <SidePanel \/>/);
   });
 
   it('moves analysis controls into the left rail instead of a horizontal main-panel toolbar', () => {
