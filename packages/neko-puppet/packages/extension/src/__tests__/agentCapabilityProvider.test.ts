@@ -4,7 +4,30 @@ vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
 }));
 
-import { validateAndClampParams, parseJsonFromLLMResponse } from '../agentCapabilityProvider';
+import {
+  createNekoPuppetCapabilityProvider,
+  parseJsonFromLLMResponse,
+  validateAndClampParams,
+} from '../agentCapabilityProvider';
+
+describe('createNekoPuppetCapabilityProvider', () => {
+  it('advertises Live2D/Puppet character actions instead of generic 2D Scene creation', () => {
+    const provider = createNekoPuppetCapabilityProvider({
+      getCurrentFaceParams: vi.fn(() => ({})),
+      getParameterNames: vi.fn(() => []),
+      setFaceParams: vi.fn(async () => undefined),
+    });
+    const descriptions = provider
+      .getTools({ extensionContext: {} })
+      .map((tool) => tool.description)
+      .join('\n');
+
+    expect(descriptions).toContain('Live2D');
+    expect(descriptions).toContain('Puppet character');
+    expect(descriptions).toContain('Generic 2D Scene creation');
+    expect(descriptions).toContain('belongs to neko-model');
+  });
+});
 
 // =============================================================================
 // validateAndClampParams

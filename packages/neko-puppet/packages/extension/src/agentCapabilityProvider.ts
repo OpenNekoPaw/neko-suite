@@ -1,7 +1,7 @@
 /**
  * NekoPuppet Agent Capability Provider
  *
- * Provides AI-powered face parameter manipulation tools to neko-agent.
+ * Provides AI-powered Live2D/Puppet character parameter manipulation tools to neko-agent.
  * Tools use LLM inference via `neko.agent.llm.generate` command (no direct platform dependency).
  *
  * Migrated from neko-agent/extension/src/tools/puppetFaceTools.ts
@@ -150,9 +150,10 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: 'PuppetGenerateParams',
         description:
-          'Generate face parameter values for a 2D puppet model from a text description. ' +
+          'Generate face parameter values for a Live2D or native Puppet character from a text description. ' +
           'Analyzes the description and produces appropriate values for the standard 32 face parameters. ' +
-          'The generated parameters are automatically applied to the active puppet model.',
+          'The generated parameters are automatically applied to the active puppet character. ' +
+          'Generic 2D Scene creation such as sprites, tilemaps, cameras, lights, parallax, or particles belongs to neko-model.',
         category: 'generation',
         parameters: {
           type: 'object',
@@ -174,7 +175,7 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
           const shouldApply = (args.apply as boolean | undefined) ?? true;
 
           const systemPrompt =
-            'You are a 2D character face parameter expert. Given a text description of a character face, ' +
+            'You are a Live2D/Puppet character face parameter expert. Given a text description of a character face, ' +
             'produce a JSON object mapping parameter IDs to numeric values.\n\n' +
             'Rules:\n- Only include parameters whose values differ from defaults.\n' +
             "- Values must be within each parameter's [min, max] range.\n" +
@@ -228,7 +229,7 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: 'PuppetFromImage',
         description:
-          'Analyze a reference image of a face/character and generate matching puppet face parameters. ' +
+          'Analyze a reference image of a Live2D/Puppet face or character and generate matching puppet face parameters. ' +
           'Supports PNG, JPEG, and WebP. The generated parameters are automatically applied.',
         category: 'generation',
         parameters: {
@@ -269,7 +270,7 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
           }
 
           const systemPrompt =
-            'You are a 2D character face parameter expert with vision capabilities. ' +
+            'You are a Live2D/Puppet character face parameter expert with vision capabilities. ' +
             'Analyze the reference face image and produce a JSON object mapping parameter IDs to numeric values.\n\n' +
             'Rules:\n- Only include parameters whose values differ from defaults.\n' +
             "- Values must be within each parameter's [min, max] range.\n" +
@@ -323,8 +324,8 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: 'PuppetAdjust',
         description:
-          'Adjust puppet face parameters using a natural language instruction. ' +
-          'Reads current parameter values from the active puppet model, adjusts via LLM, and applies.',
+          'Adjust Live2D/Puppet character face parameters using a natural language instruction. ' +
+          'Reads current parameter values from the active puppet character, adjusts via LLM, and applies.',
         category: 'generation',
         parameters: {
           type: 'object',
@@ -353,7 +354,7 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
           }
 
           const systemPrompt =
-            'You are a 2D character face parameter expert. Given current parameter values and ' +
+            'You are a Live2D/Puppet character face parameter expert. Given current parameter values and ' +
             'an adjustment instruction, produce a JSON object with the UPDATED parameter values.\n\n' +
             'Rules:\n- Include ALL parameters (not just changed ones).\n' +
             "- Values must be within each parameter's [min, max] range.\n" +
