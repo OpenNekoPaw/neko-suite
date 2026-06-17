@@ -861,6 +861,20 @@ body[data-vscode-theme-kind="vscode-light"] .nk-select {
   overflow: hidden;
 }
 
+.cut-property-panel-shell {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  background: var(--vscode-sideBar-background);
+  overflow: hidden;
+}
+
+#cut-property-panel {
+  background: var(--vscode-sideBar-background);
+}
+
 .cut-left-toolbar.neko-vtoolbar {
   height: 100%;
   border-right: 1px solid var(--vscode-panel-border);
@@ -1050,9 +1064,157 @@ body[data-vscode-theme-kind="vscode-light"] .nk-select {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   background: var(--nk-bg-elevated);
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.cut-shared-property-panel {
+  min-width: 0;
+}
+
+.cut-shared-property-panel > div {
+  min-width: 0;
+}
+
+.cut-shared-property-row {
+  display: grid;
+  grid-template-columns: minmax(48px, 56px) minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 2px;
+  min-width: 0;
+  border-radius: var(--nk-r-sm);
+}
+
+.cut-shared-property-row:hover {
+  background: var(--neko-hover);
+}
+
+.cut-shared-property-row[data-disabled='true'] {
+  opacity: 0.6;
+}
+
+.cut-shared-property-row[data-animatable='false'] {
+  grid-template-columns: minmax(48px, 56px) minmax(0, 1fr);
+}
+
+.cut-shared-property-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.cut-shared-property-control {
+  min-width: 0;
+}
+
+.cut-shared-property-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.cut-shared-property-row[data-animatable='false'] .cut-shared-property-actions {
+  display: none;
+}
+
+.cut-shared-property-actions button {
+  width: 20px;
+  height: 20px;
+}
+
+.cut-shared-number-control,
+.cut-shared-slider-control,
+.cut-shared-color-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cut-shared-slider-control {
+  width: 100%;
+}
+
+.cut-shared-slider {
+  flex: 1 1 auto;
+  min-width: 38px;
+  accent-color: var(--nk-accent);
+}
+
+.cut-shared-number-input,
+.cut-shared-text-input,
+.cut-shared-select {
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--nk-r-sm);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 11px;
+  outline: none;
+}
+
+.cut-shared-number-input {
+  width: 46px;
+  flex: 0 0 46px;
+  padding: 2px 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cut-shared-text-input,
+.cut-shared-select {
+  width: 100%;
+  padding: 2px 6px;
+}
+
+.cut-shared-color-input {
+  width: 32px;
+  flex: 0 0 32px;
+  height: 24px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--nk-r-sm);
+  background: var(--vscode-input-background);
+  padding: 1px 2px;
+}
+
+.cut-shared-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--nk-accent);
+}
+
+.cut-shared-property-unit {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+}
+
+.cut-shared-number-input:focus,
+.cut-shared-text-input:focus,
+.cut-shared-select:focus,
+.cut-shared-color-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.cut-shared-number-input:disabled,
+.cut-shared-text-input:disabled,
+.cut-shared-select:disabled,
+.cut-shared-color-input:disabled,
+.cut-shared-slider:disabled,
+.cut-shared-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* Group (collapsible section) */

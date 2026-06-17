@@ -134,6 +134,34 @@ describe('Cut PropertyPanel shared UI migration', () => {
     expect(onRemoveKeyframe).not.toHaveBeenCalled();
   });
 
+  it('renders shared rows through the cut compact inspector adapter', () => {
+    act(() => {
+      root.render(
+        <PropertyPanel
+          currentTime={0}
+          element={createElement()}
+          projectDefaults={createDefaults()}
+          onAddKeyframe={vi.fn()}
+          onDefaultsChange={vi.fn()}
+          onElementChange={vi.fn()}
+          onElementCommit={vi.fn()}
+          onRemoveKeyframe={vi.fn()}
+        />,
+      );
+    });
+
+    const opacityRow = host.querySelector<HTMLElement>(
+      '.cut-shared-property-row[data-animatable="true"][data-property-id="animTransform.opacity"]',
+    );
+    const nameRow = host.querySelector<HTMLElement>(
+      '.cut-shared-property-row[data-animatable="false"][data-property-id="name"]',
+    );
+
+    expect(host.querySelector('.cut-shared-property-panel')).not.toBeNull();
+    expect(opacityRow).not.toBeNull();
+    expect(nameRow).not.toBeNull();
+  });
+
   it('keeps migrated collapsible shell expanded by default and toggles content', () => {
     act(() => {
       root.render(

@@ -3,9 +3,15 @@
  * 属性面板组件 - 显示和编辑选中元素的属性
  */
 
-import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { PropertyPanel as SharedPropertyPanel } from '@neko/ui/creative';
-import type { PropertyValue as SharedPropertyValue } from '@neko/ui/creative';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  KeyframeButton as SharedKeyframeButton,
+  PropertyPanel as SharedPropertyPanel,
+} from '@neko/ui/creative';
+import type {
+  PropertyRowProps as SharedPropertyRowProps,
+  PropertyValue as SharedPropertyValue,
+} from '@neko/ui/creative';
 import { Collapsible } from '@neko/ui/primitives';
 import type { PropertyDefinition } from './PropertyRow';
 import { NormalizeLoudnessButton } from './NormalizeLoudnessButton';
@@ -377,6 +383,254 @@ function ChevronIcon(): React.JSX.Element {
       <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L9.19 8 6.22 5.03a.75.75 0 0 1 0-1.06z" />
     </svg>
   );
+}
+
+function renderCompactSharedPropertyRow(props: SharedPropertyRowProps): ReactNode {
+  const { property } = props;
+
+  return (
+    <div
+      className="cut-shared-property-row"
+      data-animatable={property.animatable ? 'true' : 'false'}
+      data-disabled={property.disabled ? 'true' : 'false'}
+      data-kind={property.kind}
+      data-property-id={property.id}
+    >
+      <label className="cut-shared-property-label" htmlFor={getSharedControlId(property.id)}>
+        {property.label}
+      </label>
+      <div className="cut-shared-property-control">
+        <CompactSharedControl {...props} />
+      </div>
+      <div className="cut-shared-property-actions">
+        {property.animatable ? (
+          <SharedKeyframeButton
+            animatable={property.animatable}
+            disabled={property.disabled}
+            hasKeyframes={property.hasKeyframes}
+            isAtKeyframe={property.isAtKeyframe}
+            onToggleKeyframe={props.onToggleKeyframe}
+            propertyId={property.id}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CompactSharedControl({
+  onCommit,
+  onPreviewChange,
+  property,
+}: SharedPropertyRowProps): ReactNode {
+  const controlId = getSharedControlId(property.id);
+  const [draftValue, setDraftValue] = useState(() => getCompactDraftValue(property));
+
+  useEffect(() => {
+    setDraftValue(getCompactDraftValue(property));
+  }, [property.id, property.value]);
+
+  const commitNumber = (rawValue: string): void => {
+    if (property.kind !== 'number' && property.kind !== 'slider') return;
+    const nextValue = parseSharedNumber(rawValue, property);
+    if (nextValue !== undefined) {
+      setDraftValue(String(nextValue));
+      onCommit?.(property.id, nextValue);
+    }
+  };
+  const previewNumber = (rawValue: string): void => {
+    if (property.kind !== 'number' && property.kind !== 'slider') return;
+    setDraftValue(rawValue);
+    const nextValue = parseSharedNumber(rawValue, property);
+    if (nextValue !== undefined) {
+      onPreviewChange?.(property.id, nextValue);
+    }
+  };
+  const previewText = (value: string): void => {
+    setDraftValue(value);
+    onPreviewChange?.(property.id, value);
+  };
+  const commitText = (value: string): void => {
+    setDraftValue(value);
+    onCommit?.(property.id, value);
+  };
+
+  switch (property.kind) {
+    case 'number':
+      return (
+        <span className="cut-shared-number-control">
+          <input
+            className="cut-shared-number-input"
+            disabled={property.disabled}
+            id={controlId}
+            inputMode="decimal"
+            max={property.max}
+            min={property.min}
+            onBlur={(event) => commitNumber(event.currentTarget.value)}
+            onChange={(event) => previewNumber(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                commitNumber(event.currentTarget.value);
+              }
+            }}
+            step={property.step}
+            type="number"
+            value={draftValue}
+          />
+          {property.unit ? <span className="cut-shared-property-unit">{property.unit}</span> : null}
+        </span>
+      );
+    case 'slider':
+      return (
+        <span className="cut-shared-slider-control">
+          <input
+            aria-label={property.label}
+            className="cut-shared-slider"
+            disabled={property.disabled}
+            id={controlId}
+            max={property.max}
+            min={property.min}
+            onBlur={(event) => commitNumber(event.currentTarget.value)}
+            onChange={(event) => previewNumber(event.currentTarget.value)}
+            onPointerUp={(event) => commitNumber(event.currentTarget.value)}
+            step={property.step}
+            type="range"
+            value={getRangeDraftValue(draftValue, property)}
+          />
+          <input
+            aria-label={`${property.label} value`}
+            className="cut-shared-number-input"
+            disabled={property.disabled}
+            inputMode="decimal"
+            max={property.max}
+            min={property.min}
+            onBlur={(event) => commitNumber(event.currentTarget.value)}
+            onChange={(event) => previewNumber(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                commitNumber(event.currentTarget.value);
+              }
+            }}
+            step={property.step}
+            type="number"
+            value={draftValue}
+          />
+          {property.unit ? <span className="cut-shared-property-unit">{property.unit}</span> : null}
+        </span>
+      );
+    case 'text':
+      return (
+        <input
+          className="cut-shared-text-input"
+          disabled={property.disabled}
+          id={controlId}
+          onBlur={(event) => commitText(event.currentTarget.value)}
+          onChange={(event) => previewText(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              commitText(event.currentTarget.value);
+            }
+          }}
+          type="text"
+          value={draftValue}
+        />
+      );
+    case 'color':
+      return (
+        <span className="cut-shared-color-control">
+          <input
+            aria-label={property.label}
+            className="cut-shared-color-input"
+            disabled={property.disabled}
+            id={controlId}
+            onBlur={(event) => commitText(event.currentTarget.value)}
+            onChange={(event) => previewText(event.currentTarget.value)}
+            type="color"
+            value={normalizeColorInputValue(draftValue)}
+          />
+          <input
+            aria-label={`${property.label} value`}
+            className="cut-shared-text-input"
+            disabled={property.disabled}
+            onBlur={(event) => commitText(event.currentTarget.value)}
+            onChange={(event) => previewText(event.currentTarget.value)}
+            type="text"
+            value={draftValue}
+          />
+        </span>
+      );
+    case 'boolean':
+      return (
+        <input
+          aria-label={property.label}
+          checked={property.value}
+          className="cut-shared-checkbox"
+          disabled={property.disabled}
+          id={controlId}
+          onChange={(event) => {
+            onPreviewChange?.(property.id, event.currentTarget.checked);
+            onCommit?.(property.id, event.currentTarget.checked);
+          }}
+          type="checkbox"
+        />
+      );
+    case 'select':
+      return (
+        <select
+          aria-label={property.label}
+          className="cut-shared-select"
+          disabled={property.disabled}
+          id={controlId}
+          onChange={(event) => {
+            setDraftValue(event.currentTarget.value);
+            onPreviewChange?.(property.id, event.currentTarget.value);
+            onCommit?.(property.id, event.currentTarget.value);
+          }}
+          value={draftValue}
+        >
+          {property.options.map((option) => (
+            <option disabled={option.disabled} key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    default:
+      return null;
+  }
+}
+
+function getCompactDraftValue(property: SharedPropertyRowProps['property']): string {
+  return typeof property.value === 'boolean' ? String(property.value) : String(property.value);
+}
+
+function getRangeDraftValue(
+  rawValue: string,
+  property: Extract<SharedPropertyRowProps['property'], { kind: 'slider' }>,
+): number {
+  return parseSharedNumber(rawValue, property) ?? property.value;
+}
+
+function getSharedControlId(propertyId: string): string {
+  return `cut-shared-property-${propertyId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+function parseSharedNumber(
+  rawValue: string,
+  property: Extract<SharedPropertyRowProps['property'], { kind: 'number' | 'slider' }>,
+): number | undefined {
+  const nextValue = Number(rawValue);
+  if (!Number.isFinite(nextValue)) {
+    return undefined;
+  }
+  return Math.max(
+    property.min ?? Number.NEGATIVE_INFINITY,
+    Math.min(property.max ?? Number.POSITIVE_INFINITY, nextValue),
+  );
+}
+
+function normalizeColorInputValue(value: string): string {
+  return /^#[\da-f]{6}$/i.test(value) ? value : '#ffffff';
 }
 
 // =============================================================================
@@ -846,12 +1100,15 @@ export const PropertyPanel = memo(function PropertyPanel({
 
   const renderSharedPropertyRows = useCallback(
     (properties: typeof sharedBasicProperties) => (
-      <SharedPropertyPanel
-        properties={properties}
-        onPreviewChange={previewSharedProperty}
-        onCommit={commitSharedProperty}
-        onToggleKeyframe={toggleSharedKeyframe}
-      />
+      <div className="cut-shared-property-panel">
+        <SharedPropertyPanel
+          properties={properties}
+          onPreviewChange={previewSharedProperty}
+          onCommit={commitSharedProperty}
+          onToggleKeyframe={toggleSharedKeyframe}
+          renderRow={renderCompactSharedPropertyRow}
+        />
+      </div>
     ),
     [commitSharedProperty, previewSharedProperty, toggleSharedKeyframe],
   );

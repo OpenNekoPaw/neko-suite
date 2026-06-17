@@ -62,17 +62,17 @@ const TransitionPresetCard = memo(function TransitionPresetCard({
 
   return (
     <button
-      className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${
+      className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded border px-1.5 py-1.5 transition-colors ${
         isSelected
           ? 'border-[var(--nk-border-focus)] bg-[var(--nk-bg-active)]'
           : 'border-[var(--nk-border)] bg-[var(--nk-input-bg)] hover:bg-[var(--nk-bg-hover)]'
-      } disabled:opacity-50 disabled:cursor-not-allowed min-w-[60px]`}
+      } disabled:cursor-not-allowed disabled:opacity-50`}
       onClick={onClick}
       disabled={disabled}
       title={t(preset.i18nKey)}
     >
-      <span className="text-lg mb-1">{preset.icon}</span>
-      <span className="max-w-full truncate text-[9px] text-[var(--nk-fg)]">
+      <span className="text-base leading-none">{preset.icon}</span>
+      <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--nk-fg)]">
         {t(preset.i18nKey)}
       </span>
     </button>
@@ -98,17 +98,19 @@ const NoneTransitionCard = memo(function NoneTransitionCard({
 
   return (
     <button
-      className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${
+      className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded border px-1.5 py-1.5 transition-colors ${
         isSelected
           ? 'border-[var(--nk-border-focus)] bg-[var(--nk-bg-active)]'
           : 'border-[var(--nk-border)] bg-[var(--nk-input-bg)] hover:bg-[var(--nk-bg-hover)]'
-      } disabled:opacity-50 disabled:cursor-not-allowed min-w-[60px]`}
+      } disabled:cursor-not-allowed disabled:opacity-50`}
       onClick={onClick}
       disabled={disabled}
       title={t('transition.type.none')}
     >
-      <span className="text-lg mb-1">✕</span>
-      <span className="text-[9px] text-[var(--nk-fg)]">{t('transition.type.none')}</span>
+      <span className="text-base leading-none">x</span>
+      <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--nk-fg)]">
+        {t('transition.type.none')}
+      </span>
     </button>
   );
 });
@@ -264,14 +266,14 @@ export const TransitionPicker = memo(function TransitionPicker({
   );
 
   return (
-    <div className="flex flex-col gap-3 p-3">
+    <div className="flex min-w-0 flex-col gap-3 p-3">
       {/* Title */}
       <h3 className="text-[12px] font-medium text-[var(--nk-fg)]">
         {t('transition.selectTransition')}
       </h3>
 
       {/* Transition Grid */}
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid max-h-56 grid-cols-[repeat(auto-fit,minmax(58px,1fr))] gap-1.5 overflow-y-auto pr-1">
         {/* None option */}
         <NoneTransitionCard
           isSelected={!transition}
