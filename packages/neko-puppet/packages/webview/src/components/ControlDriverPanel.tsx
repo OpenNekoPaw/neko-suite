@@ -41,8 +41,8 @@ export function ControlDriverPanel() {
 
 function DriverCard({ driver }: { driver: NkpControlDriver }) {
   const { t } = useTranslation();
-  const source = formatSource(driver.source);
-  const target = formatTarget(driver.target);
+  const source = formatSource(driver.source, t);
+  const target = formatTarget(driver.target, t);
 
   return (
     <div className="control-driver-card" title={`${source} -> ${target}`}>
@@ -58,7 +58,7 @@ function DriverCard({ driver }: { driver: NkpControlDriver }) {
       <div className="mt-2 flex items-center gap-2">
         <CurvePreview curve={driver.curve} label={t('puppet.controlDriver.curvePreview')} />
         <div className="flex min-w-0 flex-col text-[10px] opacity-70">
-          <span>{formatCurve(driver.curve)}</span>
+          <span>{formatCurve(driver.curve, t)}</span>
           <span>
             {t('puppet.controlDriver.priority')}: {driver.priority}
           </span>
@@ -110,43 +110,48 @@ function evaluatePreviewCurve(curve: NkpDriverCurve, input: number): number {
   }
 }
 
-function formatSource(source: NkpControlSource): string {
+function formatSource(source: NkpControlSource, t: (key: string) => string): string {
   switch (source.type) {
     case 'blendshape':
-      return `BlendShape:${source.name}`;
+      return `${t('puppet.controlDriver.source.blendShape')}:${source.name}`;
     case 'expression':
-      return `Expression:${source.preset}`;
+      return `${t('puppet.controlDriver.source.expression')}:${source.preset}`;
     case 'tracking':
-      return `Tracking:${source.name}`;
+      return `${t('puppet.controlDriver.source.tracking')}:${source.name}`;
     case 'live2dParam':
-      return `Live2D:${source.name}`;
+      return `${t('puppet.controlDriver.source.live2d')}:${source.name}`;
   }
 }
 
-function formatTarget(target: NkpControlTarget): string {
+function formatTarget(target: NkpControlTarget, t: (key: string) => string): string {
   switch (target.type) {
     case 'boneRotation':
-      return `Bone:${target.bone}.${target.axis}`;
+      return `${t('puppet.controlDriver.target.bone')}:${target.bone}.${target.axis}`;
     case 'bonePosition':
-      return `Bone:${target.bone}.position`;
+      return `${t('puppet.controlDriver.target.bone')}:${target.bone}.${t(
+        'puppet.controlDriver.target.position',
+      )}`;
     case 'boneScale':
-      return `Bone:${target.bone}.scale`;
+      return `${t('puppet.controlDriver.target.bone')}:${target.bone}.${t(
+        'puppet.controlDriver.target.scale',
+      )}`;
     case 'blendshapeWeight':
-      return `BlendShape:${target.name}`;
+      return `${t('puppet.controlDriver.target.blendShape')}:${target.name}`;
   }
 }
 
-function formatCurve(curve: NkpDriverCurve): string {
+function formatCurve(curve: NkpDriverCurve, t: (key: string) => string): string {
   switch (curve.type) {
     case 'linear': {
       const scale = curve.scale ?? 1;
       const offset = curve.offset ?? 0;
-      return offset === 0 ? `linear x${scale}` : `linear x${scale} + ${offset}`;
+      const label = t('puppet.controlDriver.curve.linear');
+      return offset === 0 ? `${label} x${scale}` : `${label} x${scale} + ${offset}`;
     }
     case 'bezier':
-      return `bezier(${curve.points.join(', ')})`;
+      return `${t('puppet.controlDriver.curve.bezier')}(${curve.points.join(', ')})`;
     case 'step':
-      return 'step';
+      return t('puppet.controlDriver.curve.step');
   }
 }
 

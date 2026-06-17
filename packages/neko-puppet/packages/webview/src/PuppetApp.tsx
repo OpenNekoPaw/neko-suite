@@ -6,12 +6,14 @@
  */
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import type { ExtensionToWebviewMessage } from './types';
+import type { PuppetDocumentContext } from './types';
 import { usePuppetStore } from './stores/puppet-store';
 import { decodeMoc3ExternalTextures } from './utils/moc3-textures';
 import { AnimationPanel } from './components/AnimationPanel';
 import { ControlDriverPanel } from './components/ControlDriverPanel';
 import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
+import { PuppetRuntimeStatus } from './components/PuppetRuntimeStatus';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { PuppetCanvas } from './components/PuppetCanvas';
 import { PuppetEmptyState } from './components/empty-state/PuppetEmptyState';
@@ -45,6 +47,8 @@ type PendingPuppetLoad =
   | Extract<ExtensionToWebviewMessage, { type: 'loadPuppet' }>
   | Extract<ExtensionToWebviewMessage, { type: 'loadPuppetSource' }>
   | Extract<ExtensionToWebviewMessage, { type: 'loadNativePuppet' }>;
+
+type PuppetRightDockMode = 'basic' | 'professional';
 
 /** Debounce timer ref for parameter save */
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,17 +95,27 @@ function PuppetLoadErrorPlaceholder({ message }: { message: string }) {
 }
 
 function PuppetLocalPreviewLabel() {
+  const { t } = useTranslation();
   return (
     <div
       className="puppet-local-preview-badge"
       data-non-authoritative-preview="local-canvas-preview"
     >
-      Local preview
+      {t('puppet.viewport.localPreview')}
     </div>
   );
 }
 
 export function PuppetApp() {
+  return (
+    <I18nProvider service={i18nService}>
+      <PuppetWorkbench />
+    </I18nProvider>
+  );
+}
+
+function PuppetWorkbench() {
+  const { t } = useTranslation();
   const controllerRef = useRef<PuppetController | null>(null);
   const { onPlay, onStop, onSeek, onCrossfade } = usePuppetPlayback(controllerRef.current);
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
@@ -114,6 +128,9 @@ export function PuppetApp() {
   const [isRightPanelVisible, setIsRightPanelVisible] = useState(false);
   const [fitViewRequest, setFitViewRequest] = useState(0);
   const [isOnionSkinEnabled, setIsOnionSkinEnabled] = useState(false);
+  const [rightDockMode, setRightDockMode] = useState<PuppetRightDockMode>('basic');
+  const [documentContext, setDocumentContext] = useState<PuppetDocumentContext | null>(null);
+  const isRightDockVisible = isRightPanelVisible && puppetLoaded;
 
   /** Pending parameter overrides received before puppet loads */
   const pendingStateRef = useRef<Record<string, number> | null>(null);
@@ -213,6 +230,11 @@ export function PuppetApp() {
     (event: MessageEvent<ExtensionToWebviewMessage>) => {
       const msg = event.data;
       switch (msg.type) {
+        case 'documentContext': {
+          setDocumentContext(msg.context);
+          break;
+        }
+
         case 'enginePort': {
           const engine = new EngineClient(msg.port);
           const ctrl = new PuppetController(engine);
@@ -229,7 +251,7 @@ export function PuppetApp() {
         case 'engineUnavailable': {
           const store = usePuppetStore.getState();
           store.setPuppetLoaded(false);
-          store.setLoadError(msg.message ?? i18nService.t('puppet.status.engineUnavailable'));
+          store.setLoadError(msg.message ?? t('puppet.status.engineUnavailable'));
           break;
         }
 
@@ -302,7 +324,7 @@ export function PuppetApp() {
           break;
       }
     },
-    [loadPuppetMessage],
+    [loadPuppetMessage, t],
   );
 
   const puppetViewportController = React.useMemo(() => {
@@ -386,135 +408,165 @@ export function PuppetApp() {
   }, []);
 
   return (
-    <I18nProvider service={i18nService}>
-      <CreativeWorkbenchShell
-        className="flex flex-col h-screen w-screen overflow-hidden"
-        bodyClassName="flex flex-1 overflow-hidden"
-        mainClassName="puppet-main-panel"
-        mainKind="viewport-timeline"
-        leftRail={
-          <PuppetToolbar
-            isRightPanelVisible={isRightPanelVisible}
-            puppetLoaded={puppetLoaded}
-            onionSkinEnabled={isOnionSkinEnabled}
-            onImport={handleImportPuppet}
-            onOpenExport={handleOpenExport}
-            onOpenPackage={handleOpenPackage}
-            onFitView={handleFitPuppetView}
-            onToggleOnionSkin={handleToggleOnionSkin}
-            onToggleRightPanel={() => setIsRightPanelVisible((visible) => !visible)}
-          />
-        }
-        main={
-          <>
-            {loadError ? (
-              <div className="flex-1 flex items-center justify-center text-sm text-[var(--vscode-errorForeground)]">
-                <PuppetLoadErrorPlaceholder message={loadError} />
-              </div>
-            ) : noPuppetSource || (puppetLoaded && puppetViewportController) ? (
-              <ViewportShell
-                sceneId="puppet-main"
-                viewportId="main"
-                controller={activePuppetViewportController}
-                frameMeta={puppetFrameMeta}
-                className="puppet-viewport-shell flex-1 relative overflow-hidden"
-                surface={{
-                  kind: 'custom',
-                  node: (
-                    <PuppetCanvas
-                      overlayLayer={
-                        noPuppetSource ? <PuppetEmptyState onDropMoc3={handleDropMoc3} /> : null
-                      }
-                      contextMenuLayer={null}
-                      localPreviewLabel={noPuppetSource ? null : <PuppetLocalPreviewLabel />}
-                      fitViewRequest={fitViewRequest}
-                      emptyViewport={noPuppetSource}
-                    />
-                  ),
-                }}
-                onContextMenuAction={handlePuppetContextMenuAction}
-                renderOverlayLayer={({ frameMeta, overlays }) => (
-                  <>
-                    <OverlayRenderer
-                      className="puppet-viewport-overlay"
-                      frameMeta={frameMeta}
-                      overlays={overlays}
-                    />
-                  </>
-                )}
-                renderToolbar={() => null}
-              />
-            ) : puppetLoaded ? (
-              <PuppetCanvas
-                localPreviewLabel={<PuppetLocalPreviewLabel />}
-                fitViewRequest={fitViewRequest}
-              />
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-sm opacity-50">
-                <PuppetWaitingPlaceholder />
+    <CreativeWorkbenchShell
+      className="flex flex-col h-screen w-screen overflow-hidden"
+      bodyClassName="flex flex-1 overflow-hidden"
+      mainClassName="puppet-main-panel"
+      mainKind="viewport-timeline"
+      leftRail={
+        <PuppetToolbar
+          isRightPanelVisible={isRightDockVisible}
+          puppetLoaded={puppetLoaded}
+          onionSkinEnabled={isOnionSkinEnabled}
+          onImport={handleImportPuppet}
+          onOpenExport={handleOpenExport}
+          onOpenPackage={handleOpenPackage}
+          onFitView={handleFitPuppetView}
+          onToggleOnionSkin={handleToggleOnionSkin}
+          onToggleRightPanel={() => setIsRightPanelVisible((visible) => !visible)}
+        />
+      }
+      main={
+        <>
+          {loadError ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-[var(--vscode-errorForeground)]">
+              <PuppetLoadErrorPlaceholder message={loadError} />
+            </div>
+          ) : noPuppetSource || (puppetLoaded && puppetViewportController) ? (
+            <ViewportShell
+              sceneId="puppet-main"
+              viewportId="main"
+              controller={activePuppetViewportController}
+              frameMeta={puppetFrameMeta}
+              className="puppet-viewport-shell flex-1 relative overflow-hidden"
+              surface={{
+                kind: 'custom',
+                node: (
+                  <PuppetCanvas
+                    overlayLayer={
+                      noPuppetSource ? (
+                        <PuppetEmptyState
+                          onDropMoc3={handleDropMoc3}
+                          onImportMoc3={handleImportPuppet}
+                        />
+                      ) : null
+                    }
+                    contextMenuLayer={null}
+                    localPreviewLabel={noPuppetSource ? null : <PuppetLocalPreviewLabel />}
+                    fitViewRequest={fitViewRequest}
+                    emptyViewport={noPuppetSource}
+                  />
+                ),
+              }}
+              onContextMenuAction={handlePuppetContextMenuAction}
+              renderOverlayLayer={({ frameMeta, overlays }) => (
+                <>
+                  <OverlayRenderer
+                    className="puppet-viewport-overlay"
+                    frameMeta={frameMeta}
+                    overlays={overlays}
+                  />
+                </>
+              )}
+              renderToolbar={() => null}
+            />
+          ) : puppetLoaded ? (
+            <PuppetCanvas
+              localPreviewLabel={<PuppetLocalPreviewLabel />}
+              fitViewRequest={fitViewRequest}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-sm opacity-50">
+              <PuppetWaitingPlaceholder />
+            </div>
+          )}
+        </>
+      }
+      rightDock={
+        isRightDockVisible
+          ? {
+              id: 'puppet-right-panel',
+              panelId: PUPPET_RIGHT_PANEL_RESIZE.panelId,
+              defaultSize: PUPPET_RIGHT_PANEL_RESIZE.defaultSize,
+              minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
+              maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
+              className: 'puppet-right-panel',
+              contentClassName: 'puppet-right-panel-stack',
+              resizeHandleClassName: 'puppet-resize-handle puppet-right-panel-resize-handle',
+              resizePersistence: { api: vscode },
+              groups: {
+                label: t('puppet.rightDock.mode.label'),
+                activeId: rightDockMode,
+                onActiveIdChange: (id) => setRightDockMode(toPuppetRightDockMode(id)),
+                items: [
+                  {
+                    id: 'basic',
+                    label: t('puppet.rightDock.mode.basic'),
+                    description: t('puppet.rightDock.mode.basic.description'),
+                  },
+                  {
+                    id: 'professional',
+                    label: t('puppet.rightDock.mode.professional'),
+                    description: t('puppet.rightDock.mode.professional.description'),
+                  },
+                ],
+              },
+              children: (
+                <>
+                  <PuppetRuntimeStatus context={documentContext} />
+                  <ParameterPanel
+                    controller={controllerRef.current}
+                    mode={rightDockMode}
+                    viewportController={puppetViewportController}
+                  />
+                  {rightDockMode === 'professional' ? (
+                    <>
+                      <PuppetNodeTree />
+                      <ControlDriverPanel />
+                      <AnimationPanel
+                        onPlay={onPlay}
+                        onStop={onStop}
+                        onSeek={onSeek}
+                        onCrossfade={onCrossfade}
+                      />
+                    </>
+                  ) : null}
+                </>
+              ),
+            }
+          : undefined
+      }
+      bottomPanel={
+        puppetLoaded ? (
+          <div className="flex flex-col border-t border-[var(--sketch-border)]">
+            <button
+              type="button"
+              className="flex items-center gap-1 px-2 py-1 text-xs hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer"
+              onClick={toggleKeyframeEditor}
+              aria-expanded={isKeyframeEditorOpen}
+              aria-label={
+                isKeyframeEditorOpen ? t('puppet.keyframes.collapse') : t('puppet.keyframes.expand')
+              }
+            >
+              <span className="w-3 text-center" aria-hidden>
+                {isKeyframeEditorOpen ? '▾' : '▸'}
+              </span>
+              <span>{t('puppet.keyframes.title')}</span>
+            </button>
+            {isKeyframeEditorOpen && (
+              <div style={{ height: 180 }}>
+                <PuppetKeyframeTimeline controller={controllerRef.current} />
               </div>
             )}
-          </>
-        }
-        rightDock={
-          isRightPanelVisible
-            ? {
-                id: 'puppet-right-panel',
-                panelId: PUPPET_RIGHT_PANEL_RESIZE.panelId,
-                defaultSize: PUPPET_RIGHT_PANEL_RESIZE.defaultSize,
-                minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
-                maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
-                className: 'puppet-right-panel',
-                contentClassName: 'puppet-right-panel-stack',
-                resizeHandleClassName: 'puppet-resize-handle puppet-right-panel-resize-handle',
-                resizePersistence: { api: vscode },
-                children: puppetLoaded ? (
-                  <>
-                    <PuppetNodeTree />
-                    <ParameterPanel
-                      controller={controllerRef.current}
-                      viewportController={puppetViewportController}
-                    />
-                    <ControlDriverPanel />
-                    <AnimationPanel
-                      onPlay={onPlay}
-                      onStop={onStop}
-                      onSeek={onSeek}
-                      onCrossfade={onCrossfade}
-                    />
-                  </>
-                ) : null,
-              }
-            : undefined
-        }
-        bottomPanel={
-          puppetLoaded ? (
-            <div className="flex flex-col border-t border-[var(--sketch-border)]">
-              <button
-                type="button"
-                className="flex items-center gap-1 px-2 py-1 text-xs hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer"
-                onClick={toggleKeyframeEditor}
-                aria-expanded={isKeyframeEditorOpen}
-                aria-label={
-                  isKeyframeEditorOpen ? 'Collapse keyframe editor' : 'Expand keyframe editor'
-                }
-              >
-                <span className="w-3 text-center" aria-hidden>
-                  {isKeyframeEditorOpen ? '▾' : '▸'}
-                </span>
-                <span>Keyframes</span>
-              </button>
-              {isKeyframeEditorOpen && (
-                <div style={{ height: 180 }}>
-                  <PuppetKeyframeTimeline controller={controllerRef.current} />
-                </div>
-              )}
-            </div>
-          ) : undefined
-        }
-      />
-    </I18nProvider>
+          </div>
+        ) : undefined
+      }
+    />
   );
+}
+
+function toPuppetRightDockMode(id: string): PuppetRightDockMode {
+  return id === 'professional' ? 'professional' : 'basic';
 }
 
 function base64ToArrayBuffer(data: string): ArrayBuffer {

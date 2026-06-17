@@ -46,8 +46,22 @@ describe('Puppet right panel resize layout', () => {
 
     expect(app).not.toMatch(/w-60/);
     expect(app).toMatch(/className: 'puppet-right-panel'/);
-    expect(app).toMatch(/rightDock=\{\s*isRightPanelVisible/);
+    expect(app).toMatch(/const isRightDockVisible = isRightPanelVisible && puppetLoaded/);
+    expect(app).toMatch(/rightDock=\{\s*isRightDockVisible/);
     expect(app).toMatch(/panelId: PUPPET_RIGHT_PANEL_RESIZE\.panelId/);
+    expect(app).toMatch(/type PuppetRightDockMode = 'basic' \| 'professional'/);
+    expect(app).toMatch(
+      /const \[rightDockMode, setRightDockMode\] = useState<PuppetRightDockMode>\('basic'\)/,
+    );
+    expect(app).toMatch(/groups: \{/);
+    expect(app).toMatch(/activeId: rightDockMode/);
+    expect(app).toMatch(/function PuppetWorkbench\(\)/);
+    expect(app).toMatch(/label: t\('puppet\.rightDock\.mode\.label'\)/);
+    expect(app).toMatch(/label: t\('puppet\.rightDock\.mode\.basic'\)/);
+    expect(app).toMatch(/label: t\('puppet\.rightDock\.mode\.professional'\)/);
+    expect(app).toMatch(/t\('puppet\.keyframes\.title'\)/);
+    expect(app).not.toMatch(/i18nService\.t\('puppet\.rightDock/);
+    expect(app).not.toMatch(/i18nService\.t\('puppet\.keyframes/);
     expect(app).toMatch(/defaultSize: PUPPET_RIGHT_PANEL_RESIZE\.defaultSize/);
     expect(app).toMatch(
       /resizeHandleClassName: 'puppet-resize-handle puppet-right-panel-resize-handle'/,
@@ -74,7 +88,8 @@ describe('Puppet right panel resize layout', () => {
     expect(app).toMatch(/noPuppetSource \|\| \(puppetLoaded && puppetViewportController\)/);
     expect(app).toMatch(/<PuppetCanvas/);
     expect(app).toMatch(/emptyViewport=\{noPuppetSource\}/);
-    expect(app).toMatch(/<PuppetEmptyState\s+onDropMoc3=\{handleDropMoc3\}/);
+    expect(app).toMatch(/onDropMoc3=\{handleDropMoc3\}/);
+    expect(app).toMatch(/onImportMoc3=\{handleImportPuppet\}/);
     expect(app).toMatch(/<PuppetToolbar\b/);
     expect(app).not.toMatch(/<PuppetViewportControls\b/);
     expect(app).toMatch(/<CreativeWorkbenchShell/);
@@ -86,6 +101,8 @@ describe('Puppet right panel resize layout', () => {
     expect(app).not.toMatch(/puppet-empty-inspector/);
     expect(css).toMatch(/\.puppet-left-toolbar\.neko-vtoolbar\s*\{[^}]*width: 48px !important/s);
     expect(css).toMatch(/\.puppet-left-toolbar \.neko-toolbar-btn\s*\{[^}]*height: 40px/s);
+    expect(css).toMatch(/\.puppet-viewport-shell \.puppet-canvas\s*\{[^}]*position: absolute/s);
+    expect(css).toMatch(/\.puppet-empty-state-panel/);
     expect(css).not.toMatch(/\.puppet-empty-actions/);
     expect(css).not.toMatch(/\.puppet-default-viewport-preview/);
   });
@@ -109,7 +126,8 @@ describe('Puppet right panel resize layout', () => {
     expect(app).toMatch(
       /const \[isRightPanelVisible, setIsRightPanelVisible\] = useState\(false\)/,
     );
-    expect(app).toMatch(/rightDock=\{\s*isRightPanelVisible/);
+    expect(app).toMatch(/rightDock=\{\s*isRightDockVisible/);
+    expect(app).toMatch(/rightDockMode === 'professional' \? \(/);
     expect(css).not.toMatch(/\.puppet-viewport-toolbar/);
     expect(css).toMatch(/\.puppet-main-panel\s*\{/);
     expect(css).not.toMatch(/\.puppet-viewport-controls\s*\{/);

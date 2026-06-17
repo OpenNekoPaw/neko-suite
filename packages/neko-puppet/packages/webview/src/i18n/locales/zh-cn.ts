@@ -17,14 +17,34 @@ export const zhCN: MessageBundle = {
   'puppet.animation.fadeDuration': '渐变',
 
   // Parameter panel
+  'puppet.action.reset': '重置',
   'puppet.panel.parameters': '参数',
+  'puppet.panel.blendShapes': '混合形状',
+  'puppet.panel.nodes': '节点',
+  'puppet.panel.runtime': '运行时',
   'puppet.parameter.resetDefault': '重置为默认值',
   'puppet.parameter.resetParam': '重置 {name} 为默认值',
+  'puppet.nodes.treeLabel': 'Puppet 节点',
+  'puppet.runtime.profile': '配置',
+  'puppet.runtime.profile.live2d': 'Live2D Puppet',
+  'puppet.runtime.profile.native': 'Neko Puppet',
+  'puppet.runtime.adapter': '适配器',
 
   // Control drivers
   'puppet.panel.controlDrivers': '控制驱动',
   'puppet.controlDriver.priority': '优先级',
   'puppet.controlDriver.curvePreview': '控制驱动曲线预览',
+  'puppet.controlDriver.source.blendShape': '混合形状',
+  'puppet.controlDriver.source.expression': '表情',
+  'puppet.controlDriver.source.tracking': '追踪',
+  'puppet.controlDriver.source.live2d': 'Live2D',
+  'puppet.controlDriver.target.bone': '骨骼',
+  'puppet.controlDriver.target.position': '位置',
+  'puppet.controlDriver.target.scale': '缩放',
+  'puppet.controlDriver.target.blendShape': '混合形状',
+  'puppet.controlDriver.curve.linear': '线性',
+  'puppet.controlDriver.curve.bezier': '贝塞尔',
+  'puppet.controlDriver.curve.step': '阶梯',
 
   // Morph editor
   'puppet.panel.morph': '变形目标',
@@ -53,6 +73,17 @@ export const zhCN: MessageBundle = {
   'puppet.toolbar.showRightPanel': '显示右侧面板',
   'puppet.toolbar.hideRightPanel': '隐藏右侧面板',
   'puppet.toolbar.onionSkin': '洋葱皮',
+  'puppet.rightDock.mode.label': '创作模式',
+  'puppet.rightDock.mode.basic': '基础',
+  'puppet.rightDock.mode.basic.description': 'AI 辅助摆姿与关键参数',
+  'puppet.rightDock.mode.professional': '专业',
+  'puppet.rightDock.mode.professional.description': '节点树、控制驱动与动画工具',
+
+  // Viewport and timeline
+  'puppet.viewport.localPreview': '本地预览',
+  'puppet.keyframes.title': '关键帧',
+  'puppet.keyframes.collapse': '收起关键帧编辑器',
+  'puppet.keyframes.expand': '展开关键帧编辑器',
 
   // Status
   'puppet.status.ready': '就绪',

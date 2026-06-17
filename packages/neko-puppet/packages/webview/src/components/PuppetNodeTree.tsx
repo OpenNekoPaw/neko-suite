@@ -8,8 +8,10 @@ import { useState } from 'react';
 import { TreeView } from '@neko/ui/creative';
 import { usePuppetStore } from '../stores/puppet-store';
 import { mapPuppetNodesToTreeViewItems } from './adapters/sharedPuppetUiAdapter';
+import { useTranslation } from '../i18n/I18nContext';
 
 export function PuppetNodeTree() {
+  const { t } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const snapshot = usePuppetStore((s) => s.puppetSnapshot);
   const selectedNativeBoneId = usePuppetStore((s) => s.selectedNativeBoneId);
@@ -24,8 +26,8 @@ export function PuppetNodeTree() {
   const tree = mapPuppetNodesToTreeViewItems(snapshot.nodes, selectedTreeId);
 
   return (
-    <div className="sketch-panel" role="region" aria-label="Node Tree">
-      <h3 className="sketch-panel-title m-0 mb-1">Nodes</h3>
+    <div className="sketch-panel" role="region" aria-label={t('puppet.panel.nodes')}>
+      <h3 className="sketch-panel-title m-0 mb-1">{t('puppet.panel.nodes')}</h3>
 
       <TreeView
         className="max-h-40"
@@ -33,7 +35,7 @@ export function PuppetNodeTree() {
         focusedId={focusedId ?? selectedTreeId ?? snapshot.nodes[0]?.id}
         height={160}
         items={tree}
-        label="Puppet nodes"
+        label={t('puppet.nodes.treeLabel')}
         onFocusItem={setFocusedId}
         onSelect={(id) => {
           setSelectedId(id);

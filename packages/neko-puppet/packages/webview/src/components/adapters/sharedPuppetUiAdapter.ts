@@ -57,6 +57,11 @@ export function mapPuppetParametersToProperties(
 
 export function mapNativeBlendShapesToProperties(
   blendShapes: readonly NativeBlendShapeInfo[],
+  {
+    groupLabel = 'Blend Shapes',
+  }: {
+    readonly groupLabel?: string;
+  } = {},
 ): PuppetParameterAdapterResult {
   const properties = blendShapes.map(
     (shape): PropertyDefinition => ({
@@ -75,7 +80,7 @@ export function mapNativeBlendShapesToProperties(
     groups: [
       {
         id: 'native-blend-shapes',
-        label: 'Blend Shapes',
+        label: groupLabel,
         propertyIds: properties.map((item) => item.id),
       },
     ],

@@ -101,6 +101,7 @@ export function PuppetToolbar({
         data-creative-left-rail-kind="visibility-toggle"
         data-creative-left-rail-target="right-panel"
         data-puppet-toolbar-action="toggle-right-panel"
+        disabled={!puppetLoaded}
         icon={isRightPanelVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />}
         title={
           isRightPanelVisible

@@ -20,11 +20,36 @@ import {
 
 interface ParameterPanelProps {
   controller: IPuppetController | null;
+  mode?: 'basic' | 'professional';
   viewportController?: PuppetViewportController | null;
 }
 
-export function ParameterPanel({ controller, viewportController }: ParameterPanelProps) {
-  const { t } = useTranslation();
+const BASIC_LIVE2D_PARAMETER_NAMES = new Set([
+  'ParamAngleX',
+  'ParamAngleY',
+  'ParamAngleZ',
+  'ParamBodyAngleX',
+  'ParamBodyAngleY',
+  'ParamBodyAngleZ',
+  'ParamEyeBallX',
+  'ParamEyeBallY',
+  'ParamEyeLOpen',
+  'ParamEyeROpen',
+  'ParamEyeLSmile',
+  'ParamEyeRSmile',
+  'ParamBrowLY',
+  'ParamBrowRY',
+  'ParamMouthOpenY',
+  'ParamMouthForm',
+  'ParamBreath',
+]);
+
+export function ParameterPanel({
+  controller,
+  mode = 'basic',
+  viewportController,
+}: ParameterPanelProps) {
+  const { t, locale: currentLocale } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const parameters = usePuppetStore((s) => s.puppetParameters);
   const nativeBlendShapes = usePuppetStore((s) => s.nativeBlendShapes);
@@ -86,31 +111,48 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
     const faceNames = new Set(PUPPET_FACE_PARAMETERS.map((p) => p.name));
     return parameters.some((p) => faceNames.has(p.name));
   }, [parameters]);
-  const locale = t('puppet.panel.parameters') !== 'puppet.panel.parameters' ? 'zh' : 'en';
+  const isProfessionalMode = mode === 'professional';
+  const visibleParameters = useMemo(
+    () => (isProfessionalMode ? parameters : filterBasicPuppetParameters(parameters)),
+    [isProfessionalMode, parameters],
+  );
+  const visibleNativeBlendShapes = useMemo(
+    () => (isProfessionalMode ? nativeBlendShapes : []),
+    [isProfessionalMode, nativeBlendShapes],
+  );
+  const parameterLocale = currentLocale === 'zh-cn' ? 'zh' : 'en';
   const parameterAdapter = useMemo(
     () =>
       hasFaceParams
-        ? mapPuppetFaceParametersToProperties(parameters, locale)
-        : mapPuppetParametersToProperties(parameters),
-    [hasFaceParams, locale, parameters],
+        ? mapPuppetFaceParametersToProperties(visibleParameters, parameterLocale)
+        : mapPuppetParametersToProperties(visibleParameters, {
+            groupLabel: t('puppet.panel.parameters'),
+          }),
+    [hasFaceParams, parameterLocale, t, visibleParameters],
   );
   const nativeBlendShapeAdapter = useMemo(
-    () => mapNativeBlendShapesToProperties(nativeBlendShapes),
-    [nativeBlendShapes],
+    () =>
+      mapNativeBlendShapesToProperties(visibleNativeBlendShapes, {
+        groupLabel: t('puppet.panel.blendShapes'),
+      }),
+    [t, visibleNativeBlendShapes],
   );
 
-  if (!puppetLoaded || (parameters.length === 0 && nativeBlendShapes.length === 0)) return null;
+  if (!puppetLoaded || (visibleParameters.length === 0 && visibleNativeBlendShapes.length === 0)) {
+    return null;
+  }
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('puppet.panel.parameters')}>
       <h3 className="sketch-panel-title m-0 mb-1">{t('puppet.panel.parameters')}</h3>
 
-      {nativeBlendShapes.length > 0 && (
+      {visibleNativeBlendShapes.length > 0 && (
         <div className="mb-2">
           <SharedPropertyPanel
             groups={nativeBlendShapeAdapter.groups}
+            resetLabel={t('puppet.action.reset')}
             onCommit={(propertyId, value) => {
-              const shape = nativeBlendShapes.find(
+              const shape = visibleNativeBlendShapes.find(
                 (item) => `${item.meshId}:${item.name}` === propertyId,
               );
               if (shape) {
@@ -118,7 +160,7 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
               }
             }}
             onPreviewChange={(propertyId, value) => {
-              const shape = nativeBlendShapes.find(
+              const shape = visibleNativeBlendShapes.find(
                 (item) => `${item.meshId}:${item.name}` === propertyId,
               );
               if (shape) {
@@ -126,7 +168,7 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
               }
             }}
             onReset={(propertyId) => {
-              const shape = nativeBlendShapes.find(
+              const shape = visibleNativeBlendShapes.find(
                 (item) => `${item.meshId}:${item.name}` === propertyId,
               );
               if (shape) {
@@ -138,9 +180,10 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
         </div>
       )}
 
-      {parameters.length > 0 ? (
+      {visibleParameters.length > 0 ? (
         <SharedPropertyPanel
           groups={parameterAdapter.groups}
+          resetLabel={t('puppet.action.reset')}
           onCommit={(propertyId, value) =>
             handleParameterValue(propertyId, value, handleParameterCommit)
           }
@@ -148,7 +191,7 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
             handleParameterValue(propertyId, value, handleParameterPreview)
           }
           onReset={(propertyId) => {
-            const parameter = parameters.find((item) => item.name === propertyId);
+            const parameter = visibleParameters.find((item) => item.name === propertyId);
             if (parameter) {
               handleParameterCommit(parameter.name, parameter.default);
             }
@@ -158,4 +201,13 @@ export function ParameterPanel({ controller, viewportController }: ParameterPane
       ) : null}
     </div>
   );
+}
+
+function filterBasicPuppetParameters<T extends { name: string }>(parameters: readonly T[]): T[] {
+  const faceParameterNames = new Set(PUPPET_FACE_PARAMETERS.map((parameter) => parameter.name));
+  const matched = parameters.filter(
+    (parameter) =>
+      faceParameterNames.has(parameter.name) || BASIC_LIVE2D_PARAMETER_NAMES.has(parameter.name),
+  );
+  return matched.length > 0 ? matched : [...parameters].slice(0, 12);
 }

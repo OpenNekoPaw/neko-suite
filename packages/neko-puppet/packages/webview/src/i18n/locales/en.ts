@@ -17,14 +17,34 @@ export const en: MessageBundle = {
   'puppet.animation.fadeDuration': 'Fade',
 
   // Parameter panel
+  'puppet.action.reset': 'Reset',
   'puppet.panel.parameters': 'Parameters',
+  'puppet.panel.blendShapes': 'Blend Shapes',
+  'puppet.panel.nodes': 'Nodes',
+  'puppet.panel.runtime': 'Runtime',
   'puppet.parameter.resetDefault': 'Reset to default',
   'puppet.parameter.resetParam': 'Reset {name} to default',
+  'puppet.nodes.treeLabel': 'Puppet nodes',
+  'puppet.runtime.profile': 'Profile',
+  'puppet.runtime.profile.live2d': 'Live2D Puppet',
+  'puppet.runtime.profile.native': 'Neko Puppet',
+  'puppet.runtime.adapter': 'Adapter',
 
   // Control drivers
   'puppet.panel.controlDrivers': 'Control Drivers',
   'puppet.controlDriver.priority': 'Priority',
   'puppet.controlDriver.curvePreview': 'Control driver curve preview',
+  'puppet.controlDriver.source.blendShape': 'BlendShape',
+  'puppet.controlDriver.source.expression': 'Expression',
+  'puppet.controlDriver.source.tracking': 'Tracking',
+  'puppet.controlDriver.source.live2d': 'Live2D',
+  'puppet.controlDriver.target.bone': 'Bone',
+  'puppet.controlDriver.target.position': 'position',
+  'puppet.controlDriver.target.scale': 'scale',
+  'puppet.controlDriver.target.blendShape': 'BlendShape',
+  'puppet.controlDriver.curve.linear': 'linear',
+  'puppet.controlDriver.curve.bezier': 'bezier',
+  'puppet.controlDriver.curve.step': 'step',
 
   // Morph editor
   'puppet.panel.morph': 'Morph Targets',
@@ -53,6 +73,18 @@ export const en: MessageBundle = {
   'puppet.toolbar.showRightPanel': 'Show right panel',
   'puppet.toolbar.hideRightPanel': 'Hide right panel',
   'puppet.toolbar.onionSkin': 'Onion skin',
+  'puppet.rightDock.mode.label': 'Creation mode',
+  'puppet.rightDock.mode.basic': 'Basic',
+  'puppet.rightDock.mode.basic.description': 'AI-assisted posing and key parameters',
+  'puppet.rightDock.mode.professional': 'Professional',
+  'puppet.rightDock.mode.professional.description':
+    'Node tree, control drivers, and animation tools',
+
+  // Viewport and timeline
+  'puppet.viewport.localPreview': 'Local preview',
+  'puppet.keyframes.title': 'Keyframes',
+  'puppet.keyframes.collapse': 'Collapse keyframe editor',
+  'puppet.keyframes.expand': 'Expand keyframe editor',
 
   // Status
   'puppet.status.ready': 'Ready',

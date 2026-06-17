@@ -1,10 +1,16 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PuppetNodeTree } from './PuppetNodeTree';
 import { usePuppetStore } from '../stores/puppet-store';
 import type { PuppetNodeSnapshot } from '../animation/types';
+
+vi.mock('../i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
 
 describe('PuppetNodeTree shared UI migration', () => {
   let host: HTMLDivElement;
@@ -42,7 +48,9 @@ describe('PuppetNodeTree shared UI migration', () => {
       root.render(<PuppetNodeTree />);
     });
 
-    expect(host.querySelector('[role="tree"]')?.getAttribute('aria-label')).toBe('Puppet nodes');
+    expect(host.querySelector('[role="tree"]')?.getAttribute('aria-label')).toBe(
+      'puppet.nodes.treeLabel',
+    );
 
     act(() => {
       host.querySelector<HTMLButtonElement>('button[aria-label="Expand item"]')?.click();

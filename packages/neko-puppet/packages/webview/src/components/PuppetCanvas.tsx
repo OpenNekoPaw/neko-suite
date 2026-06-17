@@ -712,7 +712,7 @@ export function PuppetCanvas({
   return (
     <div
       ref={containerRef}
-      className="flex-1 relative overflow-hidden bg-[var(--vscode-editor-background)]"
+      className="puppet-canvas flex-1 relative overflow-hidden bg-[var(--vscode-editor-background)]"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onDoubleClick={fitPuppetToView}

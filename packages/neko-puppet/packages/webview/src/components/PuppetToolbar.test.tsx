@@ -105,7 +105,7 @@ describe('PuppetToolbar', () => {
   });
 
   it('routes visibility toggles through the left rail', () => {
-    const props = defaultProps({ isRightPanelVisible: true });
+    const props = defaultProps({ isRightPanelVisible: true, puppetLoaded: true });
 
     act(() => {
       root.render(<PuppetToolbar {...props} />);
@@ -135,6 +135,7 @@ describe('PuppetToolbar', () => {
     expect(rightPanelButton).not.toBeNull();
     expect(rightPanelButton?.getAttribute('aria-expanded')).toBe('false');
     expect(rightPanelButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(rightPanelButton?.disabled).toBe(true);
   });
 
   function buttonByLabel(label: string): HTMLButtonElement | null {

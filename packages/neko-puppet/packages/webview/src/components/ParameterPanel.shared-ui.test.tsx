@@ -74,8 +74,9 @@ describe('Puppet ParameterPanel shared UI migration', () => {
     expect(propertyRow?.querySelector('[role="slider"]')?.getAttribute('aria-valuenow')).toBe('12');
 
     const resetButton = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Reset',
+      (button) => button.textContent === 'puppet.action.reset',
     );
+    expect(resetButton).toBeDefined();
     act(() => {
       resetButton?.click();
     });
@@ -108,5 +109,31 @@ describe('Puppet ParameterPanel shared UI migration', () => {
 
     expect(controller.setParameter).toHaveBeenCalledTimes(1);
     expect(controller.setParameter).toHaveBeenCalledWith('ParamAngleX', 18);
+  });
+
+  it('keeps native blend shapes and non-core parameters in professional mode', () => {
+    usePuppetStore.setState({
+      puppetParameters: [
+        { name: 'ParamAngleX', min: -30, max: 30, default: 0, current: 12 },
+        { name: 'DebugWarp', min: 0, max: 1, default: 0, current: 0.4 },
+      ],
+      nativeBlendShapes: [{ meshId: 'face-mesh', name: 'Smile', current: 0.35 }],
+    });
+
+    act(() => {
+      root.render(<ParameterPanel controller={null} mode="basic" />);
+    });
+
+    expect(host.querySelector('[data-property-id="ParamAngleX"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="DebugWarp"]')).toBeNull();
+    expect(host.querySelector('[data-property-id="face-mesh:Smile"]')).toBeNull();
+
+    act(() => {
+      root.render(<ParameterPanel controller={null} mode="professional" />);
+    });
+
+    expect(host.querySelector('[data-property-id="ParamAngleX"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="DebugWarp"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="face-mesh:Smile"]')).not.toBeNull();
   });
 });

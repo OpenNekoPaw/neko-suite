@@ -81,6 +81,13 @@ body,
   height: 100%;
 }
 
+.puppet-viewport-shell .puppet-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .puppet-viewport-overlay {
   pointer-events: none;
   position: absolute;
@@ -166,11 +173,15 @@ body,
 }
 
 .puppet-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: auto;
   position: absolute;
   inset: 0;
   z-index: 20;
   background: transparent;
+  padding: 24px;
   transition:
     background-color 0.12s ease,
     box-shadow 0.12s ease;
@@ -179,6 +190,78 @@ body,
 .puppet-empty-state[data-drag-over='true'] {
   background: color-mix(in srgb, var(--sketch-active) 8%, transparent);
   box-shadow: inset 0 0 0 2px var(--vscode-focusBorder, var(--sketch-active));
+}
+
+.puppet-empty-state-panel {
+  display: flex;
+  width: min(360px, 100%);
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--sketch-border) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sketch-panel-bg) 92%, transparent);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 18%);
+  padding: 18px;
+  text-align: center;
+}
+
+.puppet-empty-state-icon {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--sketch-active) 45%, var(--sketch-border));
+  border-radius: 6px;
+  color: var(--sketch-active);
+}
+
+.puppet-empty-state-title {
+  max-width: 100%;
+  color: var(--sketch-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.puppet-empty-state-hint {
+  max-width: 28rem;
+  color: var(--vscode-descriptionForeground, color-mix(in srgb, var(--sketch-fg) 72%, transparent));
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.puppet-empty-state-import-button {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 5px;
+  background: var(--vscode-button-background, var(--sketch-active));
+  color: var(--vscode-button-foreground, #fff);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 6px 11px;
+}
+
+.puppet-empty-state-import-button:hover {
+  background: var(--vscode-button-hoverBackground, var(--sketch-active));
+}
+
+.puppet-empty-state-import-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .puppet-right-panel {
@@ -206,6 +289,30 @@ body,
   border: 0;
   border-bottom: 1px solid var(--sketch-border);
   background: transparent;
+}
+
+.puppet-runtime-status {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.puppet-runtime-status > div {
+  display: grid;
+  grid-template-columns: minmax(0, 72px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.puppet-runtime-status dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.puppet-runtime-status dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .puppet-resize-handle {

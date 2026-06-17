@@ -48,7 +48,7 @@ Puppet/Live2D 编辑器按“让角色快速动起来”和“完整 rig/参数/
 | 基础模式 | 导入、预览、表演和快速导出 | 模型导入、快速预览、表情/动作模板、口型建议、姿态建议、tracking/lip-sync 基础设置、一键导出或录制                            |
 | 专业模式 | Rig、参数、驱动和动画编辑  | 节点树、参数滑杆、Control Driver、Animation clips、关键帧、驱动曲线、motion/expression/physics 参数精修、tracking 映射和诊断 |
 
-右侧 Dock 在基础模式显示导入状态、表情/动作模板、基础参数和 AI 建议；专业模式显示 Node Tree、Parameter Panel、Control Driver、Animation、Keyframe 和诊断。AI 生成的表情、动作或映射建议必须落到 `.nkp` 的可审计参数、motion、expression 或 tracking 映射中。
+右侧 Dock 的当前实现按 Live2D/Puppet Inspector 裁剪：基础模式显示 Runtime Status 和核心脸部/常用参数；专业模式在此基础上开放完整 Parameter Panel、native blend shapes、Node Tree、Control Driver 和 Animation 面板。AI 生成的表情、动作或映射建议必须落到 `.nkp` 的可审计参数、motion、expression 或 tracking 映射中。
 
 ## Engine 边界
 
