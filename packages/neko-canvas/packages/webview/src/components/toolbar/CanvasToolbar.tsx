@@ -104,22 +104,6 @@ export function CanvasToolbar({
         onClick={onTogglePanMode}
       />
 
-      {onToggleNodeLibrary && (
-        <ToolbarButton
-          aria-controls="canvas-right-node-tree-panel"
-          aria-expanded={isNodeLibraryVisible}
-          data-creative-left-rail-action="toggle-right-node-tree"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="right-panel"
-          icon={
-            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
-          }
-          title={nodeLibraryTitle}
-          active={isNodeLibraryVisible}
-          onClick={onToggleNodeLibrary}
-        />
-      )}
-
       {onOpenNarrativePreview && (
         <ToolbarButton
           data-creative-left-rail-action="open-narrative-preview"
@@ -177,6 +161,22 @@ export function CanvasToolbar({
           <ToolbarSpacer />
           <ToolbarSeparator />
         </>
+      )}
+
+      {onToggleNodeLibrary && (
+        <ToolbarButton
+          aria-controls="canvas-right-node-tree-panel"
+          aria-expanded={isNodeLibraryVisible}
+          data-creative-left-rail-action="toggle-right-node-tree"
+          data-creative-left-rail-kind="visibility-toggle"
+          data-creative-left-rail-target="right-panel"
+          icon={
+            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
+          }
+          title={nodeLibraryTitle}
+          active={isNodeLibraryVisible}
+          onClick={onToggleNodeLibrary}
+        />
       )}
 
       {onToggleHud && (

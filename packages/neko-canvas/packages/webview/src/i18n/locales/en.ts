@@ -56,14 +56,7 @@ export const en = {
   'toolbar.image': 'Image',
   'toolbar.video': 'Video',
   'toolbar.audio': 'Audio',
-  'scopeNavigation.boardCount': '{count} boards',
   'scopeNavigation.issueCount': '{count} board issues',
-  'scopeNavigation.kind.episode': 'Episode',
-  'scopeNavigation.kind.sequence': 'Sequence',
-  'scopeNavigation.kind.scene': 'Scene',
-  'scopeNavigation.kind.shotCluster': 'Shot Cluster',
-  'scopeNavigation.kind.interactiveNarrative': 'Interactive Narrative',
-  'scopeNavigation.kind.generic': 'Canvas',
 
   // Empty state
   'empty.hint': 'Open the node library, drop files here, or right-click to add elements',

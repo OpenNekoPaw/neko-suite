@@ -90,7 +90,7 @@ describe('NodeLibraryPanel', () => {
     expect(markup).not.toContain('aria-label="Unlocked"');
   });
 
-  it('renders as the right node tree panel surface', () => {
+  it('renders node library content without owning the right dock shell', () => {
     setLocale('en');
 
     const markup = renderToStaticMarkup(
@@ -101,9 +101,9 @@ describe('NodeLibraryPanel', () => {
       }),
     );
 
-    expect(markup).toContain('id="canvas-right-node-tree-panel"');
-    expect(markup).toContain('data-canvas-right-node-tree="true"');
-    expect(markup).toContain('aria-label="Node Library"');
+    expect(markup).not.toContain('id="canvas-right-node-tree-panel"');
+    expect(markup).not.toContain('data-canvas-right-node-tree="true"');
+    expect(markup).toContain('Node Library');
   });
 
   it('keeps file-bound node entries visible in the file references group', () => {

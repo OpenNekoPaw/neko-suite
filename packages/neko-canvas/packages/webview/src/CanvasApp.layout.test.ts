@@ -108,6 +108,15 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/isHudVisible && \(/);
   });
 
+  it('does not duplicate the document title as a canvas scope chip', () => {
+    expect(appSource).toMatch(/function CanvasBoardNavigationBar/);
+    expect(appSource).toMatch(/if \(relatedBoards\.length === 0\) return null/);
+    expect(appSource).not.toMatch(/CanvasScopeNavigationBar/);
+    expect(appSource).not.toMatch(/SCOPE_LABELS/);
+    expect(appSource).not.toMatch(/scopeNavigation\.kind/);
+    expect(appSource).not.toMatch(/scopeNavigation\.boardCount/);
+  });
+
   it('keeps playback controls owned by the Preview panel, with Canvas exposing only the entry point', () => {
     expect(appSource).not.toMatch(/<PlaybackControllerHost/);
     expect(appSource).not.toMatch(/<CanvasPlaybackController/);
@@ -132,10 +141,13 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(
       /const \[isRightNodeTreeVisible, setIsRightNodeTreeVisible\] = useState\(false\)/,
     );
-    expect(appSource).toMatch(/rightPanel=\{\s*isRightNodeTreeVisible \? \(/);
+    expect(appSource).toMatch(/rightDock=\{\s*isRightNodeTreeVisible/);
+    expect(appSource).toMatch(/id: 'canvas-right-node-tree-panel'/);
+    expect(appSource).toMatch(/panelId: 'canvas\.nodeLibraryDock'/);
     expect(appSource).toMatch(/<NodeLibraryPanel/);
-    expect(nodeLibrarySource).toMatch(/id="canvas-right-node-tree-panel"/);
-    expect(nodeLibrarySource).toMatch(/data-canvas-right-node-tree="true"/);
+    expect(appSource).toMatch(/'data-canvas-right-node-tree': 'true'/);
+    expect(nodeLibrarySource).not.toMatch(/id="canvas-right-node-tree-panel"/);
+    expect(nodeLibrarySource).not.toMatch(/data-canvas-right-node-tree="true"/);
   });
 
   it('marks primary canvas tools and visibility toggles by responsibility', () => {

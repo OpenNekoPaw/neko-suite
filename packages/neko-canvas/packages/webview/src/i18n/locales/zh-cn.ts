@@ -56,14 +56,7 @@ export const zhCN = {
   'toolbar.image': '图片',
   'toolbar.video': '视频',
   'toolbar.audio': '音频',
-  'scopeNavigation.boardCount': '{count} 个画布',
   'scopeNavigation.issueCount': '{count} 个画布问题',
-  'scopeNavigation.kind.episode': '单集',
-  'scopeNavigation.kind.sequence': '段落',
-  'scopeNavigation.kind.scene': '场景',
-  'scopeNavigation.kind.shotCluster': '镜头簇',
-  'scopeNavigation.kind.interactiveNarrative': '互动叙事',
-  'scopeNavigation.kind.generic': '画布',
 
   // Empty state
   'empty.hint': '打开节点库、拖入文件，或右键添加元素',

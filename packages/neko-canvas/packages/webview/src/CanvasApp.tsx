@@ -93,15 +93,6 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
 const logger = getLogger('CanvasApp');
 
-const SCOPE_LABELS: Record<string, string> = {
-  episode: 'scopeNavigation.kind.episode',
-  sequence: 'scopeNavigation.kind.sequence',
-  scene: 'scopeNavigation.kind.scene',
-  'shot-cluster': 'scopeNavigation.kind.shotCluster',
-  'interactive-narrative': 'scopeNavigation.kind.interactiveNarrative',
-  generic: 'scopeNavigation.kind.generic',
-};
-
 function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
   return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
 }
@@ -1433,7 +1424,7 @@ export function CanvasApp() {
             onDrop={handleDrop}
           >
             {canvasData && (
-              <CanvasScopeNavigationBar
+              <CanvasBoardNavigationBar
                 canvasData={canvasData}
                 onOpenBoardRef={handleCanvasBoardRefOpen}
               />
@@ -1579,32 +1570,63 @@ export function CanvasApp() {
             )}
           </div>
         }
-        rightPanel={
-          isRightNodeTreeVisible ? (
-            <NodeLibraryPanel
-              coreDescriptors={coreNodeTypeDescriptors}
-              subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
-              nodeTypeDescriptors={subsystemNodeTypeDescriptors}
-              activeSubsystemIds={activeSubsystemIds}
-              onCreateNode={handleCreateLibraryNode}
-              onPickNodeSource={handlePickLibraryNodeSource}
-              onLoadSubsystem={handleLoadSubsystem}
-            />
-          ) : undefined
+        rightDock={
+          isRightNodeTreeVisible
+            ? {
+                id: 'canvas-right-node-tree-panel',
+                panelId: 'canvas.nodeLibraryDock',
+                defaultSize: 280,
+                minSize: 220,
+                maxSize: 420,
+                label: t('library.title'),
+                className: 'canvas-right-node-tree-panel',
+                contentClassName: 'canvas-right-node-tree-panel-content',
+                resizeHandleClassName: 'canvas-right-node-tree-resize-handle',
+                resizePersistence: { api: vscode },
+                containerProps: {
+                  'data-canvas-right-node-tree': 'true',
+                  ...getKeyboardBoundaryMetadata({
+                    scope: 'property-panel',
+                    ownerId: 'canvas-node-library',
+                    priority: 10,
+                    ownedKeys: [
+                      'Enter',
+                      'Escape',
+                      'Space',
+                      'Tab',
+                      'ArrowUp',
+                      'ArrowDown',
+                      'ArrowLeft',
+                      'ArrowRight',
+                    ],
+                  }),
+                },
+                children: (
+                  <NodeLibraryPanel
+                    coreDescriptors={coreNodeTypeDescriptors}
+                    subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
+                    nodeTypeDescriptors={subsystemNodeTypeDescriptors}
+                    activeSubsystemIds={activeSubsystemIds}
+                    onCreateNode={handleCreateLibraryNode}
+                    onPickNodeSource={handlePickLibraryNodeSource}
+                    onLoadSubsystem={handleLoadSubsystem}
+                  />
+                ),
+              }
+            : undefined
         }
       />
     </div>
   );
 }
 
-function CanvasScopeNavigationBar({
+function CanvasBoardNavigationBar({
   canvasData,
   onOpenBoardRef,
 }: {
   canvasData: CanvasData;
   onOpenBoardRef: (ref: CanvasBoardRef) => void;
 }) {
-  const scope = canvasData.creativeScope;
   const relatedBoards = canvasData.relatedBoards ?? [];
   const diagnostics = relatedBoards.flatMap((board) =>
     validateCanvasBoardRef(board.ref).map((diagnostic) => ({
@@ -1614,33 +1636,10 @@ function CanvasScopeNavigationBar({
     })),
   );
 
-  if (!scope && relatedBoards.length === 0) return null;
-
-  const scopeTitle =
-    scope?.title ||
-    scope?.workId ||
-    scope?.sequenceId ||
-    scope?.episodeId ||
-    scope?.sceneIds?.[0] ||
-    canvasData.name;
-  const scopeLabel = scope
-    ? t(SCOPE_LABELS[scope.kind] ?? 'scopeNavigation.kind.generic')
-    : t('scopeNavigation.kind.generic');
+  if (relatedBoards.length === 0) return null;
 
   return (
     <div className="pointer-events-none absolute left-3 right-3 top-3 z-20 flex min-w-0 flex-wrap items-center gap-2">
-      <div className="pointer-events-auto flex min-w-0 max-w-full items-center gap-2 rounded-md border border-[var(--toolbar-border)] bg-[var(--toolbar-bg)] px-2 py-1 shadow-sm">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-normal text-[var(--toolbar-fg-secondary)]">
-          {scopeLabel}
-        </span>
-        <span className="min-w-0 truncate text-xs text-[var(--toolbar-fg)]">{scopeTitle}</span>
-        {relatedBoards.length > 0 && (
-          <span className="shrink-0 text-[10px] text-[var(--toolbar-fg-secondary)]">
-            {t('scopeNavigation.boardCount', { count: relatedBoards.length })}
-          </span>
-        )}
-      </div>
-
       {relatedBoards.slice(0, 6).map((board, index) => {
         const boardDiagnostics = validateCanvasBoardRef(board.ref);
         const disabled = boardDiagnostics.some((diagnostic) => diagnostic.severity === 'error');
