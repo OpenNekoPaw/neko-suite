@@ -107,6 +107,14 @@ Runtime projection
 | Engine File Access           | 大型二进制、range、container entry、Engine 可读 source token              | 项目路径身份、Webview URI、cache manifest |
 | Project fact stores          | JSON/project 文件的原子读写、schema guard、锁或串行化                     | 派生缩略图、搜索排序、runtime token       |
 
+### 项目文件 I/O
+
+`@neko/shared/project-file-io` 是 JSON `nk*` 项目文件的稳定 host 持久化入口。`.nkv`、`.nkc`、`.nks`、`.nkp`、`.nkm`、`.nka` 等格式继续由各自 domain codec 拥有 schema、验证、迁移、默认值和序列化；Extension Host 通过 `ProjectFileStore` 调用注册的 `ProjectFormatCodec`，并在写入前应用对应的 `PortableSourcePathPolicy`。
+
+`ProjectFileStore` 负责项目文件生命周期：load、save、save-as、backup、revert、diagnostics、只读 future-version 状态、串行化写入和 best-effort atomic write。它通过注入的 `ProjectFileOps` 执行文件操作，不导入 VS Code API；VS Code 运行面使用 `@neko/shared/vscode/extension` 的 `createVSCodeProjectFileIoAdapter` 连接 `workspace.fs`、workspace roots、document URI、路径变量和授权 roots。
+
+新增或迁移 `nk*` host 持久化入口时，应复用 `ProjectFileStore` 和 codec registry，而不是在具体 editor provider 中重新实现 `JSON.parse/stringify`、`workspace.fs.writeFile`、路径收缩、backup 或 future-version 逻辑。Webview 仍只能通过 typed message / document host 发送编辑和 add-source intent，不能写项目文件，也不能把 `File.name`、blob URL、Webview URI、Engine token、stream id、preview URL、cache path 或 `cachePath` 作为 durable source identity。
+
 ## 读取意图
 
 调用方不能只看 target 类型判断应读 source 还是 cache。必须声明 intent。

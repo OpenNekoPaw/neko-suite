@@ -47,6 +47,7 @@
 
 - 主入口不得导出 React UI 组件。
 - `PathResolver` 是路径变量、相对路径和运行时绝对路径解析的统一入口。
+- `@neko/shared/project-file-io` 是 JSON `nk*` 项目文件 host 持久化、codec registry、诊断和 portable source policy 的共享入口；domain codec 仍归各领域格式所有。
 - `ResourceRef` 是持久跨包 payload 的优先引用形式，不要把 blob URL、Webview URI、preview token、stream ID 或 engine token 写成持久事实。
 - `ENTITY_FACADE_COMMANDS` 是实体跨包 facade 的命令契约，功能包通过命令或 adapter 访问实体能力。
 - `@neko/shared/vscode`、`@neko/shared/vscode/extension`、`@neko/shared/i18n/react`、`@neko/shared/components` 是分层 subpath，不等同于主入口 L0。
@@ -204,6 +205,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 ## 缓存、路径和实体
 
 - 持久项目记录保存 workspace-relative path、`${VAR}/path`、stable `ResourceRef`、document source ref、asset/entity ID 和 provenance。
+- JSON `nk*` 项目文件的 Extension Host 读写应通过 `ProjectFileStore`、注册的 domain codec 和 `createVSCodeProjectFileIoAdapter`，避免各 editor provider 直接承担项目文件解析、写入和路径收缩。
 - 本地绝对路径只允许出现在本机设置、临时运行时状态或明确 host adapter 内。
 - Cache 是派生数据，不能作为项目事实来源。
 - Entity facts、assets、search index、agent memory 和 preview cache 要通过明确引用连接，不要直接互相读取私有存储。
