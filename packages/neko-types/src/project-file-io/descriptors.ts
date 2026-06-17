@@ -1,4 +1,5 @@
 import type { AudioProjectData } from '../types/audioProject';
+import type { CanvasData } from '../types/canvas';
 import type {
   NkmLiveActorRef,
   NkmProjectData,
@@ -8,6 +9,7 @@ import type {
 } from '../types/model-project';
 import type { ProjectData } from '../types/project';
 import type { NkpProjectData } from '../types/puppet';
+import type { NksDocument } from '../types/sketch';
 import type {
   TimelineElement,
   AudioElement,
@@ -37,6 +39,29 @@ export const nkaSourcePathPolicy: PortableSourcePathPolicy<AudioProjectData> = {
       ...document,
       tracks: replaceTimelineTracks(document.tracks, replacements),
     };
+  },
+};
+
+export const nkcSourcePathPolicy: PortableSourcePathPolicy<CanvasData> = {
+  listSources(document) {
+    return listObjectPathSources(document, {
+      rootId: 'canvas',
+      rootPath: [],
+      allowedKeys: CANVAS_SOURCE_FIELD_KEYS,
+      skippedKeys: RUNTIME_OR_INLINE_FIELD_KEYS,
+    });
+  },
+  replaceSources(document, replacements) {
+    return replaceObjectPathSources(document, replacements);
+  },
+};
+
+export const nksSourcePathPolicy: PortableSourcePathPolicy<NksDocument> = {
+  listSources() {
+    return [];
+  },
+  replaceSources(document) {
+    return document;
   },
 };
 
@@ -549,4 +574,148 @@ function replaceIndexedAssetRef<TEntry extends Record<TKey, string>, TKey extend
   return entries.map((entry, entryIndex) =>
     entryIndex === index ? { ...entry, [key]: value } : entry,
   );
+}
+
+const CANVAS_SOURCE_FIELD_KEYS = new Set([
+  'assetPath',
+  'assetUri',
+  'docPath',
+  'documentPath',
+  'filePath',
+  'imagePath',
+  'imageUri',
+  'linkedProject',
+  'mediaPath',
+  'modelPath',
+  'path',
+  'projectPath',
+  'referenceImagePath',
+  'sourcePath',
+  'sourceUri',
+  'src',
+  'thumbnailPath',
+  'uri',
+]);
+
+const RUNTIME_OR_INLINE_FIELD_KEYS = new Set([
+  'base64',
+  'cachePath',
+  'cacheUri',
+  'data',
+  'dataUrl',
+  'fragmentRef',
+  'html',
+  'prompt',
+  'text',
+  'thumbnailData',
+  'url',
+  'webviewUri',
+]);
+
+interface ObjectPathSourceOptions {
+  readonly rootId: string;
+  readonly rootPath: readonly (string | number)[];
+  readonly allowedKeys: ReadonlySet<string>;
+  readonly skippedKeys: ReadonlySet<string>;
+}
+
+function listObjectPathSources(
+  value: unknown,
+  options: ObjectPathSourceOptions,
+): readonly ProjectSourceDescriptor[] {
+  const descriptors: ProjectSourceDescriptor[] = [];
+  visitObjectPathSources(value, options.rootId, options.rootPath, options, descriptors);
+  return descriptors;
+}
+
+function visitObjectPathSources(
+  value: unknown,
+  id: string,
+  fieldPath: readonly (string | number)[],
+  options: ObjectPathSourceOptions,
+  descriptors: ProjectSourceDescriptor[],
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      visitObjectPathSources(item, `${id}.${index}`, [...fieldPath, index], options, descriptors);
+    });
+    return;
+  }
+  if (!isPlainRecord(value)) return;
+
+  for (const [key, child] of Object.entries(value)) {
+    if (options.skippedKeys.has(key)) continue;
+    const childPath = [...fieldPath, key];
+    const childId = `${id}.${key}`;
+    if (typeof child === 'string' && options.allowedKeys.has(key) && isSourceLikeValue(child)) {
+      descriptors.push({
+        id: childId,
+        role: inferSourceRole(key, child),
+        path: child,
+        fieldPath: childPath,
+        allowRemote: key.toLowerCase().includes('uri') || key.toLowerCase().includes('url'),
+      });
+      continue;
+    }
+    visitObjectPathSources(child, childId, childPath, options, descriptors);
+  }
+}
+
+function replaceObjectPathSources<TDocument>(
+  document: TDocument,
+  replacements: readonly ProjectSourceReplacement[],
+): TDocument {
+  let next: unknown = document;
+  for (const replacement of replacements) {
+    next = replaceAtFieldPath(next, replacement.descriptor.fieldPath, replacement.path);
+  }
+  return next as TDocument;
+}
+
+function replaceAtFieldPath(
+  value: unknown,
+  fieldPath: readonly (string | number)[],
+  replacement: string,
+): unknown {
+  if (fieldPath.length === 0) return replacement;
+  const [head, ...rest] = fieldPath;
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      index === head ? replaceAtFieldPath(item, rest, replacement) : item,
+    );
+  }
+  if (!isPlainRecord(value) || typeof head !== 'string') return value;
+  return {
+    ...value,
+    [head]: replaceAtFieldPath(value[head], rest, replacement),
+  };
+}
+
+function isSourceLikeValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 4096) return false;
+  if (trimmed.startsWith('data:')) return false;
+  return (
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('${') ||
+    /^[A-Za-z]:[\\/]/.test(trimmed) ||
+    /^https?:\/\//i.test(trimmed) ||
+    /\.[A-Za-z0-9]{2,8}(?:[?#].*)?$/.test(trimmed)
+  );
+}
+
+function inferSourceRole(key: string, value: string): ProjectSourceDescriptor['role'] {
+  const lower = `${key} ${value}`.toLowerCase();
+  if (lower.includes('audio') || /\.(wav|mp3|flac|ogg|m4a|aac)$/i.test(value)) return 'audio';
+  if (lower.includes('model') || /\.(glb|gltf|vrm|fbx|obj)$/i.test(value)) return 'model';
+  if (lower.includes('project') || /\.(nkv|nkc|nks|nkp|nkm|nka)$/i.test(value)) return 'project';
+  if (lower.includes('document') || lower.includes('docpath')) return 'document';
+  if (/\.(png|jpe?g|webp|gif|bmp|svg|hdr|exr)$/i.test(value)) return 'image';
+  return 'media';
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
