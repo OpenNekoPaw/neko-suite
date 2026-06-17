@@ -11,6 +11,7 @@ export type {
   CreativeLeftRailVisibilityTarget,
   CreativeLeftRailProps,
   CreativeWorkbenchControlledRightDockProps,
+  CreativeWorkbenchRightDockContainerProps,
   CreativeWorkbenchMainKind,
   CreativeWorkbenchPersistedRightDockProps,
   CreativeWorkbenchRightDockProps,

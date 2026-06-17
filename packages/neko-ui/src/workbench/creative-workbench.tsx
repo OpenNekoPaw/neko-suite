@@ -1,5 +1,6 @@
 import type React from 'react';
 import { usePersistedResize, useResizable } from '../hooks';
+import type { PersistedResizeOptions } from '../hooks';
 import {
   ResizeHandle,
   ToolbarButton,
@@ -43,12 +44,18 @@ export interface CreativeWorkbenchShellProps {
   readonly bottomPanelClassName?: string;
 }
 
+export type CreativeWorkbenchRightDockContainerProps = Omit<
+  React.HTMLAttributes<HTMLElement> & Record<`data-${string}`, string | undefined>,
+  'aria-label' | 'children' | 'className' | 'id' | 'role' | 'style'
+>;
+
 interface CreativeWorkbenchRightDockBaseProps {
   readonly id: string;
   readonly children: React.ReactNode;
   readonly className?: string;
   readonly contentClassName?: string;
   readonly resizeHandleClassName?: string;
+  readonly containerProps?: CreativeWorkbenchRightDockContainerProps;
   readonly label?: string;
   readonly role?: React.AriaRole;
   readonly minSize?: number;
@@ -66,6 +73,7 @@ export interface CreativeWorkbenchControlledRightDockProps extends CreativeWorkb
 export interface CreativeWorkbenchPersistedRightDockProps extends CreativeWorkbenchRightDockBaseProps {
   readonly panelId: string;
   readonly defaultSize: number;
+  readonly resizePersistence?: Pick<PersistedResizeOptions, 'api' | 'persistDebounceMs'>;
   readonly size?: never;
   readonly onSizeChange?: never;
 }
@@ -173,14 +181,20 @@ function CreativeWorkbenchRightDock(props: CreativeWorkbenchRightDockProps): Rea
 function CreativeWorkbenchPersistedRightDock(
   props: CreativeWorkbenchPersistedRightDockProps,
 ): React.ReactElement {
-  const resize = usePersistedResize(props.panelId, props.defaultSize, {
-    minSize: props.minSize,
-    maxSize: props.maxSize,
-  });
+  const { resizePersistence, ...surfaceProps } = props;
+  const resize = usePersistedResize(
+    props.panelId,
+    props.defaultSize,
+    {
+      minSize: props.minSize,
+      maxSize: props.maxSize,
+    },
+    resizePersistence,
+  );
 
   return (
     <CreativeWorkbenchRightDockSurface
-      {...props}
+      {...surfaceProps}
       size={resize.size}
       onSizeChange={resize.setSize}
     />
@@ -208,6 +222,7 @@ function CreativeWorkbenchRightDockSurface({
   children,
   className,
   contentClassName,
+  containerProps,
   disabled,
   id,
   label,
@@ -230,6 +245,7 @@ function CreativeWorkbenchRightDockSurface({
 
   return (
     <aside
+      {...containerProps}
       id={id}
       ref={containerRef}
       aria-label={label}
