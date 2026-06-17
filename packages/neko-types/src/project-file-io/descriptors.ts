@@ -1,5 +1,11 @@
 import type { AudioProjectData } from '../types/audioProject';
-import type { NkmProjectData } from '../types/model-project';
+import type {
+  NkmLiveActorRef,
+  NkmProjectData,
+  NkmScene2DParallaxLayer,
+  NkmScene2DSprite,
+  NkmScene2DTilemap,
+} from '../types/model-project';
 import type { ProjectData } from '../types/project';
 import type { NkpProjectData } from '../types/puppet';
 import type {
@@ -128,21 +134,55 @@ export const nkpSourcePathPolicy: PortableSourcePathPolicy<NkpProjectData> = {
 
 export const nkmSourcePathPolicy: PortableSourcePathPolicy<NkmProjectData> = {
   listSources(document) {
-    if (!document.model.src) return [];
-    return [
-      {
+    const descriptors: ProjectSourceDescriptor[] = [];
+    if (document.model.src) {
+      descriptors.push({
         id: 'model.src',
         role: 'model',
         path: document.model.src,
         fieldPath: ['model', 'src'],
-      },
-    ];
+      });
+    }
+    document.scene2d?.sprites?.forEach((sprite, index) => {
+      descriptors.push({
+        id: `scene2d.sprites.${index}.assetRef`,
+        role: 'image',
+        path: sprite.assetRef,
+        fieldPath: ['scene2d', 'sprites', index, 'assetRef'],
+      });
+    });
+    document.scene2d?.tilemaps?.forEach((tilemap, index) => {
+      descriptors.push({
+        id: `scene2d.tilemaps.${index}.tilesetRef`,
+        role: 'image',
+        path: tilemap.tilesetRef,
+        fieldPath: ['scene2d', 'tilemaps', index, 'tilesetRef'],
+      });
+    });
+    document.scene2d?.parallaxLayers?.forEach((layer, index) => {
+      descriptors.push({
+        id: `scene2d.parallaxLayers.${index}.assetRef`,
+        role: 'image',
+        path: layer.assetRef,
+        fieldPath: ['scene2d', 'parallaxLayers', index, 'assetRef'],
+      });
+    });
+    document.live?.actors?.forEach((actor, index) => {
+      descriptors.push({
+        id: `live.actors.${index}.ref`,
+        role: 'puppet',
+        path: actor.ref,
+        fieldPath: ['live', 'actors', index, 'ref'],
+      });
+    });
+    return descriptors;
   },
   replaceSources(document, replacements) {
-    const modelSrc = replacements.find(
-      (replacement) => replacement.descriptor.id === 'model.src',
-    )?.path;
-    return modelSrc ? { ...document, model: { ...document.model, src: modelSrc } } : document;
+    let next: NkmProjectData = document;
+    for (const replacement of replacements) {
+      next = replaceNkmSource(next, replacement);
+    }
+    return next;
   },
 };
 
@@ -246,7 +286,267 @@ function replaceNkpSource(
             },
           }
         : document;
+    case 'puppet.bundle.manifest':
+      return document.puppet.bundle
+        ? {
+            ...document,
+            puppet: {
+              ...document.puppet,
+              bundle: {
+                ...document.puppet.bundle,
+                manifest: {
+                  ...document.puppet.bundle.manifest,
+                  bundlePath: replacement.path,
+                  fragmentRef: `${replacement.path}#${document.puppet.bundle.manifest.entryPath}`,
+                },
+              },
+            },
+          }
+        : document;
+    case 'puppet.bundle.moc':
+      return document.puppet.bundle
+        ? {
+            ...document,
+            puppet: {
+              ...document.puppet,
+              bundle: {
+                ...document.puppet.bundle,
+                moc: {
+                  ...document.puppet.bundle.moc,
+                  bundlePath: replacement.path,
+                  fragmentRef: `${replacement.path}#${document.puppet.bundle.moc.entryPath}`,
+                },
+              },
+            },
+          }
+        : document;
+    case 'bundleIndex.manifest':
+      return document.bundleIndex
+        ? {
+            ...document,
+            bundleIndex: {
+              ...document.bundleIndex,
+              manifest: {
+                ...document.bundleIndex.manifest,
+                bundlePath: replacement.path,
+                fragmentRef: `${replacement.path}#${document.bundleIndex.manifest.entryPath}`,
+              },
+            },
+          }
+        : document;
+    case 'bundleIndex.moc':
+      return document.bundleIndex
+        ? {
+            ...document,
+            bundleIndex: {
+              ...document.bundleIndex,
+              moc: {
+                ...document.bundleIndex.moc,
+                bundlePath: replacement.path,
+                fragmentRef: `${replacement.path}#${document.bundleIndex.moc.entryPath}`,
+              },
+            },
+          }
+        : document;
+    case 'bundleIndex.physics':
+      return document.bundleIndex?.physics
+        ? {
+            ...document,
+            bundleIndex: {
+              ...document.bundleIndex,
+              physics: {
+                ...document.bundleIndex.physics,
+                bundlePath: replacement.path,
+                fragmentRef: `${replacement.path}#${document.bundleIndex.physics.entryPath}`,
+              },
+            },
+          }
+        : document;
+    default:
+      return replaceNkpIndexedBundleSource(document, replacement);
+  }
+}
+
+function replaceNkpIndexedBundleSource(
+  document: NkpProjectData,
+  replacement: ProjectSourceReplacement,
+): NkpProjectData {
+  if (!document.bundleIndex) return document;
+  const [collection, index] = parseIndexedBundleSourceId(replacement.descriptor.id);
+  if (!collection || index === undefined) return document;
+
+  switch (collection) {
+    case 'textures':
+      return {
+        ...document,
+        bundleIndex: {
+          ...document.bundleIndex,
+          textures: document.bundleIndex.textures.map((entry, entryIndex) =>
+            entryIndex === index
+              ? {
+                  ...entry,
+                  locator: {
+                    ...entry.locator,
+                    bundlePath: replacement.path,
+                    fragmentRef: `${replacement.path}#${entry.locator.entryPath}`,
+                  },
+                }
+              : entry,
+          ),
+        },
+      };
+    case 'motions':
+      return {
+        ...document,
+        bundleIndex: {
+          ...document.bundleIndex,
+          motions: document.bundleIndex.motions.map((entry, entryIndex) =>
+            entryIndex === index
+              ? {
+                  ...entry,
+                  locator: {
+                    ...entry.locator,
+                    bundlePath: replacement.path,
+                    fragmentRef: `${replacement.path}#${entry.locator.entryPath}`,
+                  },
+                }
+              : entry,
+          ),
+        },
+      };
+    case 'expressions':
+      return {
+        ...document,
+        bundleIndex: {
+          ...document.bundleIndex,
+          expressions: document.bundleIndex.expressions.map((entry, entryIndex) =>
+            entryIndex === index
+              ? {
+                  ...entry,
+                  locator: {
+                    ...entry.locator,
+                    bundlePath: replacement.path,
+                    fragmentRef: `${replacement.path}#${entry.locator.entryPath}`,
+                  },
+                }
+              : entry,
+          ),
+        },
+      };
     default:
       return document;
   }
+}
+
+function parseIndexedBundleSourceId(
+  id: string,
+): readonly ['textures' | 'motions' | 'expressions' | undefined, number | undefined] {
+  const match = id.match(/^bundleIndex\.(textures|motions|expressions)\.(\d+)\.locator$/);
+  if (!match) return [undefined, undefined];
+  return [match[1] as 'textures' | 'motions' | 'expressions', Number(match[2])];
+}
+
+function replaceNkmSource(
+  document: NkmProjectData,
+  replacement: ProjectSourceReplacement,
+): NkmProjectData {
+  switch (replacement.descriptor.id) {
+    case 'model.src':
+      return { ...document, model: { ...document.model, src: replacement.path } };
+    default:
+      return replaceNkmIndexedSource(document, replacement);
+  }
+}
+
+function replaceNkmIndexedSource(
+  document: NkmProjectData,
+  replacement: ProjectSourceReplacement,
+): NkmProjectData {
+  const [section, index] = parseNkmIndexedSourceId(replacement.descriptor.id);
+  if (!section || index === undefined) return document;
+
+  switch (section) {
+    case 'sprites':
+      return {
+        ...document,
+        scene2d: document.scene2d
+          ? {
+              ...document.scene2d,
+              sprites: replaceIndexedAssetRef<NkmScene2DSprite>(
+                document.scene2d.sprites,
+                index,
+                'assetRef',
+                replacement.path,
+              ),
+            }
+          : document.scene2d,
+      };
+    case 'tilemaps':
+      return {
+        ...document,
+        scene2d: document.scene2d
+          ? {
+              ...document.scene2d,
+              tilemaps: replaceIndexedAssetRef<NkmScene2DTilemap>(
+                document.scene2d.tilemaps,
+                index,
+                'tilesetRef',
+                replacement.path,
+              ),
+            }
+          : document.scene2d,
+      };
+    case 'parallaxLayers':
+      return {
+        ...document,
+        scene2d: document.scene2d
+          ? {
+              ...document.scene2d,
+              parallaxLayers: replaceIndexedAssetRef<NkmScene2DParallaxLayer>(
+                document.scene2d.parallaxLayers,
+                index,
+                'assetRef',
+                replacement.path,
+              ),
+            }
+          : document.scene2d,
+      };
+    case 'actors':
+      return {
+        ...document,
+        live: document.live
+          ? {
+              ...document.live,
+              actors: replaceIndexedAssetRef<NkmLiveActorRef>(
+                document.live.actors,
+                index,
+                'ref',
+                replacement.path,
+              ),
+            }
+          : document.live,
+      };
+    default:
+      return document;
+  }
+}
+
+function parseNkmIndexedSourceId(
+  id: string,
+): readonly ['sprites' | 'tilemaps' | 'parallaxLayers' | 'actors' | undefined, number | undefined] {
+  const match = id.match(/^(?:scene2d\.)?(sprites|tilemaps|parallaxLayers|actors)\.(\d+)\./);
+  if (!match) return [undefined, undefined];
+  return [match[1] as 'sprites' | 'tilemaps' | 'parallaxLayers' | 'actors', Number(match[2])];
+}
+
+function replaceIndexedAssetRef<TEntry extends Record<TKey, string>, TKey extends keyof TEntry>(
+  entries: readonly TEntry[] | undefined,
+  index: number,
+  key: TKey,
+  value: string,
+): readonly TEntry[] | undefined {
+  if (!entries) return entries;
+  return entries.map((entry, entryIndex) =>
+    entryIndex === index ? { ...entry, [key]: value } : entry,
+  );
 }

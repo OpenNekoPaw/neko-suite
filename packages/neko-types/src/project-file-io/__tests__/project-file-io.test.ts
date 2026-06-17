@@ -243,6 +243,71 @@ describe('default project format codecs', () => {
       expect.arrayContaining(['tilemaps', 'sceneCamera']),
     );
   });
+
+  it('loads .nkm profile: live actor refs without copying puppet truth', async () => {
+    const store = new ProjectFileStore({
+      registry: createDefaultProjectFormatCodecRegistry(),
+      fileOps: createMemoryFileOps({
+        '/project/stage.nkm': JSON.stringify({
+          version: 2,
+          name: 'Live Stage',
+          profile: 'live',
+          model: { src: null },
+          live: {
+            actors: [{ id: 'actor-sakura', ref: './sakura.nkp', role: 'host' }],
+            routes: [{ id: 'route-1', source: 'camera-1', target: 'actor-sakura' }],
+          },
+          faceParams: {},
+          customClips: [],
+          camera: null,
+          viewport: { zoom: 1 },
+          editorState: {},
+        }),
+      }),
+    });
+
+    const result = await store.load({ filePath: '/project/stage.nkm' });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.document).toMatchObject({
+      profile: 'live',
+      live: { actors: [{ id: 'actor-sakura', ref: './sakura.nkp' }] },
+    });
+  });
+
+  it('rejects .nkm profile: live actor entries that embed puppet parameter truth', async () => {
+    const store = new ProjectFileStore({
+      registry: createDefaultProjectFormatCodecRegistry(),
+      fileOps: createMemoryFileOps({
+        '/project/stage.nkm': JSON.stringify({
+          version: 2,
+          name: 'Live Stage',
+          profile: 'live',
+          model: { src: null },
+          live: {
+            actors: [
+              {
+                id: 'actor-sakura',
+                ref: './sakura.nkp',
+                parameters: { ParamAngleX: 0.4 },
+              },
+            ],
+          },
+          faceParams: {},
+          customClips: [],
+          camera: null,
+          viewport: { zoom: 1 },
+          editorState: {},
+        }),
+      }),
+    });
+
+    const result = await store.load({ filePath: '/project/stage.nkm' });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain('invalid-document');
+  });
 });
 
 describe('portable source path policy', () => {

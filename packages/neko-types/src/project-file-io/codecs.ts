@@ -479,8 +479,32 @@ function isNkmScene2DState(value: unknown): boolean {
 function isNkmLiveStageState(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (
-    (value['actors'] === undefined || Array.isArray(value['actors'])) &&
-    (value['routes'] === undefined || Array.isArray(value['routes']))
+    (value['actors'] === undefined ||
+      (Array.isArray(value['actors']) && value['actors'].every(isNkmLiveActorRef))) &&
+    (value['routes'] === undefined ||
+      (Array.isArray(value['routes']) && value['routes'].every(isNkmLiveRoute)))
+  );
+}
+
+function isNkmLiveActorRef(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    typeof value['ref'] === 'string' &&
+    (value['role'] === undefined || typeof value['role'] === 'string') &&
+    value['parameters'] === undefined &&
+    value['motions'] === undefined &&
+    value['expressions'] === undefined &&
+    value['physics'] === undefined
+  );
+}
+
+function isNkmLiveRoute(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    typeof value['source'] === 'string' &&
+    typeof value['target'] === 'string'
   );
 }
 
