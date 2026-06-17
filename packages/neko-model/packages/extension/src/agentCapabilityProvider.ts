@@ -1,7 +1,7 @@
 /**
  * NekoModel Agent Capability Provider
  *
- * Exposes 3D scene query and editing tools through the shared
+ * Exposes 2D/3D/Live Scene query and editing tools through the shared
  * AgentCapabilityProvider protocol. Scene lifecycle and mutation authority stay
  * owned by NekoModelAPI in the Extension Host.
  */
@@ -38,7 +38,7 @@ type ParseResult<T> = ParseOk<T> | ParseFailure;
 const MODEL_QUERY_BEFORE_MUTATE = {
   preferredQueryTools: [TOOL_NAMES_MODEL.MODEL_SCENE_QUERY],
   reason:
-    'Query the active scene first to obtain stable node, material, and animation identifiers before mutating model state.',
+    'Query the active .nkm Scene first to obtain stable node, material, and animation identifiers before mutating scene state.',
 } as const;
 
 export function createNekoModelCapabilityProvider(api: NekoModelAPI): AgentCapabilityProvider {
@@ -63,7 +63,7 @@ class NekoModelCapabilityProvider implements AgentCapabilityProvider {
     return {
       name: TOOL_NAMES_MODEL.MODEL_SCENE_QUERY,
       description:
-        'Query the active 3D model scene graph, one node, or available animations. Use this read-only tool before model mutations to obtain stable IDs.',
+        'Query the active .nkm Scene graph for 2D, 3D, or Live Stage profiles, one node, or available animations. Use this read-only tool before scene mutations to obtain stable IDs.',
       category: 'analysis',
       isReadOnly: true,
       isConcurrencySafe: true,
@@ -114,7 +114,7 @@ class NekoModelCapabilityProvider implements AgentCapabilityProvider {
     return {
       name: TOOL_NAMES_MODEL.MODEL_NODE_MANIPULATE,
       description:
-        'Mutate active 3D model scene nodes: set transform, set visibility, or update material parameters. Query the scene first and pass stable target IDs.',
+        'Mutate active .nkm Scene nodes: set transform, set visibility, or update material parameters. Generic 2D Scene creation targets neko-model, not neko-puppet. Query the scene first and pass stable target IDs.',
       category: 'project',
       safetyKind: 'non-destructive-mutation',
       targetRequirements: {
@@ -233,7 +233,7 @@ class NekoModelCapabilityProvider implements AgentCapabilityProvider {
     return {
       name: TOOL_NAMES_MODEL.MODEL_ANIMATION_CONTROL,
       description:
-        'Control active 3D model animation playback. Use model_scene_query with query=animations before play or seek operations.',
+        'Control active .nkm Scene animation playback. Use model_scene_query with query=animations before play or seek operations.',
       category: 'project',
       safetyKind: 'non-destructive-mutation',
       targetRequirements: {

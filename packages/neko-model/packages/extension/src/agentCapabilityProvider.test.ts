@@ -33,6 +33,12 @@ describe('createNekoModelCapabilityProvider', () => {
         preferredQueryTools: [TOOL_NAMES_MODEL.MODEL_SCENE_QUERY],
       },
     });
+    expect(byName.get(TOOL_NAMES_MODEL.MODEL_SCENE_QUERY)?.description).toContain(
+      '2D, 3D, or Live Stage profiles',
+    );
+    expect(byName.get(TOOL_NAMES_MODEL.MODEL_NODE_MANIPULATE)?.description).toContain(
+      'Generic 2D Scene creation targets neko-model',
+    );
   });
 
   it('queries scene graph and reports unavailable host diagnostics', async () => {
