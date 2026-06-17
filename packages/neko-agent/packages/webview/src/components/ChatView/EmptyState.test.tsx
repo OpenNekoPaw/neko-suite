@@ -29,9 +29,13 @@ describe('EmptyState', () => {
     expect(screen.getByRole('button', { name: /Help me optimize the timeline/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Write a narration script/ })).toBeTruthy();
     expect(document.querySelector('.agent-empty-state')).toBeTruthy();
-    expect(document.querySelector('.agent-empty-panel')?.className).toContain('max-w-[420px]');
+    expect(document.querySelector('.agent-empty-panel')?.className).toContain(
+      'max-w-[min(840px,100%)]',
+    );
+    expect(document.querySelector('.agent-empty-panel')?.className).toContain('min-w-0');
     expect(document.querySelectorAll('.agent-empty-action')).toHaveLength(3);
     expect(document.querySelectorAll('.agent-empty-action-icon')).toHaveLength(3);
+    expect(document.querySelector('.agent-empty-action')?.className).toContain('min-w-0');
   });
 
   it('passes the selected suggestion text to the input handler', () => {

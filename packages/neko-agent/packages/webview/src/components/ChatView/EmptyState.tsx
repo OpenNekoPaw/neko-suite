@@ -17,7 +17,7 @@ export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
   return (
     <div className="agent-empty-state flex h-full min-h-[260px] select-none items-start justify-center px-3 py-5 sm:px-4 sm:py-7">
       <section
-        className="agent-empty-panel w-full max-w-[420px]"
+        className="agent-empty-panel w-full min-w-0 max-w-[min(840px,100%)]"
         aria-labelledby="neko-agent-empty-title"
       >
         <div className="min-w-0">
@@ -38,7 +38,7 @@ export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
               key={suggestion}
               type="button"
               onClick={() => onSuggestionClick?.(suggestion)}
-              className="agent-empty-action group flex min-h-9 w-full cursor-pointer items-center rounded-md border border-[var(--agent-empty-action-border)] bg-[var(--agent-empty-action-bg)] px-3 py-2 text-left text-[12px] leading-5 text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-empty-action-hover-border)] hover:bg-[var(--agent-empty-action-hover-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--agent-accent)]"
+              className="agent-empty-action group flex min-h-9 w-full min-w-0 cursor-pointer items-center rounded-md border border-[var(--agent-empty-action-border)] bg-[var(--agent-empty-action-bg)] px-3 py-2 text-left text-[12px] leading-5 text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-empty-action-hover-border)] hover:bg-[var(--agent-empty-action-hover-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--agent-accent)]"
             >
               <span className="min-w-0 flex-1 break-words">{suggestion}</span>
               <ArrowRightIcon className="agent-empty-action-icon ml-2 h-3.5 w-3.5 flex-shrink-0" />
