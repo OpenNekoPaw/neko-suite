@@ -1143,6 +1143,59 @@ body {
   gap: 2px;
 }
 
+.agent-composer-control-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px 5px;
+}
+
+.agent-composer-control-group {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--agent-composer-rail-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--agent-composer-bg) 58%, transparent);
+}
+
+.agent-composer-control-group-mode {
+  flex: 0 1 auto;
+  max-width: min(46%, 260px);
+}
+
+.agent-composer-control-group-config {
+  flex: 1 1 0;
+  justify-content: flex-end;
+}
+
+.agent-composer-control-group-config .agent-generation-params {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .agent-composer-control-row {
+    flex-wrap: wrap;
+  }
+
+  .agent-composer-control-group-mode,
+  .agent-composer-control-group-config {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .agent-composer-control-group-config {
+    justify-content: flex-start;
+  }
+
+  .agent-composer-control-group-config .agent-generation-params {
+    justify-content: flex-start;
+  }
+}
+
 .agent-dropdown-menu {
   z-index: 50;
   width: var(--agent-overlay-inline-size);

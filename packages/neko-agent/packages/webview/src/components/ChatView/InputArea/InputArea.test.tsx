@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { cloneElement, isValidElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload, ChatModelOption, MessageAttachment } from '@neko/shared';
@@ -85,10 +85,14 @@ describe('InputArea composer controls', () => {
 
     expect(screen.queryByText('LLM')).toBeNull();
     expect(screen.queryByText('生成')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Agent' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '选择模型' })).toBeTruthy();
+    const modeGroup = screen.getByRole('group', { name: '模式与模型' });
+    const paramsGroup = screen.getByRole('group', { name: '工具参数' });
+    expect(modeGroup.className).toContain('agent-composer-control-group-mode');
+    expect(paramsGroup.className).toContain('agent-composer-control-group-config');
+    expect(within(modeGroup).getByRole('button', { name: 'Agent' })).toBeTruthy();
+    expect(within(modeGroup).getByRole('button', { name: '选择模型' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /图片/ })).toBeTruthy();
-    expect(screen.getByTitle('Image Provider / Model Image')).toBeTruthy();
+    expect(within(paramsGroup).getByTitle('Image Provider / Model Image')).toBeTruthy();
     expect(screen.getByTitle('添加附件').className).toContain('agent-composer-tool-button');
     expect(screen.getByTitle('命令').className).toContain('agent-composer-tool-button');
     expect(document.querySelector('.agent-composer-toolbar')).toBeTruthy();

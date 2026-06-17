@@ -589,42 +589,48 @@ export function InputArea({
 
       <div className="agent-composer-rail">
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
-        <div className="flex items-center px-2 py-1 gap-0.5">
-          {/* Left: session mode */}
-          {inputAreaProjection.showSessionModeSelector && (
-            <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
-          )}
-
-          {/* Model selector — contextual based on session mode */}
-          {inputAreaProjection.showChatModelSelector ? (
-            <ModelSelector
-              selectedModel={selectedModel}
-              models={availableModels}
-              onSelect={onModelSelect}
-            />
-          ) : (
-            inputAreaProjection.showSessionMediaModelSelector &&
-            sessionMediaPicker && (
-              <CategoryChip
-                category={sessionMediaPicker.category}
-                Icon={MEDIA_CATEGORY_ICONS[sessionMediaPicker.category]}
-                selectedId={sessionMediaPicker.selectedId}
-                models={sessionMediaPicker.models}
-                onSelect={(modelId) => onMediaModelSelect(sessionMediaPicker.category, modelId)}
-              />
-            )
-          )}
-
-          <div className="flex-1" />
-
-          {/* Separator */}
+        <div className="agent-composer-control-row">
           <div
-            className="w-px h-3.5 mx-1 opacity-30"
-            style={{ background: 'var(--agent-composer-rail-border)' }}
-          />
+            className="agent-composer-control-group agent-composer-control-group-mode"
+            role="group"
+            aria-label={t('chat.input.control.mode')}
+          >
+            {/* Left: session mode */}
+            {inputAreaProjection.showSessionModeSelector && (
+              <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+            )}
+
+            {/* Model selector — contextual based on session mode */}
+            {inputAreaProjection.showChatModelSelector ? (
+              <ModelSelector
+                selectedModel={selectedModel}
+                models={availableModels}
+                onSelect={onModelSelect}
+              />
+            ) : (
+              inputAreaProjection.showSessionMediaModelSelector &&
+              sessionMediaPicker && (
+                <CategoryChip
+                  category={sessionMediaPicker.category}
+                  Icon={MEDIA_CATEGORY_ICONS[sessionMediaPicker.category]}
+                  selectedId={sessionMediaPicker.selectedId}
+                  models={sessionMediaPicker.models}
+                  onSelect={(modelId) => onMediaModelSelect(sessionMediaPicker.category, modelId)}
+                />
+              )
+            )}
+          </div>
 
           {/* Right: generation params (media model integrated in agent mode) */}
-          {inputAreaProjection.showGenerationParams && <GenerationParamsBar />}
+          {inputAreaProjection.showGenerationParams && (
+            <div
+              className="agent-composer-control-group agent-composer-control-group-config"
+              role="group"
+              aria-label={t('chat.input.control.params')}
+            >
+              <GenerationParamsBar />
+            </div>
+          )}
         </div>
 
         {/* Ambient canvas reference — mirrors @ quick references above the composer. */}
