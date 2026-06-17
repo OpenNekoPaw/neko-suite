@@ -9,7 +9,10 @@ import {
   createProjectFileDiagnostic,
   detectRuntimeOrCacheSourceHandle,
   handleProjectSourceAddRequest,
+  nkaSourcePathPolicy,
+  nkcSourcePathPolicy,
   nkpSourcePathPolicy,
+  nksSourcePathPolicy,
   nkmSourcePathPolicy,
   nkvSourcePathPolicy,
   resolveProjectSourceDiagnostics,
@@ -512,6 +515,110 @@ describe('source descriptor helpers', () => {
 
     expect(nkpSources.map((source) => source.id)).toContain('puppet.src');
     expect(nkmSources.map((source) => source.id)).toContain('model.src');
+  });
+
+  it('lists and replaces nkc source fields while nks has no external source fields', () => {
+    const canvas = {
+      version: '2.1',
+      name: 'Canvas',
+      nodes: [
+        {
+          id: 'media-1',
+          type: 'media',
+          position: { x: 0, y: 0 },
+          size: { width: 320, height: 180 },
+          data: {
+            assetPath: '/workspace/project/media/hero.png',
+            prompt: 'do not treat prose as a path',
+          },
+        },
+      ],
+      connections: [],
+    };
+    const descriptors = nkcSourcePathPolicy.listSources(canvas);
+    const replaced = nkcSourcePathPolicy.replaceSources(canvas, [
+      { descriptor: descriptors[0]!, path: 'media/hero.png' },
+    ]);
+
+    expect(descriptors.map((descriptor) => descriptor.id)).toContain(
+      'canvas.nodes.0.data.assetPath',
+    );
+    expect(descriptors.map((descriptor) => descriptor.id)).not.toContain(
+      'canvas.nodes.0.data.prompt',
+    );
+    expect(
+      (replaced.nodes[0]?.data as { readonly assetPath?: string } | undefined)?.assetPath,
+    ).toBe('media/hero.png');
+    expect(
+      nksSourcePathPolicy.listSources({
+        version: '1.2',
+        canvas: { width: 100, height: 100, dpi: 72, backgroundColor: '#fff' },
+        layers: [],
+        brushPresets: [],
+        palette: [],
+        viewport: { panX: 0, panY: 0, zoom: 1 },
+      }),
+    ).toEqual([]);
+  });
+
+  it('stores nkc, nka, and nks documents through the shared lifecycle', async () => {
+    const files = createMemoryFileOps({
+      '/workspace/project/canvas.nkc': JSON.stringify({
+        version: '2.1',
+        name: 'Canvas',
+        nodes: [],
+        connections: [],
+      }),
+      '/workspace/project/audio.nka': JSON.stringify({
+        version: '2.1',
+        name: 'Audio',
+        sampleRate: 48000,
+        channels: 2,
+        duration: 0,
+        tracks: [],
+        masterEffectsChain: [],
+        markers: [],
+      }),
+      '/workspace/project/sketch.nks': JSON.stringify({
+        version: '1.2',
+        canvas: { width: 100, height: 100, dpi: 72, backgroundColor: '#fff' },
+        layers: [],
+        brushPresets: [],
+        palette: [],
+        viewport: { panX: 0, panY: 0, zoom: 1 },
+      }),
+    });
+    const store = new ProjectFileStore({
+      registry: createDefaultProjectFormatCodecRegistry(),
+      fileOps: files,
+    });
+
+    const canvas = await store.load({ filePath: '/workspace/project/canvas.nkc' });
+    const audio = await store.load({ filePath: '/workspace/project/audio.nka' });
+    const sketch = await store.load({ filePath: '/workspace/project/sketch.nks' });
+    const canvasSave = await store.save({
+      filePath: '/workspace/project/canvas.nkc',
+      formatId: 'nkc',
+      document: {
+        version: '2.1',
+        name: 'Saved Canvas',
+        nodes: [],
+        connections: [],
+      },
+      sourcePolicy: nkcSourcePathPolicy,
+      sourcePolicyOptions: {
+        context: {
+          owningWorkspaceRoot: '/workspace/project',
+          workspaceRoots: ['/workspace/project'],
+        },
+      },
+    });
+
+    expect(canvas.ok).toBe(true);
+    expect(audio.ok).toBe(true);
+    expect(sketch.ok).toBe(true);
+    expect(canvasSave.ok).toBe(true);
+    expect(files.readText('/workspace/project/canvas.nkc')).toContain('"name": "Saved Canvas"');
   });
 });
 

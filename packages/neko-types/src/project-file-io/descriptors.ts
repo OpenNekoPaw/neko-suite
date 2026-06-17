@@ -601,7 +601,6 @@ const RUNTIME_OR_INLINE_FIELD_KEYS = new Set([
   'base64',
   'cachePath',
   'cacheUri',
-  'data',
   'dataUrl',
   'fragmentRef',
   'html',
