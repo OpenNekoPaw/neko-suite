@@ -5,7 +5,7 @@
  * - PromptSyncHandler: Prompt CRUD + file system sync
  * - SkillSyncHandler: Skill file scanning + caching + enabled state
  * - ToolSkillHandler: ToolSkill registration + enabled state
- * - ConfigFileHandler: Config file import/watching + openUserConfigFile
+ * - ConfigFileHandler: openUserConfigFile
  */
 
 import * as vscode from 'vscode';
@@ -83,7 +83,7 @@ export class ConfigBridge implements vscode.Disposable {
     // Initialize domain handlers
     this.skillSync = new SkillSyncHandler(getSkillFileService(), context);
     this.toolSkill = new ToolSkillHandler(context);
-    this.configFile = new ConfigFileHandler(platform, this.activeWebviews);
+    this.configFile = new ConfigFileHandler();
 
     // Register disposable sub-handlers
     this.disposables.push(this.skillSync, this.configFile);
@@ -91,13 +91,6 @@ export class ConfigBridge implements vscode.Disposable {
     // Initialize all handlers
     this.skillSync.init();
     void this.configFile.init();
-
-    // Broadcast updated configState to webviews whenever ~/.neko/config.json changes
-    // (e.g. after neko-market installs an Ollama model and refreshModels writes new entries)
-    const unsubscribeConfig = platform.config.onUserConfigChange(() => {
-      void this.broadcastConfigBridgeQuery({ type: 'getConfig' });
-    });
-    this.disposables.push({ dispose: unsubscribeConfig });
 
     // Subscribe to neko-auth session changes and broadcast to all webviews.
     // Deferred async: neko-auth may not be activated yet when ConfigBridge constructs.
@@ -191,6 +184,10 @@ export class ConfigBridge implements vscode.Disposable {
     return this.toolSkill.getToolSkills();
   }
 
+  sendConfigState(postMessage: PostMessageFn): Promise<void> {
+    return this.postConfigBridgeQuery({ type: 'getConfig' }, postMessage);
+  }
+
   // ---- Private helpers ----
 
   private buildConfigState(): WebviewConfigState {
@@ -210,14 +207,6 @@ export class ConfigBridge implements vscode.Disposable {
     });
     if (result.message) {
       postMessage(result.message);
-    }
-  }
-
-  private broadcastConfigBridgeQuery(request: ConfigBridgeQueryRequest): void {
-    for (const postMessage of this.activeWebviews) {
-      void this.postConfigBridgeQuery(request, postMessage).catch((error) => {
-        logger.error(`Failed to broadcast ${request.type}:`, error);
-      });
     }
   }
 

@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   promptMode: 'default' as PromptMode,
   chatModelOptions: [],
   ssoSession: null,
+  configDiagnostic: undefined,
 };
 
 /**

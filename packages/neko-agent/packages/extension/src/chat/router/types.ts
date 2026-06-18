@@ -29,6 +29,7 @@ export interface ChatWebviewMessageRouterDeps {
   readonly slashCommandHandler: SlashCommandHandler;
   readonly conversationMessageHandler: ConversationMessageHandler;
   readonly dndBroker: DragDropBroker;
+  readonly refreshConfigSnapshot: () => void;
   readonly sendTabState: () => void;
   readonly updateTabState: (openTabs: OpenTab[], activeTabId: string | null) => void;
   readonly syncCanvasAmbientScopeFromActiveConversation: () => void;

@@ -578,7 +578,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           return;
         }
 
-        if (message.type === 'getConfig') {
+        if (message.type === 'getConfig' || message.type === 'refreshConfigSnapshot') {
           postPluginsAvailable(webview);
         }
 
@@ -618,6 +618,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           slashCommandHandler: this._slashCommandHandler,
           conversationMessageHandler: this._conversationMessageHandler,
           dndBroker: this._dndBroker,
+          refreshConfigSnapshot: () => this._refreshConfigSnapshot(webview, postMessageFn),
           sendTabState: () => this._sendTabState(),
           updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
           syncCanvasAmbientScopeFromActiveConversation: () =>
@@ -625,6 +626,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
       }),
     );
+  }
+
+  private _refreshConfigSnapshot(
+    webview: vscode.Webview,
+    postMessage: (message: unknown) => Thenable<boolean>,
+  ): void {
+    if (!this._platform) return;
+    this._platform.config.reloadConfig();
+    this._settingsHandler.sendSettings(webview);
+    void this._configBridge?.sendConfigState(postMessage);
   }
 
   // ============================================================================

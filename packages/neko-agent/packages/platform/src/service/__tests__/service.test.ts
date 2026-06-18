@@ -9,6 +9,8 @@ import { ConfigManager } from '../../config/config-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
 import type { ChatMessage, ChatResponse, Adapter, ChatChunk } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
+import type { IUserConfigManager } from '../../config/user-config';
+import type { ConfigReadResult } from '@neko/shared/config/config-reader';
 
 // Mock adapter
 const createMockAdapter = (responses: ChatResponse[] = []): Partial<Adapter> => {
@@ -79,6 +81,7 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
   const mockAdapter = adapter || createMockAdapter();
 
   const configManager = {
+    assertConfigAvailable: vi.fn(),
     getProvider: vi.fn((id: string) => mockProviders.find((p) => p.id === id)),
     getProviders: vi.fn(() => mockProviders),
     getEnabledProviders: vi.fn(() => mockProviders.filter((p) => p.enabled)),
@@ -112,6 +115,55 @@ function createMockConfig(adapter?: Partial<Adapter>): ServiceConfig {
   return {
     configManager,
     providerRegistry,
+  };
+}
+
+function createReadResultUserConfigManager(result: ConfigReadResult): IUserConfigManager {
+  return {
+    load: () => {
+      throw new Error('legacy load fallback should not be used');
+    },
+    loadRaw: () => {
+      throw new Error('legacy raw fallback should not be used');
+    },
+    loadRawResult: () => result,
+    save: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateProviderOverride: async () => {
+      throw new Error('write path should not be used');
+    },
+    addProvider: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeProvider: async () => {
+      throw new Error('write path should not be used');
+    },
+    addModel: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeModel: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateMCPServerOverride: async () => {
+      throw new Error('write path should not be used');
+    },
+    addMCPServer: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeMCPServer: async () => {
+      throw new Error('write path should not be used');
+    },
+    clear: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateScalar: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateScalars: async () => {
+      throw new Error('write path should not be used');
+    },
+    reload: () => {},
   };
 }
 
@@ -210,6 +262,46 @@ describe('Service', () => {
         service.chat([{ role: 'user', content: 'Hello' }], { modelId: 'non-existent' }),
       ).rejects.toThrow('Model non-existent not found');
     });
+
+    it('fails closed before provider fallback when the active config snapshot has an error', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error(
+            'Configuration file contains invalid JSON: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+          );
+        },
+      );
+      const service = new Service(config);
+
+      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
+        'Configuration file contains invalid JSON',
+      );
+      expect(adapter.chat).not.toHaveBeenCalled();
+      expect(config.configManager.getEnabledModels).not.toHaveBeenCalled();
+    });
+
+    it('reports missing provider configuration before model lookup can report MODEL_NOT_FOUND', async () => {
+      const configManager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/home/user/.neko/config.json',
+          config: {},
+        }),
+      });
+      const getEnabledModels = vi.spyOn(configManager, 'getEnabledModels');
+      const providerRegistry = new ProviderRegistry(configManager);
+      const adapter = createMockAdapter();
+      vi.spyOn(providerRegistry, 'getAdapter').mockReturnValue(adapter as Adapter);
+      const service = new Service({ configManager, providerRegistry });
+
+      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
+        'Agent configuration has no enabled providers',
+      );
+      expect(getEnabledModels).not.toHaveBeenCalled();
+      expect(adapter.chat).not.toHaveBeenCalled();
+    });
   });
 
   describe('chatStream', () => {
@@ -268,6 +360,22 @@ describe('Service', () => {
 
       expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow();
     });
+
+    it('fails closed before opening a stream when the active config snapshot has an error', () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Configuration file is empty: /home/user/.neko/config.json');
+        },
+      );
+      const service = new Service(config);
+
+      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow(
+        'Configuration file is empty',
+      );
+      expect(adapter.chatStream).not.toHaveBeenCalled();
+    });
   });
 
   describe('embed', () => {
@@ -307,6 +415,22 @@ describe('Service', () => {
       await expect(service.embed('Hello', { modelId: 'text-embedding-ada' })).rejects.toThrow(
         'does not support embeddings',
       );
+    });
+
+    it('fails closed before embedding when the active config snapshot has an error', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Unable to read configuration file: /home/user/.neko/config.json');
+        },
+      );
+      const service = new Service(config);
+
+      await expect(service.embed('Hello', { modelId: 'text-embedding-ada' })).rejects.toThrow(
+        'Unable to read configuration file',
+      );
+      expect(adapter.embed).not.toHaveBeenCalled();
     });
   });
 

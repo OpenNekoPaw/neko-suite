@@ -10,6 +10,10 @@ export function tryHandleSettingsRoute(
       deps.settingsHandler.sendSettings(deps.webview);
       return true;
 
+    case 'refreshConfigSnapshot':
+      deps.refreshConfigSnapshot();
+      return true;
+
     case 'updateSettings':
       void deps.settingsHandler.handleUpdateSettings(deps.webview, message.settings);
       return true;

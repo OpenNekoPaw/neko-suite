@@ -18,7 +18,6 @@ import type {
   SsoErrorMessage,
   SsoSessionChangedMessage,
 } from './messages';
-import { VSCodeMessages } from '@/messages';
 import {
   projectConfigStateMessage,
   projectMediaModelSelectionDefaults,
@@ -57,6 +56,10 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
       return defaultProjection.updated ? defaultProjection.selection : prev;
     });
   }
+
+  if (projection.configDiagnostic) {
+    context.setGlobalError(projection.configDiagnostic.message);
+  }
 };
 
 /**
@@ -89,6 +92,9 @@ const handleConfigState: MessageHandler<'configState'> = (message: ConfigStateMe
       ...prev,
       ...settingsPatch,
     }));
+    if (settingsPatch.configDiagnostic) {
+      context.setGlobalError(settingsPatch.configDiagnostic.message);
+    }
   }
 };
 
@@ -99,11 +105,7 @@ const handleConfigChanged: MessageHandler<'configChanged'> = (
   _message: ConfigChangedMessage,
   _context,
 ) => {
-  // Refresh both config AND settings when configuration changes
-  // getConfig() updates configuredProviders, models, etc.
-  // getSettings() updates chatModelOptions (model selector dropdown)
-  VSCodeMessages.getConfig();
-  VSCodeMessages.getSettings();
+  // Deprecated: Agent config is snapshot-loaded on session/tab open, not file-watch refresh.
 };
 
 /**

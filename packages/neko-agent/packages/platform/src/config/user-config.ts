@@ -10,12 +10,11 @@ import type { MCPServerPreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
-  readUserConfig as readUserConfigFile,
+  readUserConfigResult,
   writeUserConfig as writeUserConfigFile,
-  watchUserConfig as watchUserConfigFile,
   getUserConfigPath,
+  type ConfigReadResult,
 } from '@neko/shared/config/config-reader';
-import { ensureUserConfig } from './default-config';
 
 /**
  * User configuration structure
@@ -73,7 +72,15 @@ function unifiedToUserConfig(unified: UnifiedConfig | null): UserConfig {
  */
 function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
   // Read existing file to preserve scalar fields not managed by UserConfig
-  const existing = readUserConfigFile() ?? {};
+  const existingResult = readUserConfigResult();
+  const existing = existingResult.status === 'ok' ? existingResult.config : {};
+  if (
+    existingResult.status === 'empty' ||
+    existingResult.status === 'invalidJson' ||
+    existingResult.status === 'readError'
+  ) {
+    throw new Error(existingResult.diagnostic.message);
+  }
 
   return {
     ...existing,
@@ -95,6 +102,7 @@ function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
  */
 export interface IUserConfigManager {
   load(): UserConfig;
+  loadResult?(): UserConfigReadResult;
   save(config: UserConfig): Promise<void>;
   updateProviderOverride(providerId: string, override: Partial<Provider>): Promise<void>;
   addProvider(provider: Provider): Promise<void>;
@@ -108,11 +116,23 @@ export interface IUserConfigManager {
 
   /** Load raw UnifiedConfig (includes scalar fields like temperature, maxTokens, etc.) */
   loadRaw(): UnifiedConfig;
+  loadRawResult?(): ConfigReadResult;
   /** Update a single scalar field in the config file */
   updateScalar<K extends keyof UnifiedConfig>(key: K, value: UnifiedConfig[K]): Promise<void>;
   /** Update multiple scalar fields in the config file */
   updateScalars(updates: Partial<UnifiedConfig>): Promise<void>;
+  /** Explicitly refresh any cached file snapshot */
+  reload?(): void;
 }
+
+export type UserConfigReadResult =
+  | {
+      readonly status: 'ok';
+      readonly filePath: string;
+      readonly config: UserConfig;
+      readonly raw: UnifiedConfig;
+    }
+  | Exclude<ConfigReadResult, { readonly status: 'ok' }>;
 
 // =============================================================================
 // File-based User Config Manager
@@ -124,44 +144,33 @@ export interface IUserConfigManager {
  * This implementation reads from and writes to the unified config file,
  * allowing configuration to be shared with cli.
  *
- * On construction, ensures the default config file exists (first-run generation).
+ * Construction is side-effect free; callers own any explicit file writes.
  */
 export class FileUserConfigManager implements IUserConfigManager {
-  private stopWatching: (() => void) | null = null;
   private cachedConfig: UserConfig | null = null;
-  private onChangeCallback: ((config: UserConfig) => void) | null = null;
+  private cachedReadResult: ConfigReadResult | null = null;
 
-  constructor() {
-    // Ensure default config exists on first run
-    ensureUserConfig();
-
-    // Initialize file watcher
-    this.stopWatching = watchUserConfigFile((unified) => {
-      this.cachedConfig = unifiedToUserConfig(unified);
-      if (this.onChangeCallback) {
-        this.onChangeCallback(this.cachedConfig);
-      }
-    });
-  }
-
-  /**
-   * Set callback for config changes
-   */
-  onChange(callback: (config: UserConfig) => void): void {
-    this.onChangeCallback = callback;
-  }
+  constructor() {}
 
   /**
    * Load user configuration from file
    */
   load(): UserConfig {
-    if (this.cachedConfig) {
-      return this.cachedConfig;
-    }
+    const result = this.loadResult();
+    return result.status === 'ok' ? result.config : { ...DEFAULT_USER_CONFIG };
+  }
 
-    const unified = readUserConfigFile();
-    this.cachedConfig = unifiedToUserConfig(unified);
-    return this.cachedConfig;
+  loadResult(): UserConfigReadResult {
+    const result = this.loadRawResult();
+    if (result.status !== 'ok') {
+      return result;
+    }
+    return {
+      status: 'ok',
+      filePath: result.filePath,
+      config: unifiedToUserConfig(result.config),
+      raw: result.config,
+    };
   }
 
   /**
@@ -171,6 +180,11 @@ export class FileUserConfigManager implements IUserConfigManager {
     const unified = userToUnifiedConfig(config);
     writeUserConfigFile(unified);
     this.cachedConfig = config;
+    this.cachedReadResult = {
+      status: 'ok',
+      filePath: getUserConfigPath(),
+      config: unified,
+    };
   }
 
   // ==========================================================================
@@ -265,22 +279,37 @@ export class FileUserConfigManager implements IUserConfigManager {
   // ==========================================================================
 
   loadRaw(): UnifiedConfig {
-    return readUserConfigFile() ?? {};
+    const result = this.loadRawResult();
+    return result.status === 'ok' ? result.config : {};
+  }
+
+  loadRawResult(): ConfigReadResult {
+    if (!this.cachedReadResult) {
+      this.cachedReadResult = readUserConfigResult();
+      if (this.cachedReadResult.status === 'ok') {
+        this.cachedConfig = unifiedToUserConfig(this.cachedReadResult.config);
+      } else {
+        this.cachedConfig = null;
+      }
+    }
+    return this.cachedReadResult;
   }
 
   async updateScalar<K extends keyof UnifiedConfig>(
     key: K,
     value: UnifiedConfig[K],
   ): Promise<void> {
-    const raw = this.loadRaw();
+    const raw = this.loadRawForWrite();
     (raw as Record<string, unknown>)[key] = value;
     writeUserConfigFile(raw);
+    this.reload();
   }
 
   async updateScalars(updates: Partial<UnifiedConfig>): Promise<void> {
-    const raw = this.loadRaw();
+    const raw = this.loadRawForWrite();
     Object.assign(raw, updates);
     writeUserConfigFile(raw);
+    this.reload();
   }
 
   // ==========================================================================
@@ -291,14 +320,25 @@ export class FileUserConfigManager implements IUserConfigManager {
     await this.save({ ...DEFAULT_USER_CONFIG });
   }
 
+  reload(): void {
+    this.cachedConfig = null;
+    this.cachedReadResult = null;
+  }
+
   /**
    * Dispose resources
    */
-  dispose(): void {
-    if (this.stopWatching) {
-      this.stopWatching();
-      this.stopWatching = null;
+  dispose(): void {}
+
+  private loadRawForWrite(): UnifiedConfig {
+    const result = this.loadRawResult();
+    if (result.status === 'ok') {
+      return { ...result.config };
     }
+    if (result.status === 'missing') {
+      return {};
+    }
+    throw new Error(result.diagnostic.message);
   }
 }
 

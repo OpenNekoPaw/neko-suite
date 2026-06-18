@@ -430,9 +430,25 @@ describe('config message presenter', () => {
     expect(
       projectConfigStateMessage({
         type: 'configState',
-        config: { configuredProviders },
+        config: {
+          configuredProviders,
+          configDiagnostic: {
+            code: 'readError',
+            filePath: '/home/user/.neko/config.json',
+            message:
+              'Unable to read configuration file: /home/user/.neko/config.json. Check file permissions, then open a new Agent session or tab.',
+          },
+        },
       }),
-    ).toEqual({ configuredProviders });
+    ).toEqual({
+      configuredProviders,
+      configDiagnostic: {
+        code: 'readError',
+        filePath: '/home/user/.neko/config.json',
+        message:
+          'Unable to read configuration file: /home/user/.neko/config.json. Check file permissions, then open a new Agent session or tab.',
+      },
+    });
 
     expect(
       projectPluginCommandsMessage({

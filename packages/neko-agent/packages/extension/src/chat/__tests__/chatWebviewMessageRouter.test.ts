@@ -106,6 +106,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     dndBroker: {
       setPayload: vi.fn(),
     } as any,
+    refreshConfigSnapshot: vi.fn(),
     sendTabState: vi.fn(),
     updateTabState: vi.fn(),
     syncCanvasAmbientScopeFromActiveConversation: vi.fn(),
@@ -442,6 +443,15 @@ describe('handleChatWebviewMessage', () => {
     handleChatWebviewMessage({ type: 'getSkills' }, deps);
 
     expect(deps.skillHandler.sendSkillsList).toHaveBeenCalledWith(deps.webview);
+  });
+
+  it('routes lifecycle config snapshot refresh without calling settings directly', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'refreshConfigSnapshot' }, deps);
+
+    expect(deps.refreshConfigSnapshot).toHaveBeenCalledTimes(1);
+    expect(deps.settingsHandler.sendSettings).not.toHaveBeenCalled();
   });
 
   it('routes clearActiveSkill with explicit conversation context', () => {

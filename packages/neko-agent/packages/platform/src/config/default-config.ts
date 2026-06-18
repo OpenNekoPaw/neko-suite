@@ -1,13 +1,12 @@
 /**
  * Default Configuration
  *
- * Provides default user configuration for first-run generation.
- * When ~/.neko/config.json does not exist, this default is written out.
+ * Provides default user configuration data for explicit tooling.
+ * VS Code Agent runtime does not create or rewrite user config files.
  */
 
 import type { UnifiedConfig } from '@neko/shared';
 import type { ProviderConfig, ModelConfig } from '@neko/shared';
-import { readUserConfig, writeUserConfig } from '@neko/shared/config/config-reader';
 
 // =============================================================================
 // Default Providers (4)
@@ -253,14 +252,3 @@ export const DEFAULT_USER_CONFIG: UnifiedConfig = {
   models: DEFAULT_MODELS,
   mcpServers: [],
 };
-
-/**
- * Ensure user config file exists.
- * If ~/.neko/config.json does not exist, write the default config.
- */
-export function ensureUserConfig(): void {
-  const existing = readUserConfig();
-  if (existing) return;
-
-  writeUserConfig(DEFAULT_USER_CONFIG);
-}

@@ -13,9 +13,11 @@ import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
   readWorkspaceConfig as readWorkspaceConfigFile,
+  readWorkspaceConfigResult as readWorkspaceConfigFileResult,
   writeWorkspaceConfig as writeWorkspaceConfigFile,
   watchWorkspaceConfig as watchWorkspaceConfigFile,
   getWorkspaceConfigPath,
+  type ConfigReadResult,
 } from '@neko/shared/config/config-reader';
 
 /**
@@ -61,6 +63,17 @@ function workspaceToUnifiedConfig(workspace: WorkspaceConfig): UnifiedConfig {
 export function loadWorkspaceConfig(workspacePath: string): WorkspaceConfig | null {
   const unified = readWorkspaceConfigFile(workspacePath);
   return unifiedToWorkspaceConfig(unified);
+}
+
+export function loadWorkspaceConfigResult(workspacePath: string): {
+  raw: ConfigReadResult;
+  config: WorkspaceConfig | null;
+} {
+  const raw = readWorkspaceConfigFileResult(workspacePath);
+  return {
+    raw,
+    config: raw.status === 'ok' ? unifiedToWorkspaceConfig(raw.config) : null,
+  };
 }
 
 /**

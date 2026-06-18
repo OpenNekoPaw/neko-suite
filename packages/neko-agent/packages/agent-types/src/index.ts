@@ -326,6 +326,7 @@ export type {
   WebviewToExtensionMessage,
   WorkflowProjectionMessage,
 } from './webview-protocol';
+export type { AgentConfigDiagnostic, AgentConfigDiagnosticCode } from './config-diagnostic';
 export {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,

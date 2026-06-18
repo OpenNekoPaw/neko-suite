@@ -12,6 +12,7 @@ function createMockWebview() {
 function createMockPlatform() {
   return {
     config: {
+      reloadConfig: vi.fn(),
       getAssistantSettingsData: vi.fn().mockReturnValue({
         providers: [
           { id: 'anthropic', name: 'Anthropic', type: 'anthropic', models: [], enabled: true },
@@ -31,7 +32,7 @@ function createMockPlatform() {
         chatModelOptions: [],
         defaultMediaModels: {},
       }),
-      setAssistantSettingsFromWebview: vi.fn().mockResolvedValue(undefined),
+      applyRuntimeAssistantSettingsFromWebview: vi.fn().mockResolvedValue(undefined),
     },
   };
 }
@@ -61,6 +62,7 @@ describe('SettingsHandler', () => {
       });
       handler.sendSettings(webview as any);
 
+      expect(platform.config.reloadConfig).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'settingsData',
@@ -74,6 +76,19 @@ describe('SettingsHandler', () => {
       );
     });
 
+    it('should reload config only for explicit snapshot refresh calls', () => {
+      handler = new SettingsHandler({
+        platform: platform as any,
+      });
+
+      handler.sendSettings(webview as any, { reloadConfig: true });
+
+      expect(platform.config.reloadConfig).toHaveBeenCalledTimes(1);
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'settingsData' }),
+      );
+    });
+
     it('should expose platform-projected provider and media data', () => {
       platform.config.getAssistantSettingsData.mockReturnValue({
         ...platform.config.getAssistantSettingsData(),
@@ -84,6 +99,7 @@ describe('SettingsHandler', () => {
       });
       handler.sendSettings(webview as any);
 
+      expect(platform.config.reloadConfig).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           providers: expect.any(Array),
@@ -105,7 +121,7 @@ describe('SettingsHandler', () => {
       };
       await handler.handleUpdateSettings(webview as any, update);
 
-      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'settingsUpdated',
         success: true,
@@ -123,7 +139,7 @@ describe('SettingsHandler', () => {
       };
       await handler.handleUpdateSettings(webview as any, update);
 
-      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
     it('should update numeric settings', async () => {
@@ -136,7 +152,7 @@ describe('SettingsHandler', () => {
       };
       await handler.handleUpdateSettings(webview as any, update);
 
-      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
     it('should update execution mode', async () => {
@@ -146,7 +162,7 @@ describe('SettingsHandler', () => {
       const update = { executionMode: 'plan' };
       await handler.handleUpdateSettings(webview as any, update);
 
-      expect(platform.config.setAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
     it('should report failure when platform is unavailable', async () => {
@@ -163,7 +179,7 @@ describe('SettingsHandler', () => {
     });
 
     it('should report failure when platform rejects settings update', async () => {
-      platform.config.setAssistantSettingsFromWebview.mockRejectedValue(
+      platform.config.applyRuntimeAssistantSettingsFromWebview.mockRejectedValue(
         new Error('Config write failed'),
       );
       handler = new SettingsHandler({

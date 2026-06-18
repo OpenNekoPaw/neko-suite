@@ -82,6 +82,11 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'getSettings' });
   },
 
+  /** Request a lifecycle-scoped config/settings snapshot */
+  refreshConfigSnapshot: () => {
+    postWebviewMessage({ type: 'refreshConfigSnapshot' });
+  },
+
   /** Clear all conversation history */
   clearHistory: (conversationId: string) => {
     postWebviewMessage({ type: 'clearHistory', conversationId });

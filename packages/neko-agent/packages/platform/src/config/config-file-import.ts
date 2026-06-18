@@ -47,6 +47,7 @@ export type ProviderCredentialConfigFileImportRuntimeResult =
     };
 
 export interface ProviderCredentialConfigFileChangeRuntimeEffects extends ProviderCredentialConfigFileImportRuntimeEffects {
+  /** Deprecated: Agent config snapshots no longer broadcast file-change refreshes. */
   notifyConfigChanged(): void | Promise<void>;
 }
 
@@ -104,6 +105,5 @@ export async function runProviderCredentialConfigFileChangeRuntime(
   effects: ProviderCredentialConfigFileChangeRuntimeEffects,
 ): Promise<ProviderCredentialConfigFileChangeRuntimeResult> {
   const importResult = await runProviderCredentialConfigFileImportRuntime(input, effects);
-  await effects.notifyConfigChanged();
-  return { importResult, notified: true };
+  return { importResult, notified: false };
 }

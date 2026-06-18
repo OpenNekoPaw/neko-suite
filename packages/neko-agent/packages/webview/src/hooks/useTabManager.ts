@@ -21,6 +21,7 @@ export interface UseTabManagerProps {
   onBeforeTabActivation?: () => void;
   onActivateCharacterRoleTab?: (tab: OpenTab) => void;
   hasLocalConversationActivity?: (conversationId: string) => boolean;
+  onConfigSnapshotRequested?: () => void;
 }
 
 export interface UseTabManagerReturn {
@@ -40,6 +41,7 @@ export function useTabManager({
   onBeforeTabActivation,
   onActivateCharacterRoleTab,
   hasLocalConversationActivity,
+  onConfigSnapshotRequested,
 }: UseTabManagerProps): UseTabManagerReturn {
   // Sync tab state to extension for persistence across panel close/reopen
   const isInitialTabStateRef = useRef(true);
@@ -71,6 +73,7 @@ export function useTabManager({
         };
         setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id);
+        onConfigSnapshotRequested?.();
         VSCodeMessages.switchConversation(conversationId);
       }
       setActiveTab('chat');
@@ -82,6 +85,7 @@ export function useTabManager({
       setActiveTab,
       onBeforeTabActivation,
       onActivateCharacterRoleTab,
+      onConfigSnapshotRequested,
     ],
   );
 

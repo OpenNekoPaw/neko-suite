@@ -1,37 +1,22 @@
 /**
- * ConfigFileHandler - Config file import, watching, and openUserConfigFile
+ * ConfigFileHandler - user-owned config file opening
  */
 
 import * as vscode from 'vscode';
-import {
-  ensureUserConfig,
-  getUserConfigPath,
-  runProviderCredentialConfigFileChangeRuntime,
-  runProviderCredentialConfigFileImportRuntime,
-  type Platform,
-} from '@neko/platform';
-import { buildConfigChangedRuntimeMessage } from '@neko/agent/runtime';
-import { watchUserConfig, watchWorkspaceConfig } from '@neko/shared/config/config-reader';
+import * as fs from 'fs';
+import { getUserConfigPath } from '@neko/platform';
 import { getLogger } from '../../base';
-import type { PostMessageFn } from './types';
-import { broadcastToWebviews } from './broadcastHelper';
 
 const logger = getLogger('ConfigFileHandler');
 
 export class ConfigFileHandler implements vscode.Disposable {
-  private watcherCleanups: Array<() => void> = [];
-
-  constructor(
-    private readonly platform: Platform,
-    private readonly activeWebviews: Set<PostMessageFn>,
-  ) {}
+  constructor() {}
 
   /**
-   * Initialize: import config files and start watching
+   * Initialize config file handler.
    */
   async init(): Promise<void> {
-    await this.importConfigs();
-    this.watchFiles();
+    logger.debug('Config file watching is disabled; snapshots load on Agent session/tab open.');
   }
 
   /**
@@ -39,57 +24,26 @@ export class ConfigFileHandler implements vscode.Disposable {
    * Platform owns the default config shape; Extension only opens the file.
    */
   async handleOpenUserConfigFile(): Promise<void> {
-    ensureUserConfig();
     const configPath = getUserConfigPath();
+    if (!fs.existsSync(configPath)) {
+      const doc = await vscode.workspace.openTextDocument({
+        language: 'json',
+        content: buildUserConfigTemplate(),
+      });
+      await vscode.window.showTextDocument(doc, { preview: false });
+      await vscode.window.showInformationMessage(
+        `Neko config file does not exist yet. Save this template as ${configPath} when ready.`,
+      );
+      return;
+    }
 
     const doc = await vscode.workspace.openTextDocument(configPath);
     await vscode.window.showTextDocument(doc, { preview: false });
   }
 
-  /**
-   * Import providers from config files into platform
-   */
-  private async importConfigs(): Promise<void> {
-    await runProviderCredentialConfigFileImportRuntime(
-      { ...this.workspacePathInput() },
-      { config: this.platform.config, logger },
-    );
-  }
+  dispose(): void {}
+}
 
-  /**
-   * Watch config files for changes and re-import
-   */
-  private watchFiles(): void {
-    const handleChange = () => {
-      void runProviderCredentialConfigFileChangeRuntime(
-        { ...this.workspacePathInput() },
-        {
-          config: this.platform.config,
-          logger,
-          notifyConfigChanged: () => {
-            broadcastToWebviews(this.activeWebviews, buildConfigChangedRuntimeMessage());
-          },
-        },
-      );
-    };
-
-    this.watcherCleanups.push(watchUserConfig(handleChange));
-
-    const workspacePath = this.workspacePathInput().workspacePath;
-    if (workspacePath) {
-      this.watcherCleanups.push(watchWorkspaceConfig(workspacePath, handleChange));
-    }
-  }
-
-  private workspacePathInput(): { workspacePath?: string } {
-    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    return workspacePath ? { workspacePath } : {};
-  }
-
-  dispose(): void {
-    for (const cleanup of this.watcherCleanups) {
-      cleanup();
-    }
-    this.watcherCleanups = [];
-  }
+function buildUserConfigTemplate(): string {
+  return ['{', '  "providers": [],', '  "models": [],', '  "mcpServers": []', '}'].join('\n');
 }

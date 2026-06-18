@@ -9,6 +9,8 @@ import { ConfigManager } from '../config-manager';
 import type { IUserConfigManager, UserConfig } from '../user-config';
 import type { Provider, Model } from '../../types/provider';
 import type { MCPServerPreset } from '../../types/config';
+import type { UnifiedConfig } from '@neko/shared';
+import type { ConfigReadResult } from '@neko/shared/config/config-reader';
 import { RETRY_TIMEOUT_PRESETS } from '../retry-timeout-presets';
 
 // =============================================================================
@@ -83,9 +85,77 @@ function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfig
       providers: config.providers,
       models: config.models,
       mcpServers: config.mcpServers,
+      providerOverrides: config.providerOverrides,
+      modelOverrides: config.modelOverrides,
+      mcpServerOverrides: config.mcpServerOverrides,
+    }),
+    loadRawResult: () => ({
+      status: 'ok',
+      filePath: '<test-config>',
+      config: {
+        providers: config.providers,
+        models: config.models,
+        mcpServers: config.mcpServers,
+        providerOverrides: config.providerOverrides,
+        modelOverrides: config.modelOverrides,
+        mcpServerOverrides: config.mcpServerOverrides,
+      } satisfies UnifiedConfig,
     }),
     updateScalar: async () => {},
     updateScalars: async () => {},
+    reload: () => {},
+  };
+}
+
+function createReadResultUserConfigManager(
+  result: ConfigReadResult | (() => ConfigReadResult),
+): IUserConfigManager {
+  const readResult = () => (typeof result === 'function' ? result() : result);
+  return {
+    load: () => {
+      throw new Error('legacy load fallback should not be used');
+    },
+    loadRaw: () => {
+      throw new Error('legacy raw fallback should not be used');
+    },
+    loadRawResult: readResult,
+    save: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateProviderOverride: async () => {
+      throw new Error('write path should not be used');
+    },
+    addProvider: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeProvider: async () => {
+      throw new Error('write path should not be used');
+    },
+    addModel: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeModel: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateMCPServerOverride: async () => {
+      throw new Error('write path should not be used');
+    },
+    addMCPServer: async () => {
+      throw new Error('write path should not be used');
+    },
+    removeMCPServer: async () => {
+      throw new Error('write path should not be used');
+    },
+    clear: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateScalar: async () => {
+      throw new Error('write path should not be used');
+    },
+    updateScalars: async () => {
+      throw new Error('write path should not be used');
+    },
+    reload: () => {},
   };
 }
 
@@ -262,16 +332,15 @@ describe('ConfigManager', () => {
       expect(result.failed).toEqual([]);
     });
 
-    it('should keep importing remaining provider credentials when one provider fails', async () => {
+    it('should project provider credentials in memory without writing config files', async () => {
       const ucm = createMockUserConfigManager({
         providers: [SAMPLE_PROVIDER],
       });
-      const updateProviderOverride = ucm.updateProviderOverride;
-      ucm.updateProviderOverride = async (id, override) => {
-        if (id === 'anthropic') {
-          throw new Error('denied');
-        }
-        await updateProviderOverride(id, override);
+      ucm.updateProviderOverride = async () => {
+        throw new Error('write path should not be used');
+      };
+      ucm.addProvider = async () => {
+        throw new Error('write path should not be used');
       };
       const failingManager = new ConfigManager({ userConfigManager: ucm });
 
@@ -292,9 +361,173 @@ describe('ConfigManager', () => {
         },
       ]);
 
-      expect(result.imported.map((item) => item.id)).toEqual(['openai']);
-      expect(result.failed.map((item) => item.id)).toEqual(['anthropic']);
+      expect(result.imported.map((item) => item.id)).toEqual(['anthropic', 'openai']);
+      expect(result.failed).toEqual([]);
+      expect(failingManager.getProvider('anthropic')?.apiKey).toBe('sk-user');
       expect(failingManager.getProvider('openai')?.apiKey).toBe('sk-openai');
+    });
+  });
+
+  describe('snapshot diagnostics', () => {
+    it('surfaces invalid config diagnostics and does not fall back to default providers', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'invalidJson',
+          filePath: '/tmp/neko/config.json',
+          diagnostic: {
+            code: 'invalidJson',
+            filePath: '/tmp/neko/config.json',
+            message: 'invalid json detail',
+            detail: 'Unexpected token',
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'invalidJson',
+        filePath: '/tmp/neko/config.json',
+        message:
+          'Configuration file contains invalid JSON: /tmp/neko/config.json. Fix the file, then open a new Agent session or tab.',
+      });
+      expect(manager.getConfig().providers.size).toBe(0);
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: null,
+          selectedModelId: null,
+          configDiagnostic: expect.objectContaining({ code: 'invalidJson' }),
+        }),
+      );
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Configuration file contains invalid JSON',
+      );
+    });
+
+    it('treats missing config as user-owned and reports configuration guidance', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'missing',
+          filePath: '/tmp/neko/config.json',
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'missingConfig',
+        filePath: '/tmp/neko/config.json',
+        message:
+          'Agent configuration file is missing: /tmp/neko/config.json. Create the config file with at least one enabled provider, chat model, and API key, then open a new Agent session or tab.',
+      });
+      expect(manager.getConfig().providers.size).toBe(0);
+      expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
+      expect(manager.getAssistantSettingsData().selectedModelId).toBeNull();
+      expect(() => manager.assertConfigAvailable()).toThrow('Agent configuration file is missing');
+    });
+
+    it('reports incomplete config before leaking shared default model names', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.json',
+          config: {},
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'missingProvider',
+        filePath: '/tmp/neko/config.json',
+        message:
+          'Agent configuration has no enabled providers: /tmp/neko/config.json. Add at least one enabled provider with an API key, then open a new Agent session or tab.',
+      });
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: null,
+          selectedModelId: null,
+          configDiagnostic: expect.objectContaining({ code: 'missingProvider' }),
+        }),
+      );
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Agent configuration has no enabled providers',
+      );
+    });
+
+    it('reports missing API keys for enabled chat models before model resolution', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.json',
+          config: {
+            providers: [SAMPLE_PROVIDER],
+            models: [SAMPLE_MODEL],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'missingApiKey',
+        filePath: '/tmp/neko/config.json',
+        message:
+          'Agent configuration has no API key for any enabled chat provider: /tmp/neko/config.json. Add an API key, then open a new Agent session or tab.',
+      });
+      expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
+      expect(manager.getAssistantSettingsData().selectedModelId).toBeNull();
+      expect(() => manager.assertConfigAvailable()).toThrow('Agent configuration has no API key');
+    });
+
+    it('clears availability diagnostics after runtime credential projection', async () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.json',
+          config: {
+            providers: [SAMPLE_PROVIDER],
+            models: [SAMPLE_MODEL],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()?.code).toBe('missingApiKey');
+
+      await manager.importProviderCredentialsFromUnifiedConfigs([
+        {
+          providers: [{ ...SAMPLE_PROVIDER, apiKey: 'sk-runtime' }],
+        },
+      ]);
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'anthropic',
+          selectedModelId: 'anthropic-claude-sonnet-4',
+        }),
+      );
+      expect(() => manager.assertConfigAvailable()).not.toThrow();
+    });
+
+    it('refreshes only through explicit reloadConfig snapshots', () => {
+      let current: ConfigReadResult = {
+        status: 'ok',
+        filePath: '<test-config>',
+        config: { providers: [SAMPLE_PROVIDER], models: [SAMPLE_MODEL] },
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager(() => current),
+      });
+
+      expect(manager.getProvider('anthropic')).toBeDefined();
+
+      current = {
+        status: 'invalidJson',
+        filePath: '/tmp/neko/config.json',
+        diagnostic: {
+          code: 'invalidJson',
+          filePath: '/tmp/neko/config.json',
+          message: 'invalid json detail',
+        },
+      };
+
+      expect(manager.getProvider('anthropic')).toBeDefined();
+      manager.reloadConfig();
+      expect(manager.getProvider('anthropic')).toBeUndefined();
+      expect(manager.getConfigDiagnostic()?.code).toBe('invalidJson');
     });
   });
 

@@ -15,6 +15,45 @@ import { LogLevel } from '../logger/types';
 
 const logger = new ConsoleLogger('ConfigReader', LogLevel.Debug);
 
+export type ConfigReadErrorCode = 'empty' | 'invalidJson' | 'readError';
+
+export interface ConfigReadDiagnostic {
+  readonly code: ConfigReadErrorCode;
+  readonly filePath: string;
+  readonly message: string;
+  readonly detail?: string;
+}
+
+export type ConfigReadResult =
+  | {
+      readonly status: 'ok';
+      readonly filePath: string;
+      readonly config: UnifiedConfig;
+    }
+  | {
+      readonly status: 'missing';
+      readonly filePath: string;
+    }
+  | {
+      readonly status: ConfigReadErrorCode;
+      readonly filePath: string;
+      readonly diagnostic: ConfigReadDiagnostic;
+    };
+
+export function isConfigReadError(
+  result: ConfigReadResult,
+): result is Extract<ConfigReadResult, { readonly status: ConfigReadErrorCode }> {
+  return (
+    result.status === 'empty' || result.status === 'invalidJson' || result.status === 'readError'
+  );
+}
+
+export function getConfigReadDiagnostic(
+  result: ConfigReadResult,
+): ConfigReadDiagnostic | undefined {
+  return isConfigReadError(result) ? result.diagnostic : undefined;
+}
+
 // =============================================================================
 // Path Utilities
 // =============================================================================
@@ -52,26 +91,51 @@ export function getWorkspaceConfigPath(workDir: string): string {
 // =============================================================================
 
 /**
- * Read configuration from a file path
+ * Read configuration from a file path with a typed result.
+ *
+ * @param filePath - Path to the configuration file
+ * @returns Typed read result that distinguishes missing, empty, invalid JSON, and IO failures
+ */
+export function readConfigFileResult(filePath: string): ConfigReadResult {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { status: 'missing', filePath };
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8').trim();
+    if (!content) {
+      return {
+        status: 'empty',
+        filePath,
+        diagnostic: buildConfigReadDiagnostic('empty', filePath),
+      };
+    }
+    return {
+      status: 'ok',
+      filePath,
+      config: JSON.parse(content) as UnifiedConfig,
+    };
+  } catch (error) {
+    const code = error instanceof SyntaxError ? 'invalidJson' : 'readError';
+    const diagnostic = buildConfigReadDiagnostic(code, filePath, error);
+    logger.error(diagnostic.message, error);
+    return { status: code, filePath, diagnostic };
+  }
+}
+
+/**
+ * Read configuration from a file path.
+ *
+ * Compatibility helper for older explicit config tooling. New Agent runtime paths
+ * should use readConfigFileResult so invalid files cannot be confused with
+ * missing files.
  *
  * @param filePath - Path to the configuration file
  * @returns Parsed configuration or null if file doesn't exist or is invalid
  */
 export function readConfigFile(filePath: string): UnifiedConfig | null {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
-    const content = fs.readFileSync(filePath, 'utf-8').trim();
-    if (!content) {
-      return null;
-    }
-    return JSON.parse(content) as UnifiedConfig;
-  } catch (error) {
-    logger.error(`Failed to read config from ${filePath}`, error);
-    return null;
-  }
+  const result = readConfigFileResult(filePath);
+  return result.status === 'ok' ? result.config : null;
 }
 
 /**
@@ -84,6 +148,13 @@ export function readUserConfig(): UnifiedConfig | null {
 }
 
 /**
+ * Read user configuration with a typed result (~/.neko/config.json)
+ */
+export function readUserConfigResult(): ConfigReadResult {
+  return readConfigFileResult(getUserConfigPath());
+}
+
+/**
  * Read workspace configuration (.neko/config.json)
  *
  * @param workDir - Workspace directory path
@@ -91,6 +162,13 @@ export function readUserConfig(): UnifiedConfig | null {
  */
 export function readWorkspaceConfig(workDir: string): UnifiedConfig | null {
   return readConfigFile(getWorkspaceConfigPath(workDir));
+}
+
+/**
+ * Read workspace configuration with a typed result (.neko/config.json)
+ */
+export function readWorkspaceConfigResult(workDir: string): ConfigReadResult {
+  return readConfigFileResult(getWorkspaceConfigPath(workDir));
 }
 
 // =============================================================================
@@ -209,6 +287,38 @@ export function watchConfigFile(
       watcher.close();
     }
   };
+}
+
+function buildConfigReadDiagnostic(
+  code: ConfigReadErrorCode,
+  filePath: string,
+  error?: unknown,
+): ConfigReadDiagnostic {
+  const detail =
+    error instanceof Error ? error.message : error === undefined ? undefined : String(error);
+  switch (code) {
+    case 'empty':
+      return {
+        code,
+        filePath,
+        message: `Configuration file is empty: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'invalidJson':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains invalid JSON: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'readError':
+      return {
+        code,
+        filePath,
+        message: `Failed to read configuration file: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+  }
 }
 
 /**

@@ -47,6 +47,7 @@ export interface UseMessageHandlerProps {
   queuedMessageCount: number;
   openTabs: OpenTab[];
   activeTabId: string | null;
+  requestConfigSnapshot?: () => void;
 
   // Refs
   activeConversationIdRef: MutableRefObject<string | null>;
@@ -125,6 +126,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     queuedMessageCount,
     openTabs,
     activeTabId,
+    requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
     conversationMessagesRef,
@@ -217,6 +219,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveConversationId,
       openTabs,
       activeTabId,
+      requestConfigSnapshot,
       setOpenTabs,
       setActiveTabId,
       setActiveTab,
@@ -263,6 +266,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveConversationId,
       openTabs,
       activeTabId,
+      requestConfigSnapshot,
       setOpenTabs,
       setActiveTabId,
       setActiveTab,

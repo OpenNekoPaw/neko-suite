@@ -80,6 +80,7 @@ export interface TabContext {
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
+  requestConfigSnapshot?: () => void;
 }
 
 /** Settings and model configuration */

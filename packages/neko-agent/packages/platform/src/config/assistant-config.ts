@@ -7,6 +7,7 @@ import {
 } from '@neko/shared';
 import type { Model, Provider } from '../types/provider';
 import type { MergedConfig } from './config-manager';
+import type { AssistantConfigDiagnostic } from './config-diagnostic';
 
 export type AssistantExecutionMode = 'plan' | 'ask' | 'auto';
 
@@ -56,11 +57,13 @@ export interface AssistantSettingsData extends AssistantSettingsSnapshot {
   configuredProviders: AssistantConfiguredProviderView[];
   chatModelOptions: ChatModelOption[];
   defaultMediaModels: Partial<Record<MediaModelType, string>>;
+  configDiagnostic?: AssistantConfigDiagnostic;
 }
 
 export interface AssistantConfigState {
   providers: AssistantProviderView[];
   configuredProviders: AssistantConfiguredProviderView[];
+  configDiagnostic?: AssistantConfigDiagnostic;
 }
 
 export interface AssistantSettingsDataMessage extends AssistantSettingsData {

@@ -6,6 +6,7 @@ import type { ChatModelOption } from '@neko/shared';
 import type { ConfiguredProvider } from './provider';
 import type { ShellExecutionMode } from './settings';
 import type { NpcProfileSource } from '@neko/shared';
+import type { AgentConfigDiagnostic } from './config-diagnostic';
 
 // ---------------------------------------------------------------------------
 // Tabs & Conversations
@@ -123,4 +124,6 @@ export interface SettingsState {
   chatModelOptions: Array<ChatModelOption>;
   /** SSO session info (null when using custom key or not logged in) */
   ssoSession: SsoSession | null;
+  /** Safe config file diagnostic for the active snapshot, if loading failed. */
+  configDiagnostic?: AgentConfigDiagnostic;
 }

@@ -34,8 +34,11 @@ export class SettingsHandler {
   /**
    * Send all settings data to webview
    */
-  sendSettings(webview: vscode.Webview): void {
+  sendSettings(webview: vscode.Webview, options: { readonly reloadConfig?: boolean } = {}): void {
     if (!this.deps.platform) return;
+    if (options.reloadConfig === true) {
+      this.deps.platform.config.reloadConfig();
+    }
 
     const message = buildAssistantSettingsRuntimeDataMessage({
       getSettingsData: () => this.deps.platform?.config.getAssistantSettingsData(),
@@ -65,7 +68,7 @@ export class SettingsHandler {
     const platform = this.deps.platform;
     const message = await runAssistantSettingsUpdateRuntime(settings, {
       updateSettingsFromWebview: (updates) =>
-        platform.config.setAssistantSettingsFromWebview(updates),
+        platform.config.applyRuntimeAssistantSettingsFromWebview(updates),
     });
     webview.postMessage(message);
   }

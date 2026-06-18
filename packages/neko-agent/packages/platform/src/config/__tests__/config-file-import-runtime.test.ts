@@ -67,7 +67,7 @@ describe('provider credential config file import runtime', () => {
     );
   });
 
-  it('notifies config changed after config file change import', async () => {
+  it('does not notify config changed after config file change import', async () => {
     const config = createConfig();
     const notifyConfigChanged = vi.fn();
 
@@ -79,8 +79,8 @@ describe('provider credential config file import runtime', () => {
     expect(config.importProviderCredentialsFromConfigFiles).toHaveBeenCalledWith({
       workspacePath: '/repo',
     });
-    expect(notifyConfigChanged).toHaveBeenCalledTimes(1);
-    expect(result.notified).toBe(true);
+    expect(notifyConfigChanged).not.toHaveBeenCalled();
+    expect(result.notified).toBe(false);
     expect(result.importResult.status).toBe('completed');
   });
 });

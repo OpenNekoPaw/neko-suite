@@ -63,6 +63,7 @@ export function projectSettingsDataMessage(message: SettingsDataMessage): Settin
   const source = asRecord(message) ?? {};
   const selectedProviderId = readString(source, 'selectedProviderId') ?? null;
   const selectedModelId = readString(source, 'selectedModelId') ?? null;
+  const configDiagnostic = readConfigDiagnostic(source.configDiagnostic);
 
   return {
     settingsPatch: {
@@ -77,10 +78,12 @@ export function projectSettingsDataMessage(message: SettingsDataMessage): Settin
       maxTokens: readNumber(source, 'maxTokens') ?? 4096,
       executionMode: readShellExecutionMode(source.executionMode) ?? 'ask',
       chatModelOptions: readChatModelOptions(source.chatModelOptions),
+      configDiagnostic,
     },
     selectedModel:
       selectedProviderId && selectedModelId ? `${selectedProviderId}:${selectedModelId}` : null,
     defaultMediaModels: readMediaModelDefaults(source.defaultMediaModels),
+    ...(configDiagnostic ? { configDiagnostic } : {}),
   };
 }
 
@@ -248,6 +251,7 @@ export function projectConfigStateMessage(
   if (!message.config) return null;
   return {
     configuredProviders: message.config.configuredProviders ?? [],
+    configDiagnostic: readConfigDiagnostic(message.config.configDiagnostic),
   };
 }
 
@@ -303,6 +307,27 @@ function readMediaModelDefaults(value: unknown): MediaModelDefaults {
     if (model) defaults[category] = model;
   }
   return defaults;
+}
+
+function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic'] | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const code = record.code;
+  if (
+    code !== 'empty' &&
+    code !== 'invalidJson' &&
+    code !== 'readError' &&
+    code !== 'missingConfig' &&
+    code !== 'missingProvider' &&
+    code !== 'missingModel' &&
+    code !== 'missingApiKey'
+  ) {
+    return undefined;
+  }
+  const filePath = readString(record, 'filePath');
+  const message = readString(record, 'message');
+  if (!filePath || !message) return undefined;
+  return { code, filePath, message };
 }
 
 function parseSelectedChatModel(selectedModel: string): ModelRef<'llm'> | undefined {

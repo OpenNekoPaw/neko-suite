@@ -106,6 +106,41 @@ describe('useTabManager', () => {
     expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
   });
 
+  it('requests a config snapshot only when opening a new tab', () => {
+    const onConfigSnapshotRequested = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-a');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [
+          { id: 'conv-a', title: 'Chat A', messageCount: 1, updatedAt: 1 },
+          { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 2 },
+        ],
+        setActiveTab: vi.fn(),
+        onNewChat: vi.fn(),
+        onConfigSnapshotRequested,
+      });
+    });
+
+    act(() => {
+      result.current.handleOpenTab('conv-a', 'Chat A');
+    });
+    expect(onConfigSnapshotRequested).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.handleOpenTab('conv-b', 'Chat B');
+    });
+    expect(onConfigSnapshotRequested).toHaveBeenCalledTimes(1);
+  });
+
   it('does not delete a closed tab when the conversation summary is missing', () => {
     const onNewChat = vi.fn();
 

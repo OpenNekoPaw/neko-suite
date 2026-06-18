@@ -19,6 +19,7 @@ export interface SettingsDataProjection {
   settingsPatch: Partial<SettingsState>;
   selectedModel: string | null;
   defaultMediaModels: MediaModelDefaults;
+  configDiagnostic?: SettingsState['configDiagnostic'];
 }
 
 export interface MediaModelSelectionDefaultsProjection {

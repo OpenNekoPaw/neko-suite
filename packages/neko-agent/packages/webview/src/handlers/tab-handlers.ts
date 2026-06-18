@@ -30,6 +30,9 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
     }
 
     const activeTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
+    if (activeTab) {
+      context.requestConfigSnapshot?.();
+    }
     if (isCharacterRoleTab(activeTab)) {
       persistCurrentVisibleConversation(context);
       activateCharacterRoleSessionView(context, {

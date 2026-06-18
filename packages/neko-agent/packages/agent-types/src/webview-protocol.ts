@@ -61,6 +61,7 @@ import type {
   PluginTransferTargetMode,
   PluginTransferTargetRef,
 } from './plugin-transfer-contract';
+import type { AgentConfigDiagnostic } from './config-diagnostic';
 
 export type ProtocolModelCategory = ModelType;
 
@@ -137,6 +138,7 @@ export interface EmptyWebviewMessage {
     | 'getAgentStates'
     | 'getSettings'
     | 'getConfig'
+    | 'refreshConfigSnapshot'
     | 'getSkills'
     | 'openUserConfigFile'
     | 'ssoLogout'
@@ -478,6 +480,7 @@ export interface SettingsDataMessage {
   executionMode?: SettingsState['executionMode'];
   chatModelOptions?: ChatModelOption[];
   defaultMediaModels?: Partial<Record<MediaModelCategory, string>>;
+  configDiagnostic?: AgentConfigDiagnostic;
 }
 
 export type ProjectFilesMessage = ProjectFilesWebviewMessage;
@@ -487,6 +490,7 @@ export interface ConfigStateMessage {
   config?: {
     providers?: ConfiguredProvider[];
     configuredProviders?: ConfiguredProvider[];
+    configDiagnostic?: AgentConfigDiagnostic;
   };
 }
 
@@ -842,6 +846,7 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'getAgentStates',
   'getSettings',
   'getConfig',
+  'refreshConfigSnapshot',
   'getSkills',
   'openUserConfigFile',
   'ssoLogout',

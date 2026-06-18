@@ -4,6 +4,14 @@
 
 export { ConfigManager, type ConfigManagerOptions, type MergedConfig } from './config-manager';
 export {
+  buildConfigUnavailableMessage,
+  buildSafeConfigDiagnosticMessage,
+  projectAssistantConfigDiagnostic,
+  projectAssistantConfigReadResultDiagnostic,
+  type AssistantConfigDiagnostic,
+  type AssistantConfigDiagnosticCode,
+} from './config-diagnostic';
+export {
   FileUserConfigManager,
   type UserConfig,
   type IUserConfigManager,
@@ -105,4 +113,4 @@ export {
   type MCPServerConfigWriter,
 } from './mcp-server-config';
 export { RETRY_TIMEOUT_PRESETS } from './retry-timeout-presets';
-export { DEFAULT_USER_CONFIG, ensureUserConfig } from './default-config';
+export { DEFAULT_USER_CONFIG } from './default-config';

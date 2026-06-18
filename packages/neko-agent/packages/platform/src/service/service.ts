@@ -157,6 +157,7 @@ export class Service implements IService {
     options: ServiceOptions = {},
     context?: ServiceCallContext,
   ): Promise<ServiceResponse> {
+    this.config.configManager.assertConfigAvailable();
     const startTime = Date.now();
     const requestId = createModelCallRequestId(startTime);
     const logger = getServiceLogger();
@@ -256,6 +257,7 @@ export class Service implements IService {
     options: ServiceOptions = {},
     context?: ServiceCallContext,
   ): ServiceStreamResponse {
+    this.config.configManager.assertConfigAvailable();
     const startTime = Date.now();
     const requestId = createModelCallRequestId(startTime);
     const logger = getServiceLogger();
@@ -373,6 +375,7 @@ export class Service implements IService {
     input: string | string[],
     options: EmbeddingOptions = {},
   ): Promise<EmbeddingResponse> {
+    this.config.configManager.assertConfigAvailable();
     const routing = this.resolveRouting(options.modelId, [], 'embedding');
     const { model, provider, adapter } = this.resolveResources(routing);
 
