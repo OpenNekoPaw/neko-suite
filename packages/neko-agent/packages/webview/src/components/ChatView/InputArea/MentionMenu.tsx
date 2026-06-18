@@ -265,7 +265,7 @@ export function getMentionIcon(item: MentionItem): string {
   if (item.filePath && (!item.icon || isGenericMentionIcon(item.icon))) {
     return getFilePathIcon(item.filePath);
   }
-  if (item.icon && !isLegacyMentionEmojiIcon(item.icon)) return item.icon;
+  if (item.icon) return item.icon;
   if (item.mediaType) return getMediaTypeIcon(item.mediaType);
   return KIND_ICONS[item.kind] ?? 'entity';
 }
@@ -460,11 +460,7 @@ function getToneColor(key: string): string {
 }
 
 function isGenericMentionIcon(icon: string): boolean {
-  return icon === KIND_ICONS.file || icon === 'file' || isLegacyMentionEmojiIcon(icon);
-}
-
-function isLegacyMentionEmojiIcon(icon: string): boolean {
-  return projectLegacyMentionEmojiToken(icon) !== undefined;
+  return icon === KIND_ICONS.file || icon === 'file' || icon === 'document';
 }
 
 function renderMentionGlyph(label: string): ReactNode {
@@ -497,16 +493,7 @@ function renderMentionGlyph(label: string): ReactNode {
 }
 
 function normalizeMentionGlyphLabel(label: string): string {
-  return projectLegacyMentionEmojiToken(label) ?? label;
-}
-
-function projectLegacyMentionEmojiToken(icon: string): string | undefined {
-  const normalized = icon.replace(/[\uFE0E\uFE0F]/g, '').trim();
-  if (normalized === '📄') return 'file';
-  if (normalized === '🎭') return 'character';
-  if (normalized === '🎬' || normalized === '🎞') return 'video';
-  if (normalized === '🖼') return 'image';
-  return undefined;
+  return label.trim().toLowerCase();
 }
 
 function MentionCharacterIcon({ className }: { readonly className?: string }) {

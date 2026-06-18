@@ -1,6 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type {
   EnvironmentPlacement,
   PanoramaCoverageAngle,
@@ -13,9 +11,14 @@ import type {
 import { normalizeCoverageAngle, normalizePanoramaViewModeForProjection } from '@neko/shared';
 import { PreviewService } from '../services/PreviewService';
 import type { StatusBarManager } from '../ui/StatusBarManager';
-import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
 import { PANORAMIC_IMAGE_VIEW_TYPE } from '../types/panoramic-api';
+import {
+  createReadonlyPreviewDocument,
+  getPreviewErrorHtml,
+  getPreviewFileName,
+  setupPreviewWebviewPanel,
+} from './previewProviderHelper';
 
 const logger = getLogger('PanoramicImagePreview');
 
@@ -38,7 +41,7 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     _openContext: vscode.CustomDocumentOpenContext,
     _token: vscode.CancellationToken,
   ): Promise<vscode.CustomDocument> {
-    return { uri, dispose: () => {} };
+    return createReadonlyPreviewDocument(uri);
   }
 
   async resolveCustomEditor(
@@ -46,19 +49,12 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    await createDefaultLocalResourceAccessService({
-      extensionUri: this._extensionUri,
-      includeExtensionCache: false,
-    }).configureWebview(webviewPanel.webview, {
-      enableScripts: true,
-    });
-
     const filePath = document.uri.fsPath;
-    const fileName = basenameForDisplay(filePath);
+    const fileName = getPreviewFileName(filePath);
     this._statusBar.show({ fileName, duration: 0 });
 
-    webviewPanel.webview.html = getWebviewHtml({
-      webview: webviewPanel.webview,
+    await setupPreviewWebviewPanel({
+      webviewPanel,
       extensionUri: this._extensionUri,
       entry: 'panorama-image',
     });
@@ -250,8 +246,9 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
       this._previewService = await PreviewService.tryCreate();
     }
     if (!this._previewService?.isAvailable) {
-      webviewPanel.webview.html = this.getErrorHtml(
+      webviewPanel.webview.html = getPreviewErrorHtml(
         'Failed to initialize media engine. Please ensure neko-engine is installed.',
+        'Panoramic Preview Error',
       );
       this._statusBar.hide();
       return null;
@@ -274,20 +271,13 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Failed to register panoramic image manifest:', error);
-      webviewPanel.webview.html = this.getErrorHtml(`Failed to register preview asset: ${message}`);
+      webviewPanel.webview.html = getPreviewErrorHtml(
+        `Failed to register preview asset: ${message}`,
+        'Panoramic Preview Error',
+      );
       this._statusBar.hide();
       return null;
     }
-  }
-
-  private getErrorHtml(message: string): string {
-    return `<!DOCTYPE html>
-<html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px;">
-  <h2>Panoramic Preview Error</h2>
-  <p>${escapeHtml(message)}</p>
-</body>
-</html>`;
   }
 }
 
@@ -432,17 +422,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function basenameForDisplay(filePath: string): string {
-  return path.basename(filePath.replaceAll('\\', path.sep));
 }

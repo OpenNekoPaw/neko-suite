@@ -19,6 +19,7 @@ import {
   LIGHT_SPOT_NORMAL_FRAG,
   LIGHT_AMBIENT_FRAG,
 } from './light-shaders';
+import { compileWebGLProgram } from './webgl-utils';
 
 /** Fullscreen quad: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -88,49 +89,64 @@ export class LightPass {
 
   private getPointProgram(): WebGLProgram {
     if (!this.pointProgram) {
-      this.pointProgram = this.compileProgram(QUAD_VERT, LIGHT_POINT_FRAG);
+      this.pointProgram = compileWebGLProgram(this.gl, QUAD_VERT, LIGHT_POINT_FRAG, 'Light');
     }
     return this.pointProgram;
   }
 
   private getNormalProgram(): WebGLProgram {
     if (!this.normalProgram) {
-      this.normalProgram = this.compileProgram(QUAD_VERT, LIGHT_NORMAL_FRAG);
+      this.normalProgram = compileWebGLProgram(this.gl, QUAD_VERT, LIGHT_NORMAL_FRAG, 'Light');
     }
     return this.normalProgram;
   }
 
   private getDirectionalProgram(): WebGLProgram {
     if (!this.directionalProgram) {
-      this.directionalProgram = this.compileProgram(QUAD_VERT, LIGHT_DIRECTIONAL_FRAG);
+      this.directionalProgram = compileWebGLProgram(
+        this.gl,
+        QUAD_VERT,
+        LIGHT_DIRECTIONAL_FRAG,
+        'Light',
+      );
     }
     return this.directionalProgram;
   }
 
   private getDirectionalNormalProgram(): WebGLProgram {
     if (!this.directionalNormalProgram) {
-      this.directionalNormalProgram = this.compileProgram(QUAD_VERT, LIGHT_DIRECTIONAL_NORMAL_FRAG);
+      this.directionalNormalProgram = compileWebGLProgram(
+        this.gl,
+        QUAD_VERT,
+        LIGHT_DIRECTIONAL_NORMAL_FRAG,
+        'Light',
+      );
     }
     return this.directionalNormalProgram;
   }
 
   private getSpotProgram(): WebGLProgram {
     if (!this.spotProgram) {
-      this.spotProgram = this.compileProgram(QUAD_VERT, LIGHT_SPOT_FRAG);
+      this.spotProgram = compileWebGLProgram(this.gl, QUAD_VERT, LIGHT_SPOT_FRAG, 'Light');
     }
     return this.spotProgram;
   }
 
   private getSpotNormalProgram(): WebGLProgram {
     if (!this.spotNormalProgram) {
-      this.spotNormalProgram = this.compileProgram(QUAD_VERT, LIGHT_SPOT_NORMAL_FRAG);
+      this.spotNormalProgram = compileWebGLProgram(
+        this.gl,
+        QUAD_VERT,
+        LIGHT_SPOT_NORMAL_FRAG,
+        'Light',
+      );
     }
     return this.spotNormalProgram;
   }
 
   private getAmbientProgram(): WebGLProgram {
     if (!this.ambientProgram) {
-      this.ambientProgram = this.compileProgram(QUAD_VERT, LIGHT_AMBIENT_FRAG);
+      this.ambientProgram = compileWebGLProgram(this.gl, QUAD_VERT, LIGHT_AMBIENT_FRAG, 'Light');
     }
     return this.ambientProgram;
   }
@@ -254,42 +270,6 @@ export class LightPass {
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
-  }
-
-  private compileProgram(vertSrc: string, fragSrc: string): WebGLProgram {
-    const gl = this.gl;
-    const vert = this.compileShader(gl.VERTEX_SHADER, vertSrc);
-    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
-
-    const program = gl.createProgram();
-    if (!program) throw new Error('Failed to create light program');
-    gl.attachShader(program, vert);
-    gl.attachShader(program, frag);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`Light program link failed: ${info}`);
-    }
-
-    gl.deleteShader(vert);
-    gl.deleteShader(frag);
-    return program;
-  }
-
-  private compileShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) throw new Error('Failed to create shader');
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Light shader compile failed: ${info}`);
-    }
-    return shader;
   }
 
   dispose(): void {

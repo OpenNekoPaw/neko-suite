@@ -8,6 +8,7 @@ import type { AppliedFilter, FilterParam, FilterParamValue } from '../types/filt
 import type { FilterRegistry } from './filter-registry';
 import type { ITextureManager } from './types';
 import { FILTER_VERT } from './filter-shaders';
+import { compileWebGLProgram } from './webgl-utils';
 
 function isVec2Value(value: FilterParamValue): value is [number, number] {
   return (
@@ -79,40 +80,9 @@ export class FilterPipeline {
     const cached = this.programs.get(filterId);
     if (cached) return cached;
 
-    const gl = this.gl;
-    const vert = this.compileShader(gl.VERTEX_SHADER, FILTER_VERT);
-    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSource);
-
-    const program = gl.createProgram();
-    if (!program) throw new Error('Failed to create filter program');
-    gl.attachShader(program, vert);
-    gl.attachShader(program, frag);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`Filter program link failed: ${info}`);
-    }
-
-    gl.deleteShader(vert);
-    gl.deleteShader(frag);
+    const program = compileWebGLProgram(this.gl, FILTER_VERT, fragSource, 'Filter');
     this.programs.set(filterId, program);
     return program;
-  }
-
-  private compileShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) throw new Error('Failed to create shader');
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Filter shader compile failed: ${info}`);
-    }
-    return shader;
   }
 
   /**

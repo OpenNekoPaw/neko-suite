@@ -395,7 +395,6 @@ export function ChatWorkspace({
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
-    VSCodeMessages.updateSettings({ executionMode: mode });
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {

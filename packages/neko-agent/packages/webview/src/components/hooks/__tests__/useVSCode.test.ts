@@ -140,6 +140,11 @@ describe('messages', () => {
         expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getSettings' });
       });
 
+      it('should post lifecycle config snapshot refresh', () => {
+        VSCodeMessages.refreshConfigSnapshot();
+        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'refreshConfigSnapshot' });
+      });
+
       it('should post updateSettings with data', () => {
         VSCodeMessages.updateSettings({ executionMode: 'auto' });
         expect(mockPostMessage).toHaveBeenCalledWith({

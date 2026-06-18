@@ -5,7 +5,7 @@ import type { GenCategory } from './types';
 
 type ComposerIconProps = Pick<IconProps, 'className' | 'size' | 'strokeWidth'>;
 
-export function AgentWorkflowIcon({ className, size = 14, strokeWidth = 1.8 }: ComposerIconProps) {
+function AgentWorkflowIcon({ className, size = 14, strokeWidth = 1.8 }: ComposerIconProps) {
   return (
     <svg
       width={size}
@@ -30,7 +30,7 @@ export function AgentWorkflowIcon({ className, size = 14, strokeWidth = 1.8 }: C
   );
 }
 
-export function MediaImageIcon(props: ComposerIconProps) {
+function MediaImageIcon(props: ComposerIconProps) {
   return (
     <CameraIcon
       size={props.size ?? 14}
@@ -40,7 +40,7 @@ export function MediaImageIcon(props: ComposerIconProps) {
   );
 }
 
-export function MediaVideoIcon(props: ComposerIconProps) {
+function MediaVideoIcon(props: ComposerIconProps) {
   return (
     <PlayIcon
       size={props.size ?? 14}
@@ -50,7 +50,7 @@ export function MediaVideoIcon(props: ComposerIconProps) {
   );
 }
 
-export function MediaAudioIcon(props: ComposerIconProps) {
+function MediaAudioIcon(props: ComposerIconProps) {
   return (
     <VolumeIcon
       size={props.size ?? 14}

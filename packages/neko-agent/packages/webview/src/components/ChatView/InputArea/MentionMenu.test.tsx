@@ -40,19 +40,20 @@ describe('MentionMenu icon projection', () => {
   });
 
   it('uses file extensions when host only provides a generic file icon', () => {
-    expect(getMentionIcon(mention({ icon: '📄', filePath: 'assets/ref.zip' }))).toBe('ZIP');
-    expect(getMentionIcon(mention({ icon: '📄', filePath: 'images/ref.jpeg' }))).toBe('JPG');
-    expect(getMentionIcon(mention({ icon: '🎬', filePath: 'cases/clip.mp4' }))).toBe('VID');
+    expect(getMentionIcon(mention({ icon: 'file', filePath: 'assets/ref.zip' }))).toBe('ZIP');
+    expect(getMentionIcon(mention({ icon: 'document', filePath: 'images/ref.jpeg' }))).toBe('JPG');
+  });
+
+  it('does not treat old emoji protocol icons as generic file icons', () => {
+    expect(getMentionIcon(mention({ icon: '📄', filePath: 'assets/ref.zip' }))).toBe('📄');
+    expect(getMentionIcon(mention({ icon: '🎬', filePath: 'cases/clip.mp4' }))).toBe('🎬');
   });
 
   it('infers media icons from media type', () => {
     expect(getMentionIcon(mention({ kind: 'media', mediaType: 'video' }))).toBe('video');
     expect(getMentionIcon(mention({ kind: 'media', mediaType: 'audio' }))).toBe('audio');
     expect(getMentionIcon(mention({ kind: 'media', mediaType: 'image' }))).toBe('image');
-    expect(getMentionIcon(mention({ icon: '🖼', kind: 'media', mediaType: 'image' }))).toBe(
-      'image',
-    );
-    expect(getMentionIcon(mention({ icon: '🖼️', kind: 'media', mediaType: 'image' }))).toBe(
+    expect(getMentionIcon(mention({ icon: 'image', kind: 'media', mediaType: 'image' }))).toBe(
       'image',
     );
   });

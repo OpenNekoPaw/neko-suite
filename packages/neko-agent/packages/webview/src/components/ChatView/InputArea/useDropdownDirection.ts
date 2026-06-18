@@ -64,14 +64,6 @@ export function useDropdownPlacement(
   }, [boundarySelector, estimatedWidth, preferredDirection, triggerRef]);
 }
 
-export function useDropdownDirection(
-  triggerRef: RefObject<HTMLElement | null>,
-  preferredDirection: DropdownDirection = 'down',
-): () => DropdownDirection {
-  const getPlacement = useDropdownPlacement(triggerRef, { preferredDirection });
-  return useCallback(() => getPlacement().direction, [getPlacement]);
-}
-
 /** CSS class helpers for dropdown positioning */
 export function dropdownPositionClass(placement: DropdownDirection | DropdownPlacement): string {
   const direction = typeof placement === 'string' ? placement : placement.direction;

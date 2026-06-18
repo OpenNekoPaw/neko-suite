@@ -348,6 +348,9 @@ export function ConversationController({
   const embodyCharacterSession = activeOpenTab?.embodyCharacterSession;
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
+  const requestConfigSnapshot = useCallback(() => {
+    VSCodeMessages.refreshConfigSnapshot();
+  }, []);
 
   const handleUserMessageSent = useCallback(
     (event: { conversationId: string; message: Message }) => {
@@ -452,6 +455,7 @@ export function ConversationController({
     queuedMessageCount,
     openTabs,
     activeTabId,
+    requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
     conversationMessagesRef,
@@ -498,12 +502,11 @@ export function ConversationController({
   useEffect(() => {
     VSCodeMessages.getConversations();
     VSCodeMessages.getActiveConversation();
-    VSCodeMessages.getSettings();
+    requestConfigSnapshot();
     VSCodeMessages.getAgentStates();
-    VSCodeMessages.getConfig();
     VSCodeMessages.getSkills();
     VSCodeMessages.getTabState();
-  }, []);
+  }, [requestConfigSnapshot]);
 
   // ---- Context token count on conversation change ----
   useEffect(() => {
@@ -526,9 +529,10 @@ export function ConversationController({
 
   // ---- Conversation CRUD callbacks ----
   const handleNewChat = useCallback(() => {
+    requestConfigSnapshot();
     VSCodeMessages.newConversation();
     setActiveTab('chat');
-  }, []);
+  }, [requestConfigSnapshot]);
 
   const isProtectedConversation = useCallback(
     (conversationId: string): boolean => {
@@ -615,6 +619,7 @@ export function ConversationController({
     onNewChat: handleNewChat,
     onBeforeTabActivation: persistCurrentVisibleConversation,
     onActivateCharacterRoleTab: activateCharacterRoleTab,
+    onConfigSnapshotRequested: requestConfigSnapshot,
     hasLocalConversationActivity: (conversationId) => {
       const cachedMessages = conversationMessagesRef.current.get(conversationId);
       const cachedStreaming = conversationStreamingRef.current.get(conversationId);

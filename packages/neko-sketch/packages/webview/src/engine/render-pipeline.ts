@@ -9,6 +9,7 @@ import type { LayerData, ViewportState } from '../types';
 import { BLEND_MODE_INDEX, QUAD_VERT } from './shaders';
 import { CLIPPING_MASK_FRAG, LAYER_MASK_FRAG } from './mask-shaders';
 import { buildViewportTransformMatrix } from '../utils/viewport-transform';
+import { compileWebGLProgram } from './webgl-utils';
 
 /** Fullscreen quad geometry: position (x,y) + texCoord (u,v) */
 const QUAD_VERTICES = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
@@ -402,8 +403,13 @@ export class RenderPipeline implements IRenderPipeline {
 
     // Lazy-compile mask programs
     const program = isClippingMask
-      ? (this.clipProgram ??= this.compileProgram(QUAD_VERT, CLIPPING_MASK_FRAG))
-      : (this.layerMaskProgram ??= this.compileProgram(QUAD_VERT, LAYER_MASK_FRAG));
+      ? (this.clipProgram ??= compileWebGLProgram(this.gl, QUAD_VERT, CLIPPING_MASK_FRAG, 'Mask'))
+      : (this.layerMaskProgram ??= compileWebGLProgram(
+          this.gl,
+          QUAD_VERT,
+          LAYER_MASK_FRAG,
+          'Mask',
+        ));
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskFbo);
     gl.viewport(0, 0, width, height);
@@ -426,39 +432,6 @@ export class RenderPipeline implements IRenderPipeline {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return this.maskTex;
-  }
-
-  private compileProgram(vertSrc: string, fragSrc: string): WebGLProgram {
-    const gl = this.gl;
-    const vert = this.compileShader(gl.VERTEX_SHADER, vertSrc);
-    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
-    const program = gl.createProgram();
-    if (!program) throw new Error('Failed to create mask program');
-    gl.attachShader(program, vert);
-    gl.attachShader(program, frag);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`Mask program link failed: ${info}`);
-    }
-    gl.deleteShader(vert);
-    gl.deleteShader(frag);
-    return program;
-  }
-
-  private compileShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) throw new Error('Failed to create shader');
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Mask shader compile failed: ${info}`);
-    }
-    return shader;
   }
 
   dispose(): void {

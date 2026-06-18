@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type { PreviewManifest } from '@neko/shared';
 import { PreviewService } from '../services/PreviewService';
 import type { StatusBarManager } from '../ui/StatusBarManager';
-import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
 import { PANORAMIC_VIDEO_VIEW_TYPE } from '../types/panoramic-api';
+import {
+  createReadonlyPreviewDocument,
+  getPreviewFileName,
+  setupPreviewWebviewPanel,
+} from './previewProviderHelper';
 
 const logger = getLogger('PanoramicVideoPreview');
 
@@ -29,7 +31,7 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
     _openContext: vscode.CustomDocumentOpenContext,
     _token: vscode.CancellationToken,
   ): Promise<vscode.CustomDocument> {
-    return { uri, dispose: () => {} };
+    return createReadonlyPreviewDocument(uri);
   }
 
   async resolveCustomEditor(
@@ -37,20 +39,14 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    await createDefaultLocalResourceAccessService({
-      extensionUri: this._extensionUri,
-      includeExtensionCache: false,
-    }).configureWebview(webviewPanel.webview, {
-      enableScripts: true,
-    });
-    webviewPanel.webview.html = getWebviewHtml({
-      webview: webviewPanel.webview,
+    await setupPreviewWebviewPanel({
+      webviewPanel,
       extensionUri: this._extensionUri,
       entry: 'panorama-video',
     });
 
     const filePath = document.uri.fsPath;
-    const fileName = basenameForDisplay(filePath);
+    const fileName = getPreviewFileName(filePath);
     this._statusBar.show({ fileName, duration: 0 });
     const manifestPromise = this.registerManifest(filePath, fileName);
     let activeManifest: PreviewManifest | null = null;
@@ -189,8 +185,4 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function basenameForDisplay(filePath: string): string {
-  return path.basename(filePath.replaceAll('\\', path.sep));
 }

@@ -53,6 +53,22 @@ export function DownloadIcon({ size = 16, className, strokeWidth = 2 }: IconProp
   );
 }
 
+export function OpenIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      {...base(strokeWidth)}
+    >
+      <path d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+      <path d="M14 4h6v6" />
+      <path d="M20 4L10 14" />
+    </svg>
+  );
+}
+
 export function RefreshIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
   return (
     <svg

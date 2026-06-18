@@ -13,11 +13,15 @@
  */
 
 import * as vscode from 'vscode';
-import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
-import { getWebviewHtml } from '../utils/html';
 import type { StatusBarManager } from '../ui/StatusBarManager';
 import { getLogger } from '../utils/logger';
+import {
+  createReadonlyPreviewDocument,
+  getPreviewErrorHtml,
+  getPreviewFileName,
+  setupPreviewWebviewPanel,
+} from './previewProviderHelper';
 
 const logger = getLogger('VideoPreview');
 
@@ -50,7 +54,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
     _openContext: vscode.CustomDocumentOpenContext,
     _token: vscode.CancellationToken,
   ): Promise<vscode.CustomDocument> {
-    return { uri, dispose: () => {} };
+    return createReadonlyPreviewDocument(uri);
   }
 
   async resolveCustomEditor(
@@ -58,28 +62,17 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    // Configure webview
-    await createDefaultLocalResourceAccessService({
+    await setupPreviewWebviewPanel({
+      webviewPanel,
       extensionUri: this._extensionUri,
-      includeExtensionCache: false,
-    }).configureWebview(webviewPanel.webview, {
-      enableScripts: true,
+      entry: 'video',
+      pinEditor: true,
     });
-
-    // Pin the editor tab so it won't be replaced when opening other files
-    vscode.commands.executeCommand('workbench.action.pinEditor');
 
     // Immediately show status bar with file name (placeholder before probe completes)
     const filePath = document.uri.fsPath;
-    const fileName = filePath.split('/').pop() ?? filePath;
+    const fileName = getPreviewFileName(filePath);
     this._statusBar.show({ fileName, duration: 0 });
-
-    // Set webview HTML early so it can start loading while we probe
-    webviewPanel.webview.html = getWebviewHtml({
-      webview: webviewPanel.webview,
-      extensionUri: this._extensionUri,
-      entry: 'video',
-    });
 
     // Probe media in background — message handler awaits this before responding
     const mediaInfoPromise = (async (): Promise<MediaInfo | null> => {
@@ -87,7 +80,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
         this._previewService = await PreviewService.tryCreate();
       }
       if (!this._previewService?.isAvailable) {
-        webviewPanel.webview.html = this.getErrorHtml(
+        webviewPanel.webview.html = getPreviewErrorHtml(
           'Failed to initialize media engine. Please ensure neko-engine is installed.',
         );
         this._statusBar.hide();
@@ -110,7 +103,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
         return info;
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        webviewPanel.webview.html = this.getErrorHtml(`Failed to probe media file: ${msg}`);
+        webviewPanel.webview.html = getPreviewErrorHtml(`Failed to probe media file: ${msg}`);
         this._statusBar.hide();
         return null;
       }
@@ -327,39 +320,6 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
       this._statusBar.hide();
       await stopPanelStreams();
     });
-  }
-
-  // =========================================================================
-  // Error HTML
-  // =========================================================================
-
-  private getErrorHtml(message: string): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8" />
-	<style>
-		body {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			height: 100vh;
-			margin: 0;
-			background: var(--vscode-editor-background);
-			color: var(--vscode-errorForeground, #f44);
-			font-family: var(--vscode-font-family);
-			font-size: 14px;
-			text-align: center;
-			padding: 20px;
-		}
-	</style>
-</head>
-<body>
-	<div>
-		<p>⚠️ ${message}</p>
-	</div>
-</body>
-</html>`;
   }
 
   // =========================================================================

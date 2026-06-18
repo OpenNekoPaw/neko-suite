@@ -26,6 +26,7 @@ export {
   CopyIcon,
   CheckIcon,
   DownloadIcon,
+  OpenIcon,
   RefreshIcon,
   EditIcon,
   SendIcon,

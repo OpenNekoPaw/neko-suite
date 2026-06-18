@@ -12,6 +12,7 @@ import {
   STROKE_FRAG,
   CHECKER_FRAG,
 } from './shaders';
+import { compileWebGLProgram } from './webgl-utils';
 
 export class ShaderManager implements IShaderManager {
   private readonly programs = new Map<string, WebGLProgram>();
@@ -43,50 +44,8 @@ export class ShaderManager implements IShaderManager {
   }
 
   private compileAndCache(key: string, vertSrc: string, fragSrc: string): void {
-    const program = this.createProgram(vertSrc, fragSrc);
+    const program = compileWebGLProgram(this.gl, vertSrc, fragSrc, 'Shader');
     this.programs.set(key, program);
-  }
-
-  private createProgram(vertSrc: string, fragSrc: string): WebGLProgram {
-    const gl = this.gl;
-    const vert = this.compileShader(gl.VERTEX_SHADER, vertSrc);
-    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
-
-    const program = gl.createProgram();
-    if (!program) throw new Error('Failed to create WebGL program');
-
-    gl.attachShader(program, vert);
-    gl.attachShader(program, frag);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      gl.deleteShader(vert);
-      gl.deleteShader(frag);
-      throw new Error(`Shader link failed: ${info}`);
-    }
-
-    gl.deleteShader(vert);
-    gl.deleteShader(frag);
-    return program;
-  }
-
-  private compileShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) throw new Error('Failed to create shader');
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Shader compile failed: ${info}`);
-    }
-
-    return shader;
   }
 
   dispose(): void {

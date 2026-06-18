@@ -5,6 +5,7 @@
  * Renders billboarded quads with per-instance position, size, and color.
  */
 import type { ParticleBlendMode } from '../types/particle';
+import { compileWebGLProgram } from './webgl-utils';
 
 const PARTICLE_VERT = `#version 300 es
 precision highp float;
@@ -62,7 +63,7 @@ export class ParticleRenderer {
     const gl = this.gl;
 
     // Compile program
-    this.program = this.createProgram(PARTICLE_VERT, PARTICLE_FRAG);
+    this.program = compileWebGLProgram(gl, PARTICLE_VERT, PARTICLE_FRAG, 'Particle');
 
     // Quad geometry: two triangles forming a unit square
     const quadData = new Float32Array([-1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1]);
@@ -145,39 +146,6 @@ export class ParticleRenderer {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         break;
     }
-  }
-
-  private createProgram(vertSrc: string, fragSrc: string): WebGLProgram {
-    const gl = this.gl;
-    const vert = this.compileShader(gl.VERTEX_SHADER, vertSrc);
-    const frag = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
-    const program = gl.createProgram();
-    if (!program) throw new Error('Failed to create particle program');
-    gl.attachShader(program, vert);
-    gl.attachShader(program, frag);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`Particle program link failed: ${info}`);
-    }
-    gl.deleteShader(vert);
-    gl.deleteShader(frag);
-    return program;
-  }
-
-  private compileShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) throw new Error('Failed to create shader');
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Particle shader compile failed: ${info}`);
-    }
-    return shader;
   }
 
   dispose(): void {
