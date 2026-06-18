@@ -77,6 +77,35 @@ import {
 } from './baseline/controlAvailability';
 
 const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
+  profiles: [
+    {
+      id: '2d',
+      owner: 'neko-model',
+      status: 'degraded',
+      diagnostics: [
+        {
+          code: 'scene-profile-degraded',
+          severity: 'warning',
+          message:
+            '.nkm profile: 2d is Scene-owned; some first-slice 2D editor/runtime panels may be unavailable.',
+        },
+      ],
+    },
+    { id: '3d', owner: 'neko-model', status: 'available', diagnostics: [] },
+    {
+      id: 'live',
+      owner: 'neko-model',
+      status: 'degraded',
+      diagnostics: [
+        {
+          code: 'scene-profile-degraded',
+          severity: 'info',
+          message:
+            '.nkm profile: live keeps durable stage truth in Scene; live operation may compose additional runtime services.',
+        },
+      ],
+    },
+  ],
   renderModes: ['pbr'],
   liveViewportSettings: false,
   clay: false,
@@ -358,6 +387,10 @@ export function App(): React.JSX.Element {
       }
 
       switch (message.type) {
+        case 'documentContext':
+          setSceneProfile(message.context.sceneProfile);
+          break;
+
         case 'enginePort': {
           if (enginePortRef.current === message.port && sceneControlRef.current) {
             setEnginePort(message.port);

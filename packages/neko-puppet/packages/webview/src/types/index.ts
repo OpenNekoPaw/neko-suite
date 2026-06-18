@@ -5,6 +5,7 @@
  */
 import type { PuppetAuxiliaryJsonData, PuppetExternalTextureData } from '@neko/shared';
 import type { NkpNativeProjectData } from '@neko/shared';
+import type { ProjectSourceAddRequest } from '@neko/shared';
 
 export type PuppetEditorProfile = 'live2d' | 'neko-puppet';
 
@@ -55,5 +56,4 @@ export type WebviewToExtensionMessage =
   | { type: 'requestEnginePort' }
   | { type: 'state:save'; parameters: Record<string, number> }
   | { type: 'puppet:parametersLoaded'; parameters: string[] }
-  | { type: 'puppet:import' }
-  | { type: 'puppet:dropFile'; name: string; data: string };
+  | { type: 'project:addSource'; request: ProjectSourceAddRequest };

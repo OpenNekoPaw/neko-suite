@@ -6,6 +6,7 @@
  */
 
 import { useCallback } from 'react';
+import { formatMediaTime } from '@neko/neko-client';
 import { useRecording } from '../hooks/useRecording';
 import { postMessage } from '../shared/useVscodeMessage';
 import { AudioButton, AudioSelect } from './shared/AudioUiPrimitives';
@@ -37,13 +38,6 @@ export function RecordingPanel() {
       });
     }
   }, [stopRecording]);
-
-  const formatDuration = (seconds: number): string => {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 10);
-    return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
-  };
 
   return (
     <div className="flex flex-col gap-2 p-2">
@@ -88,7 +82,9 @@ export function RecordingPanel() {
 
       {/* Duration */}
       {state !== 'idle' && (
-        <div className="text-lg font-mono text-center">{formatDuration(duration)}</div>
+        <div className="text-lg font-mono text-center">
+          {formatMediaTime(duration, { fractionalDigits: 1 })}
+        </div>
       )}
 
       {/* Controls */}

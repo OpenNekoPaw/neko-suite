@@ -4,6 +4,7 @@ import type {
   EnvironmentPatch,
   EnvironmentPlacement,
   NkmSceneProfile,
+  ProjectSourceAddRequest,
   SceneDelta,
   SceneSnapshot,
 } from '@neko/shared';
@@ -22,6 +23,14 @@ export type PlaybackState = 'playing' | 'paused' | 'stopped';
 
 /** Messages from Extension Host to Webview */
 export type ExtensionMessage =
+  | {
+      type: 'documentContext';
+      context: {
+        readonly owner: 'neko-model';
+        readonly documentKind: 'nkm' | 'model-asset';
+        readonly sceneProfile: NkmSceneProfile;
+      };
+    }
   | { type: 'enginePort'; port: number }
   | { type: 'webviewVisibility'; visible: boolean }
   | { type: 'keyboardFocus'; focused: boolean }
@@ -74,9 +83,8 @@ export type WebviewMessage =
   | { type: 'latency:test'; timestamp: number }
   | { type: 'scene:capturePreview'; width?: number; height?: number; quality?: number }
   | { type: 'createShape'; shapeType: string; params: Record<string, number> }
-  | { type: 'model:import' }
   | { type: 'model:template'; templateId: string }
-  | { type: 'model:dropFile'; name: string; data: string }
+  | { type: 'project:addSource'; request: ProjectSourceAddRequest }
   | { type: 'environment:pickPanorama' }
   | { type: 'createTextMesh'; text: string; fontSize: number; extrusionDepth: number }
   | {

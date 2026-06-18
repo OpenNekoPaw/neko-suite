@@ -6,17 +6,37 @@
  */
 
 import { useRef } from 'react';
-import { postMessage } from '../shared/useVscodeMessage';
+import { createProjectSourceAddClient } from '@neko/shared';
+import { getVsCodeApi } from '../shared/useVscodeMessage';
 import { useDragDrop } from '../hooks/useDragDrop';
 import { AudioButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
+
+const PROJECT_SOURCE_ADD_TIMEOUT_MS = 30000;
 
 export function EmptyProject() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(containerRef);
 
   const handleImport = () => {
-    postMessage({ type: 'project:importAudio' });
+    const vscode = getVsCodeApi();
+    const client = createProjectSourceAddClient({
+      postMessage: (message) => vscode.postMessage(message),
+      addMessageListener: (listener) => {
+        const handleMessage = (event: MessageEvent) => listener(event.data);
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+      },
+      timeoutMs: PROJECT_SOURCE_ADD_TIMEOUT_MS,
+    });
+    void client.addSource({
+      kind: 'file-picker',
+      formatId: 'nka',
+      target: { role: 'audio' },
+      destination: { kind: 'project', directory: 'audio', copyMode: 'link' },
+      ingestMode: 'link',
+      metadata: { audioAdd: true },
+    });
   };
 
   return (

@@ -9,6 +9,8 @@ import type {
   AudioResponseMessage,
   AudioInfoMessage,
   AudioProjectData,
+  ProjectSourceAddRequest,
+  ProjectSourceAddResult,
   ProjectSyncMessage,
   WaveformDataMessage,
   EditOperation,
@@ -28,15 +30,6 @@ export interface ProjectInitMessage {
   payload: {
     projectData: AudioProjectDataMessage;
     waveforms: Record<string, WaveformData>;
-  };
-}
-
-export interface ProjectImportAudioResultMessage {
-  type: 'project:importAudioResult';
-  payload: {
-    success: boolean;
-    importedCount?: number;
-    error?: string;
   };
 }
 
@@ -103,7 +96,8 @@ export type ExtensionMessage =
   | AudioResponseMessage
   | ProjectSyncMessage
   | ProjectInitMessage
-  | ProjectImportAudioResultMessage
+  | { type: 'project:sourceAdded'; result: ProjectSourceAddResult }
+  | { type: 'project:sourceRejected'; result: ProjectSourceAddResult }
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage
   | ProjectRevertMessage
@@ -141,15 +135,6 @@ export interface ProjectRevertMessage {
   type: 'revert';
 }
 
-export interface ProjectImportAudioMessage {
-  type: 'project:importAudio';
-}
-
-export interface ProjectDropImportAudioMessage {
-  type: 'project:dropImportAudio';
-  uris: string[];
-}
-
 export interface ProjectPackageMessage {
   type: 'project:package';
 }
@@ -175,8 +160,7 @@ export type WebviewMessage =
   | AudioRequestMessage
   | ReadyMessage
   | WebviewKeyboardFocusMessage
-  | ProjectImportAudioMessage
-  | ProjectDropImportAudioMessage
+  | { type: 'project:addSource'; request: ProjectSourceAddRequest }
   | ProjectPackageMessage
   | PresetListRequestMessage
   | PresetApplyMessage

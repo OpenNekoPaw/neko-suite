@@ -45,16 +45,18 @@ describe('Route A webview boundaries', () => {
     const types = readSource('types/index.ts');
     const extension = readSource('../../extension/src/editor/ModelEditorProvider.ts');
 
-    expect(types).not.toMatch(/ModelViewportMode|type: 'loadModel'|FileSourceRef/);
+    expect(types).not.toMatch(
+      /ModelViewportMode|type: 'loadModel'|type: 'model:import'|FileSourceRef/,
+    );
     expect(app).not.toMatch(/modelViewportMode|setModelUrl|modelUrl|SourceModelPreview/);
     expect(extension).not.toMatch(
-      /postLoadModelMessage|source-preview|viewportMode|type: 'loadModel'/,
+      /postLoadModelMessage|source-preview|viewportMode|type: 'loadModel'|case 'model:import'/,
     );
     expect(extension).toMatch(
       /await this\.loadModelInEngine\(filePath, webviewPanel, generation\);/,
     );
     expect(extension).toMatch(
-      /await this\.loadModelInEngine\(importPath, webviewPanel, generation\);/,
+      /await this\.loadModelInEngine\(runtimePath, webviewPanel, generation\);/,
     );
     expect(extension).toMatch(
       /await this\.loadModelInEngine\(modelPath, webviewPanel, generation\);/,
@@ -285,13 +287,26 @@ describe('Route A webview boundaries', () => {
     const types = readSource('types/index.ts');
     const toolbar = readSource('components/Toolbar.tsx');
     const extension = readSource('../../extension/src/editor/ModelEditorProvider.ts');
+    const extensionEntry = readSource('../../extension/src/extension.ts');
+    const packageJson = readSource('../../../package.json');
     const css = readSource('index.css');
 
+    expect(packageJson).toMatch(/"command": "neko\.model\.new2dScene"/);
+    expect(extensionEntry).toMatch(/registerCommand\('neko\.model\.new2dScene'/);
+    expect(extensionEntry).toMatch(/getModelTemplate\(title, '2d'\)/);
+    expect(extensionEntry).toMatch(/scene2d:\s*\{/);
+    expect(types).toMatch(/type: 'documentContext'/);
+    expect(types).toMatch(/owner: 'neko-model'/);
     expect(types).toMatch(/sceneProfile\?: NkmSceneProfile/);
     expect(extension).toMatch(/readNkmSceneProfile/);
+    expect(extension).toMatch(/type: 'documentContext'/);
+    expect(extension).toMatch(/owner: 'neko-model'/);
+    expect(extension).toMatch(/documentKind: isProject \? 'nkm' : 'model-asset'/);
     expect(extension).toMatch(/sceneProfile === '3d' && loaded && loaded\.snapshot\?\.nodes/);
     expect(extension).toMatch(/sceneProfile,/);
     expect(app).toMatch(/useState<NkmSceneProfile>\('3d'\)/);
+    expect(app).toMatch(/case 'documentContext':/);
+    expect(app).toMatch(/setSceneProfile\(message\.context\.sceneProfile\)/);
     expect(app).toMatch(/setSceneProfile\(message\.sceneProfile \?\? '3d'\)/);
     expect(app).toMatch(/const isScene2DProfile = sceneProfile === '2d'/);
     expect(app).toMatch(/<Scene2DProfilePanel\b/);

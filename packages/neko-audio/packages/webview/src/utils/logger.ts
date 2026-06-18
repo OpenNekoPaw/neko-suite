@@ -1,10 +1,10 @@
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { ILogger } from '@neko/shared';
+import { createWebviewLoggerRegistry, LogLevel } from '@neko/shared';
 
-const rootLogger: ILogger = new ConsoleLogger('NekoAudio', LogLevel.Debug);
+const registry = createWebviewLoggerRegistry({
+  packageName: 'NekoAudio',
+  defaultLevel: LogLevel.Debug,
+});
 
-export function getLogger(source: string): ILogger {
-  return rootLogger.child(source);
-}
-
-export { rootLogger };
+export const setRootLogger = registry.setRootLogger;
+export const getRootLogger = registry.getRootLogger;
+export const getLogger = registry.getLogger;

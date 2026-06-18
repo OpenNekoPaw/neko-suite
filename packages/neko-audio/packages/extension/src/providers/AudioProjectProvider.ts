@@ -43,9 +43,15 @@ import type {
 import {
   contractWorkspaceMediaPath,
   createDefaultProjectFormatCodecRegistry,
+  handleProjectSourceAddHostRequest,
+  handleProjectSourceAddRequest,
+  ingestProjectSourceAddRequest,
   nkaSourcePathPolicy,
   ProjectFileStore,
+  type ProjectSourceAddRequest,
+  type ProjectSourceAddResult,
   resolveWorkspaceMediaPath,
+  type ProjectFileSaveReason,
   type WorkspaceMediaPathContext,
 } from '@neko/shared';
 import {
@@ -54,6 +60,9 @@ import {
   createProjectSnapshotPackage,
   createVSCodeProjectFileIoAdapter,
   createVSCodeWorkspaceMediaPathContext,
+  formatProjectFileDiagnostics,
+  normalizeVSCodeProjectSourceAddRequest,
+  ProjectFileSaveSession,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
@@ -137,17 +146,15 @@ function createImportOperationMeta(description: string): AudioProjectEditOperati
   };
 }
 
-function createImportBatchOperation(
-  operations: AudioProjectEditOperation[],
-): AudioProjectEditOperation {
-  if (operations.length === 1) {
-    return operations[0]!;
+function readProjectSourceAddDisplayName(
+  request: ProjectSourceAddRequest,
+  fallbackPath: string,
+): string {
+  const metadataName = request.metadata?.['name'];
+  if (typeof metadataName === 'string' && metadataName.length > 0) {
+    return metadataName;
   }
-  return {
-    type: 'batch',
-    meta: createImportOperationMeta('Import audio files'),
-    payload: { operations },
-  };
+  return request.browserFile?.name ?? path.basename(request.sourcePath ?? fallbackPath);
 }
 
 interface AudioWorkspacePathCommandContext {
@@ -178,6 +185,16 @@ export class AudioProjectProvider
   private readonly _projectFileStore = new ProjectFileStore({
     registry: createDefaultProjectFormatCodecRegistry(),
     fileOps: this._projectFileAdapter.fileOps,
+    logger,
+  });
+  private readonly _projectFileSession = new ProjectFileSaveSession<AudioProjectData>({
+    formatId: 'nka',
+    store: this._projectFileStore,
+    sourcePolicy: nkaSourcePathPolicy,
+    createSourcePolicyOptions: (uri) => ({
+      context: this.createWorkspaceMediaPathContext(uri),
+    }),
+    logger,
   });
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
@@ -211,6 +228,37 @@ export class AudioProjectProvider
     const projectData = this._projectDataCache.get(docKey);
     if (!projectData) return null;
     return { documentUri: docKey, projectData };
+  }
+
+  async linkAudioSource(session: ProjectSession, sourcePath: string): Promise<string> {
+    const docKey = this.toDocumentKey(session.documentUri);
+    if (!this._projectDataCache.has(docKey)) {
+      throw new Error(`Audio project is not open: ${session.documentUri}`);
+    }
+    const projectUri = vscode.Uri.parse(docKey);
+    const fileName = path.basename(sourcePath);
+    const result = await this.acquireAudioProjectSource(
+      {
+        requestId: `audio-tool-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        kind: 'programmatic',
+        formatId: 'nka',
+        documentUri: projectUri.toString(),
+        sourcePath,
+        browserFile: { name: fileName },
+        target: { role: 'audio' },
+        destination: { kind: 'project', directory: 'audio', copyMode: 'link' },
+        ingestMode: 'link',
+        caller: 'neko-audio.tool-add-source',
+        metadata: { audioAdd: true, name: fileName },
+      },
+      projectUri,
+    );
+    if (!result.ok || !result.durablePath) {
+      throw new Error(
+        result.diagnostics[0]?.message ?? `Unable to link audio source: ${sourcePath}`,
+      );
+    }
+    return result.durablePath;
   }
 
   async applyOperation(
@@ -292,7 +340,12 @@ export class AudioProjectProvider
 
     // Normalize paths for portable .nka files
     const normalized = await this.normalizePathsForSave(cached, document.uri);
-    const saved = await this.saveProjectWithStore(document.uri, document.uri, normalized);
+    const saved = await this.saveProjectWithStore(
+      document.uri,
+      document.uri,
+      normalized,
+      'vscode-save',
+    );
     if (!saved) return;
     this._projectCompatibilityCache.set(docKey, {
       loadedVersion: CURRENT_NKA_VERSION,
@@ -312,7 +365,7 @@ export class AudioProjectProvider
     if (!cached) return;
 
     const normalized = await this.normalizePathsForSave(cached, destination);
-    const saved = await this.saveProjectWithStore(destination, document.uri, normalized);
+    const saved = await this.saveProjectWithStore(destination, document.uri, normalized, 'save-as');
     if (!saved) return;
     this._projectCompatibilityCache.set(destination.toString(), {
       loadedVersion: CURRENT_NKA_VERSION,
@@ -786,52 +839,6 @@ export class AudioProjectProvider
       }
     };
 
-    const handleProjectImportAudio = async (
-      request:
-        | { type: 'project:importAudio' }
-        | { type: 'project:dropImportAudio'; uris: string[] },
-    ) => {
-      try {
-        if (!this._audioService?.isAvailable) {
-          throw new Error('AudioService not available for import');
-        }
-
-        const filePaths =
-          request.type === 'project:importAudio'
-            ? (
-                await vscode.window.showOpenDialog({
-                  canSelectMany: true,
-                  filters: { 'Audio Files': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
-                  title: vscode.l10n.t('neko.audio.import.title'),
-                })
-              )?.map((uri) => uri.fsPath)
-            : request.uris?.map((uri) => vscode.Uri.parse(uri).fsPath);
-
-        if (!filePaths || filePaths.length === 0) return;
-
-        const result = await this.importAudioFiles(filePaths, document, webviewPanel);
-        await webviewPanel.webview.postMessage({
-          type: 'project:importAudioResult',
-          payload: {
-            success: result.errors.length === 0,
-            importedCount: result.importedCount,
-            error:
-              result.errors.length > 0
-                ? `Failed to import some files:\n${result.errors.join('\n')}`
-                : undefined,
-          },
-        });
-      } catch (error) {
-        await webviewPanel.webview.postMessage({
-          type: 'project:importAudioResult',
-          payload: {
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-      }
-    };
-
     // Handle messages from webview
     const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
       async (msg: Record<string, unknown>) => {
@@ -937,15 +944,12 @@ export class AudioProjectProvider
             break;
           }
 
-          case 'project:importAudio':
-            await handleProjectImportAudio({ type: 'project:importAudio' });
-            break;
-
-          case 'project:dropImportAudio': {
-            const uris = Array.isArray(msg.uris)
-              ? msg.uris.filter((uri): uri is string => typeof uri === 'string')
-              : [];
-            await handleProjectImportAudio({ type: 'project:dropImportAudio', uris });
+          case 'project:addSource': {
+            await this.handleAudioProjectAddSource(
+              (msg as { request?: ProjectSourceAddRequest }).request,
+              document,
+              webviewPanel,
+            );
             break;
           }
 
@@ -982,80 +986,304 @@ export class AudioProjectProvider
    * Import audio files as new tracks into the project.
    * Each file creates a new track with a single AudioElement clip.
    */
-  private async importAudioFiles(
-    filePaths: string[],
+  private async handleAudioProjectAddSource(
+    request: ProjectSourceAddRequest | undefined,
     document: vscode.CustomDocument,
     panel: vscode.WebviewPanel,
-  ): Promise<{ importedCount: number; errors: string[] }> {
+  ): Promise<void> {
+    if (!request) return;
+    if (this.isAudioFilePickerSourceAddRequest(request)) {
+      await this.handleAudioProjectFilePickerSourceAdd(request, document, panel);
+      return;
+    }
+    await handleProjectSourceAddHostRequest(request, {
+      addSource: (sourceRequest) =>
+        this.addAudioProjectSource(
+          normalizeVSCodeProjectSourceAddRequest(sourceRequest),
+          document,
+          panel,
+        ),
+      postMessage: (message) => panel.webview.postMessage(message),
+      logger,
+    });
+  }
+
+  private isAudioFilePickerSourceAddRequest(request: ProjectSourceAddRequest): boolean {
+    return (
+      request.kind === 'file-picker' &&
+      request.formatId === 'nka' &&
+      !request.sourcePath &&
+      !request.sourceUri &&
+      !request.bytes &&
+      !request.generatedAssetId
+    );
+  }
+
+  private async handleAudioProjectFilePickerSourceAdd(
+    request: ProjectSourceAddRequest,
+    document: vscode.CustomDocument,
+    panel: vscode.WebviewPanel,
+  ): Promise<void> {
+    try {
+      if (!this._audioService?.isAvailable) {
+        throw new Error('AudioService not available for import');
+      }
+
+      const uris = await vscode.window.showOpenDialog({
+        canSelectMany: true,
+        filters: { 'Audio Files': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
+        title: vscode.l10n.t('neko.audio.import.title'),
+      });
+      if (!uris || uris.length === 0) {
+        await handleProjectSourceAddHostRequest(request, {
+          addSource: async () => ({
+            requestId: request.requestId,
+            ok: false,
+            diagnostics: [
+              {
+                code: 'add-source-cancelled',
+                severity: 'info',
+                message: 'Audio source selection was cancelled.',
+                recoverability: 'none',
+              },
+            ],
+          }),
+          postMessage: (message) => panel.webview.postMessage(message),
+          logger,
+        });
+        return;
+      }
+
+      const selectedRequests = uris.map((uri, index) =>
+        this.createAudioProjectSourceAddRequest(uri, document.uri, {
+          kind: 'file-picker',
+          requestId: index === 0 ? request.requestId : `${request.requestId}-${index}`,
+          caller: request.caller ?? 'neko-audio.project-add-source',
+          metadata: request.metadata,
+        }),
+      );
+      await this.addAudioProjectSources(selectedRequests, document, panel);
+    } catch (error) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: async () => ({
+          requestId: request.requestId,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'add-source-failed',
+              severity: 'error',
+              message: error instanceof Error ? error.message : String(error),
+              recoverability: 'manual',
+            },
+          ],
+        }),
+        postMessage: (message) => panel.webview.postMessage(message),
+        logger,
+      });
+    }
+  }
+
+  private async addAudioProjectSources(
+    requests: readonly ProjectSourceAddRequest[],
+    document: vscode.CustomDocument,
+    panel: vscode.WebviewPanel,
+  ): Promise<void> {
+    for (const request of requests) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: (sourceRequest) =>
+          this.addAudioProjectSource(
+            normalizeVSCodeProjectSourceAddRequest(sourceRequest),
+            document,
+            panel,
+          ),
+        postMessage: (message) => panel.webview.postMessage(message),
+        logger,
+      });
+    }
+  }
+
+  private async addAudioProjectSource(
+    request: ProjectSourceAddRequest,
+    document: vscode.CustomDocument,
+    panel: vscode.WebviewPanel,
+  ): Promise<ProjectSourceAddResult> {
     const docKey = document.uri.toString();
     const cached = this._projectDataCache.get(docKey);
     if (!cached || !this._audioService?.isAvailable) {
-      return { importedCount: 0, errors: ['No audio project is loaded'] };
+      return {
+        requestId: request.requestId,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'invalid-document',
+            severity: 'error',
+            message: 'No audio project is loaded',
+            recoverability: 'manual',
+          },
+        ],
+      };
     }
 
-    const newTracks = [...cached.tracks];
-    const errors: string[] = [];
+    const result = await this.acquireAudioProjectSource(request, document.uri);
 
-    for (const filePath of filePaths) {
-      try {
-        logger.info(`Importing audio file: ${filePath}`);
-        const audioInfo = await this._audioService.probeAudio(filePath);
-        const elementId = generateId();
-        const trackId = generateId();
+    if (!result.ok || !result.durablePath) {
+      return result;
+    }
 
-        const element = createDefaultAudioElement({
-          id: elementId,
-          filePath,
-          duration: audioInfo.duration,
-        });
+    try {
+      const runtimePath = await this.resolveProjectSourcePath(result.durablePath, document.uri);
+      logger.info(`Importing audio source: ${runtimePath}`);
+      const audioInfo = await this._audioService.probeAudio(runtimePath);
+      const elementId = generateId();
+      const trackId = generateId();
+      const name = readProjectSourceAddDisplayName(request, runtimePath);
 
-        const track: TimelineTrack = {
-          id: trackId,
-          type: 'audio',
-          name: path.basename(filePath, path.extname(filePath)),
-          elements: [element],
-          muted: false,
-          locked: false,
-          hidden: false,
-          isMain: false,
-        };
+      const element = createDefaultAudioElement({
+        id: elementId,
+        filePath: result.durablePath,
+        duration: audioInfo.duration,
+      });
 
-        newTracks.push(track);
-        logger.info(`Successfully imported: ${filePath}`);
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to import ${filePath}:`, error);
-        errors.push(`${path.basename(filePath)}: ${errMsg}`);
+      const track: TimelineTrack = {
+        id: trackId,
+        type: 'audio',
+        name: path.basename(name, path.extname(name)),
+        elements: [element],
+        muted: false,
+        locked: false,
+        hidden: false,
+        isMain: false,
+      };
+
+      const operation: AudioProjectEditOperation = {
+        type: 'track.add',
+        meta: createImportOperationMeta(`Add audio source: ${track.name}`),
+        payload: { track, index: cached.tracks.length },
+      };
+      const updated = this.applyEditOperation(cached, operation);
+      this._projectDataCache.set(docKey, updated);
+
+      this.fireDirty(docKey, {
+        operation,
+        before: cached,
+        after: updated,
+        reason: 'external-change',
+      });
+
+      await this.initializeWebview(panel, document.uri);
+      logger.info(`Successfully added audio source: ${runtimePath}`);
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to add audio source:`, error);
+      return {
+        ...result,
+        ok: false,
+        diagnostics: [
+          ...result.diagnostics,
+          {
+            code: 'add-source-failed',
+            severity: 'error',
+            message,
+            recoverability: 'manual',
+          },
+        ],
+      };
+    }
+  }
+
+  private createAudioProjectSourceAddRequest(
+    uri: vscode.Uri,
+    documentUri: vscode.Uri,
+    options: {
+      readonly kind: ProjectSourceAddRequest['kind'];
+      readonly requestId: string;
+      readonly caller: string;
+      readonly metadata?: Record<string, unknown>;
+    },
+  ): ProjectSourceAddRequest {
+    return {
+      requestId: options.requestId,
+      kind: options.kind,
+      formatId: 'nka',
+      documentUri: documentUri.toString(),
+      sourceUri: uri.toString(),
+      sourcePath: uri.fsPath,
+      browserFile: { name: path.basename(uri.fsPath) },
+      target: { role: 'audio' },
+      destination: { kind: 'project', directory: 'audio', copyMode: 'link' },
+      ingestMode: 'link',
+      caller: options.caller,
+      metadata: { ...(options.metadata ?? {}), audioAdd: true, name: path.basename(uri.fsPath) },
+    };
+  }
+
+  private async acquireAudioProjectSource(
+    request: ProjectSourceAddRequest,
+    projectUri: vscode.Uri,
+  ): Promise<ProjectSourceAddResult> {
+    return await handleProjectSourceAddRequest(
+      {
+        ...request,
+        caller: request.caller ?? 'neko-audio.project-add-source',
+        target: request.target ?? { role: 'audio' },
+        destination: {
+          kind: 'project',
+          directory: request.destination.directory ?? 'audio',
+          copyMode: request.destination.copyMode ?? (request.bytes ? 'copy' : 'link'),
+        },
+      },
+      {
+        ingest: (ingestRequest) =>
+          ingestProjectSourceAddRequest(ingestRequest, {
+            documentPath: projectUri.fsPath,
+            assetDirectory: request.destination.directory ?? 'audio',
+            workspaceContext: this.createWorkspaceMediaPathContext(projectUri),
+            fileOps: this.createAudioSourceAssetFileOps(),
+            contractPath: (absolutePath) =>
+              this.contractExternalAudioSourcePath(absolutePath, projectUri),
+            unmanagedSourceMessage:
+              'Audio source must be moved into the project, asset library, or a configured media root before saving.',
+          }),
+      },
+    );
+  }
+
+  private createAudioSourceAssetFileOps() {
+    return {
+      createDirectory: async (dirPath: string) =>
+        vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+      fileExists: async (filePath: string) => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      writeFile: async (filePath: string, bytes: Uint8Array) =>
+        vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
+    };
+  }
+
+  private async contractExternalAudioSourcePath(
+    absolutePath: string,
+    projectUri: vscode.Uri,
+  ): Promise<string | undefined> {
+    const context = this.createWorkspaceMediaPathContext(projectUri);
+    try {
+      const contracted = await vscode.commands.executeCommand<string>(
+        'neko.assets.contractPath',
+        absolutePath,
+        this.createWorkspacePathCommandContext(projectUri, context),
+      );
+      if (contracted && !path.isAbsolute(contracted)) {
+        return contracted;
       }
+    } catch {
+      // neko-assets not active
     }
-
-    const importedTracks = newTracks.slice(cached.tracks.length);
-    if (importedTracks.length === 0) {
-      return { importedCount: 0, errors };
-    }
-
-    const importOperations: AudioProjectEditOperation[] = importedTracks.map((track, offset) => ({
-      type: 'track.add',
-      meta: createImportOperationMeta(`Import audio: ${track.name}`),
-      payload: { track, index: cached.tracks.length + offset },
-    }));
-
-    // Update cache immutably
-    const updated = { ...cached, tracks: newTracks };
-    this._projectDataCache.set(docKey, updated);
-
-    this.fireDirty(docKey, {
-      operation: createImportBatchOperation(importOperations),
-      before: cached,
-      after: updated,
-      reason: 'external-change',
-    });
-
-    // Re-initialize webview with updated project
-    await this.initializeWebview(panel, document.uri);
-    const successCount = filePaths.length - errors.length;
-    logger.info(`Imported ${successCount}/${filePaths.length} audio file(s) as new tracks`);
-    return { importedCount: successCount, errors };
+    return undefined;
   }
 
   /** Read .nka JSON and send project:init to webview */
@@ -1412,14 +1640,21 @@ export class AudioProjectProvider
   }
 
   private createWorkspaceMediaPathContext(nkaUri: vscode.Uri): WorkspaceMediaPathContext {
+    const documentDir = path.dirname(nkaUri.fsPath);
     const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
     const context = createVSCodeWorkspaceMediaPathContext({
       documentUri: nkaUri,
       workspaceFolders,
+      pathVariables: new Map([['PROJECT', documentDir]]),
     });
+    const pathVariables = new Map(context.pathVariables ?? []);
+    pathVariables.set('PROJECT', documentDir);
     return {
       ...context,
-      allowedRoots: context.allowedRoots ?? context.workspaceRoots ?? [],
+      owningWorkspaceRoot: context.owningWorkspaceRoot ?? documentDir,
+      documentDir,
+      pathVariables,
+      allowedRoots: [documentDir, ...(context.allowedRoots ?? context.workspaceRoots ?? [])],
     };
   }
 
@@ -1483,22 +1718,19 @@ export class AudioProjectProvider
     targetUri: vscode.Uri,
     sourceUri: vscode.Uri,
     project: AudioProjectData,
+    saveReason: ProjectFileSaveReason = 'manual',
   ): Promise<boolean> {
     if (!(await this.serializeProjectForSave(sourceUri))) {
       return false;
     }
-    const result = await this._projectFileStore.save({
-      filePath: targetUri.fsPath,
-      formatId: 'nka',
+    await this._projectFileSession.save({
+      targetUri,
+      sourceUri,
       document: project,
-      sourcePolicy: nkaSourcePathPolicy,
-      sourcePolicyOptions: {
-        context: this.createWorkspaceMediaPathContext(targetUri),
-      },
+      saveReason,
+      fallbackMessage: 'Failed to save NKA',
+      useSaveAs: saveReason === 'save-as',
     });
-    if (!result.ok) {
-      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKA'));
-    }
     return true;
   }
 
@@ -1513,12 +1745,4 @@ export class AudioProjectProvider
     this._projectCompatibilityCache.clear();
     this._documents.clear();
   }
-}
-
-function formatProjectFileDiagnostics(
-  diagnostics: readonly { readonly message: string }[],
-  fallback: string,
-): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

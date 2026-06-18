@@ -31,6 +31,7 @@ export interface ProjectMixConfigResult {
 
 export interface AudioProjectSessionGateway {
   resolveSession(documentUri?: string): Promise<ProjectSession | null>;
+  linkAudioSource(session: ProjectSession, sourcePath: string): Promise<string>;
   applyOperation(
     session: ProjectSession,
     operation: AudioProjectEditOperation,

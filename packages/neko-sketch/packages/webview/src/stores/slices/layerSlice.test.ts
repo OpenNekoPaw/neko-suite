@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createMockVSCodeApi,
+  installMockWebviewWindow,
+  type MockWebviewWindow,
+} from '@neko/shared/vscode/test-utils';
 import type { EditOperation } from '@neko/shared';
 import type { LayerData } from '../../types';
 import { createLayerSlice, type LayerSlice } from './layerSlice';
@@ -16,9 +21,20 @@ function createLayerStore() {
   }));
 }
 
+let mockWindow: MockWebviewWindow | undefined;
+let postMessage: (message: unknown) => void;
+
 beforeEach(() => {
   useSketchOperationStore.getState().clearLog();
-  window.__vscode_api__ = { postMessage: vi.fn() };
+  const api = createMockVSCodeApi();
+  postMessage = vi.fn();
+  api.postMessage = postMessage;
+  mockWindow = installMockWebviewWindow(api);
+});
+
+afterEach(() => {
+  mockWindow?.dispose();
+  mockWindow = undefined;
 });
 
 describe('layer slice vector layers', () => {
@@ -90,7 +106,7 @@ describe('layer slice operation snapshots', () => {
     expect(operation).not.toHaveProperty('before.layer.pendingData');
     expect(operation).not.toHaveProperty('before.layer.pendingNormalData');
     expect(() => structuredClone(operation)).not.toThrow();
-    expect(window.__vscode_api__?.postMessage).toHaveBeenCalledWith({
+    expect(postMessage).toHaveBeenCalledWith({
       type: 'operationApplied',
       operation,
     });
@@ -178,10 +194,4 @@ function createRuntimeLayer(overrides: Partial<LayerData> = {}): LayerData {
     alphaLock: false,
     ...overrides,
   };
-}
-
-declare global {
-  interface Window {
-    __vscode_api__?: { postMessage(message: unknown): void };
-  }
 }

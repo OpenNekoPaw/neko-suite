@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EngineSceneSnapshot } from '@neko/shared';
 import * as vscode from 'vscode';
 import {
@@ -32,7 +32,19 @@ vi.mock('vscode', () => ({
     }),
   },
   workspace: {
-    workspaceFolders: [],
+    workspaceFolders: [
+      {
+        uri: {
+          fsPath: '/workspace',
+          scheme: 'file',
+          toString() {
+            return 'file:///workspace';
+          },
+        },
+        name: 'workspace',
+        index: 0,
+      },
+    ],
     fs: {
       stat: vi.fn(),
       readFile: vi.fn(async () =>
@@ -48,6 +60,8 @@ vi.mock('vscode', () => ({
         `),
       ),
       writeFile: vi.fn(),
+      delete: vi.fn(),
+      rename: vi.fn(),
       createDirectory: vi.fn(),
       copy: vi.fn(),
     },
@@ -66,13 +80,61 @@ vi.mock('vscode', () => ({
   l10n: {
     t: (key: string) => key,
   },
+  EventEmitter: class EventEmitter<T = void> {
+    readonly event = vi.fn();
+    fire = vi.fn((_value?: T) => undefined);
+    dispose = vi.fn();
+  },
 }));
 
 vi.mock('@neko/neko-client', () => ({
   EngineClient: vi.fn(),
 }));
 
+const projectFiles = new Map<string, Uint8Array>();
+const viteIndexHtml = new TextEncoder().encode(`
+  <html>
+    <head>
+      <link rel="stylesheet" href="./assets/index-BJH_iLiU.css">
+    </head>
+    <body>
+      <script type="module" crossorigin src="./assets/index-D0DlV1oZ.js"></script>
+    </body>
+  </html>
+`);
+
 describe('ModelEditorProvider model API mapping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    projectFiles.clear();
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
+      return projectFiles.get(uri.fsPath) ?? viteIndexHtml;
+    });
+    vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: { fsPath: string }) => {
+      if (!projectFiles.has(uri.fsPath)) {
+        throw new Error(`Missing file: ${uri.fsPath}`);
+      }
+      return { type: 1 } as never;
+    });
+    vi.mocked(vscode.workspace.fs.writeFile).mockImplementation(
+      async (uri: { fsPath: string }, content: Uint8Array) => {
+        projectFiles.set(uri.fsPath, content);
+      },
+    );
+    vi.mocked(vscode.workspace.fs.delete).mockImplementation(async (uri: { fsPath: string }) => {
+      projectFiles.delete(uri.fsPath);
+    });
+    vi.mocked(vscode.workspace.fs.rename).mockImplementation(
+      async (from: { fsPath: string }, to: { fsPath: string }) => {
+        const content = projectFiles.get(from.fsPath);
+        if (!content) throw new Error(`Missing file: ${from.fsPath}`);
+        projectFiles.set(to.fsPath, content);
+        projectFiles.delete(from.fsPath);
+      },
+    );
+    vi.mocked(vscode.window.showSaveDialog).mockReset();
+  });
+
   it('parses hashed Vite webview assets from index.html', () => {
     expect(
       parseViteWebviewAssets(`
@@ -311,7 +373,15 @@ describe('ModelEditorProvider model API mapping', () => {
     const provider = new ModelEditorProvider(createExtensionContext());
     const internals = provider as unknown as ModelEditorProviderInternals;
     const panel = createWebviewPanel();
-    const document = { uri: { fsPath: '/workspace/scene.nkm', scheme: 'file' } };
+    projectFiles.set(
+      '/workspace/scene.nkm',
+      new TextEncoder().encode(JSON.stringify(createNkmProject({ profile: '2d' }))),
+    );
+    const document = await provider.openCustomDocument(
+      createUri('/workspace/scene.nkm') as never,
+      {} as never,
+      {} as never,
+    );
     const loadProject = vi.fn(async () => ({
       snapshot: {
         sceneId: 'scene-main',
@@ -326,9 +396,6 @@ describe('ModelEditorProvider model API mapping', () => {
     internals.panelGeneration = 1;
     internals.engineClient = { loadProject };
     vi.mocked(vscode.workspace.fs.writeFile).mockClear();
-    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValueOnce(
-      new TextEncoder().encode(JSON.stringify(createNkmProject({ profile: '2d' }))),
-    );
 
     await internals.handleWebviewMessage({ type: 'ready' }, panel, document, 1);
 
@@ -341,6 +408,91 @@ describe('ModelEditorProvider model API mapping', () => {
         snapshot: expect.objectContaining({ nodes: [] }),
       }),
     );
+  });
+
+  it('saves .nkm project data through ProjectFileStore instead of the engine save path', async () => {
+    const provider = new ModelEditorProvider(createExtensionContext());
+    const internals = provider as unknown as ModelEditorProviderInternals;
+    const panel = createWebviewPanel();
+    projectFiles.set(
+      '/workspace/hero.nkm',
+      new TextEncoder().encode(JSON.stringify(createNkmProject({ profile: '3d' }))),
+    );
+    const document = await provider.openCustomDocument(
+      createUri('/workspace/hero.nkm') as never,
+      {} as never,
+      {} as never,
+    );
+    const saveProject = vi.fn(async () => undefined);
+    vi.mocked(vscode.window.showSaveDialog).mockResolvedValueOnce(
+      createUri('/workspace/saved.nkm') as never,
+    );
+    internals.activeWebviewPanel = panel;
+    internals.activeDocument = document;
+    internals.panelGeneration = 1;
+    internals.engineClient = { saveProject };
+
+    await internals.handleWebviewMessage(
+      {
+        type: 'saveProject',
+        editorState: { selectedNodeId: 'Body' },
+      },
+      panel,
+      document,
+      1,
+    );
+
+    expect(saveProject).not.toHaveBeenCalled();
+    expect(readProjectJson('/workspace/saved.nkm')).toMatchObject({
+      profile: '3d',
+      editorState: { selectedNodeId: 'Body' },
+    });
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'projectSaved',
+        success: true,
+        filePath: '/workspace/saved.nkm',
+      }),
+    );
+  });
+
+  it('links imported model files through shared add-source before marking the document dirty', async () => {
+    const provider = new ModelEditorProvider(createExtensionContext());
+    const internals = provider as unknown as ModelEditorProviderInternals;
+    const panel = createWebviewPanel();
+    projectFiles.set(
+      '/workspace/scenes/shot.nkm',
+      new TextEncoder().encode(JSON.stringify(createNkmProject({ profile: '3d' }))),
+    );
+    projectFiles.set('/workspace/assets/hero.glb', new Uint8Array([1, 2, 3]));
+    const document = await provider.openCustomDocument(
+      createUri('/workspace/scenes/shot.nkm') as never,
+      {} as never,
+      {} as never,
+    );
+    const loadModel = vi.fn(async () => createSceneSnapshot());
+    const withRegisteredFile = vi.fn(async (_file, callback) =>
+      callback({ token: 'registered-model' }),
+    );
+    internals.activeWebviewPanel = panel;
+    internals.activeDocument = document;
+    internals.panelGeneration = 1;
+    internals.engineClient = { loadModel, withRegisteredFile };
+
+    await provider.importAsset(createUri('/workspace/assets/hero.glb') as never);
+
+    expect(document.projectData).toMatchObject({
+      model: { src: 'assets/hero.glb' },
+    });
+    expect(document.isDirty).toBe(true);
+    expect(readProjectJson('/workspace/scenes/shot.nkm')).toMatchObject({
+      model: { src: null },
+    });
+    expect(withRegisteredFile).toHaveBeenCalledWith(
+      { filePath: '/workspace/assets/hero.glb', purpose: 'model' },
+      expect.any(Function),
+    );
+    expect(loadModel).toHaveBeenCalledWith({ token: 'registered-model' });
   });
 });
 
@@ -356,6 +508,11 @@ interface ModelEditorProviderInternals {
           snapshot: EngineSceneSnapshot;
           editorState: unknown;
         }>;
+        withRegisteredFile?: (
+          file: { filePath: string; purpose: string },
+          callback: (registered: { token: string }) => Promise<EngineSceneSnapshot>,
+        ) => Promise<EngineSceneSnapshot>;
+        loadModel?: (input: { token: string }) => Promise<EngineSceneSnapshot>;
         updateEditorCamera?: (
           position: [number, number, number],
           target: [number, number, number],
@@ -363,6 +520,7 @@ interface ModelEditorProviderInternals {
           viewportId?: string,
         ) => Promise<void>;
         getSceneSnapshot?: () => Promise<unknown>;
+        saveProject?: (filePath: string, editorState: unknown) => Promise<void>;
       }
     | undefined;
   handleWebviewMessage(
@@ -435,6 +593,12 @@ function createUri(fsPath: string) {
       return fsPath;
     },
   };
+}
+
+function readProjectJson(filePath: string): unknown {
+  const content = projectFiles.get(filePath);
+  if (!content) return undefined;
+  return JSON.parse(new TextDecoder().decode(content));
 }
 
 function createWebview() {

@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n/I18nContext';
 
 export interface DroppedPuppetFile {
   readonly name: string;
-  readonly data: string;
+  readonly file: File;
 }
 
 export interface PuppetEmptyStateProps {
@@ -41,13 +41,7 @@ export function PuppetEmptyState({
       const file = event.dataTransfer.files[0];
       if (!file || !file.name.toLowerCase().endsWith('.moc3')) return;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result !== 'string') return;
-        const data = reader.result.split(',')[1] ?? '';
-        onDropMoc3({ name: file.name, data });
-      };
-      reader.readAsDataURL(file);
+      onDropMoc3({ name: file.name, file });
     },
     [onDropMoc3],
   );

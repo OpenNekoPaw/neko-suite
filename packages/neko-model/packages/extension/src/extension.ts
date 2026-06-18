@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { EnvironmentPlacement, ILogger, NekoModelAPI } from '@neko/shared';
+import type { EnvironmentPlacement, ILogger, NekoModelAPI, NkmSceneProfile } from '@neko/shared';
 import {
   createNewFile,
   createVSCodeLogger,
@@ -22,14 +22,26 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
 import { ModelAssetExportService } from './export/ModelAssetExportService';
 
 /** Default .nkm document template */
-function getModelTemplate(title: string): string {
+function getModelTemplate(title: string, profile: NkmSceneProfile = '3d'): string {
   return JSON.stringify(
     {
       version: 2,
       name: title,
-      profile: '3d',
+      profile,
       model: { src: null },
-      scene_snapshot: { nodes: [], animations: [] },
+      ...(profile === '3d' ? { scene_snapshot: { nodes: [], animations: [] } } : {}),
+      ...(profile === '2d'
+        ? {
+            scene2d: {
+              sprites: [],
+              tilemaps: [],
+              lights: [],
+              parallaxLayers: [],
+              particles: [],
+              camera: null,
+            },
+          }
+        : {}),
       faceParams: {},
       customClips: [],
       camera: null,
@@ -114,6 +126,21 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
         targetFolder: uri,
         ext: '.nkm',
         template: (title) => getModelTemplate(title),
+        noFolderErrorMessage: vscode.l10n.t('neko.model.new.noFolder'),
+        onCreated: async (fileUri) => {
+          await vscode.commands.executeCommand(
+            'vscode.openWith',
+            fileUri,
+            ModelEditorProvider.viewType,
+          );
+        },
+      });
+    }),
+    vscode.commands.registerCommand('neko.model.new2dScene', async (uri?: vscode.Uri) => {
+      await createNewFile({
+        targetFolder: uri,
+        ext: '.nkm',
+        template: (title) => getModelTemplate(title, '2d'),
         noFolderErrorMessage: vscode.l10n.t('neko.model.new.noFolder'),
         onCreated: async (fileUri) => {
           await vscode.commands.executeCommand(

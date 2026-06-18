@@ -95,7 +95,7 @@ describe('PuppetEmptyState', () => {
 
     expect(onDropMoc3).toHaveBeenCalledWith({
       name: 'sample.moc3',
-      data: 'sample.moc3-payload',
+      file,
     });
   });
 });

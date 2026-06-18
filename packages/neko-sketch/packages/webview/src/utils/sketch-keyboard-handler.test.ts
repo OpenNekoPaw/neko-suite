@@ -47,6 +47,28 @@ describe('handleSketchKeyboardEvent', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it('uses shared editable-target detection for rich text and scoped inputs', () => {
+    document.body.innerHTML = `
+      <div id="rich" contenteditable="true"></div>
+      <div id="role" role="textbox"></div>
+      <div id="scoped" data-neko-keyboard-scope="text-input"></div>
+    `;
+
+    for (const id of ['rich', 'role', 'scoped']) {
+      const event = keyboardEvent('b', { target: document.getElementById(id) });
+      const dispatch = vi.fn();
+
+      const handled = handleSketchKeyboardEvent(event, {
+        isKeyboardFocused: true,
+        clearTextSelection: vi.fn(),
+        dispatch,
+      });
+
+      expect(handled).toBe(false);
+      expect(dispatch).not.toHaveBeenCalled();
+    }
+  });
+
   it('ignores shortcuts while another VSCode surface owns keyboard focus', () => {
     const event = keyboardEvent('a', { ctrlKey: true });
     const preventDefault = vi.spyOn(event, 'preventDefault');

@@ -6,9 +6,15 @@ import {
   nkmSourcePathPolicy,
   ProjectFileStore,
   resolveWorkspaceMediaPath,
+  type ApplyPortableSourcePolicyOptions,
   type NkmProjectData,
+  type ProjectFileSaveReason,
 } from '@neko/shared';
-import { createVSCodeProjectFileIoAdapter } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeProjectFileIoAdapter,
+  formatProjectFileDiagnostics,
+  ProjectFileSaveSession,
+} from '@neko/shared/vscode/extension';
 import * as path from 'path';
 import { getLogger } from '../logger';
 
@@ -17,6 +23,14 @@ const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode 
 const projectFileStore = new ProjectFileStore({
   registry: createDefaultProjectFormatCodecRegistry(),
   fileOps: projectFileAdapter.fileOps,
+  logger,
+});
+const projectFileSession = new ProjectFileSaveSession<NkmProjectData>({
+  formatId: 'nkm',
+  store: projectFileStore,
+  sourcePolicy: nkmSourcePathPolicy,
+  createSourcePolicyOptions: (uri) => createNkmSourcePolicyOptions(uri),
+  logger,
 });
 
 /**
@@ -106,13 +120,13 @@ export class ModelDocument implements vscode.CustomDocument {
       return;
     }
 
-    await saveNkmProject(this.uri, this._projectData);
+    await saveNkmProject(this.uri, this._projectData, 'vscode-save');
     this._isDirty = false;
   }
 
   /** Save to a specific URI */
   async saveAs(targetUri: vscode.Uri): Promise<void> {
-    await saveNkmProject(targetUri, this._projectData);
+    await saveNkmProject(targetUri, this._projectData, 'save-as');
     this._isDirty = false;
   }
 
@@ -159,23 +173,24 @@ export async function loadNkmProject(uri: vscode.Uri): Promise<NkmProjectLoadRes
   };
 }
 
-export async function saveNkmProject(uri: vscode.Uri, project: NkmProjectData): Promise<void> {
-  const result = await projectFileStore.save({
-    filePath: uri.fsPath,
-    formatId: 'nkm',
+export async function saveNkmProject(
+  uri: vscode.Uri,
+  project: NkmProjectData,
+  saveReason: ProjectFileSaveReason = 'manual',
+): Promise<void> {
+  await projectFileSession.save({
+    targetUri: uri,
     document: project,
-    sourcePolicy: nkmSourcePathPolicy,
-    sourcePolicyOptions: createNkmSourcePolicyOptions(uri),
+    saveReason,
+    fallbackMessage: 'Failed to save .nkm file',
+    useSaveAs: saveReason === 'save-as',
   });
-
-  if (!result.ok) {
-    throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkm file'));
-  }
 }
 
 export async function updateNkmProject(
   uri: vscode.Uri,
   update: (project: NkmProjectData) => NkmProjectData,
+  saveReason: ProjectFileSaveReason = 'manual',
 ): Promise<NkmProjectData | undefined> {
   const loaded = await loadNkmProject(uri);
   if (!loaded.project) {
@@ -184,7 +199,7 @@ export async function updateNkmProject(
   }
 
   const next = update(loaded.project);
-  await saveNkmProject(uri, next);
+  await saveNkmProject(uri, next, saveReason);
   return next;
 }
 
@@ -201,9 +216,7 @@ export async function resolveNkmProjectModelSource(uri: vscode.Uri): Promise<str
   return isWorkspaceMediaPathResolvedLocal(resolved) ? resolved.path : undefined;
 }
 
-export function createNkmSourcePolicyOptions(
-  uri: vscode.Uri,
-): Parameters<ProjectFileStore['save']>[0]['sourcePolicyOptions'] {
+export function createNkmSourcePolicyOptions(uri: vscode.Uri): ApplyPortableSourcePolicyOptions {
   const documentDir = path.dirname(uri.fsPath);
   const context = projectFileAdapter.createWorkspaceMediaPathContext({
     documentUri: uri,
@@ -218,17 +231,10 @@ export function createNkmSourcePolicyOptions(
   return {
     context: {
       ...context,
-      owningWorkspaceRoot: documentDir,
+      owningWorkspaceRoot: context.owningWorkspaceRoot ?? documentDir,
+      workspaceRoots: context.workspaceRoots?.length ? context.workspaceRoots : [documentDir],
       documentDir,
       pathVariables,
     },
   };
-}
-
-function formatProjectFileDiagnostics(
-  diagnostics: readonly { readonly message: string }[],
-  fallback: string,
-): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

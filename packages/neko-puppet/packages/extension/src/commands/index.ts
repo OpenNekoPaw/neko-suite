@@ -3,12 +3,28 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createNewFile } from '@neko/shared/vscode/extension';
+import {
+  createDefaultProjectFormatCodecRegistry,
+  ingestProjectSourceAddRequest,
+  nkpSourcePathPolicy,
+  ProjectFileStore,
+  type NkpProjectData,
+  type WorkspaceMediaPathContext,
+} from '@neko/shared';
+import {
+  createNewFile,
+  createVSCodeProjectFileIoAdapter,
+  formatProjectFileDiagnostics,
+  ProjectFileSaveSession,
+} from '@neko/shared/vscode/extension';
 import { handleError } from '../utils/errorHandler';
 import { PuppetEditorProvider } from '../editor';
 import type { PuppetLiveModeService } from '../live';
 import { Live2dBundleLoader } from '../live2d';
 import { PuppetAssetExportService } from '../export/PuppetAssetExportService';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('PuppetCommands');
 
 interface ImportLive2dBundleArgs {
   readonly path: string;
@@ -26,7 +42,14 @@ function getPuppetTemplate(name: string): string {
   const data = {
     version: '1.0',
     name,
-    puppet: { src: null },
+    puppet: {
+      src: null,
+      format: 'moc3',
+      runtimeAdapter: {
+        id: 'live2d-moc3-compat',
+        version: 'clean-room',
+      },
+    },
     parameters: {},
     viewport: { zoom: 1.0 },
   };
@@ -38,6 +61,21 @@ export function registerCommands(
   liveModeService?: PuppetLiveModeService,
 ): void {
   const live2dBundleLoader = new Live2dBundleLoader();
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const projectFileStore = new ProjectFileStore({
+    registry: createDefaultProjectFormatCodecRegistry(),
+    fileOps: projectFileAdapter.fileOps,
+    logger,
+  });
+  const projectFileSession = new ProjectFileSaveSession<NkpProjectData>({
+    formatId: 'nkp',
+    store: projectFileStore,
+    sourcePolicy: nkpSourcePathPolicy,
+    createSourcePolicyOptions: (uri) => ({
+      context: createPuppetCommandSourceContext(projectFileAdapter, uri, uri),
+    }),
+    logger,
+  });
   const exportService = new PuppetAssetExportService({
     fs: {
       readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
@@ -96,17 +134,30 @@ export function registerCommands(
             )?.[0];
         if (!bundleUri) return;
 
-        const bundleBytes = await vscode.workspace.fs.readFile(bundleUri);
-        const relativeBundlePath =
-          './' + path.relative(workspaceFolder.fsPath, bundleUri.fsPath).replace(/\\/g, '/');
-        const loaded = live2dBundleLoader.loadLive2dBundle(relativeBundlePath, bundleBytes);
         const projectStem = path.basename(bundleUri.fsPath).replace(/\.zip$/i, '');
         const projectUri = vscode.Uri.joinPath(workspaceFolder, `${projectStem}.nkp.puppet.bundle`);
-
-        await vscode.workspace.fs.writeFile(
+        const sourcePolicyContext = createPuppetCommandSourceContext(
+          projectFileAdapter,
           projectUri,
-          Buffer.from(JSON.stringify(loaded.projectData, null, 2), 'utf-8'),
+          workspaceFolder,
         );
+        const durableBundlePath = await linkPuppetBundleSource(
+          bundleUri.fsPath,
+          projectUri,
+          sourcePolicyContext,
+        );
+        const bundleBytes = await vscode.workspace.fs.readFile(bundleUri);
+        const loaded = live2dBundleLoader.loadLive2dBundle(durableBundlePath, bundleBytes);
+
+        await projectFileSession.save({
+          targetUri: projectUri,
+          document: loaded.projectData,
+          saveReason: 'import',
+          fallbackMessage: vscode.l10n.t('neko.puppet.importLive2dBundle.saveFailed'),
+          sourcePolicyOptions: {
+            context: sourcePolicyContext,
+          },
+        });
         await vscode.commands.executeCommand('vscode.openWith', projectUri, 'neko.puppetEditor');
         void vscode.window.showInformationMessage(
           vscode.l10n.t('neko.puppet.importLive2dBundle.imported'),
@@ -145,6 +196,67 @@ export function registerCommands(
       }),
     );
   }
+}
+
+function createPuppetCommandSourceContext(
+  projectFileAdapter: ReturnType<typeof createVSCodeProjectFileIoAdapter>,
+  projectUri: vscode.Uri,
+  workspaceFolder: vscode.Uri,
+): WorkspaceMediaPathContext {
+  const documentDir = path.dirname(projectUri.fsPath);
+  const context = projectFileAdapter.createWorkspaceMediaPathContext({
+    documentUri: projectUri,
+    pathVariables: new Map([['PROJECT', documentDir]]),
+    allowedRoots: [documentDir, workspaceFolder.fsPath],
+  });
+  const pathVariables = new Map(context.pathVariables ?? []);
+  pathVariables.set('PROJECT', documentDir);
+  return {
+    ...context,
+    documentDir,
+    pathVariables,
+  };
+}
+
+async function linkPuppetBundleSource(
+  bundlePath: string,
+  projectUri: vscode.Uri,
+  context: WorkspaceMediaPathContext,
+): Promise<string> {
+  const result = await ingestProjectSourceAddRequest(
+    {
+      mode: 'link',
+      sourcePath: bundlePath,
+      destination: { kind: 'project', directory: '.', copyMode: 'link' },
+      fileName: path.basename(bundlePath),
+      caller: 'neko-puppet.import-live2d-bundle',
+    },
+    {
+      documentPath: projectUri.fsPath,
+      assetDirectory: '.',
+      workspaceContext: context,
+      fileOps: {
+        createDirectory: async (dirPath) =>
+          vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+        fileExists: async (filePath) => {
+          try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        writeFile: async (filePath, bytes) =>
+          vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
+      },
+      unmanagedSourceMessage:
+        'Live2D bundle must be moved into the project, asset library, or a configured media root before saving.',
+    },
+  );
+  if (result.status !== 'ready' || !result.contractedPath) {
+    throw new Error(result.error ?? `Unable to link Live2D bundle: ${bundlePath}`);
+  }
+  return result.contractedPath;
 }
 
 async function runPuppetAssetExport(

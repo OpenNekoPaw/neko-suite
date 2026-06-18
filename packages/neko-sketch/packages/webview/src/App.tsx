@@ -38,10 +38,11 @@ import {
   handleSketchKeyboardEvent,
   SKETCH_KEYBOARD_EVENT_LISTENER_OPTIONS,
 } from './utils/sketch-keyboard-handler';
-import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
+import { importImageAsLayer, isImageMimeType } from './utils/image-import';
 import { createTextureStampAssetFromBase64 } from './brush';
 import { exportLayerImageDataBase64 } from './utils/layer-export';
 import { mapPsdDocumentTree } from './utils/psd-layer-mapper';
+import { postSketchMessage, type SketchVSCodeApi } from './utils/vscode';
 import { applySketchAIResult } from './ai/ai-result-applier';
 import { applySketchAIResultWithSession, type SketchAIApplySnapshot } from './ai/ai-apply-flow';
 import { SketchAISessionStore } from './ai/ai-session-store';
@@ -53,7 +54,13 @@ import type {
 } from './ai/ai-progress-types';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider } from './i18n/I18nContext';
-import type { SketchRuntimeFeatureFlags, SupportedLocale } from '@neko/shared';
+import {
+  createProjectSourceAddClient,
+  isProjectFileSnapshotRequestMessage,
+  PROJECT_FILE_SNAPSHOT_RESPONSE,
+  type SketchRuntimeFeatureFlags,
+  type SupportedLocale,
+} from '@neko/shared';
 import type { CanvasConfig, LayerData, ToolType } from './types';
 
 type SketchRightDockMode = 'basic' | 'professional';
@@ -62,21 +69,11 @@ interface AppSketchAIApplySnapshot extends SketchAIApplySnapshot {
   readonly wasDirty: boolean;
 }
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-interface SketchWebviewWindow {
-  acquireVsCodeApi(): VsCodeApi;
-  __vscode_api__?: VsCodeApi;
-}
-
-// Acquire VSCode API once and expose it to operation sync helpers.
-const webviewWindow = window as unknown as SketchWebviewWindow;
-const vscode = webviewWindow.acquireVsCodeApi();
-webviewWindow.__vscode_api__ = vscode;
+const vscode: Pick<NonNullable<SketchVSCodeApi>, 'postMessage'> = {
+  postMessage(message: unknown): void {
+    postSketchMessage(message);
+  },
+};
 const aiSessionStore = new SketchAISessionStore();
 const DEFAULT_FEATURE_FLAGS: SketchRuntimeFeatureFlags = {
   psdImportEnabled: false,
@@ -221,6 +218,20 @@ export function App() {
     [featureFlags],
   );
 
+  const serializeCurrentSketchDocument = useCallback(() => {
+    const state = store.getState();
+    const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
+    const gl = canvas?.getContext('webgl2') ?? null;
+    return serializeDocument(
+      state.canvas,
+      state.layers,
+      state.viewport,
+      gl,
+      state.scenes,
+      state.filters,
+    );
+  }, [store]);
+
   // Handle messages from extension
   const handleMessage = useCallback(
     async (event: MessageEvent<ExtensionToWebviewMessage>) => {
@@ -228,6 +239,24 @@ export function App() {
       const focusMessage = isKeyboardFocusMessage(msg) ? msg : null;
       if (focusMessage) {
         setKeyboardFocused(focusMessage.focused);
+        return;
+      }
+      if (isProjectFileSnapshotRequestMessage(msg)) {
+        try {
+          vscode.postMessage({
+            type: PROJECT_FILE_SNAPSHOT_RESPONSE,
+            requestId: msg.requestId,
+            ok: true,
+            document: serializeCurrentSketchDocument(),
+          });
+        } catch (error) {
+          vscode.postMessage({
+            type: PROJECT_FILE_SNAPSHOT_RESPONSE,
+            requestId: msg.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         return;
       }
 
@@ -272,18 +301,7 @@ export function App() {
         }
 
         case 'document:save': {
-          const state = store.getState();
-          const canvas = document.getElementById('sketch-canvas') as HTMLCanvasElement | null;
-          const gl = canvas?.getContext('webgl2') ?? null;
-          const doc = serializeDocument(
-            state.canvas,
-            state.layers,
-            state.viewport,
-            gl,
-            state.scenes,
-            state.filters,
-          );
-          vscode.postMessage({ type: 'document:save', data: doc });
+          vscode.postMessage({ type: 'document:save', data: serializeCurrentSketchDocument() });
           markClean();
           break;
         }
@@ -484,7 +502,15 @@ export function App() {
           break;
       }
     },
-    [setCanvas, setLayers, setViewport, setActiveLayer, markClean, clearHistory],
+    [
+      setCanvas,
+      setLayers,
+      setViewport,
+      setActiveLayer,
+      markClean,
+      clearHistory,
+      serializeCurrentSketchDocument,
+    ],
   );
 
   useEffect(() => {
@@ -502,7 +528,11 @@ export function App() {
           e.preventDefault();
           const file = item.getAsFile();
           if (file) {
-            void handleBlobImport(file, 'Pasted Image');
+            void addSketchImageSource({
+              kind: 'paste',
+              file,
+              name: file.name || 'pasted-image.png',
+            });
           }
           return; // Only import the first image
         }
@@ -512,7 +542,7 @@ export function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  // --- Drag-and-drop: import image files ---
+  // --- Drag-and-drop: acquire image files through project:addSource before import ---
   useEffect(() => {
     const root = document.getElementById('root');
     if (!root) return;
@@ -545,21 +575,36 @@ export function App() {
       setIsDragOver(false);
 
       if (!e.dataTransfer) return;
+      const client = createSketchProjectSourceAddClient();
 
-      // Case 1: OS file manager drag — dataTransfer.files available
       if (e.dataTransfer.files.length > 0) {
         for (const file of Array.from(e.dataTransfer.files)) {
           if (isImageMimeType(file.type)) {
-            void handleBlobImport(file, file.name);
+            void addSketchImageSource({
+              client,
+              kind: 'drag-drop',
+              file,
+              name: file.name,
+            });
             return; // Import the first valid image
           }
         }
       }
 
-      // Case 2: VSCode Explorer drag — text/uri-list (sandbox blocks file data)
       const uriList = e.dataTransfer.getData('text/uri-list');
       if (uriList) {
-        vscode.postMessage({ type: 'file:dropRequest', uris: uriList });
+        const sourceUri = uriList
+          .split('\n')
+          .map((uri) => uri.trim())
+          .find((uri) => uri.length > 0 && !uri.startsWith('#'));
+        if (sourceUri) {
+          void addSketchImageSource({
+            client,
+            kind: 'drag-drop',
+            sourceUri,
+            name: basenameFromSource(sourceUri),
+          });
+        }
       }
     };
 
@@ -905,13 +950,57 @@ async function handleFileImport(name: string, base64Data: string): Promise<void>
   }
 }
 
-/** Import an image from a Blob/File (clipboard paste or drag-drop) */
-async function handleBlobImport(blob: Blob, name: string): Promise<void> {
+function createSketchProjectSourceAddClient() {
+  return createProjectSourceAddClient({
+    postMessage: (message) => vscode.postMessage(message),
+    addMessageListener: (listener) => {
+      const handleMessage = (event: MessageEvent) => listener(event.data);
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+    },
+    timeoutMs: 30000,
+  });
+}
+
+async function addSketchImageSource(input: {
+  readonly client?: ReturnType<typeof createSketchProjectSourceAddClient>;
+  readonly kind: 'drag-drop' | 'paste';
+  readonly file?: File;
+  readonly sourceUri?: string;
+  readonly name: string;
+}): Promise<void> {
+  const client = input.client ?? createSketchProjectSourceAddClient();
+  const result = await client.addSource({
+    kind: input.kind,
+    formatId: 'nks',
+    ...(input.file ? { file: input.file } : {}),
+    ...(input.sourceUri ? { sourceUri: input.sourceUri, browserFile: { name: input.name } } : {}),
+    target: { role: 'image' },
+    destination: {
+      kind: 'project',
+      directory: 'imports',
+      copyMode: input.file ? 'copy' : 'link',
+    },
+    ingestMode: input.file ? 'create-asset' : 'link',
+    metadata: { sketchImport: true, name: input.name },
+  });
+  if (!result.ok) {
+    // Extension owns user-visible diagnostics; keep durable document state untouched.
+    return;
+  }
+}
+
+function basenameFromSource(value: string): string {
+  const withoutQuery = value.split(/[?#]/, 1)[0] ?? value;
+  const normalized = decodeURIComponentSafe(withoutQuery).replace(/\\/g, '/');
+  return normalized.split('/').pop() || value;
+}
+
+function decodeURIComponentSafe(value: string): string {
   try {
-    const { layer } = await importImageFromBlob(blob, name);
-    applyImportedLayers({ layers: [layer], sourceName: name, sourceKind: 'image' });
+    return decodeURIComponent(value);
   } catch {
-    // Silently fail — bitmap decode may fail for unsupported formats
+    return value;
   }
 }
 

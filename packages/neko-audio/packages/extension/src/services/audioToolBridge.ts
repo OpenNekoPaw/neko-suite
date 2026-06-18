@@ -222,10 +222,11 @@ export class AudioToolBridge {
 
     return this.applyProjectOperation(args, async (session) => {
       const audioInfo = await this.audioService.probeAudio(filePath.value);
+      const durablePath = await this.gateway.linkAudioSource(session, filePath.value);
       const trackId = this.optionalString(args.trackId) ?? generateId();
       const existingTrack = session.projectData.tracks.find((track) => track.id === trackId);
       const element = createDefaultAudioElement({
-        filePath: filePath.value,
+        filePath: durablePath,
         duration: audioInfo.duration,
       });
 

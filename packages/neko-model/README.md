@@ -2,9 +2,11 @@
 
 ## 领域职责
 
-`neko-model` 是 `.nkm` Scene authoring 的主要创作包，负责 `.nkm profile: 2d`、`.nkm profile: 3d` 和 Live Stage 所需的 Scene/Viewport 创作入口。2D Scene 的 sprite、tilemap、2D light、parallax、particle、camera 和 scene graph 属于 `.nkm profile: 2d`，不由 `neko-puppet` 保存或编辑。
+`neko-model` 是 `.nkm` Scene authoring 的主要创作包，负责 `.nkm profile: 2d`、`.nkm profile: 3d` 和 `.nkm profile: live` 所需的 Scene/Viewport 创作入口。2D Scene 的 sprite、tilemap、2D light、parallax、particle、camera 和 scene graph 属于 `.nkm profile: 2d`，不由 `neko-puppet` 保存或编辑。
 
-Live2D/Puppet 角色仍属于 `.nkp` 和 `neko-puppet`；`.nkm profile: live` 或 2D/3D Scene 可以通过稳定引用使用 `.nkp` actor，但不复制角色参数、motion、expression 或 physics 真值。
+Live2D/Puppet 角色仍属于 `.nkp` 和 `neko-puppet`；`.nkm profile: live` 或 2D/3D Scene 可以通过稳定引用使用 `.nkp` actor，但不复制角色参数、motion、expression、physics 或 tracking mapping 真值。
+
+Engine runtime 上，`.nkm profile: 2d | 3d | live` 进入 `SceneService`/`runtime-scene`。`.nkm profile: 2d` 的首批 2D 面板若尚未完整实现，Webview 必须显示 explicit degraded/unavailable state，不能把 generic 2D Scene creation fallback 到 `neko-puppet`。
 
 ## Route A 边界
 
@@ -16,7 +18,7 @@ Webview 不再内置 R3F/Three.js 可见模型 fallback。`R3FDevelopmentFallbac
 
 短生命周期预测或辅助 overlay 必须以 2D overlay / gizmo anchor / projected bounds 形式表达，携带 viewportId、sceneRevision、seq，以及必要的 sessionId/topologyVersion，并在 ack、SceneDelta、TopologyChangeEvent 或 RenderFrameMeta 对齐后清除。预测层不得解析源 glTF、不得运行第二套 PBR/材质/动画渲染器，也不得覆盖 Engine 视频流持续显示。
 
-原始 `.glb` / `.gltf` / `.vrm` 文件直接打开、导入 `.nkm` 项目、或从项目引用模型时，都必须先进入 Engine 加载路径，再由 Route A 视频流显示。`.nkm profile: 2d` 的 sprite、tilemap、camera、2D light、parallax 和 particle 也必须走 Scene/Viewport contract 与 Engine-authoritative 状态。Webview 不直接解析或渲染源模型文件作为 durable authoring 真值，只显示 Engine 帧并把选择、平移、旋转、缩放、动画和 authoring 控制输入发送给 Engine。
+原始 `.glb` / `.gltf` / `.vrm` 文件直接打开、导入 `.nkm` 项目、或从项目引用模型时，都必须先进入 Engine 加载路径，再由 Route A 视频流显示。`.nkm profile: 2d` 的 sprite、tilemap、camera、2D light、parallax 和 particle 也必须走 Scene/Viewport contract 与 Engine-authoritative 状态。`.nkm` 放置 `.nkp` actor 时只保存 stable project/asset/resource refs 与 Scene-owned placement/routing/timeline/stage control。Webview 不直接解析或渲染源模型文件作为 durable authoring 真值，只显示 Engine 帧并把选择、平移、旋转、缩放、动画和 authoring 控制输入发送给 Engine。
 
 Extension Host 只处理 VSCode API、资源 URI、Engine discovery、导入导出对话框和文件操作。高频 transform、character slider、brush patch、SceneDelta、视频帧和 PCM 帧不得经 Extension 转发。
 

@@ -116,7 +116,7 @@ export function dispatchKeyboardAction(
       break;
 
     case 'import':
-      vscode.postMessage({ type: 'file:import' });
+      postSketchFilePickerAddSource(vscode);
       break;
 
     case 'export':
@@ -132,9 +132,24 @@ export function dispatchKeyboardAction(
       break;
 
     case 'importAsset':
-      vscode.postMessage({ type: 'file:import' });
+      postSketchFilePickerAddSource(vscode);
       break;
   }
+}
+
+function postSketchFilePickerAddSource(vscode: VsCodeApi): void {
+  vscode.postMessage({
+    type: 'project:addSource',
+    request: {
+      requestId: `sketch-picker-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      kind: 'file-picker',
+      formatId: 'nks',
+      target: { role: 'image' },
+      destination: { kind: 'project', directory: 'imports', copyMode: 'link' },
+      ingestMode: 'link',
+      metadata: { sketchImport: true },
+    },
+  });
 }
 
 function deleteSelectedVectorGeometry(store: SketchStore): boolean {

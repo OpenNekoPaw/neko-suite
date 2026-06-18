@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   createModelImportConflictPath,
-  createModelProjectImportPlan,
-  formatModelProjectSrc,
   formatSupportedModelAssetExtensions,
   getSupportedModelAssetFileExtensions,
   parseModelImportAssetArgs,
@@ -57,59 +55,6 @@ describe('model import asset contract', () => {
   it('exposes dialog filters and user-facing extension labels from one source', () => {
     expect(getSupportedModelAssetFileExtensions()).toEqual(['glb', 'gltf', 'vrm']);
     expect(formatSupportedModelAssetExtensions()).toBe('.glb, .gltf, .vrm');
-  });
-
-  it('keeps workspace-local model imports on their source path', () => {
-    expect(
-      createModelProjectImportPlan({
-        sourcePath: '/repo/assets/hero.glb',
-        documentPath: '/repo/scenes/shot.nkm',
-        workspaceFolderPaths: ['/repo'],
-      }),
-    ).toEqual({
-      action: 'useSource',
-      sourcePath: '/repo/assets/hero.glb',
-      importPath: '/repo/assets/hero.glb',
-      projectModelSrc: '../assets/hero.glb',
-    });
-  });
-
-  it('materializes external model imports into the owning workspace .neko directory', () => {
-    expect(
-      createModelProjectImportPlan({
-        sourcePath: '/tmp/neko-agent/hero.glb',
-        documentPath: '/repo/scenes/shot.nkm',
-        workspaceFolderPaths: ['/repo'],
-      }),
-    ).toEqual({
-      action: 'copy',
-      sourcePath: '/tmp/neko-agent/hero.glb',
-      importPath: '/repo/.neko/imports/models/hero.glb',
-      importDirectory: '/repo/.neko/imports/models',
-      projectModelSrc: '../.neko/imports/models/hero.glb',
-    });
-  });
-
-  it('materializes external model imports next to standalone projects without a workspace', () => {
-    expect(
-      createModelProjectImportPlan({
-        sourcePath: '/tmp/neko-agent/hero.glb',
-        documentPath: '/projects/model/shot.nkm',
-      }),
-    ).toEqual({
-      action: 'copy',
-      sourcePath: '/tmp/neko-agent/hero.glb',
-      importPath: '/projects/model/.neko/imports/models/hero.glb',
-      importDirectory: '/projects/model/.neko/imports/models',
-      projectModelSrc: './.neko/imports/models/hero.glb',
-    });
-  });
-
-  it('formats model project src values as normalized relative references', () => {
-    expect(formatModelProjectSrc('asset.glb')).toBe('./asset.glb');
-    expect(formatModelProjectSrc('./asset.glb')).toBe('./asset.glb');
-    expect(formatModelProjectSrc('../asset.glb')).toBe('../asset.glb');
-    expect(formatModelProjectSrc('nested\\asset.glb')).toBe('./nested/asset.glb');
   });
 
   it('builds timestamped conflict paths without iterative numeric probing', () => {

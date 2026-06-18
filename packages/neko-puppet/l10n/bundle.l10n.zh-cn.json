@@ -13,6 +13,7 @@
   "neko.puppet.importLive2dBundle.filter": "Live2D ZIP Bundle",
   "neko.puppet.importLive2dBundle.noFolder": "未打开工作区文件夹",
   "neko.puppet.importLive2dBundle.imported": "已导入 Live2D Bundle",
+  "neko.puppet.importLive2dBundle.saveFailed": "保存 Live2D Bundle 项目失败",
   "neko.puppet.liveMode.start.title": "启动 Puppet Live Mode",
   "neko.puppet.liveMode.stop.title": "停止 Puppet Live Mode",
   "neko.puppet.liveMode.started": "Puppet Live Mode 已启动",

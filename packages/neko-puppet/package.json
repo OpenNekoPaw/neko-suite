@@ -1,7 +1,7 @@
 {
   "name": "neko-puppet",
   "displayName": "Neko Puppet",
-  "description": "Inochi2D puppet animation editor with parameter control and real-time streaming",
+  "description": ".nkp Live2D/native Puppet character editor with SDK-neutral runtime adapters",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -32,6 +32,7 @@
     "neko.neko-engine"
   ],
   "activationEvents": [
+    "onCustomEditor:neko.puppetEditor",
     "onInstallKind:media.puppet-model",
     "onInstallKind:media.puppet-config",
     "onInstallKind:media.puppet-motion"

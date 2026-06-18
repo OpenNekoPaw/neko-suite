@@ -7,14 +7,25 @@
 import * as vscode from 'vscode';
 import {
   createDefaultProjectFormatCodecRegistry,
+  handleProjectSourceAddHostRequest,
+  handleProjectSourceAddRequest,
+  ingestProjectSourceAddRequest,
   nksSourcePathPolicy,
   ProjectFileStore,
+  type ProjectSourceAddRequest,
+  type ProjectSourceAddResult,
+  type ProjectFileSaveReason,
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
   createFocusedWebviewRegistry,
+  createVSCodeProjectSourceAddRequest,
   createVSCodeProjectFileIoAdapter,
+  formatProjectFileDiagnostics,
   injectLocaleAttribute,
+  normalizeVSCodeProjectSourceAddRequest,
+  ProjectFileSaveSession,
+  requestWebviewProjectSnapshot,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type { LayerOutlineProvider } from '../views/layerOutlineProvider';
@@ -65,6 +76,45 @@ function isImageUri(uri: vscode.Uri): boolean {
 function isPsdUri(uri: vscode.Uri): boolean {
   const ext = uri.path.split('.').pop()?.toLowerCase() ?? '';
   return PSD_EXTENSIONS.has(ext);
+}
+
+function isSketchImportFileName(fileName: string): boolean {
+  const ext = fileName.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_EXTENSIONS.has(ext) || PSD_EXTENSIONS.has(ext);
+}
+
+function readSketchSourceAddFileName(request: ProjectSourceAddRequest): string {
+  const metadataName = request.metadata?.['name'];
+  if (typeof metadataName === 'string' && metadataName.length > 0) {
+    return metadataName;
+  }
+  const source = request.browserFile?.name ?? request.sourcePath ?? request.sourceUri ?? 'imported';
+  const normalized = source.split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? source;
+  const name = normalized.split('/').pop();
+  return name && name.length > 0 ? decodeURIComponentSafe(name) : 'imported';
+}
+
+function readSketchSourceAddDisplayName(request: ProjectSourceAddRequest): string {
+  const displayName = request.metadata?.['displayName'];
+  return typeof displayName === 'string' && displayName.trim().length > 0
+    ? displayName.trim()
+    : readSketchSourceAddFileName(request);
+}
+
+function resolveSketchDurablePath(documentUri: vscode.Uri, durablePath: string): string {
+  if (durablePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(durablePath)) {
+    return durablePath;
+  }
+  const documentDir = documentUri.fsPath.replace(/[\\/][^\\/]*$/, '');
+  return `${documentDir}/${durablePath}`.replace(/\\/g, '/');
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function isPsdImportEnabled(): boolean {
@@ -125,6 +175,16 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly projectFileStore = new ProjectFileStore({
     registry: createDefaultProjectFormatCodecRegistry(),
     fileOps: this.projectFileAdapter.fileOps,
+    logger,
+  });
+  private readonly projectFileSession = new ProjectFileSaveSession<NksDocument>({
+    formatId: 'nks',
+    store: this.projectFileStore,
+    sourcePolicy: nksSourcePathPolicy,
+    createSourcePolicyOptions: (uri) => ({
+      context: this.projectFileAdapter.createWorkspaceMediaPathContext({ documentUri: uri }),
+    }),
+    logger,
   });
 
   // External providers for VSCode integration
@@ -255,21 +315,32 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   async saveCustomDocument(
-    _document: vscode.CustomDocument,
+    document: vscode.CustomDocument,
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
-    this.activeWebviewPanel?.webview.postMessage({ type: 'document:save' });
+    const webviewPanel = this.getWebviewPanelForDocument(document);
+    if (!webviewPanel) return;
+    const data = await requestWebviewProjectSnapshot<NksDocument>(webviewPanel.webview, {
+      formatId: 'nks',
+      saveReason: 'vscode-save',
+    });
+    await this.saveSketchProject(document.uri, data, 'vscode-save');
+    this.syncOutline(data);
   }
 
   async saveCustomDocumentAs(
-    _document: vscode.CustomDocument,
+    document: vscode.CustomDocument,
     destination: vscode.Uri,
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
-    this.activeWebviewPanel?.webview.postMessage({
-      type: 'document:saveAs',
-      path: destination.fsPath,
+    const webviewPanel = this.getWebviewPanelForDocument(document);
+    if (!webviewPanel) return;
+    const data = await requestWebviewProjectSnapshot<NksDocument>(webviewPanel.webview, {
+      formatId: 'nks',
+      saveReason: 'save-as',
     });
+    await this.saveSketchProject(destination, data, 'save-as');
+    this.syncOutline(data);
   }
 
   async revertCustomDocument(
@@ -300,6 +371,15 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
+  private getWebviewPanelForDocument(
+    document: vscode.CustomDocument,
+  ): vscode.WebviewPanel | undefined {
+    if (this.activeDocument?.uri.toString() !== document.uri.toString()) {
+      return undefined;
+    }
+    return this.activeWebviewPanel;
+  }
+
   /** Inject a base64-encoded image into the active webview as a new layer */
   postImageData(base64: string, name: string): void {
     this.activeWebviewPanel?.webview.postMessage({
@@ -328,7 +408,15 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       return true;
     }
 
-    await this.importFileUri(uri, webviewPanel, options);
+    const document = this.activeDocument;
+    if (!document) {
+      this.queueFileImport(uri, options);
+      return true;
+    }
+    await this.importFileUriThroughAddSource(uri, document.uri, webviewPanel, {
+      caller: 'neko-sketch.external-import',
+      ...(options?.name ? { name: options.name } : {}),
+    });
     return true;
   }
 
@@ -735,19 +823,17 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     };
   }
 
-  private async saveSketchProject(uri: vscode.Uri, data: NksDocument): Promise<void> {
-    const result = await this.projectFileStore.save({
-      filePath: uri.fsPath,
-      formatId: 'nks',
+  private async saveSketchProject(
+    uri: vscode.Uri,
+    data: NksDocument,
+    saveReason: ProjectFileSaveReason = 'manual',
+  ): Promise<void> {
+    await this.projectFileSession.save({
+      targetUri: uri,
       document: data,
-      sourcePolicy: nksSourcePathPolicy,
-      sourcePolicyOptions: {
-        context: this.projectFileAdapter.createWorkspaceMediaPathContext({ documentUri: uri }),
-      },
+      saveReason,
+      fallbackMessage: 'Failed to save NKS',
     });
-    if (!result.ok) {
-      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKS'));
-    }
   }
 
   private async handleWebviewMessage(
@@ -789,11 +875,10 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (this.pendingFileImport) {
           const pending = this.pendingFileImport;
           this.pendingFileImport = undefined;
-          await this.importFileUri(
-            pending.uri,
-            webviewPanel,
-            pending.name ? { name: pending.name } : undefined,
-          );
+          await this.importFileUriThroughAddSource(pending.uri, document.uri, webviewPanel, {
+            caller: 'neko-sketch.queued-import',
+            ...(pending.name ? { name: pending.name } : {}),
+          });
         }
         break;
       }
@@ -812,7 +897,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'document:save': {
         try {
           const data = message.data as NksDocument;
-          await this.saveSketchProject(document.uri, data);
+          await this.saveSketchProject(document.uri, data, 'vscode-save');
           if (data) {
             this.syncOutline(data as unknown as NksDocument);
           }
@@ -900,36 +985,12 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
         }
         break;
       }
-      case 'file:import': {
-        const filters: Record<string, string[]> = {
-          Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
-          'All Files': ['*'],
-        };
-        if (isPsdImportEnabled()) {
-          filters['Photoshop Documents'] = ['psd'];
-        }
-        const uris = await vscode.window.showOpenDialog({
-          canSelectMany: false,
-          filters,
-        });
-        if (uris && uris.length > 0) {
-          const uri = uris[0];
-          if (uri) {
-            await this.importFileUri(uri, webviewPanel);
-          }
-        }
-        break;
-      }
-      case 'file:dropRequest': {
-        const rawUris = message.uris as string;
-        const uriStrings = rawUris.split('\n').filter(Boolean);
-        for (const uriStr of uriStrings) {
-          const uri = vscode.Uri.parse(uriStr.trim());
-          if (isImageUri(uri) || isPsdUri(uri)) {
-            await this.importFileUri(uri, webviewPanel);
-            return; // Import the first valid image only
-          }
-        }
+      case 'project:addSource': {
+        await this.handleSketchProjectAddSource(
+          (message as { request?: ProjectSourceAddRequest }).request,
+          document.uri,
+          webviewPanel,
+        );
         break;
       }
       case 'file:export': {
@@ -1057,6 +1118,205 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       void vscode.window.showErrorMessage(message);
       await this.postImportFailure(webviewPanel, getImportFailureCode(error), message, uri);
     }
+  }
+
+  private async importFileUriThroughAddSource(
+    uri: vscode.Uri,
+    documentUri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
+    options: { readonly caller: string; readonly name?: string },
+  ): Promise<void> {
+    await this.handleSketchProjectAddSource(
+      this.createSketchFilePickerSourceAddRequest(uri, documentUri, options),
+      documentUri,
+      webviewPanel,
+    );
+  }
+
+  private async handleSketchProjectAddSource(
+    request: ProjectSourceAddRequest | undefined,
+    documentUri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    if (!request) return;
+    if (this.isSketchFilePickerSourceAddRequest(request)) {
+      await this.handleSketchFilePickerSourceAdd(request, documentUri, webviewPanel);
+      return;
+    }
+    const result = await handleProjectSourceAddHostRequest(request, {
+      addSource: (sourceRequest) =>
+        this.addSketchProjectSource(
+          normalizeVSCodeProjectSourceAddRequest(sourceRequest),
+          documentUri,
+        ),
+      postMessage: (message) => webviewPanel.webview.postMessage(message),
+      logger,
+    });
+    if (!result.ok || !result.durablePath) return;
+
+    const fileName = readSketchSourceAddDisplayName(request);
+    const importPath =
+      result.ingest?.outputPath ?? resolveSketchDurablePath(documentUri, result.durablePath);
+    await this.importFileUri(vscode.Uri.file(importPath), webviewPanel, { name: fileName });
+  }
+
+  private isSketchFilePickerSourceAddRequest(request: ProjectSourceAddRequest): boolean {
+    return (
+      request.kind === 'file-picker' &&
+      request.formatId === 'nks' &&
+      !request.sourcePath &&
+      !request.sourceUri &&
+      !request.bytes &&
+      !request.generatedAssetId
+    );
+  }
+
+  private async handleSketchFilePickerSourceAdd(
+    request: ProjectSourceAddRequest,
+    documentUri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    const filters: Record<string, string[]> = {
+      Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
+      'All Files': ['*'],
+    };
+    if (isPsdImportEnabled()) {
+      filters['Photoshop Documents'] = ['psd'];
+    }
+    const uris = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters,
+    });
+    const uri = uris?.[0];
+    if (!uri) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: async () => ({
+          requestId: request.requestId,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'add-source-cancelled',
+              severity: 'info',
+              message: 'Sketch source selection was cancelled.',
+              recoverability: 'none',
+            },
+          ],
+        }),
+        postMessage: (message) => webviewPanel.webview.postMessage(message),
+        logger,
+      });
+      return;
+    }
+
+    await this.handleSketchProjectAddSource(
+      this.createSketchFilePickerSourceAddRequest(uri, documentUri, {
+        caller: request.caller ?? 'neko-sketch.project-add-source',
+        requestId: request.requestId,
+        metadata: request.metadata,
+      }),
+      documentUri,
+      webviewPanel,
+    );
+  }
+
+  private createSketchFilePickerSourceAddRequest(
+    uri: vscode.Uri,
+    documentUri: vscode.Uri,
+    options: {
+      readonly caller: string;
+      readonly name?: string;
+      readonly requestId?: string;
+      readonly metadata?: Record<string, unknown>;
+    },
+  ): ProjectSourceAddRequest {
+    const fileName = uri.path.split('/').pop() || 'imported';
+    const displayName = options.name?.trim();
+    return createVSCodeProjectSourceAddRequest({
+      requestId:
+        options.requestId ??
+        `sketch-picker-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      kind: 'file-picker',
+      formatId: 'nks',
+      sourceUri: uri,
+      role: 'image',
+      destination: { kind: 'project', directory: 'imports', copyMode: 'link' },
+      caller: options.caller,
+      metadata: {
+        ...(options.metadata ?? {}),
+        sketchImport: true,
+        name: fileName,
+        ...(displayName ? { displayName } : {}),
+        documentUri: documentUri.toString(),
+      },
+    });
+  }
+
+  private async addSketchProjectSource(
+    request: ProjectSourceAddRequest,
+    documentUri: vscode.Uri,
+  ): Promise<ProjectSourceAddResult> {
+    const fileName = readSketchSourceAddFileName(request);
+    if (!isSketchImportFileName(fileName)) {
+      return {
+        requestId: request.requestId,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'invalid-document',
+            severity: 'error',
+            message: `Unsupported Sketch import source: ${fileName}`,
+            recoverability: 'manual',
+          },
+        ],
+      };
+    }
+
+    const result = await handleProjectSourceAddRequest(
+      {
+        ...request,
+        caller: request.caller ?? 'neko-sketch.project-add-source',
+        target: request.target ?? { role: 'image' },
+        destination: {
+          kind: 'project',
+          directory: request.destination.directory ?? 'imports',
+          copyMode: request.destination.copyMode ?? (request.bytes ? 'copy' : 'link'),
+        },
+        metadata: {
+          ...(request.metadata ?? {}),
+          sketchImport: true,
+          name: fileName,
+        },
+      },
+      {
+        ingest: (ingestRequest) =>
+          ingestProjectSourceAddRequest(ingestRequest, {
+            documentPath: documentUri.fsPath,
+            assetDirectory: request.destination.directory ?? 'imports',
+            workspaceContext: this.projectFileAdapter.createWorkspaceMediaPathContext({
+              documentUri,
+            }).context,
+            fileOps: {
+              createDirectory: async (dirPath) =>
+                vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+              fileExists: async (filePath) => {
+                try {
+                  await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+                  return true;
+                } catch {
+                  return false;
+                }
+              },
+              writeFile: async (filePath, bytes) =>
+                vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
+            },
+            fileNameFallback: fileName,
+            unmanagedSourceMessage:
+              'Sketch import source must be moved into the project, asset library, or a configured media root before importing.',
+          }),
+      },
+    );
+
+    return result;
   }
 
   private async postImportFailure(
@@ -1480,12 +1740,4 @@ function appendIssueSample(samples: readonly string[], layerPath: string): reado
     return samples;
   }
   return [...samples, layerPath];
-}
-
-function formatProjectFileDiagnostics(
-  diagnostics: readonly { readonly message: string }[],
-  fallback: string,
-): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

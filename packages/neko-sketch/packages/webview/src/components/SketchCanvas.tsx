@@ -88,6 +88,7 @@ import {
   screenToDocumentPoint,
 } from '../utils/viewport-transform';
 import { snapPointToPerspectiveGrid } from '../utils/perspective-grid-snap';
+import { postSketchMessage } from '../utils/vscode';
 
 // ─── Helpers ───
 
@@ -160,9 +161,7 @@ function notifyHistoryReplay(entry: HistoryEntry | null, direction: 'undo' | 're
   if (!entry || (!entry.stateSnapshot && !entry.snapshot)) {
     return;
   }
-  const vscode = (window as unknown as { __vscode_api__?: { postMessage(message: unknown): void } })
-    .__vscode_api__;
-  vscode?.postMessage({
+  postSketchMessage({
     type: 'operationApplied',
     operation: {
       type: `sketch.history.${direction}`,
@@ -178,9 +177,7 @@ function notifyHistoryReplay(entry: HistoryEntry | null, direction: 'undo' | 're
 }
 
 function notifyDocumentEdited(description: string, type = 'sketch.pixel.edit'): void {
-  const vscode = (window as unknown as { __vscode_api__?: { postMessage(message: unknown): void } })
-    .__vscode_api__;
-  vscode?.postMessage({
+  postSketchMessage({
     type: 'operationApplied',
     operation: {
       type,

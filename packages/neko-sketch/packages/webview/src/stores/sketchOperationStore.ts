@@ -24,20 +24,14 @@ import type {
   SketchStrokeApplyOperation,
 } from '@neko/shared';
 import type { LayerData } from '../types';
+import { postSketchMessage } from '../utils/vscode';
 
 // =============================================================================
 // Extension Sync
 // =============================================================================
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-}
-
 function postMessage(message: Record<string, unknown>): void {
-  const vscode = (window as unknown as { __vscode_api__?: VsCodeApi }).__vscode_api__;
-  if (vscode) {
-    vscode.postMessage(message);
-  }
+  postSketchMessage(message);
 }
 
 function syncOperationToExtension(op: EditOperation): void {

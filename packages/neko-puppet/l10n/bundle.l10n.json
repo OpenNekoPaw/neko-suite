@@ -13,6 +13,7 @@
   "neko.puppet.importLive2dBundle.filter": "Live2D ZIP Bundles",
   "neko.puppet.importLive2dBundle.noFolder": "No workspace folder open",
   "neko.puppet.importLive2dBundle.imported": "Imported Live2D bundle",
+  "neko.puppet.importLive2dBundle.saveFailed": "Failed to save Live2D bundle project",
   "neko.puppet.liveMode.start.title": "Start Puppet Live Mode",
   "neko.puppet.liveMode.stop.title": "Stop Puppet Live Mode",
   "neko.puppet.liveMode.started": "Puppet Live Mode started",

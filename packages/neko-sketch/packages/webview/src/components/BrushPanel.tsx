@@ -18,10 +18,7 @@ import {
   mapSketchBrushPropertyCommit,
   mapSketchBrushToProperties,
 } from './adapters/sharedSketchUiAdapter';
-
-interface VsCodeBridge {
-  postMessage(message: unknown): void;
-}
+import { postSketchMessage } from '../utils/vscode';
 
 export function BrushPanel() {
   const { t } = useTranslation();
@@ -105,6 +102,5 @@ export function BrushPanel() {
 }
 
 function requestTextureStampImport(): void {
-  const vscode = (window as unknown as { __vscode_api__?: VsCodeBridge }).__vscode_api__;
-  vscode?.postMessage({ type: 'stamp:import' });
+  postSketchMessage({ type: 'stamp:import' });
 }

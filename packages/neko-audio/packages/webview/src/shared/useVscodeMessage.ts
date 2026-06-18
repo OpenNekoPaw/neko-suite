@@ -7,32 +7,30 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { isKeyboardFocusMessage } from '@neko/ui/keyboard';
 import type { WebviewMessage, ExtensionMessage } from './types';
-import { getLogger } from '../utils/logger';
+import {
+  getState as getSharedState,
+  postMessage as postRawMessage,
+  setState as setSharedState,
+} from '@neko/shared/vscode';
 
-const logger = getLogger('useVscodeMessage');
-
-// Acquire VSCode API (available in webview context)
 export interface VsCodeApi {
   postMessage(message: unknown): void;
   getState(): unknown;
   setState(state: unknown): void;
 }
 
-let vscodeApi: VsCodeApi | null = null;
-
 export function getVsCodeApi(): VsCodeApi {
-  if (!vscodeApi) {
-    vscodeApi = window.acquireVsCodeApi?.() ?? null;
-    if (!vscodeApi) {
-      logger.warn('acquireVsCodeApi not available, using mock');
-      vscodeApi = {
-        postMessage: (msg) => logger.info(`[mock postMessage] ${JSON.stringify(msg)}`),
-        getState: () => null,
-        setState: () => {},
-      };
-    }
-  }
-  return vscodeApi;
+  return {
+    postMessage(message: unknown): void {
+      postRawMessage(message);
+    },
+    getState(): unknown {
+      return getSharedState();
+    },
+    setState(state: unknown): void {
+      setSharedState(state);
+    },
+  };
 }
 
 /**

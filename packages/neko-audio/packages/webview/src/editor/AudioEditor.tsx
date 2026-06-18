@@ -151,12 +151,6 @@ export function AudioEditor() {
           }
           break;
 
-        case 'project:importAudioResult':
-          if (!message.payload.success && message.payload.error) {
-            showToast(t('audio.import.failed', { error: message.payload.error }), 'error');
-          }
-          break;
-
         case 'save':
         case 'saveAs':
         case 'revert':

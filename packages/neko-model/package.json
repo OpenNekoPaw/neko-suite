@@ -1,7 +1,7 @@
 {
   "name": "neko-model",
-  "displayName": "NekoModel",
-  "description": "3D Model Editor for VSCode",
+  "displayName": "Neko Model",
+  "description": ".nkm 2D/3D/Live Scene editor for VS Code",
   "version": "0.0.1",
   "publisher": "neko",
   "l10n": "./l10n",
@@ -59,7 +59,7 @@
     "customEditors": [
       {
         "viewType": "neko.modelEditor",
-        "displayName": "3D Model Editor",
+        "displayName": "%neko.model.editor.title%",
         "selector": [
           {
             "filenamePattern": "*.gltf"
@@ -81,6 +81,11 @@
       {
         "command": "neko.model.new",
         "title": "%neko.model.new.title%",
+        "category": "NekoModel"
+      },
+      {
+        "command": "neko.model.new2dScene",
+        "title": "%neko.model.new2dScene.title%",
         "category": "NekoModel"
       },
       {
@@ -144,6 +149,10 @@
         {
           "command": "neko.model.new",
           "group": "1@7"
+        },
+        {
+          "command": "neko.model.new2dScene",
+          "group": "1@8"
         }
       ]
     }

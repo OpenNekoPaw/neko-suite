@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import * as vscode from 'vscode';
 import { PuppetEditorProvider } from './puppetEditorProvider';
 
@@ -85,7 +87,7 @@ describe('PuppetEditorProvider project file I/O', () => {
     await provider.saveCustomDocument(document, {} as never);
 
     expect(decodeText(storage.get('/workspace/puppet/hero.nkp'))).toContain(
-      '"src": "models/hero.moc3"',
+      '"src": "puppet/models/hero.moc3"',
     );
 
     storage.set(
@@ -138,6 +140,20 @@ describe('PuppetEditorProvider project file I/O', () => {
     expect(decodeText(storage.get('/workspace/puppet/hero.nkp'))).toContain(
       '/Volumes/external/hero.moc3',
     );
+  });
+
+  it('routes editor import sources through the shared add-source path instead of path.relative', () => {
+    const source = readFileSync(join(__dirname, './puppetEditorProvider.ts'), 'utf-8');
+
+    expect(source).toContain('private createPuppetProjectSourceAddRequest(');
+    expect(source).toContain('private async acquirePuppetProjectSource(');
+    expect(source).toContain('handlePuppetFilePickerSourceAdd(');
+    expect(source).toContain("caller: request.caller ?? 'neko-puppet.project-add-source'");
+    expect(source).toContain("caller: 'neko-puppet.import-live2d-bundle-editor'");
+    expect(source).not.toContain("case 'puppet:import'");
+    expect(source).not.toContain('private async linkPuppetSourcePath(');
+    expect(source).not.toContain('path.relative(nkpDir, uris[0].fsPath)');
+    expect(source).not.toContain('path.relative(nkpDir, bundleUri.fsPath)');
   });
 });
 

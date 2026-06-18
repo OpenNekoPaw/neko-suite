@@ -138,9 +138,26 @@ describe('Puppet right panel resize layout', () => {
     const app = readSource('PuppetApp.tsx');
     const toolbar = readSource('components/PuppetToolbar.tsx');
     const parameterPanel = readSource('components/ParameterPanel.tsx');
+    const runtimeStatus = readSource('components/PuppetRuntimeStatus.tsx');
+    const types = readSource('types/index.ts');
     const controller = readSource('viewport/PuppetViewportController.ts');
+    const extension = readSource('../../extension/src/editor/puppetEditorProvider.ts');
+    const commands = readSource('../../extension/src/commands/index.ts');
+    const packageJson = readSource('../../../package.json');
     const combined = [app, toolbar, parameterPanel, controller].join('\n');
 
+    expect(packageJson).toMatch(/onCustomEditor:neko\.puppetEditor/);
+    expect(commands).toMatch(/id: 'live2d-moc3-compat'/);
+    expect(commands).toMatch(/version: 'clean-room'/);
+    expect(types).toMatch(/type PuppetEditorProfile = 'live2d' \| 'neko-puppet'/);
+    expect(types).toMatch(/owner: 'neko-puppet'/);
+    expect(extension).toMatch(/type: 'documentContext'/);
+    expect(extension).toMatch(/owner: 'neko-puppet'/);
+    expect(extension).toMatch(/id: 'live2d-moc3-compat'/);
+    expect(app).toMatch(/case 'documentContext':/);
+    expect(app).toMatch(/<PuppetRuntimeStatus context=\{documentContext\} \/>/);
+    expect(runtimeStatus).toMatch(/data-puppet-document-owner=\{context\.owner\}/);
+    expect(runtimeStatus).toMatch(/data-puppet-runtime-adapter=\{adapterId\}/);
     for (const forbidden of [
       'tilemap',
       'tile map',

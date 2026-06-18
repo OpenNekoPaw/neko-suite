@@ -64,12 +64,20 @@ function createGateway(initialProject = createProject()) {
       projectData: initialProject,
     } satisfies ProjectSession,
     synced: [] as Array<{ operation: AudioProjectEditOperation; projectData: AudioProjectData }>,
+    linkedSources: [] as Array<{ documentUri: string; sourcePath: string }>,
   };
 
   const gateway: AudioProjectSessionGateway = {
     async resolveSession(documentUri?: string) {
       if (documentUri && documentUri !== state.session.documentUri) return null;
       return state.session;
+    },
+    async linkAudioSource(session, sourcePath) {
+      state.linkedSources.push({ documentUri: session.documentUri, sourcePath });
+      if (sourcePath.startsWith('/project/')) {
+        return sourcePath.slice('/project/'.length);
+      }
+      throw new Error('Audio source must be moved into a managed root before saving');
     },
     async applyOperation(session, operation) {
       const projectData = applyOperation(session.projectData, operation);
@@ -195,19 +203,41 @@ describe('AudioToolBridge', () => {
     const bridge = new AudioToolBridge(gateway, audioService);
 
     const result = await bridge.executeAgentTool('ImportAudio', {
-      filePath: '/tmp/voice.wav',
+      filePath: '/project/audio/voice.wav',
       name: 'Imported Voice',
     });
 
     expect(result.success).toBe(true);
+    expect(audioService.probeAudio).toHaveBeenCalledWith('/project/audio/voice.wav');
+    expect(state.linkedSources).toEqual([
+      { documentUri: 'file:///project/test.nka', sourcePath: '/project/audio/voice.wav' },
+    ]);
     const importedTrack = state.session.projectData.tracks.at(-1);
     const element = importedTrack?.elements[0];
     expect(element).toMatchObject({
       type: 'audio',
-      src: '/tmp/voice.wav',
+      src: 'audio/voice.wav',
       transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0, anchorY: 0 },
       speed: { speed: 1, preservePitch: true, reverse: false },
     });
+  });
+
+  it('rejects audio import when the gateway cannot link a durable source', async () => {
+    const { gateway, state } = createGateway();
+    const bridge = new AudioToolBridge(gateway, audioService);
+
+    const result = await bridge.executeAgentTool('ImportAudio', {
+      filePath: '/tmp/voice.wav',
+      name: 'Imported Voice',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('managed root');
+    expect(state.linkedSources).toEqual([
+      { documentUri: 'file:///project/test.nka', sourcePath: '/tmp/voice.wav' },
+    ]);
+    expect(state.synced).toHaveLength(0);
+    expect(state.session.projectData.tracks).toHaveLength(1);
   });
 
   it('returns Extension-built mix export warnings with engine warnings', async () => {

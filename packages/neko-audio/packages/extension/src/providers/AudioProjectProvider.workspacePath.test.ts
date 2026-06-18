@@ -23,13 +23,40 @@ describe('AudioProjectProvider workspace media path contract', () => {
     expect(providerSource).toContain("'neko.assets.contractPath'");
     expect(providerSource).toContain('this.createWorkspacePathCommandContext(projectUri, context)');
     expect(providerSource).toContain('createVSCodeWorkspaceMediaPathContext({');
+    expect(providerSource).toContain("pathVariables: new Map([['PROJECT', documentDir]])");
+    expect(providerSource).toContain(
+      'owningWorkspaceRoot: context.owningWorkspaceRoot ?? documentDir',
+    );
+  });
+
+  it('routes imported and tool-added audio sources through the shared add-source acquisition path', () => {
+    expect(providerSource).toContain('private async acquireAudioProjectSource(');
+    expect(providerSource).toContain('const result = await this.acquireAudioProjectSource(');
+    expect(providerSource).toContain(
+      'const result = await this.acquireAudioProjectSource(request, document.uri);',
+    );
+    expect(providerSource).toContain('ingestProjectSourceAddRequest(ingestRequest');
+    expect(providerSource).not.toContain('linkAudioSourceForProject(');
+  });
+
+  it('routes audio picker acquisition through canonical project:addSource only', () => {
+    expect(providerSource).toContain('handleAudioProjectFilePickerSourceAdd(');
+    expect(providerSource).toContain('this.createAudioProjectSourceAddRequest(uri, document.uri');
+    expect(providerSource).toContain(
+      'await this.addAudioProjectSources(selectedRequests, document, panel)',
+    );
+    expect(providerSource).toContain('handleProjectSourceAddHostRequest(request');
+    expect(providerSource).not.toContain('project:importAudio');
+    expect(providerSource).not.toContain('project:importAudioResult');
+    expect(providerSource).not.toContain('project:dropImportAudio');
   });
 
   it('routes .nka host persistence through the shared project file store', () => {
     expect(providerSource).toContain('new ProjectFileStore({');
+    expect(providerSource).toContain('new ProjectFileSaveSession<AudioProjectData>({');
     expect(providerSource).toContain('createDefaultProjectFormatCodecRegistry()');
     expect(providerSource).toContain('sourcePolicy: nkaSourcePathPolicy');
-    expect(providerSource).toContain('this._projectFileStore.save({');
+    expect(providerSource).toContain('this._projectFileSession.save({');
     expect(providerSource).not.toContain(
       "await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'))",
     );

@@ -14,9 +14,11 @@
 import { useCallback } from 'react';
 import { useFileDrop } from '@neko/ui/hooks';
 import type { FileDropResult } from '@neko/ui/hooks';
-import { postMessage } from '../shared/useVscodeMessage';
+import { createProjectSourceAddClient } from '@neko/shared';
+import { getVsCodeApi } from '../shared/useVscodeMessage';
 
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']);
+const PROJECT_SOURCE_ADD_TIMEOUT_MS = 30000;
 
 function isAudioUri(uri: string): boolean {
   const ext = uri.split('.').pop()?.toLowerCase() ?? '';
@@ -31,22 +33,60 @@ export interface UseDragDropReturn {
 }
 
 export function useDragDrop(_containerRef: React.RefObject<HTMLElement | null>): UseDragDropReturn {
-  const handleFileDrop = useCallback((result: FileDropResult) => {
+  const handleFileDrop = useCallback(async (result: FileDropResult) => {
+    const vscode = getVsCodeApi();
+    const client = createProjectSourceAddClient({
+      postMessage: (message) => vscode.postMessage(message),
+      addMessageListener: (listener) => {
+        const handleMessage = (event: MessageEvent) => listener(event.data);
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+      },
+      timeoutMs: PROJECT_SOURCE_ADD_TIMEOUT_MS,
+    });
+
     if (result.type === 'uri-list' && result.uris) {
       // URI list already filtered by accept option, but double-check audio
       const audioUris = result.uris.filter((u) => isAudioUri(u));
-      if (audioUris.length > 0) {
-        postMessage({ type: 'project:dropImportAudio', uris: audioUris });
+      for (const sourceUri of audioUris) {
+        await client.addSource({
+          kind: 'drag-drop',
+          formatId: 'nka',
+          sourceUri,
+          browserFile: { name: basenameFromSource(sourceUri) },
+          target: { role: 'audio' },
+          destination: { kind: 'project', directory: 'audio', copyMode: 'link' },
+          ingestMode: 'link',
+          metadata: { audioAdd: true, name: basenameFromSource(sourceUri) },
+        });
       }
     } else if (result.type === 'asset-json' && result.assetData) {
       const data = result.assetData as { files?: { path?: string }[] };
       const files: string[] = (data.files ?? [])
         .map((f) => f.path)
         .filter((p): p is string => !!p && isAudioUri(p));
-      if (files.length > 0) {
-        postMessage({
-          type: 'project:dropImportAudio',
-          uris: files.map((f) => `file://${f}`),
+      for (const sourcePath of files) {
+        await client.addSource({
+          kind: 'drag-drop',
+          formatId: 'nka',
+          sourcePath,
+          browserFile: { name: basenameFromSource(sourcePath) },
+          target: { role: 'audio' },
+          destination: { kind: 'project', directory: 'audio', copyMode: 'link' },
+          ingestMode: 'link',
+          metadata: { audioAdd: true, name: basenameFromSource(sourcePath) },
+        });
+      }
+    } else if (result.type === 'native-file' && result.files) {
+      for (const file of result.files.filter((f) => isAudioUri(f.name))) {
+        await client.addSource({
+          kind: 'drag-drop',
+          formatId: 'nka',
+          file,
+          target: { role: 'audio' },
+          destination: { kind: 'project', directory: 'audio', copyMode: 'copy' },
+          ingestMode: 'create-asset',
+          metadata: { audioAdd: true, name: file.name },
         });
       }
     }
@@ -71,4 +111,18 @@ export function useDragDrop(_containerRef: React.RefObject<HTMLElement | null>):
     handleDragLeave: dropProps.onDragLeave,
     handleDrop: dropProps.onDrop,
   };
+}
+
+function basenameFromSource(value: string): string {
+  const withoutQuery = value.split(/[?#]/, 1)[0] ?? value;
+  const normalized = decodeURIComponentSafe(withoutQuery).replace(/\\/g, '/');
+  return normalized.split('/').pop() || value;
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

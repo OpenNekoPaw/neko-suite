@@ -86,6 +86,7 @@ vi.mock('vscode', () => ({
       dispose: vi.fn(),
       show: vi.fn(),
     })),
+    showOpenDialog: vi.fn(),
     showWarningMessage: vi.fn(),
     showErrorMessage: vi.fn(),
   },
@@ -99,6 +100,34 @@ vi.mock('vscode', () => ({
 
 vi.mock('@neko/shared/vscode/extension', () => ({
   injectLocaleAttribute: () => '',
+  createVSCodeProjectSourceAddRequest: (input: {
+    requestId: string;
+    kind: string;
+    formatId: string;
+    sourceUri: InstanceType<typeof mockState.MockUri>;
+    role: string;
+    destination: unknown;
+    caller: string;
+    metadata?: Record<string, unknown>;
+    ingestMode?: string;
+  }) => ({
+    requestId: input.requestId,
+    kind: input.kind,
+    formatId: input.formatId,
+    sourceUri: input.sourceUri.toString(),
+    sourcePath: input.sourceUri.fsPath,
+    target: { role: input.role },
+    destination: input.destination,
+    ingestMode: input.ingestMode ?? 'link',
+    caller: input.caller,
+    browserFile: { name: input.sourceUri.path.split('/').pop() ?? 'source' },
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  }),
+  normalizeVSCodeProjectSourceAddRequest: (request: unknown) => request,
+  ProjectFileSaveSession: class {
+    save = vi.fn(async () => undefined);
+    backup = vi.fn(async () => ({ id: 'backup', delete: vi.fn() }));
+  },
   createVSCodeProjectFileIoAdapter: () => ({
     fileOps: {
       readFile: async (filePath: string) =>
@@ -118,9 +147,18 @@ vi.mock('@neko/shared/vscode/extension', () => ({
       },
     },
     createWorkspaceMediaPathContext: () => ({
-      workspaceRoots: [],
-      pathVariables: new Map(),
-      allowedRoots: [],
+      context: {
+        owningWorkspaceRoot: '/tmp',
+        workspaceRoots: ['/tmp'],
+        documentDir: '/tmp',
+        pathVariables: new Map([['PROJECT', '/tmp']]),
+        allowedRoots: ['/tmp'],
+      },
+      owningWorkspaceRoot: '/tmp',
+      workspaceRoots: ['/tmp'],
+      documentDir: '/tmp',
+      pathVariables: new Map([['PROJECT', '/tmp']]),
+      allowedRoots: ['/tmp'],
     }),
     toFilePath: (uriOrPath: string | { fsPath: string }) =>
       typeof uriOrPath === 'string' ? uriOrPath : uriOrPath.fsPath,
@@ -365,6 +403,9 @@ describe('SketchEditorProvider AI context snapshot', () => {
     (provider as unknown as { activeWebviewPanel: unknown }).activeWebviewPanel = {
       webview: { postMessage },
     };
+    (provider as unknown as { activeDocument: unknown }).activeDocument = {
+      uri: mockState.MockUri.file('/tmp/doc.nks'),
+    };
 
     await provider.importFileAsset(
       mockState.MockUri.file('/tmp/frame.png') as unknown as vscode.Uri,
@@ -378,6 +419,61 @@ describe('SketchEditorProvider AI context snapshot', () => {
       name: 'Generated Frame',
       data: Buffer.from('image-bytes').toString('base64'),
       path: '/tmp/frame.png',
+    });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'project:sourceAdded',
+      result: expect.objectContaining({
+        ok: true,
+        durablePath: 'frame.png',
+      }),
+    });
+  });
+
+  it('routes the file picker add-source request through canonical add-source before sketch import', async () => {
+    const provider = createProvider({});
+    const postMessage = vi.fn(async () => true);
+    const selectedUri = mockState.MockUri.file('/tmp/picked.png');
+    const vscodeModule = await import('vscode');
+    vi.mocked(vscodeModule.window.showOpenDialog).mockResolvedValue([selectedUri] as never);
+    mockState.readFile.mockImplementationOnce(async () => Buffer.from('picked-image'));
+
+    await (
+      provider as unknown as {
+        handleWebviewMessage(
+          message: { type: string; [key: string]: unknown },
+          webviewPanel: unknown,
+          document: unknown,
+        ): Promise<void>;
+      }
+    ).handleWebviewMessage(
+      {
+        type: 'project:addSource',
+        request: {
+          requestId: 'sketch-picker-test',
+          kind: 'file-picker',
+          formatId: 'nks',
+          target: { role: 'image' },
+          destination: { kind: 'project', directory: 'imports', copyMode: 'link' },
+          ingestMode: 'link',
+          metadata: { sketchImport: true },
+        },
+      },
+      { webview: { postMessage } },
+      { uri: mockState.MockUri.file('/tmp/doc.nks') },
+    );
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'project:sourceAdded',
+      result: expect.objectContaining({
+        ok: true,
+        durablePath: 'picked.png',
+      }),
+    });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'file:imported',
+      name: 'picked.png',
+      data: Buffer.from('picked-image').toString('base64'),
+      path: '/tmp/picked.png',
     });
   });
 

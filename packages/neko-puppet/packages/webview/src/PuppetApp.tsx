@@ -27,21 +27,31 @@ import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import type { NkpNativeProjectData, SupportedLocale } from '@neko/shared';
+import { createProjectSourceAddClient } from '@neko/shared';
 import type { ViewportFrameMeta, ViewportMenuItem } from '@neko/shared';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import { EngineClient } from '@neko/neko-client';
 import { OverlayRenderer, ViewportShell } from '@neko/ui';
+import {
+  getState as getSharedState,
+  postMessage as postRawMessage,
+  setState as setSharedState,
+  type VSCodeAPI,
+} from '@neko/shared/vscode';
 import { PUPPET_RIGHT_PANEL_RESIZE } from './layout/puppetResizeLayout';
 import { PuppetToolbar } from './components/PuppetToolbar';
 
-// Acquire VSCode API once
-const vscode = (window as unknown as { acquireVsCodeApi: () => VsCodeApi }).acquireVsCodeApi();
-
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState<T = unknown>(): T | undefined;
-  setState(state: unknown): void;
-}
+const vscode: VSCodeAPI = {
+  postMessage(message: unknown): void {
+    postRawMessage(message);
+  },
+  getState<T = unknown>(): T | undefined {
+    return getSharedState<T>();
+  },
+  setState<T = unknown>(state: T): void {
+    setSharedState(state);
+  },
+};
 
 type PendingPuppetLoad =
   | Extract<ExtensionToWebviewMessage, { type: 'loadPuppet' }>
@@ -366,7 +376,23 @@ function PuppetWorkbench() {
     handlePuppetMenuAction(item);
   }, []);
   const handleImportPuppet = useCallback(() => {
-    vscode.postMessage({ type: 'puppet:import' });
+    const client = createProjectSourceAddClient({
+      postMessage: (message) => vscode.postMessage(message),
+      addMessageListener: (listener) => {
+        const handleMessage = (event: MessageEvent) => listener(event.data);
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+      },
+      timeoutMs: 30000,
+    });
+    void client.addSource({
+      kind: 'file-picker',
+      formatId: 'nkp',
+      target: { role: 'puppet' },
+      destination: { kind: 'project', directory: '.', copyMode: 'link' },
+      ingestMode: 'link',
+      metadata: { puppetAdd: true },
+    });
   }, []);
   const handleOpenExport = useCallback(() => {
     vscode.postMessage({ type: 'puppet:export' });
@@ -374,8 +400,25 @@ function PuppetWorkbench() {
   const handleOpenPackage = useCallback(() => {
     vscode.postMessage({ type: 'project:package' });
   }, []);
-  const handleDropMoc3 = useCallback((file: { readonly name: string; readonly data: string }) => {
-    vscode.postMessage({ type: 'puppet:dropFile', name: file.name, data: file.data });
+  const handleDropMoc3 = useCallback((file: { readonly name: string; readonly file: File }) => {
+    const client = createProjectSourceAddClient({
+      postMessage: (message) => vscode.postMessage(message),
+      addMessageListener: (listener) => {
+        const handleMessage = (event: MessageEvent) => listener(event.data);
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+      },
+      timeoutMs: 30000,
+    });
+    void client.addSource({
+      kind: 'drag-drop',
+      formatId: 'nkp',
+      file: file.file,
+      target: { role: 'puppet' },
+      destination: { kind: 'project', directory: '.', copyMode: 'copy' },
+      ingestMode: 'create-asset',
+      metadata: { puppetAdd: true, name: file.name },
+    });
   }, []);
   const handleFitPuppetView = useCallback(() => {
     setFitViewRequest((value) => value + 1);

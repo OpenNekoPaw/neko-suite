@@ -18,7 +18,15 @@ import type {
   ModelSceneNodeKind,
   ModelViewportCameraUpdate,
   NekoModelAPI,
+  NkmProjectData,
   NkmSceneProfile,
+  ProjectSourceAddRequest,
+  ProjectSourceAddResult,
+} from '@neko/shared';
+import {
+  handleProjectSourceAddHostRequest,
+  handleProjectSourceAddRequest,
+  ingestProjectSourceAddRequest,
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
@@ -27,6 +35,7 @@ import {
   generateHumanoidGlb,
   hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
+  normalizeVSCodeProjectSourceAddRequest,
   updateWebviewKeyboardEditableOwner,
   type FocusedWebviewDisposable,
   type IFocusedWebviewRegistry,
@@ -34,16 +43,12 @@ import {
 import {
   loadNkmProject,
   ModelDocument,
+  createNkmSourcePolicyOptions,
   resolveNkmProjectModelSource,
-  updateNkmProject,
+  saveNkmProject,
 } from './ModelDocument';
 import type { ModelStatusProjection, ModelStatusSnapshot } from './modelStatusProjection';
 import { getDefaultModelStatusSnapshot } from './modelStatusProjection';
-import {
-  createModelImportConflictPath,
-  createModelProjectImportPlan,
-  formatModelProjectSrc,
-} from '../importModelAsset';
 import type { VrmExpressionValues } from '../live/vmcMapping';
 import { getLogger } from '../logger';
 
@@ -57,6 +62,23 @@ const MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'redo',
   'resetView',
 ]);
+
+function createVSCodeSourceAssetFileOps() {
+  return {
+    createDirectory: async (dirPath: string) =>
+      vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+    fileExists: async (filePath: string) => {
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    writeFile: async (filePath: string, bytes: Uint8Array) =>
+      vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
+  };
+}
 
 interface ActiveSceneStream {
   readonly streamId: string;
@@ -76,11 +98,11 @@ export interface WebviewAssetManifest {
  * - EngineClient connection (Rust backend for scene ECS)
  * - Bidirectional message passing between webview and engine
  */
-export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider {
+export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<ModelDocument> {
   public static readonly viewType = 'neko.modelEditor';
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
-  private activeDocument: vscode.CustomDocument | undefined;
+  private activeDocument: ModelDocument | undefined;
   private queuedModelImport: { uri: vscode.Uri } | undefined;
   private engineClient: EngineClient | undefined;
   private activeStream: ActiveSceneStream | undefined;
@@ -97,16 +119,18 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     this.focusedWebviews = focusedWebviews;
   }
 
-  openCustomDocument(
+  async openCustomDocument(
     uri: vscode.Uri,
     _openContext: vscode.CustomDocumentOpenContext,
     _token: vscode.CancellationToken,
-  ): vscode.CustomDocument {
-    return { uri, dispose: () => {} };
+  ): Promise<ModelDocument> {
+    return uri.fsPath.endsWith('.nkm')
+      ? ModelDocument.fromNkm(uri)
+      : ModelDocument.fromModelFile(uri);
   }
 
   async resolveCustomEditor(
-    document: vscode.CustomDocument,
+    document: ModelDocument,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
@@ -286,7 +310,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private async handleWebviewMessage(
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
-    document: vscode.CustomDocument,
+    document: ModelDocument,
     generation: number,
   ): Promise<void> {
     if (!this.isPanelCurrent(webviewPanel, generation)) return;
@@ -296,10 +320,18 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         this.focusedWebviews.syncFocus(document.uri.toString());
         const filePath = document.uri.fsPath;
         const isProject = filePath.endsWith('.nkm');
+        const sceneProfile = isProject ? await this.readNkmSceneProfile(filePath) : '3d';
+
+        void this.postToPanel(webviewPanel, generation, {
+          type: 'documentContext',
+          context: {
+            owner: 'neko-model',
+            documentKind: isProject ? 'nkm' : 'model-asset',
+            sceneProfile,
+          },
+        });
 
         if (isProject) {
-          const sceneProfile = await this.readNkmSceneProfile(filePath);
-
           // Load .nkm project file via engine backend
           const loaded = await this.loadProjectInEngine(
             filePath,
@@ -637,16 +669,21 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       }
 
       case 'saveProject': {
-        const client = await this.ensureEngineClient();
-        if (!client) break;
-
         try {
           const saveUri = await vscode.window.showSaveDialog({
             filters: { 'Neko Model Project': ['nkm'] },
             defaultUri: vscode.Uri.file(document.uri.fsPath.replace(/\.[^.]+$/, '.nkm')),
           });
           if (saveUri) {
-            await client.saveProject(saveUri.fsPath, message.editorState);
+            const project = getModelDocumentProjectData(document);
+            await saveNkmProject(
+              saveUri,
+              {
+                ...project,
+                editorState: normalizeModelEditorState(message.editorState),
+              },
+              'manual',
+            );
             void this.postToPanel(webviewPanel, generation, {
               type: 'projectSaved',
               success: true,
@@ -770,20 +807,6 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
-      case 'model:import': {
-        // Open file dialog to select .glb/.gltf/.vrm
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          filters: { '3D Models': ['glb', 'gltf', 'vrm'] },
-        });
-        if (uris?.[0]) {
-          await this.importModelFile(uris[0].fsPath, document, webviewPanel, generation);
-        }
-        break;
-      }
-
       case 'environment:pickPanorama': {
         const uris = await vscode.window.showOpenDialog({
           canSelectFiles: true,
@@ -811,27 +834,29 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const name = path.basename(document.uri.fsPath, '.nkm');
         const glbData =
           templateId === 'humanoid' ? generateHumanoidGlb(name) : generateDefaultCubeGlb(name);
-
-        // Write .glb alongside .nkm
-        const nkmDir = path.dirname(document.uri.fsPath);
-        const glbName = `${name}.glb`;
-        const glbPath = path.join(nkmDir, glbName);
-        await vscode.workspace.fs.writeFile(vscode.Uri.file(glbPath), glbData);
-
-        await this.importModelFile(glbPath, document, webviewPanel, generation);
+        await this.handleModelProjectAddSource(
+          this.createModelProjectSourceAddRequest({
+            documentUri: document.uri,
+            fileName: `${name}.glb`,
+            bytes: glbData,
+            kind: 'generated-output',
+            caller: 'neko-model.template-add-source',
+            requestId: `model-template-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          }),
+          document,
+          webviewPanel,
+          generation,
+        );
         break;
       }
 
-      case 'model:dropFile': {
-        const fileName = message.name as string;
-        const base64Data = message.data as string;
-        const fileData = Buffer.from(base64Data, 'base64');
-
-        const nkmDir2 = path.dirname(document.uri.fsPath);
-        const dropPath = path.join(nkmDir2, fileName);
-        await vscode.workspace.fs.writeFile(vscode.Uri.file(dropPath), fileData);
-
-        await this.importModelFile(dropPath, document, webviewPanel, generation);
+      case 'project:addSource': {
+        await this.handleModelProjectAddSource(
+          (message as { request?: ProjectSourceAddRequest }).request,
+          document,
+          webviewPanel,
+          generation,
+        );
         break;
       }
 
@@ -845,76 +870,188 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
    */
   private async importModelFile(
     modelPath: string,
-    document: vscode.CustomDocument,
+    document: ModelDocument,
     webviewPanel: vscode.WebviewPanel,
     generation: number,
   ): Promise<void> {
     if (!this.isPanelCurrent(webviewPanel, generation)) return;
 
-    let importPath = path.resolve(modelPath);
+    await this.handleModelProjectAddSource(
+      this.createModelProjectSourceAddRequest({
+        documentUri: document.uri,
+        sourcePath: modelPath,
+        kind: 'file-picker',
+        caller: 'neko-model.import-model',
+        requestId: `model-import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      }),
+      document,
+      webviewPanel,
+      generation,
+    );
+  }
 
-    // Update model.src in the .nkm project file
+  private async handleModelProjectAddSource(
+    request: ProjectSourceAddRequest | undefined,
+    document: ModelDocument,
+    webviewPanel: vscode.WebviewPanel,
+    generation: number,
+  ): Promise<void> {
+    if (!request) return;
+    if (this.isModelFilePickerSourceAddRequest(request)) {
+      await this.handleModelFilePickerSourceAdd(request, document, webviewPanel, generation);
+      return;
+    }
+    await handleProjectSourceAddHostRequest(request, {
+      addSource: (sourceRequest) =>
+        this.addModelProjectSource(
+          normalizeVSCodeProjectSourceAddRequest(sourceRequest),
+          document,
+          webviewPanel,
+          generation,
+        ),
+      postMessage: (message) => webviewPanel.webview.postMessage(message),
+      logger,
+    });
+  }
+
+  private isModelFilePickerSourceAddRequest(request: ProjectSourceAddRequest): boolean {
+    return (
+      request.kind === 'file-picker' &&
+      request.formatId === 'nkm' &&
+      !request.sourcePath &&
+      !request.sourceUri &&
+      !request.bytes &&
+      !request.generatedAssetId
+    );
+  }
+
+  private async handleModelFilePickerSourceAdd(
+    request: ProjectSourceAddRequest,
+    document: ModelDocument,
+    webviewPanel: vscode.WebviewPanel,
+    generation: number,
+  ): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: { '3D Models': ['glb', 'gltf', 'vrm'] },
+    });
+    const uri = uris?.[0];
+    if (!uri) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: async () => ({
+          requestId: request.requestId,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'add-source-cancelled',
+              severity: 'info',
+              message: 'Model source selection was cancelled.',
+              recoverability: 'none',
+            },
+          ],
+        }),
+        postMessage: (message) => webviewPanel.webview.postMessage(message),
+        logger,
+      });
+      return;
+    }
+
+    await this.handleModelProjectAddSource(
+      this.createModelProjectSourceAddRequest({
+        documentUri: document.uri,
+        sourcePath: uri.fsPath,
+        kind: 'file-picker',
+        caller: request.caller ?? 'neko-model.project-add-source',
+        requestId: request.requestId,
+      }),
+      document,
+      webviewPanel,
+      generation,
+    );
+  }
+
+  private async addModelProjectSource(
+    request: ProjectSourceAddRequest,
+    document: ModelDocument,
+    webviewPanel: vscode.WebviewPanel,
+    generation: number,
+  ): Promise<ProjectSourceAddResult> {
+    const fileName = readModelSourceAddFileName(request);
+    const result = await handleProjectSourceAddRequest(
+      {
+        ...request,
+        caller: request.caller ?? 'neko-model.project-add-source',
+        target: request.target ?? { role: 'model' },
+        destination: {
+          kind: 'project',
+          directory: request.destination.directory ?? '.',
+          copyMode: request.destination.copyMode ?? (request.bytes ? 'copy' : 'link'),
+        },
+        metadata: {
+          ...(request.metadata ?? {}),
+          modelAdd: true,
+          name: fileName,
+        },
+      },
+      {
+        ingest: (ingestRequest) =>
+          ingestProjectSourceAddRequest(ingestRequest, {
+            documentPath: document.uri.fsPath,
+            assetDirectory: request.destination.directory ?? '.',
+            workspaceContext: createNkmSourcePolicyOptions(document.uri).context,
+            fileOps: createVSCodeSourceAssetFileOps(),
+            fileNameFallback: 'model.glb',
+            unmanagedSourceMessage:
+              'Model source must be moved into the project, asset library, or a configured media root before saving.',
+          }),
+      },
+    );
+
+    if (!result.ok || !result.durablePath) {
+      return result;
+    }
+
     if (document.uri.fsPath.endsWith('.nkm')) {
-      try {
-        const importPlan = createModelProjectImportPlan({
-          sourcePath: modelPath,
-          documentPath: document.uri.fsPath,
-          workspaceFolderPaths: (vscode.workspace.workspaceFolders ?? []).map(
-            (folder) => folder.uri.fsPath,
-          ),
-        });
-
-        importPath = importPlan.importPath;
-        let projectModelSrc = importPlan.projectModelSrc;
-
-        if (importPlan.action === 'copy') {
-          importPath = await this.resolveAvailableImportPath(importPlan.importPath);
-          await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(importPath)));
-          await vscode.workspace.fs.copy(
-            vscode.Uri.file(importPlan.sourcePath),
-            vscode.Uri.file(importPath),
-            { overwrite: false },
-          );
-          projectModelSrc = formatModelProjectSrc(
-            path.relative(path.dirname(document.uri.fsPath), importPath),
-          );
-        }
-
-        const updated = await updateNkmProject(document.uri, (project) => ({
-          ...project,
-          model: { ...project.model, src: projectModelSrc },
-        }));
-        if (!updated) return;
-      } catch (err) {
-        this.logError('updateNkmModelSrc', err);
-        return;
-      }
+      document.updateProjectData({
+        model: { ...document.projectData.model, src: result.durablePath },
+      });
     }
 
-    await this.loadModelInEngine(importPath, webviewPanel, generation);
+    const runtimePath =
+      result.ingest?.outputPath ??
+      (await resolveNkmProjectModelSource(document.uri)) ??
+      request.sourcePath ??
+      result.durablePath;
+    await this.loadModelInEngine(runtimePath, webviewPanel, generation);
+    return result;
   }
 
-  private async resolveAvailableImportPath(targetPath: string): Promise<string> {
-    if (!(await this.fileExists(targetPath))) {
-      return targetPath;
-    }
-
-    const nonce = Date.now();
-    const timestampedPath = createModelImportConflictPath({ targetPath, nonce });
-    if (!(await this.fileExists(timestampedPath))) {
-      return timestampedPath;
-    }
-
-    return createModelImportConflictPath({ targetPath, nonce, attempt: 1 });
-  }
-
-  private async fileExists(filePath: string): Promise<boolean> {
-    try {
-      await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
-      return true;
-    } catch {
-      return false;
-    }
+  private createModelProjectSourceAddRequest(input: {
+    readonly documentUri: vscode.Uri;
+    readonly sourcePath?: string;
+    readonly fileName?: string;
+    readonly bytes?: Uint8Array;
+    readonly kind: ProjectSourceAddRequest['kind'];
+    readonly caller: string;
+    readonly requestId: string;
+  }): ProjectSourceAddRequest {
+    const fileName = input.fileName ?? path.basename(input.sourcePath ?? 'model.glb');
+    return {
+      requestId: input.requestId,
+      kind: input.kind,
+      formatId: 'nkm',
+      documentUri: input.documentUri.toString(),
+      ...(input.sourcePath ? { sourcePath: input.sourcePath } : {}),
+      ...(input.bytes ? { bytes: input.bytes } : {}),
+      browserFile: { name: fileName },
+      target: { role: 'model' },
+      destination: { kind: 'project', directory: '.', copyMode: input.bytes ? 'copy' : 'link' },
+      ingestMode: input.bytes ? 'create-asset' : 'link',
+      caller: input.caller,
+      metadata: { modelAdd: true, name: fileName },
+    };
   }
 
   private isPanelCurrent(webviewPanel: vscode.WebviewPanel, generation: number): boolean {
@@ -1053,17 +1190,26 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
    */
   private async ensureDefaultCubeModelForProject(
     nkmPath: string,
-    document: vscode.CustomDocument,
+    document: ModelDocument,
     webviewPanel: vscode.WebviewPanel,
     generation: number,
   ): Promise<void> {
     if (!this.isPanelCurrent(webviewPanel, generation)) return;
 
-    const nkmDir = path.dirname(nkmPath);
     const name = path.basename(nkmPath, '.nkm');
-    const glbPath = await this.resolveAvailableImportPath(path.join(nkmDir, `${name}.glb`));
-    await vscode.workspace.fs.writeFile(vscode.Uri.file(glbPath), generateDefaultCubeGlb(name));
-    await this.importModelFile(glbPath, document, webviewPanel, generation);
+    await this.handleModelProjectAddSource(
+      this.createModelProjectSourceAddRequest({
+        documentUri: document.uri,
+        fileName: `${name}.glb`,
+        bytes: generateDefaultCubeGlb(name),
+        kind: 'generated-output',
+        caller: 'neko-model.default-cube-add-source',
+        requestId: `model-default-cube-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      }),
+      document,
+      webviewPanel,
+      generation,
+    );
   }
 
   private getWorkspaceFolderUris(): readonly vscode.Uri[] {
@@ -1725,6 +1871,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function getModelDocumentProjectData(document: ModelDocument): NkmProjectData {
+  return document.projectData;
+}
+
+function normalizeModelEditorState(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
 function isModelEditorLevelKeyboardAction(action: string): boolean {
   return MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS.has(action);
 }
@@ -1752,6 +1906,26 @@ function unique<T>(values: readonly T[]): readonly T[] {
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
+}
+
+function readModelSourceAddFileName(request: ProjectSourceAddRequest): string {
+  const metadataName = request.metadata?.['name'];
+  if (typeof metadataName === 'string' && metadataName.length > 0) {
+    return metadataName;
+  }
+  const source =
+    request.browserFile?.name ?? request.sourcePath ?? request.sourceUri ?? 'model.glb';
+  const normalized = source.split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? source;
+  const name = normalized.split('/').pop();
+  return name && name.length > 0 ? decodeURIComponentSafe(name) : 'model.glb';
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function escapeHtml(value: string): string {

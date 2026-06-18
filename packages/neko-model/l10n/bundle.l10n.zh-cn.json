@@ -1,7 +1,8 @@
 {
-  "neko.model.editor.title": "3D 模型编辑器",
+  "neko.model.editor.title": "Neko Model 场景编辑器",
   "neko.model.resetView.title": "重置视图",
   "neko.model.new.title": "新建 3D 模型项目",
+  "neko.model.new2dScene.title": "新建 2D 场景项目",
   "neko.model.new.noFolder": "未打开任何工作区文件夹。",
   "neko.model.importAsset.noWorkspace": "发送模型资产到 NekoModel 前，请先打开一个工作区文件夹。",
   "neko.model.importAsset.unsupportedFormat": "只能导入 {extensions} 模型资产。",

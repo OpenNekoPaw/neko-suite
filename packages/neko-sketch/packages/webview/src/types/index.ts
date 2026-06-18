@@ -3,6 +3,7 @@
  */
 
 import type {
+  ProjectFileSnapshotRequestMessage,
   PsdImportPayloadWire,
   SketchAICancelMessage,
   SketchAIErrorMessage,
@@ -273,6 +274,7 @@ export type ExtensionToWebviewMessage =
   | { type: 'document:revert' }
   | { type: 'document:save' }
   | { type: 'document:saveAs'; path: string }
+  | ProjectFileSnapshotRequestMessage
   | { type: 'file:imported'; name: string; data: string; path: string }
   | { type: 'file:importedPsdTree'; payload: PsdImportPayloadWire }
   | { type: 'stamp:imported'; name: string; data: string; mimeType: string }
@@ -303,10 +305,9 @@ export type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'webviewKeyboardFocus'; focused: boolean }
   | { type: 'document:save'; data: unknown }
-  | { type: 'file:import' }
   | { type: 'stamp:import' }
   | { type: 'file:export'; data: { format: string; data: string } }
-  | { type: 'file:dropRequest'; uris: string }
+  | { type: 'project:addSource'; request: import('@neko/shared').ProjectSourceAddRequest }
   | { type: 'operationApplied'; operation: unknown }
   | SketchAIOpenAgentMessage
   | SketchAIResultAppliedMessage

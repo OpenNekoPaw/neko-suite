@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import { getTotalDuration } from '@neko/shared';
+import { formatMediaTimeCentiseconds } from '@neko/neko-client';
 import {
   PauseIcon,
   PlayIcon,
@@ -28,13 +29,6 @@ interface TransportBarProps {
   onSeek: (time: number) => void;
   onStop: () => void;
   onRecord?: () => void;
-}
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 100);
-  return `${m}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 }
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
@@ -249,7 +243,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
       </AudioIconButton>
 
       <span className="text-[12px] font-mono text-[var(--activity-fg)] opacity-75 whitespace-nowrap tabular-nums">
-        {formatTime(currentTime)} / {formatTime(duration)}
+        {formatMediaTimeCentiseconds(currentTime)} / {formatMediaTimeCentiseconds(duration)}
       </span>
 
       {projectMode && (
@@ -299,8 +293,8 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
           <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
           <span className="text-[11px] font-mono text-[var(--activity-inactive)] whitespace-nowrap">
             {t('audio.waveform.selection', {
-              start: formatTime(selection.start),
-              end: formatTime(selection.end),
+              start: formatMediaTimeCentiseconds(selection.start),
+              end: formatMediaTimeCentiseconds(selection.end),
             })}
           </span>
           <AudioButton

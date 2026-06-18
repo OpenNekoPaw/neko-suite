@@ -11,20 +11,33 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
   createDefaultProjectFormatCodecRegistry,
+  handleProjectSourceAddHostRequest,
+  handleProjectSourceAddRequest,
+  ingestProjectSourceAddRequest,
   nkpSourcePathPolicy,
+  postProjectSourceAddResult,
   ProjectFileStore,
+  type ProjectSourceAddRequest,
+  type ProjectSourceAddResult,
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
   createVSCodeProjectFileIoAdapter,
+  formatProjectFileDiagnostics,
   injectLocaleAttribute,
+  normalizeVSCodeProjectSourceAddRequest,
+  ProjectFileSaveSession,
 } from '@neko/shared/vscode/extension';
 import { Live2dBundleLoader } from '../live2d';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PuppetEditorProvider');
 
-import { isNkpNativeProjectData, type NkpProjectData } from '@neko/shared';
+import {
+  isNkpNativeProjectData,
+  type NkpProjectData,
+  type NkpPuppetRuntimeAdapterReference,
+} from '@neko/shared';
 
 /** Custom document for .nkp files */
 class PuppetDocument implements vscode.CustomDocument {
@@ -79,6 +92,14 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   private readonly projectFileStore = new ProjectFileStore({
     registry: createDefaultProjectFormatCodecRegistry(),
     fileOps: this.projectFileAdapter.fileOps,
+    logger,
+  });
+  private readonly projectFileSession = new ProjectFileSaveSession<NkpProjectData>({
+    formatId: 'nkp',
+    store: this.projectFileStore,
+    sourcePolicy: nkpSourcePathPolicy,
+    createSourcePolicyOptions: (uri) => this.createSourcePolicyOptions(uri),
+    logger,
   });
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
@@ -148,16 +169,12 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     if (document.isSourceFile || !document.projectData) return;
-    const result = await this.projectFileStore.save({
-      filePath: document.uri.fsPath,
-      formatId: 'nkp',
+    await this.projectFileSession.save({
+      targetUri: document.uri,
       document: document.projectData,
-      sourcePolicy: nkpSourcePathPolicy,
-      sourcePolicyOptions: this.createSourcePolicyOptions(document.uri),
+      saveReason: 'vscode-save',
+      fallbackMessage: 'Failed to save .nkp file',
     });
-    if (!result.ok) {
-      throw new Error(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkp file'));
-    }
     document.dirty = false;
   }
 
@@ -167,18 +184,13 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<void> {
     if (!document.projectData) return;
-    const result = await this.projectFileStore.saveAs({
-      filePath: destination.fsPath,
-      formatId: 'nkp',
+    await this.projectFileSession.save({
+      targetUri: destination,
       document: document.projectData,
-      sourcePolicy: nkpSourcePathPolicy,
-      sourcePolicyOptions: this.createSourcePolicyOptions(destination),
+      saveReason: 'save-as',
+      fallbackMessage: 'Failed to save .nkp file as target',
+      useSaveAs: true,
     });
-    if (!result.ok) {
-      throw new Error(
-        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save .nkp file as target'),
-      );
-    }
     document.dirty = false;
   }
 
@@ -216,19 +228,12 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     _cancellation: vscode.CancellationToken,
   ): Promise<vscode.CustomDocumentBackup> {
     if (document.projectData) {
-      const result = await this.projectFileStore.backup({
-        filePath: document.uri.fsPath,
-        backupPath: context.destination.fsPath,
-        formatId: 'nkp',
+      await this.projectFileSession.backup({
+        documentUri: document.uri,
+        backupUri: context.destination,
         document: document.projectData,
-        sourcePolicy: nkpSourcePathPolicy,
-        sourcePolicyOptions: this.createSourcePolicyOptions(document.uri),
+        fallbackMessage: 'Failed to backup .nkp file',
       });
-      if (!result.ok) {
-        throw new Error(
-          formatProjectFileDiagnostics(result.diagnostics, 'Failed to backup .nkp file'),
-        );
-      }
     }
     return {
       id: context.destination.toString(),
@@ -272,6 +277,11 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   ): Promise<void> {
     switch (message.type) {
       case 'ready': {
+        webviewPanel.webview.postMessage({
+          type: 'documentContext',
+          context: this.createDocumentContext(document),
+        });
+
         // Send engine port first if available
         const port = await this.ensureEnginePort();
         if (port) {
@@ -348,67 +358,12 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         break;
       }
 
-      case 'puppet:import': {
-        // Open file dialog to select a new MOC3 source.
-        if (document.isSourceFile) break;
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          filters: {
-            [vscode.l10n.t('neko.puppet.import.filter')]: ['moc3', 'zip'],
-          },
-        });
-
-        if (uris && uris[0] && document.projectData) {
-          if (uris[0].fsPath.toLowerCase().endsWith('.zip')) {
-            await this.importLive2dBundleIntoProject(document, webviewPanel, uris[0]);
-            break;
-          }
-
-          // Compute relative path from .nkp to .moc3
-          const nkpDir = path.dirname(document.uri.fsPath);
-          const relativePath = path.relative(nkpDir, uris[0].fsPath).replace(/\\/g, '/');
-          document.projectData.puppet.src = `./${relativePath}`;
-          document.dirty = true;
-          this._onDidChangeCustomDocument.fire({ document });
-
-          // Load the selected MOC3
-          await this.loadMoc3FromProject(document, webviewPanel);
-
-          // Notify webview that puppet was imported
-          webviewPanel.webview.postMessage({
-            type: 'puppetImported',
-            name: path.basename(uris[0].fsPath).replace(/\.moc3$/, ''),
-          });
-        }
-        break;
-      }
-
-      case 'puppet:dropFile': {
-        // Save dropped .moc3 file and load it.
-        if (document.isSourceFile || !document.projectData) break;
-        const fileName = message.name as string;
-        if (!fileName.endsWith('.moc3')) break;
-        const base64Data = message.data as string;
-        const fileData = Buffer.from(base64Data, 'base64');
-
-        // Write dropped file alongside .nkp
-        const nkpDir2 = path.dirname(document.uri.fsPath);
-        const dropUri = vscode.Uri.file(path.join(nkpDir2, fileName));
-        await vscode.workspace.fs.writeFile(dropUri, fileData);
-
-        // Update project reference
-        document.projectData.puppet.src = `./${fileName}`;
-        document.dirty = true;
-        this._onDidChangeCustomDocument.fire({ document });
-
-        // Load and notify
-        await this.loadMoc3FromProject(document, webviewPanel);
-        webviewPanel.webview.postMessage({
-          type: 'puppetImported',
-          name: path.basename(fileName).replace(/\.moc3$/, ''),
-        });
+      case 'project:addSource': {
+        await this.handlePuppetProjectAddSource(
+          (message as { request?: ProjectSourceAddRequest }).request,
+          document,
+          webviewPanel,
+        );
         break;
       }
 
@@ -512,11 +467,31 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     document: PuppetDocument,
     webviewPanel: vscode.WebviewPanel,
     bundleUri: vscode.Uri,
-  ): Promise<void> {
+    requestId?: string,
+  ): Promise<ProjectSourceAddResult> {
+    const fileName = path.basename(bundleUri.fsPath);
+    const sourceResult = await this.acquirePuppetProjectSource({
+      request: this.createPuppetProjectSourceAddRequest({
+        documentUri: document.uri,
+        sourcePath: bundleUri.fsPath,
+        fileName,
+        role: 'bundle',
+        kind: 'file-picker',
+        caller: 'neko-puppet.import-live2d-bundle-editor',
+        requestId:
+          requestId ?? `puppet-bundle-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      }),
+      fileNameFallback: fileName,
+      unmanagedSourceMessage:
+        'Live2D bundle must be moved into the project, asset library, or a configured media root before saving.',
+    });
+    if (!sourceResult.ok || !sourceResult.durablePath) {
+      throw new Error(
+        sourceResult.diagnostics[0]?.message ?? `Unable to add puppet bundle: ${fileName}`,
+      );
+    }
     const bundleBytes = await vscode.workspace.fs.readFile(bundleUri);
-    const nkpDir = path.dirname(document.uri.fsPath);
-    const relativePath = './' + path.relative(nkpDir, bundleUri.fsPath).replace(/\\/g, '/');
-    const loaded = this.live2dBundleLoader.loadLive2dBundle(relativePath, bundleBytes);
+    const loaded = this.live2dBundleLoader.loadLive2dBundle(sourceResult.durablePath, bundleBytes);
 
     document.projectData = {
       ...document.projectData!,
@@ -536,6 +511,280 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       type: 'puppetImported',
       name: path.basename(bundleUri.fsPath).replace(/\.zip$/i, ''),
     });
+    return sourceResult;
+  }
+
+  private async handlePuppetProjectAddSource(
+    request: ProjectSourceAddRequest | undefined,
+    document: PuppetDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    if (!request) return;
+    if (this.isPuppetFilePickerSourceAddRequest(request)) {
+      await this.handlePuppetFilePickerSourceAdd(request, document, webviewPanel);
+      return;
+    }
+    await handleProjectSourceAddHostRequest(request, {
+      addSource: (sourceRequest) =>
+        this.addPuppetProjectSource(
+          normalizeVSCodeProjectSourceAddRequest(sourceRequest),
+          document,
+          webviewPanel,
+        ),
+      postMessage: (message) => webviewPanel.webview.postMessage(message),
+      logger,
+    });
+  }
+
+  private isPuppetFilePickerSourceAddRequest(request: ProjectSourceAddRequest): boolean {
+    return (
+      request.kind === 'file-picker' &&
+      request.formatId === 'nkp' &&
+      !request.sourcePath &&
+      !request.sourceUri &&
+      !request.bytes &&
+      !request.generatedAssetId
+    );
+  }
+
+  private async handlePuppetFilePickerSourceAdd(
+    request: ProjectSourceAddRequest,
+    document: PuppetDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    if (document.isSourceFile) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: async () => ({
+          requestId: request.requestId,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'invalid-document',
+              severity: 'error',
+              message: 'Puppet source files cannot import another puppet source.',
+              recoverability: 'manual',
+            },
+          ],
+        }),
+        postMessage: (message) => webviewPanel.webview.postMessage(message),
+        logger,
+      });
+      return;
+    }
+
+    const uris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: {
+        [vscode.l10n.t('neko.puppet.import.filter')]: ['moc3', 'zip'],
+      },
+    });
+    const uri = uris?.[0];
+    if (!uri) {
+      await handleProjectSourceAddHostRequest(request, {
+        addSource: async () => ({
+          requestId: request.requestId,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'add-source-cancelled',
+              severity: 'info',
+              message: 'Puppet source selection was cancelled.',
+              recoverability: 'none',
+            },
+          ],
+        }),
+        postMessage: (message) => webviewPanel.webview.postMessage(message),
+        logger,
+      });
+      return;
+    }
+
+    if (uri.fsPath.toLowerCase().endsWith('.zip')) {
+      try {
+        const sourceResult = await this.importLive2dBundleIntoProject(
+          document,
+          webviewPanel,
+          uri,
+          request.requestId,
+        );
+        await postProjectSourceAddResult(sourceResult, {
+          postMessage: (message) => webviewPanel.webview.postMessage(message),
+          logger,
+        });
+      } catch (error) {
+        await webviewPanel.webview.postMessage({
+          type: 'project:sourceRejected',
+          result: {
+            requestId: request.requestId,
+            ok: false,
+            diagnostics: [
+              {
+                code: 'add-source-failed',
+                severity: 'error',
+                message: error instanceof Error ? error.message : String(error),
+                recoverability: 'manual',
+              },
+            ],
+          },
+        });
+      }
+      return;
+    }
+
+    await this.handlePuppetProjectAddSource(
+      this.createPuppetProjectSourceAddRequest({
+        documentUri: document.uri,
+        sourcePath: uri.fsPath,
+        fileName: path.basename(uri.fsPath),
+        role: 'puppet',
+        kind: 'file-picker',
+        caller: request.caller ?? 'neko-puppet.project-add-source',
+        requestId: request.requestId,
+      }),
+      document,
+      webviewPanel,
+    );
+  }
+
+  private async addPuppetProjectSource(
+    request: ProjectSourceAddRequest,
+    document: PuppetDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<ProjectSourceAddResult> {
+    if (document.isSourceFile || !document.projectData) {
+      return {
+        requestId: request.requestId,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'invalid-document',
+            severity: 'error',
+            message: 'No .nkp project is loaded for puppet source add.',
+            recoverability: 'manual',
+          },
+        ],
+      };
+    }
+
+    const fileName = readPuppetSourceAddFileName(request);
+    if (!fileName.toLowerCase().endsWith('.moc3')) {
+      return {
+        requestId: request.requestId,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'invalid-document',
+            severity: 'error',
+            message: `Unsupported puppet source: ${fileName}`,
+            recoverability: 'manual',
+          },
+        ],
+      };
+    }
+
+    const result = await this.acquirePuppetProjectSource({
+      request,
+      documentUri: document.uri,
+      fileNameFallback: 'puppet.moc3',
+      unmanagedSourceMessage:
+        'MOC3 source must be moved into the project, asset library, or a configured media root before saving.',
+    });
+    if (!result.ok || !result.durablePath) {
+      return result;
+    }
+
+    document.projectData.puppet.src = result.durablePath;
+    document.dirty = true;
+    this._onDidChangeCustomDocument.fire({ document });
+
+    await this.loadMoc3FromProject(document, webviewPanel);
+    webviewPanel.webview.postMessage({
+      type: 'puppetImported',
+      name: path.basename(fileName).replace(/\.moc3$/i, ''),
+    });
+    return result;
+  }
+
+  private createPuppetProjectSourceAddRequest(input: {
+    readonly documentUri: vscode.Uri;
+    readonly sourcePath: string;
+    readonly fileName: string;
+    readonly role: 'puppet' | 'bundle';
+    readonly kind: ProjectSourceAddRequest['kind'];
+    readonly caller: string;
+    readonly requestId: string;
+  }): ProjectSourceAddRequest {
+    return {
+      requestId: input.requestId,
+      kind: input.kind,
+      formatId: 'nkp',
+      documentUri: input.documentUri.toString(),
+      sourcePath: input.sourcePath,
+      browserFile: { name: input.fileName },
+      target: { role: input.role },
+      destination: { kind: 'project', directory: '.', copyMode: 'link' },
+      ingestMode: 'link',
+      caller: input.caller,
+      metadata: { puppetAdd: true, name: input.fileName },
+    };
+  }
+
+  private async acquirePuppetProjectSource(input: {
+    readonly request: ProjectSourceAddRequest;
+    readonly documentUri?: vscode.Uri;
+    readonly fileNameFallback: string;
+    readonly unmanagedSourceMessage: string;
+  }): Promise<ProjectSourceAddResult> {
+    const request = input.request;
+    const fileName = readPuppetSourceAddFileName(request);
+    const documentUri =
+      input.documentUri ??
+      (request.documentUri ? vscode.Uri.parse(request.documentUri) : undefined);
+    if (!documentUri) {
+      return {
+        requestId: request.requestId,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'invalid-document',
+            severity: 'error',
+            message: 'No .nkp document URI is available for puppet source add.',
+            recoverability: 'manual',
+          },
+        ],
+      };
+    }
+
+    return await handleProjectSourceAddRequest(
+      {
+        ...request,
+        caller: request.caller ?? 'neko-puppet.project-add-source',
+        target: request.target ?? { role: 'puppet' },
+        destination: {
+          kind: 'project',
+          directory: request.destination.directory ?? '.',
+          copyMode: request.destination.copyMode ?? (request.bytes ? 'copy' : 'link'),
+        },
+        metadata: {
+          ...(request.metadata ?? {}),
+          puppetAdd: true,
+          name: fileName,
+        },
+      },
+      {
+        ingest: (ingestRequest) =>
+          ingestProjectSourceAddRequest(ingestRequest, {
+            documentPath: documentUri.fsPath,
+            assetDirectory: request.destination.directory ?? '.',
+            workspaceContext: this.createSourcePolicyOptions(documentUri).context,
+            fileOps: this.createPuppetSourceAssetFileOps(),
+            fileNameFallback: input.fileNameFallback,
+            unmanagedSourceMessage: input.unmanagedSourceMessage,
+          }),
+      },
+    );
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
@@ -592,10 +841,54 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     return {
       context: {
         ...context,
-        owningWorkspaceRoot: documentDir,
+        owningWorkspaceRoot: context.owningWorkspaceRoot ?? documentDir,
         documentDir,
         pathVariables,
       },
+    };
+  }
+
+  private createPuppetSourceAssetFileOps() {
+    return {
+      createDirectory: async (dirPath: string) =>
+        vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+      fileExists: async (filePath: string) => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      writeFile: async (filePath: string, content: Uint8Array) =>
+        vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), content),
+    };
+  }
+
+  private createDocumentContext(document: PuppetDocument): {
+    readonly owner: 'neko-puppet';
+    readonly documentKind: 'nkp' | 'moc3';
+    readonly profile: 'live2d' | 'neko-puppet';
+    readonly runtimeAdapter?: NkpPuppetRuntimeAdapterReference;
+  } {
+    if (document.isSourceFile) {
+      return {
+        owner: 'neko-puppet',
+        documentKind: 'moc3',
+        profile: 'live2d',
+        runtimeAdapter: {
+          id: 'live2d-moc3-compat',
+          version: 'clean-room',
+        },
+      };
+    }
+
+    const runtimeAdapter = document.projectData?.puppet.runtimeAdapter;
+    return {
+      owner: 'neko-puppet',
+      documentKind: 'nkp',
+      profile: isNkpNativeProjectData(document.projectData) ? 'neko-puppet' : 'live2d',
+      ...(runtimeAdapter ? { runtimeAdapter } : {}),
     };
   }
 
@@ -636,10 +929,22 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   }
 }
 
-function formatProjectFileDiagnostics(
-  diagnostics: readonly { readonly message: string }[],
-  fallback: string,
-): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
+function readPuppetSourceAddFileName(request: ProjectSourceAddRequest): string {
+  const metadataName = request.metadata?.['name'];
+  if (typeof metadataName === 'string' && metadataName.length > 0) {
+    return metadataName;
+  }
+  const source =
+    request.browserFile?.name ?? request.sourcePath ?? request.sourceUri ?? 'puppet.moc3';
+  const normalized = source.split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? source;
+  const name = normalized.split('/').pop();
+  return name && name.length > 0 ? decodeURIComponentSafe(name) : 'puppet.moc3';
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

@@ -182,7 +182,7 @@ Webview 不构建项目 `MixdownConfig`。项目播放、导出和 Agent MixExpo
 
 当前 `setSpeed` 对项目 mix stream 是全局预览倍率：Engine 按倍率推进 mix cursor 并由 pacer 调整发送节奏，不做相位声码器或重采样级时间拉伸。`speed > 1` 适合快速预览/跳读，不承诺连续变速音质；连续 time-stretch 属于后续 planned DSP 能力。
 
-`project:init`、`project:sync`、`operationApplied`、`project:importAudio` 和 `project:dropImportAudio` 属于项目状态/编辑平面，不属于旧音频运行时控制协议。导入音频由 Extension 作为项目编辑处理；Extension 可调用 Engine probe/waveform 获取元数据，但 Engine 不修改 `.nka` 项目数据，也不需要 `audio:import`。当 `project:sync.operation.meta.source === 'ai'` 时，Webview 只记录展示用的 affected track/clip/effect IDs，不把同一 operation 回发给 Extension。
+`project:init`、`project:sync`、`operationApplied` 和 `project:addSource` 属于项目状态/编辑平面，不属于旧音频运行时控制协议。拖拽、工具调用和选择器导入都发送 `project:addSource`；选择器导入使用 `kind: "file-picker"`，由 Extension 打开文件选择器后继续复用同一条路径/资产持久化逻辑，不再保留独立导入协议。Extension 可调用 Engine probe/waveform 获取元数据，但 Engine 不修改 `.nka` 项目数据，也不需要 `audio:import`。当 `project:sync.operation.meta.source === 'ai'` 时，Webview 只记录展示用的 affected track/clip/effect IDs，不把同一 operation 回发给 Extension。
 
 ### Agent 执行边界
 
