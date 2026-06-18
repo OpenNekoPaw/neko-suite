@@ -24,7 +24,6 @@ import {
   type ContentSourceRef,
   type ContentStableSourceRef,
   type ResourceCacheStatus,
-  type ResourceRef,
   type ResourceVariantRequest,
 } from '../../types';
 import type { LocalResourceAccessService } from './local-resource-access';
@@ -609,7 +608,12 @@ export class RegisterExistingSourceContentIngestProvider implements ContentInges
   }
 
   supports(request: ContentIngestRequest): boolean {
-    return request.mode === 'register-existing-source' && request.sourcePath !== undefined;
+    return (
+      (request.mode === 'register-existing-source' ||
+        request.mode === 'link' ||
+        request.mode === 'add') &&
+      request.sourcePath !== undefined
+    );
   }
 
   async ingest({ request }: ContentIngestProviderRequest): Promise<ContentIngestResult> {
@@ -640,6 +644,7 @@ export class GeneratedOutputContentIngestProvider implements ContentIngestProvid
   }
 
   supports(request: ContentIngestRequest): boolean {
+    if (request.mode === 'create-asset') return request.bytes !== undefined;
     return (
       request.mode === 'generated-output' &&
       (request.sourcePath !== undefined || request.bytes !== undefined)
@@ -900,7 +905,11 @@ function resolveIngestOutputPath(request: ContentIngestRequest, projectRoot: str
     );
   }
   if (request.sourcePath) return request.sourcePath;
-  if (request.mode === 'generated-output' || request.destination.kind === 'generated-assets') {
+  if (
+    request.mode === 'generated-output' ||
+    request.mode === 'create-asset' ||
+    request.destination.kind === 'generated-assets'
+  ) {
     return path.join(
       projectRoot,
       '.neko',

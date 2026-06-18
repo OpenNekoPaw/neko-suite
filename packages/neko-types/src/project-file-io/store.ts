@@ -4,6 +4,7 @@ import {
   type ProjectFormatCodecRegistry,
   type ProjectFormatLoadResult,
 } from './codec';
+import type { ILogger } from '../logger/types';
 import {
   createProjectFileDiagnostic,
   hasProjectFileErrors,
@@ -40,6 +41,7 @@ export interface ProjectFileStoreOptions {
   readonly fileOps: ProjectFileOps;
   readonly textEncoder?: ProjectTextEncoder;
   readonly textDecoder?: ProjectTextDecoder;
+  readonly logger?: Pick<ILogger, 'debug' | 'info' | 'warn'>;
 }
 
 export interface ProjectFileLoadRequest<TDocument> {
@@ -55,6 +57,7 @@ export interface ProjectFileSaveRequest<TDocument> {
   readonly formatId?: string;
   readonly sourcePolicy?: PortableSourcePathPolicy<TDocument>;
   readonly sourcePolicyOptions?: ApplyPortableSourcePolicyOptions;
+  readonly saveReason?: ProjectFileSaveReason;
   readonly indent?: number;
   readonly atomic?: boolean;
 }
@@ -73,18 +76,32 @@ export interface ProjectFileLoadResponse<TDocument> {
   readonly loadResult?: ProjectFormatLoadResult<TDocument>;
 }
 
-export interface ProjectFileSaveResponse {
+export interface ProjectFileSaveResponse<TDocument = unknown> {
   readonly ok: boolean;
   readonly filePath: string;
+  readonly document?: TDocument;
   readonly diagnostics: readonly ProjectFileDiagnostic[];
   readonly written: boolean;
 }
+
+export type ProjectFileSaveReason =
+  | 'manual'
+  | 'autosave'
+  | 'vscode-save'
+  | 'import'
+  | 'migration'
+  | 'add-source'
+  | 'backup'
+  | 'save-as'
+  | 'agent-edit'
+  | 'external-sync';
 
 export class ProjectFileStore {
   private readonly registry: ProjectFormatCodecRegistry;
   private readonly fileOps: ProjectFileOps;
   private readonly textEncoder: ProjectTextEncoder;
   private readonly textDecoder: ProjectTextDecoder;
+  private readonly logger?: Pick<ILogger, 'debug' | 'info' | 'warn'>;
   private readonly writeQueues = new Map<string, Promise<void>>();
 
   constructor(options: ProjectFileStoreOptions) {
@@ -92,6 +109,7 @@ export class ProjectFileStore {
     this.fileOps = options.fileOps;
     this.textEncoder = options.textEncoder ?? new TextEncoder();
     this.textDecoder = options.textDecoder ?? new TextDecoder();
+    this.logger = options.logger;
   }
 
   async load<TDocument>(
@@ -156,23 +174,24 @@ export class ProjectFileStore {
 
   async save<TDocument>(
     request: ProjectFileSaveRequest<TDocument>,
-  ): Promise<ProjectFileSaveResponse> {
+  ): Promise<ProjectFileSaveResponse<TDocument>> {
     return this.enqueueWrite(request.filePath, () => this.saveNow(request));
   }
 
   async saveAs<TDocument>(
     request: ProjectFileSaveRequest<TDocument>,
-  ): Promise<ProjectFileSaveResponse> {
+  ): Promise<ProjectFileSaveResponse<TDocument>> {
     return this.save(request);
   }
 
   async backup<TDocument>(
     request: ProjectFileBackupRequest<TDocument>,
-  ): Promise<ProjectFileSaveResponse> {
+  ): Promise<ProjectFileSaveResponse<TDocument>> {
     const response = await this.save({
       ...request,
       filePath: request.backupPath,
       atomic: false,
+      saveReason: request.saveReason ?? 'backup',
     });
     if (!response.ok) {
       return {
@@ -198,7 +217,7 @@ export class ProjectFileStore {
 
   private async saveNow<TDocument>(
     request: ProjectFileSaveRequest<TDocument>,
-  ): Promise<ProjectFileSaveResponse> {
+  ): Promise<ProjectFileSaveResponse<TDocument>> {
     const codec = this.resolveCodec<TDocument>(request.filePath, request.formatId);
     if (!codec) {
       return {
@@ -214,6 +233,8 @@ export class ProjectFileStore {
       };
     }
 
+    this.logSave('start', request, codec.formatId);
+
     const policyResult =
       request.sourcePolicyOptions && request.sourcePolicy
         ? applyPortableSourcePathPolicy(
@@ -224,6 +245,7 @@ export class ProjectFileStore {
         : { document: request.document, diagnostics: [] as readonly ProjectFileDiagnostic[] };
 
     if (hasProjectFileErrors(policyResult.diagnostics)) {
+      this.logSave('blocked', request, codec.formatId, policyResult.diagnostics);
       return {
         ok: false,
         filePath: request.filePath,
@@ -253,11 +275,12 @@ export class ProjectFileStore {
 
     const diagnostics = [...policyResult.diagnostics, ...saveResult.diagnostics];
     if (hasProjectFileErrors(saveResult.diagnostics)) {
+      this.logSave('blocked', request, codec.formatId, diagnostics);
       return { ok: false, filePath: request.filePath, diagnostics, written: false };
     }
 
     try {
-      await this.writeFile(request.filePath, saveResult.content, request.atomic ?? true);
+      await this.writeFile(request.filePath, saveResult.content, request.atomic ?? false);
     } catch (error) {
       return {
         ok: false,
@@ -270,9 +293,12 @@ export class ProjectFileStore {
       };
     }
 
+    this.logSave('written', request, codec.formatId, diagnostics);
+
     return {
       ok: true,
       filePath: request.filePath,
+      document: policyResult.document,
       diagnostics,
       written: true,
     };
@@ -330,5 +356,28 @@ export class ProjectFileStore {
   ): ProjectFormatCodec<TDocument> | undefined {
     const codec = formatId ? this.registry.get(formatId) : this.registry.getByExtension(filePath);
     return codec as ProjectFormatCodec<TDocument> | undefined;
+  }
+
+  private logSave<TDocument>(
+    phase: 'start' | 'blocked' | 'written',
+    request: ProjectFileSaveRequest<TDocument>,
+    formatId: string,
+    diagnostics: readonly ProjectFileDiagnostic[] = [],
+  ): void {
+    if (!this.logger) return;
+
+    const payload = {
+      phase,
+      saveReason: request.saveReason ?? 'manual',
+      filePath: request.filePath,
+      formatId,
+      diagnosticCodes: diagnostics.map((diagnostic) => diagnostic.code),
+    };
+
+    if (phase === 'blocked') {
+      this.logger.warn('projectFile.save', payload);
+      return;
+    }
+    this.logger.debug('projectFile.save', payload);
   }
 }

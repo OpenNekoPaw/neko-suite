@@ -7,7 +7,11 @@ import type {
 } from '../types/content-access';
 import type { ProjectFileDiagnostic } from './diagnostics';
 import { createProjectFileDiagnostic } from './diagnostics';
-import type { ProjectSourceDescriptor, ProjectSourceRole } from './source-policy';
+import {
+  detectRuntimeOrCacheSourceHandle,
+  type ProjectSourceDescriptor,
+  type ProjectSourceRole,
+} from './source-policy';
 
 export type ProjectSourceAddKind =
   | 'drag-drop'
@@ -78,7 +82,7 @@ export async function handleProjectSourceAddRequest(
           createProjectFileDiagnostic({
             code: ingest.status === 'non-portable' ? 'non-portable-path' : 'missing-source',
             message: ingest.error,
-            recoverability: ingest.status === 'non-portable' ? 'import' : 'relink',
+            recoverability: ingest.status === 'non-portable' ? 'create-asset' : 'relink',
           }),
         ]
       : []),
@@ -133,26 +137,56 @@ export function validateProjectSourceAddRequest(
   request: ProjectSourceAddRequest,
 ): readonly ProjectFileDiagnostic[] {
   const diagnostics: ProjectFileDiagnostic[] = [];
-  if (!request.sourcePath && !request.bytes && !request.generatedAssetId) {
+  if (
+    !request.sourcePath &&
+    !request.bytes &&
+    !request.generatedAssetId &&
+    request.kind !== 'file-picker'
+  ) {
     diagnostics.push(
       createProjectFileDiagnostic({
         code: 'missing-source',
         message: request.browserFile?.name
           ? `Dropped file ${request.browserFile.name} does not expose a durable source path.`
           : 'Add-source request does not include a durable source, bytes, or generated asset id.',
-        recoverability: 'import',
+        recoverability: 'create-asset',
         context: request.browserFile?.name ? { fileName: request.browserFile.name } : undefined,
       }),
     );
   }
-  if (request.sourcePath?.startsWith('blob:') || request.sourceUri?.startsWith('blob:')) {
-    diagnostics.push(
-      createProjectFileDiagnostic({
-        code: 'runtime-handle-persisted',
-        message: 'Add-source request contains a browser blob URL instead of a durable source.',
-        recoverability: 'import',
-      }),
-    );
+  diagnostics.push(...detectRuntimeOrCacheAddSourceHandles(request));
+  return diagnostics;
+}
+
+function detectRuntimeOrCacheAddSourceHandles(
+  request: ProjectSourceAddRequest,
+): readonly ProjectFileDiagnostic[] {
+  const diagnostics: ProjectFileDiagnostic[] = [];
+  for (const [field, value] of [
+    ['sourcePath', request.sourcePath],
+    ['sourceUri', request.sourceUri],
+  ] as const) {
+    if (!value) continue;
+    const diagnostic = detectRuntimeOrCacheSourceHandle({
+      id: `addSource.${field}`,
+      role: request.target?.role ?? 'other',
+      path: value,
+      fieldPath: [field],
+    });
+    if (diagnostic) {
+      diagnostics.push(
+        createProjectFileDiagnostic({
+          code: diagnostic.code,
+          message:
+            diagnostic.code === 'runtime-handle-persisted'
+              ? 'Add-source request contains a runtime-only handle instead of a durable source.'
+              : 'Add-source request contains a cache or preview artifact instead of a durable source.',
+          path: diagnostic.path,
+          sourceId: diagnostic.sourceId,
+          recoverability: diagnostic.recoverability,
+        }),
+      );
+    }
   }
   return diagnostics;
 }
@@ -166,7 +200,7 @@ function projectDiagnosticsFromContentDiagnostics(
       severity: diagnostic.severity,
       message: diagnostic.message,
       sourceId: diagnostic.sourceId,
-      recoverability: diagnostic.code.includes('non-portable') ? 'import' : 'manual',
+      recoverability: diagnostic.code.includes('non-portable') ? 'create-asset' : 'manual',
     }),
   );
 }
@@ -181,7 +215,7 @@ function mapContentDiagnosticCode(code: string): ProjectFileDiagnostic['code'] {
 }
 
 function inferIngestMode(request: ProjectSourceAddRequest): ContentIngestMode {
-  if (request.generatedAssetId || request.kind === 'generated-output') return 'generated-output';
-  if (request.destination.copyMode === 'register') return 'register-existing-source';
-  return request.bytes ? 'import-source' : 'register-existing-source';
+  if (request.generatedAssetId || request.kind === 'generated-output') return 'create-asset';
+  if (request.bytes) return 'create-asset';
+  return 'link';
 }

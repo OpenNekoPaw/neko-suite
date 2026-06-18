@@ -90,6 +90,10 @@ export function applyPortableSourcePathPolicy<TDocument>(
     }
 
     const classification = classifyWorkspaceMediaPath(descriptor.path);
+    if (classification.kind === 'workspace-relative' && hasParentTraversal(descriptor.path)) {
+      diagnostics.push(createNonPortableSourceDiagnostic(descriptor));
+      continue;
+    }
     if (classification.kind === 'workspace-relative' || classification.kind === 'variable') {
       continue;
     }
@@ -109,7 +113,7 @@ export function applyPortableSourcePathPolicy<TDocument>(
           message: `Source ${descriptor.id} is an absolute local path that cannot be made portable.`,
           path: descriptor.fieldPath,
           sourceId: descriptor.id,
-          recoverability: 'import',
+          recoverability: 'create-asset',
         }),
       );
     }
@@ -148,6 +152,10 @@ export function resolveProjectSourceDiagnostics<TDocument>(
           }),
         );
       }
+      continue;
+    }
+    if (hasParentTraversal(descriptor.path)) {
+      diagnostics.push(createNonPortableSourceDiagnostic(descriptor));
       continue;
     }
 
@@ -195,11 +203,10 @@ export function detectRuntimeOrCacheSourceHandle(
   }
 
   if (
-    lower.includes('/.neko/.cache/') ||
-    lower.includes('\\.neko\\.cache\\') ||
-    lower.includes('/cache/') ||
-    lower.includes('/proxy/') ||
-    lower.includes('/thumbnail/') ||
+    hasPathSegmentSequence(lower, ['.neko', '.cache']) ||
+    hasPathSegment(lower, 'cache') ||
+    hasPathSegment(lower, 'proxy') ||
+    hasPathSegment(lower, 'thumbnail') ||
     lower.includes('cachepath')
   ) {
     return createProjectFileDiagnostic({
@@ -212,6 +219,38 @@ export function detectRuntimeOrCacheSourceHandle(
   }
 
   return undefined;
+}
+
+function createNonPortableSourceDiagnostic(
+  descriptor: ProjectSourceDescriptor,
+): ProjectFileDiagnostic {
+  return createProjectFileDiagnostic({
+    code: 'non-portable-path',
+    message: `Source ${descriptor.id} escapes the project or workspace root.`,
+    path: descriptor.fieldPath,
+    sourceId: descriptor.id,
+    recoverability: 'create-asset',
+  });
+}
+
+function hasParentTraversal(value: string): boolean {
+  const normalized = normalizePathForSegmentChecks(value);
+  return normalized === '..' || normalized.startsWith('../') || normalized.includes('/../');
+}
+
+function hasPathSegment(value: string, segment: string): boolean {
+  return normalizePathForSegmentChecks(value).split('/').includes(segment);
+}
+
+function hasPathSegmentSequence(value: string, sequence: readonly string[]): boolean {
+  const segments = normalizePathForSegmentChecks(value).split('/');
+  return segments.some((_, index) =>
+    sequence.every((segment, offset) => segments[index + offset] === segment),
+  );
+}
+
+function normalizePathForSegmentChecks(value: string): string {
+  return value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
 }
 
 function mapWorkspaceDiagnostic(

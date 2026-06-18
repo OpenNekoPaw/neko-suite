@@ -452,6 +452,44 @@ describe('content ingest providers', () => {
     expect(result.prewarm).toEqual([{ role: 'thumbnail', width: 256 }]);
   });
 
+  it('creates assets from bytes but does not treat source paths as Create Asset input', async () => {
+    const fileOps = createFileOps({ '/downloads/shot.png': bytes('external') });
+    const provider = new GeneratedOutputContentIngestProvider({
+      projectRoot: '/workspace/demo',
+      fileOps,
+    });
+    const bytesRequest: ContentIngestRequest = {
+      mode: 'create-asset',
+      bytes: bytes('created'),
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/workspace/demo/neko/generated/image',
+      },
+      fileName: 'created.png',
+    };
+    const sourcePathRequest: ContentIngestRequest = {
+      mode: 'create-asset',
+      sourcePath: '/downloads/shot.png',
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/workspace/demo/neko/generated/image',
+      },
+      fileName: 'shot.png',
+    };
+
+    expect(provider.supports(bytesRequest)).toBe(true);
+    expect(provider.supports(sourcePathRequest)).toBe(false);
+
+    const result = await provider.ingest({ request: bytesRequest });
+
+    expect(fileOps.files.get('/workspace/demo/neko/generated/image/created.png')).toEqual(
+      bytes('created'),
+    );
+    expect(result.contractedPath).toBe('neko/generated/image/created.png');
+  });
+
   it('falls back generated outputs to project cache when no destination directory is provided', async () => {
     const fileOps = createFileOps({});
     const provider = new GeneratedOutputContentIngestProvider({

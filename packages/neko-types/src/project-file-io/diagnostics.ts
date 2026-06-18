@@ -11,6 +11,9 @@ export type ProjectFileDiagnosticCode =
   | 'non-portable-path'
   | 'runtime-handle-persisted'
   | 'cache-source-persisted'
+  | 'add-source-timeout'
+  | 'add-source-cancelled'
+  | 'add-source-failed'
   | 'wrong-domain-field'
   | 'write-conflict'
   | 'backup-failed'
@@ -23,7 +26,7 @@ export type ProjectFileDiagnosticSeverity = 'info' | 'warning' | 'error';
 export type ProjectFileDiagnosticRecoverability =
   | 'retry'
   | 'relink'
-  | 'import'
+  | 'create-asset'
   | 'configure'
   | 'readonly'
   | 'manual'

@@ -34,6 +34,9 @@ export type ContentAccessTarget =
   | 'runtime-stream';
 
 export type ContentIngestMode =
+  | 'add'
+  | 'link'
+  | 'create-asset'
   | 'import-source'
   | 'register-existing-source'
   | 'generated-output'
@@ -292,6 +295,9 @@ export const CONTENT_ACCESS_TARGETS: readonly ContentAccessTarget[] = [
 ] as const;
 
 export const CONTENT_INGEST_MODES: readonly ContentIngestMode[] = [
+  'add',
+  'link',
+  'create-asset',
   'import-source',
   'register-existing-source',
   'generated-output',
@@ -559,7 +565,7 @@ function isGeneratedAssetCacheOutput(
   options: { readonly projectRoot?: string },
 ): boolean {
   if (
-    result.request.mode !== 'generated-output' ||
+    !isCreateAssetIngestMode(result.request.mode) ||
     result.request.destination.kind !== 'generated-assets' ||
     !result.outputPath ||
     !options.projectRoot
@@ -573,8 +579,17 @@ function isGeneratedAssetCacheOutput(
 
 export function isDurableSourceIngestMode(mode: ContentIngestMode): boolean {
   return (
-    mode === 'import-source' || mode === 'register-existing-source' || mode === 'generated-output'
+    mode === 'add' ||
+    mode === 'link' ||
+    mode === 'create-asset' ||
+    mode === 'import-source' ||
+    mode === 'register-existing-source' ||
+    mode === 'generated-output'
   );
+}
+
+export function isCreateAssetIngestMode(mode: ContentIngestMode): boolean {
+  return mode === 'create-asset' || mode === 'generated-output';
 }
 
 export function isContentAccessRequest(value: unknown): value is ContentAccessRequest {

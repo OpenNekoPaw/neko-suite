@@ -6,6 +6,7 @@ import { ProjectData } from './project';
 import { ConfigState, MCPServerConfig, PromptPresetConfig, ProviderConfig } from './config';
 import type { EditOperation } from '../operations';
 import type { ProjectSourceAddRequest, ProjectSourceAddResult } from '../project-file-io/ingest';
+import type { ProjectSourceRejectedMessage } from '../project-file-io/add-source-flow';
 
 // =============================================================================
 // Attachment Types (Chat UI DTO)
@@ -198,10 +199,10 @@ export interface TemplateStepMessage {
 
 export type MessageToWebview =
   | { type: 'update'; content: ProjectData }
-  | { type: 'fileAdded'; path: string; mediaType: 'video' | 'audio' | 'image' }
   | { type: 'project:sourceAdded'; result: ProjectSourceAddResult }
+  | ProjectSourceRejectedMessage
   | { type: 'error'; message: string }
-  | { type: 'saved' }
+  | { type: 'saved'; content?: ProjectData }
   | { type: 'fileUri'; path: string; uri: string; isBase64?: boolean }
   | { type: 'exportProgress'; progress: ExportProgressInfo }
   // Audio decode messages (Extension -> WebView)
@@ -376,8 +377,8 @@ export interface ExportStartConfig {
 export type MessageFromWebview =
   | { type: 'ready' }
   | { type: 'save'; content: ProjectData }
+  | { type: 'project:changed'; document: ProjectData }
   | { type: 'requestFile'; path: string }
-  | { type: 'addMediaToTimeline'; path: string }
   | { type: 'project:addSource'; request: ProjectSourceAddRequest }
   | { type: 'saveBlob'; data: ArrayBuffer; filename: string; mimeType: string }
   | { type: 'selectExportPath'; filename: string; format: string }

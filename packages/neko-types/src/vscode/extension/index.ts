@@ -162,6 +162,19 @@ export type {
   VSCodeProjectFileIoAdapter,
   VSCodeProjectFileIoAdapterOptions,
 } from './project-file-io';
+export { requestWebviewProjectSnapshot } from './project-file-snapshot';
+export type { RequestWebviewProjectSnapshotOptions } from './project-file-snapshot';
+export { ProjectFileSaveSession, formatProjectFileDiagnostics } from './project-file-save-session';
+export type {
+  ProjectFileSaveSessionBackupRequest,
+  ProjectFileSaveSessionOptions,
+  ProjectFileSaveSessionSaveRequest,
+  ProjectFileSaveSessionSnapshotRequest,
+} from './project-file-save-session';
+export {
+  createVSCodeProjectSourceAddRequest,
+  normalizeVSCodeProjectSourceAddRequest,
+} from './project-source-add';
 
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {

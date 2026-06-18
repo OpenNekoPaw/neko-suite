@@ -26,6 +26,7 @@ let initialized = false;
 // Request-response tracking
 const pendingRequests = new Map<string, PendingRequest>();
 let messageListenerInitialized = false;
+let messageListener: ((event: MessageEvent) => void) | null = null;
 
 /**
  * Generate unique request ID
@@ -43,7 +44,7 @@ function initMessageListener(): void {
 
   messageListenerInitialized = true;
 
-  window.addEventListener('message', (event: MessageEvent) => {
+  messageListener = (event: MessageEvent) => {
     const message = event.data;
 
     // Check if this is a response to a pending request
@@ -59,7 +60,9 @@ function initMessageListener(): void {
         pending.resolve(message.payload !== undefined ? message.payload : message);
       }
     }
-  });
+  };
+
+  window.addEventListener('message', messageListener);
 }
 
 /**
@@ -241,8 +244,15 @@ export function getPendingRequestCount(): number {
  * Reset the module state (for testing)
  */
 export function resetVSCodeApi(): void {
+  if (messageListener && typeof window !== 'undefined') {
+    window.removeEventListener('message', messageListener);
+  }
+  for (const pending of pendingRequests.values()) {
+    clearTimeout(pending.timeout);
+  }
   cachedApi = null;
   initialized = false;
+  messageListener = null;
   pendingRequests.clear();
   messageListenerInitialized = false;
 }

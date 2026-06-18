@@ -26,6 +26,7 @@
     "./types/npc-test-bench": "./src/types/npc-test-bench.ts",
     "./vscode/extension/command-args": "./src/vscode/extension/command-args.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
+    "./vscode/test-utils": "./src/vscode/test-utils.ts",
     "./*": "./src/*"
   },
   "peerDependencies": {

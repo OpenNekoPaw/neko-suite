@@ -24,6 +24,18 @@ import type { ILogger } from './types';
 import { LogLevel } from './types';
 import { ConsoleLogger, type LogLevelRef } from './console-logger';
 
+export interface LoggerRegistry {
+  readonly setRootLogger: (logger: ILogger) => void;
+  readonly getRootLogger: () => ILogger;
+  readonly getLogger: (source: string) => ILogger;
+}
+
+export interface CreateWebviewLoggerRegistryOptions {
+  readonly packageName: string;
+  readonly defaultLevel?: LogLevel;
+  readonly rootLogger?: ILogger;
+}
+
 /**
  * Create a logger registry for a package.
  *
@@ -36,7 +48,10 @@ import { ConsoleLogger, type LogLevelRef } from './console-logger';
  * @param packageName Default root logger source name (e.g., 'Agent', 'Platform')
  * @param defaultLevel Default log level (defaults to Info)
  */
-export function createLoggerRegistry(packageName: string, defaultLevel = LogLevel.Info) {
+export function createLoggerRegistry(
+  packageName: string,
+  defaultLevel = LogLevel.Info,
+): LoggerRegistry {
   const sharedRef: LogLevelRef = { level: defaultLevel };
   let rootLogger: ILogger = new ConsoleLogger(packageName, sharedRef);
   return {
@@ -57,4 +72,14 @@ export function createLoggerRegistry(packageName: string, defaultLevel = LogLeve
       return rootLogger.child(source);
     },
   };
+}
+
+export function createWebviewLoggerRegistry(
+  options: CreateWebviewLoggerRegistryOptions,
+): LoggerRegistry {
+  const registry = createLoggerRegistry(options.packageName, options.defaultLevel);
+  if (options.rootLogger) {
+    registry.setRootLogger(options.rootLogger);
+  }
+  return registry;
 }
