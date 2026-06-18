@@ -175,16 +175,6 @@ const requiredLcdProviderSunsetFields = [
   'removalTrigger',
   'protectingTests',
 ];
-const requiredLegacyToolMetadataFields = [
-  'toolName',
-  'kind',
-  'owner',
-  'replacement',
-  'removeAfter',
-  'lcdId',
-  'tests',
-];
-
 const runnerIndividualEventProperties = [
   'onDidStart',
   'onDidStop',
@@ -405,6 +395,36 @@ function runSelfTest() {
     }
   }
 
+  const centralizedToolCases = [
+    {
+      name: 'toolBootstrap domain tool registration fails',
+      content: 'const tools = [createReadDocumentTool(deps), createSemanticCoverageTool()];\n',
+      expectedRuleIds: ['extension-no-legacy-centralized-tool-registration'],
+    },
+    {
+      name: 'toolBootstrap agent-owned meta-tool registration passes',
+      content: 'const tools = createPluginSkillDiscoveryTools(source, logger);\n',
+      expectedRuleIds: [],
+    },
+  ];
+
+  for (const testCase of centralizedToolCases) {
+    const violations = findLegacyCentralizedToolRegistrationViolationsFromContent(
+      testCase.content,
+      'packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts',
+    );
+    const actualIds = [...new Set(violations.map((violation) => violation.ruleId))].sort();
+    const expectedIds = [...testCase.expectedRuleIds].sort();
+    if (JSON.stringify(actualIds) !== JSON.stringify(expectedIds)) {
+      failures.push({
+        name: testCase.name,
+        expectedRuleIds: expectedIds,
+        actualRuleIds: actualIds,
+        violations,
+      });
+    }
+  }
+
   const compatibilityCases = [
     {
       name: 'exception without metadata fails',
@@ -527,6 +547,23 @@ function runSelfTest() {
           kind: 'migration-adapter',
           status: 'active',
           sunsetProviders: [],
+        }),
+      ]),
+      expectedCodes: ['missing-provider-sunset'],
+    },
+    {
+      name: 'LCD-009 with incomplete provider sunset rows fails',
+      register: createSelfTestLcdRegister([
+        createSelfTestLcdEntry({
+          id: 'LCD-009',
+          surface: 'packages/neko-agent/packages/ai-sdk/src/bridge/*',
+          kind: 'migration-adapter',
+          status: 'active',
+          sunsetProviders: [
+            createSelfTestProviderSunsetRow({ providerType: 'fal' }),
+            createSelfTestProviderSunsetRow({ providerType: 'dashscope' }),
+            createSelfTestProviderSunsetRow({ providerType: 'kling' }),
+          ],
         }),
       ]),
       expectedCodes: ['missing-provider-sunset'],
@@ -837,7 +874,18 @@ function evaluateLcdRegister(register, options = {}) {
 function evaluateLcdProviderSunsetRows(entry) {
   const findings = [];
   const rows = Array.isArray(entry?.sunsetProviders) ? entry.sunsetProviders : [];
-  const requiredProviderTypes = ['fal', 'dashscope', 'kling'];
+  const requiredProviderTypes = [
+    'fal',
+    'dashscope',
+    'runway',
+    'luma',
+    'suno',
+    'vidu',
+    'midjourney',
+    'minimax',
+    'liblib',
+    'kling',
+  ];
 
   if (rows.length === 0) {
     findings.push({
@@ -993,6 +1041,20 @@ function createSelfTestLcdEntry(overrides) {
   };
 }
 
+function createSelfTestProviderSunsetRow(overrides) {
+  return {
+    provider: 'Self-test provider',
+    providerType: 'self-test-provider',
+    taskFamilies: ['image'],
+    resolverPath: 'self-test resolver path',
+    nativeSupportStatus: 'self-test status',
+    migrationConditions: ['self-test condition'],
+    removalTrigger: 'self-test removal trigger',
+    protectingTests: ['packages/neko-agent/packages/ai-sdk/src/resolve.test.ts'],
+    ...overrides,
+  };
+}
+
 function findImportViolations(scope, file, content) {
   const imports = extractImportSpecifiers(content);
   const activeRules = rules.filter((rule) => rule.scopes.includes(scope));
@@ -1111,68 +1173,32 @@ function findLegacyCentralizedToolRegistrationViolations() {
   const file = resolve(repoRoot, 'packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts');
   const content = readFileSync(file, 'utf8');
   const relativeFile = relative(repoRoot, file);
-  const metadataBlock = content.match(
-    /LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA[\s\S]*?\n\s*\];/,
-  )?.[0];
-  if (!metadataBlock) {
-    return [
-      {
-        ruleId: 'extension-legacy-tools-require-lcd-metadata',
-        file: relativeFile,
-        reason: 'toolBootstrap must declare lifecycle metadata for remaining centralized tools.',
-      },
-    ];
-  }
+  return findLegacyCentralizedToolRegistrationViolationsFromContent(content, relativeFile);
+}
 
-  const metadataToolNames = [...metadataBlock.matchAll(/toolName:\s*([^,\n]+)/g)].map((match) =>
-    normalizeToolNameExpression(match[1] ?? ''),
-  );
-  const toolArrayBlock = content.match(/const tools =[\s\S]*?;\n\s*for \(const tool of tools\)/)?.[0] ?? '';
-  const registeredToolNames = [
-    ...toolArrayBlock.matchAll(/createPluginSkillDiscoveryTools\(/g),
-  ].map(() => 'TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS');
-  registeredToolNames.push(
-    ...[...toolArrayBlock.matchAll(/create(ReadDocumentTool|ReadImageTool|ReadDocumentImageTool|SemanticCoverageTool)\(/g)]
-      .map((match) => {
-        const factory = match[1];
-        if (factory === 'ReadDocumentTool') return 'TOOL_NAMES_SYSTEM.READ_DOCUMENT';
-        if (factory === 'ReadImageTool') return 'TOOL_NAMES_SYSTEM.READ_IMAGE';
-        if (factory === 'ReadDocumentImageTool') return 'TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE';
-        if (factory === 'SemanticCoverageTool') return 'TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE';
-        return '';
-      })
-      .filter(Boolean),
-  );
-
+function findLegacyCentralizedToolRegistrationViolationsFromContent(content, relativeFile) {
   const findings = [];
-  for (const toolName of registeredToolNames) {
-    if (!metadataToolNames.includes(toolName)) {
+  const forbiddenPatterns = [
+    'LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA',
+    'LegacyCentralizedToolRegistrationMetadata',
+    'createReadDocumentTool(',
+    'createReadImageTool(',
+    'createReadDocumentImageTool(',
+    'createSemanticCoverageTool(',
+  ];
+  for (const pattern of forbiddenPatterns) {
+    if (content.includes(pattern)) {
       findings.push({
-        ruleId: 'extension-legacy-tools-require-lcd-metadata',
+        ruleId: 'extension-no-legacy-centralized-tool-registration',
         file: relativeFile,
-        specifier: toolName,
+        specifier: pattern,
         reason:
-          'Remaining centralized Extension tools must be documented as agent-owned meta-tools or compatibility bridges with LCD metadata.',
-      });
-    }
-  }
-
-  for (const field of requiredLegacyToolMetadataFields) {
-    if (!new RegExp(`\\b${field}\\s*:`).test(metadataBlock)) {
-      findings.push({
-        ruleId: 'extension-legacy-tools-require-lcd-metadata',
-        file: relativeFile,
-        specifier: field,
-        reason: 'Legacy centralized tool metadata is missing a lifecycle field.',
+          'Domain document/media/search tools must be registered by owner capability providers, not toolBootstrap.',
       });
     }
   }
 
   return findings;
-}
-
-function normalizeToolNameExpression(value) {
-  return value.trim().replace(/[,\s]+$/g, '');
 }
 
 function extractImportSpecifiers(content) {

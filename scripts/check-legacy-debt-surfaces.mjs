@@ -20,6 +20,7 @@ const requiredSemanticClasses = [
   'false-positive-word',
 ];
 const allowedSemanticClasses = new Set([...requiredSemanticClasses, 'needs-review']);
+const failingProductionSemanticClasses = new Set(['delete-now', 'migrate-now', 'needs-review']);
 const allowedStatuses = new Set(['active', 'planned', 'removed']);
 const allowedActions = new Set([
   'delete',
@@ -77,13 +78,14 @@ if (args.has('--validate-ledger')) {
   } else {
     printValidation(result);
   }
-  process.exit(result.errors.length > 0 ? 1 : 0);
-}
-
-if (args.has('--json')) {
-  console.log(JSON.stringify(report, null, 2));
+  process.exitCode = result.errors.length > 0 || report.qualityGate.status === 'failed' ? 1 : 0;
 } else {
-  printHumanReport(report);
+  if (args.has('--json')) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printHumanReport(report);
+  }
+  process.exitCode = report.qualityGate.status === 'failed' ? 1 : 0;
 }
 
 function printHelp() {
@@ -230,6 +232,7 @@ function buildReport(allMatches, sourceFiles) {
       allSource: summarizeSemanticClasses(allMatches),
       nonTestSource: summarizeSemanticClasses(nonTestMatches),
     },
+    qualityGate: buildQualityGate(nonTestMatches),
     hotspots: {
       packages: topRows(groupMatches(nonTestMatches, (match) => match.packageName), 20),
       files: topRows(groupMatches(nonTestMatches, (match) => match.file), 40),
@@ -239,6 +242,26 @@ function buildReport(allMatches, sourceFiles) {
       .filter((match) => match.semanticClass === 'needs-review')
       .map(formatExample),
     cleanupCandidates: cleanupCandidates(nonTestMatches),
+  };
+}
+
+function buildQualityGate(nonTestMatches) {
+  const failingMatches = nonTestMatches.filter((match) => failingProductionSemanticClasses.has(match.semanticClass));
+  const classes = {};
+  for (const semanticClass of failingProductionSemanticClasses) {
+    const matches = failingMatches.filter((match) => match.semanticClass === semanticClass);
+    classes[semanticClass] = {
+      occurrences: matches.length,
+      files: new Set(matches.map((match) => match.file)).size,
+      examples: matches.slice(0, 5).map(formatExample),
+    };
+  }
+
+  return {
+    status: failingMatches.length === 0 ? 'passed' : 'failed',
+    failingProductionSemanticClasses: [...failingProductionSemanticClasses].sort(),
+    blockingOccurrences: failingMatches.length,
+    classes,
   };
 }
 
@@ -391,6 +414,9 @@ function classifySurface(file, line, term) {
   if (isDomainDeprecatedSurface(lowerFile, lowerLine, term)) {
     return 'domain-status';
   }
+  if (term === 'fallback' && isDomainFallbackSurface(lowerFile, lowerLine)) {
+    return 'domain-status';
+  }
   if (isDeleteNowSurface(lowerFile, lowerLine)) {
     return 'delete-now';
   }
@@ -454,6 +480,15 @@ function isDomainDeprecatedSurface(lowerFile, lowerLine, term) {
       'execution-persona.ts',
     ]) ||
     containsAny(lowerLine, ['deprecated status', "status: 'deprecated'", '"deprecated"', "'deprecated'", 'deprecated:'])
+  );
+}
+
+function isDomainFallbackSurface(lowerFile, lowerLine) {
+  return (
+    (containsAny(lowerFile, ['types/asset/classifier.ts']) &&
+      containsAny(lowerLine, ["source?: 'llm' | 'fallback'", "source: 'fallback'"])) ||
+    (containsAny(lowerFile, ['types/narrative-production-binding.ts']) &&
+      containsAny(lowerLine, ["'fallback'", 'narrative_production_binding_roles']))
   );
 }
 
@@ -609,6 +644,7 @@ function isRuntimeResilienceSurface(lowerFile, lowerLine) {
 
 function isPresentationDefaultSurface(lowerFile, lowerLine) {
   return (
+    containsAny(lowerFile, ['error-boundary']) ||
     containsAny(lowerFile, ['webview', 'component', 'presenter', 'view', 'i18n']) ||
     containsAny(lowerFile, ['nodetypedescriptor.ts', 'types/animation.ts']) ||
     containsAny(lowerFile, [
@@ -713,6 +749,7 @@ function validateLedger(report) {
   validateRequiredCoverage(ledger, entriesById, report, errors, warnings);
   validateRemovedStalePatterns(entries, errors);
   addCoverageWarnings(report, entries, warnings);
+  validateQualityGate(report, errors);
 
   return {
     ledgerPath,
@@ -720,6 +757,21 @@ function validateLedger(report) {
     warnings,
     checkedEntries: entries.length,
   };
+}
+
+function validateQualityGate(report, errors) {
+  if (report.qualityGate.status !== 'failed') {
+    return;
+  }
+
+  const summary = Object.entries(report.qualityGate.classes)
+    .filter(([, row]) => row.occurrences > 0)
+    .map(([semanticClass, row]) => `${semanticClass}=${row.occurrences}`)
+    .join(', ');
+  errors.push(
+    `Production unresolved legacy/fallback debt remains: ${summary}. ` +
+      'Resolve, rename, or ledger-classify these surfaces before the gate can pass.',
+  );
 }
 
 function validateLedgerRoot(ledger, errors) {
@@ -946,6 +998,8 @@ function printHumanReport(report) {
   console.log('');
   printSemanticClassSummary(report.semanticClasses.nonTestSource);
   console.log('');
+  printQualityGate(report.qualityGate);
+  console.log('');
   printHotspots('Top package hotspots', report.hotspots.packages, 12);
   console.log('');
   printHotspots('Top file hotspots', report.hotspots.files, 20);
@@ -953,6 +1007,22 @@ function printHumanReport(report) {
   console.log('Representative examples');
   for (const example of report.examples.slice(0, 12)) {
     console.log(`- ${example.file}:${example.line} [${example.semanticClass}/${example.term}] ${example.text}`);
+  }
+}
+
+function printQualityGate(qualityGate) {
+  console.log(
+    `Quality gate: ${qualityGate.status} ` +
+      `(blocking=${qualityGate.blockingOccurrences}; classes=${qualityGate.failingProductionSemanticClasses.join(', ')})`,
+  );
+  for (const [semanticClass, row] of Object.entries(qualityGate.classes)) {
+    if (row.occurrences === 0) {
+      continue;
+    }
+    console.log(`- ${semanticClass}: ${row.occurrences} occurrences in ${row.files} files`);
+    for (const example of row.examples.slice(0, 3)) {
+      console.log(`  ${example.file}:${example.line} ${example.text}`);
+    }
   }
 }
 
@@ -1017,12 +1087,64 @@ function runSelfTest() {
       expected: 'presentation-default',
     },
     {
+      value: classifySurface(
+        'packages/neko-ui/src/error-boundary/index.tsx',
+        'return this.props.fallback(fallbackProps);',
+        'fallback',
+      ),
+      expected: 'presentation-default',
+    },
+    {
+      value: classifySurface(
+        'packages/neko-types/src/types/asset/classifier.ts',
+        "source?: 'llm' | 'fallback';",
+        'fallback',
+      ),
+      expected: 'domain-status',
+    },
+    {
+      value: classifySurface(
+        'packages/neko-types/src/types/narrative-production-binding.ts',
+        "'fallback',",
+        'fallback',
+      ),
+      expected: 'domain-status',
+    },
+    {
       value: classifySurface('packages/neko-client/src/EngineClient.ts', 'fallback to cpu when gpu fails', 'fallback'),
       expected: 'runtime-resilience',
     },
     {
       value: classifySurface('knip.config.ts', "'@img/sharp-wasm32', // Sharp WASM fallback", 'fallback'),
       expected: 'runtime-resilience',
+    },
+    {
+      value: buildQualityGate([
+        {
+          file: 'packages/neko-client/src/EngineClient.ts',
+          packageName: '@neko/client',
+          lineNumber: 1,
+          term: 'fallback',
+          text: 'fallback to cpu when gpu fails',
+          isTest: false,
+          semanticClass: 'runtime-resilience',
+        },
+      ]).status,
+      expected: 'passed',
+    },
+    {
+      value: buildQualityGate([
+        {
+          file: 'packages/neko-types/src/project-file-io/save-session.ts',
+          packageName: '@neko/shared',
+          lineNumber: 1,
+          term: 'fallback',
+          text: 'readonly fallbackMessage: string;',
+          isTest: false,
+          semanticClass: 'needs-review',
+        },
+      ]).status,
+      expected: 'failed',
     },
     {
       value: matchesGlob('packages/neko-types/src/types/storyboard-table.ts', 'packages/neko-types/src/types/*.ts'),

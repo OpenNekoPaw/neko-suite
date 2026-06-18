@@ -1,7 +1,32 @@
 {
   "schemaVersion": 1,
   "owner": "neko-agent-architecture",
-  "updatedAt": "2026-06-13",
+  "updatedAt": "2026-06-19",
+  "qualityGate": {
+    "failingProductionSemanticClasses": [
+      "delete-now",
+      "migrate-now",
+      "needs-review"
+    ],
+    "retainedEntryRequirements": [
+      "owner",
+      "replacement",
+      "removeAfter",
+      "tests"
+    ],
+    "legacyBridgeSunsetProviderTypes": [
+      "fal",
+      "dashscope",
+      "runway",
+      "luma",
+      "suno",
+      "vidu",
+      "midjourney",
+      "minimax",
+      "liblib",
+      "kling"
+    ]
+  },
   "categories": [
     "confirmed-dead-code",
     "static-analysis-false-positive",
@@ -45,15 +70,23 @@
       "surface": "legacy centralized domain-tool registration path",
       "kind": "stray-surface",
       "semanticClass": "current-bridge",
-      "status": "active",
+      "status": "removed",
       "owner": "neko-agent-runtime",
-      "replacement": "Per-package AgentCapabilityProvider registration",
-      "removeAfter": "Only documented agent-owned meta-tools or compatibility bridges may remain on centralized paths; new domain tools must use AgentCapabilityProvider.",
+      "replacement": "DocumentReadCapabilityProvider, MediaReadCapabilityProvider, SemanticCoverageCapabilityProvider, and Agent-owned plugin skill discovery meta-tool.",
+      "removeAfter": "Removed by eliminate-legacy-fallback-surfaces; READ_DOCUMENT, READ_IMAGE, READ_DOCUMENT_IMAGE, and QUERY_SEMANTIC_COVERAGE now register through owner capability providers instead of toolBootstrap.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts packages/extension/src/tools/__tests__/capabilityProviders.test.ts",
         "pnpm check:agent-boundaries"
       ],
-      "notes": "This is a guardrail, not a blocker for host-boundary migration."
+      "stalePatterns": [
+        {
+          "pattern": "LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA|LegacyCentralizedToolRegistrationMetadata|createReadDocumentTool\\(|createReadImageTool\\(|createReadDocumentImageTool\\(|createSemanticCoverageTool\\(",
+          "paths": [
+            "packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts"
+          ]
+        }
+      ],
+      "notes": "toolBootstrap may keep Agent-owned plugin skill catalogue discovery; domain document/media/search tools must use capability providers."
     },
     {
       "id": "LCD-009",
@@ -73,16 +106,17 @@
         {
           "provider": "fal.ai",
           "providerType": "fal",
-          "taskFamilies": ["image"],
-          "resolverPath": "resolveProvider('fal', config, FalMediaAdapter) -> createLegacyBridgeProvider()",
-          "nativeSupportStatus": "No native resolveProvider('fal') branch; fal.ai may be represented only through compatible newapi/generic configuration.",
-          "migrationConditions": [
-            "A native fal provider path or documented generic/newapi compatible-provider path covers queue polling.",
-            "Auth tests cover fal.ai Key authentication.",
-            "Provider option tests cover ControlNet, IP-Adapter, image-to-image/edit fields, and result normalization.",
-            "Cancellation and failure normalization tests pass without FalMediaAdapter bridge execution."
+          "taskFamilies": [
+            "image"
           ],
-          "removalTrigger": "resolveProvider('fal') no longer enters createLegacyBridgeProvider() for supported image tasks and FalMediaAdapter has no runtime callers for those tasks.",
+          "resolverPath": "resolveProvider('fal', config, FalMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. No native fal.ai AI SDK path yet; provider can alternatively be configured as newapi/generic when using an OpenAI-compatible proxy.",
+          "migrationConditions": [
+            "Native fal queue provider or documented newapi/generic compatible configuration covers text-to-image, image-to-image, ControlNet, IP-Adapter, and edit fields.",
+            "Auth tests cover fal.ai Key authentication and queue task ids.",
+            "Failure, cancellation, external task recovery, and result normalization tests pass without FalMediaAdapter bridge execution."
+          ],
+          "removalTrigger": "Remove providerType 'fal' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after supported image tasks no longer require FalMediaAdapter.",
           "protectingTests": [
             "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
             "packages/neko-agent/packages/platform/src/media/adapters/fal-media-adapter.ts"
@@ -91,32 +125,164 @@
         {
           "provider": "DashScope",
           "providerType": "dashscope",
-          "taskFamilies": ["image", "video"],
-          "resolverPath": "resolveProvider('dashscope', config, DashScopeMediaAdapter) -> createLegacyBridgeProvider()",
-          "nativeSupportStatus": "No native resolveProvider('dashscope') branch.",
+          "taskFamilies": [
+            "image",
+            "video"
+          ],
+          "resolverPath": "resolveProvider('dashscope', config, DashScopeMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. No native DashScope AI SDK path yet.",
           "migrationConditions": [
             "Native or compatible provider path covers Qwen image and Wan video requests.",
-            "Async task status polling, result download, retry/failure semantics, and result normalization are covered by tests.",
-            "Cancellation behavior is verified without DashScopeMediaAdapter bridge execution."
+            "Async task status polling, result download, retry/failure semantics, cancellation, and result normalization are covered by tests.",
+            "DashScopeMediaAdapter bridge is not used by default new-path acceptance tests."
           ],
-          "removalTrigger": "resolveProvider('dashscope') no longer enters createLegacyBridgeProvider() for supported media tasks and DashScope smoke/unit tests run through the native path.",
+          "removalTrigger": "Remove providerType 'dashscope' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after supported media tasks run through native/generic providers.",
           "protectingTests": [
             "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
             "packages/neko-agent/packages/platform/src/media/adapters/dashscope-media-adapter.ts"
           ]
         },
         {
+          "provider": "Runway",
+          "providerType": "runway",
+          "taskFamilies": [
+            "video"
+          ],
+          "resolverPath": "resolveProvider('runway', config, RunwayMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Runway async video API needs provider-specific native support.",
+          "migrationConditions": [
+            "Native Runway provider covers text/image/video-to-video request fields, polling, cancellation, and result download.",
+            "Provider option and failure normalization tests pass without RunwayMediaAdapter bridge execution."
+          ],
+          "removalTrigger": "Remove providerType 'runway' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Runway path covers supported video tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/runway-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Luma",
+          "providerType": "luma",
+          "taskFamilies": [
+            "video"
+          ],
+          "resolverPath": "resolveProvider('luma', config, LumaMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Luma video API needs provider-specific native support.",
+          "migrationConditions": [
+            "Native Luma provider covers prompt/reference image requests, polling, cancellation, and result normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'luma' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Luma path covers supported video tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/luma-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Suno",
+          "providerType": "suno",
+          "taskFamilies": [
+            "audio",
+            "music"
+          ],
+          "resolverPath": "resolveProvider('suno', config, SunoMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Suno music/audio generation needs provider-specific native support.",
+          "migrationConditions": [
+            "Native Suno provider covers music prompt fields, wait/polling semantics, failure normalization, and audio output normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'suno' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Suno path covers supported audio/music tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/suno-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Vidu",
+          "providerType": "vidu",
+          "taskFamilies": [
+            "video"
+          ],
+          "resolverPath": "resolveProvider('vidu', config, ViduMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Vidu video API needs provider-specific native support.",
+          "migrationConditions": [
+            "Native Vidu provider covers text/image-to-video, polling, cancellation, and result normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'vidu' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Vidu path covers supported video tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/vidu-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Midjourney proxy",
+          "providerType": "midjourney",
+          "taskFamilies": [
+            "image"
+          ],
+          "resolverPath": "resolveProvider('midjourney', config, MidjourneyMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Midjourney proxy APIs are not OpenAI-compatible enough for the generic path.",
+          "migrationConditions": [
+            "Native Midjourney provider covers imagine/status/result flow and failure normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'midjourney' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Midjourney path covers supported image tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/midjourney-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "MiniMax",
+          "providerType": "minimax",
+          "taskFamilies": [
+            "video"
+          ],
+          "resolverPath": "resolveProvider('minimax', config, MiniMaxMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. MiniMax video API needs provider-specific native support.",
+          "migrationConditions": [
+            "Native MiniMax provider covers video request fields, polling, cancellation, and result normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'minimax' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native MiniMax path covers supported video tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/minimax-media-adapter.ts"
+          ]
+        },
+        {
+          "provider": "Liblib",
+          "providerType": "liblib",
+          "taskFamilies": [
+            "image"
+          ],
+          "resolverPath": "resolveProvider('liblib', config, LiblibMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
+          "nativeSupportStatus": "Temporary migration bridge only. Liblib image/workflow API needs provider-specific native support.",
+          "migrationConditions": [
+            "Native Liblib provider covers image/workflow request fields, polling, cancellation, and result normalization.",
+            "Bridge execution is poisoned in native-path tests."
+          ],
+          "removalTrigger": "Remove providerType 'liblib' from AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES after native Liblib path covers supported image tasks.",
+          "protectingTests": [
+            "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
+            "packages/neko-agent/packages/platform/src/media/adapters/liblib-media-adapter.ts"
+          ]
+        },
+        {
           "provider": "Kling",
           "providerType": "kling",
-          "taskFamilies": ["image", "video"],
-          "resolverPath": "resolveProvider('kling', config, OpenAICompatMediaAdapter) -> createLegacyBridgeProvider()",
-          "nativeSupportStatus": "No native resolveProvider('kling') branch; generic/newapi can express some OpenAI-compatible scenarios but the kling provider type still bridges.",
-          "migrationConditions": [
-            "The kling provider type maps to createNewAPIProvider() or is replaced by explicit generic/newapi configuration.",
-            "Image/video endpoint, provider options, async status, failure normalization, and result normalization are covered by contract tests.",
-            "Adapter registry no longer needs a distinct kling builtin legacy adapter for supported task families."
+          "taskFamilies": [
+            "image",
+            "video"
           ],
-          "removalTrigger": "resolveProvider('kling') no longer calls createLegacyBridgeProvider() and Kling contract tests pass through the native provider path.",
+          "resolverPath": "resolveProvider('kling', config, poisonedAdapter, { allowLegacyBridge: true }) -> createNewAPIProvider() compatible native path",
+          "nativeSupportStatus": "Migrated to native-compatible AI SDK resolution through createNewAPIProvider() while preserving provider type metadata as kling.",
+          "migrationConditions": [
+            "Resolver poison-bridge test proves createLegacyBridgeProvider() is not used for kling.",
+            "Image/video endpoint, provider options, async status, failure normalization, and result normalization remain covered before deleting the OpenAICompatMediaAdapter builtin."
+          ],
+          "removalTrigger": "Keep out of AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES; delete this sunset row when Kling contract tests fully cover the native-compatible provider path.",
           "protectingTests": [
             "packages/neko-agent/packages/ai-sdk/src/resolve.test.ts",
             "packages/neko-agent/packages/platform/src/media/adapters/openai-compat-media-adapter.ts"
@@ -172,7 +338,13 @@
         "pnpm check:unused",
         "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts"
       ],
-      "dependencies": ["epub2", "fast-xml-parser", "node-fetch", "node-unrar-js", "xlsx"],
+      "dependencies": [
+        "epub2",
+        "fast-xml-parser",
+        "node-fetch",
+        "node-unrar-js",
+        "xlsx"
+      ],
       "notes": "Knip cannot reliably trace these dynamic parser backends from the extension package manifest."
     },
     {

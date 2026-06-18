@@ -2,8 +2,23 @@
   "schemaVersion": 1,
   "scope": "non-agent",
   "owner": "architecture",
-  "updatedAt": "2026-06-13",
+  "updatedAt": "2026-06-19",
   "scanner": "node scripts/check-legacy-debt-surfaces.mjs --validate-ledger",
+  "qualityGate": {
+    "failingProductionSemanticClasses": ["delete-now", "migrate-now", "needs-review"],
+    "targetCounts": {
+      "delete-now": 0,
+      "migrate-now": 0,
+      "needs-review": 0
+    },
+    "retainedEntryRequirements": [
+      "owner",
+      "replacement",
+      "removeCondition",
+      "validation.commands",
+      "paths"
+    ]
+  },
   "semanticClasses": {
     "delete-now": "No current runtime or entrypoint depends on the surface; delete it and keep stale-surface scans.",
     "migrate-now": "Current code still touches an old or deprecated surface; migrate callers to the canonical contract and remove the old path.",

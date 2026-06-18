@@ -13,6 +13,7 @@
 
 | 文档                                                                   | 内容                                                               |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md) | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则 |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
 | [`agent.md`](agent.md)                                                 | Agent-first、IDC、skill/prompt/tool/provider 控制面和宿主分层      |
 | [`asset-library.md`](asset-library.md)                                 | 素材库、Asset/Variant/File、导入来源、市场安装和素材搜索投影       |
