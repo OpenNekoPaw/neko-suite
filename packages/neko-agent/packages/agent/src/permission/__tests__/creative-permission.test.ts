@@ -7,7 +7,7 @@
  * Auto mode logic (simplified):
  *   - Reversible OR local → auto-allow
  *   - Network + irreversible → ask (user confirms expensive operations)
- *   - No traits registry → unconditional allow (backward compat)
+ *   - No traits registry → ask (traits metadata unavailable)
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -221,12 +221,12 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
     });
   });
 
-  describe('backward compatibility', () => {
-    it('unconditionally allows when no traits registry provided', () => {
+  describe('missing traits metadata', () => {
+    it('asks when no traits registry is provided', () => {
       const matcher = new PermissionRuleMatcher(makeAutoConfig());
       const result = matcher.check(makeToolCall('GenerateVideo'));
-      expect(result.decision).toBe('allow');
-      expect(result.reason).toContain('allowed by default');
+      expect(result.decision).toBe('ask');
+      expect(result.reason).toContain('traits metadata is unavailable');
     });
 
     it('unknown tools default to safe traits (allow)', () => {

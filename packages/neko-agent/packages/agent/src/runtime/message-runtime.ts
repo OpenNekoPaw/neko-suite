@@ -232,7 +232,7 @@ export type RunAgentMessageTurnRuntimeResult =
       readonly status: 'agent-dispatched';
     }
   | {
-      readonly status: 'fallback';
+      readonly status: 'precondition-unmet';
       readonly reason: 'no-agent-runtime';
     };
 
@@ -453,13 +453,21 @@ const MEDIA_GENERATION_CAPABILITIES: readonly ProviderGenerationCapability[] = [
   'audio.generate',
 ];
 
-export type AgentMessageTurnFallbackReason = 'missing-platform' | 'no-provider-configured';
+export type AgentMessageTurnPreconditionReason = 'missing-platform' | 'no-provider-configured';
+export type AgentMessageTurnFallbackReason = AgentMessageTurnPreconditionReason;
 
-export const AGENT_TURN_FALLBACK_MESSAGE =
+export const AGENT_TURN_PRECONDITION_MESSAGE =
   'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.';
+export const AGENT_TURN_FALLBACK_MESSAGE = AGENT_TURN_PRECONDITION_MESSAGE;
 
-export function getAgentTurnFallbackMessage(_reason: AgentMessageTurnFallbackReason): string {
-  return AGENT_TURN_FALLBACK_MESSAGE;
+export function getAgentTurnPreconditionMessage(
+  _reason: AgentMessageTurnPreconditionReason,
+): string {
+  return AGENT_TURN_PRECONDITION_MESSAGE;
+}
+
+export function getAgentTurnFallbackMessage(reason: AgentMessageTurnFallbackReason): string {
+  return getAgentTurnPreconditionMessage(reason);
 }
 
 export function createAgentMessageId(options: AgentMessageIdOptions = {}): string {
@@ -724,22 +732,22 @@ export async function runAgentMessageTurnRuntime(
     return { status: 'agent-dispatched' };
   }
 
-  const fallbackMessage = getAgentTurnFallbackMessage('no-provider-configured');
+  const preconditionMessage = getAgentTurnPreconditionMessage('no-provider-configured');
   input.persistErrorMessage?.(
     conversationId,
     buildAgentErrorAssistantMessage({
       id: input.generateMessageId(),
       timestamp: input.now?.() ?? Date.now(),
-      message: fallbackMessage,
+      message: preconditionMessage,
     }),
   );
   input.postMessage(
     buildErrorMessage({
       conversationId,
-      message: fallbackMessage,
+      message: preconditionMessage,
     }),
   );
-  return { status: 'fallback', reason: 'no-agent-runtime' };
+  return { status: 'precondition-unmet', reason: 'no-agent-runtime' };
 }
 
 export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput): string {

@@ -249,8 +249,10 @@ export {
 
 export {
   AGENT_TURN_FALLBACK_MESSAGE,
+  AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
   getAgentTurnFallbackMessage,
+  getAgentTurnPreconditionMessage,
   runAgentTurnForWebviewRuntime,
   type AgentTurnForWebviewRuntimeMessage,
   type AgentTurnAgentManager,
@@ -260,6 +262,7 @@ export {
   type AgentTurnDisposable,
   type AgentTurnExecutionResult,
   type AgentTurnFallbackReason,
+  type AgentTurnPreconditionReason,
   type AgentTurnProviderSource,
   type AgentTurnRunner,
   type AgentTurnRunnerConfigureInput,
@@ -464,6 +467,7 @@ export {
   type AgentMessageRuntimeRequest,
   type AgentMessageTurnAgentExecutionInput,
   type AgentMessageTurnFallbackReason,
+  type AgentMessageTurnPreconditionReason,
   type AgentMessageTurnMediaExecutionInput,
   type AgentMessageTurnRuntimeMessage,
   type AgentTurnConfigurationPlan,

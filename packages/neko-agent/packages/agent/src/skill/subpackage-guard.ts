@@ -61,7 +61,7 @@ export interface SkillActivationIssue {
   subpackageId: string;
   minVersion?: string;
   installedVersion?: string;
-  fallbackMessage?: string;
+  defaultMessage?: string;
 }
 
 /**
@@ -153,7 +153,7 @@ function _evaluate(
       code: 'subpackage-missing',
       subpackageId: dep.id,
       minVersion: dep.minVersion,
-      fallbackMessage: dep.fallback?.message,
+      defaultMessage: dep.fallback?.message,
     };
   }
 
@@ -163,7 +163,7 @@ function _evaluate(
       subpackageId: dep.id,
       minVersion: dep.minVersion,
       installedVersion: info.version,
-      fallbackMessage: dep.fallback?.message,
+      defaultMessage: dep.fallback?.message,
     };
   }
 

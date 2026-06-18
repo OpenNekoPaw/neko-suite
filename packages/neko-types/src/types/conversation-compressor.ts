@@ -173,6 +173,10 @@ export interface SummarizationRequest {
 export interface SummarizationResult {
   /** Summary text */
   summary: string;
+  /** Source path that produced the summary */
+  source?: 'llm' | 'fallback';
+  /** Whether the summary was produced by a degraded/local path */
+  degraded?: boolean;
   /** Token count of summary */
   tokenCount: number;
   /** Key points extracted */

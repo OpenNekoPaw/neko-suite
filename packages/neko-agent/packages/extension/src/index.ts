@@ -27,11 +27,7 @@ import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
-import {
-  registerExtensionToolGroups,
-  registerExtensionTools,
-  buildEmbedFn,
-} from './bootstrap/toolBootstrap';
+import { registerExtensionTools, buildEmbedFn } from './bootstrap/toolBootstrap';
 import { registerAgentCoreCommands } from './commands/agentCoreCommands';
 import { registerSkillCatalogActionCommands } from './commands/skillCatalogActions';
 import {
@@ -45,6 +41,9 @@ import {
 import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
 import { registerEntityContributionAutomationCommand } from '@neko/entity/host-vscode';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
+import { createDocumentReadCapabilityProvider } from './tools/documentCapabilityProvider';
+import { createMediaReadCapabilityProvider } from './tools/mediaCapabilityProvider';
+import { createSemanticCoverageCapabilityProvider } from './tools/searchCapabilityProvider';
 import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import {
@@ -214,22 +213,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
-  registerExtensionToolGroups(capabilityRegistries.toolGroupRegistry);
 
   // Register neko-agent host tools.
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform, context);
 
-  bootstrapCapabilities(
+  const agentOwnedCapabilityContext = {
+    extensionContext: context,
+    mediaService: bootstrapResult.platform.media,
+    configManager: bootstrapResult.platform.config,
+    embedFn: buildEmbedFn(bootstrapResult.platform),
+  };
+  const capabilityDiscovery = bootstrapCapabilities(
     {
       toolRegistry: bootstrapResult.toolRegistry,
       skillRegistry: capabilityRegistries.skillRegistry,
       toolGroupRegistry: capabilityRegistries.toolGroupRegistry,
-      mediaService: bootstrapResult.platform.media,
-      configManager: bootstrapResult.platform.config,
-      embedFn: buildEmbedFn(bootstrapResult.platform),
+      mediaService: agentOwnedCapabilityContext.mediaService,
+      configManager: agentOwnedCapabilityContext.configManager,
+      embedFn: agentOwnedCapabilityContext.embedFn,
       workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     },
     context,
+  );
+  capabilityDiscovery.registerProvider(
+    createDocumentReadCapabilityProvider(bootstrapResult.platform),
+    agentOwnedCapabilityContext,
+  );
+  capabilityDiscovery.registerProvider(
+    createMediaReadCapabilityProvider({ platform: bootstrapResult.platform }),
+    agentOwnedCapabilityContext,
+  );
+  capabilityDiscovery.registerProvider(
+    createSemanticCoverageCapabilityProvider(),
+    agentOwnedCapabilityContext,
   );
 
   // Create chat view provider

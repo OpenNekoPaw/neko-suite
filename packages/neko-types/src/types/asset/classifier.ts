@@ -59,6 +59,10 @@ export interface ObjectRecognitionInfo {
 export interface ClassificationResult {
   /** Suggested entity category */
   suggestedCategory: EntityCategory;
+  /** Source path that produced the classification */
+  source?: 'llm' | 'fallback';
+  /** Whether the classification was produced by a degraded/local path */
+  degraded?: boolean;
   /** Confidence score (0-1) */
   confidence: number;
   /** Detected variant attributes */

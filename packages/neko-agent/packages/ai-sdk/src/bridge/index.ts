@@ -19,6 +19,7 @@ export function createLegacyBridgeProvider(
 ): ResolvedProvider {
   return {
     type: providerType,
+    source: 'legacy-bridge',
     image: (modelId: string) => new LegacyImageModel(providerType, modelId, adapter, config),
     video: (modelId: string) => new LegacyVideoModel(providerType, modelId, adapter, config),
     speech: (modelId: string) => new LegacySpeechModel(providerType, modelId, adapter, config),

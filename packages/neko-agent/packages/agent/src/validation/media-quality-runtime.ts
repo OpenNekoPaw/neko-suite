@@ -337,7 +337,7 @@ function readIssueRegion(
   return { x, y, w, h };
 }
 
-function parseEvaluationJson(text: string, fallbackMessage: string): MediaEvaluation {
+function parseEvaluationJson(text: string, defaultMessage: string): MediaEvaluation {
   try {
     const cleaned = text
       .replace(/```json?\s*/g, '')
@@ -362,7 +362,7 @@ function parseEvaluationJson(text: string, fallbackMessage: string): MediaEvalua
       passed: false,
     };
   } catch {
-    return qualityErrorResult(fallbackMessage);
+    return qualityErrorResult(defaultMessage);
   }
 }
 

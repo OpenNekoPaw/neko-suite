@@ -61,6 +61,8 @@ describe('CreativeSummarizer', () => {
       // User messages should appear verbatim
       expect(result.summary).toContain('用赛博朋克风格画猫');
       expect(result.summary).toContain('颜色太暗了');
+      expect(result.source).toBe('fallback');
+      expect(result.degraded).toBe(true);
     });
 
     it('groups messages by category', async () => {
@@ -111,6 +113,8 @@ describe('CreativeSummarizer', () => {
 
       expect(result.summary).toBe('');
       expect(result.tokenCount).toBe(0);
+      expect(result.source).toBeUndefined();
+      expect(result.degraded).toBeUndefined();
     });
   });
 
@@ -150,6 +154,8 @@ describe('CreativeSummarizer', () => {
 
       expect(result.keyPoints.length).toBeGreaterThan(0);
       expect(result.entities.length).toBeGreaterThan(0);
+      expect(result.source).toBe('llm');
+      expect(result.degraded).toBe(false);
     });
 
     it('falls back to simple summary on service error', async () => {
@@ -170,6 +176,8 @@ describe('CreativeSummarizer', () => {
 
       // Should still produce a result via fallback
       expect(result.summary).toBeTruthy();
+      expect(result.source).toBe('fallback');
+      expect(result.degraded).toBe(true);
     });
   });
 

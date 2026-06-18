@@ -221,6 +221,8 @@ export class LLMSummarizer implements ISummarizer {
 
     return {
       summary,
+      source: 'llm',
+      degraded: false,
       tokenCount: estimateTokens(summary),
       keyPoints,
       entities,
@@ -253,6 +255,8 @@ export class LLMSummarizer implements ISummarizer {
 
     return {
       summary,
+      source: 'fallback',
+      degraded: true,
       tokenCount: estimateTokens(summary),
       keyPoints: [],
       entities: [],

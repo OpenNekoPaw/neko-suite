@@ -219,10 +219,10 @@ export class PermissionRuleMatcher {
         };
       }
 
-      // Fallback: no traits registry → unconditional allow (backward compatible)
+      // Missing traits metadata cannot prove the tool is safe, so ask the user.
       return {
-        decision: 'allow',
-        reason: `Auto mode: tool '${normalizedTool}' allowed by default`,
+        decision: 'ask',
+        reason: `Auto mode: tool '${normalizedTool}' requires confirmation because tool traits metadata is unavailable`,
         toolCall,
       };
     }

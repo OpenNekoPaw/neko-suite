@@ -2695,8 +2695,8 @@ type QualityCheckFeedbackPayload = import('../feedback').QualityReviewFeedbackPa
 
 type QualityConsistencyReport = import('../validation/qa-types').ConsistencyReport;
 
-function resolveObservedToolName(result: ObservedToolResult, fallbackName?: string): string {
-  return result.name ?? fallbackName ?? 'unknown-tool';
+function resolveObservedToolName(result: ObservedToolResult, toolNameHint?: string): string {
+  return result.name ?? toolNameHint ?? 'unknown-tool';
 }
 
 function toQualityCheckFeedbackSignal(input: {

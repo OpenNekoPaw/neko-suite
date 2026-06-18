@@ -488,7 +488,7 @@ describe('message runtime helpers', () => {
     expect(executeAgentTurn).not.toHaveBeenCalled();
   });
 
-  it('falls back with a scoped error when no agent runtime is available', async () => {
+  it('returns an unmet precondition with a scoped error when no agent runtime is available', async () => {
     const postMessage = vi.fn();
     const persistErrorMessage = vi.fn();
 
@@ -506,7 +506,7 @@ describe('message runtime helpers', () => {
         generateMessageId: vi.fn().mockReturnValueOnce('user-1').mockReturnValueOnce('error-1'),
         now: () => 123,
       }),
-    ).resolves.toEqual({ status: 'fallback', reason: 'no-agent-runtime' });
+    ).resolves.toEqual({ status: 'precondition-unmet', reason: 'no-agent-runtime' });
 
     expect(persistErrorMessage).toHaveBeenCalledWith('conv-1', {
       id: 'error-1',

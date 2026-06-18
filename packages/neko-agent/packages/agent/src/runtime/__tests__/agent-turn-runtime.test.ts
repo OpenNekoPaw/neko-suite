@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildAgentTurnForWebviewRuntimeInput } from '../agent-turn-assembly';
 import {
   AGENT_TURN_FALLBACK_MESSAGE,
+  AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
   getAgentTurnFallbackMessage,
+  getAgentTurnPreconditionMessage,
   runAgentTurnForWebviewRuntime,
   type AgentTurnRunner,
   type ExecuteAgentTurnInput,
@@ -112,9 +114,12 @@ describe('executeAgentTurn', () => {
   it('provides a shared fallback message for host adapters', () => {
     expect(getAgentTurnFallbackMessage('no-provider-configured')).toBe(AGENT_TURN_FALLBACK_MESSAGE);
     expect(getAgentTurnFallbackMessage('missing-platform')).toBe(AGENT_TURN_FALLBACK_MESSAGE);
+    expect(getAgentTurnPreconditionMessage('no-provider-configured')).toBe(
+      AGENT_TURN_PRECONDITION_MESSAGE,
+    );
   });
 
-  it('returns fallback when no provider is configured', async () => {
+  it('returns unmet precondition when no provider is configured', async () => {
     const { input } = createBaseInput({
       providerSource: {
         selectedProviderId: 'missing',
@@ -124,7 +129,7 @@ describe('executeAgentTurn', () => {
     });
 
     await expect(executeAgentTurn(input)).resolves.toEqual({
-      status: 'fallback',
+      status: 'precondition-unmet',
       reason: 'no-provider-configured',
     });
     expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
@@ -503,7 +508,7 @@ describe('executeAgentTurn', () => {
 });
 
 describe('runAgentTurnForWebviewRuntime', () => {
-  it('posts a scoped fallback error when no agent manager is available', async () => {
+  it('posts a scoped precondition error when no agent manager is available', async () => {
     const { input } = createBaseInput();
     const postMessage = vi.fn();
     const onErrorMessage = vi.fn();
@@ -515,7 +520,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
         postMessage,
         onErrorMessage,
       }),
-    ).resolves.toEqual({ status: 'fallback', reason: 'no-provider-configured' });
+    ).resolves.toEqual({ status: 'precondition-unmet', reason: 'no-provider-configured' });
 
     expect(onErrorMessage).toHaveBeenCalledWith({
       id: 'assistant-1',
@@ -531,7 +536,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
     });
   });
 
-  it('posts a fallback error returned by the turn runtime', async () => {
+  it('posts a precondition error returned by the turn runtime', async () => {
     const { input } = createBaseInput({
       providerSource: {
         selectedProviderId: 'missing',
@@ -548,7 +553,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
         postMessage,
         onErrorMessage,
       }),
-    ).resolves.toEqual({ status: 'fallback', reason: 'no-provider-configured' });
+    ).resolves.toEqual({ status: 'precondition-unmet', reason: 'no-provider-configured' });
 
     expect(onErrorMessage).toHaveBeenCalledWith({
       id: 'assistant-1',

@@ -55,13 +55,7 @@ export function projectMessageForResourceDisplay(
   message: Message,
   options: MessageResourceProjectionOptions = {},
 ): Message {
-  const projectedMessage: MessageWithLegacyToolCalls = { ...message };
-
-  if (messageHasLegacyToolCalls(message)) {
-    projectedMessage.toolCalls = message.toolCalls.map((toolCall) =>
-      projectToolCallForResourceDisplay(toolCall, options),
-    );
-  }
+  const projectedMessage: Message = { ...message };
 
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
@@ -78,16 +72,6 @@ export function projectMessageForResourceDisplay(
   }
 
   return projectedMessage;
-}
-
-type MessageWithLegacyToolCalls = Message & {
-  toolCalls?: ToolCall[];
-};
-
-function messageHasLegacyToolCalls(
-  message: Message,
-): message is Message & { readonly toolCalls: readonly ToolCall[] } {
-  return Array.isArray((message as { toolCalls?: unknown }).toolCalls);
 }
 
 function projectToolCallForResourceDisplay(

@@ -24,11 +24,11 @@ import {
   buildAgentHistoryHydrationPlan,
   buildAgentTurnConfigurationPlan,
   buildAgentTurnContextPatch,
-  getAgentTurnFallbackMessage,
+  getAgentTurnPreconditionMessage,
   selectAgentTurnProvider,
   type AgentAmbientCanvasNode,
   type AgentMessageExecutionOverrides,
-  type AgentMessageTurnFallbackReason,
+  type AgentMessageTurnPreconditionReason,
   type AgentProviderCandidate,
   type AgentStreamPersistenceSnapshot,
   type ProviderExpressionTargetConfig,
@@ -147,13 +147,19 @@ export type AgentTurnExecutionResult =
       readonly assistantMessage?: Message;
     }
   | {
-      readonly status: 'fallback';
-      readonly reason: AgentTurnFallbackReason;
+      readonly status: 'precondition-unmet';
+      readonly reason: AgentTurnPreconditionReason;
     };
 
-export type AgentTurnFallbackReason = AgentMessageTurnFallbackReason;
+export type AgentTurnPreconditionReason = AgentMessageTurnPreconditionReason;
+export type AgentTurnFallbackReason = AgentTurnPreconditionReason;
 
-export { AGENT_TURN_FALLBACK_MESSAGE, getAgentTurnFallbackMessage } from './message-runtime';
+export {
+  AGENT_TURN_FALLBACK_MESSAGE,
+  AGENT_TURN_PRECONDITION_MESSAGE,
+  getAgentTurnFallbackMessage,
+  getAgentTurnPreconditionMessage,
+} from './message-runtime';
 
 export interface ExecuteAgentTurnInput<
   TPlatform,
@@ -297,8 +303,8 @@ export async function runAgentTurnForWebviewRuntime<
   };
 
   if (!input.agentManager) {
-    publishErrorMessage(getAgentTurnFallbackMessage('no-provider-configured'));
-    return { status: 'fallback', reason: 'no-provider-configured' };
+    publishErrorMessage(getAgentTurnPreconditionMessage('no-provider-configured'));
+    return { status: 'precondition-unmet', reason: 'no-provider-configured' };
   }
 
   try {
@@ -312,8 +318,8 @@ export async function runAgentTurnForWebviewRuntime<
       now,
     });
 
-    if (result.status === 'fallback') {
-      publishErrorMessage(getAgentTurnFallbackMessage(result.reason));
+    if (result.status === 'precondition-unmet') {
+      publishErrorMessage(getAgentTurnPreconditionMessage(result.reason));
     }
 
     return result;
@@ -382,7 +388,7 @@ export async function executeAgentTurn<
       reason: providerSelection.reason,
       effectiveProviderId: providerSelection.effectiveProviderId,
     });
-    return { status: 'fallback', reason: 'no-provider-configured' };
+    return { status: 'precondition-unmet', reason: 'no-provider-configured' };
   }
 
   const platform = input.platform;
@@ -393,7 +399,7 @@ export async function executeAgentTurn<
       reason: 'missing-platform',
       effectiveProviderId: providerSelection.effectiveProviderId,
     });
-    return { status: 'fallback', reason: 'missing-platform' };
+    return { status: 'precondition-unmet', reason: 'missing-platform' };
   }
 
   const now = input.now ?? Date.now;

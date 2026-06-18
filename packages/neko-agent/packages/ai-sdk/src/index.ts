@@ -5,8 +5,13 @@
  * Used by @neko/platform to replace legacy media adapters.
  */
 
-export { resolveProvider } from './resolve';
-export type { ProviderConfig, ResolvedProvider } from './types';
+export {
+  AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES,
+  isAISDKLegacyBridgeMigrationProvider,
+  resolveProvider,
+} from './resolve';
+export type { ResolveProviderOptions } from './resolve';
+export type { ProviderConfig, ResolvedProvider, ResolvedProviderSource } from './types';
 export type { LegacyMediaAdapter, LegacyAdapterResult, LegacyMediaOutput } from './types';
 export { createNewAPIProvider } from './providers/newapi';
 export { createLegacyBridgeProvider } from './bridge';

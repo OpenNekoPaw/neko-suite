@@ -130,6 +130,14 @@ const BUDGET_KEY_MAP: Partial<Record<CreativeInfoType, keyof CreativeSummaryBudg
   aesthetic_pref: 'aestheticPrefs',
 };
 
+interface CreativeCategorySummary {
+  text: string;
+  keyPoints: string[];
+  entities: string[];
+  source: 'llm' | 'fallback';
+  degraded: boolean;
+}
+
 /**
  * Creative-domain summariser.
  * Classifies messages, then summarises each category independently.
@@ -194,7 +202,7 @@ export class CreativeSummarizer implements ISummarizer {
       totalConfigBudget > 0 ? Math.min(1, remainingBudget / totalConfigBudget) : 0;
 
     // Step 4: summarise each category
-    const categorySections: string[] = [];
+    const categorySummaries: CreativeCategorySummary[] = [];
     const allKeyPoints: string[] = [];
     const allEntities: string[] = [];
 
@@ -218,7 +226,7 @@ export class CreativeSummarizer implements ISummarizer {
 
       const summary = await this.summarizeCategory(category, categoryMessages, categoryBudget);
       if (summary) {
-        categorySections.push(summary.text);
+        categorySummaries.push(summary);
         allKeyPoints.push(...summary.keyPoints);
         allEntities.push(...summary.entities);
       }
@@ -231,14 +239,27 @@ export class CreativeSummarizer implements ISummarizer {
       parts.push('## User Messages (verbatim)\n' + userSection);
     }
 
-    for (const section of categorySections) {
-      parts.push(section);
+    for (const summary of categorySummaries) {
+      parts.push(summary.text);
     }
 
     const fullSummary = parts.join('\n\n');
+    const hasDegradedCategory = categorySummaries.some((summary) => summary.degraded);
+    const hasLlmCategory = categorySummaries.some((summary) => summary.source === 'llm');
+    const summarySource: SummarizationResult['source'] = hasDegradedCategory
+      ? 'fallback'
+      : hasLlmCategory
+        ? 'llm'
+        : undefined;
 
     return {
       summary: fullSummary,
+      ...(summarySource
+        ? {
+            source: summarySource,
+            degraded: summarySource === 'fallback',
+          }
+        : {}),
       tokenCount: estimateTokens(fullSummary),
       keyPoints: allKeyPoints,
       entities: [...new Set(allEntities)],
@@ -252,7 +273,7 @@ export class CreativeSummarizer implements ISummarizer {
     category: CreativeInfoType,
     messages: ChatMessage[],
     maxTokens: number,
-  ): Promise<{ text: string; keyPoints: string[]; entities: string[] } | null> {
+  ): Promise<CreativeCategorySummary | null> {
     const categoryLabel = category.replace(/_/g, ' ');
     const header = `## ${categoryLabel.charAt(0).toUpperCase() + categoryLabel.slice(1)}`;
 
@@ -300,7 +321,13 @@ export class CreativeSummarizer implements ISummarizer {
             text = text.substring(0, maxTokens * 4) + '...';
           }
 
-          return { text: `${header}\n${text}`, keyPoints, entities };
+          return {
+            text: `${header}\n${text}`,
+            keyPoints,
+            entities,
+            source: 'llm',
+            degraded: false,
+          };
         } catch (error) {
           logger.warn(`Category summarisation failed for ${category}`, {
             attempt: attempt + 1,
@@ -347,7 +374,7 @@ export class CreativeSummarizer implements ISummarizer {
     header: string,
     messages: ChatMessage[],
     maxTokens: number,
-  ): { text: string; keyPoints: string[]; entities: string[] } {
+  ): CreativeCategorySummary {
     const parts: string[] = [];
     let tokens = 0;
 
@@ -367,6 +394,8 @@ export class CreativeSummarizer implements ISummarizer {
       text: `${header}\n${parts.join('\n')}`,
       keyPoints: [],
       entities: [],
+      source: 'fallback',
+      degraded: true,
     };
   }
 }

@@ -7,7 +7,6 @@
  *
  * This module now only registers:
  * - SkillProvider (meta-tool: enumerates skills from all installed extensions)
- * - ReadDocument (agent-owned document reader bridge)
  *
  * Migrated sub-packages (2026-04-08):
  * - neko-cut → timeline tools + GenerateVideoForClip
@@ -27,87 +26,8 @@ import {
 } from '@neko/agent/tools';
 import { TOOL_NAMES_SYSTEM, type ISkillProvider } from '@neko/shared';
 import type { Platform } from '@neko/platform';
-import type { IToolGroupRegistry, Tool } from '@neko/shared';
+import type { Tool } from '@neko/shared';
 import { getRootLogger } from '../base';
-import { createDocumentReaderService } from '../services/DocumentReaderService';
-import { createDocumentResourceCacheService } from '../services/documentResourceCacheService';
-import { getEngineClientProvider } from '../services/engineClientProvider';
-import { createReadDocumentTool } from '../tools/readDocumentTool';
-import { createReadDocumentImageTool } from '../tools/readDocumentImageTool';
-import { createReadImageTool } from '../tools/readImageTool';
-import { createSemanticCoverageTool } from '../tools/semanticCoverageTool';
-
-export interface LegacyCentralizedToolRegistrationMetadata {
-  readonly toolName: string;
-  readonly kind: 'agent-owned-meta-tool' | 'compatibility-bridge';
-  readonly owner: string;
-  readonly replacement: string;
-  readonly removeAfter: string;
-  readonly lcdId: string;
-  readonly tests: readonly string[];
-}
-
-export const LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA: readonly LegacyCentralizedToolRegistrationMetadata[] =
-  [
-    {
-      toolName: TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS,
-      kind: 'agent-owned-meta-tool',
-      owner: 'neko-agent-extension',
-      replacement: 'Agent-owned plugin skill catalogue meta-tool',
-      removeAfter: 'Keep while Agent owns cross-extension skill catalogue discovery.',
-      lcdId: 'LCD-002',
-      tests: [
-        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
-      ],
-    },
-    {
-      toolName: TOOL_NAMES_SYSTEM.READ_DOCUMENT,
-      kind: 'compatibility-bridge',
-      owner: 'neko-agent-extension',
-      replacement: 'Document capability provider or runtime document reader bridge',
-      removeAfter:
-        'Remove once document reading is exposed through an AgentCapabilityProvider path.',
-      lcdId: 'LCD-002',
-      tests: [
-        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
-      ],
-    },
-    {
-      toolName: TOOL_NAMES_SYSTEM.READ_IMAGE,
-      kind: 'compatibility-bridge',
-      owner: 'neko-agent-extension',
-      replacement: 'Image/document capability provider or runtime media reader bridge',
-      removeAfter: 'Remove once image reading is exposed through an AgentCapabilityProvider path.',
-      lcdId: 'LCD-002',
-      tests: [
-        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
-      ],
-    },
-    {
-      toolName: TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
-      kind: 'compatibility-bridge',
-      owner: 'neko-agent-extension',
-      replacement: 'Document image capability provider or runtime document reader bridge',
-      removeAfter:
-        'Remove once document image reading is exposed through an AgentCapabilityProvider path.',
-      lcdId: 'LCD-002',
-      tests: [
-        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
-      ],
-    },
-    {
-      toolName: TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
-      kind: 'compatibility-bridge',
-      owner: 'neko-agent-extension',
-      replacement: '@neko/search semantic coverage provider capability path',
-      removeAfter:
-        'Remove once semantic coverage querying is exposed through package capability provider metadata.',
-      lcdId: 'LCD-002',
-      tests: [
-        'packages/neko-agent/packages/extension/src/bootstrap/__tests__/toolBootstrap.test.ts',
-      ],
-    },
-  ];
 
 /**
  * Register neko-agent's own meta-tools.
@@ -118,33 +38,9 @@ export function registerExtensionTools(
   _platform: Platform,
   context?: vscode.ExtensionContext,
 ): void {
-  const documentReader = createDocumentReaderService(getEngineClientProvider(), context);
-  const documentResourceCache = context
-    ? createDocumentResourceCacheService({ reader: documentReader, context })
-    : undefined;
-  const resolveDocumentResourceScope = () =>
-    vscode.workspace.workspaceFolders?.[0] ? ('project' as const) : ('extension-private' as const);
   const tools = createPluginSkillDiscoveryTools(
     createVSCodePluginSkillCatalogueSource(),
     getRootLogger().child('PluginSkillDiscovery'),
-  );
-  tools.push(
-    createReadDocumentTool({
-      reader: documentReader,
-      resourceCache: documentResourceCache,
-      resolveResourceScope: resolveDocumentResourceScope,
-    }),
-    createReadImageTool({
-      platform: _platform,
-      resourceCache: documentResourceCache,
-    }),
-    createReadDocumentImageTool({
-      reader: documentReader,
-      platform: _platform,
-      resourceCache: documentResourceCache,
-      resolveResourceScope: resolveDocumentResourceScope,
-    }),
-    createSemanticCoverageTool(),
   );
   for (const tool of tools) {
     if (!toolRegistry.get?.(tool.name)) {
@@ -152,26 +48,6 @@ export function registerExtensionTools(
     }
   }
   getRootLogger().info(`Registered ${tools.length} extension tool(s)`);
-}
-
-export function registerExtensionToolGroups(toolGroupRegistry: IToolGroupRegistry): void {
-  toolGroupRegistry.register({
-    name: 'document-reading',
-    description:
-      'Document and image reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, comic archives, and image pages',
-    tools: [
-      TOOL_NAMES_SYSTEM.READ_DOCUMENT,
-      TOOL_NAMES_SYSTEM.READ_IMAGE,
-      TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
-      TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
-    ],
-    alwaysActive: true,
-    priority: 100,
-    loadingTier: 'resident',
-    source: 'builtin',
-    enabled: true,
-    icon: '📄',
-  });
 }
 
 /**

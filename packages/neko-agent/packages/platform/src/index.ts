@@ -23,7 +23,6 @@ export {
   type UserConfig,
   type IUserConfigManager,
 } from './config/user-config';
-export { ensureUserConfig } from './config/default-config';
 
 export { watchWorkspaceConfig, type WorkspaceConfig } from './config/workspace-config';
 
@@ -32,6 +31,14 @@ export {
   type MergedConfig,
   type ConfigManagerOptions,
 } from './config/config-manager';
+export {
+  buildConfigUnavailableMessage,
+  buildSafeConfigDiagnosticMessage,
+  projectAssistantConfigDiagnostic,
+  projectAssistantConfigReadResultDiagnostic,
+  type AssistantConfigDiagnostic,
+  type AssistantConfigDiagnosticCode,
+} from './config/config-diagnostic';
 export {
   type ConfigExportData,
   type ConfigImportResult,

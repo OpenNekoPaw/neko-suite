@@ -59,6 +59,51 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
     }
   });
 
+  it('marks completed legacy bridge outputs with provider resolution metadata', async () => {
+    const harness = createHarness({
+      adapter: createAdapter({
+        generateImage: async () => ({
+          status: 'completed',
+          outputs: [{ type: 'image', url: PNG_BASE64 }],
+        }),
+        statuses: [],
+      }),
+    });
+
+    const taskId = await harness.manager.submit(
+      createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+    );
+    const task = await harness.manager.waitForCompletion(taskId, 30000);
+
+    expect(task.status).toBe('completed');
+    expect(task.output?.data).toMatchObject({
+      metadata: { providerResolutionSource: 'legacy-bridge' },
+    });
+  });
+
+  it('fails visibly for adapter-only providers that are not listed as migration bridges', async () => {
+    const adapter = createAdapter({
+      generateImage: vi.fn(async () => ({
+        status: 'completed',
+        outputs: [{ type: 'image', url: PNG_BASE64 }],
+      })),
+      statuses: [],
+    });
+    const harness = createHarness({
+      adapter,
+      allowLegacyBridgeProviderTypes: [],
+    });
+
+    const taskId = await harness.manager.submit(
+      createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+    );
+    const task = await harness.manager.waitForCompletion(taskId, 30000);
+
+    expect(task.status).toBe('failed');
+    expect(task.output?.error).toContain('AI SDK media provider is not configured');
+    expect(adapter.generateImage).not.toHaveBeenCalled();
+  });
+
   it('propagates cancellation during external wait', async () => {
     vi.useFakeTimers();
     try {
@@ -148,6 +193,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
 function createHarness(options: {
   adapter: MediaAdapter;
+  allowLegacyBridgeProviderTypes?: readonly string[];
   storage?: MemoryTaskStorage;
   recoveryStorage?: MemoryTaskRecoveryStorage;
 }) {
@@ -155,7 +201,9 @@ function createHarness(options: {
   const storage = options.storage ?? new MemoryTaskStorage();
   const recoveryStorage = options.recoveryStorage ?? new MemoryTaskRecoveryStorage();
   const manager = new TaskManager({ storage, recoveryStorage, cleanupIntervalMs: 0 });
-  const executor = new MediaTaskExecutor({} as ProviderRegistry, createConfigManager());
+  const executor = new MediaTaskExecutor({} as ProviderRegistry, createConfigManager(), {
+    allowLegacyBridgeProviderTypes: options.allowLegacyBridgeProviderTypes ?? ['test-provider'],
+  });
   executor.registerWith(manager);
 
   return { manager, executor, storage, recoveryStorage };

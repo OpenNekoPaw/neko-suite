@@ -22,9 +22,13 @@ export interface ProviderConfig {
  * Resolved AI SDK provider with media model factories.
  * Returns null for unsupported model types.
  */
+export type ResolvedProviderSource = 'native' | 'legacy-bridge';
+
 export interface ResolvedProvider {
   /** Provider type identifier */
   type: string;
+  /** Whether this provider was resolved through a native AI SDK path or legacy bridge */
+  source: ResolvedProviderSource;
   /** Create an image model by model ID, or null if not supported */
   image(modelId: string): ImageModelV3 | null;
   /** Create a video model by model ID, or null if not supported */

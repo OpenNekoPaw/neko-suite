@@ -91,6 +91,45 @@ tmp/*.json
     expect(vscode.workspace.findFiles).toHaveBeenCalledWith('**/*app*', '**/.git/**', 16);
   });
 
+  it('projects workspace media and document icons as semantic protocol labels', async () => {
+    vi.mocked(vscode.workspace.findFiles).mockResolvedValue([
+      vscode.Uri.file('/workspace/assets/clip.mp4'),
+      vscode.Uri.file('/workspace/assets/still.png'),
+      vscode.Uri.file('/workspace/docs/guide.pdf'),
+      vscode.Uri.file('/workspace/audio/theme.wav'),
+    ]);
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(''));
+
+    await expect(
+      searchVSCodeProjectFiles({
+        includePattern: '**/*',
+        excludePattern: '**/.git/**',
+        limit: 10,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        relativePath: 'assets/clip.mp4',
+        icon: 'video',
+        mediaType: 'video',
+      }),
+      expect.objectContaining({
+        relativePath: 'assets/still.png',
+        icon: 'image',
+        mediaType: 'image',
+      }),
+      expect.objectContaining({
+        relativePath: 'audio/theme.wav',
+        icon: 'audio',
+        mediaType: 'audio',
+      }),
+      expect.objectContaining({
+        relativePath: 'docs/guide.pdf',
+        icon: 'document',
+        mediaType: 'document',
+      }),
+    ]);
+  });
+
   it('prevents direct @file reads from ignored paths', async () => {
     vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
       if (uri.fsPath.endsWith('/.gitignore')) {

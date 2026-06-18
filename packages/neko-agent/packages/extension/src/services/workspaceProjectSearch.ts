@@ -7,6 +7,8 @@ import type { AgentProjectFileCandidate, AgentProjectFileSearchPlan } from '@nek
 import { detectMediaType, isDocumentFile, isMediaFile } from '@neko/shared';
 import { createWorkspaceMentionIgnoreFilter } from './workspaceIgnoreFilter';
 
+type WorkspaceProjectMentionMediaType = NonNullable<AgentProjectFileCandidate['mediaType']>;
+
 export async function searchVSCodeProjectFiles(
   plan: AgentProjectFileSearchPlan,
 ): Promise<readonly AgentProjectFileCandidate[]> {
@@ -31,17 +33,19 @@ export async function searchVSCodeProjectFiles(
     .filter((file) => !isIgnoredWorkspaceFile(file, filters))
     .map((file) => {
       const relativePath = vscode.workspace.asRelativePath(file);
-      const mediaType =
+      const mediaType = toProjectMentionMediaType(
         !isWorkspaceCodeFile(relativePath) &&
-        (isMediaFile(relativePath) || isDocumentFile(relativePath))
+          (isMediaFile(relativePath) || isDocumentFile(relativePath))
           ? detectMediaType(relativePath)
-          : undefined;
-      return {
+          : undefined,
+      );
+      const candidate: AgentProjectFileCandidate = {
         relativePath,
         source: 'workspace',
         icon: iconForWorkspaceFile(relativePath, mediaType),
         ...(mediaType ? { mediaType } : {}),
       };
+      return candidate;
     })
     .sort((left, right) => compareWorkspaceFileCandidates(left, right, plan))
     .slice(0, plan.limit);
@@ -105,13 +109,13 @@ function isIgnoredWorkspaceFile(
 
 function iconForWorkspaceFile(
   filePath: string,
-  mediaType: ReturnType<typeof detectMediaType> | undefined,
+  mediaType: WorkspaceProjectMentionMediaType | undefined,
 ): string {
-  if (mediaType === 'video') return '🎬';
-  if (mediaType === 'audio') return '♪';
-  if (mediaType === 'image') return '🖼';
-  if (mediaType === 'sequence') return '▦';
-  if (mediaType === 'document') return '📄';
+  if (mediaType === 'video') return 'video';
+  if (mediaType === 'audio') return 'audio';
+  if (mediaType === 'image') return 'image';
+  if (mediaType === 'sequence') return 'sequence';
+  if (mediaType === 'document') return 'document';
   if (mediaType === 'text') return 'TXT';
 
   const ext = filePath.split('.').pop()?.toLowerCase();
@@ -120,7 +124,23 @@ function iconForWorkspaceFile(
   if (ext === 'json' || ext === 'jsonc') return '{}';
   if (ext === 'md' || ext === 'mdx') return 'MD';
   if (ext === 'css' || ext === 'scss' || ext === 'less') return '#';
-  return '📄';
+  return 'file';
+}
+
+function toProjectMentionMediaType(
+  mediaType: ReturnType<typeof detectMediaType> | undefined,
+): WorkspaceProjectMentionMediaType | undefined {
+  if (
+    mediaType === 'video' ||
+    mediaType === 'audio' ||
+    mediaType === 'image' ||
+    mediaType === 'sequence' ||
+    mediaType === 'text' ||
+    mediaType === 'document'
+  ) {
+    return mediaType;
+  }
+  return undefined;
 }
 
 function isWorkspaceCodeFile(filePath: string): boolean {

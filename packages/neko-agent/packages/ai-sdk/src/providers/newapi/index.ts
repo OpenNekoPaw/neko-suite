@@ -27,6 +27,7 @@ export function createNewAPIProvider(
 ): ResolvedProvider {
   return {
     type: 'newapi',
+    source: 'native',
     image: (modelId: string) =>
       options?.imageMode === 'chat'
         ? new NewAPIChatImageModel(modelId, config)

@@ -2,14 +2,37 @@
  * Provider Resolution Factory
  *
  * Maps provider type + config to AI SDK provider instances.
- * Returns null for provider types that don't have AI SDK support,
- * signaling the caller to fall back to legacy adapters.
+ * Returns null for provider types that don't have AI SDK support.
+ * Legacy media adapters require an explicit migration bridge opt-in.
  */
 
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LegacyMediaAdapter, ProviderConfig, ResolvedProvider } from './types';
 import { createNewAPIProvider } from './providers/newapi';
 import { createLegacyBridgeProvider } from './bridge';
+
+export interface ResolveProviderOptions {
+  readonly imageMode?: 'standard' | 'chat';
+  readonly allowLegacyBridge?: boolean;
+}
+
+export const AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES = [
+  'fal',
+  'dashscope',
+  'runway',
+  'luma',
+  'suno',
+  'vidu',
+  'midjourney',
+  'minimax',
+  'liblib',
+] as const;
+
+export function isAISDKLegacyBridgeMigrationProvider(providerType: string): boolean {
+  return AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES.includes(
+    providerType as (typeof AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES)[number],
+  );
+}
 
 /**
  * Resolve a provider type to an AI SDK provider instance.
@@ -20,7 +43,7 @@ export function resolveProvider(
   providerType: string,
   config: ProviderConfig,
   legacyAdapter?: LegacyMediaAdapter,
-  options?: { imageMode?: 'standard' | 'chat' },
+  options?: ResolveProviderOptions,
 ): ResolvedProvider | null {
   switch (providerType) {
     case 'openai': {
@@ -30,6 +53,7 @@ export function resolveProvider(
       });
       return {
         type: 'openai',
+        source: 'native',
         image: (modelId: string) => openai.image(modelId),
         // OpenAI provider does not support video model creation
         video: () => null,
@@ -42,16 +66,31 @@ export function resolveProvider(
     case 'generic':
       return createNewAPIProvider(config, options);
 
+    case 'xai':
+    case 'kling':
+      return createCompatibleProvider(providerType, config, options);
+
     default:
       break;
   }
 
-  // Bridge legacy adapter if provided
-  if (legacyAdapter) {
+  if (legacyAdapter && options?.allowLegacyBridge === true) {
     return createLegacyBridgeProvider(providerType, config, legacyAdapter);
   }
 
   return null;
+}
+
+function createCompatibleProvider(
+  providerType: string,
+  config: ProviderConfig,
+  options?: ResolveProviderOptions,
+): ResolvedProvider {
+  const provider = createNewAPIProvider(config, options);
+  return {
+    ...provider,
+    type: providerType,
+  };
 }
 
 /**

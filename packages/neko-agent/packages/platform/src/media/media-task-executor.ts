@@ -28,7 +28,7 @@ import type { ProviderRegistry } from '../provider/provider-registry';
 import type { ConfigManager } from '../config/config-manager';
 import type { MediaTaskManagerDeps } from './types';
 import { getLogger } from '../utils/logger';
-import { resolveProvider } from '@neko/ai-sdk';
+import { AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES, resolveProvider } from '@neko/ai-sdk';
 import { generateImage, experimental_generateVideo, experimental_generateSpeech } from 'ai';
 import {
   materializeImageRequestFileUris,
@@ -40,8 +40,16 @@ import {
   summarizeMediaGenerationError,
   type MediaGenerationErrorSummary,
 } from './media-generation-error';
+import type { ResolvedProviderSource } from '@neko/ai-sdk';
 
 const logger = getLogger('MediaTaskExecutor');
+
+function createUnsupportedProviderDiagnostic(providerType: string): string {
+  return (
+    `AI SDK media provider is not configured for provider type "${providerType}". ` +
+    'Use openai/newapi/oneapi/generic-compatible provider configuration, migrate the provider to a native AI SDK path, or add a time-boxed migration bridge ledger row.'
+  );
+}
 
 /**
  * Media task input payload
@@ -65,6 +73,11 @@ export interface MediaTaskExecutorOptions {
   pollingIntervalMs?: number;
   /** Max polling attempts (default: 360 = 30 min at 5s interval) */
   maxPollingAttempts?: number;
+  /**
+   * Provider types that may temporarily use the legacy MediaAdapter bridge.
+   * Keep scoped to migration rows; unsupported providers fail visibly.
+   */
+  allowLegacyBridgeProviderTypes?: readonly string[];
 }
 
 /**
@@ -74,14 +87,18 @@ export class MediaTaskExecutor {
   private providerRegistry: ProviderRegistry;
   private configManager: ConfigManager;
   private taskManager?: MediaTaskManagerDeps;
+  private readonly allowLegacyBridgeProviderTypes: ReadonlySet<string>;
 
   constructor(
     providerRegistry: ProviderRegistry,
     configManager: ConfigManager,
-    _options: MediaTaskExecutorOptions = {},
+    options: MediaTaskExecutorOptions = {},
   ) {
     this.providerRegistry = providerRegistry;
     this.configManager = configManager;
+    this.allowLegacyBridgeProviderTypes = new Set(
+      options.allowLegacyBridgeProviderTypes ?? AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES,
+    );
   }
 
   /**
@@ -242,12 +259,10 @@ export class MediaTaskExecutor {
         };
       }
 
-      // Get legacy adapter for bridge fallback
       const legacyAdapter = getMediaAdapterRegistry().getForType(provider.type);
 
       throwIfAborted(context?.signal);
 
-      // All generation goes through AI SDK (native providers or legacy bridge)
       const aiSdkResult = await this.tryAISDK(
         generationType,
         request,
@@ -261,14 +276,14 @@ export class MediaTaskExecutor {
       if (aiSdkResult) return aiSdkResult;
 
       return {
-        error: `No AI SDK provider or legacy adapter found for provider type: ${provider.type}`,
+        error: createUnsupportedProviderDiagnostic(provider.type),
       };
     };
   }
 
   /**
    * Try AI SDK for image/video generation.
-   * Returns TaskOutput if AI SDK handled it, null if not supported (fallback to legacy).
+   * Returns TaskOutput if AI SDK handled it, null if not supported.
    */
   private async tryAISDK(
     generationType: MediaGenerationType,
@@ -309,7 +324,10 @@ export class MediaTaskExecutor {
         },
       },
       legacyAdapter as import('@neko/ai-sdk').LegacyMediaAdapter | undefined,
-      { imageMode },
+      {
+        imageMode,
+        allowLegacyBridge: this.allowLegacyBridgeProviderTypes.has(provider.type),
+      },
     );
     if (!resolved) return null;
 
@@ -324,9 +342,9 @@ export class MediaTaskExecutor {
         const size =
           imgReq.width && imgReq.height ? (`${imgReq.width}x${imgReq.height}` as const) : undefined;
 
-        // Carry ControlNet / IP-Adapter / inpaint / edit fields through providerOptions
-        // so the legacy bridge (LegacyImageModel) can forward them to the adapter.
-        // Native AI SDK providers ignore unknown namespaces, so this is safe.
+        // Carry ControlNet / IP-Adapter / inpaint / edit fields through providerOptions.
+        // Provider implementations that understand the neko namespace consume them;
+        // standard AI SDK providers ignore unknown namespaces.
         const nekoProviderOptions: Record<string, unknown> = {};
         if (imgReq.negativePrompt !== undefined)
           nekoProviderOptions['negativePrompt'] = imgReq.negativePrompt;
@@ -375,6 +393,7 @@ export class MediaTaskExecutor {
               url: img.base64 ? `data:${img.mediaType};base64,${img.base64}` : '',
               mimeType: img.mediaType,
             })),
+            metadata: createAiSdkMediaTaskMetadata(resolved.source),
           },
         };
       }
@@ -425,6 +444,7 @@ export class MediaTaskExecutor {
                 mimeType: video.mediaType,
               },
             ],
+            metadata: createAiSdkMediaTaskMetadata(resolved.source),
           },
         };
       }
@@ -457,6 +477,7 @@ export class MediaTaskExecutor {
                 mimeType: audio.mediaType,
               },
             ],
+            metadata: createAiSdkMediaTaskMetadata(resolved.source),
           },
         };
       }
@@ -727,6 +748,14 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error('Task aborted');
   }
+}
+
+function createAiSdkMediaTaskMetadata(
+  providerResolutionSource: ResolvedProviderSource,
+): Record<string, unknown> {
+  return {
+    providerResolutionSource,
+  };
 }
 
 /**
