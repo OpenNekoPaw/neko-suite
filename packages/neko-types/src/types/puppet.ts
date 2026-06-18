@@ -13,6 +13,35 @@ export type PuppetFormat = 'moc3' | 'native';
 
 export type NkpAnimationModel = 'moc3-parameter' | 'bone-blendshape';
 
+export type NkpPuppetRuntimeAdapterId =
+  | 'neko-puppet-native'
+  | 'live2d-moc3-compat'
+  | 'live2d-cubism';
+
+export type NkpPuppetRuntimeAdapterStatus = 'available' | 'unavailable' | 'compatibility';
+
+export type NkpPuppetRuntimeDiagnosticCode =
+  | 'cubism-adapter-unavailable'
+  | 'legacy-moc3-compatibility'
+  | 'wrong-domain-field';
+
+export interface NkpPuppetRuntimeDiagnostic {
+  readonly code: NkpPuppetRuntimeDiagnosticCode;
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly message: string;
+  readonly context?: Record<string, string | number | boolean | null>;
+}
+
+export interface NkpPuppetRuntimeAdapterDescriptor {
+  readonly id: NkpPuppetRuntimeAdapterId;
+  readonly owner: 'neko-puppet';
+  readonly version?: string;
+  readonly status: NkpPuppetRuntimeAdapterStatus;
+  readonly sdkNeutral: true;
+  readonly sourceCompatibility: readonly PuppetFormat[];
+  readonly diagnostics?: readonly NkpPuppetRuntimeDiagnostic[];
+}
+
 export type NkpImportSourceKind = 'psd' | 'png' | 'live2d-bundle' | 'moc3' | 'generated';
 
 export type NkpBlendShapeStandard = 'arkit_52' | 'vrm' | 'custom';
@@ -346,6 +375,12 @@ export interface NkpLive2dBundleReference {
   contentHash?: string;
 }
 
+export interface NkpPuppetRuntimeAdapterReference {
+  readonly id: NkpPuppetRuntimeAdapterId;
+  readonly version?: string;
+  readonly importSettings?: Record<string, unknown>;
+}
+
 export interface NkpBundleMotionIndexEntry {
   name: string;
   group: string;
@@ -409,6 +444,8 @@ export interface NkpProjectData {
     format?: PuppetFormat;
     /** Runtime/authoring animation model. */
     animationModel?: NkpAnimationModel;
+    /** SDK-neutral runtime adapter selection. */
+    runtimeAdapter?: NkpPuppetRuntimeAdapterReference;
     /** Original source metadata for native imports. */
     importSource?: NkpImportSource;
     /** Live2D ZIP bundle source when the model is loaded from bundle memory. */
@@ -562,9 +599,30 @@ function isNkpPuppetSource(value: unknown): value is NkpProjectData['puppet'] {
     (typeof value['src'] === 'string' || value['src'] === null) &&
     (value['format'] === undefined || isPuppetFormat(value['format'])) &&
     (value['animationModel'] === undefined || isNkpAnimationModel(value['animationModel'])) &&
+    (value['runtimeAdapter'] === undefined ||
+      isNkpPuppetRuntimeAdapterReference(value['runtimeAdapter'])) &&
     (value['importSource'] === undefined || isNkpImportSource(value['importSource'])) &&
     (value['bundle'] === undefined || isNkpLive2dBundleReference(value['bundle']))
   );
+}
+
+export function createNkpPuppetRuntimeAdapterDescriptor(
+  id: NkpPuppetRuntimeAdapterId,
+  options: {
+    readonly version?: string;
+    readonly status?: NkpPuppetRuntimeAdapterStatus;
+    readonly diagnostics?: readonly NkpPuppetRuntimeDiagnostic[];
+  } = {},
+): NkpPuppetRuntimeAdapterDescriptor {
+  return {
+    id,
+    owner: 'neko-puppet',
+    ...(options.version ? { version: options.version } : {}),
+    status: options.status ?? defaultRuntimeAdapterStatus(id),
+    sdkNeutral: true,
+    sourceCompatibility: runtimeAdapterSourceCompatibility(id),
+    ...(options.diagnostics ? { diagnostics: [...options.diagnostics] } : {}),
+  };
 }
 
 function isPuppetCommand(value: unknown): value is PuppetCommand {
@@ -697,6 +755,37 @@ function isPuppetFormat(value: unknown): value is PuppetFormat {
 
 function isNkpAnimationModel(value: unknown): value is NkpAnimationModel {
   return value === 'moc3-parameter' || value === 'bone-blendshape';
+}
+
+function isNkpPuppetRuntimeAdapterReference(
+  value: unknown,
+): value is NkpPuppetRuntimeAdapterReference {
+  if (!isRecord(value)) return false;
+  return (
+    isNkpPuppetRuntimeAdapterId(value['id']) &&
+    (value['version'] === undefined || typeof value['version'] === 'string') &&
+    (value['importSettings'] === undefined || isRecord(value['importSettings']))
+  );
+}
+
+function isNkpPuppetRuntimeAdapterId(value: unknown): value is NkpPuppetRuntimeAdapterId {
+  return (
+    value === 'neko-puppet-native' || value === 'live2d-moc3-compat' || value === 'live2d-cubism'
+  );
+}
+
+function defaultRuntimeAdapterStatus(id: NkpPuppetRuntimeAdapterId): NkpPuppetRuntimeAdapterStatus {
+  return id === 'live2d-moc3-compat' ? 'compatibility' : 'available';
+}
+
+function runtimeAdapterSourceCompatibility(id: NkpPuppetRuntimeAdapterId): readonly PuppetFormat[] {
+  switch (id) {
+    case 'neko-puppet-native':
+      return ['native'];
+    case 'live2d-moc3-compat':
+    case 'live2d-cubism':
+      return ['moc3'];
+  }
 }
 
 function isNkpImportSource(value: unknown): value is NkpImportSource {

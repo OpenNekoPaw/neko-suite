@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { get } from 'node:http';
 import { homedir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
+import { BENIGN_VSCODE_WEBVIEW_CONSOLE_WARNINGS } from './vscode-webview-warning-policy.mjs';
 
 const repoRoot = resolve(new URL('..', import.meta.url).pathname);
 
@@ -101,6 +102,7 @@ console.log(
         worker: workerTargets.length,
       },
       assertions,
+      benignConsoleWarnings: BENIGN_VSCODE_WEBVIEW_CONSOLE_WARNINGS,
       pageTargets,
       webviewTargets,
       workerTargets,

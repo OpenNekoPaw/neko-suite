@@ -46,6 +46,13 @@ const config: KnipConfig = {
     'packages/neko-cut/packages/webview/src/utils/speed.ts': ['exports'],
     'packages/neko-cut/packages/webview/src/utils/waveform.ts': ['exports'],
     'packages/neko-cut/packages/webview/src/utils/pyramidThumbnail.ts': ['exports'],
+    // Logger facades expose test-injection hooks for package Webview tests.
+    'packages/neko-canvas/packages/webview/src/utils/logger.ts': ['exports'],
+    'packages/neko-cut/packages/webview/src/utils/logger.ts': ['exports'],
+    'packages/neko-market/packages/webview/src/utils/logger.ts': ['exports'],
+    'packages/neko-preview/packages/webview/src/utils/logger.ts': ['exports'],
+    'packages/neko-story/packages/webview/src/utils/logger.ts': ['exports'],
+    'packages/neko-tools/packages/webview/src/utils/logger.ts': ['exports'],
     // Barrel entrypoints for sketch subsystems
     'packages/neko-sketch/packages/webview/src/engine/index.ts': ['exports'],
     'packages/neko-sketch/packages/webview/src/brush/index.ts': ['exports'],
