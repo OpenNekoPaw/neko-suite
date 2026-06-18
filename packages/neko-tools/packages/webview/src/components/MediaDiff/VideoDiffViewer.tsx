@@ -7,13 +7,14 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { formatMediaTimeCentiseconds } from '@neko/neko-client';
 import { PlayIcon, PauseIcon } from '@neko/ui/icons';
 import { Button, Slider } from '@neko/ui/primitives';
 import { useTranslation } from '../../i18n/I18nContext';
 import { useMediaDiffRuntime } from '../../runtime/MediaDiffRuntimeContext';
+import { getLogger } from '../../utils/logger';
 
-const logger = new ConsoleLogger('VideoDiffViewer', LogLevel.Info);
+const logger = getLogger('VideoDiffViewer');
 import type { VideoDiffViewerProps } from './types';
 import {
   StreamingVideoDiffViewer,
@@ -84,13 +85,6 @@ const SeekControls = memo(function SeekControls({
   isFetchingPrevious,
 }: SeekControlsProps) {
   const { t } = useTranslation();
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-  };
-
   return (
     <div className="flex items-center gap-4 border-t border-[var(--tools-divider)] bg-[var(--tools-bg)] p-3">
       {/* Play/Pause button — disabled while previous version is being fetched */}
@@ -107,7 +101,7 @@ const SeekControls = memo(function SeekControls({
         {isPlaying ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
       </Button>
       <span className="min-w-[100px] font-mono text-xs text-[var(--tools-fg)]">
-        {formatTime(currentTime)} / {formatTime(duration)}
+        {formatMediaTimeCentiseconds(currentTime)} / {formatMediaTimeCentiseconds(duration)}
       </span>
       <div className="flex-1 relative">
         {/* Diff region overlay on the timeline */}
@@ -162,12 +156,6 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
   const { t } = useTranslation();
   if (!details || !details.duration) return null;
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Downsample keyframe diffs for rendering performance
   const displayKeyframeDiffs = useMemo(
     () => downsampleKeyframeDiffs(details.keyframeDiffs ?? [], 500),
@@ -182,9 +170,13 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
             {t('mediaDiff.video.duration')}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-red-400">{formatDuration(details.duration.previous)}</span>
+            <span className="text-red-400">
+              {formatMediaTimeCentiseconds(details.duration.previous)}
+            </span>
             <span>&rarr;</span>
-            <span className="text-green-400">{formatDuration(details.duration.current)}</span>
+            <span className="text-green-400">
+              {formatMediaTimeCentiseconds(details.duration.current)}
+            </span>
           </div>
         </div>
         <div>
@@ -246,7 +238,7 @@ const VideoDetails = memo(function VideoDetails({ details }: VideoDetailsProps) 
                 <div
                   key={i}
                   className={`flex-1 h-6 ${bgColor} rounded flex items-center justify-center text-white text-[10px] font-medium`}
-                  title={`${formatDuration(kf.time)}: ${percentage}%`}
+                  title={`${formatMediaTimeCentiseconds(kf.time)}: ${percentage}%`}
                 >
                   {percentage}%
                 </div>

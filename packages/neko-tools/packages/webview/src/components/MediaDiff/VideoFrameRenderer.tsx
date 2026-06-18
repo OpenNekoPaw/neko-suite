@@ -8,11 +8,11 @@
  */
 
 import { memo, useRef, useState, useCallback, useEffect } from 'react';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
 import { useMediaDiffRuntime } from '../../runtime/MediaDiffRuntimeContext';
+import { getLogger } from '../../utils/logger';
 
-const logger = new ConsoleLogger('VideoFrameRenderer', LogLevel.Info);
+const logger = getLogger('VideoFrameRenderer');
 
 // =============================================================================
 // Types

@@ -7,10 +7,10 @@
  */
 
 import { useRef, useEffect, useCallback } from 'react';
-import type { AudioStreamClient } from '@neko/neko-client';
+import type { EngineAvAudioStreamClient } from '@neko/neko-client';
 
 interface SpectrumCanvasProps {
-  audioClient: AudioStreamClient | null;
+  audioClient: EngineAvAudioStreamClient | null;
   isPlaying: boolean;
 }
 

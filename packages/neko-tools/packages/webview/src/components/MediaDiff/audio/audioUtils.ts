@@ -3,16 +3,14 @@
  * Extracted from AudioDiffViewer.tsx.
  */
 
+import { formatMediaTime, formatTime as formatGenericMediaTime } from '@neko/neko-client';
+
 export function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return formatGenericMediaTime(seconds);
 }
 
 export function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(2);
-  return `${mins}:${parseFloat(secs) < 10 ? '0' : ''}${secs}`;
+  return formatMediaTime(seconds, { fractionalDigits: 2 });
 }
 
 export function formatBitrate(bps: number): string {

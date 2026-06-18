@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AudioStreamClient, FrameScheduler, H264StreamClient } from '@neko/neko-client';
+import {
+  EngineAvStreamLifecycle,
+  type EngineAvAudioStreamClient,
+  type EngineAvFrameScheduler,
+  type EngineAvVideoStreamClient,
+} from '@neko/neko-client';
 import { DEFAULT_PANORAMA_VIEW_STATE, type PanoramaViewState } from '@neko/shared';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
@@ -24,13 +29,26 @@ function PanoramaVideoApp(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const flatPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<PanoramicVideoRenderer | null>(null);
-  const clientRef = useRef<H264StreamClient | null>(null);
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
-  const schedulerRef = useRef<FrameScheduler | null>(null);
+  const clientRef = useRef<EngineAvVideoStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
+  const schedulerRef = useRef<EngineAvFrameScheduler | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const playbackStartRef = useRef({ mediaTime: 0, wallTime: 0 });
   const viewStateRef = useRef(viewState);
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ videoClient, audioClient, scheduler }) => {
+          clientRef.current = videoClient;
+          audioClientRef.current = audioClient;
+          schedulerRef.current = scheduler;
+        },
+      },
+    });
+  }
 
   useEffect(() => {
     viewStateRef.current = viewState;
@@ -87,49 +105,41 @@ function PanoramaVideoApp(): JSX.Element {
 
   useEffect(() => {
     if (!stream?.streamUrl || !init) return;
-    clientRef.current?.dispose();
-    audioClientRef.current?.dispose();
-    schedulerRef.current?.dispose();
-    const scheduler = new FrameScheduler(init.manifest.media.codec?.fps ?? 25);
-    schedulerRef.current = scheduler;
-    const client = new H264StreamClient({
-      websocketUrl: stream.streamUrl,
-      width: init.manifest.media.dimensions?.width ?? 1920,
-      height: init.manifest.media.dimensions?.height ?? 1080,
-      onFrame: (frame) => scheduler.enqueue(frame),
-      onConnectionChange: setConnected,
-      onError: (nextError) => setError(nextError.message),
-      onStreamEnd: () => {
-        setPlaying(false);
-        postMessage({ type: 'preview:eof' });
-      },
-    });
-    clientRef.current = client;
-    void client.connect();
-
-    let audioClient: AudioStreamClient | null = null;
-    if (stream.audioStreamUrl) {
-      audioClient = new AudioStreamClient({
-        websocketUrl: stream.audioStreamUrl,
-        onError: (nextError) => setError(nextError.message),
+    let cancelled = false;
+    void lifecycleRef.current
+      ?.start(
+        {
+          video: {
+            websocketUrl: stream.streamUrl,
+            width: init.manifest.media.dimensions?.width ?? 1920,
+            height: init.manifest.media.dimensions?.height ?? 1080,
+            onConnectionChange: setConnected,
+            onError: (nextError) => setError(nextError.message),
+            onStreamEnd: () => {
+              setPlaying(false);
+              postMessage({ type: 'preview:eof' });
+            },
+          },
+          audio: stream.audioStreamUrl
+            ? {
+                websocketUrl: stream.audioStreamUrl,
+                onError: (nextError) => setError(nextError.message),
+              }
+            : undefined,
+          fps: init.manifest.media.codec?.fps ?? 25,
+          schedulerMode: 'video',
+        },
+        { audioContext: audioContextRef.current ?? undefined },
+      )
+      .catch((nextError) => {
+        if (!cancelled) {
+          setError(nextError instanceof Error ? nextError.message : String(nextError));
+        }
       });
-      audioClientRef.current = audioClient;
-      void audioClient.connect(audioContextRef.current ?? undefined);
-    }
 
     return () => {
-      client.dispose();
-      audioClient?.dispose();
-      scheduler.dispose();
-      if (clientRef.current === client) {
-        clientRef.current = null;
-      }
-      if (audioClientRef.current === audioClient) {
-        audioClientRef.current = null;
-      }
-      if (schedulerRef.current === scheduler) {
-        schedulerRef.current = null;
-      }
+      cancelled = true;
+      lifecycleRef.current?.stop();
     };
   }, [init, postMessage, stream]);
 
@@ -155,9 +165,7 @@ function PanoramaVideoApp(): JSX.Element {
 
   useEffect(() => {
     return () => {
-      clientRef.current?.dispose();
-      audioClientRef.current?.dispose();
-      schedulerRef.current?.dispose();
+      lifecycleRef.current?.dispose();
       if (audioContextRef.current?.state !== 'closed') {
         audioContextRef.current?.close().catch(() => {});
       }
@@ -183,12 +191,7 @@ function PanoramaVideoApp(): JSX.Element {
     setStream(null);
     schedulerRef.current?.flush();
     audioClientRef.current?.pause();
-    clientRef.current?.dispose();
-    audioClientRef.current?.dispose();
-    schedulerRef.current?.dispose();
-    clientRef.current = null;
-    audioClientRef.current = null;
-    schedulerRef.current = null;
+    lifecycleRef.current?.stop();
     postMessage({ type: 'preview:stop' });
   }, [postMessage]);
 

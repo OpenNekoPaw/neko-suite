@@ -6,12 +6,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { H264StreamClient, AudioStreamClient, FrameScheduler } from '@neko/neko-client';
 import type {
-  FrameSchedulerStats,
+  EngineAvAudioStreamClient,
+  EngineAvFrameScheduler,
+  EngineAvVideoStreamClient,
   AudioStreamStats,
+  FrameSchedulerStats,
   H264StreamClientStats,
 } from '@neko/neko-client';
+import { EngineAvStreamLifecycle } from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { useTranslation } from '../i18n/I18nContext';
 import { VideoControls } from './VideoControls';
@@ -106,19 +109,34 @@ export function VideoPlayer() {
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pipVideoRef = useRef<HTMLVideoElement>(null);
-  const clientRef = useRef<H264StreamClient | null>(null);
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
-  const schedulerRef = useRef<FrameScheduler | null>(null);
+  const clientRef = useRef<EngineAvVideoStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
+  const schedulerRef = useRef<EngineAvFrameScheduler | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playStartTimeRef = useRef<number>(0);
   const playWallTimeRef = useRef<number>(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusThrottleRef = useRef<number>(0);
   const statsThrottleRef = useRef<number>(0);
+  const videoStreamUrlRef = useRef<string | null>(null);
+  const audioStreamUrlRef = useRef<string | null>(null);
   /** Track clock source to detect wall→audio transition */
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
   /** Seek gate. When set, onFrame rejects stale frames outside the post-seek target window. */
   const seekGateRef = useRef<VideoSeekGate | null>(null);
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ videoClient, audioClient, scheduler }) => {
+          clientRef.current = videoClient;
+          audioClientRef.current = audioClient;
+          schedulerRef.current = scheduler;
+        },
+      },
+    });
+  }
 
   // =========================================================================
   // Keyboard shortcut: 'D' toggles stats overlay
@@ -219,6 +237,56 @@ export function VideoPlayer() {
       }
     },
     [renderFrame],
+  );
+
+  const startPreviewVideoLifecycle = useCallback(
+    async (input: { readonly videoStreamUrl?: string; readonly audioStreamUrl?: string }) => {
+      if (input.videoStreamUrl !== undefined) {
+        videoStreamUrlRef.current = input.videoStreamUrl;
+      }
+      if (input.audioStreamUrl !== undefined) {
+        audioStreamUrlRef.current = input.audioStreamUrl;
+      }
+
+      const videoStreamUrl = videoStreamUrlRef.current;
+      if (!videoStreamUrl) {
+        return;
+      }
+
+      const info = mediaInfo;
+      await lifecycleRef.current?.start(
+        {
+          video: {
+            websocketUrl: videoStreamUrl,
+            width: info?.width || 1920,
+            height: info?.height || 1080,
+            onFrame,
+            onConnectionChange: setIsConnected,
+            onError: (err) => {
+              logger.error('Stream error:', err);
+              setError(err.message);
+            },
+          },
+          audio: audioStreamUrlRef.current
+            ? {
+                websocketUrl: audioStreamUrlRef.current,
+                volume,
+                onConnectionChange: (connected) => {
+                  logger.info(`Audio stream connected: ${connected}`);
+                },
+                onError: (err) => {
+                  logger.warn('Audio stream error:', err);
+                },
+              }
+            : undefined,
+          fps: info?.fps || 25,
+          schedulerMode: 'video',
+          videoFrameRoute: 'callback',
+        },
+        { audioContext: audioCtxRef.current ?? undefined },
+      );
+    },
+    [mediaInfo, onFrame, volume],
   );
 
   // =========================================================================
@@ -355,44 +423,13 @@ export function VideoPlayer() {
         logger.info(
           `streamReady received: streamUrl=${streamUrl} audioStreamUrl=${audioStreamUrl}`,
         );
-        // Dispose previous clients if any
-        clientRef.current?.dispose();
-        audioClientRef.current?.dispose();
-        schedulerRef.current?.dispose();
-
-        // Create frame scheduler for A/V sync (adaptive threshold based on fps)
-        schedulerRef.current = new FrameScheduler(mediaInfo?.fps || 25);
-
-        const info = mediaInfo;
-        const client = new H264StreamClient({
-          websocketUrl: streamUrl,
-          width: info?.width || 1920,
-          height: info?.height || 1080,
-          onFrame,
-          onConnectionChange: setIsConnected,
-          onError: (err) => {
-            logger.error('Stream error:', err);
-            setError(err.message);
-          },
+        void startPreviewVideoLifecycle({
+          videoStreamUrl: streamUrl,
+          audioStreamUrl,
+        }).catch((err) => {
+          logger.error('Stream start failed:', err);
+          setError(err instanceof Error ? err.message : String(err));
         });
-        clientRef.current = client;
-        client.connect();
-
-        // Start audio stream if available, passing pre-created AudioContext
-        if (audioStreamUrl) {
-          const audioClient = new AudioStreamClient({
-            websocketUrl: audioStreamUrl,
-            volume,
-            onConnectionChange: (connected) => {
-              logger.info(`Audio stream connected: ${connected}`);
-            },
-            onError: (err) => {
-              logger.warn('Audio stream error:', err);
-            },
-          });
-          audioClientRef.current = audioClient;
-          audioClient.connect(audioCtxRef.current ?? undefined);
-        }
         break;
       }
 
@@ -406,43 +443,13 @@ export function VideoPlayer() {
         };
         logger.info(`streamReconnect: video=${reconnStreamUrl} audio=${reconnAudioUrl}`);
 
-        // Reconnect H264 client
-        if (reconnStreamUrl) {
-          clientRef.current?.dispose();
-          schedulerRef.current?.dispose();
-          schedulerRef.current = new FrameScheduler(mediaInfo?.fps || 25);
-          const info = mediaInfo;
-          const client = new H264StreamClient({
-            websocketUrl: reconnStreamUrl,
-            width: info?.width || 1920,
-            height: info?.height || 1080,
-            onFrame,
-            onConnectionChange: setIsConnected,
-            onError: (err) => {
-              logger.error('Stream reconnect error:', err);
-              setError(err.message);
-            },
-          });
-          clientRef.current = client;
-          client.connect();
-        }
-
-        // Reconnect audio client
-        if (reconnAudioUrl) {
-          audioClientRef.current?.dispose();
-          const audioClient = new AudioStreamClient({
-            websocketUrl: reconnAudioUrl,
-            volume,
-            onConnectionChange: (connected) => {
-              logger.info(`Audio stream reconnected: ${connected}`);
-            },
-            onError: (err) => {
-              logger.warn('Audio stream reconnect error:', err);
-            },
-          });
-          audioClientRef.current = audioClient;
-          audioClient.connect(audioCtxRef.current ?? undefined);
-        }
+        void startPreviewVideoLifecycle({
+          videoStreamUrl: reconnStreamUrl,
+          audioStreamUrl: reconnAudioUrl,
+        }).catch((err) => {
+          logger.error('Stream reconnect failed:', err);
+          setError(err instanceof Error ? err.message : String(err));
+        });
         break;
       }
 
@@ -460,14 +467,9 @@ export function VideoPlayer() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      schedulerRef.current?.dispose();
-      clientRef.current?.dispose();
       // Mute immediately to prevent audio pop, then dispose
-      const ac = audioClientRef.current;
-      if (ac) {
-        ac.setVolume(0);
-        ac.dispose();
-      }
+      audioClientRef.current?.setVolume(0);
+      lifecycleRef.current?.dispose();
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         audioCtxRef.current.close().catch(() => {});
       }
@@ -560,7 +562,7 @@ export function VideoPlayer() {
       // Flush queued frames so stale pre-seek frames aren't rendered
       schedulerRef.current?.flush();
       // Reset decoders so they start clean from the next keyframe
-      clientRef.current?.resetDecoder();
+      clientRef.current?.resetDecoder?.();
       audioClientRef.current?.resetClock();
       // Audio clock is re-prebuffering, so clock source returns to wall
       clockSourceRef.current = 'wall';

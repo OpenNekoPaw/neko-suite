@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ConsoleLogger, LogLevel, type AudioStreamConfig } from '@neko/shared';
+import type { AudioStreamConfig } from '@neko/shared';
 import type { AudioStreamClient } from '@neko/neko-client';
 import { useMediaDiffRuntime } from '../runtime/MediaDiffRuntimeContext';
+import { getLogger } from '../utils/logger';
 
-const logger = new ConsoleLogger('useAudioDiffPlayback', LogLevel.Info);
+const logger = getLogger('useAudioDiffPlayback');
 
 export interface UseAudioDiffPlaybackOptions {
   audioStreamConfig: AudioStreamConfig | null;

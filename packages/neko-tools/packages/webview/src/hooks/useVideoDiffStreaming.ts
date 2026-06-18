@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react';
-import { ConsoleLogger, LogLevel, type StreamConfig } from '@neko/shared';
+import type { StreamConfig } from '@neko/shared';
 import type { AudioStreamClient, H264StreamClient } from '@neko/neko-client';
 import { useMediaDiffRuntime } from '../runtime/MediaDiffRuntimeContext';
 import { FramePairBuffer } from '../components/MediaDiff/streaming/FramePairBuffer';
 import { DiffRenderer, type DiffMode } from '../components/MediaDiff/streaming/DiffRenderer';
+import { getLogger } from '../utils/logger';
 
-const logger = new ConsoleLogger('useVideoDiffStreaming', LogLevel.Info);
+const logger = getLogger('useVideoDiffStreaming');
 
 const SEEK_FILTER_TOLERANCE_SEC = 2.0;
 

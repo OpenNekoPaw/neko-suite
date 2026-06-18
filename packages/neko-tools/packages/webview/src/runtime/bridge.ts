@@ -1,4 +1,4 @@
-import { getVSCodeAPI } from '@neko/shared/vscode';
+import { getState, postMessage, setState } from '@neko/shared/vscode';
 
 export interface IWebviewBridge {
   postMessage(message: unknown): void;
@@ -9,15 +9,15 @@ export interface IWebviewBridge {
 
 class VSCodeWebviewBridge implements IWebviewBridge {
   postMessage(message: unknown): void {
-    getVSCodeAPI()?.postMessage(message);
+    postMessage(message);
   }
 
   getState<T>(): T | undefined {
-    return getVSCodeAPI()?.getState<T>();
+    return getState<T>();
   }
 
   setState<T>(state: T): void {
-    getVSCodeAPI()?.setState(state);
+    setState(state);
   }
 
   subscribe(listener: (message: unknown) => void): () => void {

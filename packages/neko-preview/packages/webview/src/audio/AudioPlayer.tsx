@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { AudioStreamClient } from '@neko/neko-client';
+import { EngineAvStreamLifecycle, type EngineAvAudioStreamClient } from '@neko/neko-client';
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { useTranslation } from '../i18n/I18nContext';
 import { CoverView } from './CoverView';
@@ -50,10 +50,21 @@ export function AudioPlayer() {
   const [lyrics, setLyrics] = useState<LrcLine[]>([]);
 
   // Refs
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   const playStartTimeRef = useRef(0);
   const playWallTimeRef = useRef(0);
   const statusThrottleRef = useRef(0);
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ audioClient }) => {
+          audioClientRef.current = audioClient;
+        },
+      },
+    });
+  }
 
   // =========================================================================
   // Time tracking during playback
@@ -112,13 +123,21 @@ export function AudioPlayer() {
   // Cleanup on unmount — dispose audio client
   useEffect(() => {
     return () => {
-      const client = audioClientRef.current;
-      if (client) {
-        client.dispose();
-        audioClientRef.current = null;
-      }
+      lifecycleRef.current?.dispose();
     };
   }, []);
+
+  const startAudioLifecycle = useCallback(
+    async (websocketUrl: string) => {
+      await lifecycleRef.current?.start({
+        audio: {
+          websocketUrl,
+          volume,
+        },
+      });
+    },
+    [volume],
+  );
 
   // =========================================================================
   // Extension message handlers
@@ -149,14 +168,7 @@ export function AudioPlayer() {
         const streamMsg = msg as PreviewStreamReadyMessage;
         const wsUrl = streamMsg.payload.audioStreamUrl ?? streamMsg.payload.streamUrl;
         logger.info('Audio stream ready', wsUrl);
-        // Dispose previous client if any (e.g. stream recreation)
-        const prev = audioClientRef.current;
-        if (prev) {
-          prev.dispose();
-        }
-        const client = new AudioStreamClient({ websocketUrl: wsUrl, volume });
-        audioClientRef.current = client;
-        client.connect().catch((err) => {
+        startAudioLifecycle(wsUrl).catch((err) => {
           logger.error('AudioStreamClient connect failed', err);
         });
         break;
@@ -167,13 +179,7 @@ export function AudioPlayer() {
         const wsUrl = reconnectMsg.payload.audioStreamUrl;
         if (!wsUrl) break;
         logger.info('Audio stream reconnect', wsUrl);
-        const prev = audioClientRef.current;
-        if (prev) {
-          prev.dispose();
-        }
-        const client = new AudioStreamClient({ websocketUrl: wsUrl, volume });
-        audioClientRef.current = client;
-        client.connect().catch((err) => {
+        startAudioLifecycle(wsUrl).catch((err) => {
           logger.error('AudioStreamClient reconnect failed', err);
         });
         break;
@@ -256,17 +262,6 @@ export function AudioPlayer() {
     },
     [isPlaying, currentTime, postMessage],
   );
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      const client = audioClientRef.current;
-      if (client) {
-        client.dispose();
-        audioClientRef.current = null;
-      }
-    };
-  }, []);
 
   // =========================================================================
   // Derived values

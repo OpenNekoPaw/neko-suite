@@ -4,6 +4,9 @@ import type { Group } from 'three';
 import type { VRM } from '@pixiv/three-vrm';
 import { useLiveStore } from '../stores/liveStore';
 import { mapVmcToVrmExpressions } from '../tracking/vmcMapping';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('AvatarViewer');
 
 interface AvatarViewerProps {
   url: string;
@@ -41,7 +44,7 @@ export function AvatarViewer({ url }: AvatarViewerProps) {
           setAvatarLoaded(true);
         }
       } catch (err) {
-        console.error('[AvatarViewer] Failed to load VRM:', err);
+        logger.error('Failed to load VRM', err);
         setAvatarLoaded(false);
       }
     };

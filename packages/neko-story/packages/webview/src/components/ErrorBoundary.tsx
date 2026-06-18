@@ -1,68 +1,23 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { WebviewErrorBoundary } from '@neko/ui/error-boundary';
+import type { ReactNode } from 'react';
 import { t } from '../i18n';
+import { getLogger } from '../utils/logger';
 
-const logger = new ConsoleLogger('ErrorBoundary', LogLevel.Info);
+const logger = getLogger('ErrorBoundary');
 
 interface ErrorBoundaryProps {
-  children: ReactNode;
+  readonly children: ReactNode;
 }
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    logger.error('Caught error', { error, componentStack: errorInfo.componentStack });
-  }
-
-  override render(): ReactNode {
-    if (this.state.hasError && this.state.error) {
-      return (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            padding: '1rem',
-            color: 'var(--vscode-editor-foreground)',
-            backgroundColor: 'var(--vscode-editor-background)',
-          }}
-        >
-          <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#x26A0;&#xFE0F;</div>
-          <h2 style={{ marginBottom: '0.5rem' }}>{t('error.title')}</h2>
-          <p style={{ fontSize: '0.875rem', opacity: 0.7, marginBottom: '1rem' }}>
-            {this.state.error.message}
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--vscode-button-background)',
-              color: 'var(--vscode-button-foreground)',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            {t('error.retry')}
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
+export function ErrorBoundary({ children }: ErrorBoundaryProps): ReactNode {
+  return (
+    <WebviewErrorBoundary
+      logger={logger}
+      title={t('error.title')}
+      retryLabel={t('error.retry')}
+      className="flex h-full flex-col items-center justify-center p-4 text-center text-[var(--vscode-editor-foreground)] bg-[var(--vscode-editor-background)]"
+    >
+      {children}
+    </WebviewErrorBoundary>
+  );
 }

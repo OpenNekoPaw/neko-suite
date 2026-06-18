@@ -1,3 +1,4 @@
+import { formatMediaTimeFromMilliseconds } from '@neko/neko-client';
 import { Badge, Button, Select } from '@neko/ui/primitives';
 import { useLiveStore } from '../stores/liveStore';
 import type { TrackingMode } from '../types/tracking';
@@ -42,13 +43,6 @@ export function TrackingPanel() {
     } else {
       onStartRecording?.(true);
     }
-  };
-
-  const formatTime = (ms: number): string => {
-    const totalSec = Math.floor(ms / 1000);
-    const min = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    return `${min}:${sec.toString().padStart(2, '0')}`;
   };
 
   const isRecording = recordingState === 'recording';
@@ -106,7 +100,7 @@ export function TrackingPanel() {
               }}
             />
             <span style={{ color: '#ef4444', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
-              {formatTime(recordingElapsedMs)}
+              {formatMediaTimeFromMilliseconds(recordingElapsedMs)}
             </span>
           </Badge>
         )}
