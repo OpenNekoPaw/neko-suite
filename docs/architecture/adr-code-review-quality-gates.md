@@ -40,6 +40,9 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 
 - 不新增生产 `any`、不安全 `as Type` 或正式 `console.log` 日志。
 - 不破坏 TypeScript `strict`、`noUncheckedIndexedAccess`、`noImplicitOverride`。
+- 设计复杂度符合本地 VSCode 客户端 + 本地 Rust Engine 的产品边界；避免为了假想云端多租户、分布式服务治理、远程规模或未知未来需求引入无调用方的 interface、factory、registry、strategy、plugin hook、feature flag、配置层或协议层。
+- 防御性代码只覆盖真实运行边界：VSCode/Webview 沙箱、CSP、Extension/Engine 通信、本地文件与路径、媒体 codec/Range、异步取消与资源释放、外部 AI/market provider、用户数据和安全/信任边界；宽泛 `try/catch`、静默默认值、fallback、重复校验、no-op guard 或吞错不能掩盖本应失败的开发错误。
+- 默认采用 fail-visible：contract mismatch、不可达状态、未实现路径、缺失依赖、非法 message、未知 schema/version、错误配置或未注册 handler/renderer/adapter 应直接抛错、返回明确 diagnostic 或让测试失败；只有保护用户数据、外部 provider、发布兼容或安全/信任边界时，才允许显式恢复、迁移或降级。
 - Webview 不导入 `vscode`、Node API 或 Extension 实现。
 - Extension Host 不导入 React/ReactDOM 或 Webview 实现。
 - TypeScript 不重复 Rust Engine 已拥有的权威计算。
@@ -93,6 +96,7 @@ L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通�
 - 新路径引入时，旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口默认删除或改为 fail-closed，避免验证继续走旧路径。
 - 兼容 shim 只有在保护有价值本地数据、已记录公共契约或外部信任边界时才保留，并且有 owner、replacement、验证命令、移除条件和到期任务。
 - 开发和测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；只有明确标记为迁移、拒绝或诊断测试时才可观测旧路径。
+- 代码缺陷不得被兜底或兼容逻辑吞掉：缺失新实现、contract mismatch、非法状态、未知消息、错误配置、未注册 handler/renderer/adapter 时，应 fail-visible；不能回退旧实现、默认空数据、默认成功状态或 no-op。
 - 新路径验收必须是路径级验收，不得只断言最终结果成功；review 必须确认测试断言 canonical path、新 handler、新 renderer、新 adapter 或新 contract 被命中，并通过 spy、counter、log assertion 或将 legacy path poison 成抛错来证明旧路径未参与。
 - 验证必须证明 canonical path 默认命中；如果 legacy path 仍可触发，必须有显式 feature flag、迁移入口、fail-closed diagnostic、telemetry/log assertion 或测试覆盖，并断言旧路径不会为新路径请求返回成功结果。
 - legacy fixture、旧字段 fallback、旧 message handler、旧 renderer 或旧 command alias 的测试不能作为新路径完成证据，只能作为迁移/诊断证据。

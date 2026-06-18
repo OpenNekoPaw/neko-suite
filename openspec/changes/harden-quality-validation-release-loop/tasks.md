@@ -12,6 +12,8 @@
 - [x] 1.10 Document residual/debt and unused-code checks as development validation evidence.
 - [x] 1.11 Document that a legacy-path hit during new-path development/validation must fail closed instead of returning legacy success.
 - [x] 1.12 Document path-level new-path acceptance so result-only fallback tests cannot prove a new path works.
+- [x] 1.13 Document local-client proportional design and defensive-code limits to avoid overdesign and overdefense.
+- [x] 1.14 Document fail-visible handling so fallback, compatibility, defaults, and no-ops cannot hide code defects.
 
 ## 2. Quality Gate Implementation
 

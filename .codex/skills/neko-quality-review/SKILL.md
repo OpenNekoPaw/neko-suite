@@ -34,6 +34,9 @@ Source of truth:
    - Does it fit the existing architecture?
    - How does it reduce coupling?
    - Is it easy to extend and test?
+   - Is the complexity proportional to a local VSCode client plus local Rust Engine?
+   - Does defensive code protect real boundaries instead of hiding development errors?
+   - Do code defects and contract violations fail visibly instead of falling back, defaulting, or no-oping?
 
 4. For multi-module changes or new functionality, apply the five-layer analysis:
    - Responsibility: who owns data, behavior, and lifecycle?
@@ -94,6 +97,9 @@ Always check:
 
 - No new production `any`, unsafe `as Type`, or formal logging via `console.log`.
 - No circular dependency or broken layer direction.
+- No overdesign for the local-client/local-engine product boundary: avoid speculative interfaces, factories, registries, strategies, plugin hooks, feature flags, config layers, protocol layers, or generic platform scaffolding without a current caller, real external provider, release, or trust boundary.
+- No overdefense that hides defects: broad `try/catch`, silent defaults, fallback success, repeated validation, no-op guards, retries, caches, or circuit-breaker-style logic must protect a real VSCode/Webview, local file, Engine process, media, external provider, user-data, release, or security boundary and fail visibly for development errors.
+- Fail-visible defect handling is enforced: missing new implementations, contract mismatches, unreachable states, illegal messages, unknown schema/version values, bad configuration, missing dependencies, or unregistered handlers/renderers/adapters throw, return typed diagnostics, or fail tests visibly instead of returning empty data, success defaults, no-ops, silent degradation, or old compatibility behavior.
 - Webview code does not import `vscode`.
 - Extension host code does not import React/ReactDOM.
 - TypeScript does not duplicate Rust engine authoritative computation.

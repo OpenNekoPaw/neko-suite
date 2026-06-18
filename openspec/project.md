@@ -14,6 +14,10 @@ OpenSpec changes in this repository must preserve the product direction:
   device I/O, heavy computation, and engine-owned state.
 - Keep TypeScript focused on UI, orchestration, host adapters, shared contracts,
   and typed projections.
+- Keep design complexity proportional to a local VSCode client plus local Rust
+  Engine. Do not import cloud multi-tenant, distributed-service, remote-scale, or
+  speculative platform architecture unless a real external provider, release, or
+  trust boundary requires it.
 - Favor creator-facing, end-to-end workflows over isolated feature surfaces.
 - Maintain clear package boundaries so individual creative domains can evolve
   without cross-extension coupling.
@@ -78,6 +82,14 @@ For multi-module changes, include the five-layer analysis:
   default. Chrome, the generic Browser plugin, Playwright, or a Vite dev server
   in a regular browser must not be used as the default acceptance surface unless
   the user explicitly asks for browser-compatibility validation.
+- Proportionality: why is each abstraction, registry, factory, feature flag,
+  config layer, fallback, retry, or guard required for this local client/engine
+  boundary now?
+- Fail-visible behavior: which contract mismatches, unreachable states,
+  unimplemented paths, missing dependencies, illegal messages, unknown
+  schema/version values, bad configuration, or unregistered handlers/renderers
+  fail directly instead of falling back, returning empty data, returning success,
+  or no-oping?
 
 Designs must record rejected alternatives when they avoid a tempting but unsafe
 shortcut, especially around Engine authority, Webview sandboxing, runtime handles,
@@ -173,6 +185,11 @@ Breaking migrations must be explicit, not incidental:
   fail-closed diagnostic, or emit assertable telemetry/log failure instead of
   returning a legacy success result. Only tests explicitly scoped to migration,
   rejection, or diagnostics may intentionally observe the legacy path.
+- Do not let fallback or compatibility logic hide code defects. Missing new
+  implementations, contract mismatches, illegal states, unknown messages, bad
+  configuration, or unregistered handlers/renderers/adapters should fail visibly
+  instead of falling back to old implementations, empty data, success defaults,
+  or no-ops.
 - Require path-level acceptance for new paths. Do not accept result-only tests
   that can pass through fallback behavior. Tests must assert that the canonical
   path, new handler, new renderer, new adapter, or new contract was hit, and

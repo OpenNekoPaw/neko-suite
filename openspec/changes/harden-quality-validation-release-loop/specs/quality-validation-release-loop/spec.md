@@ -50,6 +50,27 @@ Development validation SHALL include residual/debt and unused-code checks when a
 - **THEN** the validation evidence MUST record `pnpm check:legacy-debt` and `pnpm check:unused`, or record that `pnpm ci:local` / `pnpm check:quality` covered the relevant checks
 - **AND** new residual/debt matches MUST be removed, renamed, or recorded in the appropriate debt ledger with owner, replacement, validation, and removal criteria
 
+### Requirement: Local-client proportional design
+
+Neko Suite changes SHALL keep architecture and defensive code proportional to a local VSCode client plus local Rust Engine.
+
+#### Scenario: New abstraction or defensive layer is introduced
+
+- **WHEN** a change introduces an interface, factory, registry, strategy, plugin hook, feature flag, configuration layer, protocol layer, fallback, retry, cache, validation guard, or broad error handler
+- **THEN** the proposal, design, PR notes, or delivery summary MUST explain the real local client/engine boundary, current caller, external provider, release, or trust boundary that requires it
+- **AND** cloud multi-tenant, distributed-service, remote-scale, or speculative future requirements MUST NOT justify extra layers unless they map to a real external provider, marketplace/release, security, or user-data boundary
+- **AND** defensive code MUST fail visibly for development errors and MUST NOT hide them behind silent defaults, broad catch blocks, no-op guards, repeated validation, or fallback success
+
+### Requirement: Fail-visible defects
+
+Code defects and contract violations SHALL be surfaced directly instead of hidden by fallback, compatibility, or no-op behavior.
+
+#### Scenario: Development error or contract violation is encountered
+
+- **WHEN** code encounters a missing new implementation, contract mismatch, unreachable state, illegal message, unknown schema/version, bad configuration, missing dependency, or unregistered handler, renderer, or adapter
+- **THEN** it MUST throw, return a typed diagnostic, or fail the test visibly
+- **AND** it MUST NOT return empty data, default success, no-op, silently degrade, or fall back to old compatibility behavior unless the path is explicitly scoped to user-data recovery, migration, external provider degradation, release compatibility, or security/trust handling
+
 ### Requirement: Engine validation surface
 
 Changes that affect Rust Engine actions, streams, file access, runtime state, native packaging, or EngineClient contracts SHALL include Engine-specific validation evidence.
