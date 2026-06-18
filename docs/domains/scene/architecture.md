@@ -6,6 +6,8 @@
 
 `neko-model` 是 `.nkm profile: 2d` 和 `.nkm profile: 3d` 的创作入口所有者；2D Scene 不通过 `neko-puppet` 创建或维护。`neko-live` 可以运行和编排 Live profile，但 Live profile 的 durable scene/stage 真值仍属于 `.nkm`。
 
+Runtime 上，`.nkm profile: 2d | 3d | live` 通过 `SceneService` 和 Scene profile descriptors 进入 `runtime-scene`。`.nkm profile: 2d` 即使首批 2D 面板尚未完整实现，也必须显示明确 degraded/unavailable diagnostics，不能回退成 `.nkp` 或 `neko-puppet` workflow。
+
 ## 模块职责
 
 | 参与者        | 职责                                                                      |
@@ -55,10 +57,11 @@ Scene 编辑器按“快速搭建可预览场景”和“完整 Scene/LookDev au
 ## 稳定边界
 
 - `.nkm` 可以引用 `.nks` 图像素材和 `.nkp` 角色，但不复制它们的编辑真值。
+- `.nkm` 放置 Puppet actor 时只保存 stable `.nkp` project/asset/resource refs，以及 Scene-owned placement、routing、timeline 或 stage control；不得复制 `.nkp` parameters、motions、expressions、physics 或 tracking mapping truth。
 - `.nkm profile: 2d` 是 generic 2D Scene 的唯一 durable authoring profile；tilemap、scene camera、2D light、parallax、particle 和 scene graph 不保存到 `.nkp`。
 - Live 是 `.nkm profile: live`，不是独立 `.nklive` 格式。
 - Live profile 保存舞台、actor、routing、camera、合成和 session 可复建配置；角色参数和动作真值仍归 `.nkp`。
-- Engine 侧可以把 Live 作为 `runtime-scene` 的 profile 或未来抽出 `runtime-stage`，但领域格式不随内部 runtime 拆分而变化。
+- Engine 侧当前通过 Scene profile descriptors 暴露 `2d`、`3d` 和 `live`；未来即使抽出 `runtime-stage`，领域格式仍保持 `.nkm` Scene/Stage truth，不随内部 runtime 拆分而变化。
 
 ## 验证
 

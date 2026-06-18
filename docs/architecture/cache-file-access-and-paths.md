@@ -1,6 +1,6 @@
 # 缓存、文件读写服务与路径变量
 
-更新日期：2026-06-15
+更新日期：2026-06-17
 
 本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
 
@@ -9,11 +9,15 @@
 - 让所有创作领域使用一致的路径保存、路径解析、文件读取和缓存投影规则。
 - 区分 source path、stable ref、cache artifact、runtime handle，避免把本机状态写入项目事实。
 - 让 Webview、Agent、Dashboard、Engine、Assets、Documents 等消费者通过 Host 侧服务读取内容，而不是直接扫描文件系统或缓存目录。
+- 保持项目记录和二进制数据分离：`.nk*` 文件适合 Git 同步轻量事实，workspace、资产库、媒体库和 OSS 负责持久数据文件。
 
 ## 核心原则
 
 - 持久项目事实只保存 workspace-relative path、`${VAR}/path`、source ref、`ResourceRef`、asset/entity ID 和 provenance。
-- 绝对路径只允许出现在本机设置、Host adapter、短生命周期运行态，或明确标注的导入来源记录中。
+- 绝对路径只允许出现在本机设置、Host adapter、短生命周期运行态，或用户明确选择的迁移/资产创建来源记录中。
+- Add 只把已经 durable 的 source/ref 加入领域文档；Link 直接引用 workspace、资产库、OSS 或 `${VAR}` 下的文件；Create Asset 先把 bytes 落成正式文件或资产，再 Add。
+- `Downloads`、`Desktop`、temp 和任意未纳管绝对路径不是隐式导入来源；用户必须明确移入 workspace/资产库、配置路径变量，或取消添加。
+- Webview `File`、blob、bytes、粘贴截图和 AI 生成内容必须先经 Host 侧 Create Asset 获得对应二进制文件或资产对象，不能直接写入 `.nk*`。
 - Webview 不直接读取文件系统，不扫描 `.neko/.cache/`，不保存 `asWebviewUri(...)` 结果。
 - 文件读写属于 Extension Host、平台层或 Engine 受控接口；Webview 和纯 UI 包只消费投影 DTO。
 - 交互预览 cache-first，离线导出、打包、校验 source-first。
@@ -70,7 +74,7 @@ Runtime projection
 | ------------------------- | --------------------- | ------------------------------------------- |
 | workspace-relative path   | 是                    | 项目内源文件、项目格式引用                  |
 | `${VAR}/path`             | 是                    | 团队共享媒体库、外部素材库、可配置 root     |
-| absolute local path       | 默认否                | Host 运行时、local override、一次性导入来源 |
+| absolute local path       | 默认否                | Host 运行时、local override、显式迁移来源   |
 | Webview URI               | 否                    | 当前 Webview 展示                           |
 | Engine token / stream URL | 否                    | 当前 Engine session                         |
 | cache-relative path       | 只允许 cache manifest | 缓存内部定位，不作为项目 source             |
@@ -83,13 +87,13 @@ Runtime projection
 | `neko/settings.json` media libraries  | Workspace / Team | 团队共享媒体库变量名和原始路径   |
 | `.neko/settings.local.json` overrides | User / Machine   | 本机路径覆盖，不提交             |
 | extension/global storage              | User / Machine   | 私有缓存和会话数据，不写项目事实 |
-| explicit import root                  | Session / Intent | 一次性导入或窄授权 root          |
+| explicit asset/create root            | Session / Intent | 一次性资产创建或窄授权 root      |
 
 ### 解析规则
 
 - 写入项目事实前，优先把本地路径收缩为 workspace-relative path。
 - 不在 workspace 内时，尝试收缩为已声明媒体库变量 `${VAR}/path`。
-- 无法收缩的绝对路径不能静默写入项目事实；应走导入、注册媒体库、local override 或返回诊断。
+- 无法收缩的绝对路径不能静默写入项目事实；应提示用户移入 workspace/资产库、配置 `${VAR}`、执行显式 Create Asset，或返回诊断。
 - 变量名是契约，变量值是环境配置。跨机器同步的是变量名和相对路径，不是本机绝对路径。
 - 路径解析失败应返回 unresolved、unauthorized、missing 或 non-portable，不应猜测相邻文件。
 
@@ -101,7 +105,7 @@ Runtime projection
 | ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------- |
 | `PathResolver`               | `${VAR}/path`、workspace-relative、运行时绝对路径之间的转换               | 缓存选择、Webview 投影、导出语义          |
 | `ContentAccessService`       | 按读取意图选择 source、cache、proxy、Engine source、bytes 或投影          | 写入新 source、管理实体或素材事实         |
-| `ContentIngestService`       | 导入外部文件、注册已有 source、提升 generated output、委托 cache artifact | Webview 展示、低层 range 读取             |
+| `ContentIngestService`       | 执行 Host 侧 Add/Link/Create Asset、注册 durable source、落盘 byte-only 输入 | Webview 展示、低层 range 读取、隐式复制未纳管文件 |
 | `ResourceCacheService`       | `ResourceRef`/variant 的 materialize、resolve、project、invalidate、gc    | 原始素材身份、最终导出输入                |
 | `LocalResourceAccessService` | Webview roots 授权和 `asWebviewUri(...)` 投影                             | 缓存物化、source fingerprint、离线读取    |
 | Engine File Access           | 大型二进制、range、container entry、Engine 可读 source token              | 项目路径身份、Webview URI、cache manifest |
@@ -111,7 +115,7 @@ Runtime projection
 
 `@neko/shared/project-file-io` 是 JSON `nk*` 项目文件的稳定 host 持久化入口。`.nkv`、`.nkc`、`.nks`、`.nkp`、`.nkm`、`.nka` 等格式继续由各自 domain codec 拥有 schema、验证、迁移、默认值和序列化；Extension Host 通过 `ProjectFileStore` 调用注册的 `ProjectFormatCodec`，并在写入前应用对应的 `PortableSourcePathPolicy`。
 
-`ProjectFileStore` 负责项目文件生命周期：load、save、save-as、backup、revert、diagnostics、只读 future-version 状态、串行化写入和 best-effort atomic write。它通过注入的 `ProjectFileOps` 执行文件操作，不导入 VS Code API；VS Code 运行面使用 `@neko/shared/vscode/extension` 的 `createVSCodeProjectFileIoAdapter` 连接 `workspace.fs`、workspace roots、document URI、路径变量和授权 roots。
+`ProjectFileStore` 负责项目文件生命周期：load、save、save-as、backup、revert、diagnostics、只读 future-version 状态、串行化写入和 best-effort atomic write。它通过注入的 `ProjectFileOps` 执行文件操作，不导入 VS Code API；VS Code 运行面使用 `@neko/shared/vscode/extension` 的 `createVSCodeProjectFileIoAdapter` 连接 `workspace.fs`、workspace roots、document URI、路径变量和授权 roots。打开、加载、迁移和解析投影不得触发项目保存；autosave 必须等文档完成打开基线建立并有用户/系统编辑原因后才能写入。
 
 新增或迁移 `nk*` host 持久化入口时，应复用 `ProjectFileStore` 和 codec registry，而不是在具体 editor provider 中重新实现 `JSON.parse/stringify`、`workspace.fs.writeFile`、路径收缩、backup 或 future-version 逻辑。Webview 仍只能通过 typed message / document host 发送编辑和 add-source intent，不能写项目文件，也不能把 `File.name`、blob URL、Webview URI、Engine token、stream id、preview URL、cache path 或 `cachePath` 作为 durable source identity。
 
@@ -131,19 +135,44 @@ Runtime projection
 
 如果 `final-export`、`package` 或 `verify` 收到 thumbnail、preview、proxy、Webview URI、blob URL、runtime token 或 legacy `cachePath`，应返回 diagnostic，而不是复制缓存文件。用户明确选择 draft/proxy 导出时，必须在结果中记录使用了派生物。
 
-## 写入与导入
+## Add / Link / Create Asset
 
-写入项目事实前必须先判断写入对象是 source、cache artifact、runtime state 还是用户确认事实。
+写入项目事实前必须先判断写入对象是 durable source、byte-only input、cache artifact、runtime state 还是用户确认事实。默认入口使用 Add / Link / Create Asset，而不是把所有外部来源都叫做 import。
 
 | Mode                       | 用途                                           | 输出                                 |
 | -------------------------- | ---------------------------------------------- | ------------------------------------ |
-| `import-source`            | 外部图片、文档、模型、音视频导入项目或媒体库   | stable source ref，可带 prewarm hint |
-| `register-existing-source` | 注册已有 workspace/media-library/`${VAR}` 文件 | 收缩后的 source ref                  |
-| `generated-output`         | Agent/tool 生成媒体提升为项目 generated asset  | promoted generated source ref        |
+| `add`                      | 把已 durable 的 source/ref 加入领域项目         | 项目内 portable ref 或 domain record |
+| `link`                     | 直接引用 workspace/资产库/OSS/`${VAR}` 文件     | 收缩后的 source ref                  |
+| `create-asset`             | 将 Webview bytes、粘贴截图、AI 输出落为正式资产 | stable source ref，可带 prewarm hint |
 | `stage-export`             | 记录最终导出或 package 输出                    | staged output，不改写项目 source ref |
 | `cache-artifact`           | 缩略图、文档页图、proxy、preview variant 预热  | cache entry，不生成项目 source       |
 
-未 promoted 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Agent durable result、package manifest 或最终导出输入。
+来源处理矩阵：
+
+| 输入来源                                      | 处理方式                | 说明                                   |
+| --------------------------------------------- | ----------------------- | -------------------------------------- |
+| workspace/project 文件                        | `link` 后 `add`         | 保存 workspace-relative path           |
+| 资产库、媒体库、OSS 或配置的 `${VAR}` 文件     | `link` 后 `add`         | 保存 `${VAR}/path`、asset ref 或 OSS ref |
+| 允许的 remote source                          | `add`                   | 仅限字段明确允许 remote source identity |
+| `Downloads`、`Desktop`、temp、未纳管绝对路径   | 诊断                    | 提示移入 workspace/资产库或配置变量    |
+| Webview `File`、blob、bytes                   | `create-asset` 后 `add` | Host 负责命名、落盘、资产记录和诊断    |
+| paste 截图、AI 生成 bytes                     | `create-asset` 后 `add` | 先获得真实二进制文件或资产对象         |
+| cache、proxy、thumbnail                       | 诊断                    | 不提升为 source，不作为项目事实         |
+| Webview URI、blob URL、Engine token、stream id | 诊断                    | 仅为当前会话 runtime handle            |
+
+未 Create Asset 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Cut、Audio、Sketch、Puppet、Model、Agent durable result、package manifest 或最终导出输入。
+
+各领域的 Add handler 只保存引用和领域编辑事实，不把大型二进制封装进 `.nk*`：
+
+| 类型                         | 持久化策略                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| 视频、音频、图片             | 直接 Link durable file/source，播放和缩略图走 Engine/Cache 投影             |
+| 字幕                         | 可 Link 外部字幕；用户选择可编辑字幕时，转换为领域 cue 记录并保留 provenance |
+| `.cube` LUT                  | Link 外部 LUT；解析结果是运行时/缓存投影                                    |
+| PSD                          | 可 Link 原始 PSD；作为 Sketch 可编辑层时，保存 source ref、图层记录和派生资产 |
+| `.glb`、`.gltf`、`.vrm`      | Link durable model source；贴图和 sibling resources 通过 locator/解析服务读取 |
+| `.moc3`、Live2D 目录或 zip   | Link durable puppet source；zip 只解析 index/locator，不嵌入二进制          |
+| raster layer / generated art | 长期使用 asset/dataRef；避免把大块 base64 写入 `.nks`                       |
 
 ## ResourceRef 与缓存变体
 
@@ -184,7 +213,7 @@ source fact / ResourceRef
 | `stale`         | source fingerprint、provider version 或参数已变化 | 可展示旧预览并安排重建，离线操作回 source |
 | `materializing` | provider 正在生成或刷新                           | UI 显示进行中，读者等待或降级             |
 | `unsupported`   | 没有 provider 或格式不支持                        | 返回诊断，不猜测 fallback                 |
-| `unauthorized`  | 当前 workspace/root/token 不允许访问              | 提示授权或导入，不绕过 Host               |
+| `unauthorized`  | 当前 workspace/root/token 不允许访问              | 提示授权、重新 Link 或 Create Asset，不绕过 Host |
 | `failed`        | provider 执行失败                                 | 保留错误诊断，可重试                      |
 | `non-portable`  | 只在 extension-private 或本机会话内有效           | 不能写入跨包持久 payload                  |
 
@@ -207,7 +236,7 @@ source fact / ResourceRef
 | 触发         | 适合自动缓存                                | 不适合自动缓存                        |
 | ------------ | ------------------------------------------- | ------------------------------------- |
 | 项目打开     | manifest、轻量 metadata、已有 index summary | 全量视频 probing、OCR、ASR、embedding |
-| 素材导入     | 文件 identity、基础 metadata、小缩略图      | 大尺寸 proxy、复杂语义索引            |
+| 素材添加/创建 | 文件 identity、基础 metadata、小缩略图      | 大尺寸 proxy、复杂语义索引            |
 | Webview 可见 | 当前 viewport 周边 thumbnail/page-image     | 不可见列表的所有高清变体              |
 | Agent 上下文 | 有界片段、低分辨率图、transcript chunk      | 无来源的大型 scratch 内容             |
 | 用户显式预览 | preview/proxy/fov-crop                      | 与当前 intent 无关的表现              |

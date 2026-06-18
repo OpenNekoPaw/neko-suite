@@ -16,9 +16,9 @@ This design is an L3 project-format and file/resource-access change. It touches 
 
 | Layer | Analysis |
 | --- | --- |
-| Responsibility | Domain codecs own schema, validation, migration, defaults, and domain serialization. Shared project-file I/O owns host-side document lifecycle, serialized writes, backup/revert/save-as, path normalization, diagnostics, and import/register-source orchestration. Cache services own derived artifacts only. |
+| Responsibility | Domain codecs own schema, validation, migration, defaults, and domain serialization. Shared project-file I/O owns host-side document lifecycle, serialized writes, backup/revert/save-as, path normalization, diagnostics, and Add/Link/Create Asset orchestration. Cache services own derived artifacts only. |
 | Dependency | L0 shared contracts stay host-agnostic where possible. VSCode `workspace.fs`, `Uri`, and `Disposable` usage stays in `@neko/shared/vscode/extension` or feature Extension packages. Webviews receive typed projections and commands only. Engine file access remains behind `@neko/neko-client` and host authorization. |
-| Interface | Use narrow interfaces: `ProjectFormatCodec<T>`, `ProjectFileStore<T>`, `PortableSourcePathPolicy<T>`, `ProjectDocumentHost<T>`, `ProjectFileDiagnostic`, and import/register-source request/result DTOs. Avoid a catch-all file manager. |
+| Interface | Use narrow interfaces: `ProjectFormatCodec<T>`, `ProjectFileStore<T>`, `PortableSourcePathPolicy<T>`, `ProjectDocumentHost<T>`, `ProjectFileDiagnostic`, and Add/Link/Create Asset request/result DTOs. Avoid a catch-all file manager. |
 | Extension | Adding a future `.nkb` or revising `.nks` should require registering a codec and source-field policy, not duplicating document lifecycle, atomic writes, path contraction, or missing-source diagnostics. |
 | Testing | Pure codec roundtrip tests cover format ownership. Path policy tests cover workspace-relative, `${VAR}`, missing variable, unauthorized root, and non-portable absolute paths. Store tests cover load/save/save-as/revert/backup/dirty serialization. Package integration tests cover `nkv`, `nkp`, `nkm`, and Webview message contracts. |
 
@@ -30,10 +30,10 @@ This design is an L3 project-format and file/resource-access change. It touches 
 - Keep each domain format's codec, schema, migration, and default document data under domain ownership.
 - Make load/save behavior consistent: parse, validate, migrate, normalize durable paths, write atomically or through a serialized queue, and return diagnostics.
 - Make source references portable by default: workspace-relative first, `${VAR}/path` second, diagnostic for uncontracted absolute local paths.
-- Ensure dragged, pasted, generated, and externally selected files are resolved by Extension Host import/register-source flows before becoming project facts.
+- Ensure dragged, pasted, generated, and externally selected sources are resolved by Extension Host Add/Link/Create Asset flows before becoming project facts.
 - Preserve the boundary that cache artifacts, Webview URIs, blob URLs, stream IDs, Engine tokens, range URLs, preview URLs, and local runtime paths never become durable project identity.
 - Support multi-root workspaces by carrying the owning workspace root and document URI through path policy context.
-- Make data movement explicit: project-local files move with the project folder; media-library files move by reconfiguring `${VAR}`; unportable external files require import, media-root registration, local override, or a diagnostic.
+- Make data movement explicit: project-local files move with the project folder; asset-library, media-library, or OSS-backed files move by reconfiguring `${VAR}` or asset roots; unmanaged external files require a user-visible move/register/configure action or a diagnostic.
 - Produce reusable diagnostics that editors can surface without inventing package-specific error strings.
 
 **Non-Goals:**
@@ -108,15 +108,21 @@ This design is an L3 project-format and file/resource-access change. It touches 
      - Webview receives projected runtime handles separately from the saved document.
    - Alternative considered: call `PathResolver.contract()` on every string field. Rejected because not every string is a source, and cache/runtime fields must be diagnosed, not normalized.
 
-5. **Route user-added files through host-mediated ingest/register-source.**
-   - Webview request shape carries intent, document context, optional browser `File` metadata, and any host-provided URI token, not a fabricated source path.
-   - Extension Host resolves real identity through one of:
-     - `register-existing-source` for workspace or configured `${VAR}` media-library files,
-     - `import-source` when an external file should be copied/imported into a project or media library,
-     - `generated-output` promotion for tool/Agent outputs,
-     - diagnostic when only `File.name`, blob URL, Webview URI, or cache path is available.
-   - Rationale: This directly addresses drag-save failures where `clip.mp4` is saved without knowing where it came from.
-   - Alternative considered: let Webview build relative paths from dropped `File.name`. Rejected because browser `File` objects generally do not expose safe real local paths in VS Code Webviews.
+5. **Route user-added sources through Add, Link, and Create Asset.**
+   - `.nk*` files are lightweight project records. Large binary data belongs in the workspace/project folder, asset library, configured `${VAR}` root, or OSS-backed asset storage.
+   - Webview request shape carries intent, document context, optional browser `File` metadata, byte handles, and any host-provided URI token, not a fabricated source path.
+   - Host-side source handling uses three stable semantics:
+     - `Add`: add an already durable source ref, `ResourceRef`, asset/entity ID, workspace-relative path, `${VAR}/path`, or allowed remote ref into a domain document.
+     - `Link`: directly reference an existing durable file in the workspace/project folder, asset library, OSS, or configured `${VAR}` root without copying it.
+     - `Create Asset`: materialize byte-only inputs into a durable file or asset object first, then return a stable ref that can be added to the document.
+   - Source classification:
+     - Workspace/project files, asset-library files, OSS refs, and configured `${VAR}` paths can be linked and added.
+     - `Downloads`, `Desktop`, temp folders, and arbitrary unmanaged absolute paths are not auto-copied or silently imported. The editor must offer a recovery action such as move into workspace/asset library, configure a variable root, or keep the document dirty with a diagnostic.
+     - Webview `File`/blob/bytes, paste screenshots, and AI/generated bytes must go through `Create Asset` before `Add`.
+     - Cache, proxy, thumbnail, Webview URI, blob URL, stream ID, Engine token, and other runtime handles are rejected as source identity and are not promoted as durable sources.
+   - Domain Add handlers store durable refs only. Parsing, metadata extraction, proxy generation, thumbnailing, subtitle parsing, PSD layer extraction, LUT parsing, model probing, and media playback are projections handled by ContentAccess, Engine file access, or cache services.
+   - Rationale: This directly addresses drag-save failures where `clip.mp4` is saved without knowing where it came from, while preserving the record/data separation needed for Git-friendly project files and OSS-backed binary sync.
+   - Alternative considered: let Webview build relative paths from dropped `File.name`, or auto-import every external local file. Rejected because browser `File` objects generally do not expose safe real local paths in VS Code Webviews, and silent copies hide ownership, sync, and storage decisions from users.
 
 6. **Use diagnostics instead of silent fallback.**
    - Standard diagnostic codes include:
@@ -132,7 +138,7 @@ This design is an L3 project-format and file/resource-access change. It touches 
      - `cache-source-persisted`
      - `write-conflict`
      - `backup-failed`
-   - Rationale: Editors need consistent user-visible states and test assertions, and data corruption is worse than an explicit save/import prompt.
+   - Rationale: Editors need consistent user-visible states and test assertions, and data corruption is worse than an explicit save/recovery prompt.
    - Alternative considered: best-effort fallback to relative paths. Rejected because it can create broken refs such as `clip.mp4` that appear valid but cannot reload.
 
 7. **Migrate in phases by risk and existing maturity.**
@@ -150,11 +156,11 @@ This design is an L3 project-format and file/resource-access change. It touches 
 ## Risks / Trade-offs
 
 - [Risk] A shared store becomes too generic and hard to use. -> Mitigation: keep format codecs domain-owned and require only narrow source descriptor/policy adapters per format.
-- [Risk] Strict non-portable path rejection blocks users with external media. -> Mitigation: offer explicit choices through ingest/register-source: import into project, register media root, configure `${VAR}`, or keep document dirty with diagnostic.
+- [Risk] Strict non-portable path rejection blocks users with external media. -> Mitigation: offer explicit recovery choices: move into workspace/project or asset library, configure a `${VAR}` root, create a durable asset for byte-only inputs, or keep the document dirty with diagnostic. Do not silently copy unmanaged local files.
 - [Risk] Multi-root workspace contraction chooses the wrong root. -> Mitigation: carry `documentUri`, `owningWorkspaceRoot`, `workspaceRoots`, and `allowedRoots`; return `multi-root-ambiguity` diagnostics when candidates conflict.
-- [Risk] Existing `.nkv` or `.nkp` files contain absolute paths that users rely on locally. -> Mitigation: migration can preserve them as unresolved diagnostics or prompt for root registration/import; do not silently rewrite to a wrong relative path.
+- [Risk] Existing `.nkv` or `.nkp` files contain absolute paths that users rely on locally. -> Mitigation: migration can preserve them as unresolved diagnostics or prompt for root configuration, relink, or explicit move into managed storage; do not silently rewrite to a wrong relative path.
 - [Risk] Atomic writes differ across local, remote, and virtual workspaces. -> Mitigation: define the contract as serialized writes with best-effort atomic temp/rename when supported; VSCode `workspace.fs` adapter handles remote-compatible operations.
-- [Risk] Cache deletion reveals old project files that only saved cache paths. -> Mitigation: diagnose `cache-source-persisted` and require reimport or source relinking rather than treating cache as source.
+- [Risk] Cache deletion reveals old project files that only saved cache paths. -> Mitigation: diagnose `cache-source-persisted` and require source relinking or explicit Create Asset from a valid byte source rather than treating cache as source.
 - [Risk] Package migration is broad. -> Mitigation: implement shared contracts first, migrate one format at a time, and keep package-specific integration tests focused.
 
 ## Migration Plan
@@ -164,7 +170,7 @@ This design is an L3 project-format and file/resource-access change. It touches 
 3. Register existing `.nkv`, `.nkc`, and `.nka` codecs through the new codec registry; add adapter stubs for `.nks`, `.nkp`, and `.nkm`.
 4. Implement portable source descriptors and path policy for `.nkv` media/audio/scene/puppet sources first.
 5. Replace `neko-cut` ad hoc project session save/load paths with `ProjectFileStore`, preserving current command surfaces and Webview DTOs.
-6. Add import/register-source message handling for cut drag/drop and external media add flows. A Webview-only `File.name` path must produce a relink/import diagnostic, not a broken saved path.
+6. Add Add/Link/Create Asset message handling for cut drag/drop and external media add flows. A Webview-only `File.name`, unmanaged absolute path, runtime handle, or cache artifact must produce a recovery diagnostic, not a broken saved path.
 7. Migrate `.nkp` and `.nkm` editor providers away from direct JSON persistence into the shared store.
 8. Migrate `.nkc`, `.nka`, and `.nks` lifecycle entry points where they are host-persisted.
 9. Add guard tests for runtime/cache handle persistence and direct package-local `nk*` save bypasses.

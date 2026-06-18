@@ -53,6 +53,26 @@
 - `@neko/shared/vscode`、`@neko/shared/vscode/extension`、`@neko/shared/i18n/react`、`@neko/shared/components` 是分层 subpath，不等同于主入口 L0。
 - `@neko/shared/components` 是 legacy UI 兼容面；新 Webview UI 优先使用 `@neko/ui`。
 
+新增功能涉及组件样式、主题、国际化、日志、错误/诊断、配置、路径、项目文件保存/读写、资源授权、缓存、DTO 或跨包契约时，必须先做公共基础能力审计：
+
+- 先判断是否已有 `@neko/shared`、`@neko/ui`、`@neko/neko-client`、`@neko/proto`、`@neko/entity`、`@neko/search`、project-file-io、resource cache 或 domain service 可复用。
+- 可复用但缺少小能力时，优先扩展公共契约、公共 adapter、公共 hook/primitive 或 domain service，再由 owning package 注入业务差异。
+- 只有当能力只服务单一领域、包含明确业务语义、或提升到公共层会倒置依赖时，才保留在 owning package。
+- 不得在功能包内并行实现 package-local design system、theme token、i18n runtime、logger/error 类型、项目文件 IO、cache manager、path resolver、Engine HTTP/WS client 或共享 DTO。
+- 若决定不更新公共层，需在 OpenSpec、PR 或交付说明中记录审计结论、保留原因、后续提取条件和验证命令。
+
+### 跨子包能力复用
+
+新功能涉及 provider、registry、bridge、protocol、message router、status bar、tree view、file decoration、history、selection、recent items、projector、facade、command router、capability provider、store slice 或 workflow adapter 时，必须做跨子包能力复用审计。
+
+约束：
+
+- 先搜索其他子包和共享层是否已有同类能力、相同交互模式、相同 host adapter、相同协议形态或可复用测试。
+- 两个以上子包需要同类能力时，优先提取为中立共享契约、domain service、adapter factory、registry、strategy、hook、test utility 或 `@neko/ui` primitive。
+- 不要复制其他功能包实现；不要通过直接 import 另一个功能包内部模块来复用。复用必须经共享包、public subpath、command/API facade、port、provider registry 或 domain service。
+- 只有当职责、生命周期、领域语义、依赖方向或运行环境明显不同，且抽公共层会引入错误依赖时，才保留 package-local 实现。
+- 保留 package-local 实现时，需记录查过哪些包、为何不能复用、为何不抽共享层、后续提取条件和验证命令。
+
 ### `@neko/proto`
 
 `packages/neko-proto` 是跨层 IDL 的单一事实来源。涉及 Engine 通信、Scene、Timeline、Viewport、流 descriptor 或跨语言结构时，优先从 proto 生成类型或复用已有生成类型，不在功能包内手写平行协议。
@@ -65,6 +85,8 @@
 
 - TypeScript 侧请求 Engine 应走 `EngineClient` 或 `@neko/neko-client` 暴露的 stream/device/client API。
 - 不在功能包中散落 ad hoc `fetch('/v1/...')`、裸 WebSocket URL 拼接或重复 wire normalizer。
+- 普通 Webview 媒体播放的 H.264/audio/scheduler 创建、替换和释放应优先组合 `EngineAvStreamLifecycle`；Preview、Canvas、Cut 等播放器只保留渲染、seek gate、时钟选择、控件和领域错误 UI。
+- 普通媒体时间标签应使用 `formatTime`、`formatMediaTime`、`formatMediaTimeFromMilliseconds` 或 `formatMediaTimeCentiseconds`。字幕 timecode、bar/beat、导出 ETA、聊天相对时间和领域 prose 可以保留在 owning package，但命名要表达领域语义。
 - Webview 可以在 Extension 授权后使用 Engine client 或 stream client，但不能自己发现、启动或授权 Engine。
 - Extension Host 负责权限、端口、token、资源 URI 和生命周期代理；高频视频帧、PCM 包和 scene delta 不应经 Extension Host 中继。
 
@@ -83,6 +105,8 @@
 
 - 不导入 `vscode`、Node-only module、功能包或 `acquireVsCodeApi`。
 - 不放 package-specific 业务逻辑、命令协议、Engine 操作或 Agent runtime。
+- `@neko/ui/error-boundary` 是 Webview React ErrorBoundary 捕获、日志、fallback/retry 的共享入口；功能包需要品牌 copy 或错误 handler 时保留薄 wrapper，不复制 catch/log/reset 实现。
+- `@neko/ui/keyboard` 是 Webview 键盘焦点、editable target、shortcut suppression 和 focused root metadata 的共享入口；功能包不要保留本地 `editable-target` copy 或旧 keyboard reporter。
 - Agent Header/Input/selector 等 Agent 专属交互留在 `neko-agent` Webview，不迁入 `@neko/ui`。
 - 被多个创作 Webview 复用的无业务 UI、viewport shell、workbench layout、键盘边界和基础控件可以进入 `@neko/ui`。
 - Cut、Canvas、Audio、Model、Sketch 等被动状态优先投影到 VS Code native StatusBar，避免在 Webview topbar 重复一套状态栏。
@@ -129,7 +153,9 @@ Webview 包负责浏览器沙箱内的交互体验。
 应做：
 
 - 使用 React、Zustand、`@neko/ui` 和 package-local hooks/components 组织 UI。
-- 通过共享 wrapper 或局部桥接模块封装 `acquireVsCodeApi`，业务组件不要直接散落调用。
+- 通过 `@neko/shared/vscode` 或委托给它的 package-local typed facade 访问 VS Code Webview API；生产 Webview 源码不要直接调用或声明 `acquireVsCodeApi()`，业务组件不要依赖全局 `__vscode_api__` / `__vscodeApi` / `window.vscode` / `window.vscodeApi` shim，也不要实现 package-local mock `postMessage` fallback。
+- 通过 `createWebviewI18n` 初始化 per-Webview i18n；不要在功能包里重复 `new I18nService(detectWebviewLocale())` 或本地 bundle registration loop。
+- 通过 `createWebviewLoggerRegistry` 或委托给它的 package-local logger facade 创建 Webview logger；生产 Webview 源码不要直接 `console.*`，也不要在功能包里新建 `ConsoleLogger` root。
 - 只保存可恢复 UI 状态和项目事实引用，运行时 URI/token/stream handle 只作为短生命周期状态。
 - 通过 `@neko/neko-client` 消费 Extension 授权后的 Engine stream。
 - 对媒体入口遵守 Webview CSP、格式兼容和 Range 限制；不兼容时展示 fallback/diagnostic。
@@ -160,6 +186,8 @@ Webview 包负责浏览器沙箱内的交互体验。
 - 低延迟交互 Scene stream 优先短 GOP，必要时 GOP=1；不要把 GOP=1 写成所有流的全局规则，因为 Timeline/Puppet/Preview 等路径存在不同编码目标。
 - Engine file access 是大型媒体、container entry、sibling resource 和需要 Range/seek 的源文件访问权威路径。
 - 3D Route A 中 Extension Host 不代理视频帧/PCM，不 relay 高频 scene delta；Webview 消费 Engine canvas/stream/control，authoring panels 编译为 Engine commands。
+- `runtime-puppet` 只拥有 `.nkp` Live2D/native Puppet character runtime；当前 `live2d-moc3-compat` 是 clean-room MOC3 compatibility，不是官方 Cubism SDK。官方 `live2d-cubism` 只能作为 optional adapter，公共 DTO、Proto、EngineClient、Webview message 和项目文件不暴露 SDK handle/type。
+- `runtime-scene` 拥有 `.nkm profile: 2d | 3d | live` Scene runtime；generic 2D Scene creation（sprite/tilemap/camera/light/parallax/particle/scene graph）归 `neko-model`，不能回退到 `neko-puppet`。
 
 ## Agent 子包
 
@@ -189,23 +217,23 @@ Webview 包负责浏览器沙箱内的交互体验。
 
 ## 领域包规则
 
-| 领域/包          | 主要职责                                                     | 关键边界                                                                                                                                        |
-| ---------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `neko-cut`       | Timeline、视频编辑、导出、状态投影                           | Webview 管 UI 和时间线交互；Extension 管 editor/provider/export/status；媒体请求走 Engine client                                                |
-| `neko-canvas`    | 画布、投影、创作结构和叙事节点                               | Canvas 状态和投影走共享 contract；被动状态进 native StatusBar                                                                                   |
-| `neko-audio`     | 波形、效果链、PCM 播放、音频工程                             | 音频分析/流/效果走 Engine；Webview 消费 client；文件元数据进 StatusBar                                                                          |
-| `neko-model`     | `.nkm` 2D/3D Scene authoring、Scene/Viewport、Route A stream | Webview 直接消费授权 stream/control；Extension 不代理高频帧；2D Scene 的 sprite/tilemap/light/camera/parallax/particle 面板输出 Engine commands |
-| `neko-preview`   | video/audio/pdf/epub/docx/cbz/panorama 预览                  | Extension 管 provider/resource/CSP；Webview 只渲染授权内容                                                                                      |
-| `neko-sketch`    | 2D 绘画和图层交互                                            | Webview 管画布交互；通用 UI 可复用 `@neko/ui`；状态投影不复制 topbar                                                                            |
-| `neko-puppet`    | `.nkp` Live2D/Puppet 角色参数、motion、expression、tracking  | Engine 管 puppet runtime/stream；不承接 generic 2D Scene authoring；Agent 能力通过 contract 暴露                                                |
-| `neko-story`     | 剧本、parser、叙事预览、实体索引                             | parser/types 独立；Extension 管 LSP/provider/index；Webview 管表格和预览                                                                        |
-| `neko-assets`    | 素材库、元数据、缩略图、实体绑定                             | 路径经 `PathResolver`；实体访问走 facade；缓存不伪装事实                                                                                        |
-| `neko-market`    | 市场、registry、插件安装目标                                 | core 与 extension/webview 分离；registry contract 不依赖 UI                                                                                     |
-| `neko-auth`      | auth core 与 VS Code extension 登录桥                        | core 保持共享服务；extension 承接 VS Code secret/env                                                                                            |
-| `neko-live`      | 实时合成、设备和直播交互                                     | 设备/流走 Engine client；UI 不直接访问设备宿主 API                                                                                              |
-| `neko-tools`     | 工具集合、Media LSP、差异/诊断                               | LSP/diagnostic 在 Extension；Webview 只消费授权结果                                                                                             |
-| `neko-dashboard` | 项目 dashboard、实体/搜索聚合视图                            | Webview 不直接文件 mutation；聚合通过 entity/search/service contract                                                                            |
-| `neko-suite`     | 聚合发布包                                                   | 不承载领域业务，只组织扩展组合和发布入口                                                                                                        |
+| 领域/包          | 主要职责                                                                    | 关键边界                                                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `neko-cut`       | Timeline、视频编辑、导出、状态投影                                          | Webview 管 UI 和时间线交互；Extension 管 editor/provider/export/status；媒体请求走 Engine client                                                                                       |
+| `neko-canvas`    | 画布、投影、创作结构和叙事节点                                              | Canvas 状态和投影走共享 contract；被动状态进 native StatusBar                                                                                                                          |
+| `neko-audio`     | 波形、效果链、PCM 播放、音频工程                                            | 音频分析/流/效果走 Engine；Webview 消费 client；文件元数据进 StatusBar                                                                                                                 |
+| `neko-model`     | `.nkm` 2D/3D/Live Scene authoring、Scene/Viewport、Route A stream           | Webview 直接消费授权 stream/control；Extension 不代理高频帧；2D Scene 的 sprite/tilemap/light/camera/parallax/particle 面板输出 Engine commands；Scene actor 只保存 `.nkp` stable refs |
+| `neko-preview`   | video/audio/pdf/epub/docx/cbz/panorama 预览                                 | Extension 管 provider/resource/CSP；Webview 只渲染授权内容                                                                                                                             |
+| `neko-sketch`    | 2D 绘画和图层交互                                                           | Webview 管画布交互；通用 UI 可复用 `@neko/ui`；状态投影不复制 topbar                                                                                                                   |
+| `neko-puppet`    | `.nkp` Live2D/native Puppet 角色参数、motion、expression、physics、tracking | Engine 管 puppet runtime/adapter/stream；不承接 generic 2D Scene authoring；Agent 能力通过 contract 暴露                                                                               |
+| `neko-story`     | 剧本、parser、叙事预览、实体索引                                            | parser/types 独立；Extension 管 LSP/provider/index；Webview 管表格和预览                                                                                                               |
+| `neko-assets`    | 素材库、元数据、缩略图、实体绑定                                            | 路径经 `PathResolver`；实体访问走 facade；缓存不伪装事实                                                                                                                               |
+| `neko-market`    | 市场、registry、插件安装目标                                                | core 与 extension/webview 分离；registry contract 不依赖 UI                                                                                                                            |
+| `neko-auth`      | auth core 与 VS Code extension 登录桥                                       | core 保持共享服务；extension 承接 VS Code secret/env                                                                                                                                   |
+| `neko-live`      | 实时合成、设备和直播交互                                                    | 设备/流走 Engine client；UI 不直接访问设备宿主 API                                                                                                                                     |
+| `neko-tools`     | 工具集合、Media LSP、差异/诊断                                              | LSP/diagnostic 在 Extension；Webview 只消费授权结果                                                                                                                                    |
+| `neko-dashboard` | 项目 dashboard、实体/搜索聚合视图                                           | Webview 不直接文件 mutation；聚合通过 entity/search/service contract                                                                                                                   |
+| `neko-suite`     | 聚合发布包                                                                  | 不承载领域业务，只组织扩展组合和发布入口                                                                                                                                               |
 
 领域内部架构文档放在 `docs/domains/<domain>/architecture.md`。只有跨多个领域、跨多个运行平面的不变量才提升到 `docs/architecture/`。
 

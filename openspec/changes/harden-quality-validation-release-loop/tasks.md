@@ -5,6 +5,13 @@
 - [x] 1.3 Define pre-implementation feasibility expectations for L3/L4 changes.
 - [x] 1.4 Document prelaunch breaking compatibility policy and validation expectations.
 - [x] 1.5 Document component reuse audit expectations before adding Webview/React components.
+- [x] 1.6 Document that new-path development must remove or isolate legacy compatibility paths.
+- [x] 1.7 Document that development/test defaults must not let compatibility fallback mask new-path failure.
+- [x] 1.8 Document shared foundation audit expectations for cross-cutting behavior.
+- [x] 1.9 Document cross-package capability reuse audit expectations.
+- [x] 1.10 Document residual/debt and unused-code checks as development validation evidence.
+- [x] 1.11 Document that a legacy-path hit during new-path development/validation must fail closed instead of returning legacy success.
+- [x] 1.12 Document path-level new-path acceptance so result-only fallback tests cannot prove a new path works.
 
 ## 2. Quality Gate Implementation
 

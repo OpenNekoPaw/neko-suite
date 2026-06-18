@@ -85,8 +85,8 @@ Webview 数据面还必须遵守 VS Code 宿主限制：CSP 默认拒绝、HTML 
 | `runtime-audio` / `engine-audio` | audio graph、effect chain、recording、analysis        | PCM、waveform、loudness/silence、recording result    | Audio、Video、Live               |
 | `runtime-device`                 | camera、mic、MIDI、gamepad stream/session             | device event stream、capture stream                  | Interactive、Live、Agent tools   |
 | `runtime-ml`                     | ONNX/Whisper/CLIP/upscale/denoise sessions            | inference result、embedding、transcript              | Agent、Assets、Video、Audio      |
-| `runtime-scene`                  | 3D scene ECS world、camera、animation、control state  | scene render、viewport stream、diagnostics           | Model、Interactive、Live         |
-| `runtime-puppet`                 | 2D puppet ECS world、MOC3/parameter/animation state   | puppet delta、render stream、expression/motion state | 2D、Interactive、Live            |
+| `runtime-scene`                  | `.nkm profile: 2d \| 3d \| live` Scene world/profile state、scene graph、camera/light/actor control | scene render、viewport stream、profile diagnostics   | Model、Interactive、Live         |
+| `runtime-puppet`                 | `.nkp profile: live2d \| neko-puppet` character runtime、adapter selection、parameter/motion/expression/tracking state | puppet delta、render stream、adapter diagnostics     | Puppet、Interactive、Live        |
 | Preview runtime                  | preview route、variant、fov crop、proxy state         | preview artifact、stream descriptor                  | Preview、Canvas、Agent           |
 
 运行时状态可以被投影为 descriptor、snapshot、delta 或 diagnostic，但不能直接成为 `.nk*` 项目事实。项目事实保存 source、command、asset ref 或 domain format；Engine runtime 可根据这些事实重建运行态。
@@ -103,7 +103,7 @@ Webview 数据面还必须遵守 VS Code 宿主限制：CSP 默认拒绝、HTML 
 
 ### 命名与能力分类
 
-`runtime-puppet` 表示 Neko 原生 2D 角色/骨骼/BlendShape runtime，不等于所有 2D 能力；`runtime-scene` 表示 3D scene/model/viewport runtime，不等于所有 3D 能力。对外能力可以按创作领域叫 2D、模型、互动或 Live，但内部 crate 名应反映运行时核心模型，避免把 Live2D、Spine、sketch layer、stage orchestration 和 3D scene 全塞进一个泛化 runtime。
+`runtime-puppet` 表示 `.nkp` Live2D/native Puppet 角色 runtime，不等于所有 2D 能力；`runtime-scene` 表示 `.nkm profile: 2d | 3d | live` Scene runtime，generic 2D Scene（sprite/tilemap/camera/light/parallax/particle/scene graph）也属于这里。对外能力可以按创作领域叫 2D、模型、互动或 Live，但内部 crate 名应反映运行时核心模型，避免把 Live2D、Spine、sketch layer、stage orchestration 和 3D scene 全塞进一个泛化 runtime。
 
 ## 权威范围
 
@@ -179,8 +179,8 @@ Shared shell
         |
         v
 Separate cores
-  runtime-scene  -> 3D world, skeleton, morph, material, camera
-  runtime-puppet -> 2D puppet world, MOC3, parameter, mesh, expression
+  runtime-scene  -> .nkm 2D/3D/Live Scene graph, camera, light, actor staging
+  runtime-puppet -> .nkp Live2D/native Puppet character, parameter, mesh, expression
   sketch/domain  -> 2D layer/project facts, when needed projected to Engine
         |
         v
@@ -203,8 +203,8 @@ Renderer boundary
 
 | 不共享对象                                  | 原因                 |
 | ------------------------------------------- | -------------------- |
-| 3D skeleton 与 2D parameter binding         | 动画范式不同         |
-| glTF/VRM loader 与 MOC3/Live2D loader       | 文件结构和语义不同   |
+| 3D/2D Scene graph 与 Puppet parameter binding | authoring 真值不同   |
+| glTF/VRM/Scene loaders 与 MOC3/Live2D loaders | 文件结构和语义不同   |
 | 3D skinning 与 2D mesh/deformer             | GPU/CPU 数据布局不同 |
 | Scene material/PBR 与 Puppet drawable state | 渲染语义不同         |
 | `.nkm`、`.nkp`、`.nks` 项目格式             | 领域事实不同         |
@@ -215,13 +215,13 @@ LLM/Agent 意图层不应硬编码“如果是 3D 则调用 X”。Agent 选择 
 
 | 能力                | 放置                                           | 规则                                                                           |
 | ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
-| Neko 原生 2D puppet | `runtime-puppet`                               | 拥有 Bone2D、BlendShape、参数、动画和可测试导出路径                            |
-| MOC3 导入/兼容      | `runtime-puppet/moc3` 或后续导入 crate         | 与 `.nkp` 转换和 golden render 强绑定时可暂留 runtime；复用面扩大后再拆        |
-| Live2D 高保真播放   | `Live2dRuntimeAdapter` / feature-gated adapter | SDK 许可证、平台打包和渲染生命周期不进入 `runtime-puppet` core                 |
+| Neko 原生 Puppet    | `runtime-puppet` / `neko-puppet-native`        | 拥有 Bone2D、BlendShape、参数、动画和可测试导出路径                            |
+| MOC3 导入/兼容      | `runtime-puppet/moc3` / `live2d-moc3-compat`   | 当前实现是基于公开格式理解的 clean-room compatibility，不是官方 Cubism SDK     |
+| Live2D 官方 SDK 播放 | optional `live2d-cubism` adapter               | SDK 许可证、平台打包和渲染生命周期不进入 public DTO；未启用时返回稳定 diagnostic |
 | Spine/其他 2D SDK   | 独立 adapter                                   | 通过 adapter contract 接入 stage/compositor，不改变原生 puppet 数据模型        |
 | 互动舞台            | `runtime-stage` 或领域 runtime                 | 编排 scene、puppet、device、audio、trigger 和 script，不替代 scene/puppet core |
 
-第三方 adapter 可以暴露统一 command、descriptor、stream 和 diagnostic，但不能把第三方 SDK 类型穿透到 `engine-types`、`neko-client` 或领域项目格式。需要持久保存时，应保存 source、import settings、adapter id/version 和可复建的领域 refs。
+第三方 adapter 可以暴露统一 command、descriptor、stream 和 diagnostic，但不能把第三方 SDK 类型穿透到 `engine-types`、`neko-client`、Proto、Webview message 或领域项目格式。需要持久保存时，应保存 source、import settings、adapter id/version 和可复建的领域 refs。当前底层 `live2d-moc3-compat` 路径不是官方 Live2D Cubism SDK；官方 SDK 只能通过 optional、feature-gated `live2d-cubism` adapter 接入，且 unavailable 时必须报告 `cubism-adapter-unavailable`，不能冒充已启用 Cubism。
 
 ### 渲染输出模型
 

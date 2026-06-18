@@ -19,6 +19,18 @@ Prelaunch changes SHALL treat breaks to unreleased internal contracts or draft f
 - **THEN** the proposal, design, tasks, or PR notes MUST record what breaks, why compatibility shims are avoided, and whether old data is migrated, rebuilt, reimported, ignored, or intentionally discarded
 - **AND** the change MUST NOT ignore runtime, security, or trust boundaries, or silently lose valuable local data
 
+#### Scenario: Canonical replacement is introduced
+
+- **WHEN** a change introduces a canonical replacement for an unreleased internal API, DTO, Webview message, Agent workflow payload, fixture, command, or `nk*` draft format
+- **THEN** obsolete compatibility shims, legacy adapters, fallback branches, dual-read/dual-write paths, old field mappings, and legacy command aliases MUST be removed, disabled, or converted to fail-closed diagnostics by default
+- **AND** any retained compatibility path MUST name an owner, replacement path, validation command, removal condition, and expiry task
+- **AND** development and validation defaults MUST disable compatibility fallback for the new path, so a legacy-path hit MUST throw, return a fail-closed diagnostic, or emit assertable telemetry/log failure instead of returning a legacy success result
+- **AND** only tests explicitly scoped to migration, rejection, or diagnostics MAY intentionally observe the retained legacy path
+- **AND** new-path acceptance MUST include path-level evidence that the canonical path, new handler, new renderer, new adapter, or new contract was hit
+- **AND** result-only tests that can pass through fallback behavior MUST NOT count as new-path acceptance evidence
+- **AND** tests MUST prove retained legacy paths did not participate by using a spy, counter, log assertion, or poisoned legacy path that throws
+- **AND** validation MUST prove the canonical path is hit by default and the legacy path cannot return success for new-path requests or mask new-path failure
+
 ### Requirement: Repository quality gate
 
 The repository SHALL expose a single quality gate command that runs machine-readable quality checks for code-debt ledgers, Agent boundaries, Route A boundaries, and release-channel metadata.
@@ -27,6 +39,16 @@ The repository SHALL expose a single quality gate command that runs machine-read
 
 - **WHEN** CI executes the code-quality job for a TypeScript, workflow, script, or main-branch change
 - **THEN** the job MUST run the repository quality gate and fail if any included quality check fails
+
+### Requirement: Residual and redundant code validation
+
+Development validation SHALL include residual/debt and unused-code checks when a change touches legacy terms, compatibility paths, or redundant code.
+
+#### Scenario: Residual or redundant code changes
+
+- **WHEN** a change adds, modifies, or removes `legacy`, `fallback`, `deprecated`, `compat`, `shim`, `dirty`, `hack`, `temporary`, `workaround`, dead code, unused code, or duplicate implementation surfaces
+- **THEN** the validation evidence MUST record `pnpm check:legacy-debt` and `pnpm check:unused`, or record that `pnpm ci:local` / `pnpm check:quality` covered the relevant checks
+- **AND** new residual/debt matches MUST be removed, renamed, or recorded in the appropriate debt ledger with owner, replacement, validation, and removal criteria
 
 ### Requirement: Engine validation surface
 
@@ -62,6 +84,29 @@ Webview and React changes SHALL prefer enhancing existing components, hooks, sha
 - **THEN** the proposal, design, tasks, PR notes, or delivery summary MUST record which existing `@neko/ui`, owning-package, adjacent-domain, and test surfaces were checked for reuse
 - **AND** the record MUST explain why the existing component could not be enhanced safely through props, slots, variants, composition hooks, or package-local adapters
 - **AND** the change MUST include focused validation for the new component or for the enhanced existing component
+
+### Requirement: Shared foundation audit
+
+Changes that introduce or modify cross-cutting behavior SHALL prefer existing shared foundations and domain services over package-local parallel implementations.
+
+#### Scenario: Cross-cutting behavior is introduced
+
+- **WHEN** a change introduces or modifies component styling, theming, i18n, logging, errors/diagnostics, config, paths, project file save/load, resource authorization, cache, DTOs, or cross-package contracts
+- **THEN** the proposal, design, tasks, PR notes, or delivery summary MUST record whether `@neko/shared`, `@neko/ui`, `@neko/neko-client`, `@neko/proto`, entity/search services, project-file-io, resource cache, or another domain service was reused or updated
+- **AND** package-local parallel implementations of design systems, theme tokens, i18n runtimes, logger/error taxonomies, project file IO, cache managers, path resolvers, Engine HTTP/WS clients, or shared DTOs MUST be avoided unless the owning boundary and extraction criteria are documented
+- **AND** the change MUST include focused validation for the reused or updated shared foundation, or document residual risk and follow-up
+
+### Requirement: Cross-package capability reuse audit
+
+Changes that introduce reusable package capability patterns SHALL audit adjacent packages and shared layers before adding package-local implementations.
+
+#### Scenario: Reusable package capability is introduced
+
+- **WHEN** a change introduces or modifies a provider, registry, bridge, protocol, message router, status bar, tree view, file decoration, history, selection, recent items, projector, facade, command router, capability provider, store slice, workflow adapter, or similar package capability pattern
+- **THEN** the proposal, design, tasks, PR notes, or delivery summary MUST record which adjacent packages and shared layers were checked for equivalent behavior, interaction patterns, host adapters, protocol shapes, or reusable tests
+- **AND** if two or more packages need the same pattern, the change MUST prefer a neutral shared contract, domain service, adapter factory, registry, strategy, hook, test utility, or `@neko/ui` primitive
+- **AND** the change MUST NOT copy another feature package implementation or import another feature package's internals; reuse MUST go through shared packages, public subpaths, command/API facades, ports, provider registries, or domain services
+- **AND** package-local implementations MUST document why responsibility, lifecycle, domain semantics, dependency direction, or runtime environment prevents shared extraction, plus extraction criteria and validation commands
 
 ### Requirement: Pre-implementation feasibility check
 

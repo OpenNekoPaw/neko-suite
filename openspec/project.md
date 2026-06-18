@@ -131,6 +131,10 @@ Allowed prelaunch breaking changes:
 
 - Replace internal APIs, DTOs, commands, Webview messages, Agent workflow
   payloads, and fixtures without long-lived compatibility shims.
+- Delete old compatibility shims, legacy adapters, fallback branches,
+  dual-read/dual-write paths, old field mappings, and legacy command aliases
+  when a canonical replacement is introduced, so validation exercises the new
+  path instead of silently falling back to the old path.
 - Revise unreleased `nk*` project drafts, local test fixtures, package manifests,
   or runtime payloads when old data can be rebuilt, reimported, regenerated, or
   intentionally discarded.
@@ -147,6 +151,9 @@ Not allowed under the name of prelaunch cleanup:
 - Accepting higher-version durable files without fail-closed diagnostics.
 - Adding broad compatibility shims without owner, replacement, validation, and
   removal criteria.
+- Keeping legacy paths as default fallbacks after a canonical replacement exists,
+  because this hides broken new behavior and creates conflicting sources of
+  truth.
 
 Breaking migrations must be explicit, not incidental:
 
@@ -158,8 +165,28 @@ Breaking migrations must be explicit, not incidental:
   intentionally discarded.
 - Add validation tasks for load/save, contract fixtures, failure diagnostics,
   and any migration or rebuild path.
-- Avoid compatibility shims unless they protect valuable local data or an
-  already documented public contract.
+- Remove obsolete compatibility code in the same change when possible. If a shim
+  remains, state the owner, replacement path, validation command, removal
+  condition, and follow-up task.
+- Disable compatibility fallback by default while developing and validating the
+  new path. If execution reaches a legacy path, it must throw, return a
+  fail-closed diagnostic, or emit assertable telemetry/log failure instead of
+  returning a legacy success result. Only tests explicitly scoped to migration,
+  rejection, or diagnostics may intentionally observe the legacy path.
+- Require path-level acceptance for new paths. Do not accept result-only tests
+  that can pass through fallback behavior. Tests must assert that the canonical
+  path, new handler, new renderer, new adapter, or new contract was hit, and
+  prove the legacy path did not participate with a spy, counter, log assertion,
+  or poisoned legacy path that throws.
+- Validate that the canonical path is hit by default. If the legacy path remains
+  reachable, guard it behind an explicit feature flag, migration-only entry,
+  fail-closed diagnostic, or telemetry/log assertion, and add tests proving it
+  cannot return success for new-path requests or mask new-path failure.
+- Do not count tests that pass through legacy fixtures, old field fallback, old
+  message handlers, old renderers, or legacy command aliases as acceptance
+  evidence for the new path. Split those into migration/diagnostic tests.
+- Avoid compatibility shims unless they protect valuable local data, an already
+  documented public contract, or an external trust/runtime boundary.
 - If old data is intentionally ignored or discarded, explain why it has no
   migration value and how users or tests recover.
 
@@ -210,6 +237,35 @@ Shared foundation expectations:
 - Use `@neko/shared` (`packages/neko-types`) as the default source for Layer 0
   logger contracts, i18n core, theme tokens, error abstractions, config/path
   helpers, validators, and shared DTOs.
+- Before implementing cross-cutting behavior, perform a shared foundation audit
+  for component styling, theming, i18n, logging, errors/diagnostics, config,
+  paths, project file save/load, resource authorization, cache, DTOs, and
+  cross-package contracts. Decide whether to reuse an existing foundation,
+  update a shared contract/adapter, or keep the logic in the owning package.
+- Do not create package-local design systems, theme token sets, i18n runtimes,
+  logger/error taxonomies, project file IO helpers, cache managers, path
+  resolvers, Engine HTTP/WS clients, or shared DTO copies in feature packages.
+- If the change intentionally does not update a shared foundation, record why,
+  the owning boundary, extraction criteria, and validation command in OpenSpec,
+  PR notes, or the delivery summary.
+- Before implementing reusable package capability patterns, perform a
+  cross-package capability reuse audit. This applies to providers, registries,
+  bridges, protocols, message routers, status bars, tree views, file
+  decorations, history, selection, recent items, projectors, facades, command
+  routers, capability providers, store slices, workflow adapters, and similar
+  package capability patterns.
+- Search adjacent feature packages and shared layers for equivalent behavior,
+  interaction patterns, host adapters, protocol shapes, or reusable tests. When
+  two or more packages need the same pattern, prefer a neutral shared contract,
+  domain service, adapter factory, registry, strategy, hook, test utility, or
+  `@neko/ui` primitive.
+- Do not copy another feature package implementation or import another feature
+  package's internals. Reuse through shared packages, public subpaths,
+  command/API facades, ports, provider registries, or domain services.
+- Keep package-local implementations only when responsibility, lifecycle,
+  domain semantics, dependency direction, or runtime environment is genuinely
+  different. Record the audit, non-reuse reason, extraction criteria, and
+  validation command.
 - Use `@neko/ui` for reusable Webview React controls, creative UI primitives,
   keyboard/focus behavior, accessibility affordances, and theme-aware UI
   composition when a suitable primitive exists.
@@ -539,7 +595,11 @@ Before review, answer:
 1. Does this fit the existing architecture?
 2. How does this reduce coupling?
 3. Is it easy to extend and test?
-4. For Webview/React changes, which existing components, hooks, shared
+4. For cross-cutting behavior, which shared foundation or domain service was
+   reused or updated, and why was package-local logic acceptable if not?
+5. For reusable package capability patterns, which other packages and shared
+   layers were audited before adding package-local capability code?
+6. For Webview/React changes, which existing components, hooks, shared
    primitives, or tests were audited before adding any new component?
 
 Validation expectations:
@@ -559,6 +619,9 @@ Recommended commands by impact:
 - Rust engine: `pnpm ci:local:rust` or targeted `cargo test`/`cargo clippy`.
 - Proto: `pnpm ci:local:proto`.
 - Architecture: `pnpm check`, plus `pnpm check:agent-boundaries` for Agent work.
+- Residual/debt terms or redundant code: `pnpm check:legacy-debt` and
+  `pnpm check:unused`, or record that `pnpm ci:local` / `pnpm check:quality`
+  covered them.
 - Smoke: `pnpm smoke:engine`, `pnpm smoke:webview`,
   `pnpm smoke:webview:runtime`, or focused VSCode debugger Skill smoke. Use
   Webview runtime smoke by default when Extension Webview visuals,

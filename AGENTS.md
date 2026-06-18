@@ -107,6 +107,12 @@
   - `packages/neko-cut/packages/webview/src/components/`
   - `packages/neko-cut/packages/webview/src/hooks/`
   - `packages/neko-agent/packages/platform/src/`
+- 新功能涉及组件样式、主题、国际化、日志、错误/诊断、配置、路径、文件保存/读写、资源授权、缓存、DTO 或跨包契约时，必须先做公共基础能力审计：判断应复用现有公共入口、更新公共契约/adapter，还是确实保留在 owning package。
+- 禁止在功能包内并行实现 package-local design system、theme token、i18n runtime、logger/error 类型、项目文件 IO、cache manager、path resolver、Engine HTTP/WS client 或共享 DTO；确需新增公共能力时优先进入 `@neko/shared`、`@neko/ui`、`@neko/neko-client`、`@neko/proto` 或既有 domain service。
+- 若决定不更新公共层，必须在 OpenSpec、PR 或交付说明中说明原因、边界、后续提取条件和验证命令。
+- 新功能涉及 provider、registry、bridge、protocol、message router、status bar、tree view、file decoration、history、selection、recent items、projector、facade、command router、capability provider、store slice 或 workflow adapter 时，必须先做跨子包能力复用审计：搜索其他子包是否已有同类能力、相同交互模式或相同 host adapter。
+- 两个以上子包需要同类能力时，优先提取到中立共享层、domain service、shared contract、adapter factory、registry、strategy、hook 或 `@neko/ui` primitive；不要复制实现，也不要让功能包直接 import 另一个功能包的内部实现。
+- 保留 package-local 实现时，必须说明职责、生命周期、领域语义、依赖方向或运行环境为何不同，以及后续满足什么条件会抽到共享层。
 - 新增 Webview/React 组件前必须先做组件复用审计：搜索 `@neko/ui`、同包 `components/`、`hooks/`、`shared/`、相邻领域包和已有测试，优先增强旧组件、提取 prop/slot/variant、或抽出 package-local adapter。
 - 只有在职责、状态生命周期、交互契约或可访问性语义明显不同，且增强旧组件会增加耦合或破坏既有使用方时，才新增组件；新增时需在 OpenSpec、PR 或交付说明中写明复用审计结论。
 - 不要为单个页面复制按钮、选择器、面板、空状态、工具栏、列表、卡片、输入区、Header/Input 等已有模式；跨两个以上 Webview 复用的无业务 UI 优先进入 `@neko/ui`，领域专属适配留在 owning package。
@@ -146,7 +152,12 @@
 
 - 项目尚未发布时，可以对未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 和 nk\* 草稿格式做显式破坏性调整，用于清理 legacy debt 或收敛到更清晰的架构。
 - “未发布”不等于忽略版本兼容性。破坏性变更必须说明影响范围，以及旧数据是迁移、重建、重新导入、忽略还是有意丢弃。
-- 不要为了未发布草稿保留长期 compatibility shim；确需保留时必须有 owner、replacement、验证命令和移除条件。
+- 新路径开发默认必须清理旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，避免验证继续走旧路径。
+- 只有为保护有价值本地数据、已发布契约或外部信任边界时，才允许临时保留兼容逻辑；必须有 owner、replacement、验证命令、移除条件和到期任务。
+- 开发和测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；仅在明确标记为迁移、拒绝或诊断测试时可观测旧路径。
+- 新路径验收必须是路径级验收，不得只断言最终结果成功；测试必须断言 canonical path、new handler、new renderer、new adapter 或新 contract 被命中，并通过 spy/counter/log assertion 或将 legacy path poison 成抛错来证明旧路径未参与。
+- 新路径验证必须证明旧路径不会被默认命中；若旧路径仍可被触发，必须有显式 feature flag、migration-only 入口、fail-closed diagnostic、telemetry/log assertion 或迁移测试覆盖，并断言旧路径不会为新路径请求返回成功结果。
+- 测试不得通过 legacy fixture、旧字段 fallback、旧 message handler、旧 renderer 或旧 command alias 让新路径“看似通过”；需要 legacy 覆盖时必须拆成迁移/拒绝/诊断测试。
 - 不能借 prelaunch cleanup 忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 或安全边界。
 - 不能静默删除或损坏有价值的本地项目数据、用户设置、trust state、entitlement、插件安装记录或生成产物；必须提供迁移、重建、确认或 fail-closed diagnostic。
 
@@ -156,6 +167,7 @@
   - `pnpm build`
   - `pnpm test`
   - `pnpm check`
+  - 残留/债务或冗余相关改动：运行 `pnpm check:legacy-debt`、`pnpm check:unused`，或说明已由 `pnpm ci:local` / `pnpm check:quality` 覆盖。
   - Rust 相关改动：`cd packages/neko-engine && cargo test`
   - Webview 视觉/交互改动：运行 `pnpm smoke:webview:runtime` 或等价的 `vscode-extension-debugger` Skill 验证；仅浏览器/Vite/Chrome/Playwright 验证不足以证明 VS Code Webview 运行态正确。
 - 重点关注以下架构规则：

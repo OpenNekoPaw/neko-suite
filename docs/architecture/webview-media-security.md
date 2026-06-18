@@ -34,6 +34,21 @@ Webview 不是普通浏览器页面，也不是本地文件播放器。开发时
 
 Dev Webview 可以为 Vite HMR 临时开放 localhost、React Refresh 或 dev-only `unsafe-eval`，但这些权限不得被复制到生产 CSP。
 
+## VS Code 容器级 Warning
+
+打开任意 VS Code Webview 编辑器或 Webview View 时，DevTools 可能出现以下 warning：
+
+- `Unrecognized feature: 'local-network-access'`
+- `An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.`
+
+这些 warning 来自 VS Code Workbench 创建 Webview iframe 时的容器属性，而不是 Neko Webview HTML、CSP、媒体节点、路径转换或保存逻辑。扩展侧没有 API 修改 VS Code 内部 iframe 的 `allow` / `sandbox` 属性，因此不应在 Canvas、Cut、Audio、Model、Sketch 或 Puppet 等功能包中添加 package-local hack。
+
+运行态排障时：
+
+- 堆栈指向 `webviewElement.ts`、`overlayWebview.ts`、`customEditorInput.ts` 或 `webviewEditor.ts` 时，将其视为已知良性容器 warning。
+- 不要把它作为保存失败、媒体加载失败、缩略图失败或 CSP 配置错误的证据。
+- 继续追踪 Neko 自身 logger、CSP violation、`preview:*`、`media:*`、Engine file-access、`Failed to save NK*` 和 project-file-io diagnostics。
+
 ## 媒体格式规则
 
 VS Code 官方 Webview 文档只列出以下可用媒体能力：

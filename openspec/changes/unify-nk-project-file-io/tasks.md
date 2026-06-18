@@ -25,10 +25,10 @@
 ## 4. Host Adapters and Ingest Flow
 
 - [x] 4.1 Add a VSCode Extension Host adapter for project file operations, workspace roots, document URI context, backups, and safe URI/path conversion.
-- [x] 4.2 Add host-mediated import/register-source DTOs for dragged, pasted, selected, generated, and external files.
-- [x] 4.3 Wire import/register-source handling to existing `ContentIngestService`, `ContentAccessService`, `PathResolver`, and Engine file-access registration where needed.
+- [x] 4.2 Add host-mediated Add/Link/Create Asset DTOs for dragged, pasted, selected, generated, linked, and external sources.
+- [x] 4.3 Wire Add/Link/Create Asset handling to existing `ContentIngestService`, `ContentAccessService`, `PathResolver`, asset storage, and Engine file-access registration where needed.
 - [x] 4.4 Add diagnostics for Webview-only `File.name`, blob URL, Webview URI, or cache path inputs that do not carry durable source identity.
-- [x] 4.5 Add Extension/Webview message contract tests for add-source intent, successful registration/import, unresolved external source, and diagnostic projection.
+- [x] 4.5 Add Extension/Webview message contract tests for add-source intent, successful Add/Link/Create Asset, unresolved external source, and diagnostic projection.
 
 ## 5. NKV Migration and Drag-Save Fix
 
@@ -36,7 +36,7 @@
 - [x] 5.2 Add `.nkv` source descriptors for timeline media, audio, scene3d, puppet, and other source-bearing elements.
 - [x] 5.3 Replace package-local `normalizePathsForSave` behavior with the shared portable path policy or a compatibility wrapper around it.
 - [x] 5.4 Update drag/drop and add-media flows so Extension Host returns durable source refs before timeline elements are persisted.
-- [x] 5.5 Add focused `.nkv` tests proving dragged workspace media saves and reloads, external media without import does not save as `clip.mp4`, `${VAR}` media roots reload on a changed machine root, and cache deletion does not break source refs.
+- [x] 5.5 Add focused `.nkv` tests proving dragged workspace media saves and reloads, unmanaged external media does not save as `clip.mp4`, `${VAR}` media roots reload on a changed machine root, and cache deletion does not break source refs.
 
 ## 6. NKP and NKM Persistence Migration
 
@@ -63,5 +63,5 @@
 - [x] 8.5 Run dependency and boundary checks relevant to touched packages, including Webview-not-importing-VSCode and Extension-not-importing-React guards.
 - [x] 8.6 Run `pnpm build:neko-cut` after the `.nkv` migration and broader `pnpm check` or `pnpm test` once multiple formats are migrated.
   - `pnpm build:neko-cut` passed. `pnpm check` was run and is blocked by existing knip findings outside this change: `AgentStateIndicator.tsx`, `@fission-ai/openspec`, unlisted `jsdom`, unlisted `tsc`, several Agent Webview unused exports, and stale knip configuration hints.
-- [x] 8.7 Run `pnpm smoke:webview:runtime` or focused `vscode-extension-debugger` validation for Extension Webview save/import flows affected by the migration.
+- [x] 8.7 Run `pnpm smoke:webview:runtime` or focused `vscode-extension-debugger` validation for Extension Webview save/add-link flows affected by the migration.
 - [x] 8.8 Run `openspec validate unify-nk-project-file-io` and record any residual validation gaps before implementation is considered complete.

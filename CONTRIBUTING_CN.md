@@ -288,6 +288,15 @@ pnpm check:deps          # 检查架构规则违反
 pnpm check               # 同时运行 Knip + dependency-cruiser
 ```
 
+残留/债务关键词或冗余代码相关改动需要显式检查：
+
+```bash
+pnpm check:legacy-debt   # 扫描 legacy/fallback/deprecated 等残留代码面
+pnpm check:unused        # 检查未使用文件、导出和依赖
+```
+
+如果已运行 `pnpm ci:local`，则已覆盖 `pnpm check` 和 `pnpm check:quality`；交付说明仍需说明残留/冗余检查由哪个命令覆盖。
+
 ### 本地 CI 检查
 
 提交 PR 前按影响范围运行本地 CI 等价检查：
@@ -327,7 +336,7 @@ node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview
 
 当前项目仍处于发布前阶段，可以有意破坏尚未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 或 `nk*` 草稿格式，以减少长期兼容包袱。但这种破坏必须在 proposal、design、tasks 或 PR 说明中写清楚影响范围、原因，以及旧数据是迁移、重建、重新导入、忽略还是明确丢弃。
 
-不要为了未发布草稿保留长期 compatibility shim；确需保留时必须有 owner、replacement、验证命令和移除条件。预发布也不能忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 等运行/安全/信任边界，不能静默删除或损坏有价值的本地项目数据、设置、信任状态、权益、安装记录或生成产物。
+新路径开发默认清理旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，避免开发和测试仍然命中旧路径。测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；只有明确标记为迁移、拒绝或诊断测试时才可观测旧路径。新路径验收必须是路径级验收，不得只断言最终结果成功；必须断言 canonical path、新 handler、新 renderer、新 adapter 或新 contract 被命中，并通过 spy、counter、log assertion，或将 legacy path poison 成抛错来证明旧路径未参与。只有保护有价值本地数据、已发布契约或外部信任边界时，才允许临时保留兼容逻辑，并且必须有 owner、replacement、验证命令、移除条件和到期任务。预发布也不能忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 等运行/安全/信任边界，不能静默删除或损坏有价值的本地项目数据、设置、信任状态、权益、安装记录或生成产物。
 
 代码审查流程、风险分级、功能/UX/性能检查和合并规则遵循 [AGENTS.md](./AGENTS.md) 与 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) 中的验证要求。
 
@@ -502,7 +511,10 @@ docs: update ARCHITECTURE.md with streaming flow
 - [ ] `pnpm test` 测试通过
 - [ ] Rust 变更：`cargo test` + `cargo clippy` 通过
 - [ ] 新接口有单元测试
+- [ ] 新功能涉及样式、主题、i18n、日志、错误、文件 IO、缓存、配置、路径或 DTO 时，已做公共基础能力审计
+- [ ] 新功能涉及 provider、registry、bridge、protocol、status/tree/history/selection 等可复用能力时，已做跨子包能力复用审计
 - [ ] 新增 Webview/React 组件前已做复用审计，并说明为何不能增强既有组件或抽到 `@neko/ui`
+- [ ] 新路径开发已删除或隔离旧兼容逻辑，验收断言 canonical path 被命中且 legacy path 未参与；若旧路径被命中会 fail-closed，而不会返回旧路径成功结果
 - [ ] 涉及架构变更：更新对应 ADR 或 package README
 - [ ] 无 `any` 类型、无 `console.log`、无 `as Type` 强制断言
 
@@ -511,8 +523,10 @@ docs: update ARCHITECTURE.md with streaming flow
 1. 是否符合 SOLID 原则（单一职责、依赖倒置）
 2. Webview 是否误用 Node.js/VS Code API
 3. 是否引入循环依赖
-4. 新增组件是否先审计并优先增强了既有 `@neko/ui` 或包内组件
-5. Rust 代码是否有 `unwrap()` 隐患
+4. 横切能力是否优先复用或更新公共基础层，而不是功能包私有并行实现
+5. 可复用能力是否先查其他子包和共享层，并避免复制实现或直接依赖其他功能包内部模块
+6. 新增组件是否先审计并优先增强了既有 `@neko/ui` 或包内组件
+7. Rust 代码是否有 `unwrap()` 隐患
 
 ---
 

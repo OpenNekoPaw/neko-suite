@@ -2,9 +2,11 @@
 
 更新日期：2026-06-17
 
-角色创作领域以 `.nkp` 为参数驱动角色真值。`.nkp` 使用 `profile` 区分 `live2d`、`neko-puppet` 和未来 avatar profile；Scene/Live Stage 通过 actor 引用消费角色，不复制角色参数、motion、expression 或 physics 真值。
+角色创作领域以 `.nkp` 为参数驱动角色真值。`.nkp` 使用 `profile` 区分 `live2d`、`neko-puppet` 和未来 avatar profile；Scene/Live Stage 通过 actor 引用消费角色，不复制角色参数、motion、expression、physics 或 tracking 真值。
 
 `neko-puppet` 是 `.nkp profile: live2d` 和 `.nkp profile: neko-puppet` 的创作入口所有者。它不承担 generic 2D Scene authoring；sprite/tilemap/2D light/parallax/particle/camera/scene graph 属于 `.nkm profile: 2d`，由 `neko-model` 负责。
+
+Runtime 上，`.nkp` 通过 `PuppetService` 和 SDK-neutral `PuppetRuntimeAdapter` 进入 `runtime-puppet`。当前 Live2D-style MOC3 路径标识为 `live2d-moc3-compat`，表示 clean-room compatibility/import support，不是官方 Live2D Cubism SDK。官方 SDK 只能作为 optional `live2d-cubism` adapter 接入；未编译、未安装、未授权或未启用时必须报告 `cubism-adapter-unavailable`，不能把 compatibility path 宣称为 Cubism SDK。
 
 ## 模块职责
 
@@ -35,6 +37,7 @@
 - `.nkp` 保存角色模型源、参数、motion、expression、physics 和 tracking 映射，不保存舞台 camera、灯光、actor 编排或 scene switching。
 - `.nkp` 不保存 tilemap、2D light、parallax、particle、scene camera 或 generic scene graph；这些属于 `.nkm profile: 2d`。
 - Live2D 是 `.nkp profile: live2d`，不是独立项目格式。
+- `.nkp` 可以保存 `runtimeAdapter.id/version`、source refs、import settings、parameters、motions、expressions、physics 和 tracking mappings；不得保存 Cubism SDK native handles、Webview URL、engine session id、stream id 或 cache-only path 作为 durable identity。
 - Live 舞台通过 `.nkm profile: live` 引用 `.nkp` actor；Live 驱动参数可以进入 `.nkm` routing，但角色参数定义和默认映射归 `.nkp`。
 - Live2D/Cubism SDK 类型不得穿透到 `engine-types`、`neko-client` 或领域项目格式；需要接入时通过 adapter id/version、source refs 和可复建 import settings 表达。
 - Sketch/Image 输出可以作为角色源图或参考图，但 `.nks` 不直接成为 Puppet runtime 状态。
@@ -52,6 +55,7 @@ Puppet/Live2D 编辑器按“让角色快速动起来”和“完整 rig/参数/
 
 ## Engine 边界
 
-- `runtime-puppet` 表示 Neko 原生 puppet/参数/mesh/motion 核心。
-- MOC3/Live2D 兼容能力可作为 `runtime-puppet` 内部模块或 feature-gated adapter，但不能污染 native puppet core。
+- `runtime-puppet` 表示 `.nkp` Live2D/native Puppet character runtime，不表示 generic 2D Scene runtime。
+- `neko-puppet-native`、`live2d-moc3-compat` 和 optional `live2d-cubism` 通过 adapter descriptor 暴露能力、状态和 diagnostics。
+- MOC3/Live2D 兼容能力可作为 `runtime-puppet` 内部模块或 feature-gated adapter，但不能污染 native puppet core 或 public DTO。
 - `engine-puppet-renderer` 消费 runtime snapshot/delta 或 deformed mesh 输入，避免渲染器长期锁住 live world。

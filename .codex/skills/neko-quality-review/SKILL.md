@@ -62,6 +62,13 @@ Source of truth:
 
    If a narrower package command is enough, prefer the smallest reliable command and state why.
 
+   For residual/debt and redundancy checks:
+
+   ```bash
+   pnpm check:legacy-debt
+   pnpm check:unused
+   ```
+
    For integration smoke checks:
 
    ```bash
@@ -71,6 +78,15 @@ Source of truth:
    ```
 
    For Extension Webview visual, layout, interaction, focus, CSP, media preview, or lifecycle changes, use `pnpm smoke:webview:runtime` or an equivalent `vscode-extension-debugger` Skill run. Do not use Chrome, the generic Browser plugin, Playwright, or a Vite localhost page as the default validation path unless the user explicitly asks for browser-compatibility testing.
+
+   Treat VS Code container-level Webview warnings as known benign runtime noise when the stack points to VS Code Workbench `webviewElement` / `overlayWebview` creation, especially:
+
+   ```text
+   Unrecognized feature: 'local-network-access'
+   An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+   ```
+
+   These warnings are not Neko Webview HTML/CSP/media/save failures. Continue investigating Neko logger output, CSP violations, `preview:*`, `media:*`, Engine file-access, `Failed to save NK*`, or project-file-io diagnostics.
 
 ## Review Checklist
 
@@ -84,8 +100,18 @@ Always check:
 - Paths are relative or `${VAR}/path`, not hard-coded absolute paths.
 - Async flows handle errors, cancellation, resource disposal, and races.
 - Public contracts include tests or clear validation evidence.
+- Residual/debt terms are scanned and classified: `legacy`, `fallback`, `deprecated`, `compat`, `shim`, `dirty`, `hack`, `temporary`, `workaround`, `dead code`, `unused`, and `duplicate`. New matches are removed, renamed, or recorded in the appropriate debt ledger with owner, replacement, validation, and removal criteria.
+- Redundant code is checked within the package and across adjacent packages: unused exports/files, duplicated helpers, repeated adapters, repeated protocol/message handlers, duplicated components, copied tests, and package-local implementations that should be shared.
+- Cross-cutting behavior includes shared foundation audit evidence: style/theme/i18n/logger/error/config/path/file IO/resource/cache/DTO changes reused or updated `@neko/shared`, `@neko/ui`, `@neko/neko-client`, `@neko/proto`, entity/search services, project-file-io, resource cache, or a domain service before adding package-local logic.
+- No package-local parallel design system, theme token set, i18n runtime, logger/error taxonomy, project file IO, cache manager, path resolver, Engine HTTP/WS client, or shared DTO copy unless the owning boundary, extraction criteria, and validation command are documented.
+- Reusable package capability patterns include cross-package reuse audit evidence: checked adjacent packages and shared layers for providers, registries, bridges, protocols, message routers, status bars, tree views, file decorations, history, selection, recent items, projectors, facades, command routers, capability providers, store slices, workflow adapters, or reusable tests before adding package-local capability code.
+- No copied implementation from another feature package and no direct import of another feature package's internals; reuse goes through shared packages, public subpaths, command/API facades, ports, provider registries, or domain services.
 - New Webview/React components include component reuse audit evidence: checked `@neko/ui`, owning-package components/hooks/shared modules, adjacent domains, and tests; explained why enhancing an existing component would be unsafe or too coupled.
-- Prelaunch breaking changes identify what breaks, the old-data strategy, and why compatibility shims are avoided; they do not relax runtime, security, trust, or valuable local-data boundaries.
+- Prelaunch breaking changes identify what breaks, the old-data strategy, and why compatibility shims are removed. New canonical paths delete or isolate legacy adapters, fallback branches, dual-read/dual-write paths, old field mappings, and legacy command aliases unless they protect valuable data or published/trust boundaries.
+- Development and validation defaults disable compatibility fallback for new paths. A legacy-path hit during new-path development or validation must throw, return a fail-closed diagnostic, or emit assertable telemetry/log failure instead of returning a legacy success result.
+- Only migration, rejection, or diagnostic tests may intentionally observe retained legacy paths; new-path acceptance tests must assert that retained legacy paths cannot return success or mask new-path failure.
+- New-path acceptance is path-level acceptance, not result-only acceptance. Tests must assert the canonical path, new handler, new renderer, new adapter, or new contract was hit, and prove retained legacy paths did not participate with a spy, counter, log assertion, or poisoned legacy path that throws.
+- Retained compatibility paths have owner, replacement, validation command, removal condition, expiry task, and tests proving they cannot mask new-path failure.
 - Docs are updated when behavior, architecture, config, package entry points, or public contracts change.
 
 Add domain checks as needed:

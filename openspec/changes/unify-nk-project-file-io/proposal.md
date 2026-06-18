@@ -1,8 +1,8 @@
 ## Why
 
-The `nk*` project formats currently load, save, normalize paths, and manage cache/source boundaries through package-local code paths, which makes save reliability, drag-import behavior, portability, diagnostics, backup, and dirty-state handling inconsistent across editors. The recent `.nkv` drag-and-save failure exposed the core risk: Webview interactions can lose real source identity, while individual formats decide independently whether a path is portable, absolute, cache-backed, or only a runtime projection.
+The `nk*` project formats currently load, save, normalize paths, and manage cache/source boundaries through package-local code paths, which makes save reliability, drag-add/link behavior, portability, diagnostics, backup, and dirty-state handling inconsistent across editors. The recent `.nkv` drag-and-save failure exposed the core risk: Webview interactions can lose real source identity, while individual formats decide independently whether a path is portable, absolute, cache-backed, or only a runtime projection.
 
-This change introduces a shared project file I/O capability so `.nkv`, `.nkc`, `.nks`, `.nkp`, `.nkm`, `.nka`, and later `nk*` formats can keep domain-owned codecs while using one contract for host-side file persistence, portable source paths, import/register-source flows, and diagnostics.
+This change introduces a shared project file I/O capability so `.nkv`, `.nkc`, `.nks`, `.nkp`, `.nkm`, `.nka`, and later `nk*` formats can keep domain-owned codecs while using one contract for host-side file persistence, portable source paths, Add/Link/Create Asset flows, and diagnostics.
 
 ## What Changes
 
@@ -13,7 +13,7 @@ This change introduces a shared project file I/O capability so `.nkv`, `.nkc`, `
   - Use configured `${VAR}/path` roots for shared media libraries and external source roots.
   - Reject or diagnose absolute local paths that cannot be contracted instead of silently saving them.
   - Never persist Webview URIs, blob URLs, Engine tokens, stream IDs, preview URLs, cache artifact paths, or runtime-only handles as project facts.
-- Add a host-mediated import/register-source contract for dragged, pasted, generated, and externally selected files so Webviews submit user intent and Extension Host resolves real file identity through `ContentIngestService`, `ContentAccessService`, `PathResolver`, and Engine file access when needed.
+- Add a host-mediated Add/Link/Create Asset contract for dragged, pasted, generated, linked, and externally selected sources so Webviews submit user intent and Extension Host resolves real file identity through `ContentIngestService`, `ContentAccessService`, `PathResolver`, asset storage, and Engine file access when needed. Unmanaged local paths are diagnosed until the user explicitly moves/registers/configures them; byte-only inputs must first become durable assets.
 - Migrate `.nkv`, `.nkc`, `.nks`, `.nkp`, `.nkm`, and `.nka` read/write entry points toward the shared store in phases, starting with formats that currently perform ad hoc `JSON.parse/stringify`, `workspace.fs.writeFile`, or package-local path conversion.
 - Add diagnostics for missing source, unauthorized root, unresolved variable, non-portable absolute path, stale cache-only reference, unsupported future format version, invalid JSON, and migration failure.
 - Document the source/cache/runtime boundary at the implementation entry points, reusing `docs/architecture/cache-file-access-and-paths.md` rather than creating a parallel model.
@@ -28,7 +28,7 @@ This change introduces a shared project file I/O capability so `.nkv`, `.nkc`, `
 
 ### New Capabilities
 
-- `project-file-io`: Shared behavior for loading, saving, validating, migrating, backing up, restoring, and path-normalizing `nk*` project files, including host-mediated import/register-source flows and durable source/cache/runtime identity rules.
+- `project-file-io`: Shared behavior for loading, saving, validating, migrating, backing up, restoring, and path-normalizing `nk*` project files, including host-mediated Add/Link/Create Asset flows and durable source/cache/runtime identity rules.
 
 ### Modified Capabilities
 
@@ -42,19 +42,19 @@ This change introduces a shared project file I/O capability so `.nkv`, `.nkc`, `
   - Existing `packages/neko-types/src/nkv`, `nkc`, `nks`, and `nka` format SDKs
   - New shared project-file I/O contracts, adapters, diagnostics, and test utilities in `@neko/shared`
 - Domain package integrations:
-  - `packages/neko-cut` (`.nkv`, timeline media source save/load, drag-import path reliability)
+  - `packages/neko-cut` (`.nkv`, timeline media source save/load, drag-add/link path reliability)
   - `packages/neko-canvas` (`.nkc`, source/resource refs and workspace path setup)
   - `packages/neko-sketch` (`.nks`, webview serializer and future host persistence)
   - `packages/neko-puppet` (`.nkp`, current direct JSON read/write and bundle/source references)
   - `packages/neko-model` (`.nkm`, model document persistence and sibling resources)
   - `packages/neko-audio` (`.nka`, audio project codec and source references)
 - Runtime and architecture boundaries:
-  - Extension Host remains responsible for file I/O, VSCode `workspace.fs`, URI authorization, import/register-source, and Webview projection.
+  - Extension Host remains responsible for file I/O, VSCode `workspace.fs`, URI authorization, Add/Link/Create Asset decisions, and Webview projection.
   - Webviews continue to exchange typed DTOs and do not persist runtime handles or local absolute paths.
   - Engine file access remains the authority for large media, range/seek, container entries, sibling resources, and source tokens.
 - Compatibility and migration:
   - Prelaunch `nk*` draft formats may receive explicit breaking cleanup where old fields represented runtime/cache state rather than durable facts.
-  - Existing valuable local project data must be migrated, reimported, or diagnosed; it must not be silently discarded.
+  - Existing valuable local project data must be migrated, relinked, moved into managed storage, configured through variables, or diagnosed; it must not be silently discarded.
   - Higher-version project files must fail closed with actionable diagnostics.
 - Success criteria:
   - A media file dragged into `neko-cut` is saved as a durable workspace-relative or `${VAR}/path` source when possible, and reloads after closing/reopening VS Code.

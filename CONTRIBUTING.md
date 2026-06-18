@@ -290,6 +290,15 @@ All packages share vitest coverage settings via `vitest.shared.ts` (reporters, e
 pnpm check               # Runs both Knip + dependency-cruiser
 ```
 
+Changes that touch residual/debt terms or redundant code need explicit checks:
+
+```bash
+pnpm check:legacy-debt   # Scans legacy/fallback/deprecated debt surfaces
+pnpm check:unused        # Checks unused files, exports, and dependencies
+```
+
+If `pnpm ci:local` was run, it already covers `pnpm check` and `pnpm check:quality`; still record which command covered residual/redundancy checks in the delivery notes.
+
 ### Local CI Checks
 
 Before opening a PR, run the local CI-equivalent checks that match the impact area:
@@ -329,7 +338,7 @@ node scripts/smoke-webview-builds.mjs --list  # Lists selected webview packages 
 
 This project is still prelaunch, so changes may deliberately break unreleased internal APIs, DTOs, Webview messages, Agent workflow payloads, test fixtures, or `nk*` draft formats when doing so reduces long-term compatibility debt. The break must still be recorded in the proposal, design, tasks, or PR notes with the affected surface, the reason, and whether old data is migrated, rebuilt, reimported, ignored, or intentionally discarded.
 
-Do not keep long-term compatibility shims for unreleased drafts unless they have an owner, replacement path, validation command, and removal criteria. Prelaunch status also does not relax VS Code, Node, pnpm, Rust, OS, Webview sandbox, CSP, codec, Range, Engine, Proto, or marketplace trust boundaries, and it must not silently delete or corrupt valuable local project data, settings, trust state, entitlements, install records, or generated artifacts.
+New-path development should delete old compatibility shims, legacy adapters, fallback branches, dual-read/dual-write paths, old field mappings, and legacy command aliases by default so development and validation cannot keep hitting the old path. Disable compatibility fallback by default when testing the new path; if execution reaches a legacy path, it must throw, return a fail-closed diagnostic, or emit assertable telemetry/log failure instead of returning a legacy success result. Only migration, rejection, or diagnostic tests may intentionally observe the legacy path. New-path acceptance must be path-level acceptance, not result-only acceptance: tests must assert that the canonical path, new handler, new renderer, new adapter, or new contract was hit, and prove the legacy path did not participate through a spy, counter, log assertion, or poisoned legacy path that throws. Keep compatibility logic only when it protects valuable local data, a published contract, or an external trust boundary, and give it an owner, replacement path, validation command, removal criteria, and expiry task. Prelaunch status also does not relax VS Code, Node, pnpm, Rust, OS, Webview sandbox, CSP, codec, Range, Engine, Proto, or marketplace trust boundaries, and it must not silently delete or corrupt valuable local project data, settings, trust state, entitlements, install records, or generated artifacts.
 
 For the code review process, risk levels, functional/UX/performance checks, and merge rules, follow [AGENTS.md](./AGENTS.md) and the validation guidance in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -504,7 +513,10 @@ docs: update ARCHITECTURE.md with streaming flow
 - [ ] `pnpm test` passes
 - [ ] Rust changes: `cargo test` + `cargo clippy` pass
 - [ ] New interfaces have unit tests
+- [ ] New features that touch style, theme, i18n, logging, errors, file IO, cache, config, paths, or DTOs include a shared foundation audit
+- [ ] New features that touch providers, registries, bridges, protocols, status/tree/history/selection, or similar reusable capabilities include a cross-package reuse audit
 - [ ] New Webview/React components include a reuse audit and explain why existing components could not be enhanced or moved into `@neko/ui`
+- [ ] New-path development removes or isolates old compatibility logic, acceptance asserts the canonical path was hit and the legacy path did not participate; any legacy-path hit fails closed instead of returning a legacy success result
 - [ ] Architecture changes: corresponding ADR or package README updated
 - [ ] No `any` types, no `console.log`, no `as Type` assertions
 
@@ -513,8 +525,10 @@ docs: update ARCHITECTURE.md with streaming flow
 1. Does it follow SOLID principles (single responsibility, dependency inversion)?
 2. Does the Webview misuse Node.js/VS Code APIs?
 3. Does it introduce circular dependencies?
-4. Did new components audit and prefer enhancing existing `@neko/ui` or package-local components?
-5. Does the Rust code have risky `unwrap()` calls?
+4. Did cross-cutting behavior reuse or update shared foundations instead of adding package-local parallel systems?
+5. Did reusable capability code check adjacent packages/shared layers and avoid copied implementations or direct imports of feature-package internals?
+6. Did new components audit and prefer enhancing existing `@neko/ui` or package-local components?
+7. Does the Rust code have risky `unwrap()` calls?
 
 ---
 
