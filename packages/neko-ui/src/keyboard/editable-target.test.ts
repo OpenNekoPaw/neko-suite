@@ -36,6 +36,24 @@ describe('keyboard editable and IME guards', () => {
     expect(isEditableTarget(document.getElementById('button'))).toBe(false);
   });
 
+  it('covers Agent and Sketch legacy editable target selectors', () => {
+    document.body.innerHTML = `
+      <div id="contenteditable-empty" contenteditable=""><span id="empty-child"></span></div>
+      <div id="contenteditable-true" contenteditable="true"><span id="true-child"></span></div>
+      <div id="contenteditable-false" contenteditable="false"><span id="false-child"></span></div>
+      <div id="role-textbox" role="textbox"><span id="role-child"></span></div>
+      <div id="neko-text-input" data-neko-keyboard-scope="text-input">
+        <span id="scope-child"></span>
+      </div>
+    `;
+
+    expect(isEditableTarget(document.getElementById('empty-child'))).toBe(true);
+    expect(isEditableTarget(document.getElementById('true-child'))).toBe(true);
+    expect(isEditableTarget(document.getElementById('false-child'))).toBe(false);
+    expect(isEditableTarget(document.getElementById('role-child'))).toBe(true);
+    expect(isEditableTarget(document.getElementById('scope-child'))).toBe(true);
+  });
+
   it('detects when the current active element is editable', () => {
     document.body.innerHTML = `
       <input id="text" />

@@ -1,13 +1,15 @@
 /**
- * Shared VSCode webview API singleton.
+ * Preview typed facade over the shared VS Code Webview bridge.
  *
- * acquireVsCodeApi() can only be called once per webview, so all
- * consumers must share the same instance.
+ * The shared bridge owns acquisition and non-VS Code no-op behavior; Preview
+ * keeps only the document-viewer API shape.
  */
 
-import { getLogger } from '../utils/logger';
-
-const logger = getLogger('vscodeApi');
+import {
+  getState as getSharedState,
+  postMessage as postRawMessage,
+  setState as setSharedState,
+} from '@neko/shared/vscode';
 
 export interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -15,20 +17,16 @@ export interface VsCodeApi {
   setState(state: unknown): void;
 }
 
-let vscodeApi: VsCodeApi | null = null;
-
 export function getVscodeApi(): VsCodeApi {
-  if (!vscodeApi) {
-    vscodeApi = (window.acquireVsCodeApi?.() as VsCodeApi | undefined) ?? null;
-    if (!vscodeApi) {
-      // Fallback for dev mode (outside VSCode)
-      logger.warn('acquireVsCodeApi not available, using mock');
-      vscodeApi = {
-        postMessage: (msg) => logger.info(`[mock postMessage] ${JSON.stringify(msg)}`),
-        getState: () => null,
-        setState: () => {},
-      };
-    }
-  }
-  return vscodeApi;
+  return {
+    postMessage(message: unknown): void {
+      postRawMessage(message);
+    },
+    getState(): Record<string, unknown> | null {
+      return getSharedState<Record<string, unknown>>() ?? null;
+    },
+    setState(state: unknown): void {
+      setSharedState(state);
+    },
+  };
 }

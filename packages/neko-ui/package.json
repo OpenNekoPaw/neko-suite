@@ -11,6 +11,7 @@
     "./creative": "./src/creative/index.ts",
     "./icons": "./src/icons/index.ts",
     "./hooks": "./src/hooks/index.ts",
+    "./error-boundary": "./src/error-boundary/index.tsx",
     "./keyboard": "./src/keyboard/index.ts",
     "./keyboard/focus.css": "./src/keyboard/focus.css",
     "./workbench": "./src/workbench/index.ts",

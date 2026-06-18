@@ -1,8 +1,8 @@
 import { createWebviewLoggerRegistry, LogLevel } from '@neko/shared';
 
 const registry = createWebviewLoggerRegistry({
-  packageName: 'NekoPreview',
-  defaultLevel: LogLevel.Debug,
+  packageName: 'NekoLive',
+  defaultLevel: LogLevel.Info,
 });
 
 export const setRootLogger = registry.setRootLogger;

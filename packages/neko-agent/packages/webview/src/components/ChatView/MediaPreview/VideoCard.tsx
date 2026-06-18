@@ -7,6 +7,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
+import { formatTime } from '@neko/neko-client';
 import { VSCodeMessages } from '@/messages';
 
 interface VideoPlayerProps {
@@ -31,16 +32,6 @@ function getFileName(src: string, title?: string): string {
   } catch {
     return src.split('/').pop() || 'video';
   }
-}
-
-/**
- * Format time as MM:SS
- */
-function formatTime(time: number): string {
-  if (!isFinite(time)) return '0:00';
-  const minutes = Math.floor(time / 60);
-  const seconds = Math.floor(time % 60);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function VideoPlayerComponent({

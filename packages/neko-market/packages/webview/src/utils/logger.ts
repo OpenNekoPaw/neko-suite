@@ -5,11 +5,13 @@
  * Uses ConsoleLogger from @neko/shared (Layer 0, no vscode dependency).
  */
 
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { ILogger } from '@neko/shared';
+import { createWebviewLoggerRegistry, LogLevel } from '@neko/shared';
 
-const rootLogger: ILogger = new ConsoleLogger('NekoMarket', LogLevel.Debug);
+const registry = createWebviewLoggerRegistry({
+  packageName: 'NekoMarket',
+  defaultLevel: LogLevel.Debug,
+});
 
-export function getLogger(source: string): ILogger {
-  return rootLogger.child(source);
-}
+export const setRootLogger = registry.setRootLogger;
+export const getRootLogger = registry.getRootLogger;
+export const getLogger = registry.getLogger;

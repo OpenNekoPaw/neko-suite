@@ -327,6 +327,58 @@ describe('useFocusedWebviewRoot', () => {
     });
   });
 
+  it('clears editable ownership when the webview page is hidden', () => {
+    const reporter: WebviewKeyboardEditableReporter = {
+      postMessage: vi.fn(),
+    };
+
+    act(() => {
+      root.render(<ReportEditableHarness reporter={reporter} />);
+    });
+
+    act(() => {
+      host.querySelector<HTMLInputElement>('input')?.focus();
+    });
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    expect(reporter.postMessage).toHaveBeenCalledWith({
+      type: 'webviewKeyboardEditable',
+      editable: true,
+    });
+    expect(reporter.postMessage).toHaveBeenCalledWith({
+      type: 'webviewKeyboardEditable',
+      editable: false,
+    });
+  });
+
+  it('reports editable pointer state for role textbox and Neko text-input scoped targets', () => {
+    const reporter: WebviewKeyboardEditableReporter = {
+      postMessage: vi.fn(),
+    };
+
+    act(() => {
+      root.render(<ReportEditableHarness reporter={reporter} />);
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLElement>('[data-testid="role-textbox"]')
+        ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    act(() => {
+      host
+        .querySelector<HTMLElement>('[data-testid="scope-text-input"]')
+        ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+
+    expect(reporter.postMessage).toHaveBeenCalledWith({
+      type: 'webviewKeyboardEditable',
+      editable: true,
+    });
+  });
+
   it('cancels deferred editable checks on unmount', () => {
     vi.useFakeTimers();
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
@@ -484,6 +536,8 @@ function ReportEditableHarness({
   return (
     <div>
       <input type="text" />
+      <div role="textbox" data-testid="role-textbox" tabIndex={0} />
+      <div data-neko-keyboard-scope="text-input" data-testid="scope-text-input" tabIndex={0} />
       <div data-testid="non-focusable-surface">Surface</div>
       <button type="button">Button</button>
     </div>

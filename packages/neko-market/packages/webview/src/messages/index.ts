@@ -4,12 +4,10 @@
  * All communication with the Extension Host goes through these helpers.
  */
 
-// Acquire the VSCode API once (injected by the extension host)
-declare function acquireVsCodeApi(): { postMessage: (msg: unknown) => void };
-const vscode = acquireVsCodeApi();
+import { postMessage as postRawMessage } from '@neko/shared/vscode';
 
 function postMessage(msg: unknown): void {
-  vscode.postMessage(msg);
+  postRawMessage(msg);
 }
 
 // =============================================================================
