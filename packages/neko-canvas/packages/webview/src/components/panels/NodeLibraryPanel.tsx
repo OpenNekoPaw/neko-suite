@@ -8,7 +8,6 @@ import {
   getNodeLibraryCreationPolicy,
   isNodeLibraryFileBoundType,
   isNodeLibraryVisibleCreateType,
-  type NodeLibraryPickerMessageType,
 } from '../../utils/nodeLibraryPolicy';
 import type { NodeTypeDescriptorRegistry } from '../nodes/nodeTypeDescriptor';
 import { mapCanvasNodeLibraryGroupToTreeItems } from '../adapters/sharedCanvasUiAdapter';
@@ -19,10 +18,7 @@ export interface NodeLibraryPanelProps {
   nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   activeSubsystemIds?: readonly string[];
   onCreateNode: (type: CanvasNodeType) => void;
-  onPickNodeSource?: (
-    type: CanvasNodeType,
-    pickerMessageType: NodeLibraryPickerMessageType,
-  ) => void;
+  onPickNodeSource?: (type: CanvasNodeType) => void;
   onLoadSubsystem?: (subsystemId: CanvasSubsystemManifest['id']) => void;
 }
 
@@ -180,8 +176,8 @@ export function NodeLibraryPanel({
                         onCreateNode(nodeType);
                         return;
                       }
-                      if (creationPolicy.pickerMessageType) {
-                        onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
+                      if (creationPolicy.requiresSourceAdd) {
+                        onPickNodeSource?.(nodeType);
                       }
                     }}
                   />

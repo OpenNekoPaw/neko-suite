@@ -1,15 +1,28 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  createMockVSCodeApi,
+  installMockWebviewWindow,
+  type MockWebviewWindow,
+} from '@neko/shared/vscode/test-utils';
 import {
   confirmCanvasEntityCandidate,
   requestCanvasEntitySummary,
 } from './canvasEntityRouteClient';
-import { setGlobalVSCodeApi } from '../../utils/vscode';
 
 describe('canvas entity route client', () => {
+  const mockWindows: MockWebviewWindow[] = [];
+
+  afterEach(() => {
+    for (const mockWindow of mockWindows.splice(0)) {
+      mockWindow.dispose();
+    }
+  });
+
   it('sends request/response messages with request ids', async () => {
-    const postMessage = vi.fn((message: unknown) => {
+    const api = createMockVSCodeApi();
+    api.postMessage = vi.fn((message: unknown) => {
       const request = message as { readonly _requestId: number };
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -22,14 +35,14 @@ describe('canvas entity route client', () => {
         }),
       );
     });
-    setGlobalVSCodeApi(createVSCodeApiMock(postMessage));
+    mockWindows.push(installMockWebviewWindow(api));
 
     const response = await requestCanvasEntitySummary({
       candidateId: 'candidate-rin',
       characterName: 'Rin',
     });
 
-    expect(postMessage).toHaveBeenCalledWith(
+    expect(api.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'entity.summary',
         candidateId: 'candidate-rin',
@@ -45,7 +58,8 @@ describe('canvas entity route client', () => {
   });
 
   it('routes candidate confirmation through the host', async () => {
-    const postMessage = vi.fn((message: unknown) => {
+    const api = createMockVSCodeApi();
+    api.postMessage = vi.fn((message: unknown) => {
       const request = message as { readonly _requestId: number };
       window.dispatchEvent(
         new MessageEvent('message', {
@@ -57,11 +71,11 @@ describe('canvas entity route client', () => {
         }),
       );
     });
-    setGlobalVSCodeApi(createVSCodeApiMock(postMessage));
+    mockWindows.push(installMockWebviewWindow(api));
 
     await confirmCanvasEntityCandidate({ candidateId: 'candidate-rin' });
 
-    expect(postMessage).toHaveBeenCalledWith(
+    expect(api.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'entity.confirmCandidate',
         candidateId: 'candidate-rin',
@@ -70,11 +84,3 @@ describe('canvas entity route client', () => {
     );
   });
 });
-
-function createVSCodeApiMock(postMessage: (message: unknown) => void) {
-  return {
-    postMessage,
-    getState: () => undefined,
-    setState: () => undefined,
-  };
-}

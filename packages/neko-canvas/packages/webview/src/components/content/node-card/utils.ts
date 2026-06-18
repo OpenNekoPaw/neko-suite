@@ -10,7 +10,11 @@ import {
   parseDocumentArchiveResourceRef,
   parseDocumentResourceStatus,
 } from '@neko/shared';
-import { isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../../preview';
+import {
+  isImagePreviewUrl,
+  isSafeWebviewUrl,
+  type PreviewSourceDescriptor,
+} from '../../../preview';
 import type { ActionCondition, ActionConditionContext, CardPreviewSource } from './types';
 
 const TEXT_PREVIEW_MAX_LENGTH = 60;
@@ -82,7 +86,13 @@ export function hasPreviewDescriptorContent(source: PreviewSourceDescriptor): bo
 export function getStableSafeVariantUrl(source: PreviewSourceDescriptor): string | undefined {
   const variant = source.variants?.find((candidate) => candidate.role === source.role);
   const url = variant?.sourcePath;
-  return url && isSafeWebviewUrl(url) ? url : undefined;
+  if (!url) {
+    return undefined;
+  }
+  if (source.role === 'video-poster') {
+    return isImagePreviewUrl(url) ? url : undefined;
+  }
+  return isSafeWebviewUrl(url) ? url : undefined;
 }
 
 export function createAssetPreviewDescriptor(input: {

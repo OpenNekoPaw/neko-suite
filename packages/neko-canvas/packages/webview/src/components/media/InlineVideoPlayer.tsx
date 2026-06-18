@@ -1,5 +1,11 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { H264StreamClient, AudioStreamClient, FrameScheduler, formatTime } from '@neko/neko-client';
+import {
+  EngineAvStreamLifecycle,
+  formatTime,
+  type EngineAvAudioStreamClient,
+  type EngineAvFrameScheduler,
+  type EngineAvVideoStreamClient,
+} from '@neko/neko-client';
 import { ProgressBar } from '@neko/ui/creative';
 import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/ui/icons';
 import { getLogger } from '../../utils/logger';
@@ -44,9 +50,10 @@ export function InlineVideoPlayer({
   onStop,
 }: InlineVideoPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const clientRef = useRef<H264StreamClient | null>(null);
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
-  const schedulerRef = useRef<FrameScheduler | null>(null);
+  const clientRef = useRef<EngineAvVideoStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
+  const schedulerRef = useRef<EngineAvFrameScheduler | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   const animFrameRef = useRef<number>(0);
   const playStartTimeRef = useRef(startTime);
   const playWallTimeRef = useRef(0);
@@ -57,6 +64,18 @@ export function InlineVideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(startTime);
   const [isMuted, setIsMuted] = useState(false);
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ videoClient, audioClient, scheduler }) => {
+          clientRef.current = videoClient;
+          audioClientRef.current = audioClient;
+          schedulerRef.current = scheduler;
+        },
+      },
+    });
+  }
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -164,29 +183,29 @@ export function InlineVideoPlayer({
   // =========================================================================
 
   useEffect(() => {
-    schedulerRef.current = new FrameScheduler(fps);
-
-    if (videoStreamUrl) {
-      const client = new H264StreamClient({
-        websocketUrl: videoStreamUrl,
-        width,
-        height,
-        onFrame,
-        onError: (err) => logger.error(`H264 error: ${err}`),
-      });
-      clientRef.current = client;
-      client.connect();
-    }
-
-    if (audioStreamUrl) {
-      const audioClient = new AudioStreamClient({
-        websocketUrl: audioStreamUrl,
-        volume: DEFAULT_VOLUME,
-        onError: (err) => logger.warn(`Audio error: ${err}`),
-      });
-      audioClientRef.current = audioClient;
-      audioClient.connect();
-    }
+    void lifecycleRef.current
+      ?.start({
+        video: videoStreamUrl
+          ? {
+              websocketUrl: videoStreamUrl,
+              width,
+              height,
+              onFrame,
+              onError: (err) => logger.error(`H264 error: ${err}`),
+            }
+          : undefined,
+        audio: audioStreamUrl
+          ? {
+              websocketUrl: audioStreamUrl,
+              volume: DEFAULT_VOLUME,
+              onError: (err) => logger.warn(`Audio error: ${err}`),
+            }
+          : undefined,
+        fps,
+        schedulerMode: 'video',
+        videoFrameRoute: 'callback',
+      })
+      .catch((err) => logger.error(`Inline video lifecycle error: ${err}`));
 
     setIsPlaying(true);
     setCurrentTime(startTime);
@@ -195,16 +214,8 @@ export function InlineVideoPlayer({
     clockSourceRef.current = 'wall';
 
     return () => {
-      schedulerRef.current?.dispose();
-      clientRef.current?.dispose();
-      const ac = audioClientRef.current;
-      if (ac) {
-        ac.setVolume(0);
-        ac.dispose();
-      }
-      schedulerRef.current = null;
-      clientRef.current = null;
-      audioClientRef.current = null;
+      audioClientRef.current?.setVolume(0);
+      lifecycleRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startTime is only used for initial value; including it would restart streams on pause
   }, [videoStreamUrl, audioStreamUrl, width, height, fps, onFrame]);

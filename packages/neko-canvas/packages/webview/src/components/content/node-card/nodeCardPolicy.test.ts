@@ -154,6 +154,29 @@ describe('node card policies', () => {
     ).toBe('waveform');
   });
 
+  it('keeps video source paths for thumbnail resolution without using runtime video URLs as posters', () => {
+    const node = createMediaNode('video-runtime', {
+      assetPath: 'cases/test.mp4',
+      runtimeAssetPath:
+        'https://file+.vscode-resource.vscode-cdn.net/Users/feng/Git/neko-test/cases/test.mp4',
+      mediaType: 'video',
+    });
+
+    const source = mediaCardPolicy.resolvePreviewSource(node);
+
+    expect(source.renderForm).toBe('media-poster');
+    if (source.renderForm !== 'media-poster') {
+      throw new Error('expected media poster preview');
+    }
+    expect(source.source.asset).toMatchObject({
+      kind: 'asset-identity',
+      path: 'cases/test.mp4',
+      mediaType: 'video',
+    });
+    expect(JSON.stringify(source.source.variants ?? [])).not.toContain('runtimeAssetPath');
+    expect(JSON.stringify(source.source.variants ?? [])).not.toContain('test.mp4');
+  });
+
   it('represents shot inline preview as role-matched safe variant', () => {
     const node = createShotNode({
       id: 'shot-1',

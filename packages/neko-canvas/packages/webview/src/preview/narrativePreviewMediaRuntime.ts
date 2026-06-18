@@ -1,4 +1,10 @@
-import { AudioStreamClient, FrameScheduler, H264StreamClient } from '@neko/neko-client';
+import {
+  EngineAvStreamLifecycle,
+  type EngineAvAudioStreamClient,
+  type EngineAvFrameScheduler,
+  type EngineAvVideoStreamClient,
+  formatTime,
+} from '@neko/neko-client';
 
 type PreviewMediaType = 'audio' | 'video';
 
@@ -72,9 +78,10 @@ interface PlayerState {
   assetPath?: string;
   resourceRef?: unknown;
   documentResourceRef?: unknown;
-  videoClient?: H264StreamClient;
-  audioClient?: AudioStreamClient;
-  scheduler?: FrameScheduler;
+  videoClient?: EngineAvVideoStreamClient;
+  audioClient?: EngineAvAudioStreamClient;
+  scheduler?: EngineAvFrameScheduler;
+  lifecycle: EngineAvStreamLifecycle;
   animationFrameId?: number;
   requestTimeoutId?: number;
   pendingRequestStage?: 'probe' | 'stream';
@@ -209,6 +216,18 @@ function mount(request: PreviewMediaMountRequest): void {
   root.append(title, viewport, controls);
   request.container.replaceChildren(root);
 
+  const lifecycle = new EngineAvStreamLifecycle({
+    callbacks: {
+      onClientsChanged: ({ videoClient, audioClient, scheduler }) => {
+        const current = players.get(request.surfaceId);
+        if (!current) return;
+        current.videoClient = videoClient ?? undefined;
+        current.audioClient = audioClient ?? undefined;
+        current.scheduler = scheduler ?? undefined;
+      },
+    },
+  });
+
   const player: PlayerState = {
     surfaceId: request.surfaceId,
     mediaType: request.mediaType,
@@ -235,6 +254,7 @@ function mount(request: PreviewMediaMountRequest): void {
     playStartTime: request.startTime ?? 0,
     playWallTime: performance.now(),
     clockSource: 'wall',
+    lifecycle,
   };
   players.set(request.surfaceId, player);
 
@@ -342,7 +362,7 @@ function seek(surfaceId: string, time: number): void {
   player.playWallTime = performance.now();
   player.clockSource = 'wall';
   player.scheduler?.flush();
-  player.videoClient?.resetDecoder();
+  player.videoClient?.resetDecoder?.();
   player.audioClient?.resetClock();
   postHostMessage({ type: 'media:seek', nodeId: surfaceId, time: nextTime });
   renderPlayer(player);
@@ -364,6 +384,7 @@ function dispose(surfaceId: string): void {
   if (!player) return;
   players.delete(surfaceId);
   teardownStreams(player);
+  player.lifecycle.dispose();
   postHostMessage({ type: 'media:stop', nodeId: surfaceId });
   player.container.replaceChildren();
 }
@@ -470,26 +491,30 @@ function handleStreamReady(message: PreviewMediaStreamReadyMessage): void {
   const audioStreamUrl =
     typeof message.audioStreamUrl === 'string' ? message.audioStreamUrl : undefined;
 
-  if (player.mediaType === 'video' && videoStreamUrl) {
-    player.scheduler = new FrameScheduler(player.fps);
-    player.videoClient = new H264StreamClient({
-      websocketUrl: videoStreamUrl,
-      width: player.width,
-      height: player.height,
-      onFrame: (frame) => handleVideoFrame(player, frame),
-      onError: (error) => showError(player, String(error)),
-    });
-    void player.videoClient.connect();
-  }
-
-  if (audioStreamUrl) {
-    player.audioClient = new AudioStreamClient({
-      websocketUrl: audioStreamUrl,
-      volume: DEFAULT_VOLUME,
-      onError: (error) => showError(player, String(error)),
-    });
-    void player.audioClient.connect();
-  }
+  void player.lifecycle
+    .start({
+      video:
+        player.mediaType === 'video' && videoStreamUrl
+          ? {
+              websocketUrl: videoStreamUrl,
+              width: player.width,
+              height: player.height,
+              onFrame: (frame) => handleVideoFrame(player, frame),
+              onError: (error) => showError(player, String(error)),
+            }
+          : undefined,
+      audio: audioStreamUrl
+        ? {
+            websocketUrl: audioStreamUrl,
+            volume: DEFAULT_VOLUME,
+            onError: (error) => showError(player, String(error)),
+          }
+        : undefined,
+      fps: player.fps,
+      schedulerMode: player.mediaType === 'video' ? 'video' : 'none',
+      videoFrameRoute: 'callback',
+    })
+    .catch((error) => showError(player, String(error)));
 
   player.isPlaying = player.shouldPlayWhenReady;
   player.playStartTime = player.currentTime;
@@ -588,12 +613,8 @@ function drawVideoFrame(player: PlayerState, frame: VideoFrame): void {
 function teardownStreams(player: PlayerState): void {
   clearHostResponseTimeout(player);
   cancelPlayerFrame(player);
-  player.scheduler?.dispose();
-  player.videoClient?.dispose();
-  if (player.audioClient) {
-    player.audioClient.setVolume(0);
-    player.audioClient.dispose();
-  }
+  player.audioClient?.setVolume(0);
+  player.lifecycle.stop();
   player.scheduler = undefined;
   player.videoClient = undefined;
   player.audioClient = undefined;
@@ -690,18 +711,6 @@ function createAudioVisualization(): HTMLElement {
     root.appendChild(bar);
   }
   return root;
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const total = Math.floor(seconds);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const remainder = total % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
-  }
-  return `${minutes}:${String(remainder).padStart(2, '0')}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

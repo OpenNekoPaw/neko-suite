@@ -230,10 +230,10 @@ describe('NodeLibraryPanel', () => {
 
     expect(onCreateNode).not.toHaveBeenCalled();
     expect(onPickNodeSource).toHaveBeenCalledTimes(4);
-    expect(onPickNodeSource).toHaveBeenNthCalledWith(1, 'media', 'pickMediaFile');
-    expect(onPickNodeSource).toHaveBeenNthCalledWith(2, 'script', 'pickScriptDocument');
-    expect(onPickNodeSource).toHaveBeenNthCalledWith(3, 'document', 'pickReferenceDocument');
-    expect(onPickNodeSource).toHaveBeenNthCalledWith(4, 'model', 'pickModelReference');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(1, 'media');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(2, 'script');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(3, 'document');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(4, 'model');
   });
 
   it('moves file-bound nodes out of default groups and hides projection-only entity nodes', () => {

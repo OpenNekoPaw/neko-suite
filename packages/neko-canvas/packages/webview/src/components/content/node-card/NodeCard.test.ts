@@ -234,6 +234,34 @@ describe('CardPreviewSlot rendering', () => {
     expect(video).not.toContain('data-node-card-preview-shell="true"');
     expect(video).toContain('data:image/png;base64,poster');
   });
+
+  it('does not render a video file URL as a poster image', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: {
+          renderForm: 'media-poster',
+          aspectRatio: '3/2',
+          source: {
+            id: 'video',
+            role: 'video-poster',
+            variants: [
+              {
+                id: 'source-video',
+                role: 'video-poster',
+                sourcePath: 'https://file+.vscode-resource.vscode-cdn.net/workspace/clip.mp4',
+              },
+            ],
+          },
+        } satisfies CardPreviewSource,
+        title: 'Video',
+      }),
+    );
+
+    expect(markup).not.toContain('<img');
+    expect(markup).not.toContain('clip.mp4');
+    expect(markup).toContain('VID');
+    expect(markup).toContain('rounded-full');
+  });
 });
 
 function createNode(

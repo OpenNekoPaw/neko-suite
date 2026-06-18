@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isResourceRef, type DelegateAction, type ResourceRef } from '@neko/shared';
 import { dispatchPreviewDelegate } from './previewDelegates';
-import { isSafeWebviewUrl, WebviewPreviewResolver } from './previewResolver';
+import { isImagePreviewUrl, isSafeWebviewUrl, WebviewPreviewResolver } from './previewResolver';
 import { PreviewRuntime } from './previewRuntime';
 import type { PreviewSourceDescriptor, RuntimePreviewVariant } from './types';
 import { InlineVideoPlayer } from '../components/media/InlineVideoPlayer';
@@ -51,13 +51,16 @@ export function PreviewSurface(props: PreviewRendererProps) {
 // Hooks
 // =============================================================================
 
-function useResolvedVariant(source: PreviewSourceDescriptor): RuntimePreviewVariant | undefined {
+function useResolvedVariant(
+  source: PreviewSourceDescriptor,
+  role?: PreviewSourceDescriptor['role'],
+): RuntimePreviewVariant | undefined {
   const resolver = useMemo(() => new WebviewPreviewResolver(), []);
   const [variant, setVariant] = useState<RuntimePreviewVariant | undefined>();
 
   useEffect(() => {
     let cancelled = false;
-    resolver.resolve({ source }).then((nextVariant) => {
+    resolver.resolve({ source, role }).then((nextVariant) => {
       if (!cancelled) {
         setVariant(nextVariant);
       }
@@ -66,7 +69,7 @@ function useResolvedVariant(source: PreviewSourceDescriptor): RuntimePreviewVari
       cancelled = true;
       resolver.dispose();
     };
-  }, [resolver, source]);
+  }, [resolver, role, source]);
 
   return variant;
 }
@@ -550,8 +553,9 @@ function renderVideoPreview({
   source,
   surfaceKind = 'inline',
 }: PreviewRendererProps): React.ReactNode {
-  const variant = useResolvedVariant(source);
-  const thumbnailUrl = variant?.runtimeUrl ?? getStableSafeUrl(source);
+  const variant = useResolvedVariant(source, 'video-poster');
+  const thumbnailUrl =
+    readImagePreviewUrl(variant?.runtimeUrl) ?? readImagePreviewUrl(getStableSafeUrl(source));
   const assetPath = source.asset?.path;
   const resourceRef = readPreviewSourceResourceRef(source);
   const capturedFrame = useCaptureFrame(assetPath, source.id, resourceRef);
@@ -613,6 +617,10 @@ function renderVideoPreview({
       </button>
     </div>
   );
+}
+
+function readImagePreviewUrl(url: string | undefined): string | undefined {
+  return url && isImagePreviewUrl(url) ? url : undefined;
 }
 
 function renderAudioPreview({
@@ -804,7 +812,13 @@ function resolveProjectTypeLabel(value: unknown, defaultExt: string): string {
 function getStableSafeUrl(source: PreviewSourceDescriptor): string | undefined {
   const variant = source.variants?.find((v) => v.role === source.role);
   const url = variant?.sourcePath;
-  return url && isSafeWebviewUrl(url) ? url : undefined;
+  if (!url) {
+    return undefined;
+  }
+  if (source.role === 'video-poster') {
+    return isImagePreviewUrl(url) ? url : undefined;
+  }
+  return isSafeWebviewUrl(url) ? url : undefined;
 }
 
 function renderFallbackPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {

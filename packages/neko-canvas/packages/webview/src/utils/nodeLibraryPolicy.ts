@@ -2,30 +2,22 @@ import type { CanvasNodeType } from '@neko/shared';
 
 export type NodeLibraryCreationKind = 'create' | 'file-bound' | 'source-bound' | 'projection-only';
 
-export type NodeLibraryPickerMessageType =
-  | 'pickMediaFile'
-  | 'pickScriptDocument'
-  | 'pickReferenceDocument'
-  | 'pickModelReference'
-  | 'pickCanvasDocument'
-  | 'pickProjectDocument';
-
 export interface NodeLibraryCreationPolicy {
   readonly kind: NodeLibraryCreationKind;
   readonly canDragToCreate: boolean;
   readonly badgeKey?: string;
   readonly titleKey: string;
-  readonly pickerMessageType?: NodeLibraryPickerMessageType;
+  readonly requiresSourceAdd?: boolean;
 }
 
-const FILE_BOUND_NODE_PICKERS: Partial<Record<CanvasNodeType, NodeLibraryPickerMessageType>> = {
-  media: 'pickMediaFile',
-  script: 'pickScriptDocument',
-  document: 'pickReferenceDocument',
-  model: 'pickModelReference',
-  'canvas-embed': 'pickCanvasDocument',
-  project: 'pickProjectDocument',
-};
+const FILE_BOUND_NODE_TYPES = new Set<CanvasNodeType>([
+  'media',
+  'script',
+  'document',
+  'model',
+  'canvas-embed',
+  'project',
+]);
 
 const SOURCE_BOUND_NODE_TYPES = new Set<CanvasNodeType>(['entity']);
 
@@ -36,14 +28,13 @@ const PROJECTION_ONLY_NODE_TYPES = new Set<CanvasNodeType>([
 ]);
 
 export function getNodeLibraryCreationPolicy(nodeType: CanvasNodeType): NodeLibraryCreationPolicy {
-  const pickerMessageType = FILE_BOUND_NODE_PICKERS[nodeType];
-  if (pickerMessageType) {
+  if (FILE_BOUND_NODE_TYPES.has(nodeType)) {
     return {
       kind: 'file-bound',
       canDragToCreate: false,
       badgeKey: 'library.badge.file',
       titleKey: 'library.action.pickFile',
-      pickerMessageType,
+      requiresSourceAdd: true,
     };
   }
 
@@ -84,8 +75,6 @@ export function isNodeLibraryVisibleCreateType(nodeType: CanvasNodeType): boolea
   return getNodeLibraryCreationPolicy(nodeType).kind === 'create';
 }
 
-export function getNodeLibraryPickerMessageType(
-  nodeType: CanvasNodeType,
-): NodeLibraryPickerMessageType | undefined {
-  return getNodeLibraryCreationPolicy(nodeType).pickerMessageType;
+export function requiresNodeLibrarySourceAdd(nodeType: CanvasNodeType): boolean {
+  return getNodeLibraryCreationPolicy(nodeType).requiresSourceAdd === true;
 }

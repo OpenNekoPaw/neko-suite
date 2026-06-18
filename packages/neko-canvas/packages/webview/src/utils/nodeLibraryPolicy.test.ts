@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   getNodeLibraryCreationPolicy,
-  getNodeLibraryPickerMessageType,
   isNodeLibraryDirectCreateType,
   isNodeLibraryFileBoundType,
   isNodeLibraryVisibleCreateType,
+  requiresNodeLibrarySourceAdd,
 } from './nodeLibraryPolicy';
 
 describe('node library creation policy', () => {
@@ -16,14 +16,14 @@ describe('node library creation policy', () => {
     expect(isNodeLibraryDirectCreateType('shot')).toBe(true);
   });
 
-  it('routes file-bound nodes through picker messages', () => {
+  it('routes file-bound nodes through canonical source add intent', () => {
     expect(getNodeLibraryCreationPolicy('script')).toMatchObject({
       kind: 'file-bound',
       canDragToCreate: false,
-      pickerMessageType: 'pickScriptDocument',
+      requiresSourceAdd: true,
     });
-    expect(getNodeLibraryPickerMessageType('media')).toBe('pickMediaFile');
-    expect(getNodeLibraryPickerMessageType('project')).toBe('pickProjectDocument');
+    expect(requiresNodeLibrarySourceAdd('media')).toBe(true);
+    expect(requiresNodeLibrarySourceAdd('project')).toBe(true);
     expect(isNodeLibraryFileBoundType('document')).toBe(true);
     expect(isNodeLibraryVisibleCreateType('document')).toBe(false);
   });

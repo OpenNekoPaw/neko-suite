@@ -42,20 +42,27 @@ import {
   useCanvasKeyboardController,
   type CanvasKeyboardState,
 } from './hooks/useCanvasKeyboardController';
+import { useCanvasAutoSave } from './hooks/useCanvasAutoSave';
 import { useKeyboardActions } from './hooks/useKeyboardActions';
+import {
+  applyCanvasAddSourceResult,
+  createCanvasFilePickerAddSourceInput,
+  createCanvasProjectSourceAddClient,
+  getCanvasFilePickerFallbackName,
+  type CanvasProjectSourceAddClient,
+} from './hooks/useDragDrop';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import { useThrottledCanvasViewport } from './hooks/useThrottledCanvasViewport';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
 import {
-  getNodeLibraryPickerMessageType,
   isNodeLibraryDirectCreateType,
-  type NodeLibraryPickerMessageType,
+  requiresNodeLibrarySourceAdd,
 } from './utils/nodeLibraryPolicy';
 import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { getImportedGeneratedAssetNodeInput } from './utils/importedGeneratedAsset';
-import { setGlobalVSCodeApi } from './utils/vscode';
+import { getGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
 import { createStoryboardNodeTypeDescriptors } from './subsystems/storyboard/descriptors';
 import type { FloatingPanelDefinition } from './subsystems';
@@ -65,7 +72,6 @@ import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
 } from './utils/viewportMath';
-import { createCanvasDocumentSaveFingerprint } from './utils/canvasPersistence';
 import {
   createViewportSnapshotPolicy,
   type ViewportSnapshotPolicy,
@@ -177,19 +183,7 @@ function updateGalleryChildGeneration(
   state.updateCanvasData({ nodes: nextNodes });
 }
 
-declare const acquireVsCodeApi: () => {
-  postMessage: (message: unknown) => void;
-  getState: () => unknown;
-  setState: (state: unknown) => void;
-};
-
-// Get VSCode API if available (in webview context)
-const vscode: VSCodeAPI = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
-
-// Expose on window so child components (e.g. MediaNode) can postMessage
-if (vscode) {
-  setGlobalVSCodeApi(vscode);
-}
+const vscode: VSCodeAPI = getGlobalVSCodeApi();
 
 // =============================================================================
 // Component
@@ -261,6 +255,10 @@ export function CanvasApp() {
   const seedViewportFromDocument = useRuntimeViewportStore(
     (state) => state.seedViewportFromDocument,
   );
+  const viewportSnapshotPolicyRef = useRef<ViewportSnapshotPolicy | null>(null);
+  const pendingLoadedCanvasBaselineRef = useRef<CanvasData | null>(null);
+  const markAutoSaveSavedRef = useRef<((canvasData: CanvasData) => void) | null>(null);
+  const canvasProjectSourceAddClientRef = useRef<CanvasProjectSourceAddClient | null>(null);
 
   // Derive computed values from canvasData
   const nodes = canvasData?.nodes ?? [];
@@ -370,7 +368,6 @@ export function CanvasApp() {
 
   const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
   const isComposingRef = useRef(false);
-  const viewportSnapshotPolicyRef = useRef<ViewportSnapshotPolicy | null>(null);
   const projectionRequestIdRef = useRef(0);
   const projectionResolversRef = useRef(
     new Map<
@@ -444,41 +441,97 @@ export function CanvasApp() {
     deleteSelected,
   });
 
-  const handleAddMediaFromExtension = useCallback(
-    (
-      mediaType: string,
-      uri: string,
-      name: string,
-      options?: { runtimeAssetPath?: string; originalPath?: string },
-    ) => {
-      addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name, {
-        ...(options?.runtimeAssetPath ? { runtimeAssetPath: options.runtimeAssetPath } : {}),
+  const handleDropAssets = useCallback(
+    (assets: CanvasDroppedAsset[], position?: { x: number; y: number }) => {
+      const pos = position ?? dropPositionRef.current ?? getViewportCenter();
+      assets.forEach((asset, i) => {
+        const offset = i * 30;
+        const dropPos = { x: pos.x + offset, y: pos.y + offset };
+        switch (asset.kind) {
+          case 'media':
+            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name, {
+              ...(asset.runtimeAssetPath ? { runtimeAssetPath: asset.runtimeAssetPath } : {}),
+            });
+            break;
+          case 'script':
+            addScriptAt(dropPos, asset.path, asset.title);
+            break;
+          case 'document':
+            addDocumentAt(dropPos, asset.path, asset.title, asset.docType);
+            break;
+          case 'model':
+            addModelAt(dropPos, asset.path, asset.modelName, asset.modelType, asset.role);
+            break;
+          case 'canvas':
+            addCanvasEmbedAt(dropPos, asset.path, asset.title);
+            break;
+          case 'project':
+            addProjectAt(dropPos, asset.path, asset.title, asset.projectType);
+            break;
+        }
       });
+      dropPositionRef.current = null;
     },
-    [addMediaAt, getViewportCenter],
+    [
+      addCanvasEmbedAt,
+      addDocumentAt,
+      addMediaAt,
+      addModelAt,
+      addProjectAt,
+      addScriptAt,
+      getViewportCenter,
+    ],
+  );
+
+  const getCanvasProjectSourceAddClient = useCallback(() => {
+    if (!vscode) return null;
+    const existing = canvasProjectSourceAddClientRef.current;
+    if (existing) return existing;
+    const client = createCanvasProjectSourceAddClient(vscode);
+    canvasProjectSourceAddClientRef.current = client;
+    return client;
+  }, []);
+
+  const requestCanvasFilePickerSource = useCallback(
+    (type: CanvasNodeType | undefined, position: { x: number; y: number }) => {
+      const client = getCanvasProjectSourceAddClient();
+      if (!client) return;
+
+      void client
+        .addSource(createCanvasFilePickerAddSourceInput(type, position))
+        .then((result) => {
+          applyCanvasAddSourceResult({
+            result,
+            fallbackName: getCanvasFilePickerFallbackName(type),
+            fallbackMediaType: type === 'media' ? 'video' : undefined,
+            dropPosition: position,
+            addMediaAt,
+            onDropAssets: handleDropAssets,
+          });
+        })
+        .catch((error: unknown) => {
+          logger.warn('Canvas file-picker add-source failed', error);
+        });
+    },
+    [addMediaAt, getCanvasProjectSourceAddClient, handleDropAssets],
   );
 
   const handleImportFile = useCallback(() => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickFile' });
-    }
-  }, []);
+    requestCanvasFilePickerSource(undefined, getViewportCenter());
+  }, [getViewportCenter, requestCanvasFilePickerSource]);
 
   const handlePickLibraryNodeSource = useCallback(
-    (_type: CanvasNodeType, pickerMessageType: NodeLibraryPickerMessageType) => {
-      if (vscode) {
-        vscode.postMessage({ type: pickerMessageType });
-      }
+    (type: CanvasNodeType) => {
+      requestCanvasFilePickerSource(type, getViewportCenter());
     },
-    [],
+    [getViewportCenter, requestCanvasFilePickerSource],
   );
 
   const createLibraryNodeAt = useCallback(
     (type: CanvasNodeType, position: { x: number; y: number }) => {
       if (!isNodeLibraryDirectCreateType(type)) {
-        const pickerMessageType = getNodeLibraryPickerMessageType(type);
-        if (pickerMessageType && vscode) {
-          vscode.postMessage({ type: pickerMessageType });
+        if (requiresNodeLibrarySourceAdd(type)) {
+          requestCanvasFilePickerSource(type, position);
         }
         return;
       }
@@ -495,7 +548,7 @@ export function CanvasApp() {
         reportAction('node.create', type);
       }
     },
-    [addNode, reportAction, selectNode],
+    [addNode, reportAction, requestCanvasFilePickerSource, selectNode],
   );
 
   const handleCreateLibraryNode = useCallback(
@@ -542,6 +595,8 @@ export function CanvasApp() {
     screenToCanvas,
     addMediaAt,
     onDropNodeType: handleDropLibraryNode,
+    onDropAssets: handleDropAssets,
+    addSourceClient: getCanvasProjectSourceAddClient() ?? undefined,
   });
 
   // =========================================================================
@@ -553,6 +608,7 @@ export function CanvasApp() {
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
     onCanvasDataLoaded: (data) => {
+      pendingLoadedCanvasBaselineRef.current = useCanvasStore.getState().canvasData ?? data;
       const documentKey = createCanvasViewportSnapshotKey(data);
       seedViewportFromDocument(
         documentKey,
@@ -561,7 +617,12 @@ export function CanvasApp() {
           DEFAULT_RUNTIME_VIEWPORT,
       );
     },
-    onAddMediaFromExtension: handleAddMediaFromExtension,
+    onSaved: () => {
+      const latestCanvasData = useCanvasStore.getState().canvasData;
+      if (latestCanvasData) {
+        markAutoSaveSavedRef.current?.(latestCanvasData);
+      }
+    },
     onImportGeneratedAsset: (asset) => {
       const nodeInput = getImportedGeneratedAssetNodeInput(asset);
       addMediaAt(getViewportCenter(), asset.mediaType, nodeInput.assetPath, asset.name, {
@@ -571,36 +632,6 @@ export function CanvasApp() {
         ...(nodeInput.resourceRef ? { resourceRef: nodeInput.resourceRef } : {}),
         ...(nodeInput.runtimeAssetPath ? { runtimeAssetPath: nodeInput.runtimeAssetPath } : {}),
       });
-    },
-    onDropAssets: (assets: CanvasDroppedAsset[]) => {
-      const pos = dropPositionRef.current ?? getViewportCenter();
-      assets.forEach((asset, i) => {
-        const offset = i * 30;
-        const dropPos = { x: pos.x + offset, y: pos.y + offset };
-        switch (asset.kind) {
-          case 'media':
-            addMediaAt(dropPos, asset.mediaType, asset.path, asset.name, {
-              ...(asset.runtimeAssetPath ? { runtimeAssetPath: asset.runtimeAssetPath } : {}),
-            });
-            break;
-          case 'script':
-            addScriptAt(dropPos, asset.path, asset.title);
-            break;
-          case 'document':
-            addDocumentAt(dropPos, asset.path, asset.title, asset.docType);
-            break;
-          case 'model':
-            addModelAt(dropPos, asset.path, asset.modelName, asset.modelType, asset.role);
-            break;
-          case 'canvas':
-            addCanvasEmbedAt(dropPos, asset.path, asset.title);
-            break;
-          case 'project':
-            addProjectAt(dropPos, asset.path, asset.title, asset.projectType);
-            break;
-        }
-      });
-      dropPositionRef.current = null;
     },
     onBuildPromptResult: (prompt) => {
       buildPromptResolverRef.current?.(prompt);
@@ -1068,6 +1099,28 @@ export function CanvasApp() {
     isComposingRef,
   });
 
+  const { markSaved } = useCanvasAutoSave({
+    canvasData,
+    isReady,
+    onBeforeSave: () => viewportSnapshotPolicyRef.current?.flush('save'),
+    onSave: (data) => vscode?.postMessage({ type: 'requestSave', saveReason: 'autosave', data }),
+  });
+
+  useEffect(() => {
+    markAutoSaveSavedRef.current = markSaved;
+    return () => {
+      markAutoSaveSavedRef.current = null;
+    };
+  }, [markSaved]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    const baseline = pendingLoadedCanvasBaselineRef.current;
+    if (!baseline) return;
+    markSaved(baseline);
+    pendingLoadedCanvasBaselineRef.current = null;
+  }, [isReady, markSaved]);
+
   const keyboardState = useMemo<CanvasKeyboardState>(
     () => ({
       canDeleteSelection: selectedNodeIds.length > 0 || selectedConnectionIds.length > 0,
@@ -1130,28 +1183,6 @@ export function CanvasApp() {
     window.addEventListener('blur', flushViewportSnapshot);
     return () => window.removeEventListener('blur', flushViewportSnapshot);
   }, [vscode]);
-
-  // =========================================================================
-  // Debounced save
-  // =========================================================================
-
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSavedDataRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!vscode || !isReady || !canvasData) return;
-    const currentDataFingerprint = createCanvasDocumentSaveFingerprint(canvasData);
-    if (currentDataFingerprint === lastSavedDataRef.current) return;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
-      lastSavedDataRef.current = currentDataFingerprint;
-      viewportSnapshotPolicyRef.current?.flush('save');
-      vscode.postMessage({ type: 'save', data: canvasData });
-    }, 300);
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [canvasData, isReady]);
 
   // =========================================================================
   // Sync status to extension

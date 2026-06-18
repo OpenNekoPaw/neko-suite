@@ -69,9 +69,9 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 
 | 方式 | 状态 | 说明 |
 |------|------|------|
-| Explorer 拖拽 | ✅ | `useDragDrop` → `resolveDroppedFiles` → `dropAssets`（media/script/document/model/canvas） |
-| 素材库拖拽 | ✅ | `application/json` 协议，PathVariable 解析 |
-| 工具栏文件选择器 | ✅ | `pickMedia` 已接通，图片/视频/音频可直接选入 |
+| Explorer 拖拽 | ✅ | `useDragDrop` → `project:addSource` → `dropAssets`（media/script/document/model/canvas） |
+| 素材库拖拽 | ✅ | `application/json` 协议 → `project:addSource`，Extension Host 统一解析路径变量 |
+| 工具栏文件选择器 | ✅ | `pickMedia` / `pickFile` 生成 `ProjectSourceAddRequest` 后再创建节点 |
 | 引用节点选择器 | ✅ | `pickScriptDocument` / `pickReferenceDocument` / `pickModelReference` / `pickCanvasDocument` |
 | 文档类型（ScriptNode 等）| ✅ | Explorer 拖入或工具栏选择均可创建 `ScriptNode` / `DocumentNode` / `ModelNode` / `CanvasEmbedNode` |
 

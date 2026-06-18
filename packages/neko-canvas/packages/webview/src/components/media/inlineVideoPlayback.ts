@@ -13,7 +13,7 @@ export interface InlineVideoSeekClockState {
 
 export interface InlineVideoSeekPipeline {
   scheduler: { flush(): void } | null;
-  videoClient: { resetDecoder(): void } | null;
+  videoClient: { resetDecoder?: () => void } | null;
   audioClient: { resetClock(): void } | null;
 }
 
@@ -36,7 +36,7 @@ export function resetInlineVideoPlaybackForSeek({
   clock.clockSourceRef.current = 'wall';
 
   pipeline.scheduler?.flush();
-  pipeline.videoClient?.resetDecoder();
+  pipeline.videoClient?.resetDecoder?.();
   pipeline.audioClient?.resetClock();
 }
 

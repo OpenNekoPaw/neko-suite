@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  createMockVSCodeApi,
+  installMockWebviewWindow,
+  type MockWebviewWindow,
+} from '@neko/shared/vscode/test-utils';
 import { WebviewPreviewResolver } from './previewResolver';
-import { setGlobalVSCodeApi } from '../utils/vscode';
 
-let restoreWindow: (() => void) | undefined;
+let mockWindow: MockWebviewWindow | undefined;
 
 afterEach(() => {
-  setGlobalVSCodeApi(null);
-  restoreWindow?.();
-  restoreWindow = undefined;
+  mockWindow?.dispose();
+  mockWindow = undefined;
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -39,15 +42,59 @@ describe('WebviewPreviewResolver', () => {
     expect(variant.metadata?.label).toBe('No preview source');
   });
 
+  it('does not treat video source URLs as stable poster images', async () => {
+    const resolver = new WebviewPreviewResolver();
+    const source = {
+      id: 'node:video',
+      role: 'video-poster' as const,
+      asset: { kind: 'asset-identity' as const, path: 'clip.mp4', mediaType: 'video' },
+      variants: [
+        {
+          id: 'source-video',
+          role: 'video-poster' as const,
+          sourcePath: 'https://file+.vscode-resource.vscode-cdn.net/workspace/clip.mp4',
+        },
+      ],
+    };
+
+    const variant = await resolver.resolve({ source });
+
+    expect(variant.runtimeUrl).toBeUndefined();
+    expect(variant.sourcePath).toBe('clip.mp4');
+  });
+
+  it('resolves relative image poster paths for video posters instead of the video source', async () => {
+    vi.useFakeTimers();
+    const { postMessage } = installPreviewMock();
+    const resolver = new WebviewPreviewResolver();
+
+    const promise = resolver.resolve({
+      source: {
+        id: 'node:video',
+        role: 'video-poster',
+        asset: { kind: 'asset-identity', path: 'clip.mp4', mediaType: 'video' },
+        variants: [{ id: 'thumb', role: 'video-poster', sourcePath: 'thumbs/clip.png' }],
+      },
+    });
+    const request = postMessage.mock.calls[0]?.[0] as Record<string, unknown>;
+    resolver.dispose();
+
+    expect(request).toMatchObject({
+      type: 'preview:resolveVariant',
+      assetPath: 'thumbs/clip.png',
+      role: 'thumbnail',
+      mediaType: 'image',
+    });
+    await expect(promise).resolves.toMatchObject({
+      sourcePath: 'thumbs/clip.png',
+      runtimeUrl: undefined,
+      mimeType: 'image',
+    });
+  });
+
   it('cleans up pending runtime variant requests on dispose', async () => {
     vi.useFakeTimers();
-    const fakeWindow = installFakeWindow();
-    const postMessage = vi.fn();
-    setGlobalVSCodeApi({
-      postMessage,
-      getState: () => undefined,
-      setState: () => {},
-    });
+    const { postMessage } = installPreviewMock();
     const resolver = new WebviewPreviewResolver();
 
     const promise = resolver.resolve({
@@ -67,27 +114,23 @@ describe('WebviewPreviewResolver', () => {
       id: 'node:video:runtime',
       runtimeUrl: undefined,
     });
-    expect(fakeWindow.removeEventListener).toHaveBeenCalledWith('message', expect.any(Function));
+    expect(mockWindow?.listeners).toHaveLength(0);
   });
 
   it('requests panoramic FOV variants without persisting returned runtime URLs', async () => {
     vi.useFakeTimers();
-    installFakeWindow();
-    const postMessage = vi.fn();
+    const { postMessage } = installPreviewMock();
     let messageHandler: ((event: MessageEvent) => void) | undefined;
+    const addEventListener = window.addEventListener.bind(window);
     window.addEventListener = vi.fn(
       (_type: string, listener: EventListenerOrEventListenerObject) => {
         messageHandler =
           typeof listener === 'function'
             ? (listener as (event: MessageEvent) => void)
             : (event: MessageEvent) => listener.handleEvent(event);
+        addEventListener(_type, listener);
       },
     );
-    setGlobalVSCodeApi({
-      postMessage,
-      getState: () => undefined,
-      setState: () => {},
-    });
     const resolver = new WebviewPreviewResolver();
     const source = {
       id: 'node:pano',
@@ -123,13 +166,7 @@ describe('WebviewPreviewResolver', () => {
 
   it('passes document resource refs to runtime preview resolution without storing them on asset identity', async () => {
     vi.useFakeTimers();
-    installFakeWindow();
-    const postMessage = vi.fn();
-    setGlobalVSCodeApi({
-      postMessage,
-      getState: () => undefined,
-      setState: () => {},
-    });
+    const { postMessage } = installPreviewMock();
     const resolver = new WebviewPreviewResolver();
     const documentResourceRef = {
       kind: 'document-entry',
@@ -160,13 +197,7 @@ describe('WebviewPreviewResolver', () => {
 
   it('requests runtime previews from document resource refs without an asset path', async () => {
     vi.useFakeTimers();
-    installFakeWindow();
-    const postMessage = vi.fn();
-    setGlobalVSCodeApi({
-      postMessage,
-      getState: () => undefined,
-      setState: () => {},
-    });
+    const { postMessage } = installPreviewMock();
     const resolver = new WebviewPreviewResolver();
     const documentResourceRef = {
       kind: 'document-entry',
@@ -199,13 +230,7 @@ describe('WebviewPreviewResolver', () => {
 
   it('requests source variants for source-image review previews', async () => {
     vi.useFakeTimers();
-    installFakeWindow();
-    const postMessage = vi.fn();
-    setGlobalVSCodeApi({
-      postMessage,
-      getState: () => undefined,
-      setState: () => {},
-    });
+    const { postMessage } = installPreviewMock();
     const resolver = new WebviewPreviewResolver();
 
     const promise = resolver.resolve({
@@ -228,35 +253,10 @@ describe('WebviewPreviewResolver', () => {
   });
 });
 
-function installFakeWindow(): {
-  removeEventListener: ReturnType<typeof vi.fn>;
-} {
-  const previousWindow = globalThis.window;
-  const fakeWindow = {
-    vscode: null,
-    __vscode_api__: null,
-    setTimeout: globalThis.setTimeout.bind(globalThis),
-    clearTimeout: globalThis.clearTimeout.bind(globalThis),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  };
-
-  Object.defineProperty(globalThis, 'window', {
-    value: fakeWindow,
-    configurable: true,
-  });
-
-  restoreWindow = () => {
-    if (previousWindow === undefined) {
-      Reflect.deleteProperty(globalThis, 'window');
-      return;
-    }
-
-    Object.defineProperty(globalThis, 'window', {
-      value: previousWindow,
-      configurable: true,
-    });
-  };
-
-  return fakeWindow;
+function installPreviewMock(): { postMessage: ReturnType<typeof vi.fn> } {
+  const api = createMockVSCodeApi();
+  const postMessage = vi.fn(api.postMessage);
+  api.postMessage = postMessage;
+  mockWindow = installMockWebviewWindow(api);
+  return { postMessage };
 }

@@ -10,6 +10,7 @@ import { useCanvasStore } from '../../../stores/canvasStore';
 import { useClipboardStore } from '../../../stores/clipboardStore';
 import { useHistoryStore } from '../../../stores/historyStore';
 import { getGlobalVSCodeApi } from '../../../utils/vscode';
+import { isImagePreviewUrl } from '../../../preview';
 import { dispatchNodeCardAction, NODE_CARD_ACTION_DISPATCHER } from './actionDispatcher';
 import { createBuiltInNodeCardPolicyRegistry, getNodeCardPolicy } from './policies';
 import type {
@@ -138,7 +139,11 @@ export function CardPreviewSlot({
       ? undefined
       : previewDescriptor,
   );
-  const displayUrl = stableUrl ?? resolvedVariant?.runtimeUrl;
+  const resolvedDisplayUrl =
+    source.renderForm === 'media-poster'
+      ? readImagePreviewUrl(resolvedVariant?.runtimeUrl)
+      : resolvedVariant?.runtimeUrl;
+  const displayUrl = stableUrl ?? resolvedDisplayUrl;
 
   switch (source.renderForm) {
     case 'asset-thumbnail':
@@ -167,6 +172,9 @@ export function CardPreviewSlot({
               src={displayUrl}
               alt={title}
               className={`h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`}
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-[var(--node-fg-secondary)]">
@@ -198,6 +206,10 @@ export function CardPreviewSlot({
     case 'none':
       return null;
   }
+}
+
+function readImagePreviewUrl(url: string | undefined): string | undefined {
+  return url && isImagePreviewUrl(url) ? url : undefined;
 }
 
 function canShellPreviewSource(source: CardPreviewSource): boolean {

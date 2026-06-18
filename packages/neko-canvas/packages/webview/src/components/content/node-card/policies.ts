@@ -26,6 +26,7 @@ import {
   readString,
   resolvePlacementTitle,
 } from './utils';
+import { isImagePreviewUrl } from '../../../preview';
 import { t } from '../../../i18n';
 import { resolveCanvasStatusLabel } from '../../../i18n/canvasValueLabels';
 
@@ -62,11 +63,13 @@ export const mediaCardPolicy: NodeCardPolicy = {
       return { renderForm: 'waveform', waveformStyle: 'bars' };
     }
 
+    const posterPath =
+      readString(data, 'runtimeThumbnailPath') ?? readString(data, 'thumbnailPath');
+    const assetPath = readPersistentAssetPath(node);
     const sourcePath =
-      readString(data, 'runtimeThumbnailPath') ??
-      readString(data, 'runtimeAssetPath') ??
-      readString(data, 'thumbnailPath') ??
-      readString(data, 'assetPath');
+      mediaType === 'video'
+        ? posterPath
+        : (posterPath ?? readString(data, 'runtimeAssetPath') ?? readString(data, 'assetPath'));
     const title = resolveMediaTitle(node);
     const role: CanvasPreviewRole = mediaType === 'video' ? 'video-poster' : 'image';
     const documentResourceRef = readDocumentResourceRef(node);
@@ -75,12 +78,21 @@ export const mediaCardPolicy: NodeCardPolicy = {
       mediaType === 'image' && documentResourceRef && sourcePath && isSafeWebviewUrl(sourcePath)
         ? sourcePath
         : undefined;
+    const stablePosterPath =
+      mediaType === 'video' && sourcePath && isImagePreviewUrl(sourcePath) ? sourcePath : undefined;
     const source = createAssetPreviewDescriptor({
       id: `node-card:${node.id}:media`,
       role,
-      path: stableRuntimePath ? undefined : sourcePath,
+      path:
+        mediaType === 'video'
+          ? assetPath
+          : stableRuntimePath || stablePosterPath
+            ? undefined
+            : sourcePath,
       stablePath:
-        stableRuntimePath ?? readString(data, 'thumbnailPath') ?? readPersistentAssetPath(node),
+        stableRuntimePath ??
+        stablePosterPath ??
+        (mediaType === 'video' ? readString(data, 'thumbnailPath') : (posterPath ?? assetPath)),
       mediaType,
       title,
       metadata:

@@ -8,6 +8,7 @@ import type { ArtboardCanvasNode, CanvasViewport } from '@neko/shared';
 import { ARTBOARD_PRESETS } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { exportArtboard, type ExportFormat } from '../../utils/artboardExport';
+import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { t } from '../../i18n';
 import clsx from 'clsx';
 
@@ -37,9 +38,7 @@ export function ArtboardNode({ node, viewport, isSelected, onSelect, onMove }: A
 
   const doExport = useCallback(
     async (format: ExportFormat) => {
-      const vscodeApi = (window as unknown as Record<string, unknown>).vscode as
-        | { postMessage: (msg: unknown) => void }
-        | undefined;
+      const vscodeApi = getGlobalVSCodeApi();
       if (!vscodeApi) return;
 
       setExporting(true);

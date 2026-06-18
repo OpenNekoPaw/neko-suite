@@ -5,14 +5,13 @@
  * Uses ConsoleLogger from @neko/shared.
  */
 
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { ILogger } from '@neko/shared';
+import { createWebviewLoggerRegistry, LogLevel } from '@neko/shared';
 
-const rootLogger: ILogger = new ConsoleLogger('NekoCanvas', LogLevel.Debug);
+const registry = createWebviewLoggerRegistry({
+  packageName: 'NekoCanvas',
+  defaultLevel: LogLevel.Debug,
+});
 
-/**
- * Get a child logger for a module/component.
- */
-export function getLogger(source: string): ILogger {
-  return rootLogger.child(source);
-}
+export const setRootLogger = registry.setRootLogger;
+export const getRootLogger = registry.getRootLogger;
+export const getLogger = registry.getLogger;

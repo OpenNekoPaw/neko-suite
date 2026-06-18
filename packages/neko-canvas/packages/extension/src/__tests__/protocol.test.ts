@@ -61,6 +61,33 @@ const canvasManifest = JSON.parse(
   readFileSync(join(__dirname, '../../../../package.json'), 'utf-8'),
 ) as CanvasManifest;
 
+function readMethodBody(source: string, methodStart: string): string {
+  const start = source.indexOf(methodStart);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const nextMethod = source.indexOf('\n  private ', start + methodStart.length);
+  const nextPublicMethod = source.indexOf('\n  async ', start + methodStart.length);
+  const candidates = [nextMethod, nextPublicMethod].filter((index) => index > start);
+  const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
+  return source.slice(start, end);
+}
+
+function readCaseBody(source: string, caseName: string): string {
+  const start = source.indexOf(`case '${caseName}'`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const braceStart = source.indexOf('{', start);
+  expect(braceStart).toBeGreaterThanOrEqual(0);
+  let depth = 0;
+  for (let index = braceStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(braceStart, index + 1);
+    }
+  }
+  return source.slice(start);
+}
+
 describe('canvasEditorProvider message contracts', () => {
   describe('NKV-001: nodes.list nodeType parameter', () => {
     it('sends nodeType field, not bare type', () => {
@@ -173,25 +200,28 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-007: canvas embed picker', () => {
-    it('extension handles pickCanvasDocument and returns a canvas dropped asset', () => {
-      expect(providerSource).toContain("case 'pickCanvasDocument'");
-      expect(providerSource).toContain("kind: 'canvas'");
-      expect(providerSource).toContain("type: 'dropAssets'");
+    it('routes Canvas file picking through project:addSource only', () => {
+      expect(providerSource).toContain("case 'project:addSource'");
+      expect(providerSource).toContain('private async resolveCanvasProjectSourceAddRequest(');
+      expect(providerSource).toContain('private createCanvasProjectSourcePickerFilters(');
+      expect(providerSource).toContain('this.createCanvasPickerSourceAddRequest(uri, documentUri');
+      expect(providerSource).not.toContain("case 'pickCanvasDocument'");
+      expect(providerSource).not.toContain('rejectLegacyCanvasPickerMessage');
+      expect(providerSource).not.toContain('createCanvasDroppedAssetFromProjectAddSource');
+      expect(providerSource).not.toContain("postMessage({ type: 'dropAssets'");
     });
   });
 
   describe('NKV-008: reference picker entrypoints', () => {
-    it('extension handles script/document/model picker messages', () => {
-      expect(providerSource).toContain("case 'pickMediaFile'");
-      expect(providerSource).toContain("case 'pickScriptDocument'");
-      expect(providerSource).toContain("case 'pickReferenceDocument'");
-      expect(providerSource).toContain("case 'pickModelReference'");
-      expect(providerSource).toContain("case 'pickProjectDocument'");
-      expect(providerSource).toContain("kind: 'media'");
-      expect(providerSource).toContain("kind: 'script'");
-      expect(providerSource).toContain("kind: 'document'");
-      expect(providerSource).toContain("kind: 'model'");
-      expect(providerSource).toContain("kind: 'project'");
+    it('removes legacy script/document/model picker message entrypoints', () => {
+      expect(providerSource).not.toContain("case 'pickMediaFile'");
+      expect(providerSource).not.toContain("case 'pickScriptDocument'");
+      expect(providerSource).not.toContain("case 'pickReferenceDocument'");
+      expect(providerSource).not.toContain("case 'pickModelReference'");
+      expect(providerSource).not.toContain("case 'pickProjectDocument'");
+      expect(providerSource).not.toContain('rejectLegacyCanvasPickerMessage');
+      expect(providerSource).toContain('private createCanvasProjectSourcePickerFilters(');
+      expect(providerSource).not.toContain("postMessage({ type: 'dropAssets'");
     });
   });
 
@@ -548,6 +578,55 @@ describe('canvasEditorProvider message contracts', () => {
       expect(narrativePreviewBridgeSource).not.toContain('loadNkc(');
     });
 
+    it('keeps Canvas document saves on the VS Code custom editor lifecycle', () => {
+      expect(providerSource).toContain("case 'requestSave':");
+      expect(providerSource).toContain('private async requestDocumentSave(');
+      expect(providerSource).toContain('await vscode.workspace.save(document.uri)');
+      expect(providerSource).toContain("webviewPanel.webview.postMessage({ type: 'saved' })");
+      const requestSaveBody = readMethodBody(providerSource, 'private async requestDocumentSave');
+      expect(requestSaveBody).not.toContain("postMessage({ type: 'saved' })");
+      expect(providerSource).toContain('CustomDocumentContentChangeEvent<vscode.CustomDocument>');
+      expect(providerSource).not.toContain('CustomDocumentEditEvent<vscode.CustomDocument>');
+      expect(providerSource).not.toContain('private async persistCanvasSnapshot(');
+      expect(canvasAppSource).toContain("type: 'requestSave'");
+      expect(canvasAppSource).not.toContain("type: 'save', data");
+      expect(webviewSource).toContain("case 'saved':");
+      expect(webviewSource).toContain('onSavedRef.current?.()');
+    });
+
+    it('removes legacy Canvas picker messages so tests cannot pass through old paths', () => {
+      for (const caseName of [
+        'pickMedia',
+        'pickCanvasDocument',
+        'pickMediaFile',
+        'pickProjectDocument',
+        'pickScriptDocument',
+        'pickReferenceDocument',
+        'pickModelReference',
+        'pickFile',
+      ]) {
+        expect(providerSource, `${caseName} should not remain as a message case`).not.toContain(
+          `case '${caseName}'`,
+        );
+      }
+      expect(providerSource).not.toContain('rejectLegacyCanvasPickerMessage');
+      expect(providerSource).not.toContain("postMessage({ type: 'dropAssets'");
+      expect(providerSource).toContain('private createCanvasPickerSourceAddRequest');
+      expect(providerSource).toContain('this.addCanvasProjectSource(');
+      expect(providerSource).toContain('handleProjectSourceAddRequest(');
+    });
+
+    it('marks Canvas custom documents dirty with content-change events only', () => {
+      const dirtyEventCalls = [
+        ...providerSource.matchAll(/_onDidChangeCustomDocument\.fire\(\{([^)]*)\}\)/g),
+      ].map((match) => match[1] ?? '');
+      expect(dirtyEventCalls.length).toBeGreaterThan(0);
+      expect(dirtyEventCalls.every((body) => body.includes('document'))).toBe(true);
+      expect(
+        dirtyEventCalls.every((body) => !body.includes('undo') && !body.includes('redo')),
+      ).toBe(true);
+    });
+
     it('contributes all Narrative Preview ablation settings', () => {
       const properties = canvasManifest.contributes.configuration.properties;
       expect(
@@ -600,8 +679,8 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('saves projected canvas layout to cache path rather than the source document', () => {
       expect(providerSource).toContain('this.getProjectionCacheUri(');
-      expect(providerSource).toContain('const projectedCanvas = data as unknown as CanvasData');
-      expect(providerSource).toContain('isProjectedCanvasData(projectedCanvas)');
+      expect(providerSource).toContain('const data: ProjectedCanvasData = {');
+      expect(providerSource).toContain('projectionSource: source,');
       expect(providerSource).toContain("'.neko', '.cache'");
     });
   });
@@ -874,14 +953,19 @@ describe('canvasEditorProvider message contracts', () => {
     });
 
     it('keeps Canvas media import storage paths separate from runtime webview URLs', () => {
-      expect(providerSource).toContain('private async createMediaDroppedAsset(');
-      expect(providerSource).toContain('runtimeAssetPath,');
-      expect(providerSource).toContain('originalPath: fsPath');
-      expect(providerSource).toContain('path: await this.contractAssetPath(fsPath, documentUri)');
-      expect(providerSource).toContain("'neko-canvas.pick-media'");
-      expect(providerSource).toContain("'neko-canvas.pick-media-file'");
-      expect(providerSource).toContain("'neko-canvas.pick-file'");
-      expect(providerSource).toContain("'neko-canvas.drop-file'");
+      expect(providerSource).toContain('private async handleCanvasProjectAddSource(');
+      expect(providerSource).toContain('private async addCanvasProjectSource(');
+      expect(providerSource).toContain('ingestProjectSourceAddRequest(');
+      expect(providerSource).toContain('const runtimeAssetPath =');
+      expect(providerSource).toContain('this.projectLocalResource(');
+      expect(providerSource).toContain('await this.projectCanvasMediaLocalFile(');
+      expect(providerSource).toContain('...(runtimeAssetPath ? { runtimeAssetPath } : {}),');
+      expect(providerSource).toContain('postProjectSourceAddResult');
+      expect(providerSource).toContain('handleProjectSourceAddHostRequest(sourceRequest');
+      expect(providerSource).toContain('contractedPath');
+      expect(providerSource).toContain('contractExternalAssetPath(');
+      expect(providerSource).toContain("'neko-canvas.project-add-source.file-picker'");
+      expect(providerSource).toContain("'neko-canvas.project-add-source'");
       expect(providerSource).toContain('resolveCanvasMediaPathForSave(');
       expect(providerSource).toContain('resolveWorkspaceVariableAssetPathCandidates(');
       expect(providerSource).toContain('contractWorkspaceMediaPath(');
@@ -889,13 +973,43 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('getOwningCanvasWorkspaceRoot(');
       expect(providerSource).toContain('isWorkspaceScopedVariablePath(');
       expect(providerSource).toContain('return relativePath || undefined;');
+      expect(providerSource).toContain('Canvas asset path is not portable');
+      expect(providerSource).not.toContain('// Fallback: relative to document directory');
+      expect(providerSource).not.toContain('path.relative(docDir, absolutePath)');
       expect(providerSource).not.toContain(
         'return relativePath ? `\\${WORKSPACE}/${relativePath}`',
       );
       expect(providerSource).toContain('this.createCanvasWorkspaceMediaPathContext(documentUri)');
-      expect(canvasAppSource).toContain('runtimeAssetPath: options.runtimeAssetPath');
+      expect(canvasAppSource).not.toContain('runtimeAssetPath: options.runtimeAssetPath');
       expect(canvasAppSource).toContain('runtimeAssetPath: asset.runtimeAssetPath');
-      expect(webviewSource).toContain('message.runtimeAssetPath');
+      expect(webviewSource).not.toContain('message.runtimeAssetPath');
+      expect(webviewSource).not.toMatch(/case ['"](?:addMedia|dropMedia|dropAssets)['"]/);
+      expect(
+        readFileSync(join(__dirname, '../../../webview/src/hooks/useDragDrop.ts'), 'utf-8'),
+      ).toContain("const runtimeAssetPath = metadata?.['runtimeAssetPath'];");
+    });
+
+    it('normalizes persisted media preview bindings to durable asset paths', () => {
+      const bindingNormalizer = extractFunction(
+        providerSource,
+        'normalizeCanvasContentBindingsForSave',
+      );
+
+      expect(bindingNormalizer).toContain(
+        "normalizeCanvasAssetPreviewBindings(content, '/assetPath');",
+      );
+      expect(bindingNormalizer).not.toContain("'/runtimeAssetPath'");
+      expect(providerSource).toContain("delete nodeData['runtimeAssetPath'];");
+      expect(providerSource).toContain("delete nodeData['runtimeThumbnailPath'];");
+    });
+
+    it('does not reconfigure Canvas Webview roots while resolving add-source previews', () => {
+      const addSource = extractFunction(providerSource, 'private async addCanvasProjectSource');
+
+      expect(addSource).toContain('projectCanvasMediaLocalFile(');
+      expect(addSource).not.toContain('configureWebview(');
+      expect(addSource).not.toContain('addFeatureRoot(');
+      expect(providerSource).not.toContain('private async addFeatureRoot(');
     });
   });
 
@@ -927,3 +1041,23 @@ describe('canvasEditorProvider message contracts', () => {
     });
   });
 });
+
+function extractFunction(source: string, functionName: string): string {
+  const functionIndex = source.indexOf(functionName);
+  if (functionIndex < 0) return '';
+  const braceIndex = source.indexOf('{', functionIndex);
+  if (braceIndex < 0) return '';
+
+  let depth = 0;
+  for (let index = braceIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(braceIndex + 1, index);
+      }
+    }
+  }
+  return '';
+}

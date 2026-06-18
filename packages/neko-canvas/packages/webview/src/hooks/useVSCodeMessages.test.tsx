@@ -121,6 +121,26 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
   });
 
+  it('notifies the app when the extension confirms a custom document save', () => {
+    const onSaved = vi.fn();
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{ onSaved }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({ type: 'saved' });
+    });
+
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
   it('creates canvas connections from host node operation requests', () => {
     const vscode = createVSCodeApi();
     const createConnection = vi.fn(() => ({
@@ -192,8 +212,6 @@ function createOptions(
     vscode: createVSCodeApi(),
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData: vi.fn(),
-    onAddMediaFromExtension: vi.fn(),
-    onDropAssets: vi.fn(),
     isComposingRef,
     isKeyboardFocusedRef,
     ...options,

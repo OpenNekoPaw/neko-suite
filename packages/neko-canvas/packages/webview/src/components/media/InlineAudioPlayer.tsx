@@ -1,5 +1,9 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { AudioStreamClient, formatTime } from '@neko/neko-client';
+import {
+  EngineAvStreamLifecycle,
+  formatTime,
+  type EngineAvAudioStreamClient,
+} from '@neko/neko-client';
 import { ProgressBar } from '@neko/ui/creative';
 import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/ui/icons';
 import { getLogger } from '../../utils/logger';
@@ -30,7 +34,8 @@ export function InlineAudioPlayer({
   onTimeUpdate,
   onStop,
 }: InlineAudioPlayerProps) {
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   const animFrameRef = useRef<number>(0);
   const playStartTimeRef = useRef(startTime);
   const playWallTimeRef = useRef(0);
@@ -41,6 +46,16 @@ export function InlineAudioPlayer({
   const [currentTime, setCurrentTime] = useState(startTime);
   const [volume] = useState(DEFAULT_VOLUME);
   const [isMuted, setIsMuted] = useState(false);
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ audioClient }) => {
+          audioClientRef.current = audioClient;
+        },
+      },
+    });
+  }
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -90,13 +105,15 @@ export function InlineAudioPlayer({
   // =========================================================================
 
   useEffect(() => {
-    const audioClient = new AudioStreamClient({
-      websocketUrl: audioStreamUrl,
-      volume: DEFAULT_VOLUME,
-      onError: (err) => logger.warn(`Audio error: ${err}`),
-    });
-    audioClientRef.current = audioClient;
-    audioClient.connect();
+    void lifecycleRef.current
+      ?.start({
+        audio: {
+          websocketUrl: audioStreamUrl,
+          volume: DEFAULT_VOLUME,
+          onError: (err) => logger.warn(`Audio error: ${err}`),
+        },
+      })
+      .catch((err) => logger.warn(`Inline audio lifecycle error: ${err}`));
 
     setIsPlaying(true);
     setCurrentTime(startTime);
@@ -105,9 +122,8 @@ export function InlineAudioPlayer({
     clockSourceRef.current = 'wall';
 
     return () => {
-      audioClient.setVolume(0);
-      audioClient.dispose();
-      audioClientRef.current = null;
+      audioClientRef.current?.setVolume(0);
+      lifecycleRef.current?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startTime is only used for initial value; including it would restart the stream on pause
   }, [audioStreamUrl]);

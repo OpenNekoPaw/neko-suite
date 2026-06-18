@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from 'react';
 import { hasEditableActiveElement, isKeyboardFocusMessage } from '@neko/ui/keyboard';
 import type {
   CanvasData,
-  CanvasDroppedAsset,
   CanvasNode,
   CanvasNodeType,
   ScriptScene,
@@ -27,8 +26,14 @@ import type {
   ProjectedCanvasStatus,
   ProjectionSourceChangeEvent,
 } from '@neko/shared';
-import { isCanvasNodeType, isJsonPointerPath } from '@neko/shared';
+import {
+  isCanvasNodeType,
+  isJsonPointerPath,
+  isProjectFileSnapshotRequestMessage,
+  PROJECT_FILE_SNAPSHOT_RESPONSE,
+} from '@neko/shared';
 import { setLocale } from '../i18n';
+import { useCanvasStore } from '../stores/canvasStore';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
 import {
   normalizeImportedGeneratedAsset,
@@ -59,14 +64,7 @@ export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
-  onAddMediaFromExtension: (
-    mediaType: string,
-    uri: string,
-    name: string,
-    options?: { runtimeAssetPath?: string; originalPath?: string },
-  ) => void;
   onImportGeneratedAsset?: (asset: ImportedGeneratedAssetPayload) => void;
-  onDropAssets: (assets: CanvasDroppedAsset[]) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
   /** Called with the AI-built prompt string for AutoPrompt */
@@ -104,6 +102,8 @@ export interface UseVSCodeMessagesOptions {
   onProjectionSourceChanged?: (event: ProjectionSourceChangeEvent) => void;
   /** Called after a Canvas document payload has been normalized and applied. */
   onCanvasDataLoaded?: (data: CanvasData) => void;
+  /** Called after the extension confirms that the current custom document save completed. */
+  onSaved?: () => void;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
   onKeyboardFocusChange?: (focused: boolean) => void;
@@ -177,9 +177,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     vscode,
     defaultCanvasData,
     setCanvasData,
-    onAddMediaFromExtension,
     onImportGeneratedAsset,
-    onDropAssets,
     onGenerationProgress,
     onBuildPromptResult,
     onScriptIndexResult,
@@ -200,6 +198,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     onProjectionStatus,
     onProjectionSourceChanged,
     onCanvasDataLoaded,
+    onSaved,
     onUpdateNodeImage,
     onKeyboardFocusChange,
     isKeyboardFocusedRef,
@@ -210,12 +209,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   const keyboardActionRef = useRef<(action: string) => void>(() => {});
 
   // Stable refs for callbacks to avoid re-registering listener
-  const onAddMediaRef = useRef(onAddMediaFromExtension);
-  onAddMediaRef.current = onAddMediaFromExtension;
   const onImportGeneratedAssetRef = useRef(onImportGeneratedAsset);
   onImportGeneratedAssetRef.current = onImportGeneratedAsset;
-  const onDropAssetsRef = useRef(onDropAssets);
-  onDropAssetsRef.current = onDropAssets;
   const onGenerationProgressRef = useRef(onGenerationProgress);
   onGenerationProgressRef.current = onGenerationProgress;
   const onBuildPromptResultRef = useRef(onBuildPromptResult);
@@ -256,6 +251,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onProjectionSourceChangedRef.current = onProjectionSourceChanged;
   const onCanvasDataLoadedRef = useRef(onCanvasDataLoaded);
   onCanvasDataLoadedRef.current = onCanvasDataLoaded;
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
   const onKeyboardFocusChangeRef = useRef(onKeyboardFocusChange);
@@ -279,6 +276,16 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             isKeyboardFocusedRefRef.current.current = message.focused;
           }
           onKeyboardFocusChangeRef.current?.(message.focused);
+          return;
+        }
+        if (isProjectFileSnapshotRequestMessage(message)) {
+          const document = useCanvasStore.getState().canvasData;
+          vscode.postMessage({
+            type: PROJECT_FILE_SNAPSHOT_RESPONSE,
+            requestId: message.requestId,
+            ok: Boolean(document),
+            ...(document ? { document } : { error: 'Canvas document is not ready.' }),
+          });
           return;
         }
         switch (message.type) {
@@ -305,53 +312,14 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'setLocale':
             setLocale(message.locale as 'en' | 'zh-cn');
             break;
-          case 'addMedia':
-            onAddMediaRef.current(
-              message.mediaType as string,
-              message.uri as string,
-              message.name as string,
-              {
-                ...(typeof message.runtimeAssetPath === 'string'
-                  ? { runtimeAssetPath: message.runtimeAssetPath }
-                  : {}),
-                ...(typeof message.originalPath === 'string'
-                  ? { originalPath: message.originalPath }
-                  : {}),
-              },
-            );
+          case 'saved':
+            onSavedRef.current?.();
             break;
           case 'importGeneratedAsset': {
             const asset = normalizeImportedGeneratedAsset(message.asset);
             if (asset) {
               onImportGeneratedAssetRef.current?.(asset);
             }
-            break;
-          }
-          case 'dropAssets': {
-            const assets = (message.assets as CanvasDroppedAsset[] | undefined) ?? [];
-            onDropAssetsRef.current(assets);
-            break;
-          }
-          case 'dropMedia': {
-            const assets = (
-              (message.files as
-                | Array<{ uri: string; name: string; mediaType: string }>
-                | undefined) ?? []
-            ).map((file) => {
-              const mediaType: 'image' | 'video' | 'audio' =
-                file.mediaType === 'video'
-                  ? 'video'
-                  : file.mediaType === 'audio'
-                    ? 'audio'
-                    : 'image';
-              return {
-                kind: 'media' as const,
-                path: file.uri,
-                name: file.name,
-                mediaType,
-              };
-            });
-            onDropAssetsRef.current(assets);
             break;
           }
           case 'generationProgress':

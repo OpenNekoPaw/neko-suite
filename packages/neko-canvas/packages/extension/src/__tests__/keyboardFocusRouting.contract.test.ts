@@ -116,9 +116,10 @@ describe('Canvas keyboard focus routing contracts', () => {
 
   it('sends custom document save/revert messages to the matching panel instead of the global active panel', () => {
     expect(providerSource).toContain('private getWebviewPanelForDocument(');
-    expect(providerSource).toContain(
-      "this.getWebviewPanelForDocument(document)?.webview.postMessage({ type: 'save' })",
-    );
+    expect(providerSource).toContain('requestWebviewProjectSnapshot<CanvasData>');
+    expect(providerSource).toContain("saveReason: 'vscode-save'");
+    expect(providerSource).toContain('CustomDocumentContentChangeEvent<vscode.CustomDocument>');
+    expect(providerSource).not.toContain('CustomDocumentEditEvent<vscode.CustomDocument>');
     expect(providerSource).toContain(
       "this.getWebviewPanelForDocument(document)?.webview.postMessage({ type: 'revert' })",
     );

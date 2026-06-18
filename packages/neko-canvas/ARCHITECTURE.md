@@ -176,10 +176,11 @@ packages/neko-canvas/
 
 ```
 VSCode Explorer 拖放文件到 Webview
-  → postMessage('resolveDroppedFiles', paths)
-    → Extension Host 解析文件类型
-      → postMessage('dropAssets', assetDtos)
-        → canvasStore.addNode(MediaNode | ScriptNode | DocumentNode | ModelNode | CanvasEmbedNode, dropPosition)
+  → postMessage('project:addSource', ProjectSourceAddRequest)
+    → Extension Host 统一路径/资产持久化
+      → postMessage('project:sourceAdded' | 'project:sourceRejected')
+        → 成功后转为 dropAssets 域操作
+          → canvasStore.addNode(MediaNode | ScriptNode | DocumentNode | ModelNode | CanvasEmbedNode, dropPosition)
 ```
 
 ---
@@ -208,7 +209,7 @@ pickScriptDocument                — 打开剧本选择器
 pickReferenceDocument             — 打开文档选择器
 pickModelReference                — 打开模型选择器
 pickCanvasDocument                — 打开 .nkc 选择器
-resolveDroppedFiles(paths)        — 解析拖放的文件
+project:addSource(request)        — 统一添加拖放/选择/素材库来源
 media:probe(path)                 — 媒体探测
 media:play/seek/pause/stop        — 播放控制
 media:captureFrame                — 截取帧

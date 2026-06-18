@@ -3,9 +3,24 @@ import { getGlobalVSCodeApi } from '../utils/vscode';
 import type { PreviewResolveRequest, PreviewResolver, RuntimePreviewVariant } from './types';
 
 const SAFE_URL_RE = /^(data:|blob:|https?:)/;
+const IMAGE_PREVIEW_SOURCE_RE = /\.(?:png|jpe?g|webp|gif|avif|bmp|svg)(?:[?#]|$)/i;
+const NON_IMAGE_MEDIA_URL_RE =
+  /\.(?:mp4|m4v|mov|webm|mkv|avi|wmv|mp3|m4a|wav|flac|aac|ogg|opus)(?:[?#]|$)/i;
 
 export function isSafeWebviewUrl(url: string): boolean {
   return SAFE_URL_RE.test(url);
+}
+
+export function isImagePreviewUrl(url: string): boolean {
+  if (!isSafeWebviewUrl(url)) {
+    return false;
+  }
+
+  if (url.startsWith('data:')) {
+    return url.startsWith('data:image/');
+  }
+
+  return !NON_IMAGE_MEDIA_URL_RE.test(readUrlPathname(url));
 }
 
 const ROLE_TO_ENGINE_ROLE: Partial<Record<CanvasPreviewRole, PreviewVariantRole>> = {
@@ -26,12 +41,15 @@ export class WebviewPreviewResolver implements PreviewResolver {
   private readonly pending = new Set<RuntimeVariantRequest>();
 
   async resolve(request: PreviewResolveRequest): Promise<RuntimePreviewVariant> {
+    const role = request.role ?? request.source.role;
     const preferred = selectStableVariant(request);
     if (preferred?.sourcePath || preferred?.assetId) {
       return preferred;
     }
 
-    const sourcePath = request.source.asset?.path ?? request.source.asset?.uri;
+    const variantSourcePath = selectRuntimeVariantSourcePath(request, role);
+    const sourcePath = variantSourcePath ?? request.source.asset?.path ?? request.source.asset?.uri;
+    const mediaType = variantSourcePath ? 'image' : request.source.asset?.mediaType;
     const documentResourceRef = request.source.metadata?.['documentResourceRef'];
     const resourceRef = request.source.metadata?.['resourceRef'];
     if (!sourcePath && !documentResourceRef && !resourceRef) {
@@ -41,19 +59,19 @@ export class WebviewPreviewResolver implements PreviewResolver {
     const runtimeUrl = await this.requestRuntimeVariant({
       sourceId: request.source.id,
       assetPath: sourcePath,
-      role: request.role ?? request.source.role,
-      mediaType: request.source.asset?.mediaType,
+      role,
+      mediaType,
       documentResourceRef,
       resourceRef,
     });
 
     return {
       id: `${request.source.id}:runtime`,
-      role: request.role ?? request.source.role,
+      role,
       assetId: request.source.asset?.assetId,
       sourcePath,
       runtimeUrl,
-      mimeType: request.source.asset?.mediaType,
+      mimeType: mediaType,
     };
   }
 
@@ -79,11 +97,43 @@ function selectStableVariant(request: PreviewResolveRequest): RuntimePreviewVari
   if (!variant) {
     return undefined;
   }
+  if (role === 'video-poster' && variant.sourcePath && !isImagePreviewUrl(variant.sourcePath)) {
+    return undefined;
+  }
 
   return {
     ...variant,
     runtimeUrl: variant.sourcePath,
   };
+}
+
+function selectRuntimeVariantSourcePath(
+  request: PreviewResolveRequest,
+  role: CanvasPreviewRole,
+): string | undefined {
+  const variant = request.source.variants?.find((candidate) => candidate.role === role);
+  if (!variant?.sourcePath) {
+    return undefined;
+  }
+  if (role === 'video-poster' && isImagePreviewSourcePath(variant.sourcePath)) {
+    return variant.sourcePath;
+  }
+  return undefined;
+}
+
+function isImagePreviewSourcePath(sourcePath: string): boolean {
+  if (isSafeWebviewUrl(sourcePath)) {
+    return isImagePreviewUrl(sourcePath);
+  }
+  return IMAGE_PREVIEW_SOURCE_RE.test(readUrlPathname(sourcePath));
+}
+
+function readUrlPathname(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
 }
 
 function createUnavailableVariant(

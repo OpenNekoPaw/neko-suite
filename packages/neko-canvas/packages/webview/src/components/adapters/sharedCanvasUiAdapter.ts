@@ -171,7 +171,7 @@ function mapCanvasNodeLibraryTypeToTreeItem({
     label: resolveCanvasNodeLibraryLabel(nodeType, descriptor),
     icon: createCanvasNodeLibraryIcon(nodeType, descriptor?.tagColor),
     draggable: policy.canDragToCreate,
-    disabled: policy.kind !== 'create' && !policy.pickerMessageType,
+    disabled: policy.kind !== 'create' && !policy.requiresSourceAdd,
     badges: badge ? [badge] : [],
     metadata: {
       kind: 'node-type',
