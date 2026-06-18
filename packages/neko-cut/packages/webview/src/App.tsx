@@ -69,7 +69,7 @@ function App() {
   const mainPanelToolsVisible = useEditorStore((state) => state.mainPanelToolsVisible);
   const toggleMainPanelTools = useEditorStore((state) => state.toggleMainPanelTools);
   const togglePropertyPanel = useEditorStore((state) => state.togglePropertyPanel);
-  const { sendMessage } = useVSCodeMessaging();
+  const { sendMessage } = useVSCodeMessaging({ subscribeToExtensionMessages: true });
   const animationFrameRef = useRef<number>(0);
   const lastSeekTimeRef = useRef<number>(currentTime); // Track last known currentTime
   const [isFullscreen, setIsFullscreen] = useState(false);

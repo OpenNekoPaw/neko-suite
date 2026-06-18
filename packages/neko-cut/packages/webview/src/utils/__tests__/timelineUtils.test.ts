@@ -380,10 +380,8 @@ describe('formatTime', () => {
     expect(formatTime(360000)).toBe('100:00:00.000');
   });
 
-  it('handles millisecond rounding edge case (1.9999)', () => {
-    // Math.floor(1.9999 % 60) = 1, Math.round((1.9999 % 1) * 1000) = 1000
-    // Implementation does not carry over, so ms can be 1000
-    expect(formatTime(1.9999)).toBe('00:00:01.1000');
+  it('truncates generic media milliseconds to the canonical three digits', () => {
+    expect(formatTime(1.9999)).toBe('00:00:01.999');
   });
 });
 

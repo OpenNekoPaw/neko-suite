@@ -25,10 +25,11 @@ import {
   type FrameServerMessage,
 } from '../../services/frameServerMessages';
 import {
-  H264StreamClient,
-  AudioStreamClient,
-  FrameScheduler,
+  EngineAvStreamLifecycle,
   PlaybackPerformanceMonitor,
+  type EngineAvAudioStreamClient,
+  type EngineAvFrameScheduler,
+  type EngineAvVideoStreamClient,
 } from '@neko/neko-client';
 import type { ProjectData } from '@neko/shared';
 import {
@@ -252,11 +253,12 @@ export const PreviewPanel = memo(function PreviewPanel({
   const mediaInfoRef = useRef({ bitrate: '', codec: '', resolution: '' });
 
   // H.264 stream client
-  const h264ClientRef = useRef<H264StreamClient | null>(null);
+  const h264ClientRef = useRef<EngineAvVideoStreamClient | null>(null);
   // Audio stream client (master clock)
-  const audioClientRef = useRef<AudioStreamClient | null>(null);
+  const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
   // Frame scheduler (A/V sync)
-  const schedulerRef = useRef<FrameScheduler | null>(null);
+  const schedulerRef = useRef<EngineAvFrameScheduler | null>(null);
+  const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
   // Shared AudioContext (created on user gesture)
   const audioCtxRef = useRef<AudioContext | null>(null);
   // rAF handle for playback loop
@@ -266,6 +268,18 @@ export const PreviewPanel = memo(function PreviewPanel({
   const playWallTimeRef = useRef<number>(0);
   // Track clock source to detect wall→audio transition
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
+
+  if (!lifecycleRef.current) {
+    lifecycleRef.current = new EngineAvStreamLifecycle({
+      callbacks: {
+        onClientsChanged: ({ videoClient, audioClient, scheduler }) => {
+          h264ClientRef.current = videoClient;
+          audioClientRef.current = audioClient;
+          schedulerRef.current = scheduler;
+        },
+      },
+    });
+  }
 
   // Performance monitor
   const perfMonitorRef = useRef<PlaybackPerformanceMonitor>(new PlaybackPerformanceMonitor());
@@ -379,43 +393,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     const monitor = perfMonitorRef.current;
     monitor.reset();
 
-    // Create frame scheduler for A/V sync
-    schedulerRef.current = new FrameScheduler(project.fps || 25);
-
-    // Create H.264 stream client — frames go to scheduler, not directly to canvas
-    const client = new H264StreamClient({
-      websocketUrl: streamWsUrl,
-      width: project.resolution.width,
-      height: project.resolution.height,
-      onFrame: (frame: VideoFrame) => {
-        const scheduler = schedulerRef.current;
-        if (scheduler) {
-          scheduler.enqueue(frame);
-        } else {
-          renderFrame(frame);
-        }
-      },
-      onConnectionChange: (connected: boolean) => {
-        logger.info(`H.264 stream ${connected ? 'connected' : 'disconnected'}`);
-        setIsInitialized(connected);
-        if (connected) {
-          setInitError(null);
-        }
-      },
-      onError: (error: Error) => {
-        logger.error('H.264 stream error:', error);
-        setInitError(error.message);
-      },
-      onPacketReceived: (sizeBytes: number) => {
-        monitor.recordPacketSize(sizeBytes);
-      },
-    });
-
-    h264ClientRef.current = client;
-    client.connect();
-
-    // Create audio stream client if audio URL is available
-    let audioClient: AudioStreamClient | null = null;
+    let cancelled = false;
     if (audioWsUrl) {
       // Create / resume AudioContext (may already exist from user gesture)
       if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -424,26 +402,72 @@ export const PreviewPanel = memo(function PreviewPanel({
       if (audioCtxRef.current.state === 'suspended') {
         audioCtxRef.current.resume().catch(() => {});
       }
-
-      audioClient = new AudioStreamClient({
-        websocketUrl: audioWsUrl,
-        volume: 1.0,
-        onConnectionChange: (connected) => {
-          logger.info(`Audio stream ${connected ? 'connected' : 'disconnected'}`);
-        },
-        onError: (err) => {
-          logger.warn('Audio stream error:', err);
-        },
-      });
-      audioClientRef.current = audioClient;
-      audioClient.connect(audioCtxRef.current ?? undefined);
-      audioClient.setClockPlaybackRate(playbackSpeedRef.current);
-      if (isPlayingRef.current) {
-        audioClient.resume();
-      } else {
-        audioClient.pause();
-      }
     }
+
+    void lifecycleRef.current
+      ?.start(
+        {
+          video: {
+            websocketUrl: streamWsUrl,
+            width: project.resolution.width,
+            height: project.resolution.height,
+            onFrame: (frame: VideoFrame) => {
+              const scheduler = schedulerRef.current;
+              if (scheduler) {
+                scheduler.enqueue(frame);
+              } else {
+                renderFrame(frame);
+              }
+            },
+            onConnectionChange: (connected: boolean) => {
+              logger.info(`H.264 stream ${connected ? 'connected' : 'disconnected'}`);
+              setIsInitialized(connected);
+              if (connected) {
+                setInitError(null);
+              }
+            },
+            onError: (error: Error) => {
+              logger.error('H.264 stream error:', error);
+              setInitError(error.message);
+            },
+            onPacketReceived: (sizeBytes: number) => {
+              monitor.recordPacketSize(sizeBytes);
+            },
+          },
+          audio: audioWsUrl
+            ? {
+                websocketUrl: audioWsUrl,
+                volume: 1.0,
+                onConnectionChange: (connected) => {
+                  logger.info(`Audio stream ${connected ? 'connected' : 'disconnected'}`);
+                },
+                onError: (err) => {
+                  logger.warn('Audio stream error:', err);
+                },
+              }
+            : undefined,
+          fps: project.fps || 25,
+          schedulerMode: 'video',
+          videoFrameRoute: 'callback',
+        },
+        { audioContext: audioCtxRef.current ?? undefined },
+      )
+      .then(() => {
+        const audioClient = audioClientRef.current;
+        if (!audioClient) return;
+        audioClient.setClockPlaybackRate(playbackSpeedRef.current);
+        if (isPlayingRef.current) {
+          audioClient.resume();
+        } else {
+          audioClient.pause();
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          logger.error('Stream lifecycle error:', error);
+          setInitError(error instanceof Error ? error.message : String(error));
+        }
+      });
 
     // Reset clock source for new stream
     clockSourceRef.current = 'wall';
@@ -451,15 +475,9 @@ export const PreviewPanel = memo(function PreviewPanel({
     playStartTimeRef.current = currentTimeRef.current;
 
     return () => {
-      client.dispose();
-      h264ClientRef.current = null;
-      schedulerRef.current?.dispose();
-      schedulerRef.current = null;
-      if (audioClient) {
-        audioClient.setVolume(0);
-        audioClient.dispose();
-        audioClientRef.current = null;
-      }
+      cancelled = true;
+      audioClientRef.current?.setVolume(0);
+      lifecycleRef.current?.stop();
       monitor.reset();
       setIsInitialized(false);
     };
@@ -590,7 +608,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
     // Actual seek: flush stale frames and reset decoders
     schedulerRef.current?.flush();
-    h264ClientRef.current?.resetDecoder();
+    h264ClientRef.current?.resetDecoder?.();
     audioClientRef.current?.resetClock();
     clockSourceRef.current = 'wall';
 
@@ -984,13 +1002,8 @@ export const PreviewPanel = memo(function PreviewPanel({
 
   useEffect(() => {
     return () => {
-      schedulerRef.current?.dispose();
-      h264ClientRef.current?.dispose();
-      const ac = audioClientRef.current;
-      if (ac) {
-        ac.setVolume(0);
-        ac.dispose();
-      }
+      audioClientRef.current?.setVolume(0);
+      lifecycleRef.current?.dispose();
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         audioCtxRef.current.close().catch(() => {});
       }

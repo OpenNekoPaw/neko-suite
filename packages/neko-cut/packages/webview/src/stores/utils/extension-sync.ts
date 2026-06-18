@@ -8,6 +8,21 @@
 import { postMessage } from '@neko/shared/vscode';
 import type { EditOperation } from '@neko/shared';
 
+let projectChangedSyncSuppressionDepth = 0;
+
+export function suppressProjectChangedSync<T>(action: () => T): T {
+  projectChangedSyncSuppressionDepth++;
+  try {
+    return action();
+  } finally {
+    projectChangedSyncSuppressionDepth--;
+  }
+}
+
+export function isProjectChangedSyncSuppressed(): boolean {
+  return projectChangedSyncSuppressionDepth > 0;
+}
+
 export function syncOperationToExtension(op: EditOperation): void {
   postMessage({ type: 'operationApplied', operation: op });
 }

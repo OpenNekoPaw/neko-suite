@@ -89,6 +89,9 @@ vi.mock('../../services/mediaProxyFactory', () => ({
 
 vi.mock('@neko/neko-client', () => {
   const h264Connect = vi.fn();
+  const lifecycleStart = vi.fn();
+  const lifecycleStop = vi.fn();
+  const lifecycleDispose = vi.fn();
 
   class H264StreamClient {
     connect = h264Connect;
@@ -112,6 +115,7 @@ vi.mock('@neko/neko-client', () => {
     setVolume = vi.fn();
     resetClock = vi.fn();
     getCurrentTime = vi.fn(() => 0);
+    setClockPlaybackRate = vi.fn();
   }
 
   class FrameScheduler {
@@ -121,6 +125,62 @@ vi.mock('@neko/neko-client', () => {
     dispose = vi.fn();
     switchClock = vi.fn();
     getStats = vi.fn(() => ({ queueLength: 0, skipped: 0, backpressure: 0 }));
+  }
+
+  class EngineAvStreamLifecycle {
+    private readonly callbacks: {
+      onClientsChanged?: (clients: {
+        videoClient: H264StreamClient | null;
+        audioClient: AudioStreamClient | null;
+        scheduler: FrameScheduler | null;
+      }) => void;
+    };
+
+    constructor(options: {
+      callbacks?: {
+        onClientsChanged?: (clients: {
+          videoClient: H264StreamClient | null;
+          audioClient: AudioStreamClient | null;
+          scheduler: FrameScheduler | null;
+        }) => void;
+      };
+    }) {
+      this.callbacks = options.callbacks ?? {};
+    }
+
+    async start(descriptor: {
+      video?: unknown;
+      audio?: unknown;
+      schedulerMode?: 'auto' | 'video' | 'av' | 'none';
+    }) {
+      lifecycleStart(descriptor);
+      const videoClient = descriptor.video ? new H264StreamClient() : null;
+      const audioClient = descriptor.audio ? new AudioStreamClient() : null;
+      const scheduler =
+        descriptor.video && descriptor.schedulerMode !== 'none' ? new FrameScheduler() : null;
+      this.callbacks.onClientsChanged?.({ videoClient, audioClient, scheduler });
+      await audioClient?.connect();
+      await videoClient?.connect();
+      return { videoClient, audioClient, scheduler, descriptor };
+    }
+
+    stop() {
+      lifecycleStop();
+      this.callbacks.onClientsChanged?.({
+        videoClient: null,
+        audioClient: null,
+        scheduler: null,
+      });
+    }
+
+    dispose() {
+      lifecycleDispose();
+      this.callbacks.onClientsChanged?.({
+        videoClient: null,
+        audioClient: null,
+        scheduler: null,
+      });
+    }
   }
 
   class PlaybackPerformanceMonitor {
@@ -145,8 +205,12 @@ vi.mock('@neko/neko-client', () => {
     H264StreamClient,
     AudioStreamClient,
     FrameScheduler,
+    EngineAvStreamLifecycle,
     PlaybackPerformanceMonitor,
     __h264Connect: h264Connect,
+    __lifecycleStart: lifecycleStart,
+    __lifecycleStop: lifecycleStop,
+    __lifecycleDispose: lifecycleDispose,
   };
 });
 
@@ -341,15 +405,50 @@ describe('PreviewPanel playback controls', () => {
 
     const { root } = await renderPreview();
     const clientModule = await import('@neko/neko-client');
-    const h264Connect = (
-      clientModule as typeof clientModule & { __h264Connect: ReturnType<typeof vi.fn> }
-    ).__h264Connect;
+    const lifecycleStart = (
+      clientModule as typeof clientModule & { __lifecycleStart: ReturnType<typeof vi.fn> }
+    ).__lifecycleStart;
 
-    expect(h264Connect).toHaveBeenCalled();
+    expect(lifecycleStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({
+          websocketUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_cached',
+        }),
+        schedulerMode: 'video',
+        videoFrameRoute: 'callback',
+      }),
+    );
 
     await act(async () => {
       root.unmount();
       await Promise.resolve();
     });
+  });
+
+  it('disposes the shared stream lifecycle on unmount', async () => {
+    publishFrameServerMessage({
+      type: 'frameServer:config',
+      port: 39001,
+    });
+    publishFrameServerMessage({
+      type: 'frameServer:streamCreated',
+      streamId: 'strm_editor-v_dispose',
+      wsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_dispose',
+      audioStreamId: null,
+      audioWsUrl: null,
+    });
+
+    const { root } = await renderPreview();
+    const clientModule = await import('@neko/neko-client');
+    const lifecycleDispose = (
+      clientModule as typeof clientModule & { __lifecycleDispose: ReturnType<typeof vi.fn> }
+    ).__lifecycleDispose;
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+
+    expect(lifecycleDispose).toHaveBeenCalled();
   });
 });

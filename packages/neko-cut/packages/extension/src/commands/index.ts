@@ -5,11 +5,12 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createDefaultProject } from '@neko/shared';
+import { createDefaultProject, type ProjectSourceAddResult } from '@neko/shared';
 import { createNewFile } from '@neko/shared/vscode/extension';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { getLogger, handleError } from '../base';
+import { addCutProjectSource } from '../editor/video/cutProjectSourceIngest';
 
 const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
@@ -138,30 +139,78 @@ export function registerCommands(
     vscode.commands.registerCommand(
       'neko.cut.importGeneratedClip',
       async (params: {
-        assetPath: string;
+        assetPath?: string;
+        data?: string;
+        type?: string;
+        name?: string;
         mediaType?: string;
         duration?: number;
         trackIndex?: number;
       }) => {
         const webview = videoEditorProvider.getActiveWebview();
-        if (!webview) {
+        const documentUri = videoEditorProvider.getActiveDocumentVsCodeUri();
+        if (!webview || !documentUri) {
           void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
             showToUser: true,
             severity: 'warning',
           });
           return;
         }
-        const mediaType = inferGeneratedClipMediaType(params.assetPath, params.mediaType);
+        const assetPath = params.assetPath;
+        const fileName = params.name
+          ? ensureMediaFileExtension(params.name, params.mediaType ?? params.type)
+          : assetPath
+            ? path.basename(assetPath)
+            : ensureMediaFileExtension('generated-clip', params.mediaType ?? params.type);
+        const mediaType = inferGeneratedClipMediaType(
+          assetPath ?? fileName,
+          params.mediaType ?? params.type,
+        );
+        const bytes =
+          typeof params.data === 'string'
+            ? dataUrlToBytes(params.data)
+            : assetPath
+              ? await vscode.workspace.fs.readFile(vscode.Uri.file(assetPath))
+              : undefined;
+        if (!bytes) {
+          void handleError(new Error('Generated clip import requires assetPath or data bytes.'), {
+            showToUser: true,
+          });
+          return;
+        }
 
-        webview.postMessage({
-          type: 'importGeneratedClip',
-          assetPath: params.assetPath,
-          mediaType,
-          duration: params.duration ?? (mediaType === 'image' ? 3 : undefined),
-          trackIndex: params.trackIndex,
+        const result = await addCutProjectSource(documentUri, {
+          requestId: `cut-import-generated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          kind: 'generated-output',
+          formatId: 'nkv',
+          ...(bytes ? { bytes } : {}),
+          browserFile: {
+            name: fileName,
+            type: mimeTypeForMedia(fileName, mediaType),
+            ...(bytes ? { size: bytes.byteLength } : {}),
+          },
+          destination: {
+            kind: 'project',
+            directory: 'media',
+            copyMode: 'copy',
+          },
+          ingestMode: 'create-asset',
+          metadata: {
+            addToTimeline: true,
+            mediaType,
+            ...(params.duration !== undefined
+              ? { duration: params.duration }
+              : mediaType === 'image'
+                ? { duration: 3 }
+                : {}),
+            ...(params.trackIndex !== undefined ? { trackIndex: params.trackIndex } : {}),
+            name: fileName,
+            sourceCommand: 'neko.cut.importGeneratedClip',
+          },
         });
+        await postProjectSourceAddResult(webview, result);
 
-        logger.info(`importGeneratedClip: ${params.assetPath} (${mediaType})`);
+        logger.info(`importGeneratedClip: ${assetPath ?? fileName} (${mediaType})`);
       },
     ),
   );
@@ -179,8 +228,9 @@ async function addToTimeline(
 ): Promise<void> {
   // Get the active webview
   const webview = editorProvider.getActiveWebview();
+  const documentUri = editorProvider.getActiveDocumentVsCodeUri();
 
-  if (!webview) {
+  if (!webview || !documentUri) {
     void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
       showToUser: true,
       severity: 'warning',
@@ -205,18 +255,35 @@ async function addToTimeline(
     return;
   }
 
-  // Get relative path from workspace
-  const relativePath = vscode.workspace.asRelativePath(fileUri);
-
-  // Send message to webview to add the media
-  webview.postMessage({
-    type: 'addMediaFile',
-    path: relativePath,
-    mediaType,
+  const result = await addCutProjectSource(documentUri, {
+    requestId: `cut-add-to-timeline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    kind: 'programmatic',
+    formatId: 'nkv',
+    sourcePath: fileUri.fsPath,
+    browserFile: {
+      name: path.basename(fileUri.fsPath),
+      type: mimeTypeForMedia(fileUri.fsPath, mediaType),
+    },
+    destination: {
+      kind: 'project',
+      directory: 'media',
+      copyMode: 'link',
+    },
+    ingestMode: 'link',
+    metadata: {
+      addToTimeline: true,
+      mediaType,
+      name: path.basename(fileUri.fsPath),
+      sourceCommand: 'neko.addToTimeline',
+    },
   });
+  await postProjectSourceAddResult(webview, result);
+  if (!result.ok) return;
 
   vscode.window.showInformationMessage(
-    vscode.l10n.t('timeline.info.addingToTimeline', { filename: path.basename(relativePath) }),
+    vscode.l10n.t('timeline.info.addingToTimeline', {
+      filename: path.basename(result.durablePath ?? fileUri.fsPath),
+    }),
   );
 }
 
@@ -225,6 +292,48 @@ async function addToTimeline(
  */
 async function openInEditor(fileUri: vscode.Uri): Promise<void> {
   await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
+}
+
+async function postProjectSourceAddResult(
+  webview: vscode.Webview,
+  result: ProjectSourceAddResult,
+): Promise<void> {
+  await webview.postMessage({ type: 'project:sourceAdded', result });
+  if (!result.ok) {
+    const message =
+      result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+      result.diagnostics[0]?.message ??
+      'Failed to add media to timeline.';
+    void handleError(new Error(message), { showToUser: true });
+  }
+}
+
+function dataUrlToBytes(data: string): Uint8Array {
+  const base64 = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
+  return Buffer.from(base64, 'base64');
+}
+
+function ensureMediaFileExtension(name: string, mediaTypeHint?: string): string {
+  if (path.extname(name)) return name;
+  if (mediaTypeHint === 'image') return `${name}.png`;
+  if (mediaTypeHint === 'audio') return `${name}.wav`;
+  return `${name}.mp4`;
+}
+
+function mimeTypeForMedia(filePath: string, mediaType: GeneratedClipMediaType): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.m4a') return 'audio/mp4';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mov') return 'video/quicktime';
+  if (mediaType === 'image') return 'image/png';
+  if (mediaType === 'audio') return 'audio/wav';
+  return 'video/mp4';
 }
 
 /**
@@ -259,27 +368,20 @@ async function exportVideoCommand(editorProvider: VideoEditorProvider): Promise<
     return;
   }
 
-  // Read project data from document
-  const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === docUri);
-  if (!document) {
+  const project = editorProvider.getProjectDataForDocument(docUri);
+  if (!project) {
     void handleError(new Error('Cannot read project data: document not found.'), {
       showToUser: true,
     });
     return;
   }
 
-  let project: import('@neko/shared').ProjectData;
-  try {
-    project = JSON.parse(document.getText()) as import('@neko/shared').ProjectData;
-  } catch {
-    void handleError(new Error('Cannot parse project data.'), { showToUser: true });
-    return;
-  }
-
   // Show save dialog
   const defaultName = project.name ? `${project.name}.mp4` : 'export.mp4';
   const saveUri = await vscode.window.showSaveDialog({
-    defaultUri: vscode.Uri.file(path.join(path.dirname(document.uri.fsPath), defaultName)),
+    defaultUri: vscode.Uri.file(
+      path.join(path.dirname(vscode.Uri.parse(docUri).fsPath), defaultName),
+    ),
     filters: {
       'MP4 Video': ['mp4'],
       'WebM Video': ['webm'],

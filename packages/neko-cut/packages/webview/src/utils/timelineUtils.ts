@@ -5,6 +5,8 @@
  * 职责：提供时间范围计算、碰撞检测等纯函数
  */
 
+import { formatMediaTime } from '@neko/neko-client';
+
 // =============================================================================
 // 类型定义
 // =============================================================================
@@ -203,33 +205,17 @@ export function getProjectDuration(
  * 将秒数格式化为时间字符串 (HH:MM:SS.mmm)
  */
 export function formatTime(seconds: number, showMilliseconds = true): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  const ms = Math.round((seconds % 1) * 1000);
-
-  const parts = [
-    hours.toString().padStart(2, '0'),
-    minutes.toString().padStart(2, '0'),
-    secs.toString().padStart(2, '0'),
-  ];
-
-  const timeStr = parts.join(':');
-
-  if (showMilliseconds) {
-    return `${timeStr}.${ms.toString().padStart(3, '0')}`;
-  }
-
-  return timeStr;
+  return formatMediaTime(seconds, {
+    alwaysHours: true,
+    fractionalDigits: showMilliseconds ? 3 : 0,
+  });
 }
 
 /**
  * 将秒数格式化为简短时间字符串 (MM:SS)
  */
 export function formatTimeShort(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  return formatMediaTime(seconds, { padMinutes: true, rollHoursIntoMinutes: true });
 }
 
 /**

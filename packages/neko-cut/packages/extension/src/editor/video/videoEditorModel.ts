@@ -5,8 +5,12 @@
 
 import * as vscode from 'vscode';
 import { BaseEditorModel, EditorCapabilities, IModelChangeEvent } from '../common/editorModel';
-import { ProjectData, createDefaultProject, loadNkv } from '@neko/shared';
+import { ProjectData, createDefaultProject, loadNkv, saveNkv } from '@neko/shared';
 import { getLogger } from '../../base';
+import {
+  VideoProjectDocument,
+  createVideoProjectTextDocumentAdapter,
+} from './videoProjectDocument';
 
 const logger = getLogger('VideoEditorModel');
 
@@ -16,13 +20,19 @@ const logger = getLogger('VideoEditorModel');
 
 export class VideoEditorModel extends BaseEditorModel {
   private _content: ProjectData;
-  private _pendingEdit: Promise<void> | null = null;
+  private readonly _projectDocument?: VideoProjectDocument;
+  private _documentEditQueue: Promise<void> = Promise.resolve();
   /** Counter for internal saves, incremented before edit, decremented after event processed */
   private _internalSaveCounter: number = 0;
 
-  constructor(document: vscode.TextDocument) {
-    super(document, 'video');
-    this._content = this.parseDocument();
+  constructor(document: vscode.TextDocument | VideoProjectDocument) {
+    const projectDocument = document instanceof VideoProjectDocument ? document : undefined;
+    const textDocument = projectDocument
+      ? createVideoProjectTextDocumentAdapter(projectDocument)
+      : document;
+    super(textDocument as vscode.TextDocument, 'video');
+    this._projectDocument = projectDocument;
+    this._content = projectDocument?.projectData ?? this.parseDocument();
   }
 
   /**
@@ -34,12 +44,25 @@ export class VideoEditorModel extends BaseEditorModel {
   }
 
   /**
-   * Decrement internal save counter (called after document change event is processed)
+   * Consume one pending internal TextDocument edit marker.
    */
-  decrementInternalSaveCounter(): void {
+  consumeInternalDocumentEdit(): boolean {
     if (this._internalSaveCounter > 0) {
       this._internalSaveCounter--;
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Mark an upcoming legacy TextDocument edit as internal.
+   */
+  markInternalDocumentEdit(): void {
+    this._internalSaveCounter++;
+  }
+
+  async awaitPendingDocumentEdit(): Promise<void> {
+    await this._documentEditQueue;
   }
 
   // -------------------------------------------------------------------------
@@ -68,9 +91,25 @@ export class VideoEditorModel extends BaseEditorModel {
   async setContent<T>(content: T): Promise<void> {
     const projectData = content as ProjectData;
     this._content = projectData;
+    this._projectDocument?.setProjectData(projectData);
+
+    if (this._projectDocument) {
+      this._onDidChange.fire({
+        model: this,
+        changeType: 'content',
+        changes: this._content,
+      });
+      return;
+    }
+
+    const nextText = `${saveNkv(projectData)}\n`;
 
     // 序列化编辑操作，避免并发冲突
     const doEdit = async (): Promise<void> => {
+      if (this.document.getText() === nextText) {
+        return;
+      }
+
       const maxRetries = 3;
       let lastError: Error | null = null;
 
@@ -84,7 +123,7 @@ export class VideoEditorModel extends BaseEditorModel {
           edit.replace(
             this.document.uri,
             new vscode.Range(0, 0, this.document.lineCount, 0),
-            JSON.stringify(this._content, null, 2),
+            nextText,
           );
 
           const success = await vscode.workspace.applyEdit(edit);
@@ -111,14 +150,17 @@ export class VideoEditorModel extends BaseEditorModel {
       }
     };
 
-    // 等待之前的编辑完成
-    if (this._pendingEdit) {
-      await this._pendingEdit;
+    const previousEdit = this._documentEditQueue;
+    const nextEdit = previousEdit.then(doEdit, doEdit);
+    const queuedEdit = nextEdit.catch(() => undefined);
+    this._documentEditQueue = queuedEdit;
+    try {
+      await nextEdit;
+    } finally {
+      if (this._documentEditQueue === queuedEdit) {
+        this._documentEditQueue = Promise.resolve();
+      }
     }
-
-    this._pendingEdit = doEdit();
-    await this._pendingEdit;
-    this._pendingEdit = null;
   }
 
   // -------------------------------------------------------------------------
@@ -136,6 +178,13 @@ export class VideoEditorModel extends BaseEditorModel {
    * 更新项目数据
    */
   async updateProjectData(data: ProjectData): Promise<boolean> {
+    return this.syncSavedProjectData(data);
+  }
+
+  /**
+   * Sync a ProjectFileStore-saved document back into VS Code's TextDocument.
+   */
+  async syncSavedProjectData(data: ProjectData): Promise<boolean> {
     await this.setContent(data);
     return true;
   }
@@ -146,6 +195,7 @@ export class VideoEditorModel extends BaseEditorModel {
    */
   applyIncrementalUpdate(newContent: ProjectData): void {
     this._content = newContent;
+    this._projectDocument?.setProjectData(newContent);
   }
 
   /**
@@ -198,7 +248,10 @@ import { IEditorModelProvider } from '../common/editorRegistry';
 import { IEditorModel } from '../common/editorModel';
 
 export class VideoEditorModelProvider implements IEditorModelProvider {
-  createModel(document: vscode.TextDocument): IEditorModel {
-    return new VideoEditorModel(document);
+  createModel(document: vscode.TextDocument | vscode.CustomDocument): IEditorModel {
+    if (document instanceof VideoProjectDocument) {
+      return new VideoEditorModel(document);
+    }
+    return new VideoEditorModel(document as vscode.TextDocument);
   }
 }

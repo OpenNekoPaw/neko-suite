@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -7,7 +8,7 @@ import { useEditorStore } from '../stores/editor-store';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 
 vi.mock('./useVSCodeMessaging', () => ({
-  useVSCodeMessaging: () => ({ saveProject: vi.fn() }),
+  useVSCodeMessaging: () => ({}),
 }));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -87,6 +88,19 @@ describe('useKeyboardShortcuts', () => {
       window.dispatchEvent(createKeyEvent(' ', 'Space'));
     });
     expect(useEditorStore.getState().isPlaying).toBe(true);
+  });
+
+  it('leaves primary+S to the VS Code workbench save keybinding', () => {
+    act(() => {
+      root.render(<KeyboardHarness />);
+    });
+
+    const event = createKeyEvent('s', 'KeyS', { metaKey: true });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });
 

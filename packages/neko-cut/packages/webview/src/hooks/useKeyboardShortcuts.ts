@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useKeyboardDispatcher, type ShortcutBinding } from '@neko/ui/keyboard';
 import { useEditorStore } from '../stores/editor-store';
-import { useVSCodeMessaging } from './useVSCodeMessaging';
 
 interface CutKeyboardState extends Record<string, unknown> {
   readonly hasProject: boolean;
@@ -34,7 +33,6 @@ export function useKeyboardShortcuts(): void {
     toggleElementHidden,
     toggleElementMuted,
   } = useEditorStore();
-  const { saveProject } = useVSCodeMessaging();
   const fps = project?.fps ?? 30;
   const state = useMemo<CutKeyboardState>(
     () => ({
@@ -88,7 +86,6 @@ export function useKeyboardShortcuts(): void {
       createBinding('toggle-snapping', 'KeyN', () => toggleSnapping()),
       createBinding('toggle-ripple-editing', 'KeyR', () => toggleRippleEditing()),
       createBinding('toggle-frame-align', 'KeyF', () => toggleFrameAlign()),
-      createBinding('save', { key: 'KeyS', primary: true }, () => saveProject()),
       createBinding(
         'split-at-playhead',
         'KeyS',
@@ -151,7 +148,6 @@ export function useKeyboardShortcuts(): void {
       pasteAtTime,
       pause,
       removeElement,
-      saveProject,
       seek,
       selectedElements,
       splitAndKeepLeft,

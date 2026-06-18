@@ -17,23 +17,22 @@ import {
 } from '@neko/shared/vscode/extension';
 import { VideoEditorModel } from './videoEditorModel';
 import {
+  formatCutProjectFileDiagnostics,
+  prepareCutProjectFileSave,
+} from './cutProjectFilePersistence';
+import {
   MessageFromWebview,
+  handleProjectSourceAddHostRequest,
+  isProjectFileSnapshotResponseMessage,
   ProjectData,
   ContextMenuItem,
-  applyOperation,
-  handleProjectSourceAddRequest,
-  type ContentIngestRequest,
-  type ContentIngestResult,
   type EditOperation,
   type ProjectSourceAddRequest,
 } from '@neko/shared';
 import { getLogger } from '../../base';
-import {
-  isExistingLocalFile,
-  normalizePathsForSave,
-  resolveMediaPath,
-} from '../../services/tools/helpers';
+import { isExistingLocalFile, resolveMediaPath } from '../../services/tools/helpers';
 import { AIActionHandler } from '../../services/AIActionHandler';
+import { addCutProjectSource } from './cutProjectSourceIngest';
 
 const logger = getLogger('MessageHandler');
 
@@ -62,6 +61,10 @@ export class MessageHandler {
    * Handle incoming messages from the webview
    */
   public async handleMessage(message: MessageFromWebview): Promise<void> {
+    if (isProjectFileSnapshotResponseMessage(message)) {
+      return;
+    }
+
     switch (message.type) {
       case 'ready':
         this.sendUpdate();
@@ -71,12 +74,12 @@ export class MessageHandler {
         await this.handleSave(message.content);
         break;
 
-      case 'requestFile':
-        await this.handleRequestFile(message.path);
+      case 'project:changed':
+        await this.handleProjectChanged(message.document);
         break;
 
-      case 'addMediaToTimeline':
-        await this.handleAddMedia(message.path);
+      case 'requestFile':
+        await this.handleRequestFile(message.path);
         break;
 
       case 'project:addSource':
@@ -120,7 +123,7 @@ export class MessageHandler {
         break;
 
       case 'operationApplied':
-        this.handleOperationApplied(message.operation);
+        await this.handleOperationApplied(message.operation);
         break;
 
       case 'executeAIAction':
@@ -195,17 +198,12 @@ export class MessageHandler {
 
   /**
    * Handle incremental operation sync from Webview.
-   * Applies the operation to in-memory model without writing to document.
+   * The current Webview also sends a project:changed snapshot for durable
+   * document sync. Operations remain available for preview-engine fast paths
+   * in VideoEditorProvider, but must not mutate the TextDocument here.
    */
-  private handleOperationApplied(operation: EditOperation): void {
-    try {
-      const currentData = this.model.getProjectData();
-      const newData = applyOperation(currentData as any, operation) as ProjectData;
-      this.model.applyIncrementalUpdate(newData);
-    } catch (e) {
-      logger.error('Incremental sync failed', e);
-      // Non-fatal: full save on Cmd+S will resync
-    }
+  private async handleOperationApplied(_operation: EditOperation): Promise<void> {
+    return;
   }
 
   // ==========================================================================
@@ -217,19 +215,40 @@ export class MessageHandler {
    */
   private async handleSave(content: ProjectData): Promise<void> {
     try {
-      const normalizedContent = await normalizePathsForSave(content, this.model.uri.fsPath, {
-        documentUri: this.model.uri,
-      });
-      const updated = await this.model.updateProjectData(normalizedContent);
-      const saved = updated && (await this.model.save());
-      if (saved) {
-        this.webview.postMessage({ type: 'saved' });
-      } else {
-        this.sendError('Failed to save project');
+      const result = await prepareCutProjectFileSave(this.model.uri, content);
+      if (!result.ok || !result.document) {
+        this.sendError(
+          formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save project'),
+        );
+        return;
       }
+
+      await this.model.syncSavedProjectData(result.document);
     } catch (error) {
       logger.error('Save error', error);
       this.sendError(`Save error: ${error}`);
+    }
+  }
+
+  /**
+   * Sync the latest Webview project snapshot into the custom document model.
+   * This does not write to disk; VS Code save requests a live Webview snapshot
+   * and persists through ProjectFileStore.
+   */
+  private async handleProjectChanged(document: ProjectData): Promise<void> {
+    try {
+      const result = await prepareCutProjectFileSave(this.model.uri, document);
+      if (!result.ok || !result.document) {
+        this.sendError(
+          formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to sync project'),
+        );
+        return;
+      }
+
+      await this.model.syncSavedProjectData(result.document);
+    } catch (error) {
+      logger.error('Project change sync error', error);
+      this.sendError(`Project change sync error: ${error}`);
     }
   }
 
@@ -303,78 +322,12 @@ export class MessageHandler {
     }
   }
 
-  /**
-   * Handle adding media to timeline
-   */
-  private async handleAddMedia(relativePath: string): Promise<void> {
-    try {
-      const ext = path.extname(relativePath).toLowerCase();
-      let mediaType: 'video' | 'audio' | 'image';
-
-      if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) {
-        mediaType = 'video';
-      } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
-        mediaType = 'audio';
-      } else if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
-        mediaType = 'image';
-      } else {
-        this.sendError(`Unsupported file type: ${ext}`);
-        return;
-      }
-
-      this.webview.postMessage({
-        type: 'fileAdded',
-        path: relativePath,
-        mediaType,
-      });
-    } catch (error) {
-      logger.error('Add media error', error);
-      this.sendError(`Failed to add media: ${relativePath}`);
-    }
-  }
-
   private async handleProjectAddSource(request: ProjectSourceAddRequest): Promise<void> {
-    const result = await handleProjectSourceAddRequest(request, {
-      ingest: (ingestRequest) => this.ingestProjectSource(ingestRequest),
+    await handleProjectSourceAddHostRequest(request, {
+      addSource: (sourceRequest) => addCutProjectSource(this.model.uri, sourceRequest),
+      postMessage: (message) => this.webview.postMessage(message),
+      logger,
     });
-    this.webview.postMessage({ type: 'project:sourceAdded', result });
-    if (result.ok && result.durablePath) {
-      await this.handleAddMedia(result.durablePath);
-    }
-  }
-
-  private async ingestProjectSource(request: ContentIngestRequest): Promise<ContentIngestResult> {
-    const sourcePath = request.sourcePath;
-    if (!sourcePath) {
-      return {
-        status: 'missing-source',
-        request,
-        error: request.fileName
-          ? `Dropped file ${request.fileName} does not expose a durable source path.`
-          : 'No source path was provided.',
-      };
-    }
-
-    const baseDir = path.dirname(this.model.uri.fsPath);
-    let durablePath = sourcePath;
-    if (path.isAbsolute(sourcePath)) {
-      if (!sourcePath.startsWith(baseDir)) {
-        return {
-          status: 'non-portable',
-          request,
-          error:
-            'External media must be imported or registered under a configured media root before saving.',
-        };
-      }
-      durablePath = path.relative(baseDir, sourcePath).split(path.sep).join('/');
-    }
-
-    return {
-      status: 'ready',
-      request,
-      source: { kind: 'file', path: durablePath },
-      contractedPath: durablePath,
-    };
   }
 
   /**

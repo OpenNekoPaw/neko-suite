@@ -1,3 +1,5 @@
+import { formatMediaTime } from '@neko/neko-client';
+
 // =============================================================================
 // ID Generation
 // =============================================================================
@@ -17,19 +19,14 @@ export function generateId(): string {
  * Format seconds to MM:SS format (for timeline ruler)
  */
 export function formatTimeShort(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return formatMediaTime(seconds, { padMinutes: true, rollHoursIntoMinutes: true });
 }
 
 /**
  * Format seconds to MM:SS.ms format (for toolbar display)
  */
 export function formatTimeFull(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 100);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  return formatMediaTime(seconds, { fractionalDigits: 2, padMinutes: true });
 }
 
 // =============================================================================

@@ -64,7 +64,7 @@ export async function activate(
   // Create providers
   const videoEditorProvider = new VideoEditorProvider(context);
 
-  // Register custom editor (CustomTextEditorProvider for .nkv files)
+  // Register custom editor (CustomEditorProvider for .nkv files)
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider('neko.videoEditor', videoEditorProvider, {
       webviewOptions: {

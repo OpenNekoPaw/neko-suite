@@ -24,6 +24,7 @@ import type { ProjectData, TimelineTrack, TimelineElement } from '../types';
 import {
   CENTERED_TRANSFORM,
   ASSET_DRAG_MIME,
+  createProjectSourceAddClient,
   getDragItems,
   type AssetDragData,
   type SubtitleElement,
@@ -35,6 +36,7 @@ import { postMessage } from '../utils/vscodeApi';
 
 const logger = getLogger('useTimelineDragDrop');
 const SUBTITLE_FILE_READ_END = 512 * 1024 - 1;
+const PROJECT_SOURCE_ADD_TIMEOUT_MS = 30000;
 
 export interface TimelineDragDropOptions {
   timelineRef: RefObject<HTMLDivElement>;
@@ -128,6 +130,51 @@ export function useTimelineDragDrop({
         });
       }),
     [decodeBase64Utf8],
+  );
+
+  const registerDroppedSource = useCallback(
+    async (input: {
+      readonly sourcePath?: string;
+      readonly file?: File;
+      readonly displayName: string;
+      readonly requestIndex: number;
+    }): Promise<string | null> => {
+      const requestId = `timeline-drop-${Date.now()}-${input.requestIndex}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      const client = createProjectSourceAddClient({
+        createRequestId: () => requestId,
+        postMessage,
+        addMessageListener: (listener) => {
+          const handleMessage = (event: MessageEvent) => listener(event.data);
+          window.addEventListener('message', handleMessage);
+          return () => window.removeEventListener('message', handleMessage);
+        },
+        timeoutMs: PROJECT_SOURCE_ADD_TIMEOUT_MS,
+      });
+
+      const result = await client.addSource({
+        kind: 'drag-drop',
+        formatId: 'nkv',
+        ...(input.sourcePath ? { sourcePath: input.sourcePath } : {}),
+        ...(input.file ? { file: input.file } : { browserFile: { name: input.displayName } }),
+        destination: {
+          kind: 'project',
+          directory: 'media',
+          copyMode: input.sourcePath ? 'link' : 'copy',
+        },
+        ingestMode: input.sourcePath ? 'link' : 'create-asset',
+      });
+
+      if (result.ok && result.durablePath) {
+        return result.durablePath;
+      }
+
+      const detail = result.diagnostics[0]?.message ?? `Failed to add ${input.displayName}`;
+      onError?.(detail);
+      return null;
+    },
+    [onError],
   );
 
   const importSubtitleTrack = useCallback(
@@ -248,6 +295,7 @@ export function useTimelineDragDrop({
         displayName: string,
         startTime: number,
         file?: File,
+        requestIndex = 0,
       ): Promise<boolean> => {
         const fileType = getFileType(displayName);
         if (!fileType) {
@@ -258,7 +306,19 @@ export function useTimelineDragDrop({
 
         if (fileType === 'subtitle') {
           return importSubtitleTrack(filePath, displayName, startTime, targetTrack, file);
-        } else if (fileType === 'audio') {
+        }
+
+        const durablePath = await registerDroppedSource({
+          sourcePath: filePath || undefined,
+          file,
+          displayName,
+          requestIndex,
+        });
+        if (!durablePath) {
+          return false;
+        }
+
+        if (fileType === 'audio') {
           let audioTrackId = targetTrack?.type === 'audio' ? targetTrack.id : '';
           if (!audioTrackId) {
             // Use live state — avoids duplicate audio tracks across multi-file drops
@@ -267,11 +327,11 @@ export function useTimelineDragDrop({
           }
           let duration = DEFAULT_VIDEO_DURATION;
           try {
-            duration = await getMediaInfoService().getDuration(filePath);
+            duration = await getMediaInfoService().getDuration(durablePath);
           } catch (err) {
             logger.warn('Failed to get audio duration:', err);
           }
-          addMediaElement(audioTrackId, filePath, displayName, duration, startTime);
+          addMediaElement(audioTrackId, durablePath, displayName, duration, startTime);
         } else {
           // video or image
           let mediaTrackId = targetTrack?.type === 'media' ? targetTrack.id : '';
@@ -283,7 +343,7 @@ export function useTimelineDragDrop({
           if (fileType === 'video') {
             let duration = DEFAULT_VIDEO_DURATION;
             try {
-              duration = await getMediaInfoService().getDuration(filePath);
+              duration = await getMediaInfoService().getDuration(durablePath);
             } catch (err) {
               logger.warn('Failed to get video duration:', err);
             }
@@ -291,14 +351,20 @@ export function useTimelineDragDrop({
             // so the next file won't start until this one's linked tracks are created.
             await addMediaElementWithAudio(
               mediaTrackId,
-              filePath,
+              durablePath,
               displayName,
               duration,
               startTime,
             );
           } else {
             // image — no audio detection needed
-            addMediaElement(mediaTrackId, filePath, displayName, DEFAULT_IMAGE_DURATION, startTime);
+            addMediaElement(
+              mediaTrackId,
+              durablePath,
+              displayName,
+              DEFAULT_IMAGE_DURATION,
+              startTime,
+            );
           }
         }
         return true;
@@ -317,7 +383,7 @@ export function useTimelineDragDrop({
                 if (item?.files && item.files.length > 0) {
                   const file = item.files[0];
                   if (file) {
-                    await addFileToTrack(file.path, file.name, dropTime + i * 0.5);
+                    await addFileToTrack(file.path, file.name, dropTime + i * 0.5, undefined, i);
                   }
                 }
               }
@@ -342,7 +408,7 @@ export function useTimelineDragDrop({
               if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
             }
             const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'media';
-            await addFileToTrack(filePath, fileName, dropTime + idx * 0.5);
+            await addFileToTrack(filePath, fileName, dropTime + idx * 0.5, undefined, idx);
           }
           return;
         }
@@ -350,31 +416,7 @@ export function useTimelineDragDrop({
         // Priority 3: OS file manager drop (files extracted synchronously above)
         for (let i = 0; i < filesSnapshot.length; i++) {
           const file = filesSnapshot[i]!;
-          if (!file.path) {
-            postMessage({
-              type: 'project:addSource',
-              request: {
-                requestId: `timeline-drop-${Date.now()}-${i}`,
-                kind: 'drag-drop',
-                formatId: 'nkv',
-                browserFile: {
-                  name: file.name,
-                  size: file.file?.size,
-                  type: file.file?.type,
-                  lastModified: file.file?.lastModified,
-                },
-                destination: {
-                  kind: 'project',
-                  copyMode: 'register',
-                },
-              },
-            });
-            onError?.(
-              `Dropped file ${file.name} needs to be imported or registered before it can be saved.`,
-            );
-            continue;
-          }
-          await addFileToTrack(file.path, file.name, dropTime + i * 0.5, file.file);
+          await addFileToTrack(file.path, file.name, dropTime + i * 0.5, file.file, i);
         }
       };
 
@@ -398,6 +440,8 @@ export function useTimelineDragDrop({
       getCurrentTracks,
       tracksRef,
       onError,
+      registerDroppedSource,
+      importSubtitleTrack,
     ],
   );
 

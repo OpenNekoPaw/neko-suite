@@ -28,7 +28,7 @@ export interface IEditorModelProvider {
    * 创建编辑器模型
    * @param document VSCode 文档
    */
-  createModel(document: vscode.TextDocument): IEditorModel;
+  createModel(document: vscode.TextDocument | vscode.CustomDocument): IEditorModel;
 }
 
 // =============================================================================

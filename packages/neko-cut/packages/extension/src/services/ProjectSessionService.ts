@@ -15,6 +15,7 @@ import * as path from 'path';
 import type { ProjectData, ProjectFileOps } from '@neko/shared';
 import {
   ProjectFileStore,
+  ProjectFileSaveSession,
   createDefaultProject,
   createDefaultProjectFormatCodecRegistry,
   nkvSourcePathPolicy,
@@ -45,11 +46,28 @@ export const IProjectSessionService =
 export class ProjectSessionService implements IProjectSessionService {
   private session: { info: ProjectSessionInfo; project: ProjectData } | null = null;
   private readonly store: ProjectFileStore;
+  private readonly saveSession: ProjectFileSaveSession<ProjectData>;
 
   constructor(fileOps: ProjectFileOps = createNodeProjectFileOps()) {
     this.store = new ProjectFileStore({
       registry: createDefaultProjectFormatCodecRegistry(),
       fileOps,
+    });
+    this.saveSession = new ProjectFileSaveSession<ProjectData>({
+      formatId: 'nkv',
+      store: this.store,
+      sourcePolicy: nkvSourcePathPolicy,
+      createSourcePolicyOptions: (uri) => {
+        const documentDir = path.dirname(uri.fsPath);
+        return {
+          context: {
+            owningWorkspaceRoot: documentDir,
+            workspaceRoots: [documentDir],
+            documentDir,
+            pathVariables: new Map([['PROJECT', documentDir]]),
+          },
+        };
+      },
     });
   }
 
@@ -121,25 +139,12 @@ export class ProjectSessionService implements IProjectSessionService {
       return;
     }
 
-    const result = await this.store.save({
-      filePath,
-      formatId: 'nkv',
+    await this.saveSession.save({
+      targetUri: createFileUri(filePath),
       document: data,
-      sourcePolicy: nkvSourcePathPolicy,
-      sourcePolicyOptions: {
-        context: {
-          owningWorkspaceRoot: path.dirname(filePath),
-          workspaceRoots: [path.dirname(filePath)],
-          documentDir: path.dirname(filePath),
-          pathVariables: new Map([['PROJECT', path.dirname(filePath)]]),
-        },
-      },
+      saveReason: 'external-sync',
+      fallbackMessage: 'Failed to save NKV project',
     });
-    if (!result.ok) {
-      throw new Error(
-        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
-      );
-    }
   }
 
   clear(): void {
@@ -164,6 +169,10 @@ function createNodeProjectFileOps(): ProjectFileOps {
       await fs.rename(fromPath, toPath);
     },
   };
+}
+
+function createFileUri(filePath: string): { readonly fsPath: string } {
+  return { fsPath: filePath };
 }
 
 function formatProjectFileDiagnostics(

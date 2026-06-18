@@ -74,9 +74,7 @@ export class TimelineToolExecutor {
         project = model.getProjectData();
         projectFilePath = model.uri.fsPath;
         writeBack = async (next) => {
-          await model!.updateProjectData(
-            await normalizePathsForSave(next, projectFilePath, { documentUri: model!.uri }),
-          );
+          await model!.syncSavedProjectData(await normalizePathsForSave(next, model!.uri.fsPath));
         };
       } else if (projectSession?.isLoaded()) {
         project = projectSession.getProjectData();

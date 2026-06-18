@@ -1,6 +1,6 @@
-// TODO: Duplicated hook — neko-story has a thin useVSCodeMessaging (56 lines)
-// that wraps acquireVsCodeApi + message listener. This version (462 lines) adds
-// heavy domain logic (timeline, export, context menu, AI actions).
+// TODO(P2): Duplicated hook — neko-story has a thin useVSCodeMessaging
+// that delegates to the shared VS Code bridge and owns its message listener.
+// This version adds heavy domain logic (timeline, export, context menu, AI actions).
 // The thin wrapper pattern from neko-story could be extracted to
 // @neko/shared/hooks/useVSCodeMessaging as a generic base, with this hook
 // composing domain-specific handlers on top of it.
@@ -11,8 +11,13 @@ import type { EditorSubtitleElement, ProjectData, TextElement, TimelineTrack } f
 import { getLogger } from '../utils/logger';
 
 import { DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
+import { getMediaType, type MediaType } from '../utils';
 import { getMediaInfoService } from '../services';
-import { CENTERED_TRANSFORM } from '@neko/shared';
+import {
+  CENTERED_TRANSFORM,
+  isProjectFileSnapshotRequestMessage,
+  PROJECT_FILE_SNAPSHOT_RESPONSE,
+} from '@neko/shared';
 import { getVSCodeAPI, postMessage } from '../utils/vscodeApi';
 import {
   getFileUri as getFileUriAsync,
@@ -26,6 +31,11 @@ import {
 } from '../utils/storyboardImport';
 import type { CutStoryboardImportPayload } from '../utils/storyboardImport';
 import { isFrameServerMessage, publishFrameServerMessage } from '../services/frameServerMessages';
+import type { ProjectSourceAddResult } from '@neko/shared';
+import {
+  isProjectChangedSyncSuppressed,
+  suppressProjectChangedSync,
+} from '../stores/utils/extension-sync';
 
 const logger = getLogger('useVSCodeMessaging');
 
@@ -35,7 +45,12 @@ const vscode = getVSCodeAPI();
 // Pending context menu callbacks
 const pendingContextMenuCallbacks = new Map<string, (selectedId?: string) => void>();
 
-export function useVSCodeMessaging() {
+export interface UseVSCodeMessagingOptions {
+  readonly subscribeToExtensionMessages?: boolean;
+}
+
+export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
+  const subscribeToExtensionMessages = options.subscribeToExtensionMessages === true;
   const {
     setProject,
     project,
@@ -50,8 +65,6 @@ export function useVSCodeMessaging() {
     getTotalDuration,
   } = useEditorStore();
   const projectRef = useRef(project);
-  const lastSavedRef = useRef<string>('');
-  const pendingSaveRef = useRef<string | null>(null);
 
   projectRef.current = project;
 
@@ -81,20 +94,19 @@ export function useVSCodeMessaging() {
     });
   }, [sendMessage]);
 
-  // Save project to file (manual save only)
-  const saveProject = useCallback(() => {
-    if (projectRef.current) {
-      const content = JSON.stringify(projectRef.current);
-      // Only save if content has changed
-      if (content !== lastSavedRef.current) {
-        pendingSaveRef.current = content;
-        logger.info('Manual save triggered, tracks:', projectRef.current.tracks?.length);
-        sendMessage({ type: 'save', content: projectRef.current });
-      } else {
-        logger.info('No changes to save');
-      }
-    }
-  }, [sendMessage]);
+  useEffect(() => {
+    if (!subscribeToExtensionMessages) return;
+
+    let lastSyncedProject = useEditorStore.getState().project;
+    return useEditorStore.subscribe((state) => {
+      const nextProject = state.project;
+      if (nextProject === lastSyncedProject) return;
+      lastSyncedProject = nextProject;
+      if (!nextProject || isProjectChangedSyncSuppressed()) return;
+
+      sendMessage({ type: 'project:changed', document: nextProject });
+    });
+  }, [subscribeToExtensionMessages, sendMessage]);
 
   const importStoryboard = useCallback(
     (payload: CutStoryboardImportPayload) => {
@@ -115,8 +127,21 @@ export function useVSCodeMessaging() {
 
   // Handle incoming messages from Extension Host
   useEffect(() => {
+    if (!subscribeToExtensionMessages) return;
+
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
+
+      if (isProjectFileSnapshotRequestMessage(message)) {
+        const document = useEditorStore.getState().project;
+        sendMessage({
+          type: PROJECT_FILE_SNAPSHOT_RESPONSE,
+          requestId: message.requestId,
+          ok: Boolean(document),
+          ...(document ? { document } : { error: 'Cut project is not ready.' }),
+        });
+        return;
+      }
 
       switch (message.type) {
         case 'frameServer:config':
@@ -128,9 +153,9 @@ export function useVSCodeMessaging() {
           break;
 
         case 'update':
-          // Store the incoming content as "last saved" to avoid immediate re-save
-          lastSavedRef.current = JSON.stringify(message.content);
-          setProject(message.content as ProjectData, message.projectRoot as string | undefined);
+          suppressProjectChangedSync(() => {
+            setProject(message.content as ProjectData, message.projectRoot as string | undefined);
+          });
 
           // Pre-request URIs for all media files in the project
           if (message.content && message.content.tracks) {
@@ -159,44 +184,18 @@ export function useVSCodeMessaging() {
           }
           break;
 
-        case 'addMediaFile':
-          // Handle adding media file to timeline
-          if (message.path && message.mediaType) {
-            const addMediaToStore = async () => {
-              const { addMediaElement, addMediaElementWithAudio, getTotalDuration } =
-                useEditorStore.getState();
-              const mediaInfoService = getMediaInfoService();
-              const fileName = message.path.split('/').pop() || message.path;
-
-              // Read actual duration when possible (fallback to defaults)
-              let duration =
-                message.mediaType === 'image' ? DEFAULT_IMAGE_DURATION : DEFAULT_VIDEO_DURATION;
-              if (message.mediaType !== 'image') {
-                try {
-                  duration = await mediaInfoService.getDuration(message.path);
-                } catch (e) {
-                  logger.warn('Failed to get media duration:', e);
-                }
-              }
-
-              // Add to the first available media track, or at the end of timeline
-              const totalDuration = getTotalDuration();
-
-              if (message.mediaType === 'video') {
-                await addMediaElementWithAudio('', message.path, fileName, duration, totalDuration);
-              } else {
-                addMediaElement('', message.path, fileName, duration, totalDuration);
-              }
-
-              // Pre-request the webview URI for this file
-              sendMessage({ type: 'requestFile', path: message.path });
-
-              logger.info(`Added ${message.mediaType} file to timeline: ${message.path}`);
-            };
-            addMediaToStore().catch((err) => {
-              logger.error('Failed to add media file to timeline:', err);
+        case 'project:sourceAdded':
+          if (shouldAddProjectSourceResultToTimeline(message.result)) {
+            addProjectSourceResultToTimeline(message.result, sendMessage).catch((err) => {
+              logger.error('Failed to add project source to timeline:', err);
             });
           }
+          break;
+
+        case 'project:sourceRejected':
+          logger.warn(
+            message.result?.diagnostics?.[0]?.message ?? 'Project source add was rejected',
+          );
           break;
 
         case 'importStoryboard': {
@@ -215,16 +214,15 @@ export function useVSCodeMessaging() {
         }
 
         case 'saved':
-          // Confirmation that file was saved
-          if (pendingSaveRef.current) {
-            lastSavedRef.current = pendingSaveRef.current;
-            pendingSaveRef.current = null;
+          if (message.content) {
+            suppressProjectChangedSync(() => {
+              setProject(message.content as ProjectData, message.projectRoot as string | undefined);
+            });
           }
           logger.info('Project saved successfully');
           break;
 
         case 'error':
-          pendingSaveRef.current = null;
           logger.error('Error from extension:', message.message);
           break;
 
@@ -236,8 +234,12 @@ export function useVSCodeMessaging() {
                 'Click OK to reload (your unsaved changes will be lost) or Cancel to keep your current version.',
             );
             if (shouldReload) {
-              lastSavedRef.current = JSON.stringify(message.content);
-              setProject(message.content as ProjectData, message.projectRoot as string | undefined);
+              suppressProjectChangedSync(() => {
+                setProject(
+                  message.content as ProjectData,
+                  message.projectRoot as string | undefined,
+                );
+              });
             }
           }
           break;
@@ -407,13 +409,22 @@ export function useVSCodeMessaging() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [setProject, sendStatusUpdate, selectElement, seek, setAIActionStatus, importStoryboard]);
+  }, [
+    subscribeToExtensionMessages,
+    setProject,
+    sendStatusUpdate,
+    selectElement,
+    seek,
+    setAIActionStatus,
+    importStoryboard,
+  ]);
 
   // Send status updates when playback state changes
   useEffect(() => {
+    if (!subscribeToExtensionMessages) return;
     if (!project) return;
     sendStatusUpdate();
-  }, [currentTime, isPlaying, project, sendStatusUpdate]);
+  }, [subscribeToExtensionMessages, currentTime, isPlaying, project, sendStatusUpdate]);
 
   // Request file URI for media playback
   const requestFileUri = useCallback(
@@ -427,14 +438,6 @@ export function useVSCodeMessaging() {
   const getFileUri = useCallback((path: string): Promise<string> => {
     return getFileUriAsync(path);
   }, []);
-
-  // Add media to timeline
-  const addMediaToTimeline = useCallback(
-    (path: string) => {
-      sendMessage({ type: 'addMediaToTimeline', path });
-    },
-    [sendMessage],
-  );
 
   // Export video
   const exportVideo = useCallback(
@@ -512,10 +515,8 @@ export function useVSCodeMessaging() {
 
   return {
     sendMessage,
-    saveProject,
     requestFileUri,
     getFileUri,
-    addMediaToTimeline,
     exportVideo,
     sendStatusUpdate,
     // Streaming export
@@ -535,6 +536,90 @@ type StoryboardImportStoreActions = Pick<
   EditorStore,
   'addElement' | 'addMediaElement' | 'addTrack' | 'getTotalDuration' | 'project'
 >;
+
+interface TimelineAddMetadata {
+  readonly addToTimeline?: unknown;
+  readonly mediaType?: unknown;
+  readonly duration?: unknown;
+  readonly startTime?: unknown;
+  readonly trackId?: unknown;
+  readonly name?: unknown;
+}
+
+async function addProjectSourceResultToTimeline(
+  result: ProjectSourceAddResult | undefined,
+  sendMessage: (message: unknown) => void,
+): Promise<void> {
+  if (!result?.ok || !result.durablePath) {
+    const detail = result?.diagnostics?.[0]?.message ?? 'Failed to add media to timeline';
+    logger.warn(detail);
+    return;
+  }
+
+  const metadata = readTimelineAddMetadata(result);
+  const mediaType = readTimelineMediaType(metadata, result.durablePath);
+  if (!mediaType) {
+    logger.warn(`Unsupported timeline media source: ${result.durablePath}`);
+    return;
+  }
+
+  const { addMediaElement, addMediaElementWithAudio, getTotalDuration } = useEditorStore.getState();
+  const startTime =
+    typeof metadata.startTime === 'number' ? metadata.startTime : getTotalDuration();
+  const fileName =
+    typeof metadata.name === 'string' && metadata.name.trim().length > 0
+      ? metadata.name
+      : result.durablePath.split('/').pop() || result.durablePath;
+
+  let duration =
+    typeof metadata.duration === 'number'
+      ? metadata.duration
+      : mediaType === 'image'
+        ? DEFAULT_IMAGE_DURATION
+        : DEFAULT_VIDEO_DURATION;
+  if (metadata.duration === undefined && mediaType !== 'image') {
+    try {
+      duration = await getMediaInfoService().getDuration(result.durablePath);
+    } catch (error) {
+      logger.warn('Failed to get media duration:', error);
+    }
+  }
+
+  if (mediaType === 'video') {
+    await addMediaElementWithAudio('', result.durablePath, fileName, duration, startTime);
+  } else {
+    addMediaElement('', result.durablePath, fileName, duration, startTime);
+  }
+
+  sendMessage({ type: 'requestFile', path: result.durablePath });
+  logger.info(`Added ${mediaType} source to timeline: ${result.durablePath}`);
+}
+
+function shouldAddProjectSourceResultToTimeline(
+  result: ProjectSourceAddResult | undefined,
+): boolean {
+  return readTimelineAddMetadata(result).addToTimeline === true;
+}
+
+function readTimelineAddMetadata(result: ProjectSourceAddResult | undefined): TimelineAddMetadata {
+  const metadata = result?.ingest?.request.metadata;
+  if (!metadata || typeof metadata !== 'object') return {};
+  return metadata as TimelineAddMetadata;
+}
+
+function readTimelineMediaType(
+  metadata: TimelineAddMetadata,
+  durablePath: string,
+): MediaType | null {
+  if (
+    metadata.mediaType === 'video' ||
+    metadata.mediaType === 'audio' ||
+    metadata.mediaType === 'image'
+  ) {
+    return metadata.mediaType;
+  }
+  return getMediaType(durablePath);
+}
 
 function importStoryboardToStore(
   store: StoryboardImportStoreActions,

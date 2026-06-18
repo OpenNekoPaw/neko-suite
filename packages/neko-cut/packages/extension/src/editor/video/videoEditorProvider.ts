@@ -5,14 +5,22 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { loadNkv, type ProjectData, type ProjectFileSaveReason } from '@neko/shared';
 import {
   createDefaultLocalResourceAccessService,
+  requestWebviewProjectSnapshot,
   createProjectSnapshotPackage,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
 import { IEditorRegistry } from '../common/editorRegistry';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
+import { VideoProjectDocument } from './videoProjectDocument';
+import {
+  formatCutProjectFileDiagnostics,
+  prepareCutProjectFileSave,
+  saveCutProjectFile,
+} from './cutProjectFilePersistence';
 import { MediaService } from '../../services/MediaService';
 import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
@@ -25,8 +33,13 @@ import { isAssetMessage, handleAssetMessage } from '../../handlers/assetHandlers
 const logger = getLogger('VideoEditorProvider');
 import { IStatusBar } from '../../views/statusBar';
 import { IVideoProjectOutlineProvider } from '../../views/outlineProvider';
-export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
+export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoProjectDocument> {
   private static readonly viewType = 'neko.videoEditor';
+  private readonly onDidChangeCustomDocumentEmitter = new vscode.EventEmitter<
+    vscode.CustomDocumentContentChangeEvent<VideoProjectDocument>
+  >();
+  readonly onDidChangeCustomDocument = this.onDidChangeCustomDocumentEmitter.event;
+  private readonly documents = new Map<string, VideoProjectDocument>();
   private activeWebviews: Map<string, vscode.Webview> = new Map();
   private activeWebviewPanels: Map<string, vscode.WebviewPanel> = new Map();
   private modelDisposables: Map<string, vscode.Disposable> = new Map();
@@ -222,6 +235,18 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     return null;
   }
 
+  public getActiveDocumentVsCodeUri(): vscode.Uri | null {
+    const uri = this.getActiveDocumentUri();
+    return uri ? vscode.Uri.parse(uri) : null;
+  }
+
+  public getProjectDataForDocument(documentUri: string): ProjectData | null {
+    const model = getService<IEditorRegistry>(IEditorRegistry)?.getEditorByUri(
+      vscode.Uri.parse(documentUri),
+    ) as VideoEditorModel | undefined;
+    return model?.getProjectData() ?? this.documents.get(documentUri)?.projectData ?? null;
+  }
+
   /**
    * Get the active ExportService (for the currently active document)
    */
@@ -242,8 +267,130 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     return null;
   }
 
-  public async resolveCustomTextEditor(
-    document: vscode.TextDocument,
+  async openCustomDocument(
+    uri: vscode.Uri,
+    _openContext: vscode.CustomDocumentOpenContext,
+    _token: vscode.CancellationToken,
+  ): Promise<VideoProjectDocument> {
+    const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+    const result = loadNkv(text);
+    if (!result.validation.valid) {
+      logger.warn(
+        'NKV validation errors:',
+        result.validation.errors.map((error) => `${error.field}: ${error.message}`).join('; '),
+      );
+    }
+    const document = new VideoProjectDocument(uri, result.project, () => {
+      this.documents.delete(uri.toString());
+    });
+    this.documents.set(uri.toString(), document);
+    return document;
+  }
+
+  async saveCustomDocument(
+    document: VideoProjectDocument,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    logger.info('cut.customDocument.save.start', {
+      uri: document.uri.toString(),
+      hasWebview: this.activeWebviewPanels.has(document.uri.toString()),
+    });
+    const webviewPanel = this.activeWebviewPanels.get(document.uri.toString());
+    const snapshot = webviewPanel
+      ? await requestCutProjectSnapshot(webviewPanel.webview, 'vscode-save')
+      : document.projectData;
+    const result = await saveCutProjectFile(document.uri, snapshot, 'vscode-save');
+    if (!result.ok || !result.document) {
+      throw new Error(
+        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
+      );
+    }
+    document.setProjectData(result.document);
+    const model = getService<IEditorRegistry>(IEditorRegistry)?.getEditorByUri(document.uri) as
+      | VideoEditorModel
+      | undefined;
+    model?.applyIncrementalUpdate(result.document);
+    webviewPanel?.webview.postMessage({ type: 'saved' });
+    logger.info('cut.customDocument.save.done', {
+      uri: document.uri.toString(),
+      diagnostics: result.diagnostics.map((diagnostic) => diagnostic.code),
+    });
+  }
+
+  async saveCustomDocumentAs(
+    document: VideoProjectDocument,
+    destination: vscode.Uri,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    const webviewPanel = this.activeWebviewPanels.get(document.uri.toString());
+    const snapshot = webviewPanel
+      ? await requestCutProjectSnapshot(webviewPanel.webview, 'save-as')
+      : document.projectData;
+    const result = await saveCutProjectFile(destination, snapshot, 'save-as', {
+      sourceUri: document.uri,
+      useSaveAs: true,
+    });
+    if (!result.ok || !result.document) {
+      throw new Error(
+        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
+      );
+    }
+    document.setProjectData(result.document);
+    webviewPanel?.webview.postMessage({ type: 'saved' });
+  }
+
+  async revertCustomDocument(
+    document: VideoProjectDocument,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<void> {
+    const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(document.uri));
+    const result = loadNkv(text);
+    document.setProjectData(result.project);
+    const model = getService<IEditorRegistry>(IEditorRegistry)?.getEditorByUri(document.uri) as
+      | VideoEditorModel
+      | undefined;
+    model?.applyIncrementalUpdate(result.project);
+    this.activeWebviewPanels
+      .get(document.uri.toString())
+      ?.webview.postMessage({ type: 'update', content: result.project });
+  }
+
+  async backupCustomDocument(
+    document: VideoProjectDocument,
+    context: vscode.CustomDocumentBackupContext,
+    _cancellation: vscode.CancellationToken,
+  ): Promise<vscode.CustomDocumentBackup> {
+    const result = await saveCutProjectFile(context.destination, document.projectData, 'backup', {
+      sourceUri: document.uri,
+    });
+    if (!result.ok) {
+      throw new Error(
+        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to backup NKV project'),
+      );
+    }
+    return {
+      id: context.destination.toString(),
+      delete: async () => {
+        try {
+          await vscode.workspace.fs.delete(context.destination);
+        } catch {
+          // Best-effort backup cleanup.
+        }
+      },
+    };
+  }
+
+  private markDocumentDirty(document: VideoProjectDocument): void {
+    logger.info('cut.customDocument.dirty', {
+      uri: document.uri.toString(),
+    });
+    this.onDidChangeCustomDocumentEmitter.fire({
+      document,
+    });
+  }
+
+  public async resolveCustomEditor(
+    document: VideoProjectDocument,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
@@ -756,7 +903,15 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
           return;
         }
 
-        messageHandler.handleMessage(message);
+        await messageHandler.handleMessage(message);
+
+        if (message.type === 'project:changed' || message.type === 'save') {
+          this.markDocumentDirty(document);
+        }
+
+        if (message.type === 'save') {
+          await vscode.commands.executeCommand('workbench.action.files.save');
+        }
 
         // Update FrameServer and outline on incremental sync
         if (message.type === 'operationApplied') {
@@ -886,34 +1041,8 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
-    // Listen for document changes (来自 VSCode TextDocument 的事件，用于外部修改)
-    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.uri.toString() === document.uri.toString()) {
-        // Skip events with no content changes (e.g., dirty state cleanup on save).
-        // VSCode fires onDidChangeTextDocument with empty contentChanges when
-        // document.save() clears the dirty flag. Without this guard, the handler
-        // would reload stale TextDocument content and overwrite webview state.
-        if (e.contentChanges.length === 0) {
-          return;
-        }
-
-        // Skip reload if this is an internal save (from webview)
-        // This prevents the save operation from overwriting webview state
-        if (model!.isInternalSave) {
-          logger.info('Skipping reload for internal save');
-          // Decrement counter after processing the event
-          model!.decrementInternalSaveCounter();
-          return;
-        }
-        // 重新加载模型内容 (only for external changes)
-        logger.info('External change detected, reloading model');
-        model!.reload();
-      }
-    });
-
     // Clean up when editor is closed
     webviewPanel.onDidDispose(async () => {
-      changeDocumentSubscription.dispose();
       modelChangeSubscription.dispose();
 
       // Remove from active webviews and panels
@@ -1148,4 +1277,14 @@ function getNonce(): string {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+function requestCutProjectSnapshot(
+  webview: Pick<vscode.Webview, 'postMessage' | 'onDidReceiveMessage'>,
+  saveReason: ProjectFileSaveReason,
+): Promise<ProjectData> {
+  return requestWebviewProjectSnapshot<ProjectData>(webview, {
+    formatId: 'nkv',
+    saveReason,
+  });
 }

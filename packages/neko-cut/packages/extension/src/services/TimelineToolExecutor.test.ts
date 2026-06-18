@@ -13,6 +13,21 @@ import { CENTERED_TRANSFORM } from '@neko/shared';
 import { ServiceCollection, setGlobalServices } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import { TimelineToolExecutor } from './TimelineToolExecutor';
+import { saveCutProjectFile } from '../editor/video/cutProjectFilePersistence';
+
+vi.mock('../editor/video/cutProjectFilePersistence', () => ({
+  saveCutProjectFile: vi.fn(async (_uri: unknown, project: ProjectData) => ({
+    ok: true,
+    document: project,
+    diagnostics: [],
+  })),
+  formatCutProjectFileDiagnostics: vi.fn(
+    (diagnostics: readonly { readonly message: string }[], fallback: string) =>
+      diagnostics.length === 0
+        ? fallback
+        : `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`,
+  ),
+}));
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -33,6 +48,8 @@ class MockVideoEditorModel {
   readonly uri = vscode.Uri.file('/test/project.nkv');
   private project: ProjectData;
   readonly updates: ProjectData[] = [];
+  readonly savedSyncs: ProjectData[] = [];
+  readonly legacyUpdates: ProjectData[] = [];
 
   constructor(project: ProjectData) {
     this.project = project;
@@ -43,9 +60,20 @@ class MockVideoEditorModel {
   }
 
   async updateProjectData(data: ProjectData): Promise<boolean> {
+    this.legacyUpdates.push(data);
+    this.project = data;
+    return true;
+  }
+
+  async syncSavedProjectData(data: ProjectData): Promise<boolean> {
+    this.savedSyncs.push(data);
+    this.project = data;
+    return true;
+  }
+
+  applyIncrementalUpdate(data: ProjectData): void {
     this.project = data;
     this.updates.push(data);
-    return true;
   }
 }
 
@@ -75,6 +103,12 @@ describe('TimelineToolExecutor', () => {
   beforeEach(() => {
     const services = new ServiceCollection();
     setGlobalServices(services);
+    vi.mocked(saveCutProjectFile).mockClear();
+    vi.mocked(saveCutProjectFile).mockImplementation(async (_uri, project) => ({
+      ok: true,
+      document: project,
+      diagnostics: [],
+    }));
 
     model = new MockVideoEditorModel(createBaseProject());
 
@@ -97,7 +131,10 @@ describe('TimelineToolExecutor', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
+    expect(model.legacyUpdates).toHaveLength(0);
+    expect(saveCutProjectFile).not.toHaveBeenCalled();
 
     const updated = model.getProjectData();
     expect(updated.tracks[0].elements).toHaveLength(1);
@@ -119,7 +156,8 @@ describe('TimelineToolExecutor', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
 
     const trackAny = model.getProjectData().tracks[0] as any;
     expect(trackAny.shapes).toHaveLength(1);
@@ -171,7 +209,8 @@ describe('TimelineToolExecutor', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
 
     const updatedElement = model.getProjectData().tracks[0].elements[0] as TimelineElement;
     expect(updatedElement.startTime).toBe(2);
@@ -249,7 +288,8 @@ describe('TimelineToolExecutor', () => {
     const result = await executor.execute('DeleteElement', { elementId: 'elem-1' });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
     expect(model.getProjectData().tracks[0].elements).toHaveLength(0);
   });
 
@@ -287,7 +327,8 @@ describe('TimelineToolExecutor', () => {
     const result = await executor.execute('SplitElement', { elementId: 'elem-1', splitTime: 3 });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
 
     const elements = model.getProjectData().tracks[0].elements;
     expect(elements).toHaveLength(2);
@@ -339,7 +380,8 @@ describe('TimelineToolExecutor', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(model.updates).toHaveLength(1);
+    expect(model.savedSyncs).toHaveLength(1);
+    expect(model.updates).toHaveLength(0);
 
     const updatedElement = model.getProjectData().tracks[0].elements[0] as any;
     expect(updatedElement.colorCorrection).toBeDefined();

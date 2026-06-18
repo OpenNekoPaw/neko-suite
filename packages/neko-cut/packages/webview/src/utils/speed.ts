@@ -3,6 +3,7 @@
  * 速度控制工具 - 处理变速、倒放和时间重映射
  */
 
+import { formatMediaTimeCentiseconds } from '@neko/neko-client';
 import type { EasingType } from '../types/animation';
 import { applyEasing } from './animation';
 
@@ -352,8 +353,5 @@ export function formatSpeed(speed: number): string {
  * 格式化时间以供显示
  */
 export function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 100);
-  return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  return formatMediaTimeCentiseconds(seconds);
 }
