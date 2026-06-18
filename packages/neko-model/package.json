@@ -165,18 +165,15 @@
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "pnpm run compile:extension -- --watch",
-    "lint": "eslint packages --ext ts,tsx",
+    "lint": "eslint packages/extension/src packages/webview/src",
     "test": "vitest run --passWithNoTests",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.13.0",
-    "@typescript-eslint/parser": "^6.13.0",
     "@neko/shared": "workspace:*",
     "esbuild": "^0.19.8",
-    "eslint": "^8.55.0",
     "typescript": "^5.3.2",
     "vitest": "^4.1.2"
   }
