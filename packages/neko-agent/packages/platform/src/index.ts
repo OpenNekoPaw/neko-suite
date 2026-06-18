@@ -23,6 +23,17 @@ export {
   type UserConfig,
   type IUserConfigManager,
 } from './config/user-config';
+export {
+  CUSTOM_NEWAPI_PROVIDER_ID,
+  DEFAULT_USER_CONFIG,
+  NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+  NEKO_GATEWAY_PROVIDER_ID,
+  OLLAMA_LOCAL_PROVIDER_ID,
+} from './config/default-config';
 
 export { watchWorkspaceConfig, type WorkspaceConfig } from './config/workspace-config';
 
