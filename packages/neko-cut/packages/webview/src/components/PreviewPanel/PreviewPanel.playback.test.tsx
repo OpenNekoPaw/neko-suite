@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
@@ -233,9 +235,14 @@ async function renderPreview(): Promise<{ root: Root; container: HTMLDivElement 
   return { root, container };
 }
 
+function clearFrameServerStreamCache(): void {
+  publishFrameServerMessage({ type: 'frameServer:streamStopped' });
+}
+
 describe('PreviewPanel playback controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearFrameServerStreamCache();
     vi.stubGlobal(
       'ResizeObserver',
       class ResizeObserver {
@@ -418,6 +425,37 @@ describe('PreviewPanel playback controls', () => {
         videoFrameRoute: 'callback',
       }),
     );
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
+  it('does not keep the GPU initializing overlay after the frame server stream is ready', async () => {
+    const { root, container } = await renderPreview();
+
+    expect(container.textContent).toContain('preview.initializingGpu');
+
+    await act(async () => {
+      publishFrameServerMessage({
+        type: 'frameServer:config',
+        port: 39001,
+      });
+      publishFrameServerMessage({
+        type: 'frameServer:streamCreated',
+        streamId: 'strm_editor-v_ready',
+        wsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_ready',
+        audioStreamId: 'strm_editor-a_ready',
+        audioWsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-a_ready',
+      });
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('preview.initializingGpu');
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    expect(canvas?.style.display).toBe('block');
 
     await act(async () => {
       root.unmount();

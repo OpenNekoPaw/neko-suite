@@ -103,7 +103,7 @@ describe('EngineAvStreamLifecycle', () => {
       fps: 30,
     });
 
-    expect(events).toEqual(['audio.connect', 'video.connect']);
+    expect(events).toEqual(['video.connect', 'audio.connect']);
     expect(lifecycle.getSnapshot()).toMatchObject({
       videoClient: video,
       audioClient: audio,
@@ -114,6 +114,41 @@ describe('EngineAvStreamLifecycle', () => {
       audioClient: audio,
       scheduler,
     });
+  });
+
+  it('does not block video connection on a slow audio connection', async () => {
+    const events: string[] = [];
+    let releaseAudio: (() => void) | undefined;
+    const video = createVideoClient(events, 'video');
+    const audio = {
+      ...createAudioClient(events, 'audio'),
+      async connect() {
+        events.push('audio.connect:start');
+        await new Promise<void>((resolve) => {
+          releaseAudio = resolve;
+        });
+        events.push('audio.connect:done');
+      },
+    };
+    const lifecycle = new EngineAvStreamLifecycle({
+      factories: {
+        createVideoClient: () => video,
+        createAudioClient: () => audio,
+      },
+    });
+
+    const started = lifecycle.start({
+      video: { websocketUrl: 'ws://video', width: 1280, height: 720 },
+      audio: { websocketUrl: 'ws://audio' },
+    });
+    await Promise.resolve();
+
+    expect(events).toEqual(['video.connect', 'audio.connect:start']);
+
+    releaseAudio?.();
+    await started;
+
+    expect(events).toEqual(['video.connect', 'audio.connect:start', 'audio.connect:done']);
   });
 
   it('replaces descriptors and disposes old clients before starting new ones', async () => {
@@ -145,13 +180,13 @@ describe('EngineAvStreamLifecycle', () => {
     });
 
     expect(events).toEqual([
-      'firstAudio.connect',
       'firstVideo.connect',
+      'firstAudio.connect',
       'firstScheduler.dispose',
       'firstVideo.dispose',
       'firstAudio.dispose',
-      'secondAudio.connect',
       'secondVideo.connect',
+      'secondAudio.connect',
     ]);
   });
 

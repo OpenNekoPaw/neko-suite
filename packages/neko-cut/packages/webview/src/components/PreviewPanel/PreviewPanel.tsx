@@ -289,7 +289,8 @@ export const PreviewPanel = memo(function PreviewPanel({
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
 
   // State
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isStreamReady, setIsStreamReady] = useState(false);
+  const [hasVideoFrame, setHasVideoFrame] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
 
   // Media info cache
@@ -336,11 +337,15 @@ export const PreviewPanel = memo(function PreviewPanel({
         );
         setStreamWsUrl(typeof message.wsUrl === 'string' ? message.wsUrl : null);
         setAudioWsUrl(typeof message.audioWsUrl === 'string' ? message.audioWsUrl : null);
+        setIsStreamReady(Boolean(message.wsUrl));
+        setHasVideoFrame(false);
       }
       if (message.type === 'frameServer:streamStopped') {
         logger.info(`Stream stopped: ${message.streamId}`);
         setStreamWsUrl(null);
         setAudioWsUrl(null);
+        setIsStreamReady(false);
+        setHasVideoFrame(false);
       }
     };
 
@@ -376,6 +381,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     perfMonitorRef.current.recordFrame();
     const renderStart = performance.now();
     ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    setHasVideoFrame((ready) => (ready ? ready : true));
     perfMonitorRef.current.recordRenderTime(performance.now() - renderStart);
     frame.close();
   }, []);
@@ -421,7 +427,6 @@ export const PreviewPanel = memo(function PreviewPanel({
             },
             onConnectionChange: (connected: boolean) => {
               logger.info(`H.264 stream ${connected ? 'connected' : 'disconnected'}`);
-              setIsInitialized(connected);
               if (connected) {
                 setInitError(null);
               }
@@ -479,7 +484,7 @@ export const PreviewPanel = memo(function PreviewPanel({
       audioClientRef.current?.setVolume(0);
       lifecycleRef.current?.stop();
       monitor.reset();
-      setIsInitialized(false);
+      setHasVideoFrame(false);
     };
   }, [
     streamWsUrl,
@@ -634,14 +639,14 @@ export const PreviewPanel = memo(function PreviewPanel({
         },
       });
     }
-  }, [seekRevision, currentTime, isPlaying, isInitialized, project, playbackSpeed]);
+  }, [seekRevision, currentTime, isPlaying, project, playbackSpeed]);
 
   // ==========================================================================
   // Composite High-Quality Frame (when paused)
   // ==========================================================================
 
   useEffect(() => {
-    if (!project || isPlaying || !isInitialized || !pausedCompositeState.enabled) return;
+    if (!project || isPlaying || !isStreamReady || !pausedCompositeState.enabled) return;
 
     const abortController = new AbortController();
 
@@ -689,7 +694,7 @@ export const PreviewPanel = memo(function PreviewPanel({
     return () => {
       abortController.abort();
     };
-  }, [currentTime, isPlaying, isInitialized, project, pausedCompositeState]);
+  }, [currentTime, isPlaying, isStreamReady, project, pausedCompositeState]);
 
   // ==========================================================================
   // Canvas Resize
@@ -804,8 +809,8 @@ export const PreviewPanel = memo(function PreviewPanel({
   // ==========================================================================
 
   const captureScreenshot = useCallback(async () => {
-    if (!isInitialized || !project || !canvasRef.current) {
-      logger.error('Cannot capture: not initialized or no project');
+    if (!isStreamReady || !project || !canvasRef.current) {
+      logger.error('Cannot capture: stream is not ready or no project');
       return;
     }
 
@@ -846,7 +851,7 @@ export const PreviewPanel = memo(function PreviewPanel({
       logger.error('Screenshot capture failed:', error);
       throw error;
     }
-  }, [isInitialized, project, currentTime]);
+  }, [isStreamReady, project, currentTime]);
 
   useEffect(() => {
     if (onCaptureScreenshot) {
@@ -1047,18 +1052,18 @@ export const PreviewPanel = memo(function PreviewPanel({
           <canvas
             ref={canvasRef}
             className="border border-vscode-panel-border shadow-lg bg-black"
-            style={{ display: isInitialized ? 'block' : 'none' }}
+            style={{ display: isStreamReady ? 'block' : 'none' }}
           />
 
           <PreviewCanvasOverlay
             project={project}
             currentTime={currentTime}
-            visible={pausedCompositeState.enabled && !isPlaying && isInitialized}
+            visible={pausedCompositeState.enabled && !isPlaying && isStreamReady}
             displaySize={displaySize}
           />
 
           {/* FPS Counter */}
-          {isInitialized && showFpsCounter && (
+          {isStreamReady && hasVideoFrame && showFpsCounter && (
             <PerformanceOverlay
               performanceStats={performanceStats}
               currentFps={currentFps}
@@ -1071,7 +1076,7 @@ export const PreviewPanel = memo(function PreviewPanel({
           <video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
 
           {/* Loading overlay */}
-          {!isInitialized && (
+          {!isStreamReady && (
             <div
               className="flex items-center justify-center bg-black border border-vscode-panel-border max-w-full max-h-full"
               style={{

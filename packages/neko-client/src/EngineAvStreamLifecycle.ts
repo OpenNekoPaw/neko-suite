@@ -161,8 +161,10 @@ export class EngineAvStreamLifecycle {
     this.videoClient = videoClient;
     this.callbacks.onClientsChanged?.(this.getClients());
 
-    await audioClient?.connect(options.audioContext);
-    await videoClient?.connect();
+    const videoConnect = videoClient?.connect() ?? Promise.resolve();
+    const audioConnect = audioClient?.connect(options.audioContext) ?? Promise.resolve();
+
+    await Promise.all([videoConnect, audioConnect]);
 
     return this.getSnapshot();
   }
