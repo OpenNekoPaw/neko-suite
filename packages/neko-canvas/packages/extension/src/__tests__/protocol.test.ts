@@ -1040,6 +1040,13 @@ describe('canvasEditorProvider message contracts', () => {
       expect(canvasAppSource).not.toContain('formatProjectionStatus(');
     });
   });
+
+  it('uses the typed neko-assets API for asset entity lookup without command fallback', () => {
+    expect(extensionSource).toContain('vscode.extensions.getExtension<NekoAssetsAPI>');
+    expect(extensionSource).toContain('api.getAllEntities()');
+    expect(extensionSource).toContain('typed Neko Assets API is unavailable');
+    expect(extensionSource).not.toContain("'neko.assets.getAllEntities'");
+  });
 });
 
 function extractFunction(source: string, functionName: string): string {

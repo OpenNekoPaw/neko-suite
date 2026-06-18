@@ -20,7 +20,7 @@ export interface ProjectFileSaveSessionSnapshotRequest<TDocument> {
   readonly webview: Pick<vscode.Webview, 'postMessage' | 'onDidReceiveMessage'>;
   readonly targetUri: ProjectFileSaveTargetUri;
   readonly saveReason: ProjectFileSaveReason;
-  readonly fallbackMessage: string;
+  readonly defaultMessage: string;
   readonly sourceUri?: ProjectFileSaveTargetUri;
   readonly sourcePolicyOptions?: ProjectFileSaveSessionSaveRequest<TDocument>['sourcePolicyOptions'];
   readonly useSaveAs?: boolean;
@@ -42,7 +42,7 @@ export class ProjectFileSaveSession<TDocument> extends CoreProjectFileSaveSessio
       targetUri: request.targetUri,
       document,
       saveReason: request.saveReason,
-      fallbackMessage: request.fallbackMessage,
+      defaultMessage: request.defaultMessage,
       sourceUri: request.sourceUri,
       sourcePolicyOptions: request.sourcePolicyOptions,
       useSaveAs: request.useSaveAs,

@@ -55,7 +55,7 @@ export class VideoEditorModel extends BaseEditorModel {
   }
 
   /**
-   * Mark an upcoming legacy TextDocument edit as internal.
+   * Mark an upcoming TextDocument edit from the adapter path as internal.
    */
   markInternalDocumentEdit(): void {
     this._internalSaveCounter++;

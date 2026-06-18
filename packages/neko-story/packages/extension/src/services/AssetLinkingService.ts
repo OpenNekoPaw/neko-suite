@@ -1,7 +1,7 @@
-import * as vscode from 'vscode';
 import type { AssetEntity, AssetFile } from '@neko/shared';
 import type { AssetReference } from '@neko-story/types';
 import type { AssetLinkMatch, AssetLinkMatchSource, IAssetLinker } from './types';
+import { getNekoAssetsApi } from './assetsApi';
 
 const CHARACTER_CATEGORY = 'character';
 const LOCATION_CATEGORY = 'environment';
@@ -57,10 +57,7 @@ export class AssetLinkingService implements IAssetLinker {
       return this.deps.loadEntities();
     }
 
-    const entities = await vscode.commands.executeCommand<readonly AssetEntity[]>(
-      'neko.assets.getAllEntities',
-    );
-    return Array.isArray(entities) ? entities : [];
+    return getNekoAssetsApi().then((api) => api.getAllEntities());
   }
 }
 

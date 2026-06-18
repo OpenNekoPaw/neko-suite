@@ -1509,7 +1509,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       sourceUri: document.uri,
       document: snapshot,
       saveReason: 'vscode-save',
-      fallbackMessage: 'Failed to save NKC',
+      defaultMessage: 'Failed to save NKC',
     });
     this.afterCanvasProjectSaved(document, result.document ?? null);
     webviewPanel.webview.postMessage({ type: 'saved' });
@@ -1531,7 +1531,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       sourceUri: document.uri,
       document: snapshot,
       saveReason: 'save-as',
-      fallbackMessage: 'Failed to save NKC',
+      defaultMessage: 'Failed to save NKC',
       useSaveAs: true,
     });
     this.afterCanvasProjectSaved(document, result.document ?? null);

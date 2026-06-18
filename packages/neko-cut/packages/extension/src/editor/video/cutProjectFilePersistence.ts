@@ -90,7 +90,7 @@ export async function saveCutProjectFile(
     sourceUri,
     document: prepared.document,
     saveReason,
-    fallbackMessage: 'Failed to save NKV project',
+    defaultMessage: 'Failed to save NKV project',
     useSaveAs: options.useSaveAs,
   });
 
@@ -100,12 +100,4 @@ export async function saveCutProjectFile(
     content: result.ok ? `${saveNkv(result.document ?? prepared.document)}\n` : undefined,
     diagnostics: result.diagnostics,
   };
-}
-
-export function formatCutProjectFileDiagnostics(
-  diagnostics: readonly ProjectFileDiagnostic[],
-  fallback: string,
-): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

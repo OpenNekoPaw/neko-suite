@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { AssetEntity, IErrorHandler, ILogger, VariantComparisonResult } from '@neko/shared';
+import type { IErrorHandler, ILogger, VariantComparisonResult } from '@neko/shared';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
@@ -23,6 +23,7 @@ import { EngineMediaService } from '../services/EngineMediaService';
 import { VSCodeEngineRuntimeResolver } from '../services/EngineRuntimeResolver';
 import { DefaultScheduler } from '../services/Scheduler';
 import { DefaultTempFileService } from '../services/TempFileService';
+import { VSCodeAssetEntityReader } from '../services/VSCodeAssetEntityReader';
 import { VSCodeWorkspaceIO } from '../services/WorkspaceIO';
 import { setErrorHandler } from '../utils/errorHandler';
 import { setRootLogger } from '../utils/logger';
@@ -56,27 +57,6 @@ export interface ICoreServicesBootstrapResult extends vscode.Disposable {
 class VscodeExtensionI18n implements IExtensionI18n {
   t(key: string, ...args: Array<string | number | boolean>): string {
     return vscode.l10n.t(key, ...args);
-  }
-}
-
-class VscodeCommandAssetEntityReader implements IAssetEntityReader {
-  async listEntities(): Promise<AssetEntity[]> {
-    return this.fetchEntities();
-  }
-
-  async getEntity(entityId: string): Promise<AssetEntity | null> {
-    try {
-      const entities = await this.fetchEntities();
-      return entities.find((entity) => entity.id === entityId) ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async fetchEntities(): Promise<AssetEntity[]> {
-    return (
-      (await vscode.commands.executeCommand<AssetEntity[]>('neko.assets.getAllEntities')) ?? []
-    );
   }
 }
 
@@ -133,7 +113,7 @@ export function bootstrapCoreServices(
   const workspaceIO = new VSCodeWorkspaceIO();
   const scheduler = new DefaultScheduler();
   const tempFileService = new DefaultTempFileService();
-  const assetEntityReader = new VscodeCommandAssetEntityReader();
+  const assetEntityReader = new VSCodeAssetEntityReader();
   const variantComparisonService = new VscodeCommandVariantComparisonService();
 
   setRootLogger(logger);

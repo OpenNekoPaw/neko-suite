@@ -79,7 +79,7 @@ async function ingestCutProjectSource(
       writeFile: async (filePath, bytes) =>
         vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
     },
-    fileNameFallback: 'media.bin',
+    defaultFileName: 'media.bin',
     unmanagedSourceMessage:
       'External media must be moved into the project, asset library, or a configured media root before saving.',
   });

@@ -91,12 +91,6 @@ vi.mock('./cutProjectFilePersistence', () => ({
     document: project,
     diagnostics: [],
   })),
-  formatCutProjectFileDiagnostics: vi.fn(
-    (diagnostics: readonly { readonly message: string }[], fallback: string) =>
-      diagnostics.length === 0
-        ? fallback
-        : `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`,
-  ),
   prepareCutProjectFileSave: vi.fn(async (_uri: unknown, project: ProjectData) => ({
     ok: true,
     document: project,

@@ -70,12 +70,6 @@ vi.mock('./cutProjectFilePersistence', () => {
   return {
     prepareCutProjectFileSave,
     saveCutProjectFile,
-    formatCutProjectFileDiagnostics: vi.fn(
-      (diagnostics: readonly { readonly message: string }[], fallback: string) =>
-        diagnostics.length === 0
-          ? fallback
-          : `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`,
-    ),
   };
 });
 

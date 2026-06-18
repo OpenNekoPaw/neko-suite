@@ -23,7 +23,7 @@ export interface NkmProjectData {
   /**
    * Scene authoring profile.
    *
-   * Missing profile is treated as "3d" for legacy pre-profile .nkm files.
+   * Missing profile is treated as "3d" for pre-profile .nkm files.
    */
   profile?: NkmSceneProfile;
   /** Source model reference */

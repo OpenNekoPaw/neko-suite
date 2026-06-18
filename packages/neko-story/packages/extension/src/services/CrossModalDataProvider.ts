@@ -14,6 +14,7 @@ import type {
 } from '@neko/shared';
 import { createVSCodeEntityServices } from '@neko/entity/host-vscode';
 import { getRootLogger } from '../utils/logger';
+import { getNekoAssetsApi } from './assetsApi';
 
 export interface CrossModalDataSnapshot {
   readonly canvasNodes: readonly CanvasNode[];
@@ -151,15 +152,12 @@ export class CrossModalDataProvider implements vscode.Disposable {
 
   private async refreshAssetEntities(): Promise<void> {
     try {
-      const result = await vscode.commands.executeCommand<readonly AssetEntity[] | undefined>(
-        'neko.assets.getAllEntities',
+      this.assetEntities = await getNekoAssetsApi().then((api) => api.getAllEntities());
+      this.onDidUpdateEmitter.fire();
+    } catch (error) {
+      getRootLogger().warn(
+        `CrossModalDataProvider: Neko Assets API unavailable: ${formatError(error)}`,
       );
-      if (result) {
-        this.assetEntities = result;
-        this.onDidUpdateEmitter.fire();
-      }
-    } catch {
-      // neko-assets not installed or command unavailable — leave empty
     }
   }
 

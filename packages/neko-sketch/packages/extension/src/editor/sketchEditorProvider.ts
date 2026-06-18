@@ -832,7 +832,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       targetUri: uri,
       document: data,
       saveReason,
-      fallbackMessage: 'Failed to save NKS',
+      defaultMessage: 'Failed to save NKS',
     });
   }
 
@@ -1309,7 +1309,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
               writeFile: async (filePath, bytes) =>
                 vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), bytes),
             },
-            fileNameFallback: fileName,
+            defaultFileName: fileName,
             unmanagedSourceMessage:
               'Sketch import source must be moved into the project, asset library, or a configured media root before importing.',
           }),

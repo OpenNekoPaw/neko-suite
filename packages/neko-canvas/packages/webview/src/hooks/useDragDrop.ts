@@ -111,8 +111,8 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
               );
               applyCanvasAddSourceResult({
                 result: addResult,
-                fallbackName: file['name'] ?? filePath,
-                fallbackMediaType: normalizeCanvasMediaType(file['mediaType']),
+                sourceNameHint: file['name'] ?? filePath,
+                mediaTypeHint: normalizeCanvasMediaType(file['mediaType']),
                 dropPosition: dropPos,
                 addMediaAt,
                 onDropAssets: options.onDropAssets,
@@ -138,7 +138,7 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
           );
           applyCanvasAddSourceResult({
             result: addResult,
-            fallbackName: sourceUri,
+            sourceNameHint: sourceUri,
             dropPosition: dropPos,
             addMediaAt,
             onDropAssets: options.onDropAssets,
@@ -165,8 +165,8 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
             );
             applyCanvasAddSourceResult({
               result,
-              fallbackName: file.name,
-              fallbackMediaType: mediaType,
+              sourceNameHint: file.name,
+              mediaTypeHint: mediaType,
               dropPosition: dropPos,
               addMediaAt,
               onDropAssets: options.onDropAssets,
@@ -259,7 +259,7 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
   };
 }
 
-export function createCanvasAssetAddSourceInput(input: {
+function createCanvasAssetAddSourceInput(input: {
   readonly sourcePath?: string;
   readonly sourceUri?: string;
   readonly name: string;
@@ -339,10 +339,10 @@ export function createCanvasFilePickerAddSourceInput(
   nodeType: CanvasNodeType | undefined,
   dropPosition: { x: number; y: number },
 ): ProjectSourceAddClientInput {
-  const fallbackName = getCanvasFilePickerFallbackName(nodeType);
+  const sourceNameHint = getCanvasFilePickerDefaultName(nodeType);
   const assetKind = readCanvasAssetKindForNodeType(nodeType);
   const metadata = createCanvasAddSourceMetadata({
-    fileName: fallbackName,
+    fileName: sourceNameHint,
     assetKind,
     dropPosition,
   });
@@ -350,7 +350,7 @@ export function createCanvasFilePickerAddSourceInput(
   return {
     kind: 'file-picker',
     formatId: 'nkc',
-    browserFile: { name: fallbackName },
+    browserFile: { name: sourceNameHint },
     target: {
       role: readCanvasSourceRoleForNodeType(nodeType),
     },
@@ -364,7 +364,7 @@ export function createCanvasFilePickerAddSourceInput(
   };
 }
 
-export function getCanvasFilePickerFallbackName(nodeType: CanvasNodeType | undefined): string {
+export function getCanvasFilePickerDefaultName(nodeType: CanvasNodeType | undefined): string {
   switch (nodeType) {
     case 'media':
       return 'media';
@@ -383,7 +383,7 @@ export function getCanvasFilePickerFallbackName(nodeType: CanvasNodeType | undef
   }
 }
 
-export function readCanvasAddSourceMetadata(result: ProjectSourceAddResult): {
+function readCanvasAddSourceMetadata(result: ProjectSourceAddResult): {
   readonly canvasAssetKind?: 'media' | 'script' | 'document' | 'model' | 'canvas' | 'project';
   readonly mediaType?: 'image' | 'video' | 'audio';
   readonly runtimeAssetPath?: string;
@@ -418,8 +418,8 @@ export function readCanvasAddSourceMetadata(result: ProjectSourceAddResult): {
 
 export function applyCanvasAddSourceResult(input: {
   readonly result: ProjectSourceAddResult;
-  readonly fallbackName: string;
-  readonly fallbackMediaType?: 'image' | 'video' | 'audio';
+  readonly sourceNameHint: string;
+  readonly mediaTypeHint?: 'image' | 'video' | 'audio';
   readonly dropPosition: { x: number; y: number };
   readonly addMediaAt: UseDragDropOptions['addMediaAt'];
   readonly onDropAssets?: (
@@ -429,13 +429,13 @@ export function applyCanvasAddSourceResult(input: {
   readonly onError?: (message: string) => void;
 }): void {
   const metadata = readCanvasAddSourceMetadata(input.result);
-  const mediaType = metadata.mediaType ?? input.fallbackMediaType;
+  const mediaType = metadata.mediaType ?? input.mediaTypeHint;
   if (input.result.ok && input.result.durablePath) {
     const asset = createCanvasDroppedAssetFromAddSourceResult({
       durablePath: input.result.durablePath,
       metadata,
-      fallbackName: input.fallbackName,
-      fallbackMediaType: mediaType,
+      sourceNameHint: input.sourceNameHint,
+      mediaTypeHint: mediaType,
     });
     if (asset) {
       if (input.onDropAssets) {
@@ -449,29 +449,29 @@ export function applyCanvasAddSourceResult(input: {
         return;
       }
     }
-    input.onError?.(`Unsupported Canvas source: ${basenameFromSource(input.fallbackName)}`);
+    input.onError?.(`Unsupported Canvas source: ${basenameFromSource(input.sourceNameHint)}`);
     return;
   }
 
   input.onError?.(
     input.result.diagnostics[0]?.message ??
-      `Failed to add ${basenameFromSource(input.fallbackName)}`,
+      `Failed to add ${basenameFromSource(input.sourceNameHint)}`,
   );
 }
 
 function createCanvasDroppedAssetFromAddSourceResult(input: {
   readonly durablePath: string;
   readonly metadata: ReturnType<typeof readCanvasAddSourceMetadata>;
-  readonly fallbackName: string;
-  readonly fallbackMediaType?: 'image' | 'video' | 'audio';
+  readonly sourceNameHint: string;
+  readonly mediaTypeHint?: 'image' | 'video' | 'audio';
 }): CanvasDroppedAsset | undefined {
-  const name = input.metadata.name ?? basenameFromSource(input.fallbackName);
+  const name = input.metadata.name ?? basenameFromSource(input.sourceNameHint);
   const title = input.metadata.title ?? (stripExtension(name) || name);
   const kind =
     input.metadata.canvasAssetKind ??
-    (input.metadata.mediaType || input.fallbackMediaType ? 'media' : undefined);
+    (input.metadata.mediaType || input.mediaTypeHint ? 'media' : undefined);
   if (kind === 'media') {
-    const mediaType = input.metadata.mediaType ?? input.fallbackMediaType;
+    const mediaType = input.metadata.mediaType ?? input.mediaTypeHint;
     if (!mediaType) return undefined;
     return {
       kind: 'media',

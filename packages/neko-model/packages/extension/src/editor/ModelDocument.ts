@@ -182,7 +182,7 @@ export async function saveNkmProject(
     targetUri: uri,
     document: project,
     saveReason,
-    fallbackMessage: 'Failed to save .nkm file',
+    defaultMessage: 'Failed to save .nkm file',
     useSaveAs: saveReason === 'save-as',
   });
 }

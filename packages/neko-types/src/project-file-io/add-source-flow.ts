@@ -101,7 +101,7 @@ export function createProjectSourceAddClient(
 
 export async function createProjectSourceAddRequest(
   input: ProjectSourceAddClientInput,
-  fallbackRequestId = createDefaultProjectSourceAddRequestId(),
+  defaultRequestId = createDefaultProjectSourceAddRequestId(),
 ): Promise<ProjectSourceAddRequest> {
   const bytes = normalizeProjectSourceAddBytes(
     input.bytes ??
@@ -112,7 +112,7 @@ export async function createProjectSourceAddRequest(
   const browserFile = input.browserFile ?? projectBrowserFileFromFile(input.file);
 
   return {
-    requestId: input.requestId ?? fallbackRequestId,
+    requestId: input.requestId ?? defaultRequestId,
     kind: input.kind,
     formatId: input.formatId,
     ...(input.documentUri ? { documentUri: input.documentUri } : {}),

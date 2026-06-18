@@ -173,7 +173,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       targetUri: document.uri,
       document: document.projectData,
       saveReason: 'vscode-save',
-      fallbackMessage: 'Failed to save .nkp file',
+      defaultMessage: 'Failed to save .nkp file',
     });
     document.dirty = false;
   }
@@ -188,7 +188,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       targetUri: destination,
       document: document.projectData,
       saveReason: 'save-as',
-      fallbackMessage: 'Failed to save .nkp file as target',
+      defaultMessage: 'Failed to save .nkp file as target',
       useSaveAs: true,
     });
     document.dirty = false;
@@ -232,7 +232,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         documentUri: document.uri,
         backupUri: context.destination,
         document: document.projectData,
-        fallbackMessage: 'Failed to backup .nkp file',
+        defaultMessage: 'Failed to backup .nkp file',
       });
     }
     return {
@@ -481,7 +481,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         requestId:
           requestId ?? `puppet-bundle-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       }),
-      fileNameFallback: fileName,
+      defaultFileName: fileName,
       unmanagedSourceMessage:
         'Live2D bundle must be moved into the project, asset library, or a configured media root before saving.',
     });
@@ -687,7 +687,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     const result = await this.acquirePuppetProjectSource({
       request,
       documentUri: document.uri,
-      fileNameFallback: 'puppet.moc3',
+      defaultFileName: 'puppet.moc3',
       unmanagedSourceMessage:
         'MOC3 source must be moved into the project, asset library, or a configured media root before saving.',
     });
@@ -734,7 +734,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   private async acquirePuppetProjectSource(input: {
     readonly request: ProjectSourceAddRequest;
     readonly documentUri?: vscode.Uri;
-    readonly fileNameFallback: string;
+    readonly defaultFileName: string;
     readonly unmanagedSourceMessage: string;
   }): Promise<ProjectSourceAddResult> {
     const request = input.request;
@@ -780,7 +780,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
             assetDirectory: request.destination.directory ?? '.',
             workspaceContext: this.createSourcePolicyOptions(documentUri).context,
             fileOps: this.createPuppetSourceAssetFileOps(),
-            fileNameFallback: input.fileNameFallback,
+            defaultFileName: input.defaultFileName,
             unmanagedSourceMessage: input.unmanagedSourceMessage,
           }),
       },

@@ -428,8 +428,8 @@ function createDocumentEntryRelativePath(
 ): string {
   const rawPath = entryPath ?? sourcePath;
   const parsed = path.parse(rawPath);
-  const fallbackName = path.basename(rawPath, path.extname(rawPath)) || ref.id;
-  const fileName = `${sanitizePathPart(parsed.name || fallbackName)}${ext}`;
+  const defaultName = path.basename(rawPath, path.extname(rawPath)) || ref.id;
+  const fileName = `${sanitizePathPart(parsed.name || defaultName)}${ext}`;
   if (!entryPath) {
     return fileName;
   }

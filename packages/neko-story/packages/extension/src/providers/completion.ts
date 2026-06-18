@@ -355,12 +355,12 @@ const DIRECTIVE_VALUE_SUGGESTIONS: Record<string, string[]> = {
 
 function mergeCharacterNames(
   preferredNames: readonly string[],
-  fallbackNames: readonly string[],
+  secondaryNames: readonly string[],
 ): readonly string[] {
   const merged: string[] = [];
   const seen = new Set<string>();
 
-  for (const name of [...preferredNames, ...fallbackNames]) {
+  for (const name of [...preferredNames, ...secondaryNames]) {
     if (typeof name !== 'string' || name.trim().length === 0) {
       continue;
     }

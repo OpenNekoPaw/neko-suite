@@ -143,7 +143,7 @@ export class ProjectSessionService implements IProjectSessionService {
       targetUri: createFileUri(filePath),
       document: data,
       saveReason: 'external-sync',
-      fallbackMessage: 'Failed to save NKV project',
+      defaultMessage: 'Failed to save NKV project',
     });
   }
 

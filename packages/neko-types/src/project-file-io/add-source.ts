@@ -15,7 +15,7 @@ export interface ProjectSourceAssetOptions {
   readonly contractPath?: (
     absolutePath: string,
   ) => Promise<string | undefined> | string | undefined;
-  readonly fileNameFallback?: string;
+  readonly defaultFileName?: string;
   readonly maxNameAttempts?: number;
   readonly unmanagedSourceMessage?: string;
 }
@@ -135,7 +135,7 @@ async function createProjectSourceAsset(
     request.fileName ??
       (request.sourcePath
         ? basenamePath(request.sourcePath)
-        : (options.fileNameFallback ?? 'asset.bin')),
+        : (options.defaultFileName ?? 'asset.bin')),
   );
   const assetDir = joinPath(baseDir, options.assetDirectory ?? 'assets');
   await options.fileOps.createDirectory(assetDir);

@@ -5,7 +5,12 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { loadNkv, type ProjectData, type ProjectFileSaveReason } from '@neko/shared';
+import {
+  formatProjectFileDiagnostics,
+  loadNkv,
+  type ProjectData,
+  type ProjectFileSaveReason,
+} from '@neko/shared';
 import {
   createDefaultLocalResourceAccessService,
   requestWebviewProjectSnapshot,
@@ -16,11 +21,7 @@ import { IEditorRegistry } from '../common/editorRegistry';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
 import { VideoProjectDocument } from './videoProjectDocument';
-import {
-  formatCutProjectFileDiagnostics,
-  prepareCutProjectFileSave,
-  saveCutProjectFile,
-} from './cutProjectFilePersistence';
+import { prepareCutProjectFileSave, saveCutProjectFile } from './cutProjectFilePersistence';
 import { MediaService } from '../../services/MediaService';
 import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
@@ -302,7 +303,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
     const result = await saveCutProjectFile(document.uri, snapshot, 'vscode-save');
     if (!result.ok || !result.document) {
       throw new Error(
-        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
       );
     }
     document.setProjectData(result.document);
@@ -332,7 +333,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
     });
     if (!result.ok || !result.document) {
       throw new Error(
-        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to save NKV project'),
       );
     }
     document.setProjectData(result.document);
@@ -365,7 +366,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
     });
     if (!result.ok) {
       throw new Error(
-        formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to backup NKV project'),
+        formatProjectFileDiagnostics(result.diagnostics, 'Failed to backup NKV project'),
       );
     }
     return {

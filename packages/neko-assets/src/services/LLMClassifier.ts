@@ -108,7 +108,12 @@ export class LLMClassifier implements IAssetClassifier {
     } catch (err) {
       logger.debug('LLM classification failed, falling back:', err);
     }
-    return this.fallback.analyze(filePath, _options);
+    const fallbackResult = await this.fallback.analyze(filePath, _options);
+    return {
+      ...fallbackResult,
+      source: 'fallback',
+      degraded: true,
+    };
   }
 
   async suggestVariantAttributes(_entityId: string, filePath: string): Promise<VariantAttributes> {
@@ -218,6 +223,8 @@ export class LLMClassifier implements IAssetClassifier {
 
     return {
       suggestedCategory: parsed.category,
+      source: 'llm',
+      degraded: false,
       confidence: parsed.confidence ?? 0.8,
       detectedAttributes: parsed.attributes ?? {},
       description: parsed.description,

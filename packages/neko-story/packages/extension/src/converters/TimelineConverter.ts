@@ -237,8 +237,8 @@ function makeMediaElement(
  *   Track 1 — type:'subtitle' — one SubtitleElement per dialogue line
  */
 export class TimelineConverter {
-  convert(doc: FountainDocument, fallbackName: string): ConversionResult {
-    const projectName = extractTitle(doc) ?? fallbackName;
+  convert(doc: FountainDocument, defaultProjectName: string): ConversionResult {
+    const projectName = extractTitle(doc) ?? defaultProjectName;
     const characterNames = collectCharacterNames(doc.elements);
     const scenes = groupByScene(doc.elements);
 

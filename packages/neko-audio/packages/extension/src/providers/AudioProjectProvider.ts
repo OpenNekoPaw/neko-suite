@@ -1728,7 +1728,7 @@ export class AudioProjectProvider
       sourceUri,
       document: project,
       saveReason,
-      fallbackMessage: 'Failed to save NKA',
+      defaultMessage: 'Failed to save NKA',
       useSaveAs: saveReason === 'save-as',
     });
     return true;

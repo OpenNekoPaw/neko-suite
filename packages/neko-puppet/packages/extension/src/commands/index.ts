@@ -153,7 +153,7 @@ export function registerCommands(
           targetUri: projectUri,
           document: loaded.projectData,
           saveReason: 'import',
-          fallbackMessage: vscode.l10n.t('neko.puppet.importLive2dBundle.saveFailed'),
+          defaultMessage: vscode.l10n.t('neko.puppet.importLive2dBundle.saveFailed'),
           sourcePolicyOptions: {
             context: sourcePolicyContext,
           },

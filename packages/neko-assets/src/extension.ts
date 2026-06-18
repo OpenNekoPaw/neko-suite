@@ -2192,19 +2192,6 @@ function registerBaselineCommands(context: vscode.ExtensionContext): void {
 // =============================================================================
 
 function registerInternalCommands(context: vscode.ExtensionContext): void {
-  // Get all entities (used by neko-canvas AssetLibraryProvider)
-  context.subscriptions.push(
-    vscode.commands.registerCommand('neko.assets.getAllEntities', async () => {
-      if (!library) return [];
-      try {
-        return await library.getAllEntities();
-      } catch (error) {
-        logger.error('getAllEntities failed:', error);
-        return [];
-      }
-    }),
-  );
-
   // Compare two variants (used by neko-cut DiffViewer)
   context.subscriptions.push(
     vscode.commands.registerCommand(

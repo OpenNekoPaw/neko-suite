@@ -6,7 +6,12 @@ vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(),
   },
+  extensions: {
+    getExtension: vi.fn(),
+  },
 }));
+
+import * as vscode from 'vscode';
 
 function createEntity(
   overrides: Partial<AssetEntity> & Pick<AssetEntity, 'id' | 'name' | 'category'>,
@@ -54,6 +59,38 @@ function createEntity(
 }
 
 describe('AssetLinkingService', () => {
+  it('loads entities from the typed Neko Assets API by default', async () => {
+    const getAllEntities = vi.fn(async () => [
+      createEntity({
+        id: 'asset-alice',
+        name: 'Alice Concept',
+        category: 'character',
+        aliases: ['ALICE'],
+      }),
+    ]);
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: { getAllEntities },
+    } as never);
+    const service = new AssetLinkingService();
+
+    await expect(service.linkCharacter('ALICE')).resolves.toMatchObject({
+      entity: { id: 'asset-alice' },
+    });
+    expect(getAllEntities).toHaveBeenCalledTimes(1);
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith('neko.assets.getAllEntities');
+  });
+
+  it('fails visibly when the typed Neko Assets API is unavailable', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
+    const service = new AssetLinkingService();
+
+    await expect(service.linkCharacter('ALICE')).rejects.toThrow(
+      'Neko Assets extension API is unavailable.',
+    );
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith('neko.assets.getAllEntities');
+  });
+
   it('prefers registryId matches for character assets', async () => {
     const service = new AssetLinkingService({
       loadEntities: async () => [

@@ -15,12 +15,8 @@ import {
   type ContentAccessService,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
-import { VideoEditorModel } from './videoEditorModel';
 import {
-  formatCutProjectFileDiagnostics,
-  prepareCutProjectFileSave,
-} from './cutProjectFilePersistence';
-import {
+  formatProjectFileDiagnostics,
   MessageFromWebview,
   handleProjectSourceAddHostRequest,
   isProjectFileSnapshotResponseMessage,
@@ -29,6 +25,8 @@ import {
   type EditOperation,
   type ProjectSourceAddRequest,
 } from '@neko/shared';
+import { VideoEditorModel } from './videoEditorModel';
+import { prepareCutProjectFileSave } from './cutProjectFilePersistence';
 import { getLogger } from '../../base';
 import { isExistingLocalFile, resolveMediaPath } from '../../services/tools/helpers';
 import { AIActionHandler } from '../../services/AIActionHandler';
@@ -217,9 +215,7 @@ export class MessageHandler {
     try {
       const result = await prepareCutProjectFileSave(this.model.uri, content);
       if (!result.ok || !result.document) {
-        this.sendError(
-          formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to save project'),
-        );
+        this.sendError(formatProjectFileDiagnostics(result.diagnostics, 'Failed to save project'));
         return;
       }
 
@@ -239,9 +235,7 @@ export class MessageHandler {
     try {
       const result = await prepareCutProjectFileSave(this.model.uri, document);
       if (!result.ok || !result.document) {
-        this.sendError(
-          formatCutProjectFileDiagnostics(result.diagnostics, 'Failed to sync project'),
-        );
+        this.sendError(formatProjectFileDiagnostics(result.diagnostics, 'Failed to sync project'));
         return;
       }
 

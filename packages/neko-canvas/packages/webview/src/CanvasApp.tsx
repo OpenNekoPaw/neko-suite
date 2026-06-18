@@ -48,7 +48,7 @@ import {
   applyCanvasAddSourceResult,
   createCanvasFilePickerAddSourceInput,
   createCanvasProjectSourceAddClient,
-  getCanvasFilePickerFallbackName,
+  getCanvasFilePickerDefaultName,
   type CanvasProjectSourceAddClient,
 } from './hooks/useDragDrop';
 import { useDragDrop } from './hooks/useDragDrop';
@@ -502,8 +502,8 @@ export function CanvasApp() {
         .then((result) => {
           applyCanvasAddSourceResult({
             result,
-            fallbackName: getCanvasFilePickerFallbackName(type),
-            fallbackMediaType: type === 'media' ? 'video' : undefined,
+            sourceNameHint: getCanvasFilePickerDefaultName(type),
+            mediaTypeHint: type === 'media' ? 'video' : undefined,
             dropPosition: position,
             addMediaAt,
             onDropAssets: handleDropAssets,

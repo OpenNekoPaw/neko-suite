@@ -90,7 +90,7 @@ describe('ProjectFileSaveSession', () => {
       targetUri: createUri('/workspace/project/edit.nkc'),
       document: { title: 'Canvas' },
       saveReason: 'vscode-save',
-      fallbackMessage: 'Failed to save NKC',
+      defaultMessage: 'Failed to save NKC',
     });
 
     expect(result.written).toBe(true);
@@ -127,7 +127,7 @@ describe('ProjectFileSaveSession', () => {
       targetUri: createUri('/workspace/project/edit.nkv'),
       document: { title: 'Cut' },
       saveReason: 'external-sync',
-      fallbackMessage: 'Failed to save NKV',
+      defaultMessage: 'Failed to save NKV',
     });
 
     expect(save).toHaveBeenCalledWith(
@@ -162,7 +162,7 @@ describe('ProjectFileSaveSession', () => {
       targetUri: createUri('/workspace/project/edit.nkc'),
       document: { title: 'Canvas asset add' },
       saveReason: 'add-source',
-      fallbackMessage: 'Failed to save NKC',
+      defaultMessage: 'Failed to save NKC',
     });
 
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ saveReason: 'add-source' }));
@@ -196,7 +196,7 @@ describe('ProjectFileSaveSession', () => {
       document: { title: 'Audio' },
       saveReason: 'vscode-save',
       atomic: true,
-      fallbackMessage: 'Failed to save NKA',
+      defaultMessage: 'Failed to save NKA',
     });
 
     expect(save).toHaveBeenCalledWith(
@@ -228,7 +228,7 @@ describe('ProjectFileSaveSession', () => {
       webview,
       targetUri: createUri('/workspace/project/edit.nks'),
       saveReason: 'vscode-save',
-      fallbackMessage: 'Failed to save NKS',
+      defaultMessage: 'Failed to save NKS',
     });
 
     expect(save).toHaveBeenCalledWith(
@@ -262,7 +262,7 @@ describe('ProjectFileSaveSession', () => {
       session.save({
         targetUri: createUri('/workspace/project/edit.nkv'),
         document: { title: 'Cut' },
-        fallbackMessage: 'Failed to save NKV',
+        defaultMessage: 'Failed to save NKV',
       }),
     ).rejects.toThrow('Failed to save NKV: Source clip.src is an absolute local path.');
   });

@@ -67,16 +67,13 @@ async function getAssetsAPI(): Promise<NekoAssetsAPI | undefined> {
 
 async function getAssetEntities(): Promise<AssetEntity[]> {
   try {
-    // Prefer typed API when available
     const api = await getAssetsAPI();
-    if (api) return api.getAllEntities();
-    // Fallback: command-level proxy (backward compat with older neko-assets)
-    const entities = await vscode.commands.executeCommand<AssetEntity[]>(
-      'neko.assets.getAllEntities',
-    );
-    return Array.isArray(entities) ? entities : [];
+    if (!api) {
+      throw new Error('typed Neko Assets API is unavailable');
+    }
+    return api.getAllEntities();
   } catch (error) {
-    throw new Error(`neko-assets proxy unavailable: ${String(error)}`);
+    throw new Error(`neko-assets typed API unavailable: ${String(error)}`);
   }
 }
 

@@ -22,7 +22,7 @@ export interface ProjectFileSaveSessionSaveRequest<TDocument> {
   readonly document: TDocument;
   readonly saveReason?: ProjectFileSaveReason;
   readonly atomic?: boolean;
-  readonly fallbackMessage: string;
+  readonly defaultMessage: string;
   readonly sourceUri?: ProjectFileSaveTargetUri;
   readonly sourcePolicyOptions?: ApplyPortableSourcePolicyOptions;
   readonly useSaveAs?: boolean;
@@ -32,7 +32,7 @@ export interface ProjectFileSaveSessionBackupRequest<TDocument> {
   readonly documentUri: ProjectFileSaveTargetUri;
   readonly backupUri: ProjectFileSaveTargetUri;
   readonly document: TDocument;
-  readonly fallbackMessage: string;
+  readonly defaultMessage: string;
   readonly sourcePolicyOptions?: ApplyPortableSourcePolicyOptions;
 }
 
@@ -74,7 +74,7 @@ export class ProjectFileSaveSession<TDocument> {
 
     this.logSaveResult(request.targetUri, request.saveReason ?? 'manual', result);
     if (!result.ok) {
-      throw new Error(formatProjectFileDiagnostics(result.diagnostics, request.fallbackMessage));
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, request.defaultMessage));
     }
     return result;
   }
@@ -96,7 +96,7 @@ export class ProjectFileSaveSession<TDocument> {
 
     this.logSaveResult(request.backupUri, 'backup', result);
     if (!result.ok) {
-      throw new Error(formatProjectFileDiagnostics(result.diagnostics, request.fallbackMessage));
+      throw new Error(formatProjectFileDiagnostics(result.diagnostics, request.defaultMessage));
     }
     return result;
   }
@@ -124,8 +124,8 @@ export class ProjectFileSaveSession<TDocument> {
 
 export function formatProjectFileDiagnostics(
   diagnostics: readonly Pick<ProjectFileDiagnostic, 'message'>[],
-  fallback: string,
+  defaultMessage: string,
 ): string {
-  if (diagnostics.length === 0) return fallback;
-  return `${fallback}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
+  if (diagnostics.length === 0) return defaultMessage;
+  return `${defaultMessage}: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
 }

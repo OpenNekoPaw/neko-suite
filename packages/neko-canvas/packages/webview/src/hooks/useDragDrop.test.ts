@@ -4,7 +4,7 @@ import {
   createCanvasFilePickerAddSourceInput,
   createCanvasProjectSourceAddClient,
   createCanvasMediaAddSourceInput,
-  getCanvasFilePickerFallbackName,
+  getCanvasFilePickerDefaultName,
   hasCanvasExternalDropPayload,
   isDomNode,
   isNodeLibraryDragLeavingCanvas,
@@ -87,7 +87,7 @@ describe('useDragDrop add-source contract', () => {
         }),
       }),
     );
-    expect(getCanvasFilePickerFallbackName('canvas-embed')).toBe('canvas.nkc');
+    expect(getCanvasFilePickerDefaultName('canvas-embed')).toBe('canvas.nkc');
   });
 
   it('applies the first canonical sourceAdded response without requiring a second add', async () => {
@@ -164,8 +164,8 @@ describe('useDragDrop add-source contract', () => {
       const result = await promise;
       applyCanvasAddSourceResult({
         result,
-        fallbackName: 'first.mp4',
-        fallbackMediaType: 'video',
+        sourceNameHint: 'first.mp4',
+        mediaTypeHint: 'video',
         dropPosition: { x: 10, y: 20 },
         addMediaAt,
         onDropAssets,
@@ -238,8 +238,8 @@ describe('useDragDrop add-source contract', () => {
           metadata: { canvasAssetKind: 'media', mediaType: 'video', name: 'first.mp4' },
         },
       },
-      fallbackName: 'first.mp4',
-      fallbackMediaType: 'video',
+      sourceNameHint: 'first.mp4',
+      mediaTypeHint: 'video',
       dropPosition: { x: 10, y: 20 },
       addMediaAt,
       onDropAssets,
@@ -261,8 +261,8 @@ describe('useDragDrop add-source contract', () => {
           metadata: { canvasAssetKind: 'media', mediaType: 'video', name: 'second.mp4' },
         },
       },
-      fallbackName: 'second.mp4',
-      fallbackMediaType: 'video',
+      sourceNameHint: 'second.mp4',
+      mediaTypeHint: 'video',
       dropPosition: { x: 40, y: 50 },
       addMediaAt,
       onDropAssets,
@@ -298,8 +298,8 @@ describe('useDragDrop add-source contract', () => {
           },
         ],
       },
-      fallbackName: 'blob:vscode-runtime',
-      fallbackMediaType: 'video',
+      sourceNameHint: 'blob:vscode-runtime',
+      mediaTypeHint: 'video',
       dropPosition: { x: 10, y: 20 },
       addMediaAt,
       onDropAssets,

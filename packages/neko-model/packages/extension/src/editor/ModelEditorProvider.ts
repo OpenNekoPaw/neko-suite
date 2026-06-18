@@ -1002,7 +1002,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
             assetDirectory: request.destination.directory ?? '.',
             workspaceContext: createNkmSourcePolicyOptions(document.uri).context,
             fileOps: createVSCodeSourceAssetFileOps(),
-            fileNameFallback: 'model.glb',
+            defaultFileName: 'model.glb',
             unmanagedSourceMessage:
               'Model source must be moved into the project, asset library, or a configured media root before saving.',
           }),
