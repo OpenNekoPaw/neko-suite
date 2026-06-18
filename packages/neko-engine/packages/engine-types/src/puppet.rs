@@ -238,6 +238,59 @@ pub enum NkpAnimationModel {
     BoneBlendshape,
 }
 
+/// SDK-neutral Puppet runtime adapter id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NkpPuppetRuntimeAdapterId {
+    NekoPuppetNative,
+    Live2dMoc3Compat,
+    Live2dCubism,
+}
+
+/// Adapter availability classification exposed to public diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NkpPuppetRuntimeAdapterStatus {
+    Available,
+    Unavailable,
+    Compatibility,
+}
+
+/// Stable machine-readable Puppet runtime diagnostic code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NkpPuppetRuntimeDiagnosticCode {
+    CubismAdapterUnavailable,
+    LegacyMoc3Compatibility,
+    WrongDomainField,
+}
+
+/// SDK-neutral Puppet runtime diagnostic.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NkpPuppetRuntimeDiagnostic {
+    pub code: NkpPuppetRuntimeDiagnosticCode,
+    pub severity: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<BTreeMap<String, Value>>,
+}
+
+/// SDK-neutral adapter capability descriptor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NkpPuppetRuntimeAdapterDescriptor {
+    pub id: NkpPuppetRuntimeAdapterId,
+    pub owner: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub status: NkpPuppetRuntimeAdapterStatus,
+    pub sdk_neutral: bool,
+    pub source_compatibility: Vec<PuppetFormat>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<NkpPuppetRuntimeDiagnostic>,
+}
+
 /// Original import source kind for native puppets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -307,6 +360,17 @@ pub struct NkpLive2dBundleReference {
     pub content_hash: Option<String>,
 }
 
+/// SDK-neutral runtime adapter selection stored in .nkp puppet metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NkpPuppetRuntimeAdapterReference {
+    pub id: NkpPuppetRuntimeAdapterId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub import_settings: Option<Value>,
+}
+
 /// .nkp puppet source metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -317,9 +381,50 @@ pub struct NkpPuppetSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animation_model: Option<NkpAnimationModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_adapter: Option<NkpPuppetRuntimeAdapterReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub import_source: Option<NkpImportSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle: Option<NkpLive2dBundleReference>,
+}
+
+/// Build a public SDK-neutral adapter descriptor.
+pub fn create_nkp_puppet_runtime_adapter_descriptor(
+    id: NkpPuppetRuntimeAdapterId,
+    version: Option<String>,
+    status: Option<NkpPuppetRuntimeAdapterStatus>,
+    diagnostics: Vec<NkpPuppetRuntimeDiagnostic>,
+) -> NkpPuppetRuntimeAdapterDescriptor {
+    NkpPuppetRuntimeAdapterDescriptor {
+        id,
+        owner: "neko-puppet".to_string(),
+        version,
+        status: status.unwrap_or_else(|| default_runtime_adapter_status(id)),
+        sdk_neutral: true,
+        source_compatibility: runtime_adapter_source_compatibility(id),
+        diagnostics,
+    }
+}
+
+fn default_runtime_adapter_status(
+    id: NkpPuppetRuntimeAdapterId,
+) -> NkpPuppetRuntimeAdapterStatus {
+    match id {
+        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat => {
+            NkpPuppetRuntimeAdapterStatus::Compatibility
+        }
+        NkpPuppetRuntimeAdapterId::NekoPuppetNative | NkpPuppetRuntimeAdapterId::Live2dCubism => {
+            NkpPuppetRuntimeAdapterStatus::Available
+        }
+    }
+}
+
+fn runtime_adapter_source_compatibility(id: NkpPuppetRuntimeAdapterId) -> Vec<PuppetFormat> {
+    match id {
+        NkpPuppetRuntimeAdapterId::NekoPuppetNative => vec![PuppetFormat::Native],
+        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat
+        | NkpPuppetRuntimeAdapterId::Live2dCubism => vec![PuppetFormat::Moc3],
+    }
 }
 
 /// Native puppet layer mesh.
@@ -688,6 +793,11 @@ mod native_contract_tests {
                 src: None,
                 format: Some(PuppetFormat::Native),
                 animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                runtime_adapter: Some(NkpPuppetRuntimeAdapterReference {
+                    id: NkpPuppetRuntimeAdapterId::NekoPuppetNative,
+                    version: Some("fixture".to_string()),
+                    import_settings: None,
+                }),
                 import_source: Some(NkpImportSource {
                     kind: NkpImportSourceKind::Live2dBundle,
                     path: Some("./sakura.zip".to_string()),
@@ -817,6 +927,8 @@ mod native_contract_tests {
         let json = serde_json::to_string(&project).unwrap();
         assert!(json.contains("\"format\":\"native\""));
         assert!(json.contains("\"animationModel\":\"bone-blendshape\""));
+        assert!(json.contains("\"runtimeAdapter\""));
+        assert!(json.contains("\"neko-puppet-native\""));
 
         let restored: NkpProjectData = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, project);
@@ -840,5 +952,38 @@ mod native_contract_tests {
         let round_tripped: NkpProjectData =
             serde_json::from_str(&serde_json::to_string(&project).unwrap()).unwrap();
         assert_eq!(round_tripped, project);
+    }
+
+    #[test]
+    fn runtime_adapter_descriptors_are_sdk_neutral() {
+        let moc3 = create_nkp_puppet_runtime_adapter_descriptor(
+            NkpPuppetRuntimeAdapterId::Live2dMoc3Compat,
+            Some("clean-room".to_string()),
+            None,
+            vec![],
+        );
+        let cubism_unavailable = create_nkp_puppet_runtime_adapter_descriptor(
+            NkpPuppetRuntimeAdapterId::Live2dCubism,
+            None,
+            Some(NkpPuppetRuntimeAdapterStatus::Unavailable),
+            vec![NkpPuppetRuntimeDiagnostic {
+                code: NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable,
+                severity: "error".to_string(),
+                message: "Cubism SDK adapter is not enabled in this build.".to_string(),
+                context: None,
+            }],
+        );
+
+        assert_eq!(moc3.status, NkpPuppetRuntimeAdapterStatus::Compatibility);
+        assert!(moc3.sdk_neutral);
+        assert_eq!(moc3.source_compatibility, vec![PuppetFormat::Moc3]);
+        assert_eq!(
+            cubism_unavailable.status,
+            NkpPuppetRuntimeAdapterStatus::Unavailable
+        );
+        assert_eq!(
+            cubism_unavailable.diagnostics[0].code,
+            NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable
+        );
     }
 }

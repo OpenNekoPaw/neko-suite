@@ -5,7 +5,9 @@
 
 use neko_engine_puppet_renderer::PuppetRenderOutput;
 use neko_engine_types::easing::EasingType;
-use neko_engine_types::{PuppetCommandAck, PuppetCommandEnvelope};
+use neko_engine_types::{
+    NkpPuppetRuntimeAdapterDescriptor, PuppetCommandAck, PuppetCommandEnvelope,
+};
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
 use neko_runtime_puppet::moc3::expression::ExpressionInfo;
@@ -79,6 +81,9 @@ pub trait IPuppetService: Send + Sync {
         &self,
         command: neko_engine_types::PuppetCommand,
     ) -> crate::error::Result<PuppetCommandAck>;
+
+    /// SDK-neutral runtime adapter descriptors available to Puppet callers.
+    fn runtime_adapters(&self) -> crate::error::Result<Vec<NkpPuppetRuntimeAdapterDescriptor>>;
 
     /// Load a puppet from INP binary data and return a snapshot
     fn load_puppet(&self, data: &[u8]) -> crate::error::Result<PuppetSnapshot>;

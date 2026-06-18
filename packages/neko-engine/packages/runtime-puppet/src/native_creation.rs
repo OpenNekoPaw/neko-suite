@@ -250,6 +250,7 @@ fn build_template_project(
             src: None,
             format: Some(PuppetFormat::Native),
             animation_model: Some(NkpAnimationModel::BoneBlendshape),
+            runtime_adapter: None,
             import_source: Some(import_source(&source)),
             bundle: None,
         },

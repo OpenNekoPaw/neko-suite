@@ -9,6 +9,7 @@ use neko_engine_scene_renderer::{
     ViewportLiveSettings,
 };
 use neko_engine_types::easing::EasingType;
+use neko_engine_types::SceneRuntimeProfileDescriptor;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::components::AnimationChannelInfo;
 use neko_runtime_scene::ik::IkChainInfo;
@@ -61,6 +62,9 @@ pub struct SceneStreamGpuFrameRequest<'a> {
 /// Service interface for 3D scene management
 #[allow(async_fn_in_trait)]
 pub trait ISceneService: Send + Sync {
+    /// Runtime profile descriptors for durable .nkm Scene profiles.
+    fn runtime_profiles(&self) -> crate::error::Result<Vec<SceneRuntimeProfileDescriptor>>;
+
     /// Load a glTF/glb model and return a scene snapshot
     fn load_model(&self, path: &Path) -> crate::error::Result<SceneSnapshot>;
 

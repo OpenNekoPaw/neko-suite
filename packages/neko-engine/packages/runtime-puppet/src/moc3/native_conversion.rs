@@ -275,6 +275,7 @@ pub fn convert_moc3_to_native_project(
             src: None,
             format: Some(neko_engine_types::puppet::PuppetFormat::Native),
             animation_model: Some(NkpAnimationModel::BoneBlendshape),
+            runtime_adapter: None,
             import_source: Some(NkpImportSource {
                 kind: NkpImportSourceKind::Moc3,
                 path: source_path,

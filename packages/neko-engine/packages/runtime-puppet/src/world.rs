@@ -1365,6 +1365,7 @@ mod tests {
                 src: None,
                 format: Some(PuppetFormat::Native),
                 animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                runtime_adapter: None,
                 import_source: None,
                 bundle: None,
             },

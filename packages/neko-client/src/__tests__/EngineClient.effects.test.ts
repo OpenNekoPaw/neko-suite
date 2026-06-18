@@ -165,4 +165,54 @@ describe('EngineClient effect discovery', () => {
       }),
     );
   });
+
+  it('dispatches puppets:capabilities and preserves SDK-neutral adapter descriptors', async () => {
+    mockDispatchResponse({
+      adapters: [
+        {
+          id: 'live2d-moc3-compat',
+          owner: 'neko-puppet',
+          status: 'compatibility',
+          sdkNeutral: true,
+          sourceCompatibility: ['moc3'],
+          diagnostics: [{ code: 'legacy-moc3-compatibility', severity: 'warning' }],
+        },
+        {
+          id: 'live2d-cubism',
+          owner: 'neko-puppet',
+          status: 'unavailable',
+          sdkNeutral: true,
+          sourceCompatibility: ['moc3'],
+          diagnostics: [{ code: 'cubism-adapter-unavailable', severity: 'error' }],
+        },
+      ],
+      diagnostics: [],
+    });
+    const client = new EngineClient(7788);
+
+    await expect(client.getPuppetCapabilities()).resolves.toMatchObject({
+      adapters: [
+        {
+          id: 'live2d-moc3-compat',
+          owner: 'neko-puppet',
+          status: 'compatibility',
+          sdkNeutral: true,
+        },
+        {
+          id: 'live2d-cubism',
+          owner: 'neko-puppet',
+          status: 'unavailable',
+          sdkNeutral: true,
+        },
+      ],
+      diagnostics: [],
+    });
+    expect(lastDispatchBody()).toEqual(
+      expect.objectContaining({
+        group: 'puppets',
+        action: 'capabilities',
+        options: {},
+      }),
+    );
+  });
 });

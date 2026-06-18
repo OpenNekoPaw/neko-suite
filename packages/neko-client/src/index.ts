@@ -102,7 +102,28 @@ export {
 } from './detectCapabilities';
 
 // Time formatting utilities
-export { formatTime, formatTimePrecise } from './formatTime';
+export {
+  formatMediaTime,
+  formatMediaTimeCentiseconds,
+  formatMediaTimeFromMilliseconds,
+  formatTime,
+  formatTimePrecise,
+  type FormatMediaTimeOptions,
+} from './formatTime';
+
+export {
+  EngineAvStreamLifecycle,
+  type EngineAvAudioStreamClient,
+  type EngineAvFrameScheduler,
+  type EngineAvStreamClients,
+  type EngineAvStreamDescriptor,
+  type EngineAvStreamLifecycleCallbacks,
+  type EngineAvStreamLifecycleFactories,
+  type EngineAvStreamLifecycleOptions,
+  type EngineAvStreamLifecycleSnapshot,
+  type EngineAvStreamLifecycleStats,
+  type EngineAvVideoStreamClient,
+} from './EngineAvStreamLifecycle';
 
 // Engine HTTP/WS dispatch client
 export {

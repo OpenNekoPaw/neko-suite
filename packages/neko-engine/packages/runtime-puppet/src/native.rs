@@ -2753,6 +2753,7 @@ mod tests {
                 src: None,
                 format: Some(neko_engine_types::puppet::PuppetFormat::Native),
                 animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                runtime_adapter: None,
                 import_source: Some(neko_engine_types::puppet::NkpImportSource {
                     kind: NkpImportSourceKind::Generated,
                     path: None,

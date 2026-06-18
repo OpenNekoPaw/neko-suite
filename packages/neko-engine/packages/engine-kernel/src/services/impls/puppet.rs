@@ -20,8 +20,12 @@ use neko_engine_puppet_renderer::{
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
-    GpuFrameLease, GpuOutputHandle, PipelineOutput, PuppetCommand, PuppetCommandAck,
-    PuppetCommandAckStatus, PuppetCommandEnvelope, PuppetCommandError, VideoGpuFrame, VideoOutput,
+    create_nkp_puppet_runtime_adapter_descriptor, GpuFrameLease, GpuOutputHandle,
+    NkpPuppetRuntimeAdapterDescriptor, NkpPuppetRuntimeAdapterId,
+    NkpPuppetRuntimeAdapterStatus, NkpPuppetRuntimeDiagnostic,
+    NkpPuppetRuntimeDiagnosticCode, PipelineOutput, PuppetCommand, PuppetCommandAck,
+    PuppetCommandAckStatus, PuppetCommandEnvelope, PuppetCommandError, VideoGpuFrame,
+    VideoOutput,
 };
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
@@ -705,6 +709,39 @@ impl IPuppetService for PuppetService {
         self.apply_compat_command(command)
     }
 
+    fn runtime_adapters(&self) -> Result<Vec<NkpPuppetRuntimeAdapterDescriptor>> {
+        Ok(vec![
+            create_nkp_puppet_runtime_adapter_descriptor(
+                NkpPuppetRuntimeAdapterId::NekoPuppetNative,
+                None,
+                None,
+                vec![],
+            ),
+            create_nkp_puppet_runtime_adapter_descriptor(
+                NkpPuppetRuntimeAdapterId::Live2dMoc3Compat,
+                Some("clean-room".to_string()),
+                None,
+                vec![NkpPuppetRuntimeDiagnostic {
+                    code: NkpPuppetRuntimeDiagnosticCode::LegacyMoc3Compatibility,
+                    severity: "warning".to_string(),
+                    message: "MOC3 support is a clean-room compatibility path, not the official Live2D Cubism SDK.".to_string(),
+                    context: None,
+                }],
+            ),
+            create_nkp_puppet_runtime_adapter_descriptor(
+                NkpPuppetRuntimeAdapterId::Live2dCubism,
+                None,
+                Some(NkpPuppetRuntimeAdapterStatus::Unavailable),
+                vec![NkpPuppetRuntimeDiagnostic {
+                    code: NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable,
+                    severity: "error".to_string(),
+                    message: "The official Live2D Cubism SDK adapter is not enabled in this build.".to_string(),
+                    context: None,
+                }],
+            ),
+        ])
+    }
+
     fn load_puppet(&self, data: &[u8]) -> Result<PuppetSnapshot> {
         self.compat_value(PuppetCommand::Load {
             data_base64: base64::engine::general_purpose::STANDARD.encode(data),
@@ -1004,6 +1041,37 @@ mod tests {
     }
 
     #[test]
+    fn runtime_adapters_are_exposed_from_puppet_service() {
+        let service = PuppetService::new();
+        let adapters = service.runtime_adapters().unwrap();
+
+        assert!(adapters.iter().any(|adapter| {
+            adapter.id == NkpPuppetRuntimeAdapterId::NekoPuppetNative
+                && adapter.owner == "neko-puppet"
+                && adapter.status == NkpPuppetRuntimeAdapterStatus::Available
+                && adapter.sdk_neutral
+        }));
+        assert!(adapters.iter().any(|adapter| {
+            adapter.id == NkpPuppetRuntimeAdapterId::Live2dMoc3Compat
+                && adapter.owner == "neko-puppet"
+                && adapter.status == NkpPuppetRuntimeAdapterStatus::Compatibility
+                && adapter
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == NkpPuppetRuntimeDiagnosticCode::LegacyMoc3Compatibility)
+        }));
+        assert!(adapters.iter().any(|adapter| {
+            adapter.id == NkpPuppetRuntimeAdapterId::Live2dCubism
+                && adapter.owner == "neko-puppet"
+                && adapter.status == NkpPuppetRuntimeAdapterStatus::Unavailable
+                && adapter
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable)
+        }));
+    }
+
+    #[test]
     fn test_puppet_service_tick_empty() {
         let service = PuppetService::new();
         let delta = service.tick(16.0).unwrap();
@@ -1253,6 +1321,7 @@ mod tests {
                 src: None,
                 format: Some(neko_engine_types::puppet::PuppetFormat::Native),
                 animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                runtime_adapter: None,
                 import_source: Some(NkpImportSource {
                     kind: NkpImportSourceKind::Generated,
                     path: None,

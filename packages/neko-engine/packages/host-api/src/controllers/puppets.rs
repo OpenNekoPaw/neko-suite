@@ -138,6 +138,9 @@ impl Controller for PuppetsController {
                 let revision = service
                     .current_revision()
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let adapters = service
+                    .runtime_adapters()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
                 let snapshot = service
                     .get_snapshot()
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
@@ -159,6 +162,7 @@ impl Controller for PuppetsController {
                     serde_json::json!({
                         "format": if is_native { "native" } else { "legacy" },
                         "animationModel": if is_native { "bone-blendshape" } else { "moc3-parameter" },
+                        "adapters": adapters,
                         "revision": revision,
                         "native": is_native,
                         "availableNativeCommands": if is_native {
@@ -778,6 +782,48 @@ mod tests {
         let controller = create_test_controller();
         let result = controller.handle("params", None, Value::Null, None).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_capabilities_expose_sdk_neutral_adapter_descriptors() {
+        let controller = create_test_controller();
+        let result = controller
+            .handle("capabilities", None, Value::Null, None)
+            .await
+            .unwrap();
+        assert!(result.is_ok());
+        let data = result.data.unwrap();
+        let adapters = data
+            .get("adapters")
+            .and_then(Value::as_array)
+            .expect("adapters array");
+
+        assert!(adapters.iter().any(|adapter| {
+            adapter.get("id").and_then(Value::as_str) == Some("live2d-moc3-compat")
+                && adapter.get("owner").and_then(Value::as_str) == Some("neko-puppet")
+                && adapter.get("status").and_then(Value::as_str) == Some("compatibility")
+                && adapter.get("sdkNeutral").and_then(Value::as_bool) == Some(true)
+        }));
+        assert!(adapters.iter().any(|adapter| {
+            adapter.get("id").and_then(Value::as_str) == Some("live2d-cubism")
+                && adapter.get("owner").and_then(Value::as_str) == Some("neko-puppet")
+                && adapter.get("status").and_then(Value::as_str) == Some("unavailable")
+                && adapter
+                    .get("diagnostics")
+                    .and_then(Value::as_array)
+                    .is_some_and(|diagnostics| {
+                        diagnostics.iter().any(|diagnostic| {
+                            diagnostic.get("code").and_then(Value::as_str)
+                                == Some("cubism-adapter-unavailable")
+                        })
+                    })
+        }));
+        for adapter in adapters {
+            assert!(adapter.get("handle").is_none());
+            assert!(adapter.get("sessionId").is_none());
+            assert!(adapter.get("streamId").is_none());
+            assert!(adapter.get("rangeUrl").is_none());
+        }
     }
 
     #[tokio::test]

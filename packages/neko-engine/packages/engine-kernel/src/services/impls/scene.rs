@@ -26,8 +26,10 @@ use neko_engine_scene_renderer::{
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
-    FrameFormat, GpuFrameLease, GpuOutputHandle, GpuRenderPath, PipelineOutput,
-    RenderFrameDiagnostics, VideoGpuFrame, VideoOutput,
+    FrameFormat, GpuFrameLease, GpuOutputHandle, GpuRenderPath, NkmSceneProfileId,
+    PipelineOutput, RenderFrameDiagnostics, SceneRuntimeProfileDescriptor,
+    SceneRuntimeProfileDiagnostic, SceneRuntimeProfileDiagnosticCode,
+    SceneRuntimeProfileStatus, VideoGpuFrame, VideoOutput,
 };
 use neko_runtime_media::encode_rgba_to_jpeg;
 use neko_runtime_scene::access::{
@@ -1608,6 +1610,39 @@ impl Default for SceneService {
 }
 
 impl ISceneService for SceneService {
+    fn runtime_profiles(&self) -> Result<Vec<SceneRuntimeProfileDescriptor>> {
+        Ok(vec![
+            SceneRuntimeProfileDescriptor {
+                id: NkmSceneProfileId::TwoD,
+                owner: "neko-model".to_string(),
+                status: SceneRuntimeProfileStatus::Degraded,
+                diagnostics: vec![SceneRuntimeProfileDiagnostic {
+                    code: SceneRuntimeProfileDiagnosticCode::SceneProfileDegraded,
+                    severity: "warning".to_string(),
+                    message: ".nkm profile: 2d is Scene-owned; some first-slice 2D editor/runtime panels may be unavailable.".to_string(),
+                    context: None,
+                }],
+            },
+            SceneRuntimeProfileDescriptor {
+                id: NkmSceneProfileId::ThreeD,
+                owner: "neko-model".to_string(),
+                status: SceneRuntimeProfileStatus::Available,
+                diagnostics: vec![],
+            },
+            SceneRuntimeProfileDescriptor {
+                id: NkmSceneProfileId::Live,
+                owner: "neko-model".to_string(),
+                status: SceneRuntimeProfileStatus::Degraded,
+                diagnostics: vec![SceneRuntimeProfileDiagnostic {
+                    code: SceneRuntimeProfileDiagnosticCode::SceneProfileDegraded,
+                    severity: "info".to_string(),
+                    message: ".nkm profile: live keeps durable stage truth in Scene; live operation may compose additional runtime services.".to_string(),
+                    context: None,
+                }],
+            },
+        ])
+    }
+
     fn load_model(&self, path: &Path) -> Result<SceneSnapshot> {
         let (load_result, snapshot) = self
             .computation
@@ -2382,6 +2417,25 @@ mod tests {
         let service = SceneService::default();
         let clips = service.get_animation_clips().unwrap();
         assert!(clips.is_empty());
+    }
+
+    #[test]
+    fn runtime_profiles_are_exposed_from_scene_service() {
+        let service = SceneService::new();
+        let profiles = service.runtime_profiles().unwrap();
+
+        assert_eq!(profiles.len(), 3);
+        assert_eq!(profiles[0].id, NkmSceneProfileId::TwoD);
+        assert_eq!(profiles[0].owner, "neko-model");
+        assert_eq!(profiles[0].status, SceneRuntimeProfileStatus::Degraded);
+        assert_eq!(
+            profiles[0].diagnostics[0].code,
+            SceneRuntimeProfileDiagnosticCode::SceneProfileDegraded
+        );
+        assert_eq!(profiles[1].id, NkmSceneProfileId::ThreeD);
+        assert_eq!(profiles[1].status, SceneRuntimeProfileStatus::Available);
+        assert_eq!(profiles[2].id, NkmSceneProfileId::Live);
+        assert_eq!(profiles[2].owner, "neko-model");
     }
 
     #[test]

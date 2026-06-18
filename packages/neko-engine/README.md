@@ -9,9 +9,9 @@
 
 ## Quick Reference
 
-- **职责**：GPU 渲染、硬件编解码、帧缓存、导出、3D/2D 场景 ECS——所有重计算的权威来源
+- **职责**：GPU 渲染、硬件编解码、帧缓存、导出、`.nkm` Scene runtime 与 `.nkp` Puppet runtime——所有重计算的权威来源
 - **入口**：`packages/extension/src/extension.ts`
-- **子包**：`engine-kernel`（Rust 核心）、`engine-types`（共享 DTO）、`runtime-scene`（3D ECS）、`runtime-puppet`（2D 骨骼 ECS）、`runtime-device`（设备 I/O）、`runtime-ml`（ML 推理）、`runtime-media`（媒体域逻辑）、`host-api`（控制器 + PluginManager）、`host-napi`（N-API）、`host-http`（axum）、`host-cli`（CLI）、`extension`（VSCode）
+- **子包**：`engine-kernel`（Rust 核心）、`engine-types`（共享 DTO）、`runtime-scene`（`.nkm profile: 2d | 3d | live` Scene runtime）、`runtime-puppet`（`.nkp profile: live2d | neko-puppet` character runtime）、`runtime-device`（设备 I/O）、`runtime-ml`（ML 推理）、`runtime-media`（媒体域逻辑）、`host-api`（控制器 + PluginManager）、`host-napi`（N-API）、`host-http`（axum）、`host-cli`（CLI）、`extension`（VSCode）
 - **依赖**：`@neko-engine/host-napi`、`@neko/shared`
 - **被依赖**：几乎所有其他扩展（extensionDependency）
 
@@ -39,12 +39,17 @@ engine-kernel (Rust)
   ├── export/        → GPU 导出管线、音视频混流
   └── jvi/           → JVI 项目格式解析
 
-runtime-puppet (Rust)  ← 2D 骨骼动画 ECS
-  ├── loader.rs      → MOC3 解析 → ECS World + AnimationClip 注册
+runtime-puppet (Rust)  ← .nkp Live2D/native Puppet character runtime
+  ├── moc3/          → clean-room MOC3 compatibility parser/import path
   ├── components.rs  → PuppetNode, Transform2D, ParameterBinding, AnimationTarget
   ├── systems.rs     → parameter_update, physics_tick, animation_tick
   ├── animation.rs   → bevy_animation AnimationClip → ParameterCurve → MOC3 参数值
   └── world.rs       → PuppetWorld trait + BevyPuppetWorld
+
+runtime-scene (Rust)  ← .nkm 2D/3D/Live Scene runtime
+  ├── profile registry → 2d / 3d / live capability descriptors
+  ├── scene graph      → sprite/tilemap/mesh/camera/light/actor state
+  └── renderer extract → Engine-authoritative viewport/render inputs
 ```
 
 ### 包结构
@@ -53,8 +58,8 @@ runtime-puppet (Rust)  ← 2D 骨骼动画 ECS
 packages/
 ├── engine-types/      # 共享 Rust DTO 类型
 ├── engine-kernel/     # Rust 核心（GPU/FFmpeg/服务层）
-├── runtime-scene/     # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-├── runtime-puppet/    # 2D 骨骼 ECS（bevy_ecs + MOC3 clean-room parser）
+├── runtime-scene/     # .nkm 2D/3D/Live Scene runtime（profile descriptors + scene graph）
+├── runtime-puppet/    # .nkp Puppet runtime（native adapter + MOC3 clean-room compatibility）
 ├── runtime-device/    # 设备 I/O（cpal/midir/gilrs）
 ├── runtime-ml/        # ML 推理（ONNX Runtime）
 ├── runtime-media/     # 媒体域逻辑（probe/diff/字幕/JPEG）
@@ -73,6 +78,14 @@ packages/
 - `neko.engine.start` / `neko.engine.stop` 当前语义应理解为“连接 / 断开 Extension 会话中的引擎包装层”。
 - `stop` 会释放 TypeScript 包装层和嵌入式 frame server，不会真正销毁底层 Rust 单例。
 - 若后续需要真实 `shutdown/reset`，应先在 Rust 侧补明确能力，再恢复“启动/停止引擎”的产品语义。
+
+### Scene 与 Puppet runtime 边界
+
+- `.nkp profile: live2d | neko-puppet` 通过 `PuppetService` 和 `runtime-puppet` 执行；public DTO 只暴露 SDK-neutral adapter id、version、capability 和 diagnostic。
+- 当前 MOC3 路径是 `live2d-moc3-compat`，即 clean-room compatibility/import support，不是官方 Live2D Cubism SDK。
+- 官方 Cubism 只能通过 optional `live2d-cubism` adapter 接入；未启用时返回 `cubism-adapter-unavailable`，不会把 compatibility path 宣称为 Cubism SDK。
+- `.nkm profile: 2d | 3d | live` 通过 `SceneService` 和 `runtime-scene` 执行；generic 2D Scene 的 sprite/tilemap/camera/light/parallax/particle/scene graph 不进入 Puppet runtime。
+- `.nkm` 可以用 stable refs 放置 `.nkp` actor，但不复制 Puppet parameters、motions、expressions、physics 或 tracking mappings。
 
 ## Deep Dive
 

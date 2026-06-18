@@ -21,6 +21,7 @@ import type {
   LightPatch,
   NodeRemoveCommand,
   NkpProjectData,
+  NkpPuppetRuntimeAdapterDescriptor,
   PreviewManifest,
   PreviewVariant,
   PreviewVariantRequest,
@@ -84,6 +85,7 @@ export interface EngineClientConfig {
 }
 
 export interface ModelLookDevSceneControlCapabilities {
+  readonly profiles: readonly SceneRuntimeProfileDescriptor[];
   readonly renderModes: readonly ViewportDescriptor['renderMode'][];
   readonly liveViewportSettings: boolean;
   readonly clay: boolean;
@@ -95,6 +97,21 @@ export interface ModelLookDevSceneControlCapabilities {
 }
 
 export type ModelSceneControlCapabilityState = 'supported' | 'unsupported' | 'unknown';
+
+export type SceneRuntimeProfileId = '2d' | '3d' | 'live';
+export type SceneRuntimeProfileStatus = 'available' | 'degraded' | 'unavailable';
+
+export interface SceneRuntimeProfileDescriptor {
+  readonly id: SceneRuntimeProfileId;
+  readonly owner: 'neko-model';
+  readonly status: SceneRuntimeProfileStatus;
+  readonly diagnostics: readonly {
+    readonly code: string;
+    readonly severity: string;
+    readonly message: string;
+    readonly context?: unknown;
+  }[];
+}
 
 export interface ModelLookDevSceneControlCapabilityStates {
   readonly renderModes: Readonly<
@@ -278,6 +295,35 @@ type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
 type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
 
 const DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
+  profiles: [
+    {
+      id: '2d',
+      owner: 'neko-model',
+      status: 'degraded',
+      diagnostics: [
+        {
+          code: 'scene-profile-degraded',
+          severity: 'warning',
+          message:
+            '.nkm profile: 2d is Scene-owned; some first-slice 2D editor/runtime panels may be unavailable.',
+        },
+      ],
+    },
+    { id: '3d', owner: 'neko-model', status: 'available', diagnostics: [] },
+    {
+      id: 'live',
+      owner: 'neko-model',
+      status: 'degraded',
+      diagnostics: [
+        {
+          code: 'scene-profile-degraded',
+          severity: 'info',
+          message:
+            '.nkm profile: live keeps durable stage truth in Scene; live operation may compose additional runtime services.',
+        },
+      ],
+    },
+  ],
   renderModes: [
     'pbr',
     'clay',
@@ -888,6 +934,10 @@ export function createEnvironmentPayload(patch: EnvironmentPatch): Record<string
 export function defaultModelLookDevSceneControlCapabilities(): ModelLookDevSceneControlCapabilities {
   return {
     ...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES,
+    profiles: DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.profiles.map((profile) => ({
+      ...profile,
+      diagnostics: profile.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+    })),
     renderModes: [...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.renderModes],
     capabilityStates: cloneModelLookDevCapabilityStates(
       DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.capabilityStates,
@@ -940,6 +990,7 @@ function normalizeModelLookDevSceneControlCapabilities(
   const typedPicking = normalizeCapabilityState(capabilityStateSource?.typedPicking);
   const characterRegions = normalizeCapabilityState(capabilityStateSource?.characterRegions);
   return {
+    profiles: normalizeSceneRuntimeProfileDescriptors(value.profiles, defaults.profiles),
     renderModes,
     liveViewportSettings: capabilityStateToBoolean(
       liveViewportSettings,
@@ -960,6 +1011,65 @@ function normalizeModelLookDevSceneControlCapabilities(
       characterRegions,
     },
   };
+}
+
+function normalizeSceneRuntimeProfileDescriptors(
+  value: unknown,
+  defaults: readonly SceneRuntimeProfileDescriptor[],
+): readonly SceneRuntimeProfileDescriptor[] {
+  if (!Array.isArray(value)) return defaults;
+  const normalized = value
+    .map(normalizeSceneRuntimeProfileDescriptor)
+    .filter((profile): profile is SceneRuntimeProfileDescriptor => profile !== undefined);
+  return normalized.length > 0 ? normalized : defaults;
+}
+
+function normalizeSceneRuntimeProfileDescriptor(
+  value: unknown,
+): SceneRuntimeProfileDescriptor | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = normalizeSceneRuntimeProfileId(value.id);
+  const status = normalizeSceneRuntimeProfileStatus(value.status);
+  if (!id || !status) return undefined;
+  return {
+    id,
+    owner: 'neko-model',
+    status,
+    diagnostics: Array.isArray(value.diagnostics)
+      ? value.diagnostics
+          .map(normalizeSceneRuntimeProfileDiagnostic)
+          .filter(
+            (diagnostic): diagnostic is SceneRuntimeProfileDescriptor['diagnostics'][number] =>
+              diagnostic !== undefined,
+          )
+      : [],
+  };
+}
+
+function normalizeSceneRuntimeProfileDiagnostic(
+  value: unknown,
+): SceneRuntimeProfileDescriptor['diagnostics'][number] | undefined {
+  if (!isRecord(value)) return undefined;
+  const code = typeof value.code === 'string' ? value.code : undefined;
+  const severity = typeof value.severity === 'string' ? value.severity : undefined;
+  const message = typeof value.message === 'string' ? value.message : undefined;
+  if (!code || !severity || !message) return undefined;
+  return {
+    code,
+    severity,
+    message,
+    ...(value.context !== undefined ? { context: value.context } : {}),
+  };
+}
+
+function normalizeSceneRuntimeProfileId(value: unknown): SceneRuntimeProfileId | undefined {
+  return value === '2d' || value === '3d' || value === 'live' ? value : undefined;
+}
+
+function normalizeSceneRuntimeProfileStatus(value: unknown): SceneRuntimeProfileStatus | undefined {
+  return value === 'available' || value === 'degraded' || value === 'unavailable'
+    ? value
+    : undefined;
 }
 
 function normalizeCapabilityState(stateValue: unknown): ModelSceneControlCapabilityState {
@@ -2116,6 +2226,28 @@ export class EngineClient {
     });
     this.assertOk(resp, 'puppets:snapshot');
     return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /** Get SDK-neutral Puppet runtime capabilities and adapter descriptors. */
+  async getPuppetCapabilities(): Promise<{
+    readonly adapters: readonly NkpPuppetRuntimeAdapterDescriptor[];
+    readonly diagnostics: readonly unknown[];
+    readonly [key: string]: unknown;
+  }> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'capabilities',
+      options: {},
+    });
+    this.assertOk(resp, 'puppets:capabilities');
+    const data = (resp.data as Record<string, unknown>) ?? {};
+    return {
+      ...data,
+      adapters: Array.isArray(data.adapters)
+        ? (data.adapters as readonly NkpPuppetRuntimeAdapterDescriptor[])
+        : [],
+      diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics : [],
+    };
   }
 
   /**

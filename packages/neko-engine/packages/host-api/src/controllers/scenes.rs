@@ -2573,9 +2573,15 @@ impl Controller for ScenesController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
-            "capabilities" => Ok(ActionResponse::ok(
-                "",
-                serde_json::json!({
+            "capabilities" => {
+                let service = self.service()?;
+                let profiles = service
+                    .runtime_profiles()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({
+                    "profiles": profiles,
                     "renderModes": [
                         "pbr",
                         "clay",
@@ -2605,7 +2611,8 @@ impl Controller for ScenesController {
                         "characterRegions": "unsupported"
                     }
                 }),
-            )),
+                ))
+            }
 
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
@@ -2784,6 +2791,15 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&Value::String("clay".to_string())));
+        assert_eq!(data["profiles"][0]["id"], "2d");
+        assert_eq!(data["profiles"][0]["owner"], "neko-model");
+        assert_eq!(data["profiles"][0]["status"], "degraded");
+        assert_eq!(
+            data["profiles"][0]["diagnostics"][0]["code"],
+            "scene-profile-degraded"
+        );
+        assert_eq!(data["profiles"][1]["id"], "3d");
+        assert_eq!(data["profiles"][2]["id"], "live");
     }
 
     #[tokio::test]

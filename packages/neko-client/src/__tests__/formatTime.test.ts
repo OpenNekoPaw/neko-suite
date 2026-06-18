@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { formatTime, formatTimePrecise } from '../formatTime';
+import {
+  formatMediaTime,
+  formatMediaTimeCentiseconds,
+  formatMediaTimeFromMilliseconds,
+  formatTime,
+  formatTimePrecise,
+} from '../formatTime';
 
 describe('formatTime', () => {
   it('should format 0 seconds as "0:00"', () => {
@@ -66,5 +72,44 @@ describe('formatTimePrecise', () => {
     expect(formatTimePrecise(NaN)).toBe('0:00.000');
     expect(formatTimePrecise(Infinity)).toBe('0:00.000');
     expect(formatTimePrecise(-Infinity)).toBe('0:00.000');
+  });
+});
+
+describe('formatMediaTime', () => {
+  it('formats generic media labels without fractional seconds by default', () => {
+    expect(formatMediaTime(65.9)).toBe('1:05');
+    expect(formatMediaTime(3601)).toBe('1:00:01');
+  });
+
+  it('formats centisecond media labels used by compact transport controls', () => {
+    expect(formatMediaTimeCentiseconds(65.987)).toBe('1:05.98');
+    expect(formatMediaTimeCentiseconds(65.987, { padMinutes: true })).toBe('01:05.98');
+  });
+
+  it('formats one-digit fractional media labels', () => {
+    expect(formatMediaTime(125.49, { fractionalDigits: 1 })).toBe('2:05.4');
+  });
+
+  it('formats always-hour labels for timeline displays', () => {
+    expect(formatMediaTime(65.123, { alwaysHours: true, fractionalDigits: 3 })).toBe(
+      '00:01:05.123',
+    );
+  });
+
+  it('formats compact timeline labels that roll hours into minutes', () => {
+    expect(formatMediaTime(3600, { padMinutes: true, rollHoursIntoMinutes: true })).toBe('60:00');
+  });
+
+  it('formats millisecond inputs for elapsed runtime labels', () => {
+    expect(formatMediaTimeFromMilliseconds(65_432)).toBe('1:05');
+    expect(formatMediaTimeFromMilliseconds(65_432, { fractionalDigits: 1 })).toBe('1:05.4');
+  });
+
+  it('uses zero labels matching the selected generic variant', () => {
+    expect(formatMediaTime(Number.NaN, { fractionalDigits: 2 })).toBe('0:00.00');
+    expect(formatMediaTime(-1, { padMinutes: true })).toBe('00:00');
+    expect(formatMediaTime(Infinity, { alwaysHours: true, fractionalDigits: 3 })).toBe(
+      '00:00:00.000',
+    );
   });
 });
