@@ -37,6 +37,7 @@ import type { ConversationBridge } from '../conversationBridge';
 import type { ProviderManager } from '../providerManager';
 import type { SettingsManager } from '../settingsManager';
 import type { AgentStreamProcessor } from './agentStreamProcessor';
+import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
 
 export interface AgentTurnBridgeDeps {
   settings: SettingsManager;
@@ -50,6 +51,7 @@ export interface AgentTurnBridgeDeps {
   taskManager?: IRuntimeTaskManager;
   getActiveSkillState?: (conversationId: string) => ActiveSkillState | undefined;
   engineClientProvider: IEngineClientProvider;
+  accountAiCatalog?: AccountAiCatalogCache;
   streamProcessor: AgentStreamProcessor;
   onPhaseChange: (event: {
     conversationId: string;
@@ -86,6 +88,7 @@ export class AgentTurnBridge {
   }
 
   async execute(input: ExecuteAgentTurnForWebviewInput): Promise<void> {
+    await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
     const agentManagerBridge:
       | AgentTurnAgentManager<
           Platform,
@@ -113,6 +116,7 @@ export class AgentTurnBridge {
         executionOverrides: input.executionOverrides,
         settings: {
           selectedProviderId: this.deps.settings.selectedProviderId,
+          selectedModelId: this.deps.settings.selectedModelId,
           customSystemPrompt: this.deps.settings.customSystemPrompt,
           executionMode: this.deps.settings.executionMode,
           autoExecuteTools: this.deps.settings.autoExecuteTools,
@@ -122,7 +126,6 @@ export class AgentTurnBridge {
         },
         providers: {
           getProvider: (providerId) => this.deps.providers.getProvider(providerId),
-          getDefaultProvider: () => this.deps.providers.getDefaultProvider(),
         },
         runtime: {
           conversations: {
@@ -161,5 +164,16 @@ export class AgentTurnBridge {
         },
       }),
     );
+  }
+
+  private async refreshAccountCatalogForTurn(providerId?: string): Promise<void> {
+    if (!this.deps.accountAiCatalog) return;
+    const cached = this.deps.accountAiCatalog.getCachedSnapshot();
+    if (cached && (!providerId || cached.provider.id === providerId)) return;
+    try {
+      await this.deps.accountAiCatalog.getSnapshot();
+    } catch (error) {
+      this.deps.accountAiCatalog.invalidateForAuthFailure(error);
+    }
   }
 }

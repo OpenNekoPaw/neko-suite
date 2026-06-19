@@ -9,6 +9,7 @@ import type { Provider, Model } from '../types/provider';
 import type { RetryTimeoutPreset, BuiltinPresetName } from '../types/error';
 import type { MCPServerPreset } from '../types/config';
 import type {
+  AccountAiCatalogSnapshot,
   ChatModelOption,
   GenerationModelConfig,
   MediaModelType,
@@ -42,6 +43,7 @@ import {
   selectAssistantProvider,
   type AssistantConfigState,
   type AssistantConfiguredProviderView,
+  type AssistantProviderModelView,
   type AssistantProviderSelection,
   type AssistantProviderView,
   type AssistantRuntimeSettingsSnapshot,
@@ -63,6 +65,11 @@ import {
   type ProviderCredentialImportApplyResult,
   type ProviderCredentialImport,
 } from './config-file-import';
+import { isProviderConfigured } from './provider-configuration';
+import {
+  resolveAiProviderSources,
+  type AiProviderSourceProjection,
+} from './ai-provider-source-resolver';
 
 /**
  * Merged configuration
@@ -275,10 +282,27 @@ export class ConfigManager {
     return buildAssistantConfiguredProviderViews(this.getConfig());
   }
 
-  getAssistantConfigState(): AssistantConfigState {
+  getAssistantConfigState(
+    options: { accountCatalog?: AccountAiCatalogSnapshot | null } = {},
+  ): AssistantConfigState {
+    const projection = this.resolveProviderSources(options.accountCatalog ?? null);
+    const configDiagnostic = this.getProjectedConfigDiagnostic(projection);
+    const explicitState = buildAssistantConfigState(this.getConfig());
+    const accountProviderViews = this.buildAccountProviderViews(options.accountCatalog ?? null);
     return {
-      ...buildAssistantConfigState(this.getConfig()),
-      ...(this.configDiagnostic ? { configDiagnostic: this.configDiagnostic } : {}),
+      ...explicitState,
+      providers: [...accountProviderViews, ...explicitState.providers],
+      configuredProviders: [
+        ...accountProviderViews.map((provider) => ({ ...provider })),
+        ...explicitState.configuredProviders,
+      ],
+      modelGroups: [...projection.modelGroups],
+      ...(options.accountCatalog?.diagnostics
+        ? {
+            accountDiagnostics: [...options.accountCatalog.diagnostics],
+          }
+        : {}),
+      ...(configDiagnostic ? { configDiagnostic } : {}),
     };
   }
 
@@ -327,10 +351,13 @@ export class ConfigManager {
 
   getAssistantSettingsData(): AssistantSettingsData {
     const config = this.getConfig();
-    const chatModelOptions = this.getChatModelOptions();
+    const providerSourceProjection = this.resolveProviderSources(null);
+    const chatModelOptions = [...providerSourceProjection.chatModelOptions];
+    const explicitState = buildAssistantConfigState(config);
     return {
       ...this.getAssistantSettingsSnapshot(),
-      ...buildAssistantConfigState(config),
+      ...explicitState,
+      modelGroups: [...providerSourceProjection.modelGroups],
       chatModelOptions,
       defaultMediaModels: buildDefaultMediaModelOptionIds({
         defaultMediaModels: this.getDefaultMediaModels(),
@@ -637,17 +664,82 @@ export class ConfigManager {
     return result.status === 'ok' ? result.config : undefined;
   }
 
+  private resolveProviderSources(
+    accountCatalog: AccountAiCatalogSnapshot | null,
+  ): AiProviderSourceProjection {
+    this.ensureMerged();
+    return resolveAiProviderSources({
+      providers: Array.from(this.providers.values()),
+      models: Array.from(this.models.values()),
+      userConfigReadResult: this.userConfigReadResult,
+      configDiagnostic: this.configDiagnostic,
+      accountCatalog,
+    });
+  }
+
+  private getProjectedConfigDiagnostic(
+    projection: AiProviderSourceProjection,
+  ): AssistantConfigDiagnostic | undefined {
+    if (projection.explicitAiConfig.invalidDiagnostic) {
+      return projection.explicitAiConfig.invalidDiagnostic;
+    }
+    if (this.isBlockingConfigReadDiagnostic(this.configDiagnostic)) {
+      return this.configDiagnostic;
+    }
+    if (projection.hasAccountGateway) {
+      return undefined;
+    }
+    return projection.accountConfigDiagnostic ?? this.configDiagnostic;
+  }
+
+  private isBlockingConfigReadDiagnostic(
+    diagnostic?: AssistantConfigDiagnostic,
+  ): diagnostic is AssistantConfigDiagnostic {
+    return (
+      diagnostic?.code === 'empty' ||
+      diagnostic?.code === 'invalidJson' ||
+      diagnostic?.code === 'readError'
+    );
+  }
+
+  private buildAccountProviderViews(
+    catalog: AccountAiCatalogSnapshot | null,
+  ): AssistantConfiguredProviderView[] {
+    if (!catalog || catalog.status !== 'available') return [];
+    const allowed = new Set(catalog.entitlement.allowedModelIds);
+    const disabled = new Set(catalog.entitlement.disabledModelIds ?? []);
+    const models: AssistantProviderModelView[] = catalog.models
+      .filter((model) => model.enabled !== false)
+      .filter((model) => allowed.has(model.id) && !disabled.has(model.id))
+      .map((model) => ({
+        id: model.id,
+        name: model.displayName || model.name || model.id,
+        enabled: true,
+      }));
+    if (models.length === 0) return [];
+    return [
+      {
+        id: catalog.provider.id,
+        name: catalog.provider.displayName || catalog.provider.name || catalog.provider.id,
+        type: catalog.provider.type,
+        connectionKind: catalog.provider.connectionKind,
+        protocolProfile: catalog.provider.protocolProfile,
+        supportLevel: catalog.provider.supportLevel,
+        requiresApiKey: false,
+        models,
+        enabled: true,
+      },
+    ];
+  }
+
   private getAssistantDefaultProviderScalarForSettings(): string | null {
     if (this.userConfigReadResult?.status !== 'ok') return null;
-    const configured = this.getAssistantDefaultProvider();
-    return this.getExplicitDefaultProviderScalar() ?? configured?.id ?? null;
+    return this.getExplicitDefaultProviderScalar() ?? null;
   }
 
   private getAssistantDefaultModelScalarForSettings(): string | null {
     if (this.userConfigReadResult?.status !== 'ok') return null;
-    const explicitDefault = this.getExplicitDefaultModelScalar();
-    if (explicitDefault) return explicitDefault;
-    return this.getAssistantDefaultProvider()?.defaultModel || null;
+    return this.getExplicitDefaultModelScalar() ?? null;
   }
 
   private buildConfigDiagnostic(): AssistantConfigDiagnostic | undefined {
@@ -687,13 +779,13 @@ export class ConfigManager {
       return buildAssistantConfigAvailabilityDiagnostic('missingModel', filePath);
     }
 
-    const providersWithApiKey = new Set(
+    const configuredProviders = new Set(
       enabledProviders
-        .filter((provider) => hasProviderApiKey(provider))
+        .filter((provider) => isProviderConfigured(provider))
         .map((provider) => provider.id),
     );
     const hasConfiguredChatModel = enabledChatModels.some((model) =>
-      providersWithApiKey.has(model.providerId),
+      configuredProviders.has(model.providerId),
     );
     return hasConfiguredChatModel
       ? undefined
@@ -875,8 +967,4 @@ export class ConfigManager {
       this.mcpServers.set(id, { ...server, args: updatedArgs });
     });
   }
-}
-
-function hasProviderApiKey(provider: Provider): boolean {
-  return typeof provider.apiKey === 'string' && provider.apiKey.length > 0;
 }

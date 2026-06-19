@@ -380,13 +380,20 @@ export interface AgentHistoryHydrationCandidateMessage {
 export interface AgentProviderCandidate {
   readonly id: string;
   readonly isConfigured: boolean;
+  readonly modelIds?: readonly string[];
+  readonly source?: 'explicit-config' | 'account-gateway';
+  readonly accountCatalogAvailable?: boolean;
+  readonly entitledModelIds?: readonly string[];
+  readonly modelCapabilities?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface AgentTurnProviderSelectionInput<TProvider extends AgentProviderCandidate> {
   readonly requestedProviderId?: string;
   readonly selectedProviderId?: string;
+  readonly requestedModelId?: string;
+  readonly selectedModelId?: string;
+  readonly requiredCapabilities?: readonly string[];
   readonly getProvider: (providerId: string) => TProvider | undefined;
-  readonly getDefaultProvider: () => TProvider | undefined;
 }
 
 export type AgentTurnProviderSelection<TProvider extends AgentProviderCandidate> =
@@ -394,11 +401,20 @@ export type AgentTurnProviderSelection<TProvider extends AgentProviderCandidate>
       readonly ok: true;
       readonly provider: TProvider;
       readonly effectiveProviderId?: string;
+      readonly effectiveModelId: string;
     }
   | {
       readonly ok: false;
       readonly effectiveProviderId?: string;
-      readonly reason: 'no-provider-configured';
+      readonly effectiveModelId?: string;
+      readonly reason:
+        | 'missing-chat-provider'
+        | 'missing-chat-model'
+        | 'chat-provider-not-configured'
+        | 'chat-model-not-found'
+        | 'account-catalog-missing'
+        | 'account-model-not-entitled'
+        | 'missing-required-capability';
     };
 
 export interface AgentTurnRuntimePlanInput {
@@ -453,17 +469,44 @@ const MEDIA_GENERATION_CAPABILITIES: readonly ProviderGenerationCapability[] = [
   'audio.generate',
 ];
 
-export type AgentMessageTurnPreconditionReason = 'missing-platform' | 'no-provider-configured';
+export type AgentMessageTurnPreconditionReason =
+  | 'missing-platform'
+  | 'no-provider-configured'
+  | 'missing-chat-provider'
+  | 'missing-chat-model'
+  | 'chat-provider-not-configured'
+  | 'chat-model-not-found'
+  | 'account-catalog-missing'
+  | 'account-model-not-entitled'
+  | 'missing-required-capability';
 export type AgentMessageTurnFallbackReason = AgentMessageTurnPreconditionReason;
 
 export const AGENT_TURN_PRECONDITION_MESSAGE =
-  'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.';
+  'No valid chat provider and model are selected. Please choose a configured Agent chat provider/model in Settings.';
 export const AGENT_TURN_FALLBACK_MESSAGE = AGENT_TURN_PRECONDITION_MESSAGE;
 
+const AGENT_TURN_PRECONDITION_MESSAGES: Record<AgentMessageTurnPreconditionReason, string> = {
+  'missing-platform': AGENT_TURN_PRECONDITION_MESSAGE,
+  'no-provider-configured': AGENT_TURN_PRECONDITION_MESSAGE,
+  'missing-chat-provider':
+    'No chat provider is selected. Please choose a configured provider in Settings.',
+  'missing-chat-model': 'No chat model is selected. Please choose a model in Settings.',
+  'chat-provider-not-configured':
+    'The selected chat provider is missing, disabled, or not configured. Please fix the provider in Settings.',
+  'chat-model-not-found':
+    'The selected chat model is missing, disabled, or does not belong to the selected provider. Please choose a valid model in Settings.',
+  'account-catalog-missing':
+    'The selected Neko account model is unavailable because the account AI catalog is missing or stale. Log in again or refresh Agent.',
+  'account-model-not-entitled':
+    'The selected Neko account model is not available for this account. Choose an entitled model or update the account plan.',
+  'missing-required-capability':
+    'The selected model does not support the required workflow capability. Choose a model with the needed vision or generation capability.',
+};
+
 export function getAgentTurnPreconditionMessage(
-  _reason: AgentMessageTurnPreconditionReason,
+  reason: AgentMessageTurnPreconditionReason,
 ): string {
-  return AGENT_TURN_PRECONDITION_MESSAGE;
+  return AGENT_TURN_PRECONDITION_MESSAGES[reason];
 }
 
 export function getAgentTurnFallbackMessage(reason: AgentMessageTurnFallbackReason): string {
@@ -1098,26 +1141,83 @@ export function selectAgentTurnProvider<TProvider extends AgentProviderCandidate
   input: AgentTurnProviderSelectionInput<TProvider>,
 ): AgentTurnProviderSelection<TProvider> {
   const effectiveProviderId = input.requestedProviderId || input.selectedProviderId;
-  const requestedProvider = effectiveProviderId
-    ? input.getProvider(effectiveProviderId)
-    : undefined;
-  const provider =
-    requestedProvider && requestedProvider.isConfigured
-      ? requestedProvider
-      : input.getDefaultProvider();
+  const effectiveModelId = input.requestedModelId || input.selectedModelId;
 
+  if (!effectiveProviderId) {
+    return {
+      ok: false,
+      reason: 'missing-chat-provider',
+      ...(effectiveModelId ? { effectiveModelId } : {}),
+    };
+  }
+
+  if (!effectiveModelId) {
+    return {
+      ok: false,
+      effectiveProviderId,
+      reason: 'missing-chat-model',
+    };
+  }
+
+  const provider = input.getProvider(effectiveProviderId);
   if (!provider?.isConfigured) {
     return {
       ok: false,
-      ...(effectiveProviderId ? { effectiveProviderId } : {}),
-      reason: 'no-provider-configured',
+      effectiveProviderId,
+      effectiveModelId,
+      reason: 'chat-provider-not-configured',
     };
+  }
+
+  if (provider.modelIds && !provider.modelIds.includes(effectiveModelId)) {
+    return {
+      ok: false,
+      effectiveProviderId,
+      effectiveModelId,
+      reason: 'chat-model-not-found',
+    };
+  }
+
+  if (provider.source === 'account-gateway') {
+    if (provider.accountCatalogAvailable === false) {
+      return {
+        ok: false,
+        effectiveProviderId,
+        effectiveModelId,
+        reason: 'account-catalog-missing',
+      };
+    }
+    if (provider.entitledModelIds && !provider.entitledModelIds.includes(effectiveModelId)) {
+      return {
+        ok: false,
+        effectiveProviderId,
+        effectiveModelId,
+        reason: 'account-model-not-entitled',
+      };
+    }
+  }
+
+  const requiredCapabilities = input.requiredCapabilities ?? [];
+  if (requiredCapabilities.length > 0) {
+    const modelCapabilities = provider.modelCapabilities?.[effectiveModelId] ?? [];
+    const hasRequiredCapabilities = requiredCapabilities.every((capability) =>
+      modelCapabilities.includes(capability),
+    );
+    if (!hasRequiredCapabilities) {
+      return {
+        ok: false,
+        effectiveProviderId,
+        effectiveModelId,
+        reason: 'missing-required-capability',
+      };
+    }
   }
 
   return {
     ok: true,
     provider,
-    ...(effectiveProviderId ? { effectiveProviderId } : {}),
+    effectiveProviderId,
+    effectiveModelId,
   };
 }
 

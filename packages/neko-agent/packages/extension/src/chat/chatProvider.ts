@@ -23,7 +23,7 @@ import { ProviderManager } from './providerManager';
 import { ConversationBridge } from './conversationBridge';
 import { AgentMessageTurnHandler } from './agentMessageTurnHandler';
 import { SystemPromptManager } from './systemPromptManager';
-import { ConfigBridge } from '../services/configBridge';
+import { ConfigBridge, getNekoAuthAPI } from '../services/configBridge';
 import { DragDropBroker } from '../services/DragDropBroker';
 import {
   TaskHandler,
@@ -82,6 +82,7 @@ import {
 } from '@neko-agent/types';
 import type { NpcAgentWorkflowRequest } from '@neko/shared';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
+import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
 const logger = getLogger('ChatProvider');
 const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
@@ -149,6 +150,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _platform?: Platform;
   private _taskManager?: IRuntimeTaskManager;
   private _configBridge?: ConfigBridge;
+  private readonly _accountAiCatalog: AccountAiCatalogCache;
   private readonly _localResourceAccess: AgentLocalResourceAccess;
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
@@ -172,6 +174,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     // Initialize managers
     this._settings = new SettingsManager();
     this._systemPrompt = new SystemPromptManager();
+    this._accountAiCatalog = new AccountAiCatalogCache({
+      getAuth: () => getNekoAuthAPI(),
+      logger,
+    });
     this._localResourceAccess =
       options.localResourceAccess ?? createChatLocalResourceAccess(_extensionUri, _context);
     this._conversations = new ConversationBridge(
@@ -273,7 +279,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
 
         // Initialize ConfigBridge for unified config message handling
-        this._configBridge = new ConfigBridge(this._platform, this._context);
+        this._configBridge = new ConfigBridge(
+          this._platform,
+          this._context,
+          this._accountAiCatalog,
+        );
 
         this._capabilityRefreshRuntime = createCapabilityRuntimeRefreshRuntime({
           getBindings: () => getCapabilityRuntimeBindings(),
@@ -314,7 +324,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
         setCapabilityRuntimeSkillService(skillService);
 
-        this._providers = new ProviderManager(this._platform);
+        this._providers = new ProviderManager(this._platform, this._accountAiCatalog);
         this._messages = new AgentMessageTurnHandler(
           this._settings,
           this._providers,
@@ -332,6 +342,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           this._dashboardWorkItems,
           this._localResourceAccess,
           {
+            accountAiCatalog: this._accountAiCatalog,
             skillAutoActivation: {
               activate: ({ webview, conversationId, userInput }) =>
                 this._skillHandler.autoActivateSkill(webview, {
@@ -844,8 +855,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _getSelectedChatModelRef(): import('@neko-agent/types').ModelRef<'llm'> | undefined {
     const modelId = this._settings.selectedModelId;
     if (!modelId || modelId === 'auto') return undefined;
-    const providerId =
-      this._settings.selectedProviderId ?? this._providers?.getDefaultProvider()?.id;
+    const providerId = this._settings.selectedProviderId;
     if (!providerId) return undefined;
     return { providerId, modelId, category: 'llm' };
   }

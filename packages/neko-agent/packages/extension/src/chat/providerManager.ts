@@ -11,6 +11,8 @@ import type {
   AssistantProviderView,
   Platform,
 } from '@neko/platform';
+import type { AccountAiCatalogSnapshot } from '@neko/shared';
+import type { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
 /**
  * Provider Manager using Platform API
@@ -18,7 +20,10 @@ import type {
 export class ProviderManager {
   private readonly _platform: Platform;
 
-  constructor(platform: Platform) {
+  constructor(
+    platform: Platform,
+    private readonly accountAiCatalog?: AccountAiCatalogCache,
+  ) {
     this._platform = platform;
   }
 
@@ -47,6 +52,37 @@ export class ProviderManager {
    * Get provider by ID
    */
   getProvider(providerId: string): AssistantProviderSelection | undefined {
+    const accountProvider = this.getAccountProvider(providerId);
+    if (accountProvider) return accountProvider;
     return this._platform.config.getAssistantProvider(providerId);
   }
+
+  private getAccountProvider(providerId: string): AssistantProviderSelection | undefined {
+    const snapshot = this.accountAiCatalog?.getCachedSnapshot();
+    if (!snapshot || snapshot.provider.id !== providerId) return undefined;
+    return buildAccountProviderSelection(snapshot);
+  }
+}
+
+function buildAccountProviderSelection(
+  snapshot: AccountAiCatalogSnapshot,
+): AssistantProviderSelection {
+  const allowed = new Set(snapshot.entitlement.allowedModelIds);
+  const disabled = new Set(snapshot.entitlement.disabledModelIds ?? []);
+  const modelIds = snapshot.models
+    .filter((model) => model.enabled !== false)
+    .filter((model) => allowed.has(model.id) && !disabled.has(model.id))
+    .map((model) => model.id);
+  return {
+    id: snapshot.provider.id,
+    isConfigured: snapshot.status === 'available' && modelIds.length > 0,
+    defaultModel: snapshot.defaults?.chat ?? modelIds[0] ?? '',
+    modelIds,
+    source: 'account-gateway',
+    accountCatalogAvailable: snapshot.status === 'available',
+    entitledModelIds: [...allowed],
+    modelCapabilities: Object.fromEntries(
+      snapshot.models.map((model) => [model.id, [...model.capabilities]]),
+    ),
+  };
 }

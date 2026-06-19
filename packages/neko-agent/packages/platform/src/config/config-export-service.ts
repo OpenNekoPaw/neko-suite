@@ -16,6 +16,10 @@ export interface ConfigExportData {
     id: string;
     name: string;
     type: string;
+    connectionKind?: string;
+    protocolProfile?: string;
+    supportLevel?: string;
+    requiresApiKey?: boolean;
     apiKey?: string;
     apiUrl?: string;
     enabled?: boolean;
@@ -133,6 +137,10 @@ export class ConfigExportService implements IConfigExportService {
         id: p.id,
         name: p.name,
         type: p.type,
+        connectionKind: p.connectionKind,
+        protocolProfile: p.protocolProfile,
+        supportLevel: p.supportLevel,
+        requiresApiKey: p.requiresApiKey,
         apiKey: p.apiKey,
         apiUrl: p.apiUrl,
         enabled: p.enabled,
@@ -210,6 +218,10 @@ export class ConfigExportService implements IConfigExportService {
         name: config.name,
         displayName: config.displayName || config.name,
         type: (config.type || 'generic') as Provider['type'],
+        connectionKind: config.type === 'ollama' ? 'local' : 'custom-gateway',
+        protocolProfile: config.type === 'ollama' ? 'ollama' : 'newapi-compatible',
+        supportLevel: 'custom',
+        requiresApiKey: config.type === 'ollama' ? false : true,
         apiUrl: config.baseUrl || '',
         apiKey: config.apiKey,
         enabled: true,

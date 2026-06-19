@@ -166,6 +166,16 @@ function createMessageRequest(
   };
 }
 
+function createChatModelRequest(
+  messageText = 'hello',
+  overrides: Partial<AgentMessageRuntimeRequest> = {},
+): AgentMessageRuntimeRequest {
+  return createMessageRequest(messageText, {
+    chatModel: { providerId: 'anthropic', modelId: 'claude-3', category: 'llm' },
+    ...overrides,
+  });
+}
+
 /** Minimal SettingsManager-shaped object */
 function createMockSettings() {
   return {
@@ -183,7 +193,9 @@ function createMockSettings() {
 
 /** Minimal ProviderManager-shaped object — no configured provider by default */
 function createMockProviders(isConfigured = false) {
-  const provider = isConfigured ? { id: 'anthropic', isConfigured: true, models: [] } : undefined;
+  const provider = isConfigured
+    ? { id: 'anthropic', isConfigured: true, modelIds: ['claude-3'] }
+    : undefined;
   return {
     getProvider: vi.fn().mockReturnValue(provider),
     getDefaultProvider: vi.fn().mockReturnValue(provider),
@@ -383,7 +395,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('生成分镜表', { conversationId: 'conv-1' }),
+        createChatModelRequest('生成分镜表', { conversationId: 'conv-1' }),
       );
 
       expect(skillAutoActivation.activate).toHaveBeenCalledWith({
@@ -431,7 +443,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         createMockWebview() as any,
-        createMessageRequest('outline the rollout'),
+        createChatModelRequest('outline the rollout'),
       );
 
       expect(agentRunner.configure).toHaveBeenCalledWith(
@@ -452,7 +464,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         createMockWebview() as any,
-        createMessageRequest('outline the rollout'),
+        createChatModelRequest('outline the rollout'),
       );
 
       expect(agentRunner.execute).toHaveBeenCalledWith(
@@ -682,7 +694,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+        createChatModelRequest('start subagent task', { conversationId: 'conv-1' }),
       );
 
       agentRunner.emitSubAgentEvent({
@@ -723,7 +735,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+        createChatModelRequest('start subagent task', { conversationId: 'conv-1' }),
       );
 
       agentRunner.emitSubAgentEvent({
@@ -757,7 +769,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('start subagent task', { conversationId: 'conv-1' }),
+        createChatModelRequest('start subagent task', { conversationId: 'conv-1' }),
       );
       handler.clearAgentState('conv-1');
 

@@ -37,4 +37,47 @@ describe('ChatModelService', () => {
       contextWindow: 200000,
     });
   });
+
+  it('includes no-key local text-only chat models', () => {
+    const service = new ChatModelService();
+    const localProvider: Provider = {
+      id: 'ollama-local',
+      name: 'ollama',
+      displayName: 'Ollama Local',
+      type: 'ollama',
+      apiUrl: 'http://localhost:11434/api',
+      enabled: true,
+      requiresApiKey: false,
+      connectionKind: 'local',
+      protocolProfile: 'ollama',
+    };
+    const localModel: Model = {
+      id: 'ollama-local-llama3.2',
+      name: 'llama3.2',
+      displayName: 'Llama 3.2',
+      providerId: 'ollama-local',
+      type: 'llm',
+      enabled: true,
+      capabilities: ['chat'],
+    };
+
+    expect(service.getChatModelOptions([localProvider], [localModel])).toContainEqual({
+      id: 'ollama-local:ollama-local-llama3.2',
+      label: 'Ollama Local / Llama 3.2',
+      providerId: 'ollama-local',
+      modelId: 'ollama-local-llama3.2',
+      capabilities: ['chat'],
+      category: 'llm',
+    });
+  });
+
+  it('does not include remote providers missing an endpoint even with an API key', () => {
+    const service = new ChatModelService();
+
+    expect(
+      service
+        .getChatModelOptions([{ ...provider, apiUrl: '' }], [model])
+        .map((option) => option.id),
+    ).toEqual(['auto']);
+  });
 });

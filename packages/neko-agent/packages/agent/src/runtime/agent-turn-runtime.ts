@@ -104,8 +104,9 @@ export interface AgentTurnConversationStore<THistoryMessage> {
 export interface AgentTurnProviderSource<TProvider extends AgentProviderCandidate> {
   readonly requestedProviderId?: string | null;
   readonly selectedProviderId?: string | null;
+  readonly requestedModelId?: string | null;
+  readonly selectedModelId?: string | null;
   getProvider(providerId: string): TProvider | undefined;
-  getDefaultProvider(): TProvider | undefined;
 }
 
 export interface AgentTurnRuntimeSettings {
@@ -360,6 +361,8 @@ export async function executeAgentTurn<
     executionMode: input.settings.executionMode,
     selectedProviderId: input.providerSource.selectedProviderId,
     requestedProviderId: input.providerSource.requestedProviderId,
+    selectedModelId: input.providerSource.selectedModelId,
+    requestedModelId: input.providerSource.requestedModelId,
     hasActiveSkill: input.activeSkill !== undefined && input.activeSkill !== null,
     activeSkillName: input.activeSkill?.skill.name,
   });
@@ -378,8 +381,12 @@ export async function executeAgentTurn<
   const providerSelection = selectAgentTurnProvider({
     requestedProviderId: input.providerSource.requestedProviderId ?? undefined,
     selectedProviderId: input.providerSource.selectedProviderId ?? undefined,
+    requestedModelId: input.providerSource.requestedModelId ?? undefined,
+    selectedModelId: input.providerSource.selectedModelId ?? undefined,
+    requiredCapabilities: buildRequiredTurnCapabilities({
+      imageAttachments: input.imageAttachments,
+    }),
     getProvider: (providerId) => input.providerSource.getProvider(providerId),
-    getDefaultProvider: () => input.providerSource.getDefaultProvider(),
   });
   if (providerSelection.ok === false) {
     logger.warn('neko.agent.turn.execute.failed', {
@@ -387,8 +394,9 @@ export async function executeAgentTurn<
       durationMs: Date.now() - startTime,
       reason: providerSelection.reason,
       effectiveProviderId: providerSelection.effectiveProviderId,
+      effectiveModelId: providerSelection.effectiveModelId,
     });
-    return { status: 'precondition-unmet', reason: 'no-provider-configured' };
+    return { status: 'precondition-unmet', reason: providerSelection.reason };
   }
 
   const platform = input.platform;
@@ -414,7 +422,11 @@ export async function executeAgentTurn<
     ambientCanvas,
     isPlanMode: input.isPlanMode(input.conversationId),
     executionMode: input.settings.executionMode,
-    chatModel: input.chatModel,
+    chatModel: input.chatModel ?? {
+      providerId: providerSelection.provider.id,
+      modelId: providerSelection.effectiveModelId,
+      category: 'llm',
+    },
     executionOverrides: input.executionOverrides,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
@@ -665,6 +677,18 @@ function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(
     agentRunner.clearActiveSkill?.();
   }
   turnManagedSkillNames.delete(runnerKey);
+}
+
+function buildRequiredTurnCapabilities(input: {
+  readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
+}): string[] {
+  const capabilities = new Set<string>();
+
+  if ((input.imageAttachments?.length ?? 0) > 0) {
+    capabilities.add('vision');
+  }
+
+  return [...capabilities];
 }
 
 function summarizeTurnImages(

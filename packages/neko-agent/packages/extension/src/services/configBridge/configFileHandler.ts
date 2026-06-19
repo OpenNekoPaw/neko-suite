@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import { getUserConfigPath } from '@neko/platform';
+import { DEFAULT_USER_CONFIG, getUserConfigPath } from '@neko/platform';
 import { getLogger } from '../../base';
 
 const logger = getLogger('ConfigFileHandler');
@@ -44,6 +44,6 @@ export class ConfigFileHandler implements vscode.Disposable {
   dispose(): void {}
 }
 
-function buildUserConfigTemplate(): string {
-  return ['{', '  "providers": [],', '  "models": [],', '  "mcpServers": []', '}'].join('\n');
+export function buildUserConfigTemplate(): string {
+  return `${JSON.stringify(DEFAULT_USER_CONFIG, null, 2)}\n`;
 }

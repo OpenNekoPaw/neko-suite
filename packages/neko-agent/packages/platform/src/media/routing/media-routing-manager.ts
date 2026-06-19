@@ -8,6 +8,7 @@
 import type { MediaModelType } from '@neko/shared';
 import type { MediaGenerationType, MediaRoutingResult, RoutingPreference } from '../types';
 import type { ConfigManager } from '../../config/config-manager';
+import { isProviderConfigured } from '../../config/provider-configuration';
 
 /**
  * Map generation type to media model type
@@ -53,7 +54,7 @@ export class MediaRoutingManager {
     if (providerId && modelId) {
       const provider = this.configManager.getProvider(providerId);
       const model = this.configManager.getModel(modelId);
-      if (provider && model) {
+      if (provider && model && isProviderConfigured(provider)) {
         return {
           providerId,
           modelId,
@@ -71,7 +72,7 @@ export class MediaRoutingManager {
         const model = this.configManager.getModel(defaultModelId);
         if (model) {
           const provider = this.configManager.getProvider(model.providerId);
-          if (provider) {
+          if (provider && isProviderConfigured(provider)) {
             return {
               providerId: provider.id,
               modelId: defaultModelId,
@@ -88,7 +89,7 @@ export class MediaRoutingManager {
       const model = this.configManager.getModel(modelId);
       if (model) {
         const provider = this.configManager.getProvider(model.providerId);
-        if (provider) {
+        if (provider && isProviderConfigured(provider)) {
           return {
             providerId: provider.id,
             modelId,

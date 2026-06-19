@@ -36,6 +36,19 @@ const openaiProvider: Provider = {
   enabled: true,
 };
 
+const ollamaLocalProvider: Provider = {
+  id: 'ollama-local',
+  name: 'ollama',
+  displayName: 'Ollama Local',
+  type: 'ollama',
+  apiUrl: 'http://localhost:11434/api',
+  enabled: true,
+  connectionKind: 'local',
+  protocolProfile: 'ollama',
+  supportLevel: 'compatible',
+  requiresApiKey: false,
+};
+
 const claudeModel: Model = {
   id: 'anthropic-claude-sonnet-4',
   name: 'claude-sonnet-4-20250514',
@@ -54,6 +67,16 @@ const imageModel: Model = {
   type: 'image',
   enabled: true,
   capabilities: ['image_generation'],
+};
+
+const localChatModel: Model = {
+  id: 'ollama-local-llama3.2',
+  name: 'llama3.2',
+  displayName: 'Llama 3.2',
+  providerId: 'ollama-local',
+  type: 'llm',
+  enabled: true,
+  capabilities: ['chat'],
 };
 
 function createConfig(input?: { providers?: Provider[]; models?: Model[] }) {
@@ -106,6 +129,21 @@ describe('assistant config presenter', () => {
     ]);
   });
 
+  it('projects provider connection metadata', () => {
+    const providers = buildAssistantProviderViews(
+      createConfig({ providers: [ollamaLocalProvider], models: [localChatModel] }),
+    );
+
+    expect(providers[0]).toMatchObject({
+      id: 'ollama-local',
+      type: 'ollama',
+      connectionKind: 'local',
+      protocolProfile: 'ollama',
+      supportLevel: 'compatible',
+      requiresApiKey: false,
+    });
+  });
+
   it('projects only configured providers with credentials', () => {
     const providers = buildAssistantConfiguredProviderViews(createConfig());
 
@@ -114,6 +152,19 @@ describe('assistant config presenter', () => {
       id: 'anthropic',
       apiKey: 'sk-ant',
       baseUrl: 'https://api.anthropic.com',
+    });
+  });
+
+  it('treats no-key local providers as configured', () => {
+    const providers = buildAssistantConfiguredProviderViews(
+      createConfig({ providers: [ollamaLocalProvider], models: [localChatModel] }),
+    );
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toMatchObject({
+      id: 'ollama-local',
+      baseUrl: 'http://localhost:11434/api',
+      requiresApiKey: false,
     });
   });
 
@@ -130,11 +181,60 @@ describe('assistant config presenter', () => {
       id: 'anthropic',
       isConfigured: true,
       defaultModel: 'anthropic-claude-sonnet-4',
+      modelIds: ['anthropic-claude-sonnet-4'],
     });
     expect(selectAssistantProvider(createConfig(), 'openai')).toEqual({
       id: 'openai',
       isConfigured: false,
       defaultModel: 'openai-dall-e-3',
+      modelIds: ['openai-dall-e-3'],
+    });
+  });
+
+  it('selects enabled no-key local providers without credentials', () => {
+    expect(
+      selectAssistantDefaultProvider(
+        createConfig({ providers: [ollamaLocalProvider], models: [localChatModel] }),
+      ),
+    ).toEqual({
+      id: 'ollama-local',
+      isConfigured: true,
+      defaultModel: 'ollama-local-llama3.2',
+      modelIds: ['ollama-local-llama3.2'],
+    });
+  });
+
+  it('marks disabled provider selections as not configured', () => {
+    expect(
+      selectAssistantProvider(
+        createConfig({
+          providers: [{ ...anthropicProvider, enabled: false }],
+          models: [claudeModel],
+        }),
+        'anthropic',
+      ),
+    ).toEqual({
+      id: 'anthropic',
+      isConfigured: false,
+      defaultModel: 'anthropic-claude-sonnet-4',
+      modelIds: ['anthropic-claude-sonnet-4'],
+    });
+  });
+
+  it('excludes disabled models from provider selection model IDs', () => {
+    expect(
+      selectAssistantProvider(
+        createConfig({
+          providers: [anthropicProvider],
+          models: [{ ...claudeModel, enabled: false }],
+        }),
+        'anthropic',
+      ),
+    ).toEqual({
+      id: 'anthropic',
+      isConfigured: true,
+      defaultModel: '',
+      modelIds: [],
     });
   });
 

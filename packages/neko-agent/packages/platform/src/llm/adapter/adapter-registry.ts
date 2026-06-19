@@ -38,6 +38,7 @@ export class AdapterRegistry extends BaseRegistry<ProviderType, Adapter> {
     this.builtinItems.set('generic', new GenericAdapter());
     // NewAPI is OpenAI-compatible, use GenericAdapter
     this.builtinItems.set('newapi', new GenericAdapter());
+    this.builtinItems.set('oneapi', new GenericAdapter());
   }
 }
 

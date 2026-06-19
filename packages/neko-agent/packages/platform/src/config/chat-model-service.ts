@@ -6,6 +6,7 @@
 
 import type { Model, Provider } from '../types/provider';
 import type { ChatModelOption, ModelCapability, ModelType } from '@neko/shared';
+import { isProviderConfigured } from './provider-configuration';
 
 /**
  * Chat model service interface
@@ -29,15 +30,16 @@ export class ChatModelService implements IChatModelService {
   /**
    * Get chat model options for UI model selector
    * Returns a list of enabled models with 'auto' as the first option
-   * Only includes models from providers with API key configured
+   * Only includes models from configured providers.
    */
   getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[] {
     const options: ChatModelOption[] = [
       { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'llm' },
     ];
 
-    // Only include providers with API key configured
-    const configuredProviders = providers.filter((p) => p.enabled && !!p.apiKey);
+    const configuredProviders = providers.filter(
+      (provider) => provider.enabled && isProviderConfigured(provider),
+    );
     const providerMap = new Map(configuredProviders.map((p) => [p.id, p]));
 
     const enabledModels = models.filter((m) => m.enabled);

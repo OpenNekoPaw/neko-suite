@@ -53,6 +53,7 @@ describe('MediaRoutingManager', () => {
       displayName: 'OpenAI',
       type: 'openai',
       apiUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-test',
       enabled: true,
     });
 
@@ -62,6 +63,7 @@ describe('MediaRoutingManager', () => {
       displayName: 'Stability AI',
       type: 'openai', // Use openai type for testing
       apiUrl: 'https://api.stability.ai/v1',
+      apiKey: 'sk-test',
       enabled: true,
     });
 
@@ -156,6 +158,34 @@ describe('MediaRoutingManager', () => {
     it('should return null when default model not found in config', async () => {
       configManager.setDefaultMediaModels({
         image: 'non-existent-model',
+      });
+
+      const result = await manager.selectProvider('text-to-image');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when default model provider is not configured', async () => {
+      configManager.addProvider({
+        id: 'empty-gateway',
+        name: 'empty-gateway',
+        displayName: 'Empty Gateway',
+        type: 'newapi',
+        apiUrl: '',
+        enabled: true,
+        connectionKind: 'gateway',
+        protocolProfile: 'newapi-compatible',
+        requiresApiKey: true,
+      });
+      configManager.addModel({
+        id: 'empty-gateway-image',
+        name: 'gpt-image-2',
+        providerId: 'empty-gateway',
+        capabilities: ['text_to_image'],
+        enabled: true,
+      });
+      configManager.setDefaultMediaModels({
+        image: 'empty-gateway-image',
       });
 
       const result = await manager.selectProvider('text-to-image');

@@ -108,6 +108,11 @@ describe('AdapterRegistry', () => {
       expect(adapter?.type).toBe('generic');
     });
 
+    it('should route NewAPI-compatible provider types through generic adapter', () => {
+      expect(registry.get('newapi')).toBeInstanceOf(GenericAdapter);
+      expect(registry.get('oneapi')).toBeInstanceOf(GenericAdapter);
+    });
+
     it('should have azure adapter', () => {
       const adapter = registry.get('azure');
       expect(adapter).toBeDefined();
@@ -151,6 +156,8 @@ describe('AdapterRegistry', () => {
       expect(types).toContain('google');
       expect(types).toContain('ollama');
       expect(types).toContain('generic');
+      expect(types).toContain('newapi');
+      expect(types).toContain('oneapi');
       expect(types).toContain('azure');
     });
 

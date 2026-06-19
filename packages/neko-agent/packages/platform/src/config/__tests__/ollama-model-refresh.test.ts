@@ -4,12 +4,15 @@ import type { Adapter, ChatChunk } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
 
 const ollamaProvider: Provider = {
-  id: 'ollama',
+  id: 'ollama-local',
   name: 'ollama',
   displayName: 'Ollama',
   type: 'ollama',
   apiUrl: 'http://localhost:11434/api',
   enabled: true,
+  connectionKind: 'local',
+  protocolProfile: 'ollama',
+  requiresApiKey: false,
 };
 
 function createAdapter(listModels: Adapter['listModels']): Adapter {
@@ -63,9 +66,9 @@ describe('refreshOllamaModels', () => {
   it('discovers new Ollama models through the platform adapter registry', async () => {
     const { config, setModel } = createConfig([
       {
-        id: 'ollama-llama3',
+        id: 'ollama-local-llama3',
         name: 'llama3',
-        providerId: 'ollama',
+        providerId: 'ollama-local',
         capabilities: ['chat'],
         enabled: true,
       },
@@ -85,9 +88,9 @@ describe('refreshOllamaModels', () => {
 
     expect(listModels).toHaveBeenCalledWith(ollamaProvider);
     expect(setModel).toHaveBeenCalledWith({
-      id: 'ollama-qwen2.5',
+      id: 'ollama-local-qwen2.5',
       name: 'qwen2.5',
-      providerId: 'ollama',
+      providerId: 'ollama-local',
       capabilities: ['chat'],
       enabled: true,
     });
@@ -111,13 +114,13 @@ describe('refreshOllamaModels', () => {
     ).resolves.toEqual({
       added: 0,
       checkedProviders: 1,
-      failedProviders: ['ollama'],
+      failedProviders: ['ollama-local'],
     });
 
     expect(setModel).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       'Failed to refresh Ollama models',
-      expect.objectContaining({ providerId: 'ollama' }),
+      expect.objectContaining({ providerId: 'ollama-local' }),
     );
   });
 });

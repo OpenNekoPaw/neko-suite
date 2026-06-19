@@ -178,6 +178,38 @@ const SAMPLE_MODEL: Model = {
   enabled: true,
 };
 
+function createAccountCatalog() {
+  return {
+    source: 'account-gateway' as const,
+    status: 'available' as const,
+    provider: {
+      id: 'neko-account-gateway',
+      name: 'neko-account-gateway',
+      displayName: 'Neko Official',
+      type: 'newapi' as const,
+      apiUrl: '',
+      enabled: true,
+      connectionKind: 'gateway' as const,
+      protocolProfile: 'newapi-compatible' as const,
+      supportLevel: 'verified' as const,
+      requiresApiKey: false,
+    },
+    models: [
+      {
+        id: 'official-chat',
+        name: 'gpt-4o-mini',
+        displayName: 'Official Chat',
+        providerId: 'neko-account-gateway',
+        type: 'llm' as const,
+        capabilities: ['chat'],
+        enabled: true,
+      },
+    ],
+    entitlement: { allowedModelIds: ['official-chat'] },
+    expiresAt: Date.now() + 60_000,
+  };
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -414,7 +446,7 @@ describe('ConfigManager', () => {
         code: 'missingConfig',
         filePath: '/tmp/neko/config.json',
         message:
-          'Agent configuration file is missing: /tmp/neko/config.json. Create the config file with at least one enabled provider, chat model, and API key, then open a new Agent session or tab.',
+          'Agent configuration file is missing: /tmp/neko/config.json. Create the config file with at least one enabled provider, chat model, and required provider credentials, then open a new Agent session or tab.',
       });
       expect(manager.getConfig().providers.size).toBe(0);
       expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
@@ -435,7 +467,7 @@ describe('ConfigManager', () => {
         code: 'missingProvider',
         filePath: '/tmp/neko/config.json',
         message:
-          'Agent configuration has no enabled providers: /tmp/neko/config.json. Add at least one enabled provider with an API key, then open a new Agent session or tab.',
+          'Agent configuration has no enabled providers: /tmp/neko/config.json. Add at least one enabled provider with its required endpoint and credentials, then open a new Agent session or tab.',
       });
       expect(manager.getAssistantSettingsData()).toEqual(
         expect.objectContaining({
@@ -447,6 +479,51 @@ describe('ConfigManager', () => {
       expect(() => manager.assertConfigAvailable()).toThrow(
         'Agent configuration has no enabled providers',
       );
+    });
+
+    it('allows account gateway catalog to satisfy absent explicit AI configuration', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'missing',
+          filePath: '/tmp/neko/config.json',
+        }),
+      });
+
+      const state = manager.getAssistantConfigState({
+        accountCatalog: createAccountCatalog(),
+      });
+
+      expect(state.configDiagnostic).toBeUndefined();
+      expect(state.configuredProviders).toEqual([
+        expect.objectContaining({
+          id: 'neko-account-gateway',
+          requiresApiKey: false,
+          models: [expect.objectContaining({ id: 'official-chat' })],
+        }),
+      ]);
+      expect(state.modelGroups[0]).toMatchObject({
+        source: 'account-gateway',
+        providerId: 'neko-account-gateway',
+      });
+    });
+
+    it('keeps invalid explicit AI config diagnostic instead of falling back to account gateway', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.json',
+          config: {
+            defaultProvider: 'missing-provider',
+          },
+        }),
+      });
+
+      const state = manager.getAssistantConfigState({
+        accountCatalog: createAccountCatalog(),
+      });
+
+      expect(state.configDiagnostic).toEqual(expect.objectContaining({ code: 'missingProvider' }));
+      expect(state.modelGroups[0]).toMatchObject({ source: 'account-gateway' });
     });
 
     it('reports missing API keys for enabled chat models before model resolution', () => {
@@ -465,11 +542,60 @@ describe('ConfigManager', () => {
         code: 'missingApiKey',
         filePath: '/tmp/neko/config.json',
         message:
-          'Agent configuration has no API key for any enabled chat provider: /tmp/neko/config.json. Add an API key, then open a new Agent session or tab.',
+          'Agent configuration has no configured enabled chat provider: /tmp/neko/config.json. Add the required provider endpoint and credentials, then open a new Agent session or tab.',
       });
       expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
       expect(manager.getAssistantSettingsData().selectedModelId).toBeNull();
-      expect(() => manager.assertConfigAvailable()).toThrow('Agent configuration has no API key');
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Agent configuration has no configured enabled chat provider',
+      );
+    });
+
+    it('does not require API keys for local no-key providers', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const localModel: Model = {
+        id: 'ollama-local-llama3.2',
+        name: 'llama3.2',
+        displayName: 'Llama 3.2',
+        providerId: 'ollama-local',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.json',
+          config: {
+            providers: [localProvider],
+            models: [localModel],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getAssistantDefaultProvider()).toEqual(
+        expect.objectContaining({
+          id: 'ollama-local',
+          defaultModel: 'ollama-local-llama3.2',
+          modelIds: ['ollama-local-llama3.2'],
+        }),
+      );
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: null,
+          selectedModelId: null,
+        }),
+      );
     });
 
     it('clears availability diagnostics after runtime credential projection', async () => {
@@ -493,10 +619,17 @@ describe('ConfigManager', () => {
       ]);
 
       expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getAssistantDefaultProvider()).toEqual(
+        expect.objectContaining({
+          id: 'anthropic',
+          defaultModel: 'anthropic-claude-sonnet-4',
+          modelIds: ['anthropic-claude-sonnet-4'],
+        }),
+      );
       expect(manager.getAssistantSettingsData()).toEqual(
         expect.objectContaining({
-          selectedProviderId: 'anthropic',
-          selectedModelId: 'anthropic-claude-sonnet-4',
+          selectedProviderId: null,
+          selectedModelId: null,
         }),
       );
       expect(() => manager.assertConfigAvailable()).not.toThrow();

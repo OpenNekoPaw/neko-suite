@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../../input/mention-excludes';
 import {
+  AGENT_TURN_PRECONDITION_MESSAGE,
   appendAmbientCanvasSystemPrompt,
   buildAgentAssistantMessageFromStream,
   buildAgentErrorAssistantMessage,
@@ -511,8 +512,7 @@ describe('message runtime helpers', () => {
     expect(persistErrorMessage).toHaveBeenCalledWith('conv-1', {
       id: 'error-1',
       role: 'assistant',
-      content:
-        'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.',
+      content: AGENT_TURN_PRECONDITION_MESSAGE,
       timestamp: 123,
       isError: true,
     });
@@ -899,53 +899,222 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('selects requested configured provider before falling back to default provider', () => {
+  it('selects requested configured provider and model before config selection', () => {
     const providers = new Map([
-      ['openai', { id: 'openai', isConfigured: true }],
-      ['anthropic', { id: 'anthropic', isConfigured: true }],
+      ['openai', { id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] }],
+      ['anthropic', { id: 'anthropic', isConfigured: true, modelIds: ['claude-3'] }],
     ]);
 
     expect(
       selectAgentTurnProvider({
         requestedProviderId: 'openai',
         selectedProviderId: 'anthropic',
+        requestedModelId: 'gpt-4.1',
+        selectedModelId: 'claude-3',
         getProvider: (id) => providers.get(id),
-        getDefaultProvider: () => providers.get('anthropic'),
       }),
     ).toEqual({
       ok: true,
       effectiveProviderId: 'openai',
-      provider: { id: 'openai', isConfigured: true },
+      effectiveModelId: 'gpt-4.1',
+      provider: { id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] },
     });
   });
 
-  it('falls back to default provider when requested provider is unavailable', () => {
-    const defaultProvider = { id: 'anthropic', isConfigured: true };
+  it('rejects unavailable requested provider instead of falling back to another provider', () => {
+    const getProvider = vi.fn(() => undefined);
 
     expect(
       selectAgentTurnProvider({
         requestedProviderId: 'missing',
-        getProvider: () => undefined,
-        getDefaultProvider: () => defaultProvider,
+        requestedModelId: 'gpt-4.1',
+        selectedProviderId: 'anthropic',
+        selectedModelId: 'claude-3',
+        getProvider,
       }),
     ).toEqual({
-      ok: true,
+      ok: false,
       effectiveProviderId: 'missing',
-      provider: defaultProvider,
+      effectiveModelId: 'gpt-4.1',
+      reason: 'chat-provider-not-configured',
     });
+    expect(getProvider).toHaveBeenCalledWith('missing');
+    expect(getProvider).not.toHaveBeenCalledWith('anthropic');
   });
 
-  it('returns a no-provider result when no configured provider is available', () => {
+  it('returns a provider configuration result when selected provider is unavailable', () => {
     expect(
       selectAgentTurnProvider({
         selectedProviderId: 'openai',
+        selectedModelId: 'gpt-4.1',
         getProvider: () => ({ id: 'openai', isConfigured: false }),
-        getDefaultProvider: () => undefined,
       }),
     ).toEqual({
       ok: false,
       effectiveProviderId: 'openai',
-      reason: 'no-provider-configured',
+      effectiveModelId: 'gpt-4.1',
+      reason: 'chat-provider-not-configured',
+    });
+  });
+
+  it('rejects missing chat provider and model selections', () => {
+    expect(
+      selectAgentTurnProvider({
+        getProvider: () => {
+          throw new Error('provider lookup should not be used');
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: 'missing-chat-provider',
+    });
+
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'openai',
+        getProvider: () => {
+          throw new Error('provider lookup should not be used');
+        },
+      }),
+    ).toEqual({
+      ok: false,
+      effectiveProviderId: 'openai',
+      reason: 'missing-chat-model',
+    });
+  });
+
+  it('rejects model IDs that are not enabled for the selected provider', () => {
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'openai',
+        selectedModelId: 'missing-model',
+        getProvider: () => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] }),
+      }),
+    ).toEqual({
+      ok: false,
+      effectiveProviderId: 'openai',
+      effectiveModelId: 'missing-model',
+      reason: 'chat-model-not-found',
+    });
+  });
+
+  it('allows text-only chat models for plain text turns without requiring vision', () => {
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'local',
+        selectedModelId: 'llama3',
+        getProvider: () => ({
+          id: 'local',
+          isConfigured: true,
+          modelIds: ['llama3'],
+          modelCapabilities: { llama3: ['chat'] },
+        }),
+      }),
+    ).toEqual({
+      ok: true,
+      effectiveProviderId: 'local',
+      effectiveModelId: 'llama3',
+      provider: {
+        id: 'local',
+        isConfigured: true,
+        modelIds: ['llama3'],
+        modelCapabilities: { llama3: ['chat'] },
+      },
+    });
+  });
+
+  it('rejects account gateway selections when catalog or entitlement is unavailable', () => {
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'official-chat',
+        getProvider: () => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: false,
+          modelIds: ['official-chat'],
+        }),
+      }),
+    ).toEqual({
+      ok: false,
+      effectiveProviderId: 'neko-account-gateway',
+      effectiveModelId: 'official-chat',
+      reason: 'account-catalog-missing',
+    });
+
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'official-denied',
+        getProvider: () => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: true,
+          modelIds: ['official-denied'],
+          entitledModelIds: ['official-chat'],
+        }),
+      }),
+    ).toEqual({
+      ok: false,
+      effectiveProviderId: 'neko-account-gateway',
+      effectiveModelId: 'official-denied',
+      reason: 'account-model-not-entitled',
+    });
+  });
+
+  it('validates required model capabilities without provider fallback', () => {
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'text-only',
+        requiredCapabilities: ['vision'],
+        getProvider: () => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: true,
+          modelIds: ['text-only'],
+          entitledModelIds: ['text-only'],
+          modelCapabilities: { 'text-only': ['chat'] },
+        }),
+      }),
+    ).toEqual({
+      ok: false,
+      effectiveProviderId: 'neko-account-gateway',
+      effectiveModelId: 'text-only',
+      reason: 'missing-required-capability',
+    });
+
+    expect(
+      selectAgentTurnProvider({
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'vision-model',
+        requiredCapabilities: ['vision'],
+        getProvider: () => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: true,
+          modelIds: ['vision-model'],
+          entitledModelIds: ['vision-model'],
+          modelCapabilities: { 'vision-model': ['chat', 'vision'] },
+        }),
+      }),
+    ).toEqual({
+      ok: true,
+      effectiveProviderId: 'neko-account-gateway',
+      effectiveModelId: 'vision-model',
+      provider: {
+        id: 'neko-account-gateway',
+        isConfigured: true,
+        source: 'account-gateway',
+        accountCatalogAvailable: true,
+        modelIds: ['vision-model'],
+        entitledModelIds: ['vision-model'],
+        modelCapabilities: { 'vision-model': ['chat', 'vision'] },
+      },
     });
   });
 

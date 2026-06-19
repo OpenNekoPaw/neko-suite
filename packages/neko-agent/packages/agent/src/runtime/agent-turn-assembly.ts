@@ -32,6 +32,7 @@ import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeli
 
 export interface AgentTurnSettingsSource {
   readonly selectedProviderId?: string | null;
+  readonly selectedModelId?: string | null;
   readonly customSystemPrompt?: string | null;
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly autoExecuteTools?: boolean;
@@ -42,7 +43,6 @@ export interface AgentTurnSettingsSource {
 
 export interface AgentTurnProviderHost<TProvider extends AgentProviderCandidate> {
   getProvider(providerId: string): TProvider | undefined;
-  getDefaultProvider(): TProvider | undefined;
 }
 
 export interface AgentTurnConversationHost<THistoryMessage> {
@@ -200,9 +200,10 @@ export function buildAgentTurnForWebviewRuntimeInput<
     },
     providerSource: {
       requestedProviderId: input.chatModel?.providerId,
+      requestedModelId: input.chatModel?.modelId,
       selectedProviderId: input.settings.selectedProviderId,
+      selectedModelId: input.settings.selectedModelId,
       getProvider: (providerId) => input.providers.getProvider(providerId),
-      getDefaultProvider: () => input.providers.getDefaultProvider(),
     },
     agentManager: input.host.agentManager,
     conversations: {

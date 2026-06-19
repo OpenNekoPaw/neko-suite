@@ -113,4 +113,14 @@ export {
   type MCPServerConfigWriter,
 } from './mcp-server-config';
 export { RETRY_TIMEOUT_PRESETS } from './retry-timeout-presets';
-export { DEFAULT_USER_CONFIG } from './default-config';
+export {
+  CUSTOM_NEWAPI_PROVIDER_ID,
+  DEFAULT_USER_CONFIG,
+  NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
+  NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+  NEKO_GATEWAY_PROVIDER_ID,
+  OLLAMA_LOCAL_PROVIDER_ID,
+} from './default-config';

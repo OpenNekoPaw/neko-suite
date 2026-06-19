@@ -1,13 +1,16 @@
 import {
   DEFAULT_CONFIG,
   DEFAULT_EXTENSION_CONFIG,
+  type AccountAiCatalogDiagnostic,
   type ChatModelOption,
   type MediaModelType,
+  type ModelSourceGroup,
   type UnifiedConfig,
 } from '@neko/shared';
 import type { Model, Provider } from '../types/provider';
 import type { MergedConfig } from './config-manager';
 import type { AssistantConfigDiagnostic } from './config-diagnostic';
+import { isProviderConfigured } from './provider-configuration';
 
 export type AssistantExecutionMode = 'plan' | 'ask' | 'auto';
 
@@ -21,6 +24,10 @@ export interface AssistantProviderView {
   id: string;
   name: string;
   type: string;
+  connectionKind?: string;
+  protocolProfile?: string;
+  supportLevel?: string;
+  requiresApiKey?: boolean;
   models: AssistantProviderModelView[];
   enabled: boolean;
 }
@@ -34,6 +41,11 @@ export interface AssistantProviderSelection {
   id: string;
   isConfigured: boolean;
   defaultModel: string;
+  modelIds: string[];
+  source?: 'explicit-config' | 'account-gateway';
+  accountCatalogAvailable?: boolean;
+  entitledModelIds?: readonly string[];
+  modelCapabilities?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface AssistantSettingsSnapshot {
@@ -63,6 +75,8 @@ export interface AssistantSettingsData extends AssistantSettingsSnapshot {
 export interface AssistantConfigState {
   providers: AssistantProviderView[];
   configuredProviders: AssistantConfiguredProviderView[];
+  modelGroups: ModelSourceGroup[];
+  accountDiagnostics?: AccountAiCatalogDiagnostic[];
   configDiagnostic?: AssistantConfigDiagnostic;
 }
 
@@ -134,6 +148,7 @@ export function buildAssistantConfigState(
   return {
     providers: buildAssistantProviderViews(config),
     configuredProviders: buildAssistantConfiguredProviderViews(config),
+    modelGroups: [],
   };
 }
 
@@ -349,6 +364,10 @@ function toProviderView(provider: Provider, models: readonly Model[]): Assistant
     id: provider.id,
     name: provider.displayName || provider.name || provider.id,
     type: provider.type,
+    ...(provider.connectionKind ? { connectionKind: provider.connectionKind } : {}),
+    ...(provider.protocolProfile ? { protocolProfile: provider.protocolProfile } : {}),
+    ...(provider.supportLevel ? { supportLevel: provider.supportLevel } : {}),
+    ...(provider.requiresApiKey !== undefined ? { requiresApiKey: provider.requiresApiKey } : {}),
     models: models
       .filter((model) => model.providerId === provider.id)
       .map((model) => ({
@@ -364,17 +383,16 @@ function toProviderSelection(
   provider: Provider,
   models: readonly Model[],
 ): AssistantProviderSelection {
-  const defaultModel =
-    models.find((model) => model.providerId === provider.id && model.enabled !== false)?.id || '';
+  const modelIds = models
+    .filter((model) => model.providerId === provider.id && model.enabled !== false)
+    .map((model) => model.id);
+  const defaultModel = modelIds[0] || '';
   return {
     id: provider.id,
-    isConfigured: isProviderConfigured(provider),
+    isConfigured: provider.enabled !== false && isProviderConfigured(provider),
     defaultModel,
+    modelIds,
   };
-}
-
-function isProviderConfigured(provider: Provider): boolean {
-  return typeof provider.apiKey === 'string' && provider.apiKey.length > 0;
 }
 
 function buildModelIdAliases(models: Iterable<Model>): Map<string, string> {

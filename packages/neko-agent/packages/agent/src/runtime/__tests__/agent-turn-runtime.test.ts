@@ -20,7 +20,15 @@ type TestContext = {
   imageAttachments?: readonly unknown[];
 };
 type TestHistoryMessage = { readonly role: string; readonly content: string };
-type TestProvider = { readonly id: string; readonly isConfigured: boolean };
+type TestProvider = {
+  readonly id: string;
+  readonly isConfigured: boolean;
+  readonly modelIds?: readonly string[];
+  readonly source?: 'explicit-config' | 'account-gateway';
+  readonly accountCatalogAvailable?: boolean;
+  readonly entitledModelIds?: readonly string[];
+  readonly modelCapabilities?: Readonly<Record<string, readonly string[]>>;
+};
 
 function createAgentRunner(
   overrides: {
@@ -78,8 +86,8 @@ function createBaseInput(
     },
     providerSource: {
       selectedProviderId: 'openai',
-      getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true })),
-      getDefaultProvider: vi.fn(() => ({ id: 'default', isConfigured: true })),
+      selectedModelId: 'gpt-4.1',
+      getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
     },
     agentManager: {
       getOrCreate: vi.fn(() => agentRunner),
@@ -117,22 +125,124 @@ describe('executeAgentTurn', () => {
     expect(getAgentTurnPreconditionMessage('no-provider-configured')).toBe(
       AGENT_TURN_PRECONDITION_MESSAGE,
     );
+    expect(getAgentTurnPreconditionMessage('missing-chat-model')).toContain(
+      'No chat model is selected',
+    );
   });
 
-  it('returns unmet precondition when no provider is configured', async () => {
+  it('returns unmet precondition when selected provider is not configured', async () => {
     const { input } = createBaseInput({
       providerSource: {
         selectedProviderId: 'missing',
+        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => undefined),
-        getDefaultProvider: vi.fn(() => undefined),
       },
     });
 
     await expect(executeAgentTurn(input)).resolves.toEqual({
       status: 'precondition-unmet',
-      reason: 'no-provider-configured',
+      reason: 'chat-provider-not-configured',
     });
     expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns unmet precondition when no model is selected', async () => {
+    const { input } = createBaseInput({
+      providerSource: {
+        selectedProviderId: 'openai',
+        getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'precondition-unmet',
+      reason: 'missing-chat-model',
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns unmet precondition when selected model does not belong to provider', async () => {
+    const { input } = createBaseInput({
+      providerSource: {
+        selectedProviderId: 'openai',
+        selectedModelId: 'claude-3',
+        getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'precondition-unmet',
+      reason: 'chat-model-not-found',
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns unmet precondition before runner configuration when selected model lacks vision', async () => {
+    const { input } = createBaseInput({
+      imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
+      providerSource: {
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'text-only',
+        getProvider: vi.fn(() => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: true,
+          modelIds: ['text-only'],
+          entitledModelIds: ['text-only'],
+          modelCapabilities: { 'text-only': ['chat'] },
+        })),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'precondition-unmet',
+      reason: 'missing-required-capability',
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns unmet precondition before runner configuration for unauthorized account models', async () => {
+    const { input } = createBaseInput({
+      providerSource: {
+        selectedProviderId: 'neko-account-gateway',
+        selectedModelId: 'official-denied',
+        getProvider: vi.fn(() => ({
+          id: 'neko-account-gateway',
+          isConfigured: true,
+          source: 'account-gateway',
+          accountCatalogAvailable: true,
+          modelIds: ['official-denied'],
+          entitledModelIds: ['official-chat'],
+          modelCapabilities: { 'official-denied': ['chat'] },
+        })),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'precondition-unmet',
+      reason: 'account-model-not-entitled',
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+  });
+
+  it('configures runner with the explicitly selected config model when the request omits chatModel', async () => {
+    const { input, agentRunner } = createBaseInput({
+      chatModel: undefined,
+      providerSource: {
+        selectedProviderId: 'openai',
+        selectedModelId: 'gpt-4.1',
+        getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: 'gpt-4.1',
+      }),
+    );
   });
 
   it('hydrates previous conversation history for a fresh agent runner', async () => {
@@ -398,6 +508,16 @@ describe('executeAgentTurn', () => {
     const imageAttachments = [{ type: 'base64' as const, media_type: 'image/png', data: 'abc' }];
     const { input, agentRunner } = createBaseInput({
       imageAttachments,
+      providerSource: {
+        selectedProviderId: 'openai',
+        selectedModelId: 'gpt-4.1',
+        getProvider: vi.fn(() => ({
+          id: 'openai',
+          isConfigured: true,
+          modelIds: ['gpt-4.1'],
+          modelCapabilities: { 'gpt-4.1': ['chat', 'vision'] },
+        })),
+      },
       mediaModels: {
         video: { providerId: 'runway', modelId: 'gen-3', category: 'video' },
       },
@@ -540,8 +660,8 @@ describe('runAgentTurnForWebviewRuntime', () => {
     const { input } = createBaseInput({
       providerSource: {
         selectedProviderId: 'missing',
+        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => undefined),
-        getDefaultProvider: vi.fn(() => undefined),
       },
     });
     const postMessage = vi.fn();
@@ -553,19 +673,19 @@ describe('runAgentTurnForWebviewRuntime', () => {
         postMessage,
         onErrorMessage,
       }),
-    ).resolves.toEqual({ status: 'precondition-unmet', reason: 'no-provider-configured' });
+    ).resolves.toEqual({ status: 'precondition-unmet', reason: 'chat-provider-not-configured' });
 
     expect(onErrorMessage).toHaveBeenCalledWith({
       id: 'assistant-1',
       role: 'assistant',
-      content: AGENT_TURN_FALLBACK_MESSAGE,
+      content: getAgentTurnPreconditionMessage('chat-provider-not-configured'),
       timestamp: 123,
       isError: true,
     });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',
-      message: AGENT_TURN_FALLBACK_MESSAGE,
+      message: getAgentTurnPreconditionMessage('chat-provider-not-configured'),
     });
   });
 
@@ -713,6 +833,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
       settings: {
         selectedProviderId: 'anthropic',
+        selectedModelId: 'gpt-4.1',
         customSystemPrompt: 'Custom prompt',
         executionMode: 'ask',
         autoExecuteTools: false,
@@ -721,8 +842,11 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
         thinkingBudget: 2048,
       },
       providers: {
-        getProvider: vi.fn((providerId: string) => ({ id: providerId, isConfigured: true })),
-        getDefaultProvider: vi.fn(() => ({ id: 'default', isConfigured: true })),
+        getProvider: vi.fn((providerId: string) => ({
+          id: providerId,
+          isConfigured: true,
+          modelIds: ['gpt-4.1'],
+        })),
       },
       runtime: {
         conversations: {
@@ -762,6 +886,8 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
     });
     expect(runtimeInput.providerSource.selectedProviderId).toBe('anthropic');
     expect(runtimeInput.providerSource.requestedProviderId).toBe('openai');
+    expect(runtimeInput.providerSource.selectedModelId).toBe('gpt-4.1');
+    expect(runtimeInput.providerSource.requestedModelId).toBe('gpt-4.1');
     expect(runtimeInput.getWorkspaceRoot?.()).toBe('/repo');
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.taskManager).toBe(taskManager);

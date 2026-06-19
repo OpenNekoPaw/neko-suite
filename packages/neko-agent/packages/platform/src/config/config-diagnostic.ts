@@ -8,7 +8,10 @@ export type AssistantConfigAvailabilityCode =
   | 'missingConfig'
   | 'missingProvider'
   | 'missingModel'
-  | 'missingApiKey';
+  | 'missingApiKey'
+  | 'missingAccountCatalog'
+  | 'accountCatalogUnavailable'
+  | 'accountModelNotEntitled';
 
 export type AssistantConfigDiagnosticCode = ConfigReadErrorCode | AssistantConfigAvailabilityCode;
 
@@ -64,13 +67,19 @@ export function buildSafeConfigDiagnosticMessage(
     case 'readError':
       return `Unable to read configuration file: ${filePath}. Check file permissions, then open a new Agent session or tab.`;
     case 'missingConfig':
-      return `Agent configuration file is missing: ${filePath}. Create the config file with at least one enabled provider, chat model, and API key, then open a new Agent session or tab.`;
+      return `Agent configuration file is missing: ${filePath}. Create the config file with at least one enabled provider, chat model, and required provider credentials, then open a new Agent session or tab.`;
     case 'missingProvider':
-      return `Agent configuration has no enabled providers: ${filePath}. Add at least one enabled provider with an API key, then open a new Agent session or tab.`;
+      return `Agent configuration has no enabled providers: ${filePath}. Add at least one enabled provider with its required endpoint and credentials, then open a new Agent session or tab.`;
     case 'missingModel':
       return `Agent configuration has no enabled chat models: ${filePath}. Add at least one enabled chat model, then open a new Agent session or tab.`;
     case 'missingApiKey':
-      return `Agent configuration has no API key for any enabled chat provider: ${filePath}. Add an API key, then open a new Agent session or tab.`;
+      return `Agent configuration has no configured enabled chat provider: ${filePath}. Add the required provider endpoint and credentials, then open a new Agent session or tab.`;
+    case 'missingAccountCatalog':
+      return 'Neko account AI catalog is unavailable. Log in or configure a local AI provider, then open a new Agent session or tab.';
+    case 'accountCatalogUnavailable':
+      return 'Neko account AI catalog is temporarily unavailable. Refresh Agent or configure a local AI provider.';
+    case 'accountModelNotEntitled':
+      return 'Neko account does not have entitlement for the selected AI model. Choose another entitled model or update the account plan.';
   }
 }
 

@@ -54,6 +54,7 @@ import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
 import { AgentTurnBridge } from './message/agentTurnBridge';
+import type { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
@@ -67,6 +68,7 @@ export interface AgentMessageSkillAutoActivation {
 
 export interface AgentMessageTurnHandlerOptions {
   readonly skillAutoActivation?: AgentMessageSkillAutoActivation;
+  readonly accountAiCatalog?: AccountAiCatalogCache;
 }
 
 export class AgentMessageTurnHandler {
@@ -154,6 +156,7 @@ export class AgentMessageTurnHandler {
       taskManager: this._taskManager,
       getActiveSkillState: this._getActiveSkillState,
       engineClientProvider: this._engineClientProvider,
+      accountAiCatalog: this._options.accountAiCatalog,
       streamProcessor: this._streamProcessor,
       onPhaseChange: ({ conversationId, phase, toolName, timestamp }) =>
         this._updateAgentState(conversationId, phase, toolName, timestamp),

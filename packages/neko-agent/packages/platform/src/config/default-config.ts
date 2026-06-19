@@ -6,228 +6,140 @@
  */
 
 import type { UnifiedConfig } from '@neko/shared';
-import type { ProviderConfig, ModelConfig } from '@neko/shared';
+import type { ModelConfig, ProviderConfig } from '@neko/shared';
+
+export const NEKO_GATEWAY_PROVIDER_ID = 'neko-gateway';
+export const CUSTOM_NEWAPI_PROVIDER_ID = 'custom-newapi';
+export const OLLAMA_LOCAL_PROVIDER_ID = 'ollama-local';
+
+export const NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID = 'neko-gateway-default-chat';
+export const OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID = 'ollama-local-default-chat';
+export const NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID = 'neko-gateway-gpt-image-2';
+export const NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID = 'neko-gateway-seedance-lite';
+export const NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID = 'neko-gateway-tts';
+export const NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID = 'neko-gateway-suno';
+
+const DEFAULT_NEWAPI_BASE_URL = '';
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/api';
 
 // =============================================================================
-// Default Providers (4)
+// Default Providers
 // =============================================================================
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
-    id: 'anthropic',
-    name: 'anthropic',
-    displayName: 'Anthropic',
-    type: 'anthropic',
-    apiUrl: 'https://api.anthropic.com',
+    id: NEKO_GATEWAY_PROVIDER_ID,
+    name: 'neko-gateway',
+    displayName: 'Neko Gateway',
+    type: 'newapi',
+    apiUrl: DEFAULT_NEWAPI_BASE_URL,
     enabled: true,
+    builtin: true,
+    connectionKind: 'gateway',
+    protocolProfile: 'newapi-compatible',
+    supportLevel: 'verified',
+    requiresApiKey: true,
+    useBearerAuth: true,
+    supportsBeta: false,
+    protocolVariant: {
+      basePath: '/v1',
+      authType: 'bearer',
+      streamFormat: 'sse',
+    },
   },
   {
-    id: 'openai',
-    name: 'openai',
-    displayName: 'OpenAI',
-    type: 'openai',
-    apiUrl: 'https://api.openai.com/v1',
-    enabled: true,
+    id: CUSTOM_NEWAPI_PROVIDER_ID,
+    name: 'custom-newapi',
+    displayName: 'Custom NewAPI Endpoint',
+    type: 'newapi',
+    apiUrl: DEFAULT_NEWAPI_BASE_URL,
+    enabled: false,
+    builtin: true,
+    connectionKind: 'custom-gateway',
+    protocolProfile: 'newapi-compatible',
+    supportLevel: 'custom',
+    requiresApiKey: true,
+    useBearerAuth: true,
+    supportsBeta: false,
+    protocolVariant: {
+      basePath: '/v1',
+      authType: 'bearer',
+      streamFormat: 'sse',
+    },
   },
   {
-    id: 'google',
-    name: 'google',
-    displayName: 'Google',
-    type: 'google',
-    apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    id: OLLAMA_LOCAL_PROVIDER_ID,
+    name: 'ollama',
+    displayName: 'Ollama Local',
+    type: 'ollama',
+    apiUrl: DEFAULT_OLLAMA_BASE_URL,
     enabled: true,
-  },
-  {
-    id: 'deepseek',
-    name: 'deepseek',
-    displayName: 'DeepSeek',
-    type: 'openai',
-    apiUrl: 'https://api.deepseek.com',
-    enabled: true,
+    builtin: true,
+    connectionKind: 'local',
+    protocolProfile: 'ollama',
+    supportLevel: 'compatible',
+    requiresApiKey: false,
   },
 ];
 
 // =============================================================================
-// Default Models (10 LLM + 4 Media)
+// Default Models
 // =============================================================================
 
 const DEFAULT_MODELS: ModelConfig[] = [
-  // Anthropic
   {
-    id: 'anthropic-claude-sonnet-4',
-    name: 'claude-sonnet-4-20250514',
-    displayName: 'Claude Sonnet 4',
-    providerId: 'anthropic',
+    id: NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
+    name: 'auto',
+    displayName: 'Gateway Default Chat',
+    providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code'],
-    contextWindow: 200000,
-    maxOutputTokens: 16384,
-    inputCostPer1k: 0.003,
-    outputCostPer1k: 0.015,
+    capabilities: ['chat', 'function_calling', 'streaming', 'json_mode', 'code'],
     enabled: true,
   },
   {
-    id: 'anthropic-claude-opus-4',
-    name: 'claude-opus-4-20250514',
-    displayName: 'Claude Opus 4',
-    providerId: 'anthropic',
+    id: OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID,
+    name: 'llama3.2',
+    displayName: 'Ollama Local Chat',
+    providerId: OLLAMA_LOCAL_PROVIDER_ID,
     type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code'],
-    contextWindow: 200000,
-    maxOutputTokens: 32768,
-    inputCostPer1k: 0.015,
-    outputCostPer1k: 0.075,
+    capabilities: ['chat', 'streaming', 'code'],
     enabled: true,
   },
   {
-    id: 'anthropic-claude-3-5-haiku',
-    name: 'claude-3-5-haiku-20241022',
-    displayName: 'Claude 3.5 Haiku',
-    providerId: 'anthropic',
-    type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code'],
-    contextWindow: 200000,
-    maxOutputTokens: 8192,
-    inputCostPer1k: 0.0008,
-    outputCostPer1k: 0.004,
-    enabled: true,
-  },
-  // OpenAI
-  {
-    id: 'openai-gpt-4o',
-    name: 'gpt-4o',
-    displayName: 'GPT-4o',
-    providerId: 'openai',
-    type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code', 'json_mode'],
-    contextWindow: 128000,
-    maxOutputTokens: 16384,
-    inputCostPer1k: 0.0025,
-    outputCostPer1k: 0.01,
-    enabled: true,
-  },
-  {
-    id: 'openai-gpt-4o-mini',
-    name: 'gpt-4o-mini',
-    displayName: 'GPT-4o Mini',
-    providerId: 'openai',
-    type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code', 'json_mode'],
-    contextWindow: 128000,
-    maxOutputTokens: 16384,
-    inputCostPer1k: 0.00015,
-    outputCostPer1k: 0.0006,
-    enabled: true,
-  },
-  {
-    id: 'openai-o3-mini',
-    name: 'o3-mini',
-    displayName: 'o3-mini',
-    providerId: 'openai',
-    type: 'llm',
-    capabilities: ['chat', 'function_calling', 'streaming', 'code', 'reasoning'],
-    contextWindow: 200000,
-    maxOutputTokens: 100000,
-    inputCostPer1k: 0.0011,
-    outputCostPer1k: 0.0044,
-    enabled: true,
-  },
-  // Google
-  {
-    id: 'google-gemini-2-5-pro',
-    name: 'gemini-2.5-pro-preview-06-05',
-    displayName: 'Gemini 2.5 Pro',
-    providerId: 'google',
-    type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code'],
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    inputCostPer1k: 0.00125,
-    outputCostPer1k: 0.01,
-    enabled: true,
-  },
-  {
-    id: 'google-gemini-2-5-flash',
-    name: 'gemini-2.5-flash-preview-05-20',
-    displayName: 'Gemini 2.5 Flash',
-    providerId: 'google',
-    type: 'llm',
-    capabilities: ['chat', 'vision', 'function_calling', 'streaming', 'code'],
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    inputCostPer1k: 0.00015,
-    outputCostPer1k: 0.0006,
-    enabled: true,
-  },
-  // DeepSeek
-  {
-    id: 'deepseek-v3',
-    name: 'deepseek-chat',
-    displayName: 'DeepSeek V3',
-    providerId: 'deepseek',
-    type: 'llm',
-    capabilities: ['chat', 'function_calling', 'streaming', 'code'],
-    contextWindow: 64000,
-    maxOutputTokens: 8192,
-    inputCostPer1k: 0.00027,
-    outputCostPer1k: 0.0011,
-    enabled: true,
-  },
-  {
-    id: 'deepseek-r1',
-    name: 'deepseek-reasoner',
-    displayName: 'DeepSeek R1',
-    providerId: 'deepseek',
-    type: 'llm',
-    capabilities: ['chat', 'streaming', 'code', 'reasoning'],
-    contextWindow: 64000,
-    maxOutputTokens: 8192,
-    inputCostPer1k: 0.00055,
-    outputCostPer1k: 0.00219,
-    enabled: true,
-  },
-  // =========================================================================
-  // Media Generation Models
-  // =========================================================================
-  // Image
-  {
-    id: 'openai-dall-e-3',
-    name: 'dall-e-3',
-    displayName: 'DALL-E 3',
-    providerId: 'openai',
+    id: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+    name: 'gpt-image-2',
+    displayName: 'GPT Image 2',
+    providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'image',
-    capabilities: ['image_generation'],
+    capabilities: ['text_to_image', 'image_to_image', 'image_edit'],
     enabled: true,
   },
-  // Video
   {
-    id: 'openai-sora',
-    name: 'sora',
-    displayName: 'Sora',
-    providerId: 'openai',
+    id: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+    name: 'seedance-lite',
+    displayName: 'Seedance Lite',
+    providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'video',
-    capabilities: ['video_generation'],
+    capabilities: ['text_to_video', 'image_to_video'],
     enabled: true,
   },
-  // Audio (TTS)
   {
-    id: 'openai-tts-1',
+    id: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
     name: 'tts-1',
-    displayName: 'TTS-1',
-    providerId: 'openai',
+    displayName: 'Gateway TTS',
+    providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'audio',
-    capabilities: ['tts'],
+    capabilities: ['text_to_audio', 'audio'],
     enabled: true,
   },
-  // Music (placeholder — enable when a provider supports it)
   {
-    id: 'openai-jukebox',
-    name: 'jukebox',
-    displayName: 'Jukebox',
-    providerId: 'openai',
+    id: NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
+    name: 'suno-v4',
+    displayName: 'Suno Music',
+    providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'music',
-    capabilities: ['music_generation'],
-    enabled: false,
+    capabilities: ['text_to_music'],
+    enabled: true,
   },
 ];
 
@@ -236,15 +148,16 @@ const DEFAULT_MODELS: ModelConfig[] = [
 // =============================================================================
 
 /**
- * Default user configuration written on first run.
+ * Default user configuration written by explicit tooling.
  */
 export const DEFAULT_USER_CONFIG: UnifiedConfig = {
-  defaultProvider: 'anthropic',
-  defaultModel: 'claude-sonnet-4-20250514',
+  defaultProvider: OLLAMA_LOCAL_PROVIDER_ID,
+  defaultModel: OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID,
   defaultMediaModels: {
-    image: 'dall-e-3',
-    video: 'sora',
-    audio: 'tts-1',
+    image: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+    video: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+    audio: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
+    music: NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
   },
   maxTokens: 8192,
   temperature: 0.7,
