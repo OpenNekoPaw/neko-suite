@@ -1,8 +1,8 @@
 /**
  * Configuration Manager
  *
- * Providers/models: user config only (~/.neko/config.json).
- * MCP servers: user + workspace merge (.neko/config.json overrides by id).
+ * Providers/models: user config only (~/.neko/config.toml).
+ * MCP servers: user + workspace merge (.neko/config.toml overrides by id).
  */
 
 import type { Provider, Model } from '../types/provider';
@@ -92,7 +92,7 @@ export interface ConfigManagerOptions {
 /**
  * ConfigManager - Unified configuration management
  *
- * - Providers/Models: user config only (~/.neko/config.json)
+ * - Providers/Models: user config only (~/.neko/config.toml)
  * - MCP Servers: user + workspace merge (workspace overrides by id)
  */
 export class ConfigManager {
@@ -432,10 +432,10 @@ export class ConfigManager {
   }
 
   // ==========================================================================
-  // Scalar Config Methods (read/write ~/.neko/config.json scalars)
+  // Scalar Config Methods (read/write ~/.neko/config.toml scalars)
   // ==========================================================================
 
-  /** Read a scalar field from config.json with default fallback */
+  /** Read a scalar field from config.toml with default fallback */
   getScalar<K extends keyof UnifiedConfig>(key: K): NonNullable<UnifiedConfig[K]> | undefined {
     const raw = this.getRawUserConfigSnapshot();
     return (raw?.[key] as NonNullable<UnifiedConfig[K]>) ?? undefined;
@@ -496,14 +496,14 @@ export class ConfigManager {
     return this.getScalar('showToolCalls') ?? DEFAULT_EXTENSION_CONFIG.showToolCalls;
   }
 
-  /** Write a single scalar field to config.json */
+  /** Write a single scalar field to config.toml */
   async setScalar<K extends keyof UnifiedConfig>(key: K, value: UnifiedConfig[K]): Promise<void> {
     this.ensureUserConfigManager();
     await this.userConfigManager!.updateScalar(key, value);
     this.reloadConfig();
   }
 
-  /** Write multiple scalar fields to config.json */
+  /** Write multiple scalar fields to config.toml */
   async setScalars(updates: Partial<UnifiedConfig>): Promise<void> {
     this.ensureUserConfigManager();
     await this.userConfigManager!.updateScalars(updates);
@@ -698,6 +698,14 @@ export class ConfigManager {
     return (
       diagnostic?.code === 'empty' ||
       diagnostic?.code === 'invalidJson' ||
+      diagnostic?.code === 'invalidToml' ||
+      diagnostic?.code === 'unsupportedVersion' ||
+      diagnostic?.code === 'duplicateProviderId' ||
+      diagnostic?.code === 'duplicateModelId' ||
+      diagnostic?.code === 'legacyJsonOnly' ||
+      diagnostic?.code === 'conflictingConfigFiles' ||
+      diagnostic?.code === 'invalidDefaultProvider' ||
+      diagnostic?.code === 'invalidDefaultModel' ||
       diagnostic?.code === 'readError'
     );
   }
@@ -779,6 +787,18 @@ export class ConfigManager {
       return buildAssistantConfigAvailabilityDiagnostic('missingModel', filePath);
     }
 
+    const explicitDefaultProvider = this.getExplicitDefaultProviderScalar();
+    const explicitDefaultModel = this.getExplicitDefaultModelScalar();
+    const defaultSelectionDiagnostic = this.validateExplicitChatDefaults({
+      filePath,
+      explicitDefaultProvider,
+      explicitDefaultModel,
+      enabledChatModels,
+    });
+    if (defaultSelectionDiagnostic) {
+      return defaultSelectionDiagnostic;
+    }
+
     const configuredProviders = new Set(
       enabledProviders
         .filter((provider) => isProviderConfigured(provider))
@@ -790,6 +810,52 @@ export class ConfigManager {
     return hasConfiguredChatModel
       ? undefined
       : buildAssistantConfigAvailabilityDiagnostic('missingApiKey', filePath);
+  }
+
+  private validateExplicitChatDefaults(input: {
+    filePath: string;
+    explicitDefaultProvider?: string;
+    explicitDefaultModel?: string;
+    enabledChatModels: readonly Model[];
+  }): AssistantConfigDiagnostic | undefined {
+    const provider = input.explicitDefaultProvider
+      ? this.providers.get(input.explicitDefaultProvider)
+      : undefined;
+    if (input.explicitDefaultProvider) {
+      if (!provider || provider.enabled === false || !isProviderConfigured(provider)) {
+        return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultProvider', input.filePath);
+      }
+    }
+
+    if (!input.explicitDefaultModel) {
+      return undefined;
+    }
+
+    const model = this.models.get(input.explicitDefaultModel);
+    if (
+      !model ||
+      model.enabled === false ||
+      !model.capabilities?.includes('chat') ||
+      (provider && model.providerId !== provider.id)
+    ) {
+      return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModel', input.filePath);
+    }
+
+    if (!provider) {
+      const modelProvider = this.providers.get(model.providerId);
+      if (
+        !modelProvider ||
+        modelProvider.enabled === false ||
+        !isProviderConfigured(modelProvider)
+      ) {
+        return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultProvider', input.filePath);
+      }
+    }
+
+    const enabledModelIds = new Set(input.enabledChatModels.map((candidate) => candidate.id));
+    return enabledModelIds.has(model.id)
+      ? undefined
+      : buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModel', input.filePath);
   }
 
   private getExplicitDefaultProviderScalar(): string | undefined {

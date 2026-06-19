@@ -335,11 +335,19 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
   if (
     code !== 'empty' &&
     code !== 'invalidJson' &&
+    code !== 'invalidToml' &&
+    code !== 'unsupportedVersion' &&
+    code !== 'duplicateProviderId' &&
+    code !== 'duplicateModelId' &&
+    code !== 'legacyJsonOnly' &&
+    code !== 'conflictingConfigFiles' &&
     code !== 'readError' &&
     code !== 'missingConfig' &&
     code !== 'missingProvider' &&
     code !== 'missingModel' &&
     code !== 'missingApiKey' &&
+    code !== 'invalidDefaultProvider' &&
+    code !== 'invalidDefaultModel' &&
     code !== 'missingAccountCatalog' &&
     code !== 'accountCatalogUnavailable' &&
     code !== 'accountModelNotEntitled'

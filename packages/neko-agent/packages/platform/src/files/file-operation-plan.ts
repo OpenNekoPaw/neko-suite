@@ -163,7 +163,7 @@ function hasFileOperationError(
 }
 
 export function buildConfigFilePath(homeDir: string): string {
-  return path.join(homeDir, '.neko', 'config.json');
+  return path.join(homeDir, '.neko', 'config.toml');
 }
 
 function resolveNekoBasePath(input: {

@@ -23,10 +23,15 @@ import {
   getWorkspaceConfigDir,
   getWorkspaceConfigPath,
   getConfigLocations,
-  readUserConfig,
-  readWorkspaceConfig,
+  getLegacyUserConfigPath,
+  readUserConfigResult,
+  readWorkspaceConfigResult,
   writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
+import {
+  migrateLegacyJsonConfigToToml,
+  type LegacyConfigMigrationResult,
+} from '@neko/shared/config/config-migration';
 import { getEnvKeyMap } from '@neko/shared';
 
 export {
@@ -114,8 +119,12 @@ export function loadConfig(
     const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
 
     // Read scalar fields from raw UnifiedConfig (not UserConfig which lacks them)
-    const rawUser = readUserConfig() ?? {};
-    const rawWorkspace = readWorkspaceConfig(workDir) ?? {};
+    const rawUserResult = readUserConfigResult();
+    const rawWorkspaceResult = readWorkspaceConfigResult(workDir);
+    assertCliConfigReadable(rawUserResult);
+    assertCliConfigReadable(rawWorkspaceResult);
+    const rawUser = rawUserResult.status === 'ok' ? rawUserResult.config : {};
+    const rawWorkspace = rawWorkspaceResult.status === 'ok' ? rawWorkspaceResult.config : {};
 
     // Model: override > defaultModel scalar > first enabled model for provider > default
     const model =
@@ -301,9 +310,23 @@ export function listConfiguredProviders(workDir?: string): string[] {
  * Update defaultModel in user config and persist to disk.
  */
 export function updateDefaultModel(modelId: string): void {
-  const raw = readUserConfig() ?? {};
+  const result = readUserConfigResult();
+  assertCliConfigReadable(result);
+  const raw = result.status === 'ok' ? result.config : {};
   raw.defaultModel = modelId;
   writeUserConfig(raw);
+}
+
+export function migrateUserConfigJsonToToml(): LegacyConfigMigrationResult {
+  return migrateLegacyJsonConfigToToml({
+    legacyJsonPath: getLegacyUserConfigPath(),
+    tomlPath: getUserConfigPath(),
+  });
+}
+
+function assertCliConfigReadable(result: ReturnType<typeof readUserConfigResult>): void {
+  if (result.status === 'ok' || result.status === 'missing') return;
+  throw new Error(result.diagnostic.message);
 }
 
 // =============================================================================
@@ -320,7 +343,7 @@ export function validateConfig(config: CLIConfig): { valid: boolean; errors: str
     errors.push(
       `API key not found for provider "${config.provider}". ` +
         `Set the appropriate environment variable (e.g. ANTHROPIC_API_KEY), ` +
-        `use --api-key option, or configure in ~/.neko/config.json`,
+        `use --api-key option, or configure in ~/.neko/config.toml`,
     );
   }
 

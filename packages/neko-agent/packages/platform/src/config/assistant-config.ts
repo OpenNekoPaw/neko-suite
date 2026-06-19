@@ -68,6 +68,7 @@ export interface AssistantSettingsData extends AssistantSettingsSnapshot {
   providers: AssistantProviderView[];
   configuredProviders: AssistantConfiguredProviderView[];
   chatModelOptions: ChatModelOption[];
+  modelGroups: ModelSourceGroup[];
   defaultMediaModels: Partial<Record<MediaModelType, string>>;
   configDiagnostic?: AssistantConfigDiagnostic;
 }

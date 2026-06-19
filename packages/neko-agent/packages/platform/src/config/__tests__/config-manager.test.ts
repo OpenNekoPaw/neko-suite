@@ -404,33 +404,33 @@ describe('ConfigManager', () => {
     it('surfaces invalid config diagnostics and does not fall back to default providers', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
-          status: 'invalidJson',
-          filePath: '/tmp/neko/config.json',
+          status: 'invalidToml',
+          filePath: '/tmp/neko/config.toml',
           diagnostic: {
-            code: 'invalidJson',
-            filePath: '/tmp/neko/config.json',
-            message: 'invalid json detail',
-            detail: 'Unexpected token',
+            code: 'invalidToml',
+            filePath: '/tmp/neko/config.toml',
+            message: 'invalid toml detail',
+            detail: 'Invalid TOML',
           },
         }),
       });
 
       expect(manager.getConfigDiagnostic()).toEqual({
-        code: 'invalidJson',
-        filePath: '/tmp/neko/config.json',
+        code: 'invalidToml',
+        filePath: '/tmp/neko/config.toml',
         message:
-          'Configuration file contains invalid JSON: /tmp/neko/config.json. Fix the file, then open a new Agent session or tab.',
+          'Configuration file contains invalid TOML: /tmp/neko/config.toml. Fix the file, then open a new Agent session or tab.',
       });
       expect(manager.getConfig().providers.size).toBe(0);
       expect(manager.getAssistantSettingsData()).toEqual(
         expect.objectContaining({
           selectedProviderId: null,
           selectedModelId: null,
-          configDiagnostic: expect.objectContaining({ code: 'invalidJson' }),
+          configDiagnostic: expect.objectContaining({ code: 'invalidToml' }),
         }),
       );
       expect(() => manager.assertConfigAvailable()).toThrow(
-        'Configuration file contains invalid JSON',
+        'Configuration file contains invalid TOML',
       );
     });
 
@@ -438,15 +438,15 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'missing',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
         }),
       });
 
       expect(manager.getConfigDiagnostic()).toEqual({
         code: 'missingConfig',
-        filePath: '/tmp/neko/config.json',
+        filePath: '/tmp/neko/config.toml',
         message:
-          'Agent configuration file is missing: /tmp/neko/config.json. Create the config file with at least one enabled provider, chat model, and required provider credentials, then open a new Agent session or tab.',
+          'Agent configuration file is missing: /tmp/neko/config.toml. Create the config file with at least one enabled provider, chat model, and required provider credentials, then open a new Agent session or tab.',
       });
       expect(manager.getConfig().providers.size).toBe(0);
       expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
@@ -458,16 +458,16 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
           config: {},
         }),
       });
 
       expect(manager.getConfigDiagnostic()).toEqual({
         code: 'missingProvider',
-        filePath: '/tmp/neko/config.json',
+        filePath: '/tmp/neko/config.toml',
         message:
-          'Agent configuration has no enabled providers: /tmp/neko/config.json. Add at least one enabled provider with its required endpoint and credentials, then open a new Agent session or tab.',
+          'Agent configuration has no enabled providers: /tmp/neko/config.toml. Add at least one enabled provider with its required endpoint and credentials, then open a new Agent session or tab.',
       });
       expect(manager.getAssistantSettingsData()).toEqual(
         expect.objectContaining({
@@ -485,7 +485,7 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'missing',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
         }),
       });
 
@@ -511,7 +511,7 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
           config: {
             defaultProvider: 'missing-provider',
           },
@@ -530,7 +530,7 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
           config: {
             providers: [SAMPLE_PROVIDER],
             models: [SAMPLE_MODEL],
@@ -540,9 +540,9 @@ describe('ConfigManager', () => {
 
       expect(manager.getConfigDiagnostic()).toEqual({
         code: 'missingApiKey',
-        filePath: '/tmp/neko/config.json',
+        filePath: '/tmp/neko/config.toml',
         message:
-          'Agent configuration has no configured enabled chat provider: /tmp/neko/config.json. Add the required provider endpoint and credentials, then open a new Agent session or tab.',
+          'Agent configuration has no configured enabled chat provider: /tmp/neko/config.toml. Add the required provider endpoint and credentials, then open a new Agent session or tab.',
       });
       expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
       expect(manager.getAssistantSettingsData().selectedModelId).toBeNull();
@@ -574,7 +574,7 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
           config: {
             providers: [localProvider],
             models: [localModel],
@@ -602,7 +602,7 @@ describe('ConfigManager', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/tmp/neko/config.json',
+          filePath: '/tmp/neko/config.toml',
           config: {
             providers: [SAMPLE_PROVIDER],
             models: [SAMPLE_MODEL],
@@ -648,19 +648,190 @@ describe('ConfigManager', () => {
       expect(manager.getProvider('anthropic')).toBeDefined();
 
       current = {
-        status: 'invalidJson',
-        filePath: '/tmp/neko/config.json',
+        status: 'invalidToml',
+        filePath: '/tmp/neko/config.toml',
         diagnostic: {
-          code: 'invalidJson',
-          filePath: '/tmp/neko/config.json',
-          message: 'invalid json detail',
+          code: 'invalidToml',
+          filePath: '/tmp/neko/config.toml',
+          message: 'invalid toml detail',
         },
       };
 
       expect(manager.getProvider('anthropic')).toBeDefined();
       manager.reloadConfig();
       expect(manager.getProvider('anthropic')).toBeUndefined();
-      expect(manager.getConfigDiagnostic()?.code).toBe('invalidJson');
+      expect(manager.getConfigDiagnostic()?.code).toBe('invalidToml');
+    });
+
+    it('poisons legacy JSON-only fallback so it cannot become a successful explicit source', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'legacyJsonOnly',
+          filePath: '/tmp/neko/config.toml',
+          diagnostic: {
+            code: 'legacyJsonOnly',
+            filePath: '/tmp/neko/config.toml',
+            message: 'Legacy JSON configuration found without TOML config: /tmp/neko/config.json',
+          },
+        }),
+      });
+
+      const state = manager.getAssistantConfigState({
+        accountCatalog: createAccountCatalog(),
+      });
+
+      expect(manager.getConfig().providers.size).toBe(0);
+      expect(state.configDiagnostic).toEqual(
+        expect.objectContaining({
+          code: 'legacyJsonOnly',
+          filePath: '/tmp/neko/config.toml',
+        }),
+      );
+      expect(state.modelGroups[0]).toMatchObject({ source: 'account-gateway' });
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: null,
+          selectedModelId: null,
+          configDiagnostic: expect.objectContaining({ code: 'legacyJsonOnly' }),
+        }),
+      );
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Legacy JSON configuration must be migrated to TOML',
+      );
+    });
+
+    it('blocks conversation when selected default provider is unavailable', () => {
+      const validProvider: Provider = {
+        ...SAMPLE_PROVIDER,
+        apiKey: 'sk-valid',
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            defaultProvider: 'missing-provider',
+            defaultModel: SAMPLE_MODEL.id,
+            providers: [validProvider],
+            models: [SAMPLE_MODEL],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'invalidDefaultProvider',
+        filePath: '/tmp/neko/config.toml',
+        message:
+          'Agent configuration selects an unavailable default provider: /tmp/neko/config.toml. Fix default_provider, then open a new Agent session or tab.',
+      });
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Agent configuration selects an unavailable default provider',
+      );
+    });
+
+    it('blocks conversation when selected default model is not a chat model for the selected provider', () => {
+      const validProvider: Provider = {
+        ...SAMPLE_PROVIDER,
+        apiKey: 'sk-valid',
+      };
+      const imageModel: Model = {
+        id: 'anthropic-image',
+        name: 'image-model',
+        displayName: 'Image Model',
+        providerId: 'anthropic',
+        type: 'image',
+        capabilities: ['text_to_image'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            defaultProvider: 'anthropic',
+            defaultModel: imageModel.id,
+            providers: [validProvider],
+            models: [SAMPLE_MODEL, imageModel],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'invalidDefaultModel',
+        filePath: '/tmp/neko/config.toml',
+        message:
+          'Agent configuration selects an unavailable default chat model: /tmp/neko/config.toml. Fix default_model, then open a new Agent session or tab.',
+      });
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Agent configuration selects an unavailable default chat model',
+      );
+    });
+
+    it('keeps unselected invalid providers scoped when a selected local provider and model are valid', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const invalidProvider: Provider = {
+        id: 'broken-gateway',
+        name: 'broken',
+        displayName: 'Broken Gateway',
+        type: 'newapi',
+        apiUrl: '',
+        enabled: true,
+        connectionKind: 'custom-gateway',
+        requiresApiKey: true,
+      };
+      const localModel: Model = {
+        id: 'ollama-local-chat',
+        name: 'llama3.2',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const brokenModel: Model = {
+        id: 'broken-chat',
+        name: 'broken-chat',
+        providerId: 'broken-gateway',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            defaultProvider: localProvider.id,
+            defaultModel: localModel.id,
+            providers: [localProvider, invalidProvider],
+            models: [localModel, brokenModel],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getAssistantDefaultProvider()).toEqual(
+        expect.objectContaining({
+          id: 'ollama-local',
+          defaultModel: 'ollama-local-chat',
+        }),
+      );
+      expect(() => manager.assertConfigAvailable()).not.toThrow();
+      expect(manager.getAssistantConfigState().modelGroups).toEqual([
+        expect.objectContaining({
+          source: 'explicit-config',
+          providerId: 'ollama-local',
+        }),
+      ]);
     });
   });
 

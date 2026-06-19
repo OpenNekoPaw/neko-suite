@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { handleSlashCommand } from '../slash-commands';
 import type { CLIConfig } from '../types';
 
+vi.mock('../config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config')>();
+  return {
+    ...actual,
+    migrateUserConfigJsonToToml: vi.fn(() => ({
+      status: 'migrated',
+      legacyJsonPath: '/home/user/.neko/config.json',
+      tomlPath: '/home/user/.neko/config.toml',
+      backupPath: '/home/user/.neko/config.json.bak',
+    })),
+  };
+});
+
 function createConfig(): CLIConfig {
   return {
     provider: 'anthropic',
@@ -61,5 +74,16 @@ describe('handleSlashCommand', () => {
 
     expect(result.handled).toBe(true);
     expect(result.agentPrompt).toBeUndefined();
+  });
+
+  it('handles /config migrate through the explicit migration entry point', async () => {
+    const result = await handleSlashCommand('/config migrate', {
+      config: createConfig(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('Migrated legacy JSON config to TOML');
+    expect(result.output).toContain('/home/user/.neko/config.toml');
   });
 });

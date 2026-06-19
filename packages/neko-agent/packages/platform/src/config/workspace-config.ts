@@ -1,9 +1,9 @@
 /**
  * Workspace Configuration Loader
  *
- * Loads MCP server configuration from .neko/config.json.
+ * Loads MCP server configuration from .neko/config.toml.
  * Workspace config only manages MCP servers — providers and models
- * are user-level only (~/.neko/config.json).
+ * are user-level only (~/.neko/config.toml).
  *
  * Uses shared configuration module from @neko/shared.
  */

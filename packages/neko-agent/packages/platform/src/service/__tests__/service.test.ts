@@ -269,14 +269,14 @@ describe('Service', () => {
       (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
         () => {
           throw new Error(
-            'Configuration file contains invalid JSON: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+            'Configuration file contains invalid TOML: /home/user/.neko/config.toml. Fix the file, then open a new Agent session or tab.',
           );
         },
       );
       const service = new Service(config);
 
       await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
-        'Configuration file contains invalid JSON',
+        'Configuration file contains invalid TOML',
       );
       expect(adapter.chat).not.toHaveBeenCalled();
       expect(config.configManager.getEnabledModels).not.toHaveBeenCalled();
@@ -286,7 +286,7 @@ describe('Service', () => {
       const configManager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
-          filePath: '/home/user/.neko/config.json',
+          filePath: '/home/user/.neko/config.toml',
           config: {},
         }),
       });
@@ -366,7 +366,7 @@ describe('Service', () => {
       const config = createMockConfig(adapter);
       (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
         () => {
-          throw new Error('Configuration file is empty: /home/user/.neko/config.json');
+          throw new Error('Configuration file is empty: /home/user/.neko/config.toml');
         },
       );
       const service = new Service(config);
@@ -422,7 +422,7 @@ describe('Service', () => {
       const config = createMockConfig(adapter);
       (config.configManager.assertConfigAvailable as ReturnType<typeof vi.fn>).mockImplementation(
         () => {
-          throw new Error('Unable to read configuration file: /home/user/.neko/config.json');
+          throw new Error('Unable to read configuration file: /home/user/.neko/config.toml');
         },
       );
       const service = new Service(config);

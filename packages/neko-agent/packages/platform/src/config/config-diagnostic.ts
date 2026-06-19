@@ -9,6 +9,8 @@ export type AssistantConfigAvailabilityCode =
   | 'missingProvider'
   | 'missingModel'
   | 'missingApiKey'
+  | 'invalidDefaultProvider'
+  | 'invalidDefaultModel'
   | 'missingAccountCatalog'
   | 'accountCatalogUnavailable'
   | 'accountModelNotEntitled';
@@ -48,6 +50,12 @@ export function projectAssistantConfigReadResultDiagnostic(
   if (
     result.status === 'empty' ||
     result.status === 'invalidJson' ||
+    result.status === 'invalidToml' ||
+    result.status === 'unsupportedVersion' ||
+    result.status === 'duplicateProviderId' ||
+    result.status === 'duplicateModelId' ||
+    result.status === 'legacyJsonOnly' ||
+    result.status === 'conflictingConfigFiles' ||
     result.status === 'readError'
   ) {
     return projectAssistantConfigDiagnostic(result.diagnostic);
@@ -63,7 +71,19 @@ export function buildSafeConfigDiagnosticMessage(
     case 'empty':
       return `Configuration file is empty: ${filePath}. Fix the file, then open a new Agent session or tab.`;
     case 'invalidJson':
-      return `Configuration file contains invalid JSON: ${filePath}. Fix the file, then open a new Agent session or tab.`;
+      return `Legacy JSON configuration contains invalid JSON: ${filePath}. Fix or remove the legacy file, then run the Agent config migration command.`;
+    case 'invalidToml':
+      return `Configuration file contains invalid TOML: ${filePath}. Fix the file, then open a new Agent session or tab.`;
+    case 'unsupportedVersion':
+      return `Configuration file uses an unsupported version: ${filePath}. Update Neko Suite or migrate the file, then open a new Agent session or tab.`;
+    case 'duplicateProviderId':
+      return `Configuration file contains duplicate provider IDs: ${filePath}. Remove duplicate provider entries, then open a new Agent session or tab.`;
+    case 'duplicateModelId':
+      return `Configuration file contains duplicate model IDs: ${filePath}. Remove duplicate model entries, then open a new Agent session or tab.`;
+    case 'legacyJsonOnly':
+      return `Legacy JSON configuration must be migrated to TOML: ${filePath}. Run the Agent config migration command, then open a new Agent session or tab.`;
+    case 'conflictingConfigFiles':
+      return `Both TOML and legacy JSON configuration files exist for ${filePath}. Keep the TOML file and remove or migrate the legacy JSON file, then open a new Agent session or tab.`;
     case 'readError':
       return `Unable to read configuration file: ${filePath}. Check file permissions, then open a new Agent session or tab.`;
     case 'missingConfig':
@@ -74,6 +94,10 @@ export function buildSafeConfigDiagnosticMessage(
       return `Agent configuration has no enabled chat models: ${filePath}. Add at least one enabled chat model, then open a new Agent session or tab.`;
     case 'missingApiKey':
       return `Agent configuration has no configured enabled chat provider: ${filePath}. Add the required provider endpoint and credentials, then open a new Agent session or tab.`;
+    case 'invalidDefaultProvider':
+      return `Agent configuration selects an unavailable default provider: ${filePath}. Fix default_provider, then open a new Agent session or tab.`;
+    case 'invalidDefaultModel':
+      return `Agent configuration selects an unavailable default chat model: ${filePath}. Fix default_model, then open a new Agent session or tab.`;
     case 'missingAccountCatalog':
       return 'Neko account AI catalog is unavailable. Log in or configure a local AI provider, then open a new Agent session or tab.';
     case 'accountCatalogUnavailable':

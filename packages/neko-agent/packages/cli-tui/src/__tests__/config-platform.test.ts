@@ -1,7 +1,7 @@
 /**
  * Platform Integration Tests — Real Config
  *
- * Tests config.ts against the real ~/.neko/config.json.
+ * Tests config.ts against the real ~/.neko/config.toml.
  * Validates that loadConfig, listProviders, getProviderModels,
  * validateConfig, and createConfigManager work end-to-end.
  */
@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { readUserConfig } from '@neko/shared/config/config-reader';
 
 import {
   loadConfig,
@@ -22,17 +23,17 @@ import {
 } from '../core/config';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 
-// Skip the entire suite if ~/.neko/config.json does not exist
-const configPath = path.join(os.homedir(), '.neko', 'config.json');
+// Skip the entire suite if ~/.neko/config.toml does not exist
+const configPath = path.join(os.homedir(), '.neko', 'config.toml');
 const hasRealConfig = fs.existsSync(configPath);
 let rawConfig: Record<string, unknown> = {};
 if (hasRealConfig) {
-  rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  rawConfig = readUserConfig() ?? {};
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
-describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.json', () => {
+describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => {
   const savedEnv = { ...process.env };
 
   beforeEach(() => {

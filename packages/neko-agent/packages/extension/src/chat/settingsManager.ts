@@ -1,7 +1,7 @@
 /**
  * Settings Manager
  *
- * Facade over ConfigManager — reads scalar AI settings from ~/.neko/config.json.
+ * Facade over ConfigManager — reads scalar AI settings from ~/.neko/config.toml.
  * No longer uses VSCode workspaceState.
  *
  * Supports late initialization: can be constructed without a ConfigManager and

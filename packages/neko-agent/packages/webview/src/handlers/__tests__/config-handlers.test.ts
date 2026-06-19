@@ -24,10 +24,10 @@ describe('configHandlers', () => {
         selectedProviderId: null,
         selectedModelId: null,
         configDiagnostic: {
-          code: 'invalidJson',
-          filePath: '/home/user/.neko/config.json',
+          code: 'invalidToml',
+          filePath: '/home/user/.neko/config.toml',
           message:
-            'Configuration file contains invalid JSON: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+            'Configuration file contains invalid TOML: /home/user/.neko/config.toml. Fix the file, then open a new Agent session or tab.',
         },
       },
       context,
@@ -36,7 +36,7 @@ describe('configHandlers', () => {
     expect(context.setSettings).toHaveBeenCalledTimes(1);
     expect(context.setSelectedModel).toHaveBeenCalledWith('auto');
     expect(context.setGlobalError).toHaveBeenCalledWith(
-      'Configuration file contains invalid JSON: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+      'Configuration file contains invalid TOML: /home/user/.neko/config.toml. Fix the file, then open a new Agent session or tab.',
     );
   });
 
@@ -65,10 +65,10 @@ describe('configHandlers', () => {
         config: {
           configuredProviders: [],
           configDiagnostic: {
-            code: 'empty',
-            filePath: '/home/user/.neko/config.json',
+            code: 'legacyJsonOnly',
+            filePath: '/home/user/.neko/config.toml',
             message:
-              'Configuration file is empty: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+              'Legacy JSON configuration must be migrated to TOML: /home/user/.neko/config.toml. Run the Agent config migration command, then open a new Agent session or tab.',
           },
         },
       },
@@ -77,7 +77,7 @@ describe('configHandlers', () => {
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
     expect(context.setGlobalError).toHaveBeenCalledWith(
-      'Configuration file is empty: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
+      'Legacy JSON configuration must be migrated to TOML: /home/user/.neko/config.toml. Run the Agent config migration command, then open a new Agent session or tab.',
     );
   });
 });

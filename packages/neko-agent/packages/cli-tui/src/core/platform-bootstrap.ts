@@ -61,7 +61,7 @@ function collectEnvApiKeys(): Record<string, string> {
 /**
  * Create a Platform instance for CLI use.
  *
- * - Initializes FileUserConfigManager for ~/.neko/config.json
+ * - Initializes FileUserConfigManager for ~/.neko/config.toml
  * - Injects env var API keys at runtime (not persisted to disk)
  * - Returns an IService ready for AgentSession
  */

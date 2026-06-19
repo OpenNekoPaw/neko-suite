@@ -22,7 +22,7 @@ import {
 } from '@neko/agent';
 import { handleMarketCommand } from '../commands/market';
 import type { CLIConfig } from './types';
-import { listProviders, getProviderModels } from './config';
+import { listProviders, getProviderModels, migrateUserConfigJsonToToml } from './config';
 
 /** Per-category media model overrides for the current session */
 export interface MediaModelOverrides {
@@ -261,6 +261,7 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
       'Use "/config set <key> <value>" to change a setting.',
       'Use "/config providers" to list available providers.',
       'Use "/config models" to list available models.',
+      'Use "/config migrate" to migrate legacy config.json to config.toml.',
       '',
     ];
 
@@ -370,11 +371,34 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
       return { handled: true, output: lines.join('\n'), continueExecution: true };
     }
 
+    case 'migrate': {
+      const result = migrateUserConfigJsonToToml();
+      if (result.status !== 'migrated') {
+        return {
+          handled: true,
+          continueExecution: true,
+          error: result.diagnostic?.message ?? `Config migration failed: ${result.status}`,
+        };
+      }
+
+      return {
+        handled: true,
+        continueExecution: true,
+        output: [
+          '',
+          'Migrated legacy JSON config to TOML.',
+          `  TOML:   ${result.tomlPath}`,
+          `  Backup: ${result.backupPath}`,
+          '',
+        ].join('\n'),
+      };
+    }
+
     default:
       return {
         handled: true,
         continueExecution: true,
-        error: `Unknown config subcommand: ${subcommand}. Use /config, /config set, /config providers, or /config models`,
+        error: `Unknown config subcommand: ${subcommand}. Use /config, /config set, /config providers, /config models, or /config migrate`,
       };
   }
 }

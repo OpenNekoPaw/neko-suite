@@ -13,7 +13,13 @@
 import React from 'react';
 import { render } from 'ink';
 import { Command } from 'commander';
-import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
+import {
+  loadConfig,
+  validateConfig,
+  listProviders,
+  getProviderModels,
+  migrateUserConfigJsonToToml,
+} from './core/config';
 import type { CLIConfig } from './core/types';
 import { runAgent, runInteractive } from './core/runner';
 import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
@@ -127,6 +133,23 @@ configCmd
       console.log(`  ${marker}${m}`);
     }
     console.log('\n  (* = current model)\n');
+  });
+
+configCmd
+  .command('migrate')
+  .description('Migrate legacy ~/.neko/config.json to ~/.neko/config.toml')
+  .action(() => {
+    const result = migrateUserConfigJsonToToml();
+    if (result.status === 'migrated') {
+      console.log(chalk.green('Migrated legacy JSON config to TOML.'));
+      console.log(chalk.gray(`  TOML:   ${result.tomlPath}`));
+      console.log(chalk.gray(`  Backup: ${result.backupPath}`));
+      return;
+    }
+
+    const message = result.diagnostic?.message ?? `Config migration failed: ${result.status}`;
+    console.error(chalk.red(message));
+    process.exit(1);
   });
 
 program.parse();

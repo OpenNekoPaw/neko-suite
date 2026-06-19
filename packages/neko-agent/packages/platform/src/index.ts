@@ -374,7 +374,7 @@ const logger = getLogger('Platform');
 export interface PlatformOptions {
   /** User config manager (file-based) */
   userConfigManager?: IUserConfigManager;
-  /** Workspace path for .neko/config.json */
+  /** Workspace path for .neko/config.toml */
   workspacePath?: string;
   /**
    * Task manager instance for media generation

@@ -56,7 +56,7 @@ describe('file operation plan', () => {
   });
 
   it('builds config file paths', () => {
-    expect(buildConfigFilePath('/home/me')).toBe('/home/me/.neko/config.json');
+    expect(buildConfigFilePath('/home/me')).toBe('/home/me/.neko/config.toml');
   });
 
   it('builds SVG download plans and saved messages', () => {

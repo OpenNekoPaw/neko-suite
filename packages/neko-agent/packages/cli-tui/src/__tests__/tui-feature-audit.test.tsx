@@ -6,7 +6,7 @@
  * 2. Thinking/reasoning process display
  * 3. Task progress (TodoList)
  * 4. Agent execution progress (iteration, spinner, token bar)
- * 5. Model display from .neko/config.json
+ * 5. Model display from .neko/config.toml
  * 6. Slash commands (/help, /status, /config, /plan, /auto, /ask)
  * 7. Diff preview in tool approval
  * 8. Command preview in tool approval
@@ -34,7 +34,7 @@ import { useConfigStore } from '../stores/config-store';
 import type { Message, TodoItem } from '../types/state';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 
-// ─── Test Config (mirrors .neko/config.json) ────────────────────────
+// ─── Test Config (mirrors .neko/config.toml) ────────────────────────
 
 const TEST_CONFIG = {
   ...DEFAULT_CLI_CONFIG,

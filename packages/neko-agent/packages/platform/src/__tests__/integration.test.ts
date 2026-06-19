@@ -1,5 +1,5 @@
 /**
- * Integration Tests — Real API with ~/.neko/config.json
+ * Integration Tests — Real API with ~/.neko/config.toml
  *
  * These tests use the actual user configuration and make real API calls.
  * They verify that:
@@ -21,7 +21,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 
 // Check if real config exists — skip entire suite if not
-const configPath = path.join(os.homedir(), '.neko', 'config.json');
+const configPath = path.join(os.homedir(), '.neko', 'config.toml');
 const hasRealConfig = fs.existsSync(configPath);
 
 // Minimal no-op tool registry for testing
@@ -34,7 +34,7 @@ const noopToolRegistry: IToolRegistry = {
   getAllToolDefinitions: () => [],
 } as unknown as IToolRegistry;
 
-describe.skipIf(!hasRealConfig)('Integration: Real API with ~/.neko/config.json', () => {
+describe.skipIf(!hasRealConfig)('Integration: Real API with ~/.neko/config.toml', () => {
   let platform: Platform;
   let service: IService;
 

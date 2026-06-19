@@ -42,6 +42,7 @@
     "onCommand:neko.agent.clearDndPayload",
     "onCommand:neko.agent.rescanSkills",
     "onCommand:neko.agent.refreshModels",
+    "onCommand:neko.agent.migrateConfigToToml",
     "onInstallType:skill",
     "onInstallType:endpoint",
     "onInstallType:provider",
@@ -223,6 +224,11 @@
         "title": "%neko.agent.addToContext.title%",
         "category": "NekoAgent: AI",
         "icon": "$(comment-add)"
+      },
+      {
+        "command": "neko.agent.migrateConfigToToml",
+        "title": "%neko.agent.migrateConfigToToml.title%",
+        "category": "NekoAgent"
       }
     ],
     "menus": {

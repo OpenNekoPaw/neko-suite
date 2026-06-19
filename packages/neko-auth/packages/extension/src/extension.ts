@@ -5,7 +5,7 @@ import type { AuthConfig } from '@neko/shared';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — root tsconfig lacks moduleResolution:bundler; esbuild resolves correctly
 import {
-  loadAuthConfigFromJson,
+  loadAuthConfigFromFiles,
   isAuthConfigured,
 } from '@neko/shared/config/auth-config-loader.ts';
 import { VscodeTokenStorage } from './vscode-token-storage';
@@ -15,7 +15,7 @@ import type { NekoAuthAPI } from './auth-api';
 /**
  * Load AuthConfig with layered fallback:
  *   1. VSCode workspace settings (`neko.auth.*`) — highest priority
- *   2. config.json (`~/.neko/config.json` + `.neko/config.json`) — fallback
+ *   2. config.toml (`~/.neko/config.toml` + `.neko/config.toml`) — fallback
  */
 function loadAuthConfig(): AuthConfig {
   const cfg = vscode.workspace.getConfiguration('neko.auth');
@@ -28,18 +28,18 @@ function loadAuthConfig(): AuthConfig {
     redirectPort: cfg.get<number>('redirectPort', 6419),
   };
 
-  // Fallback: read from config.json and let explicit VSCode settings override
+  // Fallback: read from config files and let explicit VSCode settings override
   // individual fields. This keeps account catalog URL independent from OAuth
   // endpoint placement without exposing tokens outside the auth boundary.
   const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  const jsonConfig = loadAuthConfigFromJson(workDir);
+  const fileConfig = loadAuthConfigFromFiles(workDir);
   const mergedConfig: AuthConfig = {
-    clientId: vscodeConfig.clientId || jsonConfig.clientId,
-    authUrl: vscodeConfig.authUrl || jsonConfig.authUrl,
-    tokenUrl: vscodeConfig.tokenUrl || jsonConfig.tokenUrl,
-    aiCatalogUrl: vscodeConfig.aiCatalogUrl || jsonConfig.aiCatalogUrl,
-    scopes: vscodeConfig.scopes.length > 0 ? vscodeConfig.scopes : jsonConfig.scopes,
-    redirectPort: vscodeConfig.redirectPort ?? jsonConfig.redirectPort,
+    clientId: vscodeConfig.clientId || fileConfig.clientId,
+    authUrl: vscodeConfig.authUrl || fileConfig.authUrl,
+    tokenUrl: vscodeConfig.tokenUrl || fileConfig.tokenUrl,
+    aiCatalogUrl: vscodeConfig.aiCatalogUrl || fileConfig.aiCatalogUrl,
+    scopes: vscodeConfig.scopes.length > 0 ? vscodeConfig.scopes : fileConfig.scopes,
+    redirectPort: vscodeConfig.redirectPort ?? fileConfig.redirectPort,
   };
 
   if (isAuthConfigured(mergedConfig)) {

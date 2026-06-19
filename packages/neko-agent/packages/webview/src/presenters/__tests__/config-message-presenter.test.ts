@@ -430,9 +430,9 @@ describe('config message presenter', () => {
           configuredProviders,
           configDiagnostic: {
             code: 'readError',
-            filePath: '/home/user/.neko/config.json',
+            filePath: '/home/user/.neko/config.toml',
             message:
-              'Unable to read configuration file: /home/user/.neko/config.json. Check file permissions, then open a new Agent session or tab.',
+              'Unable to read configuration file: /home/user/.neko/config.toml. Check file permissions, then open a new Agent session or tab.',
           },
         },
       }),
@@ -440,9 +440,9 @@ describe('config message presenter', () => {
       configuredProviders,
       configDiagnostic: {
         code: 'readError',
-        filePath: '/home/user/.neko/config.json',
+        filePath: '/home/user/.neko/config.toml',
         message:
-          'Unable to read configuration file: /home/user/.neko/config.json. Check file permissions, then open a new Agent session or tab.',
+          'Unable to read configuration file: /home/user/.neko/config.toml. Check file permissions, then open a new Agent session or tab.',
       },
     });
 

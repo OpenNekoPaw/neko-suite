@@ -1,7 +1,7 @@
 /**
  * User Configuration Storage
  *
- * File-based storage (~/.neko/config.json) shared with CLI.
+ * File-based storage (~/.neko/config.toml) shared with CLI.
  * Uses shared configuration module from @neko/shared for unified format.
  */
 
@@ -74,11 +74,7 @@ function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
   // Read existing file to preserve scalar fields not managed by UserConfig
   const existingResult = readUserConfigResult();
   const existing = existingResult.status === 'ok' ? existingResult.config : {};
-  if (
-    existingResult.status === 'empty' ||
-    existingResult.status === 'invalidJson' ||
-    existingResult.status === 'readError'
-  ) {
+  if (existingResult.status !== 'ok' && existingResult.status !== 'missing') {
     throw new Error(existingResult.diagnostic.message);
   }
 
@@ -139,7 +135,7 @@ export type UserConfigReadResult =
 // =============================================================================
 
 /**
- * User config manager using file storage (~/.neko/config.json)
+ * User config manager using file storage (~/.neko/config.toml)
  *
  * This implementation reads from and writes to the unified config file,
  * allowing configuration to be shared with cli.
