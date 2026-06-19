@@ -43,6 +43,16 @@
 | 多模态 Git | 媒体感知 diff、语义 JSON 审阅、实体影响分析和 commit 级摘要 |
 | Dashboard | 项目任务、实体、资产、生成媒体、搜索和 Agent 状态在同一 hub 可检查 |
 
+## 中期：Agent Provider 与模型生态
+
+| 方向 | 目标 |
+|------|------|
+| 官方直连 Provider | 在 NewAPI MVP 稳定后，再逐项验证 Gemini、Grok、Claude、GPT、DeepSeek、GLM 等官方 API 的套餐权限、参数差异和错误语义 |
+| 中转协议扩展 | 在 NewAPI-compatible 之外，将 OneAPI、OpenRouter、SubAPI 等作为独立 profile/preset 增量接入 |
+| 生成模型扩展 | 对 Suno、Seedance、Kling、GPT image 等生成模型先通过 gateway 能力暴露；官方直连 adapter 需有配置、参数映射和测试后再标记 verified |
+| 本地生成模型 | 在本地 trust、安装、资源和硬件边界清楚后，扩展本地图像、视频、音频和音乐生成 provider |
+| 能力分层 | 把视觉理解、函数调用、推理、图像/视频/音频/音乐生成等建模为 capability，而不是把能力硬编码到厂商名 |
+
 ## 引擎与运行时演进
 
 | 方向 | 目标 |

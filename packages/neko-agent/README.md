@@ -94,26 +94,43 @@ packages/
 
 ## 多模型支持
 
-| 提供商 | 配置方式 | 特殊能力 |
-|--------|---------|---------|
-| Anthropic | `~/.neko/config.json` | Extended Thinking、Beta headers |
-| OpenAI | `~/.neko/config.json` | DALL-E 图像生成 |
-| Google | `~/.neko/config.json` | Gemini 多模态 |
-| Azure | `~/.neko/config.json` | OpenAI 兼容 |
-| Ollama | 本地，无需 key | 私有部署 |
-| Generic | 自定义 apiUrl | OpenAI 兼容代理（newapi/one-api） |
+Neko Agent 现在有两条 AI 配置路径：
 
-**模型选择**：优先级 fallback（显式指定 → 配置默认 → 首个可用），无复杂路由策略。
+1. **本地用户配置文件**：`~/.neko/config.json` / 环境凭据 / 运行时导入凭据，支持 `direct`、`gateway`、`custom-gateway`、`local` 分组。只要配置中出现 AI provider、model、默认 provider/model 或显式聊天模型选择，就视为显式 AI 配置，并拥有最高优先级。
+2. **OAuth Neko 官方账号网关**：用户登录后由 `neko-auth` 拉取 Neko 官方 AI catalog、entitlement、usage 和默认模型，Agent Extension Host 缓存为运行时 `neko-account-gateway` provider。该路径不写入用户配置文件，也不向 Webview、日志、prompt 或工具 payload 暴露 OAuth token、gateway token、API key 或内部授权头。
+
+本地配置文件可以只包含 MCP、auth、UI 等非 AI 设置；这种情况下不会阻断 OAuth 官方账号网关。若本地配置显式选择了 AI provider/model，但 provider 缺失、模型不属于 provider、provider 未配置或模型无能力，则对话直接返回可见错误，不会 fallback 到官方账号网关、首个模型或硬编码默认值。
+
+Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter 路由，`connectionKind` 用于区分中转、本地、用户自定义网关和未来官方直连。
+
+| 连接模式 | MVP 状态 | 配置方式 | 说明 |
+|----------|----------|----------|------|
+| `gateway` | MVP | 用户配置 `neko-gateway` + `newapi-compatible`，或 OAuth `neko-account-gateway` | NewAPI-compatible 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
+| `custom-gateway` | MVP | `custom-newapi` + `newapi-compatible` | 用户自建或第三方 NewAPI-compatible endpoint。 |
+| `local` | MVP | `ollama-local` + `ollama` | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。 |
+| `direct` | Roadmap | 官方厂商 API | Gemini、Grok、Claude、GPT、DeepSeek、GLM 等官方直连需逐项验证套餐、参数和接口差异后再进入默认支持。 |
+
+**LLM 视觉理解**：不是所有 LLM 的强需求。文本聊天只要求 `chat` 能力；图像理解/多模态工作流必须选择声明了 `vision` 能力的模型。
+
+**中转协议**：MVP 只把 NewAPI-compatible 作为默认中转协议。OneAPI/OpenRouter/SubAPI 等作为后续 profile/preset 支持，除非已有 adapter、参数映射和测试。
+
+**生成模型**：MVP 通过 NewAPI-compatible gateway 配置图片、视频、音频和音乐模型；Suno、Seedance、Kling、GPT image 等具体模型是否可用取决于 gateway 暴露的能力。未配置 endpoint/凭据的 gateway 不会被路由为可用 provider。官方直连和本地生成模型运行时进入 Roadmap。
+
+**账号 catalog 缓存**：Agent Extension Host 复用新鲜的 account catalog snapshot；新开 Agent tab 不会因为 tab 新建而强制同步访问官方接口。缓存会在 OAuth login/logout/silent refresh、TTL 过期、手动刷新、catalog version/ETag 不匹配、官方接口或账号网关返回 401/403 时刷新或清空。
+
+**模型展示**：Webview 按 source/provider 分组展示模型。OAuth catalog 可用时先显示 Neko Official，再按配置文件中的 provider 顺序显示用户配置 provider；每组内部按 `llm`、`image`、`video`、`audio`、`music` 等类型分开。对话选择器隐藏空分组，配置/设置视图可以显示空 provider 并带诊断。
+
+**模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。
 
 **媒体模型默认值**：在 `~/.neko/config.json` 中通过 `defaultMediaModels` 为各媒体类型配置默认模型：
 
 ```json
 {
   "defaultMediaModels": {
-    "image": "flux-kontext-pro",
-    "video": "sora-2",
-    "audio": "tts-1",
-    "music": "suno-v4"
+    "image": "neko-gateway-gpt-image-2",
+    "video": "neko-gateway-seedance-lite",
+    "audio": "neko-gateway-tts",
+    "music": "neko-gateway-suno"
   }
 }
 ```

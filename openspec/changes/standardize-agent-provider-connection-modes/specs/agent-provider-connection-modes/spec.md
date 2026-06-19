@@ -70,3 +70,25 @@ Official direct provider APIs, additional proxy products, broad LLM family catal
 
 - **WHEN** a provider family such as OpenRouter, SubAPI, official direct Gemini/Grok/Claude/GPT/DeepSeek/GLM, or generation providers such as Suno/Seedance/Kling/GPT image is discussed
 - **THEN** the MVP documentation identifies it as future or gateway-compatible support unless verified in code and tests
+
+### Requirement: Conversation runtime fails visibly for invalid selection
+
+The Agent conversation runtime SHALL require an explicit chat provider and chat model selection from the user request or persisted config. It SHALL NOT fall back to a default provider, first configured provider, or first available model when the selected provider/model is missing, disabled, unconfigured, or mismatched.
+
+#### Scenario: Missing chat selection blocks conversation
+
+- **WHEN** the user sends a chat message without an explicit provider/model selection in the request or config
+- **THEN** the runtime returns a visible precondition error
+- **THEN** no LLM runner or provider fallback path is invoked
+
+#### Scenario: Wrong provider selection blocks conversation
+
+- **WHEN** the selected provider ID does not exist or is not configured
+- **THEN** the runtime returns a visible precondition error
+- **THEN** it does not use another configured provider
+
+#### Scenario: Wrong model selection blocks conversation
+
+- **WHEN** the selected model ID is not enabled for the selected provider
+- **THEN** the runtime returns a visible precondition error
+- **THEN** it does not use another model from the same provider or another provider

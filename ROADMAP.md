@@ -43,6 +43,16 @@ This roadmap is directional, not a release promise. Active execution items live 
 | Multimodal Git | Media-aware diff, semantic JSON review, entity impact analysis, and commit-level summaries |
 | Dashboard | Project tasks, entities, assets, generated media, search, and Agent state become inspectable from one hub |
 
+## Mid-Term: Agent Providers And Model Ecosystem
+
+| Area | Direction |
+|------|-----------|
+| Official direct providers | After the NewAPI MVP stabilizes, verify Gemini, Grok, Claude, GPT, DeepSeek, GLM, and similar official APIs one by one for plan access, parameters, and error semantics |
+| Proxy protocols | Add OneAPI, OpenRouter, SubAPI, and similar products as separate profiles or presets beyond the NewAPI-compatible MVP |
+| Generation models | Expose Suno, Seedance, Kling, GPT image, and similar generation models through gateway capabilities first; mark direct adapters verified only after config, parameter mapping, and tests exist |
+| Local generation models | Extend local image, video, audio, and music providers after local trust, install, resource, and hardware boundaries are clear |
+| Capability layering | Model vision, tool calling, reasoning, image/video/audio/music generation, and similar features as capabilities instead of hard-coding them to vendor names |
+
 ## Engine And Runtime Evolution
 
 | Area | Direction |
