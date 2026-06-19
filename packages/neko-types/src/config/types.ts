@@ -208,9 +208,6 @@ export const CONFIG_DIR_NAME = '.neko';
 /** Config file name */
 export const CONFIG_FILE_NAME = 'config.toml';
 
-/** Legacy JSON config file name, only for explicit migration/diagnostics */
-export const LEGACY_CONFIG_FILE_NAME = 'config.json';
-
 // =============================================================================
 // Auth & Credentials Types
 // =============================================================================

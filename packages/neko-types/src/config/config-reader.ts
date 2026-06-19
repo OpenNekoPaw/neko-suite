@@ -2,7 +2,6 @@
  * Configuration Reader
  *
  * Reads TOML configuration files from user and workspace locations.
- * Legacy JSON helpers exist only for explicit migration and diagnostics.
  */
 
 import * as fs from 'fs';
@@ -10,7 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { parse, stringify, TomlError } from 'smol-toml';
 import type { UnifiedConfig } from './types';
-import { CONFIG_DIR_NAME, CONFIG_FILE_NAME, LEGACY_CONFIG_FILE_NAME } from './types';
+import { CONFIG_DIR_NAME, CONFIG_FILE_NAME } from './types';
 import { tomlToUnifiedConfig, unifiedConfigToToml, type NekoTomlConfig } from './toml-config';
 import { ConsoleLogger } from '../logger/console-logger';
 import { LogLevel } from '../logger/types';
@@ -19,13 +18,10 @@ const logger = new ConsoleLogger('ConfigReader', LogLevel.Debug);
 
 export type ConfigReadErrorCode =
   | 'empty'
-  | 'invalidJson'
   | 'invalidToml'
   | 'unsupportedVersion'
   | 'duplicateProviderId'
   | 'duplicateModelId'
-  | 'legacyJsonOnly'
-  | 'conflictingConfigFiles'
   | 'readError';
 
 export interface ConfigReadDiagnostic {
@@ -82,13 +78,6 @@ export function getUserConfigPath(): string {
 }
 
 /**
- * Get legacy user config file path (~/.neko/config.json)
- */
-export function getLegacyUserConfigPath(): string {
-  return path.join(getUserConfigDir(), LEGACY_CONFIG_FILE_NAME);
-}
-
-/**
  * Get workspace config directory (.neko in workDir)
  */
 export function getWorkspaceConfigDir(workDir: string): string {
@@ -102,13 +91,6 @@ export function getWorkspaceConfigPath(workDir: string): string {
   return path.join(getWorkspaceConfigDir(workDir), CONFIG_FILE_NAME);
 }
 
-/**
- * Get legacy workspace config file path (.neko/config.json in workDir)
- */
-export function getLegacyWorkspaceConfigPath(workDir: string): string {
-  return path.join(getWorkspaceConfigDir(workDir), LEGACY_CONFIG_FILE_NAME);
-}
-
 // =============================================================================
 // Configuration Reading
 // =============================================================================
@@ -120,24 +102,8 @@ export function getLegacyWorkspaceConfigPath(workDir: string): string {
  * @returns Typed read result that distinguishes missing, empty, invalid TOML, validation, and IO failures
  */
 export function readConfigFileResult(filePath: string): ConfigReadResult {
-  const legacyJsonPath = inferLegacyJsonPath(filePath);
-  if (fs.existsSync(filePath) && legacyJsonPath && fs.existsSync(legacyJsonPath)) {
-    return {
-      status: 'conflictingConfigFiles',
-      filePath,
-      diagnostic: buildConfigReadDiagnostic('conflictingConfigFiles', filePath, legacyJsonPath),
-    };
-  }
-
   try {
     if (!fs.existsSync(filePath)) {
-      if (legacyJsonPath && fs.existsSync(legacyJsonPath)) {
-        return {
-          status: 'legacyJsonOnly',
-          filePath,
-          diagnostic: buildConfigReadDiagnostic('legacyJsonOnly', filePath, legacyJsonPath),
-        };
-      }
       return { status: 'missing', filePath };
     }
 
@@ -163,81 +129,10 @@ export function readConfigFileResult(filePath: string): ConfigReadResult {
 }
 
 /**
- * Read configuration from a file path.
- *
- * Compatibility helper for older explicit config tooling. New Agent runtime paths
- * should use readConfigFileResult so invalid files cannot be confused with
- * missing files.
- *
- * @param filePath - Path to the TOML configuration file
- * @returns Parsed configuration or null if file doesn't exist or is invalid
- */
-export function readConfigFile(filePath: string): UnifiedConfig | null {
-  const result = readConfigFileResult(filePath);
-  return result.status === 'ok' ? result.config : null;
-}
-
-/**
- * Explicitly read a legacy JSON config file for migration only.
- */
-export function readLegacyJsonConfigFileResult(filePath: string): ConfigReadResult {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return { status: 'missing', filePath };
-    }
-
-    const content = fs.readFileSync(filePath, 'utf-8').trim();
-    if (!content) {
-      return {
-        status: 'empty',
-        filePath,
-        diagnostic: buildConfigReadDiagnostic('empty', filePath),
-      };
-    }
-    return {
-      status: 'ok',
-      filePath,
-      config: JSON.parse(content) as UnifiedConfig,
-    };
-  } catch (error) {
-    const code = error instanceof SyntaxError ? 'invalidJson' : 'readError';
-    const diagnostic = buildLegacyJsonReadDiagnostic(code, filePath, error);
-    logger.error(diagnostic.message, error);
-    return { status: code, filePath, diagnostic };
-  }
-}
-
-/**
- * Explicitly read the legacy user JSON config for migration only.
- */
-export function readLegacyUserConfigResult(): ConfigReadResult {
-  return readLegacyJsonConfigFileResult(getLegacyUserConfigPath());
-}
-
-/**
- * Read user configuration (~/.neko/config.toml)
- *
- * @returns User configuration or null if not found
- */
-export function readUserConfig(): UnifiedConfig | null {
-  return readConfigFile(getUserConfigPath());
-}
-
-/**
  * Read user configuration with a typed result (~/.neko/config.toml)
  */
 export function readUserConfigResult(): ConfigReadResult {
   return readConfigFileResult(getUserConfigPath());
-}
-
-/**
- * Read workspace configuration (.neko/config.toml)
- *
- * @param workDir - Workspace directory path
- * @returns Workspace configuration or null if not found
- */
-export function readWorkspaceConfig(workDir: string): UnifiedConfig | null {
-  return readConfigFile(getWorkspaceConfigPath(workDir));
 }
 
 /**
@@ -280,67 +175,6 @@ export function writeWorkspaceConfig(workDir: string, config: UnifiedConfig): vo
   writeConfigFile(getWorkspaceConfigPath(workDir), config);
 }
 
-// =============================================================================
-// Configuration Watching
-// =============================================================================
-
-/**
- * Watch configuration file for changes
- *
- * This legacy watcher callback intentionally keeps the nullable shape for
- * existing callers; conversation setup uses ConfigReadResult diagnostics.
- *
- * @param filePath - Path to the configuration file
- * @param callback - Callback when config changes
- * @returns Cleanup function to stop watching
- */
-export function watchConfigFile(
-  filePath: string,
-  callback: (config: UnifiedConfig | null) => void,
-): () => void {
-  let watcher: fs.FSWatcher | null = null;
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const debouncedRead = () => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null;
-      const config = readConfigFile(filePath);
-      callback(config);
-    }, 100);
-  };
-
-  try {
-    watcher = fs.watch(filePath, (eventType) => {
-      if (eventType === 'change') {
-        debouncedRead();
-      }
-    });
-  } catch {
-    const dir = path.dirname(filePath);
-    const filename = path.basename(filePath);
-
-    if (fs.existsSync(dir)) {
-      watcher = fs.watch(dir, (_eventType, changedFilename) => {
-        if (changedFilename === filename) {
-          debouncedRead();
-        }
-      });
-    }
-  }
-
-  return () => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    if (watcher) {
-      watcher.close();
-    }
-  };
-}
-
 function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'unsupportedVersion')) return 'unsupportedVersion';
   if (isTomlValidationError(error, 'duplicateProviderId')) return 'duplicateProviderId';
@@ -380,13 +214,6 @@ function buildConfigReadDiagnostic(
         message: `Configuration file contains invalid TOML: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
-    case 'invalidJson':
-      return {
-        code,
-        filePath,
-        message: `Legacy JSON configuration file contains invalid JSON: ${filePath}`,
-        ...(detail !== undefined ? { detail } : {}),
-      };
     case 'unsupportedVersion':
       return {
         code,
@@ -408,20 +235,6 @@ function buildConfigReadDiagnostic(
         message: `Configuration file contains duplicate model IDs: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
-    case 'legacyJsonOnly':
-      return {
-        code,
-        filePath,
-        message: `Legacy JSON configuration found without TOML config: ${String(error)}. Migrate it to ${filePath}.`,
-        ...(detail !== undefined ? { detail } : {}),
-      };
-    case 'conflictingConfigFiles':
-      return {
-        code,
-        filePath,
-        message: `Both TOML and legacy JSON configuration files exist. Keep ${filePath} and remove or migrate ${String(error)}.`,
-        ...(detail !== undefined ? { detail } : {}),
-      };
     case 'readError':
       return {
         code,
@@ -430,54 +243,6 @@ function buildConfigReadDiagnostic(
         ...(detail !== undefined ? { detail } : {}),
       };
   }
-}
-
-function buildLegacyJsonReadDiagnostic(
-  code: ConfigReadErrorCode,
-  filePath: string,
-  error?: unknown,
-): ConfigReadDiagnostic {
-  const detail =
-    error instanceof Error ? error.message : error === undefined ? undefined : String(error);
-  if (code === 'invalidJson') {
-    return {
-      code,
-      filePath,
-      message: `Legacy JSON configuration file contains invalid JSON: ${filePath}`,
-      ...(detail !== undefined ? { detail } : {}),
-    };
-  }
-  return buildConfigReadDiagnostic(code, filePath, error);
-}
-
-function inferLegacyJsonPath(filePath: string): string | null {
-  return path.basename(filePath) === CONFIG_FILE_NAME
-    ? path.join(path.dirname(filePath), LEGACY_CONFIG_FILE_NAME)
-    : null;
-}
-
-/**
- * Watch user configuration for changes
- *
- * @param callback - Callback when config changes
- * @returns Cleanup function to stop watching
- */
-export function watchUserConfig(callback: (config: UnifiedConfig | null) => void): () => void {
-  return watchConfigFile(getUserConfigPath(), callback);
-}
-
-/**
- * Watch workspace configuration for changes
- *
- * @param workDir - Workspace directory path
- * @param callback - Callback when config changes
- * @returns Cleanup function to stop watching
- */
-export function watchWorkspaceConfig(
-  workDir: string,
-  callback: (config: UnifiedConfig | null) => void,
-): () => void {
-  return watchConfigFile(getWorkspaceConfigPath(workDir), callback);
 }
 
 // =============================================================================
@@ -491,8 +256,6 @@ export interface ConfigLocationInfo {
   dir: string;
   file: string;
   exists: boolean;
-  legacyFile?: string;
-  legacyExists?: boolean;
 }
 
 /**
@@ -506,24 +269,18 @@ export function getConfigLocations(workDir: string = process.cwd()): {
   workspace: ConfigLocationInfo;
 } {
   const userFile = getUserConfigPath();
-  const userLegacyFile = getLegacyUserConfigPath();
   const workspaceFile = getWorkspaceConfigPath(workDir);
-  const workspaceLegacyFile = getLegacyWorkspaceConfigPath(workDir);
 
   return {
     user: {
       dir: getUserConfigDir(),
       file: userFile,
       exists: fs.existsSync(userFile),
-      legacyFile: userLegacyFile,
-      legacyExists: fs.existsSync(userLegacyFile),
     },
     workspace: {
       dir: getWorkspaceConfigDir(workDir),
       file: workspaceFile,
       exists: fs.existsSync(workspaceFile),
-      legacyFile: workspaceLegacyFile,
-      legacyExists: fs.existsSync(workspaceLegacyFile),
     },
   };
 }

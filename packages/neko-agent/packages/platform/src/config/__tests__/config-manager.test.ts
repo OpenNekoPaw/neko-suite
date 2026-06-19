@@ -107,6 +107,10 @@ function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfig
   };
 }
 
+function createEmptyConfigManager(): ConfigManager {
+  return new ConfigManager({ userConfigManager: createMockUserConfigManager() });
+}
+
 function createReadResultUserConfigManager(
   result: ConfigReadResult | (() => ConfigReadResult),
 ): IUserConfigManager {
@@ -217,7 +221,7 @@ function createAccountCatalog() {
 describe('ConfigManager', () => {
   describe('initialization without user config', () => {
     it('should initialize with empty config', () => {
-      const manager = new ConfigManager();
+      const manager = createEmptyConfigManager();
       const config = manager.getConfig();
 
       expect(config.providers.size).toBe(0);
@@ -226,7 +230,7 @@ describe('ConfigManager', () => {
     });
 
     it('should return retry/timeout presets', () => {
-      const manager = new ConfigManager();
+      const manager = createEmptyConfigManager();
       const preset = manager.getRetryTimeoutPreset('modelCall');
 
       expect(preset).toBeDefined();
@@ -434,7 +438,7 @@ describe('ConfigManager', () => {
       );
     });
 
-    it('treats missing config as user-owned and reports configuration guidance', () => {
+    it('keeps missing config out of settings data until account-aware projection runs', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'missing',
@@ -451,10 +455,27 @@ describe('ConfigManager', () => {
       expect(manager.getConfig().providers.size).toBe(0);
       expect(manager.getAssistantSettingsData().selectedProviderId).toBeNull();
       expect(manager.getAssistantSettingsData().selectedModelId).toBeNull();
+      expect(manager.getAssistantSettingsData().configDiagnostic).toBeUndefined();
       expect(() => manager.assertConfigAvailable()).toThrow('Agent configuration file is missing');
     });
 
-    it('reports incomplete config before leaking shared default model names', () => {
+    it('reports missing config from account-aware config state when account gateway is absent', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'missing',
+          filePath: '/tmp/neko/config.toml',
+        }),
+      });
+
+      expect(manager.getAssistantConfigState().configDiagnostic).toEqual(
+        expect.objectContaining({
+          code: 'missingConfig',
+          filePath: '/tmp/neko/config.toml',
+        }),
+      );
+    });
+
+    it('keeps non-AI empty config out of settings data until account-aware projection runs', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
           status: 'ok',
@@ -473,8 +494,11 @@ describe('ConfigManager', () => {
         expect.objectContaining({
           selectedProviderId: null,
           selectedModelId: null,
-          configDiagnostic: expect.objectContaining({ code: 'missingProvider' }),
         }),
+      );
+      expect(manager.getAssistantSettingsData().configDiagnostic).toBeUndefined();
+      expect(manager.getAssistantConfigState().configDiagnostic).toEqual(
+        expect.objectContaining({ code: 'missingProvider' }),
       );
       expect(() => manager.assertConfigAvailable()).toThrow(
         'Agent configuration has no enabled providers',
@@ -661,43 +685,6 @@ describe('ConfigManager', () => {
       manager.reloadConfig();
       expect(manager.getProvider('anthropic')).toBeUndefined();
       expect(manager.getConfigDiagnostic()?.code).toBe('invalidToml');
-    });
-
-    it('poisons legacy JSON-only fallback so it cannot become a successful explicit source', () => {
-      const manager = new ConfigManager({
-        userConfigManager: createReadResultUserConfigManager({
-          status: 'legacyJsonOnly',
-          filePath: '/tmp/neko/config.toml',
-          diagnostic: {
-            code: 'legacyJsonOnly',
-            filePath: '/tmp/neko/config.toml',
-            message: 'Legacy JSON configuration found without TOML config: /tmp/neko/config.json',
-          },
-        }),
-      });
-
-      const state = manager.getAssistantConfigState({
-        accountCatalog: createAccountCatalog(),
-      });
-
-      expect(manager.getConfig().providers.size).toBe(0);
-      expect(state.configDiagnostic).toEqual(
-        expect.objectContaining({
-          code: 'legacyJsonOnly',
-          filePath: '/tmp/neko/config.toml',
-        }),
-      );
-      expect(state.modelGroups[0]).toMatchObject({ source: 'account-gateway' });
-      expect(manager.getAssistantSettingsData()).toEqual(
-        expect.objectContaining({
-          selectedProviderId: null,
-          selectedModelId: null,
-          configDiagnostic: expect.objectContaining({ code: 'legacyJsonOnly' }),
-        }),
-      );
-      expect(() => manager.assertConfigAvailable()).toThrow(
-        'Legacy JSON configuration must be migrated to TOML',
-      );
     });
 
     it('blocks conversation when selected default provider is unavailable', () => {
@@ -901,7 +888,7 @@ describe('ConfigManager', () => {
 
   describe('retry/timeout presets', () => {
     it('should return all built-in presets', () => {
-      const manager = new ConfigManager();
+      const manager = createEmptyConfigManager();
       const config = manager.getConfig();
 
       expect(config.retryTimeoutPresets.size).toBe(4);
@@ -912,14 +899,14 @@ describe('ConfigManager', () => {
     });
 
     it('should return correct preset values', () => {
-      const manager = new ConfigManager();
+      const manager = createEmptyConfigManager();
       const preset = manager.getRetryTimeoutPreset('modelCall');
 
       expect(preset).toEqual(RETRY_TIMEOUT_PRESETS.modelCall);
     });
 
     it('should return undefined for non-existent preset', () => {
-      const manager = new ConfigManager();
+      const manager = createEmptyConfigManager();
       const preset = manager.getRetryTimeoutPreset('nonexistent' as any);
 
       expect(preset).toBeUndefined();

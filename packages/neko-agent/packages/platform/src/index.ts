@@ -35,7 +35,7 @@ export {
   OLLAMA_LOCAL_PROVIDER_ID,
 } from './config/default-config';
 
-export { watchWorkspaceConfig, type WorkspaceConfig } from './config/workspace-config';
+export { type WorkspaceConfig } from './config/workspace-config';
 
 export {
   ConfigManager,

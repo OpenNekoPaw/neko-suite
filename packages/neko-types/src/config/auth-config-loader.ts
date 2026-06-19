@@ -8,8 +8,12 @@
  */
 
 import type { AuthConfig } from '../types/auth';
-import type { AuthConfigJson } from './types';
-import { readUserConfig, readWorkspaceConfig } from './config-reader';
+import type { AuthConfigJson, UnifiedConfig } from './types';
+import {
+  readUserConfigResult,
+  readWorkspaceConfigResult,
+  type ConfigReadResult,
+} from './config-reader';
 
 // =============================================================================
 // Defaults
@@ -29,8 +33,8 @@ const DEFAULT_REDIRECT_PORT = 6419;
  * @returns AuthConfig with defaults applied. Empty authUrl/tokenUrl means not configured.
  */
 export function loadAuthConfigFromFiles(workspaceDir?: string): AuthConfig {
-  const userConfig = readUserConfig();
-  const wsConfig = workspaceDir ? readWorkspaceConfig(workspaceDir) : null;
+  const userConfig = readConfigOrThrow(readUserConfigResult());
+  const wsConfig = workspaceDir ? readConfigOrThrow(readWorkspaceConfigResult(workspaceDir)) : null;
 
   // Workspace auth overrides user auth (field-level merge)
   const userAuth = userConfig?.auth;
@@ -45,6 +49,12 @@ export function loadAuthConfigFromFiles(workspaceDir?: string): AuthConfig {
     scopes: merged.scopes ?? DEFAULT_SCOPES,
     redirectPort: merged.redirectPort ?? DEFAULT_REDIRECT_PORT,
   };
+}
+
+function readConfigOrThrow(result: ConfigReadResult): UnifiedConfig | null {
+  if (result.status === 'missing') return null;
+  if (result.status === 'ok') return result.config;
+  throw new Error(result.diagnostic.message);
 }
 
 /**

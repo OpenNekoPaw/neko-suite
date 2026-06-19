@@ -49,13 +49,10 @@ export function projectAssistantConfigReadResultDiagnostic(
 ): AssistantConfigDiagnostic | undefined {
   if (
     result.status === 'empty' ||
-    result.status === 'invalidJson' ||
     result.status === 'invalidToml' ||
     result.status === 'unsupportedVersion' ||
     result.status === 'duplicateProviderId' ||
     result.status === 'duplicateModelId' ||
-    result.status === 'legacyJsonOnly' ||
-    result.status === 'conflictingConfigFiles' ||
     result.status === 'readError'
   ) {
     return projectAssistantConfigDiagnostic(result.diagnostic);
@@ -70,8 +67,6 @@ export function buildSafeConfigDiagnosticMessage(
   switch (code) {
     case 'empty':
       return `Configuration file is empty: ${filePath}. Fix the file, then open a new Agent session or tab.`;
-    case 'invalidJson':
-      return `Legacy JSON configuration contains invalid JSON: ${filePath}. Fix or remove the legacy file, then run the Agent config migration command.`;
     case 'invalidToml':
       return `Configuration file contains invalid TOML: ${filePath}. Fix the file, then open a new Agent session or tab.`;
     case 'unsupportedVersion':
@@ -80,10 +75,6 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains duplicate provider IDs: ${filePath}. Remove duplicate provider entries, then open a new Agent session or tab.`;
     case 'duplicateModelId':
       return `Configuration file contains duplicate model IDs: ${filePath}. Remove duplicate model entries, then open a new Agent session or tab.`;
-    case 'legacyJsonOnly':
-      return `Legacy JSON configuration must be migrated to TOML: ${filePath}. Run the Agent config migration command, then open a new Agent session or tab.`;
-    case 'conflictingConfigFiles':
-      return `Both TOML and legacy JSON configuration files exist for ${filePath}. Keep the TOML file and remove or migrate the legacy JSON file, then open a new Agent session or tab.`;
     case 'readError':
       return `Unable to read configuration file: ${filePath}. Check file permissions, then open a new Agent session or tab.`;
     case 'missingConfig':

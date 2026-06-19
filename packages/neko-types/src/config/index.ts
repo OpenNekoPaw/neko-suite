@@ -21,8 +21,8 @@
  *
  * // In Node.js (extension, agent-cli) - import reader directly
  * import {
- *   readUserConfig,
- *   readWorkspaceConfig,
+ *   readUserConfigResult,
+ *   readWorkspaceConfigResult,
  * } from '@neko/shared/config/config-reader';
  * ```
  */
@@ -41,7 +41,6 @@ export {
   DEFAULT_EXTENSION_CONFIG,
   CONFIG_DIR_NAME,
   CONFIG_FILE_NAME,
-  LEGACY_CONFIG_FILE_NAME,
 } from './types';
 
 // Normalizer (browser-safe - pure functions, no Node.js dependencies)

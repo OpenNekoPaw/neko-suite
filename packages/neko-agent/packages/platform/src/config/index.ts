@@ -20,7 +20,6 @@ export {
 export {
   loadWorkspaceConfig,
   saveWorkspaceConfig,
-  watchWorkspaceConfig,
   getWorkspaceConfigPath,
   type WorkspaceConfig,
 } from './workspace-config';

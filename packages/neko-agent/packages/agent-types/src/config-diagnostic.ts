@@ -1,6 +1,5 @@
 export type AgentConfigDiagnosticCode =
   | 'empty'
-  | 'invalidJson'
   | 'readError'
   | 'missingConfig'
   | 'missingProvider'
@@ -10,8 +9,6 @@ export type AgentConfigDiagnosticCode =
   | 'unsupportedVersion'
   | 'duplicateProviderId'
   | 'duplicateModelId'
-  | 'legacyJsonOnly'
-  | 'conflictingConfigFiles'
   | 'invalidDefaultProvider'
   | 'invalidDefaultModel'
   | 'missingAccountCatalog'

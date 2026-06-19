@@ -354,6 +354,11 @@ export class ConfigManager {
     const providerSourceProjection = this.resolveProviderSources(null);
     const chatModelOptions = [...providerSourceProjection.chatModelOptions];
     const explicitState = buildAssistantConfigState(config);
+    const settingsDiagnostic =
+      providerSourceProjection.explicitAiConfig.invalidDiagnostic ??
+      (this.isBlockingConfigReadDiagnostic(this.configDiagnostic)
+        ? this.configDiagnostic
+        : undefined);
     return {
       ...this.getAssistantSettingsSnapshot(),
       ...explicitState,
@@ -364,7 +369,7 @@ export class ConfigManager {
         chatModelOptions,
         models: config.models.values(),
       }),
-      ...(this.configDiagnostic ? { configDiagnostic: this.configDiagnostic } : {}),
+      ...(settingsDiagnostic ? { configDiagnostic: settingsDiagnostic } : {}),
     };
   }
 
@@ -652,11 +657,7 @@ export class ConfigManager {
         config: this.userConfigManager.loadRaw(),
       };
     }
-    return {
-      status: 'ok',
-      filePath: '<no-user-config-manager>',
-      config: {},
-    };
+    throw new Error('User config storage not available');
   }
 
   private getRawUserConfigSnapshot(): UnifiedConfig | undefined {
@@ -697,13 +698,10 @@ export class ConfigManager {
   ): diagnostic is AssistantConfigDiagnostic {
     return (
       diagnostic?.code === 'empty' ||
-      diagnostic?.code === 'invalidJson' ||
       diagnostic?.code === 'invalidToml' ||
       diagnostic?.code === 'unsupportedVersion' ||
       diagnostic?.code === 'duplicateProviderId' ||
       diagnostic?.code === 'duplicateModelId' ||
-      diagnostic?.code === 'legacyJsonOnly' ||
-      diagnostic?.code === 'conflictingConfigFiles' ||
       diagnostic?.code === 'invalidDefaultProvider' ||
       diagnostic?.code === 'invalidDefaultModel' ||
       diagnostic?.code === 'readError'
