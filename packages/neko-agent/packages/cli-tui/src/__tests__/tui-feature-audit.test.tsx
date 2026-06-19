@@ -40,6 +40,7 @@ const TEST_CONFIG = {
   ...DEFAULT_CLI_CONFIG,
   provider: 'openai',
   providerType: 'openai',
+  providerRequiresApiKey: true,
   model: 'gpt-5.3-codex',
   baseUrl: 'https://www.nekoapi.com/v1',
   apiKey: 'sk-test-key',

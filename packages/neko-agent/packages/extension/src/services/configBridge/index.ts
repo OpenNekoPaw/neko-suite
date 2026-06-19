@@ -45,7 +45,7 @@ import { broadcastToWebviews } from './broadcastHelper';
 import { SkillSyncHandler } from './skillSyncHandler';
 import { ToolSkillHandler } from './toolSkillHandler';
 import { ConfigFileHandler } from './configFileHandler';
-import { AccountAiCatalogCache } from '../accountAiCatalogCache';
+import { AccountAiCatalogCache, isAuthorizationFailure } from '../accountAiCatalogCache';
 
 export type { PostMessageFn } from './types';
 
@@ -241,9 +241,12 @@ export class ConfigBridge implements vscode.Disposable {
       const result = await this.accountAiCatalog.getSnapshot();
       return result.snapshot;
     } catch (error) {
-      this.accountAiCatalog.invalidateForAuthFailure(error);
-      logger.warn('Failed to resolve account AI catalog for config projection:', error);
-      return null;
+      if (isAuthorizationFailure(error)) {
+        this.accountAiCatalog.invalidateForAuthFailure(error);
+        logger.warn('Account AI catalog authorization failed for config projection:', error);
+        return null;
+      }
+      throw error;
     }
   }
 

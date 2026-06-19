@@ -12,6 +12,8 @@ export interface CLIConfig {
   provider: string;
   /** Provider protocol type for API routing (e.g., 'anthropic', 'openai') */
   providerType: string;
+  /** Whether the selected provider requires an API key before execution */
+  providerRequiresApiKey: boolean;
   /** Chat model ID */
   model: string;
   /** Media model IDs (for image/video/audio generation, empty if none) */
@@ -84,6 +86,7 @@ export interface CLIResult {
 export const DEFAULT_CLI_CONFIG: CLIConfig = {
   provider: 'anthropic',
   providerType: 'anthropic',
+  providerRequiresApiKey: true,
   model: 'claude-sonnet-4-20250514',
   mediaModels: [],
   maxTokens: 8192,

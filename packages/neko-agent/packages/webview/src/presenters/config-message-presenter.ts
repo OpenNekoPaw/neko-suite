@@ -334,13 +334,10 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
   const code = record.code;
   if (
     code !== 'empty' &&
-    code !== 'invalidJson' &&
     code !== 'invalidToml' &&
     code !== 'unsupportedVersion' &&
     code !== 'duplicateProviderId' &&
     code !== 'duplicateModelId' &&
-    code !== 'legacyJsonOnly' &&
-    code !== 'conflictingConfigFiles' &&
     code !== 'readError' &&
     code !== 'missingConfig' &&
     code !== 'missingProvider' &&

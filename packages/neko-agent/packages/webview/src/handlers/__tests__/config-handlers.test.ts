@@ -40,6 +40,26 @@ describe('configHandlers', () => {
     );
   });
 
+  it('does not show a global error when settings data has no blocking diagnostic', () => {
+    const context = createContext();
+
+    dispatch(
+      {
+        type: 'settingsData',
+        providers: [],
+        selectedProviderId: null,
+        selectedModelId: null,
+        chatModelOptions: [],
+        modelGroups: [],
+      },
+      context,
+    );
+
+    expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setSelectedModel).toHaveBeenCalledWith('auto');
+    expect(context.setGlobalError).not.toHaveBeenCalled();
+  });
+
   it('hydrates the selected chat model when config has an explicit selection', () => {
     const context = createContext();
 
@@ -56,7 +76,7 @@ describe('configHandlers', () => {
     expect(context.setSelectedModel).toHaveBeenCalledWith('openai:gpt-4.1');
   });
 
-  it('projects config state diagnostics into state and global error', () => {
+  it('keeps missing config diagnostics in state without a global error', () => {
     const context = createContext();
 
     dispatch(
@@ -65,10 +85,10 @@ describe('configHandlers', () => {
         config: {
           configuredProviders: [],
           configDiagnostic: {
-            code: 'legacyJsonOnly',
+            code: 'missingConfig',
             filePath: '/home/user/.neko/config.toml',
             message:
-              'Legacy JSON configuration must be migrated to TOML: /home/user/.neko/config.toml. Run the Agent config migration command, then open a new Agent session or tab.',
+              'Agent configuration file is missing: /home/user/.neko/config.toml. Create the config file with at least one enabled provider, chat model, and required provider credentials, then open a new Agent session or tab.',
           },
         },
       },
@@ -76,9 +96,7 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
-    expect(context.setGlobalError).toHaveBeenCalledWith(
-      'Legacy JSON configuration must be migrated to TOML: /home/user/.neko/config.toml. Run the Agent config migration command, then open a new Agent session or tab.',
-    );
+    expect(context.setGlobalError).not.toHaveBeenCalled();
   });
 });
 

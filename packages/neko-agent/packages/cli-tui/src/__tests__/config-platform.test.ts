@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { readUserConfig } from '@neko/shared/config/config-reader';
+import { readUserConfigResult } from '@neko/shared/config/config-reader';
 
 import {
   loadConfig,
@@ -28,7 +28,15 @@ const configPath = path.join(os.homedir(), '.neko', 'config.toml');
 const hasRealConfig = fs.existsSync(configPath);
 let rawConfig: Record<string, unknown> = {};
 if (hasRealConfig) {
-  rawConfig = readUserConfig() ?? {};
+  const result = readUserConfigResult();
+  if (result.status !== 'ok') {
+    throw new Error(
+      result.status === 'missing'
+        ? `Expected existing real config at ${configPath}`
+        : result.diagnostic.message,
+    );
+  }
+  rawConfig = result.config as Record<string, unknown>;
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
@@ -58,13 +66,17 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
   describe('loadConfig', () => {
     it('loads provider from real config', () => {
       const config = loadConfig('/tmp/test');
-      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
-      const expectedProvider =
-        (rawConfig.defaultProvider as string) ??
-        configProviders[0]?.id ??
-        DEFAULT_CLI_CONFIG.provider;
+      const configProviders =
+        (rawConfig.providers as Array<{ id: string; enabled?: boolean }>)?.filter(
+          (provider) => provider.enabled !== false,
+        ) ?? [];
+      const explicitDefaultProvider = rawConfig.defaultProvider as string | undefined;
 
-      expect(config.provider).toBe(expectedProvider);
+      if (explicitDefaultProvider) {
+        expect(config.provider).toBe(explicitDefaultProvider);
+      } else {
+        expect(configProviders.map((provider) => provider.id)).toContain(config.provider);
+      }
     });
 
     it('loads model from real config', () => {
@@ -80,8 +92,11 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
 
     it('loads API key from real config', () => {
       const config = loadConfig('/tmp/test');
-      // Config file has apiKey in providers or providerOverrides
-      expect(config.apiKey).toBeTruthy();
+      if (config.providerRequiresApiKey) {
+        expect(config.apiKey).toBeTruthy();
+      } else {
+        expect(config.apiKey).toBeUndefined();
+      }
     });
 
     it('applies CLI arg overrides over config', () => {
@@ -172,10 +187,23 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
     });
 
     it('fails when apiKey is missing', () => {
-      const config = { ...DEFAULT_CLI_CONFIG, apiKey: undefined };
+      const config = { ...DEFAULT_CLI_CONFIG, providerRequiresApiKey: true, apiKey: undefined };
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('API key not found');
+    });
+
+    it('allows local providers without an API key', () => {
+      const config = {
+        ...DEFAULT_CLI_CONFIG,
+        provider: 'ollama-local',
+        providerType: 'ollama',
+        providerRequiresApiKey: false,
+        apiKey: undefined,
+      };
+      const result = validateConfig(config);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('fails for invalid temperature', () => {
@@ -211,7 +239,10 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
   describe('listProviders', () => {
     it('returns providers from real config', () => {
       const providers = listProviders();
-      const configProviders = (rawConfig.providers as Array<{ id: string }>) ?? [];
+      const configProviders =
+        (rawConfig.providers as Array<{ id: string; enabled?: boolean }>)?.filter(
+          (provider) => provider.enabled !== false,
+        ) ?? [];
 
       expect(providers.length).toBeGreaterThanOrEqual(configProviders.length);
 

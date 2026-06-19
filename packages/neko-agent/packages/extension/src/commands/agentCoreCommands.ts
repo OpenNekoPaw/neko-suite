@@ -23,7 +23,6 @@ import { getRootLogger, handleError, ServiceCollection } from '../base';
 import { IPlatform } from '../bootstrap';
 import type { ChatViewProvider } from '../chat';
 import { getSkillFileService } from '../services/SkillFileService';
-import { migrateLegacyUserConfigFileInVsCode } from '../services/configBridge/configFileHandler';
 import {
   getSlashCommandRegistry,
   type PluginSlashCommandDef,
@@ -133,19 +132,10 @@ export function registerAgentCoreCommands(
 
   registerScriptCommands(context, chatViewProvider);
   registerServiceCommands(context, services);
-  registerConfigCommands(context);
   registerCanvasCommands(context, services);
   registerPluginCommands(context, chatViewProvider);
   registerDragAndDropCommands(context, chatViewProvider);
   registerInternalApiCommands(context, services);
-}
-
-function registerConfigCommands(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand('neko.agent.migrateConfigToToml', async () => {
-      await migrateLegacyUserConfigFileInVsCode();
-    }),
-  );
 }
 
 function registerScriptCommands(

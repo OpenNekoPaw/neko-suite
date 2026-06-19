@@ -27,6 +27,5 @@
   "neko.agent.startCreation.title": "Start Creation...",
   "neko.agent.createFromFile.title": "Create Video from This File",
   "neko.agent.retryCreation.title": "Retry Last Creation",
-  "neko.agent.addToContext.title": "Add to Neko Agent",
-  "neko.agent.migrateConfigToToml.title": "Migrate Agent Config to TOML"
+  "neko.agent.addToContext.title": "Add to Neko Agent"
 }

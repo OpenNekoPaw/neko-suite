@@ -79,6 +79,12 @@ export const workspace = {
   onDidChangeTextDocument: vi.fn((_listener: (event: any) => void) => ({
     dispose: vi.fn(),
   })),
+  onDidSaveTextDocument: vi.fn((_listener: (document: any) => void) => ({
+    dispose: vi.fn(),
+  })),
+  onDidChangeWorkspaceFolders: vi.fn((_listener: (event: any) => void) => ({
+    dispose: vi.fn(),
+  })),
   createFileSystemWatcher: vi.fn(() => ({
     onDidCreate: vi.fn((_listener: (uri: any) => void) => ({ dispose: vi.fn() })),
     onDidChange: vi.fn((_listener: (uri: any) => void) => ({ dispose: vi.fn() })),

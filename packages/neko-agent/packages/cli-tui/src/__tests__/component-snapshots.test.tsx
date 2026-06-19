@@ -40,6 +40,7 @@ function resetStores(): void {
     model: 'gpt-5.3-codex',
     provider: 'openai',
     providerType: 'openai',
+    providerRequiresApiKey: true,
   });
 }
 

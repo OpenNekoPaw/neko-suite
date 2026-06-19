@@ -23,15 +23,10 @@ import {
   getWorkspaceConfigDir,
   getWorkspaceConfigPath,
   getConfigLocations,
-  getLegacyUserConfigPath,
   readUserConfigResult,
   readWorkspaceConfigResult,
   writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
-import {
-  migrateLegacyJsonConfigToToml,
-  type LegacyConfigMigrationResult,
-} from '@neko/shared/config/config-migration';
 import { getEnvKeyMap } from '@neko/shared';
 
 export {
@@ -109,15 +104,6 @@ export function loadConfig(
   const cm = createConfigManager(workDir);
 
   try {
-    // Determine provider: override > first enabled provider with apiKey > default
-    const providerId = overrides.provider ?? findDefaultProvider(cm) ?? DEFAULT_CLI_CONFIG.provider;
-    const provider = cm.getProvider(providerId);
-    const providerType = provider?.type ?? DEFAULT_CLI_CONFIG.providerType;
-
-    // API key: env > config
-    const envApiKey = getApiKeyFromEnv(providerId) ?? getApiKeyFromEnv(providerType);
-    const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
-
     // Read scalar fields from raw UnifiedConfig (not UserConfig which lacks them)
     const rawUserResult = readUserConfigResult();
     const rawWorkspaceResult = readWorkspaceConfigResult(workDir);
@@ -126,13 +112,31 @@ export function loadConfig(
     const rawUser = rawUserResult.status === 'ok' ? rawUserResult.config : {};
     const rawWorkspace = rawWorkspaceResult.status === 'ok' ? rawWorkspaceResult.config : {};
 
+    const providerId =
+      overrides.provider ?? rawWorkspace.defaultProvider ?? rawUser.defaultProvider;
+    if (!providerId) {
+      throw new Error('Default provider is not configured in ~/.neko/config.toml.');
+    }
+    const provider = cm.getProvider(providerId);
+    const providerType = provider?.type;
+    if (!providerType) {
+      throw new Error(`Provider "${providerId}" is not configured in ~/.neko/config.toml.`);
+    }
+    const providerRequiresApiKey = provider.requiresApiKey !== false;
+
+    // API key: env > config
+    const envApiKey = getApiKeyFromEnv(providerId) ?? getApiKeyFromEnv(providerType);
+    const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
+
     // Model: override > defaultModel scalar > first enabled model for provider > default
     const model =
       overrides.model ??
       rawWorkspace.defaultModel ??
       rawUser.defaultModel ??
-      findDefaultModel(cm, providerId) ??
-      DEFAULT_CLI_CONFIG.model;
+      findDefaultModel(cm, providerId);
+    if (!model) {
+      throw new Error(`No model is configured for provider "${providerId}".`);
+    }
 
     // Check if the configured model exists in ConfigManager.
     // If not, mark it as modelNotFound but do NOT fallback —
@@ -198,6 +202,7 @@ export function loadConfig(
     const config: CLIConfig = {
       provider: providerId,
       providerType,
+      providerRequiresApiKey,
       model,
       mediaModels,
       defaultMediaModels,
@@ -218,17 +223,6 @@ export function loadConfig(
   } finally {
     cm.dispose();
   }
-}
-
-/**
- * Find the first enabled provider that has an API key (env or config).
- */
-function findDefaultProvider(cm: ConfigManager): string | undefined {
-  for (const p of cm.getEnabledProviders()) {
-    const envKey = getApiKeyFromEnv(p.id) ?? getApiKeyFromEnv(p.type);
-    if (envKey ?? p.apiKey) return p.id;
-  }
-  return undefined;
 }
 
 /**
@@ -317,13 +311,6 @@ export function updateDefaultModel(modelId: string): void {
   writeUserConfig(raw);
 }
 
-export function migrateUserConfigJsonToToml(): LegacyConfigMigrationResult {
-  return migrateLegacyJsonConfigToToml({
-    legacyJsonPath: getLegacyUserConfigPath(),
-    tomlPath: getUserConfigPath(),
-  });
-}
-
 function assertCliConfigReadable(result: ReturnType<typeof readUserConfigResult>): void {
   if (result.status === 'ok' || result.status === 'missing') return;
   throw new Error(result.diagnostic.message);
@@ -339,7 +326,7 @@ function assertCliConfigReadable(result: ReturnType<typeof readUserConfigResult>
 export function validateConfig(config: CLIConfig): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  if (!config.apiKey) {
+  if (config.providerRequiresApiKey && !config.apiKey) {
     errors.push(
       `API key not found for provider "${config.provider}". ` +
         `Set the appropriate environment variable (e.g. ANTHROPIC_API_KEY), ` +

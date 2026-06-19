@@ -84,6 +84,7 @@ function makeConfig(): CLIConfig {
   return {
     provider: 'test',
     providerType: 'openai',
+    providerRequiresApiKey: true,
     model: 'test-model',
     mediaModels: [],
     maxTokens: 1024,

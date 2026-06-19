@@ -90,9 +90,6 @@ const handleConfigState: MessageHandler<'configState'> = (message: ConfigStateMe
       ...prev,
       ...settingsPatch,
     }));
-    if (settingsPatch.configDiagnostic) {
-      context.setGlobalError(settingsPatch.configDiagnostic.message);
-    }
   }
 };
 
