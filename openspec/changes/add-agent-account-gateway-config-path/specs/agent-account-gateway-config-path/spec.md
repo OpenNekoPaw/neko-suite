@@ -6,7 +6,7 @@ Neko Agent SHALL resolve AI provider/model configuration from explicit user conf
 
 #### Scenario: Explicit local AI selection wins
 
-- **WHEN** `~/.neko/config.json` contains an explicit enabled AI provider, chat model, `defaultProvider`, and `defaultModel`
+- **WHEN** `~/.neko/config.toml` contains an explicit enabled AI provider, chat model, `default_provider`, and `default_model`
 - **THEN** Agent provider resolution MUST use the explicit config source
 - **THEN** it MUST NOT replace the selected provider/model with the Neko account gateway even if an OAuth session exists
 

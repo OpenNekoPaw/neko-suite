@@ -1,9 +1,9 @@
 ## 1. Contracts and Diagnostics
 
-- [x] 1.1 Add typed config read result contracts in `@neko/shared/config/config-reader` for `ok`, `missing`, `empty`, `invalidJson`, and `readError`.
+- [x] 1.1 Add typed config read result contracts in `@neko/shared/config/config-reader` for `ok`, `missing`, `empty`, `invalidToml`, and `readError`.
 - [x] 1.2 Keep existing read APIs only as compatibility helpers where still needed, and add Agent-facing APIs that cannot collapse errors into `null`.
 - [x] 1.3 Add safe diagnostic projection helpers for Extension/Webview messages, preserving file path and failure category while excluding stacks/secrets from Webview state.
-- [x] 1.4 Add focused shared config-reader tests for missing, empty, invalid JSON, read error, and successful JSON reads.
+- [x] 1.4 Add focused shared config-reader tests for missing, empty, invalid TOML, read error, and successful TOML reads.
 
 ## 2. Platform Snapshot Loading
 
@@ -27,7 +27,7 @@
 
 - [x] 4.1 Remove Webview `configChanged` auto-refresh handling or convert it to a deprecated no-op with tests proving it does not call `getConfig`/`getSettings`.
 - [x] 4.2 Add Webview state and presenter handling for config diagnostics from Extension messages.
-- [x] 4.3 Display safe actionable config errors for empty, invalid JSON, and read-error states; keep missing config as onboarding/configuration guidance.
+- [x] 4.3 Display safe actionable config errors for empty, invalid TOML, and read-error states; keep missing config as onboarding/configuration guidance.
 - [x] 4.4 Update `ChatWorkspace` execution mode changes to local/runtime state without sending config-file-backed `updateSettings` writes.
 - [x] 4.5 Trigger config/settings snapshot requests on Webview mount, new chat tab open, and reopened/restored conversation tab activation.
 - [x] 4.6 Add Webview tests for config diagnostics, no `configChanged` refresh, runtime-only settings changes, and tab lifecycle snapshot requests.

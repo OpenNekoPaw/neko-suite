@@ -1,6 +1,6 @@
 ## Why
 
-Neko Agent currently treats user config file read failures like missing config, watches config files in real time, and can write UI setting updates back to `~/.neko/config.json`. This can read a partially written file, hide the error behind defaults, and then overwrite or clear a user-maintained config file.
+Neko Agent currently treats user config file read failures like missing config, watches config files in real time, and can write UI setting updates back to `~/.neko/config.toml`. This can read a partially written file, hide the error behind defaults, and then overwrite or clear a user-maintained config file.
 
 This change is needed now because provider/API configuration is a trust and data-preservation boundary: configuration errors must be explicit, recoverable, and must not be masked by fallback or Agent-authored writes.
 
@@ -8,7 +8,7 @@ This change is needed now because provider/API configuration is a trust and data
 
 - **BREAKING** Stop real-time config file reload for Agent sessions. Agent reads a config snapshot only when a conversation session/tab is opened or reopened.
 - **BREAKING** Stop Agent-owned writes to user config files from Webview settings, provider imports, default config creation, file watchers, or automatic refresh flows.
-- Add explicit config load diagnostics for missing, empty, invalid JSON, and read-error states, with safe user-facing messages and full Extension-side logging.
+- Add explicit config load diagnostics for missing, empty, invalid TOML, and read-error states, with safe user-facing messages and full Extension-side logging.
 - Replace `null`-as-error config reads with a typed result so invalid config cannot be confused with an absent file.
 - Remove or fail-close watcher/fallback paths that currently broadcast `configChanged` and refresh settings/config in active Webviews.
 - Keep "open config file" as a user action, but it must only open an existing file or a user-editable new document without silently overwriting existing content.
@@ -25,7 +25,7 @@ This change is needed now because provider/API configuration is a trust and data
 
 ### Compatibility
 
-This is a deliberate prelaunch cleanup of an internal Agent configuration path. Existing `~/.neko/config.json` files remain user-owned and must not be modified by the Agent. If a file is invalid, empty, or unreadable, the Agent reports a diagnostic and disables config-dependent execution until the user fixes the file and opens a new session/tab.
+This is a deliberate prelaunch cleanup of an internal Agent configuration path. Existing `~/.neko/config.toml` files remain user-owned and must not be modified by the Agent. If a file is invalid, empty, or unreadable, the Agent reports a diagnostic and disables config-dependent execution until the user fixes the file and opens a new session/tab.
 
 ## Capabilities
 

@@ -5,11 +5,10 @@ Neko Agent's current user configuration is stored as `~/.neko/config.json`, whic
 ## What Changes
 
 - **BREAKING**: Replace `~/.neko/config.json` and workspace `.neko/config.json` as the canonical Agent user/workspace configuration files with `~/.neko/config.toml` and `.neko/config.toml`.
-- **BREAKING**: Stop treating `config.json` as a successful default runtime fallback for Agent configuration. If a legacy JSON config is present without TOML, Agent surfaces a migration diagnostic and does not silently load JSON for conversations.
+- **BREAKING**: Stop treating `config.json` as any Agent configuration input. If TOML is missing, Agent reports the canonical TOML file as missing and ignores adjacent JSON files.
 - Add a TOML authoring contract for Agent configuration that maps to the existing internal `UnifiedConfig`, `ProviderConfig`, `ModelConfig`, MCP, auth, and scalar settings contracts.
 - Keep runtime, Webview messages, account gateway catalog snapshots, generated caches, and internal DTOs as typed objects/JSON-compatible data. TOML is only the user-authored configuration syntax.
-- Add an explicit migration command/tool path that reads legacy `config.json`, writes `config.toml`, and preserves the old JSON as a backup or leaves it untouched for user review.
-- Add fail-visible parse and validation diagnostics for TOML syntax errors, unsupported schema versions, duplicate IDs, invalid provider/model references, selected unavailable models, and legacy JSON-only state.
+- Add fail-visible parse and validation diagnostics for TOML syntax errors, unsupported schema versions, duplicate IDs, invalid provider/model references, and selected unavailable models.
 - Update config open/create/write paths, documentation, tests, and Webview diagnostics to point users to TOML.
 
 Non-goals for this change:
@@ -17,7 +16,7 @@ Non-goals for this change:
 - No migration of OAuth account gateway secrets into user configuration.
 - No change to provider source priority, account gateway catalog behavior, or NewAPI/local provider runtime semantics beyond replacing the file format used by explicit user configuration.
 - No TOML persistence for Webview state, account catalog cache, generated media/artifact cache, project files, or `nk*` durable project formats.
-- No long-lived dual-read/dual-write compatibility path for JSON.
+- No JSON migration command, dual-read, dual-write, conflict detection, or compatibility path for Agent config.
 
 ## Capabilities
 
@@ -33,9 +32,9 @@ Non-goals for this change:
 
 - Shared configuration constants, reader/writer, and tests in `packages/neko-types/src/config/`.
 - Agent Platform config manager, user/workspace config adapters, diagnostics, default config creation, and import/export paths in `packages/neko-agent/packages/platform/src/config/`.
-- Agent Extension config bridge commands that open/create/migrate configuration files.
-- CLI/TUI configuration read/write paths that currently share `~/.neko/config.json`.
+- Agent Extension config bridge commands that open/create configuration files.
+- CLI/TUI configuration read/write paths that now share `~/.neko/config.toml`.
 - Webview settings/onboarding/config projections and localized diagnostics that mention the config file path or invalid JSON.
-- Existing OpenSpec/docs references to `~/.neko/config.json` for Agent explicit config.
+- Existing OpenSpec/docs references that still describe the old `~/.neko/config.json` Agent explicit config.
 - New dependency audit for a TOML parser/serializer in the shared Layer 0 config package.
-- Focused validation for TOML parse/write, JSON rejection/migration diagnostics, provider/model resolution path-level behavior, Webview projection diagnostics, and documentation updates.
+- Focused validation for TOML parse/write, JSON-ignored path-level behavior, provider/model resolution, Webview projection diagnostics, and documentation updates.

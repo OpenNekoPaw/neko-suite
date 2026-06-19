@@ -6,7 +6,7 @@ The final product path needs two AI API configuration sources:
 
 ```text
 Explicit local user configuration
-  ~/.neko/config.json / env / runtime imported credentials
+  ~/.neko/config.toml / env / runtime imported credentials
   supports direct, gateway, custom-gateway, local
   highest priority when it explicitly selects AI provider/model
 
@@ -44,7 +44,7 @@ Five-layer analysis:
 
 - Implementing official direct vendor setup or API verification for Gemini, Grok, Claude, GPT, DeepSeek, GLM, Suno, Seedance, Kling, or similar providers.
 - Guaranteeing that every NewAPI-compatible gateway supports every upstream vendor-specific parameter.
-- Persisting Neko account gateway API secrets into `~/.neko/config.json`.
+- Persisting Neko account gateway API secrets into `~/.neko/config.toml`.
 - Replacing the existing local config format or rewriting existing user config files.
 - Building a new cloud service governance layer in the local client.
 - Redesigning the full settings UI beyond the projected account gateway/config state required for this path.
@@ -68,13 +68,13 @@ Five-layer analysis:
      3. fail-visible diagnostic
    ```
 
-   Alternative considered: merge account gateway into `~/.neko/config.json` as a normal provider. Rejected because OAuth-derived credentials and entitlement are session-scoped and should not become user-editable config facts.
+   Alternative considered: merge account gateway into `~/.neko/config.toml` as a normal provider. Rejected because OAuth-derived credentials and entitlement are session-scoped and should not become user-editable config facts.
 
 2. Treat config file priority as explicit, not merely present.
 
    A config file that only contains MCP, auth, UI settings, or non-AI settings must not disable the OAuth default path. A config file with explicit AI provider/model selection, explicit AI provider entries, or explicit chat model request owns provider resolution and should fail visibly if invalid.
 
-   Alternative considered: any existing `~/.neko/config.json` disables OAuth. Rejected because it makes unrelated local settings unexpectedly break the default account gateway path.
+   Alternative considered: any existing `~/.neko/config.toml` disables OAuth. Rejected because it makes unrelated local settings unexpectedly break the default account gateway path.
 
 3. Represent OAuth as a runtime-only `neko-account-gateway` provider source.
 
@@ -161,7 +161,7 @@ The intended runtime flow:
 
 ```text
 Agent tab/session open
-  -> ConfigManager reads ~/.neko/config.json result
+  -> ConfigManager reads ~/.neko/config.toml result
   -> AccountGatewayCatalogService checks auth session + cached catalog
   -> AiProviderSourceResolver builds provider source snapshot
   -> ConfigBridge projects providers/models/diagnostics to Webview

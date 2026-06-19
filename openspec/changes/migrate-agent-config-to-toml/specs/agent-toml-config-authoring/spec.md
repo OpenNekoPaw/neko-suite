@@ -40,50 +40,29 @@ Neko Agent SHALL parse `config.toml` into a TOML-authored configuration contract
 - **THEN** the message payload MUST remain JSON-compatible runtime data
 - **THEN** the Webview MUST NOT receive TOML AST nodes or TOML parser-specific data structures
 
-### Requirement: Legacy JSON config is not a default runtime fallback
+### Requirement: Legacy JSON config is not an Agent config input
 
-Neko Agent SHALL NOT treat legacy `config.json` files as successful runtime configuration in the canonical Agent config read path. Legacy JSON files MAY be read only by explicit migration, rejection, or diagnostic paths.
+Neko Agent SHALL NOT treat legacy `config.json` files as successful runtime configuration, migration input, rejection input, conflict input, or diagnostic input in the canonical Agent config path.
 
-#### Scenario: Only legacy user JSON exists
+#### Scenario: Adjacent legacy user JSON is ignored
 
 - **WHEN** `~/.neko/config.json` exists and `~/.neko/config.toml` does not exist
-- **THEN** the canonical Agent config read result MUST be a visible legacy JSON diagnostic
+- **THEN** the canonical Agent config read result MUST be missing `~/.neko/config.toml`
 - **THEN** Agent MUST NOT load the JSON file as successful explicit AI configuration for conversation runtime
+- **THEN** Agent MUST NOT offer or invoke a JSON migration path
 
-#### Scenario: Only legacy workspace JSON exists
+#### Scenario: Adjacent legacy workspace JSON is ignored
 
 - **WHEN** `.neko/config.json` exists and `.neko/config.toml` does not exist
-- **THEN** the canonical workspace config read result MUST be a visible legacy JSON diagnostic
-- **THEN** Agent MUST NOT load the JSON file as successful workspace configuration outside an explicit migration or diagnostic path
+- **THEN** the canonical workspace config read result MUST be missing `.neko/config.toml`
+- **THEN** Agent MUST NOT load the JSON file as successful workspace configuration
 
-#### Scenario: JSON and TOML both exist
+#### Scenario: JSON and TOML both exist with different content
 
 - **WHEN** both `config.json` and `config.toml` exist in the same Agent config directory
-- **THEN** Agent MUST surface a conflicting config files diagnostic
+- **THEN** Agent MUST read `config.toml`
 - **THEN** Agent MUST NOT silently merge the two files
 - **THEN** Agent MUST NOT choose the JSON file as a fallback if TOML is invalid
-
-### Requirement: Legacy JSON migration is explicit and recoverable
-
-Neko Agent SHALL provide an explicit migration path that converts legacy `config.json` into `config.toml`. Normal Agent startup SHALL NOT silently rewrite JSON to TOML.
-
-#### Scenario: User invokes migration command
-
-- **WHEN** the user invokes the Agent config migration command or equivalent CLI/tool action
-- **THEN** the migration path MUST read the legacy JSON file
-- **THEN** it MUST write a TOML file that maps the legacy runtime config into the canonical TOML authoring format
-- **THEN** it MUST report whether the legacy JSON file was preserved, renamed, or backed up
-
-#### Scenario: Migration does not persist account secrets
-
-- **WHEN** legacy JSON migration runs while an OAuth Neko account session exists
-- **THEN** the generated TOML MUST NOT include OAuth access tokens, refresh tokens, account gateway bearer tokens, internal routing secrets, or account catalog cache payloads
-
-#### Scenario: Invalid legacy JSON migration fails visibly
-
-- **WHEN** the migration command reads a syntactically invalid legacy JSON file
-- **THEN** migration MUST fail with a visible diagnostic
-- **THEN** it MUST NOT create a partial TOML file that can be mistaken for a successful migration
 
 ### Requirement: TOML parse and validation diagnostics are fail-visible
 
@@ -160,7 +139,7 @@ Neko-managed commands that create or update Agent configuration SHALL write TOML
 
 ### Requirement: Documentation and UI name TOML as the config surface
 
-User-facing documentation, commands, diagnostics, onboarding copy, and settings UI labels SHALL identify TOML as the Agent configuration surface after the migration. Legacy JSON SHALL be described only as an old format that requires explicit migration or removal.
+User-facing documentation, commands, diagnostics, onboarding copy, and settings UI labels SHALL identify TOML as the Agent configuration surface after the migration. Legacy JSON SHALL NOT be exposed as a supported Agent configuration or migration surface.
 
 #### Scenario: Invalid syntax message says TOML
 

@@ -26,7 +26,7 @@ The extension export `NekoAuthAPI` exposes:
 
 ## Configuration Sources
 
-Auth configuration is loaded from VS Code settings (`neko.auth.*`) with field-level fallback to `auth` in `~/.neko/config.json` / workspace config. `aiCatalogUrl` is part of auth config, but OAuth-derived AI gateway credentials are never persisted to local user config.
+Auth configuration is loaded from VS Code settings (`neko.auth.*`) with field-level fallback to `auth` in `~/.neko/config.toml` / workspace config. `aiCatalogUrl` is part of auth config, but OAuth-derived AI gateway credentials are never persisted to local user config.
 
 Agent owns provider source resolution:
 

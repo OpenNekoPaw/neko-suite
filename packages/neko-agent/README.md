@@ -134,7 +134,7 @@ music = "neko-gateway-suno"
 
 值为 `models[]` 中对应模型的 `id`。Webview 启动时自动应用为初始选择；用户在 AgentMediaBar 中手动切换后，运行时选择优先。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio` / `music`）控制模型在选择器中的分组。
 
-**TOML 迁移**：`config.toml` 是当前唯一默认读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时兜底；若只存在 JSON，Agent 会提示显式迁移。可执行 VS Code 命令 `NekoAgent: Migrate Agent Config to TOML` 或 CLI 命令 `nekoagent config migrate`，迁移成功后旧 JSON 会重命名为 `config.json.bak`。
+**配置格式**：`config.toml` 是当前唯一读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源；如需保留旧配置，请手动迁移为 TOML。
 
 ## 核心概念
 

@@ -2,9 +2,9 @@
 
 Agent provider/API configuration is currently loaded through several overlapping paths:
 
-- `@neko/shared/config/config-reader` returns `UnifiedConfig | null`, where `null` can mean missing file, empty file, invalid JSON, or read failure.
+- `@neko/shared/config/config-reader` returns `UnifiedConfig | null`, where `null` can mean missing file, empty file, invalid TOML, or read failure.
 - `ensureUserConfig()` writes default config whenever `readUserConfig()` returns `null`, so invalid or partially written files can be overwritten.
-- `FileUserConfigManager` calls `ensureUserConfig()` in the constructor, watches `~/.neko/config.json`, maps watcher read failures to default empty user config, and can write scalar/provider changes back to the same file.
+- `FileUserConfigManager` calls `ensureUserConfig()` in the constructor, watches `~/.neko/config.toml`, maps watcher read failures to default empty user config, and can write scalar/provider changes back to the same file.
 - `ConfigManager` subscribes to user config changes, invalidates merged caches, and exposes Webview settings update methods that persist to config scalars.
 - `ConfigFileHandler` imports config files on init, watches user/workspace config files, and broadcasts `configChanged`.
 - Agent Webview handles `configChanged` by immediately calling `getConfig()` and `getSettings()`.
@@ -18,7 +18,7 @@ These paths violate the desired lifecycle: config files are user-maintained, sho
 | --- | --- |
 | Responsibility | `@neko/shared` owns host-agnostic config file read results and diagnostics. Agent platform owns snapshot interpretation, merge, provider credential projection, and fail-closed config state. Extension owns VS Code file opening, session/tab lifecycle triggers, and Webview message projection. Webview owns display and local runtime settings only. |
 | Dependency | Shared config reader may use Node in its existing config-reader subpath, but it must not import Agent, VSCode, React, or Webview code. Platform must not import Extension/Webview. Webview must not read files or import Node/VSCode. |
-| Interface | Replace ambiguous `UnifiedConfig | null` reads in Agent paths with typed results such as `ok`, `missing`, `empty`, `invalidJson`, and `readError`. Cross-boundary Webview messages expose safe diagnostics, not raw stack traces. Settings updates separate runtime/session state from persisted config. |
+| Interface | Replace ambiguous `UnifiedConfig | null` reads in Agent paths with typed results such as `ok`, `missing`, `empty`, `invalidToml`, and `readError`. Cross-boundary Webview messages expose safe diagnostics, not raw stack traces. Settings updates separate runtime/session state from persisted config. |
 | Extension | Future config editors can add an explicit write-capable command/path without re-enabling automatic writes. Future tab/session types can request a config snapshot through the same lifecycle hook. |
 | Testing | Tests must prove path-level behavior: snapshot read occurs on session/tab open, watcher paths do not run, Agent write methods are not called from Webview settings, invalid config produces diagnostics, and poisoned legacy watch/write/fallback paths cannot make a request succeed. |
 
@@ -45,7 +45,7 @@ These paths violate the desired lifecycle: config files are user-maintained, sho
 ## Decisions
 
 1. **Use typed config read results instead of `null` for Agent paths.**
-   - `missing` is distinct from `empty`, `invalidJson`, and `readError`.
+   - `missing` is distinct from `empty`, `invalidToml`, and `readError`.
    - Invalid states carry file path, safe message, and optional parser/read details for logs.
    - Alternative considered: keep `null` and add extra existence checks at call sites. Rejected because every caller would need to remember the distinction and old fallback behavior could return.
 
@@ -60,7 +60,7 @@ These paths violate the desired lifecycle: config files are user-maintained, sho
    - Alternative considered: atomic writes. Rejected for this change because the stated requirement is no Agent-authored config writes, not safer Agent writes.
 
 4. **Runtime settings are separated from file-backed config.**
-   - Webview changes like execution mode update local/runtime state and may influence the current session, but must not persist to `~/.neko/config.json`.
+   - Webview changes like execution mode update local/runtime state and may influence the current session, but must not persist to `~/.neko/config.toml`.
    - Existing `settingsUpdated` acknowledgements can remain only for runtime update success/failure; the implementation must not call config file write methods.
    - Alternative considered: keep writing only "safe" scalar settings. Rejected because it still violates the user-maintained config boundary and risks writes during config edits.
 
@@ -99,6 +99,6 @@ Rollback can restore previous Agent config behavior in one change, but it risks 
 
 ## Open Questions
 
-- Should "Open Config File" create a missing `~/.neko/config.json`, or open a template/untitled document without writing? The safer default for this change is no automatic write.
+- Should "Open Config File" create a missing `~/.neko/config.toml`, or open a template/untitled document without writing? The safer default for this change is no automatic write.
 - Should runtime execution mode be stored per conversation, per tab, or global in-memory Extension state? The implementation should choose the smallest state that preserves current UI behavior without disk writes.
 - Do CLI/TUI config write paths need the same typed diagnostic API immediately, or can they keep explicit write behavior while adopting diagnostics incrementally?

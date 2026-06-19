@@ -6,21 +6,21 @@ Agent configuration reads MUST distinguish a missing config file from an existin
 
 #### Scenario: Missing config file is not a parse error
 
-- **WHEN** Agent reads a config snapshot and `~/.neko/config.json` does not exist
+- **WHEN** Agent reads a config snapshot and `~/.neko/config.toml` does not exist
 - **THEN** the read result MUST identify the state as `missing`
 - **AND** Agent MUST NOT create, overwrite, or normalize the config file
 
 #### Scenario: Empty config file is reported as an error
 
-- **WHEN** Agent reads a config snapshot and `~/.neko/config.json` exists but has no JSON content
+- **WHEN** Agent reads a config snapshot and `~/.neko/config.toml` exists but has no TOML content
 - **THEN** the read result MUST identify the state as `empty`
 - **AND** Agent MUST surface a safe user-facing diagnostic that names the config file and asks the user to fix it before opening a new session/tab
 - **AND** Agent MUST NOT replace the file with defaults
 
-#### Scenario: Invalid JSON is reported as an error
+#### Scenario: Invalid TOML is reported as an error
 
-- **WHEN** Agent reads a config snapshot and `~/.neko/config.json` contains invalid JSON
-- **THEN** the read result MUST identify the state as `invalidJson`
+- **WHEN** Agent reads a config snapshot and `~/.neko/config.toml` contains invalid TOML
+- **THEN** the read result MUST identify the state as `invalidToml`
 - **AND** Extension/platform logging MUST include the parser details
 - **AND** Webview-facing diagnostics MUST avoid raw stack traces while still identifying the file and the failure category
 - **AND** Agent MUST NOT fall back to default provider/API configuration
@@ -56,7 +56,7 @@ Agent MUST refresh file-backed provider/API configuration only when opening a ne
 
 #### Scenario: Active session ignores external config file changes
 
-- **WHEN** `~/.neko/config.json` changes while an Agent session/tab is already open
+- **WHEN** `~/.neko/config.toml` changes while an Agent session/tab is already open
 - **THEN** Agent MUST NOT refresh provider/API configuration in that active session from a file watcher
 - **AND** Agent MUST NOT broadcast or handle config file change messages that cause `getConfig` or `getSettings` to run automatically
 
@@ -133,6 +133,6 @@ Tests and runtime wiring MUST prove that legacy config watcher, automatic write,
 
 #### Scenario: Invalid config does not pass through default fallback
 
-- **WHEN** focused Agent config tests provide invalid JSON and poison default config fallback to throw
+- **WHEN** focused Agent config tests provide invalid TOML and poison default config fallback to throw
 - **THEN** the snapshot read MUST return a config diagnostic
 - **AND** no success result may be produced by default provider/model fallback

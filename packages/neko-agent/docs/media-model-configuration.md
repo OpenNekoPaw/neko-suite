@@ -14,7 +14,7 @@ Neko Agent 支持为不同类型的媒体生成任务配置默认模型。这允
 
 用户配置的 Agent provider/model 由用户级配置管理；工作区配置主要用于 MCP 等工作区资源。媒体默认模型值必须是 `[[models]]` 中的 canonical `id`，不是供应商 API 的 model name 或展示名。OAuth 官方账号网关模型是运行时 snapshot，不会写入 `~/.neko/config.toml`；如果本地配置显式选择了错误的 AI provider/model，运行时会直接报错，不会 fallback 到账号网关。
 
-旧版 `~/.neko/config.json` 不再作为默认运行时兜底。若你已有 JSON 配置，请执行 VS Code 命令 `NekoAgent: Migrate Agent Config to TOML` 或 CLI 命令 `nekoagent config migrate`；迁移成功后旧文件会重命名为 `config.json.bak`。
+旧版 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源。若你已有旧 JSON 配置，请手动迁移为 `config.toml`。
 
 ## 配置格式
 
