@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildAIMenuSection, PositionedContextMenu } from './index';
+import { buildMenuSection, PositionedContextMenu } from './index';
 
 describe('@neko/ui positioned context menu', () => {
   let host: HTMLDivElement;
@@ -81,20 +81,30 @@ describe('@neko/ui positioned context menu', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('builds standard AI menu sections with quick actions and agent submenu', () => {
+  it('builds neutral menu sections with actions and caller-owned groups', () => {
     const quick = vi.fn();
-    const agent = vi.fn();
+    const nested = vi.fn();
+    const trailing = vi.fn();
 
-    const items = buildAIMenuSection({
-      quickActions: [{ id: 'generate', label: 'Generate', icon: 'AI', onClick: quick }],
-      agentActions: [{ id: 'understand', label: 'Understand', onClick: agent }],
-      sendToAgentLabel: 'Send to Agent',
+    const items = buildMenuSection({
+      actions: [{ id: 'generate', label: 'Generate', icon: 'AI', onClick: quick }],
+      groups: [
+        {
+          id: 'target',
+          label: 'Target',
+          icon: 'T',
+          actions: [{ id: 'understand', label: 'Understand', onClick: nested }],
+        },
+      ],
+      trailingActions: [{ id: 'send', label: 'Send', icon: 'S', onClick: trailing }],
     });
 
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(6);
     expect(items[0]).toEqual({ separator: true });
     expect(items[1]).toMatchObject({ label: 'Generate', icon: 'AI' });
     expect(items[2]).toEqual({ separator: true });
-    expect(items[3]).toMatchObject({ label: 'Send to Agent', icon: '🤖' });
+    expect(items[3]).toMatchObject({ label: 'Target', icon: 'T' });
+    expect(items[4]).toEqual({ separator: true });
+    expect(items[5]).toMatchObject({ label: 'Send', icon: 'S' });
   });
 });

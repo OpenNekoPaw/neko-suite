@@ -5,14 +5,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeyframeTimeline } from './index';
-import type { EditorKeyframeTrack } from '@neko/shared';
+import type { KeyframeTimelineTrack } from './index';
 
-const tracks: EditorKeyframeTrack[] = [
+const tracks: KeyframeTimelineTrack[] = [
   {
-    property: 'node.x',
+    id: 'node.x',
     label: 'Position X',
-    min: 0,
-    max: 1,
     defaultValue: 0.5,
     keyframes: [{ id: 'kf-1', timeMs: 1000, value: 0.25, easing: 'linear' }],
   },

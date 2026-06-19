@@ -29,7 +29,10 @@ vi.mock('./shared/AudioUiPrimitives', () => ({
     children,
     label,
     ...props
-  }: ButtonHTMLAttributes<HTMLButtonElement> & { readonly label: string }) => (
+  }: ButtonHTMLAttributes<HTMLButtonElement> & {
+    readonly active?: boolean;
+    readonly label: string;
+  }) => (
     <button type="button" aria-label={label} {...props}>
       {children}
     </button>

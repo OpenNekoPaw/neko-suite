@@ -1,27 +1,53 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import type { EasingType, EditorKeyframeTrack } from '@neko/shared';
 import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { PositionedContextMenu } from '../primitives';
 import type { MenuItem } from '../primitives';
 import { KeyframeDiamond } from './keyframe-diamond';
 import { TimelineRuler } from './timeline-ruler';
 
+export type KeyframeTimelineEasing =
+  | 'linear'
+  | 'ease-in-cubic'
+  | 'ease-out-cubic'
+  | 'ease-in-out-cubic'
+  | (string & {});
+
+export interface KeyframeTimelineKeyframe {
+  readonly id: string;
+  readonly timeMs: number;
+  readonly value: number;
+  readonly easing?: KeyframeTimelineEasing;
+}
+
+export interface KeyframeTimelineTrack {
+  readonly id: string;
+  readonly label: string;
+  readonly defaultValue: number;
+  readonly keyframes: readonly KeyframeTimelineKeyframe[];
+}
+
+export interface KeyframeTimelineKeyframeUpdate {
+  readonly timeMs?: number;
+  readonly value?: number;
+  readonly easing?: KeyframeTimelineEasing;
+}
+
 export interface KeyframeTimelineProps {
   readonly durationMs: number;
   readonly currentTimeMs: number;
-  readonly tracks: readonly EditorKeyframeTrack[];
+  readonly tracks: readonly KeyframeTimelineTrack[];
   readonly pixelsPerSecond?: number;
   readonly trackHeight?: number;
   readonly onSeek: (timeMs: number) => void;
-  readonly onKeyframeAdd: (trackProperty: string, timeMs: number, value: number) => void;
-  readonly onKeyframeRemove: (trackProperty: string, keyframeId: string) => void;
+  readonly onKeyframeAdd: (trackId: string, timeMs: number, value: number) => void;
+  readonly onKeyframeRemove: (trackId: string, keyframeId: string) => void;
   readonly onKeyframeUpdate?: (
-    trackProperty: string,
+    trackId: string,
     keyframeId: string,
-    updates: { readonly timeMs?: number; readonly value?: number; readonly easing?: EasingType },
+    updates: KeyframeTimelineKeyframeUpdate,
   ) => void;
   readonly onKeyframeSelect?: (keyframeId: string, multi?: boolean) => void;
-  readonly onKeyframeDrag?: (trackProperty: string, keyframeId: string, newTimeMs: number) => void;
+  readonly onKeyframeDrag?: (trackId: string, keyframeId: string, newTimeMs: number) => void;
   readonly selectedKeyframeIds?: ReadonlySet<string>;
   readonly className?: string;
 }
@@ -29,7 +55,7 @@ export interface KeyframeTimelineProps {
 interface KeyframeContextMenuState {
   readonly x: number;
   readonly y: number;
-  readonly trackProperty: string;
+  readonly trackId: string;
   readonly keyframeId: string;
 }
 
@@ -75,13 +101,13 @@ export function KeyframeTimeline({
   );
 
   const handleTrackDoubleClick = useCallback(
-    (track: EditorKeyframeTrack, event: React.MouseEvent) => {
+    (track: KeyframeTimelineTrack, event: React.MouseEvent) => {
       const container = scrollRef.current;
       if (!container) return;
       const rect = event.currentTarget.getBoundingClientRect();
       const x = event.clientX - rect.left + container.scrollLeft;
       const timeMs = Math.max(0, Math.min(durationMs, (x / pixelsPerSecond) * 1000));
-      onKeyframeAdd(track.property, timeMs, track.defaultValue);
+      onKeyframeAdd(track.id, timeMs, track.defaultValue);
     },
     [durationMs, onKeyframeAdd, pixelsPerSecond],
   );
@@ -95,9 +121,9 @@ export function KeyframeTimeline({
   );
 
   const handleDiamondDragStart = useCallback(
-    (trackProperty: string, keyframeId: string, event: React.PointerEvent) => {
+    (trackId: string, keyframeId: string, event: React.PointerEvent) => {
       event.stopPropagation();
-      const track = tracks.find((candidate) => candidate.property === trackProperty);
+      const track = tracks.find((candidate) => candidate.id === trackId);
       const keyframe = track?.keyframes.find((candidate) => candidate.id === keyframeId);
       if (!keyframe) return;
 
@@ -108,7 +134,7 @@ export function KeyframeTimeline({
         const dx = moveEvent.clientX - startX;
         const dtMs = (dx / pixelsPerSecond) * 1000;
         const newTimeMs = Math.max(0, Math.min(durationMs, startTimeMs + dtMs));
-        onKeyframeDrag?.(trackProperty, keyframeId, Math.round(newTimeMs));
+        onKeyframeDrag?.(trackId, keyframeId, Math.round(newTimeMs));
       };
 
       const handleUp = () => {
@@ -123,10 +149,10 @@ export function KeyframeTimeline({
   );
 
   const handleDiamondContextMenu = useCallback(
-    (trackProperty: string, keyframeId: string, event: React.MouseEvent) => {
+    (trackId: string, keyframeId: string, event: React.MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      setContextMenu({ x: event.clientX, y: event.clientY, trackProperty, keyframeId });
+      setContextMenu({ x: event.clientX, y: event.clientY, trackId, keyframeId });
     },
     [],
   );
@@ -174,7 +200,7 @@ export function KeyframeTimeline({
         <div style={{ width: LABEL_WIDTH, flexShrink: 0, overflow: 'hidden' }}>
           {tracks.map((track) => (
             <div
-              key={track.property}
+              key={track.id}
               title={track.label}
               style={{
                 height: trackHeight,
@@ -199,7 +225,7 @@ export function KeyframeTimeline({
           <div style={{ position: 'relative', width: totalWidth }}>
             {tracks.map((track) => (
               <div
-                key={track.property}
+                key={track.id}
                 style={{
                   position: 'relative',
                   height: trackHeight,
@@ -214,7 +240,7 @@ export function KeyframeTimeline({
                     <span
                       key={keyframe.id}
                       onContextMenu={(event) =>
-                        handleDiamondContextMenu(track.property, keyframe.id, event)
+                        handleDiamondContextMenu(track.id, keyframe.id, event)
                       }
                     >
                       <KeyframeDiamond
@@ -225,7 +251,7 @@ export function KeyframeTimeline({
                         ).toFixed(2)}s`}
                         onClick={(event) => handleDiamondClick(keyframe.id, event)}
                         onDragStart={(event) =>
-                          handleDiamondDragStart(track.property, keyframe.id, event)
+                          handleDiamondDragStart(track.id, keyframe.id, event)
                         }
                       />
                     </span>
@@ -273,32 +299,32 @@ function KeyframeContextMenu({
       {
         label: 'Delete Keyframe',
         onClick: () => {
-          onKeyframeRemove(state.trackProperty, state.keyframeId);
+          onKeyframeRemove(state.trackId, state.keyframeId);
         },
       },
       { separator: true },
       {
         label: 'Linear',
         onClick: () => {
-          onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'linear' });
+          onKeyframeUpdate?.(state.trackId, state.keyframeId, { easing: 'linear' });
         },
       },
       {
         label: 'Ease In',
         onClick: () => {
-          onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'ease-in-cubic' });
+          onKeyframeUpdate?.(state.trackId, state.keyframeId, { easing: 'ease-in-cubic' });
         },
       },
       {
         label: 'Ease Out',
         onClick: () => {
-          onKeyframeUpdate?.(state.trackProperty, state.keyframeId, { easing: 'ease-out-cubic' });
+          onKeyframeUpdate?.(state.trackId, state.keyframeId, { easing: 'ease-out-cubic' });
         },
       },
       {
         label: 'Ease In-Out',
         onClick: () => {
-          onKeyframeUpdate?.(state.trackProperty, state.keyframeId, {
+          onKeyframeUpdate?.(state.trackId, state.keyframeId, {
             easing: 'ease-in-out-cubic',
           });
         },

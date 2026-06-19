@@ -336,14 +336,6 @@ export function getComputedTransform(
   };
 }
 
-/**
- * Check if a property has keyframes
- * 检查属性是否有关键帧
- */
-export function hasKeyframes(property: AnimatableProperty | undefined): boolean {
-  return property !== undefined && property.keyframes.length > 0;
-}
-
 // =============================================================================
 // Keyframe Query (UI state)
 // =============================================================================

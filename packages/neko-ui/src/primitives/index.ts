@@ -9,6 +9,8 @@ export { Button } from './button';
 export type { ButtonProps } from './button';
 export { Badge } from './badge';
 export type { BadgeProps } from './badge';
+export { Checkbox } from './checkbox';
+export type { CheckboxProps } from './checkbox';
 export { Collapsible } from './collapsible';
 export type { CollapsibleProps } from './collapsible';
 export { ContextMenu } from './context-menu';
@@ -25,8 +27,8 @@ export type {
   MenuSeparator,
   PositionedContextMenuProps,
 } from './positioned-context-menu';
-export { buildAIMenuSection } from './context-menu-ai';
-export type { AICapability, AIMenuConfig } from './context-menu-ai';
+export { buildMenuSection } from './menu-section';
+export type { MenuSectionAction, MenuSectionConfig, MenuSectionGroup } from './menu-section';
 export { Dialog } from './dialog';
 export type { DialogProps } from './dialog';
 export { EmptyState } from './empty-state';
@@ -47,6 +49,10 @@ export { SegmentedControl } from './segmented-control';
 export type { SegmentedControlOption, SegmentedControlProps } from './segmented-control';
 export { Slider } from './slider';
 export type { SliderProps } from './slider';
+export { Stepper } from './stepper';
+export type { StepperProps } from './stepper';
+export { Switch } from './switch';
+export type { SwitchProps } from './switch';
 export { Tabs } from './tabs';
 export type { TabsItem, TabsProps } from './tabs';
 export { Tooltip, TooltipProvider } from './tooltip';

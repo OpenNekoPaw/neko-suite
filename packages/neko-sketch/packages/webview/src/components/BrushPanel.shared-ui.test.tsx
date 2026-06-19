@@ -6,6 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSketchStore } from '../stores';
 import { BrushPanel } from './BrushPanel';
 
+vi.mock('./adapters/sharedSketchUiAdapter', () => ({
+  mapSketchBrushToProperties: vi.fn(() => {
+    throw new Error('BrushPanel must not use the legacy brush schema adapter');
+  }),
+  mapSketchBrushPropertyCommit: vi.fn(() => {
+    throw new Error('BrushPanel must not use the legacy brush commit adapter');
+  }),
+  mapSketchLayersToTreeViewItems: vi.fn(),
+}));
+
 vi.mock('../i18n/I18nContext', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string | number>) =>
@@ -54,13 +64,14 @@ describe('Sketch BrushPanel shared UI migration', () => {
     host.remove();
   });
 
-  it('renders brush controls through shared PropertyPanel and commits slider changes', () => {
+  it('renders brush controls through composition rows and commits typed slider changes', () => {
     act(() => {
       root.render(<BrushPanel />);
     });
 
     expect(host.querySelector('[data-property-id="brush.size"]')).not.toBeNull();
     expect(host.querySelector('[data-property-id="brush.color"]')).not.toBeNull();
+    expect(host.querySelector('[data-cut-panel-path]')).toBeNull();
 
     const sizeInput = host.querySelector<HTMLInputElement>(
       '[data-property-id="brush.size"] input[type="number"]',
@@ -74,6 +85,47 @@ describe('Sketch BrushPanel shared UI migration', () => {
     });
 
     expect(useSketchStore.getState().brushSettings.size).toBe(64);
+  });
+
+  it('commits stamp texture and symmetry edits through typed brush callbacks', () => {
+    useSketchStore.setState({
+      brushSettings: {
+        ...useSketchStore.getState().brushSettings,
+        type: 'stamp',
+        stampPattern: 'grain',
+      },
+      textureStampAssets: [
+        {
+          id: 'paper',
+          name: 'Paper',
+          dataUrl: '',
+          mimeType: 'image/png',
+          width: 1,
+          height: 1,
+          createdAt: 1,
+        },
+      ],
+    });
+
+    act(() => {
+      root.render(<BrushPanel />);
+    });
+
+    expect(host.querySelector('[data-property-id="brush.stampTexture"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="brush.spacing"]')).not.toBeNull();
+
+    const spacingInput = host.querySelector<HTMLInputElement>(
+      '[data-property-id="brush.spacing"] input[type="number"]',
+    );
+    expect(spacingInput).not.toBeNull();
+
+    act(() => {
+      setInputValue(spacingInput, '120');
+      spacingInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      spacingInput?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    });
+
+    expect(useSketchStore.getState().brushSettings.spacing).toBe(1.2);
   });
 });
 

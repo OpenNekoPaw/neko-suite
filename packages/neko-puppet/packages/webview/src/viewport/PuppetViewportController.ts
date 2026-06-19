@@ -65,6 +65,11 @@ interface PuppetBoneDragState {
 }
 
 const BONE_DRAG_COMMIT_EPSILON = 0.5;
+const PUPPET_PREDICTION_KIND = {
+  blendshape: 'custom:puppet:blendshape',
+  bone: 'custom:puppet:bone',
+  overlay: 'overlay',
+} satisfies Record<string, Parameters<ViewportPredictionLayer['create']>[0]['kind']>;
 
 class IdlePuppetViewportController implements ISceneController {
   readonly sceneId = 'puppet-main';
@@ -851,13 +856,13 @@ function predictionKindForAction(
 ): Parameters<ViewportPredictionLayer['create']>[0]['kind'] {
   switch (action) {
     case 'scene:puppet:drag-bone':
-      return 'bone';
+      return PUPPET_PREDICTION_KIND.bone;
     case 'scene:puppet:set-blendshape':
     case 'scene:puppet:edit-vertex':
-      return 'blendshape';
+      return PUPPET_PREDICTION_KIND.blendshape;
     case 'scene:puppet:set-driver-weight':
     case 'scene:puppet:toggle-onion-skin':
-      return 'overlay';
+      return PUPPET_PREDICTION_KIND.overlay;
   }
 }
 

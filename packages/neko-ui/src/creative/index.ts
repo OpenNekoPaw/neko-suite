@@ -14,15 +14,35 @@ export type {
 export type {
   PropertyCommitHandler,
   PropertyGroupDefinition,
+  PropertyPanelRowProps,
+  PropertyPanelRowRenderer,
   PropertyKeyframeToggleHandler,
   PropertyPanelProps,
   PropertyPreviewChangeHandler,
   PropertyResetHandler,
-  PropertyRowProps,
-  PropertyRowRenderer,
 } from './property-panel-types';
-export { PropertyGroup, PropertyPanel, PropertyRow } from './property-panel';
+export { PropertyGroup, PropertyPanel, SchemaPropertyRow } from './property-panel';
 export type { PropertyGroupProps } from './property-panel';
+export {
+  AxisGroup,
+  ColorPropertyRow,
+  NumberPropertyRow,
+  PanelSection,
+  PropertyRow,
+  SelectPropertyRow,
+  SliderPropertyRow,
+} from './property-composition';
+export type {
+  AxisGroupAxisProps,
+  AxisGroupProps,
+  ColorPropertyRowProps,
+  NumberPropertyRowProps,
+  PanelSectionProps,
+  PropertyRowDensity,
+  PropertyRowProps,
+  SelectPropertyRowProps,
+  SliderPropertyRowProps,
+} from './property-composition';
 
 export type { KeyframeControlProps } from './keyframe-types';
 export { KeyframeButton } from './keyframe-button';
@@ -60,6 +80,12 @@ export type { TimelineRulerProps } from './timeline-ruler';
 export { KeyframeDiamond } from './keyframe-diamond';
 export type { KeyframeDiamondProps } from './keyframe-diamond';
 export { KeyframeTimeline } from './keyframe-timeline';
-export type { KeyframeTimelineProps } from './keyframe-timeline';
+export type {
+  KeyframeTimelineEasing,
+  KeyframeTimelineKeyframe,
+  KeyframeTimelineKeyframeUpdate,
+  KeyframeTimelineProps,
+  KeyframeTimelineTrack,
+} from './keyframe-timeline';
 export { ProgressBar, SeekBar } from './seek-bar';
 export type { ProgressBarProps, SeekBarProps } from './seek-bar';

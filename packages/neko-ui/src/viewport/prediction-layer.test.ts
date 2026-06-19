@@ -28,7 +28,7 @@ describe('ViewportPredictionLayer', () => {
     expect(layer.active()).toHaveLength(0);
 
     const morph = layer.create({
-      kind: 'morph',
+      kind: 'custom:morph',
       seq: 11,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -41,7 +41,7 @@ describe('ViewportPredictionLayer', () => {
     expect(layer.active()).toHaveLength(0);
 
     layer.create({
-      kind: 'brush',
+      kind: 'custom:brush',
       seq: 12,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -56,7 +56,7 @@ describe('ViewportPredictionLayer', () => {
     expect(layer.active()).toHaveLength(0);
 
     layer.create({
-      kind: 'topology',
+      kind: 'custom:topology',
       seq: 13,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -118,7 +118,7 @@ describe('ViewportPredictionLayer', () => {
     ).toBe('rolled-back');
 
     layer.create({
-      kind: 'ik',
+      kind: 'custom:ik',
       seq: 45,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -178,7 +178,7 @@ describe('ViewportPredictionLayer', () => {
   it('does not commit predictions from delayed metadata until applied sequence is compatible', () => {
     const layer = new ViewportPredictionLayer();
     layer.create({
-      kind: 'blendshape',
+      kind: 'custom:blendshape',
       seq: 60,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -205,7 +205,7 @@ describe('ViewportPredictionLayer', () => {
   it('covers timeout, error rollback, and revision invalidation states independently', () => {
     const layer = new ViewportPredictionLayer();
     layer.create({
-      kind: 'bone',
+      kind: 'custom:bone',
       seq: 70,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -216,7 +216,7 @@ describe('ViewportPredictionLayer', () => {
     expect(layer.timeout(3_030)[0]?.prediction.status).toBe('timed-out');
 
     layer.create({
-      kind: 'bone',
+      kind: 'custom:bone',
       seq: 71,
       sceneId: 'scene-a',
       viewportId: 'main',
@@ -233,7 +233,7 @@ describe('ViewportPredictionLayer', () => {
     ).toBe('rolled-back');
 
     layer.create({
-      kind: 'bone',
+      kind: 'custom:bone',
       seq: 72,
       sceneId: 'scene-a',
       viewportId: 'main',

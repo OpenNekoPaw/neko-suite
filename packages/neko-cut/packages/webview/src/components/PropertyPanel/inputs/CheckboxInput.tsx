@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { Checkbox } from '@neko/ui/primitives';
 
 export interface CheckboxInputProps {
   label: string;
@@ -14,15 +15,12 @@ export const CheckboxInput = memo(function CheckboxInput({
   disabled,
 }: CheckboxInputProps) {
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        className="h-4 w-4 accent-[var(--nk-accent)]"
-      />
-      <label className="text-[11px] text-[var(--nk-fg)]">{label}</label>
-    </div>
+    <Checkbox
+      checked={checked}
+      disabled={disabled}
+      id={label}
+      label={label}
+      onCheckedChange={onChange}
+    />
   );
 });

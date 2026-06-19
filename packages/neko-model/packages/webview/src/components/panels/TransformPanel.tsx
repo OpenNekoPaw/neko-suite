@@ -1,10 +1,9 @@
 import React from 'react';
-import { PropertyPanel as SharedPropertyPanel } from '@neko/ui/creative';
-import type { PropertyValue } from '@neko/ui/creative';
+import { AxisGroup } from '@neko/ui/creative';
 import type { SceneNodeSnapshot, TransformMode } from '../../types';
 import type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
+import { MODEL_COMPONENT_SCHEMA_REGISTRY } from '../../scene/ComponentSchemaRegistry';
 import { useTranslation } from '../../i18n/I18nContext';
-import { mapModelTransformToProperties } from '../adapters/sharedModelUiAdapter';
 import {
   disabledControl,
   formatControlAvailabilityTitle,
@@ -47,10 +46,6 @@ export function TransformPanel({
   const [draftTransform, setDraftTransform] = React.useState<EditableNodeTransform>(() =>
     toNodeTransform(node),
   );
-  const sharedTransform = React.useMemo(
-    () => mapModelTransformToProperties(draftTransform, t),
-    [draftTransform, t],
-  );
 
   React.useEffect(() => {
     setDraftTransform(toNodeTransform(node));
@@ -86,28 +81,8 @@ export function TransformPanel({
     void onTransformCommit?.(node.nodeId, nextTransform);
   };
   const previewValue = (section: TransformSection, axis: TransformAxis, value: number) => {
-    setDraftTransform(
-      (current) =>
-        ({
-          ...current,
-          [section]: {
-            ...current[section],
-            [axis]: value,
-          },
-        }) as EditableNodeTransform,
-    );
-  };
-  const handleSharedPreview = (propertyId: string, value: PropertyValue) => {
-    if (typeof value !== 'number') return;
-    const field = parseTransformPropertyId(propertyId);
-    if (!field) return;
-    previewValue(field.section, field.axis, value);
-  };
-  const handleSharedCommit = (propertyId: string, value: PropertyValue) => {
-    if (typeof value !== 'number') return;
-    const field = parseTransformPropertyId(propertyId);
-    if (!field) return;
-    commitValue(field.section, field.axis, value);
+    const nextTransform = updateTransformAxis(draftTransform, section, axis, value);
+    setDraftTransform(nextTransform);
   };
 
   return (
@@ -143,16 +118,34 @@ export function TransformPanel({
         </div>
       </div>
 
-      <div className="model-panel-section">
-        <SharedPropertyPanel
-          groups={sharedTransform.groups}
-          onCommit={handleSharedCommit}
-          onPreviewChange={handleSharedPreview}
-          properties={sharedTransform.properties.map((property) => ({
-            ...property,
-            disabled: controlsDisabled,
-          }))}
-        />
+      <div className="model-panel-section" data-model-transform-path="axis-composition">
+        {TRANSFORM_GROUPS.map((group) => (
+          <AxisGroup
+            density="compact"
+            disabled={controlsDisabled}
+            key={group.section}
+            label={t(group.labelKey)}
+          >
+            {group.axes.map((axis) => {
+              const id = `${group.section}.${axis}`;
+              const schema = MODEL_COMPONENT_SCHEMA_REGISTRY.getField('transform', id);
+              return (
+                <AxisGroup.Axis
+                  axis={axis.toUpperCase()}
+                  disabled={controlsDisabled}
+                  id={id}
+                  key={id}
+                  max={schema?.max}
+                  min={schema?.min}
+                  onCommit={(_, value) => commitValue(group.section, axis, value)}
+                  onPreviewChange={(_, value) => previewValue(group.section, axis, value)}
+                  step={schema?.step}
+                  value={getTransformAxisValue(draftTransform, group.section, axis)}
+                />
+              );
+            })}
+          </AxisGroup>
+        ))}
       </div>
 
       <div
@@ -199,27 +192,68 @@ function toNodeTransform(node: SceneNodeSnapshot | null): EditableNodeTransform 
   };
 }
 
+function getTransformAxisValue(
+  transform: EditableNodeTransform,
+  section: TransformSection,
+  axis: TransformAxis,
+): number {
+  switch (section) {
+    case 'position':
+      if (axis === 'w') throw new Error('Model position transform does not support W axis');
+      return transform.position[axis];
+    case 'rotation':
+      return transform.rotation[axis];
+    case 'scale':
+      if (axis === 'w') throw new Error('Model scale transform does not support W axis');
+      return transform.scale[axis];
+    default:
+      return assertNever(section);
+  }
+}
+
+function updateTransformAxis(
+  transform: EditableNodeTransform,
+  section: TransformSection,
+  axis: TransformAxis,
+  value: number,
+): EditableNodeTransform {
+  switch (section) {
+    case 'position':
+      if (axis === 'w') throw new Error('Model position transform does not support W axis');
+      return {
+        ...transform,
+        position: { ...transform.position, [axis]: value },
+      };
+    case 'rotation':
+      return {
+        ...transform,
+        rotation: { ...transform.rotation, [axis]: value },
+      };
+    case 'scale':
+      if (axis === 'w') throw new Error('Model scale transform does not support W axis');
+      return {
+        ...transform,
+        scale: { ...transform.scale, [axis]: value },
+      };
+    default:
+      return assertNever(section);
+  }
+}
+
 function isCharacterNode(node: SceneNodeSnapshot): boolean {
   return node.kind === 'character' || node.kind === 'character-instance';
 }
 
-function parseTransformPropertyId(
-  propertyId: string,
-): { section: TransformSection; axis: TransformAxis } | null {
-  const [section, axis] = propertyId.split('.');
-  if (!isTransformSection(section) || !isTransformAxis(axis)) {
-    return null;
-  }
-  if (section !== 'rotation' && axis === 'w') {
-    return null;
-  }
-  return { section, axis };
+function assertNever(value: never): never {
+  throw new Error(`Unsupported Model transform section: ${String(value)}`);
 }
 
-function isTransformSection(value: string | undefined): value is TransformSection {
-  return value === 'position' || value === 'rotation' || value === 'scale';
-}
-
-function isTransformAxis(value: string | undefined): value is TransformAxis {
-  return value === 'x' || value === 'y' || value === 'z' || value === 'w';
-}
+const TRANSFORM_GROUPS: readonly {
+  readonly section: TransformSection;
+  readonly labelKey: string;
+  readonly axes: readonly TransformAxis[];
+}[] = [
+  { section: 'position', labelKey: 'transform.position', axes: ['x', 'y', 'z'] },
+  { section: 'rotation', labelKey: 'transform.rotation', axes: ['x', 'y', 'z', 'w'] },
+  { section: 'scale', labelKey: 'transform.scale', axes: ['x', 'y', 'z'] },
+];

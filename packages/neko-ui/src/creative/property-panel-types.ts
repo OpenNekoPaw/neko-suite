@@ -11,7 +11,7 @@ export interface PropertyPanelProps {
   readonly groups?: readonly PropertyGroupDefinition[];
   readonly emptyState?: ReactNode;
   readonly resetLabel?: ReactNode;
-  readonly renderRow?: PropertyRowRenderer;
+  readonly renderRow?: PropertyPanelRowRenderer;
   readonly onPreviewChange?: PropertyPreviewChangeHandler;
   readonly onCommit?: PropertyCommitHandler;
   readonly onReset?: PropertyResetHandler;
@@ -25,7 +25,7 @@ export interface PropertyGroupDefinition {
   readonly collapsed?: boolean;
 }
 
-export interface PropertyRowProps {
+export interface PropertyPanelRowProps {
   readonly property: PropertyDefinition;
   readonly resetLabel?: ReactNode;
   readonly onPreviewChange?: PropertyPreviewChangeHandler;
@@ -34,4 +34,4 @@ export interface PropertyRowProps {
   readonly onToggleKeyframe?: PropertyKeyframeToggleHandler;
 }
 
-export type PropertyRowRenderer = (props: PropertyRowProps) => ReactNode;
+export type PropertyPanelRowRenderer = (props: PropertyPanelRowProps) => ReactNode;

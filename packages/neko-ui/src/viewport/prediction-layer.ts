@@ -10,14 +10,9 @@ export type ViewportPredictionKind =
   | 'marquee'
   | 'transform'
   | 'camera'
-  | 'morph'
-  | 'ik'
-  | 'bone'
-  | 'blendshape'
-  | 'brush'
-  | 'topology'
   | 'overlay'
-  | 'custom';
+  | 'custom'
+  | (`custom:${string}` & {});
 
 export type ViewportPredictionStatus =
   | 'active'

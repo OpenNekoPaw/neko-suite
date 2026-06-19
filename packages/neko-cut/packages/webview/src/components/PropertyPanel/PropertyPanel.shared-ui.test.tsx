@@ -1,5 +1,9 @@
+// @vitest-environment jsdom
+
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PropertyPanel } from './PropertyPanel';
 import type { ProjectDefaults, TimelineElement, Transform } from '../../types';
@@ -112,21 +116,62 @@ describe('Cut PropertyPanel shared UI migration', () => {
     expect(onRemoveKeyframe).not.toHaveBeenCalled();
   });
 
-  it('renders shared rows through the cut compact inspector adapter', () => {
+  it('renders stable basic and transform rows through typed composition', () => {
     act(() => {
       renderPropertyPanel({ element: createElement() });
     });
 
-    const opacityRow = host.querySelector<HTMLElement>(
-      '.cut-shared-property-row[data-animatable="true"][data-property-id="animTransform.opacity"]',
+    const typedBasic = host.querySelector<HTMLElement>('[data-cut-panel-path="typed-basic"]');
+    const typedTransform = host.querySelector<HTMLElement>(
+      '[data-cut-panel-path="typed-transform"]',
     );
-    const nameRow = host.querySelector<HTMLElement>(
-      '.cut-shared-property-row[data-animatable="false"][data-property-id="name"]',
+    const opacityRow = typedTransform?.querySelector<HTMLElement>(
+      '[data-property-id="animTransform.opacity"]',
     );
+    const nameRow = typedBasic?.querySelector<HTMLElement>('[data-property-id="name"]');
 
-    expect(host.querySelector('.cut-shared-property-panel')).not.toBeNull();
+    expect(typedBasic).not.toBeNull();
+    expect(typedTransform).not.toBeNull();
     expect(opacityRow).not.toBeNull();
     expect(nameRow).not.toBeNull();
+    expect(
+      host.querySelector('.cut-shared-property-row[data-property-id="animTransform.opacity"]'),
+    ).toBeNull();
+    expect(host.querySelector('.cut-shared-property-row[data-property-id="name"]')).toBeNull();
+  });
+
+  it('does not import the removed legacy shared property adapter in the production panel', () => {
+    const source = readFileSync(resolve(__dirname, 'PropertyPanel.tsx'), 'utf8');
+
+    expect(source).not.toContain('sharedPropertyAdapter');
+    expect(source).not.toContain('mapCutPropertySourcesToShared');
+    expect(source).not.toContain('createCutElementPatch');
+    expect(source).not.toContain('SharedPropertyPanel');
+  });
+
+  it('renders text, subtitle, and audio stable sections through typed composition rows', () => {
+    act(() => {
+      renderPropertyPanel({ element: createTextElement() });
+    });
+
+    expect(host.querySelector('[data-cut-panel-path="typed-text"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="content"]')).not.toBeNull();
+    expect(host.querySelector('.cut-shared-property-row[data-property-id="content"]')).toBeNull();
+
+    act(() => {
+      renderPropertyPanel({ element: createSubtitleElement() });
+    });
+
+    expect(host.querySelector('[data-cut-panel-path="typed-subtitle"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="strokeWidth"]')).not.toBeNull();
+
+    act(() => {
+      renderPropertyPanel({ element: createElement() });
+    });
+
+    expect(host.querySelector('[data-cut-panel-path="typed-audio"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="audio.volume"]')).not.toBeNull();
+    expect(host.querySelector('[data-property-id="audio.muted"]')).not.toBeNull();
   });
 
   it('keeps migrated collapsible shell expanded by default and toggles content', () => {
@@ -255,6 +300,37 @@ function createElement(): TimelineElement {
     locked: false,
     animTransform,
   };
+}
+
+function createTextElement(): TimelineElement {
+  return {
+    ...createElement(),
+    type: 'text',
+    content: 'Title',
+    fontSize: 48,
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    backgroundColor: '#000000',
+    textAlign: 'center',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    textDecoration: 'none',
+  } as TimelineElement;
+}
+
+function createSubtitleElement(): TimelineElement {
+  return {
+    ...createElement(),
+    type: 'subtitle',
+    text: 'Caption',
+    fontSize: 32,
+    fontFamily: 'Arial',
+    color: '#ffffff',
+    backgroundColor: '#000000',
+    textAlign: 'center',
+    strokeColor: '#000000',
+    strokeWidth: 2,
+  } as TimelineElement;
 }
 
 function createDefaults(): ProjectDefaults {

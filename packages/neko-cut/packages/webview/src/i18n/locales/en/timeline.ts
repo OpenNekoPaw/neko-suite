@@ -55,6 +55,7 @@ export const timeline = {
   'timeline.contextMenu.aiAutoEdit': 'AI Auto Edit',
   'timeline.contextMenu.aiMatchMusic': 'AI Match Music Beats',
   'timeline.contextMenu.aiRemoveSilence': 'AI Remove Silence',
+  'timeline.contextMenu.sendToAgent': 'Send to Agent',
   'timeline.contextMenu.aiEnhance': 'AI Enhance Video',
   'timeline.contextMenu.aiRemoveBackground': 'AI Remove Background',
   'timeline.contextMenu.aiStabilize': 'AI Stabilize',

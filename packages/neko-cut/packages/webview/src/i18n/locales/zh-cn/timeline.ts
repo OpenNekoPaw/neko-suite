@@ -55,6 +55,7 @@ export const timeline = {
   'timeline.contextMenu.aiAutoEdit': 'AI 智能剪辑',
   'timeline.contextMenu.aiMatchMusic': 'AI 音乐节拍匹配',
   'timeline.contextMenu.aiRemoveSilence': 'AI 删除静音',
+  'timeline.contextMenu.sendToAgent': '发送到 Agent',
   'timeline.contextMenu.aiEnhance': 'AI 视频增强',
   'timeline.contextMenu.aiRemoveBackground': 'AI 去除背景',
   'timeline.contextMenu.aiStabilize': 'AI 视频防抖',

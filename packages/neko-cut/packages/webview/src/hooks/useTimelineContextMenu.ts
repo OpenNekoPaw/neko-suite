@@ -8,7 +8,7 @@ import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
 import type { MenuItem } from '../components/ContextMenu';
 import type { TimelineTrack } from '../types';
-import { buildAIMenuSection, type MenuItem as SharedMenuItem } from '@neko/ui/primitives';
+import { buildMenuSection, type MenuItem as SharedMenuItem } from '@neko/ui/primitives';
 
 export interface ContextMenuState {
   x: number;
@@ -228,8 +228,8 @@ export function useTimelineContextMenu({
       },
       // AI Operations — unified shell
       ...fromSharedItems(
-        buildAIMenuSection({
-          quickActions: [
+        buildMenuSection({
+          actions: [
             {
               id: 'ai-subtitles',
               label: t('timeline.contextMenu.aiGenerateSubtitles'),
@@ -255,7 +255,16 @@ export function useTimelineContextMenu({
               onClick: aiRemoveSilence,
             },
           ],
-          onSendToAgent,
+          trailingActions: onSendToAgent
+            ? [
+                {
+                  id: 'send-to-agent',
+                  label: t('timeline.contextMenu.sendToAgent'),
+                  icon: '🤖',
+                  onClick: onSendToAgent,
+                },
+              ]
+            : undefined,
         }),
       ),
     ];

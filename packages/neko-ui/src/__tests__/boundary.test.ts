@@ -32,6 +32,29 @@ describe('@neko/ui dependency boundary', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('does not embed feature-domain UI semantics in production source', () => {
+    const forbiddenDomainSemantics = [
+      /\bAICapability\b/,
+      /\bAIMenuConfig\b/,
+      /\bbuildAIMenuSection\b/,
+      /\bDEFAULT_AGENT_LABEL\b/,
+      /发送到 Agent/,
+      /\bEditorKeyframeTrack\b/,
+      /from\s+['"]@neko\/shared['"];?\s*$/,
+      /\|\s*'(?:morph|ik|bone|blendshape|brush)'/,
+    ];
+
+    const violations = collectSourceFiles(srcRoot).flatMap((filePath) => {
+      const relativePath = relative(srcRoot, filePath);
+      const text = readFileSync(filePath, 'utf-8');
+      return forbiddenDomainSemantics
+        .filter((pattern) => pattern.test(text))
+        .map((pattern) => `${relativePath}: ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
 });
 
 function collectSourceFiles(directory: string): string[] {

@@ -5,8 +5,9 @@
  * to the shared KeyframeTimeline component. Delegates CRUD operations
  * to the IPuppetController for engine dispatch.
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { KeyframeTimeline } from '@neko/ui/creative';
+import type { KeyframeTimelineKeyframeUpdate, KeyframeTimelineTrack } from '@neko/ui/creative';
 import type { EasingType } from '@neko/shared';
 import type { IPuppetController } from '../animation';
 import { usePuppetStore } from '../stores/puppet-store';
@@ -26,6 +27,21 @@ export function PuppetKeyframeTimeline({ controller }: PuppetKeyframeTimelinePro
 
   const controllerRef = useRef(controller);
   controllerRef.current = controller;
+  const visualTracks = useMemo(
+    (): readonly KeyframeTimelineTrack[] =>
+      tracks.map((track) => ({
+        id: track.property,
+        label: track.label,
+        defaultValue: track.defaultValue,
+        keyframes: track.keyframes.map((keyframe) => ({
+          id: keyframe.id,
+          timeMs: keyframe.timeMs,
+          value: keyframe.value,
+          easing: keyframe.easing,
+        })),
+      })),
+    [tracks],
+  );
 
   // Derive clip duration from current animation
   const currentClip = animations.find((c) => c.name === currentAnimation);
@@ -74,18 +90,20 @@ export function PuppetKeyframeTimeline({ controller }: PuppetKeyframeTimelinePro
   );
 
   const handleKeyframeUpdate = useCallback(
-    (
-      trackProperty: string,
-      keyframeId: string,
-      updates: { timeMs?: number; value?: number; easing?: EasingType },
-    ) => {
+    (trackProperty: string, keyframeId: string, updates: KeyframeTimelineKeyframeUpdate) => {
       const ctrl = controllerRef.current;
       const clip = currentAnimation;
       if (!ctrl || !clip) return;
 
-      void ctrl.updateKeyframe(clip, trackProperty, keyframeId, updates).then(() => {
-        void ctrl.getKeyframeTracks(clip).then(setKeyframeTracks);
-      });
+      void ctrl
+        .updateKeyframe(clip, trackProperty, keyframeId, {
+          timeMs: updates.timeMs,
+          value: updates.value,
+          easing: readDomainEasing(updates.easing),
+        })
+        .then(() => {
+          void ctrl.getKeyframeTracks(clip).then(setKeyframeTracks);
+        });
     },
     [currentAnimation, setKeyframeTracks],
   );
@@ -118,7 +136,7 @@ export function PuppetKeyframeTimeline({ controller }: PuppetKeyframeTimelinePro
     <KeyframeTimeline
       durationMs={durationMs}
       currentTimeMs={currentTimeMs}
-      tracks={tracks}
+      tracks={visualTracks}
       selectedKeyframeIds={selectedKeyframeIds}
       onSeek={handleSeek}
       onKeyframeAdd={handleKeyframeAdd}
@@ -128,4 +146,22 @@ export function PuppetKeyframeTimeline({ controller }: PuppetKeyframeTimelinePro
       onKeyframeDrag={handleKeyframeDrag}
     />
   );
+}
+
+function readDomainEasing(value: KeyframeTimelineKeyframeUpdate['easing']): EasingType | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case 'linear':
+      return 'linear';
+    case 'ease-in-cubic':
+      return 'ease-in-cubic';
+    case 'ease-out-cubic':
+      return 'ease-out-cubic';
+    case 'ease-in-out-cubic':
+      return 'ease-in-out-cubic';
+    default:
+      break;
+  }
+  throw new Error(`puppet keyframe timeline received unsupported easing: ${value}`);
 }

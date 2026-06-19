@@ -44,7 +44,7 @@ describe('Model TransformPanel shared UI migration', () => {
     host.remove();
   });
 
-  it('renders transform properties through shared PropertyPanel and commits numeric values', () => {
+  it('renders transform axes through composition rows and commits numeric values', () => {
     const onTransformCommit = vi.fn();
 
     act(() => {
@@ -58,6 +58,7 @@ describe('Model TransformPanel shared UI migration', () => {
       );
     });
 
+    expect(host.querySelector('[data-model-transform-path="axis-composition"]')).not.toBeNull();
     const positionX = host.querySelector<HTMLInputElement>(
       '[data-property-id="position.x"] input[type="number"]',
     );

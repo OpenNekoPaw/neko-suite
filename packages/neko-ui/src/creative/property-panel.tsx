@@ -1,19 +1,27 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { getKeyboardBoundaryMetadata } from '../keyboard';
-import { Button, Select, TooltipProvider } from '../primitives';
+import { TooltipProvider } from '../primitives';
 import { cn } from '../utils';
-import { ColorPicker } from './color-picker';
 import { KeyframeButton } from './keyframe-button';
 import type {
   PropertyGroupDefinition,
   PropertyPanelProps,
-  PropertyRowProps,
+  PropertyPanelRowProps,
 } from './property-panel-types';
 import { assertNever } from './property-types';
 import type { PropertyDefinition } from './property-types';
-import { NumberInput } from './number-input';
-import { NumberSlider } from './number-slider';
+import { Checkbox } from '../primitives/checkbox';
+import {
+  PanelSection,
+  PropertyRow,
+  ColorPropertyRow,
+  NumberPropertyRow,
+  SelectPropertyRow,
+  SliderPropertyRow,
+} from './property-composition';
+
+type InlinePropertyControlDefinition = Extract<PropertyDefinition, { kind: 'text' | 'boolean' }>;
 
 export function PropertyPanel({
   emptyState,
@@ -81,65 +89,124 @@ export interface PropertyGroupProps {
 }
 
 export function PropertyGroup({ children, group }: PropertyGroupProps): React.ReactElement {
-  return (
-    <section
-      aria-label={group.label}
-      className="grid gap-1.5 border-t border-[var(--neko-border)] pt-2 first:border-t-0 first:pt-0"
-    >
-      <h3 className="px-1 text-[11px] font-semibold uppercase text-[var(--vscode-descriptionForeground)]">
-        {group.label}
-      </h3>
-      {group.collapsed ? null : <div className="grid gap-1.5">{children}</div>}
-    </section>
-  );
+  return <PanelSection title={group.label}>{group.collapsed ? null : children}</PanelSection>;
 }
 
-export function PropertyRow({
+export function SchemaPropertyRow({
   onCommit,
   onPreviewChange,
   onReset,
   onToggleKeyframe,
   property,
   resetLabel,
-}: PropertyRowProps): React.ReactElement {
-  return (
-    <div
-      className={cn(
-        'grid min-h-8 grid-cols-[minmax(7rem,0.9fr)_minmax(0,1.4fr)_auto] items-center gap-2',
-        'rounded-[var(--neko-radius-sm,6px)] px-1 py-1 text-xs',
-        'hover:bg-[var(--neko-hover)]',
-        property.disabled ? 'opacity-60' : null,
-      )}
-      data-property-id={property.id}
-    >
-      <span className="min-w-0 truncate text-[var(--vscode-descriptionForeground)]">
-        {property.label}
-      </span>
-      <div className="min-w-0">{renderPropertyControl(property, onPreviewChange, onCommit)}</div>
-      <div className="flex items-center justify-end gap-1">
-        {onReset ? (
-          <Button
-            disabled={property.disabled}
-            onClick={() => onReset(property.id)}
-            size="xs"
-            variant="ghost"
-          >
-            {resetLabel ?? 'Reset'}
-          </Button>
-        ) : null}
-        {property.animatable ? (
-          <KeyframeButton
-            animatable={property.animatable}
-            disabled={property.disabled}
-            hasKeyframes={property.hasKeyframes}
-            isAtKeyframe={property.isAtKeyframe}
-            onToggleKeyframe={onToggleKeyframe}
-            propertyId={property.id}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
+}: PropertyPanelRowProps): React.ReactElement {
+  const rowActions = property.animatable ? (
+    <KeyframeButton
+      animatable={property.animatable}
+      disabled={property.disabled}
+      hasKeyframes={property.hasKeyframes}
+      isAtKeyframe={property.isAtKeyframe}
+      onToggleKeyframe={onToggleKeyframe}
+      propertyId={property.id}
+    />
+  ) : null;
+
+  switch (property.kind) {
+    case 'number':
+      return (
+        <NumberPropertyRow
+          disabled={property.disabled}
+          id={property.id}
+          keyframe={rowActions}
+          label={property.label}
+          max={property.max}
+          min={property.min}
+          onCommit={onCommit}
+          onPreviewChange={onPreviewChange}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          resetLabel={resetLabel}
+          step={property.step}
+          unit={property.unit}
+          value={property.value}
+        />
+      );
+    case 'slider':
+      return (
+        <SliderPropertyRow
+          disabled={property.disabled}
+          id={property.id}
+          keyframe={rowActions}
+          label={property.label}
+          max={property.max}
+          min={property.min}
+          onCommit={onCommit}
+          onPreviewChange={onPreviewChange}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          resetLabel={resetLabel}
+          step={property.step}
+          unit={property.unit}
+          value={property.value}
+        />
+      );
+    case 'text':
+      return (
+        <PropertyRow
+          disabled={property.disabled}
+          keyframe={rowActions}
+          label={property.label}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          propertyId={property.id}
+          resetLabel={resetLabel}
+        >
+          {renderPropertyControl(property, onPreviewChange, onCommit)}
+        </PropertyRow>
+      );
+    case 'color':
+      return (
+        <ColorPropertyRow
+          alpha={property.alpha}
+          disabled={property.disabled}
+          id={property.id}
+          keyframe={rowActions}
+          label={property.label}
+          onCommit={onCommit}
+          onPreviewChange={onPreviewChange}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          resetLabel={resetLabel}
+          value={property.value}
+        />
+      );
+    case 'boolean':
+      return (
+        <PropertyRow
+          disabled={property.disabled}
+          keyframe={rowActions}
+          label={property.label}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          propertyId={property.id}
+          resetLabel={resetLabel}
+        >
+          {renderPropertyControl(property, onPreviewChange, onCommit)}
+        </PropertyRow>
+      );
+    case 'select':
+      return (
+        <SelectPropertyRow
+          disabled={property.disabled}
+          id={property.id}
+          keyframe={rowActions}
+          label={property.label}
+          onCommit={onCommit}
+          onPreviewChange={onPreviewChange}
+          onReset={onReset ? () => onReset(property.id) : undefined}
+          options={property.options}
+          resetLabel={resetLabel}
+          value={property.value}
+        />
+      );
+    default:
+      return assertNever(property);
+  }
 }
 
 function renderPropertyRow({
@@ -149,46 +216,20 @@ function renderPropertyRow({
 }: {
   readonly property: PropertyDefinition;
   readonly renderRow?: PropertyPanelProps['renderRow'];
-  readonly rowProps: Omit<PropertyRowProps, 'property'>;
+  readonly rowProps: Omit<PropertyPanelRowProps, 'property'>;
 }): ReactNode {
   const props = { ...rowProps, property };
-  return <div key={property.id}>{renderRow ? renderRow(props) : <PropertyRow {...props} />}</div>;
+  return (
+    <div key={property.id}>{renderRow ? renderRow(props) : <SchemaPropertyRow {...props} />}</div>
+  );
 }
 
 function renderPropertyControl(
-  property: PropertyDefinition,
-  onPreviewChange: PropertyRowProps['onPreviewChange'],
-  onCommit: PropertyRowProps['onCommit'],
+  property: InlinePropertyControlDefinition,
+  onPreviewChange: PropertyPanelRowProps['onPreviewChange'],
+  onCommit: PropertyPanelRowProps['onCommit'],
 ): ReactNode {
   switch (property.kind) {
-    case 'number':
-      return (
-        <NumberInput
-          disabled={property.disabled}
-          id={property.id}
-          max={property.max}
-          min={property.min}
-          onCommit={onCommit}
-          onPreviewChange={onPreviewChange}
-          step={property.step}
-          unit={property.unit}
-          value={property.value}
-        />
-      );
-    case 'slider':
-      return (
-        <NumberSlider
-          disabled={property.disabled}
-          id={property.id}
-          max={property.max}
-          min={property.min}
-          onCommit={onCommit}
-          onPreviewChange={onPreviewChange}
-          step={property.step}
-          unit={property.unit}
-          value={property.value}
-        />
-      );
     case 'text':
       return (
         <input
@@ -215,45 +256,17 @@ function renderPropertyControl(
           value={property.value}
         />
       );
-    case 'color':
-      return (
-        <ColorPicker
-          alpha={property.alpha}
-          disabled={property.disabled}
-          id={property.id}
-          onCommit={onCommit}
-          onPreviewChange={onPreviewChange}
-          value={property.value}
-        />
-      );
     case 'boolean':
       return (
-        <label className="inline-flex items-center gap-2 text-xs text-[var(--vscode-foreground)]">
-          <input
-            aria-label={property.label}
-            checked={property.value}
-            className="h-4 w-4 accent-[var(--neko-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={property.disabled}
-            onChange={(event) => {
-              onPreviewChange?.(property.id, event.currentTarget.checked);
-              onCommit?.(property.id, event.currentTarget.checked);
-            }}
-            type="checkbox"
-          />
-          <span>{property.value ? 'On' : 'Off'}</span>
-        </label>
-      );
-    case 'select':
-      return (
-        <Select
+        <Checkbox
+          aria-label={property.label}
+          checked={property.value}
           disabled={property.disabled}
-          label={property.label}
-          onValueChange={(value) => {
-            onPreviewChange?.(property.id, value);
-            onCommit?.(property.id, value);
+          label={property.value ? 'On' : 'Off'}
+          onCheckedChange={(checked) => {
+            onPreviewChange?.(property.id, checked);
+            onCommit?.(property.id, checked);
           }}
-          options={property.options}
-          value={property.value}
         />
       );
     default:

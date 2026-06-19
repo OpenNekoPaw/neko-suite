@@ -7,6 +7,7 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { KeyframeTimeline } from '@neko/ui/creative';
+import type { KeyframeTimelineKeyframeUpdate, KeyframeTimelineTrack } from '@neko/ui/creative';
 import type { EasingType } from '@neko/shared';
 import { useTranslation } from '../i18n/I18nContext';
 import { useModelStore } from '../stores/modelStore';
@@ -42,6 +43,21 @@ export function ModelKeyframeTimeline({
   }, [activeAnimation, animationClips]);
 
   const clipName = activeAnimation ?? '';
+  const visualTracks = useMemo(
+    (): readonly KeyframeTimelineTrack[] =>
+      keyframeTracks.map((track) => ({
+        id: track.property,
+        label: track.label,
+        defaultValue: track.defaultValue,
+        keyframes: track.keyframes.map((keyframe) => ({
+          id: keyframe.id,
+          timeMs: keyframe.timeMs,
+          value: keyframe.value,
+          easing: keyframe.easing,
+        })),
+      })),
+    [keyframeTracks],
+  );
 
   const handleSeek = useCallback(
     (timeMs: number) => {
@@ -83,18 +99,14 @@ export function ModelKeyframeTimeline({
   );
 
   const handleKeyframeUpdate = useCallback(
-    (
-      _trackProperty: string,
-      keyframeId: string,
-      updates: { timeMs?: number; value?: number; easing?: EasingType },
-    ) => {
+    (_trackProperty: string, keyframeId: string, updates: KeyframeTimelineKeyframeUpdate) => {
       if (disabled || !clipName) return;
       onKeyframeMutation('update', {
         clipName,
         keyframeId,
         timestamp: updates.timeMs,
         values: updates.value !== undefined ? [updates.value] : undefined,
-        easing: updates.easing,
+        easing: readDomainEasing(updates.easing),
       });
     },
     [clipName, disabled, onKeyframeMutation],
@@ -131,7 +143,7 @@ export function ModelKeyframeTimeline({
     <KeyframeTimeline
       durationMs={durationMs}
       currentTimeMs={currentTimeMs}
-      tracks={keyframeTracks}
+      tracks={visualTracks}
       selectedKeyframeIds={selectedKeyframeIds}
       onSeek={handleSeek}
       onKeyframeAdd={handleKeyframeAdd}
@@ -141,4 +153,22 @@ export function ModelKeyframeTimeline({
       onKeyframeDrag={handleKeyframeDrag}
     />
   );
+}
+
+function readDomainEasing(value: KeyframeTimelineKeyframeUpdate['easing']): EasingType | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case 'linear':
+      return 'linear';
+    case 'ease-in-cubic':
+      return 'ease-in-cubic';
+    case 'ease-out-cubic':
+      return 'ease-out-cubic';
+    case 'ease-in-out-cubic':
+      return 'ease-in-out-cubic';
+    default:
+      break;
+  }
+  throw new Error(`model keyframe timeline received unsupported easing: ${value}`);
 }
