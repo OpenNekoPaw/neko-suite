@@ -34,7 +34,11 @@ export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeProvider = configuredProviders.find((p) => p.enabled !== false && p.apiKey);
+  const activeProvider = configuredProviders.find(
+    (p) =>
+      p.enabled !== false &&
+      ((p.models?.length ?? 0) > 0 || !!p.apiKey || p.requiresApiKey === false),
+  );
   const isConfigured = !!ssoSession || !!activeProvider;
   const triggerLabel = ssoSession
     ? ssoSession.user

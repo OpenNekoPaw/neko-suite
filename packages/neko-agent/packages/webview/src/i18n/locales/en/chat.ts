@@ -7,6 +7,7 @@ export const chat = {
   'chat.thinking': 'Thinking...',
   'chat.autoMode': 'Auto',
   'chat.selectModel': 'Select model',
+  'chat.noModelsAvailable': 'No available models',
   'chat.selectAgent': 'Select agent',
   'chat.defaultAgent': 'Default',
   'chat.selectPrompt': 'Select prompt',

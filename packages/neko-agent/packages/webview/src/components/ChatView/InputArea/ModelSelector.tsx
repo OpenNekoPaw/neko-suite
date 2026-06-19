@@ -48,9 +48,9 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
   const groupedModels = useMemo(() => {
     const groups: Record<string, ChatModelOption[]> = {};
     const autoModel = models.find((m) => m.id === 'auto');
+    const selectableModels = models.filter((m) => m.id !== 'auto');
 
-    for (const model of models) {
-      if (model.id === 'auto') continue;
+    for (const model of selectableModels) {
       const category = (model as ChatModelOption).category || 'llm';
       if (!groups[category]) {
         groups[category] = [];
@@ -65,10 +65,16 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
       return orderA - orderB;
     });
 
-    return { autoModel, groups, sortedCategories };
+    return {
+      autoModel,
+      groups,
+      sortedCategories,
+      hasSelectableModels: selectableModels.length > 0,
+    };
   }, [models]);
 
   const getSelectedLabel = () => {
+    if (!groupedModels.hasSelectableModels) return t('chat.noModelsAvailable');
     if (selectedModel === 'auto') return t('chat.autoMode');
     const model = models.find((m) => m.id === selectedModel);
     const label = model?.label ?? t('chat.autoMode');
@@ -89,11 +95,12 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
     return category.charAt(0).toUpperCase() + category.slice(1);
   };
 
-  const hasModels = models.length > 1;
-
   const selectedModelObj =
     selectedModel === 'auto' ? null : models.find((m) => m.id === selectedModel);
-  const dotColor = selectedModelObj ? getProviderColor(selectedModelObj.providerId) : '#6B7280';
+  const dotColor =
+    selectedModelObj && groupedModels.hasSelectableModels
+      ? getProviderColor(selectedModelObj.providerId)
+      : '#6B7280';
 
   return (
     <div className="relative" ref={menuRef}>
@@ -107,7 +114,11 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className="agent-control-chip"
-        title={selectedModelObj?.label ?? t('chat.autoMode')}
+        title={
+          groupedModels.hasSelectableModels
+            ? (selectedModelObj?.label ?? t('chat.autoMode'))
+            : t('chat.noModelsAvailable')
+        }
       >
         <ModelDot color={dotColor} />
         <span className="agent-control-chip-text">{getSelectedLabel()}</span>
@@ -120,7 +131,7 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
           role="menu"
         >
           {/* Auto option */}
-          {groupedModels.autoModel && (
+          {groupedModels.autoModel && groupedModels.hasSelectableModels && (
             <button
               type="button"
               onClick={() => {
@@ -162,9 +173,9 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
           ))}
 
           {/* No providers message */}
-          {!hasModels && (
+          {!groupedModels.hasSelectableModels && (
             <div className="px-2 py-1 text-[10px] text-[var(--vscode-descriptionForeground)]">
-              {t('chat.noProvidersConfigured')}
+              {t('chat.noModelsAvailable')}
             </div>
           )}
         </div>

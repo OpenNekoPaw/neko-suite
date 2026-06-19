@@ -34,9 +34,26 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setSelectedModel).toHaveBeenCalledWith('auto');
     expect(context.setGlobalError).toHaveBeenCalledWith(
       'Configuration file contains invalid JSON: /home/user/.neko/config.json. Fix the file, then open a new Agent session or tab.',
     );
+  });
+
+  it('hydrates the selected chat model when config has an explicit selection', () => {
+    const context = createContext();
+
+    dispatch(
+      {
+        type: 'settingsData',
+        providers: [],
+        selectedProviderId: 'openai',
+        selectedModelId: 'gpt-4.1',
+      },
+      context,
+    );
+
+    expect(context.setSelectedModel).toHaveBeenCalledWith('openai:gpt-4.1');
   });
 
   it('projects config state diagnostics into state and global error', () => {

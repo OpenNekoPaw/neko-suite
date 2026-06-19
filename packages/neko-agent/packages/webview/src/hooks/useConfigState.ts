@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   executionMode: 'ask' as ShellExecutionMode,
   promptMode: 'default' as PromptMode,
   chatModelOptions: [],
+  modelGroups: [],
   ssoSession: null,
   configDiagnostic: undefined,
 };

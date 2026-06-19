@@ -33,6 +33,7 @@ const translations: Record<string, string> = {
   'chat.input.canvasContext.prompt.understand': '分析选中的画布节点，并建议下一步可执行动作。',
   'chat.autoMode': '自动',
   'chat.selectModel': '选择模型',
+  'chat.noModelsAvailable': '无可用模型',
   'chat.sessionMode.agent': 'Agent',
   'chat.sessionMode.image': '生图',
   'chat.sessionMode.video': '生视频',
@@ -48,7 +49,16 @@ const translations: Record<string, string> = {
   'chat.generation.param.resolution': '分辨率',
 };
 
+const autoModel: ChatModelOption = {
+  id: 'auto',
+  label: 'Auto',
+  providerId: '',
+  modelId: '',
+  category: 'llm',
+};
+
 const chatModels: ChatModelOption[] = [
+  autoModel,
   {
     id: 'openai:gpt-5.5',
     label: 'OpenAI / gpt-5.5',
@@ -76,6 +86,30 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 describe('InputArea composer controls', () => {
+  it('keeps unconfigured conversations on Agent with an empty LLM selector only', () => {
+    render(
+      <Harness selectedModel="auto" availableModels={[autoModel]} availableMediaModels={[]}>
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    const modeGroup = screen.getByRole('group', { name: '模式与模型' });
+    expect(within(modeGroup).getByRole('button', { name: 'Agent' })).toBeTruthy();
+    expect(within(modeGroup).getByRole('button', { name: '选择模型' }).textContent).toContain(
+      '无可用模型',
+    );
+    expect(screen.queryByRole('group', { name: '工具参数' })).toBeNull();
+
+    fireEvent.click(within(modeGroup).getByRole('button', { name: 'Agent' }));
+    expect(screen.queryByRole('menuitem', { name: '生图' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: '生视频' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: '生音频' })).toBeNull();
+
+    fireEvent.click(within(modeGroup).getByRole('button', { name: '选择模型' }));
+    expect(within(screen.getByRole('menu')).getByText('无可用模型')).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: '自动' })).toBeNull();
+  });
+
   it('hides legacy LLM/generation labels while preserving mode and params controls', () => {
     render(
       <Harness>
@@ -430,6 +464,9 @@ function Harness({
   contextChips = [],
   onRemoveContextChip = vi.fn(),
   mentionItems = [],
+  selectedModel = 'openai:gpt-5.5',
+  availableModels = chatModels,
+  availableMediaModels = mediaModels,
   selectedFileReferences = [],
   onSelectedFileReferencesChange = vi.fn(),
   children,
@@ -438,6 +475,9 @@ function Harness({
   readonly contextChips?: AgentContextPayload[];
   readonly onRemoveContextChip?: (id: string) => void;
   readonly mentionItems?: React.ComponentProps<typeof InputAreaProvider>['mentionItems'];
+  readonly selectedModel?: string;
+  readonly availableModels?: ChatModelOption[];
+  readonly availableMediaModels?: ChatModelOption[];
   readonly selectedFileReferences?: React.ComponentProps<
     typeof InputArea
   >['selectedFileReferences'];
@@ -448,15 +488,15 @@ function Harness({
 }) {
   return (
     <InputAreaProvider
-      selectedModel="openai:gpt-5.5"
-      availableModels={chatModels}
+      selectedModel={selectedModel}
+      availableModels={availableModels}
       onModelSelect={vi.fn()}
       mediaModelSelection={{
         image: 'image-provider:model-image',
         video: 'none',
         audio: 'none',
       }}
-      availableMediaModels={mediaModels}
+      availableMediaModels={availableMediaModels}
       onMediaModelSelect={vi.fn()}
       sessionMode="agent"
       onSessionModeChange={vi.fn()}

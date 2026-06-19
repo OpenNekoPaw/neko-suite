@@ -273,6 +273,7 @@ describe('types validation', () => {
         executionMode: 'ask',
         promptMode: 'default',
         chatModelOptions: [],
+        modelGroups: [],
         ssoSession: null,
       };
       expect(settings.executionMode).toBe('ask');
@@ -295,6 +296,7 @@ describe('types validation', () => {
         executionMode: 'auto',
         promptMode: 'default',
         chatModelOptions: [],
+        modelGroups: [],
         ssoSession: null,
       };
       expect(settings.selectedProviderId).toBe('openai');

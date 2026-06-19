@@ -19,6 +19,7 @@ import {
   ProjectFile,
   SlashCommand,
   MentionItem,
+  type GenCategory,
   type SelectedFileReference,
 } from './types';
 import { createSlashCommandCatalog, filterSlashCommands } from './slash-command-catalog';
@@ -34,6 +35,7 @@ import { projectInputAreaUi } from '@/presenters/input-area-presenter';
 import { projectSessionMediaModelPickerState } from '@/presenters/media-model-presenter';
 import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
 import type { AgentContextPayload } from '@neko/shared';
+import type { SessionMode } from '@neko-agent/types';
 
 interface InputAreaProps {
   inputValue: string;
@@ -198,6 +200,9 @@ export function InputArea({
     filterSlashCommands(slashCommands, slashFilter, t),
   );
   const filteredMentionItems = getFilteredMentionItems(mentionItems, atFilter);
+  const mediaModelCounts = countMediaModelsByCategory(availableMediaModels);
+  const availableSessionModes = getAvailableSessionModes(mediaModelCounts);
+  const currentSessionMediaModelCount = getSessionMediaModelCount(sessionMode, mediaModelCounts);
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -571,6 +576,8 @@ export function InputArea({
     disabled,
     sessionMode,
     conversationKind,
+    availableMediaModelCount: availableMediaModels.length,
+    currentSessionMediaModelCount,
   });
   const sessionMediaPicker = projectSessionMediaModelPickerState({
     sessionMode,
@@ -597,7 +604,11 @@ export function InputArea({
           >
             {/* Left: session mode */}
             {inputAreaProjection.showSessionModeSelector && (
-              <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+              <SessionModeSelector
+                mode={sessionMode}
+                onChange={onSessionModeChange}
+                availableModes={availableSessionModes}
+              />
             )}
 
             {/* Model selector — contextual based on session mode */}
@@ -859,6 +870,34 @@ function promoteCompletedFileReferencesFromInput(
   }
 
   return { value: normalizeInputWhitespace(nextValue), references };
+}
+
+function countMediaModelsByCategory(
+  models: readonly { category?: string }[],
+): Record<GenCategory, number> {
+  return {
+    image: models.filter((model) => model.category === 'image').length,
+    video: models.filter((model) => model.category === 'video').length,
+    audio: models.filter((model) => model.category === 'audio').length,
+  };
+}
+
+function getAvailableSessionModes(counts: Record<GenCategory, number>): SessionMode[] {
+  const modes: SessionMode[] = ['agent'];
+  if (counts.image > 0) modes.push('image');
+  if (counts.video > 0) modes.push('video');
+  if (counts.audio > 0) modes.push('audio');
+  return modes;
+}
+
+function getSessionMediaModelCount(
+  sessionMode: SessionMode,
+  counts: Record<GenCategory, number>,
+): number {
+  if (sessionMode === 'image' || sessionMode === 'video' || sessionMode === 'audio') {
+    return counts[sessionMode];
+  }
+  return 0;
 }
 
 function appendSelectedFileReferencesToMessage(

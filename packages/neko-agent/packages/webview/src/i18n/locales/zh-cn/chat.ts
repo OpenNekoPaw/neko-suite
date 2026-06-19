@@ -7,6 +7,7 @@ export const chat = {
   'chat.thinking': '思考中...',
   'chat.autoMode': '自动',
   'chat.selectModel': '选择模型',
+  'chat.noModelsAvailable': '无可用模型',
   'chat.selectAgent': '选择智能体',
   'chat.defaultAgent': '默认',
   'chat.selectPrompt': '选择提示词',

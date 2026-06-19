@@ -236,6 +236,16 @@ export function ChatWorkspace({
     mediaModelSelection,
   });
 
+  useEffect(() => {
+    if (sessionMode === 'agent') return;
+    const hasCurrentSessionModel = availableMediaModels.some(
+      (model) => model.category === sessionMode,
+    );
+    if (!hasCurrentSessionModel) {
+      setSessionMode('agent');
+    }
+  }, [availableMediaModels, sessionMode]);
+
   // ---- Behavior hooks ----
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue,

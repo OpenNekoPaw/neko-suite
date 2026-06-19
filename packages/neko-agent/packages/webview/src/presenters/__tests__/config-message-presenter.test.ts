@@ -313,11 +313,7 @@ describe('config message presenter', () => {
       },
     });
 
-    expect(projection.availableModels.map((model) => model.id)).toEqual([
-      'auto',
-      'openai:gpt-4.1',
-      'suno:chirp',
-    ]);
+    expect(projection.availableModels.map((model) => model.id)).toEqual(['auto', 'openai:gpt-4.1']);
     expect(projection.availableMediaModels.map((model) => model.id)).toEqual([
       'flux:pro',
       'runway:gen-4',
@@ -507,6 +503,100 @@ describe('config message presenter', () => {
     expect(projectSsoErrorMessage({ type: 'ssoError', error: 'Login failed' })).toEqual({
       globalError: 'Login failed',
       showOnboarding: true,
+    });
+  });
+
+  it('projects source-grouped account gateway model state', () => {
+    expect(
+      projectConfigStateMessage({
+        type: 'configState',
+        config: {
+          configuredProviders: [
+            {
+              id: 'neko-account-gateway',
+              name: 'Neko Official',
+              type: 'newapi',
+              enabled: true,
+              requiresApiKey: false,
+              models: [{ id: 'official-chat', name: 'Official Chat', enabled: true }],
+            },
+          ],
+          modelGroups: [
+            {
+              source: 'account-gateway',
+              providerId: 'neko-account-gateway',
+              providerLabel: 'Neko Official',
+              connectionKind: 'gateway',
+              priority: 0,
+              modelsByType: {
+                llm: [
+                  {
+                    id: 'neko-account-gateway:official-chat',
+                    label: 'Neko Official / Official Chat',
+                    providerId: 'neko-account-gateway',
+                    modelId: 'official-chat',
+                    category: 'llm',
+                    capabilities: ['chat'],
+                  },
+                ],
+                image: [
+                  {
+                    id: 'neko-account-gateway:official-image',
+                    label: 'Neko Official / Official Image',
+                    providerId: 'neko-account-gateway',
+                    modelId: 'official-image',
+                    category: 'image',
+                    capabilities: ['text_to_image'],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      configuredProviders: [
+        {
+          id: 'neko-account-gateway',
+          name: 'Neko Official',
+          type: 'newapi',
+          enabled: true,
+          requiresApiKey: false,
+          models: [{ id: 'official-chat', name: 'Official Chat', enabled: true }],
+        },
+      ],
+      modelGroups: [
+        {
+          source: 'account-gateway',
+          providerId: 'neko-account-gateway',
+          providerLabel: 'Neko Official',
+          connectionKind: 'gateway',
+          priority: 0,
+          modelsByType: {
+            llm: [
+              {
+                id: 'neko-account-gateway:official-chat',
+                label: 'Neko Official / Official Chat',
+                providerId: 'neko-account-gateway',
+                modelId: 'official-chat',
+                category: 'llm',
+                capabilities: ['chat'],
+              },
+            ],
+            image: [
+              {
+                id: 'neko-account-gateway:official-image',
+                label: 'Neko Official / Official Image',
+                providerId: 'neko-account-gateway',
+                modelId: 'official-image',
+                category: 'image',
+                capabilities: ['text_to_image'],
+              },
+            ],
+          },
+        },
+      ],
+      configDiagnostic: undefined,
     });
   });
 });

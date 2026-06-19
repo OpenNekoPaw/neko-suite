@@ -1,4 +1,10 @@
-import type { AgentContextPayload, ChatModelOption, ModelCapability } from '@neko/shared';
+import type {
+  AgentContextPayload,
+  ChatModelOption,
+  ModelCapability,
+  ModelSourceGroup,
+  ModelType,
+} from '@neko/shared';
 import type {
   AgentMediaModelCategory,
   AgentMediaModelSelections,
@@ -78,6 +84,9 @@ export function projectSettingsDataMessage(message: SettingsDataMessage): Settin
       maxTokens: readNumber(source, 'maxTokens') ?? 4096,
       executionMode: readShellExecutionMode(source.executionMode) ?? 'ask',
       chatModelOptions: readChatModelOptions(source.chatModelOptions),
+      ...(Array.isArray(source.modelGroups)
+        ? { modelGroups: readModelSourceGroups(source.modelGroups) }
+        : {}),
       configDiagnostic,
     },
     selectedModel:
@@ -251,6 +260,11 @@ export function projectConfigStateMessage(
   if (!message.config) return null;
   return {
     configuredProviders: message.config.configuredProviders ?? [],
+    ...(Array.isArray(message.config.modelGroups)
+      ? {
+          modelGroups: readModelSourceGroups(message.config.modelGroups),
+        }
+      : {}),
     configDiagnostic: readConfigDiagnostic(message.config.configDiagnostic),
   };
 }
@@ -297,6 +311,11 @@ function readChatModelOptions(value: unknown): ChatModelOption[] {
   return value.filter(isChatModelOption);
 }
 
+function readModelSourceGroups(value: unknown): ModelSourceGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isModelSourceGroup);
+}
+
 function readMediaModelDefaults(value: unknown): MediaModelDefaults {
   const record = asRecord(value);
   if (!record) return {};
@@ -320,7 +339,10 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
     code !== 'missingConfig' &&
     code !== 'missingProvider' &&
     code !== 'missingModel' &&
-    code !== 'missingApiKey'
+    code !== 'missingApiKey' &&
+    code !== 'missingAccountCatalog' &&
+    code !== 'accountCatalogUnavailable' &&
+    code !== 'accountModelNotEntitled'
   ) {
     return undefined;
   }
@@ -372,7 +394,7 @@ function isAgentMediaCategory(category: unknown): category is AgentMediaModelCat
 }
 
 function isChatSelectableModel(model: ChatModelOption): boolean {
-  return model.id === 'auto' || !isAgentMediaCategory(model.category);
+  return model.id === 'auto' || model.category === undefined || model.category === 'llm';
 }
 
 function isAgentMediaChatModelOption(model: ChatModelOption): model is ChatModelOption & {
@@ -517,6 +539,30 @@ function isChatModelOption(value: unknown): value is ChatModelOption {
   return (
     contextWindow === undefined ||
     (typeof contextWindow === 'number' && Number.isFinite(contextWindow) && contextWindow > 0)
+  );
+}
+
+function isModelSourceGroup(value: unknown): value is ModelSourceGroup {
+  const record = asRecord(value);
+  if (!record) return false;
+  if (record.source !== 'account-gateway' && record.source !== 'explicit-config') return false;
+  if (!readString(record, 'providerId') || !readString(record, 'providerLabel')) return false;
+  if (typeof record.priority !== 'number' || !Number.isFinite(record.priority)) return false;
+
+  const modelsByType = asRecord(record.modelsByType);
+  if (!modelsByType) return false;
+  return Object.entries(modelsByType).every(([category, models]) => {
+    return isModelType(category) && Array.isArray(models) && models.every(isChatModelOption);
+  });
+}
+
+function isModelType(value: unknown): value is ModelType {
+  return (
+    value === 'llm' ||
+    value === 'image' ||
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'music'
   );
 }
 

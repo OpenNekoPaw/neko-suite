@@ -86,6 +86,11 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
     category: 'chat',
     noKey: true,
   },
+  'ollama-local': {
+    icon: '🦙',
+    category: 'chat',
+    noKey: true,
+  },
   deepseek: {
     icon: '🐋',
     category: 'chat',
@@ -113,6 +118,14 @@ export const PROVIDER_UI_METADATA: Record<string, ProviderUIMetadata> = {
   },
   newapi: {
     icon: '🔗',
+    category: 'chat',
+  },
+  'neko-gateway': {
+    icon: '🔗',
+    category: 'chat',
+  },
+  'custom-newapi': {
+    icon: '🔌',
     category: 'chat',
   },
   generic: {

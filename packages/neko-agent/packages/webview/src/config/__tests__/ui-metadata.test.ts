@@ -31,6 +31,8 @@ describe('Provider UI Metadata', () => {
       expect(getProviderIcon('anthropic')).toBe('🟠');
       expect(getProviderIcon('google')).toBe('🔵');
       expect(getProviderIcon('ollama')).toBe('🦙');
+      expect(getProviderIcon('ollama-local')).toBe('🦙');
+      expect(getProviderIcon('neko-gateway')).toBe('🔗');
     });
 
     it('should return default icon for unknown provider', () => {
@@ -61,6 +63,7 @@ describe('Provider UI Metadata', () => {
   describe('isNoKeyProvider()', () => {
     it('should return true for local providers', () => {
       expect(isNoKeyProvider('ollama')).toBe(true);
+      expect(isNoKeyProvider('ollama-local')).toBe(true);
       expect(isNoKeyProvider('lmstudio')).toBe(true);
     });
 
@@ -105,11 +108,15 @@ describe('Provider UI Metadata', () => {
         'google',
         'azure',
         'ollama',
+        'ollama-local',
         'deepseek',
         'kimi',
         'glm',
         'qwen',
         'lmstudio',
+        'newapi',
+        'neko-gateway',
+        'custom-newapi',
         'generic',
       ];
       chatProviders.forEach((id) => {

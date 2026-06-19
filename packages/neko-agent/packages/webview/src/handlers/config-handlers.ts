@@ -43,9 +43,7 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
     ...projection.settingsPatch,
   }));
 
-  if (projection.selectedModel) {
-    context.setSelectedModel(projection.selectedModel);
-  }
+  context.setSelectedModel(projection.selectedModel ?? 'auto');
 
   if (Object.keys(projection.defaultMediaModels).length > 0) {
     context.setMediaModelSelection((prev) => {

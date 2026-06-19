@@ -22,6 +22,7 @@ import { SessionModeIcon } from './ComposerIcons';
 interface SessionModeSelectorProps {
   mode: SessionMode;
   onChange: (mode: SessionMode) => void;
+  availableModes?: readonly SessionMode[];
 }
 
 interface ModeOption {
@@ -38,7 +39,7 @@ export const SESSION_MODE_COLORS: Record<SessionMode, string> = {
   audio: '#06B6D4',
 };
 
-export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps) {
+export function SessionModeSelector({ mode, onChange, availableModes }: SessionModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>({
@@ -53,7 +54,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
     estimatedWidth: 220,
   });
 
-  const OPTIONS: ModeOption[] = [
+  const allOptions: ModeOption[] = [
     {
       value: 'agent',
       labelKey: 'chat.sessionMode.agent',
@@ -80,19 +81,25 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
     },
   ];
 
-  const current = OPTIONS.find((o) => o.value === mode)!;
+  const availableModeSet = new Set<SessionMode>(
+    availableModes ?? allOptions.map((opt) => opt.value),
+  );
+  const OPTIONS = allOptions.filter((opt) => availableModeSet.has(opt.value));
+  const current = OPTIONS.find((o) => o.value === mode) ?? allOptions[0]!;
+  const canSwitchMode = OPTIONS.length > 1;
 
   return (
     <div className="relative" ref={menuRef}>
       <button
         type="button"
         onClick={() => {
+          if (!canSwitchMode) return;
           if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-label={t(current.labelKey)}
         aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-expanded={canSwitchMode ? isOpen : false}
         className="agent-control-chip agent-control-chip-icon"
         style={{ color: current.color }}
         title={t(current.labelKey)}
@@ -100,7 +107,7 @@ export function SessionModeSelector({ mode, onChange }: SessionModeSelectorProps
         <SessionModeIcon mode={current.value} size={14} />
       </button>
 
-      {isOpen && (
+      {isOpen && canSwitchMode && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-mode absolute ${dropdownPositionClass(placement)}`}
           role="menu"
