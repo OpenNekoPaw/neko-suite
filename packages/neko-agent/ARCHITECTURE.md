@@ -149,11 +149,11 @@ LLM 适配和媒体生成服务。62 个源文件。
 
 ```
 配置策略：
-├─ Providers/Models: 用户配置（~/.neko/config.json），首次运行生成默认值
+├─ Providers/Models: 用户配置（~/.neko/config.toml），显式打开配置时生成 TOML 模板
 ├─ MCP Servers: 用户配置 + 工作区配置（workspace 按 id 覆盖 user）
 └─ 标量设置: 用户配置 + @neko/shared DEFAULT_CONFIG fallback
 
-模型选择: 优先级 fallback（显式指定 → 配置默认 → 首个可用）
+模型选择: 显式 provider/model 失败即报错；未显式选择时才从可用 chat 模型中解析
 ```
 
 | 模块 | 职责 |
@@ -206,7 +206,7 @@ React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源�
 
 CLI 特有的 bootstrap 层（`createCLIPlatform()`）负责：
 - 从环境变量注入 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等）
-- 基于文件的用户配置（`~/.neko/config.json`，与 Extension 共享）
+- 基于文件的用户配置（`~/.neko/config.toml`，与 Extension 共享）
 - `toSharedService()` 适配 platform Service → `@neko/shared.IService`
 
 | 模块 | 职责 |

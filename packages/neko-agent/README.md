@@ -96,7 +96,7 @@ packages/
 
 Neko Agent 现在有两条 AI 配置路径：
 
-1. **本地用户配置文件**：`~/.neko/config.json` / 环境凭据 / 运行时导入凭据，支持 `direct`、`gateway`、`custom-gateway`、`local` 分组。只要配置中出现 AI provider、model、默认 provider/model 或显式聊天模型选择，就视为显式 AI 配置，并拥有最高优先级。
+1. **本地用户配置文件**：`~/.neko/config.toml` / 环境凭据 / 运行时导入凭据，支持 `direct`、`gateway`、`custom-gateway`、`local` 分组。只要配置中出现 AI provider、model、默认 provider/model 或显式聊天模型选择，就视为显式 AI 配置，并拥有最高优先级。
 2. **OAuth Neko 官方账号网关**：用户登录后由 `neko-auth` 拉取 Neko 官方 AI catalog、entitlement、usage 和默认模型，Agent Extension Host 缓存为运行时 `neko-account-gateway` provider。该路径不写入用户配置文件，也不向 Webview、日志、prompt 或工具 payload 暴露 OAuth token、gateway token、API key 或内部授权头。
 
 本地配置文件可以只包含 MCP、auth、UI 等非 AI 设置；这种情况下不会阻断 OAuth 官方账号网关。若本地配置显式选择了 AI provider/model，但 provider 缺失、模型不属于 provider、provider 未配置或模型无能力，则对话直接返回可见错误，不会 fallback 到官方账号网关、首个模型或硬编码默认值。
@@ -122,20 +122,19 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 **模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。
 
-**媒体模型默认值**：在 `~/.neko/config.json` 中通过 `defaultMediaModels` 为各媒体类型配置默认模型：
+**媒体模型默认值**：在 `~/.neko/config.toml` 中通过 `default_media_models` 为各媒体类型配置默认模型：
 
-```json
-{
-  "defaultMediaModels": {
-    "image": "neko-gateway-gpt-image-2",
-    "video": "neko-gateway-seedance-lite",
-    "audio": "neko-gateway-tts",
-    "music": "neko-gateway-suno"
-  }
-}
+```toml
+[default_media_models]
+image = "neko-gateway-gpt-image-2"
+video = "neko-gateway-seedance-lite"
+audio = "neko-gateway-tts"
+music = "neko-gateway-suno"
 ```
 
 值为 `models[]` 中对应模型的 `id`。Webview 启动时自动应用为初始选择；用户在 AgentMediaBar 中手动切换后，运行时选择优先。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio` / `music`）控制模型在选择器中的分组。
+
+**TOML 迁移**：`config.toml` 是当前唯一默认读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时兜底；若只存在 JSON，Agent 会提示显式迁移。可执行 VS Code 命令 `NekoAgent: Migrate Agent Config to TOML` 或 CLI 命令 `nekoagent config migrate`，迁移成功后旧 JSON 会重命名为 `config.json.bak`。
 
 ## 核心概念
 
@@ -167,7 +166,7 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 ### MCP 集成
 
-支持 Stdio 和 HTTP 两种传输协议，配置在 `~/.neko/config.json` 或 `.neko/config.json`（工作区）。
+支持 Stdio 和 HTTP 两种传输协议，配置在 `~/.neko/config.toml` 或 `.neko/config.toml`（工作区）。
 
 ## 内部 API（跨扩展命令）
 
@@ -223,7 +222,7 @@ pnpm check                  # 代码质量检查
 ```
 
 **调试**：
-- Extension Host：`console.log('[Extension]', data)`
+- Extension Host：项目 Logger / VS Code 输出面板
 - Webview DevTools：`Cmd+Shift+P → Developer: Open Webview Developer Tools`
 - CLI：直接终端输出
 
