@@ -20,6 +20,7 @@
     "./nkproj": "./src/nkproj/index.ts",
     "./components": "./src/components/index.ts",
     "./config/config-reader": "./src/config/config-reader.ts",
+    "./config/config-migration": "./src/config/config-migration.ts",
     "./types/dashboard-task": "./src/types/dashboard-task.ts",
     "./types/dashboard-project": "./src/types/dashboard-project.ts",
     "./types/dashboard-creative-entity": "./src/types/dashboard-creative-entity.ts",
@@ -49,5 +50,8 @@
     "@types/vscode": "^1.85.0",
     "jsdom": "^27.0.1"
   },
-  "license": "AGPL-3.0-or-later"
+  "license": "AGPL-3.0-or-later",
+  "dependencies": {
+    "smol-toml": "1.6.1"
+  }
 }

@@ -211,8 +211,8 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
  * 1. Merge user and workspace configs
  * 2. Normalize to internal format
  *
- * @param userConfig - User configuration (~/.neko/config.json)
- * @param workspaceConfig - Workspace configuration (.neko/config.json)
+ * @param userConfig - User configuration (~/.neko/config.toml)
+ * @param workspaceConfig - Workspace configuration (.neko/config.toml)
  * @returns Normalized configuration
  */
 export function processConfig(

@@ -4,8 +4,8 @@
  * Shared configuration format for agent-cli and platform.
  *
  * File locations:
- * - User config: ~/.neko/config.json
- * - Workspace config: .neko/config.json
+ * - User config: ~/.neko/config.toml
+ * - Workspace config: .neko/config.toml
  *
  * NOTE: config-reader.ts uses Node.js APIs (fs, path, os) and is NOT exported
  * from the main entry point. Import it directly from '@neko/shared/config/config-reader'
@@ -41,10 +41,32 @@ export {
   DEFAULT_EXTENSION_CONFIG,
   CONFIG_DIR_NAME,
   CONFIG_FILE_NAME,
+  LEGACY_CONFIG_FILE_NAME,
 } from './types';
 
 // Normalizer (browser-safe - pure functions, no Node.js dependencies)
 export { mergeConfigs, normalizeConfig, processConfig } from './config-normalizer';
+
+export type {
+  NekoTomlConfig,
+  TomlDefaultsConfig,
+  TomlProviderConfig,
+  TomlProtocolVariant,
+  TomlMediaEndpoints,
+  TomlModelConfig,
+  TomlMcpServerConfig,
+  TomlConfigValidationIssue,
+} from './toml-config';
+
+export {
+  SUPPORTED_TOML_CONFIG_VERSION,
+  TomlConfigValidationError,
+  parseTomlConfigText,
+  serializeUnifiedConfigToToml,
+  tomlToUnifiedConfig,
+  unifiedConfigToToml,
+  validateTomlConfig,
+} from './toml-config';
 
 // Config adapter interface (browser-safe)
 export type {

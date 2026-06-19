@@ -414,7 +414,7 @@ export interface ChatModelOption {
   /** Model ID (empty string for 'auto') */
   modelId: string;
   /** Model capabilities (optional, for filtering) */
-  capabilities?: ModelCapability[];
+  capabilities?: readonly string[];
   /** Model type for UI grouping */
   category?: ModelType;
   /** Context window size in tokens, when known */

@@ -6,8 +6,8 @@
  *
  * Priority chain:
  *   1. Environment variable   (ANTHROPIC_API_KEY, etc.)
- *   2. credentials.apiKeys    (config.json "credentials" section)
- *   3. providers[].apiKey     (config.json "providers" section)
+ *   2. credentials.apiKeys    (config.toml "credentials" section)
+ *   3. providers[].apiKey     (config.toml "providers" section)
  *   4. Generic fallback env   (NEKO_API_KEY / LLM_API_KEY)
  */
 

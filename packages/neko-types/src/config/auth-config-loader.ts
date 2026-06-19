@@ -1,7 +1,7 @@
 /**
  * Auth Config Loader
  *
- * Loads OAuth configuration from config.json files.
+ * Loads OAuth configuration from config.toml files.
  * Node.js only — uses config-reader (fs, path, os).
  *
  * Import via: '@neko/shared/config/auth-config-loader'
@@ -23,12 +23,12 @@ const DEFAULT_REDIRECT_PORT = 6419;
 // =============================================================================
 
 /**
- * Load AuthConfig from config.json files (user + workspace merge).
+ * Load AuthConfig from config files (user + workspace merge).
  *
- * @param workspaceDir - Workspace directory for .neko/config.json lookup
+ * @param workspaceDir - Workspace directory for .neko/config.toml lookup
  * @returns AuthConfig with defaults applied. Empty authUrl/tokenUrl means not configured.
  */
-export function loadAuthConfigFromJson(workspaceDir?: string): AuthConfig {
+export function loadAuthConfigFromFiles(workspaceDir?: string): AuthConfig {
   const userConfig = readUserConfig();
   const wsConfig = workspaceDir ? readWorkspaceConfig(workspaceDir) : null;
 

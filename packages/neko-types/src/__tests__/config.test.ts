@@ -486,7 +486,7 @@ describe('config constants', () => {
   });
 
   it('should have correct config file name', () => {
-    expect(CONFIG_FILE_NAME).toBe('config.json');
+    expect(CONFIG_FILE_NAME).toBe('config.toml');
   });
 
   it('should have sensible default values', () => {

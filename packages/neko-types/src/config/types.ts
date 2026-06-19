@@ -3,8 +3,8 @@
  *
  * Shared configuration format for agent-cli and platform.
  * File locations:
- * - User config: ~/.neko/config.json
- * - Workspace config: .neko/config.json
+ * - User config: ~/.neko/config.toml
+ * - Workspace config: .neko/config.toml
  */
 
 import type { ProviderConfig, ModelConfig, MCPServerConfig, MediaModelType } from '../types/config';
@@ -19,27 +19,8 @@ import type { ProviderConfig, ModelConfig, MCPServerConfig, MediaModelType } fro
  * This format is shared between agent-cli and platform.
  * Both can read from the same config file.
  *
- * @example
- * ```json
- * {
- *   "defaultProvider": "anthropic",
- *   "maxTokens": 8192,
- *   "temperature": 0.7,
- *   "providers": [
- *     {
- *       "id": "neko-gateway",
- *       "name": "neko-gateway",
- *       "displayName": "Neko Gateway",
- *       "type": "newapi",
- *       "apiUrl": "https://gateway.example.com/v1",
- *       "apiKey": "sk-xxx",
- *       "enabled": true
- *     }
- *   ],
- *   "models": [...],
- *   "mcpServers": [...]
- * }
- * ```
+ * TOML is the user-authored syntax. Runtime code uses this object shape after
+ * parsing and adaptation.
  */
 export interface UnifiedConfig {
   // ==========================================================================
@@ -132,7 +113,7 @@ export interface UnifiedConfig {
   /**
    * API key credentials.
    *
-   * WARNING: Stored in PLAINTEXT in config.json.
+   * WARNING: Stored in PLAINTEXT in config.toml.
    * Prefer environment variables for sensitive keys.
    *
    * Priority: env vars > credentials.apiKeys > providers[].apiKey
@@ -225,14 +206,17 @@ export const DEFAULT_EXTENSION_CONFIG = {
 export const CONFIG_DIR_NAME = '.neko';
 
 /** Config file name */
-export const CONFIG_FILE_NAME = 'config.json';
+export const CONFIG_FILE_NAME = 'config.toml';
+
+/** Legacy JSON config file name, only for explicit migration/diagnostics */
+export const LEGACY_CONFIG_FILE_NAME = 'config.json';
 
 // =============================================================================
 // Auth & Credentials Types
 // =============================================================================
 
 /**
- * OAuth 2.0 configuration stored in config.json.
+ * OAuth 2.0 configuration stored in config.toml.
  * Mirrors AuthConfig from types/auth.ts but all fields optional for partial config.
  */
 export interface AuthConfigJson {
