@@ -82,6 +82,9 @@ describe('NekoAuthAPIImpl -- construction and event wiring', () => {
     login: ReturnType<typeof vi.fn>;
     logout: ReturnType<typeof vi.fn>;
   };
+  let mockCatalogClient: {
+    fetchCatalog: ReturnType<typeof vi.fn>;
+  };
   let mockContext: {
     subscriptions: Array<{ dispose: () => void }>;
   };
@@ -92,6 +95,36 @@ describe('NekoAuthAPIImpl -- construction and event wiring', () => {
       getSession: vi.fn().mockResolvedValue(null),
       login: vi.fn().mockResolvedValue({ userId: 'u1', token: 'tok' }),
       logout: vi.fn().mockResolvedValue(undefined),
+    };
+    mockCatalogClient = {
+      fetchCatalog: vi.fn().mockResolvedValue({
+        source: 'account-gateway',
+        status: 'available',
+        provider: {
+          id: 'neko-account-gateway',
+          name: 'neko-account-gateway',
+          displayName: 'Neko Official',
+          type: 'newapi',
+          apiUrl: '',
+          enabled: true,
+          connectionKind: 'gateway',
+          protocolProfile: 'newapi-compatible',
+          supportLevel: 'verified',
+          requiresApiKey: false,
+        },
+        models: [
+          {
+            id: 'gpt-4o-mini',
+            name: 'gpt-4o-mini',
+            providerId: 'neko-account-gateway',
+            type: 'llm',
+            capabilities: ['chat'],
+            enabled: true,
+          },
+        ],
+        entitlement: { allowedModelIds: ['gpt-4o-mini'] },
+        expiresAt: Date.now() + 60_000,
+      }),
     };
     mockContext = { subscriptions: [] };
   });
@@ -158,5 +191,72 @@ describe('NekoAuthAPIImpl -- construction and event wiring', () => {
 
     const token = await api.getCloudToken('github');
     expect(token).toBeNull();
+  });
+
+  it('returns null account AI catalog when there is no session', async () => {
+    const api = new NekoAuthAPIImpl(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockService as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockContext as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockCatalogClient as any,
+    );
+
+    await expect(api.getAccountAiCatalog()).resolves.toBeNull();
+    expect(mockCatalogClient.fetchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('fetches account AI catalog only through the injected catalog client', async () => {
+    const session = {
+      user: 'alice@example.com',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 60_000,
+    };
+    mockService.getSession.mockResolvedValue(session);
+    const api = new NekoAuthAPIImpl(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockService as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockContext as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockCatalogClient as any,
+    );
+
+    const catalog = await api.getAccountAiCatalog();
+
+    expect(mockCatalogClient.fetchCatalog).toHaveBeenCalledWith(session);
+    expect(catalog).toMatchObject({
+      source: 'account-gateway',
+      status: 'available',
+    });
+    expect(JSON.stringify(catalog)).not.toContain('access-token');
+    expect(JSON.stringify(catalog)).not.toContain('refresh-token');
+  });
+
+  it('returns null account AI catalog after logout clears the session', async () => {
+    const session = {
+      user: 'alice@example.com',
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60_000,
+    };
+    mockService.getSession.mockResolvedValueOnce(session).mockResolvedValueOnce(null);
+    const api = new NekoAuthAPIImpl(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockService as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockContext as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockCatalogClient as any,
+    );
+
+    await expect(api.getAccountAiCatalog()).resolves.toMatchObject({
+      source: 'account-gateway',
+    });
+    await api.logout();
+
+    await expect(api.getAccountAiCatalog()).resolves.toBeNull();
+    expect(mockCatalogClient.fetchCatalog).toHaveBeenCalledTimes(1);
   });
 });

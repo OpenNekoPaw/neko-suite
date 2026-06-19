@@ -42,6 +42,17 @@ export class AuthTokenError extends Error {
   }
 }
 
+export class AuthEntitlementError extends Error {
+  readonly code = 'AUTH_ENTITLEMENT_ERROR' as const;
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'AuthEntitlementError';
+    this.status = status;
+  }
+}
+
 export class AuthNetworkError extends Error {
   readonly code = 'AUTH_NETWORK_ERROR' as const;
 

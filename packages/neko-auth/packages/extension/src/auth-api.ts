@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { IAuthSession } from '@neko/shared';
-import type { NekoAuthService } from '@neko/auth-core';
+import type { AccountAiCatalogSnapshot, IAuthSession } from '@neko/shared';
+import type { AccountAiCatalogClient, NekoAuthService } from '@neko/auth-core';
 
 export type CloudProvider = 'github' | 'gitlab' | 's3';
 
@@ -18,6 +18,10 @@ export interface NekoAuthAPI {
   onDidChangeSession: vscode.Event<IAuthSession | null>;
   /** Phase 2 stub — returns null until cloud token service is implemented. */
   getCloudToken(provider: CloudProvider): Promise<string | null>;
+  /** Returns the secret-free Neko official account AI catalog snapshot when available. */
+  getAccountAiCatalog(options?: {
+    forceRefresh?: boolean;
+  }): Promise<AccountAiCatalogSnapshot | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,6 +37,7 @@ export class NekoAuthAPIImpl implements NekoAuthAPI, vscode.Disposable {
   constructor(
     private readonly service: NekoAuthService,
     context: vscode.ExtensionContext,
+    private readonly accountAiCatalog?: AccountAiCatalogClient,
   ) {
     this.disposables.push(this._onDidChangeSession);
     context.subscriptions.push(this);
@@ -61,6 +66,13 @@ export class NekoAuthAPIImpl implements NekoAuthAPI, vscode.Disposable {
   /** Phase 2 stub — getCloudToken for provider-specific OAuth */
   getCloudToken(_provider: CloudProvider): Promise<string | null> {
     return Promise.resolve(null);
+  }
+
+  async getAccountAiCatalog(): Promise<AccountAiCatalogSnapshot | null> {
+    if (!this.accountAiCatalog) return null;
+    const session = await this.service.getSession();
+    if (!session) return null;
+    return this.accountAiCatalog.fetchCatalog(session);
   }
 
   dispose(): void {

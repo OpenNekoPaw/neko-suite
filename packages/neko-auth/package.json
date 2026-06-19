@@ -37,6 +37,11 @@
           "default": "",
           "description": "%neko.auth.tokenUrl.description%"
         },
+        "neko.auth.aiCatalogUrl": {
+          "type": "string",
+          "default": "",
+          "description": "%neko.auth.aiCatalogUrl.description%"
+        },
         "neko.auth.scopes": {
           "type": "array",
           "items": { "type": "string" },

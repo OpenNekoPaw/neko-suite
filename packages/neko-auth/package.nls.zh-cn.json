@@ -3,6 +3,7 @@
   "neko.auth.clientId.description": "Neko Suite 认证所使用的 OAuth 2.0 客户端 ID",
   "neko.auth.authUrl.description": "OAuth 2.0 授权端点 URL",
   "neko.auth.tokenUrl.description": "OAuth 2.0 令牌端点 URL",
+  "neko.auth.aiCatalogUrl.description": "Neko 官方账号 AI 模型目录端点 URL",
   "neko.auth.scopes.description": "认证时请求的 OAuth 2.0 权限范围",
   "neko.auth.redirectPort.description": "OAuth 回调使用的本地端口"
 }
