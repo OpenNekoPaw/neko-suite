@@ -41,6 +41,7 @@ export function loadAuthConfigFromJson(workspaceDir?: string): AuthConfig {
     clientId: merged.clientId ?? '',
     authUrl: merged.authUrl ?? '',
     tokenUrl: merged.tokenUrl ?? '',
+    aiCatalogUrl: merged.aiCatalogUrl ?? '',
     scopes: merged.scopes ?? DEFAULT_SCOPES,
     redirectPort: merged.redirectPort ?? DEFAULT_REDIRECT_PORT,
   };
@@ -70,6 +71,7 @@ function mergeAuthConfig(base?: AuthConfigJson, override?: AuthConfigJson): Auth
     clientId: override.clientId ?? base.clientId,
     authUrl: override.authUrl ?? base.authUrl,
     tokenUrl: override.tokenUrl ?? base.tokenUrl,
+    aiCatalogUrl: override.aiCatalogUrl ?? base.aiCatalogUrl,
     scopes: override.scopes ?? base.scopes,
     redirectPort: override.redirectPort ?? base.redirectPort,
   };

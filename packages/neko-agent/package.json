@@ -322,14 +322,17 @@
             "openai",
             "google",
             "azure",
-            "ollama"
+            "ollama",
+            "neko-gateway",
+            "custom-newapi",
+            "ollama-local"
           ],
-          "default": "anthropic",
+          "default": "ollama-local",
           "description": "Default AI provider"
         },
         "neko.agent.model": {
           "type": "string",
-          "default": "claude-sonnet-4-20250514",
+          "default": "ollama-local-default-chat",
           "description": "Default model to use"
         },
         "neko.agent.apiKey.anthropic": {

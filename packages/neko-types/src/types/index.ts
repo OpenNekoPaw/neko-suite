@@ -72,6 +72,7 @@ export * from './message';
 
 // Configuration
 export * from './config';
+export * from './agent-ai-source';
 
 // AI Actions
 export * from './aiAction';

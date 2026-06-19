@@ -27,12 +27,12 @@ import type { ProviderConfig, ModelConfig, MCPServerConfig, MediaModelType } fro
  *   "temperature": 0.7,
  *   "providers": [
  *     {
- *       "id": "anthropic",
- *       "name": "anthropic",
- *       "displayName": "Anthropic",
- *       "type": "anthropic",
- *       "apiUrl": "https://api.anthropic.com",
- *       "apiKey": "sk-ant-xxx",
+ *       "id": "neko-gateway",
+ *       "name": "neko-gateway",
+ *       "displayName": "Neko Gateway",
+ *       "type": "newapi",
+ *       "apiUrl": "https://gateway.example.com/v1",
+ *       "apiKey": "sk-xxx",
  *       "enabled": true
  *     }
  *   ],
@@ -196,8 +196,8 @@ export interface NormalizedConfig {
  * Default configuration values
  */
 export const DEFAULT_CONFIG: Omit<NormalizedConfig, 'providers' | 'models' | 'mcpServers'> = {
-  defaultProvider: 'anthropic',
-  defaultModel: 'claude-sonnet-4-20250514',
+  defaultProvider: 'ollama-local',
+  defaultModel: 'ollama-local-default-chat',
   maxTokens: 8192,
   temperature: 0.7,
   verbose: false,
@@ -241,6 +241,8 @@ export interface AuthConfigJson {
   authUrl?: string;
   /** Token endpoint. */
   tokenUrl?: string;
+  /** Neko official account AI catalog endpoint. */
+  aiCatalogUrl?: string;
   scopes?: string[];
   /** Localhost redirect port for OAuth callback. Default: 6419 */
   redirectPort?: number;

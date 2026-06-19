@@ -21,11 +21,14 @@ import type { UnifiedConfig } from './types';
  * Known provider ID → environment variable name mapping.
  */
 const ENV_KEY_MAP: Record<string, string> = {
+  'neko-gateway': 'NEKO_GATEWAY_API_KEY',
+  'custom-newapi': 'NEWAPI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   google: 'GOOGLE_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
   azure: 'AZURE_OPENAI_API_KEY',
+  newapi: 'NEWAPI_API_KEY',
 };
 
 /** Generic fallback environment variables (checked in order) */

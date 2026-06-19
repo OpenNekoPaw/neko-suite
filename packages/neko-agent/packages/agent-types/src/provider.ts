@@ -6,6 +6,10 @@ export interface ConfiguredProvider {
   id: string;
   type: string;
   name: string;
+  connectionKind?: string;
+  protocolProfile?: string;
+  supportLevel?: string;
+  requiresApiKey?: boolean;
   apiKey?: string;
   baseUrl?: string;
   /** Whether the provider is enabled (default true) */

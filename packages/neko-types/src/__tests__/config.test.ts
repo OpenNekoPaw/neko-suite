@@ -452,6 +452,8 @@ describe('resolveApiKey', () => {
 
 describe('getEnvKeyName', () => {
   it('should return known provider env var name', () => {
+    expect(getEnvKeyName('neko-gateway')).toBe('NEKO_GATEWAY_API_KEY');
+    expect(getEnvKeyName('custom-newapi')).toBe('NEWAPI_API_KEY');
     expect(getEnvKeyName('anthropic')).toBe('ANTHROPIC_API_KEY');
     expect(getEnvKeyName('openai')).toBe('OPENAI_API_KEY');
   });
@@ -464,6 +466,8 @@ describe('getEnvKeyName', () => {
 describe('getEnvKeyMap', () => {
   it('should return all known mappings', () => {
     const map = getEnvKeyMap();
+    expect(map['neko-gateway']).toBe('NEKO_GATEWAY_API_KEY');
+    expect(map['custom-newapi']).toBe('NEWAPI_API_KEY');
     expect(map.anthropic).toBe('ANTHROPIC_API_KEY');
     expect(map.openai).toBe('OPENAI_API_KEY');
     expect(map.google).toBe('GOOGLE_API_KEY');
@@ -486,7 +490,7 @@ describe('config constants', () => {
   });
 
   it('should have sensible default values', () => {
-    expect(DEFAULT_CONFIG.defaultProvider).toBe('anthropic');
+    expect(DEFAULT_CONFIG.defaultProvider).toBe('ollama-local');
     expect(DEFAULT_CONFIG.maxTokens).toBeGreaterThan(0);
     expect(DEFAULT_CONFIG.temperature).toBeGreaterThanOrEqual(0);
     expect(DEFAULT_CONFIG.temperature).toBeLessThanOrEqual(2);

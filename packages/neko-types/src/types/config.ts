@@ -118,6 +118,31 @@ export type ProviderType =
   | 'dashscope';
 
 /**
+ * Provider connection mode.
+ *
+ * Adapter routing still uses ProviderConfig.type. This field describes how the
+ * user reaches the provider so settings can group gateway, local, and future
+ * direct official API paths without inferring that from vendor IDs.
+ */
+export type ProviderConnectionKind = 'gateway' | 'custom-gateway' | 'local' | 'direct';
+
+/**
+ * Protocol profile used by the provider endpoint.
+ */
+export type ProviderProtocolProfile =
+  | 'newapi-compatible'
+  | 'openai-chat'
+  | 'openai-responses'
+  | 'anthropic'
+  | 'google'
+  | 'ollama';
+
+/**
+ * Support confidence for built-in and user-configured providers.
+ */
+export type ProviderSupportLevel = 'verified' | 'compatible' | 'experimental' | 'custom';
+
+/**
  * AI service provider configuration
  */
 export interface ProviderConfig {
@@ -135,6 +160,14 @@ export interface ProviderConfig {
   apiKey?: string;
   /** Whether provider is enabled */
   enabled: boolean;
+  /** Connection path for grouping gateway, local, and future direct providers */
+  connectionKind?: ProviderConnectionKind;
+  /** Protocol profile implemented by the provider endpoint */
+  protocolProfile?: ProviderProtocolProfile;
+  /** Product support confidence for this provider profile */
+  supportLevel?: ProviderSupportLevel;
+  /** Whether this provider requires an API key to be considered configured */
+  requiresApiKey?: boolean;
   /** Whether this is a builtin provider */
   builtin?: boolean;
   /**

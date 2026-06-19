@@ -479,6 +479,7 @@ export interface SettingsDataMessage {
   maxTokens?: number;
   executionMode?: SettingsState['executionMode'];
   chatModelOptions?: ChatModelOption[];
+  modelGroups?: SettingsState['modelGroups'];
   defaultMediaModels?: Partial<Record<MediaModelCategory, string>>;
   configDiagnostic?: AgentConfigDiagnostic;
 }
@@ -490,6 +491,7 @@ export interface ConfigStateMessage {
   config?: {
     providers?: ConfiguredProvider[];
     configuredProviders?: ConfiguredProvider[];
+    modelGroups?: SettingsState['modelGroups'];
     configDiagnostic?: AgentConfigDiagnostic;
   };
 }

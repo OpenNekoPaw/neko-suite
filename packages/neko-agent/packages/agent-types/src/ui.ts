@@ -2,7 +2,7 @@
  * UI Types — Shared UI state types for webview and extension
  */
 
-import type { ChatModelOption } from '@neko/shared';
+import type { ChatModelOption, ModelSourceGroup } from '@neko/shared';
 import type { ConfiguredProvider } from './provider';
 import type { ShellExecutionMode } from './settings';
 import type { NpcProfileSource } from '@neko/shared';
@@ -122,6 +122,8 @@ export interface SettingsState {
   promptMode: PromptMode;
   /** Chat model options for UI model selector (from Platform ConfigManager) */
   chatModelOptions: Array<ChatModelOption>;
+  /** Source/provider grouped model options for account gateway and explicit config providers. */
+  modelGroups: Array<ModelSourceGroup>;
   /** SSO session info (null when using custom key or not logged in) */
   ssoSession: SsoSession | null;
   /** Safe config file diagnostic for the active snapshot, if loading failed. */

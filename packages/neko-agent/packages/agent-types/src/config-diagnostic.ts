@@ -5,7 +5,10 @@ export type AgentConfigDiagnosticCode =
   | 'missingConfig'
   | 'missingProvider'
   | 'missingModel'
-  | 'missingApiKey';
+  | 'missingApiKey'
+  | 'missingAccountCatalog'
+  | 'accountCatalogUnavailable'
+  | 'accountModelNotEntitled';
 
 export interface AgentConfigDiagnostic {
   code: AgentConfigDiagnosticCode;

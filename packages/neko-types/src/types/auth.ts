@@ -83,6 +83,8 @@ export interface AuthConfig {
   authUrl: string;
   /** Token endpoint. */
   tokenUrl: string;
+  /** Neko official account AI catalog endpoint. Empty string = account AI unavailable. */
+  aiCatalogUrl?: string;
   scopes: string[];
   /** Localhost redirect port for OAuth callback. Default: 6419 */
   redirectPort?: number;
