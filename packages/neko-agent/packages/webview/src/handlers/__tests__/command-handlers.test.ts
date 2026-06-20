@@ -1,0 +1,260 @@
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { ExtensionToWebviewMessage } from '@neko-agent/types';
+import type { Message } from '@neko-agent/types';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import { commandHandlers } from '../command-handlers';
+import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
+
+describe('command handlers conversation isolation', () => {
+  it('routes slash command assistant messages to the result conversation', () => {
+    const visibleMessage = message('visible-message', 'assistant', '当前会话内容');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: [visibleMessage],
+    });
+
+    dispatch(
+      commandHandlers,
+      {
+        type: 'slashCommandResult',
+        conversationId: 'conv-a',
+        command: 'status',
+        success: true,
+        message: 'A 会话命令结果',
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([visibleMessage]);
+    expect(harness.conversationMessages().get('conv-a')).toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'A 会话命令结果',
+      }),
+    ]);
+    expect(harness.conversationMessages().get('conv-b')).toBeUndefined();
+  });
+
+  it('does not close the visible tab for an exit result from a non-current conversation', () => {
+    const setOpenTabs = vi.fn();
+    const setActiveTabId = vi.fn();
+    const setActiveConversationId = vi.fn();
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: [],
+      overrides: {
+        setOpenTabs,
+        setActiveTabId,
+        setActiveConversationId,
+      },
+    });
+
+    dispatch(
+      commandHandlers,
+      {
+        type: 'slashCommandResult',
+        conversationId: 'conv-a',
+        command: 'exit',
+        success: true,
+        action: 'exit',
+        message: '退出 A',
+      },
+      harness.context,
+    );
+
+    expect(setOpenTabs).not.toHaveBeenCalled();
+    expect(setActiveTabId).not.toHaveBeenCalled();
+    expect(setActiveConversationId).not.toHaveBeenCalled();
+    expect(harness.conversationMessages().get('conv-a')).toEqual([
+      expect.objectContaining({
+        content: '退出 A',
+      }),
+    ]);
+  });
+
+  it('keeps the active conversation ref aligned when exit closes the current tab', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: [],
+    });
+
+    dispatch(
+      commandHandlers,
+      {
+        type: 'slashCommandResult',
+        conversationId: 'conv-b',
+        command: 'exit',
+        success: true,
+        action: 'exit',
+      },
+      harness.context,
+    );
+
+    expect(harness.context.activeConversationId).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+  });
+});
+
+function dispatch(
+  handlers: readonly HandlerRegistration[],
+  message: ExtensionToWebviewMessage,
+  context: MessageHandlerContext,
+): void {
+  const registration = handlers.find((handler) => handler.type === message.type);
+  expect(registration).toBeDefined();
+  registration?.handler(message, context);
+}
+
+interface ContextHarnessOptions {
+  activeConversationId: string;
+  currentMessages: Message[];
+  overrides?: Partial<
+    Pick<MessageHandlerContext, 'setOpenTabs' | 'setActiveTabId' | 'setActiveConversationId'>
+  >;
+}
+
+interface ContextHarness {
+  context: MessageHandlerContext;
+  messages(): Message[];
+  conversationMessages(): Map<string, Message[]>;
+}
+
+function createContextHarness(options: ContextHarnessOptions): ContextHarness {
+  let activeConversationId: string | null = options.activeConversationId;
+  let messages = options.currentMessages;
+  let streaming: StreamingState = {
+    isThinking: false,
+    streamingMessageId: null,
+    queuedMessageCount: 0,
+  };
+  let workItems: AgentWorkItemStore = new Map();
+  let pluginsAvailable: PluginsAvailable = {};
+  const activeConversationIdRef = ref<string | null>(options.activeConversationId);
+  const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
+  const conversationMessagesRef = ref(new Map<string, Message[]>());
+  const conversationStreamingRef = ref(new Map<string, StreamingState>());
+  const isTablessConversationViewRef = ref(false);
+
+  const context: MessageHandlerContext = {
+    messages,
+    setMessages: createSetter(
+      () => messages,
+      (next) => {
+        messages = next;
+        context.messages = next;
+      },
+    ),
+    isThinking: streaming.isThinking,
+    setIsThinking: createSetter(
+      () => streaming.isThinking,
+      (next) => {
+        streaming = { ...streaming, isThinking: next };
+        context.isThinking = next;
+      },
+    ),
+    setStreamingMessageId: createSetter(
+      () => streaming.streamingMessageId,
+      (next) => {
+        streaming = { ...streaming, streamingMessageId: next };
+        streamingMessageIdRef.current = next;
+      },
+    ),
+    setQueuedMessageCount: noopDispatch(),
+    streamingMessageId: streaming.streamingMessageId,
+    queuedMessageCount: streaming.queuedMessageCount,
+    streamingMessageIdRef,
+    activeConversationId,
+    activeConversationIdRef,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    openTabs: [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+    ],
+    activeTabId: 'tab-b',
+    isTablessConversationViewRef,
+    setOpenTabs: options.overrides?.setOpenTabs ?? noopDispatch(),
+    setActiveTabId: options.overrides?.setActiveTabId ?? noopDispatch(),
+    setActiveTab: noopDispatch(),
+    setSettings: noopDispatch(),
+    setSelectedModel: noopDispatch(),
+    setMediaModelSelection: noopDispatch(),
+    updateSettings: () => undefined,
+    setPromptModeForConversation: () => undefined,
+    setAgentState: noopDispatch(),
+    conversationAgentStateRef: ref(new Map()),
+    forceAgentStateUpdate: () => undefined,
+    setSkills: noopDispatch(),
+    setActiveSkill: noopDispatch(),
+    setGlobalError: noopDispatch(),
+    conversationTokenCountRef: ref(new Map()),
+    conversationCompressingRef: ref(new Map()),
+    forceUpdate: () => undefined,
+    isCurrentConversation: (conversationId?: string) =>
+      conversationId === activeConversationIdRef.current,
+    updateNonCurrentConversation: (conversationId, updater) => {
+      const existingMessages = conversationMessagesRef.current.get(conversationId) ?? [];
+      const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {
+        isThinking: false,
+        streamingMessageId: null,
+        queuedMessageCount: 0,
+      };
+      const result = updater(existingMessages, existingStreaming);
+      conversationMessagesRef.current.set(conversationId, result.messages);
+      conversationStreamingRef.current.set(conversationId, result.streaming);
+    },
+    setConversations: noopDispatch(),
+    setActiveConversationId:
+      options.overrides?.setActiveConversationId ??
+      createSetter(
+        () => activeConversationId,
+        (next) => {
+          activeConversationId = next;
+          context.activeConversationId = next;
+        },
+      ),
+    setWorkItemsByConversation: createSetter(
+      () => workItems,
+      (next) => {
+        workItems = next;
+      },
+    ),
+    setProjectFiles: noopDispatch(),
+    mentionSearchFilter: '',
+    setMentionItems: noopDispatch(),
+    setPluginCommands: noopDispatch(),
+    setPluginsAvailable: createSetter(
+      () => pluginsAvailable,
+      (next) => {
+        pluginsAvailable = next;
+      },
+    ),
+    setShowOnboarding: noopDispatch(),
+  };
+
+  return {
+    context,
+    messages: () => messages,
+    conversationMessages: () => conversationMessagesRef.current,
+  };
+}
+
+function message(id: string, role: Message['role'], content: string): Message {
+  return { id, role, content, timestamp: 1 };
+}
+
+function createSetter<T>(read: () => T, write: (next: T) => void): Dispatch<SetStateAction<T>> {
+  return (action) => {
+    write(typeof action === 'function' ? (action as (previous: T) => T)(read()) : action);
+  };
+}
+
+function noopDispatch<T>(): Dispatch<SetStateAction<T>> {
+  return () => undefined;
+}
+
+function ref<T>(current: T): MutableRefObject<T> {
+  return { current };
+}

@@ -197,6 +197,61 @@ describe('PluginTransferBridge', () => {
     );
   });
 
+  it('sends generated clips to the Cut timeline command without requiring Canvas promotion', async () => {
+    const ingest = vi.fn();
+    const executeCommand = vi.fn().mockResolvedValue(undefined);
+
+    const result = await sendGeneratedAssetToPlugin(
+      'cut',
+      undefined,
+      undefined,
+      {
+        kind: 'singleAsset',
+        asset: {
+          path: '/tmp/agent-private/shot.png',
+          mediaType: 'image',
+          name: 'shot.png',
+        },
+      },
+      createDeps({ ingest, executeCommand }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(ingest).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledWith('neko.cut.importGeneratedClip', {
+      assetPath: '/tmp/agent-private/shot.png',
+      mediaType: 'image',
+      name: 'shot.png',
+    });
+  });
+
+  it('sends generated image assets to the Sketch import command', async () => {
+    const ingest = vi.fn();
+    const executeCommand = vi.fn().mockResolvedValue(undefined);
+
+    const result = await sendGeneratedAssetToPlugin(
+      'sketch',
+      undefined,
+      undefined,
+      {
+        kind: 'singleAsset',
+        asset: {
+          path: '/tmp/agent-private/frame.png',
+          mediaType: 'image',
+          name: 'frame.png',
+        },
+      },
+      createDeps({ ingest, executeCommand }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(ingest).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledWith('neko.sketch.importAsset', {
+      path: '/tmp/agent-private/frame.png',
+      name: 'frame.png',
+    });
+  });
+
   it('processes storyboard entity contribution before Canvas import', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ ok: true });
     const processContribution = vi.fn().mockResolvedValue({

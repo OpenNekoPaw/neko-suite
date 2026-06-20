@@ -16,6 +16,8 @@ const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
 
 type GeneratedClipMediaType = 'image' | 'video' | 'audio';
+const TIMELINE_EDITOR_READY_TIMEOUT_MS = 5000;
+const TIMELINE_EDITOR_READY_POLL_MS = 50;
 
 function inferGeneratedClipMediaType(
   assetPath: string,
@@ -138,7 +140,7 @@ export function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.cut.importGeneratedClip',
-      async (params: {
+      async (params?: {
         assetPath?: string;
         data?: string;
         type?: string;
@@ -147,6 +149,13 @@ export function registerCommands(
         duration?: number;
         trackIndex?: number;
       }) => {
+        if (!params) {
+          void handleError(new Error('Generated clip import requires assetPath or data bytes.'), {
+            showToUser: true,
+          });
+          return;
+        }
+        await ensureTimelineEditorForGeneratedClip(params, videoEditorProvider);
         const webview = videoEditorProvider.getActiveWebview();
         const documentUri = videoEditorProvider.getActiveDocumentVsCodeUri();
         if (!webview || !documentUri) {
@@ -217,6 +226,95 @@ export function registerCommands(
 
   // Register timeline commands (element, track, effect, transition, animation, render, export)
   registerTimelineCommands(context, videoEditorProvider);
+}
+
+async function ensureTimelineEditorForGeneratedClip(
+  params: {
+    readonly assetPath?: string;
+    readonly name?: string;
+    readonly mediaType?: string;
+    readonly type?: string;
+  },
+  editorProvider: VideoEditorProvider,
+): Promise<void> {
+  if (editorProvider.getActiveWebview() && editorProvider.getActiveDocumentVsCodeUri()) {
+    await editorProvider.focusActiveEditor();
+    return;
+  }
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    return;
+  }
+
+  const title = createGeneratedClipProjectName(params);
+  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    Buffer.from(JSON.stringify(createDefaultProject(title), null, 2), 'utf-8'),
+  );
+  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
+  await waitForTimelineEditorReady(editorProvider, fileUri);
+}
+
+async function waitForTimelineEditorReady(
+  editorProvider: VideoEditorProvider,
+  fileUri: vscode.Uri,
+): Promise<void> {
+  const startedAt = Date.now();
+  const documentUri = fileUri.toString();
+  while (Date.now() - startedAt < TIMELINE_EDITOR_READY_TIMEOUT_MS) {
+    if (
+      editorProvider.getActiveDocumentVsCodeUri()?.toString() === documentUri &&
+      editorProvider.getActiveWebview()
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, TIMELINE_EDITOR_READY_POLL_MS));
+  }
+  throw new Error('Timeline editor did not become ready before import.');
+}
+
+function createGeneratedClipProjectName(params: {
+  readonly assetPath?: string;
+  readonly name?: string;
+  readonly mediaType?: string;
+  readonly type?: string;
+}): string {
+  const sourceName =
+    params.name?.trim() || (params.assetPath ? path.parse(params.assetPath).name : '');
+  const mediaType = params.mediaType ?? params.type;
+  const fallback =
+    mediaType === 'audio'
+      ? 'Agent Audio Timeline'
+      : mediaType === 'image'
+        ? 'Agent Image Timeline'
+        : 'Agent Timeline';
+  return sanitizeTimelineFileName(sourceName).slice(0, 80) || fallback;
+}
+
+async function createAvailableTimelineFileUri(
+  folderUri: vscode.Uri,
+  name: string,
+): Promise<vscode.Uri> {
+  const baseName = sanitizeTimelineFileName(name) || 'Agent Timeline';
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? '' : ` ${index + 1}`;
+    const candidate = vscode.Uri.joinPath(folderUri, `${baseName}${suffix}.nkv`);
+    try {
+      await vscode.workspace.fs.stat(candidate);
+    } catch {
+      return candidate;
+    }
+  }
+  return vscode.Uri.joinPath(folderUri, `${baseName}-${Date.now()}.nkv`);
+}
+
+function sanitizeTimelineFileName(value: string): string {
+  return value
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**

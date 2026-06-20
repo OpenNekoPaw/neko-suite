@@ -68,6 +68,7 @@ const messageHandlerSource = readFileSync(
   join(__dirname, '../editor/video/messageHandler.ts'),
   'utf-8',
 );
+const commandSource = readFileSync(join(__dirname, '../commands/index.ts'), 'utf-8');
 const exportServiceSource = readFileSync(join(__dirname, '../services/ExportService.ts'), 'utf-8');
 
 describe('neko-cut protocol', () => {
@@ -243,5 +244,14 @@ describe('intent-aware engine and export boundaries', () => {
     expect(exportServiceSource).toContain("intent: 'final-export'");
     expect(exportServiceSource).toContain("mode: 'stage-export'");
     expect(exportServiceSource).toContain('ExportStagingContentIngestProvider');
+  });
+});
+
+describe('generated clip import command boundaries', () => {
+  it('opens a timeline editor before importing generated clips when none is active', () => {
+    expect(commandSource).toContain('ensureTimelineEditorForGeneratedClip(');
+    expect(commandSource).toContain("vscode.openWith', fileUri, 'neko.videoEditor'");
+    expect(commandSource).toContain('createDefaultProject(title)');
+    expect(commandSource).toContain('Timeline editor did not become ready before import.');
   });
 });

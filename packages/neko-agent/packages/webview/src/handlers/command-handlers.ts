@@ -12,6 +12,7 @@ import {
   projectCloseCurrentConversationTab,
   projectSlashCommandResultMessage,
 } from '../presenters/command-result-presenter';
+import { updateConversation } from './message-updater';
 
 /**
  * Handle 'slashCommandResult' message - Result from slash command execution
@@ -22,7 +23,7 @@ const handleSlashCommandResult: MessageHandler<'slashCommandResult'> = (
 ) => {
   const projection = projectSlashCommandResultMessage(message);
   for (const effect of projection.effects) {
-    applySlashCommandEffect(effect, context);
+    applySlashCommandEffect(effect, context, message.conversationId);
   }
 };
 
@@ -36,12 +37,17 @@ const handlePromptModeChanged: MessageHandler<'promptModeChanged'> = (
 function applySlashCommandEffect(
   effect: SlashCommandResultEffect,
   context: MessageHandlerContext,
+  conversationId: string | undefined,
 ): void {
   switch (effect.type) {
     case 'appendAssistantMessage':
-      context.setMessages((prev) => [...prev, effect.message]);
+      updateConversation(context, conversationId, (messages, streamingMessageId) => ({
+        messages: [...messages, effect.message],
+        streamingMessageId,
+      }));
       break;
     case 'closeCurrentTab': {
+      if (!conversationId || !context.isCurrentConversation(conversationId)) return;
       const projection = projectCloseCurrentConversationTab({
         openTabs: context.openTabs,
         activeConversationId: context.activeConversationId,
@@ -50,6 +56,7 @@ function applySlashCommandEffect(
       context.setOpenTabs(projection.openTabs);
       context.setActiveTabId(projection.activeTabId);
       context.setActiveConversationId(projection.activeConversationId);
+      context.activeConversationIdRef.current = projection.activeConversationId;
       break;
     }
     case 'setPromptMode':
