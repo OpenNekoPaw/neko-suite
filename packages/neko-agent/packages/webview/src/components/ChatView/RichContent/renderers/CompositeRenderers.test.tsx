@@ -498,9 +498,9 @@ describe('composite rich content renderers', () => {
       />,
     );
 
-    expect(screen.getByTitle('Open in Canvas')).toBeTruthy();
-    expect(screen.getByTitle('Open in Timeline')).toBeTruthy();
-    expect(screen.getByTitle('Open in Explorer')).toBeTruthy();
+    expect(screen.getByTitle('Send to Canvas')).toBeTruthy();
+    expect(screen.getByTitle('Send to Timeline')).toBeTruthy();
+    expect(screen.getByTitle('Send to Explorer')).toBeTruthy();
   });
 
   it('localizes semantic storyboard table field labels', () => {

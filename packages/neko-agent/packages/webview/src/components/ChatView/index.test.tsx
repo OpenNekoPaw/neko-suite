@@ -4,12 +4,13 @@ import type { CharacterDialogueSessionProjection } from '@neko-agent/types';
 import { ChatView } from './index';
 
 const translations: Record<string, string> = {
-  'chat.emptyState.title': 'Neko Suite AI Assistant',
-  'chat.emptyState.description': 'Organize projects, characters, assets, and generation tasks.',
+  'chat.emptyState.title': 'Neko Suite Creative Assistant',
+  'chat.emptyState.description':
+    'Shape stories, characters, storyboards, shots, visuals, video, and sound.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
-  'chat.emptyState.suggestion1': 'Analyze current project structure',
-  'chat.emptyState.suggestion2': 'Help me optimize the timeline',
-  'chat.emptyState.suggestion3': 'Write a narration script',
+  'chat.emptyState.suggestion1': 'Design the protagonist and relationships',
+  'chat.emptyState.suggestion2': 'Shape this scene into storyboard rhythm',
+  'chat.emptyState.suggestion3': 'Draft dialogue and narration beats',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -46,8 +47,10 @@ describe('ChatView empty state', () => {
   it('renders ordinary assistant suggestions for empty normal chat', () => {
     renderChatView();
 
-    expect(screen.getByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Analyze current project structure/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Design the protagonist and relationships/ }),
+    ).toBeTruthy();
   });
 
   it('does not render ordinary assistant suggestions in empty Character Dialogue sessions', () => {
@@ -57,8 +60,10 @@ describe('ChatView empty state', () => {
     });
 
     expect(screen.getByTestId('character-dialogue-header')).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Analyze current project structure/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Design the protagonist and relationships/ }),
+    ).toBeNull();
     expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
   });
 

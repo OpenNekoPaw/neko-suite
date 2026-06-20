@@ -6,7 +6,6 @@ import type {
   ConversationStreamingState,
   OpenTab,
 } from '@neko-agent/types';
-import type { AgentWorkItem } from '@neko-agent/types';
 import { projectConversationWorkItemsFromMessages } from './work-item-message-presenter';
 
 const DEFAULT_ERROR_MESSAGE = 'An error occurred';
@@ -57,16 +56,11 @@ export function projectActiveConversation(
 
   const cachedMessages = input.cachedMessages;
   const hasCachedMessages = Boolean(cachedMessages && cachedMessages.length > 0);
-  const projection = hasCachedMessages
-    ? {
-        messages: [...cachedMessages!],
-        workItems: [] as AgentWorkItem[],
-      }
-    : projectConversationWorkItemsFromMessages({
-        conversationId: conversation.id,
-        messages: conversation.messages ?? [],
-        now: input.now,
-      });
+  const projection = projectConversationWorkItemsFromMessages({
+    conversationId: conversation.id,
+    messages: hasCachedMessages ? cachedMessages! : (conversation.messages ?? []),
+    now: input.now,
+  });
 
   const tabProjection = projectConversationTab({
     conversationId: conversation.id,

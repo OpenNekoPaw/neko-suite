@@ -2,6 +2,7 @@
  * Shared utility functions for TaskCard components
  */
 
+import { CameraIcon, PlayIcon, VolumeIcon } from '@neko/shared/icons';
 import type {
   AgentWorkItemStatusTone,
   AgentWorkItemStepRowProjection,
@@ -82,9 +83,21 @@ export function getStepIcon(iconKind: AgentWorkItemStepRowProjection['iconKind']
 }
 
 export function getTypeIcon(type: string): string {
-  if (type === 'video') return '\uD83C\uDFAC';
-  if (type === 'audio') return '\uD83C\uDFB5';
-  return '\uD83D\uDDBC\uFE0F';
+  if (type === 'video') return 'Video';
+  if (type === 'audio') return 'Audio';
+  return 'Image';
+}
+
+export function getTaskTypeLabel(type: string): string {
+  if (type === 'video') return 'video';
+  if (type === 'audio') return 'audio';
+  return 'image';
+}
+
+export function TaskTypeIcon({ type, className }: { type: string; className?: string }) {
+  if (type === 'video') return PlayIcon({ className });
+  if (type === 'audio') return VolumeIcon({ className });
+  return CameraIcon({ className });
 }
 
 export function formatDuration(seconds?: number): string {

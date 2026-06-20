@@ -42,6 +42,8 @@ interface SendToMenuProps {
   plugins: PluginsAvailable;
   /** Hide the leading "Send to" text for compact contexts such as thumbnails. */
   hidePrefixLabel?: boolean;
+  /** Hide Explorer from contexts that already have a primary view/reveal affordance. */
+  hideExplorerTarget?: boolean;
   className?: string;
 }
 
@@ -54,6 +56,7 @@ function SendToMenuComponent({
   mediaType,
   plugins,
   hidePrefixLabel = false,
+  hideExplorerTarget = false,
   className,
 }: SendToMenuProps) {
   const handleSendTo = useCallback(
@@ -85,24 +88,28 @@ function SendToMenuComponent({
   const targets = allowedTargets
     ? projection.targets.filter((target) => allowedTargets.includes(target.id))
     : projection.targets;
+  const visibleTargets = hideExplorerTarget
+    ? targets.filter((target) => target.id !== 'explorer')
+    : targets;
 
-  if (targets.length === 0) return null;
+  if (visibleTargets.length === 0) return null;
 
   return (
-    <div className={`flex items-center gap-1.5 ${className ?? ''}`}>
+    <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className ?? ''}`}>
       {!hidePrefixLabel && (
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] shrink-0">
-          Open in
+        <span className="shrink-0 text-[10px] text-[var(--vscode-descriptionForeground)]">
+          Send to
         </span>
       )}
-      {targets.map((target) => (
+      {visibleTargets.map((target) => (
         <button
           key={target.id}
           onClick={() => handleSendTo(target.id)}
-          className="inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-[var(--agent-input-border)]
-            bg-[var(--agent-surface)] px-2 text-[11px] text-[var(--agent-fg)]
-            transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)]"
-          title={`Open in ${target.label}`}
+          className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded border border-[var(--agent-input-border)]
+            bg-[var(--agent-surface)] px-2 text-[11px] font-medium text-[var(--agent-fg)]
+            transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)]
+            focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-[var(--agent-accent)]"
+          title={`Send to ${target.label}`}
         >
           {getTargetIcon(target.id)}
           <span>{target.label}</span>

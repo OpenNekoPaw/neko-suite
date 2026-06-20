@@ -43,10 +43,8 @@ describe('conversation UI presenter', () => {
     });
   });
 
-  it('restores active conversation from cache without rehydrating work items', () => {
-    const cachedMessages: Message[] = [
-      { id: 'assistant-1', role: 'assistant', content: 'cached', timestamp: 1 },
-    ];
+  it('restores active conversation from cache and rehydrates work items', () => {
+    const cachedMessages: Message[] = [createCompletedBackgroundTaskMessage()];
 
     const projected = projectActiveConversation({
       conversation: {
@@ -59,12 +57,26 @@ describe('conversation UI presenter', () => {
       openTabs: [{ id: 'tab-1', title: 'Cached chat', conversationId: 'conv-1' }],
     });
 
-    expect(projected.messages).toEqual(cachedMessages);
+    expect(projected.messages).toEqual([
+      {
+        ...cachedMessages[0],
+        workItemIds: ['task-1'],
+      },
+    ]);
     expect(projected.streaming).toEqual({
       streamingMessageId: 'assistant-1',
       isThinking: true,
     });
-    expect(projected.workItems).toEqual([]);
+    expect(projected.workItems).toMatchObject([
+      {
+        id: 'task-1',
+        conversationId: 'conv-1',
+        kind: 'tool-background-task',
+        parentMessageId: 'assistant-1',
+        parentToolCallId: 'tool-1',
+        status: 'completed',
+      },
+    ]);
     expect(projected.activeTabId).toBe('tab-1');
     expect(projected.restoredFromCache).toBe(true);
   });

@@ -3,12 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { EmptyState } from './EmptyState';
 
 const translations: Record<string, string> = {
-  'chat.emptyState.title': 'Neko Suite AI Assistant',
-  'chat.emptyState.description': 'Organize projects, characters, assets, and generation tasks.',
+  'chat.emptyState.title': 'Neko Suite Creative Assistant',
+  'chat.emptyState.description':
+    'Shape stories, characters, storyboards, shots, visuals, video, and sound. Start from project materials to develop plot, dialogue, narration, settings, and shot language together, then create character images, scene references, shot clips, voice, sound effects, and ambience.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
-  'chat.emptyState.suggestion1': 'Analyze current project structure',
-  'chat.emptyState.suggestion2': 'Help me optimize the timeline',
-  'chat.emptyState.suggestion3': 'Write a narration script',
+  'chat.emptyState.suggestion1': 'Design the protagonist and relationships',
+  'chat.emptyState.suggestion2': 'Shape this scene into storyboard rhythm',
+  'chat.emptyState.suggestion3': 'Draft dialogue and narration beats',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -21,13 +22,19 @@ describe('EmptyState', () => {
   it('renders the compact assistant entry points', () => {
     render(<EmptyState />);
 
-    expect(screen.getByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
     expect(
-      screen.getByText('Organize projects, characters, assets, and generation tasks.'),
+      screen.getByText(
+        'Shape stories, characters, storyboards, shots, visuals, video, and sound. Start from project materials to develop plot, dialogue, narration, settings, and shot language together, then create character images, scene references, shot clips, voice, sound effects, and ambience.',
+      ),
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Analyze current project structure/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Help me optimize the timeline/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Write a narration script/ })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Design the protagonist and relationships/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Shape this scene into storyboard rhythm/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Draft dialogue and narration beats/ })).toBeTruthy();
     expect(document.querySelector('.agent-empty-state')).toBeTruthy();
     expect(document.querySelector('.agent-empty-panel')?.className).toContain(
       'max-w-[min(840px,100%)]',
@@ -42,8 +49,8 @@ describe('EmptyState', () => {
     const onSuggestionClick = vi.fn();
     render(<EmptyState onSuggestionClick={onSuggestionClick} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Write a narration script/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Draft dialogue and narration beats/ }));
 
-    expect(onSuggestionClick).toHaveBeenCalledWith('Write a narration script');
+    expect(onSuggestionClick).toHaveBeenCalledWith('Draft dialogue and narration beats');
   });
 });

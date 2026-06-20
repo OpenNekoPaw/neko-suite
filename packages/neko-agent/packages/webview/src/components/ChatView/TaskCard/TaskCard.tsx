@@ -5,8 +5,7 @@
  * cross-plugin "Send to" buttons (SendToMenu, ADR-5 P0).
  */
 
-import { useState, useCallback } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { useState, useCallback, type ReactNode } from 'react';
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
@@ -21,8 +20,15 @@ import {
   ErrorIcon,
   ToolLoadingSpinner as LoadingSpinner,
 } from '@/components/ChatView/ToolCallDisplay';
+import { CloseIcon, RefreshIcon } from '@neko/shared/icons';
 import { TaskSteps, ChevronIcon } from './TaskSteps';
-import { getToneColor, getTypeIcon, formatDuration, formatETA } from './task-utils';
+import {
+  getTaskTypeLabel,
+  getToneColor,
+  TaskTypeIcon,
+  formatDuration,
+  formatETA,
+} from './task-utils';
 
 interface TaskCardProps {
   task: BackgroundTask;
@@ -34,7 +40,7 @@ interface TaskCardProps {
 }
 
 const compactActionClass =
-  'inline-flex items-center gap-1 rounded-md border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] transition-colors hover:bg-[var(--agent-hover)]';
+  'inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 text-[10px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-[var(--agent-accent)]';
 
 export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: TaskCardProps) {
   const { t } = useTranslation();
@@ -49,11 +55,19 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
 
   return (
     <div className="my-1">
-      <div className={`agent-inline-card ${toneClass}`}>
+      <div className={`agent-inline-card overflow-hidden ${toneClass}`}>
         {/* Compact header */}
         <div
-          className="agent-inline-header flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px]"
+          className="agent-inline-header flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[11px]"
           onClick={toggleExpand}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleExpand();
+            }
+          }}
         >
           {/* Status indicator */}
           {projection.status.isActive && (
@@ -67,10 +81,12 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
           )}
 
           {/* Task type icon + name */}
-          <span className="shrink-0">{getTypeIcon(projection.taskType)}</span>
-          <span className="truncate font-medium text-[var(--agent-fg)]">
-            {t(projection.titleKey)}
-          </span>
+          <TaskTypeIcon type={projection.taskType} className="h-3.5 w-3.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold text-[var(--agent-fg)]">
+              {t(projection.titleKey)}
+            </div>
+          </div>
 
           {/* Progress or status */}
           {projection.progressLabel && (
@@ -78,8 +94,6 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
               {projection.progressLabel}
             </span>
           )}
-
-          <span className="flex-1" />
 
           {/* Provider badge */}
           <span className="agent-badge hidden shrink-0 text-[10px] sm:inline-flex">
@@ -93,10 +107,11 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
                 e.stopPropagation();
                 onCancel(task.id);
               }}
-              className="agent-danger-link rounded-md px-1.5 py-0.5 text-[10px] shrink-0"
+              className="agent-danger-link inline-flex h-6 shrink-0 cursor-pointer items-center rounded px-1.5 text-[10px]"
               title={t('tasks.cancel')}
+              aria-label={t('tasks.cancel')}
             >
-              ✕
+              <CloseIcon className="h-3 w-3" />
             </button>
           )}
 
@@ -108,8 +123,9 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
               }}
               className={compactActionClass}
               title={t('tasks.retry')}
+              aria-label={t('tasks.retry')}
             >
-              ↻
+              <RefreshIcon className="h-3 w-3" />
             </button>
           )}
 
@@ -187,8 +203,9 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
 
             {/* Error message */}
             {projection.showExpandedError && task.error && (
-              <div className="mb-2 rounded-md bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1.5 text-[var(--agent-danger)]">
-                ⚠️ {task.error}
+              <div className="mb-2 flex gap-1.5 rounded bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1.5 text-[var(--agent-danger)]">
+                <ErrorIcon className="mt-0.5 h-3 w-3 shrink-0" />
+                <span className="min-w-0 break-words">{task.error}</span>
               </div>
             )}
 
@@ -196,7 +213,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
             {projection.showResultPreview && <ResultPreview task={task} plugins={plugins} />}
 
             {/* Provider info */}
-            <div className="border-t border-[var(--agent-divider)] pt-1 text-[var(--agent-fg-secondary)]">
+            <div className="border-t border-[var(--agent-divider)] pt-1.5 text-[var(--agent-fg-secondary)]">
               {t('tasks.provider')}: {task.providerName}
             </div>
           </div>
@@ -222,7 +239,6 @@ function toInlineToneClass(tone: AgentWorkItemStatusTone): string {
 // ---------------------------------------------------------------------------
 
 function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: PluginsAvailable }) {
-  const { t } = useTranslation();
   const projection = projectBackgroundTaskResultContent(task);
   const {
     contentKind,
@@ -235,44 +251,30 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
   } = projection;
 
   return (
-    <div className="mb-2">
+    <div className="mb-2 rounded border border-[var(--agent-divider)] bg-[color-mix(in_srgb,var(--agent-surface)_70%,transparent)] p-2">
       {/* Media result — registry-driven rendering (ADR-6 §6.2) */}
       {contentKind && contentData && (
         <RichContentRenderer kind={contentKind} data={contentData} inline />
       )}
 
-      {/* Result info badges + download */}
-      <div className="flex flex-wrap items-center gap-1 mt-2">
+      {/* Result metadata */}
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+        <ResultBadge>{getTaskTypeLabel(mediaType)}</ResultBadge>
         {displayWidth && displayHeight && (
-          <span className="agent-badge text-[10px] text-[var(--agent-fg)]">
-            {displayWidth}×{displayHeight}
-          </span>
+          <ResultBadge>
+            {displayWidth}x{displayHeight}
+          </ResultBadge>
         )}
         {displayDuration && displayDuration > 0 && (
-          <span className="agent-badge text-[10px] text-[var(--agent-fg)]">
-            {formatDuration(displayDuration)}
-          </span>
+          <ResultBadge>{formatDuration(displayDuration)}</ResultBadge>
         )}
-        <span className="flex-1" />
         {firstLocalPath && (
           <span
-            className="max-w-[140px] truncate text-xs text-[var(--agent-fg-secondary)]"
+            className="min-w-[120px] flex-1 truncate text-right text-[10px] text-[var(--agent-fg-secondary)]"
             title={firstLocalPath}
           >
             {firstLocalPath.split(/[\\/]/).pop()}
           </span>
-        )}
-        {firstLocalPath && (
-          <button
-            onClick={() => {
-              VSCodeMessages.revealFile(firstLocalPath);
-            }}
-            className={compactActionClass}
-            title={t('tasks.revealInExplorer')}
-          >
-            <DownloadIcon className="h-3 w-3" />
-            <span>{t('tasks.revealInExplorer')}</span>
-          </button>
         )}
       </div>
 
@@ -282,6 +284,7 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
           assetPath={firstLocalPath}
           mediaType={mediaType}
           plugins={plugins}
+          hideExplorerTarget
           className="mt-1.5"
         />
       )}
@@ -289,15 +292,10 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
   );
 }
 
-function DownloadIcon({ className }: { className?: string }) {
+function ResultBadge({ children }: { children: ReactNode }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-      />
-    </svg>
+    <span className="rounded-full bg-[var(--agent-elevated)] px-2 py-0.5 text-[10px] text-[var(--agent-fg-secondary)]">
+      {children}
+    </span>
   );
 }
