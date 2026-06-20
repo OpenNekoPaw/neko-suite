@@ -213,6 +213,7 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
       searchText: [
         extra.label,
         extra.summary,
+        extra.searchText,
         extra.filePath,
         extra.mediaType,
         extra.entityType,
@@ -567,6 +568,7 @@ function isProjectMentionExtra(value: unknown): value is ProjectMentionExtra {
     readString(record, 'id') &&
     readString(record, 'label') &&
     readString(record, 'summary') &&
+    (record.searchText === undefined || typeof record.searchText === 'string') &&
     (record.thumbnailUri === undefined || typeof record.thumbnailUri === 'string') &&
     (record.source === undefined || isProjectMentionSource(record.source)) &&
     (record.icon === undefined || typeof record.icon === 'string') &&

@@ -360,6 +360,7 @@ export interface ProjectMentionExtra {
   id: string;
   label: string;
   summary: string;
+  searchText?: string;
   thumbnailUri?: string;
   source?: ProjectMentionSource;
   icon?: string;

@@ -75,6 +75,7 @@ function projectSearchItemToMentionCandidate(
     summary: item.description
       ? `${labelForType(type)}: ${item.label} (${item.description})`
       : `${labelForType(type)}: ${item.label}`,
+    ...(item.searchText ? { searchText: item.searchText } : {}),
     ...(source ? { source } : {}),
     ...(item.icon ? { icon: item.icon } : {}),
     ...(item.filePath ? { filePath: item.filePath } : {}),

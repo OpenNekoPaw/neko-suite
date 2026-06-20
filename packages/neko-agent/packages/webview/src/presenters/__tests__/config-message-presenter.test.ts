@@ -115,6 +115,7 @@ describe('config message presenter', () => {
             id: 'asset-1',
             label: 'Hero portrait',
             summary: 'Asset: Hero portrait',
+            searchText: '小橘 alias',
             source: 'asset-library',
             icon: '🎭',
             filePath: 'assets/hero.png',
@@ -193,7 +194,8 @@ describe('config message presenter', () => {
           mediaType: 'image',
           entityType: 'character',
           navigationData: { assetId: 'asset-1' },
-          searchText: 'Hero portrait Asset: Hero portrait assets/hero.png image character asset-1',
+          searchText:
+            'Hero portrait Asset: Hero portrait 小橘 alias assets/hero.png image character asset-1',
         },
       ],
     });

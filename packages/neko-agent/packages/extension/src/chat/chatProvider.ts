@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { getService, getLogger } from '../base';
 import type { Platform } from '@neko/platform';
 import type { IAgentManager } from '../ai/agentManager';
@@ -89,7 +90,20 @@ const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
 const AGENT_KEYBOARD_EDITABLE_OWNER_ID = 'neko.agent:assistant';
 
 function getCurrentWorkspaceRoot(): string | undefined {
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const activeEditorPath = vscode.window.activeTextEditor?.document.uri.fsPath;
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  if (activeEditorPath) {
+    const activeFolder = workspaceFolders.find((folder) =>
+      isPathInsideWorkspace(activeEditorPath, folder.uri.fsPath),
+    );
+    if (activeFolder) return activeFolder.uri.fsPath;
+  }
+  return workspaceFolders[0]?.uri.fsPath;
+}
+
+function isPathInsideWorkspace(filePath: string, workspaceRoot: string): boolean {
+  const relative = path.relative(workspaceRoot, filePath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 export function createChatLocalResourceAccess(
@@ -183,7 +197,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       options.localResourceAccess ?? createChatLocalResourceAccess(_extensionUri, _context);
     this._conversations = new ConversationBridge(
       _context,
-      getCurrentWorkspaceRoot(),
+      getCurrentWorkspaceRoot,
       this._localResourceAccess,
     );
 

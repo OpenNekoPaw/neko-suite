@@ -64,17 +64,22 @@ class VscodeConversationStorage implements ConversationStorage {
 export class ConversationBridge {
   private _conversationManager: ConversationManager;
   private _persistenceRuntime: ConversationPersistenceRuntime | null = null;
+  private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
 
   constructor(
     context: vscode.ExtensionContext,
-    workspaceRoot?: string,
+    workspaceRoot?: string | (() => string | undefined),
     private readonly localResourceAccess?: AgentLocalResourceAccess,
   ) {
+    const initialWorkspaceRoot =
+      typeof workspaceRoot === 'function' ? workspaceRoot() : workspaceRoot;
+    this.getWorkspaceRoot = typeof workspaceRoot === 'function' ? workspaceRoot : undefined;
     const storage = new VscodeConversationStorage(context.workspaceState);
     this._conversationManager = new ConversationManager(storage, undefined, {
-      ...(workspaceRoot && {
-        generateId: () => createConversationId(workspaceRoot),
-      }),
+      generateId: () => {
+        const root = this.getWorkspaceRoot?.() ?? initialWorkspaceRoot;
+        return root ? createConversationId(root) : undefined;
+      },
     });
 
     // Clean up empty conversations from previous sessions
@@ -84,9 +89,9 @@ export class ConversationBridge {
     }
 
     // Initialize shared resume-layer file storage if workspace root is known
-    if (workspaceRoot) {
+    if (initialWorkspaceRoot) {
       this._persistenceRuntime = createFileConversationPersistenceRuntime({
-        workspaceRoot,
+        workspaceRoot: initialWorkspaceRoot,
         source: 'extension',
         getConversation: (conversationId) => this._conversationManager.get(conversationId),
         onWarning: (warning) => {

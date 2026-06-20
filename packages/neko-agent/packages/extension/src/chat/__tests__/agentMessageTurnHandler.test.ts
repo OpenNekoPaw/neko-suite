@@ -67,7 +67,11 @@ import {
   buildProviderExpressionTargets,
   type AgentMessageRuntimeRequest,
 } from '@neko/agent/runtime';
-import { DEFAULT_MENTION_EXCLUDE_GLOB, type SubAgentEvent } from '@neko/agent';
+import {
+  DEFAULT_MENTION_EXCLUDE_GLOB,
+  getConversationWorkDirHash,
+  type SubAgentEvent,
+} from '@neko/agent';
 import { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 
 // Mock @neko/agent module - createInputProcessor is used inside _getInputProcessor
@@ -986,6 +990,74 @@ describe('AgentMessageTurnHandler', () => {
           text: '小橘',
           contextFilePath: '/workspace/cases/test.fountain',
           contextUri: 'file:///workspace/cases/test.fountain',
+        }),
+      );
+    });
+
+    it('uses the conversation workspace hash for mention search in multi-root workspaces', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+      const targetProjectRoot = '/workspace/neko-test';
+      const conversationId = `${getConversationWorkDirHash(targetProjectRoot)}-01JTEST0000000000000000000`;
+      (vscode.workspace as any).workspaceFolders = [
+        { uri: { fsPath: '/workspace/neko-suite' } },
+        { uri: { fsPath: targetProjectRoot } },
+      ];
+      (vscode.window as any).activeTextEditor = undefined;
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+        items: [],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: targetProjectRoot },
+        query: { text: '灯神' },
+      });
+
+      await handler.searchProjectFiles(webview as any, '灯神', conversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'neko.projectSearch.query',
+        expect.objectContaining({
+          text: '灯神',
+          projectRoot: targetProjectRoot,
+        }),
+      );
+    });
+
+    it('prefers the active editor workspace over an older conversation hash', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+      const staleProjectRoot = '/workspace/neko-suite';
+      const targetProjectRoot = '/workspace/neko-test';
+      const staleConversationId = `${getConversationWorkDirHash(staleProjectRoot)}-01JTEST0000000000000000000`;
+      (vscode.workspace as any).workspaceFolders = [
+        { uri: { fsPath: staleProjectRoot } },
+        { uri: { fsPath: targetProjectRoot } },
+      ];
+      (vscode.window as any).activeTextEditor = {
+        document: {
+          uri: {
+            fsPath: `${targetProjectRoot}/config.toml`,
+            toString: () => `file://${targetProjectRoot}/config.toml`,
+          },
+        },
+      };
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+        items: [],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: targetProjectRoot },
+        query: { text: '灯神' },
+      });
+
+      await handler.searchProjectFiles(webview as any, '灯神', staleConversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'neko.projectSearch.query',
+        expect.objectContaining({
+          text: '灯神',
+          contextFilePath: `${targetProjectRoot}/config.toml`,
+          contextUri: `file://${targetProjectRoot}/config.toml`,
+          projectRoot: targetProjectRoot,
         }),
       );
     });

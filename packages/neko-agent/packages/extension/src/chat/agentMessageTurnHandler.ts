@@ -7,6 +7,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
@@ -37,6 +38,7 @@ import {
 } from '@neko/agent/runtime';
 import {
   createInputProcessor,
+  getConversationWorkDirHash,
   type ActiveSkillState,
   type InputProcessor,
   type IRuntimeTaskManager,
@@ -352,6 +354,7 @@ export class AgentMessageTurnHandler {
     conversationId: string,
   ): Promise<void> {
     const searchContextUri = this._resolveSearchContextUri();
+    const projectRoot = this._resolveSearchProjectRoot(conversationId, searchContextUri);
     const message = await executeAgentProjectFileSearch({
       conversationId,
       filter,
@@ -360,6 +363,7 @@ export class AgentMessageTurnHandler {
         searchProjectMentionCandidates(plan, {
           contextFilePath: searchContextUri?.fsPath,
           contextUri: searchContextUri?.toString(),
+          projectRoot,
         }),
       getCanvasNodes: (id) => getCanvasSelection(id),
       getCharacters: async () => {
@@ -426,6 +430,26 @@ export class AgentMessageTurnHandler {
     return this._lastTextEditorUri;
   }
 
+  private _resolveSearchProjectRoot(
+    conversationId: string,
+    contextUri: vscode.Uri | undefined,
+  ): string | undefined {
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+    if (contextUri?.fsPath) {
+      const fromContext = workspaceFolders.find((folder) =>
+        isPathInsideWorkspace(contextUri.fsPath, folder.uri.fsPath),
+      )?.uri.fsPath;
+      if (fromContext) return fromContext;
+    }
+
+    const fromConversation = workspaceFolders.find(
+      (folder) => getConversationWorkDirHash(folder.uri.fsPath) === conversationId.slice(0, 8),
+    )?.uri.fsPath;
+    if (fromConversation) return fromConversation;
+
+    return workspaceFolders[0]?.uri.fsPath;
+  }
+
   private _projectProjectFilesMessageForWebview(
     webview: vscode.Webview,
     message: Awaited<ReturnType<typeof executeAgentProjectFileSearch>>,
@@ -483,4 +507,9 @@ function createVSCodeEntityMemoryContributionAutomation(): EntityMemoryContribut
       );
     },
   };
+}
+
+function isPathInsideWorkspace(filePath: string, workspaceRoot: string): boolean {
+  const relative = path.relative(workspaceRoot, filePath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }

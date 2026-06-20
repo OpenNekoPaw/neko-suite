@@ -28,7 +28,7 @@ export interface CleanupPolicy {
 }
 
 export interface ConversationManagerOptions {
-  generateId?: () => string;
+  generateId?: () => string | undefined;
 }
 
 export interface DeleteConversationOptions {
@@ -49,7 +49,7 @@ export class ConversationManager {
   private activeId: string | null = null;
   private readonly storage?: ConversationStorage;
   private readonly cleanupPolicy: CleanupPolicy;
-  private readonly idGenerator?: () => string;
+  private readonly idGenerator?: () => string | undefined;
   private readonly dirtyConversations = new Set<string>();
   private saveTimer?: ReturnType<typeof setTimeout>;
   private static readonly SAVE_DEBOUNCE_MS = 500;

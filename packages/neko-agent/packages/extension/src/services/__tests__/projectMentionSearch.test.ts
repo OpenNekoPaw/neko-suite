@@ -118,6 +118,7 @@ describe('projectMentionSearch', () => {
           type: 'asset',
           label: '橘猫参考图',
           source: 'asset-library',
+          searchText: '橘猫参考图 小橘',
           mediaType: 'image',
           thumbnailUri: 'webview:/workspace/.neko/.cache/resources/thumbnails/asset-1.jpg',
           entityType: 'character',

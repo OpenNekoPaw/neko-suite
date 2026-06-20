@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationBridge } from '../conversationBridge';
+import { getConversationWorkDirHash } from '@neko/agent';
 
 function createMockContext() {
   const store = new Map<string, unknown>();
@@ -58,6 +59,16 @@ describe('ConversationBridge', () => {
       const id = workspaceHandler.create();
 
       expect(id).toMatch(/^[0-9a-z]{8}-[0-9A-HJKMNP-TV-Z]{26}$/);
+    });
+
+    it('uses the latest workspace root resolver when creating a conversation', () => {
+      let workspaceRoot = '/workspace/neko-suite';
+      const workspaceHandler = new ConversationBridge(ctx as any, () => workspaceRoot);
+
+      workspaceRoot = '/workspace/neko-test';
+      const id = workspaceHandler.create();
+
+      expect(id.startsWith(`${getConversationWorkDirHash('/workspace/neko-test')}-`)).toBe(true);
     });
   });
 
