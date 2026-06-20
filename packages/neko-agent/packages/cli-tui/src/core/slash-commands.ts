@@ -29,7 +29,6 @@ export interface MediaModelOverrides {
   image?: string;
   video?: string;
   audio?: string;
-  music?: string;
 }
 
 /**
@@ -81,7 +80,7 @@ export interface SlashCommandContext {
   /** Available media model IDs from config */
   availableMediaModels?: string[];
   /** Default media models from config */
-  defaultMediaModels?: { image?: string; video?: string; audio?: string; music?: string };
+  defaultMediaModels?: { image?: string; video?: string; audio?: string };
 }
 
 /**
@@ -485,8 +484,8 @@ function handleHistory(context: SlashCommandContext): SlashCommandResult {
 // /media — Per-category media model selection
 // ============================================================================
 
-type MediaCategory = 'image' | 'video' | 'audio' | 'music';
-const MEDIA_CATEGORIES: MediaCategory[] = ['image', 'video', 'audio', 'music'];
+type MediaCategory = 'image' | 'video' | 'audio';
+const MEDIA_CATEGORIES: MediaCategory[] = ['image', 'video', 'audio'];
 
 function handleMedia(args: string[], context: SlashCommandContext): SlashCommandResult {
   const {

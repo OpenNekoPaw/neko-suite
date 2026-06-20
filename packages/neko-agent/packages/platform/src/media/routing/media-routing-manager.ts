@@ -22,7 +22,7 @@ const GENERATION_TYPE_TO_MEDIA_TYPE: Record<MediaGenerationType, MediaModelType>
   'video-to-video': 'video',
   'video-edit': 'video',
   'text-to-audio': 'audio',
-  'text-to-music': 'music',
+  'text-to-music': 'audio',
   workflow: 'image', // Default to image for workflow
 };
 
@@ -67,19 +67,22 @@ export class MediaRoutingManager {
     // Try to use configured default media model for this type
     if (!modelId) {
       const mediaType = GENERATION_TYPE_TO_MEDIA_TYPE[generationType];
-      const defaultModelId = this.getDefaultMediaModel(mediaType);
-      if (defaultModelId) {
-        const model = this.configManager.getModel(defaultModelId);
-        if (model) {
-          const provider = this.configManager.getProvider(model.providerId);
-          if (provider && isProviderConfigured(provider)) {
-            return {
-              providerId: provider.id,
-              modelId: defaultModelId,
-              score: 90,
-              reason: `Configured default ${mediaType} model`,
-            };
-          }
+      const defaultModel = this.configManager.getDefaultModelRef(mediaType);
+      if (defaultModel) {
+        const provider = this.configManager.getProvider(defaultModel.providerId);
+        const model = this.configManager.getModel(defaultModel.modelId);
+        if (
+          provider &&
+          model &&
+          model.providerId === provider.id &&
+          isProviderConfigured(provider)
+        ) {
+          return {
+            providerId: provider.id,
+            modelId: model.id,
+            score: 90,
+            reason: `Configured default ${mediaType} model`,
+          };
         }
       }
     }
@@ -124,11 +127,6 @@ export class MediaRoutingManager {
     return this.selectProvider(generationType, updatedPreference);
   }
 
-  /**
-   * Get configured default media model for a specific type
-   */
-  private getDefaultMediaModel(mediaType: MediaModelType): string | undefined {
-    const defaultMediaModels = this.configManager.getDefaultMediaModels();
-    return defaultMediaModels[mediaType];
-  }
+  // The default model binding is read through ConfigManager so provider identity
+  // remains explicit in config instead of inferred from a global default provider.
 }

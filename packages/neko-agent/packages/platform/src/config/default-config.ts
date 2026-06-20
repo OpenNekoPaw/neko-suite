@@ -93,7 +93,7 @@ const DEFAULT_MODELS: ModelConfig[] = [
     displayName: 'Gateway Default Chat',
     providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'llm',
-    capabilities: ['chat', 'function_calling', 'streaming', 'json_mode', 'code'],
+    capabilities: ['chat', 'llm.chat', 'function_calling', 'streaming', 'json_mode', 'code'],
     enabled: true,
   },
   {
@@ -111,7 +111,7 @@ const DEFAULT_MODELS: ModelConfig[] = [
     displayName: 'GPT Image 2',
     providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'image',
-    capabilities: ['text_to_image', 'image_to_image', 'image_edit'],
+    capabilities: ['text_to_image', 'image.generate', 'image_to_image', 'image_edit', 'image.edit'],
     enabled: true,
   },
   {
@@ -120,7 +120,7 @@ const DEFAULT_MODELS: ModelConfig[] = [
     displayName: 'Seedance Lite',
     providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'video',
-    capabilities: ['text_to_video', 'image_to_video'],
+    capabilities: ['text_to_video', 'video.generate', 'image_to_video'],
     enabled: true,
   },
   {
@@ -129,7 +129,7 @@ const DEFAULT_MODELS: ModelConfig[] = [
     displayName: 'Gateway TTS',
     providerId: NEKO_GATEWAY_PROVIDER_ID,
     type: 'audio',
-    capabilities: ['text_to_audio', 'audio'],
+    capabilities: ['text_to_audio', 'audio.generate', 'audio.tts', 'audio'],
     enabled: true,
   },
   {
@@ -137,7 +137,7 @@ const DEFAULT_MODELS: ModelConfig[] = [
     name: 'suno-v4',
     displayName: 'Suno Music',
     providerId: NEKO_GATEWAY_PROVIDER_ID,
-    type: 'music',
+    type: 'audio',
     capabilities: ['text_to_music'],
     enabled: true,
   },
@@ -153,11 +153,23 @@ const DEFAULT_MODELS: ModelConfig[] = [
 export const DEFAULT_USER_CONFIG: UnifiedConfig = {
   defaultProvider: OLLAMA_LOCAL_PROVIDER_ID,
   defaultModel: OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID,
-  defaultMediaModels: {
-    image: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
-    video: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
-    audio: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
-    music: NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
+  defaultModels: {
+    llm: {
+      providerId: NEKO_GATEWAY_PROVIDER_ID,
+      modelId: NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
+    },
+    image: {
+      providerId: NEKO_GATEWAY_PROVIDER_ID,
+      modelId: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+    },
+    video: {
+      providerId: NEKO_GATEWAY_PROVIDER_ID,
+      modelId: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+    },
+    audio: {
+      providerId: NEKO_GATEWAY_PROVIDER_ID,
+      modelId: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
+    },
   },
   maxTokens: 8192,
   temperature: 0.7,

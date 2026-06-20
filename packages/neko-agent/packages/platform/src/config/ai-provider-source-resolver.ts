@@ -97,6 +97,7 @@ export function detectExplicitAiConfig(input: AiProviderSourceInput): ExplicitAi
     hasNonEmptyArray(raw.models) ||
     isNonEmptyString(raw.defaultProvider) ||
     isNonEmptyString(raw.defaultModel) ||
+    hasNonEmptyRecord(raw.defaultModels) ||
     hasNonEmptyRecord(raw.providerOverrides) ||
     hasNonEmptyRecord(raw.modelOverrides);
 
@@ -291,7 +292,8 @@ function isExplicitAiAvailabilityDiagnostic(
     diagnostic?.code === 'missingModel' ||
     diagnostic?.code === 'missingApiKey' ||
     diagnostic?.code === 'invalidDefaultProvider' ||
-    diagnostic?.code === 'invalidDefaultModel'
+    diagnostic?.code === 'invalidDefaultModel' ||
+    diagnostic?.code === 'invalidDefaultModelBinding'
   );
 }
 

@@ -34,10 +34,20 @@ const translations: Record<string, string> = {
   'chat.autoMode': '自动',
   'chat.selectModel': '选择模型',
   'chat.noModelsAvailable': '无可用模型',
-  'chat.sessionMode.agent': 'Agent',
-  'chat.sessionMode.image': '生图',
-  'chat.sessionMode.video': '生视频',
-  'chat.sessionMode.audio': '生音频',
+  'chat.sessionMode.sections.agent': 'Agent 直接协作',
+  'chat.sessionMode.sections.media': '媒体生成',
+  'chat.sessionMode.agent': 'Agent 创作协作',
+  'chat.sessionMode.agentDesc': '直接打磨故事、角色、对白、旁白、分镜节奏和镜头语言。',
+  'chat.sessionMode.image': '图片生成',
+  'chat.sessionMode.imageDesc': '产出角色图、场景参考、关键帧和风格探索图。',
+  'chat.sessionMode.video': '视频生成',
+  'chat.sessionMode.videoDesc': '产出镜头片段、动作预览和氛围视频素材。',
+  'chat.sessionMode.audio': '声音生成',
+  'chat.sessionMode.audioDesc': '产出配音、音效和环境声。',
+  'chat.sessionMode.badge.agent': '对话',
+  'chat.sessionMode.badge.image': '图片',
+  'chat.sessionMode.badge.video': '视频',
+  'chat.sessionMode.badge.audio': '声音',
   'chat.generation.category.image': '图片',
   'chat.generation.category.video': '视频',
   'chat.generation.category.audio': '音频',
@@ -94,16 +104,17 @@ describe('InputArea composer controls', () => {
     );
 
     const modeGroup = screen.getByRole('group', { name: '模式与模型' });
-    expect(within(modeGroup).getByRole('button', { name: 'Agent' })).toBeTruthy();
+    expect(within(modeGroup).getByRole('button', { name: 'Agent 创作协作' })).toBeTruthy();
     expect(within(modeGroup).getByRole('button', { name: '选择模型' }).textContent).toContain(
       '无可用模型',
     );
     expect(screen.queryByRole('group', { name: '工具参数' })).toBeNull();
 
-    fireEvent.click(within(modeGroup).getByRole('button', { name: 'Agent' }));
-    expect(screen.queryByRole('menuitem', { name: '生图' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: '生视频' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: '生音频' })).toBeNull();
+    fireEvent.click(within(modeGroup).getByRole('button', { name: 'Agent 创作协作' }));
+    expect(screen.queryByRole('menuitem', { name: /图片生成/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /视频生成/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /声音生成/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: '生音乐' })).toBeNull();
 
     fireEvent.click(within(modeGroup).getByRole('button', { name: '选择模型' }));
     expect(within(screen.getByRole('menu')).getByText('无可用模型')).toBeTruthy();
@@ -123,7 +134,7 @@ describe('InputArea composer controls', () => {
     const paramsGroup = screen.getByRole('group', { name: '工具参数' });
     expect(modeGroup.className).toContain('agent-composer-control-group-mode');
     expect(paramsGroup.className).toContain('agent-composer-control-group-config');
-    expect(within(modeGroup).getByRole('button', { name: 'Agent' })).toBeTruthy();
+    expect(within(modeGroup).getByRole('button', { name: 'Agent 创作协作' })).toBeTruthy();
     expect(within(modeGroup).getByRole('button', { name: '选择模型' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /图片/ })).toBeTruthy();
     expect(within(paramsGroup).getByTitle('Image Provider / Model Image')).toBeTruthy();
@@ -131,6 +142,49 @@ describe('InputArea composer controls', () => {
     expect(screen.getByTitle('命令').className).toContain('agent-composer-tool-button');
     expect(document.querySelector('.agent-composer-toolbar')).toBeTruthy();
     expect(document.querySelector('.agent-composer-textarea')).toBeTruthy();
+  });
+
+  it('shows creative collaboration and media generation in the command-style mode popup', () => {
+    render(
+      <Harness
+        availableMediaModels={[
+          ...mediaModels,
+          {
+            id: 'video-provider:model-video',
+            label: 'Video Provider / Model Video',
+            providerId: 'video-provider',
+            modelId: 'model-video',
+            category: 'video',
+          },
+          {
+            id: 'audio-provider:model-audio',
+            label: 'Audio Provider / Model Audio',
+            providerId: 'audio-provider',
+            modelId: 'model-audio',
+            category: 'audio',
+          },
+        ]}
+      >
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agent 创作协作' }));
+
+    const menu = screen.getByRole('menu');
+    expect(menu.className).toContain('agent-composer-popover');
+    expect(menu.className).toContain('agent-composer-session-mode-menu');
+    expect(screen.getByText('Agent 直接协作')).toBeTruthy();
+    expect(screen.getByText('媒体生成')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Agent 创作协作/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /图片生成/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /视频生成/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /声音生成/ })).toBeTruthy();
+    expect(screen.getByText('直接打磨故事、角色、对白、旁白、分镜节奏和镜头语言。')).toBeTruthy();
+    expect(screen.queryByText('脚本生成')).toBeNull();
+    expect(screen.queryByText('生成剧本')).toBeNull();
+    expect(screen.queryByText('生成分镜')).toBeNull();
+    expect(screen.queryByText('镜头描述')).toBeNull();
   });
 
   it('projects selected canvas nodes into a lightweight reference row and recommended actions', () => {

@@ -332,7 +332,6 @@ const AUDIO_DURATION_OPTIONS = [1, 2, 3, 5, 8, 10, 15, 30].map((n) => ({
 }));
 
 const AUDIO_TYPE_OPTIONS = [
-  { value: 'music', labelKey: 'chat.generation.audioType.music' },
   { value: 'sfx', labelKey: 'chat.generation.audioType.sfx' },
   { value: 'ambient', labelKey: 'chat.generation.audioType.ambient' },
   { value: 'voice', labelKey: 'chat.generation.audioType.voice' },

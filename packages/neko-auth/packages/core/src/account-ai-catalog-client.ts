@@ -174,9 +174,10 @@ function readModels(value: unknown): AccountAiCatalogSnapshot['models'] {
     if (!id || !name || !providerId) {
       throw new AuthTokenError('AI catalog model entry is incomplete', 502);
     }
-    const capabilities = readStringArray(model.capabilities);
+    const rawType = readString(model.type);
+    const capabilities = normalizeModelCapabilities(readStringArray(model.capabilities), rawType);
     const displayName = readString(model.displayName);
-    const type = readModelType(model.type);
+    const type = readModelType(rawType);
     const contextWindow = readNumber(model.contextWindow);
     const maxOutputTokens = readNumber(model.maxOutputTokens);
     return {
@@ -233,14 +234,12 @@ function readDefaults(value: unknown): AccountAiCatalogSnapshot['defaults'] | un
   const chat = readString(defaults.chat);
   const image = readString(defaults.image);
   const video = readString(defaults.video);
-  const audio = readString(defaults.audio);
-  const music = readString(defaults.music);
+  const audio = readString(defaults.audio) ?? readString(defaults.music);
   const result = {
     ...(chat ? { chat } : {}),
     ...(image ? { image } : {}),
     ...(video ? { video } : {}),
     ...(audio ? { audio } : {}),
-    ...(music ? { music } : {}),
   };
   return Object.keys(result).length > 0 ? result : undefined;
 }
@@ -286,11 +285,20 @@ function readModelType(value: unknown): AccountAiCatalogSnapshot['models'][numbe
     case 'image':
     case 'video':
     case 'audio':
-    case 'music':
       return value;
+    case 'music':
+      return 'audio';
     default:
       return undefined;
   }
+}
+
+function normalizeModelCapabilities(capabilities: string[], rawType: string | undefined): string[] {
+  if (rawType !== 'music') return capabilities;
+  if (capabilities.includes('text_to_music') || capabilities.includes('audio.music.generate')) {
+    return capabilities;
+  }
+  return [...capabilities, 'text_to_music'];
 }
 
 function assertNoForbiddenSecretFields(value: unknown, label: string): void {

@@ -11,8 +11,8 @@ import type {
   SsoSessionChangedMessage,
 } from './webview-protocol';
 
-export type MediaModelDefaults = Partial<Record<'image' | 'video' | 'audio', string>>;
-export type MediaModelSelectionState = Record<'image' | 'video' | 'audio', string>;
+export type MediaModelDefaults = Partial<Record<AgentMediaModelCategory, string>>;
+export type MediaModelSelectionState = Record<AgentMediaModelCategory, string>;
 export type AgentSessionMode = 'agent' | AgentMediaModelCategory;
 
 export interface SettingsDataProjection {

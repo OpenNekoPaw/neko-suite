@@ -1,7 +1,6 @@
 import type {
   AgentContextPayload,
   ChatModelOption,
-  ModelCapability,
   ModelSourceGroup,
   ModelType,
 } from '@neko/shared';
@@ -38,32 +37,7 @@ import type {
   SsoSessionProjection,
 } from '@neko-agent/types';
 
-const MODEL_CAPABILITIES: ReadonlySet<ModelCapability> = new Set([
-  'chat',
-  'completion',
-  'vision',
-  'function_calling',
-  'json_mode',
-  'streaming',
-  'embedding',
-  'code',
-  'audio',
-  'reasoning',
-  'text_to_image',
-  'image_to_image',
-  'text_to_video',
-  'image_to_video',
-  'video_to_video',
-  'text_to_audio',
-  'text_to_music',
-  'workflow',
-  'image_edit',
-  'video_edit',
-  'controlnet',
-  'ip_adapter',
-  'image_generation',
-  'video_generation',
-]);
+const AGENT_MEDIA_CATEGORIES: readonly AgentMediaModelCategory[] = ['image', 'video', 'audio'];
 
 export function projectSettingsDataMessage(message: SettingsDataMessage): SettingsDataProjection {
   const source = asRecord(message) ?? {};
@@ -107,7 +81,7 @@ export function projectMediaModelSelectionDefaults(input: {
     audio: input.selection.audio,
   };
 
-  for (const category of ['image', 'video', 'audio'] as const) {
+  for (const category of AGENT_MEDIA_CATEGORIES) {
     const defaultModel = input.defaults[category];
     if (selection[category] === 'none' && defaultModel) {
       selection[category] = defaultModel;
@@ -321,7 +295,7 @@ function readMediaModelDefaults(value: unknown): MediaModelDefaults {
   if (!record) return {};
 
   const defaults: MediaModelDefaults = {};
-  for (const category of ['image', 'video', 'audio'] as const) {
+  for (const category of AGENT_MEDIA_CATEGORIES) {
     const model = readString(record, category);
     if (model) defaults[category] = model;
   }
@@ -338,6 +312,10 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
     code !== 'unsupportedVersion' &&
     code !== 'duplicateProviderId' &&
     code !== 'duplicateModelId' &&
+    code !== 'unsupportedModelType' &&
+    code !== 'unsupportedDefaultMediaModelType' &&
+    code !== 'unsupportedDefaultModelType' &&
+    code !== 'invalidDefaultModelBinding' &&
     code !== 'readError' &&
     code !== 'missingConfig' &&
     code !== 'missingProvider' &&
@@ -395,7 +373,7 @@ function resolveSelectedContextWindow(input: {
 }
 
 function isAgentMediaCategory(category: unknown): category is AgentMediaModelCategory {
-  return category === 'image' || category === 'video' || category === 'audio';
+  return AGENT_MEDIA_CATEGORIES.includes(category as AgentMediaModelCategory);
 }
 
 function isChatSelectableModel(model: ChatModelOption): boolean {
@@ -536,7 +514,10 @@ function isChatModelOption(value: unknown): value is ChatModelOption {
     return false;
   }
   const capabilities = record.capabilities;
-  if (Array.isArray(capabilities) && !capabilities.every(isModelCapability)) {
+  if (
+    Array.isArray(capabilities) &&
+    !capabilities.every((capability) => typeof capability === 'string')
+  ) {
     return false;
   }
 
@@ -562,17 +543,7 @@ function isModelSourceGroup(value: unknown): value is ModelSourceGroup {
 }
 
 function isModelType(value: unknown): value is ModelType {
-  return (
-    value === 'llm' ||
-    value === 'image' ||
-    value === 'video' ||
-    value === 'audio' ||
-    value === 'music'
-  );
-}
-
-function isModelCapability(value: unknown): value is ModelCapability {
-  return typeof value === 'string' && MODEL_CAPABILITIES.has(value as ModelCapability);
+  return value === 'llm' || value === 'image' || value === 'video' || value === 'audio';
 }
 
 function isProjectFileMentionInfo(value: unknown): value is ProjectFileMentionInfo {

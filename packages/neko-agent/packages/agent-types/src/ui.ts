@@ -74,7 +74,7 @@ export type PromptMode = 'default' | 'plan';
  * - agent:  LLM reasoning + tool calls (default)
  * - image:  image generation (routes to image media model)
  * - video:  video generation (routes to video media model)
- * - audio:  audio generation (routes to audio media model)
+ * - audio:  audio generation, including music-capable audio models
  */
 export type SessionMode = 'agent' | 'image' | 'video' | 'audio';
 

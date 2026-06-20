@@ -1,7 +1,7 @@
 /**
  * AgentMediaBar — compact per-category media model indicators for Agent mode.
  *
- * Shows three small chips (image / video / audio):
+ * Shows configured media category chips (image / video / audio):
  *  - Colored + model name  → category configured with a selected model
  *  - Dimmed icon only      → category has available models but none selected
  *  - Hidden                → no models available for this category

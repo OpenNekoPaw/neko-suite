@@ -246,6 +246,7 @@ export type {
   ContextTokenCountMessage,
   ConversationListMessage,
   ConversationOnlyWebviewMessage,
+  DeleteConversationWebviewMessage,
   DownloadSvgWebviewMessage,
   DragStartWebviewMessage,
   EmptyWebviewMessage,

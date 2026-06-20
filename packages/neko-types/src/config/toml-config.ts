@@ -1,10 +1,13 @@
 import type {
   MCPServerConfig,
   ModelConfig,
+  ModelRefConfig,
   ModelType,
   ProviderConfig,
   ProtocolVariant,
+  TypeDefaultModels,
 } from '../types/config';
+import { MODEL_TYPES } from '../types/config';
 import { parse, stringify } from 'smol-toml';
 import type { AuthConfigJson, CredentialsConfig, MarketConfig, UnifiedConfig } from './types';
 
@@ -14,7 +17,8 @@ export interface NekoTomlConfig {
   readonly version?: number;
   readonly default_provider?: string;
   readonly default_model?: string;
-  readonly default_media_models?: Partial<Record<ModelType, string>>;
+  readonly default_media_models?: unknown;
+  readonly default_models?: Partial<Record<ModelType, TomlModelRefConfig>>;
   readonly defaults?: TomlDefaultsConfig;
   readonly skills_dir?: string;
   readonly verbose?: boolean;
@@ -39,6 +43,11 @@ export interface NekoTomlConfig {
 export interface TomlDefaultsConfig {
   readonly max_tokens?: number;
   readonly temperature?: number;
+}
+
+export interface TomlModelRefConfig {
+  readonly provider_id: string;
+  readonly model_id: string;
 }
 
 export interface TomlProviderConfig {
@@ -114,7 +123,13 @@ export interface TomlMcpServerConfig {
 }
 
 export interface TomlConfigValidationIssue {
-  readonly code: 'unsupportedVersion' | 'duplicateProviderId' | 'duplicateModelId';
+  readonly code:
+    | 'unsupportedVersion'
+    | 'duplicateProviderId'
+    | 'duplicateModelId'
+    | 'unsupportedModelType'
+    | 'unsupportedDefaultMediaModelType'
+    | 'unsupportedDefaultModelType';
   readonly path: string;
   readonly message: string;
 }
@@ -131,8 +146,8 @@ export function tomlToUnifiedConfig(config: NekoTomlConfig): UnifiedConfig {
   return {
     ...(config.default_provider !== undefined ? { defaultProvider: config.default_provider } : {}),
     ...(config.default_model !== undefined ? { defaultModel: config.default_model } : {}),
-    ...(config.default_media_models !== undefined
-      ? { defaultMediaModels: config.default_media_models }
+    ...(config.default_models !== undefined
+      ? { defaultModels: tomlDefaultModelsToRuntime(config.default_models) }
       : {}),
     ...(config.defaults?.max_tokens !== undefined ? { maxTokens: config.defaults.max_tokens } : {}),
     ...(config.defaults?.temperature !== undefined
@@ -188,8 +203,8 @@ export function unifiedConfigToToml(config: UnifiedConfig): NekoTomlConfig {
     version: SUPPORTED_TOML_CONFIG_VERSION,
     ...(config.defaultProvider !== undefined ? { default_provider: config.defaultProvider } : {}),
     ...(config.defaultModel !== undefined ? { default_model: config.defaultModel } : {}),
-    ...(config.defaultMediaModels !== undefined
-      ? { default_media_models: config.defaultMediaModels }
+    ...(config.defaultModels !== undefined
+      ? { default_models: runtimeDefaultModelsToToml(config.defaultModels) }
       : {}),
     ...(config.maxTokens !== undefined || config.temperature !== undefined
       ? {
@@ -256,6 +271,10 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   }
   collectDuplicateIdIssues(config.providers, 'providers', 'duplicateProviderId', issues);
   collectDuplicateIdIssues(config.models, 'models', 'duplicateModelId', issues);
+  collectUnsupportedDefaultMediaModelIssues(config.default_media_models, issues);
+  collectUnsupportedModelTypeIssues(config.models, 'models', issues);
+  collectUnsupportedModelOverrideTypeIssues(config.model_overrides, issues);
+  collectDefaultModelIssues(config.default_models, issues);
   if (issues.length > 0) {
     throw new TomlConfigValidationError(issues);
   }
@@ -435,6 +454,34 @@ function runtimeModelToToml(model: ModelConfig): TomlModelConfig {
   }) as TomlModelConfig;
 }
 
+function tomlDefaultModelsToRuntime(
+  defaults: Partial<Record<ModelType, TomlModelRefConfig>>,
+): TypeDefaultModels {
+  return mapRecordValues(defaults, tomlModelRefToRuntime) as TypeDefaultModels;
+}
+
+function runtimeDefaultModelsToToml(
+  defaults: TypeDefaultModels,
+): Partial<Record<ModelType, TomlModelRefConfig>> {
+  return mapRecordValues(defaults, runtimeModelRefToToml) as Partial<
+    Record<ModelType, TomlModelRefConfig>
+  >;
+}
+
+function tomlModelRefToRuntime(ref: TomlModelRefConfig): ModelRefConfig {
+  return {
+    providerId: ref.provider_id,
+    modelId: ref.model_id,
+  };
+}
+
+function runtimeModelRefToToml(ref: ModelRefConfig): TomlModelRefConfig {
+  return {
+    provider_id: ref.providerId,
+    model_id: ref.modelId,
+  };
+}
+
 function tomlModelOverrideToRuntime(model: Partial<TomlModelConfig>): Partial<ModelConfig> {
   return removeUndefined({
     id: model.id,
@@ -492,6 +539,96 @@ function tomlMcpServerToRuntime(server: TomlMcpServerConfig): MCPServerConfig {
     tools: server.tools ? [...server.tools] : undefined,
     requestTimeout: server.request_timeout,
   }) as MCPServerConfig;
+}
+
+function collectUnsupportedDefaultMediaModelIssues(
+  defaults: unknown,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (defaults === undefined) return;
+  issues.push({
+    code: 'unsupportedDefaultMediaModelType',
+    path: 'default_media_models',
+    message:
+      'Unsupported default_media_models section. Configure default models under [default_models.llm], [default_models.image], [default_models.video], and [default_models.audio].',
+  });
+}
+
+function collectUnsupportedModelTypeIssues(
+  models: readonly TomlModelConfig[] | undefined,
+  section: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!models) return;
+  for (const model of models) {
+    if (model.type !== undefined && !isModelType(model.type)) {
+      issues.push({
+        code: 'unsupportedModelType',
+        path: `${section}.${model.id}.type`,
+        message:
+          model.type === 'music'
+            ? `Unsupported model type "music" for model ${model.id}. Configure music models as type "audio" with capability "text_to_music".`
+            : `Unsupported model type "${String(model.type)}" for model ${model.id}.`,
+      });
+    }
+  }
+}
+
+function collectUnsupportedModelOverrideTypeIssues(
+  overrides: Record<string, Partial<TomlModelConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!overrides) return;
+  for (const [modelId, override] of Object.entries(overrides)) {
+    if (override.type !== undefined && !isModelType(override.type)) {
+      issues.push({
+        code: 'unsupportedModelType',
+        path: `model_overrides.${modelId}.type`,
+        message:
+          override.type === 'music'
+            ? `Unsupported model override type "music" for model ${modelId}. Configure music models as type "audio" with capability "text_to_music".`
+            : `Unsupported model override type "${String(override.type)}" for model ${modelId}.`,
+      });
+    }
+  }
+}
+
+function collectDefaultModelIssues(
+  defaults: Partial<Record<ModelType, TomlModelRefConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!defaults) return;
+  for (const [key, ref] of Object.entries(defaults)) {
+    if (!isModelType(key)) {
+      issues.push({
+        code: 'unsupportedDefaultModelType',
+        path: `default_models.${key}`,
+        message: `Unsupported default_models key: ${key}. Use llm, image, video, or audio.`,
+      });
+      continue;
+    }
+    if (!isTomlModelRefConfig(ref)) {
+      issues.push({
+        code: 'unsupportedDefaultModelType',
+        path: `default_models.${key}`,
+        message: `Invalid default_models.${key}. Expected provider_id and model_id strings.`,
+      });
+    }
+  }
+}
+
+function isModelType(value: unknown): value is ModelType {
+  return typeof value === 'string' && MODEL_TYPES.includes(value as ModelType);
+}
+
+function isTomlModelRefConfig(value: unknown): value is TomlModelRefConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as Partial<TomlModelRefConfig>).provider_id === 'string' &&
+    typeof (value as Partial<TomlModelRefConfig>).model_id === 'string'
+  );
 }
 
 function runtimeMcpServerToToml(server: MCPServerConfig): TomlMcpServerConfig {

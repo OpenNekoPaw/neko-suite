@@ -63,7 +63,7 @@ export interface GenerationParams {
   videoFps: 24 | 30;
   /** Audio duration in seconds */
   audioDuration: number;
-  audioType: 'music' | 'sfx' | 'ambient' | 'voice';
+  audioType: 'sfx' | 'ambient' | 'voice';
 }
 
 export const DEFAULT_GENERATION_PARAMS: GenerationParams = {

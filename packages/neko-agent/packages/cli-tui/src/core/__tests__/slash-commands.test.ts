@@ -73,4 +73,13 @@ describe('handleSlashCommand', () => {
     expect(result.output).toBeUndefined();
     expect(result.error).toContain('Unknown config subcommand: migrate');
   });
+
+  it('rejects music as a top-level media category', async () => {
+    const result = await handleSlashCommand('/media music', {
+      config: createConfig(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.error).toContain('Valid: image, video, audio, reset');
+  });
 });

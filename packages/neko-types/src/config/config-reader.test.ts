@@ -117,6 +117,98 @@ describe('config-reader typed results', () => {
     );
   });
 
+  it('preserves type defaults and model capability metadata from TOML', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[default_models.audio]',
+        'provider_id = "neko-gateway"',
+        'model_id = "suno-v4"',
+        '',
+        '[default_models.video]',
+        'provider_id = "neko-gateway"',
+        'model_id = "gemini-video"',
+        '',
+        '[[models]]',
+        'id = "suno-v4"',
+        'name = "suno-v4"',
+        'provider_id = "neko-gateway"',
+        'type = "audio"',
+        'capabilities = ["text_to_music"]',
+        '',
+        '[[models]]',
+        'id = "gemini-video"',
+        'name = "gemini-2.5-pro"',
+        'provider_id = "neko-gateway"',
+        'type = "video"',
+        'capabilities = ["text_to_video", "vision"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.defaultModels).toEqual({
+      audio: { providerId: 'neko-gateway', modelId: 'suno-v4' },
+      video: { providerId: 'neko-gateway', modelId: 'gemini-video' },
+    });
+    expect(result.config.models?.[0]).toEqual(
+      expect.objectContaining({
+        type: 'audio',
+        capabilities: ['text_to_music'],
+      }),
+    );
+    expect(result.config.models?.[1]).toEqual(
+      expect.objectContaining({
+        type: 'video',
+        capabilities: ['text_to_video', 'vision'],
+      }),
+    );
+  });
+
+  it('accepts existing capability metadata fields for type defaults', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[default_models.llm]',
+        'provider_id = "neko-gateway"',
+        'model_id = "gpt"',
+        '',
+        '[default_models.audio]',
+        'provider_id = "neko-gateway"',
+        'model_id = "suno-v4"',
+        '',
+        '[[models]]',
+        'id = "gpt"',
+        'name = "gpt-4.1"',
+        'provider_id = "neko-gateway"',
+        'type = "llm"',
+        'capabilities = ["chat", "function_calling", "streaming", "json_mode", "code"]',
+        '',
+        '[[models]]',
+        'id = "suno-v4"',
+        'name = "suno-v4"',
+        'provider_id = "neko-gateway"',
+        'type = "audio"',
+        'capabilities = ["text_to_music"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.defaultModels).toEqual({
+      llm: { providerId: 'neko-gateway', modelId: 'gpt' },
+      audio: { providerId: 'neko-gateway', modelId: 'suno-v4' },
+    });
+  });
+
   it('writes TOML and reads it back through the canonical reader', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
 
@@ -199,6 +291,68 @@ describe('config-reader typed results', () => {
 
     expect(result.status).toBe('duplicateProviderId');
     expect(getConfigReadDiagnostic(result)?.detail).toContain('Duplicate providers id');
+  });
+
+  it('rejects music as a top-level model type', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[models]]',
+        'id = "suno-v4"',
+        'name = "suno-v4"',
+        'provider_id = "neko-gateway"',
+        'type = "music"',
+        'capabilities = ["text_to_music"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedModelType');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'Configure music models as type "audio"',
+    );
+  });
+
+  it('rejects legacy default media models section', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      ['[default_media_models]', 'image = "gpt-image-2"'].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedDefaultMediaModelType');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain('Unsupported default_media_models');
+  });
+
+  it('rejects unsupported type defaults', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[default_models.audio_music_generate]',
+        'provider_id = "neko-gateway"',
+        'model_id = "suno-v4"',
+        '',
+        '[[models]]',
+        'id = "suno-v4"',
+        'name = "suno-v4"',
+        'provider_id = "neko-gateway"',
+        'type = "audio"',
+        'capabilities = ["text_to_music"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedDefaultModelType');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain('Unsupported default_models key');
   });
 
   it('ignores adjacent config.json when canonical TOML is missing', () => {

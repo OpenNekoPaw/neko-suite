@@ -7,7 +7,12 @@
  * - Workspace config: .neko/config.toml
  */
 
-import type { ProviderConfig, ModelConfig, MCPServerConfig, MediaModelType } from '../types/config';
+import type {
+  ProviderConfig,
+  ModelConfig,
+  MCPServerConfig,
+  TypeDefaultModels,
+} from '../types/config';
 
 // =============================================================================
 // Unified Configuration Format
@@ -33,8 +38,8 @@ export interface UnifiedConfig {
   /** Default model ID */
   defaultModel?: string;
 
-  /** Default media models by type */
-  defaultMediaModels?: Partial<Record<MediaModelType, string>>;
+  /** Default models by broad model type */
+  defaultModels?: TypeDefaultModels;
 
   /** Global default maxTokens */
   maxTokens?: number;

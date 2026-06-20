@@ -13,6 +13,8 @@ import type {
   ChatModelOption,
   GenerationModelConfig,
   MediaModelType,
+  ModelRefConfig,
+  ModelType,
   UnifiedConfig,
 } from '@neko/shared';
 import { DEFAULT_CONFIG, DEFAULT_EXTENSION_CONFIG } from '@neko/shared';
@@ -56,6 +58,7 @@ import {
   projectAssistantConfigReadResultDiagnostic,
   type AssistantConfigDiagnostic,
 } from './config-diagnostic';
+import { modelSupportsPurpose } from './model-purpose-registry';
 import {
   buildAssistantStatusBarPresentation,
   type AssistantStatusBarPresentation,
@@ -455,9 +458,21 @@ export class ConfigManager {
   }
 
   getDefaultMediaModels(): Partial<Record<MediaModelType, string>> {
-    const fromConfig = this.getScalar('defaultMediaModels') ?? {};
+    const fromConfig = this.getMediaDefaultModelOptionIdsFromConfig();
     // Runtime overrides take priority over config-file defaults (not persisted)
     return { ...fromConfig, ...this.runtimeMediaDefaults };
+  }
+
+  getDefaultModelRef(type: ModelType): ModelRefConfig | undefined {
+    const defaults = this.getScalar('defaultModels') ?? {};
+    if (type === 'llm') {
+      const configured = defaults.llm;
+      if (configured) return configured;
+      const providerId = this.getExplicitDefaultProviderScalar();
+      const modelId = this.getExplicitDefaultModelScalar();
+      return providerId && modelId ? { providerId, modelId } : undefined;
+    }
+    return defaults[type];
   }
 
   /**
@@ -665,6 +680,15 @@ export class ConfigManager {
     return result.status === 'ok' ? result.config : undefined;
   }
 
+  private getMediaDefaultModelOptionIdsFromConfig(): Partial<Record<MediaModelType, string>> {
+    const defaults = this.getScalar('defaultModels') ?? {};
+    return removeUndefinedRecord({
+      image: defaults.image ? toModelOptionId(defaults.image) : undefined,
+      video: defaults.video ? toModelOptionId(defaults.video) : undefined,
+      audio: defaults.audio ? toModelOptionId(defaults.audio) : undefined,
+    });
+  }
+
   private resolveProviderSources(
     accountCatalog: AccountAiCatalogSnapshot | null,
   ): AiProviderSourceProjection {
@@ -702,8 +726,12 @@ export class ConfigManager {
       diagnostic?.code === 'unsupportedVersion' ||
       diagnostic?.code === 'duplicateProviderId' ||
       diagnostic?.code === 'duplicateModelId' ||
+      diagnostic?.code === 'unsupportedModelType' ||
+      diagnostic?.code === 'unsupportedDefaultMediaModelType' ||
+      diagnostic?.code === 'unsupportedDefaultModelType' ||
       diagnostic?.code === 'invalidDefaultProvider' ||
       diagnostic?.code === 'invalidDefaultModel' ||
+      diagnostic?.code === 'invalidDefaultModelBinding' ||
       diagnostic?.code === 'readError'
     );
   }
@@ -740,12 +768,20 @@ export class ConfigManager {
 
   private getAssistantDefaultProviderScalarForSettings(): string | null {
     if (this.userConfigReadResult?.status !== 'ok') return null;
-    return this.getExplicitDefaultProviderScalar() ?? null;
+    return (
+      this.getExplicitDefaultModelRef('llm')?.providerId ??
+      this.getExplicitDefaultProviderScalar() ??
+      null
+    );
   }
 
   private getAssistantDefaultModelScalarForSettings(): string | null {
     if (this.userConfigReadResult?.status !== 'ok') return null;
-    return this.getExplicitDefaultModelScalar() ?? null;
+    return (
+      this.getExplicitDefaultModelRef('llm')?.modelId ??
+      this.getExplicitDefaultModelScalar() ??
+      null
+    );
   }
 
   private buildConfigDiagnostic(): AssistantConfigDiagnostic | undefined {
@@ -779,14 +815,25 @@ export class ConfigManager {
     }
 
     const enabledChatModels = Array.from(this.models.values()).filter(
-      (model) => model.enabled !== false && model.capabilities?.includes('chat'),
+      (model) => model.enabled !== false && modelSupportsPurpose(model, 'llm.chat'),
     );
     if (enabledChatModels.length === 0) {
       return buildAssistantConfigAvailabilityDiagnostic('missingModel', filePath);
     }
 
-    const explicitDefaultProvider = this.getExplicitDefaultProviderScalar();
-    const explicitDefaultModel = this.getExplicitDefaultModelScalar();
+    const explicitDefaultLlmModelRef = this.getExplicitDefaultModelRef('llm');
+    const explicitDefaultProvider =
+      explicitDefaultLlmModelRef?.providerId ?? this.getExplicitDefaultProviderScalar();
+    const explicitDefaultModel =
+      explicitDefaultLlmModelRef?.modelId ?? this.getExplicitDefaultModelScalar();
+    const defaultModelBindingDiagnostic = this.validateDefaultModelBindings(
+      filePath,
+      userConfigResult.config,
+    );
+    if (defaultModelBindingDiagnostic) {
+      return defaultModelBindingDiagnostic;
+    }
+
     const defaultSelectionDiagnostic = this.validateExplicitChatDefaults({
       filePath,
       explicitDefaultProvider,
@@ -833,7 +880,7 @@ export class ConfigManager {
     if (
       !model ||
       model.enabled === false ||
-      !model.capabilities?.includes('chat') ||
+      !modelSupportsPurpose(model, 'llm.chat') ||
       (provider && model.providerId !== provider.id)
     ) {
       return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModel', input.filePath);
@@ -856,6 +903,31 @@ export class ConfigManager {
       : buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModel', input.filePath);
   }
 
+  private validateDefaultModelBindings(
+    filePath: string,
+    config: UnifiedConfig,
+  ): AssistantConfigDiagnostic | undefined {
+    const defaults = config.defaultModels ?? {};
+    for (const [type, ref] of Object.entries(defaults)) {
+      if (!ref) continue;
+      const modelType = type as ModelType;
+      const provider = this.providers.get(ref.providerId);
+      const model = this.models.get(ref.modelId);
+      if (
+        !provider ||
+        provider.enabled === false ||
+        !isProviderConfigured(provider) ||
+        !model ||
+        model.enabled === false ||
+        model.providerId !== provider.id ||
+        (model.type ?? 'llm') !== modelType
+      ) {
+        return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModelBinding', filePath);
+      }
+    }
+    return undefined;
+  }
+
   private getExplicitDefaultProviderScalar(): string | undefined {
     const raw = this.getRawUserConfigSnapshot();
     return typeof raw?.defaultProvider === 'string' && raw.defaultProvider.length > 0
@@ -868,6 +940,10 @@ export class ConfigManager {
     return typeof raw?.defaultModel === 'string' && raw.defaultModel.length > 0
       ? raw.defaultModel
       : undefined;
+  }
+
+  private getExplicitDefaultModelRef(type: ModelType): ModelRefConfig | undefined {
+    return this.getRawUserConfigSnapshot()?.defaultModels?.[type];
   }
 
   private setRuntimeAssistantSettings(updates: Partial<AssistantSettingsSnapshot>): void {
@@ -1031,4 +1107,14 @@ export class ConfigManager {
       this.mcpServers.set(id, { ...server, args: updatedArgs });
     });
   }
+}
+
+function toModelOptionId(ref: ModelRefConfig): string {
+  return `${ref.providerId}:${ref.modelId}`;
+}
+
+function removeUndefinedRecord<T extends Record<string, unknown>>(record: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 }

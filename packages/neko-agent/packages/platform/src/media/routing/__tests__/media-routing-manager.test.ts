@@ -6,12 +6,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { MediaRoutingManager } from '../media-routing-manager';
 import type { ConfigManager } from '../../../config/config-manager';
 import type { Provider, Model } from '../../../types/provider';
+import type { MediaModelType, ModelRefConfig } from '@neko/shared';
 
 // Mock ConfigManager
 class MockConfigManager {
   private providers = new Map<string, Provider>();
   private models = new Map<string, Model>();
-  private defaultMediaModels: Record<string, string> = {};
+  private defaultModels: Partial<Record<MediaModelType, ModelRefConfig>> = {};
 
   addProvider(provider: Provider) {
     this.providers.set(provider.id, provider);
@@ -21,8 +22,8 @@ class MockConfigManager {
     this.models.set(model.id, model);
   }
 
-  setDefaultMediaModels(defaults: Record<string, string>) {
-    this.defaultMediaModels = defaults;
+  setDefaultModels(defaults: Partial<Record<MediaModelType, ModelRefConfig>>) {
+    this.defaultModels = defaults;
   }
 
   getProvider(id: string): Provider | undefined {
@@ -33,8 +34,8 @@ class MockConfigManager {
     return this.models.get(id);
   }
 
-  getDefaultMediaModels() {
-    return this.defaultMediaModels;
+  getDefaultModelRef(type: MediaModelType) {
+    return this.defaultModels[type];
   }
 }
 
@@ -106,8 +107,8 @@ describe('MediaRoutingManager', () => {
     });
 
     it('should use configured default model when no model specified', async () => {
-      configManager.setDefaultMediaModels({
-        image: 'dall-e-3',
+      configManager.setDefaultModels({
+        image: { providerId: 'openai', modelId: 'dall-e-3' },
       });
 
       const result = await manager.selectProvider('text-to-image');
@@ -143,9 +144,9 @@ describe('MediaRoutingManager', () => {
     });
 
     it('should use correct media type for different generation types', async () => {
-      configManager.setDefaultMediaModels({
-        image: 'dall-e-3',
-        audio: 'tts-1',
+      configManager.setDefaultModels({
+        image: { providerId: 'openai', modelId: 'dall-e-3' },
+        audio: { providerId: 'openai', modelId: 'tts-1' },
       });
 
       const imageResult = await manager.selectProvider('text-to-image');
@@ -156,8 +157,8 @@ describe('MediaRoutingManager', () => {
     });
 
     it('should return null when default model not found in config', async () => {
-      configManager.setDefaultMediaModels({
-        image: 'non-existent-model',
+      configManager.setDefaultModels({
+        image: { providerId: 'openai', modelId: 'non-existent-model' },
       });
 
       const result = await manager.selectProvider('text-to-image');
@@ -184,8 +185,8 @@ describe('MediaRoutingManager', () => {
         capabilities: ['text_to_image'],
         enabled: true,
       });
-      configManager.setDefaultMediaModels({
-        image: 'empty-gateway-image',
+      configManager.setDefaultModels({
+        image: { providerId: 'empty-gateway', modelId: 'empty-gateway-image' },
       });
 
       const result = await manager.selectProvider('text-to-image');
@@ -194,8 +195,8 @@ describe('MediaRoutingManager', () => {
     });
 
     it('should handle image-to-image as image type', async () => {
-      configManager.setDefaultMediaModels({
-        image: 'dall-e-3',
+      configManager.setDefaultModels({
+        image: { providerId: 'openai', modelId: 'dall-e-3' },
       });
 
       const result = await manager.selectProvider('image-to-image');

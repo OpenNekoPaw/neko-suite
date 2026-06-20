@@ -118,7 +118,6 @@ export interface ConfirmToolWebviewMessage {
 export interface ConversationOnlyWebviewMessage {
   type:
     | 'switchConversation'
-    | 'deleteConversation'
     | 'clearHistory'
     | 'cancelMessage'
     | 'getTasks'
@@ -127,6 +126,12 @@ export interface ConversationOnlyWebviewMessage {
     | 'clearActiveSkill'
     | 'getPromptMode';
   conversationId: string;
+}
+
+export interface DeleteConversationWebviewMessage {
+  type: 'deleteConversation';
+  conversationId: string;
+  activateNext?: boolean;
 }
 
 export interface EmptyWebviewMessage {
@@ -291,6 +296,7 @@ export type WebviewToExtensionMessage =
   | SearchProjectFilesWebviewMessage
   | ConfirmToolWebviewMessage
   | ConversationOnlyWebviewMessage
+  | DeleteConversationWebviewMessage
   | EmptyWebviewMessage
   | PlanActionWebviewMessage
   | PlanStepActionWebviewMessage
@@ -821,17 +827,10 @@ export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract
 >;
 
 const SESSION_MODES: readonly SessionMode[] = ['agent', 'image', 'video', 'audio'];
-const MODEL_CATEGORIES: readonly ProtocolModelCategory[] = [
-  'llm',
-  'image',
-  'video',
-  'audio',
-  'music',
-];
+const MODEL_CATEGORIES: readonly ProtocolModelCategory[] = ['llm', 'image', 'video', 'audio'];
 const AGENT_MEDIA_CATEGORIES: readonly AgentMediaModelCategory[] = ['image', 'video', 'audio'];
 const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['type'][] = [
   'switchConversation',
-  'deleteConversation',
   'clearHistory',
   'cancelMessage',
   'getTasks',
@@ -1201,6 +1200,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseSearchProjectFilesMessage(raw);
     case 'confirmTool':
       return parseConfirmToolMessage(raw);
+    case 'deleteConversation':
+      return parseDeleteConversationMessage(raw);
     case 'updateSettings':
       return parseUpdateSettingsMessage(raw);
     case 'updateTabState':
@@ -1373,6 +1374,19 @@ function parseConfirmToolMessage(raw: Record<string, unknown>): ConfirmToolWebvi
   const toolCallId = requiredString(raw.toolCallId);
   if (!conversationId || !toolCallId || typeof raw.approved !== 'boolean') return null;
   return { type: 'confirmTool', toolCallId, approved: raw.approved, conversationId };
+}
+
+function parseDeleteConversationMessage(
+  raw: Record<string, unknown>,
+): DeleteConversationWebviewMessage | null {
+  const conversationId = requiredString(raw.conversationId);
+  if (!conversationId) return null;
+  const activateNext = typeof raw.activateNext === 'boolean' ? raw.activateNext : undefined;
+  return {
+    type: 'deleteConversation',
+    conversationId,
+    ...(activateNext !== undefined ? { activateNext } : {}),
+  };
 }
 
 function parsePlanActionMessage(

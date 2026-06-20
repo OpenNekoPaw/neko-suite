@@ -126,6 +126,47 @@ describe('AccountAiCatalogClient', () => {
     expect(collectKeys(snapshot)).not.toContain('authorization');
   });
 
+  it('normalizes account catalog music models to audio models with music capability metadata', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      createJsonResponse(
+        createCatalogPayload({
+          models: [
+            {
+              id: 'suno-v4',
+              name: 'suno-v4',
+              displayName: 'Suno V4',
+              providerId: 'neko-account-gateway',
+              type: 'music',
+              capabilities: ['text_to_audio'],
+              enabled: true,
+            },
+          ],
+          entitlement: {
+            plan: 'Pro',
+            allowedModelIds: ['suno-v4'],
+          },
+          defaults: {
+            music: 'suno-v4',
+          },
+        }),
+      ),
+    );
+    const client = new AccountAiCatalogClient(
+      { catalogUrl: 'https://api.neko.dev/account/ai/catalog' },
+      { fetchFn, now: () => 1_000 },
+    );
+
+    const snapshot = await client.fetchCatalog(session);
+
+    expect(snapshot.models).toHaveLength(1);
+    expect(snapshot.models[0]).toMatchObject({
+      id: 'suno-v4',
+      type: 'audio',
+      capabilities: ['text_to_audio', 'text_to_music'],
+    });
+    expect(snapshot.defaults).toEqual({ audio: 'suno-v4' });
+  });
+
   it('throws AuthNotConfiguredError when the catalog URL is absent', async () => {
     const client = new AccountAiCatalogClient({ catalogUrl: '' }, { fetchFn: vi.fn() });
 

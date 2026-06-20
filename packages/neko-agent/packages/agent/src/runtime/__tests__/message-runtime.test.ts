@@ -69,14 +69,13 @@ describe('message runtime helpers', () => {
     ]);
   });
 
-  it('projects agent audio media model to audio and music runtime slots', () => {
+  it('projects music-capable audio models through the audio runtime slot', () => {
     expect(
       buildRuntimeMediaModelSelections({
         audio: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
       }),
     ).toEqual({
       audio: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
-      music: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
     });
   });
 

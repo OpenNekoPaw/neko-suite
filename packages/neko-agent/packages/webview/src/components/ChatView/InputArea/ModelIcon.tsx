@@ -22,7 +22,6 @@ const CATEGORY_COLORS: Record<ModelType, string> = {
   image: '#A855F7',
   video: '#EF4444',
   audio: '#06B6D4',
-  music: '#F59E0B',
 };
 
 export function getProviderColor(providerId: string): string {

@@ -17,6 +17,14 @@ const mediaModels: ChatModelOption[] = [
     modelId: 'model-video',
     category: 'video',
   },
+  {
+    id: 'music-provider:model-music',
+    label: 'Music Provider / Model Music',
+    providerId: 'music-provider',
+    modelId: 'model-music',
+    category: 'audio',
+    capabilities: ['audio.music.generate'],
+  },
 ];
 
 describe('media model presenter', () => {
@@ -65,6 +73,30 @@ describe('media model presenter', () => {
       expect.objectContaining({
         category: 'video',
         selectedId: 'video-provider:model-video',
+        isAgentMode: false,
+        showCategorySelector: false,
+        showInlineMediaModelPicker: false,
+        isExpanded: true,
+      }),
+    );
+  });
+
+  it('keeps music-capable models in the audio session category', () => {
+    const projection = projectGenerationParamsBarState({
+      sessionMode: 'audio',
+      generationCategory: 'image',
+      mediaModelSelection: {
+        image: 'image-provider:model-image',
+        video: 'video-provider:model-video',
+        audio: 'music-provider:model-music',
+      },
+      availableMediaModels: mediaModels,
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        category: 'audio',
+        selectedId: 'music-provider:model-music',
         isAgentMode: false,
         showCategorySelector: false,
         showInlineMediaModelPicker: false,

@@ -11,6 +11,7 @@ export type AssistantConfigAvailabilityCode =
   | 'missingApiKey'
   | 'invalidDefaultProvider'
   | 'invalidDefaultModel'
+  | 'invalidDefaultModelBinding'
   | 'missingAccountCatalog'
   | 'accountCatalogUnavailable'
   | 'accountModelNotEntitled';
@@ -53,6 +54,9 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'unsupportedVersion' ||
     result.status === 'duplicateProviderId' ||
     result.status === 'duplicateModelId' ||
+    result.status === 'unsupportedModelType' ||
+    result.status === 'unsupportedDefaultMediaModelType' ||
+    result.status === 'unsupportedDefaultModelType' ||
     result.status === 'readError'
   ) {
     return projectAssistantConfigDiagnostic(result.diagnostic);
@@ -75,6 +79,14 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains duplicate provider IDs: ${filePath}. Remove duplicate provider entries, then open a new Agent session or tab.`;
     case 'duplicateModelId':
       return `Configuration file contains duplicate model IDs: ${filePath}. Remove duplicate model entries, then open a new Agent session or tab.`;
+    case 'unsupportedModelType':
+      return `Configuration file contains an unsupported model type: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
+    case 'unsupportedDefaultMediaModelType':
+      return `Configuration file contains legacy default_media_models: ${filePath}. Move defaults to [default_models.llm], [default_models.image], [default_models.video], or [default_models.audio], then open a new Agent session or tab.`;
+    case 'unsupportedDefaultModelType':
+      return `Configuration file contains an unsupported default_models key: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
+    case 'invalidDefaultModelBinding':
+      return `Configuration file contains a default_models entry that references an unavailable provider/model or mismatched type: ${filePath}. Fix the default binding, then open a new Agent session or tab.`;
     case 'readError':
       return `Unable to read configuration file: ${filePath}. Check file permissions, then open a new Agent session or tab.`;
     case 'missingConfig':

@@ -22,6 +22,9 @@ export type ConfigReadErrorCode =
   | 'unsupportedVersion'
   | 'duplicateProviderId'
   | 'duplicateModelId'
+  | 'unsupportedModelType'
+  | 'unsupportedDefaultMediaModelType'
+  | 'unsupportedDefaultModelType'
   | 'readError';
 
 export interface ConfigReadDiagnostic {
@@ -179,6 +182,13 @@ function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'unsupportedVersion')) return 'unsupportedVersion';
   if (isTomlValidationError(error, 'duplicateProviderId')) return 'duplicateProviderId';
   if (isTomlValidationError(error, 'duplicateModelId')) return 'duplicateModelId';
+  if (isTomlValidationError(error, 'unsupportedModelType')) return 'unsupportedModelType';
+  if (isTomlValidationError(error, 'unsupportedDefaultMediaModelType')) {
+    return 'unsupportedDefaultMediaModelType';
+  }
+  if (isTomlValidationError(error, 'unsupportedDefaultModelType')) {
+    return 'unsupportedDefaultModelType';
+  }
   return error instanceof TomlError ? 'invalidToml' : 'readError';
 }
 
@@ -233,6 +243,27 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file contains duplicate model IDs: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedModelType':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported model type: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedDefaultMediaModelType':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported default media model category: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedDefaultModelType':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported default model type: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'readError':

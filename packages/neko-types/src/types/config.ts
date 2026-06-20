@@ -198,6 +198,10 @@ export interface ProviderConfig {
 export type ModelCapability =
   // LLM capabilities
   | 'chat'
+  | 'llm.chat'
+  | 'llm.plan'
+  | 'llm.judge'
+  | 'llm.vision'
   | 'completion'
   | 'vision'
   | 'function_calling'
@@ -209,11 +213,22 @@ export type ModelCapability =
   | 'reasoning'
   // Media generation capabilities
   | 'text_to_image'
+  | 'image.generate'
+  | 'image.edit'
   | 'image_to_image'
   | 'text_to_video'
+  | 'video.generate'
+  | 'video.understand'
+  | 'video.safety'
   | 'image_to_video'
   | 'video_to_video'
   | 'text_to_audio'
+  | 'audio.generate'
+  | 'audio.tts'
+  | 'audio.asr'
+  | 'audio.music.generate'
+  | 'content.safety.moderate'
+  | 'local.video.probe'
   | 'text_to_music'
   | 'workflow'
   | 'image_edit'
@@ -223,6 +238,48 @@ export type ModelCapability =
   // Legacy aliases (for backwards compatibility)
   | 'image_generation'
   | 'video_generation';
+
+export const KNOWN_MODEL_CAPABILITIES = [
+  'chat',
+  'llm.chat',
+  'llm.plan',
+  'llm.judge',
+  'llm.vision',
+  'completion',
+  'vision',
+  'function_calling',
+  'json_mode',
+  'streaming',
+  'embedding',
+  'code',
+  'audio',
+  'reasoning',
+  'text_to_image',
+  'image.generate',
+  'image.edit',
+  'image_to_image',
+  'text_to_video',
+  'video.generate',
+  'video.understand',
+  'video.safety',
+  'image_to_video',
+  'video_to_video',
+  'text_to_audio',
+  'audio.generate',
+  'audio.tts',
+  'audio.asr',
+  'audio.music.generate',
+  'content.safety.moderate',
+  'local.video.probe',
+  'text_to_music',
+  'workflow',
+  'image_edit',
+  'video_edit',
+  'controlnet',
+  'ip_adapter',
+  'image_generation',
+  'video_generation',
+] as const satisfies readonly ModelCapability[];
 
 /**
  * Model configuration
@@ -393,12 +450,38 @@ export interface ConfiguredPrompt extends PromptPresetConfig {
 /**
  * Model type for classification and routing
  */
-export type ModelType = 'llm' | 'image' | 'video' | 'audio' | 'music';
+export type ModelType = 'llm' | 'image' | 'video' | 'audio';
+
+export const MODEL_TYPES = [
+  'llm',
+  'image',
+  'video',
+  'audio',
+] as const satisfies readonly ModelType[];
 
 /**
  * Media model type (excludes LLM)
  */
 export type MediaModelType = Exclude<ModelType, 'llm'>;
+
+export const MEDIA_MODEL_TYPES = [
+  'image',
+  'video',
+  'audio',
+] as const satisfies readonly MediaModelType[];
+
+/**
+ * Default model binding.
+ *
+ * The config file keeps provider and model identity separate so user-authored
+ * TOML does not depend on a packed `provider:model` string format.
+ */
+export interface ModelRefConfig {
+  providerId: string;
+  modelId: string;
+}
+
+export type TypeDefaultModels = Partial<Record<ModelType, ModelRefConfig>>;
 
 /**
  * Chat model option for UI model selector dropdown

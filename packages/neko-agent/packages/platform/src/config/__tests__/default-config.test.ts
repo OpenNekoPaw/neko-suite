@@ -12,6 +12,7 @@ import {
   OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID,
   OLLAMA_LOCAL_PROVIDER_ID,
 } from '../default-config';
+import { modelSupportsPurpose } from '../model-purpose-registry';
 
 describe('default agent provider configuration', () => {
   it('uses NewAPI-compatible gateway and local provider groups by default', () => {
@@ -46,18 +47,40 @@ describe('default agent provider configuration', () => {
     });
   });
 
-  it('uses canonical model IDs for default media models', () => {
+  it('uses canonical provider/model refs for default models by type', () => {
     const models = new Map(DEFAULT_USER_CONFIG.models?.map((model) => [model.id, model]));
 
-    expect(DEFAULT_USER_CONFIG.defaultMediaModels).toEqual({
-      image: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
-      video: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
-      audio: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
-      music: NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID,
+    expect(DEFAULT_USER_CONFIG.defaultModels).toEqual({
+      llm: {
+        providerId: NEKO_GATEWAY_PROVIDER_ID,
+        modelId: NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
+      },
+      image: {
+        providerId: NEKO_GATEWAY_PROVIDER_ID,
+        modelId: NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
+      },
+      video: {
+        providerId: NEKO_GATEWAY_PROVIDER_ID,
+        modelId: NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID,
+      },
+      audio: {
+        providerId: NEKO_GATEWAY_PROVIDER_ID,
+        modelId: NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
+      },
     });
 
-    for (const modelId of Object.values(DEFAULT_USER_CONFIG.defaultMediaModels ?? {})) {
-      expect(models.has(modelId)).toBe(true);
+    for (const modelRef of Object.values(DEFAULT_USER_CONFIG.defaultModels ?? {})) {
+      expect(modelRef.providerId).toBe(NEKO_GATEWAY_PROVIDER_ID);
+      expect(models.has(modelRef.modelId)).toBe(true);
     }
+
+    expect(models.get(NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID)).toMatchObject({
+      type: 'audio',
+      capabilities: expect.arrayContaining(['text_to_music']),
+    });
+    const musicModel = models.get(NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID);
+    expect(musicModel).toBeDefined();
+    if (!musicModel) throw new Error('Expected default music model');
+    expect(modelSupportsPurpose(musicModel, 'audio.music.generate')).toBe(true);
   });
 });

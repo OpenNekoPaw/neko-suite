@@ -16,14 +16,20 @@ const translations: Record<string, string> = {
   'chat.executionMode.askDesc': 'Ask before tool actions',
   'chat.executionMode.auto': 'Auto',
   'chat.executionMode.autoDesc': 'Run approved actions automatically',
-  'chat.sessionMode.agent': 'Agent',
-  'chat.sessionMode.agentDesc': 'Use agent tools',
-  'chat.sessionMode.image': 'Image',
-  'chat.sessionMode.imageDesc': 'Generate images',
-  'chat.sessionMode.video': 'Video',
-  'chat.sessionMode.videoDesc': 'Generate videos',
-  'chat.sessionMode.audio': 'Audio',
-  'chat.sessionMode.audioDesc': 'Generate audio',
+  'chat.sessionMode.sections.agent': 'Direct Agent Collaboration',
+  'chat.sessionMode.sections.media': 'Media Generation',
+  'chat.sessionMode.agent': 'Creative Collaboration',
+  'chat.sessionMode.agentDesc': 'Develop stories, characters, dialogue, and shot language',
+  'chat.sessionMode.image': 'Image Generation',
+  'chat.sessionMode.imageDesc': 'Create character images and scene references',
+  'chat.sessionMode.video': 'Video Generation',
+  'chat.sessionMode.videoDesc': 'Create shot clips and motion previews',
+  'chat.sessionMode.audio': 'Sound Generation',
+  'chat.sessionMode.audioDesc': 'Create voice, sound effects, and ambience',
+  'chat.sessionMode.badge.agent': 'Chat',
+  'chat.sessionMode.badge.image': 'Image',
+  'chat.sessionMode.badge.video': 'Video',
+  'chat.sessionMode.badge.audio': 'Sound',
 };
 
 const models: ChatModelOption[] = [
@@ -66,12 +72,18 @@ describe('dropdown overlay presentation contract', () => {
     expect(menu.className).not.toContain('overflow-y-auto');
   });
 
-  it('uses the shared mode overlay shell for session and execution menus', () => {
+  it('uses shared overlay shells for session and execution menus', () => {
     const { rerender } = render(<SessionModeSelector mode="agent" onChange={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
-    expect(screen.getByRole('menu').className).toContain('agent-dropdown-menu-mode');
-    expect(screen.getByRole('menu').className).not.toContain('w-[');
+    fireEvent.click(screen.getByRole('button', { name: 'Creative Collaboration' }));
+    expect(screen.getByRole('menu').className).toContain('agent-composer-popover');
+    expect(screen.getByRole('menu').className).toContain('agent-composer-session-mode-menu');
+    expect(screen.getByRole('menu').className).toContain('is-placement-');
+    expect(screen.getByText('Direct Agent Collaboration')).toBeTruthy();
+    expect(screen.getByText('Media Generation')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Image Generation/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Script Generation' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Music' })).toBeNull();
 
     rerender(<ModeSelector mode="ask" onChange={vi.fn()} />);
 

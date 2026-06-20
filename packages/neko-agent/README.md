@@ -118,21 +118,31 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 **账号 catalog 缓存**：Agent Extension Host 复用新鲜的 account catalog snapshot；新开 Agent tab 不会因为 tab 新建而强制同步访问官方接口。缓存会在 OAuth login/logout/silent refresh、TTL 过期、手动刷新、catalog version/ETag 不匹配、官方接口或账号网关返回 401/403 时刷新或清空。
 
-**模型展示**：Webview 按 source/provider 分组展示模型。OAuth catalog 可用时先显示 Neko Official，再按配置文件中的 provider 顺序显示用户配置 provider；每组内部按 `llm`、`image`、`video`、`audio`、`music` 等类型分开。对话选择器隐藏空分组，配置/设置视图可以显示空 provider 并带诊断。
+**模型展示**：Webview 按 source/provider 分组展示模型。OAuth catalog 可用时先显示 Neko Official，再按配置文件中的 provider 顺序显示用户配置 provider；每组内部按 `llm`、`image`、`video`、`audio` 类型分开。音乐生成模型归入 `audio`，通过 `text_to_music` 等模型元数据表达用途；Neko 内部用途注册表会把它绑定到 `audio.music.generate` 产品用途。对话选择器隐藏空分组，配置/设置视图可以显示空 provider 并带诊断。
 
 **模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。
 
-**媒体模型默认值**：在 `~/.neko/config.toml` 中通过 `default_media_models` 为各媒体类型配置默认模型：
+**模型默认值**：在 `~/.neko/config.toml` 中通过 `default_models.<type>` 为 LLM 和生成模型配置默认模型：
 
 ```toml
-[default_media_models]
-image = "neko-gateway-gpt-image-2"
-video = "neko-gateway-seedance-lite"
-audio = "neko-gateway-tts"
-music = "neko-gateway-suno"
+[default_models.llm]
+provider_id = "ollama-local"
+model_id = "ollama-local-llama3.2"
+
+[default_models.image]
+provider_id = "neko-gateway"
+model_id = "neko-gateway-gpt-image-2"
+
+[default_models.video]
+provider_id = "neko-gateway"
+model_id = "neko-gateway-seedance-lite"
+
+[default_models.audio]
+provider_id = "neko-gateway"
+model_id = "neko-gateway-tts"
 ```
 
-值为 `models[]` 中对应模型的 `id`。Webview 启动时自动应用为初始选择；用户在 AgentMediaBar 中手动切换后，运行时选择优先。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio` / `music`）控制模型在选择器中的分组。
+每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
 
 **配置格式**：`config.toml` 是当前唯一读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源；如需保留旧配置，请手动迁移为 TOML。
 

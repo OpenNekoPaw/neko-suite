@@ -187,6 +187,49 @@ describe('webview protocol parser', () => {
     ).toBeNull();
   });
 
+  it('rejects top-level music session mode and model category', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'compose',
+        sessionMode: 'music',
+        mediaModel: { providerId: 'suno', modelId: 'chirp', category: 'music' },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'Generate mixed media',
+        sessionMode: 'agent',
+        mediaModels: {
+          audio: { providerId: 'suno', modelId: 'chirp', category: 'music' },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('accepts music-capable audio models as audio media model refs', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'compose',
+        sessionMode: 'audio',
+        mediaModel: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        sessionMode: 'audio',
+        mediaModel: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
+      }),
+    );
+  });
+
   it('rejects single mediaModel in agent mode', () => {
     expect(
       parseSendMessageWebviewMessage({
@@ -1207,6 +1250,30 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
     expect(parseWebviewToExtensionMessage({ type: 'getPromptMode' })).toBeNull();
     expect(parseWebviewToExtensionMessage({ type: 'setPromptMode', mode: 'plan' })).toBeNull();
+  });
+
+  it('parses deleteConversation activation intent', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'deleteConversation',
+        conversationId: 'conv-1',
+        activateNext: false,
+      }),
+    ).toEqual({
+      type: 'deleteConversation',
+      conversationId: 'conv-1',
+      activateNext: false,
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'deleteConversation',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({
+      type: 'deleteConversation',
+      conversationId: 'conv-1',
+    });
   });
 
   it('parses webview keyboard ownership messages', () => {

@@ -20,7 +20,6 @@ const translations: Record<string, string> = {
   'chat.generation.param.videoDuration': '视频时长',
   'chat.generation.param.audioType': '音频类型',
   'chat.generation.param.audioDuration': '音频时长',
-  'chat.generation.audioType.music': '音乐',
   'chat.generation.audioType.sfx': '音效',
   'chat.generation.audioType.ambient': '环境音',
   'chat.generation.audioType.voice': '人声',
@@ -48,6 +47,14 @@ const mediaModels: ChatModelOption[] = [
     providerId: 'audio-provider',
     modelId: 'model-audio',
     category: 'audio',
+  },
+  {
+    id: 'music-provider:model-music',
+    label: 'Music Provider / Model Music',
+    providerId: 'music-provider',
+    modelId: 'model-music',
+    category: 'audio',
+    capabilities: ['audio.music.generate'],
   },
 ];
 
@@ -86,8 +93,30 @@ describe('GenerationParamsBar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '音频类型' }));
 
-    expect(screen.getByRole('menuitem', { name: '音乐' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: '音乐' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: '环境音' })).toBeTruthy();
+  });
+
+  it('keeps music-capable models in the audio category selector', () => {
+    const onGenCategoryChange = vi.fn();
+    const onMediaModelSelect = vi.fn();
+
+    render(
+      <Harness onGenCategoryChange={onGenCategoryChange} onMediaModelSelect={onMediaModelSelect} />,
+    );
+
+    fireEvent.click(screen.getByTitle('图片'));
+    expect(screen.queryByRole('menuitem', { name: '音乐' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitem', { name: '音频' }));
+
+    expect(onGenCategoryChange).toHaveBeenCalledWith('audio');
+    expect(document.querySelector('.agent-control-chip-category')?.textContent).toContain('音频');
+    expect(screen.getByRole('button', { name: '音频时长' })).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('Music Provider / Model Music'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '不使用' }));
+
+    expect(onMediaModelSelect).toHaveBeenCalledWith('audio', 'none');
   });
 
   it('selects media models from the inline model dropdown', () => {
@@ -117,6 +146,16 @@ describe('GenerationParamsBar', () => {
       'agent-control-chip-param',
     );
   });
+
+  it('renders the inline model menu from the generation params bar', () => {
+    render(<Harness onGenCategoryChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByTitle('Image Provider / Model Image'));
+
+    const menu = screen.getByRole('menu');
+    expect(menu.className).toContain('agent-dropdown-menu-model');
+    expect(screen.getByRole('menuitem', { name: 'Image Provider / Model Image' })).toBeTruthy();
+  });
 });
 
 function Harness({
@@ -131,7 +170,7 @@ function Harness({
   const [mediaModelSelection, setMediaModelSelection] = useState({
     image: 'image-provider:model-image',
     video: 'video-provider:model-video',
-    audio: 'audio-provider:model-audio',
+    audio: 'music-provider:model-music',
   });
 
   const handleGenCategoryChange = (category: GenCategory) => {

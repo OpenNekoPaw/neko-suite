@@ -23,7 +23,6 @@ export interface CLIConfig {
     image?: string;
     video?: string;
     audio?: string;
-    music?: string;
   };
   /** API key (from env or config) */
   apiKey?: string;

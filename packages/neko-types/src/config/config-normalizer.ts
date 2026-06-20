@@ -28,6 +28,12 @@ export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): Unif
   if (override.defaultModel !== undefined) {
     merged.defaultModel = override.defaultModel;
   }
+  if (base.defaultModels || override.defaultModels) {
+    merged.defaultModels = {
+      ...base.defaultModels,
+      ...override.defaultModels,
+    };
+  }
   if (override.maxTokens !== undefined) {
     merged.maxTokens = override.maxTokens;
   }

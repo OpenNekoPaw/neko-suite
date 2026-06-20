@@ -26,7 +26,6 @@ const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = 
   image: { labelKey: 'chat.categoryImage', order: 2 },
   video: { labelKey: 'chat.categoryVideo', order: 3 },
   audio: { labelKey: 'chat.categoryAudio', order: 4 },
-  music: { labelKey: 'chat.categoryMusic', order: 5 },
 };
 
 export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {

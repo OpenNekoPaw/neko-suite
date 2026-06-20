@@ -35,7 +35,6 @@ export interface AccountAiModelDefaults {
   readonly image?: string;
   readonly video?: string;
   readonly audio?: string;
-  readonly music?: string;
 }
 
 export interface AccountAiCatalogDiagnostic {

@@ -596,7 +596,6 @@ interface InteractiveSessionState {
     image?: string;
     video?: string;
     audio?: string;
-    music?: string;
   };
 }
 

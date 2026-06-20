@@ -112,8 +112,12 @@ export function loadConfig(
     const rawUser = rawUserResult.status === 'ok' ? rawUserResult.config : {};
     const rawWorkspace = rawWorkspaceResult.status === 'ok' ? rawWorkspaceResult.config : {};
 
+    const llmDefaultRef = rawWorkspace.defaultModels?.llm ?? rawUser.defaultModels?.llm;
     const providerId =
-      overrides.provider ?? rawWorkspace.defaultProvider ?? rawUser.defaultProvider;
+      overrides.provider ??
+      llmDefaultRef?.providerId ??
+      rawWorkspace.defaultProvider ??
+      rawUser.defaultProvider;
     if (!providerId) {
       throw new Error('Default provider is not configured in ~/.neko/config.toml.');
     }
@@ -128,9 +132,13 @@ export function loadConfig(
     const envApiKey = getApiKeyFromEnv(providerId) ?? getApiKeyFromEnv(providerType);
     const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
 
-    // Model: override > defaultModel scalar > first enabled model for provider > default
+    const llmDefaultModel =
+      llmDefaultRef && llmDefaultRef.providerId === providerId ? llmDefaultRef.modelId : undefined;
+
+    // Model: override > [default_models.llm] > defaultModel scalar > first enabled model for provider
     const model =
       overrides.model ??
+      llmDefaultModel ??
       rawWorkspace.defaultModel ??
       rawUser.defaultModel ??
       findDefaultModel(cm, providerId);
@@ -172,12 +180,13 @@ export function loadConfig(
       })
       .map((m) => m.id);
 
-    // Default media models by type
+    // Default media models by type. The TOML source is [default_models.<type>]
+    // with explicit provider/model identity; CLI session state still stores the
+    // selected model id string used by slash commands.
     const defaultMediaModels = {
-      image: rawWorkspace.defaultMediaModels?.image ?? rawUser.defaultMediaModels?.image,
-      video: rawWorkspace.defaultMediaModels?.video ?? rawUser.defaultMediaModels?.video,
-      audio: rawWorkspace.defaultMediaModels?.audio ?? rawUser.defaultMediaModels?.audio,
-      music: rawWorkspace.defaultMediaModels?.music ?? rawUser.defaultMediaModels?.music,
+      image: rawWorkspace.defaultModels?.image?.modelId ?? rawUser.defaultModels?.image?.modelId,
+      video: rawWorkspace.defaultModels?.video?.modelId ?? rawUser.defaultModels?.video?.modelId,
+      audio: rawWorkspace.defaultModels?.audio?.modelId ?? rawUser.defaultModels?.audio?.modelId,
     };
 
     // Workspace overrides user for scalars

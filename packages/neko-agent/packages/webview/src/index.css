@@ -819,6 +819,53 @@ body {
   grid-template-columns: minmax(68px, 82px) minmax(0, 1fr) auto;
 }
 
+.agent-composer-session-mode-menu {
+  width: min(344px, calc(100vw - 24px));
+}
+
+.agent-composer-session-mode-menu.is-placement-up {
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.agent-composer-session-mode-menu.is-placement-down {
+  top: 100%;
+  bottom: auto;
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
+.agent-composer-session-mode-menu.is-align-start {
+  right: auto;
+  left: 0;
+}
+
+.agent-composer-session-mode-menu.is-align-end {
+  right: 0;
+  left: auto;
+}
+
+.agent-composer-session-mode-row {
+  min-height: 46px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+.agent-composer-session-mode-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-composer-session-mode-row .agent-composer-popover-secondary {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .agent-composer-mention-row {
   min-height: 28px;
   grid-template-columns: 22px minmax(0, 1fr) auto;
@@ -1209,12 +1256,12 @@ body {
 .agent-composer-control-group-config {
   flex: 1 1 0;
   justify-content: flex-end;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .agent-composer-control-group-config .agent-generation-params {
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .agent-dropdown-menu {

@@ -1201,7 +1201,7 @@ export function selectAgentTurnProvider<TProvider extends AgentProviderCandidate
   if (requiredCapabilities.length > 0) {
     const modelCapabilities = provider.modelCapabilities?.[effectiveModelId] ?? [];
     const hasRequiredCapabilities = requiredCapabilities.every((capability) =>
-      modelCapabilities.includes(capability),
+      modelCapabilitySetSatisfies(modelCapabilities, capability),
     );
     if (!hasRequiredCapabilities) {
       return {
@@ -1219,6 +1219,26 @@ export function selectAgentTurnProvider<TProvider extends AgentProviderCandidate
     effectiveProviderId,
     effectiveModelId,
   };
+}
+
+const RUNTIME_MODEL_PURPOSE_CAPABILITIES: Readonly<Record<string, readonly string[]>> = {
+  'llm.chat': ['llm.chat', 'chat'],
+  'llm.vision': ['llm.vision', 'vision'],
+  'image.generate': ['image.generate', 'text_to_image', 'image_generation'],
+  'image.edit': ['image.edit', 'image_edit'],
+  'video.generate': ['video.generate', 'text_to_video', 'video_generation'],
+  'video.understand': ['video.understand', 'vision'],
+  'audio.generate': ['audio.generate', 'text_to_audio', 'audio'],
+  'audio.tts': ['audio.tts', 'text_to_audio', 'audio'],
+  'audio.music.generate': ['audio.music.generate', 'text_to_music'],
+};
+
+function modelCapabilitySetSatisfies(
+  modelCapabilities: readonly string[],
+  requiredCapability: string,
+): boolean {
+  const accepted = RUNTIME_MODEL_PURPOSE_CAPABILITIES[requiredCapability] ?? [requiredCapability];
+  return accepted.some((capability) => modelCapabilities.includes(capability));
 }
 
 export function shouldHydrateAgentHistory(input: {
@@ -1351,9 +1371,7 @@ export function buildRuntimeMediaModelSelections(
     return {
       ...(agentMediaModels.image ? { image: agentMediaModels.image } : {}),
       ...(agentMediaModels.video ? { video: agentMediaModels.video } : {}),
-      ...(agentMediaModels.audio
-        ? { audio: agentMediaModels.audio, music: agentMediaModels.audio }
-        : {}),
+      ...(agentMediaModels.audio ? { audio: agentMediaModels.audio } : {}),
     };
   }
 
@@ -1363,7 +1381,6 @@ export function buildRuntimeMediaModelSelections(
     image: mediaModel,
     video: mediaModel,
     audio: mediaModel,
-    music: mediaModel,
   };
 }
 

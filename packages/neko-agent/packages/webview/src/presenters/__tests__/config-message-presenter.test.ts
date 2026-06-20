@@ -209,6 +209,7 @@ describe('config message presenter', () => {
       defaults: {
         image: 'image-provider:model',
         video: 'video-provider:model',
+        audio: 'music-provider:model',
       },
     });
 
@@ -216,7 +217,7 @@ describe('config message presenter', () => {
       selection: {
         image: 'image-provider:model',
         video: 'existing-video',
-        audio: 'none',
+        audio: 'music-provider:model',
       },
       updated: true,
     });
@@ -300,7 +301,8 @@ describe('config message presenter', () => {
           label: 'Suno / Chirp',
           providerId: 'suno',
           modelId: 'chirp',
-          category: 'music',
+          category: 'audio',
+          capabilities: ['audio.music.generate'],
         },
       ],
       selectedModel: 'openai:gpt-4.1',
@@ -309,7 +311,7 @@ describe('config message presenter', () => {
       mediaModelSelection: {
         image: 'flux:pro',
         video: 'runway:gen-4',
-        audio: 'none',
+        audio: 'suno:chirp',
       },
     });
 
@@ -317,11 +319,13 @@ describe('config message presenter', () => {
     expect(projection.availableMediaModels.map((model) => model.id)).toEqual([
       'flux:pro',
       'runway:gen-4',
+      'suno:chirp',
     ]);
     expect(projection.activeMediaModel).toBeUndefined();
     expect(projection.agentMediaModels).toEqual({
       image: { providerId: 'flux', modelId: 'pro', category: 'image' },
       video: { providerId: 'runway', modelId: 'gen-4', category: 'video' },
+      audio: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
     });
     expect(projection.selectedContextWindow).toBe(200000);
   });
@@ -355,7 +359,11 @@ describe('config message presenter', () => {
       selectedModel: 'missing:model',
       defaultContextWindow: 16384,
       sessionMode: 'video',
-      mediaModelSelection: { image: 'none', video: 'runway:gen-4', audio: 'none' },
+      mediaModelSelection: {
+        image: 'none',
+        video: 'runway:gen-4',
+        audio: 'none',
+      },
     });
 
     expect(directProjection.activeMediaModel?.id).toBe('runway:gen-4');
@@ -391,7 +399,11 @@ describe('config message presenter', () => {
     expect(
       projectMediaModelSelectionForSessionModeChange({
         sessionMode: 'agent',
-        mediaModelSelection: { image: 'flux:pro', video: 'runway:gen-4', audio: 'none' },
+        mediaModelSelection: {
+          image: 'flux:pro',
+          video: 'runway:gen-4',
+          audio: 'none',
+        },
         chatModelOptions: [],
       }),
     ).toEqual({
@@ -402,6 +414,35 @@ describe('config message presenter', () => {
         audio: 'none',
       },
       updated: false,
+    });
+
+    expect(
+      projectMediaModelSelectionForSessionModeChange({
+        sessionMode: 'audio',
+        mediaModelSelection: {
+          image: 'flux:pro',
+          video: 'runway:gen-4',
+          audio: 'none',
+        },
+        chatModelOptions: [
+          {
+            id: 'suno:chirp',
+            label: 'Suno / Chirp',
+            providerId: 'suno',
+            modelId: 'chirp',
+            category: 'audio',
+            capabilities: ['audio.music.generate'],
+          },
+        ],
+      }),
+    ).toEqual({
+      sessionMode: 'audio',
+      mediaModelSelection: {
+        image: 'flux:pro',
+        video: 'runway:gen-4',
+        audio: 'suno:chirp',
+      },
+      updated: true,
     });
   });
 

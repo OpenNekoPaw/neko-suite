@@ -17,7 +17,18 @@ import { RETRY_TIMEOUT_PRESETS } from '../retry-timeout-presets';
 // Test Helpers
 // =============================================================================
 
-function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfigManager {
+function createMockUserConfigManager(
+  initial?: Partial<UserConfig>,
+  rawScalars: Omit<
+    UnifiedConfig,
+    | 'providers'
+    | 'models'
+    | 'mcpServers'
+    | 'providerOverrides'
+    | 'modelOverrides'
+    | 'mcpServerOverrides'
+  > = {},
+): IUserConfigManager {
   let config: UserConfig = {
     providers: [],
     models: [],
@@ -82,6 +93,7 @@ function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfig
       };
     },
     loadRaw: () => ({
+      ...rawScalars,
       providers: config.providers,
       models: config.models,
       mcpServers: config.mcpServers,
@@ -93,6 +105,7 @@ function createMockUserConfigManager(initial?: Partial<UserConfig>): IUserConfig
       status: 'ok',
       filePath: '<test-config>',
       config: {
+        ...rawScalars,
         providers: config.providers,
         models: config.models,
         mcpServers: config.mcpServers,
@@ -620,6 +633,236 @@ describe('ConfigManager', () => {
           selectedModelId: null,
         }),
       );
+    });
+
+    it('accepts llm.chat metadata as a chat model capability', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const localModel: Model = {
+        id: 'ollama-local-chat',
+        name: 'llama3.2',
+        displayName: 'Llama 3.2',
+        providerId: 'ollama-local',
+        capabilities: ['llm.chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [localProvider],
+            models: [localModel],
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+    });
+
+    it('uses type default llm binding for assistant settings selection', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const localModel: Model = {
+        id: 'ollama-local-chat',
+        name: 'llama3.2',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [localProvider],
+            models: [localModel],
+            defaultModels: {
+              llm: {
+                providerId: 'ollama-local',
+                modelId: 'ollama-local-chat',
+              },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'ollama-local',
+          selectedModelId: 'ollama-local-chat',
+        }),
+      );
+      expect(manager.getAssistantRuntimeSettingsSnapshot()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'ollama-local',
+          selectedModelId: 'ollama-local-chat',
+        }),
+      );
+    });
+
+    it('lets valid type default llm binding supersede invalid legacy chat scalars', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const localModel: Model = {
+        id: 'ollama-local-chat',
+        name: 'llama3.2',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            defaultProvider: 'missing-provider',
+            defaultModel: 'missing-model',
+            providers: [localProvider],
+            models: [localModel],
+            defaultModels: {
+              llm: {
+                providerId: 'ollama-local',
+                modelId: 'ollama-local-chat',
+              },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(() => manager.assertConfigAvailable()).not.toThrow();
+      expect(manager.getAssistantSettingsData()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'ollama-local',
+          selectedModelId: 'ollama-local-chat',
+        }),
+      );
+    });
+
+    it('reports type default models that do not match the configured model type', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const textOnlyModel: Model = {
+        id: 'text-only',
+        name: 'llama3.2',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [localProvider],
+            models: [textOnlyModel],
+            defaultModels: {
+              video: {
+                providerId: 'ollama-local',
+                modelId: 'text-only',
+              },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'invalidDefaultModelBinding',
+        filePath: '/tmp/neko/config.toml',
+        message:
+          'Configuration file contains a default_models entry that references an unavailable provider/model or mismatched type: /tmp/neko/config.toml. Fix the default binding, then open a new Agent session or tab.',
+      });
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'Configuration file contains a default_models entry',
+      );
+    });
+
+    it('keeps invalid type defaults visible instead of falling back to account gateway', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const textOnlyModel: Model = {
+        id: 'text-only',
+        name: 'llama3.2',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [localProvider],
+            models: [textOnlyModel],
+            defaultModels: {
+              video: {
+                providerId: 'ollama-local',
+                modelId: 'text-only',
+              },
+            },
+          },
+        }),
+      });
+
+      const state = manager.getAssistantConfigState({
+        accountCatalog: createAccountCatalog(),
+      });
+
+      expect(state.configDiagnostic).toEqual(
+        expect.objectContaining({ code: 'invalidDefaultModelBinding' }),
+      );
+      expect(state.modelGroups[0]).toMatchObject({ source: 'account-gateway' });
     });
 
     it('clears availability diagnostics after runtime credential projection', async () => {
