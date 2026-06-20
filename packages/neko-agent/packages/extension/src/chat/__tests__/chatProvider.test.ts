@@ -79,6 +79,133 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('preserves an explicitly empty tab state instead of reopening recent history', async () => {
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'hi', timestamp: 1 }],
+      createdAt: 1,
+      updatedAt: 1,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: 'conv-history',
+      },
+      'neko.tabState': {
+        openTabs: [],
+        activeTabId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    await receiveMessage?.({ type: 'getActiveConversation' });
+    await receiveMessage?.({ type: 'getTabState' });
+
+    expect(context.workspaceState.update).not.toHaveBeenCalledWith(
+      'neko.tabState',
+      expect.objectContaining({
+        openTabs: [expect.objectContaining({ conversationId: 'conv-history' })],
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'activeConversation',
+      conversation: null,
+    });
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      tabState: { openTabs: [], activeTabId: null },
+    });
+
+    provider.dispose();
+  });
+
+  it('keeps same-session empty tab state after all tabs are closed', async () => {
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'hi', timestamp: 1 }],
+      createdAt: 1,
+      updatedAt: 1,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: 'conv-history',
+      },
+    });
+    const firstWebview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview: firstWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    await receiveFirstMessage?.({ type: 'updateTabState', openTabs: [], activeTabId: null });
+
+    const secondWebview = vscode.createMockWebview();
+    provider.resolveWebviewView(
+      {
+        webview: secondWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    await receiveSecondMessage?.({ type: 'getActiveConversation' });
+    await receiveSecondMessage?.({ type: 'getTabState' });
+
+    expect(secondWebview.postMessage).toHaveBeenCalledWith({
+      type: 'activeConversation',
+      conversation: null,
+    });
+    expect(secondWebview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      tabState: { openTabs: [], activeTabId: null },
+    });
+
+    provider.dispose();
+  });
+
   it('configures unified chat roots for extension assets, caches, workspace, and media libraries', async () => {
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
       id: 'neko.neko-assets',

@@ -618,6 +618,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let mentionItems: MentionItem[] = [];
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
+  const isTablessConversationViewRef = ref(false);
   const conversationMessagesRef = ref(new Map<string, Message[]>(options.nonCurrentMessages ?? []));
   const conversationStreamingRef = ref(
     new Map<string, StreamingState>(options.nonCurrentStreaming ?? []),
@@ -692,6 +693,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationStreamingRef,
     openTabs: [],
     activeTabId: null,
+    isTablessConversationViewRef,
     setOpenTabs: noopDispatch(),
     setActiveTabId: noopDispatch(),
     setActiveTab: noopDispatch(),

@@ -141,9 +141,17 @@ describe('ConversationMessageHandler', () => {
     expect(agentManager.remove).toHaveBeenCalledWith('conv-a');
     expect(messages.clearAgentState).toHaveBeenCalledWith('conv-a');
     expect(promptModeCleanup.clearPromptMode).toHaveBeenCalledWith('conv-a');
-    expect(conversations.delete).toHaveBeenCalledWith('conv-a');
+    expect(conversations.delete).toHaveBeenCalledWith('conv-a', { activateNext: true });
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
     expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview);
+  });
+
+  it('deletes the final closed tab without activating another conversation', async () => {
+    await handler.handleDeleteConversation('conv-a', { activateNext: false });
+
+    expect(conversations.delete).toHaveBeenCalledWith('conv-a', { activateNext: false });
+    expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
+    expect(conversations.sendActiveConversation).not.toHaveBeenCalled();
   });
 
   it('clears history through conversation runtime effects', async () => {

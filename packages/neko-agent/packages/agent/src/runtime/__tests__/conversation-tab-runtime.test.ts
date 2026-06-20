@@ -144,6 +144,23 @@ describe('conversation-tab-runtime', () => {
     expect(effects.switchConversation).toHaveBeenCalledWith('conv-1');
   });
 
+  it('clears the active conversation when the persisted tab state is empty', () => {
+    const effects = createEffects({
+      getActiveConversationId: () => 'conv-1',
+      clearActiveConversation: vi.fn(),
+    });
+
+    expect(updateTabStateRuntime({ openTabs: [], activeTabId: null }, effects)).toEqual({
+      tabState: {
+        openTabs: [],
+        activeTabId: null,
+      },
+      sync: { kind: 'active-conversation-cleared' },
+    });
+    expect(effects.clearActiveConversation).toHaveBeenCalledTimes(1);
+    expect(effects.switchConversation).not.toHaveBeenCalled();
+  });
+
   it('builds a webview restore plan with ordered host effects', () => {
     const tab = { id: 'tab-1', title: 'Chat', conversationId: 'conv-1' };
 

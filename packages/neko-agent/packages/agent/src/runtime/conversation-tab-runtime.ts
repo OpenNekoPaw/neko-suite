@@ -26,6 +26,9 @@ export type ConversationTabSyncReason =
 
 export type ConversationTabSyncResult =
   | {
+      kind: 'active-conversation-cleared';
+    }
+  | {
       kind: 'switched';
       conversationId: string;
     }
@@ -49,6 +52,7 @@ export interface ConversationTabRuntimeEffects {
   hasEmbodyCharacterSession?(sessionId: string): boolean;
   getActiveConversationId(): string | null;
   switchConversation(conversationId: string): boolean;
+  clearActiveConversation?(): void;
   onConversationSwitched?(conversationId: string): void;
 }
 
@@ -91,6 +95,14 @@ export function syncActiveConversationFromTabState(
   input: SyncActiveConversationFromTabStateInput,
   effects: ConversationTabRuntimeEffects,
 ): ConversationTabSyncResult {
+  if (input.tabState.openTabs.length === 0) {
+    if (effects.getActiveConversationId()) {
+      effects.clearActiveConversation?.();
+      return { kind: 'active-conversation-cleared' };
+    }
+    return { kind: 'skipped', reason: 'no-active-tab-conversation' };
+  }
+
   const conversationId = resolveActiveTabConversationId({
     tabState: input.tabState,
     hasConversation: effects.hasConversation,

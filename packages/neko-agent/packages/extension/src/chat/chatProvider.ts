@@ -118,6 +118,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   // Tab state for persistence
   private _tabState: TabState = { openTabs: [], activeTabId: null };
+  private _hasPersistedTabState = false;
 
   // Handlers
   private readonly _taskHandler: TaskHandler;
@@ -450,10 +451,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     // and disables typing indefinitely.
     this._syncActiveConversationFromTabState();
 
-    // Final guarantee: by the time the webview asks for the active conversation,
-    // there must be one. Otherwise activeConversationId stays null in the webview,
-    // and useChatActions.handleSend short-circuits on `if (!conversationId) return`,
-    // making the Send button silently no-op even after the input is enabled.
+    // Final guarantee: unless the user explicitly persisted an empty tab state,
+    // the webview should have an active conversation before it asks for one.
     this._ensureActiveConversationAndTab();
 
     // Notify webview which neko-suite plugins are installed (ADR-5)
@@ -708,9 +707,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   // ============================================================================
 
   private _loadTabState(): void {
-    const restored = normalizeTabState(
-      this._context.workspaceState.get<unknown>(ChatViewProvider.TAB_STATE_KEY),
+    const persistedTabState = this._context.workspaceState.get<unknown>(
+      ChatViewProvider.TAB_STATE_KEY,
     );
+    this._hasPersistedTabState = persistedTabState !== undefined;
+    const restored = normalizeTabState(persistedTabState);
 
     // Drop tabs whose conversation no longer exists (e.g. user cleared all
     // conversations while the panel was closed). Otherwise the webview would
@@ -747,11 +748,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        clearActiveConversation: () => this._conversations.clearActive(),
       },
     );
   }
 
   private _ensureActiveConversationAndTab(): void {
+    // Empty persisted tab state is intentional: the user closed every tab, so
+    // reopening the panel must not resurrect the most recent history item.
+    if (
+      this._hasPersistedTabState &&
+      this._tabState.openTabs.length === 0 &&
+      this._tabState.activeTabId === null
+    ) {
+      this._conversations.clearActive();
+      return;
+    }
+
     // Make sure ConversationManager has at least one conversation and an active id.
     // ensureActive() creates a fresh conversation if none exists, then returns the
     // active id (creating or reusing).
@@ -796,6 +809,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private _saveTabState(): void {
+    this._hasPersistedTabState = true;
     this._context.workspaceState.update(ChatViewProvider.TAB_STATE_KEY, this._tabState);
   }
 
@@ -813,6 +827,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        clearActiveConversation: () => this._conversations.clearActive(),
         onConversationSwitched: () => this._syncCanvasAmbientScopeFromActiveConversation(),
       },
     );

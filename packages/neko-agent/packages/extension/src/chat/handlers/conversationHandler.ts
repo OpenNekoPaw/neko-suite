@@ -15,6 +15,7 @@ import {
   runClearHistoryRuntime,
   runConfirmToolRuntime,
   runDeleteConversationRuntime,
+  type DeleteConversationRuntimeOptions,
   runNewConversationRuntime,
   runSwitchConversationRuntime,
   type ConversationControlRuntimeEffects,
@@ -67,9 +68,15 @@ export class ConversationMessageHandler {
     );
   }
 
-  handleDeleteConversation(conversationId: string): Promise<void> {
+  handleDeleteConversation(
+    conversationId: string,
+    options?: DeleteConversationRuntimeOptions,
+  ): Promise<void> {
     return this._runConversationRuntime(() =>
-      runDeleteConversationRuntime({ conversationId }, this._createConversationRuntimeEffects()),
+      runDeleteConversationRuntime(
+        { conversationId, activateNext: options?.activateNext },
+        this._createConversationRuntimeEffects(),
+      ),
     );
   }
 
@@ -140,7 +147,8 @@ export class ConversationMessageHandler {
     const effects: ConversationControlRuntimeEffects = {
       createConversation: () => this.deps.conversations.create(),
       switchConversation: (conversationId) => this.deps.conversations.switchTo(conversationId),
-      deleteConversation: (conversationId) => this.deps.conversations.delete(conversationId),
+      deleteConversation: (conversationId, options) =>
+        this.deps.conversations.delete(conversationId, options),
       listConversationIds: () =>
         this.deps.conversations.list().map((conversation) => conversation.id),
       clearConversations: () => this.deps.conversations.clearAll(),

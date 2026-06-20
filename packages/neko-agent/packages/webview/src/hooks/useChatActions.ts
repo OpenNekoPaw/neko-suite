@@ -31,6 +31,14 @@ import type { AgentContextPayload } from '@neko/shared';
 /** Per-category resolved media model for agent mode */
 export type AgentMediaModels = AgentMediaModelSelections;
 
+export interface PendingSendInput {
+  messageText?: string;
+  displayMessageText?: string;
+  attachments?: MessageAttachment[];
+  contextPayloads?: AgentContextPayload[];
+  fileReferences?: SelectedFileReference[];
+}
+
 export interface UseChatActionsProps {
   inputValue: string;
   isThinking: boolean;
@@ -54,17 +62,12 @@ export interface UseChatActionsProps {
   clearInput: () => void;
   setAttachedFiles: (files: MessageAttachment[]) => void;
   setSelectedFileReferences?: (references: SelectedFileReference[]) => void;
+  ensureConversationForSend?: (input: PendingSendInput) => void;
   onUserMessageSent?: (event: { conversationId: string; message: Message }) => void;
 }
 
 export interface UseChatActionsReturn {
-  handleSend: (input?: {
-    messageText?: string;
-    displayMessageText?: string;
-    attachments?: MessageAttachment[];
-    contextPayloads?: AgentContextPayload[];
-    fileReferences?: SelectedFileReference[];
-  }) => void;
+  handleSend: (input?: PendingSendInput) => void;
   triggerSend: (messageText: string) => void;
   handleCancelMessage: () => void;
   copyLastResponse: () => void;
@@ -91,6 +94,7 @@ export function useChatActions({
   clearInput,
   setAttachedFiles,
   setSelectedFileReferences,
+  ensureConversationForSend,
   onUserMessageSent,
 }: UseChatActionsProps): UseChatActionsReturn {
   // Lightweight dedup guard: prevent double-click within 1s
@@ -107,13 +111,7 @@ export function useChatActions({
   // Send a user message — always send directly to Extension.
   // AgentRunner handles queueing if the agent is already running.
   const handleSend = useCallback(
-    (input?: {
-      messageText?: string;
-      displayMessageText?: string;
-      attachments?: MessageAttachment[];
-      contextPayloads?: AgentContextPayload[];
-      fileReferences?: SelectedFileReference[];
-    }) => {
+    (input?: PendingSendInput) => {
       if (isConversationSwitching) return;
 
       const messageText = input?.messageText ?? inputValue;
@@ -129,7 +127,16 @@ export function useChatActions({
       if (!trimmed && !hasAttachments && !hasContextPayloads) return;
 
       const conversationId = activeConversationId;
-      if (!conversationId) return;
+      if (!conversationId) {
+        ensureConversationForSend?.({
+          messageText,
+          displayMessageText,
+          ...(attachments ? { attachments } : {}),
+          ...(contextPayloads ? { contextPayloads } : {}),
+          ...(input?.fileReferences ? { fileReferences: input.fileReferences } : {}),
+        });
+        return;
+      }
 
       const slashCommand = isCharacterRoleSession ? null : parseDirectBuiltinSlashCommand(trimmed);
       if (slashCommand) {
@@ -201,6 +208,7 @@ export function useChatActions({
       clearInput,
       setAttachedFiles,
       setSelectedFileReferences,
+      ensureConversationForSend,
       onUserMessageSent,
     ],
   );
@@ -212,7 +220,13 @@ export function useChatActions({
       if (isThinking) return;
 
       const conversationId = activeConversationIdRef.current;
-      if (!conversationId) return;
+      if (!conversationId) {
+        ensureConversationForSend?.({
+          messageText,
+          displayMessageText: messageText,
+        });
+        return;
+      }
 
       setStreamingMessageId(null);
       streamingMessageIdRef.current = null;
@@ -250,6 +264,7 @@ export function useChatActions({
       setStreamingMessageId,
       streamingMessageIdRef,
       activeConversationIdRef,
+      ensureConversationForSend,
       onUserMessageSent,
     ],
   );

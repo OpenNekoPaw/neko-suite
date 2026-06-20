@@ -8,6 +8,7 @@ import { useMemo, useCallback, type MutableRefObject } from 'react';
 import {
   createConfiguredRegistry,
   type MessageHandlerContext,
+  type PendingForegroundConversationActivation,
   type StreamingState,
   type NonCurrentConversationUpdater,
 } from '@/handlers';
@@ -47,6 +48,9 @@ export interface UseMessageHandlerProps {
   queuedMessageCount: number;
   openTabs: OpenTab[];
   activeTabId: string | null;
+  isTablessConversationViewRef: MutableRefObject<boolean>;
+  pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
+  completeForegroundConversationActivation?: (conversationId: string) => void;
   requestConfigSnapshot?: () => void;
 
   // Refs
@@ -126,6 +130,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     queuedMessageCount,
     openTabs,
     activeTabId,
+    isTablessConversationViewRef,
+    pendingForegroundConversationActivationRef,
+    completeForegroundConversationActivation,
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -219,6 +226,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveConversationId,
       openTabs,
       activeTabId,
+      isTablessConversationViewRef,
       requestConfigSnapshot,
       setOpenTabs,
       setActiveTabId,
@@ -247,6 +255,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceUpdate: forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
+      pendingForegroundConversationActivationRef,
+      completeForegroundConversationActivation,
     }),
     [
       activeConversationId,
@@ -266,6 +276,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveConversationId,
       openTabs,
       activeTabId,
+      isTablessConversationViewRef,
       requestConfigSnapshot,
       setOpenTabs,
       setActiveTabId,
@@ -294,6 +305,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
+      pendingForegroundConversationActivationRef,
+      completeForegroundConversationActivation,
     ],
   );
 

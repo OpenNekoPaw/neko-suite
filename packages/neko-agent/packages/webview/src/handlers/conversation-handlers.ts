@@ -20,6 +20,7 @@ import {
 } from '../presenters/conversation-ui-presenter';
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
+import { shouldActivateForegroundConversation } from './foreground-activation';
 
 /**
  * Handle 'error' message - Error occurred
@@ -105,8 +106,44 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
       : undefined,
     openTabs: context.openTabs,
   });
+  const pendingForegroundActivation =
+    context.pendingForegroundConversationActivationRef?.current ?? null;
+  const shouldActivateForeground = shouldActivateForegroundConversation(
+    pendingForegroundActivation,
+    conversationId,
+  );
+  const shouldCacheOnly = pendingForegroundActivation !== null && !shouldActivateForeground;
+  const activeTab = findActiveTab(context.openTabs, context.activeTabId);
+  const isActiveCharacterRoleTab = isCharacterRoleTab(activeTab);
+  const isStaleOrdinaryTabConversation =
+    conversationId !== undefined &&
+    activeTab !== undefined &&
+    !isActiveCharacterRoleTab &&
+    activeTab.conversationId !== conversationId &&
+    !shouldActivateForeground;
 
-  if (isCharacterRoleTab(findActiveTab(context.openTabs, context.activeTabId))) {
+  if (
+    shouldCacheOnly ||
+    isStaleOrdinaryTabConversation ||
+    (context.isTablessConversationViewRef.current &&
+      !isActiveCharacterRoleTab &&
+      !shouldActivateForeground)
+  ) {
+    if (conversationId) {
+      context.conversationMessagesRef.current.set(conversationId, projection.messages);
+      context.conversationStreamingRef.current.set(conversationId, projection.streaming);
+
+      const activeConversationId = projection.activeConversationId;
+      if (activeConversationId && projection.workItems.length > 0) {
+        context.setWorkItemsByConversation((prev) =>
+          upsertWorkItemsForConversation(prev, activeConversationId, projection.workItems),
+        );
+      }
+    }
+    return;
+  }
+
+  if (isActiveCharacterRoleTab && !shouldActivateForeground) {
     if (conversationId) {
       context.conversationMessagesRef.current.set(conversationId, projection.messages);
       context.conversationStreamingRef.current.set(conversationId, projection.streaming);
@@ -129,9 +166,13 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
   context.setActiveConversationId(projection.activeConversationId);
   context.activeConversationIdRef.current = projection.activeConversationId;
+  context.isTablessConversationViewRef.current = false;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);
   context.setActiveTab(projection.activeTab);
+  if (conversationId && shouldActivateForeground) {
+    context.completeForegroundConversationActivation?.(conversationId);
+  }
 
   const activeConversationId = projection.activeConversationId;
   if (activeConversationId && projection.workItems.length > 0) {

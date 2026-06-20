@@ -40,6 +40,16 @@ export interface StreamingState {
   queuedMessageCount?: number;
 }
 
+export type PendingForegroundConversationActivation =
+  | {
+      readonly reason: 'new-conversation';
+      readonly previousConversationIds: readonly string[];
+    }
+  | {
+      readonly reason: 'switch-conversation';
+      readonly conversationId: string;
+    };
+
 /**
  * Non-current conversation update function signature
  */
@@ -77,6 +87,7 @@ export interface ConversationRefContext {
 export interface TabContext {
   openTabs: OpenTab[];
   activeTabId: string | null;
+  isTablessConversationViewRef: MutableRefObject<boolean>;
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
@@ -124,6 +135,8 @@ export interface HelperContext {
     conversationId: string,
     updater: NonCurrentConversationUpdater,
   ) => void;
+  pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
+  completeForegroundConversationActivation?: (conversationId: string) => void;
 }
 
 // =============================================================================

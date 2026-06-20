@@ -12,7 +12,7 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { type MutableRefObject, useEffect, useCallback, useState } from 'react';
+import { type MutableRefObject, useEffect, useCallback, useRef, useState } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
 import {
   ShellExecutionMode,
@@ -39,6 +39,7 @@ import {
   useUIState,
   useConversationSession,
   useChatActions,
+  type PendingSendInput,
   usePlanActions,
   useSkillActions,
   useSlashCommands,
@@ -67,6 +68,7 @@ export interface ChatWorkspaceProps {
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   activeTabConversationId: string | null;
+  isForegroundConversationActivationPending?: boolean;
   conversationKind: ConversationKind;
   characterDialogueSession?: CharacterDialogueSessionProjection;
   embodyCharacterSession?: EmbodyCharacterSessionProjection;
@@ -118,6 +120,9 @@ export interface ChatWorkspaceProps {
   >;
   onNewChat: () => void;
   onUserMessageSent?: (event: { conversationId: string; message: Message }) => void;
+  onSendWithoutConversation?: (input: PendingSendInput) => void;
+  pendingSendRequest?: { id: number; input: PendingSendInput } | null;
+  onPendingSendRequestConsumed?: (id: number) => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
     cleanupConversation: (id: string) => void;
@@ -141,6 +146,7 @@ export function ChatWorkspace({
   activeConversationId,
   activeConversationIdRef,
   activeTabConversationId,
+  isForegroundConversationActivationPending = false,
   conversationKind,
   characterDialogueSession,
   embodyCharacterSession,
@@ -178,6 +184,9 @@ export function ChatWorkspace({
   setAmbientNodes,
   onNewChat,
   onUserMessageSent,
+  onSendWithoutConversation,
+  pendingSendRequest,
+  onPendingSendRequestConsumed,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
   // ---- UI state (model selection comes from props, not useUIState) ----
@@ -218,8 +227,10 @@ export function ChatWorkspace({
   const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
   const isConversationSwitching = Boolean(
-    activeTabConversationId && activeTabConversationId !== activeConversationId,
+    isForegroundConversationActivationPending ||
+    (activeTabConversationId && activeTabConversationId !== activeConversationId),
   );
+  const consumedPendingSendRequestIdRef = useRef<number | null>(null);
 
   // ---- Model lists ----
   const {
@@ -247,6 +258,14 @@ export function ChatWorkspace({
   }, [availableMediaModels, sessionMode]);
 
   // ---- Behavior hooks ----
+  const handleSendWithoutConversation = useCallback(
+    (input: PendingSendInput) => {
+      setSessionMode('agent');
+      onSendWithoutConversation?.(input);
+    },
+    [onSendWithoutConversation],
+  );
+
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue,
     isThinking,
@@ -268,8 +287,24 @@ export function ChatWorkspace({
     clearInput,
     setAttachedFiles,
     setSelectedFileReferences,
+    ensureConversationForSend: handleSendWithoutConversation,
     onUserMessageSent,
   });
+
+  useEffect(() => {
+    if (!pendingSendRequest || !activeConversationId || isConversationSwitching) return;
+    if (consumedPendingSendRequestIdRef.current === pendingSendRequest.id) return;
+
+    consumedPendingSendRequestIdRef.current = pendingSendRequest.id;
+    handleSend(pendingSendRequest.input);
+    onPendingSendRequestConsumed?.(pendingSendRequest.id);
+  }, [
+    activeConversationId,
+    handleSend,
+    isConversationSwitching,
+    onPendingSendRequestConsumed,
+    pendingSendRequest,
+  ]);
 
   // Pre-intercept handler: catches messages not in the registry
   const handleMessageWithExtras = useCallback(

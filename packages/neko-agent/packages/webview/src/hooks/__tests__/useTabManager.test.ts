@@ -10,6 +10,7 @@ const vscodeMocks = vi.hoisted(() => ({
   exitCharacterDialogueSession: vi.fn(),
   exitEmbodyCharacterSession: vi.fn(),
   deleteConversation: vi.fn(),
+  getTasks: vi.fn(),
 }));
 
 vi.mock('@/messages', () => ({
@@ -48,7 +49,6 @@ describe('useTabManager', () => {
           setActiveTabId,
           conversations: [{ id: 'conv-a', title: 'Chat', messageCount: 1, updatedAt: 1 }],
           setActiveTab,
-          onNewChat: vi.fn(),
           onBeforeTabActivation,
           onActivateCharacterRoleTab,
         }),
@@ -63,11 +63,13 @@ describe('useTabManager', () => {
     expect(onBeforeTabActivation).toHaveBeenCalledTimes(1);
     expect(onActivateCharacterRoleTab).toHaveBeenCalledWith(roleTab);
     expect(vscodeMocks.switchConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.getTasks).not.toHaveBeenCalled();
     expect(setActiveTab).toHaveBeenCalledWith('chat');
   });
 
   it('switches ordinary tabs through the extension conversation route', () => {
     const onBeforeTabActivation = vi.fn();
+    const onBeforeConversationActivation = vi.fn();
     const onActivateCharacterRoleTab = vi.fn();
 
     const { result } = renderHook(() => {
@@ -89,8 +91,8 @@ describe('useTabManager', () => {
             { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 2 },
           ],
           setActiveTab: vi.fn(),
-          onNewChat: vi.fn(),
           onBeforeTabActivation,
+          onBeforeConversationActivation,
           onActivateCharacterRoleTab,
         }),
       };
@@ -102,12 +104,48 @@ describe('useTabManager', () => {
 
     expect(result.current.activeTabId).toBe('tab-b');
     expect(onBeforeTabActivation).toHaveBeenCalledTimes(1);
+    expect(onBeforeConversationActivation).toHaveBeenCalledWith('conv-b');
     expect(onActivateCharacterRoleTab).not.toHaveBeenCalled();
     expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
   });
 
+  it('reloads task snapshots when switching ordinary tabs', () => {
+    const onConversationActivated = vi.fn((conversationId: string) => {
+      vscodeMocks.getTasks(conversationId);
+    });
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-a');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [
+          { id: 'conv-a', title: 'Chat A', messageCount: 1, updatedAt: 1 },
+          { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 2 },
+        ],
+        setActiveTab: vi.fn(),
+        onConversationActivated,
+      });
+    });
+
+    act(() => {
+      result.current.handleSwitchTab('tab-b');
+    });
+
+    expect(onConversationActivated).toHaveBeenCalledWith('conv-b');
+    expect(vscodeMocks.getTasks).toHaveBeenCalledWith('conv-b');
+  });
+
   it('requests a config snapshot only when opening a new tab', () => {
     const onConfigSnapshotRequested = vi.fn();
+    const onBeforeConversationActivation = vi.fn();
 
     const { result } = renderHook(() => {
       const [openTabs, setOpenTabs] = useState<OpenTab[]>([
@@ -125,8 +163,8 @@ describe('useTabManager', () => {
           { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 2 },
         ],
         setActiveTab: vi.fn(),
-        onNewChat: vi.fn(),
         onConfigSnapshotRequested,
+        onBeforeConversationActivation,
       });
     });
 
@@ -134,16 +172,16 @@ describe('useTabManager', () => {
       result.current.handleOpenTab('conv-a', 'Chat A');
     });
     expect(onConfigSnapshotRequested).not.toHaveBeenCalled();
+    expect(onBeforeConversationActivation).toHaveBeenCalledWith('conv-a');
 
     act(() => {
       result.current.handleOpenTab('conv-b', 'Chat B');
     });
     expect(onConfigSnapshotRequested).toHaveBeenCalledTimes(1);
+    expect(onBeforeConversationActivation).toHaveBeenCalledWith('conv-b');
   });
 
   it('does not delete a closed tab when the conversation summary is missing', () => {
-    const onNewChat = vi.fn();
-
     const { result } = renderHook(() => {
       const [openTabs, setOpenTabs] = useState<OpenTab[]>([
         { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
@@ -158,7 +196,6 @@ describe('useTabManager', () => {
         setActiveTabId,
         conversations: [],
         setActiveTab: vi.fn(),
-        onNewChat,
       });
     });
 
@@ -167,12 +204,9 @@ describe('useTabManager', () => {
     });
 
     expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
-    expect(onNewChat).not.toHaveBeenCalled();
   });
 
   it('preserves locally active conversations when closing their tab', () => {
-    const onNewChat = vi.fn();
-
     const { result } = renderHook(() => {
       const [openTabs, setOpenTabs] = useState<OpenTab[]>([
         { id: 'tab-a', title: 'Draft', conversationId: 'conv-a' },
@@ -187,7 +221,6 @@ describe('useTabManager', () => {
         setActiveTabId,
         conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
         setActiveTab: vi.fn(),
-        onNewChat,
         hasLocalConversationActivity: (conversationId) => conversationId === 'conv-a',
       });
     });
@@ -197,7 +230,6 @@ describe('useTabManager', () => {
     });
 
     expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
-    expect(onNewChat).not.toHaveBeenCalled();
   });
 
   it('persists the active tab before checking whether it is locally active', () => {
@@ -224,7 +256,6 @@ describe('useTabManager', () => {
         setActiveTabId,
         conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
         setActiveTab: vi.fn(),
-        onNewChat: vi.fn(),
         onBeforeTabActivation,
         hasLocalConversationActivity,
       });
@@ -255,7 +286,6 @@ describe('useTabManager', () => {
         setActiveTabId,
         conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
         setActiveTab: vi.fn(),
-        onNewChat: vi.fn(),
         onBeforeTabActivation: () => {
           events.push('persist');
         },
@@ -275,8 +305,6 @@ describe('useTabManager', () => {
   });
 
   it('keeps the empty-tab cleanup behavior for confirmed empty conversations', () => {
-    const onNewChat = vi.fn();
-
     const { result } = renderHook(() => {
       const [openTabs, setOpenTabs] = useState<OpenTab[]>([
         { id: 'tab-a', title: 'New Chat', conversationId: 'conv-a' },
@@ -291,7 +319,6 @@ describe('useTabManager', () => {
         setActiveTabId,
         conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
         setActiveTab: vi.fn(),
-        onNewChat,
       });
     });
 
@@ -299,7 +326,78 @@ describe('useTabManager', () => {
       result.current.handleCloseTab('tab-a');
     });
 
-    expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a');
-    expect(onNewChat).not.toHaveBeenCalled();
+    expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a', {
+      activateNext: true,
+    });
+  });
+
+  it('closes the final active tab into an explicit empty tab state', () => {
+    const onAllTabsClosed = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'New Chat', conversationId: 'conv-a' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-a');
+
+      return {
+        activeTabId,
+        openTabs,
+        ...useTabManager({
+          openTabs,
+          setOpenTabs,
+          activeTabId,
+          setActiveTabId,
+          conversations: [{ id: 'conv-a', title: 'New Chat', messageCount: 0, updatedAt: 1 }],
+          setActiveTab: vi.fn(),
+          onAllTabsClosed,
+        }),
+      };
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(result.current.openTabs).toEqual([]);
+    expect(result.current.activeTabId).toBeNull();
+    expect(onAllTabsClosed).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a', {
+      activateNext: false,
+    });
+    expect(vscodeMocks.switchConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.updateTabState).toHaveBeenCalledWith([], null);
+  });
+
+  it('records the next ordinary conversation before closing the active tab switches to it', () => {
+    const onBeforeConversationActivation = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-a');
+
+      return useTabManager({
+        openTabs,
+        setOpenTabs,
+        activeTabId,
+        setActiveTabId,
+        conversations: [
+          { id: 'conv-a', title: 'Chat A', messageCount: 1, updatedAt: 1 },
+          { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 2 },
+        ],
+        setActiveTab: vi.fn(),
+        onBeforeConversationActivation,
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-a');
+    });
+
+    expect(onBeforeConversationActivation).toHaveBeenCalledWith('conv-b');
+    expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
   });
 });

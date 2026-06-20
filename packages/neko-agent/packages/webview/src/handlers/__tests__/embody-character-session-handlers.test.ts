@@ -138,6 +138,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   };
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
+  const isTablessConversationViewRef = ref(false);
   const conversationMessagesRef = ref(new Map<string, Message[]>());
   const conversationStreamingRef = ref(new Map<string, StreamingState>());
   let workItems: AgentWorkItemStore = new Map();
@@ -182,6 +183,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationStreamingRef,
     openTabs,
     activeTabId,
+    isTablessConversationViewRef,
     setOpenTabs: createSetter(
       () => openTabs,
       (next) => {

@@ -31,6 +31,10 @@ export interface ConversationManagerOptions {
   generateId?: () => string;
 }
 
+export interface DeleteConversationOptions {
+  activateNext?: boolean;
+}
+
 export type AgentHistoryEntry = AgentHistoryWithToolContextMessage;
 
 const DEFAULT_CLEANUP_POLICY: CleanupPolicy = {
@@ -168,14 +172,21 @@ export class ConversationManager {
     return true;
   }
 
-  delete(id: string): boolean {
+  clearActive(): void {
+    if (this.activeId === null) return;
+    this.activeId = null;
+    this.markDirty('__meta__');
+    this.scheduleSave();
+  }
+
+  delete(id: string, options: DeleteConversationOptions = {}): boolean {
     if (!this.conversations.has(id)) return false;
 
     this.conversations.delete(id);
     this.dirtyConversations.delete(id);
 
     if (this.activeId === id) {
-      this.activeId = this.list()[0]?.id ?? null;
+      this.activeId = (options.activateNext ?? true) ? (this.list()[0]?.id ?? null) : null;
     }
 
     this.persist();

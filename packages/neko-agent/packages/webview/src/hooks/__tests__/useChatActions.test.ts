@@ -119,6 +119,118 @@ describe('useChatActions', () => {
     });
   });
 
+  it('does not send the stale active conversation while a foreground conversation is pending', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const onUserMessageSent = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('role-session-1');
+      return useChatActions({
+        inputValue: '你好',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'role-session-1',
+        activeConversationIdRef,
+        isConversationSwitching: true,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        onUserMessageSent,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(setIsThinking).not.toHaveBeenCalled();
+    expect(setStreamingMessageId).not.toHaveBeenCalled();
+    expect(onUserMessageSent).not.toHaveBeenCalled();
+  });
+
+  it('requests a conversation instead of dropping a send when no conversation is active', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const ensureConversationForSend = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>(null);
+      return useChatActions({
+        inputValue: '从这里开始一个默认 Agent 对话',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: null,
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        ensureConversationForSend,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(ensureConversationForSend).toHaveBeenCalledWith({
+      messageText: '从这里开始一个默认 Agent 对话',
+      displayMessageText: '从这里开始一个默认 Agent 对话',
+    });
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(setIsThinking).not.toHaveBeenCalled();
+    expect(setStreamingMessageId).not.toHaveBeenCalled();
+  });
+
+  it('requests a conversation for externally triggered sends when no conversation is active', () => {
+    const ensureConversationForSend = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>(null);
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: null,
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages: vi.fn(),
+        setIsThinking: vi.fn(),
+        setStreamingMessageId: vi.fn(),
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        ensureConversationForSend,
+      });
+    });
+
+    act(() => {
+      result.current.triggerSend('Use this selected clip');
+    });
+
+    expect(ensureConversationForSend).toHaveBeenCalledWith({
+      messageText: 'Use this selected clip',
+      displayMessageText: 'Use this selected clip',
+    });
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('sends builtin slash-looking text as role session content during character role sessions', () => {
     const setMessages = vi.fn();
     const setIsThinking = vi.fn();

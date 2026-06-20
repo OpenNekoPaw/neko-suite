@@ -121,6 +121,52 @@ describe('ConversationManager', () => {
     );
   });
 
+  it('clears the active id without deleting conversation history', () => {
+    const storage = createMemoryStorage();
+    const manager = new ConversationManager(storage, undefined, { generateId: () => 'conv-1' });
+    const id = manager.create();
+    manager.addMessage(id, {
+      id: 'msg-1',
+      role: 'user',
+      content: 'hello',
+      timestamp: 1,
+    });
+
+    manager.clearActive();
+    manager.flush();
+
+    expect(manager.getActiveId()).toBeNull();
+    expect(manager.get(id)).toEqual(expect.objectContaining({ id }));
+    expect(storage.update).toHaveBeenLastCalledWith(
+      'conversations',
+      expect.objectContaining({
+        conversations: expect.arrayContaining([[id, expect.objectContaining({ id })]]),
+        activeId: null,
+      }),
+    );
+  });
+
+  it('can delete the active conversation without activating older history', () => {
+    let count = 0;
+    const manager = new ConversationManager(undefined, undefined, {
+      generateId: () => `conv-${++count}`,
+    });
+    const historicalId = manager.create();
+    manager.addMessage(historicalId, {
+      id: 'msg-1',
+      role: 'user',
+      content: 'historical',
+      timestamp: 1,
+    });
+    const activeId = manager.create();
+
+    expect(manager.delete(activeId, { activateNext: false })).toBe(true);
+
+    expect(manager.get(activeId)).toBeUndefined();
+    expect(manager.get(historicalId)).toBeDefined();
+    expect(manager.getActiveId()).toBeNull();
+  });
+
   it('cleans up empty conversations and switches active id', () => {
     let count = 0;
     const manager = new ConversationManager(undefined, undefined, {

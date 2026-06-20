@@ -20,6 +20,10 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
   if (message.tabState) {
     const openTabs = message.tabState.openTabs ?? [];
     const { activeTabId } = message.tabState;
+    const isEmptyTabState =
+      Array.isArray(message.tabState.openTabs) &&
+      openTabs.length === 0 &&
+      (activeTabId ?? null) === null;
 
     if (Array.isArray(openTabs)) {
       context.setOpenTabs(openTabs);
@@ -27,6 +31,19 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
 
     if (activeTabId !== undefined) {
       context.setActiveTabId(activeTabId);
+    }
+
+    if (isEmptyTabState) {
+      context.isTablessConversationViewRef.current = true;
+      context.setMessages([]);
+      context.setStreamingMessageId(null);
+      context.streamingMessageIdRef.current = null;
+      context.setIsThinking(false);
+      context.setQueuedMessageCount?.(0);
+      context.setActiveConversationId(null);
+      context.activeConversationIdRef.current = null;
+      context.setActiveTab('chat');
+      return;
     }
 
     const activeTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;

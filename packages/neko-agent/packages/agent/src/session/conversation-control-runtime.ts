@@ -19,7 +19,10 @@ export interface ConversationControlDisposable {
 export interface ConversationControlRuntimeEffects {
   createConversation?(): string;
   switchConversation?(conversationId: string): boolean;
-  deleteConversation?(conversationId: string): boolean | void;
+  deleteConversation?(
+    conversationId: string,
+    options?: DeleteConversationRuntimeOptions,
+  ): boolean | void;
   listConversationIds?(): readonly string[];
   clearConversations?(): void;
   refreshConversationList?(): void;
@@ -72,6 +75,14 @@ export interface ConversationControlConversationInput {
   conversationId: string;
 }
 
+export interface DeleteConversationRuntimeOptions {
+  activateNext?: boolean;
+}
+
+export interface DeleteConversationRuntimeInput extends ConversationControlConversationInput {
+  activateNext?: boolean;
+}
+
 export interface ConfirmToolRuntimeInput extends ConversationControlConversationInput {
   toolCallId: string;
   approved: boolean;
@@ -117,7 +128,7 @@ export async function runSwitchConversationRuntime(
 }
 
 export async function runDeleteConversationRuntime(
-  input: ConversationControlConversationInput,
+  input: DeleteConversationRuntimeInput,
   effects: ConversationControlRuntimeEffects,
 ): Promise<ConversationControlRuntimeResult> {
   if (!requireConversationId('delete-conversation', input.conversationId, effects)) {
@@ -127,9 +138,12 @@ export async function runDeleteConversationRuntime(
   effects.removeAgent?.(input.conversationId);
   effects.clearAgentState?.(input.conversationId);
   effects.clearPromptMode?.(input.conversationId);
-  effects.deleteConversation?.(input.conversationId);
+  const activateNext = input.activateNext ?? true;
+  effects.deleteConversation?.(input.conversationId, { activateNext });
   effects.refreshConversationList?.();
-  effects.refreshActiveConversation?.();
+  if (activateNext) {
+    effects.refreshActiveConversation?.();
+  }
 
   return {
     action: 'delete-conversation',

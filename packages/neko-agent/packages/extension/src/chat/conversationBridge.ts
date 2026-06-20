@@ -13,6 +13,7 @@ import {
   type AgentHistoryEntry,
   type ConversationPersistenceRuntime,
   type ConversationStorage,
+  type DeleteConversationOptions,
 } from '@neko/agent';
 import type { Message } from '@neko-agent/types';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
@@ -155,10 +156,17 @@ export class ConversationBridge {
   }
 
   /**
+   * Clear active conversation without deleting persisted conversation history.
+   */
+  clearActive(): void {
+    this._conversationManager.clearActive();
+  }
+
+  /**
    * Delete a conversation
    */
-  delete(conversationId: string): void {
-    this._conversationManager.delete(conversationId);
+  delete(conversationId: string, options?: DeleteConversationOptions): void {
+    this._conversationManager.delete(conversationId, options);
     this._queueConversationDelete(conversationId);
   }
 

@@ -45,7 +45,9 @@ export function tryHandleConversationRoute(
       return true;
 
     case 'deleteConversation':
-      deps.conversationMessageHandler.handleDeleteConversation(message.conversationId);
+      deps.conversationMessageHandler.handleDeleteConversation(message.conversationId, {
+        activateNext: message.activateNext,
+      });
       deps.syncCanvasAmbientScopeFromActiveConversation();
       return true;
 

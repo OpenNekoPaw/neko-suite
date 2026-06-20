@@ -6,17 +6,22 @@ import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { conversationHandlers } from '../conversation-handlers';
 import { tabHandlers } from '../tab-handlers';
-import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
+import type {
+  HandlerRegistration,
+  MessageHandlerContext,
+  PendingForegroundConversationActivation,
+  StreamingState,
+} from '../types';
 
 describe('character role context isolation', () => {
   it('keeps active conversation refs aligned for ordinary activeConversation updates', () => {
     const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
     const harness = createContextHarness({
       activeConversationId: 'conv-old',
-      activeTabId: 'tab-old',
+      activeTabId: 'tab-a',
       currentMessages: [],
       currentStreaming: { isThinking: true, streamingMessageId: 'old-stream' },
-      openTabs: [{ id: 'tab-old', title: 'Old chat', conversationId: 'conv-old' }],
+      openTabs: [{ id: 'tab-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
     });
 
     dispatch(
@@ -83,6 +88,148 @@ describe('character role context isolation', () => {
     });
   });
 
+  it('activates a foreground new conversation response even while a role session tab is active', () => {
+    const roleTab: OpenTab = {
+      id: 'tab-role',
+      title: 'Character Dialogue: 小橘',
+      conversationId: 'role-session-1',
+      kind: 'character-dialogue',
+    };
+    const roleMessages = [message('role-message', 'assistant', '角色回复')];
+    const harness = createContextHarness({
+      activeConversationId: 'role-session-1',
+      activeTabId: roleTab.id,
+      currentMessages: roleMessages,
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [roleTab],
+      cachedMessages: new Map([['role-session-1', roleMessages]]),
+      pendingForegroundActivation: {
+        reason: 'new-conversation',
+        previousConversationIds: ['role-session-1', 'conv-old'],
+      },
+    });
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-new',
+          title: 'New Chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-new');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-new');
+    expect(harness.activeTabId()).not.toBe(roleTab.id);
+    expect(harness.messages()).toEqual([ordinaryMessage]);
+    expect(harness.conversationMessages().get('role-session-1')).toEqual(roleMessages);
+    expect(harness.pendingForegroundActivation()).toBeNull();
+    expect(harness.completedForegroundActivations()).toEqual(['conv-new']);
+  });
+
+  it('caches stale activeConversation responses while a different foreground switch is pending', () => {
+    const messageA = message('message-a', 'assistant', 'A 回复');
+    const messageB = message('message-b', 'assistant', 'B 回复');
+    const messageC = message('message-c', 'assistant', 'C 回复');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-c',
+      currentMessages: [messageA],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+        { id: 'tab-c', title: 'Chat C', conversationId: 'conv-c' },
+      ],
+      pendingForegroundActivation: {
+        reason: 'switch-conversation',
+        conversationId: 'conv-c',
+      },
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-b',
+          title: 'Chat B',
+          messages: [messageB],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+    expect(harness.activeTabId()).toBe('tab-c');
+    expect(harness.messages()).toEqual([messageA]);
+    expect(harness.conversationMessages().get('conv-b')).toEqual([messageB]);
+    expect(harness.pendingForegroundActivation()).toEqual({
+      reason: 'switch-conversation',
+      conversationId: 'conv-c',
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-c',
+          title: 'Chat C',
+          messages: [messageC],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-c');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-c');
+    expect(harness.activeTabId()).toBe('tab-c');
+    expect(harness.messages()).toEqual([messageC]);
+    expect(harness.pendingForegroundActivation()).toBeNull();
+    expect(harness.completedForegroundActivations()).toEqual(['conv-c']);
+  });
+
+  it('does not let a late ordinary activeConversation response override the active tab', () => {
+    const messageB = message('message-b', 'assistant', 'B 回复');
+    const messageC = message('message-c', 'assistant', 'C 回复');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-c',
+      activeTabId: 'tab-c',
+      currentMessages: [messageC],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+        { id: 'tab-c', title: 'Chat C', conversationId: 'conv-c' },
+      ],
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-b',
+          title: 'Chat B',
+          messages: [messageB],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-c');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-c');
+    expect(harness.activeTabId()).toBe('tab-c');
+    expect(harness.messages()).toEqual([messageC]);
+    expect(harness.conversationMessages().get('conv-b')).toEqual([messageB]);
+  });
+
   it('restores role session messages from tabState without displaying ordinary chat history', () => {
     const roleTab: OpenTab = {
       id: 'tab-embody',
@@ -137,6 +284,54 @@ describe('character role context isolation', () => {
       queuedMessageCount: 0,
     });
   });
+
+  it('keeps an explicitly empty tab state from restoring the closed active conversation', () => {
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-conv-a',
+      currentMessages: [ordinaryMessage],
+      currentStreaming: { isThinking: true, streamingMessageId: 'stream-a', queuedMessageCount: 0 },
+      openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: [],
+          activeTabId: null,
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBeNull();
+    expect(harness.activeTabId()).toBeNull();
+    expect(harness.messages()).toEqual([]);
+    expect(harness.openTabs()).toEqual([]);
+    expect(harness.context.isTablessConversationViewRef.current).toBe(true);
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBeNull();
+    expect(harness.activeTabId()).toBeNull();
+    expect(harness.messages()).toEqual([]);
+    expect(harness.openTabs()).toEqual([]);
+    expect(harness.conversationMessages().get('conv-a')).toEqual([ordinaryMessage]);
+  });
 });
 
 function dispatch(
@@ -157,6 +352,7 @@ interface ContextHarnessOptions {
   openTabs: OpenTab[];
   cachedMessages?: Map<string, Message[]>;
   cachedStreaming?: Map<string, StreamingState>;
+  pendingForegroundActivation?: PendingForegroundConversationActivation | null;
 }
 
 interface ContextHarness {
@@ -168,6 +364,8 @@ interface ContextHarness {
   openTabs(): OpenTab[];
   conversationMessages(): Map<string, Message[]>;
   conversationStreaming(): Map<string, StreamingState>;
+  pendingForegroundActivation(): PendingForegroundConversationActivation | null;
+  completedForegroundActivations(): string[];
 }
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
@@ -180,10 +378,15 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let pluginsAvailable: PluginsAvailable = {};
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
+  const isTablessConversationViewRef = ref(false);
   const conversationMessagesRef = ref(new Map<string, Message[]>(options.cachedMessages ?? []));
   const conversationStreamingRef = ref(
     new Map<string, StreamingState>(options.cachedStreaming ?? []),
   );
+  const pendingForegroundConversationActivationRef = ref(
+    options.pendingForegroundActivation ?? null,
+  );
+  const completedForegroundActivations: string[] = [];
 
   const context: MessageHandlerContext = {
     messages,
@@ -217,6 +420,21 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationStreamingRef,
     openTabs,
     activeTabId,
+    isTablessConversationViewRef,
+    pendingForegroundConversationActivationRef,
+    completeForegroundConversationActivation: (conversationId) => {
+      const pending = pendingForegroundConversationActivationRef.current;
+      if (!pending) return;
+      if (
+        (pending.reason === 'new-conversation' &&
+          pending.previousConversationIds.includes(conversationId)) ||
+        (pending.reason === 'switch-conversation' && pending.conversationId !== conversationId)
+      ) {
+        return;
+      }
+      completedForegroundActivations.push(conversationId);
+      pendingForegroundConversationActivationRef.current = null;
+    },
     setOpenTabs: createSetter(
       () => openTabs,
       (next) => {
@@ -295,6 +513,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     openTabs: () => openTabs,
     conversationMessages: () => conversationMessagesRef.current,
     conversationStreaming: () => conversationStreamingRef.current,
+    pendingForegroundActivation: () => pendingForegroundConversationActivationRef.current,
+    completedForegroundActivations: () => completedForegroundActivations,
   };
 }
 

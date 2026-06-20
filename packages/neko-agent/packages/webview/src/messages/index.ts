@@ -58,8 +58,12 @@ export const VSCodeMessages = {
    * Delete a conversation
    * @param conversationId - The conversation ID to delete
    */
-  deleteConversation: (conversationId: string) => {
-    postWebviewMessage({ type: 'deleteConversation', conversationId });
+  deleteConversation: (conversationId: string, options?: { activateNext?: boolean }) => {
+    postWebviewMessage({
+      type: 'deleteConversation',
+      conversationId,
+      ...(options?.activateNext !== undefined ? { activateNext: options.activateNext } : {}),
+    });
   },
 
   /** Clear all conversations */

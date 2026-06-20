@@ -76,9 +76,19 @@ describe('conversation control runtime', () => {
     expect(removeAgent).toHaveBeenCalledWith('conv-1');
     expect(clearAgentState).toHaveBeenCalledWith('conv-1');
     expect(clearPromptMode).toHaveBeenCalledWith('conv-1');
-    expect(effects.deleteConversation).toHaveBeenCalledWith('conv-1');
+    expect(effects.deleteConversation).toHaveBeenCalledWith('conv-1', { activateNext: true });
     expect(refreshConversationList).toHaveBeenCalledTimes(1);
     expect(refreshActiveConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('can delete a conversation without activating another conversation', async () => {
+    effects.deleteConversation = vi.fn();
+
+    await runDeleteConversationRuntime({ conversationId: 'conv-1', activateNext: false }, effects);
+
+    expect(effects.deleteConversation).toHaveBeenCalledWith('conv-1', { activateNext: false });
+    expect(refreshConversationList).toHaveBeenCalledTimes(1);
+    expect(refreshActiveConversation).not.toHaveBeenCalled();
   });
 
   it('clears one conversation history and posts a scoped event', async () => {

@@ -37,8 +37,13 @@ import {
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { MediaModelSelection } from '@/hooks/useUIState';
-import { useConversationState, useTabManager } from '@/hooks';
-import { useMessageHandler, type BoundActiveSkillIndicator } from '@/handlers';
+import { useConversationState, useTabManager, type PendingSendInput } from '@/hooks';
+import {
+  useMessageHandler,
+  type BoundActiveSkillIndicator,
+  type PendingForegroundConversationActivation,
+} from '@/handlers';
+import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ChatWorkspace } from './ChatWorkspace';
 import {
   isCharacterRoleConversationKind,
@@ -209,6 +214,16 @@ export function ConversationController({
   const [agentState, setAgentState] = useState<AgentState | null>(null);
   const conversationAgentStateRef = useRef<Map<string, AgentState>>(new Map());
   const forceAgentStateUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
+  const isTablessConversationViewRef = useRef(false);
+  const pendingForegroundConversationActivationRef =
+    useRef<PendingForegroundConversationActivation | null>(null);
+  const [isForegroundConversationActivationPending, setIsForegroundConversationActivationPending] =
+    useState(false);
+  const nextPendingSendRequestIdRef = useRef(0);
+  const [pendingSendRequest, setPendingSendRequest] = useState<{
+    id: number;
+    input: PendingSendInput;
+  } | null>(null);
 
   // ---- Context chips & ambient nodes ----
   const [contextChipsByConversation, setContextChipsByConversation] = useState<
@@ -351,6 +366,11 @@ export function ConversationController({
   const requestConfigSnapshot = useCallback(() => {
     VSCodeMessages.refreshConfigSnapshot();
   }, []);
+  const requestConversationResourceSnapshot = useCallback((conversationId: string) => {
+    VSCodeMessages.getContextTokenCount(conversationId);
+    VSCodeMessages.getTasks(conversationId);
+    VSCodeMessages.getPromptMode(conversationId);
+  }, []);
 
   const handleUserMessageSent = useCallback(
     (event: { conversationId: string; message: Message }) => {
@@ -416,6 +436,46 @@ export function ConversationController({
     streamingMessageIdRef,
   ]);
 
+  const beginForegroundConversationActivation = useCallback(() => {
+    const previousConversationIds = new Set<string>();
+    for (const conversation of conversations) {
+      previousConversationIds.add(conversation.id);
+    }
+    for (const tab of openTabs) {
+      previousConversationIds.add(tab.conversationId);
+    }
+    if (activeConversationId) {
+      previousConversationIds.add(activeConversationId);
+    }
+    if (activeTabConversationId) {
+      previousConversationIds.add(activeTabConversationId);
+    }
+    if (activeConversationIdRef.current) {
+      previousConversationIds.add(activeConversationIdRef.current);
+    }
+
+    pendingForegroundConversationActivationRef.current = {
+      reason: 'new-conversation',
+      previousConversationIds: [...previousConversationIds],
+    };
+    setIsForegroundConversationActivationPending(true);
+  }, [
+    activeConversationId,
+    activeConversationIdRef,
+    activeTabConversationId,
+    conversations,
+    openTabs,
+  ]);
+
+  const completeForegroundConversationActivation = useCallback((conversationId: string) => {
+    const pending = pendingForegroundConversationActivationRef.current;
+    if (!shouldActivateForegroundConversation(pending, conversationId)) {
+      return;
+    }
+    pendingForegroundConversationActivationRef.current = null;
+    setIsForegroundConversationActivationPending(false);
+  }, []);
+
   const activateCharacterRoleTab = useCallback(
     (tab: OpenTab) => {
       const projection = projectCharacterRoleSessionView({
@@ -455,6 +515,9 @@ export function ConversationController({
     queuedMessageCount,
     openTabs,
     activeTabId,
+    isTablessConversationViewRef,
+    pendingForegroundConversationActivationRef,
+    completeForegroundConversationActivation,
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -511,11 +574,9 @@ export function ConversationController({
   // ---- Context token count on conversation change ----
   useEffect(() => {
     if (activeConversationId && !isCharacterRoleConversationKind(conversationKind)) {
-      VSCodeMessages.getContextTokenCount(activeConversationId);
-      VSCodeMessages.getTasks(activeConversationId);
-      VSCodeMessages.getPromptMode(activeConversationId);
+      requestConversationResourceSnapshot(activeConversationId);
     }
-  }, [activeConversationId, conversationKind]);
+  }, [activeConversationId, conversationKind, requestConversationResourceSnapshot]);
 
   // ---- Sync agent state on conversation change ----
   useEffect(() => {
@@ -528,11 +589,77 @@ export function ConversationController({
   }, [activeConversationId]);
 
   // ---- Conversation CRUD callbacks ----
-  const handleNewChat = useCallback(() => {
+  const startNewForegroundConversation = useCallback(() => {
+    isTablessConversationViewRef.current = false;
+    persistCurrentVisibleConversation();
+    beginForegroundConversationActivation();
     requestConfigSnapshot();
     VSCodeMessages.newConversation();
     setActiveTab('chat');
-  }, [requestConfigSnapshot]);
+  }, [
+    beginForegroundConversationActivation,
+    persistCurrentVisibleConversation,
+    requestConfigSnapshot,
+  ]);
+
+  const handleNewChat = useCallback(() => {
+    setPendingSendRequest(null);
+    startNewForegroundConversation();
+  }, [startNewForegroundConversation]);
+
+  const handleSendWithoutConversation = useCallback(
+    (input: PendingSendInput) => {
+      const id = nextPendingSendRequestIdRef.current + 1;
+      nextPendingSendRequestIdRef.current = id;
+      setPendingSendRequest({ id, input });
+      startNewForegroundConversation();
+    },
+    [startNewForegroundConversation],
+  );
+
+  const handlePendingSendRequestConsumed = useCallback((id: number) => {
+    setPendingSendRequest((current) => (current?.id === id ? null : current));
+  }, []);
+
+  const handleBeforeTabOpen = useCallback(() => {
+    setPendingSendRequest(null);
+    pendingForegroundConversationActivationRef.current = null;
+    setIsForegroundConversationActivationPending(false);
+    isTablessConversationViewRef.current = false;
+  }, []);
+
+  const handleBeforeConversationActivation = useCallback((conversationId: string) => {
+    setPendingSendRequest(null);
+    pendingForegroundConversationActivationRef.current = {
+      reason: 'switch-conversation',
+      conversationId,
+    };
+    setIsForegroundConversationActivationPending(true);
+    isTablessConversationViewRef.current = false;
+  }, []);
+
+  const handleAllTabsClosed = useCallback(() => {
+    setPendingSendRequest(null);
+    isTablessConversationViewRef.current = true;
+    setMessages([]);
+    setStreamingMessageId(null);
+    streamingMessageIdRef.current = null;
+    setIsThinking(false);
+    setQueuedMessageCount(0);
+    setActiveConversationId(null);
+    activeConversationIdRef.current = null;
+    pendingForegroundConversationActivationRef.current = null;
+    setIsForegroundConversationActivationPending(false);
+    setActiveTab('chat');
+  }, [
+    activeConversationIdRef,
+    setActiveConversationId,
+    setIsThinking,
+    setMessages,
+    setQueuedMessageCount,
+    setStreamingMessageId,
+    streamingMessageIdRef,
+  ]);
 
   const isProtectedConversation = useCallback(
     (conversationId: string): boolean => {
@@ -614,10 +741,13 @@ export function ConversationController({
     setOpenTabs,
     activeTabId,
     setActiveTabId,
+    onBeforeTabOpen: handleBeforeTabOpen,
     conversations,
     setActiveTab,
-    onNewChat: handleNewChat,
+    onAllTabsClosed: handleAllTabsClosed,
     onBeforeTabActivation: persistCurrentVisibleConversation,
+    onBeforeConversationActivation: handleBeforeConversationActivation,
+    onConversationActivated: requestConversationResourceSnapshot,
     onActivateCharacterRoleTab: activateCharacterRoleTab,
     onConfigSnapshotRequested: requestConfigSnapshot,
     hasLocalConversationActivity: (conversationId) => {
@@ -721,6 +851,7 @@ export function ConversationController({
           activeConversationId={activeConversationId}
           activeConversationIdRef={activeConversationIdRef}
           activeTabConversationId={activeTabConversationId}
+          isForegroundConversationActivationPending={isForegroundConversationActivationPending}
           conversationKind={conversationKind}
           characterDialogueSession={activeOpenTab?.characterDialogueSession}
           embodyCharacterSession={embodyCharacterSession}
@@ -767,6 +898,9 @@ export function ConversationController({
           setAmbientNodes={setAmbientNodes}
           onNewChat={handleNewChat}
           onUserMessageSent={handleUserMessageSent}
+          onSendWithoutConversation={handleSendWithoutConversation}
+          pendingSendRequest={pendingSendRequest}
+          onPendingSendRequestConsumed={handlePendingSendRequestConsumed}
           // Session cleanup registration
           sessionCleanupRef={sessionCleanupRef}
         />

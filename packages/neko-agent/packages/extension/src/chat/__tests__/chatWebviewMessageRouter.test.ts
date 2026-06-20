@@ -256,6 +256,21 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.syncCanvasAmbientScopeFromActiveConversation).toHaveBeenCalledTimes(1);
   });
 
+  it('routes delete conversation activation intent to the conversation handler', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      { type: 'deleteConversation', conversationId: 'conv-2', activateNext: false },
+      deps,
+    );
+
+    expect(deps.conversationMessageHandler.handleDeleteConversation).toHaveBeenCalledWith(
+      'conv-2',
+      { activateNext: false },
+    );
+    expect(deps.syncCanvasAmbientScopeFromActiveConversation).toHaveBeenCalledTimes(1);
+  });
+
   it('routes plugin slash commands with explicit conversation context', () => {
     const deps = createDeps();
     vi.mocked(vscode.commands.executeCommand).mockClear();

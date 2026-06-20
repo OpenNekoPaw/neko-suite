@@ -47,6 +47,7 @@ export {
   type AgentHistoryEntry,
   type CleanupPolicy,
   type Conversation,
+  type DeleteConversationOptions,
   type ConversationManagerOptions,
   type ConversationStorage,
 } from './conversation-manager';
@@ -68,6 +69,8 @@ export {
   type ConversationControlRuntimeResult,
   type ConversationControlRuntimeWarning,
   type ConversationControlRuntimeWarningCode,
+  type DeleteConversationRuntimeInput,
+  type DeleteConversationRuntimeOptions,
 } from './conversation-control-runtime';
 export {
   formatToolResultContext,

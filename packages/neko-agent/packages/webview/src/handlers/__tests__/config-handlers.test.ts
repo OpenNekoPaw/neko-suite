@@ -123,6 +123,7 @@ function createContext(): MessageHandlerContext {
     conversationStreamingRef: { current: new Map() },
     openTabs: [],
     activeTabId: null,
+    isTablessConversationViewRef: { current: false },
     setOpenTabs: vi.fn(),
     setActiveTabId: vi.fn(),
     setActiveTab: vi.fn(),

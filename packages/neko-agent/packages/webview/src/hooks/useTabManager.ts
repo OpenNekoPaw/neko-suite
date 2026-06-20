@@ -15,10 +15,13 @@ export interface UseTabManagerProps {
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
   activeTabId: string | null;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
+  onBeforeTabOpen?: () => void;
   conversations: ConversationSummary[];
   setActiveTab: (tab: TabType) => void;
-  onNewChat: () => void;
+  onAllTabsClosed?: () => void;
   onBeforeTabActivation?: () => void;
+  onBeforeConversationActivation?: (conversationId: string) => void;
+  onConversationActivated?: (conversationId: string) => void;
   onActivateCharacterRoleTab?: (tab: OpenTab) => void;
   hasLocalConversationActivity?: (conversationId: string) => boolean;
   onConfigSnapshotRequested?: () => void;
@@ -35,10 +38,13 @@ export function useTabManager({
   setOpenTabs,
   activeTabId,
   setActiveTabId,
+  onBeforeTabOpen,
   conversations,
   setActiveTab,
-  onNewChat,
+  onAllTabsClosed,
   onBeforeTabActivation,
+  onBeforeConversationActivation,
+  onConversationActivated,
   onActivateCharacterRoleTab,
   hasLocalConversationActivity,
   onConfigSnapshotRequested,
@@ -57,13 +63,16 @@ export function useTabManager({
   const handleOpenTab = useCallback(
     (conversationId: string, title: string) => {
       const existingTab = openTabs.find((t) => t.conversationId === conversationId);
+      onBeforeTabOpen?.();
       onBeforeTabActivation?.();
       if (existingTab) {
         setActiveTabId(existingTab.id);
         if (isCharacterRoleTab(existingTab)) {
           onActivateCharacterRoleTab?.(existingTab);
         } else {
+          onBeforeConversationActivation?.(conversationId);
           VSCodeMessages.switchConversation(conversationId);
+          onConversationActivated?.(conversationId);
         }
       } else {
         const newTab: OpenTab = {
@@ -74,7 +83,9 @@ export function useTabManager({
         setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id);
         onConfigSnapshotRequested?.();
+        onBeforeConversationActivation?.(conversationId);
         VSCodeMessages.switchConversation(conversationId);
+        onConversationActivated?.(conversationId);
       }
       setActiveTab('chat');
     },
@@ -84,6 +95,9 @@ export function useTabManager({
       setActiveTabId,
       setActiveTab,
       onBeforeTabActivation,
+      onBeforeTabOpen,
+      onBeforeConversationActivation,
+      onConversationActivated,
       onActivateCharacterRoleTab,
       onConfigSnapshotRequested,
     ],
@@ -108,16 +122,20 @@ export function useTabManager({
         conversation && !hasPersistedMessages && !hasLocalActivity,
       );
 
+      const tabIndex = openTabs.findIndex((t) => t.id === tabId);
+      const newTabs = openTabs.filter((t) => t.id !== tabId);
+      const isClosingLastTab = newTabs.length === 0;
+
       if (tab.kind === 'character-dialogue') {
         VSCodeMessages.exitCharacterDialogueSession(tab.conversationId);
       } else if (tab.kind === 'embody-character') {
         VSCodeMessages.exitEmbodyCharacterSession(tab.conversationId);
       } else if (shouldDeleteEmptyConversation) {
-        VSCodeMessages.deleteConversation(tab.conversationId);
+        VSCodeMessages.deleteConversation(tab.conversationId, {
+          activateNext: !isClosingLastTab,
+        });
       }
 
-      const tabIndex = openTabs.findIndex((t) => t.id === tabId);
-      const newTabs = openTabs.filter((t) => t.id !== tabId);
       setOpenTabs(newTabs);
 
       if (isClosingActiveTab && newTabs.length > 0) {
@@ -127,11 +145,13 @@ export function useTabManager({
         if (isCharacterRoleTab(newActiveTab)) {
           onActivateCharacterRoleTab?.(newActiveTab);
         } else {
+          onBeforeConversationActivation?.(newActiveTab.conversationId);
           VSCodeMessages.switchConversation(newActiveTab.conversationId);
+          onConversationActivated?.(newActiveTab.conversationId);
         }
       } else if (newTabs.length === 0) {
         setActiveTabId(null);
-        onNewChat();
+        onAllTabsClosed?.();
       }
     },
     [
@@ -140,8 +160,10 @@ export function useTabManager({
       conversations,
       setOpenTabs,
       setActiveTabId,
-      onNewChat,
+      onAllTabsClosed,
       onBeforeTabActivation,
+      onBeforeConversationActivation,
+      onConversationActivated,
       onActivateCharacterRoleTab,
       hasLocalConversationActivity,
     ],
@@ -151,17 +173,29 @@ export function useTabManager({
     (tabId: string) => {
       const tab = openTabs.find((t) => t.id === tabId);
       if (tab) {
+        onBeforeTabOpen?.();
         onBeforeTabActivation?.();
         setActiveTabId(tabId);
         if (isCharacterRoleTab(tab)) {
           onActivateCharacterRoleTab?.(tab);
         } else {
+          onBeforeConversationActivation?.(tab.conversationId);
           VSCodeMessages.switchConversation(tab.conversationId);
+          onConversationActivated?.(tab.conversationId);
         }
         setActiveTab('chat');
       }
     },
-    [openTabs, setActiveTabId, setActiveTab, onBeforeTabActivation, onActivateCharacterRoleTab],
+    [
+      openTabs,
+      setActiveTabId,
+      setActiveTab,
+      onBeforeTabActivation,
+      onBeforeTabOpen,
+      onBeforeConversationActivation,
+      onConversationActivated,
+      onActivateCharacterRoleTab,
+    ],
   );
 
   return {
