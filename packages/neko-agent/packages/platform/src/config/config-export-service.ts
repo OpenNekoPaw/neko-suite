@@ -219,7 +219,7 @@ export class ConfigExportService implements IConfigExportService {
         displayName: config.displayName || config.name,
         type: (config.type || 'generic') as Provider['type'],
         connectionKind: config.type === 'ollama' ? 'local' : 'custom-gateway',
-        protocolProfile: config.type === 'ollama' ? 'ollama' : 'newapi-compatible',
+        protocolProfile: config.type === 'ollama' ? 'ollama' : 'newapi',
         supportLevel: 'custom',
         requiresApiKey: config.type === 'ollama' ? false : true,
         apiUrl: config.baseUrl || '',

@@ -5,26 +5,37 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { SendIcon, StopIcon, PlusIcon } from '@neko/shared/icons';
-import { ModelSelector } from './ModelSelector';
+import { ModeConfigBar } from './ModeConfigBar';
 import { ModeSelector } from './ModeSelector';
-import { SessionModeSelector } from './SessionModeSelector';
-import { GenerationParamsBar } from './GenerationParamsBar';
+import { EntryPromptMenu as ComposerEntryPromptMenu } from './EntryPromptMenu';
 import { AttachmentPreview } from './FileAttachment';
 import { FileReferencePreview } from './FileReferencePreview';
-import { SlashCommandMenu, sortSlashCommandsForDisplay } from './SlashCommandMenu';
-import { parseFileReference } from './FileReferenceMenu';
+import {
+  SkillInvocationMenu,
+  SlashCommandMenu,
+  sortSkillInvocationsForDisplay,
+  sortSlashCommandsForDisplay,
+} from './SlashCommandMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
 import {
   MessageAttachment,
   ProjectFile,
   SlashCommand,
+  SkillInvocation,
   MentionItem,
+  EntryPromptMenu,
   type GenCategory,
   type SelectedFileReference,
 } from './types';
-import { createSlashCommandCatalog, filterSlashCommands } from './slash-command-catalog';
+import {
+  createSkillInvocationCatalog,
+  createSlashCommandCatalog,
+  filterSkillInvocations,
+  filterSlashCommands,
+  type SkillInvocationCatalogItem,
+} from './slash-command-catalog';
+import { findTrailingMentionRange, projectTrailingMention } from './mention-input';
 import { AgentContextChip } from './AgentContextChip';
-import { CategoryChip, MEDIA_CATEGORY_ICONS } from './AgentMediaBar';
 import { SuggestionChips } from './SuggestionChips';
 import { AmbientCanvasContextBar } from './AmbientCanvasContextBar';
 import { UsageIndicator } from './UsageIndicator';
@@ -32,10 +43,16 @@ import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import { projectInputAreaUi } from '@/presenters/input-area-presenter';
-import { projectSessionMediaModelPickerState } from '@/presenters/media-model-presenter';
+import { projectComposerModeConfig } from '@/presenters/composer-mode-config-presenter';
 import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
 import type { AgentContextPayload } from '@neko/shared';
-import type { SessionMode } from '@neko-agent/types';
+import type {
+  AgentLlmConfig,
+  AgentModelSlots,
+  ConversationKind,
+  ModelRef,
+  SessionMode,
+} from '@neko-agent/types';
 
 interface InputAreaProps {
   inputValue: string;
@@ -47,11 +64,16 @@ interface InputAreaProps {
   onSend: (input?: {
     messageText?: string;
     displayMessageText?: string;
+    sessionMode?: SessionMode;
     attachments?: MessageAttachment[];
     contextPayloads?: AgentContextPayload[];
     fileReferences?: SelectedFileReference[];
+    agentModels?: AgentModelSlots;
+    llmConfig?: AgentLlmConfig;
   }) => void;
   onCancel?: () => void;
+  entryPromptMenu?: EntryPromptMenu | null;
+  onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   disabled?: boolean;
   /** Session-bound attached files (managed by parent for conversation isolation) */
   attachedFiles?: MessageAttachment[];
@@ -71,6 +93,8 @@ export function InputArea({
   onInputChange,
   onSend,
   onCancel,
+  entryPromptMenu,
+  onEntryPromptMenuChange,
   disabled = false,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
@@ -97,6 +121,7 @@ export function InputArea({
     skills,
     pluginCommands = [],
     onSlashCommand,
+    onSkillInvocation,
     onRequestFiles,
     mentionItems = [],
     onAddContextChip,
@@ -104,6 +129,8 @@ export function InputArea({
     onRemoveContextChip,
     ambientNodes = [],
     conversationKind,
+    genCategory,
+    genParams,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -118,10 +145,21 @@ export function InputArea({
   const [slashFilter, setSlashFilter] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
 
+  const [showSkillMenu, setShowSkillMenu] = useState(false);
+  const [skillFilter, setSkillFilter] = useState('');
+  const [selectedSkillIndex, setSelectedSkillIndex] = useState(0);
+
   // File reference state
   const [showAtMenu, setShowAtMenu] = useState(false);
   const [atFilter, setAtFilter] = useState('');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const lastRequestedMentionFilterRef = useRef<string | null>(null);
+  const suppressedPromotedMentionInputRef = useRef<string | null>(null);
+  const [llmConfig, setLlmConfig] = useState<AgentLlmConfig>({
+    reasoningPreset: 'balanced',
+    verbosityPreset: 'standard',
+    creativityPreset: 'creative',
+  });
 
   // Attached files - use external state if provided (for conversation isolation)
   const [internalAttachedFiles, setInternalAttachedFiles] = useState<MessageAttachment[]>([]);
@@ -180,6 +218,7 @@ export function InputArea({
       selectedFileReferences,
     );
     if (promoted.value === inputValue && promoted.references === selectedFileReferences) return;
+    suppressedPromotedMentionInputRef.current = inputValue;
     if (promoted.value !== inputValue) {
       onInputChange(promoted.value);
     }
@@ -199,10 +238,61 @@ export function InputArea({
   const filteredCommands = sortSlashCommandsForDisplay(
     filterSlashCommands(slashCommands, slashFilter, t),
   );
+  const skillInvocations = createSkillInvocationCatalog(skills);
+  const filteredSkillInvocations = sortSkillInvocationsForDisplay(
+    filterSkillInvocations(skillInvocations, skillFilter, t),
+  );
   const filteredMentionItems = getFilteredMentionItems(mentionItems, atFilter);
   const mediaModelCounts = countMediaModelsByCategory(availableMediaModels);
   const availableSessionModes = getAvailableSessionModes(mediaModelCounts);
   const currentSessionMediaModelCount = getSessionMediaModelCount(sessionMode, mediaModelCounts);
+  const showEntryPromptMenu = Boolean(entryPromptMenu);
+  const isMediaGenerationSession = isMediaGenerationMode(sessionMode);
+  const isRoleplayConversation = isRoleplayConversationKind(conversationKind);
+  const allowCommandMenus = !isMediaGenerationSession && !isRoleplayConversation;
+  const slashMenuOpen = allowCommandMenus && showSlashMenu;
+  const skillMenuOpen = allowCommandMenus && showSkillMenu;
+
+  useEffect(() => {
+    if (allowCommandMenus) return;
+    setShowSlashMenu(false);
+    setShowSkillMenu(false);
+  }, [allowCommandMenus]);
+
+  const closeEntryPromptMenu = useCallback(() => {
+    onEntryPromptMenuChange?.(null);
+  }, [onEntryPromptMenuChange]);
+
+  const syncMentionMenuFromInput = useCallback(
+    (value: string) => {
+      if (suppressedPromotedMentionInputRef.current === value) {
+        setShowAtMenu(false);
+        lastRequestedMentionFilterRef.current = null;
+        return;
+      }
+
+      const trailingMention = projectTrailingMention(value);
+      if (!trailingMention) {
+        setShowAtMenu(false);
+        lastRequestedMentionFilterRef.current = null;
+        suppressedPromotedMentionInputRef.current = null;
+        return;
+      }
+
+      setAtFilter(trailingMention.displayFilter);
+      setShowAtMenu(true);
+      setSelectedFileIndex(0);
+      if (lastRequestedMentionFilterRef.current !== trailingMention.requestFilter) {
+        lastRequestedMentionFilterRef.current = trailingMention.requestFilter;
+        onRequestFiles?.(trailingMention.requestFilter);
+      }
+    },
+    [onRequestFiles],
+  );
+
+  useEffect(() => {
+    syncMentionMenuFromInput(inputValue);
+  }, [inputValue, syncMentionMenuFromInput]);
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -217,6 +307,8 @@ export function InputArea({
       updateSelectedFileReferences(promoted.references);
     }
 
+    closeEntryPromptMenu();
+
     // Reset history navigation when user types
     if (!isNavigating) {
       // Only reset if not currently navigating (to avoid resetting on arrow key changes)
@@ -225,31 +317,27 @@ export function InputArea({
     }
 
     // Check for slash command
-    if (value.startsWith('/')) {
+    if (allowCommandMenus && value.startsWith('/')) {
       const filter = value.slice(1).split(' ')[0];
       setSlashFilter(filter);
       setShowSlashMenu(true);
+      setShowSkillMenu(false);
       setSelectedCommandIndex(0);
     } else {
       setShowSlashMenu(false);
     }
 
-    // Check for @ mention with line range support
-    const lastAtIndex = value.lastIndexOf('@');
-    if (lastAtIndex !== -1 && (lastAtIndex === 0 || value[lastAtIndex - 1] === ' ')) {
-      const afterAt = value.slice(lastAtIndex + 1);
-      if (!afterAt.includes(' ')) {
-        setAtFilter(afterAt);
-        setShowAtMenu(true);
-        setSelectedFileIndex(0);
-        const parsed = parseFileReference(afterAt);
-        onRequestFiles?.(parsed?.file || afterAt);
-      } else {
-        setShowAtMenu(false);
-      }
+    if (allowCommandMenus && value.startsWith('$')) {
+      const filter = value.slice(1).split(' ')[0];
+      setSkillFilter(filter);
+      setShowSkillMenu(true);
+      setShowSlashMenu(false);
+      setSelectedSkillIndex(0);
     } else {
-      setShowAtMenu(false);
+      setShowSkillMenu(false);
     }
+
+    syncMentionMenuFromInput(value);
 
     // Auto-resize
     e.target.style.height = 'auto';
@@ -279,7 +367,7 @@ export function InputArea({
     }
 
     // Slash menu navigation
-    if (showSlashMenu && filteredCommands.length > 0) {
+    if (slashMenuOpen && filteredCommands.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedCommandIndex((prev) => (prev + 1) % filteredCommands.length);
@@ -300,6 +388,31 @@ export function InputArea({
       if (e.key === 'Escape') {
         e.preventDefault();
         setShowSlashMenu(false);
+        return;
+      }
+    }
+
+    if (skillMenuOpen && filteredSkillInvocations.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSkillIndex((prev) => (prev + 1) % filteredSkillInvocations.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSkillIndex(
+          (prev) => (prev - 1 + filteredSkillInvocations.length) % filteredSkillInvocations.length,
+        );
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        selectSkillInvocation(filteredSkillInvocations[selectedSkillIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSkillMenu(false);
         return;
       }
     }
@@ -331,7 +444,7 @@ export function InputArea({
     }
 
     // Input history navigation (when no menus are open)
-    if (!showSlashMenu && !showAtMenu) {
+    if (!slashMenuOpen && !skillMenuOpen && !showAtMenu) {
       if (e.key === 'ArrowUp') {
         // Only trigger when cursor is at the first line
         const cursorPosition = textareaRef.current?.selectionStart ?? 0;
@@ -378,7 +491,8 @@ export function InputArea({
     if (
       e.key === 'Enter' &&
       !e.shiftKey &&
-      (!showSlashMenu || filteredCommands.length === 0) &&
+      (!slashMenuOpen || filteredCommands.length === 0) &&
+      (!skillMenuOpen || filteredSkillInvocations.length === 0) &&
       !showAtMenu
     ) {
       e.preventDefault();
@@ -387,9 +501,21 @@ export function InputArea({
   };
 
   const selectSlashCommand = (command: SlashCommand) => {
+    closeEntryPromptMenu();
     setShowSlashMenu(false);
+    setShowSkillMenu(false);
     onInputChange(command.name + ' ');
     onSlashCommand?.(command);
+    textareaRef.current?.focus();
+  };
+
+  const selectSkillInvocation = (skill: SkillInvocationCatalogItem | undefined) => {
+    if (!skill) return;
+    closeEntryPromptMenu();
+    setShowSkillMenu(false);
+    setShowSlashMenu(false);
+    onInputChange(skill.name + ' ');
+    onSkillInvocation?.(projectSkillInvocationSelection(skill));
     textareaRef.current?.focus();
   };
 
@@ -410,6 +536,7 @@ export function InputArea({
 
   /** Handle selection from MentionMenu — path-backed items become @file tokens; others create a context chip. */
   const handleMentionSelect = (item: MentionItem) => {
+    closeEntryPromptMenu();
     if (item.filePath) {
       addSelectedFileReference(item);
     } else if (item.contextPayload && onAddContextChip) {
@@ -423,6 +550,7 @@ export function InputArea({
 
   const handleSend = () => {
     if (disabled) return;
+    closeEntryPromptMenu();
     const outboundMessageText = appendSelectedFileReferencesToMessage(
       inputValue,
       selectedFileReferences,
@@ -445,9 +573,11 @@ export function InputArea({
     onSend({
       messageText: outboundMessageText,
       displayMessageText: inputValue,
+      sessionMode,
       attachments: files,
       contextPayloads,
       fileReferences: hasSelectedFileReferences ? selectedFileReferences : undefined,
+      ...(sessionMode === 'agent' ? buildAgentLlmSendConfig(selectedModel, llmConfig) : {}),
     });
     contextChips.forEach((c) => onRemoveContextChip(c.id));
     onInputChange('');
@@ -559,9 +689,37 @@ export function InputArea({
 
   // Insert slash command
   const handleSlashClick = () => {
+    if (!allowCommandMenus) return;
+    closeEntryPromptMenu();
     onInputChange('/');
     setShowSlashMenu(true);
+    setShowSkillMenu(false);
     setSlashFilter('');
+    textareaRef.current?.focus();
+  };
+
+  const handleSkillClick = () => {
+    if (!allowCommandMenus) return;
+    closeEntryPromptMenu();
+    onInputChange('$');
+    setShowSkillMenu(true);
+    setShowSlashMenu(false);
+    setSkillFilter('');
+    textareaRef.current?.focus();
+  };
+
+  const handleEntryGenerationModeSelect = (mode: Extract<SessionMode, GenCategory>) => {
+    closeEntryPromptMenu();
+    onSessionModeChange(mode);
+    textareaRef.current?.focus();
+  };
+
+  const handleEntryRoleplaySelect = (item: MentionItem) => {
+    closeEntryPromptMenu();
+    onSend({
+      messageText: `/as ${formatRoleplaySlashEntity(item)} --roleplay --skip-enrich${formatInitialRoleplayMessage(inputValue)}`,
+      displayMessageText: '',
+    });
     textareaRef.current?.focus();
   };
 
@@ -579,10 +737,20 @@ export function InputArea({
     availableMediaModelCount: availableMediaModels.length,
     currentSessionMediaModelCount,
   });
-  const sessionMediaPicker = projectSessionMediaModelPickerState({
+  const showModeControlGroup =
+    inputAreaProjection.showSessionModeSelector ||
+    inputAreaProjection.showChatModelSelector ||
+    inputAreaProjection.showSessionMediaModelSelector;
+  const showControlRow = showModeControlGroup || inputAreaProjection.showGenerationParams;
+  const composerModeConfig = projectComposerModeConfig({
     sessionMode,
+    selectedModel,
+    availableModels,
     mediaModelSelection,
     availableMediaModels,
+    genCategory,
+    genParams,
+    llmConfig,
   });
 
   return (
@@ -596,53 +764,23 @@ export function InputArea({
 
       <div className="agent-composer-rail">
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
-        <div className="agent-composer-control-row">
-          <div
-            className="agent-composer-control-group agent-composer-control-group-mode"
-            role="group"
-            aria-label={t('chat.input.control.mode')}
-          >
-            {/* Left: session mode */}
-            {inputAreaProjection.showSessionModeSelector && (
-              <SessionModeSelector
-                mode={sessionMode}
-                onChange={onSessionModeChange}
-                availableModes={availableSessionModes}
-              />
-            )}
-
-            {/* Model selector — contextual based on session mode */}
-            {inputAreaProjection.showChatModelSelector ? (
-              <ModelSelector
-                selectedModel={selectedModel}
-                models={availableModels}
-                onSelect={onModelSelect}
-              />
-            ) : (
-              inputAreaProjection.showSessionMediaModelSelector &&
-              sessionMediaPicker && (
-                <CategoryChip
-                  category={sessionMediaPicker.category}
-                  Icon={MEDIA_CATEGORY_ICONS[sessionMediaPicker.category]}
-                  selectedId={sessionMediaPicker.selectedId}
-                  models={sessionMediaPicker.models}
-                  onSelect={(modelId) => onMediaModelSelect(sessionMediaPicker.category, modelId)}
-                />
-              )
-            )}
-          </div>
-
-          {/* Right: generation params (media model integrated in agent mode) */}
-          {inputAreaProjection.showGenerationParams && (
-            <div
-              className="agent-composer-control-group agent-composer-control-group-config"
-              role="group"
-              aria-label={t('chat.input.control.params')}
-            >
-              <GenerationParamsBar />
-            </div>
-          )}
-        </div>
+        {showControlRow && (
+          <ModeConfigBar
+            projection={composerModeConfig}
+            availableSessionModes={availableSessionModes}
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onSessionModeChange={onSessionModeChange}
+            onModelSelect={onModelSelect}
+            mediaModelSelection={mediaModelSelection}
+            availableMediaModels={availableMediaModels}
+            onMediaModelSelect={onMediaModelSelect}
+            llmConfig={llmConfig}
+            onLlmConfigChange={setLlmConfig}
+            showAgentConfig={inputAreaProjection.showChatModelSelector}
+            showMediaConfig={inputAreaProjection.showGenerationParams}
+          />
+        )}
 
         {/* Ambient canvas reference — mirrors @ quick references above the composer. */}
         {inputAreaProjection.showAmbientNodes && (
@@ -653,11 +791,19 @@ export function InputArea({
         <div className="agent-composer-shell relative mx-2 mb-2">
           {/* Slash command menu */}
           <SlashCommandMenu
-            isOpen={showSlashMenu}
+            isOpen={slashMenuOpen}
             commands={filteredCommands}
             selectedIndex={selectedCommandIndex}
             onSelect={selectSlashCommand}
             onClose={() => setShowSlashMenu(false)}
+          />
+
+          <SkillInvocationMenu
+            isOpen={skillMenuOpen}
+            skills={filteredSkillInvocations}
+            selectedIndex={selectedSkillIndex}
+            onSelect={selectSkillInvocation}
+            onClose={() => setShowSkillMenu(false)}
           />
 
           {/* @mention menu — files, canvas nodes, story characters */}
@@ -676,6 +822,16 @@ export function InputArea({
               }
             }}
             onClose={() => setShowAtMenu(false)}
+          />
+
+          <ComposerEntryPromptMenu
+            isOpen={showEntryPromptMenu}
+            menu={entryPromptMenu ?? null}
+            availableMediaModels={availableMediaModels}
+            mentionItems={mentionItems}
+            onSelectGenerationMode={handleEntryGenerationModeSelect}
+            onSelectRoleplayEntity={handleEntryRoleplaySelect}
+            onClose={closeEntryPromptMenu}
           />
 
           {/* Agent context chips — shown above textarea when context is attached */}
@@ -733,15 +889,28 @@ export function InputArea({
               onChange={handleFileSelect}
             />
 
-            {/* Slash command button */}
-            <button
-              type="button"
-              onClick={handleSlashClick}
-              className="agent-composer-tool-button agent-composer-tool-button-text"
-              title={t('chat.input.commands')}
-            >
-              /
-            </button>
+            {allowCommandMenus && (
+              <>
+                {/* Slash command button */}
+                <button
+                  type="button"
+                  onClick={handleSlashClick}
+                  className="agent-composer-tool-button agent-composer-tool-button-text"
+                  title={t('chat.input.commands')}
+                >
+                  /
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSkillClick}
+                  className="agent-composer-tool-button agent-composer-tool-button-text"
+                  title={t('chat.input.skills')}
+                >
+                  $
+                </button>
+              </>
+            )}
 
             {/* Token usage pie */}
             <UsageIndicator
@@ -764,7 +933,7 @@ export function InputArea({
 
             <div className="flex-1" />
 
-            {/* Execution mode — only relevant in agent mode */}
+            {/* Execution mode — runtime control belongs with send/tools, not model config. */}
             {inputAreaProjection.showExecutionModeSelector && (
               <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
             )}
@@ -834,6 +1003,14 @@ function projectSelectedFileReference(item: MentionItem): SelectedFileReference 
   };
 }
 
+function projectSkillInvocationSelection(skill: SkillInvocationCatalogItem): SkillInvocation {
+  return {
+    id: skill.id,
+    skillName: skill.skillName,
+    name: skill.name,
+  };
+}
+
 function promoteCompletedFileReferencesFromInput(
   input: string,
   mentionItems: readonly MentionItem[],
@@ -900,6 +1077,36 @@ function getSessionMediaModelCount(
   return 0;
 }
 
+function isMediaGenerationMode(sessionMode: SessionMode): boolean {
+  return sessionMode === 'image' || sessionMode === 'video' || sessionMode === 'audio';
+}
+
+function isRoleplayConversationKind(conversationKind: ConversationKind | undefined): boolean {
+  return conversationKind === 'character-dialogue' || conversationKind === 'embody-character';
+}
+
+function buildAgentLlmSendConfig(
+  selectedModel: string,
+  llmConfig: AgentLlmConfig,
+): { agentModels?: AgentModelSlots; llmConfig: AgentLlmConfig } {
+  const primaryModel = parseSelectedLlmModelRef(selectedModel);
+  return {
+    ...(primaryModel ? { agentModels: { primary: primaryModel } } : {}),
+    llmConfig,
+  };
+}
+
+function parseSelectedLlmModelRef(selectedModel: string): ModelRef<'llm'> | null {
+  if (!selectedModel || selectedModel === 'auto') return null;
+  const separatorIndex = selectedModel.indexOf(':');
+  if (separatorIndex <= 0 || separatorIndex === selectedModel.length - 1) return null;
+  return {
+    providerId: selectedModel.slice(0, separatorIndex),
+    modelId: selectedModel.slice(separatorIndex + 1),
+    category: 'llm',
+  };
+}
+
 function appendSelectedFileReferencesToMessage(
   input: string,
   references: readonly SelectedFileReference[],
@@ -942,15 +1149,48 @@ function replaceTrailingMention(input: string, replacement: string): string {
   );
 }
 
-function findTrailingMentionRange(input: string): { start: number; end: number } | null {
-  let index = input.length - 1;
-  while (index >= 0 && !/\s/.test(input[index] ?? '')) {
-    index -= 1;
+function formatRoleplaySlashEntity(item: MentionItem): string {
+  const entityId = getMentionEntityId(item);
+  if (entityId) {
+    return `entity:${entityId}`;
   }
+  return item.label.includes(' ') ? `entity:${item.label}` : `@${item.label}`;
+}
 
-  const start = index + 1;
-  if (input[start] !== '@') return null;
-  return { start, end: input.length };
+function formatInitialRoleplayMessage(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (!trimmed.includes('"')) return ` "${trimmed}"`;
+  if (!trimmed.includes("'")) return ` '${trimmed}'`;
+  return ` ${trimmed.replace(/\s+/g, ' ')}`;
+}
+
+function getMentionEntityId(item: MentionItem): string | undefined {
+  const fromNavigation =
+    item.navigationData?.entityId ??
+    item.navigationData?.characterId ??
+    item.navigationData?.assetId ??
+    item.navigationData?.refId ??
+    item.navigationData?.id;
+  if (fromNavigation) return fromNavigation;
+  const prefixedId = stripKnownMentionIdPrefix(item.id);
+  if (prefixedId) return prefixedId;
+  if (isPlainEntityId(item.id)) return item.id;
+  if (item.contextPayload?.id) return item.contextPayload.id;
+  return undefined;
+}
+
+function stripKnownMentionIdPrefix(value: string): string | undefined {
+  const separatorIndex = value.indexOf(':');
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) return undefined;
+  const prefix = value.slice(0, separatorIndex);
+  return prefix === 'character' || prefix === 'entity'
+    ? value.slice(separatorIndex + 1)
+    : undefined;
+}
+
+function isPlainEntityId(value: string): boolean {
+  return !value.includes(':') && !value.includes('/') && !value.includes('\\');
 }
 
 /** Small icon indicating media model calls (image/video/audio generation) */

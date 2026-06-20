@@ -76,25 +76,23 @@ describe('MentionMenu icon projection', () => {
   });
 
   it('filters by host-provided search text and navigation metadata', () => {
-    expect(
-      getFilteredMentionItems(
-        [
-          mention({
-            id: 'asset',
-            kind: 'asset',
-            label: 'Portrait',
-            searchText: '小橘 alias',
-          }),
-          mention({
-            id: 'entity',
-            kind: 'entity',
-            label: 'Requirement',
-            navigationData: { entityId: '小灰' },
-          }),
-        ],
-        '小灰',
-      ).map((item) => item.id),
-    ).toEqual(['entity']);
+    const items = [
+      mention({
+        id: 'asset',
+        kind: 'asset',
+        label: 'Portrait',
+        searchText: '小橘 alias',
+      }),
+      mention({
+        id: 'entity',
+        kind: 'entity',
+        label: 'Requirement',
+        navigationData: { entityId: '小灰' },
+      }),
+    ];
+
+    expect(getFilteredMentionItems(items, '小橘').map((item) => item.id)).toEqual(['asset']);
+    expect(getFilteredMentionItems(items, '小灰').map((item) => item.id)).toEqual(['entity']);
   });
 
   it('ranks same-kind mentions by stronger text matches before label sort', () => {

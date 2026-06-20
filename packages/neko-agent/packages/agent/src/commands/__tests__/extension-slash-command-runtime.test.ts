@@ -74,11 +74,47 @@ describe('extension slash command runtime', () => {
     );
   });
 
-  it('executes skill slash arguments with IDC metadata', async () => {
+  it('keeps builtin slash commands out of the skill invocation path', () => {
+    deps.skills!.applySlashCommand = vi.fn().mockResolvedValue({
+      applied: true,
+      injection: { name: 'status' },
+      skill: { name: 'status', command: 'status' },
+    });
+
+    runExtensionSlashCommandRuntime(
+      { command: 'status', conversationId: 'conv-1' },
+      deps,
+      createEffects(),
+    );
+
+    expect(deps.skills!.applySlashCommand).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'status',
+        success: true,
+        action: 'showStatus',
+      }),
+    );
+  });
+
+  it('executes command artifact slash arguments with IDC metadata', async () => {
+    deps.skills!.listAllSkills = vi.fn(() => [
+      {
+        name: 'commit-workflow',
+        entryPointKind: 'command-artifact',
+        command: 'commit',
+        description: 'Create a commit message',
+        enabled: true,
+      },
+    ]);
     deps.skills!.applySlashCommand = vi.fn().mockResolvedValue({
       applied: true,
       injection: { name: 'commit' },
-      skill: { name: 'commit-workflow', command: 'commit' },
+      skill: {
+        name: 'commit-workflow',
+        entryPointKind: 'command-artifact',
+        command: 'commit',
+      },
     });
 
     await runExtensionSlashCommandRuntime(
@@ -107,6 +143,33 @@ describe('extension slash command runtime', () => {
         },
       },
     });
+  });
+
+  it('does not route ordinary skill legacy command fields as slash commands', async () => {
+    deps.skills!.listAllSkills = vi.fn(() => [
+      {
+        name: 'legacy-commit',
+        command: 'commit',
+        description: 'Legacy alias should not be slash-canonical',
+        enabled: true,
+      },
+    ]);
+
+    await runExtensionSlashCommandRuntime(
+      { command: 'commit', conversationId: 'conv-1', args: 'fix bug' },
+      deps,
+      createEffects(),
+    );
+
+    expect(deps.skills!.applySlashCommand).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'commit',
+        success: false,
+        error: expect.stringContaining('Unknown command'),
+      }),
+    );
+    expect(executeSkillPrompt).not.toHaveBeenCalled();
   });
 
   it('reports unknown extension commands when no builtin or skill matches', async () => {

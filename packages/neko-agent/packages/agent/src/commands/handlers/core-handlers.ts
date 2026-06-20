@@ -26,8 +26,8 @@ export function generateCliHelpText(context?: CommandContext): string {
       entry.source === 'builtin',
   );
   const skillCommands = commands.filter(
-    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'skill' }> =>
-      entry.source === 'skill',
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'command-artifact' }> =>
+      entry.source === 'command-artifact',
   );
   const lines: string[] = [
     '',
@@ -68,7 +68,7 @@ export function generateCliHelpText(context?: CommandContext): string {
   }
 
   if (skillCommands.length > 0) {
-    lines.push('Skill Commands:');
+    lines.push('Command Artifacts:');
     for (const command of skillCommands) {
       lines.push(`  /${command.name}${formatSkillUsage(command)}`);
       lines.push(`      ${command.description}`);
@@ -104,15 +104,16 @@ export function generateExtensionHelpText(skillCommands?: string[]): string {
     }
   }
 
-  // Add skill commands if provided
+  // Add slash Skill aliases if provided by older hosts during migration.
   if (skillCommands && skillCommands.length > 0) {
-    lines.push('\n**Skill Commands:**');
+    lines.push('\n**Skill Slash Aliases (Migration):**');
     for (const cmd of skillCommands) {
       lines.push(`- \`${cmd}\``);
     }
   }
 
   lines.push('\n**Tips:**');
+  lines.push('- Use `$skill-name` to activate a Skill explicitly');
   lines.push('- Use `@` to reference files');
   lines.push('- Attach files using the 📎 button');
   lines.push('- Press Enter to send, Shift+Enter for new line');
@@ -253,7 +254,9 @@ function listContextSlashCommandSkills(context?: CommandContext): SlashCommandSk
   return coerceSlashCommandSkills(listAllSkills());
 }
 
-function formatSkillUsage(entry: Extract<SlashCommandCatalogEntry, { source: 'skill' }>): string {
+function formatSkillUsage(
+  entry: Extract<SlashCommandCatalogEntry, { source: 'command-artifact' }>,
+): string {
   if (!entry.supportsArguments) {
     return '';
   }

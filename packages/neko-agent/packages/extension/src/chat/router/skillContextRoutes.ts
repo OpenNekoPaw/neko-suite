@@ -1,3 +1,4 @@
+import { buildExtensionSkillCommandResultPayload } from '@neko/agent';
 import type { WebviewToExtensionMessage } from '@neko-agent/types';
 import type { ChatWebviewMessageRouterDeps } from './types';
 import { resolveRequiredConversationId } from './conversationId';
@@ -33,6 +34,25 @@ export function tryHandleSkillContextRoute(
         message.args,
         conversationId,
       );
+      return true;
+    }
+
+    case 'invokeSkill': {
+      const conversationId = resolveRequiredConversationId(webview, message, 'invoke skill');
+      if (!conversationId) return true;
+      void deps.skillHandler
+        .handleSkillInvocation(webview, message.skillName, conversationId, message.args)
+        .then((result) => {
+          if (result?.applied) return;
+          void webview.postMessage(
+            buildExtensionSkillCommandResultPayload({
+              conversationId,
+              command: `$${message.skillName}`,
+              status: result ? 'failed' : 'unknown',
+              ...(result?.error ? { error: result.error } : {}),
+            }),
+          );
+        });
       return true;
     }
 

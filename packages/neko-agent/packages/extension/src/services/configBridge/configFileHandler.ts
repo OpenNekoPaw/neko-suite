@@ -4,8 +4,10 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import { serializeUnifiedConfigToToml } from '@neko/shared';
-import { DEFAULT_USER_CONFIG, getUserConfigPath } from '@neko/platform';
+import {
+  buildUserConfigTemplate as buildPlatformUserConfigTemplate,
+  getUserConfigPath,
+} from '@neko/platform';
 import { getLogger } from '../../base';
 
 const logger = getLogger('ConfigFileHandler');
@@ -46,5 +48,5 @@ export class ConfigFileHandler implements vscode.Disposable {
 }
 
 export function buildUserConfigTemplate(): string {
-  return serializeUnifiedConfigToToml(DEFAULT_USER_CONFIG);
+  return buildPlatformUserConfigTemplate();
 }

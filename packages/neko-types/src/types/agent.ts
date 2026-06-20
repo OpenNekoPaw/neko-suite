@@ -75,8 +75,10 @@ export interface AgentStep {
   type: 'think' | 'act' | 'observe' | 'respond' | 'content_delta';
   /** Step content */
   content: string;
-  /** Extended thinking content (Claude only) */
+  /** Extended thinking content for UI presentation */
   thinking?: string;
+  /** Provider reasoning content that must be replayed with assistant messages. */
+  reasoningContent?: string;
   /** Tool calls if any */
   toolCalls?: Array<{
     /** Tool call ID from API (required for tool result matching) */

@@ -38,7 +38,13 @@ import type { SkillService, IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { theme } from './theme';
 import { formatToolCall } from './formatter';
-import { isSlashCommand, handleSlashCommand, type SlashCommandContext } from './slash-commands';
+import {
+  handleSkillInvocation,
+  handleSlashCommand,
+  isSkillInvocation,
+  isSlashCommand,
+  type SlashCommandContext,
+} from './slash-commands';
 import { getProviderModels } from './config';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
 import { createCliAgentRuntime } from './runtime-bootstrap';
@@ -893,6 +899,32 @@ export async function runInteractive(
         if (!trimmed) {
           prompt();
           return;
+        }
+
+        if (isSkillInvocation(trimmed)) {
+          const result = await handleSkillInvocation(trimmed, slashContext);
+
+          if (result.output) {
+            console.log(result.output);
+          }
+          if (result.error) {
+            console.error(theme.error(`Error: ${result.error}`));
+            prompt();
+            return;
+          }
+          if (result.agentPrompt) {
+            executionPrompt = result.agentPrompt;
+            executionMetadata = mergeIdcExecutionMetadata(
+              state!.session.getExecutionMode() === 'plan'
+                ? createPlanModeIdcMetadata()
+                : undefined,
+              result.executionOverrides?.metadata,
+            );
+          } else {
+            console.log('');
+            prompt();
+            return;
+          }
         }
 
         // Handle slash commands

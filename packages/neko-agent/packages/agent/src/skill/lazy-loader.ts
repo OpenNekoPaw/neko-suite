@@ -9,6 +9,7 @@ import type {
   Skill,
   SlashCommand,
   SkillSource,
+  SkillEntryPointKind,
   SkillFrontmatter,
   CommandFrontmatter,
   SkillLoadError,
@@ -40,6 +41,14 @@ export interface LazySkill {
   source: SkillSource;
   /** Directory path */
   directoryPath: string;
+  /** Canonical entry namespace for this lazy registry item */
+  entryPointKind?: SkillEntryPointKind;
+  /** Slash command id when this lazy item wraps a command artifact */
+  command?: string;
+  /** Argument hint from command frontmatter */
+  argumentHint?: string;
+  /** Frontmatter-level argument hint availability before full content loads */
+  supportsArguments?: boolean;
   /** Program-facing metadata loaded from manifest.json without loading SKILL.md body */
   manifest?: SkillManifest;
   /** Whether content has been loaded */

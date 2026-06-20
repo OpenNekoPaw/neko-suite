@@ -97,6 +97,7 @@ describe('config-reader typed results', () => {
         'type = "newapi"',
         'base_url = "https://api.example.com/v1"',
         'connection_kind = "custom-gateway"',
+        'protocol_profile = "newapi"',
       ].join('\n'),
       'utf-8',
     );
@@ -113,7 +114,32 @@ describe('config-reader typed results', () => {
         id: 'custom-newapi',
         apiUrl: 'https://api.example.com/v1',
         connectionKind: 'custom-gateway',
+        protocolProfile: 'newapi',
       }),
+    );
+  });
+
+  it('rejects the removed newapi-compatible protocol profile alias', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[providers]]',
+        'id = "custom-newapi"',
+        'name = "Custom NewAPI"',
+        'type = "newapi"',
+        'base_url = "https://api.example.com/v1"',
+        'connection_kind = "custom-gateway"',
+        'protocol_profile = "newapi-compatible"',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedProviderProtocolProfile');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'Unsupported provider protocol_profile "newapi-compatible"',
     );
   });
 
@@ -293,6 +319,66 @@ describe('config-reader typed results', () => {
     expect(getConfigReadDiagnostic(result)?.detail).toContain('Duplicate providers id');
   });
 
+  it('rejects unsupported provider protocol profile values', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[providers]]',
+        'id = "deepseek"',
+        'name = "deepseek"',
+        'type = "generic"',
+        'api_url = "https://api.deepseek.com"',
+        'connection_kind = "direct"',
+        'protocol_profile = "deepseek"',
+        '',
+        '[providers.protocol_variant]',
+        'base_path = "/v1"',
+        'auth_type = "bearer"',
+        'stream_format = "sse"',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedProviderProtocolProfile');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'DeepSeek direct endpoints use "openai-chat"',
+    );
+  });
+
+  it('rejects unsupported provider and protocol variant enum values', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[providers]]',
+        'id = "bad-provider"',
+        'name = "Bad Provider"',
+        'type = "deepseek"',
+        'connection_kind = "remote"',
+        'protocol_profile = "openai-chat"',
+        'support_level = "stable"',
+        '',
+        '[providers.protocol_variant]',
+        'auth_type = "token"',
+        'stream_format = "jsonl"',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedProviderType');
+    const detail = getConfigReadDiagnostic(result)?.detail ?? '';
+    expect(detail).toContain('Unsupported provider type "deepseek"');
+    expect(detail).toContain('Unsupported provider connection_kind "remote"');
+    expect(detail).toContain('Unsupported provider support_level "stable"');
+    expect(detail).toContain('Unsupported protocol_variant auth_type "token"');
+    expect(detail).toContain('Unsupported protocol_variant stream_format "jsonl"');
+  });
+
   it('rejects music as a top-level model type', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
     fs.writeFileSync(
@@ -313,6 +399,30 @@ describe('config-reader typed results', () => {
     expect(result.status).toBe('unsupportedModelType');
     expect(getConfigReadDiagnostic(result)?.detail).toContain(
       'Configure music models as type "audio"',
+    );
+  });
+
+  it('rejects unsupported model protocol overrides', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[models]]',
+        'id = "custom-model"',
+        'name = "custom-model"',
+        'provider_id = "custom-provider"',
+        'protocol = "deepseek"',
+        'type = "llm"',
+        'capabilities = ["chat"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedModelProtocol');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'Unsupported model protocol "deepseek"',
     );
   });
 

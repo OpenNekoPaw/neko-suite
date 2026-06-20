@@ -1,21 +1,40 @@
 import { useTranslation } from '@/i18n/I18nContext';
-import { ArrowRightIcon } from '@neko/shared/icons';
+
+export type EmptyStateEntryAction = 'start-chat' | 'generate-assets' | 'roleplay';
 
 interface EmptyStateProps {
-  onSuggestionClick?: (text: string) => void;
+  selectedAction?: EmptyStateEntryAction;
+  onEntryAction?: (action: EmptyStateEntryAction) => void;
 }
 
-export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
-  const { t } = useTranslation();
+const EMPTY_STATE_ENTRIES: readonly {
+  action: EmptyStateEntryAction;
+  labelKey: string;
+  helperKey: string;
+}[] = [
+  {
+    action: 'start-chat',
+    labelKey: 'chat.emptyState.entry.startChat',
+    helperKey: 'chat.emptyState.entry.startChatHelper',
+  },
+  {
+    action: 'generate-assets',
+    labelKey: 'chat.emptyState.entry.generateAssets',
+    helperKey: 'chat.emptyState.entry.generateAssetsHelper',
+  },
+  {
+    action: 'roleplay',
+    labelKey: 'chat.emptyState.entry.roleplay',
+    helperKey: 'chat.emptyState.entry.roleplayHelper',
+  },
+];
 
-  const suggestions = [
-    t('chat.emptyState.suggestion1'),
-    t('chat.emptyState.suggestion2'),
-    t('chat.emptyState.suggestion3'),
-  ];
+export function EmptyState({ selectedAction = 'start-chat', onEntryAction }: EmptyStateProps) {
+  const { t } = useTranslation();
+  const selectedEntry = EMPTY_STATE_ENTRIES.find((entry) => entry.action === selectedAction);
 
   return (
-    <div className="agent-empty-state flex h-full min-h-[260px] select-none items-start justify-center px-3 py-5 sm:px-4 sm:py-7">
+    <div className="agent-empty-state flex min-h-0 flex-1 select-none items-center justify-center overflow-y-auto px-3 py-5 sm:px-4 sm:py-7">
       <section
         className="agent-empty-panel w-full min-w-0 max-w-[min(840px,100%)]"
         aria-labelledby="neko-agent-empty-title"
@@ -32,19 +51,27 @@ export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
           </p>
         </div>
 
-        <div className="agent-empty-actions mt-5 grid gap-1.5">
-          {suggestions.map((suggestion) => (
+        <div className="agent-empty-actions mt-5 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          {EMPTY_STATE_ENTRIES.map((entry) => (
             <button
-              key={suggestion}
+              key={entry.action}
               type="button"
-              onClick={() => onSuggestionClick?.(suggestion)}
-              className="agent-empty-action group flex min-h-9 w-full min-w-0 cursor-pointer items-center rounded-md border border-[var(--agent-empty-action-border)] bg-[var(--agent-empty-action-bg)] px-3 py-2 text-left text-[12px] leading-5 text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-empty-action-hover-border)] hover:bg-[var(--agent-empty-action-hover-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--agent-accent)]"
+              onClick={() => onEntryAction?.(entry.action)}
+              className={`agent-empty-action group flex min-h-9 w-full min-w-0 cursor-pointer items-center rounded-md border px-3 py-2 text-left text-[12px] leading-5 text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-empty-action-hover-border)] hover:bg-[var(--agent-empty-action-hover-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--agent-accent)] ${
+                selectedAction === entry.action
+                  ? 'agent-empty-action-selected border-[var(--agent-empty-action-hover-border)]'
+                  : 'border-[var(--agent-empty-action-border)] bg-[var(--agent-empty-action-bg)]'
+              }`}
+              aria-pressed={selectedAction === entry.action}
             >
-              <span className="min-w-0 flex-1 break-words">{suggestion}</span>
-              <ArrowRightIcon className="agent-empty-action-icon ml-2 h-3.5 w-3.5 flex-shrink-0" />
+              <span className="min-w-0 flex-1 break-words">{t(entry.labelKey)}</span>
             </button>
           ))}
         </div>
+
+        <p className="agent-empty-mode-hint mt-3 text-[10px] leading-4 text-[var(--agent-empty-muted)]">
+          {selectedEntry ? t(selectedEntry.helperKey) : null}
+        </p>
 
         <p className="agent-empty-disclaimer mt-4 text-[10px] leading-4 text-[var(--agent-empty-muted)]">
           {t('chat.emptyState.disclaimer')}

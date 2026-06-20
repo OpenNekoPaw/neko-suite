@@ -9,6 +9,7 @@ import type { ChatChunk, ChatResponse, ChatMessage } from '../../types/adapter';
  */
 export async function aggregateStream(stream: AsyncIterable<ChatChunk>): Promise<ChatResponse> {
   let content = '';
+  let reasoningContent = '';
   let id = '';
   let modelName = '';
   let finishReason: ChatResponse['finishReason'] = 'stop';
@@ -24,11 +25,16 @@ export async function aggregateStream(stream: AsyncIterable<ChatChunk>): Promise
         content += chunk.delta.content;
       }
     }
+    const reasoningDelta = chunk.reasoningContent ?? chunk.delta.reasoningContent;
+    if (reasoningDelta) {
+      reasoningContent += reasoningDelta;
+    }
 
     if (chunk.delta.toolCalls) {
       for (const tc of chunk.delta.toolCalls) {
         const existing = toolCalls.find((t) => t.id === tc.id);
         if (existing) {
+          existing.function.name = mergeToolCallName(existing.function.name, tc.function.name);
           existing.function.arguments += tc.function.arguments;
         } else {
           toolCalls.push({
@@ -58,10 +64,13 @@ export async function aggregateStream(stream: AsyncIterable<ChatChunk>): Promise
     message: {
       role: 'assistant',
       content,
+      reasoningContent: reasoningContent || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     },
     finishReason,
     usage,
+    thinking: reasoningContent || undefined,
+    reasoningContent: reasoningContent || undefined,
   };
 }
 
@@ -108,6 +117,7 @@ export function createStreamCollector(stream: AsyncIterable<ChatChunk>): {
  */
 function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
   let content = '';
+  let reasoningContent = '';
   let id = '';
   let modelName = '';
   let finishReason: ChatResponse['finishReason'] = 'stop';
@@ -123,11 +133,16 @@ function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
         content += chunk.delta.content;
       }
     }
+    const reasoningDelta = chunk.reasoningContent ?? chunk.delta.reasoningContent;
+    if (reasoningDelta) {
+      reasoningContent += reasoningDelta;
+    }
 
     if (chunk.delta.toolCalls) {
       for (const tc of chunk.delta.toolCalls) {
         const existing = toolCalls.find((t) => t.id === tc.id);
         if (existing) {
+          existing.function.name = mergeToolCallName(existing.function.name, tc.function.name);
           existing.function.arguments += tc.function.arguments;
         } else {
           toolCalls.push({
@@ -157,9 +172,21 @@ function aggregateStreamFromChunks(chunks: ChatChunk[]): ChatResponse {
     message: {
       role: 'assistant',
       content,
+      reasoningContent: reasoningContent || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     },
     finishReason,
     usage,
+    thinking: reasoningContent || undefined,
+    reasoningContent: reasoningContent || undefined,
   };
+}
+
+function mergeToolCallName(existing: string, delta: string): string {
+  if (!delta) return existing;
+  if (!existing) return delta;
+  if (delta === existing) return existing;
+  if (delta.startsWith(existing)) return delta;
+  if (existing.endsWith(delta)) return existing;
+  return existing + delta;
 }

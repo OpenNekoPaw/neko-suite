@@ -7,6 +7,7 @@
     "@ai-sdk/anthropic": "^3.0.63",
     "@ai-sdk/google": "^3.0.52",
     "@ai-sdk/openai": "^3.0.47",
+    "@neko-agent/types": "workspace:*",
     "@neko/ai-sdk": "workspace:*",
     "@neko/market-core": "workspace:*",
     "@neko/shared": "workspace:*",

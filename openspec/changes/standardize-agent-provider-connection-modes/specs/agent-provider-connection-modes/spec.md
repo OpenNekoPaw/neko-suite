@@ -6,27 +6,27 @@ Agent provider configuration SHALL distinguish the connection path from adapter 
 
 #### Scenario: Gateway provider is classified
 
-- **WHEN** the default Agent configuration defines a NewAPI-compatible gateway provider
-- **THEN** the provider declares a gateway connection mode and a NewAPI-compatible protocol profile
+- **WHEN** the default Agent configuration defines a NewAPI gateway provider
+- **THEN** the provider declares a gateway connection mode and a NewAPI protocol profile
 
 #### Scenario: Local provider is classified
 
 - **WHEN** the default Agent configuration defines a local model provider
 - **THEN** the provider declares a local connection mode and a local protocol profile
 
-### Requirement: NewAPI-compatible gateway is the MVP proxy path
+### Requirement: NewAPI gateway is the MVP proxy path
 
-The Agent MVP SHALL expose NewAPI-compatible gateway configuration as the supported proxy/cloud path. Official direct providers and additional proxy products SHALL NOT be required for the MVP default configuration.
+The Agent MVP SHALL expose NewAPI gateway configuration as the supported proxy/cloud path. Official direct providers and additional proxy products SHALL NOT be required for the MVP default configuration.
 
 #### Scenario: Default config prefers gateway and local providers
 
 - **WHEN** a default Agent configuration is created
-- **THEN** its built-in providers include a NewAPI-compatible gateway and a local provider
+- **THEN** its built-in providers include a NewAPI gateway and a local provider
 - **THEN** official direct vendor providers are not the recommended default provider path
 
 #### Scenario: Custom NewAPI endpoint is configurable
 
-- **WHEN** a user wants to use a third-party or self-hosted NewAPI-compatible endpoint
+- **WHEN** a user wants to use a third-party or self-hosted NewAPI endpoint
 - **THEN** the configuration can represent that provider as a custom gateway without changing adapter code
 
 ### Requirement: Local providers do not require API keys

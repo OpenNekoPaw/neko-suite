@@ -271,6 +271,7 @@ export {
 export {
   ConversationSkillRuntime,
   type ActiveSkillState,
+  type ApplySkillInvocationInput,
   type ApplySlashSkillCommandInput,
   type ConversationSkillAgentBridge,
   type ConversationSkillRuntimeDeps,

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ChatModelOption } from '@neko/shared';
 import { ModeSelector } from './ModeSelector';
 import { ModelSelector } from './ModelSelector';
@@ -19,11 +21,12 @@ const translations: Record<string, string> = {
   'chat.sessionMode.sections.agent': 'Direct Agent Collaboration',
   'chat.sessionMode.sections.media': 'Media Generation',
   'chat.sessionMode.agent': 'Creative Collaboration',
-  'chat.sessionMode.agentDesc': 'Develop stories, characters, dialogue, and shot language',
+  'chat.sessionMode.agentDesc':
+    'Refine story themes, character settings, worlds, scene atmosphere, and creative direction',
   'chat.sessionMode.image': 'Image Generation',
   'chat.sessionMode.imageDesc': 'Create character images and scene references',
   'chat.sessionMode.video': 'Video Generation',
-  'chat.sessionMode.videoDesc': 'Create shot clips and motion previews',
+  'chat.sessionMode.videoDesc': 'Create video material and motion previews',
   'chat.sessionMode.audio': 'Sound Generation',
   'chat.sessionMode.audioDesc': 'Create voice, sound effects, and ambience',
   'chat.sessionMode.badge.agent': 'Chat',
@@ -82,6 +85,7 @@ describe('dropdown overlay presentation contract', () => {
     expect(screen.getByText('Direct Agent Collaboration')).toBeTruthy();
     expect(screen.getByText('Media Generation')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Image Generation/ })).toBeTruthy();
+    expect(screen.getByRole('menu').textContent).not.toMatch(/storyboard|shot|dialogue|narration/i);
     expect(screen.queryByRole('menuitem', { name: 'Script Generation' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Music' })).toBeNull();
 
@@ -110,6 +114,16 @@ describe('dropdown overlay presentation contract', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Auto' }));
 
     expect(screen.getByRole('menu').className).toContain('right-0');
+  });
+
+  it('keeps entry prompt menus stretched to the composer width', () => {
+    const css = readFileSync(resolve(__dirname, '../../../index.css'), 'utf8');
+    const rule = css.match(/\.agent-composer-entry-prompt-menu\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+
+    expect(rule).toBeTruthy();
+    expect(rule).toContain('width: auto');
+    expect(rule).toContain('max-width: none');
+    expect(rule).not.toContain('420px');
   });
 });
 

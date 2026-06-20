@@ -6,7 +6,12 @@
  */
 
 import { useCallback } from 'react';
-import { handleTUISlashCommand, isSlashCommand } from '../adapters/slash-adapter';
+import {
+  handleTUISkillInvocation,
+  handleTUISlashCommand,
+  isSkillInvocation,
+  isSlashCommand,
+} from '../adapters/slash-adapter';
 import type { SkillService, ToolRegistry } from '@neko/agent';
 import { useConfigStore } from '../stores/config-store';
 import { useConversationStore } from '../stores/conversation-store';
@@ -14,7 +19,7 @@ import { useAgentStore } from '../stores/agent-store';
 import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
 import { getProviderModels } from '../core/config';
 
-export { isSlashCommand };
+export { isSlashCommand, isSkillInvocation };
 
 interface SlashCommandHandlers {
   /** Handle a slash command input */
@@ -39,6 +44,32 @@ export function useSlashCommands(sessionActions: {
   const handleCommand = useCallback(
     async (input: string) => {
       const config = useConfigStore.getState().config;
+
+      if (isSkillInvocation(input)) {
+        try {
+          const result = await handleTUISkillInvocation(input, {
+            config,
+            skillService: sessionActions.getSkillService?.(),
+            toolRegistry: sessionActions.getToolRegistry?.(),
+            onConfigUpdate: (updates) => {
+              useConfigStore.getState().setConfig(updates);
+            },
+            onOutput: (text) => {
+              addSystemMessage(text);
+            },
+          });
+
+          if (result.error) {
+            useConversationStore.getState().addError(new Error(result.error));
+          } else if (result.agentPrompt && sessionActions.submit) {
+            await sessionActions.submit(result.agentPrompt, result.executionOverrides);
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          useConversationStore.getState().addError(new Error(`Skill invocation error: ${msg}`));
+        }
+        return;
+      }
 
       // Built-in TUI commands that don't delegate to CLI
       const cmd = input.split(' ')[0]?.toLowerCase();

@@ -39,6 +39,7 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly systemPrompt?: string;
   readonly maxIterations?: number;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly modelId?: string;
   readonly thinkingBudget?: number;
@@ -85,6 +86,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     systemPrompt: input.systemPrompt,
     maxIterations: input.maxIterations,
     temperature: input.temperature,
+    topP: input.topP,
     maxTokens: input.maxTokens,
     modelId: input.modelId,
     thinkingBudget: input.thinkingBudget,

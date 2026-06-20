@@ -61,6 +61,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     skillHandler: {
       sendSkillsList: vi.fn(),
       clearActiveSkill: vi.fn(),
+      handleSkillInvocation: vi.fn().mockResolvedValue({ applied: true }),
     } as any,
     fileOperationHandler: {
       handleOpenFile: vi.fn(),
@@ -129,6 +130,14 @@ describe('handleChatWebviewMessage', () => {
 
   it('routes sendMessage to the message handler with explicit conversation state', () => {
     const deps = createDeps();
+    const agentModels = {
+      primary: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' as const },
+    };
+    const llmConfig = {
+      reasoningPreset: 'balanced' as const,
+      verbosityPreset: 'standard' as const,
+      creativityPreset: 'creative' as const,
+    };
 
     handleChatWebviewMessage(
       {
@@ -136,6 +145,8 @@ describe('handleChatWebviewMessage', () => {
         conversationId: 'conv-1',
         message: 'hello',
         sessionMode: 'agent',
+        agentModels,
+        llmConfig,
         contextPayloads: [
           {
             type: 'document-selection',
@@ -155,6 +166,8 @@ describe('handleChatWebviewMessage', () => {
         conversationId: 'conv-1',
         messageText: 'hello',
         sessionMode: 'agent',
+        agentModels,
+        llmConfig,
         contextPayloads: [
           {
             type: 'document-selection',
@@ -312,6 +325,57 @@ describe('handleChatWebviewMessage', () => {
       'as',
       '@小橘 --consult',
       'conv-1',
+    );
+  });
+
+  it('routes explicit skill invocations without reusing slash command dispatch', () => {
+    const deps = createDeps();
+    vi.mocked(vscode.commands.executeCommand).mockClear();
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeSkill',
+        skillName: 'quality-review',
+        args: 'changed files',
+        conversationId: 'conv-1',
+      },
+      deps,
+    );
+
+    expect(deps.skillHandler.handleSkillInvocation).toHaveBeenCalledWith(
+      deps.webview,
+      'quality-review',
+      'conv-1',
+      'changed files',
+    );
+    expect(deps.slashCommandHandler.handleCommand).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('returns a visible diagnostic when explicit skill invocation fails', async () => {
+    const deps = createDeps();
+    vi.mocked(deps.skillHandler.handleSkillInvocation).mockResolvedValue({
+      applied: false,
+      error: 'Unknown skill: $missing',
+    });
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeSkill',
+        skillName: 'missing',
+        conversationId: 'conv-1',
+      },
+      deps,
+    );
+    await Promise.resolve();
+
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'slashCommandResult',
+        command: '$missing',
+        success: false,
+        error: 'Unknown skill: $missing',
+      }),
     );
   });
 

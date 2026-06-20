@@ -6,7 +6,7 @@
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 // Command source type
-export type CommandSource = 'builtin' | 'skill' | 'plugin';
+export type CommandSource = 'builtin' | 'command-artifact' | 'plugin';
 
 // Slash command definition
 export interface SlashCommand {
@@ -16,12 +16,18 @@ export interface SlashCommand {
   name: string;
   descriptionKey: string; // i18n key or direct description for skills
   icon: string;
-  /** Command source: builtin, skill, or plugin */
+  /** Command source: builtin, command artifact, or plugin */
   source?: CommandSource;
-  /** Skill ID if source is 'skill' */
+  /** Backing Skill ID if source is 'command-artifact' */
   skillId?: string;
   /** Extension ID if source is 'plugin' */
   extensionId?: string;
+}
+
+export interface SkillInvocation {
+  id: string;
+  skillName: string;
+  name: string;
 }
 
 /**
@@ -54,6 +60,7 @@ export interface SkillSummary {
 // Generation params -------------------------------------------------------
 
 export type GenCategory = 'image' | 'video' | 'audio';
+export type EntryPromptMenu = 'generate-assets' | 'roleplay';
 
 export interface GenerationParams {
   ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:2' | '21:9' | '2.39:1';

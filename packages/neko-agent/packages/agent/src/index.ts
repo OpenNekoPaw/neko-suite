@@ -685,6 +685,7 @@ export {
   toConfiguredSkillFileCatalog,
   resolveSkillPathTriggers,
   type ActiveSkillState,
+  type ApplySkillInvocationInput,
   type ApplySlashSkillCommandInput,
   type ConversationSkillAgentBridge,
   type ConversationSkillProviderEffects,

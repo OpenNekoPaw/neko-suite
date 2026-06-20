@@ -47,11 +47,13 @@ export const handleSkills: CommandHandler = (args, context) => {
         name: string;
         description?: string;
         enabled?: boolean;
+        entryPointKind?: string;
         command?: string;
       };
       const status = s.enabled === false ? ' (disabled)' : '';
-      const cmd = s.command ? ` [/${s.command}]` : '';
-      lines.push(`  ${s.name}${cmd}${status}`);
+      const skillInvocation = ` [$${s.name}]`;
+      const cmd = s.entryPointKind === 'command-artifact' && s.command ? ` [/${s.command}]` : '';
+      lines.push(`  ${s.name}${skillInvocation}${cmd}${status}`);
       if (s.description) {
         lines.push(`      ${s.description}`);
       }
@@ -138,8 +140,8 @@ export const handleCommands: CommandHandler = (args, context) => {
       entry.source === 'builtin',
   );
   const skillCommands = commands.filter(
-    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'skill' }> =>
-      entry.source === 'skill',
+    (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'command-artifact' }> =>
+      entry.source === 'command-artifact',
   );
 
   const lines = [
@@ -156,7 +158,7 @@ export const handleCommands: CommandHandler = (args, context) => {
 
   if (skillCommands.length > 0) {
     lines.push('');
-    lines.push(`Skill Commands (${skillCommands.length}):`);
+    lines.push(`Command Artifacts (${skillCommands.length}):`);
     for (const command of skillCommands) {
       lines.push(`  /${command.name}${formatSkillUsage(command)}`);
       lines.push(`      ${command.description}`);
@@ -320,7 +322,9 @@ function listContextSlashCommandSkills(
   return coerceSlashCommandSkills(listAllSkills());
 }
 
-function formatSkillUsage(entry: Extract<SlashCommandCatalogEntry, { source: 'skill' }>): string {
+function formatSkillUsage(
+  entry: Extract<SlashCommandCatalogEntry, { source: 'command-artifact' }>,
+): string {
   if (!entry.supportsArguments) {
     return '';
   }

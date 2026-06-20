@@ -16,6 +16,8 @@ export interface ChatMessage {
   role: MessageRole;
   content: string | ContentPart[];
   name?: string;
+  /** Provider reasoning content that must be replayed with assistant messages. */
+  reasoningContent?: string;
   toolCallId?: string;
   toolCalls?: LLMToolCall[];
 }
@@ -121,8 +123,10 @@ export interface ChatResponse {
   message: ChatMessage;
   finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
   usage: TokenUsage;
-  /** Extended thinking content (Claude only) */
+  /** Extended thinking content for UI presentation */
   thinking?: string;
+  /** Provider reasoning content for protocol replay */
+  reasoningContent?: string;
 }
 
 /**
@@ -133,8 +137,10 @@ export interface ChatChunk {
   model: string;
   delta: Partial<ChatMessage>;
   finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter';
-  /** Extended thinking content delta (Claude only) */
+  /** Extended thinking content delta for UI presentation */
   thinking?: string;
+  /** Provider reasoning content delta for protocol replay */
+  reasoningContent?: string;
   /** Token usage (available on finish chunk) */
   usage?: TokenUsage;
 }

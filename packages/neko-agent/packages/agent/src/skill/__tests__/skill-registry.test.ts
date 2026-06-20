@@ -155,8 +155,12 @@ describe('SkillRegistry', () => {
   });
 
   describe('getSkillByCommand', () => {
-    it('should find skill by command name', () => {
-      const skill = createMockSkill({ name: 'commit-skill', command: 'commit' });
+    it('should find command artifacts by command name', () => {
+      const skill = createMockSkill({
+        name: 'commit-skill',
+        entryPointKind: 'command-artifact',
+        command: 'commit',
+      });
       registry.registerSkill(skill);
 
       const found = registry.getSkillByCommand('commit');
@@ -165,11 +169,22 @@ describe('SkillRegistry', () => {
     });
 
     it('should strip leading slash from command name', () => {
-      const skill = createMockSkill({ name: 'test-skill', command: 'test' });
+      const skill = createMockSkill({
+        name: 'test-skill',
+        entryPointKind: 'command-artifact',
+        command: 'test',
+      });
       registry.registerSkill(skill);
 
       const found = registry.getSkillByCommand('/test');
       expect(found).toBeDefined();
+    });
+
+    it('should not return ordinary skill legacy command aliases', () => {
+      const skill = createMockSkill({ name: 'legacy-skill', command: 'legacy' });
+      registry.registerSkill(skill);
+
+      expect(registry.getSkillByCommand('legacy')).toBeUndefined();
     });
 
     it('should return undefined for non-existent command', () => {
@@ -178,7 +193,12 @@ describe('SkillRegistry', () => {
     });
 
     it('should not return disabled skills', () => {
-      const skill = createMockSkill({ name: 'disabled', command: 'disabled', enabled: false });
+      const skill = createMockSkill({
+        name: 'disabled',
+        entryPointKind: 'command-artifact',
+        command: 'disabled',
+        enabled: false,
+      });
       registry.registerSkill(skill);
 
       const found = registry.getSkillByCommand('disabled');

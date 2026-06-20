@@ -50,8 +50,12 @@ export function* stepToEvents(
       break;
 
     case 'think':
-      if (step.thinking) {
-        yield { type: 'thinking_content', thinking: step.thinking };
+      if (step.thinking || step.reasoningContent) {
+        yield {
+          type: 'thinking_content',
+          thinking: step.thinking,
+          reasoningContent: step.reasoningContent,
+        };
       }
       // Only emit full text if we didn't already stream deltas
       if (step.content && !streamState.hasStreamedDeltas) {
@@ -184,6 +188,7 @@ export function recordStepInHistory(
         history.push({
           role: 'assistant',
           content: step.content ?? '',
+          reasoningContent: step.reasoningContent,
           toolCalls: step.toolCalls.map((tc, i) => ({
             id: tc.id || `call_${iteration}_${i}`,
             type: 'function' as const,
@@ -195,7 +200,11 @@ export function recordStepInHistory(
         });
       } else if (step.content) {
         // Final text response (no tool calls)
-        history.push({ role: 'assistant', content: step.content });
+        history.push({
+          role: 'assistant',
+          content: step.content,
+          reasoningContent: step.reasoningContent,
+        });
       }
       break;
 

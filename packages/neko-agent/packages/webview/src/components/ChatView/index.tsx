@@ -5,12 +5,13 @@ import {
   type ConversationKind,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
+  type AgentLlmConfig,
+  type AgentModelSlots,
 } from '@neko-agent/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
-import type { SelectedFileReference } from '@/components/ChatView/InputArea/types';
-import { EmptyState } from '@/components/ChatView/EmptyState';
+import type { EntryPromptMenu, SelectedFileReference } from '@/components/ChatView/InputArea/types';
 import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
@@ -59,8 +60,12 @@ interface ChatViewProps {
     attachments?: MessageAttachment[];
     contextPayloads?: AgentContextPayload[];
     fileReferences?: SelectedFileReference[];
+    agentModels?: AgentModelSlots;
+    llmConfig?: AgentLlmConfig;
   }) => void;
   onCancel?: () => void;
+  entryPromptMenu?: EntryPromptMenu | null;
+  onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   /** Session-bound attached files (managed by parent) */
   attachedFiles?: MessageAttachment[];
   /** Callback to update attached files */
@@ -102,6 +107,8 @@ export function ChatView({
   onInputChange,
   onSend,
   onCancel,
+  entryPromptMenu,
+  onEntryPromptMenuChange,
   attachedFiles,
   onAttachedFilesChange,
   selectedFileReferences,
@@ -143,9 +150,7 @@ export function ChatView({
 
         {/* Messages Container */}
         {isEmpty ? (
-          <div className="agent-chat-empty-scroll flex-1 overflow-y-auto">
-            {conversationKind === 'chat' ? <EmptyState onSuggestionClick={onInputChange} /> : null}
-          </div>
+          <div className="agent-chat-empty-scroll flex-1 overflow-y-auto" />
         ) : (
           <MessageActionsProvider
             activeConversationId={activeConversationId}
@@ -186,6 +191,8 @@ export function ChatView({
           onInputChange={onInputChange}
           onSend={onSend}
           onCancel={onCancel}
+          entryPromptMenu={entryPromptMenu}
+          onEntryPromptMenuChange={onEntryPromptMenuChange}
           disabled={isConversationSwitching}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}

@@ -207,7 +207,7 @@ function createAccountCatalog() {
       apiUrl: '',
       enabled: true,
       connectionKind: 'gateway' as const,
-      protocolProfile: 'newapi-compatible' as const,
+      protocolProfile: 'newapi' as const,
       supportLevel: 'verified' as const,
       requiresApiKey: false,
     },
@@ -448,6 +448,32 @@ describe('ConfigManager', () => {
       );
       expect(() => manager.assertConfigAvailable()).toThrow(
         'Configuration file contains invalid TOML',
+      );
+    });
+
+    it('surfaces unsupported provider protocol profile diagnostics', () => {
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'unsupportedProviderProtocolProfile',
+          filePath: '/tmp/neko/config.toml',
+          diagnostic: {
+            code: 'unsupportedProviderProtocolProfile',
+            filePath: '/tmp/neko/config.toml',
+            message: 'unsupported protocol_profile detail',
+            detail: 'Unsupported provider protocol_profile "deepseek"',
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toEqual({
+        code: 'unsupportedProviderProtocolProfile',
+        filePath: '/tmp/neko/config.toml',
+        message:
+          'Configuration file contains an unsupported provider protocol_profile: /tmp/neko/config.toml. Use newapi, openai-chat, openai-responses, anthropic, google, or ollama, then open a new Agent session or tab.',
+      });
+      expect(manager.getConfig().providers.size).toBe(0);
+      expect(() => manager.assertConfigAvailable()).toThrow(
+        'unsupported provider protocol_profile',
       );
     });
 

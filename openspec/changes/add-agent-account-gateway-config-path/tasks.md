@@ -22,7 +22,7 @@
 ## 4. Provider Source Resolution
 
 - [x] 4.1 Implement explicit AI config detection that ignores non-AI config files but treats explicit provider/model/default selections as authoritative.
-- [x] 4.2 Add an account gateway provider/model snapshot source using `connectionKind: gateway`, NewAPI-compatible protocol metadata, and entitlement-filtered models.
+- [x] 4.2 Add an account gateway provider/model snapshot source using `connectionKind: gateway`, NewAPI protocol metadata, and entitlement-filtered models.
 - [x] 4.3 Merge explicit config and account gateway snapshots through a resolver that preserves explicit config priority and records the selected source.
 - [x] 4.4 Keep invalid explicit AI config fail-visible and prevent fallback to account gateway when explicit provider/model selection is wrong.
 - [x] 4.5 Add resolver tests for explicit config win, non-AI config account fallback, invalid explicit config blocking fallback, no source diagnostics, and account entitlement filtering.

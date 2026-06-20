@@ -73,6 +73,13 @@ const ALL_PLUGIN_TRANSFER_CONTENT_FORMATS = [
 ] as const satisfies readonly PluginTransferContentFormat[];
 export type MediaModelCategory = Exclude<ProtocolModelCategory, 'llm'>;
 export type AgentMediaModelCategory = Extract<MediaModelCategory, 'image' | 'video' | 'audio'>;
+export type AgentModelSlot = 'primary' | 'fast' | 'deep' | 'summarizer' | 'vision';
+export type AgentReasoningPreset = 'fast' | 'balanced' | 'deep';
+export type AgentVerbosityPreset = 'brief' | 'standard' | 'detailed';
+export type AgentCreativityPreset = 'stable' | 'creative' | 'wild';
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type AgentTextVerbosity = 'low' | 'medium' | 'high';
+export type AgentServiceTier = 'auto' | 'default' | 'fast' | 'flex' | 'priority';
 
 export interface ModelRef<Category extends ProtocolModelCategory = ProtocolModelCategory> {
   providerId: string;
@@ -86,6 +93,25 @@ export type AgentMediaModelSelections = Partial<{
   audio: ModelRef<'audio'>;
 }>;
 
+export type AgentModelSlots = Partial<Record<AgentModelSlot, ModelRef<'llm'>>>;
+
+export interface AgentLlmAdvancedParams {
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+  reasoningEffort?: AgentReasoningEffort;
+  thinkingBudget?: number;
+  verbosity?: AgentTextVerbosity;
+  serviceTier?: AgentServiceTier;
+}
+
+export interface AgentLlmConfig {
+  reasoningPreset?: AgentReasoningPreset;
+  verbosityPreset?: AgentVerbosityPreset;
+  creativityPreset?: AgentCreativityPreset;
+  advanced?: AgentLlmAdvancedParams;
+}
+
 export type RuntimeMediaModelSelections = Partial<Record<MediaModelCategory, ModelRef>>;
 
 export interface SendMessageWebviewMessage {
@@ -94,6 +120,8 @@ export interface SendMessageWebviewMessage {
   message: string;
   sessionMode: SessionMode;
   chatModel?: ModelRef<'llm'>;
+  agentModels?: AgentModelSlots;
+  llmConfig?: AgentLlmConfig;
   mediaModel?: ModelRef<MediaModelCategory>;
   mediaModels?: AgentMediaModelSelections;
   attachments?: MessageAttachment[];
@@ -251,6 +279,13 @@ export interface InvokeSlashCommandWebviewMessage {
   conversationId: string;
 }
 
+export interface InvokeSkillWebviewMessage {
+  type: 'invokeSkill';
+  skillName: string;
+  conversationId: string;
+  args?: string;
+}
+
 export interface InvokePluginSlashCommandWebviewMessage {
   type: 'invokePluginSlashCommand';
   extensionId: string;
@@ -314,6 +349,7 @@ export type WebviewToExtensionMessage =
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
+  | InvokeSkillWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | ExitCharacterDialogueSessionWebviewMessage
   | ExitEmbodyCharacterSessionWebviewMessage
@@ -830,6 +866,32 @@ export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract
 const SESSION_MODES: readonly SessionMode[] = ['agent', 'image', 'video', 'audio'];
 const MODEL_CATEGORIES: readonly ProtocolModelCategory[] = ['llm', 'image', 'video', 'audio'];
 const AGENT_MEDIA_CATEGORIES: readonly AgentMediaModelCategory[] = ['image', 'video', 'audio'];
+const AGENT_MODEL_SLOTS: readonly AgentModelSlot[] = [
+  'primary',
+  'fast',
+  'deep',
+  'summarizer',
+  'vision',
+];
+const AGENT_REASONING_PRESETS: readonly AgentReasoningPreset[] = ['fast', 'balanced', 'deep'];
+const AGENT_VERBOSITY_PRESETS: readonly AgentVerbosityPreset[] = ['brief', 'standard', 'detailed'];
+const AGENT_CREATIVITY_PRESETS: readonly AgentCreativityPreset[] = ['stable', 'creative', 'wild'];
+const AGENT_REASONING_EFFORTS: readonly AgentReasoningEffort[] = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+];
+const AGENT_TEXT_VERBOSITIES: readonly AgentTextVerbosity[] = ['low', 'medium', 'high'];
+const AGENT_SERVICE_TIERS: readonly AgentServiceTier[] = [
+  'auto',
+  'default',
+  'fast',
+  'flex',
+  'priority',
+];
 const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['type'][] = [
   'switchConversation',
   'clearHistory',
@@ -891,6 +953,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'mermaidError',
   'downloadSvg',
   'invokeSlashCommand',
+  'invokeSkill',
   'invokePluginSlashCommand',
   'exitCharacterDialogueSession',
   'exitEmbodyCharacterSession',
@@ -1229,6 +1292,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseDownloadSvgMessage(raw);
     case 'invokeSlashCommand':
       return parseInvokeSlashCommandMessage(raw);
+    case 'invokeSkill':
+      return parseInvokeSkillMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
     case 'exitCharacterDialogueSession':
@@ -1258,13 +1323,31 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
     raw.modelId !== undefined ||
     raw.mediaProviderId !== undefined ||
     raw.mediaModelId !== undefined ||
-    raw.agentMediaModels !== undefined
+    raw.agentMediaModels !== undefined ||
+    raw.agentModel !== undefined ||
+    raw.agentLlmConfig !== undefined ||
+    raw.llmParams !== undefined ||
+    raw.temperature !== undefined ||
+    raw.maxTokens !== undefined ||
+    raw.maxOutputTokens !== undefined ||
+    raw.topP !== undefined ||
+    raw.reasoningEffort !== undefined ||
+    raw.thinkingBudget !== undefined ||
+    raw.verbosity !== undefined ||
+    raw.serviceTier !== undefined
   ) {
     return null;
   }
 
   const chatModel = raw.chatModel === undefined ? undefined : parseModelRef(raw.chatModel, 'llm');
   if (raw.chatModel !== undefined && !chatModel) return null;
+
+  const agentModels =
+    raw.agentModels === undefined ? undefined : parseAgentModelSlots(raw.agentModels);
+  if (raw.agentModels !== undefined && !agentModels) return null;
+
+  const llmConfig = raw.llmConfig === undefined ? undefined : parseAgentLlmConfig(raw.llmConfig);
+  if (raw.llmConfig !== undefined && !llmConfig) return null;
 
   const mediaModel = raw.mediaModel === undefined ? undefined : parseMediaModelRef(raw.mediaModel);
   if (raw.mediaModel !== undefined && !mediaModel) return null;
@@ -1300,6 +1383,7 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
   } else {
     if (!mediaModel || mediaModel.category !== raw.sessionMode) return null;
     if (mediaModels) return null;
+    if (agentModels || llmConfig) return null;
   }
 
   return {
@@ -1308,6 +1392,8 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
     message: raw.message,
     sessionMode: raw.sessionMode,
     ...(chatModel ? { chatModel } : {}),
+    ...(agentModels ? { agentModels } : {}),
+    ...(llmConfig ? { llmConfig } : {}),
     ...(mediaModel ? { mediaModel } : {}),
     ...(mediaModels ? { mediaModels } : {}),
     ...(attachments ? { attachments } : {}),
@@ -2132,6 +2218,19 @@ function parseInvokeSlashCommandMessage(
   };
 }
 
+function parseInvokeSkillMessage(raw: Record<string, unknown>): InvokeSkillWebviewMessage | null {
+  const skillName = requiredString(raw.skillName);
+  const conversationId = requiredString(raw.conversationId);
+  const args = optionalStringStrict(raw.args);
+  if (!skillName || !conversationId || args === null) return null;
+  return {
+    type: 'invokeSkill',
+    skillName,
+    conversationId,
+    ...(args !== undefined ? { args } : {}),
+  };
+}
+
 function parseInvokePluginSlashCommandMessage(
   raw: Record<string, unknown>,
 ): InvokePluginSlashCommandWebviewMessage | null {
@@ -2273,6 +2372,83 @@ function parseAgentMediaModelSelections(value: unknown): AgentMediaModelSelectio
   }
 
   return Object.keys(selections).length > 0 ? selections : null;
+}
+
+function parseAgentModelSlots(value: unknown): AgentModelSlots | null {
+  if (!isRecord(value)) return null;
+
+  const selections: AgentModelSlots = {};
+  for (const key of Object.keys(value)) {
+    if (!isAgentModelSlot(key)) return null;
+    const model = parseModelRef(value[key], 'llm');
+    if (!model) return null;
+    selections[key] = model;
+  }
+
+  return Object.keys(selections).length > 0 ? selections : null;
+}
+
+function parseAgentLlmConfig(value: unknown): AgentLlmConfig | null {
+  if (!isRecord(value)) return null;
+
+  const reasoningPreset = optionalAgentReasoningPreset(value.reasoningPreset);
+  if (value.reasoningPreset !== undefined && reasoningPreset === undefined) return null;
+
+  const verbosityPreset = optionalAgentVerbosityPreset(value.verbosityPreset);
+  if (value.verbosityPreset !== undefined && verbosityPreset === undefined) return null;
+
+  const creativityPreset = optionalAgentCreativityPreset(value.creativityPreset);
+  if (value.creativityPreset !== undefined && creativityPreset === undefined) return null;
+
+  const advanced =
+    value.advanced === undefined ? undefined : parseAgentLlmAdvancedParams(value.advanced);
+  if (value.advanced !== undefined && !advanced) return null;
+
+  const config: AgentLlmConfig = {
+    ...(reasoningPreset ? { reasoningPreset } : {}),
+    ...(verbosityPreset ? { verbosityPreset } : {}),
+    ...(creativityPreset ? { creativityPreset } : {}),
+    ...(advanced ? { advanced } : {}),
+  };
+
+  return Object.keys(config).length > 0 ? config : null;
+}
+
+function parseAgentLlmAdvancedParams(value: unknown): AgentLlmAdvancedParams | null {
+  if (!isRecord(value)) return null;
+
+  const temperature = optionalNumber(value.temperature);
+  if (value.temperature !== undefined && temperature === undefined) return null;
+
+  const topP = optionalNumber(value.topP);
+  if (value.topP !== undefined && topP === undefined) return null;
+
+  const maxOutputTokens = optionalPositiveInteger(value.maxOutputTokens);
+  if (value.maxOutputTokens !== undefined && maxOutputTokens === undefined) return null;
+
+  const reasoningEffort = optionalAgentReasoningEffort(value.reasoningEffort);
+  if (value.reasoningEffort !== undefined && reasoningEffort === undefined) return null;
+
+  const thinkingBudget = optionalNonNegativeInteger(value.thinkingBudget);
+  if (value.thinkingBudget !== undefined && thinkingBudget === undefined) return null;
+
+  const verbosity = optionalAgentTextVerbosity(value.verbosity);
+  if (value.verbosity !== undefined && verbosity === undefined) return null;
+
+  const serviceTier = optionalAgentServiceTier(value.serviceTier);
+  if (value.serviceTier !== undefined && serviceTier === undefined) return null;
+
+  const params: AgentLlmAdvancedParams = {
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(topP !== undefined ? { topP } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(thinkingBudget !== undefined ? { thinkingBudget } : {}),
+    ...(verbosity ? { verbosity } : {}),
+    ...(serviceTier ? { serviceTier } : {}),
+  };
+
+  return Object.keys(params).length > 0 ? params : null;
 }
 
 function parseModelRef<Category extends ProtocolModelCategory>(
@@ -2426,8 +2602,60 @@ function isModelCategory(value: unknown): value is ProtocolModelCategory {
   return typeof value === 'string' && MODEL_CATEGORIES.includes(value as ProtocolModelCategory);
 }
 
+function isAgentModelSlot(value: string): value is AgentModelSlot {
+  return includesString(AGENT_MODEL_SLOTS, value);
+}
+
+function optionalAgentReasoningPreset(value: unknown): AgentReasoningPreset | undefined {
+  return typeof value === 'string' && includesString(AGENT_REASONING_PRESETS, value)
+    ? value
+    : undefined;
+}
+
+function optionalAgentVerbosityPreset(value: unknown): AgentVerbosityPreset | undefined {
+  return typeof value === 'string' && includesString(AGENT_VERBOSITY_PRESETS, value)
+    ? value
+    : undefined;
+}
+
+function optionalAgentCreativityPreset(value: unknown): AgentCreativityPreset | undefined {
+  return typeof value === 'string' && includesString(AGENT_CREATIVITY_PRESETS, value)
+    ? value
+    : undefined;
+}
+
+function optionalAgentReasoningEffort(value: unknown): AgentReasoningEffort | undefined {
+  return typeof value === 'string' && includesString(AGENT_REASONING_EFFORTS, value)
+    ? value
+    : undefined;
+}
+
+function optionalAgentTextVerbosity(value: unknown): AgentTextVerbosity | undefined {
+  return typeof value === 'string' && includesString(AGENT_TEXT_VERBOSITIES, value)
+    ? value
+    : undefined;
+}
+
+function optionalAgentServiceTier(value: unknown): AgentServiceTier | undefined {
+  return typeof value === 'string' && includesString(AGENT_SERVICE_TIERS, value)
+    ? value
+    : undefined;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return isFiniteNumber(value) ? value : undefined;
+}
+
+function optionalPositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function isNonEmptyString(value: unknown): value is string {

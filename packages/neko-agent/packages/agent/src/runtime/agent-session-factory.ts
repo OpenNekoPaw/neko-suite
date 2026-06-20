@@ -53,6 +53,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly systemPrompt?: string;
   readonly maxIterations?: number;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly modelId?: string;
   readonly thinkingBudget?: number;
@@ -146,6 +147,7 @@ export async function createAgentRuntimeSession(
     executionMode: config.executionMode ?? 'auto',
     maxIterations: config.maxIterations,
     temperature: config.temperature,
+    topP: config.topP,
     maxTokens: config.maxTokens,
     thinkingBudget: config.thinkingBudget,
     modelId: config.modelId,
@@ -202,6 +204,7 @@ export function updateAgentRuntimeSession(
       systemPrompt: handle.effectiveSystemPrompt,
       modelId: config.modelId,
       temperature: config.temperature,
+      topP: config.topP,
       maxTokens: config.maxTokens,
       thinkingBudget: config.thinkingBudget,
       maxIterations: config.maxIterations,

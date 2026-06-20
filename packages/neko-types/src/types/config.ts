@@ -15,10 +15,18 @@
  */
 export type AuthType = 'bearer' | 'api-key' | 'custom-header';
 
+export const AUTH_TYPES = [
+  'bearer',
+  'api-key',
+  'custom-header',
+] as const satisfies readonly AuthType[];
+
 /**
  * Stream format for streaming responses
  */
 export type StreamFormat = 'sse' | 'ndjson';
+
+export const STREAM_FORMATS = ['sse', 'ndjson'] as const satisfies readonly StreamFormat[];
 
 /**
  * Protocol variant configuration for OpenAI-compatible APIs.
@@ -117,6 +125,29 @@ export type ProviderType =
   | 'fal'
   | 'dashscope';
 
+export const PROVIDER_TYPES = [
+  'openai',
+  'anthropic',
+  'google',
+  'azure',
+  'ollama',
+  'generic',
+  'newapi',
+  'oneapi',
+  'xai',
+  'kling',
+  'runway',
+  'luma',
+  'minimax',
+  'jimeng',
+  'liblib',
+  'suno',
+  'vidu',
+  'midjourney',
+  'fal',
+  'dashscope',
+] as const satisfies readonly ProviderType[];
+
 /**
  * Provider connection mode.
  *
@@ -126,21 +157,44 @@ export type ProviderType =
  */
 export type ProviderConnectionKind = 'gateway' | 'custom-gateway' | 'local' | 'direct';
 
+export const PROVIDER_CONNECTION_KINDS = [
+  'gateway',
+  'custom-gateway',
+  'local',
+  'direct',
+] as const satisfies readonly ProviderConnectionKind[];
+
 /**
  * Protocol profile used by the provider endpoint.
  */
 export type ProviderProtocolProfile =
-  | 'newapi-compatible'
+  | 'newapi'
   | 'openai-chat'
   | 'openai-responses'
   | 'anthropic'
   | 'google'
   | 'ollama';
 
+export const PROVIDER_PROTOCOL_PROFILES = [
+  'newapi',
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+  'google',
+  'ollama',
+] as const satisfies readonly ProviderProtocolProfile[];
+
 /**
  * Support confidence for built-in and user-configured providers.
  */
 export type ProviderSupportLevel = 'verified' | 'compatible' | 'experimental' | 'custom';
+
+export const PROVIDER_SUPPORT_LEVELS = [
+  'verified',
+  'compatible',
+  'experimental',
+  'custom',
+] as const satisfies readonly ProviderSupportLevel[];
 
 /**
  * AI service provider configuration

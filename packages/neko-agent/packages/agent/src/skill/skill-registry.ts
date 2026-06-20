@@ -1,8 +1,9 @@
 /**
  * Skill Registry - Unified storage for skills
  *
- * Skills with a `command` field are also accessible as slash commands.
- * No separate SlashCommand type needed.
+ * Command artifacts reuse the Skill runtime shape but are explicitly marked
+ * with `entryPointKind: "command-artifact"` before they enter the slash
+ * command namespace.
  */
 
 import type { Skill, ISkillRegistry } from '@neko/shared';
@@ -63,13 +64,18 @@ export class SkillRegistry implements ISkillRegistry {
   }
 
   /**
-   * Find a skill by its slash command trigger name.
-   * Only returns skills that have the `command` field set.
+   * Find a command artifact by slash command trigger name.
+   * Ordinary Skills may carry legacy `command` metadata during migration, but
+   * they are invoked explicitly through `$skill` and are not returned here.
    */
   getSkillByCommand(commandName: string): Skill | undefined {
     const normalized = commandName.startsWith('/') ? commandName.slice(1) : commandName;
     for (const skill of this.skills.values()) {
-      if (skill.command === normalized && skill.enabled !== false) {
+      if (
+        skill.entryPointKind === 'command-artifact' &&
+        skill.command === normalized &&
+        skill.enabled !== false
+      ) {
         return skill;
       }
     }
@@ -103,6 +109,10 @@ export class SkillRegistry implements ISkillRegistry {
       enabled: true,
       icon: lazySkill.icon,
       directoryPath: lazySkill.directoryPath,
+      entryPointKind: lazySkill.entryPointKind,
+      command: lazySkill.command,
+      argumentHint: lazySkill.argumentHint,
+      supportsArguments: lazySkill.supportsArguments,
       version: lazySkill.manifest?.version,
       domain: lazySkill.manifest?.domain,
       requiredSubpackages: lazySkill.manifest?.requiredSubpackages,

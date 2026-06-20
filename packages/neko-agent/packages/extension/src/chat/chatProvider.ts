@@ -132,7 +132,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   // Tab state for persistence
   private _tabState: TabState = { openTabs: [], activeTabId: null };
-  private _hasPersistedTabState = false;
 
   // Handlers
   private readonly _taskHandler: TaskHandler;
@@ -456,18 +455,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     await this._localResourceAccess.configureChatWebview(webviewView.webview);
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
-
-    // Reconcile the active conversation against the persisted tab state before the
-    // webview's getActiveConversation/getTabState requests arrive. Without this,
-    // a cold-start mismatch (e.g. persisted tab points to "conv-X" but the
-    // ConversationManager has no active id yet) leaves activeTabConversationId !==
-    // activeConversationId, which the input area treats as a "switching" window
-    // and disables typing indefinitely.
-    this._syncActiveConversationFromTabState();
-
-    // Final guarantee: unless the user explicitly persisted an empty tab state,
-    // the webview should have an active conversation before it asks for one.
-    this._ensureActiveConversationAndTab();
+    this._startWithEmptyTabs();
 
     // Notify webview which neko-suite plugins are installed (ADR-5)
     postPluginsAvailable(webviewView.webview);
@@ -724,31 +712,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const persistedTabState = this._context.workspaceState.get<unknown>(
       ChatViewProvider.TAB_STATE_KEY,
     );
-    this._hasPersistedTabState = persistedTabState !== undefined;
     const restored = normalizeTabState(persistedTabState);
 
-    // Drop tabs whose conversation no longer exists (e.g. user cleared all
-    // conversations while the panel was closed). Otherwise the webview would
-    // see activeTabConversationId pointing at a phantom conversation while
-    // activeConversationId is null, locking the input area into the
-    // "switching" state forever.
-    const liveTabs = restored.openTabs.filter((tab) =>
-      tab.kind === 'character-dialogue'
-        ? this._characterDialogue.hasSession(tab.conversationId)
-        : tab.kind === 'embody-character'
-          ? this._embodyCharacter.hasSession(tab.conversationId)
-          : Boolean(this._conversations.get(tab.conversationId)),
-    );
-    const liveActiveTabId =
-      restored.activeTabId && liveTabs.some((tab) => tab.id === restored.activeTabId)
-        ? restored.activeTabId
-        : (liveTabs[0]?.id ?? null);
+    // Startup no longer restores previously open tabs. Conversation history
+    // remains available from the menu; tab restoration is user-driven.
+    this._tabState = { openTabs: [], activeTabId: null };
 
-    this._tabState = { openTabs: liveTabs, activeTabId: liveActiveTabId };
-
-    if (liveTabs.length !== restored.openTabs.length || liveActiveTabId !== restored.activeTabId) {
+    if (restored.openTabs.length > 0 || restored.activeTabId !== null) {
       this._saveTabState();
     }
+  }
+
+  private _startWithEmptyTabs(): void {
+    this._tabState = { openTabs: [], activeTabId: null };
+    this._conversations.clearActive();
+    this._saveTabState();
   }
 
   private _syncActiveConversationFromTabState(): void {
@@ -767,52 +745,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
   }
 
-  private _ensureActiveConversationAndTab(): void {
-    // Empty persisted tab state is intentional: the user closed every tab, so
-    // reopening the panel must not resurrect the most recent history item.
-    if (
-      this._hasPersistedTabState &&
-      this._tabState.openTabs.length === 0 &&
-      this._tabState.activeTabId === null
-    ) {
-      this._conversations.clearActive();
-      return;
-    }
-
-    // Make sure ConversationManager has at least one conversation and an active id.
-    // ensureActive() creates a fresh conversation if none exists, then returns the
-    // active id (creating or reusing).
-    const activeId = this._conversations.ensureActive();
-
-    // Make sure _tabState has a tab pointing at the active conversation.
-    const hasTabForActive = this._tabState.openTabs.some((tab) => tab.conversationId === activeId);
-
-    if (!hasTabForActive) {
-      const conversation = this._conversations.get(activeId);
-      const newTab: OpenTab = {
-        id: `tab-${Date.now()}`,
-        title: conversation?.title || 'New Chat',
-        conversationId: activeId,
-      };
-      this._tabState = {
-        openTabs: [...this._tabState.openTabs, newTab],
-        activeTabId: newTab.id,
-      };
-      this._saveTabState();
-      return;
-    }
-
-    // Tab exists for the active conversation — make sure it's the active tab.
-    const tabForActive = this._tabState.openTabs.find((tab) => tab.conversationId === activeId);
-    if (tabForActive && this._tabState.activeTabId !== tabForActive.id) {
-      this._tabState = {
-        openTabs: this._tabState.openTabs,
-        activeTabId: tabForActive.id,
-      };
-      this._saveTabState();
-    }
-  }
-
   private _syncCanvasAmbientScopeFromActiveConversation(): void {
     const conversationId = this._conversations.getActiveId();
     const nodes = conversationId ? setActiveCanvasAmbientScope(conversationId) : [];
@@ -823,7 +755,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private _saveTabState(): void {
-    this._hasPersistedTabState = true;
     this._context.workspaceState.update(ChatViewProvider.TAB_STATE_KEY, this._tabState);
   }
 

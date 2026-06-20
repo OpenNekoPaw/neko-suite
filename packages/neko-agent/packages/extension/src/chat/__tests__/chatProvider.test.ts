@@ -139,6 +139,64 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('starts with entry state instead of restoring previously open conversation tabs', async () => {
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'hi', timestamp: 1 }],
+      createdAt: 1,
+      updatedAt: 1,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: 'conv-history',
+      },
+      'neko.tabState': {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    await receiveMessage?.({ type: 'getActiveConversation' });
+    await receiveMessage?.({ type: 'getTabState' });
+
+    expect(context.workspaceState.update).toHaveBeenCalledWith('neko.tabState', {
+      openTabs: [],
+      activeTabId: null,
+    });
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'activeConversation',
+      conversation: null,
+    });
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      tabState: { openTabs: [], activeTabId: null },
+    });
+
+    provider.dispose();
+  });
+
   it('keeps same-session empty tab state after all tabs are closed', async () => {
     const historicalConversation = {
       id: 'conv-history',

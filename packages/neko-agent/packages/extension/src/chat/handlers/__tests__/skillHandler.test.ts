@@ -19,6 +19,7 @@ function createMockSkillService() {
       getCommand: vi.fn().mockReturnValue(null),
       getSkill: vi.fn().mockReturnValue(null),
       getSkillByCommand: vi.fn().mockReturnValue(null),
+      ensureLoaded: vi.fn().mockResolvedValue(undefined),
     },
     applyCommand: vi.fn().mockReturnValue({
       applied: true,
@@ -116,10 +117,11 @@ describe('SkillHandler', () => {
       expect(result).toEqual({ applied: false, error: 'Unknown command: /unknown' });
     });
 
-    it('should apply slash command and send injection', async () => {
+    it('should apply command artifact slash command and send injection', async () => {
       const mockSkill = {
         name: 'commit',
         description: 'Create a commit',
+        entryPointKind: 'command-artifact',
         command: 'commit',
       };
       skillService.registry.getSkillByCommand.mockReturnValue(mockSkill);
@@ -150,15 +152,17 @@ describe('SkillHandler', () => {
       expect(handler.getActiveSkill('conv-1')?.skill).toBe(mockSkill);
     });
 
-    it('should isolate active slash-command skills by conversation', async () => {
+    it('should isolate active command artifact skills by conversation', async () => {
       const commitSkill = {
         name: 'commit',
         description: 'Create a commit',
+        entryPointKind: 'command-artifact',
         command: 'commit',
       };
       const reviewSkill = {
         name: 'review',
         description: 'Review code',
+        entryPointKind: 'command-artifact',
         command: 'review',
       };
       skillService.registry.getSkillByCommand.mockImplementation((command: string) =>
@@ -186,6 +190,57 @@ describe('SkillHandler', () => {
           skillName: 'review',
         }),
       );
+    });
+  });
+
+  describe('handleSkillInvocation', () => {
+    it('should apply skill by canonical name and send injection', async () => {
+      const mockSkill = {
+        name: 'quality-review',
+        description: 'Review changed files',
+        content: 'Review instructions',
+        enabled: true,
+      };
+      skillService.registry.getSkill.mockReturnValue(mockSkill);
+      skillService.registry.ensureLoaded.mockResolvedValue(mockSkill);
+      skillService.apply.mockResolvedValue({
+        name: 'quality-review',
+        systemPrompt: 'Review instructions',
+        allowedTools: ['read'],
+        type: 'skill' as const,
+      });
+
+      handler = new SkillHandler({ skillService: skillService as any });
+      const result = await handler.handleSkillInvocation(
+        webview as any,
+        'quality-review',
+        'conv-1',
+        'changed files',
+      );
+
+      expect(skillService.registry.getSkill).toHaveBeenCalledWith('quality-review');
+      expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
+      expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('quality-review');
+      expect(skillService.apply).toHaveBeenCalledWith(mockSkill, 'changed files');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'skillInjection',
+          conversationId: 'conv-1',
+          skillName: 'quality-review',
+          systemPrompt: 'Review instructions',
+        }),
+      );
+      expect(result).toEqual(expect.objectContaining({ applied: true, skill: mockSkill }));
+    });
+
+    it('should return visible unknown skill result without sending injection', async () => {
+      skillService.registry.getSkill.mockReturnValue(undefined);
+      handler = new SkillHandler({ skillService: skillService as any });
+
+      const result = await handler.handleSkillInvocation(webview as any, 'missing', 'conv-1');
+
+      expect(result).toEqual({ applied: false, error: 'Unknown skill: $missing' });
+      expect(webview.postMessage).not.toHaveBeenCalled();
     });
   });
 

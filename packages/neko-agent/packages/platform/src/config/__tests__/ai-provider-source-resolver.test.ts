@@ -13,7 +13,7 @@ const explicitProvider: Provider = {
   apiKey: 'sk-user',
   enabled: true,
   connectionKind: 'custom-gateway',
-  protocolProfile: 'newapi-compatible',
+  protocolProfile: 'newapi',
 };
 
 const explicitModel: Model = {
@@ -46,7 +46,7 @@ function createAccountCatalog(): AccountAiCatalogSnapshot {
       apiUrl: '',
       enabled: true,
       connectionKind: 'gateway',
-      protocolProfile: 'newapi-compatible',
+      protocolProfile: 'newapi',
       supportLevel: 'verified',
       requiresApiKey: false,
     },

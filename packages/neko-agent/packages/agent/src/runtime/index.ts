@@ -445,6 +445,7 @@ export {
   shouldPersistAgentAssistantStream,
   getAgentHistoryToHydrate,
   type AgentAmbientCanvasNode,
+  type AgentLlmRuntimeOptions,
   type AgentExecutionMetadataInput,
   type AgentHistoryHydrationPlan,
   type AgentHistoryHydrationPlanInput,

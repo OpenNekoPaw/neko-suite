@@ -169,6 +169,7 @@ export interface MessageHandlerContext
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   // Unified @mention items (files + canvas nodes + characters)
   mentionSearchFilter: string;
+  mentionSearchFilterRef?: MutableRefObject<string>;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   // Plugin slash commands registered by external extensions
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;

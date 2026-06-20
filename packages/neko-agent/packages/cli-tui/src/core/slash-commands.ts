@@ -7,6 +7,7 @@
 
 import {
   type Skill,
+  type SkillApplicationResult,
   type SkillService,
   type ToolRegistry,
   type CommandContext,
@@ -20,6 +21,7 @@ import {
   getCliCommands,
   type FileConversationStorage,
 } from '@neko/agent';
+import { parseAgentInputTrigger } from '@neko-agent/types';
 import { handleMarketCommand } from '../commands/market';
 import type { CLIConfig } from './types';
 import { listProviders, getProviderModels } from './config';
@@ -46,6 +48,16 @@ export interface SlashCommandResult {
   /** Prompt to continue into agent execution after command handling */
   agentPrompt?: string;
   /** Optional metadata overrides for AgentSession.execute() */
+  executionOverrides?: {
+    metadata?: Record<string, unknown>;
+  };
+}
+
+export interface SkillInvocationResult {
+  handled: boolean;
+  output?: string;
+  error?: string;
+  agentPrompt?: string;
   executionOverrides?: {
     metadata?: Record<string, unknown>;
   };
@@ -88,6 +100,10 @@ export interface SlashCommandContext {
  */
 export function isSlashCommand(input: string): boolean {
   return checkIsSlashCommand(input);
+}
+
+export function isSkillInvocation(input: string): boolean {
+  return parseDirectSkillInvocation(input) !== null;
 }
 
 /**
@@ -202,7 +218,8 @@ export async function handleSlashCommand(
     surface: 'cli',
     skills: context.skillService?.registry.listAllSkills(),
   });
-  const skill = commandEntry?.source === 'skill' ? (commandEntry.skill as Skill) : undefined;
+  const skill =
+    commandEntry?.source === 'command-artifact' ? (commandEntry.skill as Skill) : undefined;
   const isBuiltin = commandEntry?.source === 'builtin';
   const commandContext = toCommandContext(context);
   const result = await executeSlashCommand(
@@ -231,6 +248,98 @@ export async function handleSlashCommand(
   }
 
   return slashResult;
+}
+
+export async function handleSkillInvocation(
+  input: string,
+  context: SlashCommandContext,
+): Promise<SkillInvocationResult> {
+  const parsed = parseDirectSkillInvocation(input);
+  if (!parsed) {
+    return { handled: false, error: `Invalid skill invocation: ${input}` };
+  }
+
+  const skillService = context.skillService;
+  if (!skillService) {
+    return { handled: true, error: 'SkillService not initialized' };
+  }
+
+  const skill = skillService.registry.getSkill(parsed.skillName);
+  if (!skill) {
+    return { handled: true, error: `Unknown skill: $${parsed.skillName}` };
+  }
+  if (skill.enabled === false) {
+    return { handled: true, error: `Skill is disabled: $${parsed.skillName}` };
+  }
+
+  let loadedSkill: Skill | undefined;
+  try {
+    loadedSkill = await skillService.registry.ensureLoaded(parsed.skillName);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { handled: true, error: `Failed to load skill: $${parsed.skillName}: ${reason}` };
+  }
+
+  if (!loadedSkill) {
+    return { handled: true, error: `Failed to load skill: $${parsed.skillName}` };
+  }
+  if (loadedSkill.enabled === false) {
+    return { handled: true, error: `Skill is disabled: $${parsed.skillName}` };
+  }
+  if (!loadedSkill.content) {
+    return { handled: true, error: `Skill has no content: $${parsed.skillName}` };
+  }
+
+  const application = await applyCliSkill(skillService, loadedSkill, parsed.args);
+  if (!application.applied) {
+    return {
+      handled: true,
+      error: application.error ?? `Failed to apply skill: $${parsed.skillName}`,
+    };
+  }
+
+  return {
+    handled: true,
+    output: `Skill activated: ${loadedSkill.name}`,
+    ...(parsed.args
+      ? {
+          agentPrompt: parsed.args,
+          executionOverrides: {
+            metadata: createSkillExecutionIdcMetadata(loadedSkill),
+          },
+        }
+      : {}),
+  };
+}
+
+function parseDirectSkillInvocation(
+  input: string,
+): { readonly skillName: string; readonly args?: string } | null {
+  const parsed = parseAgentInputTrigger(input);
+  if (!parsed || parsed.trigger !== 'skill') {
+    return null;
+  }
+  return {
+    skillName: parsed.name,
+    ...(parsed.args ? { args: parsed.args } : {}),
+  };
+}
+
+async function applyCliSkill(
+  skillService: SkillService,
+  skill: Skill,
+  args?: string,
+): Promise<SkillApplicationResult> {
+  try {
+    const injection =
+      args === undefined ? await skillService.apply(skill) : await skillService.apply(skill, args);
+    return { applied: true, injection, skill };
+  } catch (error) {
+    return {
+      applied: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**

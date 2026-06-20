@@ -28,6 +28,7 @@ import { VSCodeMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
 import type {
+  EntryPromptMenu,
   SkillSummary,
   MentionItem,
   PluginSlashCommandDef,
@@ -35,6 +36,7 @@ import type {
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { BoundActiveSkillIndicator } from '@/handlers';
+import { projectTrailingMention } from '@/components/ChatView/InputArea/mention-input';
 import {
   useUIState,
   useConversationSession,
@@ -123,6 +125,10 @@ export interface ChatWorkspaceProps {
   onSendWithoutConversation?: (input: PendingSendInput) => void;
   pendingSendRequest?: { id: number; input: PendingSendInput } | null;
   onPendingSendRequestConsumed?: (id: number) => void;
+  initialInputRequest?: { id: number; messageText: string } | null;
+  onInitialInputRequestConsumed?: (id: number) => void;
+  initialEntryPromptMenuRequest?: { id: number; menu: EntryPromptMenu } | null;
+  onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
     cleanupConversation: (id: string) => void;
@@ -187,6 +193,10 @@ export function ChatWorkspace({
   onSendWithoutConversation,
   pendingSendRequest,
   onPendingSendRequestConsumed,
+  initialInputRequest,
+  onInitialInputRequestConsumed,
+  initialEntryPromptMenuRequest,
+  onInitialEntryPromptMenuRequestConsumed,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
   // ---- UI state (model selection comes from props, not useUIState) ----
@@ -225,6 +235,9 @@ export function ChatWorkspace({
 
   // ---- Session mode ----
   const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
+  const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
+  const consumedEntryPromptRequestIdRef = useRef<number | null>(null);
+  const consumedInitialInputRequestIdRef = useRef<number | null>(null);
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
   const isConversationSwitching = Boolean(
     isForegroundConversationActivationPending ||
@@ -304,6 +317,47 @@ export function ChatWorkspace({
     isConversationSwitching,
     onPendingSendRequestConsumed,
     pendingSendRequest,
+  ]);
+
+  useEffect(() => {
+    if (!initialInputRequest || !activeConversationId || isConversationSwitching) return;
+    if (consumedInitialInputRequestIdRef.current === initialInputRequest.id) return;
+
+    consumedInitialInputRequestIdRef.current = initialInputRequest.id;
+    setInputValue(initialInputRequest.messageText);
+    const trailingMention = projectTrailingMention(initialInputRequest.messageText);
+    if (trailingMention && !isCharacterRoleSession) {
+      onMentionSearchFilterChange(trailingMention.requestFilter);
+      VSCodeMessages.searchProjectFiles(trailingMention.requestFilter, activeConversationId);
+    }
+    onInitialInputRequestConsumed?.(initialInputRequest.id);
+  }, [
+    activeConversationId,
+    initialInputRequest,
+    isCharacterRoleSession,
+    isConversationSwitching,
+    onMentionSearchFilterChange,
+    onInitialInputRequestConsumed,
+    setInputValue,
+  ]);
+
+  useEffect(() => {
+    if (!initialEntryPromptMenuRequest || !activeConversationId || isConversationSwitching) return;
+    if (consumedEntryPromptRequestIdRef.current === initialEntryPromptMenuRequest.id) return;
+
+    consumedEntryPromptRequestIdRef.current = initialEntryPromptMenuRequest.id;
+    setEntryPromptMenu(initialEntryPromptMenuRequest.menu);
+    if (initialEntryPromptMenuRequest.menu === 'roleplay') {
+      onMentionSearchFilterChange('');
+      VSCodeMessages.searchProjectFiles('', activeConversationId);
+    }
+    onInitialEntryPromptMenuRequestConsumed?.(initialEntryPromptMenuRequest.id);
+  }, [
+    activeConversationId,
+    initialEntryPromptMenuRequest,
+    isConversationSwitching,
+    onInitialEntryPromptMenuRequestConsumed,
+    onMentionSearchFilterChange,
   ]);
 
   // Pre-intercept handler: catches messages not in the registry
@@ -418,7 +472,7 @@ export function ChatWorkspace({
   });
 
   // Slash command routing
-  const { handleSlashCommand } = useSlashCommands({
+  const { handleSlashCommand, handleSkillInvocation } = useSlashCommands({
     skills,
     pluginCommands,
     inputValue,
@@ -457,6 +511,7 @@ export function ChatWorkspace({
 
   const handleSessionModeChange = useCallback(
     (mode: SessionMode) => {
+      setEntryPromptMenu(null);
       setSessionMode(mode);
       setMediaModelSelection((prev) => {
         const projection = projectMediaModelSelectionForSessionModeChange({
@@ -493,6 +548,7 @@ export function ChatWorkspace({
       skills={skills}
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
+      onSkillInvocation={handleSkillInvocation}
       onRequestFiles={(filter) => {
         onMentionSearchFilterChange(filter);
         if (!isCharacterRoleSession && activeConversationId) {
@@ -548,6 +604,8 @@ export function ChatWorkspace({
         onInputChange={setInputValue}
         onSend={handleSend}
         onCancel={handleCancelMessage}
+        entryPromptMenu={entryPromptMenu}
+        onEntryPromptMenuChange={setEntryPromptMenu}
         attachedFiles={attachedFiles}
         onAttachedFilesChange={setAttachedFiles}
         selectedFileReferences={selectedFileReferences}

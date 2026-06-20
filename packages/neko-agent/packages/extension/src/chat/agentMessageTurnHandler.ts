@@ -9,6 +9,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
+import { buildGlobalErrorMessage } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
 import { getCanvasSelection } from '../services/canvasAmbientContext';
@@ -57,6 +58,10 @@ import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
 import { AgentTurnBridge } from './message/agentTurnBridge';
 import type { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
+import {
+  formatAgentLlmConfigDiagnostics,
+  resolveAgentLlmConfigForTurn,
+} from './agentLlmConfigResolver';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
@@ -199,9 +204,14 @@ export class AgentMessageTurnHandler {
     webview: vscode.Webview,
     request: AgentMessageRuntimeRequest,
   ): Promise<void> {
-    await this._autoActivateSkillForRequest(webview, request);
+    const resolvedRequest = this._resolveAgentTurnRequest(webview, request);
+    if (!resolvedRequest) {
+      return;
+    }
+
+    await this._autoActivateSkillForRequest(webview, resolvedRequest);
     await runAgentMessageTurnRuntime({
-      request,
+      request: resolvedRequest,
       inputProcessor: this._getInputProcessor(),
       processAttachments: (attachments) =>
         this._attachmentProcessor.processAttachments(attachments ? [...attachments] : undefined),
@@ -245,6 +255,9 @@ export class AgentMessageTurnHandler {
               conversationId,
               message,
               chatModel,
+              agentModels,
+              llmConfig,
+              llmRuntimeOptions,
               imageAttachments,
               mediaModel,
               mediaModels,
@@ -255,6 +268,9 @@ export class AgentMessageTurnHandler {
                 conversationId,
                 message,
                 chatModel,
+                agentModels,
+                llmConfig,
+                llmRuntimeOptions,
                 imageAttachments,
                 mediaModel,
                 mediaModels,
@@ -267,6 +283,43 @@ export class AgentMessageTurnHandler {
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
     });
+  }
+
+  private _resolveAgentTurnRequest(
+    webview: vscode.Webview,
+    request: AgentMessageRuntimeRequest,
+  ): AgentMessageRuntimeRequest | null {
+    const resolved = resolveAgentLlmConfigForTurn({
+      sessionMode: request.sessionMode,
+      chatModel: request.chatModel,
+      agentModels: request.agentModels,
+      llmConfig: request.llmConfig,
+      settings: this._settings,
+      providers: this._providers,
+      platform: this._platform,
+    });
+
+    if (!resolved.ok) {
+      const message = formatAgentLlmConfigDiagnostics(resolved.diagnostics);
+      logger.warn('Rejected Agent turn LLM configuration', {
+        conversationId: request.conversationId,
+        diagnostics: resolved.diagnostics,
+      });
+      void webview.postMessage(buildGlobalErrorMessage(message));
+      return null;
+    }
+
+    if (request.sessionMode !== 'agent') {
+      return request;
+    }
+
+    return {
+      ...request,
+      chatModel: resolved.chatModel,
+      agentModels: resolved.agentModels,
+      llmConfig: resolved.llmConfig,
+      llmRuntimeOptions: resolved.llmRuntimeOptions,
+    };
   }
 
   private async _autoActivateSkillForRequest(

@@ -141,6 +141,73 @@ describe('JournalProjection', () => {
     ]);
   });
 
+  it('preserves reasoning content on assistant messages with tool calls', async () => {
+    const filePath = '/tmp/journals/conv-reasoning.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        eventId: 'evt-user',
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: { type: 'user_message', content: '当前支持的能力' },
+      },
+      {
+        eventId: 'evt-reasoning',
+        seq: 2,
+        ts: 1100,
+        type: 'event',
+        event: {
+          type: 'thinking_content',
+          thinking: 'I should inspect available tools.',
+          reasoningContent: 'I should inspect available tools.',
+        },
+      },
+      {
+        eventId: 'evt-tool-call',
+        seq: 3,
+        ts: 1200,
+        type: 'event',
+        event: {
+          type: 'tool_call',
+          toolCall: { id: 'call-1', name: 'GetContext', arguments: { includeTools: true } },
+        },
+      },
+      {
+        eventId: 'evt-tool-result',
+        seq: 4,
+        ts: 1300,
+        type: 'event',
+        event: {
+          type: 'tool_result',
+          toolResult: { toolCallId: 'call-1', success: true, data: { tools: ['Read'] } },
+        },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    const projected = await projection.projectToHistoryWithEventIds('conv-reasoning');
+
+    expect(projected.messages[1]).toEqual({
+      role: 'assistant',
+      content: '',
+      reasoningContent: 'I should inspect available tools.',
+      toolCalls: [
+        {
+          id: 'call-1',
+          type: 'function',
+          function: {
+            name: 'GetContext',
+            arguments: JSON.stringify({ includeTools: true }),
+          },
+        },
+      ],
+    });
+    expect(projected.messageEventIds[1]).toEqual(['evt-reasoning', 'evt-tool-call']);
+  });
+
   it('applies compaction events by default but can expand raw history on demand', async () => {
     const filePath = '/tmp/journals/conv-compact.jsonl';
     const entries: JournalEntry[] = [

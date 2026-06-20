@@ -184,9 +184,10 @@ describe('executeSlashCommand', () => {
     expect(result.output).toBe('Help text');
   });
 
-  it('should resolve skill commands from command catalog when registry exposes listAllSkills', async () => {
+  it('executes command artifacts from the slash command catalog', async () => {
     const skill = {
       name: 'custom',
+      entryPointKind: 'command-artifact',
       command: 'custom',
       description: 'Custom skill command',
       enabled: true,
@@ -220,26 +221,76 @@ describe('executeSlashCommand', () => {
     expect(result.data?.injection).toBe('catalog-test');
   });
 
-  it('should try user-defined command if builtin not found', async () => {
+  it('does not execute ordinary skill legacy command fields as slash commands', async () => {
+    const skill = {
+      name: 'legacy-custom',
+      command: 'custom',
+      description: 'Legacy slash alias should not be canonical',
+      enabled: true,
+    };
+    context = {
+      ...context,
+      skillService: {
+        registry: {
+          skillCount: 1,
+          listSkills: vi.fn(() => [skill]),
+          listAllSkills: vi.fn(() => [skill]),
+          getSkill: vi.fn(() => skill),
+          getSkillByCommand: vi.fn(() => skill),
+          searchSkills: vi.fn(() => [skill]),
+        },
+        skillCount: 1,
+        getActiveSkill: vi.fn(() => null),
+        clearActiveSkill: vi.fn(),
+      },
+    } as unknown as CommandContext;
     const mockSkillService = {
       getSkillByCommand: vi.fn().mockReturnValue({ name: 'custom' }),
-      apply: vi.fn().mockResolvedValue('test'),
+      apply: vi.fn(),
     };
 
     const result = await executeSlashCommand('/custom arg', context, mockSkillService);
-    expect(mockSkillService.getSkillByCommand).toHaveBeenCalledWith('custom');
-    expect(mockSkillService.apply).toHaveBeenCalledWith({ name: 'custom' }, 'arg');
-    expect(result.handled).toBe(true);
-    expect(result.data?.injection).toBe('test');
+    expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
+    expect(mockSkillService.apply).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        handled: false,
+        error: expect.stringContaining('Unknown command: /custom'),
+      }),
+    );
   });
 
   it('should return error if user-defined command fails', async () => {
+    const skill = {
+      name: 'custom',
+      entryPointKind: 'command-artifact',
+      command: 'custom',
+      description: 'Custom command artifact',
+      enabled: true,
+    };
+    context = {
+      ...context,
+      skillService: {
+        registry: {
+          skillCount: 1,
+          listSkills: vi.fn(() => [skill]),
+          listAllSkills: vi.fn(() => [skill]),
+          getSkill: vi.fn(() => skill),
+          getSkillByCommand: vi.fn(() => skill),
+          searchSkills: vi.fn(() => [skill]),
+        },
+        skillCount: 1,
+        getActiveSkill: vi.fn(() => null),
+        clearActiveSkill: vi.fn(),
+      },
+    } as unknown as CommandContext;
     const mockSkillService = {
-      getSkillByCommand: vi.fn().mockReturnValue({ name: 'custom' }),
+      getSkillByCommand: vi.fn().mockReturnValue(undefined),
       apply: vi.fn().mockRejectedValue(new Error('Failed')),
     };
 
     const result = await executeSlashCommand('/custom', context, mockSkillService);
+    expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
     expect(result.handled).toBe(true);
     expect(result.error).toContain('Failed');
   });

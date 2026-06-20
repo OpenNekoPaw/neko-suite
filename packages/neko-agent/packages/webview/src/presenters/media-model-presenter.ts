@@ -63,7 +63,7 @@ export function projectGenerationParamsBarState(input: {
     ...picker,
     isAgentMode,
     showCategorySelector: isAgentMode,
-    showInlineMediaModelPicker: isAgentMode,
+    showInlineMediaModelPicker: picker.hasModels,
     hasGenerationContext,
     isExpanded: true,
     showManualCollapse: false,

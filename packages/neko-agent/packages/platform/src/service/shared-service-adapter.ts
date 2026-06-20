@@ -64,6 +64,7 @@ export class SharedServiceAdapter implements SharedIService {
       finishReason: response.finishReason,
       usage: response.usage,
       thinking: response.thinking,
+      reasoningContent: response.reasoningContent ?? response.message.reasoningContent,
     };
   }
 
@@ -89,7 +90,11 @@ export class SharedServiceAdapter implements SharedIService {
     for await (const chunk of stream) {
       // Extended thinking (Claude)
       if (chunk.thinking) {
-        yield { type: 'thinking', content: chunk.thinking };
+        yield {
+          type: 'thinking',
+          content: chunk.thinking,
+          ...(chunk.reasoningContent ? { reasoningContent: chunk.reasoningContent } : {}),
+        };
       }
       // Content delta
       if (chunk.delta.content) {

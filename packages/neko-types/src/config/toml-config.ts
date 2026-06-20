@@ -7,7 +7,15 @@ import type {
   ProtocolVariant,
   TypeDefaultModels,
 } from '../types/config';
-import { MODEL_TYPES } from '../types/config';
+import {
+  AUTH_TYPES,
+  MODEL_TYPES,
+  PROVIDER_CONNECTION_KINDS,
+  PROVIDER_PROTOCOL_PROFILES,
+  PROVIDER_SUPPORT_LEVELS,
+  PROVIDER_TYPES,
+  STREAM_FORMATS,
+} from '../types/config';
 import { parse, stringify } from 'smol-toml';
 import type { AuthConfigJson, CredentialsConfig, MarketConfig, UnifiedConfig } from './types';
 
@@ -125,6 +133,13 @@ export interface TomlMcpServerConfig {
 export interface TomlConfigValidationIssue {
   readonly code:
     | 'unsupportedVersion'
+    | 'unsupportedProviderType'
+    | 'unsupportedProviderConnectionKind'
+    | 'unsupportedProviderProtocolProfile'
+    | 'unsupportedProviderSupportLevel'
+    | 'unsupportedProtocolAuthType'
+    | 'unsupportedProtocolStreamFormat'
+    | 'unsupportedModelProtocol'
     | 'duplicateProviderId'
     | 'duplicateModelId'
     | 'unsupportedModelType'
@@ -271,9 +286,13 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   }
   collectDuplicateIdIssues(config.providers, 'providers', 'duplicateProviderId', issues);
   collectDuplicateIdIssues(config.models, 'models', 'duplicateModelId', issues);
+  collectUnsupportedProviderIssues(config.providers, 'providers', issues);
+  collectUnsupportedProviderOverrideIssues(config.provider_overrides, issues);
   collectUnsupportedDefaultMediaModelIssues(config.default_media_models, issues);
   collectUnsupportedModelTypeIssues(config.models, 'models', issues);
+  collectUnsupportedModelProtocolIssues(config.models, 'models', issues);
   collectUnsupportedModelOverrideTypeIssues(config.model_overrides, issues);
+  collectUnsupportedModelOverrideProtocolIssues(config.model_overrides, issues);
   collectDefaultModelIssues(config.default_models, issues);
   if (issues.length > 0) {
     throw new TomlConfigValidationError(issues);
@@ -574,6 +593,91 @@ function collectUnsupportedModelTypeIssues(
   }
 }
 
+function collectUnsupportedProviderIssues(
+  providers: readonly TomlProviderConfig[] | undefined,
+  section: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!providers) return;
+  for (const provider of providers) {
+    collectProviderValueIssues(provider, `${section}.${provider.id}`, issues);
+  }
+}
+
+function collectUnsupportedProviderOverrideIssues(
+  overrides: Record<string, Partial<TomlProviderConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!overrides) return;
+  for (const [providerId, override] of Object.entries(overrides)) {
+    collectProviderValueIssues(override, `provider_overrides.${providerId}`, issues);
+  }
+}
+
+function collectProviderValueIssues(
+  provider: Partial<TomlProviderConfig>,
+  path: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (provider.type !== undefined && !isProviderType(provider.type)) {
+    issues.push({
+      code: 'unsupportedProviderType',
+      path: `${path}.type`,
+      message: `Unsupported provider type "${String(provider.type)}" at ${path}.type. Supported values: ${formatAllowedValues(PROVIDER_TYPES)}.`,
+    });
+  }
+  if (
+    provider.connection_kind !== undefined &&
+    !isProviderConnectionKind(provider.connection_kind)
+  ) {
+    issues.push({
+      code: 'unsupportedProviderConnectionKind',
+      path: `${path}.connection_kind`,
+      message: `Unsupported provider connection_kind "${String(provider.connection_kind)}" at ${path}.connection_kind. Supported values: ${formatAllowedValues(PROVIDER_CONNECTION_KINDS)}.`,
+    });
+  }
+  if (
+    provider.protocol_profile !== undefined &&
+    !isProviderProtocolProfile(provider.protocol_profile)
+  ) {
+    issues.push({
+      code: 'unsupportedProviderProtocolProfile',
+      path: `${path}.protocol_profile`,
+      message: `Unsupported provider protocol_profile "${String(provider.protocol_profile)}" at ${path}.protocol_profile. Supported values: ${formatAllowedValues(PROVIDER_PROTOCOL_PROFILES)}. DeepSeek direct endpoints use "openai-chat".`,
+    });
+  }
+  if (provider.support_level !== undefined && !isProviderSupportLevel(provider.support_level)) {
+    issues.push({
+      code: 'unsupportedProviderSupportLevel',
+      path: `${path}.support_level`,
+      message: `Unsupported provider support_level "${String(provider.support_level)}" at ${path}.support_level. Supported values: ${formatAllowedValues(PROVIDER_SUPPORT_LEVELS)}.`,
+    });
+  }
+  collectProtocolVariantIssues(provider.protocol_variant, `${path}.protocol_variant`, issues);
+}
+
+function collectProtocolVariantIssues(
+  variant: TomlProtocolVariant | undefined,
+  path: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!variant) return;
+  if (variant.auth_type !== undefined && !isAuthType(variant.auth_type)) {
+    issues.push({
+      code: 'unsupportedProtocolAuthType',
+      path: `${path}.auth_type`,
+      message: `Unsupported protocol_variant auth_type "${String(variant.auth_type)}" at ${path}.auth_type. Supported values: ${formatAllowedValues(AUTH_TYPES)}.`,
+    });
+  }
+  if (variant.stream_format !== undefined && !isStreamFormat(variant.stream_format)) {
+    issues.push({
+      code: 'unsupportedProtocolStreamFormat',
+      path: `${path}.stream_format`,
+      message: `Unsupported protocol_variant stream_format "${String(variant.stream_format)}" at ${path}.stream_format. Supported values: ${formatAllowedValues(STREAM_FORMATS)}.`,
+    });
+  }
+}
+
 function collectUnsupportedModelOverrideTypeIssues(
   overrides: Record<string, Partial<TomlModelConfig>> | undefined,
   issues: TomlConfigValidationIssue[],
@@ -588,6 +692,39 @@ function collectUnsupportedModelOverrideTypeIssues(
           override.type === 'music'
             ? `Unsupported model override type "music" for model ${modelId}. Configure music models as type "audio" with capability "text_to_music".`
             : `Unsupported model override type "${String(override.type)}" for model ${modelId}.`,
+      });
+    }
+  }
+}
+
+function collectUnsupportedModelProtocolIssues(
+  models: readonly TomlModelConfig[] | undefined,
+  section: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!models) return;
+  for (const model of models) {
+    if (model.protocol !== undefined && !isProviderType(model.protocol)) {
+      issues.push({
+        code: 'unsupportedModelProtocol',
+        path: `${section}.${model.id}.protocol`,
+        message: `Unsupported model protocol "${String(model.protocol)}" for model ${model.id}. Supported values: ${formatAllowedValues(PROVIDER_TYPES)}.`,
+      });
+    }
+  }
+}
+
+function collectUnsupportedModelOverrideProtocolIssues(
+  overrides: Record<string, Partial<TomlModelConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!overrides) return;
+  for (const [modelId, override] of Object.entries(overrides)) {
+    if (override.protocol !== undefined && !isProviderType(override.protocol)) {
+      issues.push({
+        code: 'unsupportedModelProtocol',
+        path: `model_overrides.${modelId}.protocol`,
+        message: `Unsupported model override protocol "${String(override.protocol)}" for model ${modelId}. Supported values: ${formatAllowedValues(PROVIDER_TYPES)}.`,
       });
     }
   }
@@ -618,7 +755,39 @@ function collectDefaultModelIssues(
 }
 
 function isModelType(value: unknown): value is ModelType {
-  return typeof value === 'string' && MODEL_TYPES.includes(value as ModelType);
+  return isAllowedString(value, MODEL_TYPES);
+}
+
+function isProviderType(value: unknown): value is ProviderConfig['type'] {
+  return isAllowedString(value, PROVIDER_TYPES);
+}
+
+function isProviderConnectionKind(value: unknown): value is ProviderConfig['connectionKind'] {
+  return isAllowedString(value, PROVIDER_CONNECTION_KINDS);
+}
+
+function isProviderProtocolProfile(value: unknown): value is ProviderConfig['protocolProfile'] {
+  return isAllowedString(value, PROVIDER_PROTOCOL_PROFILES);
+}
+
+function isProviderSupportLevel(value: unknown): value is ProviderConfig['supportLevel'] {
+  return isAllowedString(value, PROVIDER_SUPPORT_LEVELS);
+}
+
+function isAuthType(value: unknown): value is ProtocolVariant['authType'] {
+  return isAllowedString(value, AUTH_TYPES);
+}
+
+function isStreamFormat(value: unknown): value is ProtocolVariant['streamFormat'] {
+  return isAllowedString(value, STREAM_FORMATS);
+}
+
+function isAllowedString<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === 'string' && allowed.some((entry) => entry === value);
+}
+
+function formatAllowedValues(values: readonly string[]): string {
+  return values.map((value) => `"${value}"`).join(', ');
 }
 
 function isTomlModelRefConfig(value: unknown): value is TomlModelRefConfig {

@@ -155,10 +155,7 @@ export async function executeSlashCommand(
   const skills = toSlashCommandSkillList(context);
   const surface = context.conversations ? 'extension' : 'cli';
   const entry = resolveSlashCommandCatalogEntry(command, { surface, skills });
-  const resolvedSkill =
-    (entry?.source === 'skill' ? entry.skill : undefined) ??
-    skillService?.getSkillByCommand(command) ??
-    getSkillByCommandFromContext(context, command);
+  const resolvedSkill = entry?.source === 'command-artifact' ? entry.skill : undefined;
 
   if (entry?.source === 'builtin') {
     return executeBuiltinCommand(command, args, context);
@@ -208,13 +205,4 @@ function toSlashCommandSkillList(context: CommandContext): SlashCommandSkillLike
   }
 
   return coerceSlashCommandSkills(listAllSkills());
-}
-
-function getSkillByCommandFromContext(context: CommandContext, name: string): unknown | undefined {
-  const getSkillByCommand = context.skillService?.registry.getSkillByCommand;
-  if (typeof getSkillByCommand !== 'function') {
-    return undefined;
-  }
-
-  return getSkillByCommand(name);
 }

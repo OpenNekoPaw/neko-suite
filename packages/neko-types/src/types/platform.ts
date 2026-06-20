@@ -20,6 +20,8 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | ContentPart[];
   name?: string;
+  /** Provider reasoning content that must be replayed with assistant messages. */
+  reasoningContent?: string;
   /** Tool call ID (for tool result messages) */
   toolCallId?: string;
   /** Tool calls from assistant (for function calling) */
@@ -158,8 +160,10 @@ export interface ServiceResponse {
   finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
   /** Token usage */
   usage: TokenUsage;
-  /** Extended thinking content (Claude only) */
+  /** Extended thinking content for UI presentation */
   thinking?: string;
+  /** Provider reasoning content for protocol replay */
+  reasoningContent?: string;
 }
 
 /**
@@ -177,6 +181,7 @@ export interface TokenUsage {
 export interface StreamChunk {
   type: 'content' | 'thinking' | 'tool_call' | 'usage' | 'done';
   content?: string;
+  reasoningContent?: string;
   toolCall?: Partial<ToolCall>;
   usage?: ServiceResponse['usage'];
   finishReason?: ServiceResponse['finishReason'];

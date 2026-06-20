@@ -1,5 +1,7 @@
 import type {
+  AgentLlmConfig,
   AgentMediaModelSelections,
+  AgentModelSlots,
   ContentBlock,
   ErrorMessage,
   GlobalErrorMessage,
@@ -51,6 +53,13 @@ export interface AgentMessageExecutionOverrides {
   readonly metadata?: Record<string, unknown>;
 }
 
+export interface AgentLlmRuntimeOptions {
+  readonly temperature?: number;
+  readonly topP?: number;
+  readonly maxTokens?: number;
+  readonly thinkingBudget?: number;
+}
+
 export interface AgentMessageIdOptions {
   readonly now?: () => number;
   readonly randomSuffix?: () => string;
@@ -61,6 +70,9 @@ export interface AgentMessageRuntimeRequest {
   readonly messageText: string;
   readonly sessionMode: SessionMode;
   readonly chatModel?: ModelRef<'llm'>;
+  readonly agentModels?: AgentModelSlots;
+  readonly llmConfig?: AgentLlmConfig;
+  readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly attachments?: MessageAttachment[];
@@ -196,6 +208,9 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly conversationId: string;
   readonly message: string;
   readonly chatModel?: ModelRef<'llm'>;
+  readonly agentModels?: AgentModelSlots;
+  readonly llmConfig?: AgentLlmConfig;
+  readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -278,6 +293,7 @@ export interface AgentProjectMentionCandidate {
   readonly id: string;
   readonly label: string;
   readonly summary: string;
+  readonly searchText?: string;
   readonly source?: ProjectMentionSource;
   readonly icon?: string;
   readonly filePath?: string;
@@ -443,6 +459,7 @@ export interface AgentTurnConfigurationPlanInput {
   readonly maxIterations?: number;
   readonly autoExecuteTools?: boolean;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
   readonly workspaceRoot?: string;
@@ -453,6 +470,7 @@ export interface AgentTurnConfigurationPlan {
   readonly maxIterations: number;
   readonly autoExecuteTools?: boolean;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly modelId?: string;
   readonly providerExpressionTargets?: ProviderExpressionTargetConfig[];
@@ -633,6 +651,9 @@ export async function prepareAgentMessageDispatch(
     mediaModelCategories: request.mediaModels ? Object.keys(request.mediaModels) : [],
     promptId: request.promptId,
     hasExecutionOverrides: request.executionOverrides !== undefined,
+    hasAgentModels: request.agentModels !== undefined,
+    hasLlmConfig: request.llmConfig !== undefined,
+    hasLlmRuntimeOptions: request.llmRuntimeOptions !== undefined,
   });
   logger.debug('neko.agent.message.assembly.request.raw', {
     conversationId: request.conversationId,
@@ -645,6 +666,9 @@ export async function prepareAgentMessageDispatch(
     mediaModels: request.mediaModels,
     promptId: request.promptId,
     executionOverrides: sanitizeForDebugLog(request.executionOverrides),
+    agentModels: request.agentModels,
+    llmConfig: request.llmConfig,
+    llmRuntimeOptions: request.llmRuntimeOptions,
   });
 
   const { message: parsedMessage, fileContents } = await prepareAgentMessageFileReferences({
@@ -767,6 +791,9 @@ export async function runAgentMessageTurnRuntime(
       conversationId,
       message: prepared.enhancedMessage,
       chatModel: input.request.chatModel,
+      agentModels: input.request.agentModels,
+      llmConfig: input.request.llmConfig,
+      llmRuntimeOptions: input.request.llmRuntimeOptions,
       imageAttachments: prepared.mediaImages,
       mediaModel: input.request.mediaModel,
       mediaModels: input.request.mediaModels,
@@ -1003,18 +1030,12 @@ export function projectAgentMentionExtras(
 
   if (mentionCandidates) {
     for (const candidate of mentionCandidates) {
-      const text = `${candidate.label} ${candidate.summary} ${candidate.filePath ?? ''} ${
-        candidate.entityType ?? ''
-      }`.toLowerCase();
-      if (normalizedFilter && !text.includes(normalizedFilter)) {
-        continue;
-      }
-
       extras.push({
         type: candidate.type,
         id: candidate.id,
         label: candidate.label,
         summary: candidate.summary,
+        ...(candidate.searchText ? { searchText: candidate.searchText } : {}),
         ...(candidate.source ? { source: candidate.source } : {}),
         ...(candidate.icon ? { icon: candidate.icon } : {}),
         ...(candidate.filePath
@@ -1298,6 +1319,7 @@ export function buildAgentTurnConfigurationPlan(
     maxIterations: input.maxIterations ?? 200,
     autoExecuteTools: input.autoExecuteTools,
     temperature: input.temperature,
+    topP: input.topP,
     maxTokens: input.maxTokens,
     modelId: input.chatModel?.modelId,
     providerExpressionTargets: turnRuntime.providerExpressionTargets,

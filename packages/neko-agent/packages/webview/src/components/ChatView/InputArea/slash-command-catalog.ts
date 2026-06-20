@@ -7,8 +7,9 @@ import {
 } from '@neko-agent/types';
 import type { SkillSummary } from './types';
 
-export type SlashCommandSource = 'builtin' | 'skill' | 'plugin';
+export type SlashCommandSource = 'builtin' | 'command-artifact' | 'plugin';
 export type SlashCommandDescriptionKind = 'i18n' | 'literal';
+export type SkillInvocationSource = SkillSummary['source'];
 
 export interface SlashCommandCatalogItem {
   id: string;
@@ -19,6 +20,17 @@ export interface SlashCommandCatalogItem {
   source: SlashCommandSource;
   skillId?: string;
   extensionId?: string;
+  descriptionKind: SlashCommandDescriptionKind;
+}
+
+export interface SkillInvocationCatalogItem {
+  id: string;
+  skillName: string;
+  name: string;
+  descriptionKey: string;
+  icon: string;
+  source: SkillInvocationSource;
+  enabled: boolean;
   descriptionKind: SlashCommandDescriptionKind;
 }
 
@@ -61,22 +73,26 @@ const BUILTIN_SLASH_COMMANDS: readonly SlashCommandCatalogItem[] = listBuiltinSl
   .filter((command) => !HIDDEN_WEBVIEW_BUILTIN_COMMANDS.has(command.name))
   .map(projectBuiltinSlashCommand);
 
-const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandSource[] = ['builtin', 'skill', 'plugin'];
+const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandSource[] = [
+  'builtin',
+  'command-artifact',
+  'plugin',
+];
 
 const SLASH_COMMAND_SECTION_TITLES: Record<SlashCommandSource, string> = {
   builtin: '**Available Commands:**',
-  skill: '**Skill Commands:**',
+  'command-artifact': '**Command Artifacts:**',
   plugin: '**Plugin Commands:**',
 };
 
 const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandSource, string | null> = {
   builtin: null,
-  skill: 'skill',
+  'command-artifact': 'command',
   plugin: 'plugin',
 };
 
 export function createSlashCommandCatalog(
-  skills: readonly SkillSummary[] = [],
+  _skills: readonly SkillSummary[] = [],
   pluginCommands: readonly RegisteredPluginSlashCommand[] = [],
 ): SlashCommandCatalogItem[] {
   const commands = new Map<string, SlashCommandCatalogItem>();
@@ -85,18 +101,27 @@ export function createSlashCommandCatalog(
     registerCommand(commands, command);
   }
 
-  for (const skill of skills) {
-    const command = projectSkillSlashCommand(skill);
-    if (command) {
-      registerCommand(commands, command);
-    }
-  }
-
   for (const pluginCommand of pluginCommands) {
     registerCommand(commands, projectPluginSlashCommand(pluginCommand));
   }
 
   return Array.from(commands.values());
+}
+
+export function createSkillInvocationCatalog(
+  skills: readonly SkillSummary[] = [],
+): SkillInvocationCatalogItem[] {
+  const entries = new Map<string, SkillInvocationCatalogItem>();
+  for (const skill of skills) {
+    const entry = projectSkillInvocation(skill);
+    if (entry) {
+      const key = normalizeSlashCommandName(entry.skillName);
+      if (!entries.has(key)) {
+        entries.set(key, entry);
+      }
+    }
+  }
+  return Array.from(entries.values());
 }
 
 export function createSlashCommandCatalogSections(
@@ -133,6 +158,12 @@ export function resolveSlashCommandSourceLabel(
   return SLASH_COMMAND_SOURCE_LABELS[command.source];
 }
 
+export function resolveSkillInvocationSourceLabel(
+  command: Pick<SkillInvocationCatalogItem, 'source'>,
+): string | null {
+  return command.source;
+}
+
 export function formatSlashCommandHelpCatalog(
   commands: readonly SlashCommandCatalogItem[],
   translate: SlashCommandTranslateFn,
@@ -149,6 +180,19 @@ export function formatSlashCommandHelpCatalog(
     .join('\n\n');
 }
 
+export function formatSkillInvocationHelpCatalog(
+  commands: readonly SkillInvocationCatalogItem[],
+  translate: SlashCommandTranslateFn,
+): string {
+  if (commands.length === 0) return '';
+  return [
+    '**Available Skills:**',
+    ...commands.map(
+      (entry) => `- \`${entry.name}\` - ${resolveSlashCommandDescription(entry, translate)}`,
+    ),
+  ].join('\n');
+}
+
 export function filterSlashCommands(
   commands: readonly SlashCommandCatalogItem[],
   filter: string,
@@ -163,6 +207,24 @@ export function filterSlashCommands(
     const nameMatch = normalizeSlashCommandName(command.name).includes(normalizedFilter);
     const description = resolveSlashCommandDescription(command, translate).toLowerCase();
     return nameMatch || description.includes(normalizedFilter);
+  });
+}
+
+export function filterSkillInvocations(
+  commands: readonly SkillInvocationCatalogItem[],
+  filter: string,
+  translate: SlashCommandTranslateFn,
+): SkillInvocationCatalogItem[] {
+  const normalizedFilter = normalizeSlashCommandName(filter);
+  if (!normalizedFilter) {
+    return [...commands];
+  }
+
+  return commands.filter((command) => {
+    const nameMatch = normalizeSlashCommandName(command.name).includes(normalizedFilter);
+    const skillNameMatch = normalizeSlashCommandName(command.skillName).includes(normalizedFilter);
+    const description = resolveSlashCommandDescription(command, translate).toLowerCase();
+    return nameMatch || skillNameMatch || description.includes(normalizedFilter);
   });
 }
 
@@ -197,19 +259,51 @@ export function extractSlashCommandArgs(
   return args.length > 0 ? args : undefined;
 }
 
-function projectSkillSlashCommand(skill: SkillSummary): SlashCommandCatalogItem | null {
-  if (!skill.slashCommand || !skill.enabled) {
+export function extractSkillInvocationArgs(
+  inputValue: string,
+  skill: Pick<SkillInvocationCatalogItem, 'name' | 'skillName' | 'id'>,
+): string | undefined {
+  const trimmed = inputValue.trim();
+  if (!trimmed.startsWith('$')) {
+    return undefined;
+  }
+
+  const withoutPrefix = trimmed.slice(1);
+  const separatorIndex = withoutPrefix.search(/\s/);
+  const typedSkill =
+    separatorIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, Math.max(separatorIndex, 0));
+  const normalizedTypedSkill = normalizeSlashCommandName(typedSkill);
+  const acceptedSkills = new Set([
+    normalizeSlashCommandName(skill.name),
+    normalizeSlashCommandName(skill.skillName),
+    normalizeSlashCommandName(skill.id),
+  ]);
+
+  if (!acceptedSkills.has(normalizedTypedSkill)) {
+    return undefined;
+  }
+
+  if (separatorIndex === -1) {
+    return undefined;
+  }
+
+  const args = withoutPrefix.slice(separatorIndex + 1).trim();
+  return args.length > 0 ? args : undefined;
+}
+
+function projectSkillInvocation(skill: SkillSummary): SkillInvocationCatalogItem | null {
+  if (!skill.enabled) {
     return null;
   }
 
   return {
     id: skill.id,
-    commandId: skill.slashCommand,
-    name: `/${skill.slashCommand}`,
+    skillName: skill.name,
+    name: `$${skill.name}`,
     descriptionKey: skill.description,
     icon: skill.icon || '🔧',
-    source: 'skill',
-    skillId: skill.id,
+    source: skill.source,
+    enabled: skill.enabled,
     descriptionKind: 'literal',
   };
 }

@@ -9,7 +9,9 @@ import type {
   AssistantConfiguredProviderView,
   AssistantProviderSelection,
   AssistantProviderView,
+  Model,
   Platform,
+  Provider,
 } from '@neko/platform';
 import type { AccountAiCatalogSnapshot } from '@neko/shared';
 import type { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
@@ -57,10 +59,33 @@ export class ProviderManager {
     return this._platform.config.getAssistantProvider(providerId);
   }
 
+  getProviderConfig(providerId: string): Provider | undefined {
+    const accountProvider = this.getAccountProviderConfig(providerId);
+    if (accountProvider) return accountProvider;
+    return this._platform.config.getProvider(providerId);
+  }
+
+  getModel(modelId: string): Model | undefined {
+    const accountModel = this.getAccountModel(modelId);
+    if (accountModel) return accountModel;
+    return this._platform.config.getModel(modelId);
+  }
+
   private getAccountProvider(providerId: string): AssistantProviderSelection | undefined {
     const snapshot = this.accountAiCatalog?.getCachedSnapshot();
     if (!snapshot || snapshot.provider.id !== providerId) return undefined;
     return buildAccountProviderSelection(snapshot);
+  }
+
+  private getAccountProviderConfig(providerId: string): Provider | undefined {
+    const snapshot = this.accountAiCatalog?.getCachedSnapshot();
+    if (!snapshot || snapshot.provider.id !== providerId) return undefined;
+    return snapshot.provider as Provider;
+  }
+
+  private getAccountModel(modelId: string): Model | undefined {
+    const snapshot = this.accountAiCatalog?.getCachedSnapshot();
+    return snapshot?.models.find((model) => model.id === modelId) as Model | undefined;
   }
 }
 

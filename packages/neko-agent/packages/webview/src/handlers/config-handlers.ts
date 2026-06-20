@@ -70,7 +70,8 @@ const handleProjectFiles: MessageHandler<'projectFiles'> = (
   if (!context.isCurrentConversation(message.conversationId)) {
     return;
   }
-  if (message.filter !== undefined && message.filter !== context.mentionSearchFilter) {
+  const currentFilter = context.mentionSearchFilterRef?.current ?? context.mentionSearchFilter;
+  if (message.filter !== undefined && message.filter !== currentFilter) {
     return;
   }
 

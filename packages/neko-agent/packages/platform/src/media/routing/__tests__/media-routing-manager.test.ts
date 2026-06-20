@@ -175,7 +175,7 @@ describe('MediaRoutingManager', () => {
         apiUrl: '',
         enabled: true,
         connectionKind: 'gateway',
-        protocolProfile: 'newapi-compatible',
+        protocolProfile: 'newapi',
         requiresApiKey: true,
       });
       configManager.addModel({

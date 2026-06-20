@@ -6,6 +6,7 @@ import { useChatActions } from '../useChatActions';
 const vscodeMocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   invokeSlashCommand: vi.fn(),
+  invokeSkill: vi.fn(),
   cancelMessage: vi.fn(),
 }));
 
@@ -13,6 +14,7 @@ vi.mock('@/messages', () => ({
   VSCodeMessages: {
     sendMessage: vscodeMocks.sendMessage,
     invokeSlashCommand: vscodeMocks.invokeSlashCommand,
+    invokeSkill: vscodeMocks.invokeSkill,
     cancelMessage: vscodeMocks.cancelMessage,
   },
 }));
@@ -117,6 +119,50 @@ describe('useChatActions', () => {
         content: '/not-a-builtin hello',
       }),
     });
+  });
+
+  it('routes direct dollar skill invocations without persisting them as chat messages', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const clearInput = vi.fn();
+    const setAttachedFiles = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-1');
+      return useChatActions({
+        inputValue: '$quality-review changed files',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-1',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput,
+        setAttachedFiles,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(vscodeMocks.invokeSkill).toHaveBeenCalledWith(
+      'quality-review',
+      'changed files',
+      'conv-1',
+    );
+    expect(vscodeMocks.invokeSlashCommand).not.toHaveBeenCalled();
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(setIsThinking).not.toHaveBeenCalled();
+    expect(setStreamingMessageId).not.toHaveBeenCalled();
+    expect(clearInput).toHaveBeenCalledTimes(1);
+    expect(setAttachedFiles).toHaveBeenCalledWith([]);
   });
 
   it('does not send the stale active conversation while a foreground conversation is pending', () => {

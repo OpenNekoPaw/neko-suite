@@ -1,6 +1,8 @@
 import type {
+  AgentLlmConfig,
   AgentPhaseMessage,
   ErrorMessage,
+  AgentModelSlots,
   AgentMediaModelSelections,
   AgentPhase,
   MediaModelCategory,
@@ -27,6 +29,7 @@ import {
   getAgentTurnPreconditionMessage,
   selectAgentTurnProvider,
   type AgentAmbientCanvasNode,
+  type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentMessageTurnPreconditionReason,
   type AgentProviderCandidate,
@@ -62,6 +65,7 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
   readonly maxIterations: number;
   readonly autoExecuteTools?: boolean;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly modelId?: string;
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
@@ -114,6 +118,7 @@ export interface AgentTurnRuntimeSettings {
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly autoExecuteTools?: boolean;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
 }
@@ -173,6 +178,9 @@ export interface ExecuteAgentTurnInput<
   readonly message: string;
   readonly platform?: TPlatform | null;
   readonly chatModel?: ModelRef<'llm'>;
+  readonly agentModels?: AgentModelSlots;
+  readonly llmConfig?: AgentLlmConfig;
+  readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
@@ -353,6 +361,9 @@ export async function executeAgentTurn<
     hasPlatform: input.platform !== undefined && input.platform !== null,
     hasChatModel: input.chatModel !== undefined,
     chatModel: input.chatModel,
+    hasAgentModels: input.agentModels !== undefined,
+    hasLlmConfig: input.llmConfig !== undefined,
+    hasLlmRuntimeOptions: input.llmRuntimeOptions !== undefined,
     mediaModel: input.mediaModel,
     mediaModelCategories: input.mediaModels ? Object.keys(input.mediaModels) : [],
     imageAttachmentCount: input.imageAttachments?.length ?? 0,
@@ -370,6 +381,9 @@ export async function executeAgentTurn<
     conversationId: input.conversationId,
     message: input.message,
     chatModel: input.chatModel,
+    agentModels: input.agentModels,
+    llmConfig: input.llmConfig,
+    llmRuntimeOptions: input.llmRuntimeOptions,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
     imageAttachments: summarizeTurnImages(input.imageAttachments),
@@ -432,9 +446,10 @@ export async function executeAgentTurn<
     mediaModels: input.mediaModels,
     maxIterations: 200,
     autoExecuteTools: input.settings.autoExecuteTools,
-    temperature: input.settings.temperature,
-    maxTokens: input.settings.maxTokens,
-    thinkingBudget: input.settings.thinkingBudget,
+    temperature: input.llmRuntimeOptions?.temperature ?? input.settings.temperature,
+    topP: input.llmRuntimeOptions?.topP ?? input.settings.topP,
+    maxTokens: input.llmRuntimeOptions?.maxTokens ?? input.settings.maxTokens,
+    thinkingBudget: input.llmRuntimeOptions?.thinkingBudget ?? input.settings.thinkingBudget,
     workspaceRoot,
   });
 
@@ -444,6 +459,7 @@ export async function executeAgentTurn<
     maxIterations: turnConfig.maxIterations,
     autoExecuteTools: turnConfig.autoExecuteTools,
     temperature: turnConfig.temperature,
+    topP: turnConfig.topP,
     maxTokens: turnConfig.maxTokens,
     modelId: turnConfig.modelId,
     providerExpressionTargets: turnConfig.providerExpressionTargets,

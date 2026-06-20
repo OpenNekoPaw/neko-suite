@@ -8,12 +8,16 @@ import { useCallback } from 'react';
 import type { Message } from '@neko-agent/types';
 import type {
   SlashCommand,
+  SkillInvocation,
   SkillSummary,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
 import {
+  createSkillInvocationCatalog,
   createSlashCommandCatalog,
+  extractSkillInvocationArgs,
   extractSlashCommandArgs,
+  formatSkillInvocationHelpCatalog,
   formatSlashCommandHelpCatalog,
 } from '@/components/ChatView/InputArea/slash-command-catalog';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -30,6 +34,7 @@ export interface UseSlashCommandsProps {
 
 export interface UseSlashCommandsReturn {
   handleSlashCommand: (command: SlashCommand) => void;
+  handleSkillInvocation: (skill: SkillInvocation) => void;
 }
 
 export function useSlashCommands({
@@ -65,11 +70,18 @@ export function useSlashCommands({
         clearInput();
 
         const catalog = createSlashCommandCatalog(skills, pluginCommands);
-        const sections = formatSlashCommandHelpCatalog(catalog, t);
+        const skillCatalog = createSkillInvocationCatalog(skills);
+        const sections = [
+          formatSlashCommandHelpCatalog(catalog, t),
+          formatSkillInvocationHelpCatalog(skillCatalog, t),
+        ]
+          .filter(Boolean)
+          .join('\n\n');
 
         const helpContent = `${sections}
 
 **Tips:**
+- Use \`$\` to invoke Skills
 - Use \`@\` to reference files
 - Attach files using the 📎 button
 - Press Enter to send, Shift+Enter for new line`;
@@ -100,5 +112,17 @@ export function useSlashCommands({
     [activeConversationId, clearInput, inputValue, pluginCommands, setMessages, skills, t],
   );
 
-  return { handleSlashCommand };
+  const handleSkillInvocation = useCallback(
+    (skill: SkillInvocation) => {
+      if (!activeConversationId) {
+        return;
+      }
+      const args = extractSkillInvocationArgs(inputValue, skill);
+      clearInput();
+      VSCodeMessages.invokeSkill(skill.skillName, args, activeConversationId);
+    },
+    [activeConversationId, clearInput, inputValue],
+  );
+
+  return { handleSlashCommand, handleSkillInvocation };
 }

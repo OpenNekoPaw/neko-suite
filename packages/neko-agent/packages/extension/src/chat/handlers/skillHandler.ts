@@ -101,6 +101,27 @@ export class SkillHandler {
     return result;
   }
 
+  /**
+   * Handle explicit $skill invocation.
+   */
+  async handleSkillInvocation(
+    webview: vscode.Webview,
+    skillName: string,
+    conversationId: string,
+    args?: string,
+  ): Promise<SkillApplicationResult | null> {
+    const result = await this._runtime.applySkillInvocation({
+      skillName,
+      conversationId,
+      ...(args !== undefined ? { args } : {}),
+    });
+
+    if (result?.applied) {
+      this._sendSkillInjection(webview, result, conversationId);
+    }
+    return result;
+  }
+
   // ===========================================================================
   // Semantic Discovery
   // ===========================================================================

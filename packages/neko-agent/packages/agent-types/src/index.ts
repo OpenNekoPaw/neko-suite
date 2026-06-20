@@ -52,6 +52,28 @@ export {
 } from './engine-bridge-contract';
 export type { EnabledStateRecord } from './enabled-state';
 export type {
+  AgentCommandCatalogEntry,
+  AgentCommandCatalogSource,
+  AgentInputCatalogEntry,
+  AgentInputCatalogEntryBase,
+  AgentInputTriggerKind,
+  AgentInputTriggerPrefix,
+  AgentMentionCatalogEntry,
+  AgentSkillInvocationCatalogEntry,
+  AgentSkillInvocationCatalogSource,
+  ParsedAgentInputTrigger,
+  ParseAgentInputTriggerOptions,
+} from './agent-input-trigger';
+export {
+  AGENT_INPUT_TRIGGER_PREFIXES,
+  getAgentInputTriggerKind,
+  getAgentInputTriggerPrefix,
+  isAgentInputTriggerBoundary,
+  isAgentInputTriggerPrefix,
+  normalizeAgentInputTriggerName,
+  parseAgentInputTrigger,
+} from './agent-input-trigger';
+export type {
   PluginSlashCommandDef,
   PluginSlashCommandInvocation,
   RegisteredPluginSlashCommand,
@@ -234,6 +256,16 @@ export {
 export type {
   AgentMediaModelCategory,
   AgentMediaModelSelections,
+  AgentCreativityPreset,
+  AgentLlmAdvancedParams,
+  AgentLlmConfig,
+  AgentModelSlot,
+  AgentModelSlots,
+  AgentReasoningEffort,
+  AgentReasoningPreset,
+  AgentServiceTier,
+  AgentTextVerbosity,
+  AgentVerbosityPreset,
   ActiveConversationMessage,
   AgentPhaseMessage,
   AgentStateSnapshotMessage,
@@ -256,6 +288,7 @@ export type {
   FilePathWebviewMessage,
   GlobalErrorMessage,
   HistoryClearedMessage,
+  InvokeSkillWebviewMessage,
   InjectContextMessage,
   InvokePluginSlashCommandWebviewMessage,
   InvokeSlashCommandWebviewMessage,

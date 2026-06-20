@@ -17,6 +17,7 @@ import type {
   PluginSlashCommandDef,
   GenCategory,
   GenerationParams,
+  SkillInvocation,
 } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 
@@ -54,6 +55,7 @@ export interface InputAreaContextValue {
   /** Plugin slash commands from external extensions */
   pluginCommands?: PluginSlashCommandDef[];
   onSlashCommand?: (command: SlashCommand) => void;
+  onSkillInvocation?: (skill: SkillInvocation) => void;
   onRequestFiles?: (filter: string) => void;
   /** Unified @mention items (files + canvas nodes + characters) — updated after onRequestFiles */
   mentionItems?: MentionItem[];
@@ -100,6 +102,7 @@ export function InputAreaProvider({
       skills: value.skills,
       pluginCommands: value.pluginCommands,
       onSlashCommand: value.onSlashCommand,
+      onSkillInvocation: value.onSkillInvocation,
       onRequestFiles: value.onRequestFiles,
       mentionItems: value.mentionItems,
       onAddContextChip: value.onAddContextChip,
@@ -133,6 +136,7 @@ export function InputAreaProvider({
       value.skills,
       value.pluginCommands,
       value.onSlashCommand,
+      value.onSkillInvocation,
       value.onRequestFiles,
       value.mentionItems,
       value.onAddContextChip,

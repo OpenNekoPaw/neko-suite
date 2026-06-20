@@ -110,7 +110,7 @@ describe('AccountAiCatalogClient', () => {
     expect(snapshot.provider).toMatchObject({
       id: 'neko-account-gateway',
       connectionKind: 'gateway',
-      protocolProfile: 'newapi-compatible',
+      protocolProfile: 'newapi',
       supportLevel: 'verified',
       requiresApiKey: false,
       apiUrl: '',

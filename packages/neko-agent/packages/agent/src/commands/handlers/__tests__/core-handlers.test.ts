@@ -21,6 +21,7 @@ import type { CommandContext } from '../../types';
 function createMockContext(overrides?: Partial<CommandContext>): CommandContext {
   const catalogSkill = {
     name: 'commit',
+    entryPointKind: 'command-artifact',
     command: 'commit',
     description: 'Create a commit message',
     enabled: true,
@@ -108,12 +109,28 @@ describe('generateCliHelpText', () => {
     expect(helpText).toContain('[set <key> <value>');
   });
 
-  it('should include skill-backed slash commands from context', () => {
+  it('should include command artifact slash commands from context', () => {
     const helpText = generateCliHelpText(createMockContext());
 
-    expect(helpText).toContain('Skill Commands:');
+    expect(helpText).toContain('Command Artifacts:');
     expect(helpText).toContain('/commit <message>');
     expect(helpText).toContain('Create a commit message');
+  });
+
+  it('should not include ordinary Skill legacy command fields in slash help', () => {
+    const context = createMockContext();
+    const legacySkill = {
+      name: 'legacy-commit',
+      command: 'commit',
+      description: 'Legacy alias should be hidden from slash help',
+      enabled: true,
+    };
+    context.skillService!.registry.listAllSkills = vi.fn(() => [legacySkill]);
+
+    const helpText = generateCliHelpText(context);
+
+    expect(helpText).not.toContain('Command Artifacts:');
+    expect(helpText).not.toContain('Legacy alias should be hidden');
   });
 });
 
@@ -124,9 +141,9 @@ describe('generateExtensionHelpText', () => {
     expect(helpText).toContain('`/help`');
   });
 
-  it('should include skill commands if provided', () => {
+  it('should label retained slash skill aliases as legacy if provided', () => {
     const helpText = generateExtensionHelpText(['/commit', '/review']);
-    expect(helpText).toContain('**Skill Commands:**');
+    expect(helpText).toContain('**Skill Slash Aliases (Migration):**');
     expect(helpText).toContain('`/commit`');
     expect(helpText).toContain('`/review`');
   });
@@ -134,12 +151,13 @@ describe('generateExtensionHelpText', () => {
   it('should include tips section', () => {
     const helpText = generateExtensionHelpText();
     expect(helpText).toContain('**Tips:**');
+    expect(helpText).toContain('Use `$skill-name` to activate a Skill explicitly');
     expect(helpText).toContain('Use `@` to reference files');
   });
 
   it('should work without skill commands', () => {
     const helpText = generateExtensionHelpText();
-    expect(helpText).not.toContain('**Skill Commands:**');
+    expect(helpText).not.toContain('**Skill Slash Aliases (Migration):**');
   });
 });
 

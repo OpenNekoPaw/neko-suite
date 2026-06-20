@@ -53,6 +53,20 @@ export {
   type AssistantSettingsSnapshot,
 } from './assistant-config';
 export {
+  projectAgentPresetIntent,
+  projectLlmModelCapabilities,
+  projectLlmParameters,
+  resolveLlmProviderFamily,
+  type AgentPresetIntent,
+  type LlmCapabilityProjectionInput,
+  type LlmModelCapabilities,
+  type LlmParameterDiagnostic,
+  type LlmParameterDiagnosticCode,
+  type LlmParameterProjection,
+  type LlmParameterProjectionInput,
+  type LlmProviderFamily,
+} from './llm-parameter-projection';
+export {
   refreshOllamaModels,
   type OllamaModelRefreshConfig,
   type OllamaModelRefreshLogger,
@@ -123,3 +137,4 @@ export {
   NEKO_GATEWAY_PROVIDER_ID,
   OLLAMA_LOCAL_PROVIDER_ID,
 } from './default-config';
+export { buildUserConfigTemplate } from './user-config-template';

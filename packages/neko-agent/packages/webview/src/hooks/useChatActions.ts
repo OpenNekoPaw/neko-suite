@@ -12,7 +12,13 @@ import {
   type SetStateAction,
   type MutableRefObject,
 } from 'react';
-import { Message, type SessionMode, type TabType } from '@neko-agent/types';
+import {
+  Message,
+  type AgentLlmConfig,
+  type AgentModelSlots,
+  type SessionMode,
+  type TabType,
+} from '@neko-agent/types';
 import { VSCodeMessages } from '@/messages';
 import type {
   MessageAttachment,
@@ -21,6 +27,7 @@ import type {
 import {
   getBuiltinSlashCommand,
   normalizeSlashCommandName,
+  parseAgentInputTrigger,
   type AgentMediaModelSelections,
 } from '@neko-agent/types';
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
@@ -34,9 +41,12 @@ export type AgentMediaModels = AgentMediaModelSelections;
 export interface PendingSendInput {
   messageText?: string;
   displayMessageText?: string;
+  sessionMode?: SessionMode;
   attachments?: MessageAttachment[];
   contextPayloads?: AgentContextPayload[];
   fileReferences?: SelectedFileReference[];
+  agentModels?: AgentModelSlots;
+  llmConfig?: AgentLlmConfig;
 }
 
 export interface UseChatActionsProps {
@@ -116,6 +126,7 @@ export function useChatActions({
 
       const messageText = input?.messageText ?? inputValue;
       const displayMessageText = input?.displayMessageText ?? messageText;
+      const inputSessionMode = input?.sessionMode;
       const attachments = input?.attachments;
       const contextPayloads = input?.contextPayloads;
       const fileReferenceAttachments = projectFileReferenceAttachments(input?.fileReferences);
@@ -131,9 +142,12 @@ export function useChatActions({
         ensureConversationForSend?.({
           messageText,
           displayMessageText,
+          ...(inputSessionMode ? { sessionMode: inputSessionMode } : {}),
           ...(attachments ? { attachments } : {}),
           ...(contextPayloads ? { contextPayloads } : {}),
           ...(input?.fileReferences ? { fileReferences: input.fileReferences } : {}),
+          ...(input?.agentModels ? { agentModels: input.agentModels } : {}),
+          ...(input?.llmConfig ? { llmConfig: input.llmConfig } : {}),
         });
         return;
       }
@@ -144,6 +158,15 @@ export function useChatActions({
         setAttachedFiles([]);
         setSelectedFileReferences?.([]);
         VSCodeMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
+        return;
+      }
+
+      const skillInvocation = isCharacterRoleSession ? null : parseDirectSkillInvocation(trimmed);
+      if (skillInvocation) {
+        clearInput();
+        setAttachedFiles([]);
+        setSelectedFileReferences?.([]);
+        VSCodeMessages.invokeSkill(skillInvocation.skillName, skillInvocation.args, conversationId);
         return;
       }
 
@@ -173,7 +196,7 @@ export function useChatActions({
       setSelectedFileReferences?.([]);
       setIsThinking(true);
 
-      const effectiveSessionMode = sessionMode ?? 'agent';
+      const effectiveSessionMode = inputSessionMode ?? sessionMode ?? 'agent';
       const modelProjection = projectMessageModelSelection({
         selectedModel,
         sessionMode: effectiveSessionMode,
@@ -186,6 +209,12 @@ export function useChatActions({
         message: trimmed,
         sessionMode: effectiveSessionMode,
         ...modelProjection,
+        ...(effectiveSessionMode === 'agent' && input?.agentModels
+          ? { agentModels: input.agentModels }
+          : {}),
+        ...(effectiveSessionMode === 'agent' && input?.llmConfig
+          ? { llmConfig: input.llmConfig }
+          : {}),
         ...(outboundAttachments.length > 0 ? { attachments: outboundAttachments } : {}),
         ...(outboundContextPayloads.length > 0 ? { contextPayloads: outboundContextPayloads } : {}),
       });
@@ -315,6 +344,20 @@ function mergeDisplayAttachments(
   if (!attachments || attachments.length === 0) return [...fileReferences];
   if (fileReferences.length === 0) return [...attachments];
   return [...attachments, ...fileReferences];
+}
+
+function parseDirectSkillInvocation(
+  input: string,
+): { readonly skillName: string; readonly args?: string } | null {
+  const parsed = parseAgentInputTrigger(input);
+  if (!parsed || parsed.trigger !== 'skill') {
+    return null;
+  }
+
+  return {
+    skillName: parsed.name,
+    ...(parsed.args ? { args: parsed.args } : {}),
+  };
 }
 
 function parseDirectBuiltinSlashCommand(

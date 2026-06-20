@@ -23,6 +23,8 @@ export function tryHandleMessageRoute(
         messageText: message.message,
         sessionMode: message.sessionMode,
         chatModel: message.chatModel,
+        agentModels: message.agentModels,
+        llmConfig: message.llmConfig,
         mediaModel: message.mediaModel,
         mediaModels: message.mediaModels,
         attachments: message.attachments,

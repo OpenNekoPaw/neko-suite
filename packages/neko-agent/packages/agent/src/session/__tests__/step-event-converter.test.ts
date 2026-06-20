@@ -68,6 +68,7 @@ describe('stepToEvents', () => {
       type: 'think',
       content: 'response',
       thinking: 'Let me think...',
+      reasoningContent: 'Provider reasoning',
       timestamp: Date.now(),
     };
     const ss = freshStreamState();
@@ -77,6 +78,24 @@ describe('stepToEvents', () => {
     const thinkingEvent = events.find((e) => e.type === 'thinking_content');
     expect(thinkingEvent).toBeDefined();
     expect(thinkingEvent!.thinking).toBe('Let me think...');
+    expect(thinkingEvent!.reasoningContent).toBe('Provider reasoning');
+  });
+
+  it('should emit thinking_content for replay-only reasoning content', () => {
+    const step: AgentStep = {
+      type: 'think',
+      content: '',
+      reasoningContent: 'Provider reasoning only',
+      timestamp: Date.now(),
+    };
+    const ss = freshStreamState();
+
+    const events = collect(stepToEvents(step, 1, 10, ss));
+
+    const thinkingEvent = events.find((e) => e.type === 'thinking_content');
+    expect(thinkingEvent).toBeDefined();
+    expect(thinkingEvent!.thinking).toBeUndefined();
+    expect(thinkingEvent!.reasoningContent).toBe('Provider reasoning only');
   });
 
   it('should emit tool_call events for think step with tool calls', () => {
@@ -245,6 +264,7 @@ describe('recordStepInHistory', () => {
     const step: AgentStep = {
       type: 'think',
       content: '',
+      reasoningContent: 'Need file contents.',
       toolCalls: [{ id: 'tc_1', name: 'Read', arguments: { path: '/tmp' } }],
       timestamp: Date.now(),
     };
@@ -253,6 +273,7 @@ describe('recordStepInHistory', () => {
 
     expect(history).toHaveLength(1);
     expect(history[0]!.role).toBe('assistant');
+    expect(history[0]!.reasoningContent).toBe('Need file contents.');
     expect(history[0]!.toolCalls).toHaveLength(1);
     expect(history[0]!.toolCalls![0]!.function.name).toBe('Read');
   });

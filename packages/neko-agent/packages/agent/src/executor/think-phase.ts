@@ -88,13 +88,16 @@ export async function think(
   context.messages.push({
     ...response.message,
     content,
+    reasoningContent: response.reasoningContent ?? response.message.reasoningContent,
   });
 
+  const reasoningContent = response.reasoningContent ?? response.message.reasoningContent;
   const step: AgentStep = {
     type: 'think',
     content,
     // Prefer API thinking field, then recover provider-emitted <think> tags.
     thinking: response.thinking || extractedThinking || undefined,
+    reasoningContent,
     toolCalls: toolCalls?.map((tc) => ({
       id: tc.id,
       name: tc.name,
@@ -126,6 +129,7 @@ export async function* thinkStream(
   // Accumulate streaming response
   let content = '';
   let accumulatedThinking = '';
+  let accumulatedReasoningContent = '';
   const thinkStripper = new StreamingThinkTagStripper();
   const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
   let finishReason: string | undefined;
@@ -155,12 +159,24 @@ export async function* thinkStream(
         }
         break;
 
+      case 'thinking':
+        if (chunk.content) {
+          accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + chunk.content;
+        }
+        if (chunk.reasoningContent) {
+          accumulatedReasoningContent += chunk.reasoningContent;
+        }
+        break;
+
       case 'tool_call':
         if (chunk.toolCall) {
           const tc = chunk.toolCall;
           const id = tc.id ?? `auto_${toolCallMap.size}`;
           const existing = toolCallMap.get(id);
           if (existing) {
+            if (tc.function?.name) {
+              existing.name = mergeToolCallName(existing.name, tc.function.name);
+            }
             // Append incremental arguments
             if (tc.function?.arguments) {
               existing.arguments += tc.function.arguments;
@@ -214,6 +230,7 @@ export async function* thinkStream(
   const assistantMessage: ChatMessage = {
     role: 'assistant',
     content: strippedContent,
+    reasoningContent: accumulatedReasoningContent || undefined,
     toolCalls:
       toolCalls.length > 0
         ? toolCalls.map((tc) => ({
@@ -230,6 +247,7 @@ export async function* thinkStream(
     type: 'think',
     content: strippedContent,
     thinking: accumulatedThinking || extractedThinking || undefined,
+    reasoningContent: accumulatedReasoningContent || undefined,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     timestamp: Date.now(),
     usage: streamUsage,
@@ -280,6 +298,15 @@ export function extractThinkTags(text: string): { content: string; thinking: str
   const content = text.replace(thinkRegex, '').trim();
 
   return { content, thinking };
+}
+
+function mergeToolCallName(existing: string, delta: string): string {
+  if (!delta) return existing;
+  if (!existing) return delta;
+  if (delta === existing) return existing;
+  if (delta.startsWith(existing)) return delta;
+  if (existing.endsWith(delta)) return existing;
+  return existing + delta;
 }
 
 export interface StreamingThinkTagStripperResult {

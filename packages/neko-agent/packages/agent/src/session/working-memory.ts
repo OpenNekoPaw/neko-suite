@@ -36,11 +36,17 @@ export interface ProjectedHistory {
 
 interface PendingAssistantMessage {
   content: string;
+  reasoningContent?: string;
   toolCalls: Array<{
     id: string;
     type: 'function';
     function: { name: string; arguments: string };
   }>;
+  sourceEventIds: string[];
+}
+
+interface PendingReasoningContent {
+  content: string;
   sourceEventIds: string[];
 }
 
@@ -57,6 +63,7 @@ export function projectPersistedEventsToWorkingMemory(
 ): WorkingMemoryMessage[] {
   const history: WorkingMemoryMessage[] = [];
   let pendingAssistant: PendingAssistantMessage | null = null;
+  let pendingReasoningContent: PendingReasoningContent | null = null;
 
   for (const entry of entries) {
     const event = entry.event;
@@ -64,6 +71,7 @@ export function projectPersistedEventsToWorkingMemory(
     switch (event.type) {
       case 'user_message':
         pendingAssistant = flushPendingAssistant(history, pendingAssistant);
+        pendingReasoningContent = null;
         if (typeof event.content === 'string' && event.content.length > 0) {
           history.push({
             message: { role: 'user', content: event.content },
@@ -82,9 +90,14 @@ export function projectPersistedEventsToWorkingMemory(
         if (typeof event.content === 'string' && event.content.length > 0) {
           pendingAssistant = {
             content: event.content,
+            reasoningContent: takePendingReasoningContent(pendingReasoningContent),
             toolCalls: [],
-            sourceEventIds: toSourceEventIds(entry.eventId),
+            sourceEventIds: mergeSourceEventIds(
+              toSourceEventIds(entry.eventId),
+              pendingReasoningContent?.sourceEventIds ?? [],
+            ),
           };
+          pendingReasoningContent = null;
         }
         break;
 
@@ -93,7 +106,13 @@ export function projectPersistedEventsToWorkingMemory(
           break;
         }
         if (!pendingAssistant) {
-          pendingAssistant = { content: '', toolCalls: [], sourceEventIds: [] };
+          pendingAssistant = {
+            content: '',
+            reasoningContent: takePendingReasoningContent(pendingReasoningContent),
+            toolCalls: [],
+            sourceEventIds: pendingReasoningContent?.sourceEventIds ?? [],
+          };
+          pendingReasoningContent = null;
         }
         pendingAssistant.toolCalls.push({
           id: event.toolCall.id,
@@ -111,6 +130,7 @@ export function projectPersistedEventsToWorkingMemory(
 
       case 'tool_result':
         pendingAssistant = flushPendingAssistant(history, pendingAssistant);
+        pendingReasoningContent = null;
         if (event.toolResult) {
           history.push({
             message: {
@@ -132,7 +152,6 @@ export function projectPersistedEventsToWorkingMemory(
       case 'memory_extraction':
       case 'feedback.stage_transition_requested':
       case 'thinking':
-      case 'thinking_content':
       case 'text_delta':
       case 'tool_progress':
       case 'tool_confirmation':
@@ -143,8 +162,19 @@ export function projectPersistedEventsToWorkingMemory(
       case 'messageQueued':
         break;
 
+      case 'thinking_content':
+        if (event.reasoningContent) {
+          pendingReasoningContent = appendPendingReasoningContent(
+            pendingReasoningContent,
+            event.reasoningContent,
+            toSourceEventIds(entry.eventId),
+          );
+        }
+        break;
+
       case 'error': {
         pendingAssistant = flushPendingAssistant(history, pendingAssistant);
+        pendingReasoningContent = null;
         const message = event.error?.message || 'An error occurred';
         history.push({
           message: { role: 'assistant', content: message },
@@ -292,6 +322,7 @@ function flushPendingAssistant(
     message: {
       role: 'assistant',
       content: pendingAssistant.content,
+      reasoningContent: pendingAssistant.reasoningContent,
       ...(pendingAssistant.toolCalls.length > 0 && {
         toolCalls: pendingAssistant.toolCalls,
       }),
@@ -299,6 +330,23 @@ function flushPendingAssistant(
     sourceEventIds: [...pendingAssistant.sourceEventIds],
   });
   return null;
+}
+
+function takePendingReasoningContent(
+  pendingReasoningContent: PendingReasoningContent | null,
+): string | undefined {
+  return pendingReasoningContent?.content || undefined;
+}
+
+function appendPendingReasoningContent(
+  current: PendingReasoningContent | null,
+  content: string,
+  sourceEventIds: readonly string[],
+): PendingReasoningContent {
+  return {
+    content: (current?.content ?? '') + content,
+    sourceEventIds: mergeSourceEventIds(current?.sourceEventIds ?? [], sourceEventIds),
+  };
 }
 
 function applyToolResultBackfillToHistory(

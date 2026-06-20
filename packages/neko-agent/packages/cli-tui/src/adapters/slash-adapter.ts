@@ -7,13 +7,15 @@
 
 import {
   isSlashCommand,
+  isSkillInvocation,
   handleSlashCommand,
+  handleSkillInvocation,
   type SlashCommandContext,
 } from '../core/slash-commands';
 import type { CLIConfig } from '../core/types';
 import type { SkillService, ToolRegistry } from '@neko/agent';
 
-export { isSlashCommand };
+export { isSlashCommand, isSkillInvocation };
 
 export interface TUISlashCommandContext {
   readonly config: CLIConfig;
@@ -47,6 +49,40 @@ export async function handleTUISlashCommand(
   };
 
   const result = await handleSlashCommand(input, cliContext);
+
+  if (result.output) {
+    context.onOutput(result.output);
+  }
+
+  return {
+    handled: result.handled,
+    output: result.output,
+    error: result.error,
+    agentPrompt: result.agentPrompt,
+    executionOverrides: result.executionOverrides,
+  };
+}
+
+export async function handleTUISkillInvocation(
+  input: string,
+  context: TUISlashCommandContext,
+): Promise<{
+  handled: boolean;
+  output?: string;
+  error?: string;
+  agentPrompt?: string;
+  executionOverrides?: {
+    metadata?: Record<string, unknown>;
+  };
+}> {
+  const cliContext: SlashCommandContext = {
+    config: context.config,
+    skillService: context.skillService,
+    toolRegistry: context.toolRegistry,
+    onConfigUpdate: context.onConfigUpdate,
+  };
+
+  const result = await handleSkillInvocation(input, cliContext);
 
   if (result.output) {
     context.onOutput(result.output);

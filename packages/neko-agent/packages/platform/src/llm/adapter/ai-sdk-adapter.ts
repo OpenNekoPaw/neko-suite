@@ -485,6 +485,7 @@ export abstract class AISdkAdapter implements Adapter {
       message: {
         role: 'assistant',
         content: result.text || '',
+        reasoningContent: thinkingText || undefined,
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
       },
       finishReason: this.mapFinishReason(result.finishReason),
@@ -494,6 +495,7 @@ export abstract class AISdkAdapter implements Adapter {
         totalTokens: (result.usage?.inputTokens || 0) + (result.usage?.outputTokens || 0),
       },
       thinking: thinkingText || undefined,
+      reasoningContent: thinkingText || undefined,
     };
   }
 

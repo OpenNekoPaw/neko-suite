@@ -7,7 +7,7 @@
  *
  * In image/video/audio session modes:
  *   - Always visible, no category selector (implied by sessionMode).
- *   - Shows params for that category (model is shown in left area by InputArea).
+ *   - Shows the selected generation model plus params for that category.
  */
 
 import { useState, useRef } from 'react';
@@ -181,7 +181,7 @@ function CategorySelector({ category, onChange }: CategorySelectorProps) {
   );
 }
 
-// ─── inline media model chip (for agent mode, integrated into params bar) ───
+// ─── inline media model chip (for direct generation params) ─────────────────
 
 interface InlineMediaModelChipProps {
   category: GenCategory;
@@ -474,7 +474,7 @@ export function GenerationParamsBar() {
         <CategorySelector category={genCategory} onChange={onGenCategoryChange} />
       )}
 
-      {/* Inline media model selector — agent mode only (non-agent uses InputArea left side) */}
+      {/* Inline media model selector — visible whenever the active generation category has models. */}
       {projection.showInlineMediaModelPicker && (
         <InlineMediaModelChip
           category={effectiveCategory}

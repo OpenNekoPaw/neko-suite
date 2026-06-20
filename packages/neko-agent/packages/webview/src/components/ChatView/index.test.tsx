@@ -6,11 +6,11 @@ import { ChatView } from './index';
 const translations: Record<string, string> = {
   'chat.emptyState.title': 'Neko Suite Creative Assistant',
   'chat.emptyState.description':
-    'Shape stories, characters, storyboards, shots, visuals, video, and sound.',
+    'Start from an idea, reference, or character and develop story themes, relationships, worlds, and scene atmosphere with the Agent.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
-  'chat.emptyState.suggestion1': 'Design the protagonist and relationships',
-  'chat.emptyState.suggestion2': 'Shape this scene into storyboard rhythm',
-  'chat.emptyState.suggestion3': 'Draft dialogue and narration beats',
+  'chat.emptyState.entry.startChat': 'Start Chat',
+  'chat.emptyState.entry.generateAssets': 'Generate Assets',
+  'chat.emptyState.entry.roleplay': 'Roleplay',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -44,13 +44,12 @@ vi.mock('@/components/ChatView/EmbodyCharacterHeader', () => ({
 }));
 
 describe('ChatView empty state', () => {
-  it('renders ordinary assistant suggestions for empty normal chat', () => {
+  it('keeps an opened empty normal chat blank instead of showing the entry card', () => {
     renderChatView();
 
-    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Design the protagonist and relationships/ }),
-    ).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Start Chat/ })).toBeNull();
+    expect(screen.getByTestId('input-area')).toBeTruthy();
   });
 
   it('does not render ordinary assistant suggestions in empty Character Dialogue sessions', () => {
@@ -61,9 +60,7 @@ describe('ChatView empty state', () => {
 
     expect(screen.getByTestId('character-dialogue-header')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
-    expect(
-      screen.queryByRole('button', { name: /Design the protagonist and relationships/ }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /Start Chat/ })).toBeNull();
     expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
   });
 

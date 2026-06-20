@@ -352,6 +352,15 @@ export const VSCodeMessages = {
   },
 
   /**
+   * Invoke a Skill through the explicit $skill namespace.
+   * @param skillName - Canonical Skill name/id
+   * @param args - Optional invocation arguments
+   */
+  invokeSkill: (skillName: string, args: string | undefined, conversationId: string) => {
+    postWebviewMessage({ type: 'invokeSkill', skillName, args, conversationId });
+  },
+
+  /**
    * Invoke a plugin slash command registered by an external extension.
    * Extension host routes it to the registering extension via VSCode command API.
    * @param extensionId - The extension that registered the command

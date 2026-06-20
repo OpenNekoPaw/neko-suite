@@ -4,6 +4,7 @@ import type {
   SkillDiscoveryResult,
   SkillInjection,
 } from '@neko/shared';
+import { normalizeAgentInputTriggerName } from '@neko-agent/types';
 import type { SkillService } from './skill-service';
 import {
   buildSkillInjectionMessage,
@@ -37,6 +38,12 @@ export interface ConversationSkillRuntimeDeps {
 
 export interface ApplySlashSkillCommandInput {
   readonly command: string;
+  readonly conversationId: string;
+  readonly args?: string;
+}
+
+export interface ApplySkillInvocationInput {
+  readonly skillName: string;
   readonly conversationId: string;
   readonly args?: string;
 }
@@ -103,8 +110,54 @@ export class ConversationSkillRuntime {
     if (!skill) {
       return { applied: false, error: `Unknown command: /${input.command}` };
     }
+    if (skill.entryPointKind !== 'command-artifact') {
+      return {
+        applied: false,
+        error: `Legacy slash Skill alias is not canonical: /${input.command}. Use $${skill.name}.`,
+      };
+    }
 
     return this._applySkill(input.conversationId, skill, input.args);
+  }
+
+  async applySkillInvocation(
+    input: ApplySkillInvocationInput,
+  ): Promise<SkillApplicationResult | null> {
+    const skillName = normalizeAgentInputTriggerName(input.skillName);
+    const skillService = this._deps.skillService;
+    if (!skillService) {
+      return { applied: false, error: 'SkillService not initialized' };
+    }
+    if (!input.conversationId) {
+      return { applied: false, error: 'No active conversation' };
+    }
+
+    const skill = skillService.registry.getSkill(skillName);
+    if (!skill) {
+      return { applied: false, error: `Unknown skill: $${skillName}` };
+    }
+    if (skill.enabled === false) {
+      return { applied: false, error: `Skill is disabled: $${skillName}` };
+    }
+
+    let loadedSkill: Skill | undefined;
+    try {
+      loadedSkill = await skillService.registry.ensureLoaded(skillName);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return { applied: false, error: `Failed to load skill: $${skillName}: ${reason}` };
+    }
+    if (!loadedSkill) {
+      return { applied: false, error: `Failed to load skill: $${skillName}` };
+    }
+    if (loadedSkill.enabled === false) {
+      return { applied: false, error: `Skill is disabled: $${skillName}` };
+    }
+    if (!loadedSkill.content) {
+      return { applied: false, error: `Skill has no content: $${skillName}` };
+    }
+
+    return this._applySkill(input.conversationId, loadedSkill, input.args);
   }
 
   async executeSkill(input: ExecuteSkillInput): Promise<SkillApplicationResult | null> {

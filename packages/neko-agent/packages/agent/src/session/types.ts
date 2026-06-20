@@ -115,6 +115,9 @@ export interface AgentSessionConfig {
   /** Temperature for LLM */
   temperature?: number;
 
+  /** Top P sampling for LLM */
+  topP?: number;
+
   /** Max tokens for response */
   maxTokens?: number;
 
@@ -425,6 +428,9 @@ export interface AgentEvent {
 
   /** Extended thinking content */
   thinking?: string;
+
+  /** Provider reasoning content that must be replayed with assistant messages. */
+  reasoningContent?: string;
 
   /** Tool call info */
   toolCall?: {

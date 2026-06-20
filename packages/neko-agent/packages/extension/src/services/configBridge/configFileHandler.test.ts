@@ -26,7 +26,12 @@ describe('ConfigFileHandler', () => {
   });
 
   it('uses the NewAPI/local MVP default config as the new file template', () => {
-    expect(parseTomlConfigText(buildUserConfigTemplate())).toEqual(DEFAULT_USER_CONFIG);
-    expect(buildUserConfigTemplate()).toContain('[[providers]]');
+    const template = buildUserConfigTemplate();
+
+    expect(parseTomlConfigText(template)).toEqual(DEFAULT_USER_CONFIG);
+    expect(template).toContain('# Provider fields:');
+    expect(template).toContain('protocol_profile: "newapi", "openai-chat"');
+    expect(template).toContain('DeepSeek direct');
+    expect(template).toContain('[[providers]]');
   });
 });

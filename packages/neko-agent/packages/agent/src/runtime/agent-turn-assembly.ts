@@ -1,5 +1,7 @@
 import type {
+  AgentLlmConfig,
   AgentMediaModelSelections,
+  AgentModelSlots,
   AgentPhase,
   AgentWorkflowIdentity,
   MediaModelCategory,
@@ -17,6 +19,7 @@ import {
 import type { AgentBase64ImageAttachment } from './attachment-projection';
 import type {
   AgentAmbientCanvasNode,
+  AgentLlmRuntimeOptions,
   AgentMessageExecutionOverrides,
   AgentProviderCandidate,
   AgentStreamPersistenceSnapshot,
@@ -37,6 +40,7 @@ export interface AgentTurnSettingsSource {
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly autoExecuteTools?: boolean;
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
 }
@@ -127,6 +131,9 @@ export interface AgentTurnAssemblyInput<
   readonly message: string;
   readonly platform?: TPlatform | null;
   readonly chatModel?: ModelRef<'llm'>;
+  readonly agentModels?: AgentModelSlots;
+  readonly llmConfig?: AgentLlmConfig;
+  readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -185,6 +192,9 @@ export function buildAgentTurnForWebviewRuntimeInput<
     message: input.message,
     platform: input.platform,
     chatModel: input.chatModel,
+    agentModels: input.agentModels,
+    llmConfig: input.llmConfig,
+    llmRuntimeOptions: input.llmRuntimeOptions,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
     imageAttachments: input.imageAttachments,
@@ -195,6 +205,7 @@ export function buildAgentTurnForWebviewRuntimeInput<
       executionMode: input.settings.executionMode,
       autoExecuteTools: input.settings.autoExecuteTools,
       temperature: input.settings.temperature,
+      topP: input.settings.topP,
       maxTokens: input.settings.maxTokens,
       thinkingBudget: input.settings.thinkingBudget,
     },

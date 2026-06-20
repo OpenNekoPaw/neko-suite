@@ -51,6 +51,7 @@ describe('SkillRegistryPopulator', () => {
       projectCommands: 0,
     });
     expect(registry.getSkill('builtin')?.source).toBe('builtin');
+    expect(registry.getSkill('fix')?.entryPointKind).toBe('command-artifact');
     expect(registry.getSkillByCommand('fix')?.supportsArguments).toBe(true);
   });
 
@@ -118,9 +119,15 @@ describe('SkillRegistryPopulator', () => {
 
     expect(registry.isLazy('lazy-skill')).toBe(true);
     expect(registry.isLazy('lazy-command')).toBe(true);
+    expect(registry.getSkillByCommand('lazy-command')).toMatchObject({
+      name: 'lazy-command',
+      entryPointKind: 'command-artifact',
+      command: 'lazy-command',
+    });
     await expect(registry.ensureLoaded('lazy-command')).resolves.toMatchObject({
       name: 'lazy-command',
       command: 'lazy-command',
+      entryPointKind: 'command-artifact',
       supportsArguments: true,
     });
   });

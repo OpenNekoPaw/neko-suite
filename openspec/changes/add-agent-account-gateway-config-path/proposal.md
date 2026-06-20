@@ -1,6 +1,6 @@
 ## Why
 
-Neko Agent now has a clear local configuration contract for NewAPI-compatible gateways and local models, but OAuth login is still only an account-status projection and cannot provide the default AI API path. This change completes the final provider resolution design: explicit user configuration stays highest priority, while a logged-in Neko account can supply a runtime-only official gateway catalog when no explicit AI config is selected.
+Neko Agent now has a clear local configuration contract for NewAPI gateways and local models, but OAuth login is still only an account-status projection and cannot provide the default AI API path. This change completes the final provider resolution design: explicit user configuration stays highest priority, while a logged-in Neko account can supply a runtime-only official gateway catalog when no explicit AI config is selected.
 
 ## What Changes
 
@@ -12,7 +12,7 @@ Neko Agent now has a clear local configuration contract for NewAPI-compatible ga
 - Reuse cached account catalog snapshots for new Agent sessions and refresh on account/session changes, TTL expiry, manual refresh, or provider authorization failures instead of blocking every new conversation on a catalog request.
 - Project Webview model lists as source-grouped and capability-scoped data: Neko official account gateway models first after OAuth catalog success, then models from user config providers, with LLM and domain models kept distinct.
 - Fail visibly when neither explicit config nor account gateway catalog can satisfy the selected provider/model; do not fall back to another provider, first model, or hard-coded default.
-- Leave generation provider expansion as roadmap work. The account gateway catalog may expose LLM and generation models, but the MVP only guarantees NewAPI-compatible routing for catalog-backed models that Neko official APIs return.
+- Leave generation provider expansion as roadmap work. The account gateway catalog may expose LLM and generation models, but the MVP only guarantees NewAPI routing for catalog-backed models that Neko official APIs return.
 
 Non-goals:
 

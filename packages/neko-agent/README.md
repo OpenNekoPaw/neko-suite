@@ -45,7 +45,7 @@ packages/
 ├── agent/      # @neko/agent — Agent 运行时（零 VSCode 依赖，CLI/Extension 复用）
 │   ├── executor/     ReAct 循环引擎（think-phase + act-phase + hook-runner）
 │   ├── session/      Agent 会话生命周期 + 事件转换
-│   ├── skill/        技能系统（SkillService + 3-track 原子注入 + ToolGuard + 斜杠命令）
+│   ├── skill/        技能系统（SkillService + 3-track 原子注入 + ToolGuard + 显式技能激活）
 │   ├── tools/        工具注册 + 双层注入（always/dynamic）+ 元工具
 │   ├── mcp/          MCP Client（Stdio/HTTP）+ 工具桥接
 │   ├── context/      分层上下文管理 + token 预算 + 对话压缩
@@ -105,22 +105,24 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 | 连接模式 | MVP 状态 | 配置方式 | 说明 |
 |----------|----------|----------|------|
-| `gateway` | MVP | 用户配置 `neko-gateway` + `newapi-compatible`，或 OAuth `neko-account-gateway` | NewAPI-compatible 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
-| `custom-gateway` | MVP | `custom-newapi` + `newapi-compatible` | 用户自建或第三方 NewAPI-compatible endpoint。 |
+| `gateway` | MVP | 用户配置 `neko-gateway` + `newapi`，或 OAuth `neko-account-gateway` | NewAPI 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
+| `custom-gateway` | MVP | `custom-newapi` + `newapi` | 用户自建或第三方 NewAPI endpoint。 |
 | `local` | MVP | `ollama-local` + `ollama` | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。 |
 | `direct` | Roadmap | 官方厂商 API | Gemini、Grok、Claude、GPT、DeepSeek、GLM 等官方直连需逐项验证套餐、参数和接口差异后再进入默认支持。 |
 
 **LLM 视觉理解**：不是所有 LLM 的强需求。文本聊天只要求 `chat` 能力；图像理解/多模态工作流必须选择声明了 `vision` 能力的模型。
 
-**中转协议**：MVP 只把 NewAPI-compatible 作为默认中转协议。OneAPI/OpenRouter/SubAPI 等作为后续 profile/preset 支持，除非已有 adapter、参数映射和测试。
+**中转协议**：MVP 只把 NewAPI 作为默认中转协议。OneAPI/OpenRouter/SubAPI 等作为后续 profile/preset 支持，除非已有 adapter、参数映射和测试。
 
-**生成模型**：MVP 通过 NewAPI-compatible gateway 配置图片、视频、音频和音乐模型；Suno、Seedance、Kling、GPT image 等具体模型是否可用取决于 gateway 暴露的能力。未配置 endpoint/凭据的 gateway 不会被路由为可用 provider。官方直连和本地生成模型运行时进入 Roadmap。
+**生成模型**：MVP 通过 NewAPI gateway 配置图片、视频、音频和音乐模型；Suno、Seedance、Kling、GPT image 等具体模型是否可用取决于 gateway 暴露的能力。未配置 endpoint/凭据的 gateway 不会被路由为可用 provider。官方直连和本地生成模型运行时进入 Roadmap。
 
 **账号 catalog 缓存**：Agent Extension Host 复用新鲜的 account catalog snapshot；新开 Agent tab 不会因为 tab 新建而强制同步访问官方接口。缓存会在 OAuth login/logout/silent refresh、TTL 过期、手动刷新、catalog version/ETag 不匹配、官方接口或账号网关返回 401/403 时刷新或清空。
 
 **模型展示**：Webview 按 source/provider 分组展示模型。OAuth catalog 可用时先显示 Neko Official，再按配置文件中的 provider 顺序显示用户配置 provider；每组内部按 `llm`、`image`、`video`、`audio` 类型分开。音乐生成模型归入 `audio`，通过 `text_to_music` 等模型元数据表达用途；Neko 内部用途注册表会把它绑定到 `audio.music.generate` 产品用途。对话选择器隐藏空分组，配置/设置视图可以显示空 provider 并带诊断。
 
 **模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。
+
+**Composer 级 Agent LLM 配置**：Agent 输入框中的模型、推理深度、回复详略和创造性 preset 只作用于当前会话/turn，不会自动写回用户 TOML。普通 Agent turn 当前只使用 `primary` 模型槽位；`fast`、`deep`、`summarizer`、`vision` 是预留合同，未被当前 runtime 支持时会返回可见诊断。自定义 provider 缺少能力元数据时默认采用保守控制，详见 [模型默认值配置指南](./docs/media-model-configuration.md#agent-composer-llm-配置)。
 
 **模型默认值**：在 `~/.neko/config.toml` 中通过 `default_models.<type>` 为 LLM 和生成模型配置默认模型：
 
@@ -166,7 +168,18 @@ model_id = "neko-gateway-tts"
 | B | 权限允许规则（PermissionHooks） |
 | C | 工具白名单（ToolGuard，运行时 isToolAllowed） |
 
-技能支持可选的斜杠命令触发（frontmatter 中 `command: commit`），支持参数插值（`$ARGUMENTS`, `$1-$99`）。
+显式输入触发被拆成独立命名空间：
+
+| 前缀 | 用途 | 示例 |
+|------|------|------|
+| `/` | Agent、Host、Plugin 命令，以及 `.neko/commands/*.md` 命令工件 | `/help`, `/status`, `/commit fix typo` |
+| `$` | 显式激活 Skill，按 canonical Skill name/id 分发到 Skill 注入路径 | `$quality-review changed files` |
+| `@` | 文件、素材、实体或上下文引用 | `@scene.md` |
+| 自然语言 | 普通对话输入，仍可由语义匹配隐式选择 Skill | `帮我审一下这次修改` |
+
+`/skills` 是 Skill 管理命令，用于查看、检查 active Skill 或清除 active Skill；直接应用某个 Skill 使用 `$skill-name`。普通 `.neko/skills/<name>/SKILL.md` 不再自动生成 `/skill` 入口，即使旧 frontmatter 里仍带 `command` 字段也只视为 prelaunch migration 元数据。需要 `/command` 体验时，应把提示词写成 `.neko/commands/<command>.md` 命令工件；命令工件复用 Skill 注入 runtime，并显式标记为 `entryPointKind: "command-artifact"`。
+
+命令工件支持参数插值（`$ARGUMENTS`, `$1-$99`）。`$skill args` 会把尾随参数传给现有 Skill 注入路径；若存在同名 `/review` 命令和 `$review` Skill，前缀决定命名空间，二者不会互相兜底。
 
 ### 工具系统
 

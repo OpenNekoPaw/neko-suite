@@ -29,6 +29,9 @@ export interface IAgentConfig {
   /** Temperature */
   temperature?: number;
 
+  /** Top P sampling */
+  topP?: number;
+
   /** Max tokens */
   maxTokens?: number;
 

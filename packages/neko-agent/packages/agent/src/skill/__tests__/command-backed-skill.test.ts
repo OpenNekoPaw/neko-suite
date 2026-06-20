@@ -21,6 +21,7 @@ describe('command-backed-skill', () => {
         name: 'commit',
         description: 'Create a commit message',
         command: 'commit',
+        entryPointKind: 'command-artifact',
         argumentHint: '[message]',
         supportsArguments: true,
         autoInvoke: false,
@@ -58,6 +59,7 @@ describe('command-backed-skill', () => {
       expect.objectContaining({
         name: 'review',
         command: 'review',
+        entryPointKind: 'command-artifact',
         supportsArguments: true,
       }),
     );

@@ -85,6 +85,7 @@ export interface UseMessageHandlerProps {
   // State setters - Project
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   mentionSearchFilter: string;
+  mentionSearchFilterRef?: MutableRefObject<string>;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
@@ -154,6 +155,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
     setProjectFiles,
     mentionSearchFilter,
+    mentionSearchFilterRef,
     setMentionItems,
     setPluginCommands,
     setPluginsAvailable,
@@ -238,6 +240,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
       setProjectFiles,
       mentionSearchFilter,
+      mentionSearchFilterRef,
       setMentionItems,
       setPluginCommands,
       setPluginsAvailable,
@@ -288,6 +291,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
       setProjectFiles,
       mentionSearchFilter,
+      mentionSearchFilterRef,
       setMentionItems,
       setPluginCommands,
       setPluginsAvailable,

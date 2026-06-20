@@ -22,6 +22,7 @@ interface GenericMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
   name?: string;
+  reasoning_content?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -38,6 +39,7 @@ interface GenericResponse {
     message: {
       role: string;
       content: string | null;
+      reasoning_content?: string | null;
       tool_calls?: Array<{
         id: string;
         type: 'function';
@@ -177,6 +179,10 @@ export class GenericAdapter extends BaseAdapter {
     const headers = this.buildHeaders(provider);
     const body = this.buildRequestBody(messages, { ...options, stream: true }, model);
     const variant = this.getVariant(provider);
+    const toolCallsBuffer = new Map<
+      number,
+      { id: string; type: 'function'; function: { name: string; arguments: string } }
+    >();
 
     for await (const line of this.httpStream({
       url,
@@ -204,6 +210,11 @@ export class GenericAdapter extends BaseAdapter {
         const chunk = JSON.parse(jsonStr);
         const choice = chunk.choices?.[0];
         if (!choice) continue;
+        const toolCallsDelta = this.consumeToolCallDeltas(
+          choice.delta?.tool_calls,
+          toolCallsBuffer,
+        );
+        const reasoningDelta = readString(choice.delta?.reasoning_content);
 
         yield {
           id: chunk.id || '',
@@ -211,8 +222,10 @@ export class GenericAdapter extends BaseAdapter {
           delta: {
             role: choice.delta?.role,
             content: choice.delta?.content || undefined,
-            toolCalls: choice.delta?.tool_calls,
+            ...(reasoningDelta ? { reasoningContent: reasoningDelta } : {}),
+            ...(toolCallsDelta.length > 0 ? { toolCalls: toolCallsDelta } : {}),
           },
+          ...(reasoningDelta ? { thinking: reasoningDelta, reasoningContent: reasoningDelta } : {}),
           finishReason: choice.finish_reason,
         };
       } catch {
@@ -274,6 +287,7 @@ export class GenericAdapter extends BaseAdapter {
     };
 
     if (message.name) result.name = message.name;
+    if (message.reasoningContent) result.reasoning_content = message.reasoningContent;
     if (message.toolCallId) result.tool_call_id = message.toolCallId;
     if (message.toolCalls) result.tool_calls = message.toolCalls;
 
@@ -288,6 +302,7 @@ export class GenericAdapter extends BaseAdapter {
       message: {
         role: 'assistant',
         content: choice?.message.content || '',
+        reasoningContent: choice?.message.reasoning_content || undefined,
         toolCalls: choice?.message.tool_calls,
       },
       finishReason: (choice?.finish_reason as ChatResponse['finishReason']) || 'stop',
@@ -296,7 +311,66 @@ export class GenericAdapter extends BaseAdapter {
         completionTokens: data.usage?.completion_tokens || 0,
         totalTokens: data.usage?.total_tokens || 0,
       },
+      thinking: choice?.message.reasoning_content || undefined,
+      reasoningContent: choice?.message.reasoning_content || undefined,
     };
+  }
+
+  private consumeToolCallDeltas(
+    rawToolCalls: unknown,
+    buffer: Map<
+      number,
+      { id: string; type: 'function'; function: { name: string; arguments: string } }
+    >,
+  ): NonNullable<ChatChunk['delta']['toolCalls']> {
+    if (!Array.isArray(rawToolCalls)) {
+      return [];
+    }
+
+    const deltas: NonNullable<ChatChunk['delta']['toolCalls']> = [];
+    for (const rawToolCall of rawToolCalls) {
+      if (!isRecord(rawToolCall)) {
+        continue;
+      }
+
+      const index = typeof rawToolCall.index === 'number' ? rawToolCall.index : buffer.size;
+      const functionDelta = isRecord(rawToolCall.function) ? rawToolCall.function : undefined;
+      const idDelta = readString(rawToolCall.id);
+      const nameDelta = readString(functionDelta?.name);
+      const argumentDelta = readString(functionDelta?.arguments);
+
+      let current = buffer.get(index);
+      if (!current) {
+        current = {
+          id: idDelta || `tool_call_${index}`,
+          type: 'function',
+          function: { name: '', arguments: '' },
+        };
+        buffer.set(index, current);
+      }
+
+      if (idDelta) {
+        current.id = idDelta;
+      }
+      if (nameDelta) {
+        current.function.name += nameDelta;
+      }
+      if (argumentDelta) {
+        current.function.arguments += argumentDelta;
+      }
+
+      const delta: NonNullable<ChatChunk['delta']['toolCalls']>[number] = {
+        id: current.id,
+        type: 'function',
+        function: {
+          name: nameDelta || '',
+          arguments: argumentDelta || '',
+        },
+      };
+      deltas.push(delta);
+    }
+
+    return deltas;
   }
 
   // ==========================================================================
@@ -380,4 +454,12 @@ export class GenericAdapter extends BaseAdapter {
 
     return capabilities;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }

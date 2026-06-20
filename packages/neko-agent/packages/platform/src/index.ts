@@ -34,6 +34,7 @@ export {
   NEKO_GATEWAY_PROVIDER_ID,
   OLLAMA_LOCAL_PROVIDER_ID,
 } from './config/default-config';
+export { buildUserConfigTemplate } from './config/user-config-template';
 
 export { type WorkspaceConfig } from './config/workspace-config';
 
@@ -85,6 +86,20 @@ export {
   type AssistantSettingsSnapshot,
   type AssistantSettingsUpdatedMessage,
 } from './config/assistant-config';
+export {
+  projectAgentPresetIntent,
+  projectLlmModelCapabilities,
+  projectLlmParameters,
+  resolveLlmProviderFamily,
+  type AgentPresetIntent,
+  type LlmCapabilityProjectionInput,
+  type LlmModelCapabilities,
+  type LlmParameterDiagnostic,
+  type LlmParameterDiagnosticCode,
+  type LlmParameterProjection,
+  type LlmParameterProjectionInput,
+  type LlmProviderFamily,
+} from './config/llm-parameter-projection';
 export {
   runAssistantProviderConfigMutationRuntime,
   runAssistantProviderConfigMutationNotificationRuntime,

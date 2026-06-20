@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleSlashCommand } from '../slash-commands';
+import { handleSkillInvocation, handleSlashCommand, isSkillInvocation } from '../slash-commands';
 import type { CLIConfig } from '../types';
 
 function createConfig(): CLIConfig {
@@ -20,9 +20,10 @@ function createConfig(): CLIConfig {
 }
 
 describe('handleSlashCommand', () => {
-  it('returns agent execution overrides for skill slash commands with arguments', async () => {
+  it('returns agent execution overrides for command artifact slash commands with arguments', async () => {
     const skill = {
       name: '剪辑: 快速 workflow',
+      entryPointKind: 'command-artifact',
       command: 'commit',
     } as never;
 
@@ -55,6 +56,38 @@ describe('handleSlashCommand', () => {
     });
   });
 
+  it('does not treat ordinary skill legacy command fields as slash commands', async () => {
+    const skill = {
+      name: 'quality-review',
+      command: 'commit',
+      description: 'Ordinary Skill with legacy command metadata',
+      enabled: true,
+    } as never;
+
+    const skillService = {
+      registry: {
+        skillCount: 1,
+        listSkills: vi.fn(() => [skill]),
+        listAllSkills: vi.fn(() => [skill]),
+        getSkill: vi.fn(),
+        getSkillByCommand: vi.fn((name: string) => (name === 'commit' ? skill : undefined)),
+        searchSkills: vi.fn(() => []),
+      },
+      skillCount: 1,
+      apply: vi.fn(async () => ({ type: 'slash-command' })),
+    } as never;
+
+    const result = await handleSlashCommand('/commit fix bug', {
+      config: createConfig(),
+      skillService,
+    });
+
+    expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
+    expect(skillService.apply).not.toHaveBeenCalled();
+    expect(result.handled).toBe(false);
+    expect(result.error).toContain('Unknown command: /commit');
+  });
+
   it('does not treat builtin commands as agent-execution slash prompts', async () => {
     const result = await handleSlashCommand('/plan', {
       config: createConfig(),
@@ -83,3 +116,81 @@ describe('handleSlashCommand', () => {
     expect(result.error).toContain('Valid: image, video, audio, reset');
   });
 });
+
+describe('handleSkillInvocation', () => {
+  it('applies dollar skill invocations by canonical skill name', async () => {
+    const skill = {
+      name: 'quality-review',
+      description: 'Review changed files',
+      content: 'Review instructions',
+      enabled: true,
+    };
+    const skillService = createSkillServiceMock([skill]);
+
+    const result = await handleSkillInvocation('$quality-review changed files', {
+      config: createConfig(),
+      skillService,
+    });
+
+    expect(isSkillInvocation('$quality-review changed files')).toBe(true);
+    expect(skillService.registry.getSkill).toHaveBeenCalledWith('quality-review');
+    expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
+    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('quality-review');
+    expect(skillService.apply).toHaveBeenCalledWith(skill, 'changed files');
+    expect(result).toEqual(
+      expect.objectContaining({
+        handled: true,
+        output: 'Skill activated: quality-review',
+        agentPrompt: 'changed files',
+        executionOverrides: {
+          metadata: {
+            idc: {
+              entrySignal: 'prompt-chain-skill',
+              taskShape: 'multi-step',
+              runKind: 'skill:quality-review',
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  it('returns visible diagnostics for unknown and disabled dollar skills', async () => {
+    const disabled = {
+      name: 'disabled-skill',
+      description: 'Disabled',
+      content: 'Disabled instructions',
+      enabled: false,
+    };
+    const skillService = createSkillServiceMock([disabled]);
+
+    await expect(
+      handleSkillInvocation('$missing', { config: createConfig(), skillService }),
+    ).resolves.toEqual({ handled: true, error: 'Unknown skill: $missing' });
+    await expect(
+      handleSkillInvocation('$disabled-skill', { config: createConfig(), skillService }),
+    ).resolves.toEqual({ handled: true, error: 'Skill is disabled: $disabled-skill' });
+  });
+});
+
+function createSkillServiceMock(skills: Array<Record<string, unknown>>) {
+  return {
+    registry: {
+      skillCount: skills.length,
+      listSkills: vi.fn(() => skills),
+      listAllSkills: vi.fn(() => skills),
+      getSkill: vi.fn((name: string) => skills.find((skill) => skill.name === name)),
+      getSkillByCommand: vi.fn((command: string) =>
+        skills.find((skill) => skill.command === command),
+      ),
+      searchSkills: vi.fn(() => []),
+      ensureLoaded: vi.fn(async (name: string) => skills.find((skill) => skill.name === name)),
+    },
+    skillCount: skills.length,
+    apply: vi.fn(async (skill: Record<string, unknown>, args?: string) => ({
+      name: skill.name,
+      systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
+      type: 'skill',
+    })),
+  } as never;
+}

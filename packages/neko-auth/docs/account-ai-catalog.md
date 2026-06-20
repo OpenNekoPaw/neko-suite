@@ -18,7 +18,7 @@ The extension export `NekoAuthAPI` exposes:
 `AccountAiCatalogClient` fetches `neko.auth.aiCatalogUrl` with the current OAuth access token inside the auth boundary. The returned snapshot contains provider/model IDs, model capabilities, catalog version/ETag, expiry, entitlement, usage, defaults, and diagnostics. It deliberately strips user-visible endpoint secrets:
 
 - account provider is projected as `connectionKind: "gateway"`;
-- protocol is `newapi-compatible`;
+- protocol is `newapi`;
 - `requiresApiKey` is `false` for user configuration because the user does not supply a key;
 - `apiUrl`, `apiKey`, `accessToken`, `refreshToken`, `authorization`, and auth headers are not projected to Webview or Agent prompt/tool payloads.
 

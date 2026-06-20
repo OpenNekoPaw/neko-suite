@@ -25,7 +25,7 @@ function createSnapshot(expiresAt = 5_000): AccountAiCatalogSnapshot {
       apiUrl: '',
       enabled: true,
       connectionKind: 'gateway',
-      protocolProfile: 'newapi-compatible',
+      protocolProfile: 'newapi',
       supportLevel: 'verified',
       requiresApiKey: false,
     },

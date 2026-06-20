@@ -1,6 +1,6 @@
 ## Context
 
-Neko Agent currently has one real AI provider source: the user-owned config file path. The recent provider connection mode work added explicit provider grouping (`gateway`, `custom-gateway`, `local`, future `direct`), NewAPI-compatible gateway defaults, local Ollama support without API keys, canonical media model defaults, and fail-visible conversation selection. OAuth exists through `neko-auth`, but it only projects login/session state into Agent Webviews; `getCloudToken` remains a stub and no AI catalog or entitlement snapshot is injected into Agent provider/model resolution.
+Neko Agent currently has one real AI provider source: the user-owned config file path. The recent provider connection mode work added explicit provider grouping (`gateway`, `custom-gateway`, `local`, future `direct`), NewAPI gateway defaults, local Ollama support without API keys, canonical media model defaults, and fail-visible conversation selection. OAuth exists through `neko-auth`, but it only projects login/session state into Agent Webviews; `getCloudToken` remains a stub and no AI catalog or entitlement snapshot is injected into Agent provider/model resolution.
 
 The final product path needs two AI API configuration sources:
 
@@ -43,7 +43,7 @@ Five-layer analysis:
 **Non-Goals:**
 
 - Implementing official direct vendor setup or API verification for Gemini, Grok, Claude, GPT, DeepSeek, GLM, Suno, Seedance, Kling, or similar providers.
-- Guaranteeing that every NewAPI-compatible gateway supports every upstream vendor-specific parameter.
+- Guaranteeing that every NewAPI gateway supports every upstream vendor-specific parameter.
 - Persisting Neko account gateway API secrets into `~/.neko/config.toml`.
 - Replacing the existing local config format or rewriting existing user config files.
 - Building a new cloud service governance layer in the local client.
@@ -83,7 +83,7 @@ Five-layer analysis:
    ```text
    id: neko-account-gateway
    connectionKind: gateway
-   protocolProfile: newapi-compatible
+   protocolProfile: newapi
    supportLevel: verified
    requiresApiKey: false for user configuration purposes
    source: account
@@ -231,7 +231,7 @@ This shape lets the Webview render source/provider groups while still deriving L
 
 - [Risk] Account catalog API shape changes while the extension has cached data. -> Mitigation: include catalog version/ETag, TTL, and fail-visible stale/invalid diagnostics; refresh on version mismatch.
 - [Risk] Users expect an invalid local config to fall back to OAuth. -> Mitigation: document explicit config priority and show a diagnostic that the selected local config must be fixed or cleared.
-- [Risk] NewAPI-compatible generation endpoints differ by provider. -> Mitigation: catalog declares capabilities and support level; unsupported workflows fail with capability diagnostics rather than provider fallback.
+- [Risk] NewAPI generation endpoints differ by provider. -> Mitigation: catalog declares capabilities and support level; unsupported workflows fail with capability diagnostics rather than provider fallback.
 - [Risk] Webview currently has paths that display configured provider secrets. -> Mitigation: introduce account provider projection without secrets and add redaction tests for account state messages.
 - [Risk] Auth extension is unavailable or not activated when Agent opens. -> Mitigation: resolve account source as unavailable with a clear diagnostic and refresh when auth extension/session becomes available.
 - [Risk] Local config missing currently reports `missingConfig`; OAuth default path changes that user-visible behavior. -> Mitigation: distinguish "no explicit AI config" from "invalid explicit AI config" and only use OAuth for the former.

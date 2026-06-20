@@ -5,11 +5,14 @@ import { EmptyState } from './EmptyState';
 const translations: Record<string, string> = {
   'chat.emptyState.title': 'Neko Suite Creative Assistant',
   'chat.emptyState.description':
-    'Shape stories, characters, storyboards, shots, visuals, video, and sound. Start from project materials to develop plot, dialogue, narration, settings, and shot language together, then create character images, scene references, shot clips, voice, sound effects, and ambience.',
+    'Start from an idea, reference, or character and develop story themes, relationships, worlds, and scene atmosphere with the Agent. Then continue into character images, scene references, video material, voice, sound effects, and ambience.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
-  'chat.emptyState.suggestion1': 'Design the protagonist and relationships',
-  'chat.emptyState.suggestion2': 'Shape this scene into storyboard rhythm',
-  'chat.emptyState.suggestion3': 'Draft dialogue and narration beats',
+  'chat.emptyState.entry.startChat': 'Start Chat',
+  'chat.emptyState.entry.generateAssets': 'Generate Assets',
+  'chat.emptyState.entry.roleplay': 'Roleplay',
+  'chat.emptyState.entry.startChatHelper': 'Chat helper',
+  'chat.emptyState.entry.generateAssetsHelper': 'Asset helper',
+  'chat.emptyState.entry.roleplayHelper': 'Roleplay helper',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -25,32 +28,39 @@ describe('EmptyState', () => {
     expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
     expect(
       screen.getByText(
-        'Shape stories, characters, storyboards, shots, visuals, video, and sound. Start from project materials to develop plot, dialogue, narration, settings, and shot language together, then create character images, scene references, shot clips, voice, sound effects, and ambience.',
+        'Start from an idea, reference, or character and develop story themes, relationships, worlds, and scene atmosphere with the Agent. Then continue into character images, scene references, video material, voice, sound effects, and ambience.',
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Design the protagonist and relationships/ }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Shape this scene into storyboard rhythm/ }),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Draft dialogue and narration beats/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Start Chat/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generate Assets/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Roleplay/ })).toBeTruthy();
+    expect(screen.queryByText(/script|storyboard|shot description/i)).toBeNull();
     expect(document.querySelector('.agent-empty-state')).toBeTruthy();
+    expect(document.querySelector('.agent-empty-state')?.className).toContain('items-center');
     expect(document.querySelector('.agent-empty-panel')?.className).toContain(
       'max-w-[min(840px,100%)]',
     );
     expect(document.querySelector('.agent-empty-panel')?.className).toContain('min-w-0');
     expect(document.querySelectorAll('.agent-empty-action')).toHaveLength(3);
-    expect(document.querySelectorAll('.agent-empty-action-icon')).toHaveLength(3);
     expect(document.querySelector('.agent-empty-action')?.className).toContain('min-w-0');
+    expect(screen.getByText('Chat helper')).toBeTruthy();
   });
 
-  it('passes the selected suggestion text to the input handler', () => {
-    const onSuggestionClick = vi.fn();
-    render(<EmptyState onSuggestionClick={onSuggestionClick} />);
+  it('passes the selected entry action to the handler', () => {
+    const onEntryAction = vi.fn();
+    render(<EmptyState onEntryAction={onEntryAction} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Draft dialogue and narration beats/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Assets/ }));
 
-    expect(onSuggestionClick).toHaveBeenCalledWith('Draft dialogue and narration beats');
+    expect(onEntryAction).toHaveBeenCalledWith('generate-assets');
+  });
+
+  it('renders the selected entry helper', () => {
+    render(<EmptyState selectedAction="roleplay" />);
+
+    expect(screen.getByText('Roleplay helper')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Roleplay/ }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
   });
 });

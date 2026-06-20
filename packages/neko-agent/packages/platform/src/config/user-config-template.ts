@@ -1,0 +1,59 @@
+import {
+  AUTH_TYPES,
+  MODEL_TYPES,
+  PROVIDER_CONNECTION_KINDS,
+  PROVIDER_PROTOCOL_PROFILES,
+  PROVIDER_SUPPORT_LEVELS,
+  PROVIDER_TYPES,
+  STREAM_FORMATS,
+  serializeUnifiedConfigToToml,
+} from '@neko/shared';
+import type { UnifiedConfig } from '@neko/shared';
+import { DEFAULT_USER_CONFIG } from './default-config';
+
+export function buildUserConfigTemplate(config: UnifiedConfig = DEFAULT_USER_CONFIG): string {
+  return `${buildConfigTemplateHeader()}${serializeUnifiedConfigToToml(config)}`;
+}
+
+function buildConfigTemplateHeader(): string {
+  return [
+    '# Neko Agent user config',
+    '#',
+    '# Save this file as ~/.neko/config.toml. TOML comments start with "#".',
+    '# Comments are accepted when reading, but UI/CLI write operations may rewrite',
+    '# this file from structured config and remove comments.',
+    '#',
+    '# Provider fields:',
+    `# - type: ${formatValues(PROVIDER_TYPES)}`,
+    `# - connection_kind: ${formatValues(PROVIDER_CONNECTION_KINDS)}`,
+    `# - protocol_profile: ${formatValues(PROVIDER_PROTOCOL_PROFILES)}`,
+    `# - support_level: ${formatValues(PROVIDER_SUPPORT_LEVELS)}`,
+    '#',
+    '# Recommended provider mappings:',
+    '# - NekoAPI/NewAPI/OneAPI gateway: type = "newapi", connection_kind = "gateway", protocol_profile = "newapi"',
+    '# - Custom OpenAI-compatible gateway: type = "generic", connection_kind = "custom-gateway", protocol_profile = "openai-chat"',
+    '# - DeepSeek direct: type = "generic", connection_kind = "direct", protocol_profile = "openai-chat", api_url = "https://api.deepseek.com"',
+    '# - Ollama local: type = "ollama", connection_kind = "local", protocol_profile = "ollama"',
+    '#',
+    '# protocol_variant fields for OpenAI-compatible endpoints:',
+    '# - base_path: usually "/v1"; set "" only when api_url already includes the full path policy you need',
+    `# - auth_type: ${formatValues(AUTH_TYPES)}`,
+    `# - stream_format: ${formatValues(STREAM_FORMATS)}`,
+    '# - auth_header: required only when auth_type = "custom-header"',
+    '#',
+    '# Model fields:',
+    `# - type: ${formatValues(MODEL_TYPES)}`,
+    '# - protocol: optional adapter override; use provider type values only',
+    '# - capabilities: examples include "chat", "function_calling", "streaming", "json_mode", "code",',
+    '#   "text_to_image", "image.generate", "image.edit", "text_to_video", "audio.tts", "text_to_music"',
+    '# - Music models use type = "audio" with capability "text_to_music".',
+    '#',
+    '# Default model bindings use provider_id + model_id under [default_models.llm/image/video/audio].',
+    '# Unsupported values fail visibly with a config diagnostic instead of falling back silently.',
+    '',
+  ].join('\n');
+}
+
+function formatValues(values: readonly string[]): string {
+  return values.map((value) => `"${value}"`).join(', ');
+}

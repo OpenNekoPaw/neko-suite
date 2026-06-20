@@ -6,6 +6,7 @@ export type SlashCommandSurface = 'cli' | 'extension';
 export interface SlashCommandSkillLike {
   readonly name?: string;
   readonly description?: string;
+  readonly entryPointKind?: 'skill' | 'command-artifact';
   readonly command?: string;
   readonly enabled?: boolean;
   readonly supportsArguments?: boolean;
@@ -23,11 +24,11 @@ export type SlashCommandCatalogEntry<TSkill extends SlashCommandSkillLike = Slas
       readonly builtin: BuiltinCommand;
     }
   | {
-      readonly source: 'skill';
+      readonly source: 'command-artifact';
       readonly name: string;
       readonly description: string;
       readonly aliases: readonly string[];
-      readonly category: 'skill';
+      readonly category: 'command-artifact';
       readonly supportsArguments: boolean;
       readonly argumentHint?: string;
       readonly skill: TSkill;
@@ -53,16 +54,21 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
 
   for (const skill of options.skills ?? []) {
     const commandName = normalizeSkillCommand(skill.command);
-    if (!commandName || skill.enabled === false || entries.has(commandName)) {
+    if (
+      !commandName ||
+      !isSlashCommandArtifact(skill) ||
+      skill.enabled === false ||
+      entries.has(commandName)
+    ) {
       continue;
     }
 
     entries.set(commandName, {
-      source: 'skill',
+      source: 'command-artifact',
       name: commandName,
       description: skill.description ?? `Activate skill /${commandName}`,
       aliases: [],
-      category: 'skill',
+      category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
       ...(skill.argumentHint ? { argumentHint: skill.argumentHint } : {}),
       skill,
@@ -99,7 +105,7 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
 
   for (const skill of options.skills ?? []) {
     const commandName = normalizeSkillCommand(skill.command);
-    if (!commandName || skill.enabled === false) {
+    if (!commandName || !isSlashCommandArtifact(skill) || skill.enabled === false) {
       continue;
     }
     if (commandName !== normalized) {
@@ -107,11 +113,11 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
     }
 
     return {
-      source: 'skill',
+      source: 'command-artifact',
       name: commandName,
       description: skill.description ?? `Activate skill /${commandName}`,
       aliases: [],
-      category: 'skill',
+      category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
       ...(skill.argumentHint ? { argumentHint: skill.argumentHint } : {}),
       skill,
@@ -155,6 +161,10 @@ function normalizeSkillCommand(command?: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function isSlashCommandArtifact(skill: SlashCommandSkillLike): boolean {
+  return skill.entryPointKind === 'command-artifact';
+}
+
 function isSlashCommandSkillLike(value: unknown): value is SlashCommandSkillLike {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -162,6 +172,9 @@ function isSlashCommandSkillLike(value: unknown): value is SlashCommandSkillLike
 
   const candidate = value as Record<string, unknown>;
   return (
+    (candidate['entryPointKind'] === undefined ||
+      candidate['entryPointKind'] === 'skill' ||
+      candidate['entryPointKind'] === 'command-artifact') &&
     (candidate['command'] === undefined || typeof candidate['command'] === 'string') &&
     (candidate['description'] === undefined || typeof candidate['description'] === 'string') &&
     (candidate['enabled'] === undefined || typeof candidate['enabled'] === 'boolean')

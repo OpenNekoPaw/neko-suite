@@ -89,8 +89,9 @@ vi.mock('@neko/agent', async (importOriginal) => {
   };
 });
 
-// Mock @neko/platform module
-vi.mock('@neko/platform', () => ({}));
+vi.mock('@neko/platform', async (importOriginal) => {
+  return await importOriginal<typeof import('@neko/platform')>();
+});
 
 // Mock ../ai/agentContext
 vi.mock('../ai/agentContext', () => ({
@@ -197,12 +198,39 @@ function createMockSettings() {
 
 /** Minimal ProviderManager-shaped object — no configured provider by default */
 function createMockProviders(isConfigured = false) {
+  const providerConfig = {
+    id: 'anthropic',
+    name: 'anthropic',
+    displayName: 'Anthropic',
+    type: 'anthropic' as const,
+    apiUrl: 'https://api.anthropic.test',
+    apiKey: 'sk-test',
+    enabled: true,
+    protocolProfile: 'anthropic' as const,
+  };
+  const model = {
+    id: 'claude-3',
+    name: 'claude-3',
+    displayName: 'Claude 3',
+    providerId: 'anthropic',
+    type: 'llm' as const,
+    capabilities: ['chat', 'thinking', 'sampling'],
+    enabled: true,
+  };
   const provider = isConfigured
-    ? { id: 'anthropic', isConfigured: true, modelIds: ['claude-3'] }
+    ? {
+        id: 'anthropic',
+        isConfigured: true,
+        defaultModel: 'claude-3',
+        modelIds: ['claude-3'],
+        modelCapabilities: { 'claude-3': model.capabilities },
+      }
     : undefined;
   return {
     getProvider: vi.fn().mockReturnValue(provider),
     getDefaultProvider: vi.fn().mockReturnValue(provider),
+    getProviderConfig: vi.fn().mockReturnValue(isConfigured ? providerConfig : undefined),
+    getModel: vi.fn().mockReturnValue(isConfigured ? model : undefined),
   };
 }
 
@@ -299,7 +327,7 @@ function buildHandler(
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
-  const providers = overrides.providers ?? createMockProviders();
+  const providers = overrides.providers ?? createMockProviders(true);
   const conversations = overrides.conversations ?? createMockConversations();
   // Default: agentManager present unless explicitly set to null/undefined
   const agentManager =
@@ -486,6 +514,94 @@ describe('AgentMessageTurnHandler', () => {
     });
   });
 
+  describe('Agent LLM composer configuration', () => {
+    it('uses Agent primary model and projected LLM runtime options for the turn', async () => {
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        createMockWebview() as any,
+        createMessageRequest('draft the scene', {
+          agentModels: {
+            primary: { providerId: 'anthropic', modelId: 'claude-3', category: 'llm' },
+          },
+          llmConfig: {
+            reasoningPreset: 'balanced',
+            advanced: { maxOutputTokens: 2048 },
+          },
+        }),
+      );
+
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: 'claude-3',
+          maxTokens: 2048,
+          thinkingBudget: 4096,
+        }),
+      );
+    });
+
+    it('rejects unsupported Agent model slots before dispatching the turn', async () => {
+      const webview = createMockWebview();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createMessageRequest('draft the scene', {
+          agentModels: {
+            primary: { providerId: 'anthropic', modelId: 'claude-3', category: 'llm' },
+            fast: { providerId: 'anthropic', modelId: 'claude-3', category: 'llm' },
+          },
+        }),
+      );
+
+      expect(agentRunner.configure).not.toHaveBeenCalled();
+      expect(agentRunner.execute).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'globalError',
+          message: expect.stringContaining('supports only the primary slot'),
+        }),
+      );
+    });
+
+    it('rejects conflicting chatModel and Agent primary model selections', async () => {
+      const webview = createMockWebview();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('draft the scene', {
+          agentModels: {
+            primary: { providerId: 'anthropic', modelId: 'other-model', category: 'llm' },
+          },
+        }),
+      );
+
+      expect(agentRunner.configure).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'globalError',
+          message: expect.stringContaining('conflicts with the legacy chat model selection'),
+        }),
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // getAgentStateSnapshot
   // -------------------------------------------------------------------------
@@ -614,7 +730,7 @@ describe('AgentMessageTurnHandler', () => {
     it('posts an error message when agentManager is undefined', async () => {
       const webview = createMockWebview();
       const conversations = createMockConversations();
-      const handler = buildHandler({ agentManager: undefined, conversations });
+      const handler = buildHandler({ agentManager: null, conversations });
 
       await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
@@ -633,7 +749,7 @@ describe('AgentMessageTurnHandler', () => {
 
     it('does not throw when agentManager is undefined', async () => {
       const webview = createMockWebview();
-      const handler = buildHandler({ agentManager: undefined });
+      const handler = buildHandler({ agentManager: null });
 
       await expect(
         handler.handleUserMessage(webview as any, createMessageRequest('hello')),
@@ -646,7 +762,7 @@ describe('AgentMessageTurnHandler', () => {
   // -------------------------------------------------------------------------
 
   describe('handleUserMessage() — fallback when no configured provider', () => {
-    it('posts an error message when provider is not configured', async () => {
+    it('returns a visible boundary diagnostic when no primary model can be resolved', async () => {
       const webview = createMockWebview();
       const conversations = createMockConversations();
       // providers returns undefined (not configured)
@@ -656,15 +772,15 @@ describe('AgentMessageTurnHandler', () => {
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
-        conversationId?: string;
+        message?: string;
       }>;
       expect(calls).toContainEqual(
-        expect.objectContaining({ type: 'error', conversationId: 'conv-1' }),
+        expect.objectContaining({
+          type: 'globalError',
+          message: expect.stringContaining('No Agent primary model is selected'),
+        }),
       );
-      expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
-        'conv-1',
-        expect.objectContaining({ role: 'assistant', isError: true }),
-      );
+      expect(conversations.addMessageToConversation).not.toHaveBeenCalled();
     });
   });
 

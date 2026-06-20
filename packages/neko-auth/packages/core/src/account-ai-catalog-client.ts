@@ -146,7 +146,7 @@ function readProvider(value: unknown): AccountAiCatalogSnapshot['provider'] {
     apiUrl: '',
     enabled: readBoolean(provider.enabled) ?? true,
     connectionKind: 'gateway',
-    protocolProfile: 'newapi-compatible',
+    protocolProfile: 'newapi',
     supportLevel: 'verified',
     requiresApiKey: false,
     supportsBeta: readBoolean(provider.supportsBeta) ?? false,

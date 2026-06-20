@@ -75,7 +75,7 @@ describe('media model presenter', () => {
         selectedId: 'video-provider:model-video',
         isAgentMode: false,
         showCategorySelector: false,
-        showInlineMediaModelPicker: false,
+        showInlineMediaModelPicker: true,
         isExpanded: true,
       }),
     );
@@ -99,7 +99,7 @@ describe('media model presenter', () => {
         selectedId: 'music-provider:model-music',
         isAgentMode: false,
         showCategorySelector: false,
-        showInlineMediaModelPicker: false,
+        showInlineMediaModelPicker: true,
         isExpanded: true,
       }),
     );

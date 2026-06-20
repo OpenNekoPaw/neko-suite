@@ -260,6 +260,16 @@ describe('messages', () => {
           args: 'scene 1',
         });
       });
+
+      it('should post invokeSkill with conversationId', () => {
+        VSCodeMessages.invokeSkill('quality-review', 'changed files', 'conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'invokeSkill',
+          skillName: 'quality-review',
+          conversationId: 'conv-1',
+          args: 'changed files',
+        });
+      });
     });
   });
 });

@@ -9,7 +9,9 @@
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
 import type {
+  AgentLlmConfig,
   AgentMediaModelSelections,
+  AgentModelSlots,
   AgentPhase,
   MediaModelCategory,
   ModelRef,
@@ -18,6 +20,7 @@ import {
   buildAgentTurnForWebviewRuntimeInput,
   createTimelineContextRuntime,
   runAgentTurnForWebviewRuntime,
+  type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentTurnAgentManager,
   type TimelineContextRuntime,
@@ -72,6 +75,9 @@ export interface ExecuteAgentTurnForWebviewInput {
   conversationId: string;
   message: string;
   chatModel?: ModelRef<'llm'>;
+  agentModels?: AgentModelSlots;
+  llmConfig?: AgentLlmConfig;
+  llmRuntimeOptions?: AgentLlmRuntimeOptions;
   imageAttachments?: readonly { type: 'base64'; media_type: string; data: string }[];
   mediaModel?: ModelRef<MediaModelCategory>;
   mediaModels?: AgentMediaModelSelections;
@@ -110,6 +116,9 @@ export class AgentTurnBridge {
         message: input.message,
         platform: this.deps.platform,
         chatModel: input.chatModel,
+        agentModels: input.agentModels,
+        llmConfig: input.llmConfig,
+        llmRuntimeOptions: input.llmRuntimeOptions,
         mediaModel: input.mediaModel,
         mediaModels: input.mediaModels,
         imageAttachments: input.imageAttachments,

@@ -634,17 +634,8 @@ body {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 3%, transparent);
 }
 
-.agent-empty-action-icon {
-  color: var(--agent-fg-secondary);
-  transition:
-    color 0.15s ease,
-    transform 0.15s ease;
-}
-
-.agent-empty-action:hover .agent-empty-action-icon,
-.agent-empty-action:focus-visible .agent-empty-action-icon {
-  color: var(--agent-accent);
-  transform: translateX(2px);
+.agent-empty-action-selected {
+  background: color-mix(in srgb, var(--agent-accent) 9%, var(--agent-empty-action-bg));
 }
 
 .agent-bubble {
@@ -859,6 +850,31 @@ body {
 }
 
 .agent-composer-session-mode-row .agent-composer-popover-secondary {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.agent-composer-entry-prompt-menu {
+  width: auto;
+  max-width: none;
+}
+
+.agent-composer-entry-prompt-row {
+  min-height: 44px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+.agent-composer-entry-prompt-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-composer-entry-prompt-row .agent-composer-popover-secondary {
   display: -webkit-box;
   overflow: hidden;
   white-space: normal;
@@ -1187,6 +1203,27 @@ body {
   text-overflow: ellipsis;
 }
 
+.agent-control-chip-prefix {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+.agent-composer-mode-label {
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
+  padding-inline: 3px 6px;
+  color: var(--agent-fg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-control-chip-muted {
   opacity: 0.62;
 }
@@ -1210,6 +1247,10 @@ body {
   justify-content: center;
   min-width: 56px;
   max-width: 92px;
+}
+
+.agent-control-chip-preset {
+  max-width: 116px;
 }
 
 .agent-control-chip-collapse {
@@ -1249,8 +1290,8 @@ body {
 }
 
 .agent-composer-control-group-mode {
-  flex: 0 1 max-content;
-  max-width: min(42%, 260px);
+  flex: 0 1 auto;
+  max-width: min(38%, 220px);
 }
 
 .agent-composer-control-group-config {
@@ -1262,6 +1303,36 @@ body {
 .agent-composer-control-group-config .agent-generation-params {
   width: 100%;
   overflow: visible;
+}
+
+.agent-inline-config-stack {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.agent-inline-config-group {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.agent-inline-config-label {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  opacity: 0.74;
+  white-space: nowrap;
 }
 
 .agent-dropdown-menu {

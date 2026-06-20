@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSkillInvocationCatalog,
   createSlashCommandCatalog,
   createSlashCommandCatalogSections,
   extractSlashCommandArgs,
+  filterSkillInvocations,
   filterSlashCommands,
+  formatSkillInvocationHelpCatalog,
   formatSlashCommandHelpCatalog,
   resolveSlashCommandDescription,
+  resolveSkillInvocationSourceLabel,
   resolveSlashCommandSourceLabel,
 } from '../slash-command-catalog';
 
 describe('slash-command-catalog', () => {
-  it('builds a unified catalog with builtin, skill, and plugin commands', () => {
+  it('builds a slash catalog with builtin and plugin commands', () => {
     const commands = createSlashCommandCatalog(
       [
         {
@@ -34,14 +38,7 @@ describe('slash-command-catalog', () => {
     );
 
     expect(commands.some((command) => command.name === '/help')).toBe(true);
-    expect(commands).toContainEqual(
-      expect.objectContaining({
-        id: 'commit-skill',
-        commandId: 'commit',
-        name: '/commit',
-        source: 'skill',
-      }),
-    );
+    expect(commands.some((command) => command.source === 'command-artifact')).toBe(false);
     expect(commands).toContainEqual(
       expect.objectContaining({
         id: 'plugin:neko.canvas:batch',
@@ -120,27 +117,57 @@ describe('slash-command-catalog', () => {
     expect(status?.source).toBe('builtin');
   });
 
-  it('filters by translated builtin descriptions and literal dynamic descriptions', () => {
-    const commands = createSlashCommandCatalog(
-      [
-        {
-          id: 'review-skill',
-          name: 'Review',
-          description: 'Review the current diff',
-          slashCommand: 'review',
-          tags: [],
-          source: 'project',
-          enabled: true,
-        },
-      ],
-      [],
+  it('builds skill invocations for the dollar menu', () => {
+    const commands = createSkillInvocationCatalog([
+      {
+        id: 'commit-skill',
+        name: 'commit-skill',
+        description: 'Create a commit message',
+        slashCommand: 'commit',
+        tags: [],
+        source: 'project',
+        enabled: true,
+      },
+      {
+        id: 'disabled-skill',
+        name: 'disabled-skill',
+        description: 'Disabled skill',
+        tags: [],
+        source: 'project',
+        enabled: false,
+      },
+    ]);
+
+    expect(commands).toContainEqual(
+      expect.objectContaining({
+        id: 'commit-skill',
+        skillName: 'commit-skill',
+        name: '$commit-skill',
+        source: 'project',
+      }),
     );
+    expect(commands.map((command) => command.id)).not.toContain('disabled-skill');
+  });
+
+  it('filters by translated builtin descriptions and literal dynamic descriptions', () => {
+    const commands = createSlashCommandCatalog();
+    const skillCommands = createSkillInvocationCatalog([
+      {
+        id: 'review-skill',
+        name: 'review-skill',
+        description: 'Review the current diff',
+        slashCommand: 'review',
+        tags: [],
+        source: 'project',
+        enabled: true,
+      },
+    ]);
 
     const translate = (key: string) =>
       key === 'chat.commands.skills' ? 'List and manage available skills' : key;
 
     const filteredBuiltin = filterSlashCommands(commands, 'manage available skills', translate);
-    const filteredSkill = filterSlashCommands(commands, 'current diff', translate);
+    const filteredSkill = filterSkillInvocations(skillCommands, 'current diff', translate);
 
     expect(filteredBuiltin).toContainEqual(
       expect.objectContaining({
@@ -149,7 +176,7 @@ describe('slash-command-catalog', () => {
     );
     expect(filteredSkill).toContainEqual(
       expect.objectContaining({
-        name: '/review',
+        name: '$review-skill',
       }),
     );
   });
@@ -182,17 +209,17 @@ describe('slash-command-catalog', () => {
 
   it('resolves builtin descriptions through i18n and leaves dynamic descriptions untouched', () => {
     const builtin = createSlashCommandCatalog().find((command) => command.name === '/clear');
-    const skill = createSlashCommandCatalog([
+    const skill = createSkillInvocationCatalog([
       {
         id: 'commit-skill',
-        name: 'Commit',
+        name: 'commit-skill',
         description: 'Create a commit message',
         slashCommand: 'commit',
         tags: [],
         source: 'project',
         enabled: true,
       },
-    ]).find((command) => command.source === 'skill');
+    ])[0];
 
     const translate = (key: string) =>
       key === 'chat.commands.clear' ? 'Clear conversation history' : key;
@@ -210,17 +237,7 @@ describe('slash-command-catalog', () => {
 
   it('builds stable help sections and source labels from the unified catalog', () => {
     const commands = createSlashCommandCatalog(
-      [
-        {
-          id: 'commit-skill',
-          name: 'Commit',
-          description: 'Create a commit message',
-          slashCommand: 'commit',
-          tags: [],
-          source: 'project',
-          enabled: true,
-        },
-      ],
+      [],
       [
         {
           id: 'batch',
@@ -232,7 +249,7 @@ describe('slash-command-catalog', () => {
     );
     const sections = createSlashCommandCatalogSections(commands);
 
-    expect(sections.map((section) => section.source)).toEqual(['builtin', 'skill', 'plugin']);
+    expect(sections.map((section) => section.source)).toEqual(['builtin', 'plugin']);
     expect(
       formatSlashCommandHelpCatalog(commands, (key) =>
         key === 'chat.commands.help' ? 'Show help message' : key,
@@ -243,10 +260,26 @@ describe('slash-command-catalog', () => {
       resolveSlashCommandSourceLabel(commands.find((command) => command.name === '/help')!),
     ).toBeNull();
     expect(
-      resolveSlashCommandSourceLabel(commands.find((command) => command.name === '/commit')!),
-    ).toBe('skill');
-    expect(
       resolveSlashCommandSourceLabel(commands.find((command) => command.name === '/batch')!),
     ).toBe('plugin');
+  });
+
+  it('builds stable help and source labels for skill invocations', () => {
+    const commands = createSkillInvocationCatalog([
+      {
+        id: 'commit-skill',
+        name: 'commit-skill',
+        description: 'Create a commit message',
+        slashCommand: 'commit',
+        tags: [],
+        source: 'project',
+        enabled: true,
+      },
+    ]);
+
+    expect(formatSkillInvocationHelpCatalog(commands, (key) => key)).toContain(
+      '- `$commit-skill` - Create a commit message',
+    );
+    expect(resolveSkillInvocationSourceLabel(commands[0]!)).toBe('project');
   });
 });

@@ -108,7 +108,7 @@ describe('NekoAuthAPIImpl -- construction and event wiring', () => {
           apiUrl: '',
           enabled: true,
           connectionKind: 'gateway',
-          protocolProfile: 'newapi-compatible',
+          protocolProfile: 'newapi',
           supportLevel: 'verified',
           requiresApiKey: false,
         },

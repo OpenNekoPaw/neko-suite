@@ -52,6 +52,13 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'empty' ||
     result.status === 'invalidToml' ||
     result.status === 'unsupportedVersion' ||
+    result.status === 'unsupportedProviderType' ||
+    result.status === 'unsupportedProviderConnectionKind' ||
+    result.status === 'unsupportedProviderProtocolProfile' ||
+    result.status === 'unsupportedProviderSupportLevel' ||
+    result.status === 'unsupportedProtocolAuthType' ||
+    result.status === 'unsupportedProtocolStreamFormat' ||
+    result.status === 'unsupportedModelProtocol' ||
     result.status === 'duplicateProviderId' ||
     result.status === 'duplicateModelId' ||
     result.status === 'unsupportedModelType' ||
@@ -75,6 +82,20 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains invalid TOML: ${filePath}. Fix the file, then open a new Agent session or tab.`;
     case 'unsupportedVersion':
       return `Configuration file uses an unsupported version: ${filePath}. Update Neko Suite or migrate the file, then open a new Agent session or tab.`;
+    case 'unsupportedProviderType':
+      return `Configuration file contains an unsupported provider type: ${filePath}. Use a supported type such as generic, newapi, openai, anthropic, google, or ollama, then open a new Agent session or tab.`;
+    case 'unsupportedProviderConnectionKind':
+      return `Configuration file contains an unsupported provider connection_kind: ${filePath}. Use gateway, custom-gateway, local, or direct, then open a new Agent session or tab.`;
+    case 'unsupportedProviderProtocolProfile':
+      return `Configuration file contains an unsupported provider protocol_profile: ${filePath}. Use newapi, openai-chat, openai-responses, anthropic, google, or ollama, then open a new Agent session or tab.`;
+    case 'unsupportedProviderSupportLevel':
+      return `Configuration file contains an unsupported provider support_level: ${filePath}. Use verified, compatible, experimental, or custom, then open a new Agent session or tab.`;
+    case 'unsupportedProtocolAuthType':
+      return `Configuration file contains an unsupported protocol_variant auth_type: ${filePath}. Use bearer, api-key, or custom-header, then open a new Agent session or tab.`;
+    case 'unsupportedProtocolStreamFormat':
+      return `Configuration file contains an unsupported protocol_variant stream_format: ${filePath}. Use sse or ndjson, then open a new Agent session or tab.`;
+    case 'unsupportedModelProtocol':
+      return `Configuration file contains an unsupported model protocol: ${filePath}. Use a supported provider type for model protocol overrides, then open a new Agent session or tab.`;
     case 'duplicateProviderId':
       return `Configuration file contains duplicate provider IDs: ${filePath}. Remove duplicate provider entries, then open a new Agent session or tab.`;
     case 'duplicateModelId':

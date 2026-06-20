@@ -19,6 +19,7 @@ export function createCommandBackedSkill(command: SlashCommand): Skill {
     directoryPath: toCommandDirectoryPath(command.filePath),
     icon: command.icon,
     enabled: command.enabled,
+    entryPointKind: 'command-artifact',
     command: command.command,
     argumentHint: command.argumentHint,
     supportsArguments: supportsCommandArguments(command.content, command.argumentHint),
@@ -35,6 +36,10 @@ export function createLazyCommandBackedSkill(command: LazyCommand): LazySkill {
     icon: command.icon,
     source: command.source,
     directoryPath: toCommandDirectoryPath(command.filePath) ?? command.filePath,
+    entryPointKind: 'command-artifact',
+    command: command.command,
+    argumentHint: command.argumentHint,
+    supportsArguments: Boolean(command.argumentHint),
     isLoaded: false,
     async loadContent(): Promise<Skill> {
       if (cachedSkill) {

@@ -425,6 +425,18 @@ describe('message runtime helpers', () => {
           messageText: 'inspect @src/app.ts',
           sessionMode: 'agent',
           chatModel: { providerId: 'anthropic', modelId: 'claude', category: 'llm' },
+          agentModels: {
+            primary: { providerId: 'anthropic', modelId: 'claude', category: 'llm' },
+          },
+          llmConfig: {
+            reasoningPreset: 'balanced',
+            creativityPreset: 'creative',
+          },
+          llmRuntimeOptions: {
+            temperature: 0.7,
+            topP: 0.95,
+            thinkingBudget: 4096,
+          },
         },
         inputProcessor: {
           process: async () => ({
@@ -454,6 +466,18 @@ describe('message runtime helpers', () => {
         conversationId: 'conv-1',
         message: expect.stringContaining('### File: src/app.ts'),
         chatModel: { providerId: 'anthropic', modelId: 'claude', category: 'llm' },
+        agentModels: {
+          primary: { providerId: 'anthropic', modelId: 'claude', category: 'llm' },
+        },
+        llmConfig: {
+          reasoningPreset: 'balanced',
+          creativityPreset: 'creative',
+        },
+        llmRuntimeOptions: {
+          temperature: 0.7,
+          topP: 0.95,
+          thinkingBudget: 4096,
+        },
         imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'image-1' }],
       }),
     );
@@ -625,6 +649,45 @@ describe('message runtime helpers', () => {
           label: 'Hero frame',
           summary: 'Canvas: Hero frame',
           source: 'canvas',
+        },
+      ],
+    });
+  });
+
+  it('keeps mention candidates matched only by host search text', () => {
+    expect(
+      projectAgentProjectFilesMessage({
+        conversationId: 'conv-1',
+        filter: '灯神',
+        files: [],
+        mentionCandidates: [
+          {
+            type: 'asset',
+            id: 'asset-lamp-genie',
+            label: '参考图 01',
+            summary: 'Asset: reference image',
+            searchText: '灯神 genie reference concept',
+            source: 'asset-library',
+            filePath: 'assets/reference-01.png',
+            mediaType: 'image',
+          },
+        ],
+      }),
+    ).toEqual({
+      type: 'projectFiles',
+      conversationId: 'conv-1',
+      filter: '灯神',
+      files: [],
+      mentionExtras: [
+        {
+          type: 'asset',
+          id: 'asset-lamp-genie',
+          label: '参考图 01',
+          summary: 'Asset: reference image',
+          searchText: '灯神 genie reference concept',
+          source: 'asset-library',
+          filePath: 'assets/reference-01.png',
+          mediaType: 'image',
         },
       ],
     });
@@ -1182,6 +1245,7 @@ describe('message runtime helpers', () => {
         },
         executionOverrides: { metadata: { traceId: 'trace-1' } },
         temperature: 0.7,
+        topP: 0.9,
         workspaceRoot: '/repo',
       }),
     ).toEqual(
@@ -1190,6 +1254,7 @@ describe('message runtime helpers', () => {
         executionMode: 'plan',
         modelId: 'gpt-4.1',
         temperature: 0.7,
+        topP: 0.9,
         workspaceRoot: '/repo',
         maxIterations: 200,
         providerExpressionTargets: [

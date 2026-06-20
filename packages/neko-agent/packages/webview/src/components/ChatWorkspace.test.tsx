@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentState, Message, SettingsState } from '@neko-agent/types';
@@ -28,20 +28,32 @@ vi.mock('@/messages', () => ({
 vi.mock('@/components/ChatView', () => ({
   ChatView: (props: {
     activeConversationId: string | null;
+    inputValue: string;
     onSend: (input?: { messageText?: string; displayMessageText?: string }) => void;
+    entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
+    onEntryPromptMenuChange?: (menu: 'generate-assets' | 'roleplay' | null) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="send"
-      onClick={() =>
-        props.onSend({
-          messageText: 'hello from tabless state',
-          displayMessageText: 'hello from tabless state',
-        })
-      }
-    >
-      {props.activeConversationId ?? 'no-conversation'}
-    </button>
+    <div>
+      <button
+        type="button"
+        data-testid="send"
+        onClick={() =>
+          props.onSend({
+            messageText: 'hello from tabless state',
+            displayMessageText: 'hello from tabless state',
+          })
+        }
+      >
+        {props.activeConversationId ?? 'no-conversation'}
+      </button>
+      <button
+        type="button"
+        data-testid="entry-close"
+        onClick={() => props.onEntryPromptMenuChange?.(null)}
+      />
+      <span data-testid="entry-menu">{props.entryPromptMenu ?? 'none'}</span>
+      <span data-testid="input-value">{props.inputValue}</span>
+    </div>
   ),
 }));
 
@@ -141,6 +153,62 @@ describe('ChatWorkspace pending send', () => {
     );
 
     expect(vscodeMocks.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the asset generation entry prompt from an initial controller request', () => {
+    const onInitialEntryPromptMenuRequestConsumed = vi.fn();
+    render(
+      <ChatWorkspace
+        {...createProps({
+          initialEntryPromptMenuRequest: { id: 1, menu: 'generate-assets' },
+          onInitialEntryPromptMenuRequestConsumed,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('entry-menu').textContent).toBe('generate-assets');
+    expect(onInitialEntryPromptMenuRequestConsumed).toHaveBeenCalledWith(1);
+
+    fireEvent.click(screen.getByTestId('entry-close'));
+    expect(screen.getByTestId('entry-menu').textContent).toBe('none');
+  });
+
+  it('prefills entry text after a new conversation is activated', () => {
+    const onInitialInputRequestConsumed = vi.fn();
+    const onMentionSearchFilterChange = vi.fn();
+    render(
+      <ChatWorkspace
+        {...createProps({
+          initialInputRequest: { id: 3, messageText: '@hero' },
+          onInitialInputRequestConsumed,
+          onMentionSearchFilterChange,
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('input-value').textContent).toBe('@hero');
+    expect(onMentionSearchFilterChange).toHaveBeenCalledWith('hero');
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('hero', 'conv-1');
+    expect(onInitialInputRequestConsumed).toHaveBeenCalledWith(3);
+  });
+
+  it('opens the roleplay entity prompt from an initial controller request and refreshes candidates', () => {
+    const onMentionSearchFilterChange = vi.fn();
+    const onInitialEntryPromptMenuRequestConsumed = vi.fn();
+    render(
+      <ChatWorkspace
+        {...createProps({
+          onMentionSearchFilterChange,
+          initialEntryPromptMenuRequest: { id: 2, menu: 'roleplay' },
+          onInitialEntryPromptMenuRequestConsumed,
+        })}
+      />,
+    );
+
+    expect(onMentionSearchFilterChange).toHaveBeenCalledWith('');
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('', 'conv-1');
+    expect(screen.getByTestId('entry-menu').textContent).toBe('roleplay');
+    expect(onInitialEntryPromptMenuRequestConsumed).toHaveBeenCalledWith(2);
   });
 });
 

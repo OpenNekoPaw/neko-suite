@@ -20,6 +20,13 @@ export type ConfigReadErrorCode =
   | 'empty'
   | 'invalidToml'
   | 'unsupportedVersion'
+  | 'unsupportedProviderType'
+  | 'unsupportedProviderConnectionKind'
+  | 'unsupportedProviderProtocolProfile'
+  | 'unsupportedProviderSupportLevel'
+  | 'unsupportedProtocolAuthType'
+  | 'unsupportedProtocolStreamFormat'
+  | 'unsupportedModelProtocol'
   | 'duplicateProviderId'
   | 'duplicateModelId'
   | 'unsupportedModelType'
@@ -180,6 +187,25 @@ export function writeWorkspaceConfig(workDir: string, config: UnifiedConfig): vo
 
 function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'unsupportedVersion')) return 'unsupportedVersion';
+  if (isTomlValidationError(error, 'unsupportedProviderType')) return 'unsupportedProviderType';
+  if (isTomlValidationError(error, 'unsupportedProviderConnectionKind')) {
+    return 'unsupportedProviderConnectionKind';
+  }
+  if (isTomlValidationError(error, 'unsupportedProviderProtocolProfile')) {
+    return 'unsupportedProviderProtocolProfile';
+  }
+  if (isTomlValidationError(error, 'unsupportedProviderSupportLevel')) {
+    return 'unsupportedProviderSupportLevel';
+  }
+  if (isTomlValidationError(error, 'unsupportedProtocolAuthType')) {
+    return 'unsupportedProtocolAuthType';
+  }
+  if (isTomlValidationError(error, 'unsupportedProtocolStreamFormat')) {
+    return 'unsupportedProtocolStreamFormat';
+  }
+  if (isTomlValidationError(error, 'unsupportedModelProtocol')) {
+    return 'unsupportedModelProtocol';
+  }
   if (isTomlValidationError(error, 'duplicateProviderId')) return 'duplicateProviderId';
   if (isTomlValidationError(error, 'duplicateModelId')) return 'duplicateModelId';
   if (isTomlValidationError(error, 'unsupportedModelType')) return 'unsupportedModelType';
@@ -229,6 +255,55 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file uses an unsupported version: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProviderType':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported provider type: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProviderConnectionKind':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported provider connection_kind: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProviderProtocolProfile':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported provider protocol_profile: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProviderSupportLevel':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported provider support_level: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProtocolAuthType':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported protocol_variant auth_type: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProtocolStreamFormat':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported protocol_variant stream_format: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedModelProtocol':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported model protocol: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'duplicateProviderId':

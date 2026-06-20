@@ -128,6 +128,30 @@ describe('aggregateStream', () => {
       expect(response.message.toolCalls?.[0].function.arguments).toBe('{"q":"cats"}');
     });
 
+    it('merges name fragments for the same tool call ID', async () => {
+      const chunks: ChatChunk[] = [
+        makeChunk({
+          delta: {
+            toolCalls: [{ id: 'tc-1', type: 'function', function: { name: 'Get', arguments: '' } }],
+          },
+        }),
+        makeChunk({
+          delta: {
+            toolCalls: [
+              { id: 'tc-1', type: 'function', function: { name: 'Context', arguments: '{}' } },
+            ],
+          },
+          finishReason: 'tool_calls',
+        }),
+      ];
+
+      const response = await aggregateStream(toStream(chunks));
+
+      expect(response.message.toolCalls).toHaveLength(1);
+      expect(response.message.toolCalls?.[0].function.name).toBe('GetContext');
+      expect(response.message.toolCalls?.[0].function.arguments).toBe('{}');
+    });
+
     it('keeps distinct entries for different tool call IDs', async () => {
       const chunks: ChatChunk[] = [
         makeChunk({
@@ -185,6 +209,28 @@ describe('aggregateStream', () => {
   });
 
   describe('metadata: id, model, finishReason, usage', () => {
+    it('aggregates reasoning content for replay and thinking presentation', async () => {
+      const chunks: ChatChunk[] = [
+        makeChunk({
+          delta: { reasoningContent: 'first ' },
+          reasoningContent: 'first ',
+          thinking: 'first ',
+        }),
+        makeChunk({
+          delta: { reasoningContent: 'second' },
+          reasoningContent: 'second',
+          thinking: 'second',
+          finishReason: 'stop',
+        }),
+      ];
+
+      const response = await aggregateStream(toStream(chunks));
+
+      expect(response.reasoningContent).toBe('first second');
+      expect(response.thinking).toBe('first second');
+      expect(response.message.reasoningContent).toBe('first second');
+    });
+
     it('uses the id and model from the last chunk', async () => {
       const chunks: ChatChunk[] = [
         makeChunk({ id: 'first', model: 'model-a', delta: { content: 'x' } }),
@@ -402,7 +448,7 @@ describe('createStreamCollector', () => {
 
     const collected: string[] = [];
     for await (const chunk of stream) {
-      if (chunk.delta.content) collected.push(chunk.delta.content);
+      if (typeof chunk.delta.content === 'string') collected.push(chunk.delta.content);
     }
 
     expect(collected).toEqual(contents);

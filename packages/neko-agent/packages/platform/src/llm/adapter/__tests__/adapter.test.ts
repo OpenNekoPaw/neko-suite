@@ -108,7 +108,7 @@ describe('AdapterRegistry', () => {
       expect(adapter?.type).toBe('generic');
     });
 
-    it('should route NewAPI-compatible provider types through generic adapter', () => {
+    it('should route NewAPI provider types through generic adapter', () => {
       expect(registry.get('newapi')).toBeInstanceOf(GenericAdapter);
       expect(registry.get('oneapi')).toBeInstanceOf(GenericAdapter);
     });

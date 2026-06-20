@@ -71,6 +71,132 @@ describe('webview protocol parser', () => {
     );
   });
 
+  it('accepts agent model slots and normalized LLM config for agent messages', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'develop the opening scene',
+        sessionMode: 'agent',
+        agentModels: {
+          primary: { providerId: 'openai', modelId: 'gpt-5.5', category: 'llm' },
+          deep: { providerId: 'openai', modelId: 'gpt-5.5-pro', category: 'llm' },
+        },
+        llmConfig: {
+          reasoningPreset: 'balanced',
+          verbosityPreset: 'standard',
+          creativityPreset: 'creative',
+          advanced: {
+            temperature: 0.7,
+            topP: 0.9,
+            maxOutputTokens: 4096,
+            reasoningEffort: 'medium',
+            thinkingBudget: 2048,
+            verbosity: 'medium',
+            serviceTier: 'default',
+          },
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        sessionMode: 'agent',
+        agentModels: {
+          primary: { providerId: 'openai', modelId: 'gpt-5.5', category: 'llm' },
+          deep: { providerId: 'openai', modelId: 'gpt-5.5-pro', category: 'llm' },
+        },
+        llmConfig: {
+          reasoningPreset: 'balanced',
+          verbosityPreset: 'standard',
+          creativityPreset: 'creative',
+          advanced: {
+            temperature: 0.7,
+            topP: 0.9,
+            maxOutputTokens: 4096,
+            reasoningEffort: 'medium',
+            thinkingBudget: 2048,
+            verbosity: 'medium',
+            serviceTier: 'default',
+          },
+        },
+      }),
+    );
+  });
+
+  it('rejects unknown agent model slots and non-LLM slot refs', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'hello',
+        sessionMode: 'agent',
+        agentModels: {
+          judge: { providerId: 'openai', modelId: 'gpt-5.5', category: 'llm' },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'hello',
+        sessionMode: 'agent',
+        agentModels: {
+          primary: { providerId: 'flux', modelId: 'flux-pro', category: 'image' },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects invalid agent LLM config preset and advanced values', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'hello',
+        sessionMode: 'agent',
+        llmConfig: { reasoningPreset: 'maximum' },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'hello',
+        sessionMode: 'agent',
+        llmConfig: { advanced: { maxOutputTokens: -1 } },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects agent LLM config payloads outside agent mode', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'draw',
+        sessionMode: 'image',
+        mediaModel: { providerId: 'flux', modelId: 'flux-pro', category: 'image' },
+        llmConfig: { reasoningPreset: 'fast' },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects legacy raw LLM parameter fields at the sendMessage boundary', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'hello',
+        sessionMode: 'agent',
+        temperature: 0.7,
+      }),
+    ).toBeNull();
+  });
+
   it('accepts structured context payloads on sendMessage', () => {
     expect(
       parseSendMessageWebviewMessage({
@@ -516,6 +642,50 @@ describe('webview protocol projectors', () => {
         type: 'invokePluginSlashCommand',
         extensionId: 'neko.canvas',
         commandId: 'batch',
+      }),
+    ).toBeNull();
+  });
+
+  it('parses explicit skill invocation as a conversation-scoped message', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'invokeSkill',
+        skillName: 'quality-review',
+        conversationId: 'conv-1',
+        args: 'changed files',
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      skillName: 'quality-review',
+      conversationId: 'conv-1',
+      args: 'changed files',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'invokeSkill',
+        skillName: 'quality-review',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      skillName: 'quality-review',
+      conversationId: 'conv-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'invokeSkill',
+        skillName: 'quality-review',
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'invokeSkill',
+        skillName: 'quality-review',
+        conversationId: 'conv-1',
+        args: ['changed files'],
       }),
     ).toBeNull();
   });

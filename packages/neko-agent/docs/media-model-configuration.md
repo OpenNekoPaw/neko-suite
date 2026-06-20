@@ -4,7 +4,7 @@
 
 Neko Agent 按模型 `type` 管理默认模型：`llm`、`image`、`video`、`audio`。音乐生成模型不再是顶层 `music` 类型，而是 `type = "audio"`，并通过 `capabilities = ["text_to_music"]` 表达用途。
 
-当前 MVP 优先支持用户本地 TOML 配置的 NewAPI-compatible gateway / local LLM，以及 OAuth 登录后由 Neko 官方 account catalog 注入的运行时模型列表。官方直连、更多中转协议和本地生成模型运行时属于 Roadmap。
+当前 MVP 优先支持用户本地 TOML 配置的 NewAPI gateway / local LLM，以及 OAuth 登录后由 Neko 官方 account catalog 注入的运行时模型列表。官方直连、更多中转协议和本地生成模型运行时属于 Roadmap。
 
 ## 配置位置
 
@@ -42,7 +42,7 @@ name = "neko-gateway"
 display_name = "Neko Gateway"
 type = "newapi"
 connection_kind = "gateway"
-protocol_profile = "newapi-compatible"
+protocol_profile = "newapi"
 support_level = "verified"
 api_url = "https://your-gateway.example/v1"
 api_key = "sk-..."
@@ -139,6 +139,46 @@ llm | image | video | audio
 4. 仍无法确定模型：返回错误，要求用户配置默认模型或显式指定模型。
 
 媒体模型不会自动猜测默认值。这样可以避免误用昂贵模型，也能保证生成结果来自用户明确配置的 provider。
+
+## Agent Composer LLM 配置
+
+Agent 输入框中的模式配置是会话级选择，不会自动写回 `~/.neko/config.toml`。用户在当前 tab 里选择 Agent LLM 模型、推理深度、回复详略、创造性和执行模式后，这些值只作用于当前发送的 Agent turn；只有用户显式修改配置文件或设置页时，才会改变 durable 默认值。
+
+普通 Agent 对话当前使用 `primary` 模型槽位。Webview 发送的 Agent 配置会在 Extension 边界解析为明确的 `providerId + modelId`：优先使用 composer 的 `agentModels.primary`，其次使用旧 `chatModel`，再使用当前设置/default provider 的 LLM 默认值。若 `primary` 与 `chatModel` 指向不同模型、provider/model 不匹配、模型缺失、provider 未配置或模型不是启用的 LLM，Agent 会返回可见诊断，不会切到无关模型。
+
+MVP 合同预留了 `fast`、`deep`、`summarizer`、`vision` 槽位，用于未来多模型编排；当前普通 Agent turn 只支持 `primary`。如果 payload 引用这些非 MVP 槽位，Extension 会返回 fail-visible 诊断，而不是静默忽略。
+
+Agent presets 是创作意图，不是 provider 原始参数：
+
+| Composer preset | 说明 | 运行时映射 |
+|-----------------|------|------------|
+| Reasoning `fast/balanced/deep` | 控制推理预算或 reasoning effort | 仅在模型/provider 声明支持 reasoning effort 或 thinking budget 时映射 |
+| Verbosity `brief/standard/detailed` | 控制回复详略 | 仅在模型/provider 声明支持 verbosity 时映射 |
+| Creativity `stable/creative/wild` | 控制采样倾向 | 映射到 `temperature` / `topP`，前提是模型支持采样参数 |
+
+自定义 provider 如果缺少能力元数据，默认只开放保守通用能力，不假设支持 reasoning、verbosity、fast service tier 或 provider-specific thinking。要开启高级 LLM 控件，在 provider 或 model 的 `options.llmCapabilities` 中声明能力：
+
+```toml
+[[models]]
+id = "custom-gpt-reasoning"
+name = "gpt-reasoning"
+provider_id = "custom-newapi"
+type = "llm"
+capabilities = ["chat", "streaming", "reasoning", "verbosity"]
+enabled = true
+
+[models.options.llmCapabilities]
+reasoningEffortValues = ["low", "medium", "high"]
+verbosity = true
+temperature = false
+topP = false
+maxOutputTokens = true
+fastTier = false
+```
+
+Anthropic thinking 与采样参数存在 provider 限制：启用 thinking budget 时不能同时发送 `temperature` / `topP`。这类组合会在 Extension/Platform 映射阶段被诊断，避免到 provider API 才失败。
+
+后续非 MVP 工作包括：持久化 Agent preset 默认值；在 runtime 中真正使用 `fast`、`deep`、`summarizer`、`vision` 槽位进行分工；为 provider-specific options 增加 typed adapter 合同。
 
 ## 示例
 

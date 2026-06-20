@@ -21,14 +21,21 @@ import type {
   Message,
   OpenTab,
   PromptMode,
+  SessionMode,
   TabType,
 } from '@neko-agent/types';
 import { VSCodeMessages } from '@/messages';
 import type {
   SkillSummary,
+  EntryPromptMenu,
   MentionItem,
   PluginSlashCommandDef,
+  GenCategory,
+  GenerationParams,
 } from '@/components/ChatView/InputArea/types';
+import { EmptyState, type EmptyStateEntryAction } from '@/components/ChatView/EmptyState';
+import { InputArea } from '@/components/ChatView/InputArea';
+import { InputAreaProvider, type MediaCategory } from '@/components/ChatView/InputAreaContext';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import {
   getWorkItemsForConversation,
@@ -60,6 +67,11 @@ import {
   projectHistoryConversationItems,
   type HistoryConversationItem,
 } from '@/presenters/history-menu-presenter';
+import {
+  projectChatWorkspaceModelState,
+  projectMediaModelSelectionForSessionModeChange,
+} from '@/presenters/config-message-presenter';
+import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 
 // =============================================================================
 // Props
@@ -161,6 +173,12 @@ export function ConversationController({
     audio: 'none',
   });
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [entryAction, setEntryAction] = useState<EmptyStateEntryAction>('start-chat');
+  const [entryInputValue, setEntryInputValue] = useState('');
+  const entryInputValueRef = useRef('');
+  const [entrySessionMode, setEntrySessionMode] = useState<SessionMode>('agent');
+  const [entryGenCategory, setEntryGenCategory] = useState<GenCategory>('image');
+  const [entryGenParams, setEntryGenParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
 
   // ---- Per-conversation ref Maps ----
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
@@ -172,6 +190,21 @@ export function ConversationController({
   const [promptModeByConversation, setPromptModeByConversation] = useState<Map<string, PromptMode>>(
     () => new Map(),
   );
+  const mentionSearchFilterRef = useRef(mentionSearchFilter);
+  useEffect(() => {
+    mentionSearchFilterRef.current = mentionSearchFilter;
+  }, [mentionSearchFilter]);
+  const updateMentionSearchFilter = useCallback(
+    (filter: string) => {
+      mentionSearchFilterRef.current = filter;
+      setMentionSearchFilter(filter);
+    },
+    [setMentionSearchFilter],
+  );
+  const updateEntryInputValue = useCallback((value: string) => {
+    entryInputValueRef.current = value;
+    setEntryInputValue(value);
+  }, []);
   const setPromptModeForConversation = useCallback((conversationId: string, mode: PromptMode) => {
     setPromptModeByConversation((prev) => {
       const next = new Map(prev);
@@ -223,6 +256,16 @@ export function ConversationController({
   const [pendingSendRequest, setPendingSendRequest] = useState<{
     id: number;
     input: PendingSendInput;
+  } | null>(null);
+  const nextEntryPromptMenuRequestIdRef = useRef(0);
+  const [initialEntryPromptMenuRequest, setInitialEntryPromptMenuRequest] = useState<{
+    id: number;
+    menu: EntryPromptMenu;
+  } | null>(null);
+  const nextInitialInputRequestIdRef = useRef(0);
+  const [initialInputRequest, setInitialInputRequest] = useState<{
+    id: number;
+    messageText: string;
   } | null>(null);
 
   // ---- Context chips & ambient nodes ----
@@ -342,6 +385,23 @@ export function ConversationController({
   const activeSettings = useMemo<SettingsState>(
     () => ({ ...settings, promptMode: activePromptMode }),
     [settings, activePromptMode],
+  );
+  const entryModelState = useMemo(
+    () =>
+      projectChatWorkspaceModelState({
+        chatModelOptions: activeSettings.chatModelOptions,
+        selectedModel,
+        defaultContextWindow: activeSettings.maxTokens,
+        sessionMode: entrySessionMode,
+        mediaModelSelection,
+      }),
+    [
+      activeSettings.chatModelOptions,
+      activeSettings.maxTokens,
+      entrySessionMode,
+      mediaModelSelection,
+      selectedModel,
+    ],
   );
   const updateActiveSettings = useCallback(
     (partial: Partial<SettingsState>) => {
@@ -540,6 +600,7 @@ export function ConversationController({
     setProjectFiles,
     setMentionItems,
     mentionSearchFilter,
+    mentionSearchFilterRef,
     setPluginCommands,
     setAgentState,
     conversationAgentStateRef,
@@ -561,14 +622,34 @@ export function ConversationController({
     return () => window.clearTimeout(timer);
   }, [globalError]);
 
+  useEffect(() => {
+    if (openTabs.length > 0) return;
+
+    const handleTablessMessage = (event: MessageEvent) => {
+      const type = (event.data as { type?: string } | undefined)?.type;
+      if (
+        type === 'externalMessage' ||
+        type === 'prefillInput' ||
+        type === 'injectContext' ||
+        type === 'ambientCanvasUpdate'
+      ) {
+        return;
+      }
+      handleMessage(event);
+    };
+
+    window.addEventListener('message', handleTablessMessage);
+    return () => window.removeEventListener('message', handleTablessMessage);
+  }, [handleMessage, openTabs.length]);
+
   // ---- Request data on mount ----
   useEffect(() => {
+    isTablessConversationViewRef.current = true;
     VSCodeMessages.getConversations();
     VSCodeMessages.getActiveConversation();
     requestConfigSnapshot();
     VSCodeMessages.getAgentStates();
     VSCodeMessages.getSkills();
-    VSCodeMessages.getTabState();
   }, [requestConfigSnapshot]);
 
   // ---- Context token count on conversation change ----
@@ -604,11 +685,62 @@ export function ConversationController({
 
   const handleNewChat = useCallback(() => {
     setPendingSendRequest(null);
+    setInitialEntryPromptMenuRequest(null);
+    setInitialInputRequest(null);
     startNewForegroundConversation();
   }, [startNewForegroundConversation]);
 
+  const startNewForegroundConversationWithEntryPrompt = useCallback(
+    (menu: EntryPromptMenu, messageText?: string) => {
+      const id = nextEntryPromptMenuRequestIdRef.current + 1;
+      nextEntryPromptMenuRequestIdRef.current = id;
+      setPendingSendRequest(null);
+      setInitialEntryPromptMenuRequest({ id, menu });
+      if (messageText?.trim()) {
+        const inputRequestId = nextInitialInputRequestIdRef.current + 1;
+        nextInitialInputRequestIdRef.current = inputRequestId;
+        setInitialInputRequest({ id: inputRequestId, messageText: messageText.trim() });
+      } else {
+        setInitialInputRequest(null);
+      }
+      startNewForegroundConversation();
+    },
+    [startNewForegroundConversation],
+  );
+
+  const startNewForegroundConversationWithInitialInput = useCallback(
+    (messageText: string) => {
+      const trimmed = messageText.trim();
+      if (!trimmed) return;
+      const inputRequestId = nextInitialInputRequestIdRef.current + 1;
+      nextInitialInputRequestIdRef.current = inputRequestId;
+      setPendingSendRequest(null);
+      setInitialEntryPromptMenuRequest(null);
+      setInitialInputRequest({ id: inputRequestId, messageText: trimmed });
+      startNewForegroundConversation();
+    },
+    [startNewForegroundConversation],
+  );
+
+  const handleEntryAction = useCallback((action: EmptyStateEntryAction) => {
+    setEntryAction(action);
+    switch (action) {
+      case 'start-chat':
+        setEntrySessionMode('agent');
+        return;
+      case 'generate-assets':
+        setEntrySessionMode('agent');
+        return;
+      case 'roleplay':
+        setEntrySessionMode('agent');
+        return;
+    }
+  }, []);
+
   const handleSendWithoutConversation = useCallback(
     (input: PendingSendInput) => {
+      setInitialEntryPromptMenuRequest(null);
+      setInitialInputRequest(null);
       const id = nextPendingSendRequestIdRef.current + 1;
       nextPendingSendRequestIdRef.current = id;
       setPendingSendRequest({ id, input });
@@ -617,12 +749,83 @@ export function ConversationController({
     [startNewForegroundConversation],
   );
 
+  const handleEntryInputSend = useCallback(
+    (input?: PendingSendInput) => {
+      const messageText = (input?.messageText ?? entryInputValue).trim();
+      if (!messageText) return;
+
+      switch (entryAction) {
+        case 'start-chat': {
+          setInitialEntryPromptMenuRequest(null);
+          setInitialInputRequest(null);
+          handleSendWithoutConversation({
+            ...input,
+            messageText,
+            displayMessageText: input?.displayMessageText ?? messageText,
+            sessionMode: input?.sessionMode ?? entrySessionMode,
+          });
+          updateEntryInputValue('');
+          return;
+        }
+        case 'generate-assets':
+          startNewForegroundConversationWithEntryPrompt('generate-assets', messageText);
+          updateEntryInputValue('');
+          return;
+        case 'roleplay':
+          startNewForegroundConversationWithEntryPrompt('roleplay', messageText);
+          updateEntryInputValue('');
+          return;
+      }
+    },
+    [
+      entryAction,
+      entryInputValue,
+      handleSendWithoutConversation,
+      startNewForegroundConversationWithEntryPrompt,
+      updateEntryInputValue,
+    ],
+  );
+
   const handlePendingSendRequestConsumed = useCallback((id: number) => {
     setPendingSendRequest((current) => (current?.id === id ? null : current));
   }, []);
 
+  const handleInitialEntryPromptMenuRequestConsumed = useCallback((id: number) => {
+    setInitialEntryPromptMenuRequest((current) => (current?.id === id ? null : current));
+  }, []);
+
+  const handleInitialInputRequestConsumed = useCallback((id: number) => {
+    setInitialInputRequest((current) => (current?.id === id ? null : current));
+  }, []);
+
+  const handleEntrySessionModeChange = useCallback(
+    (mode: SessionMode) => {
+      setEntrySessionMode(mode);
+      setEntryAction('start-chat');
+      setMediaModelSelection((prev) => {
+        const projection = projectMediaModelSelectionForSessionModeChange({
+          sessionMode: mode,
+          mediaModelSelection: prev,
+          chatModelOptions: activeSettings.chatModelOptions,
+        });
+        return projection.updated ? projection.mediaModelSelection : prev;
+      });
+    },
+    [activeSettings.chatModelOptions],
+  );
+
+  const handleEntryMediaModelSelect = useCallback((category: MediaCategory, modelId: string) => {
+    setMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
+  }, []);
+
+  const handleEntryGenParamsChange = useCallback((partial: Partial<GenerationParams>) => {
+    setEntryGenParams((prev) => ({ ...prev, ...partial }));
+  }, []);
+
   const handleBeforeTabOpen = useCallback(() => {
     setPendingSendRequest(null);
+    setInitialEntryPromptMenuRequest(null);
+    setInitialInputRequest(null);
     pendingForegroundConversationActivationRef.current = null;
     setIsForegroundConversationActivationPending(false);
     isTablessConversationViewRef.current = false;
@@ -630,6 +833,8 @@ export function ConversationController({
 
   const handleBeforeConversationActivation = useCallback((conversationId: string) => {
     setPendingSendRequest(null);
+    setInitialEntryPromptMenuRequest(null);
+    setInitialInputRequest(null);
     pendingForegroundConversationActivationRef.current = {
       reason: 'switch-conversation',
       conversationId,
@@ -640,6 +845,8 @@ export function ConversationController({
 
   const handleAllTabsClosed = useCallback(() => {
     setPendingSendRequest(null);
+    setInitialEntryPromptMenuRequest(null);
+    setInitialInputRequest(null);
     isTablessConversationViewRef.current = true;
     setMessages([]);
     setStreamingMessageId(null);
@@ -838,72 +1045,122 @@ export function ConversationController({
       })}
 
       {activeTab === 'chat' ? (
-        <ChatWorkspace
-          // Conversation state
-          messages={messages}
-          setMessages={setMessages}
-          isThinking={isThinking}
-          setIsThinking={setIsThinking}
-          streamingMessageId={streamingMessageId}
-          queuedMessageCount={queuedMessageCount}
-          setStreamingMessageId={setStreamingMessageId}
-          streamingMessageIdRef={streamingMessageIdRef}
-          activeConversationId={activeConversationId}
-          activeConversationIdRef={activeConversationIdRef}
-          activeTabConversationId={activeTabConversationId}
-          isForegroundConversationActivationPending={isForegroundConversationActivationPending}
-          conversationKind={conversationKind}
-          characterDialogueSession={activeOpenTab?.characterDialogueSession}
-          embodyCharacterSession={embodyCharacterSession}
-          clearMessages={clearMessages}
-          // Config
-          settings={activeSettings}
-          updateSettings={updateActiveSettings}
-          // Model selection (owned here for settingsData hydration)
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
-          mediaModelSelection={mediaModelSelection}
-          setMediaModelSelection={setMediaModelSelection}
-          mentionItems={mentionItems}
-          onMentionSearchFilterChange={setMentionSearchFilter}
-          pluginCommands={pluginCommands}
-          // Resources
-          workItems={workItems}
-          pluginsAvailable={pluginsAvailable}
-          // Session
-          setActiveTab={setActiveTab}
-          conversationMessagesRef={conversationMessagesRef}
-          conversationStreamingRef={conversationStreamingRef}
-          conversationTokenCountRef={conversationTokenCountRef}
-          conversationCompressingRef={conversationCompressingRef}
-          conversationAgentStateRef={conversationAgentStateRef}
-          // Context management
-          contextTokenCount={contextTokenCount}
-          isCompressing={isCompressing}
-          mediaModelCallCount={mediaModelCallCount}
-          // Skills
-          skills={skills}
-          activeSkill={activeSkill}
-          setActiveSkill={setActiveSkill}
-          // Context chips
-          contextChips={contextChips}
-          ambientNodes={ambientNodes}
-          onAddContextChip={handleAddContextChip}
-          onRemoveContextChip={handleRemoveContextChip}
-          onInjectContextChip={handleInjectContextChip}
-          // Agent state
-          agentState={agentState}
-          // Message handler (for pre-intercept)
-          handleMessage={handleMessage}
-          setAmbientNodes={setAmbientNodes}
-          onNewChat={handleNewChat}
-          onUserMessageSent={handleUserMessageSent}
-          onSendWithoutConversation={handleSendWithoutConversation}
-          pendingSendRequest={pendingSendRequest}
-          onPendingSendRequestConsumed={handlePendingSendRequestConsumed}
-          // Session cleanup registration
-          sessionCleanupRef={sessionCleanupRef}
-        />
+        openTabs.length === 0 ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <EmptyState selectedAction={entryAction} onEntryAction={handleEntryAction} />
+            <InputAreaProvider
+              sessionMode={entrySessionMode}
+              onSessionModeChange={handleEntrySessionModeChange}
+              selectedModel={selectedModel}
+              availableModels={entryModelState.availableModels}
+              onModelSelect={setSelectedModel}
+              mediaModelSelection={mediaModelSelection}
+              availableMediaModels={entryModelState.availableMediaModels}
+              onMediaModelSelect={handleEntryMediaModelSelect}
+              executionMode={activeSettings.executionMode}
+              onExecutionModeChange={(mode) => updateActiveSettings({ executionMode: mode })}
+              promptMode={activeSettings.promptMode}
+              onPromptModeChange={(mode) => updateActiveSettings({ promptMode: mode })}
+              maxContextTokens={entryModelState.selectedContextWindow}
+              mediaModelCallCount={0}
+              skills={skills}
+              pluginCommands={pluginCommands}
+              mentionItems={mentionItems}
+              onRequestFiles={(filter) => {
+                updateMentionSearchFilter(filter);
+                startNewForegroundConversationWithInitialInput(entryInputValueRef.current);
+              }}
+              genCategory={entryGenCategory}
+              genParams={entryGenParams}
+              onGenCategoryChange={setEntryGenCategory}
+              onGenParamsChange={handleEntryGenParamsChange}
+              contextTokenCount={0}
+              isCompressing={false}
+              contextChips={[]}
+              onRemoveContextChip={() => undefined}
+              ambientNodes={[]}
+              conversationKind="chat"
+            >
+              <InputArea
+                inputValue={entryInputValue}
+                isThinking={false}
+                onInputChange={updateEntryInputValue}
+                onSend={handleEntryInputSend}
+              />
+            </InputAreaProvider>
+          </div>
+        ) : (
+          <ChatWorkspace
+            // Conversation state
+            messages={messages}
+            setMessages={setMessages}
+            isThinking={isThinking}
+            setIsThinking={setIsThinking}
+            streamingMessageId={streamingMessageId}
+            queuedMessageCount={queuedMessageCount}
+            setStreamingMessageId={setStreamingMessageId}
+            streamingMessageIdRef={streamingMessageIdRef}
+            activeConversationId={activeConversationId}
+            activeConversationIdRef={activeConversationIdRef}
+            activeTabConversationId={activeTabConversationId}
+            isForegroundConversationActivationPending={isForegroundConversationActivationPending}
+            conversationKind={conversationKind}
+            characterDialogueSession={activeOpenTab?.characterDialogueSession}
+            embodyCharacterSession={embodyCharacterSession}
+            clearMessages={clearMessages}
+            // Config
+            settings={activeSettings}
+            updateSettings={updateActiveSettings}
+            // Model selection (owned here for settingsData hydration)
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            mediaModelSelection={mediaModelSelection}
+            setMediaModelSelection={setMediaModelSelection}
+            mentionItems={mentionItems}
+            onMentionSearchFilterChange={updateMentionSearchFilter}
+            pluginCommands={pluginCommands}
+            // Resources
+            workItems={workItems}
+            pluginsAvailable={pluginsAvailable}
+            // Session
+            setActiveTab={setActiveTab}
+            conversationMessagesRef={conversationMessagesRef}
+            conversationStreamingRef={conversationStreamingRef}
+            conversationTokenCountRef={conversationTokenCountRef}
+            conversationCompressingRef={conversationCompressingRef}
+            conversationAgentStateRef={conversationAgentStateRef}
+            // Context management
+            contextTokenCount={contextTokenCount}
+            isCompressing={isCompressing}
+            mediaModelCallCount={mediaModelCallCount}
+            // Skills
+            skills={skills}
+            activeSkill={activeSkill}
+            setActiveSkill={setActiveSkill}
+            // Context chips
+            contextChips={contextChips}
+            ambientNodes={ambientNodes}
+            onAddContextChip={handleAddContextChip}
+            onRemoveContextChip={handleRemoveContextChip}
+            onInjectContextChip={handleInjectContextChip}
+            // Agent state
+            agentState={agentState}
+            // Message handler (for pre-intercept)
+            handleMessage={handleMessage}
+            setAmbientNodes={setAmbientNodes}
+            onNewChat={handleNewChat}
+            onUserMessageSent={handleUserMessageSent}
+            onSendWithoutConversation={handleSendWithoutConversation}
+            pendingSendRequest={pendingSendRequest}
+            onPendingSendRequestConsumed={handlePendingSendRequestConsumed}
+            initialInputRequest={initialInputRequest}
+            onInitialInputRequestConsumed={handleInitialInputRequestConsumed}
+            initialEntryPromptMenuRequest={initialEntryPromptMenuRequest}
+            onInitialEntryPromptMenuRequestConsumed={handleInitialEntryPromptMenuRequestConsumed}
+            // Session cleanup registration
+            sessionCleanupRef={sessionCleanupRef}
+          />
+        )
       ) : null}
 
       {globalError ? (

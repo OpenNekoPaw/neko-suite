@@ -65,6 +65,12 @@ export interface ToolsFileFrontmatter {
 export type SkillSource = 'builtin' | 'personal' | 'project' | 'market';
 
 /**
+ * Canonical explicit entry point for a registry item that reuses the Skill
+ * runtime shape.
+ */
+export type SkillEntryPointKind = 'skill' | 'command-artifact';
+
+/**
  * Source values used by UI-facing skill catalog projections.
  *
  * `SkillSource` remains the runtime/file-skill source contract. The catalog
@@ -328,8 +334,9 @@ export interface SkillCatalogProjectionOptions {
  * semantic matching of their descriptions.
  *
  * Key characteristics:
- * - NO slash command trigger (use SlashCommand for that)
- * - NO argument interpolation
+ * - Invoked explicitly with `$skill-name` or implicitly by semantic matching
+ * - Slash command artifacts reuse this runtime shape but set
+ *   `entryPointKind: "command-artifact"`
  * - Supports multi-file structure with support files
  */
 export interface Skill {
@@ -429,26 +436,34 @@ export interface Skill {
   enabled: boolean;
 
   // ===========================================================================
-  // Optional Slash Command Integration
+  // Explicit Entry Point Metadata
   // ===========================================================================
 
   /**
-   * Optional slash command trigger (without /).
-   * When set, this skill is also registered as a slash command.
+   * Distinguishes ordinary Skills from `.neko/commands/*.md` prompt artifacts
+   * that intentionally live in the `/` command namespace.
+   * @default "skill"
+   */
+  entryPointKind?: SkillEntryPointKind;
+
+  /**
+   * Slash command trigger (without `/`) for command artifacts.
+   * Ordinary Skills may still carry this temporarily for legacy migration, but
+   * canonical explicit Skill invocation is `$<name>`.
    * @example "commit", "review-pr"
    */
   command?: string;
 
   /**
-   * Argument hint shown in slash command autocomplete.
-   * Only meaningful when `command` is set.
+   * Argument hint shown for command artifacts or explicit Skill invocation UI.
    * @example "[message]", "[pr-number] [priority]"
    */
   argumentHint?: string;
 
   /**
    * Whether content supports argument interpolation ($ARGUMENTS, $1-$99).
-   * Only meaningful when `command` is set.
+   * For ordinary Skills this is used by `$skill args`; for command artifacts it
+   * is used by `/command args`.
    * @default false
    */
   supportsArguments?: boolean;

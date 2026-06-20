@@ -25,7 +25,7 @@ export interface ExtensionSlashCommandRuntimeInput {
 export interface ExtensionSlashCommandRuntimeResult {
   command: string;
   handled: boolean;
-  source: 'builtin' | 'skill' | 'unknown';
+  source: 'builtin' | 'command-artifact' | 'unknown';
 }
 
 export interface ExtensionSlashCommandConversationSource {
@@ -124,7 +124,21 @@ export function runExtensionSlashCommandRuntime(
     return { command, handled: true, source: 'builtin' };
   }
 
-  return runExtensionSkillSlashCommand(command, input, deps, effects);
+  if (commandEntry?.source === 'command-artifact') {
+    return runExtensionSkillSlashCommand(command, input, deps, effects);
+  }
+
+  const posted = effects.postMessage(
+    buildExtensionSkillCommandResultPayload({
+      conversationId: input.conversationId,
+      command,
+      status: 'unknown',
+    }),
+  );
+  if (isPromiseLike(posted)) {
+    return posted.then(() => ({ command, handled: false, source: 'unknown' }));
+  }
+  return { command, handled: false, source: 'unknown' };
 }
 
 export function buildExtensionSlashStatusPayload(input: {
@@ -312,7 +326,7 @@ async function runExtensionSkillSlashCommand(
         error: result.error,
       }),
     );
-    return { command, handled: true, source: 'skill' };
+    return { command, handled: true, source: 'command-artifact' };
   }
 
   await effects.postMessage(
@@ -333,7 +347,7 @@ async function runExtensionSkillSlashCommand(
     });
   }
 
-  return { command, handled: true, source: 'skill' };
+  return { command, handled: true, source: 'command-artifact' };
 }
 
 function createSkillExecutionOverrides(

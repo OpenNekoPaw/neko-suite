@@ -5,7 +5,7 @@
 
 ## 2. NewAPI MVP Defaults
 
-- [x] 2.1 Replace official-direct default Agent providers with NewAPI-compatible gateway, custom NewAPI-compatible gateway, and local Ollama provider profiles.
+- [x] 2.1 Replace official-direct default Agent providers with NewAPI gateway, custom NewAPI gateway, and local Ollama provider profiles.
 - [x] 2.2 Update default LLM and generation model records to use gateway/local provider IDs and canonical model IDs.
 - [x] 2.3 Ensure default media model configuration references canonical model IDs that route directly.
 

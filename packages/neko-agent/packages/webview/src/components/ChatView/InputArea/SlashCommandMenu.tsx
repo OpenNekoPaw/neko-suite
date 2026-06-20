@@ -8,6 +8,8 @@ import { SlashCommand } from './types';
 import {
   resolveSlashCommandDescription,
   resolveSlashCommandSourceLabel,
+  resolveSkillInvocationSourceLabel,
+  type SkillInvocationCatalogItem,
   type SlashCommandCatalogItem,
 } from './slash-command-catalog';
 import { useClickOutsideSingle } from './useClickOutside';
@@ -21,7 +23,16 @@ interface SlashCommandMenuProps {
   onClose: () => void;
 }
 
-type SlashCommandDisplayGroup = 'agent' | 'creation' | 'skill';
+interface SkillInvocationMenuProps {
+  isOpen: boolean;
+  skills: SkillInvocationCatalogItem[];
+  selectedIndex: number;
+  onSelect: (skill: SkillInvocationCatalogItem) => void;
+  onClose: () => void;
+}
+
+type SlashCommandDisplayGroup = 'agent' | 'creation' | 'command';
+type SkillInvocationDisplayGroup = 'skill';
 
 interface SlashCommandSection {
   group: SlashCommandDisplayGroup;
@@ -30,10 +41,17 @@ interface SlashCommandSection {
   startIndex: number;
 }
 
+interface SkillInvocationSection {
+  group: SkillInvocationDisplayGroup;
+  title: string | null;
+  skills: SkillInvocationCatalogItem[];
+  startIndex: number;
+}
+
 const slashCommandDisplayGroupOrder: readonly SlashCommandDisplayGroup[] = [
   'agent',
   'creation',
-  'skill',
+  'command',
 ];
 
 const creationBuiltinCommands = new Set(['skills', 'tools', 'tasks']);
@@ -67,27 +85,62 @@ export function SlashCommandMenu({
               const isSelected = flatIndex === selectedIndex;
 
               return (
-                <button
+                <CommandMenuRow
                   key={cmd.id}
-                  type="button"
+                  name={cmd.name}
+                  description={description}
+                  sourceLabel={sourceLabel}
+                  isSelected={isSelected}
                   onClick={() => onSelect(cmd)}
-                  className={`agent-composer-popover-row agent-composer-command-row ${
-                    isSelected ? 'is-selected' : ''
-                  }`}
-                  role="menuitem"
-                >
-                  <span
-                    className={`agent-composer-popover-primary ${isSelected ? 'is-selected' : ''}`}
-                  >
-                    {cmd.name}
-                  </span>
-                  <span className="agent-composer-popover-secondary">{description}</span>
-                  {sourceLabel && (
-                    <span className="agent-composer-popover-badge">
-                      {resolveSlashCommandSourceLabelText(sourceLabel, t)}
-                    </span>
-                  )}
-                </button>
+                  translate={t}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SkillInvocationMenu({
+  isOpen,
+  skills,
+  selectedIndex,
+  onSelect,
+  onClose,
+}: SkillInvocationMenuProps) {
+  const { t } = useTranslation();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useClickOutsideSingle(menuRef, onClose);
+
+  if (!isOpen || skills.length === 0) return null;
+
+  const sections = buildSkillInvocationSections(skills, t);
+
+  return (
+    <div ref={menuRef} className="agent-composer-popover agent-composer-command-menu" role="menu">
+      <div className="agent-composer-popover-scroll">
+        {sections.map((section) => (
+          <div key={section.group}>
+            {section.title && <div className="agent-composer-popover-section">{section.title}</div>}
+            {section.skills.map((skill, itemIndex) => {
+              const flatIndex = section.startIndex + itemIndex;
+              const description = resolveSlashCommandDescription(skill, t);
+              const sourceLabel = resolveSkillInvocationSourceLabel(skill);
+              const isSelected = flatIndex === selectedIndex;
+
+              return (
+                <CommandMenuRow
+                  key={skill.id}
+                  name={skill.name}
+                  description={description}
+                  sourceLabel={sourceLabel}
+                  isSelected={isSelected}
+                  onClick={() => onSelect(skill)}
+                  translate={t}
+                />
               );
             })}
           </div>
@@ -122,6 +175,22 @@ function buildSlashCommandSections(
   return sections;
 }
 
+function buildSkillInvocationSections(
+  skills: SkillInvocationCatalogItem[],
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): SkillInvocationSection[] {
+  const sortedSkills = sortSkillInvocationsForDisplay(skills);
+  if (sortedSkills.length === 0) return [];
+  return [
+    {
+      group: 'skill',
+      title: resolveSkillInvocationSectionTitle(translate),
+      skills: sortedSkills,
+      startIndex: 0,
+    },
+  ];
+}
+
 export function sortSlashCommandsForDisplay(
   commands: readonly SlashCommandCatalogItem[],
 ): SlashCommandCatalogItem[] {
@@ -134,13 +203,56 @@ export function sortSlashCommandsForDisplay(
   });
 }
 
+export function sortSkillInvocationsForDisplay(
+  skills: readonly SkillInvocationCatalogItem[],
+): SkillInvocationCatalogItem[] {
+  return [...skills];
+}
+
 export function projectSlashCommandGroup(
   command: SlashCommandCatalogItem,
 ): SlashCommandDisplayGroup {
-  if (command.source === 'skill') return 'skill';
+  if (command.source === 'command-artifact') return 'command';
   if (command.source === 'plugin') return 'creation';
   if (creationBuiltinCommands.has(command.commandId ?? command.id)) return 'creation';
   return 'agent';
+}
+
+function CommandMenuRow({
+  name,
+  description,
+  sourceLabel,
+  isSelected,
+  onClick,
+  translate,
+}: {
+  readonly name: string;
+  readonly description: string;
+  readonly sourceLabel: string | null;
+  readonly isSelected: boolean;
+  readonly onClick: () => void;
+  readonly translate: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`agent-composer-popover-row agent-composer-command-row ${
+        isSelected ? 'is-selected' : ''
+      }`}
+      role="menuitem"
+    >
+      <span className={`agent-composer-popover-primary ${isSelected ? 'is-selected' : ''}`}>
+        {name}
+      </span>
+      <span className="agent-composer-popover-secondary">{description}</span>
+      {sourceLabel && (
+        <span className="agent-composer-popover-badge">
+          {resolveSlashCommandSourceLabelText(sourceLabel, translate)}
+        </span>
+      )}
+    </button>
+  );
 }
 
 function resolveSlashCommandSectionTitle(
@@ -150,9 +262,17 @@ function resolveSlashCommandSectionTitle(
   const key = `chat.commands.sections.${group}`;
   const translated = translate(key);
   if (translated !== key) return translated;
+  if (group === 'command') return 'Commands';
   if (group === 'creation') return 'Creation';
-  if (group === 'skill') return 'Skills';
   return 'Agent';
+}
+
+function resolveSkillInvocationSectionTitle(
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const key = 'chat.commands.sections.skill';
+  const translated = translate(key);
+  return translated === key ? 'Skills' : translated;
 }
 
 function resolveSlashCommandSourceLabelText(

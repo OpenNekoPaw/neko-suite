@@ -319,6 +319,37 @@ describe('executeAgentTurn', () => {
     );
   });
 
+  it('lets normalized per-turn LLM options override global settings for runner configuration', async () => {
+    const { input, agentRunner } = createBaseInput({
+      chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: true,
+        temperature: 0.2,
+        topP: 0.5,
+        maxTokens: 1024,
+        thinkingBudget: 2048,
+      },
+      llmRuntimeOptions: {
+        temperature: 0.9,
+        topP: 0.95,
+        maxTokens: 4096,
+        thinkingBudget: 8192,
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temperature: 0.9,
+        topP: 0.95,
+        maxTokens: 4096,
+        thinkingBudget: 8192,
+      }),
+    );
+  });
+
   it('replays active skill injection after runner configuration', async () => {
     const activeSkill = {
       skill: {
@@ -830,6 +861,19 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       message: 'cut the selected clip',
       platform: { name: 'platform' },
       chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
+      agentModels: {
+        primary: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
+      },
+      llmConfig: {
+        reasoningPreset: 'balanced',
+        creativityPreset: 'creative',
+      },
+      llmRuntimeOptions: {
+        temperature: 0.7,
+        topP: 0.95,
+        maxTokens: 4096,
+        thinkingBudget: 8192,
+      },
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
       settings: {
         selectedProviderId: 'anthropic',
@@ -838,6 +882,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
         executionMode: 'ask',
         autoExecuteTools: false,
         temperature: 0.2,
+        topP: 0.5,
         maxTokens: 1024,
         thinkingBudget: 2048,
       },
@@ -881,8 +926,22 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       executionMode: 'ask',
       autoExecuteTools: false,
       temperature: 0.2,
+      topP: 0.5,
       maxTokens: 1024,
       thinkingBudget: 2048,
+    });
+    expect(runtimeInput.agentModels).toEqual({
+      primary: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
+    });
+    expect(runtimeInput.llmConfig).toEqual({
+      reasoningPreset: 'balanced',
+      creativityPreset: 'creative',
+    });
+    expect(runtimeInput.llmRuntimeOptions).toEqual({
+      temperature: 0.7,
+      topP: 0.95,
+      maxTokens: 4096,
+      thinkingBudget: 8192,
     });
     expect(runtimeInput.providerSource.selectedProviderId).toBe('anthropic');
     expect(runtimeInput.providerSource.requestedProviderId).toBe('openai');

@@ -15,7 +15,7 @@ import {
 import { modelSupportsPurpose } from '../model-purpose-registry';
 
 describe('default agent provider configuration', () => {
-  it('uses NewAPI-compatible gateway and local provider groups by default', () => {
+  it('uses NewAPI gateway and local provider groups by default', () => {
     expect(DEFAULT_USER_CONFIG.defaultProvider).toBe(OLLAMA_LOCAL_PROVIDER_ID);
     expect(DEFAULT_USER_CONFIG.defaultModel).toBe(OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID);
     expect(DEFAULT_CONFIG.defaultProvider).toBe(OLLAMA_LOCAL_PROVIDER_ID);
@@ -28,14 +28,14 @@ describe('default agent provider configuration', () => {
     expect(providers.get(NEKO_GATEWAY_PROVIDER_ID)).toMatchObject({
       type: 'newapi',
       connectionKind: 'gateway',
-      protocolProfile: 'newapi-compatible',
+      protocolProfile: 'newapi',
       supportLevel: 'verified',
       requiresApiKey: true,
     });
     expect(providers.get(CUSTOM_NEWAPI_PROVIDER_ID)).toMatchObject({
       type: 'newapi',
       connectionKind: 'custom-gateway',
-      protocolProfile: 'newapi-compatible',
+      protocolProfile: 'newapi',
       supportLevel: 'custom',
       enabled: false,
     });

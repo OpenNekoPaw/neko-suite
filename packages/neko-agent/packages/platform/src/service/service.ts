@@ -638,6 +638,7 @@ interface RawMessageSnapshot {
   readonly index: number;
   readonly role: MessageRole;
   readonly name?: string;
+  readonly reasoningContent?: string;
   readonly toolCallId?: string;
   readonly content: RawContentSnapshot;
   readonly toolCalls?: readonly RawToolCallSnapshot[];
@@ -821,6 +822,7 @@ function createRawMessageSnapshot(message: ChatMessage, index: number): RawMessa
       functionName: toolCall.function.name,
       arguments: toolCall.function.arguments,
     })),
+    reasoningContent: message.reasoningContent,
   };
 }
 
