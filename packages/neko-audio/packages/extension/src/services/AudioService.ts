@@ -14,7 +14,7 @@
  */
 
 import * as vscode from 'vscode';
-import { EngineClient } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client/EngineClient';
 import type { AudioEffectConfig, MixStreamConfig } from '@neko/shared';
 
 import { getLogger } from '../utils/logger';

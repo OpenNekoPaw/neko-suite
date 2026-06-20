@@ -192,7 +192,7 @@ export class AudioProjectProvider
     store: this._projectFileStore,
     sourcePolicy: nkaSourcePathPolicy,
     createSourcePolicyOptions: (uri) => ({
-      context: this.createWorkspaceMediaPathContext(uri),
+      context: this.createWorkspaceMediaPathContext(vscode.Uri.file(uri.fsPath)),
     }),
     logger,
   });
