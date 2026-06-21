@@ -211,15 +211,35 @@ function resolveToolMediaTarget(
   options: ToolExecuteOptions | undefined,
   category: 'image' | 'video' | 'audio' | 'music',
   secondaryCategory?: 'audio',
-): { providerId?: string; modelId?: string } {
+): { providerId?: string; modelId?: string; source: 'args' | 'runtime' | 'missing' } {
+  const argProviderId = readOptionalString(args.providerId);
+  const argModelId = readOptionalString(args.modelId);
   const runtimeTarget =
     readRuntimeMediaModel(options, category) ??
     (secondaryCategory ? readRuntimeMediaModel(options, secondaryCategory) : undefined);
 
   return {
-    providerId: readOptionalString(args.providerId) ?? runtimeTarget?.providerId,
-    modelId: readOptionalString(args.modelId) ?? runtimeTarget?.modelId,
+    providerId: argProviderId ?? runtimeTarget?.providerId,
+    modelId: argModelId ?? runtimeTarget?.modelId,
+    source: argProviderId || argModelId ? 'args' : runtimeTarget ? 'runtime' : 'missing',
   };
+}
+
+function requireToolMediaTarget(
+  target: ReturnType<typeof resolveToolMediaTarget>,
+  toolName: string,
+): string | null {
+  if (target.providerId && target.modelId) return null;
+  if (target.source === 'args') {
+    return `${toolName} requires both providerId and modelId when either routing field is specified.`;
+  }
+  return `${toolName} requires an explicit Agent ${toolNameMediaCategory(toolName)} model. Configure the Agent mode media model or pass providerId and modelId.`;
+}
+
+function toolNameMediaCategory(toolName: string): string {
+  if (toolName.includes('Video')) return 'video';
+  if (toolName.includes('Music') || toolName.includes('TTS')) return 'audio';
+  return 'image';
 }
 
 function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerationRequest {
@@ -725,6 +745,10 @@ export function registerMediaAgentTools(
       },
       execute: async (args, options) => {
         const target = resolveToolMediaTarget(args, options, 'image');
+        const targetError = requireToolMediaTarget(target, 'GenerateImage');
+        if (targetError) {
+          return { success: false, error: targetError };
+        }
 
         try {
           const resolved = await resolveGenerationPrompt(args, 'image.generate', target.providerId);
@@ -951,6 +975,10 @@ export function registerMediaAgentTools(
       },
       execute: async (args, options) => {
         const target = resolveToolMediaTarget(args, options, 'image');
+        const targetError = requireToolMediaTarget(target, 'TransformImage');
+        if (targetError) {
+          return { success: false, error: targetError };
+        }
         const editInstruction = readOptionalString(args.editInstruction);
         const prompt = readOptionalString(args.prompt) ?? editInstruction ?? '';
         if (!prompt.trim()) {
@@ -1145,6 +1173,10 @@ export function registerMediaAgentTools(
       },
       execute: async (args, options) => {
         const target = resolveToolMediaTarget(args, options, 'video');
+        const targetError = requireToolMediaTarget(target, 'GenerateVideo');
+        if (targetError) {
+          return { success: false, error: targetError };
+        }
 
         try {
           const resolved = await resolveGenerationPrompt(args, 'video.generate', target.providerId);
@@ -1235,6 +1267,10 @@ export function registerMediaAgentTools(
         const moodStr = args.mood ? ` (mood: ${args.mood})` : '';
         const genreStr = args.genre ? ` (genre: ${args.genre})` : '';
         const target = resolveToolMediaTarget(args, options, 'music', 'audio');
+        const targetError = requireToolMediaTarget(target, 'GenerateMusic');
+        if (targetError) {
+          return { success: false, error: targetError };
+        }
 
         try {
           const task = await media.generateAudio({
@@ -1311,6 +1347,10 @@ export function registerMediaAgentTools(
       execute: async (args, options) => {
         const text = args.text as string;
         const target = resolveToolMediaTarget(args, options, 'audio');
+        const targetError = requireToolMediaTarget(target, 'GenerateTTS');
+        if (targetError) {
+          return { success: false, error: targetError };
+        }
 
         try {
           const task = await media.generateAudio({

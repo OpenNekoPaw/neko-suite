@@ -107,6 +107,7 @@ describe('registerMediaAgentTools', () => {
         '- resolution: 720p',
       ].join('\n'),
       providerId: 'new-video-model',
+      modelId: 'new-video-model-v1',
     });
 
     expect(result.success).toBe(true);
@@ -115,6 +116,7 @@ describe('registerMediaAgentTools', () => {
         prompt:
           'cat detective walking through a neon rainy alley, anime, cyberpunk, slow tracking shot, avoid blurry',
         providerId: 'new-video-model',
+        modelId: 'new-video-model-v1',
         metadata: expect.objectContaining({
           providerAdaptation: expect.objectContaining({
             mode: 'agentic',
@@ -151,6 +153,8 @@ describe('registerMediaAgentTools', () => {
       taskRef: 'docs/tasks/native-image.md',
       taskMarkdown: ['# Task', '', '## Goal', 'A quiet forest shrine'].join('\n'),
       providerAdaptationMode: 'native',
+      providerId: 'image-provider',
+      modelId: 'image-model',
     });
 
     expect(result.success).toBe(true);
@@ -169,6 +173,20 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('rejects GenerateImage without explicit args or Agent runtime media model routing', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('GenerateImage', {
+      prompt: 'A lighthouse at dusk',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('explicit Agent image model');
+    expect(media.generateImage).not.toHaveBeenCalled();
+  });
+
   it('does not expose legacy semanticPrompt fields in media tool results', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();
@@ -176,6 +194,8 @@ describe('registerMediaAgentTools', () => {
 
     const result = await registry.execute('GenerateImage', {
       prompt: 'A lighthouse at dusk',
+      providerId: 'openai-provider',
+      modelId: 'dalle-model',
     });
 
     expect(result.success).toBe(true);
@@ -200,6 +220,8 @@ describe('registerMediaAgentTools', () => {
       inpaintStrength: 0.8,
       editInstruction: 'Remove text and reconstruct the background.',
       aspectRatio: '16:9',
+      providerId: 'image-provider',
+      modelId: 'image-model',
     });
 
     expect(result.success).toBe(true);
@@ -226,6 +248,8 @@ describe('registerMediaAgentTools', () => {
 
     const result = await registry.execute('TransformImage', {
       editInstruction: 'Remove dialogue bubbles.',
+      providerId: 'edit-provider',
+      modelId: 'edit-model',
       sourceImageRef: {
         refId: 'source-panel-1',
         role: 'source',
@@ -337,6 +361,8 @@ describe('registerMediaAgentTools', () => {
       duration: 4,
       resolution: '720p',
       fps: 24,
+      providerId: 'runway-provider',
+      modelId: 'runway-model',
     });
 
     expect(result.success).toBe(true);
@@ -381,6 +407,21 @@ describe('registerMediaAgentTools', () => {
         modelId: 'flux-model',
       }),
     );
+  });
+
+  it('rejects partial media routing args instead of falling back to defaults', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('GenerateVideo', {
+      prompt: 'A spaceship launch',
+      providerId: 'runway-provider',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('both providerId and modelId');
+    expect(media.generateVideo).not.toHaveBeenCalled();
   });
 
   it('uses runtime audio model metadata for GenerateTTS', async () => {
