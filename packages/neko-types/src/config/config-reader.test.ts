@@ -96,7 +96,7 @@ describe('config-reader typed results', () => {
         'name = "Custom NewAPI"',
         'type = "newapi"',
         'base_url = "https://api.example.com/v1"',
-        'connection_kind = "custom-gateway"',
+        'connection_kind = "gateway"',
         'protocol_profile = "newapi"',
       ].join('\n'),
       'utf-8',
@@ -113,7 +113,7 @@ describe('config-reader typed results', () => {
       expect.objectContaining({
         id: 'custom-newapi',
         apiUrl: 'https://api.example.com/v1',
-        connectionKind: 'custom-gateway',
+        connectionKind: 'gateway',
         protocolProfile: 'newapi',
       }),
     );
@@ -129,7 +129,7 @@ describe('config-reader typed results', () => {
         'name = "Custom NewAPI"',
         'type = "newapi"',
         'base_url = "https://api.example.com/v1"',
-        'connection_kind = "custom-gateway"',
+        'connection_kind = "gateway"',
         'protocol_profile = "newapi-compatible"',
       ].join('\n'),
       'utf-8',

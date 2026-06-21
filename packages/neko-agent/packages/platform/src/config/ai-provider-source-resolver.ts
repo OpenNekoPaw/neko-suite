@@ -13,6 +13,7 @@ import type { Model, Provider } from '../types/provider';
 import type { AssistantConfigDiagnostic } from './config-diagnostic';
 import { isProviderConfigured } from './provider-configuration';
 import { ChatModelService } from './chat-model-service';
+import { projectLlmParameterControls } from './llm-parameter-projection';
 
 export const ACCOUNT_GATEWAY_PROVIDER_ID = 'neko-account-gateway';
 
@@ -134,6 +135,14 @@ function buildAccountModelOptions(
         capabilities: [...model.capabilities],
         category,
         ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(category === 'llm'
+          ? {
+              llmParameterControls: projectLlmParameterControls({
+                model,
+                provider: catalog.provider,
+              }),
+            }
+          : {}),
       } satisfies ChatModelOption;
     });
 }

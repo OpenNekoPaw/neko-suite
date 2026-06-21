@@ -6,7 +6,7 @@
  * unnecessary for a single-user desktop application.
  */
 
-import type { Model, ProviderType } from '../types/provider';
+import type { Model } from '../types/provider';
 import type { Adapter } from '../types/adapter';
 import type { ConfigManager } from '../config/config-manager';
 import { getAdapterRegistry } from '../llm/adapter/adapter-registry';
@@ -22,48 +22,16 @@ export class ProviderRegistry {
   }
 
   /**
-   * Get adapter for provider, optionally considering model-specific protocol
+   * Get adapter for provider, optionally considering an explicit model protocol
    * @param providerId - The provider ID
-   * @param model - Optional model config. If provided and has protocol, uses model.protocol instead of provider.type
+   * @param model - Optional model config. If provided and has protocol, uses that explicit protocol instead of provider.type.
    */
   getAdapter(providerId: string, model?: Model): Adapter | undefined {
     const provider = this.configManager.getProvider(providerId);
     if (!provider) return undefined;
 
-    // Priority: model.protocol > inferred from model name (only for generic type) > provider.type
-    // Only infer from model name when provider.type is 'generic', because other provider types
-    // (like 'newapi') already specify which adapter to use, even if they serve GPT models.
-    const inferredProtocol =
-      provider.type === 'generic' ? this.inferProtocolFromModelName(model?.name) : undefined;
-    const adapterType = model?.protocol || inferredProtocol || provider.type;
+    const adapterType = model?.protocol || provider.type;
     return getAdapterRegistry().getForType(adapterType);
-  }
-
-  /**
-   * Infer protocol type from model name
-   */
-  private inferProtocolFromModelName(modelName?: string): ProviderType | undefined {
-    if (!modelName) return undefined;
-
-    const name = modelName.toLowerCase();
-
-    if (name.includes('claude') || name.includes('anthropic')) {
-      return 'anthropic';
-    }
-    if (name.includes('gemini') || name.includes('palm') || name.includes('bard')) {
-      return 'google';
-    }
-    if (
-      name.includes('gpt-') ||
-      name.includes('o1') ||
-      name.includes('dall-e') ||
-      name.includes('whisper') ||
-      name.includes('tts-')
-    ) {
-      return 'openai';
-    }
-
-    return undefined;
   }
 
   /**

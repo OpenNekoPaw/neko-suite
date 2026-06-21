@@ -78,11 +78,12 @@ export class Service implements IService {
    * Resolve model for a chat or embedding request
    */
   private resolveRouting(
+    providerId?: string,
     modelId?: string,
     excludeModels: string[] = [],
     taskType: 'chat' | 'embedding' = 'chat',
   ): RoutingResult {
-    return this.selector.resolve(taskType, { modelId, excludeModels });
+    return this.selector.resolve(taskType, { providerId, modelId, excludeModels });
   }
 
   /**
@@ -165,7 +166,7 @@ export class Service implements IService {
       phase: 'llm',
       llmRequestId: requestId,
     });
-    const routing = this.resolveRouting(options.modelId, [], 'chat');
+    const routing = this.resolveRouting(options.providerId, options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name };
@@ -265,7 +266,7 @@ export class Service implements IService {
       phase: 'llm',
       llmRequestId: requestId,
     });
-    const routing = this.resolveRouting(options.modelId, [], 'chat');
+    const routing = this.resolveRouting(options.providerId, options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };
@@ -376,7 +377,7 @@ export class Service implements IService {
     options: EmbeddingOptions = {},
   ): Promise<EmbeddingResponse> {
     this.config.configManager.assertConfigAvailable();
-    const routing = this.resolveRouting(options.modelId, [], 'embedding');
+    const routing = this.resolveRouting(options.providerId, options.modelId, [], 'embedding');
     const { model, provider, adapter } = this.resolveResources(routing);
 
     if (!adapter.embed) {

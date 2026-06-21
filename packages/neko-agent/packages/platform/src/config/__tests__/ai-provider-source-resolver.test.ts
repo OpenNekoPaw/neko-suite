@@ -12,7 +12,7 @@ const explicitProvider: Provider = {
   apiUrl: 'https://gateway.example.com/v1',
   apiKey: 'sk-user',
   enabled: true,
-  connectionKind: 'custom-gateway',
+  connectionKind: 'gateway',
   protocolProfile: 'newapi',
 };
 

@@ -9,7 +9,7 @@ describe('user config template', () => {
 
     expect(parseTomlConfigText(template)).toEqual(DEFAULT_USER_CONFIG);
     expect(template).toContain('type: "openai", "anthropic", "google"');
-    expect(template).toContain('connection_kind: "gateway", "custom-gateway", "local", "direct"');
+    expect(template).toContain('connection_kind: "gateway", "local", "direct"');
     expect(template).toContain('protocol_profile: "newapi", "openai-chat", "openai-responses"');
     expect(template).toContain('auth_type: "bearer", "api-key", "custom-header"');
     expect(template).toContain('stream_format: "sse", "ndjson"');

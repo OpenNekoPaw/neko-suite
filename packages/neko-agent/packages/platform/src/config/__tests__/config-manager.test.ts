@@ -1042,7 +1042,7 @@ describe('ConfigManager', () => {
         type: 'newapi',
         apiUrl: '',
         enabled: true,
-        connectionKind: 'custom-gateway',
+        connectionKind: 'gateway',
         requiresApiKey: true,
       };
       const localModel: Model = {

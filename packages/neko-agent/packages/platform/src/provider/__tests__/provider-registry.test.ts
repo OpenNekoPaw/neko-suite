@@ -136,7 +136,7 @@ describe('ProviderRegistry', () => {
     expect(adapter?.type).toBe('anthropic');
   });
 
-  it('should infer protocol from model name for generic providers', () => {
+  it('keeps generic providers on the generic adapter even when the model name resembles another provider', () => {
     const configManager = createMockConfigManager();
     const registry = new ProviderRegistry(configManager);
 
@@ -150,10 +150,10 @@ describe('ProviderRegistry', () => {
 
     const adapter = registry.getAdapter('generic-provider', model);
     expect(adapter).toBeDefined();
-    expect(adapter?.type).toBe('anthropic');
+    expect(adapter?.type).toBe('generic');
   });
 
-  it('should NOT infer protocol from model name for non-generic providers', () => {
+  it('keeps non-generic providers on their configured adapter even when the model name resembles another provider', () => {
     const configManager = createMockConfigManager();
     const registry = new ProviderRegistry(configManager);
 

@@ -155,11 +155,10 @@ export const PROVIDER_TYPES = [
  * user reaches the provider so settings can group gateway, local, and future
  * direct official API paths without inferring that from vendor IDs.
  */
-export type ProviderConnectionKind = 'gateway' | 'custom-gateway' | 'local' | 'direct';
+export type ProviderConnectionKind = 'gateway' | 'local' | 'direct';
 
 export const PROVIDER_CONNECTION_KINDS = [
   'gateway',
-  'custom-gateway',
   'local',
   'direct',
 ] as const satisfies readonly ProviderConnectionKind[];

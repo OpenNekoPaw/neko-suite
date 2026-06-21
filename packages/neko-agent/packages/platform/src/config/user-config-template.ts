@@ -31,7 +31,7 @@ function buildConfigTemplateHeader(): string {
     '#',
     '# Recommended provider mappings:',
     '# - NekoAPI/NewAPI/OneAPI gateway: type = "newapi", connection_kind = "gateway", protocol_profile = "newapi"',
-    '# - Custom OpenAI-compatible gateway: type = "generic", connection_kind = "custom-gateway", protocol_profile = "openai-chat"',
+    '# - Custom OpenAI-compatible gateway: type = "generic", connection_kind = "gateway", protocol_profile = "openai-chat"',
     '# - DeepSeek direct: type = "generic", connection_kind = "direct", protocol_profile = "openai-chat", api_url = "https://api.deepseek.com"',
     '# - Ollama local: type = "ollama", connection_kind = "local", protocol_profile = "ollama"',
     '#',

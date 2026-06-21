@@ -167,6 +167,37 @@ function createReadResultUserConfigManager(result: ConfigReadResult): IUserConfi
   };
 }
 
+function createRoutingConfig(input: {
+  providers: Provider[];
+  models: Model[];
+  adapters?: Record<string, Partial<Adapter>>;
+}): ServiceConfig {
+  const configManager = {
+    assertConfigAvailable: vi.fn(),
+    getProvider: vi.fn((id: string) => input.providers.find((p) => p.id === id)),
+    getProviders: vi.fn(() => input.providers),
+    getEnabledProviders: vi.fn(() => input.providers.filter((p) => p.enabled !== false)),
+    getModel: vi.fn((id: string) => input.models.find((m) => m.id === id)),
+    getModels: vi.fn(() => input.models),
+    getEnabledModels: vi.fn(() => input.models.filter((m) => m.enabled !== false)),
+    getModelsByProvider: vi.fn((providerId: string) =>
+      input.models.filter((m) => m.providerId === providerId),
+    ),
+    getRetryTimeoutPreset: vi.fn(() => undefined),
+    getChatModelOptions: vi.fn(() => []),
+  } as unknown as ConfigManager;
+
+  const providerRegistry = {
+    getAdapter: vi.fn((providerId: string) => input.adapters?.[providerId] ?? createMockAdapter()),
+    isProviderAvailable: vi.fn(() => true),
+  } as unknown as ProviderRegistry;
+
+  return {
+    configManager,
+    providerRegistry,
+  };
+}
+
 describe('Service', () => {
   describe('chat', () => {
     it('should send chat request successfully', async () => {
@@ -192,6 +223,176 @@ describe('Service', () => {
       const response = await service.chat(messages, { modelId: 'gpt-4' });
 
       expect(response.routing.modelId).toBe('gpt-4');
+    });
+
+    it('routes an explicit DeepSeek direct provider/model without falling through to a NewAPI gateway', async () => {
+      const deepseekAdapter = createMockAdapter();
+      const gatewayAdapter = createMockAdapter();
+      const config = createRoutingConfig({
+        providers: [
+          {
+            id: 'deepseek-direct',
+            name: 'deepseek',
+            displayName: 'DeepSeek',
+            type: 'generic',
+            apiUrl: 'https://api.deepseek.com',
+            apiKey: 'deepseek-key',
+            enabled: true,
+            connectionKind: 'direct',
+            protocolProfile: 'openai-chat',
+          },
+          {
+            id: 'neko-gateway',
+            name: 'neko-gateway',
+            displayName: 'Neko Gateway',
+            type: 'newapi',
+            apiUrl: 'https://www.nekoapi.com/v1',
+            apiKey: 'gateway-key',
+            enabled: true,
+            connectionKind: 'gateway',
+            protocolProfile: 'newapi',
+          },
+        ],
+        models: [
+          {
+            id: 'deepseek-v4-pro-direct',
+            name: 'deepseek-v4-pro',
+            displayName: 'DeepSeek V4 Pro',
+            providerId: 'deepseek-direct',
+            type: 'llm',
+            capabilities: ['chat', 'vision'],
+            enabled: true,
+          },
+          {
+            id: 'deepseek-v4-pro-gateway',
+            name: 'deepseek-v4-pro',
+            displayName: 'DeepSeek V4 Pro',
+            providerId: 'neko-gateway',
+            type: 'llm',
+            capabilities: ['chat', 'vision'],
+            enabled: true,
+          },
+        ],
+        adapters: {
+          'deepseek-direct': deepseekAdapter,
+          'neko-gateway': gatewayAdapter,
+        },
+      });
+      const service = new Service(config);
+
+      const response = await service.chat([{ role: 'user', content: 'Describe image' }], {
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-v4-pro-direct',
+      });
+
+      expect(response.routing).toMatchObject({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-v4-pro-direct',
+      });
+      expect(deepseekAdapter.chat).toHaveBeenCalledTimes(1);
+      expect(gatewayAdapter.chat).not.toHaveBeenCalled();
+      expect(config.providerRegistry.getAdapter).toHaveBeenCalledWith(
+        'deepseek-direct',
+        expect.objectContaining({ providerId: 'deepseek-direct' }),
+      );
+    });
+
+    it('rejects provider/model mismatches instead of rerouting by model ID', async () => {
+      const deepseekAdapter = createMockAdapter();
+      const gatewayAdapter = createMockAdapter();
+      const config = createRoutingConfig({
+        providers: [
+          {
+            id: 'deepseek-direct',
+            name: 'deepseek',
+            displayName: 'DeepSeek',
+            type: 'generic',
+            apiUrl: 'https://api.deepseek.com',
+            apiKey: 'deepseek-key',
+            enabled: true,
+            connectionKind: 'direct',
+            protocolProfile: 'openai-chat',
+          },
+          {
+            id: 'neko-gateway',
+            name: 'neko-gateway',
+            displayName: 'Neko Gateway',
+            type: 'newapi',
+            apiUrl: 'https://www.nekoapi.com/v1',
+            apiKey: 'gateway-key',
+            enabled: true,
+            connectionKind: 'gateway',
+            protocolProfile: 'newapi',
+          },
+        ],
+        models: [
+          {
+            id: 'gateway-deepseek',
+            name: 'deepseek-v4-pro',
+            providerId: 'neko-gateway',
+            type: 'llm',
+            capabilities: ['chat'],
+            enabled: true,
+          },
+        ],
+        adapters: {
+          'deepseek-direct': deepseekAdapter,
+          'neko-gateway': gatewayAdapter,
+        },
+      });
+      const service = new Service(config);
+
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'deepseek-direct',
+          modelId: 'gateway-deepseek',
+        }),
+      ).rejects.toThrow(
+        'Model gateway-deepseek belongs to provider neko-gateway, not deepseek-direct',
+      );
+      expect(deepseekAdapter.chat).not.toHaveBeenCalled();
+      expect(gatewayAdapter.chat).not.toHaveBeenCalled();
+    });
+
+    it('uses configured local providers without requiring an API key', async () => {
+      const localAdapter = createMockAdapter();
+      const config = createRoutingConfig({
+        providers: [
+          {
+            id: 'ollama-local',
+            name: 'ollama',
+            displayName: 'Ollama Local',
+            type: 'ollama',
+            apiUrl: 'http://localhost:11434/api',
+            enabled: true,
+            connectionKind: 'local',
+            protocolProfile: 'ollama',
+            requiresApiKey: false,
+          },
+        ],
+        models: [
+          {
+            id: 'llama-local',
+            name: 'llama3.2',
+            providerId: 'ollama-local',
+            type: 'llm',
+            capabilities: ['chat'],
+            enabled: true,
+          },
+        ],
+        adapters: { 'ollama-local': localAdapter },
+      });
+      const service = new Service(config);
+
+      const response = await service.chat([{ role: 'user', content: 'Hello' }], {
+        providerId: 'ollama-local',
+      });
+
+      expect(response.routing).toMatchObject({
+        providerId: 'ollama-local',
+        modelId: 'llama-local',
+      });
+      expect(localAdapter.chat).toHaveBeenCalledTimes(1);
     });
 
     it('projects messages before sending to the adapter', async () => {

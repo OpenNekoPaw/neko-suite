@@ -55,7 +55,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     apiUrl: DEFAULT_NEWAPI_BASE_URL,
     enabled: false,
     builtin: true,
-    connectionKind: 'custom-gateway',
+    connectionKind: 'gateway',
     protocolProfile: 'newapi',
     supportLevel: 'custom',
     requiresApiKey: true,

@@ -34,7 +34,7 @@ describe('default agent provider configuration', () => {
     });
     expect(providers.get(CUSTOM_NEWAPI_PROVIDER_ID)).toMatchObject({
       type: 'newapi',
-      connectionKind: 'custom-gateway',
+      connectionKind: 'gateway',
       protocolProfile: 'newapi',
       supportLevel: 'custom',
       enabled: false,
