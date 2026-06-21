@@ -149,4 +149,90 @@ describe('projectMentionSearch', () => {
       }),
     );
   });
+
+  it('narrows roleplay searches to playable character candidates', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+      items: [
+        {
+          id: 'entity:char-xiaoju',
+          kind: 'creative-entity',
+          label: '小橘',
+          description: 'Character',
+          source: {
+            partition: 'creative-entities',
+            sourceId: 'char-xiaoju',
+            sourceKind: 'character',
+          },
+          projectRoot: '/workspace',
+          searchText: '小橘 character',
+          freshness: 'fresh',
+          metadata: { entityType: 'character' },
+        },
+        {
+          id: 'asset:asset-xiaoju',
+          kind: 'asset',
+          label: '小橘参考图',
+          description: 'Asset',
+          source: {
+            partition: 'asset-library',
+            sourceId: 'asset-xiaoju',
+            sourceKind: 'image',
+          },
+          projectRoot: '/workspace',
+          filePath: 'assets/xiaoju.png',
+          searchText: '小橘参考图',
+          freshness: 'fresh',
+          metadata: { mediaType: 'image', entityType: 'character' },
+        },
+        {
+          id: 'entity:scene-rooftop',
+          kind: 'creative-entity',
+          label: '天台',
+          description: 'Scene',
+          source: {
+            partition: 'creative-entities',
+            sourceId: 'scene-rooftop',
+            sourceKind: 'scene',
+          },
+          projectRoot: '/workspace',
+          searchText: '天台 scene',
+          freshness: 'fresh',
+          metadata: { entityType: 'scene' },
+        },
+      ],
+      partitions: [],
+      freshness: 'fresh',
+      context: { projectRoot: '/workspace' },
+      query: { text: '' },
+    });
+
+    const candidates = await searchProjectMentionCandidates({
+      includePattern: '**/*',
+      excludePattern: '**/node_modules/**',
+      limit: 30,
+      purpose: 'roleplay',
+    });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      PROJECT_SEARCH_QUERY_COMMAND,
+      expect.objectContaining({
+        text: '',
+        mode: 'mention',
+        kinds: ['script-role', 'creative-entity', 'entity-candidate', 'asset', 'generated-asset'],
+        partitions: ['story-symbols', 'creative-entities', 'asset-library'],
+      }),
+    );
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        type: 'entity',
+        label: '小橘',
+        entityType: 'character',
+      }),
+      expect.objectContaining({
+        type: 'asset',
+        label: '小橘参考图',
+        entityType: 'character',
+      }),
+    ]);
+  });
 });

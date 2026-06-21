@@ -224,6 +224,23 @@ describe('messages', () => {
         });
       });
 
+      it('should post roleplay project search purpose', () => {
+        VSCodeMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'searchProjectFiles',
+          filter: '',
+          purpose: 'roleplay',
+        });
+      });
+
+      it('should post character dialogue launch args without creating an ordinary conversation', () => {
+        VSCodeMessages.startCharacterDialogueFromSlash('entity:char-xiaoju --roleplay');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'startCharacterDialogueFromSlash',
+          args: 'entity:char-xiaoju --roleplay',
+        });
+      });
+
       it('should post confirmTool', () => {
         VSCodeMessages.confirmTool('tool-1', true, 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({

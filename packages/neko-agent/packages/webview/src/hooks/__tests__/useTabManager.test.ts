@@ -369,6 +369,48 @@ describe('useTabManager', () => {
     expect(vscodeMocks.updateTabState).toHaveBeenCalledWith([], null);
   });
 
+  it('closes the final roleplay tab into an explicit empty tab state without restoring history', () => {
+    const onAllTabsClosed = vi.fn();
+
+    const { result } = renderHook(() => {
+      const [openTabs, setOpenTabs] = useState<OpenTab[]>([
+        {
+          id: 'tab-role',
+          title: 'Character Dialogue: 小橘',
+          conversationId: 'npc-session-1',
+          kind: 'character-dialogue',
+        },
+      ]);
+      const [activeTabId, setActiveTabId] = useState<string | null>('tab-role');
+
+      return {
+        activeTabId,
+        openTabs,
+        ...useTabManager({
+          openTabs,
+          setOpenTabs,
+          activeTabId,
+          setActiveTabId,
+          conversations: [{ id: 'conv-old', title: 'Old Chat', messageCount: 3, updatedAt: 1 }],
+          setActiveTab: vi.fn(),
+          onAllTabsClosed,
+        }),
+      };
+    });
+
+    act(() => {
+      result.current.handleCloseTab('tab-role');
+    });
+
+    expect(result.current.openTabs).toEqual([]);
+    expect(result.current.activeTabId).toBeNull();
+    expect(onAllTabsClosed).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.exitCharacterDialogueSession).toHaveBeenCalledWith('npc-session-1');
+    expect(vscodeMocks.switchConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.deleteConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.updateTabState).toHaveBeenCalledWith([], null);
+  });
+
   it('records the next ordinary conversation before closing the active tab switches to it', () => {
     const onBeforeConversationActivation = vi.fn();
 

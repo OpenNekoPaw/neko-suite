@@ -155,10 +155,12 @@
   --agent-overlay-padding: 3px;
   --agent-overlay-inline-size: min(320px, calc(100vw - 24px));
   --agent-overlay-block-size: min(300px, 52vh);
-  --agent-overlay-wide-inline-size: min(360px, calc(100vw - 24px));
+  --agent-overlay-wide-inline-size: fit-content;
+  --agent-overlay-wide-min-inline-size: 220px;
+  --agent-overlay-wide-max-inline-size: min(560px, calc(100vw - 24px));
   --agent-overlay-compact-inline-size: max-content;
   --agent-overlay-compact-min-inline-size: 88px;
-  --agent-overlay-compact-max-inline-size: min(176px, calc(100vw - 24px));
+  --agent-overlay-compact-max-inline-size: min(240px, calc(100vw - 24px));
   --agent-menu-row-min-height: 27px;
   --agent-menu-row-padding: 3px 8px;
   --agent-menu-row-gap: 7px;
@@ -230,7 +232,9 @@ body[data-vscode-theme-kind='vscode-high-contrast'] {
   --agent-overlay-border: var(--agent-border);
   --agent-overlay-shadow: none;
   --agent-overlay-inline-size: min(320px, calc(100vw - 24px));
-  --agent-overlay-wide-inline-size: min(360px, calc(100vw - 24px));
+  --agent-overlay-wide-inline-size: fit-content;
+  --agent-overlay-wide-min-inline-size: 220px;
+  --agent-overlay-wide-max-inline-size: min(560px, calc(100vw - 24px));
   --agent-menu-row-hover-bg: var(--vscode-list-hoverBackground, var(--agent-elevated));
   --agent-menu-row-selected-bg: var(--vscode-list-activeSelectionBackground, var(--agent-elevated));
   --agent-menu-row-selected-fg: var(--vscode-list-activeSelectionForeground, var(--agent-fg));
@@ -624,10 +628,15 @@ body {
   border-radius: 8px;
   background: var(--agent-empty-panel-bg);
   box-shadow: var(--agent-empty-panel-shadow);
+  overflow-wrap: anywhere;
 }
 
 .agent-empty-title {
   letter-spacing: 0;
+}
+
+.agent-empty-copy {
+  text-wrap: pretty;
 }
 
 .agent-empty-action {
@@ -811,7 +820,7 @@ body {
 }
 
 .agent-composer-session-mode-menu {
-  width: min(344px, calc(100vw - 24px));
+  width: min(420px, calc(100vw - 24px));
 }
 
 .agent-composer-session-mode-menu.is-placement-up {
@@ -838,23 +847,15 @@ body {
 }
 
 .agent-composer-session-mode-row {
-  min-height: 46px;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-}
-
-.agent-composer-session-mode-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
+  min-height: 30px;
+  grid-template-columns: 20px minmax(52px, max-content) minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .agent-composer-session-mode-row .agent-composer-popover-secondary {
-  display: -webkit-box;
   overflow: hidden;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-composer-entry-prompt-menu {
@@ -1211,21 +1212,14 @@ body {
   opacity: 0.72;
 }
 
-.agent-composer-mode-label {
-  min-width: 0;
-  max-width: 132px;
-  overflow: hidden;
-  padding-inline: 3px 6px;
-  color: var(--agent-fg);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .agent-control-chip-muted {
   opacity: 0.62;
+}
+
+.agent-control-chip-mode {
+  max-width: 108px;
+  padding-inline: 7px;
+  font-weight: 600;
 }
 
 .agent-control-chip-icon {
@@ -1301,16 +1295,28 @@ body {
 }
 
 .agent-composer-control-group-config .agent-generation-params {
-  width: 100%;
+  width: auto;
   overflow: visible;
+}
+
+.agent-mode-config-stack {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 3px;
 }
 
 .agent-inline-config-stack {
   display: flex;
-  width: 100%;
+  width: auto;
   min-width: 0;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 3px;
 }
 
@@ -1368,8 +1374,22 @@ body {
   max-width: var(--agent-overlay-compact-max-inline-size);
 }
 
+.agent-dropdown-menu-preset {
+  width: max-content;
+  min-width: var(--agent-overlay-compact-min-inline-size);
+  max-width: var(--agent-overlay-compact-max-inline-size);
+}
+
+.agent-dropdown-menu-param {
+  width: max-content;
+  min-width: var(--agent-overlay-compact-min-inline-size);
+  max-width: var(--agent-overlay-compact-max-inline-size);
+}
+
 .agent-dropdown-menu-model {
   width: var(--agent-overlay-wide-inline-size);
+  min-width: var(--agent-overlay-wide-min-inline-size);
+  max-width: var(--agent-overlay-wide-max-inline-size);
 }
 
 .agent-dropdown-menu-mode {
@@ -1398,6 +1418,20 @@ body {
 
 .agent-dropdown-item-label {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-dropdown-header {
+  min-width: 0;
+  margin: 1px 2px 3px;
+  padding: 3px 6px 4px;
+  border-bottom: 1px solid var(--agent-menu-separator, var(--agent-divider));
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1434,6 +1468,10 @@ body {
   gap: 1px;
 }
 
+.agent-dropdown-item-inline-detail {
+  min-height: 28px;
+}
+
 .agent-dropdown-item-description {
   min-width: 0;
   overflow: hidden;
@@ -1442,6 +1480,12 @@ body {
   line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-dropdown-item-inline-detail .agent-dropdown-item-description {
+  display: inline;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .agent-dropdown-item-selected .agent-dropdown-item-description {

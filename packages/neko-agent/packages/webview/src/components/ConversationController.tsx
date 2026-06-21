@@ -267,6 +267,7 @@ export function ConversationController({
     id: number;
     messageText: string;
   } | null>(null);
+  const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
 
   // ---- Context chips & ambient nodes ----
   const [contextChipsByConversation, setContextChipsByConversation] = useState<
@@ -687,6 +688,7 @@ export function ConversationController({
     setPendingSendRequest(null);
     setInitialEntryPromptMenuRequest(null);
     setInitialInputRequest(null);
+    setEntryPromptMenu(null);
     startNewForegroundConversation();
   }, [startNewForegroundConversation]);
 
@@ -696,6 +698,7 @@ export function ConversationController({
       nextEntryPromptMenuRequestIdRef.current = id;
       setPendingSendRequest(null);
       setInitialEntryPromptMenuRequest({ id, menu });
+      setEntryPromptMenu(null);
       if (messageText?.trim()) {
         const inputRequestId = nextInitialInputRequestIdRef.current + 1;
         nextInitialInputRequestIdRef.current = inputRequestId;
@@ -717,30 +720,54 @@ export function ConversationController({
       setPendingSendRequest(null);
       setInitialEntryPromptMenuRequest(null);
       setInitialInputRequest({ id: inputRequestId, messageText: trimmed });
+      setEntryPromptMenu(null);
       startNewForegroundConversation();
     },
     [startNewForegroundConversation],
   );
 
-  const handleEntryAction = useCallback((action: EmptyStateEntryAction) => {
-    setEntryAction(action);
-    switch (action) {
-      case 'start-chat':
-        setEntrySessionMode('agent');
-        return;
-      case 'generate-assets':
-        setEntrySessionMode('agent');
-        return;
-      case 'roleplay':
-        setEntrySessionMode('agent');
-        return;
-    }
-  }, []);
+  const handleEntryAction = useCallback(
+    (action: EmptyStateEntryAction) => {
+      setEntryAction(action);
+      setEntrySessionMode('agent');
+      const messageText = entryInputValueRef.current.trim();
+
+      switch (action) {
+        case 'start-chat':
+          setPendingSendRequest(null);
+          setInitialEntryPromptMenuRequest(null);
+          setInitialInputRequest(null);
+          setEntryPromptMenu(null);
+          updateEntryInputValue('');
+          startNewForegroundConversation();
+          return;
+        case 'generate-assets':
+          updateEntryInputValue('');
+          startNewForegroundConversationWithEntryPrompt('generate-assets', messageText);
+          return;
+        case 'roleplay':
+          setPendingSendRequest(null);
+          setInitialEntryPromptMenuRequest(null);
+          setInitialInputRequest(null);
+          setEntryPromptMenu('roleplay');
+          updateMentionSearchFilter('');
+          VSCodeMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
+          return;
+      }
+    },
+    [
+      startNewForegroundConversation,
+      startNewForegroundConversationWithEntryPrompt,
+      updateEntryInputValue,
+      updateMentionSearchFilter,
+    ],
+  );
 
   const handleSendWithoutConversation = useCallback(
     (input: PendingSendInput) => {
       setInitialEntryPromptMenuRequest(null);
       setInitialInputRequest(null);
+      setEntryPromptMenu(null);
       const id = nextPendingSendRequestIdRef.current + 1;
       nextPendingSendRequestIdRef.current = id;
       setPendingSendRequest({ id, input });
@@ -772,8 +799,12 @@ export function ConversationController({
           updateEntryInputValue('');
           return;
         case 'roleplay':
-          startNewForegroundConversationWithEntryPrompt('roleplay', messageText);
-          updateEntryInputValue('');
+          setPendingSendRequest(null);
+          setInitialEntryPromptMenuRequest(null);
+          setInitialInputRequest(null);
+          setEntryPromptMenu('roleplay');
+          updateMentionSearchFilter('');
+          VSCodeMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
           return;
       }
     },
@@ -783,6 +814,7 @@ export function ConversationController({
       handleSendWithoutConversation,
       startNewForegroundConversationWithEntryPrompt,
       updateEntryInputValue,
+      updateMentionSearchFilter,
     ],
   );
 
@@ -826,6 +858,7 @@ export function ConversationController({
     setPendingSendRequest(null);
     setInitialEntryPromptMenuRequest(null);
     setInitialInputRequest(null);
+    setEntryPromptMenu(null);
     pendingForegroundConversationActivationRef.current = null;
     setIsForegroundConversationActivationPending(false);
     isTablessConversationViewRef.current = false;
@@ -835,6 +868,7 @@ export function ConversationController({
     setPendingSendRequest(null);
     setInitialEntryPromptMenuRequest(null);
     setInitialInputRequest(null);
+    setEntryPromptMenu(null);
     pendingForegroundConversationActivationRef.current = {
       reason: 'switch-conversation',
       conversationId,
@@ -847,6 +881,7 @@ export function ConversationController({
     setPendingSendRequest(null);
     setInitialEntryPromptMenuRequest(null);
     setInitialInputRequest(null);
+    setEntryPromptMenu(null);
     isTablessConversationViewRef.current = true;
     setMessages([]);
     setStreamingMessageId(null);
@@ -1047,7 +1082,11 @@ export function ConversationController({
       {activeTab === 'chat' ? (
         openTabs.length === 0 ? (
           <div className="flex min-h-0 flex-1 flex-col">
-            <EmptyState selectedAction={entryAction} onEntryAction={handleEntryAction} />
+            <EmptyState
+              selectedAction={entryAction}
+              disabled={isForegroundConversationActivationPending}
+              onEntryAction={handleEntryAction}
+            />
             <InputAreaProvider
               sessionMode={entrySessionMode}
               onSessionModeChange={handleEntrySessionModeChange}
@@ -1086,6 +1125,9 @@ export function ConversationController({
                 isThinking={false}
                 onInputChange={updateEntryInputValue}
                 onSend={handleEntryInputSend}
+                disabled={isForegroundConversationActivationPending}
+                entryPromptMenu={entryPromptMenu}
+                onEntryPromptMenuChange={setEntryPromptMenu}
               />
             </InputAreaProvider>
           </div>

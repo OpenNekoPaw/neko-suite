@@ -76,6 +76,59 @@ describe('work item message handlers', () => {
     ]);
   });
 
+  it('accepts entry roleplay search results without an active conversation scope', () => {
+    const harness = createContextHarness({
+      activeConversationId: null,
+      mentionSearchFilter: '',
+    });
+
+    dispatch(
+      configHandlers,
+      {
+        type: 'projectFiles',
+        filter: '',
+        purpose: 'roleplay',
+        mentionExtras: [
+          {
+            type: 'entity',
+            id: 'char-xiaoju',
+            label: '小橘',
+            summary: 'Character: 小橘',
+            entityType: 'character',
+          },
+        ],
+      },
+      harness.context,
+    );
+
+    expect(harness.mentionItems()).toEqual([
+      expect.objectContaining({
+        id: 'entity:char-xiaoju',
+        label: '小橘',
+        entityType: 'character',
+      }),
+    ]);
+  });
+
+  it('rejects ordinary project file results without an active conversation scope', () => {
+    const harness = createContextHarness({
+      activeConversationId: null,
+      mentionSearchFilter: '',
+    });
+
+    dispatch(
+      configHandlers,
+      {
+        type: 'projectFiles',
+        filter: '',
+        files: [{ path: 'assets/current.png', name: 'current.png', type: 'file' }],
+      },
+      harness.context,
+    );
+
+    expect(harness.mentionItems()).toEqual([]);
+  });
+
   it('merges task updates by conversation instead of replacing the global store', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a' });
 
@@ -584,7 +637,7 @@ function createMediaWorkItem(conversationId: string, id: string) {
 }
 
 interface ContextHarnessOptions {
-  activeConversationId: string;
+  activeConversationId: string | null;
   mentionSearchFilter?: string;
   currentMessages?: Message[];
   nonCurrentMessages?: Map<string, Message[]>;

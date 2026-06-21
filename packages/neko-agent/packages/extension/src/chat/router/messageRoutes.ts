@@ -34,11 +34,20 @@ export function tryHandleMessageRoute(
       return true;
 
     case 'searchProjectFiles': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'searchProjectFiles');
-      if (!conversationId) return true;
-      deps.messages?.searchProjectFiles(webview, message.filter, conversationId);
+      const conversationId =
+        message.purpose === 'roleplay'
+          ? message.conversationId
+          : resolveRequiredConversationId(webview, message, 'searchProjectFiles');
+      if (message.purpose !== 'roleplay' && !conversationId) return true;
+      deps.messages?.searchProjectFiles(webview, message.filter, conversationId, {
+        purpose: message.purpose,
+      });
       return true;
     }
+
+    case 'startCharacterDialogueFromSlash':
+      void deps.characterDialogue?.launchFromSlash({ args: message.args });
+      return true;
 
     case 'mermaidError': {
       const conversationId = resolveRequiredConversationId(

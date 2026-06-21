@@ -349,7 +349,7 @@ export function ChatWorkspace({
     setEntryPromptMenu(initialEntryPromptMenuRequest.menu);
     if (initialEntryPromptMenuRequest.menu === 'roleplay') {
       onMentionSearchFilterChange('');
-      VSCodeMessages.searchProjectFiles('', activeConversationId);
+      VSCodeMessages.searchProjectFiles('', activeConversationId, { purpose: 'roleplay' });
     }
     onInitialEntryPromptMenuRequestConsumed?.(initialEntryPromptMenuRequest.id);
   }, [

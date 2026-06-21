@@ -38,11 +38,19 @@ describe('EmptyState', () => {
     expect(document.querySelector('.agent-empty-state')).toBeTruthy();
     expect(document.querySelector('.agent-empty-state')?.className).toContain('items-center');
     expect(document.querySelector('.agent-empty-panel')?.className).toContain(
-      'max-w-[min(840px,100%)]',
+      'max-w-[min(920px,100%)]',
     );
     expect(document.querySelector('.agent-empty-panel')?.className).toContain('min-w-0');
+    expect(document.querySelector('.agent-empty-copy')?.className).toContain('max-w-full');
+    expect(document.querySelector('.agent-empty-actions')?.className).toContain('grid-cols-1');
+    expect(document.querySelector('.agent-empty-actions')?.className).not.toContain(
+      'sm:grid-cols-3',
+    );
     expect(document.querySelectorAll('.agent-empty-action')).toHaveLength(3);
     expect(document.querySelector('.agent-empty-action')?.className).toContain('min-w-0');
+    expect(document.querySelector('.agent-empty-action')?.className).toContain('justify-center');
+    expect(document.querySelector('.agent-empty-action')?.className).toContain('text-center');
+    expect(document.querySelector('.agent-empty-action')?.className).not.toContain('text-left');
     expect(screen.getByText('Chat helper')).toBeTruthy();
   });
 

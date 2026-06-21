@@ -61,24 +61,25 @@ export interface SkillSummary {
 
 export type GenCategory = 'image' | 'video' | 'audio';
 export type EntryPromptMenu = 'generate-assets' | 'roleplay';
+export type GenerationDuration = 'auto' | number;
 
 export interface GenerationParams {
   ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:2' | '21:9' | '2.39:1';
   resolution: '512' | '720p' | '1080p' | '2K' | '4K';
-  /** Video duration in seconds */
-  videoDuration: number;
+  /** Video duration in seconds, or auto for Agent/model inference. */
+  videoDuration: GenerationDuration;
   videoFps: 24 | 30;
-  /** Audio duration in seconds */
-  audioDuration: number;
+  /** Audio duration in seconds, or auto for Agent/model inference. */
+  audioDuration: GenerationDuration;
   audioType: 'sfx' | 'ambient' | 'voice';
 }
 
 export const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   ratio: '16:9',
   resolution: '1080p',
-  videoDuration: 5,
+  videoDuration: 'auto',
   videoFps: 24,
-  audioDuration: 3,
+  audioDuration: 'auto',
   audioType: 'sfx',
 };
 

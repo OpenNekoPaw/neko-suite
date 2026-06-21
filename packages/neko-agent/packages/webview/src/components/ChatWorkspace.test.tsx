@@ -206,7 +206,9 @@ describe('ChatWorkspace pending send', () => {
     );
 
     expect(onMentionSearchFilterChange).toHaveBeenCalledWith('');
-    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('', 'conv-1');
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('', 'conv-1', {
+      purpose: 'roleplay',
+    });
     expect(screen.getByTestId('entry-menu').textContent).toBe('roleplay');
     expect(onInitialEntryPromptMenuRequestConsumed).toHaveBeenCalledWith(2);
   });

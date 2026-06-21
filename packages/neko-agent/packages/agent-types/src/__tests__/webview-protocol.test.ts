@@ -43,6 +43,46 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
+  it('accepts roleplay project search purpose and rejects unknown search purposes', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'searchProjectFiles',
+        filter: '',
+        purpose: 'roleplay',
+      }),
+    ).toEqual({
+      type: 'searchProjectFiles',
+      filter: '',
+      purpose: 'roleplay',
+    });
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'searchProjectFiles',
+        filter: '',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'searchProjectFiles',
+        filter: '',
+        conversationId: 'conv-1',
+        purpose: 'unknown',
+      }),
+    ).toBeNull();
+  });
+
+  it('accepts starting Character Dialogue from slash args without conversation scope', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'startCharacterDialogueFromSlash',
+        args: 'entity:char-xiaoju --roleplay',
+      }),
+    ).toEqual({
+      type: 'startCharacterDialogueFromSlash',
+      args: 'entity:char-xiaoju --roleplay',
+    });
+  });
+
   it('accepts agent-mode multimedia model selections as explicit model refs', () => {
     expect(
       parseSendMessageWebviewMessage({

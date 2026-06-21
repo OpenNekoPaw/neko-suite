@@ -31,6 +31,7 @@ import {
   createSubAgentEventRuntime,
   createWorkspaceInputProcessorRuntime,
   runAgentMessageTurnRuntime,
+  type AgentProjectFileSearchPurpose,
   type AgentStateRuntime,
   type AgentStateRuntimeEntry,
   type AgentMessageRuntimeRequest,
@@ -404,13 +405,15 @@ export class AgentMessageTurnHandler {
   async searchProjectFiles(
     webview: vscode.Webview,
     filter: string,
-    conversationId: string,
+    conversationId: string | undefined,
+    options: { readonly purpose?: AgentProjectFileSearchPurpose } = {},
   ): Promise<void> {
     const searchContextUri = this._resolveSearchContextUri();
     const projectRoot = this._resolveSearchProjectRoot(conversationId, searchContextUri);
     const message = await executeAgentProjectFileSearch({
       conversationId,
       filter,
+      purpose: options.purpose,
       searchProjectFiles: searchVSCodeProjectFiles,
       getMentionCandidates: (plan) =>
         searchProjectMentionCandidates(plan, {
@@ -484,7 +487,7 @@ export class AgentMessageTurnHandler {
   }
 
   private _resolveSearchProjectRoot(
-    conversationId: string,
+    conversationId: string | undefined,
     contextUri: vscode.Uri | undefined,
   ): string | undefined {
     const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
@@ -495,10 +498,12 @@ export class AgentMessageTurnHandler {
       if (fromContext) return fromContext;
     }
 
-    const fromConversation = workspaceFolders.find(
-      (folder) => getConversationWorkDirHash(folder.uri.fsPath) === conversationId.slice(0, 8),
-    )?.uri.fsPath;
-    if (fromConversation) return fromConversation;
+    if (conversationId) {
+      const fromConversation = workspaceFolders.find(
+        (folder) => getConversationWorkDirHash(folder.uri.fsPath) === conversationId.slice(0, 8),
+      )?.uri.fsPath;
+      if (fromConversation) return fromConversation;
+    }
 
     return workspaceFolders[0]?.uri.fsPath;
   }

@@ -1,6 +1,10 @@
 import type { ChatModelOption } from '@neko/shared';
 import type { AgentLlmConfig, SessionMode } from '@neko-agent/types';
-import type { GenCategory, GenerationParams } from '@/components/ChatView/InputArea/types';
+import type {
+  GenCategory,
+  GenerationDuration,
+  GenerationParams,
+} from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection } from '@/components/ChatView/InputAreaContext';
 
 export interface ComposerModeConfigProjection {
@@ -112,7 +116,14 @@ function projectMediaParamSummary(
     return [params.ratio, params.resolution];
   }
   if (category === 'video') {
-    return [params.ratio, params.resolution, `${params.videoDuration}s`];
+    return [params.ratio, params.resolution, formatGenerationDuration(params.videoDuration)];
   }
-  return [`chat.generation.audioType.${params.audioType}`, `${params.audioDuration}s`];
+  return [
+    `chat.generation.audioType.${params.audioType}`,
+    formatGenerationDuration(params.audioDuration),
+  ];
+}
+
+function formatGenerationDuration(duration: GenerationDuration): string {
+  return duration === 'auto' ? 'AUTO' : `${duration}s`;
 }

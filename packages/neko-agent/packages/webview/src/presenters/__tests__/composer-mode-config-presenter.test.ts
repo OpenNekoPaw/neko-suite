@@ -88,6 +88,25 @@ describe('composer-mode-config-presenter', () => {
     });
   });
 
+  it('projects auto media duration without adding seconds', () => {
+    const projection = projectComposerModeConfig({
+      sessionMode: 'video',
+      selectedModel: 'openai:gpt-5.5',
+      availableModels: llmModels,
+      mediaModelSelection: {
+        image: 'image-provider:model-image',
+        video: 'video-provider:model-video',
+        audio: 'none',
+      },
+      availableMediaModels: mediaModels,
+      genCategory: 'image',
+      genParams: DEFAULT_GENERATION_PARAMS,
+      llmConfig: {},
+    });
+
+    expect(projection.media?.params).toEqual(['16:9', '1080p', 'AUTO']);
+  });
+
   it('uses explicit media diagnostic key when the mode has no model', () => {
     const projection = projectComposerModeConfig({
       sessionMode: 'audio',

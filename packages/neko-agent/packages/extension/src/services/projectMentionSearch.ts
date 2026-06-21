@@ -28,6 +28,14 @@ const MENTION_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
   'generated-asset',
 ];
 
+const ROLEPLAY_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
+  'script-role',
+  'creative-entity',
+  'entity-candidate',
+  'asset',
+  'generated-asset',
+];
+
 interface ProjectMentionSearchOptions {
   readonly contextFilePath?: string;
   readonly contextUri?: string;
@@ -40,13 +48,17 @@ export async function searchProjectMentionCandidates(
 ): Promise<readonly AgentProjectMentionCandidate[]> {
   const filter = extractSearchFilter(plan);
   const activeEditorUri = vscode.window.activeTextEditor?.document.uri;
+  const isRoleplaySearch = plan.purpose === 'roleplay';
   const result = await vscode.commands.executeCommand<ProjectSearchResult>(
     PROJECT_SEARCH_QUERY_COMMAND,
     {
       text: filter,
       mode: 'mention',
       limit: plan.limit,
-      kinds: MENTION_SEARCH_KINDS,
+      kinds: isRoleplaySearch ? ROLEPLAY_SEARCH_KINDS : MENTION_SEARCH_KINDS,
+      ...(isRoleplaySearch
+        ? { partitions: ['story-symbols', 'creative-entities', 'asset-library'] }
+        : {}),
       freshness: 'allow-stale',
       contextFilePath: options.contextFilePath ?? activeEditorUri?.fsPath,
       contextUri: options.contextUri ?? activeEditorUri?.toString(),
@@ -54,7 +66,31 @@ export async function searchProjectMentionCandidates(
     },
   );
 
-  return (result?.items ?? []).map(projectSearchItemToMentionCandidate);
+  const items = result?.items ?? [];
+  return (isRoleplaySearch ? items.filter(isRoleplayProjectSearchItem) : items).map(
+    projectSearchItemToMentionCandidate,
+  );
+}
+
+function isRoleplayProjectSearchItem(item: ProjectSearchItem): boolean {
+  if (item.kind === 'script-role') return true;
+  return isCharacterProjectSearchItem(item);
+}
+
+function isCharacterProjectSearchItem(item: ProjectSearchItem): boolean {
+  return (
+    isCharacterLikeString(readString(item.source.metadata?.['entityKind'])) ||
+    isCharacterLikeString(readString(item.metadata?.['entityType'])) ||
+    isCharacterLikeString(item.source.sourceKind) ||
+    isCharacterLikeString(readString(item.metadata?.['category'])) ||
+    isCharacterLikeString(readString(item.navigationData?.['kind'])) ||
+    isCharacterLikeString(readString(item.navigationData?.['entityKind']))
+  );
+}
+
+function isCharacterLikeString(value: string | undefined): boolean {
+  if (!value) return false;
+  return ['character', 'role', '角色'].includes(value.trim().toLowerCase());
 }
 
 function projectSearchItemToMentionCandidate(
@@ -67,6 +103,7 @@ function projectSearchItemToMentionCandidate(
   const entityType =
     readString(item.source.metadata?.['entityKind']) ??
     readString(item.metadata?.['entityType']) ??
+    readString(item.metadata?.['category']) ??
     item.source.sourceKind;
   return {
     type,

@@ -537,6 +537,13 @@ export interface ModelRefConfig {
 
 export type TypeDefaultModels = Partial<Record<ModelType, ModelRefConfig>>;
 
+export interface LlmParameterControlAvailability {
+  readonly reasoning: boolean;
+  readonly verbosity: boolean;
+  readonly creativity: boolean;
+  readonly maxOutputTokens: boolean;
+}
+
 /**
  * Chat model option for UI model selector dropdown
  * Built by Platform layer from enabled providers and models
@@ -556,4 +563,6 @@ export interface ChatModelOption {
   category?: ModelType;
   /** Context window size in tokens, when known */
   contextWindow?: number;
+  /** LLM parameter controls that are meaningful for this model/provider pair */
+  llmParameterControls?: LlmParameterControlAvailability;
 }

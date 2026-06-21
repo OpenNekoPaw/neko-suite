@@ -311,6 +311,13 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
     code !== 'empty' &&
     code !== 'invalidToml' &&
     code !== 'unsupportedVersion' &&
+    code !== 'unsupportedProviderType' &&
+    code !== 'unsupportedProviderConnectionKind' &&
+    code !== 'unsupportedProviderProtocolProfile' &&
+    code !== 'unsupportedProviderSupportLevel' &&
+    code !== 'unsupportedProtocolAuthType' &&
+    code !== 'unsupportedProtocolStreamFormat' &&
+    code !== 'unsupportedModelProtocol' &&
     code !== 'duplicateProviderId' &&
     code !== 'duplicateModelId' &&
     code !== 'unsupportedModelType' &&
@@ -523,9 +530,25 @@ function isChatModelOption(value: unknown): value is ChatModelOption {
   }
 
   const contextWindow = record.contextWindow;
+  if (
+    contextWindow !== undefined &&
+    (typeof contextWindow !== 'number' || !Number.isFinite(contextWindow) || contextWindow <= 0)
+  ) {
+    return false;
+  }
+
+  const llmParameterControls = record.llmParameterControls;
+  return llmParameterControls === undefined || isLlmParameterControls(llmParameterControls);
+}
+
+function isLlmParameterControls(value: unknown): value is ChatModelOption['llmParameterControls'] {
+  const record = asRecord(value);
+  if (!record) return false;
   return (
-    contextWindow === undefined ||
-    (typeof contextWindow === 'number' && Number.isFinite(contextWindow) && contextWindow > 0)
+    typeof record.reasoning === 'boolean' &&
+    typeof record.verbosity === 'boolean' &&
+    typeof record.creativity === 'boolean' &&
+    typeof record.maxOutputTokens === 'boolean'
   );
 }
 

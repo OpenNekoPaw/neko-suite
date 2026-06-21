@@ -43,6 +43,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     characterDialogue: {
       hasSession: vi.fn(() => false),
       routeUserMessage: vi.fn(),
+      launchFromSlash: vi.fn(),
       cancel: vi.fn(() => false),
       exit: vi.fn(),
     } as any,
@@ -220,6 +221,44 @@ describe('handleChatWebviewMessage', () => {
       'embody-session-1',
       '记录今天的日记',
     );
+    expect(deps.messages?.handleUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes roleplay candidate search without requiring an ordinary conversation', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'searchProjectFiles',
+        filter: '',
+        purpose: 'roleplay',
+      },
+      deps,
+    );
+
+    expect(deps.messages?.searchProjectFiles).toHaveBeenCalledWith(deps.webview, '', undefined, {
+      purpose: 'roleplay',
+    });
+    expect(deps.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'globalError' }),
+    );
+  });
+
+  it('routes entry roleplay launches directly to Character Dialogue without an ordinary tab', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'startCharacterDialogueFromSlash',
+        args: 'entity:char-xiaoju --roleplay --skip-enrich',
+      },
+      deps,
+    );
+
+    expect(deps.characterDialogue?.launchFromSlash).toHaveBeenCalledWith({
+      args: 'entity:char-xiaoju --roleplay --skip-enrich',
+    });
+    expect(deps.slashCommandHandler.handleCommand).not.toHaveBeenCalled();
     expect(deps.messages?.handleUserMessage).not.toHaveBeenCalled();
   });
 

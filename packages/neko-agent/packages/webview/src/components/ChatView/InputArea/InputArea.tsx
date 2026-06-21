@@ -45,7 +45,8 @@ import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import { projectInputAreaUi } from '@/presenters/input-area-presenter';
 import { projectComposerModeConfig } from '@/presenters/composer-mode-config-presenter';
 import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
+import { VSCodeMessages } from '@/messages';
 import type {
   AgentLlmConfig,
   AgentModelSlots,
@@ -131,6 +132,8 @@ export function InputArea({
     conversationKind,
     genCategory,
     genParams,
+    onGenCategoryChange,
+    onGenParamsChange,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -577,7 +580,9 @@ export function InputArea({
       attachments: files,
       contextPayloads,
       fileReferences: hasSelectedFileReferences ? selectedFileReferences : undefined,
-      ...(sessionMode === 'agent' ? buildAgentLlmSendConfig(selectedModel, llmConfig) : {}),
+      ...(sessionMode === 'agent'
+        ? buildAgentLlmSendConfig(selectedModel, availableModels, llmConfig)
+        : {}),
     });
     contextChips.forEach((c) => onRemoveContextChip(c.id));
     onInputChange('');
@@ -716,10 +721,9 @@ export function InputArea({
 
   const handleEntryRoleplaySelect = (item: MentionItem) => {
     closeEntryPromptMenu();
-    onSend({
-      messageText: `/as ${formatRoleplaySlashEntity(item)} --roleplay --skip-enrich${formatInitialRoleplayMessage(inputValue)}`,
-      displayMessageText: '',
-    });
+    VSCodeMessages.startCharacterDialogueFromSlash(
+      `${formatRoleplaySlashEntity(item)} --roleplay --skip-enrich${formatInitialRoleplayMessage(inputValue)}`,
+    );
     textareaRef.current?.focus();
   };
 
@@ -775,6 +779,10 @@ export function InputArea({
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
             onMediaModelSelect={onMediaModelSelect}
+            genCategory={genCategory}
+            genParams={genParams}
+            onGenCategoryChange={onGenCategoryChange}
+            onGenParamsChange={onGenParamsChange}
             llmConfig={llmConfig}
             onLlmConfigChange={setLlmConfig}
             showAgentConfig={inputAreaProjection.showChatModelSelector}
@@ -1087,13 +1095,85 @@ function isRoleplayConversationKind(conversationKind: ConversationKind | undefin
 
 function buildAgentLlmSendConfig(
   selectedModel: string,
+  availableModels: readonly ChatModelOption[],
   llmConfig: AgentLlmConfig,
 ): { agentModels?: AgentModelSlots; llmConfig: AgentLlmConfig } {
   const primaryModel = parseSelectedLlmModelRef(selectedModel);
   return {
     ...(primaryModel ? { agentModels: { primary: primaryModel } } : {}),
-    llmConfig,
+    llmConfig: filterLlmConfigForModel(selectedModel, availableModels, llmConfig),
   };
+}
+
+function filterLlmConfigForModel(
+  selectedModel: string,
+  availableModels: readonly ChatModelOption[],
+  llmConfig: AgentLlmConfig,
+): AgentLlmConfig {
+  const controls = getLlmParameterControlsForModel(selectedModel, availableModels);
+  return removeUndefinedAgentLlmConfig({
+    reasoningPreset: controls.reasoning ? llmConfig.reasoningPreset : undefined,
+    verbosityPreset: controls.verbosity ? llmConfig.verbosityPreset : undefined,
+    creativityPreset: controls.creativity ? llmConfig.creativityPreset : undefined,
+    advanced: filterAdvancedLlmParamsForControls(llmConfig.advanced, controls),
+  });
+}
+
+function filterAdvancedLlmParamsForControls(
+  advanced: AgentLlmConfig['advanced'],
+  controls: NonNullable<ChatModelOption['llmParameterControls']>,
+): AgentLlmConfig['advanced'] {
+  if (!advanced) return undefined;
+  const filtered = removeUndefinedAgentLlmAdvancedParams({
+    temperature: controls.creativity ? advanced.temperature : undefined,
+    topP: controls.creativity ? advanced.topP : undefined,
+    maxOutputTokens: controls.maxOutputTokens ? advanced.maxOutputTokens : undefined,
+    reasoningEffort: controls.reasoning ? advanced.reasoningEffort : undefined,
+    thinkingBudget: controls.reasoning ? advanced.thinkingBudget : undefined,
+    verbosity: controls.verbosity ? advanced.verbosity : undefined,
+    serviceTier: controls.reasoning ? advanced.serviceTier : undefined,
+  });
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+}
+
+function getLlmParameterControlsForModel(
+  selectedModel: string,
+  availableModels: readonly ChatModelOption[],
+): NonNullable<ChatModelOption['llmParameterControls']> {
+  const model =
+    selectedModel === 'auto'
+      ? availableModels.find((option) => option.id !== 'auto')
+      : availableModels.find((option) => option.id === selectedModel);
+  if (!model) {
+    return {
+      reasoning: false,
+      verbosity: false,
+      creativity: false,
+      maxOutputTokens: false,
+    };
+  }
+  return (
+    model.llmParameterControls ?? {
+      reasoning: false,
+      verbosity: false,
+      creativity: true,
+      maxOutputTokens: true,
+    }
+  );
+}
+
+function removeUndefinedAgentLlmConfig(config: AgentLlmConfig): AgentLlmConfig {
+  return Object.fromEntries(
+    Object.entries(config).filter(([, value]) => value !== undefined),
+  ) as AgentLlmConfig;
+}
+
+function removeUndefinedAgentLlmAdvancedParams(
+  advanced: NonNullable<AgentLlmConfig['advanced']>,
+): NonNullable<AgentLlmConfig['advanced']> {
+  return Object.fromEntries(
+    Object.entries(advanced).filter(([, value]) => value !== undefined),
+  ) as NonNullable<AgentLlmConfig['advanced']>;
 }
 
 function parseSelectedLlmModelRef(selectedModel: string): ModelRef<'llm'> | null {

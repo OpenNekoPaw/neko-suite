@@ -24,6 +24,7 @@ vi.mock('@/messages', () => ({
 
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
+    locale: 'en',
     t: (key: string) =>
       ({
         'chat.emptyState.title': 'Neko Suite Creative Assistant',
@@ -51,12 +52,20 @@ vi.mock('@/i18n/I18nContext', () => ({
         'chat.sessionMode.sections.media': 'Media Generation',
         'chat.sessionMode.agent': 'Creative Collaboration',
         'chat.sessionMode.agentDesc': 'Refine ideas.',
+        'chat.sessionMode.short.agent': 'Agent',
+        'chat.sessionMode.summary.agent': 'Refine ideas.',
         'chat.sessionMode.image': 'Image Generation',
         'chat.sessionMode.imageDesc': 'Create images.',
+        'chat.sessionMode.short.image': 'Image',
+        'chat.sessionMode.summary.image': 'Create images.',
         'chat.sessionMode.video': 'Video Generation',
         'chat.sessionMode.videoDesc': 'Create videos.',
+        'chat.sessionMode.short.video': 'Video',
+        'chat.sessionMode.summary.video': 'Create videos.',
         'chat.sessionMode.audio': 'Sound Generation',
         'chat.sessionMode.audioDesc': 'Create sounds.',
+        'chat.sessionMode.short.audio': 'Audio',
+        'chat.sessionMode.summary.audio': 'Create sounds.',
         'chat.sessionMode.badge.agent': 'Chat',
         'chat.sessionMode.badge.image': 'Image',
         'chat.sessionMode.badge.video': 'Video',
@@ -91,8 +100,45 @@ vi.mock('@/components/ChatWorkspace', () => ({
   ),
 }));
 
+vi.mock('@/components/ChatView/InputArea', async () => {
+  const { useInputAreaContext } = await vi.importActual<
+    typeof import('@/components/ChatView/InputAreaContext')
+  >('@/components/ChatView/InputAreaContext');
+  return {
+    InputArea: (props: {
+      inputValue: string;
+      onInputChange: (value: string) => void;
+      onSend: () => void;
+      disabled?: boolean;
+      entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
+    }) => {
+      const { onRequestFiles } = useInputAreaContext();
+      return (
+        <div>
+          <input
+            placeholder="Type anything..."
+            value={props.inputValue}
+            disabled={props.disabled}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              props.onInputChange(value);
+              if (value.startsWith('@')) {
+                onRequestFiles?.(value.slice(1));
+              }
+            }}
+          />
+          <button type="button" disabled={props.disabled} onClick={() => props.onSend()}>
+            Send
+          </button>
+          <span data-testid="entry-page-menu">{props.entryPromptMenu ?? 'none'}</span>
+        </div>
+      );
+    },
+  };
+});
+
 describe('ConversationController entry state', () => {
-  it('shows entry content only when no tabs are open and opens a tab before showing entry prompts', () => {
+  it('shows entry content only when no tabs are open and opens asset prompts from the entry button', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
@@ -101,12 +147,6 @@ describe('ConversationController entry state', () => {
     expect(vscodeMocks.getTabState).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Generate Assets/ }));
-    expect(vscodeMocks.newConversation).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByPlaceholderText('Type anything...'), {
-      target: { value: 'make a rain scene' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
 
     act(() => {
@@ -122,6 +162,63 @@ describe('ConversationController entry state', () => {
 
     expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
     expect(screen.getByTestId('entry-menu').textContent).toBe('generate-assets');
+  });
+
+  it('opens a new chat tab from the start chat entry button', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Start Chat/ }));
+
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-new', title: 'New Chat', messages: [] },
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
+    expect(screen.getByTestId('entry-menu').textContent).toBe('none');
+    expect(screen.getByTestId('pending-send').textContent).toBe('none');
+    expect(screen.getByTestId('initial-input').textContent).toBe('none');
+  });
+
+  it('opens roleplay prompts from the entry button', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Roleplay/ }));
+
+    expect(vscodeMocks.newConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('', undefined, {
+      purpose: 'roleplay',
+    });
+    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
+    expect(screen.getByTestId('entry-page-menu').textContent).toBe('roleplay');
+  });
+
+  it('disables entry controls while the new tab is being activated', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Generate Assets/ }));
+
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /Generate Assets/ }).hasAttribute('disabled')).toBe(
+      true,
+    );
+    expect(screen.getByPlaceholderText('Type anything...').hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /Roleplay/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
   });
 
   it('starts a new tab and sends entry text in chat mode', () => {
@@ -175,15 +272,14 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('initial-input').textContent).toBe('@hero');
   });
 
-  it('starts a new tab with asset prompt and preserves entry text as initial input', () => {
+  it('starts a new tab with asset prompt and preserves existing entry text as initial input', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Generate Assets/ }));
     fireEvent.change(screen.getByPlaceholderText('Type anything...'), {
       target: { value: 'make a rain scene' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Assets/ }));
 
     expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
 

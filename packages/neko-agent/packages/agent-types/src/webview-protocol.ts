@@ -133,7 +133,8 @@ export interface SendMessageWebviewMessage {
 export interface SearchProjectFilesWebviewMessage {
   type: 'searchProjectFiles';
   filter: string;
-  conversationId: string;
+  conversationId?: string;
+  purpose?: 'roleplay';
 }
 
 export interface ConfirmToolWebviewMessage {
@@ -299,6 +300,11 @@ export interface ExitCharacterDialogueSessionWebviewMessage {
   sessionId: string;
 }
 
+export interface StartCharacterDialogueFromSlashWebviewMessage {
+  type: 'startCharacterDialogueFromSlash';
+  args?: string;
+}
+
 export interface ExitEmbodyCharacterSessionWebviewMessage {
   type: 'exitEmbodyCharacterSession';
   sessionId: string;
@@ -351,6 +357,7 @@ export type WebviewToExtensionMessage =
   | InvokeSlashCommandWebviewMessage
   | InvokeSkillWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
+  | StartCharacterDialogueFromSlashWebviewMessage
   | ExitCharacterDialogueSessionWebviewMessage
   | ExitEmbodyCharacterSessionWebviewMessage
   | SsoLoginWebviewMessage
@@ -408,8 +415,9 @@ export interface ProjectMentionExtra {
 
 export interface ProjectFilesWebviewMessage {
   type: 'projectFiles';
-  conversationId: string;
+  conversationId?: string;
   filter?: string;
+  purpose?: 'roleplay';
   files?: ProjectFileMentionInfo[];
   mentionExtras?: ProjectMentionExtra[];
 }
@@ -955,6 +963,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'invokeSlashCommand',
   'invokeSkill',
   'invokePluginSlashCommand',
+  'startCharacterDialogueFromSlash',
   'exitCharacterDialogueSession',
   'exitEmbodyCharacterSession',
   'ssoLogin',
@@ -1296,6 +1305,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeSkillMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
+    case 'startCharacterDialogueFromSlash':
+      return parseStartCharacterDialogueFromSlashMessage(raw);
     case 'exitCharacterDialogueSession':
       return parseExitCharacterDialogueSessionMessage(raw);
     case 'exitEmbodyCharacterSession':
@@ -1451,9 +1462,17 @@ function isAgentContextPayloadType(type: unknown): type is AgentContextPayload['
 function parseSearchProjectFilesMessage(
   raw: Record<string, unknown>,
 ): SearchProjectFilesWebviewMessage | null {
+  const purpose = optionalSearchProjectFilesPurpose(raw.purpose);
+  if (purpose === null) return null;
   const conversationId = requiredString(raw.conversationId);
-  if (!conversationId || typeof raw.filter !== 'string') return null;
-  return { type: 'searchProjectFiles', filter: raw.filter, conversationId };
+  if (typeof raw.filter !== 'string') return null;
+  if (!conversationId && purpose !== 'roleplay') return null;
+  return {
+    type: 'searchProjectFiles',
+    filter: raw.filter,
+    ...(conversationId ? { conversationId } : {}),
+    ...(purpose ? { purpose } : {}),
+  };
 }
 
 function parseConfirmToolMessage(raw: Record<string, unknown>): ConfirmToolWebviewMessage | null {
@@ -2248,6 +2267,17 @@ function parseInvokePluginSlashCommandMessage(
   };
 }
 
+function parseStartCharacterDialogueFromSlashMessage(
+  raw: Record<string, unknown>,
+): StartCharacterDialogueFromSlashWebviewMessage | null {
+  const args = optionalStringStrict(raw.args);
+  if (args === null) return null;
+  return {
+    type: 'startCharacterDialogueFromSlash',
+    ...(args !== undefined ? { args } : {}),
+  };
+}
+
 function parseExitCharacterDialogueSessionMessage(
   raw: Record<string, unknown>,
 ): ExitCharacterDialogueSessionWebviewMessage | null {
@@ -2673,6 +2703,11 @@ function optionalStringStrict(value: unknown): string | undefined | null {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function optionalSearchProjectFilesPurpose(value: unknown): 'roleplay' | undefined | null {
+  if (value === undefined) return undefined;
+  return value === 'roleplay' ? value : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

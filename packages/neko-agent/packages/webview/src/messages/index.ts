@@ -100,8 +100,17 @@ export const VSCodeMessages = {
    * Search for files in the project
    * @param filter - Search filter string
    */
-  searchProjectFiles: (filter: string, conversationId: string) => {
-    postWebviewMessage({ type: 'searchProjectFiles', filter, conversationId });
+  searchProjectFiles: (
+    filter: string,
+    conversationId: string | undefined,
+    options: { readonly purpose?: 'roleplay' } = {},
+  ) => {
+    postWebviewMessage({
+      type: 'searchProjectFiles',
+      filter,
+      ...(conversationId ? { conversationId } : {}),
+      ...(options.purpose ? { purpose: options.purpose } : {}),
+    });
   },
 
   /**
@@ -292,6 +301,13 @@ export const VSCodeMessages = {
 
   exitCharacterDialogueSession: (sessionId: string) => {
     postWebviewMessage({ type: 'exitCharacterDialogueSession', sessionId });
+  },
+
+  startCharacterDialogueFromSlash: (args?: string) => {
+    postWebviewMessage({
+      type: 'startCharacterDialogueFromSlash',
+      ...(args !== undefined ? { args } : {}),
+    });
   },
 
   // ==========================================================================

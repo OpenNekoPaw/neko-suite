@@ -155,13 +155,18 @@ function projectGenerationOptions(models: readonly ChatModelOption[]) {
 }
 
 function projectRoleplayItems(items: readonly MentionItem[]): MentionItem[] {
-  return items
-    .filter(
-      (item) =>
-        item.kind === 'character' ||
-        (item.kind === 'entity' && item.entityType?.toLowerCase() === 'character'),
-    )
-    .sort((a, b) => a.label.localeCompare(b.label));
+  return items.filter(isPlayableRoleplayItem).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function isPlayableRoleplayItem(item: MentionItem): boolean {
+  if (item.kind === 'character') return true;
+  if (item.kind !== 'entity' && item.kind !== 'asset') return false;
+  return isCharacterEntityType(item.entityType);
+}
+
+function isCharacterEntityType(entityType: string | undefined): boolean {
+  if (!entityType) return false;
+  return ['character', 'role', '角色'].includes(entityType.trim().toLowerCase());
 }
 
 function getRoleplayDescription(item: MentionItem): string | undefined {

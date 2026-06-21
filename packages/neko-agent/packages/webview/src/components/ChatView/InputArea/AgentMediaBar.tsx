@@ -19,7 +19,6 @@ import {
   type DropdownPlacement,
 } from './useDropdownDirection';
 import { getCategoryColor } from './ModelIcon';
-import { ModelDot } from './ModelIcon';
 import { MediaCategoryIcon } from './ComposerIcons';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -132,7 +131,6 @@ export function CategoryChip({ category, Icon, selectedId, models, onSelect }: C
               }`}
               role="menuitem"
             >
-              <ModelDot color={color} />
               <span className="agent-dropdown-item-label">{m.label}</span>
             </button>
           ))}

@@ -12,12 +12,12 @@ import {
 } from './useDropdownDirection';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useTranslation } from '@/i18n/I18nContext';
-import { ModelDot, getProviderColor } from './ModelIcon';
 
 interface ModelSelectorProps {
   selectedModel: string;
   models: ChatModelOption[];
   onSelect: (modelId: string) => void;
+  color?: string;
 }
 
 // Category labels and order
@@ -28,7 +28,7 @@ const CATEGORY_CONFIG: Record<ModelType, { labelKey: string; order: number }> = 
   audio: { labelKey: 'chat.categoryAudio', order: 4 },
 };
 
-export function ModelSelector({ selectedModel, models, onSelect }: ModelSelectorProps) {
+export function ModelSelector({ selectedModel, models, onSelect, color }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>({
@@ -96,10 +96,6 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
 
   const selectedModelObj =
     selectedModel === 'auto' ? null : models.find((m) => m.id === selectedModel);
-  const dotColor =
-    selectedModelObj && groupedModels.hasSelectableModels
-      ? getProviderColor(selectedModelObj.providerId)
-      : '#6B7280';
 
   return (
     <div className="relative" ref={menuRef}>
@@ -113,13 +109,13 @@ export function ModelSelector({ selectedModel, models, onSelect }: ModelSelector
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className="agent-control-chip"
+        style={color ? { color } : undefined}
         title={
           groupedModels.hasSelectableModels
             ? (selectedModelObj?.label ?? t('chat.autoMode'))
             : t('chat.noModelsAvailable')
         }
       >
-        <ModelDot color={dotColor} />
         <span className="agent-control-chip-text">{getSelectedLabel()}</span>
         <ChevronDownIcon className="w-3 h-3" />
       </button>
