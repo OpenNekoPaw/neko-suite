@@ -101,7 +101,7 @@ Neko Agent SHALL distinguish TOML syntax diagnostics from semantic configuration
 
 ### Requirement: Config authoring preserves existing provider source semantics
 
-The TOML authoring format SHALL preserve existing explicit-config, account-gateway, gateway, custom-gateway, local, and future direct provider semantics. Changing the file format SHALL NOT change account gateway priority rules, OAuth secret boundaries, model capability filtering, or fail-visible selected provider/model behavior.
+The TOML authoring format SHALL preserve existing explicit-config, account-gateway, gateway, local, and direct provider semantics. Changing the file format SHALL NOT change account gateway priority rules, OAuth secret boundaries, model capability filtering, or fail-visible selected provider/model behavior.
 
 #### Scenario: Explicit TOML AI config has priority
 

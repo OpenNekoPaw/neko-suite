@@ -6,7 +6,7 @@ This change defines the complete provider grouping up front, then implements a n
 
 ## What Changes
 
-- Introduce provider connection grouping for `gateway`, `custom-gateway`, `local`, and future `direct` providers.
+- Introduce provider connection grouping for `gateway`, `local`, and `direct` providers. Custom endpoints stay in the real connection path they use, with `supportLevel` / provider identity carrying the custom status.
 - Add protocol/support metadata so provider type can continue selecting adapters while UI/config can distinguish NewAPI gateways from local private models and future direct official APIs.
 - Make NewAPI gateway the MVP cloud/proxy path instead of defaulting to official direct vendor APIs.
 - Preserve local model configuration, including API-key-free local providers such as Ollama.

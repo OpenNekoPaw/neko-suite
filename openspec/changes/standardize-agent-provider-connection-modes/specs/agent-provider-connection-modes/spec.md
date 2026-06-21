@@ -2,7 +2,7 @@
 
 ### Requirement: Provider connection modes are explicit
 
-Agent provider configuration SHALL distinguish the connection path from adapter selection. A provider MAY still use its provider type for adapter lookup, but it SHALL be able to declare whether it is a gateway, custom gateway, local runtime, or future direct official API.
+Agent provider configuration SHALL distinguish the connection path from adapter selection. A provider MAY still use its provider type for adapter lookup, but it SHALL declare whether it is a gateway, local runtime, or direct official/API-compatible path. Custom endpoint status SHALL be represented by provider identity, protocol profile, and support level rather than by a separate connection mode.
 
 #### Scenario: Gateway provider is classified
 
@@ -24,10 +24,10 @@ The Agent MVP SHALL expose NewAPI gateway configuration as the supported proxy/c
 - **THEN** its built-in providers include a NewAPI gateway and a local provider
 - **THEN** official direct vendor providers are not the recommended default provider path
 
-#### Scenario: Custom NewAPI endpoint is configurable
+#### Scenario: Custom NewAPI endpoint remains gateway-scoped
 
 - **WHEN** a user wants to use a third-party or self-hosted NewAPI endpoint
-- **THEN** the configuration can represent that provider as a custom gateway without changing adapter code
+- **THEN** the configuration represents that provider as `connectionKind = "gateway"` with a NewAPI protocol profile and custom support metadata without changing adapter code
 
 ### Requirement: Local providers do not require API keys
 

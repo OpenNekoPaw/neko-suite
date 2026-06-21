@@ -2,7 +2,7 @@
 
 Neko Agent currently treats `~/.neko/config.json` and workspace `.neko/config.json` as the shared user/workspace configuration files. The shared Layer 0 reader in `@neko/shared` parses JSON directly into `UnifiedConfig`, while Agent Platform converts that object into provider/model maps, Webview-safe projections, MCP server state, scalar settings, and conversation precondition diagnostics.
 
-That architecture is sound after parsing, but the authoring format is not friendly enough for the next phase of Agent provider configuration. Users need to hand edit local, custom gateway, future direct, and model capability records. JSON makes this error-prone because a single missing brace, bracket, comma, or quote invalidates the whole file and offers no comments. TOML reduces the most common hand-editing mistakes, supports comments, and keeps repeated provider/model records readable through `[[providers]]` and `[[models]]`.
+That architecture is sound after parsing, but the authoring format is not friendly enough for the next phase of Agent provider configuration. Users need to hand edit local providers, custom endpoints, direct providers, and model capability records. JSON makes this error-prone because a single missing brace, bracket, comma, or quote invalidates the whole file and offers no comments. TOML reduces the most common hand-editing mistakes, supports comments, and keeps repeated provider/model records readable through `[[providers]]` and `[[models]]`.
 
 This is a prelaunch breaking migration. The canonical runtime contract remains `UnifiedConfig`; the canonical user-authored syntax changes to TOML.
 

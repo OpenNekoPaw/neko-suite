@@ -125,7 +125,7 @@ Agent Webview model projections SHALL keep provider source and model purpose as 
 
 - **WHEN** both account gateway models and user-configured provider models are available
 - **THEN** user-configured provider groups MUST appear after the Neko official source group
-- **THEN** each user-configured provider group MUST preserve provider identity and connection metadata such as gateway, custom gateway, local, or direct when available
+- **THEN** each user-configured provider group MUST preserve provider identity and connection metadata such as gateway, local, or direct when available
 
 #### Scenario: No OAuth shows only configured provider groups
 

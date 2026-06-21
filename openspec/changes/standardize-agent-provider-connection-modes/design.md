@@ -16,7 +16,7 @@ Five-layer analysis:
 
 **Goals:**
 
-- Distinguish direct, local, official gateway, and custom gateway provider configuration.
+- Distinguish direct, local, and gateway provider connection paths. Custom endpoints are represented by provider identity, protocol profile, and support level, not by a separate connection mode.
 - Make NewAPI gateway the MVP proxy/cloud path.
 - Preserve local LLM configuration, especially API-key-free Ollama.
 - Keep generation model defaults compatible with the same gateway contract while avoiding claims that every upstream generation provider is verified.
@@ -37,7 +37,7 @@ Five-layer analysis:
 
    `ProviderType` still selects adapters and keeps existing configs readable. New optional fields describe configuration grouping:
 
-   - `connectionKind`: `gateway`, `custom-gateway`, `local`, or future `direct`.
+   - `connectionKind`: `gateway`, `local`, or `direct`.
    - `protocolProfile`: `newapi`, `ollama`, `openai-chat`, `openai-responses`, `anthropic`, `google`, or other verified profiles.
    - `supportLevel`: `verified`, `compatible`, `experimental`, or `custom`.
    - `requiresApiKey`: explicit credential requirement for provider projections and selection.
@@ -49,7 +49,7 @@ Five-layer analysis:
    Defaults move away from official direct Anthropic/OpenAI/Google/DeepSeek providers. The MVP includes:
 
    - `neko-gateway`: built-in NewAPI gateway profile.
-   - `custom-newapi`: disabled custom NewAPI endpoint profile.
+   - `custom-newapi`: disabled custom NewAPI endpoint profile using `connectionKind: "gateway"` and `supportLevel: "custom"`.
    - `ollama-local`: enabled local Ollama profile with `requiresApiKey: false`.
 
    Alternative considered: keep official direct providers enabled and add NewAPI beside them. That preserves familiar vendor labels but keeps the current ambiguity and creates false confidence around plan-specific direct APIs.
@@ -77,7 +77,7 @@ Five-layer analysis:
 ## Migration Plan
 
 - Update shared provider config types with optional grouping fields.
-- Update default Agent config to use gateway/local/custom-gateway defaults and canonical default media model IDs.
+- Update default Agent config to use gateway/local defaults and canonical default media model IDs.
 - Keep existing adapter-selection behavior through `type`; add OneAPI-compatible LLM registry coverage if missing.
 - Update provider configured/selection logic so `requiresApiKey: false` providers count as configured.
 - Add focused tests for the new defaults and local no-key behavior.

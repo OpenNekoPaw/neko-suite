@@ -96,19 +96,18 @@ packages/
 
 Neko Agent 现在有两条 AI 配置路径：
 
-1. **本地用户配置文件**：`~/.neko/config.toml` / 环境凭据 / 运行时导入凭据，支持 `direct`、`gateway`、`custom-gateway`、`local` 分组。只要配置中出现 AI provider、model、默认 provider/model 或显式聊天模型选择，就视为显式 AI 配置，并拥有最高优先级。
+1. **本地用户配置文件**：`~/.neko/config.toml` / 环境凭据 / 运行时导入凭据，支持 `direct`、`gateway`、`local` 分组。只要配置中出现 AI provider、model、默认 provider/model 或显式聊天模型选择，就视为显式 AI 配置，并拥有最高优先级。
 2. **OAuth Neko 官方账号网关**：用户登录后由 `neko-auth` 拉取 Neko 官方 AI catalog、entitlement、usage 和默认模型，Agent Extension Host 缓存为运行时 `neko-account-gateway` provider。该路径不写入用户配置文件，也不向 Webview、日志、prompt 或工具 payload 暴露 OAuth token、gateway token、API key 或内部授权头。
 
 本地配置文件可以只包含 MCP、auth、UI 等非 AI 设置；这种情况下不会阻断 OAuth 官方账号网关。若本地配置显式选择了 AI provider/model，但 provider 缺失、模型不属于 provider、provider 未配置或模型无能力，则对话直接返回可见错误，不会 fallback 到官方账号网关、首个模型或硬编码默认值。
 
-Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter 路由，`connectionKind` 用于区分中转、本地、用户自定义网关和未来官方直连。
+Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter 路由，`connectionKind` 只用于区分中转、本地和官方直连路径。自建或第三方 endpoint 仍按实际路径配置为 `gateway` 或 `direct`，不会被自动转换到 NewAPI 网关。
 
 | 连接模式 | MVP 状态 | 配置方式 | 说明 |
 |----------|----------|----------|------|
 | `gateway` | MVP | 用户配置 `neko-gateway` + `newapi`，或 OAuth `neko-account-gateway` | NewAPI 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
-| `custom-gateway` | MVP | `custom-newapi` + `newapi` | 用户自建或第三方 NewAPI endpoint。 |
 | `local` | MVP | `ollama-local` + `ollama` | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。 |
-| `direct` | Roadmap | 官方厂商 API | Gemini、Grok、Claude、GPT、DeepSeek、GLM 等官方直连需逐项验证套餐、参数和接口差异后再进入默认支持。 |
+| `direct` | 显式配置支持 | 官方厂商 API | DeepSeek、GPT、Claude、Gemini、GLM 等官方直连按显式 `type` / `protocolProfile` 调用。默认预设和 provider-specific 参数仍需逐项验证后扩展。 |
 
 **LLM 视觉理解**：不是所有 LLM 的强需求。文本聊天只要求 `chat` 能力；图像理解/多模态工作流必须选择声明了 `vision` 能力的模型。
 
@@ -122,7 +121,7 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 **模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。
 
-**Composer 级 Agent LLM 配置**：Agent 输入框中的模型、推理深度、回复详略和创造性 preset 只作用于当前会话/turn，不会自动写回用户 TOML。普通 Agent turn 当前只使用 `primary` 模型槽位；`fast`、`deep`、`summarizer`、`vision` 是预留合同，未被当前 runtime 支持时会返回可见诊断。自定义 provider 缺少能力元数据时默认采用保守控制，详见 [模型默认值配置指南](./docs/media-model-configuration.md#agent-composer-llm-配置)。
+**Composer 级 Agent 模型配置**：Agent 输入框中的模型、推理深度、回复详略和创造性 preset 只作用于当前会话/turn，不会自动写回用户 TOML。Agent 模式右侧先切换要配置的模型类型（LLM/图片/视频/音频，只有已配置模型的类型才展示），再显示该类型的模型选择和参数；图片、视频、音频直生成模式只显示本类型模型和参数。普通 Agent turn 当前只使用 `primary` LLM 槽位；`fast`、`deep`、`summarizer`、`vision` 是预留合同，未被当前 runtime 支持时会返回可见诊断。自定义 provider 缺少能力元数据时默认采用保守控制，详见 [模型默认值配置指南](./docs/media-model-configuration.md#agent-composer-llm-配置)。
 
 **模型默认值**：在 `~/.neko/config.toml` 中通过 `default_models.<type>` 为 LLM 和生成模型配置默认模型：
 

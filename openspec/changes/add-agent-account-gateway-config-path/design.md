@@ -1,13 +1,13 @@
 ## Context
 
-Neko Agent currently has one real AI provider source: the user-owned config file path. The recent provider connection mode work added explicit provider grouping (`gateway`, `custom-gateway`, `local`, future `direct`), NewAPI gateway defaults, local Ollama support without API keys, canonical media model defaults, and fail-visible conversation selection. OAuth exists through `neko-auth`, but it only projects login/session state into Agent Webviews; `getCloudToken` remains a stub and no AI catalog or entitlement snapshot is injected into Agent provider/model resolution.
+Neko Agent currently has one real AI provider source: the user-owned config file path. The recent provider connection mode work added explicit provider grouping (`gateway`, `local`, `direct`), NewAPI gateway defaults, local Ollama support without API keys, canonical media model defaults, and fail-visible conversation selection. OAuth exists through `neko-auth`, but it only projects login/session state into Agent Webviews; `getCloudToken` remains a stub and no AI catalog or entitlement snapshot is injected into Agent provider/model resolution.
 
 The final product path needs two AI API configuration sources:
 
 ```text
 Explicit local user configuration
   ~/.neko/config.toml / env / runtime imported credentials
-  supports direct, gateway, custom-gateway, local
+  supports direct, gateway, local
   highest priority when it explicitly selects AI provider/model
 
 OAuth Neko official account gateway
@@ -38,7 +38,7 @@ Five-layer analysis:
 - Preserve current fail-visible behavior for missing, invalid, disabled, unauthorized, or mismatched provider/model selection.
 - Support LLM and generation model records in the account catalog as capability-scoped models, without claiming broad vendor-direct support.
 - Project Webview model lists by source/provider while keeping LLM models and domain models such as image, video, audio, and music distinct.
-- Keep user config capable of representing `direct`, `gateway`, `custom-gateway`, and `local` providers for roadmap compatibility.
+- Keep user config capable of representing `direct`, `gateway`, and `local` providers for roadmap compatibility.
 
 **Non-Goals:**
 
@@ -218,7 +218,7 @@ interface ModelSourceGroup {
   source: 'account-gateway' | 'explicit-config';
   providerId: string;
   providerLabel: string;
-  connectionKind?: 'gateway' | 'custom-gateway' | 'local' | 'direct';
+  connectionKind?: 'gateway' | 'local' | 'direct';
   priority: number;
   modelsByType: Partial<Record<ModelType, ChatModelOption[]>>;
   diagnostics?: AssistantConfigDiagnostic[];

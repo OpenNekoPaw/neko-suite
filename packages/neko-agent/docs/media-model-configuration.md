@@ -4,7 +4,7 @@
 
 Neko Agent 按模型 `type` 管理默认模型：`llm`、`image`、`video`、`audio`。音乐生成模型不再是顶层 `music` 类型，而是 `type = "audio"`，并通过 `capabilities = ["text_to_music"]` 表达用途。
 
-当前 MVP 优先支持用户本地 TOML 配置的 NewAPI gateway / local LLM，以及 OAuth 登录后由 Neko 官方 account catalog 注入的运行时模型列表。官方直连、更多中转协议和本地生成模型运行时属于 Roadmap。
+当前 MVP 优先支持用户本地 TOML 配置的 NewAPI gateway / local LLM，以及 OAuth 登录后由 Neko 官方 account catalog 注入的运行时模型列表。官方 direct provider 可以通过显式 `type` / `protocol_profile` 配置；Neko 不会根据模型名或 provider 名把 direct 请求转换到 gateway。本地生成模型运行时和更多中转协议属于 Roadmap。
 
 ## 配置位置
 
@@ -156,13 +156,13 @@ Agent presets 是创作意图，不是 provider 原始参数：
 | Verbosity `brief/standard/detailed` | 控制回复详略 | 仅在模型/provider 声明支持 verbosity 时映射 |
 | Creativity `stable/creative/wild` | 控制采样倾向 | 映射到 `temperature` / `topP`，前提是模型支持采样参数 |
 
-自定义 provider 如果缺少能力元数据，默认只开放保守通用能力，不假设支持 reasoning、verbosity、fast service tier 或 provider-specific thinking。要开启高级 LLM 控件，在 provider 或 model 的 `options.llmCapabilities` 中声明能力：
+自定义 provider 如果缺少能力元数据，默认只开放保守通用能力，不假设支持 reasoning、verbosity、fast service tier 或 provider-specific thinking。要开启高级 LLM 控件，在 provider 或 model 的 `options.llmCapabilities` 中声明能力；这些能力只决定 UI 展示和参数投影，不改变 provider 的连接模式。
 
 ```toml
 [[models]]
 id = "custom-gpt-reasoning"
 name = "gpt-reasoning"
-provider_id = "custom-newapi"
+provider_id = "neko-gateway"
 type = "llm"
 capabilities = ["chat", "streaming", "reasoning", "verbosity"]
 enabled = true

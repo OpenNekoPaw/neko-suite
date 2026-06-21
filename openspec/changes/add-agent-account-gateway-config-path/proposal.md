@@ -7,7 +7,7 @@ Neko Agent now has a clear local configuration contract for NewAPI gateways and 
 - Add an OAuth-backed Neko account gateway path that fetches official AI catalog, model availability, entitlement, and usage projection from Neko official APIs.
 - Represent the OAuth path as a runtime-only `neko-account-gateway` provider/model snapshot owned by the Agent Extension Host and Platform layers.
 - Preserve explicit local user configuration as the highest-priority AI provider source when `~/.neko/config.toml`, environment credentials, or runtime config explicitly select an AI provider/model.
-- Keep user-owned config files able to represent `direct`, `gateway`, `custom-gateway`, and `local` providers, while treating official direct providers as roadmap-scoped until each API is verified.
+- Keep user-owned config files able to represent `direct`, `gateway`, and `local` providers, while treating unverified official direct provider presets as roadmap-scoped until each API is verified.
 - Keep OAuth-derived tokens, gateway credentials, and internal routing details out of `~/.neko/config.toml`, workspace files, Webview state, logs, and prompt/tool payloads.
 - Reuse cached account catalog snapshots for new Agent sessions and refresh on account/session changes, TTL expiry, manual refresh, or provider authorization failures instead of blocking every new conversation on a catalog request.
 - Project Webview model lists as source-grouped and capability-scoped data: Neko official account gateway models first after OAuth catalog success, then models from user config providers, with LLM and domain models kept distinct.
