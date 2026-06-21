@@ -1204,14 +1204,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.agent-control-chip-prefix {
-  flex: 0 0 auto;
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-  font-weight: 600;
-  opacity: 0.72;
-}
-
 .agent-control-chip-muted {
   opacity: 0.62;
 }
@@ -1328,17 +1320,6 @@ body {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 2px;
-}
-
-.agent-inline-config-label {
-  flex: 0 0 auto;
-  padding: 0 4px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 16px;
-  opacity: 0.74;
-  white-space: nowrap;
 }
 
 .agent-dropdown-menu {
