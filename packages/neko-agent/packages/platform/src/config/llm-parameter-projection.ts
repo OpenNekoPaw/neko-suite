@@ -7,6 +7,7 @@ import type {
   AgentTextVerbosity,
   AgentVerbosityPreset,
 } from '@neko-agent/types';
+import type { ChatModelOption } from '@neko/shared';
 import type { ChatOptions } from '../types/adapter';
 import type { Model, Provider } from '../types/provider';
 
@@ -57,7 +58,7 @@ export interface AgentPresetIntent {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxOutputTokens?: number;
-  readonly serviceTier?: 'fast';
+  readonly serviceTier?: 'auto' | 'default' | 'fast' | 'flex' | 'priority';
 }
 
 export interface LlmParameterProjectionInput {
@@ -84,6 +85,8 @@ export interface LlmParameterProjection {
   readonly diagnostics: readonly LlmParameterDiagnostic[];
 }
 
+export type LlmParameterControlAvailability = NonNullable<ChatModelOption['llmParameterControls']>;
+
 const ALL_REASONING_EFFORT_VALUES: readonly AgentReasoningEffort[] = [
   'none',
   'minimal',
@@ -94,7 +97,15 @@ const ALL_REASONING_EFFORT_VALUES: readonly AgentReasoningEffort[] = [
 ];
 
 const DEFAULT_OPENAI_REASONING_EFFORT_VALUES: readonly AgentReasoningEffort[] = [
+  'none',
   'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+];
+
+const DEFAULT_ANTHROPIC_REASONING_EFFORT_VALUES: readonly AgentReasoningEffort[] = [
   'low',
   'medium',
   'high',
@@ -156,7 +167,9 @@ export function projectLlmModelCapabilities(
             optionCapabilities.reasoningEffortValues ??
             (providerFamily === 'openai'
               ? DEFAULT_OPENAI_REASONING_EFFORT_VALUES
-              : ALL_REASONING_EFFORT_VALUES),
+              : providerFamily === 'anthropic'
+                ? DEFAULT_ANTHROPIC_REASONING_EFFORT_VALUES
+                : ALL_REASONING_EFFORT_VALUES),
         }
       : {}),
     supportsThinkingBudget,
@@ -165,6 +178,18 @@ export function projectLlmModelCapabilities(
     supportsTopP,
     supportsMaxOutputTokens,
     supportsFastTier,
+  };
+}
+
+export function projectLlmParameterControls(
+  input: LlmCapabilityProjectionInput,
+): LlmParameterControlAvailability {
+  const capabilities = projectLlmModelCapabilities(input);
+  return {
+    reasoning: capabilities.supportsReasoningEffort || capabilities.supportsThinkingBudget,
+    verbosity: capabilities.supportsVerbosity,
+    creativity: capabilities.supportsTemperature || capabilities.supportsTopP,
+    maxOutputTokens: capabilities.supportsMaxOutputTokens,
   };
 }
 
@@ -188,6 +213,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
     provider: input.provider,
   });
   const presetIntent = projectAgentPresetIntent(input.llmConfig);
+  const hasExplicitThinkingBudget = input.llmConfig?.advanced?.thinkingBudget !== undefined;
   const diagnostics: LlmParameterDiagnostic[] = [];
   const chatOptions: Pick<ChatOptions, 'temperature' | 'topP' | 'maxTokens' | 'thinkingBudget'> =
     {};
@@ -198,6 +224,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
     capabilities,
     diagnostics,
     chatOptions,
+    diagnoseUnsupported: !hasReasoningLikeParameter(presetIntent),
   });
 
   switch (providerFamily) {
@@ -207,6 +234,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
         capabilities,
         diagnostics,
         providerOptions,
+        hasExplicitThinkingBudget,
       });
       break;
     case 'anthropic':
@@ -217,6 +245,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
         chatOptions,
         providerOptions,
         supportsBeta: input.model.supportsBeta ?? input.provider.supportsBeta ?? true,
+        hasExplicitThinkingBudget,
       });
       break;
     case 'generic-openai':
@@ -224,6 +253,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
         presetIntent,
         capabilities,
         diagnostics,
+        hasExplicitThinkingBudget,
       });
       break;
     case 'local-ollama':
@@ -231,6 +261,7 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
         presetIntent,
         capabilities,
         diagnostics,
+        hasExplicitThinkingBudget,
       });
       break;
   }
@@ -269,13 +300,20 @@ function applyCommonOptions(input: {
   readonly capabilities: LlmModelCapabilities;
   readonly diagnostics: LlmParameterDiagnostic[];
   readonly chatOptions: Pick<ChatOptions, 'temperature' | 'topP' | 'maxTokens' | 'thinkingBudget'>;
+  readonly diagnoseUnsupported?: boolean;
 }): void {
-  const { presetIntent, capabilities, diagnostics, chatOptions } = input;
+  const {
+    presetIntent,
+    capabilities,
+    diagnostics,
+    chatOptions,
+    diagnoseUnsupported = true,
+  } = input;
 
   if (presetIntent.temperature !== undefined) {
     if (capabilities.supportsTemperature) {
       chatOptions.temperature = presetIntent.temperature;
-    } else {
+    } else if (diagnoseUnsupported) {
       diagnostics.push(createDiagnostic('unsupported-temperature', 'temperature'));
     }
   }
@@ -283,7 +321,7 @@ function applyCommonOptions(input: {
   if (presetIntent.topP !== undefined) {
     if (capabilities.supportsTopP) {
       chatOptions.topP = presetIntent.topP;
-    } else {
+    } else if (diagnoseUnsupported) {
       diagnostics.push(createDiagnostic('unsupported-top-p', 'topP'));
     }
   }
@@ -291,7 +329,7 @@ function applyCommonOptions(input: {
   if (presetIntent.maxOutputTokens !== undefined) {
     if (capabilities.supportsMaxOutputTokens) {
       chatOptions.maxTokens = presetIntent.maxOutputTokens;
-    } else {
+    } else if (diagnoseUnsupported) {
       diagnostics.push(createDiagnostic('unsupported-max-output-tokens', 'maxOutputTokens'));
     }
   }
@@ -302,8 +340,10 @@ function applyOpenAIOptions(input: {
   readonly capabilities: LlmModelCapabilities;
   readonly diagnostics: LlmParameterDiagnostic[];
   readonly providerOptions: Record<string, unknown>;
+  readonly hasExplicitThinkingBudget: boolean;
 }): void {
-  const { presetIntent, capabilities, diagnostics, providerOptions } = input;
+  const { presetIntent, capabilities, diagnostics, providerOptions, hasExplicitThinkingBudget } =
+    input;
 
   if (presetIntent.reasoningEffort !== undefined) {
     if (
@@ -312,7 +352,7 @@ function applyOpenAIOptions(input: {
     ) {
       providerOptions.openai = {
         ...(isRecord(providerOptions.openai) ? providerOptions.openai : {}),
-        reasoning: { effort: presetIntent.reasoningEffort },
+        reasoningEffort: presetIntent.reasoningEffort,
       };
     } else {
       diagnostics.push(createDiagnostic('unsupported-reasoning-effort', 'reasoningEffort'));
@@ -323,25 +363,25 @@ function applyOpenAIOptions(input: {
     if (capabilities.supportsVerbosity) {
       providerOptions.openai = {
         ...(isRecord(providerOptions.openai) ? providerOptions.openai : {}),
-        text: { verbosity: presetIntent.verbosity },
+        textVerbosity: presetIntent.verbosity,
       };
     } else {
       diagnostics.push(createDiagnostic('unsupported-verbosity', 'verbosity'));
     }
   }
 
-  if (presetIntent.serviceTier === 'fast') {
+  if (presetIntent.serviceTier !== undefined) {
     if (capabilities.supportsFastTier) {
       providerOptions.openai = {
         ...(isRecord(providerOptions.openai) ? providerOptions.openai : {}),
-        serviceTier: 'fast',
+        serviceTier: mapOpenAIServiceTier(presetIntent.serviceTier),
       };
     } else {
       diagnostics.push(createDiagnostic('unsupported-fast-tier', 'serviceTier'));
     }
   }
 
-  if (presetIntent.thinkingBudget !== undefined) {
+  if (presetIntent.thinkingBudget !== undefined && hasExplicitThinkingBudget) {
     diagnostics.push(createDiagnostic('unsupported-thinking-budget', 'thinkingBudget'));
   }
 }
@@ -353,9 +393,17 @@ function applyAnthropicOptions(input: {
   readonly chatOptions: Pick<ChatOptions, 'temperature' | 'topP' | 'maxTokens' | 'thinkingBudget'>;
   readonly providerOptions: Record<string, unknown>;
   readonly supportsBeta: boolean;
+  readonly hasExplicitThinkingBudget: boolean;
 }): void {
-  const { presetIntent, capabilities, diagnostics, chatOptions, providerOptions, supportsBeta } =
-    input;
+  const {
+    presetIntent,
+    capabilities,
+    diagnostics,
+    chatOptions,
+    providerOptions,
+    supportsBeta,
+    hasExplicitThinkingBudget,
+  } = input;
 
   if (presetIntent.reasoningEffort !== undefined) {
     if (capabilities.supportsThinkingBudget) {
@@ -368,17 +416,21 @@ function applyAnthropicOptions(input: {
           budgetTokens: chatOptions.thinkingBudget,
         },
       };
-    } else if (capabilities.supportsReasoningEffort) {
+    } else if (
+      capabilities.supportsReasoningEffort &&
+      isAnthropicEffortValue(presetIntent.reasoningEffort) &&
+      effortIsSupported(presetIntent.reasoningEffort, capabilities)
+    ) {
       providerOptions.anthropic = {
         ...(isRecord(providerOptions.anthropic) ? providerOptions.anthropic : {}),
-        thinking: { effort: presetIntent.reasoningEffort },
+        effort: mapAnthropicEffort(presetIntent.reasoningEffort),
       };
     } else {
       diagnostics.push(createDiagnostic('unsupported-reasoning-effort', 'reasoningEffort'));
     }
   }
 
-  if (presetIntent.thinkingBudget !== undefined) {
+  if (presetIntent.thinkingBudget !== undefined && hasExplicitThinkingBudget) {
     if (capabilities.supportsThinkingBudget) {
       chatOptions.thinkingBudget = presetIntent.thinkingBudget;
       providerOptions.anthropic = {
@@ -419,13 +471,14 @@ function applyGenericOpenAIOptions(input: {
   readonly presetIntent: AgentPresetIntent;
   readonly capabilities: LlmModelCapabilities;
   readonly diagnostics: LlmParameterDiagnostic[];
+  readonly hasExplicitThinkingBudget: boolean;
 }): void {
-  const { presetIntent, capabilities, diagnostics } = input;
+  const { presetIntent, capabilities, diagnostics, hasExplicitThinkingBudget } = input;
 
   if (presetIntent.reasoningEffort !== undefined && !capabilities.supportsReasoningEffort) {
     diagnostics.push(createDiagnostic('unsupported-reasoning-effort', 'reasoningEffort'));
   }
-  if (presetIntent.thinkingBudget !== undefined) {
+  if (presetIntent.thinkingBudget !== undefined && hasExplicitThinkingBudget) {
     diagnostics.push(createDiagnostic('unsupported-thinking-budget', 'thinkingBudget'));
   }
   if (presetIntent.verbosity !== undefined && !capabilities.supportsVerbosity) {
@@ -440,13 +493,18 @@ function applyLocalOllamaOptions(input: {
   readonly presetIntent: AgentPresetIntent;
   readonly capabilities: LlmModelCapabilities;
   readonly diagnostics: LlmParameterDiagnostic[];
+  readonly hasExplicitThinkingBudget: boolean;
 }): void {
-  const { presetIntent, capabilities, diagnostics } = input;
+  const { presetIntent, capabilities, diagnostics, hasExplicitThinkingBudget } = input;
 
   if (presetIntent.reasoningEffort !== undefined && !capabilities.supportsReasoningEffort) {
     diagnostics.push(createDiagnostic('unsupported-reasoning-effort', 'reasoningEffort'));
   }
-  if (presetIntent.thinkingBudget !== undefined && !capabilities.supportsThinkingBudget) {
+  if (
+    presetIntent.thinkingBudget !== undefined &&
+    hasExplicitThinkingBudget &&
+    !capabilities.supportsThinkingBudget
+  ) {
     diagnostics.push(createDiagnostic('unsupported-thinking-budget', 'thinkingBudget'));
   }
   if (presetIntent.verbosity !== undefined) {
@@ -500,8 +558,6 @@ function mapAdvancedParamsToIntent(
   advanced: AgentLlmAdvancedParams | undefined,
 ): AgentPresetIntent {
   if (!advanced) return {};
-  const serviceTier: AgentPresetIntent['serviceTier'] =
-    advanced.serviceTier === 'fast' ? 'fast' : undefined;
   return removeUndefinedValues({
     temperature: advanced.temperature,
     topP: advanced.topP,
@@ -509,8 +565,30 @@ function mapAdvancedParamsToIntent(
     reasoningEffort: advanced.reasoningEffort,
     thinkingBudget: advanced.thinkingBudget,
     verbosity: advanced.verbosity,
-    serviceTier,
+    serviceTier: advanced.serviceTier,
   });
+}
+
+function mapOpenAIServiceTier(
+  serviceTier: NonNullable<AgentPresetIntent['serviceTier']>,
+): 'auto' | 'default' | 'flex' | 'priority' {
+  return serviceTier === 'fast' ? 'priority' : serviceTier;
+}
+
+function mapAnthropicEffort(
+  effort: Extract<AgentReasoningEffort, 'low' | 'medium' | 'high' | 'xhigh'>,
+): 'low' | 'medium' | 'high' | 'max' {
+  return effort === 'xhigh' ? 'max' : effort;
+}
+
+function isAnthropicEffortValue(
+  effort: AgentReasoningEffort,
+): effort is Extract<AgentReasoningEffort, 'low' | 'medium' | 'high' | 'xhigh'> {
+  return effort === 'low' || effort === 'medium' || effort === 'high' || effort === 'xhigh';
+}
+
+function hasReasoningLikeParameter(intent: AgentPresetIntent): boolean {
+  return intent.reasoningEffort !== undefined || intent.thinkingBudget !== undefined;
 }
 
 function thinkingBudgetForEffort(effort: AgentReasoningEffort): number {

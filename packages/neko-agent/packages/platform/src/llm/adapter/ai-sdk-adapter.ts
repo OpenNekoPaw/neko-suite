@@ -328,11 +328,11 @@ export abstract class AISdkAdapter implements Adapter {
    * @param _model Model configuration (for model-level overrides)
    */
   protected getProviderOptions(
-    _options: ChatOptions,
+    options: ChatOptions,
     _provider: Provider,
     _model: Model,
   ): Record<string, unknown> {
-    return {};
+    return options.providerOptions ? { providerOptions: options.providerOptions } : {};
   }
 
   // ===========================================================================

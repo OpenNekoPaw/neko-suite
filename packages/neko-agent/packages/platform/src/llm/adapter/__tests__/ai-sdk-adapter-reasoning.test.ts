@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AISdkAdapter } from '../ai-sdk-adapter';
+import { OpenAIAdapter } from '../openai-adapter';
 import type { LanguageModel } from 'ai';
 import type { Model, Provider } from '../../../types/provider';
 import type { ChatMessage, ChatOptions } from '../../../types/adapter';
@@ -18,6 +19,23 @@ const loggerMock = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
 }));
+
+const openAIProviderMock = vi.hoisted(() => {
+  const languageModel = {
+    modelId: 'openai-test-model',
+    provider: 'openai',
+    specificationVersion: 'v1',
+  };
+  return {
+    languageModel,
+    chat: vi.fn(() => languageModel),
+    embedding: vi.fn(() => languageModel),
+    createOpenAI: vi.fn(() => ({
+      chat: openAIProviderMock.chat,
+      embedding: openAIProviderMock.embedding,
+    })),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Mock the `ai` module
@@ -40,6 +58,12 @@ vi.mock('ai', () => ({
     })(),
   }),
   jsonSchema: vi.fn((s: unknown) => s),
+  embed: vi.fn(),
+  embedMany: vi.fn(),
+}));
+
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: openAIProviderMock.createOpenAI,
 }));
 
 // ---------------------------------------------------------------------------
@@ -158,6 +182,20 @@ describe('AISdkAdapter reasoning model handling', () => {
     expect(reasoningArgs.maxOutputTokens).toBe(2048);
   });
 
+  it('chat() forwards projected providerOptions to AI SDK requests', async () => {
+    const { generateText } = await import('ai');
+    const providerOptions = {
+      openai: {
+        reasoningEffort: 'low',
+        textVerbosity: 'high',
+      },
+    };
+
+    await adapter.chat(messages, { providerOptions }, makeModel(), makeProvider());
+
+    expect(vi.mocked(generateText).mock.calls[0]![0].providerOptions).toEqual(providerOptions);
+  });
+
   // ---- chatStream() -------------------------------------------------------
 
   it('chatStream() passes temperature/topP for non-reasoning model', async () => {
@@ -243,6 +281,78 @@ describe('AISdkAdapter reasoning model handling', () => {
 
     const callArgs = vi.mocked(streamText).mock.calls[0]![0];
     expect(callArgs.maxOutputTokens).toBe(4096);
+  });
+
+  it('chatStream() forwards projected providerOptions to AI SDK requests', async () => {
+    const { streamText } = await import('ai');
+    const providerOptions = {
+      anthropic: {
+        thinking: { type: 'enabled', budgetTokens: 4096 },
+      },
+    };
+
+    vi.mocked(streamText).mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: 'text-delta', text: 'ok' };
+        yield {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 5 },
+        };
+      })(),
+    } as unknown as ReturnType<typeof streamText>);
+
+    const stream = adapter.chatStream(messages, { providerOptions }, makeModel(), makeProvider());
+    for await (const _ of stream) {
+      /* consume */
+    }
+
+    expect(vi.mocked(streamText).mock.calls[0]![0].providerOptions).toEqual(providerOptions);
+  });
+});
+
+describe('OpenAIAdapter provider options', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('merges projected OpenAI options with strictJsonSchema without moving responseFormat', async () => {
+    const { generateText } = await import('ai');
+    const adapter = new OpenAIAdapter();
+    const responseFormat = { type: 'json_object' as const };
+
+    await adapter.chat(
+      messages,
+      {
+        responseFormat,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+            textVerbosity: 'high',
+            serviceTier: 'priority',
+          },
+          neko: {
+            requestKind: 'agent',
+          },
+        },
+      },
+      makeModel({ providerId: 'openai', name: 'gpt-5' }),
+      { ...makeProvider(), id: 'openai', type: 'openai' },
+    );
+
+    const callArgs = vi.mocked(generateText).mock.calls[0]![0];
+    expect(callArgs.providerOptions).toEqual({
+      openai: {
+        reasoningEffort: 'low',
+        textVerbosity: 'high',
+        serviceTier: 'priority',
+        strictJsonSchema: false,
+      },
+      neko: {
+        requestKind: 'agent',
+      },
+    });
+    expect(callArgs).toEqual(expect.objectContaining({ responseFormat }));
   });
 });
 

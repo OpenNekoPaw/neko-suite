@@ -562,6 +562,13 @@ describe('message runtime helpers', () => {
       includePattern: '**/*app*',
       excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
       limit: 12,
+      purpose: 'mention',
+    });
+    expect(buildAgentProjectFileSearchPlan({ purpose: 'roleplay' })).toEqual({
+      includePattern: '**/*',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
+      limit: 30,
+      purpose: 'roleplay',
     });
   });
 
@@ -728,6 +735,52 @@ describe('message runtime helpers', () => {
       includePattern: '**/*app*',
       excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
       limit: 30,
+      purpose: 'mention',
+    });
+  });
+
+  it('skips workspace file search for roleplay candidate refreshes', async () => {
+    const searchProjectFiles = vi.fn(async () => [{ relativePath: 'src/app.ts' }]);
+    const getMentionCandidates = vi.fn(async () => [
+      {
+        type: 'entity' as const,
+        id: 'entity:char-xiaoju',
+        label: '小橘',
+        summary: 'Character: 小橘',
+        source: 'entity-graph' as const,
+        entityType: 'character',
+      },
+    ]);
+
+    await expect(
+      executeAgentProjectFileSearch({
+        filter: '',
+        purpose: 'roleplay',
+        searchProjectFiles,
+        getMentionCandidates,
+      }),
+    ).resolves.toEqual({
+      type: 'projectFiles',
+      filter: '',
+      purpose: 'roleplay',
+      files: [],
+      mentionExtras: [
+        {
+          type: 'entity',
+          id: 'entity:char-xiaoju',
+          label: '小橘',
+          summary: 'Character: 小橘',
+          source: 'entity-graph',
+          entityType: 'character',
+        },
+      ],
+    });
+    expect(searchProjectFiles).not.toHaveBeenCalled();
+    expect(getMentionCandidates).toHaveBeenCalledWith({
+      includePattern: '**/*',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
+      limit: 30,
+      purpose: 'roleplay',
     });
   });
 

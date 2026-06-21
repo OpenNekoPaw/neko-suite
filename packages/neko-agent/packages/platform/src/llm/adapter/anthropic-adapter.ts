@@ -149,15 +149,19 @@ export class AnthropicAdapter extends AISdkAdapter {
       willEnableThinking: supportsBeta && options.thinkingBudget && options.thinkingBudget > 0,
     });
 
+    if (options.providerOptions) {
+      providerOptions.providerOptions = options.providerOptions;
+    }
+
     if (supportsBeta && options.thinkingBudget && options.thinkingBudget > 0) {
-      providerOptions.providerOptions = {
+      providerOptions.providerOptions = mergeProviderOptions(providerOptions.providerOptions, {
         anthropic: {
           thinking: {
             type: 'enabled',
             budgetTokens: options.thinkingBudget,
           },
         },
-      };
+      });
     }
 
     // Prompt caching: convert structured sections to AI SDK system message format
@@ -238,4 +242,29 @@ export class AnthropicAdapter extends AISdkAdapter {
     if (modelId.includes('3-opus')) return 'Claude 3 Opus';
     return modelId;
   }
+}
+
+function mergeProviderOptions(
+  base: unknown,
+  next: Record<string, unknown>,
+): Record<string, unknown> {
+  const result =
+    base && typeof base === 'object' && !Array.isArray(base)
+      ? { ...(base as Record<string, unknown>) }
+      : {};
+
+  for (const [namespace, value] of Object.entries(next)) {
+    const existing = result[namespace];
+    if (isRecord(existing) && isRecord(value)) {
+      result[namespace] = { ...existing, ...value };
+    } else {
+      result[namespace] = value;
+    }
+  }
+
+  return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -14,6 +14,7 @@ export type AgentLlmConfigDiagnosticCode =
   | 'primary-model-not-found'
   | 'primary-model-provider-mismatch'
   | 'primary-model-not-llm'
+  | 'incompatible-llm-parameter'
   | 'unsupported-llm-parameter';
 
 export interface AgentLlmConfigDiagnostic {
@@ -82,8 +83,8 @@ export function resolveAgentLlmConfigForTurn(
   diagnostics.push(...validatePrimaryModel(input, resolvedPrimary));
 
   const projection = projectResolvedLlmRuntimeOptions(input, resolvedPrimary);
-  if (projection.diagnostics.length > 0) {
-    diagnostics.push(...projection.diagnostics);
+  if (projection.blockingDiagnostics.length > 0) {
+    diagnostics.push(...projection.blockingDiagnostics);
   }
 
   if (diagnostics.length > 0) {
@@ -224,16 +225,16 @@ function projectResolvedLlmRuntimeOptions(
   modelRef: ModelRef<'llm'>,
 ): {
   readonly runtimeOptions?: AgentLlmRuntimeOptions;
-  readonly diagnostics: readonly AgentLlmConfigDiagnostic[];
+  readonly blockingDiagnostics: readonly AgentLlmConfigDiagnostic[];
 } {
   if (!input.llmConfig || !input.platform) {
-    return { diagnostics: [] };
+    return { blockingDiagnostics: [] };
   }
 
   const provider = input.providers.getProviderConfig(modelRef.providerId);
   const model = input.providers.getModel(modelRef.modelId);
   if (!provider || !model) {
-    return { diagnostics: [] };
+    return { blockingDiagnostics: [] };
   }
 
   const projection = projectLlmParameters({
@@ -241,23 +242,35 @@ function projectResolvedLlmRuntimeOptions(
     model,
     llmConfig: input.llmConfig,
   });
-  const diagnostics = projection.diagnostics.map(mapLlmParameterDiagnostic);
+  const blockingDiagnostics = projection.diagnostics
+    .filter(isBlockingLlmParameterDiagnostic)
+    .map(mapLlmParameterDiagnostic);
   const runtimeOptions = removeUndefinedValues({
+    projected: true,
     temperature: projection.chatOptions.temperature,
     topP: projection.chatOptions.topP,
     maxTokens: projection.chatOptions.maxTokens,
     thinkingBudget: projection.chatOptions.thinkingBudget,
+    providerOptions:
+      Object.keys(projection.providerOptions).length > 0 ? projection.providerOptions : undefined,
   });
 
   return {
     ...(Object.keys(runtimeOptions).length > 0 ? { runtimeOptions } : {}),
-    diagnostics,
+    blockingDiagnostics,
   };
+}
+
+function isBlockingLlmParameterDiagnostic(diagnostic: LlmParameterDiagnostic): boolean {
+  return diagnostic.code === 'invalid-anthropic-thinking-sampling-combination';
 }
 
 function mapLlmParameterDiagnostic(diagnostic: LlmParameterDiagnostic): AgentLlmConfigDiagnostic {
   return {
-    code: 'unsupported-llm-parameter',
+    code:
+      diagnostic.code === 'invalid-anthropic-thinking-sampling-combination'
+        ? 'incompatible-llm-parameter'
+        : 'unsupported-llm-parameter',
     field: diagnostic.field,
     message: diagnostic.message,
   };

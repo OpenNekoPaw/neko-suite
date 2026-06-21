@@ -109,6 +109,9 @@ export interface AgentSessionConfig {
   /** Extended thinking budget (Claude only, recommended: 10000-50000) */
   thinkingBudget?: number;
 
+  /** Provider-specific AI SDK request options projected by Platform. */
+  providerOptions?: Record<string, unknown>;
+
   /** Max iterations to prevent infinite loops */
   maxIterations?: number;
 
@@ -120,6 +123,9 @@ export interface AgentSessionConfig {
 
   /** Max tokens for response */
   maxTokens?: number;
+
+  /** Provider ID override */
+  providerId?: string;
 
   /** Model ID override */
   modelId?: string;

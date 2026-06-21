@@ -41,8 +41,10 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly providerId?: string;
   readonly modelId?: string;
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
   readonly executionMode?: ExecutionMode;
   readonly hooks?: readonly ExecutorHooks[];
   readonly workspaceRoot?: string;
@@ -88,8 +90,10 @@ export function buildAgentRuntimeSessionFactoryConfig(
     temperature: input.temperature,
     topP: input.topP,
     maxTokens: input.maxTokens,
+    providerId: input.providerId,
     modelId: input.modelId,
     thinkingBudget: input.thinkingBudget,
+    providerOptions: input.providerOptions,
     executionMode: input.executionMode,
     hooks,
     workspaceRoot: input.workspaceRoot,

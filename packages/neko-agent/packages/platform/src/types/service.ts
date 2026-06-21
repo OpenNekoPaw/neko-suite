@@ -9,6 +9,8 @@ import type { ChatOptions, ChatResponse, ChatChunk } from './adapter';
  * Service options extending chat options
  */
 export interface ServiceOptions extends ChatOptions {
+  /** Specific provider ID. When set with modelId, routing must match this provider exactly. */
+  providerId?: string;
   /** Specific model ID (overrides group routing) */
   modelId?: string;
   /** Timeout in milliseconds */
@@ -53,6 +55,8 @@ export interface ServiceStreamResponse {
  * Embedding options
  */
 export interface EmbeddingOptions {
+  /** Specific provider ID */
+  providerId?: string;
   /** Specific model ID */
   modelId?: string;
 }

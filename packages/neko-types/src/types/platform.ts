@@ -87,6 +87,8 @@ export interface ToolDefinition {
  * Service options for chat requests
  */
 export interface ServiceOptions {
+  /** Provider ID to use */
+  providerId?: string;
   /** Model ID to use */
   modelId?: string;
   /** Temperature for generation (0-2) */
@@ -109,6 +111,11 @@ export interface ServiceOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
   /** Enable extended thinking (Claude only) */
   thinkingBudget?: number;
+  /**
+   * Provider-specific AI SDK request options projected by the platform layer
+   * after model capability validation.
+   */
+  providerOptions?: Record<string, unknown>;
   /** Abort signal for cancellation */
   signal?: AbortSignal;
   /** Timeout in milliseconds */

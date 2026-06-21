@@ -81,15 +81,21 @@ export class OpenAIAdapter extends AISdkAdapter {
       // Disable strict JSON schema validation for tool calls
       // Many API proxies don't support this OpenAI-specific feature
       openai: {
+        ...readProviderNamespace(options.providerOptions, 'openai'),
         strictJsonSchema: provider.supportsBeta ?? false,
       },
     };
 
-    if (options.responseFormat) {
-      result.responseFormat = options.responseFormat;
+    for (const [namespace, value] of Object.entries(options.providerOptions ?? {})) {
+      if (namespace !== 'openai') {
+        result[namespace] = value;
+      }
     }
 
-    return result;
+    return {
+      providerOptions: result,
+      ...(options.responseFormat ? { responseFormat: options.responseFormat } : {}),
+    };
   }
 
   /**
@@ -149,6 +155,16 @@ export class OpenAIAdapter extends AISdkAdapter {
   override async listModelsDetailed(provider: Provider): Promise<ModelInfo[]> {
     return this.httpHelper.listModelsDetailed(provider);
   }
+}
+
+function readProviderNamespace(
+  providerOptions: Record<string, unknown> | undefined,
+  namespace: string,
+): Record<string, unknown> {
+  const value = providerOptions?.[namespace];
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 /**

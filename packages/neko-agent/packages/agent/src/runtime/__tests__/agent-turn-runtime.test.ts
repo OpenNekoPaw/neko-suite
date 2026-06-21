@@ -335,6 +335,12 @@ describe('executeAgentTurn', () => {
         topP: 0.95,
         maxTokens: 4096,
         thinkingBudget: 8192,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'high',
+            textVerbosity: 'medium',
+          },
+        },
       },
     });
 
@@ -346,6 +352,50 @@ describe('executeAgentTurn', () => {
         topP: 0.95,
         maxTokens: 4096,
         thinkingBudget: 8192,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'high',
+            textVerbosity: 'medium',
+          },
+        },
+      }),
+    );
+  });
+
+  it('keeps omitted projected LLM options from falling back to global settings', async () => {
+    const { input, agentRunner } = createBaseInput({
+      chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: true,
+        temperature: 0.2,
+        topP: 0.5,
+        maxTokens: 1024,
+        thinkingBudget: 2048,
+      },
+      llmRuntimeOptions: {
+        projected: true,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+          },
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temperature: undefined,
+        topP: undefined,
+        maxTokens: undefined,
+        thinkingBudget: undefined,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+          },
+        },
       }),
     );
   });
@@ -873,6 +923,12 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
         topP: 0.95,
         maxTokens: 4096,
         thinkingBudget: 8192,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'medium',
+            textVerbosity: 'medium',
+          },
+        },
       },
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
       settings: {
@@ -942,6 +998,12 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       topP: 0.95,
       maxTokens: 4096,
       thinkingBudget: 8192,
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'medium',
+          textVerbosity: 'medium',
+        },
+      },
     });
     expect(runtimeInput.providerSource.selectedProviderId).toBe('anthropic');
     expect(runtimeInput.providerSource.requestedProviderId).toBe('openai');

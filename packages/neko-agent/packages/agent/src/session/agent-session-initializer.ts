@@ -447,11 +447,13 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
       maxIterations: config.maxIterations ?? DEFAULT_MAX_ITERATIONS,
       primaryModel: config.modelId,
       serviceOptions: {
+        providerId: config.providerId,
         modelId: config.modelId,
         temperature: config.temperature,
         topP: config.topP,
         maxTokens: config.maxTokens,
         thinkingBudget: config.thinkingBudget,
+        providerOptions: config.providerOptions,
       },
     },
     hooks,

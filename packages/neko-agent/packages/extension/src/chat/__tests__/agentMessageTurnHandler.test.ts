@@ -541,6 +541,14 @@ describe('AgentMessageTurnHandler', () => {
           modelId: 'claude-3',
           maxTokens: 2048,
           thinkingBudget: 4096,
+          providerOptions: {
+            anthropic: {
+              thinking: {
+                type: 'enabled',
+                budgetTokens: 4096,
+              },
+            },
+          },
         }),
       );
     });
@@ -1073,6 +1081,66 @@ describe('AgentMessageTurnHandler', () => {
             thumbnailUri: 'webview:/workspace/entities/hero.png',
           }),
         ]),
+      });
+    });
+
+    it('uses a roleplay-scoped candidate search without scanning workspace files', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+
+      (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+        items: [
+          {
+            id: 'entity:char-xiaoju',
+            kind: 'creative-entity',
+            label: '小橘',
+            description: 'Character',
+            source: {
+              partition: 'creative-entities',
+              sourceId: 'char-xiaoju',
+              sourceKind: 'character',
+            },
+            projectRoot: '/workspace',
+            searchText: '小橘 character',
+            freshness: 'fresh',
+            metadata: { entityType: 'character' },
+          },
+        ],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: '/workspace' },
+        query: { text: '' },
+      });
+
+      await handler.searchProjectFiles(webview as any, '', 'conv-search', {
+        purpose: 'roleplay',
+      });
+
+      expect(vscode.workspace.findFiles).not.toHaveBeenCalled();
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'neko.projectSearch.query',
+        expect.objectContaining({
+          text: '',
+          mode: 'mention',
+          kinds: ['script-role', 'creative-entity', 'entity-candidate', 'asset', 'generated-asset'],
+          partitions: ['story-symbols', 'creative-entities', 'asset-library'],
+        }),
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'projectFiles',
+        conversationId: 'conv-search',
+        filter: '',
+        purpose: 'roleplay',
+        files: [],
+        mentionExtras: [
+          expect.objectContaining({
+            type: 'entity',
+            id: 'entity:char-xiaoju',
+            label: '小橘',
+            entityType: 'character',
+          }),
+        ],
       });
     });
 

@@ -7,6 +7,7 @@
 import type { Model, Provider } from '../types/provider';
 import type { ChatModelOption, ModelCapability, ModelType } from '@neko/shared';
 import { isProviderConfigured } from './provider-configuration';
+import { projectLlmParameterControls } from './llm-parameter-projection';
 
 /**
  * Chat model service interface
@@ -62,6 +63,9 @@ export class ChatModelService implements IChatModelService {
         capabilities: capabilities as ModelCapability[],
         category,
         ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(category === 'llm'
+          ? { llmParameterControls: this.getLlmParameterControls(model, provider) }
+          : {}),
       });
     }
 
@@ -73,6 +77,13 @@ export class ChatModelService implements IChatModelService {
    */
   getModelType(model: Model): ModelType {
     return model.type ?? 'llm';
+  }
+
+  private getLlmParameterControls(
+    model: Model,
+    provider: Provider,
+  ): NonNullable<ChatModelOption['llmParameterControls']> {
+    return projectLlmParameterControls({ model, provider });
   }
 }
 

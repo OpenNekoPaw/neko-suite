@@ -58,6 +58,8 @@ describe('llm-parameter-projection', () => {
     expect(capabilities.supportsVision).toBe(true);
     expect(capabilities.supportsReasoningEffort).toBe(true);
     expect(capabilities.reasoningEffortValues).toContain('medium');
+    expect(capabilities.reasoningEffortValues).toContain('none');
+    expect(capabilities.reasoningEffortValues).toContain('xhigh');
     expect(capabilities.supportsVerbosity).toBe(true);
     expect(capabilities.supportsFastTier).toBe(true);
   });
@@ -153,15 +155,38 @@ describe('llm-parameter-projection', () => {
     });
 
     expect(projection.providerFamily).toBe('openai');
+    expect(projection.chatOptions).toEqual({});
+    expect(projection.providerOptions).toEqual({
+      openai: {
+        reasoningEffort: 'low',
+        textVerbosity: 'high',
+        serviceTier: 'priority',
+      },
+    });
+    expect(projection.diagnostics).toEqual([]);
+  });
+
+  it('keeps sampling controls for models that explicitly support reasoning and sampling together', () => {
+    const projection = projectLlmParameters({
+      model: createModel({
+        capabilities: ['chat', 'reasoning', 'verbosity', 'temperature', 'top_p'],
+      }),
+      provider: createProvider({ type: 'openai', protocolProfile: 'openai-responses' }),
+      llmConfig: {
+        reasoningPreset: 'balanced',
+        verbosityPreset: 'standard',
+        creativityPreset: 'creative',
+      },
+    });
+
     expect(projection.chatOptions).toEqual({
       temperature: 0.7,
       topP: 0.95,
     });
     expect(projection.providerOptions).toEqual({
       openai: {
-        reasoning: { effort: 'low' },
-        text: { verbosity: 'high' },
-        serviceTier: 'fast',
+        reasoningEffort: 'medium',
+        textVerbosity: 'medium',
       },
     });
     expect(projection.diagnostics).toEqual([]);
@@ -181,6 +206,23 @@ describe('llm-parameter-projection', () => {
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-reasoning-effort',
       'unsupported-verbosity',
+    ]);
+  });
+
+  it('diagnoses explicit thinking budget on OpenAI-compatible models that cannot send it', () => {
+    const projection = projectLlmParameters({
+      model: createModel({ capabilities: ['chat'] }),
+      provider: createProvider({ type: 'openai', protocolProfile: 'openai-responses' }),
+      llmConfig: {
+        advanced: {
+          thinkingBudget: 2048,
+        },
+      },
+    });
+
+    expect(projection.chatOptions).toEqual({});
+    expect(projection.providerOptions).toEqual({});
+    expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-thinking-budget',
     ]);
   });
@@ -208,6 +250,32 @@ describe('llm-parameter-projection', () => {
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'invalid-anthropic-thinking-sampling-combination',
     ]);
+  });
+
+  it('maps Anthropic effort-only models without sending preset thinking budget', () => {
+    const projection = projectLlmParameters({
+      model: createModel({
+        capabilities: ['chat', 'reasoning'],
+        options: {
+          llmCapabilities: {
+            reasoningEffortValues: ['low', 'medium', 'high'],
+            thinkingBudget: false,
+          },
+        },
+      }),
+      provider: createProvider({ type: 'anthropic', protocolProfile: 'anthropic' }),
+      llmConfig: {
+        reasoningPreset: 'balanced',
+      },
+    });
+
+    expect(projection.chatOptions.thinkingBudget).toBeUndefined();
+    expect(projection.providerOptions).toEqual({
+      anthropic: {
+        effort: 'medium',
+      },
+    });
+    expect(projection.diagnostics).toEqual([]);
   });
 
   it('diagnoses Anthropic thinking when beta support is disabled', () => {
@@ -248,7 +316,6 @@ describe('llm-parameter-projection', () => {
     expect(projection.providerOptions).toEqual({});
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-reasoning-effort',
-      'unsupported-thinking-budget',
       'unsupported-verbosity',
     ]);
   });
@@ -272,7 +339,6 @@ describe('llm-parameter-projection', () => {
     expect(projection.chatOptions).toEqual({ temperature: 0.2, topP: 0.8 });
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-reasoning-effort',
-      'unsupported-thinking-budget',
       'unsupported-service-tier',
     ]);
   });

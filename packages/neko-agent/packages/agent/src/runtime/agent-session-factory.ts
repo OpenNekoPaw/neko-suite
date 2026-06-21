@@ -55,8 +55,10 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly providerId?: string;
   readonly modelId?: string;
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
   readonly executionMode?: ExecutionMode;
   readonly hooks?: readonly ExecutorHooks[];
   readonly workspaceRoot?: string;
@@ -150,6 +152,8 @@ export async function createAgentRuntimeSession(
     topP: config.topP,
     maxTokens: config.maxTokens,
     thinkingBudget: config.thinkingBudget,
+    providerOptions: config.providerOptions,
+    providerId: config.providerId,
     modelId: config.modelId,
     hooks: config.hooks && config.hooks.length > 0 ? [...config.hooks] : undefined,
     runtime: buildAgentRuntimeConfig(config, promptFragments, toolCategoryRegistry, feedbackLoop),
@@ -202,11 +206,13 @@ export function updateAgentRuntimeSession(
   return {
     sessionConfig: {
       systemPrompt: handle.effectiveSystemPrompt,
+      providerId: config.providerId,
       modelId: config.modelId,
       temperature: config.temperature,
       topP: config.topP,
       maxTokens: config.maxTokens,
       thinkingBudget: config.thinkingBudget,
+      providerOptions: config.providerOptions,
       maxIterations: config.maxIterations,
       executionMode: config.executionMode ?? 'auto',
     },
@@ -403,6 +409,7 @@ function registerSubAgentRuntime(
     ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
     createService: config.createService,
     toolRegistry: config.toolRegistry,
+    ...(config.providerId ? { providerId: config.providerId } : {}),
     ...(config.modelId ? { modelId: config.modelId } : {}),
     ...(config.modelTierResolver ? { modelTierResolver: config.modelTierResolver } : {}),
     ...(config.capabilityRuntime ? { capabilityRuntime: config.capabilityRuntime } : {}),

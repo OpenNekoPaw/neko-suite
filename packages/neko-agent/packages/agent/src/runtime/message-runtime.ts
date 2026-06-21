@@ -54,10 +54,17 @@ export interface AgentMessageExecutionOverrides {
 }
 
 export interface AgentLlmRuntimeOptions {
+  /**
+   * Marks that model capability projection already decided the per-turn LLM
+   * options. When present, omitted values must stay omitted instead of falling
+   * back to legacy global settings.
+   */
+  readonly projected?: boolean;
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
 }
 
 export interface AgentMessageIdOptions {
@@ -260,12 +267,16 @@ export interface AgentAmbientCanvasNode {
 export interface AgentProjectFileSearchPlanInput {
   readonly filter?: string;
   readonly limit?: number;
+  readonly purpose?: AgentProjectFileSearchPurpose;
 }
+
+export type AgentProjectFileSearchPurpose = 'mention' | 'roleplay';
 
 export interface AgentProjectFileSearchPlan {
   readonly includePattern: string;
   readonly excludePattern: string;
   readonly limit: number;
+  readonly purpose: AgentProjectFileSearchPurpose;
 }
 
 export interface AgentProjectFileCandidate {
@@ -304,8 +315,9 @@ export interface AgentProjectMentionCandidate {
 }
 
 export interface AgentProjectFilesProjectionInput {
-  readonly conversationId: string;
+  readonly conversationId?: string;
   readonly filter?: string;
+  readonly purpose?: AgentProjectFileSearchPurpose;
   readonly files: readonly AgentProjectFileCandidate[];
   readonly canvasNodes?: readonly AgentAmbientCanvasNode[];
   readonly characters?: readonly AgentMentionCharacter[];
@@ -314,8 +326,9 @@ export interface AgentProjectFilesProjectionInput {
 }
 
 export interface ExecuteAgentProjectFileSearchInput {
-  readonly conversationId: string;
+  readonly conversationId?: string;
   readonly filter?: string;
+  readonly purpose?: AgentProjectFileSearchPurpose;
   readonly searchProjectFiles?: (
     plan: AgentProjectFileSearchPlan,
   ) => Promise<readonly AgentProjectFileCandidate[]>;
@@ -462,6 +475,7 @@ export interface AgentTurnConfigurationPlanInput {
   readonly topP?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
   readonly workspaceRoot?: string;
 }
 
@@ -472,10 +486,12 @@ export interface AgentTurnConfigurationPlan {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly providerId?: string;
   readonly modelId?: string;
   readonly providerExpressionTargets?: ProviderExpressionTargetConfig[];
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
   readonly workspaceRoot?: string;
   readonly conversationId: string;
   readonly executionMetadata?: Record<string, unknown>;
@@ -904,6 +920,7 @@ export function buildAgentProjectFileSearchPlan(
     includePattern: filter ? `**/*${filter}*` : '**/*',
     excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
     limit: input.limit ?? 30,
+    purpose: input.purpose ?? 'mention',
   };
 }
 
@@ -912,12 +929,14 @@ export async function executeAgentProjectFileSearch(
 ): Promise<ProjectFilesWebviewMessage> {
   let files: readonly AgentProjectFileCandidate[] = [];
   let mentionCandidates: readonly AgentProjectMentionCandidate[] = [];
-  const plan = buildAgentProjectFileSearchPlan({ filter: input.filter });
+  const plan = buildAgentProjectFileSearchPlan({ filter: input.filter, purpose: input.purpose });
 
-  try {
-    files = input.searchProjectFiles ? await input.searchProjectFiles(plan) : [];
-  } catch (error) {
-    input.onSearchError?.(error);
+  if (plan.purpose !== 'roleplay') {
+    try {
+      files = input.searchProjectFiles ? await input.searchProjectFiles(plan) : [];
+    } catch (error) {
+      input.onSearchError?.(error);
+    }
   }
 
   try {
@@ -934,8 +953,9 @@ export async function executeAgentProjectFileSearch(
   return projectAgentProjectFilesMessage({
     conversationId: input.conversationId,
     filter: input.filter,
+    purpose: input.purpose,
     files,
-    canvasNodes: input.getCanvasNodes?.(input.conversationId) ?? [],
+    canvasNodes: input.conversationId ? (input.getCanvasNodes?.(input.conversationId) ?? []) : [],
     characters,
     scenes,
     mentionCandidates,
@@ -947,8 +967,9 @@ export function projectAgentProjectFilesMessage(
 ): ProjectFilesWebviewMessage {
   return {
     type: 'projectFiles',
-    conversationId: input.conversationId,
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     filter: input.filter ?? '',
+    ...(input.purpose === 'roleplay' ? { purpose: input.purpose } : {}),
     files: projectAgentFileMentions(input.files),
     mentionExtras: projectAgentMentionExtras(
       input.canvasNodes ?? [],
@@ -1321,10 +1342,12 @@ export function buildAgentTurnConfigurationPlan(
     temperature: input.temperature,
     topP: input.topP,
     maxTokens: input.maxTokens,
+    providerId: input.chatModel?.providerId,
     modelId: input.chatModel?.modelId,
     providerExpressionTargets: turnRuntime.providerExpressionTargets,
     executionMode: effectiveExecutionMode,
     thinkingBudget: input.thinkingBudget,
+    providerOptions: input.providerOptions,
     workspaceRoot: input.workspaceRoot,
     conversationId: input.conversationId,
     executionMetadata: turnRuntime.executionMetadata,

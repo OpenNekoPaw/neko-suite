@@ -67,10 +67,12 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly providerId?: string;
   readonly modelId?: string;
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly thinkingBudget?: number;
+  readonly providerOptions?: Record<string, unknown>;
   readonly workspaceRoot?: string;
   readonly conversationId: string;
   readonly taskManager?: IRuntimeTaskManager;
@@ -428,6 +430,8 @@ export async function executeAgentTurn<
   const workspaceRoot = input.getWorkspaceRoot?.();
   const ambientCanvas = input.getAmbientCanvas?.(input.conversationId) ?? [];
   const agentRunner = input.agentManager.getOrCreate(input.conversationId);
+  const llmRuntimeOptions = input.llmRuntimeOptions;
+  const usesProjectedLlmOptions = llmRuntimeOptions?.projected === true;
 
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
@@ -446,10 +450,19 @@ export async function executeAgentTurn<
     mediaModels: input.mediaModels,
     maxIterations: 200,
     autoExecuteTools: input.settings.autoExecuteTools,
-    temperature: input.llmRuntimeOptions?.temperature ?? input.settings.temperature,
-    topP: input.llmRuntimeOptions?.topP ?? input.settings.topP,
-    maxTokens: input.llmRuntimeOptions?.maxTokens ?? input.settings.maxTokens,
-    thinkingBudget: input.llmRuntimeOptions?.thinkingBudget ?? input.settings.thinkingBudget,
+    temperature: usesProjectedLlmOptions
+      ? llmRuntimeOptions.temperature
+      : (llmRuntimeOptions?.temperature ?? input.settings.temperature),
+    topP: usesProjectedLlmOptions
+      ? llmRuntimeOptions.topP
+      : (llmRuntimeOptions?.topP ?? input.settings.topP),
+    maxTokens: usesProjectedLlmOptions
+      ? llmRuntimeOptions.maxTokens
+      : (llmRuntimeOptions?.maxTokens ?? input.settings.maxTokens),
+    thinkingBudget: usesProjectedLlmOptions
+      ? llmRuntimeOptions.thinkingBudget
+      : (llmRuntimeOptions?.thinkingBudget ?? input.settings.thinkingBudget),
+    providerOptions: llmRuntimeOptions?.providerOptions,
     workspaceRoot,
   });
 
@@ -461,10 +474,12 @@ export async function executeAgentTurn<
     temperature: turnConfig.temperature,
     topP: turnConfig.topP,
     maxTokens: turnConfig.maxTokens,
+    providerId: turnConfig.providerId,
     modelId: turnConfig.modelId,
     providerExpressionTargets: turnConfig.providerExpressionTargets,
     executionMode: turnConfig.executionMode,
     thinkingBudget: turnConfig.thinkingBudget,
+    providerOptions: turnConfig.providerOptions,
     workspaceRoot: turnConfig.workspaceRoot,
     conversationId: turnConfig.conversationId,
     ...(input.taskManager ? { taskManager: input.taskManager } : {}),

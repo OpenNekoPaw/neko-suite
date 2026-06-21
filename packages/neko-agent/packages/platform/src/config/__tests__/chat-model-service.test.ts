@@ -35,6 +35,12 @@ describe('ChatModelService', () => {
       capabilities: ['chat'],
       category: 'llm',
       contextWindow: 200000,
+      llmParameterControls: {
+        reasoning: false,
+        verbosity: false,
+        creativity: true,
+        maxOutputTokens: true,
+      },
     });
   });
 
@@ -68,6 +74,12 @@ describe('ChatModelService', () => {
       modelId: 'ollama-local-llama3.2',
       capabilities: ['chat'],
       category: 'llm',
+      llmParameterControls: {
+        reasoning: false,
+        verbosity: false,
+        creativity: true,
+        maxOutputTokens: true,
+      },
     });
   });
 

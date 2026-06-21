@@ -455,6 +455,7 @@ export {
   type AgentMessageFileReferenceProcessor,
   type AgentProviderCandidate,
   type AgentProjectFileCandidate,
+  type AgentProjectFileSearchPurpose,
   type AgentProjectFileSearchPlan,
   type AgentProjectFileSearchPlanInput,
   type AgentProjectFilesProjectionInput,

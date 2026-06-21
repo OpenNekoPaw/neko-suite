@@ -78,6 +78,12 @@ export interface ChatOptions {
   stream?: boolean;
   /** Enable extended thinking (Claude only) - budget tokens for thinking */
   thinkingBudget?: number;
+  /**
+   * Provider-specific AI SDK request options that have already been projected
+   * from validated model capabilities. This is intentionally adapter-owned;
+   * callers must not use it as an arbitrary raw parameter editor.
+   */
+  providerOptions?: Record<string, unknown>;
   /** Abort signal for cancellation */
   signal?: AbortSignal;
 

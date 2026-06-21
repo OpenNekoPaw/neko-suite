@@ -89,6 +89,7 @@ export {
 export {
   projectAgentPresetIntent,
   projectLlmModelCapabilities,
+  projectLlmParameterControls,
   projectLlmParameters,
   resolveLlmProviderFamily,
   type AgentPresetIntent,
@@ -96,6 +97,7 @@ export {
   type LlmModelCapabilities,
   type LlmParameterDiagnostic,
   type LlmParameterDiagnosticCode,
+  type LlmParameterControlAvailability,
   type LlmParameterProjection,
   type LlmParameterProjectionInput,
   type LlmProviderFamily,
