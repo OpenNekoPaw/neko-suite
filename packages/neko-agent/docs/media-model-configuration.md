@@ -131,20 +131,23 @@ llm | image | video | audio
 
 ## 工作原理
 
-生成工具选择模型时按以下优先级：
+生成工具必须拿到明确的模型路由：
 
 1. 显式指定 `providerId + modelId`：直接使用该组合。
-2. 只指定 `modelId`：通过 `[[models]]` 找到对应 provider。
-3. 未指定模型：使用 `[default_models.<type>]`。
-4. 仍无法确定模型：返回错误，要求用户配置默认模型或显式指定模型。
+2. Agent runtime 为该类型传入已选择的媒体模型：直接使用该组合。
+3. 仍无法确定模型：返回错误，要求用户选择模型或显式传入 `providerId + modelId`。
 
-媒体模型不会自动猜测默认值。这样可以避免误用昂贵模型，也能保证生成结果来自用户明确配置的 provider。
+媒体工具不会只凭 provider 名、model 名或历史默认值猜测路由，也不会从 direct/local 转到 NewAPI gateway。这样可以避免误用昂贵模型，也能保证生成结果来自用户明确配置的 provider。
+
+图像理解工具 `ReadImage` 的 vision 模式同样要求明确的当前 LLM 模型，并把 `providerId + modelId` 传给平台服务。若当前未选择对话模型，或者所选模型不具备所需视觉能力，工具会返回可见错误，不会调用默认 gateway。
 
 ## Agent Composer LLM 配置
 
 Agent 输入框中的模式配置是会话级选择，不会自动写回 `~/.neko/config.toml`。用户在当前 tab 里选择 Agent LLM 模型、推理深度、回复详略、创造性和执行模式后，这些值只作用于当前发送的 Agent turn；只有用户显式修改配置文件或设置页时，才会改变 durable 默认值。
 
-普通 Agent 对话当前使用 `primary` 模型槽位。Webview 发送的 Agent 配置会在 Extension 边界解析为明确的 `providerId + modelId`：优先使用 composer 的 `agentModels.primary`，其次使用旧 `chatModel`，再使用当前设置/default provider 的 LLM 默认值。若 `primary` 与 `chatModel` 指向不同模型、provider/model 不匹配、模型缺失、provider 未配置或模型不是启用的 LLM，Agent 会返回可见诊断，不会切到无关模型。
+普通 Agent 对话当前使用 `primary` 模型槽位。Webview 发送的 Agent 配置会在 Extension 边界解析为明确的 `providerId + modelId`：优先使用 composer 的 `agentModels.primary`，其次使用旧 `chatModel`，最后使用当前设置中的完整 LLM 选择。若缺少 provider 或 model 任一半、`primary` 与 `chatModel` 指向不同模型、provider/model 不匹配、模型缺失、provider 未配置或模型不是启用的 LLM，Agent 会返回可见诊断，不会切到无关模型。
+
+Webview 选择 `auto` 时表示清除运行态模型覆盖，回到 `[default_models.llm]` 文件默认值；它不会写入一个空 provider/model 来覆盖默认配置。刷新配置快照或重新读取 `config.toml` 时，运行态 LLM 模型覆盖也会失效，新的文件默认值会重新成为事实来源。
 
 MVP 合同预留了 `fast`、`deep`、`summarizer`、`vision` 槽位，用于未来多模型编排；当前普通 Agent turn 只支持 `primary`。如果 payload 引用这些非 MVP 槽位，Extension 会返回 fail-visible 诊断，而不是静默忽略。
 
