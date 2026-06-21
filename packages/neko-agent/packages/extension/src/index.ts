@@ -240,7 +240,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(
-    createMediaReadCapabilityProvider({ platform: bootstrapResult.platform }),
+    createMediaReadCapabilityProvider({
+      platform: bootstrapResult.platform,
+      getSelectedChatModel: () => {
+        const settings = bootstrapResult.platform.config.getAssistantRuntimeSettingsSnapshot();
+        if (!settings.selectedProviderId || !settings.selectedModelId) return undefined;
+        return {
+          providerId: settings.selectedProviderId,
+          modelId: settings.selectedModelId,
+          category: 'llm',
+        };
+      },
+    }),
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(

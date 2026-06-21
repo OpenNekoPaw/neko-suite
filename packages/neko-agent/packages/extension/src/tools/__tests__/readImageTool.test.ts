@@ -235,7 +235,16 @@ describe('createReadImageTool', () => {
     const platform = {
       createService: vi.fn(() => service),
     };
-    const tool = createReadImageTool({ readFile, imageProcessor, platform: platform as never });
+    const tool = createReadImageTool({
+      readFile,
+      imageProcessor,
+      platform: platform as never,
+      getSelectedChatModel: () => ({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-vision',
+        category: 'llm',
+      }),
+    });
 
     const result = (await tool.execute({
       images: [{ path: '/images/page.png', label: 'P1' }],
@@ -250,22 +259,25 @@ describe('createReadImageTool', () => {
       buffer: PNG_1X1,
       jpegQuality: 80,
     });
-    expect(service.chatStream).toHaveBeenCalledWith([
-      {
-        role: 'system',
-        content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-      },
-      expect.objectContaining({
-        role: 'user',
-        content: expect.arrayContaining([
-          expect.objectContaining({ type: 'text' }),
-          expect.objectContaining({
-            type: 'image',
-            imageUrl: expect.stringContaining('data:image/jpeg;base64,'),
-          }),
-        ]),
-      }),
-    ]);
+    expect(service.chatStream).toHaveBeenCalledWith(
+      [
+        {
+          role: 'system',
+          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+        },
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'text' }),
+            expect.objectContaining({
+              type: 'image',
+              imageUrl: expect.stringContaining('data:image/jpeg;base64,'),
+            }),
+          ]),
+        }),
+      ],
+      { providerId: 'deepseek-direct', modelId: 'deepseek-vision' },
+    );
     expect(service.chat).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
@@ -308,7 +320,16 @@ describe('createReadImageTool', () => {
     const platform = {
       createService: vi.fn(() => service),
     };
-    const tool = createReadImageTool({ readFile, imageProcessor, platform: platform as never });
+    const tool = createReadImageTool({
+      readFile,
+      imageProcessor,
+      platform: platform as never,
+      getSelectedChatModel: () => ({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-vision',
+        category: 'llm',
+      }),
+    });
 
     const result = (await tool.execute({
       image_paths: ['/images/page.png'],
@@ -318,20 +339,23 @@ describe('createReadImageTool', () => {
 
     expect(result.success).toBe(true);
     expect(imageProcessor.toJpeg).not.toHaveBeenCalled();
-    expect(service.chatStream).toHaveBeenCalledWith([
-      {
-        role: 'system',
-        content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-      },
-      expect.objectContaining({
-        content: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'image',
-            imageUrl: expect.stringContaining('data:image/png;base64,'),
-          }),
-        ]),
-      }),
-    ]);
+    expect(service.chatStream).toHaveBeenCalledWith(
+      [
+        {
+          role: 'system',
+          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+        },
+        expect.objectContaining({
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'image',
+              imageUrl: expect.stringContaining('data:image/png;base64,'),
+            }),
+          ]),
+        }),
+      ],
+      { providerId: 'deepseek-direct', modelId: 'deepseek-vision' },
+    );
     expect(service.chat).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
@@ -363,7 +387,16 @@ describe('createReadImageTool', () => {
     const platform = {
       createService: vi.fn(() => service),
     };
-    const tool = createReadImageTool({ readFile, imageProcessor, platform: platform as never });
+    const tool = createReadImageTool({
+      readFile,
+      imageProcessor,
+      platform: platform as never,
+      getSelectedChatModel: () => ({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-vision',
+        category: 'llm',
+      }),
+    });
 
     const result = (await tool.execute({
       image_paths: ['/images/page.png'],
@@ -371,11 +404,36 @@ describe('createReadImageTool', () => {
     })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(service.chat).toHaveBeenCalledOnce();
+    expect(service.chat).toHaveBeenCalledWith(expect.any(Array), {
+      providerId: 'deepseek-direct',
+      modelId: 'deepseek-vision',
+    });
     expect(result.data).toEqual(
       expect.objectContaining({
         images: [expect.objectContaining({ analysis: 'legacy image' })],
       }),
     );
+  });
+
+  it('rejects vision mode when no explicit chat model is selected', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const service = {
+      chat: vi.fn(async () => ({
+        message: { role: 'assistant', content: 'should not run' },
+      })),
+    };
+    const platform = {
+      createService: vi.fn(() => service),
+    };
+    const tool = createReadImageTool({ readFile, platform: platform as never });
+
+    const result = (await tool.execute({
+      image_paths: ['/images/page.png'],
+      mode: 'vision',
+    })) as ToolResult;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('explicit chat provider and model');
+    expect(service.chat).not.toHaveBeenCalled();
   });
 });

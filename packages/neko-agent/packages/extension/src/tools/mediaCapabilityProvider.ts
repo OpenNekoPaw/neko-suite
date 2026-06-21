@@ -6,6 +6,7 @@ import {
   type ToolGroup,
 } from '@neko/shared';
 import type { Platform } from '@neko/platform';
+import type { ModelRef } from '@neko-agent/types';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { createDocumentToolRuntime } from './documentToolRuntime';
 import { createReadImageTool } from './readImageTool';
@@ -13,6 +14,7 @@ import { createReadImageTool } from './readImageTool';
 export interface MediaReadCapabilityProviderOptions {
   readonly platform: Platform;
   readonly resourceCache?: ResourceCacheService;
+  readonly getSelectedChatModel?: () => ModelRef<'llm'> | undefined;
 }
 
 export function createMediaReadCapabilityProvider(
@@ -36,6 +38,7 @@ class MediaReadCapabilityProvider implements AgentCapabilityProvider {
     return [
       createReadImageTool({
         platform: this.options.platform,
+        getSelectedChatModel: this.options.getSelectedChatModel,
         resourceCache,
       }),
     ];

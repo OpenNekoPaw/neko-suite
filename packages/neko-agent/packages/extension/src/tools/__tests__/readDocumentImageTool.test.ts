@@ -260,6 +260,11 @@ describe('createReadDocumentImageTool', () => {
       readFile,
       imageProcessor,
       platform: platform as never,
+      getSelectedChatModel: () => ({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-vision',
+        category: 'llm',
+      }),
     });
 
     const result = (await tool.execute({

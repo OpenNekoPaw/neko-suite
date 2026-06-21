@@ -13,6 +13,7 @@ import {
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { probeImageMetadata, type ImageMetadata } from '@neko/platform/document';
 import type { ChatMessage, ServiceResponse } from '@neko/platform';
+import type { ModelRef } from '@neko-agent/types';
 import {
   DEFAULT_VISION_PREPROCESS_POLICY,
   planVisionImagePreprocess,
@@ -36,6 +37,7 @@ export const READ_IMAGE_VISION_SYSTEM_PROMPT =
 
 export interface ReadImageToolDeps {
   readonly platform?: Platform;
+  readonly getSelectedChatModel?: () => ModelRef<'llm'> | undefined;
   readonly readFile?: (filePath: string) => Promise<Uint8Array>;
   readonly imageProcessor?: VisionImageProcessor;
   readonly resourceCache?: ResourceCacheService;
@@ -251,40 +253,51 @@ export async function executeReadImage(
           error: 'ReadImage vision mode requires an active AI platform service.',
         };
       }
+      const chatModel = deps.getSelectedChatModel?.();
+      if (!chatModel?.providerId || !chatModel.modelId) {
+        return {
+          success: false,
+          error: 'ReadImage vision mode requires an explicit chat provider and model selection.',
+        };
+      }
       const prepared = await Promise.all(
         loaded.map((image) => prepareVisionImage(deps, image, preprocessOptions)),
       );
 
-      const response = await readVisionWithService(service, [
-        {
-          role: 'system',
-          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: buildVisionPrompt({ analysis, prompt: readString(args['prompt']) }),
-            },
-            ...prepared.flatMap((preparedImage, index) => [
+      const response = await readVisionWithService(
+        service,
+        [
+          {
+            role: 'system',
+            content: READ_IMAGE_VISION_SYSTEM_PROMPT,
+          },
+          {
+            role: 'user',
+            content: [
               {
-                type: 'text' as const,
-                text: formatVisionImageLabel(preparedImage.image, index),
+                type: 'text',
+                text: buildVisionPrompt({ analysis, prompt: readString(args['prompt']) }),
               },
-              {
-                type: 'image' as const,
-                imageUrl: toDataUrl(
-                  preparedImage.mimeType,
-                  preparedImage.image.resolvedPath,
-                  preparedImage.bytes,
-                ),
-                detail: 'high' as const,
-              },
-            ]),
-          ],
-        },
-      ]);
+              ...prepared.flatMap((preparedImage, index) => [
+                {
+                  type: 'text' as const,
+                  text: formatVisionImageLabel(preparedImage.image, index),
+                },
+                {
+                  type: 'image' as const,
+                  imageUrl: toDataUrl(
+                    preparedImage.mimeType,
+                    preparedImage.image.resolvedPath,
+                    preparedImage.bytes,
+                  ),
+                  detail: 'high' as const,
+                },
+              ]),
+            ],
+          },
+        ],
+        chatModel,
+      );
       const analysisText = normalizeServiceResponseText(response.message.content);
       return {
         success: true,
@@ -657,16 +670,24 @@ function toDataUrl(mimeType: string | undefined, filePath: string, bytes: Uint8A
 
 async function readVisionWithService(
   service: {
-    readonly chat?: (messages: ChatMessage[]) => Promise<ServiceResponse>;
-    readonly chatStream?: (messages: ChatMessage[]) => {
+    readonly chat?: (
+      messages: ChatMessage[],
+      options?: { providerId?: string; modelId?: string },
+    ) => Promise<ServiceResponse>;
+    readonly chatStream?: (
+      messages: ChatMessage[],
+      options?: { providerId?: string; modelId?: string },
+    ) => {
       readonly stream: AsyncIterable<unknown>;
       readonly response: Promise<ServiceResponse>;
     };
   },
   messages: ChatMessage[],
+  chatModel: ModelRef<'llm'>,
 ): Promise<ServiceResponse> {
+  const options = { providerId: chatModel.providerId, modelId: chatModel.modelId };
   if (service.chatStream) {
-    const streamResult = service.chatStream(messages);
+    const streamResult = service.chatStream(messages, options);
     for await (const _chunk of streamResult.stream) {
       // Drain the stream so the service collector can resolve the final response.
     }
@@ -674,7 +695,7 @@ async function readVisionWithService(
   }
 
   if (service.chat) {
-    return service.chat(messages);
+    return service.chat(messages, options);
   }
 
   throw new Error('ReadImage vision mode requires a chat-capable AI platform service.');
