@@ -956,6 +956,123 @@ describe('ConfigManager', () => {
       expect(manager.getConfigDiagnostic()?.code).toBe('invalidToml');
     });
 
+    it('drops runtime provider/model selection on config reload so file defaults route agent turns', async () => {
+      const deepseekProvider: Provider = {
+        id: 'deepseek-chat',
+        name: 'deepseek',
+        displayName: 'DeepSeek',
+        type: 'generic',
+        apiUrl: 'https://api.deepseek.com/v1',
+        enabled: true,
+        connectionKind: 'direct',
+        protocolProfile: 'openai-chat',
+        requiresApiKey: false,
+      };
+      const deepseekModel: Model = {
+        id: 'deepseek-v4-pro',
+        name: 'deepseek-chat',
+        displayName: 'DeepSeek V4 Pro',
+        providerId: 'deepseek-chat',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [deepseekProvider],
+            models: [deepseekModel],
+            defaultModels: {
+              llm: {
+                providerId: 'deepseek-chat',
+                modelId: 'deepseek-v4-pro',
+              },
+            },
+          },
+        }),
+      });
+
+      await manager.applyRuntimeAssistantSettingsFromWebview({
+        providerId: 'nekoapi-chat',
+        modelId: 'gateway-chat',
+        executionMode: 'auto',
+      });
+      expect(manager.getAssistantRuntimeSettingsSnapshot()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'nekoapi-chat',
+          selectedModelId: 'gateway-chat',
+          executionMode: 'auto',
+        }),
+      );
+
+      manager.reloadConfig();
+
+      expect(manager.getAssistantRuntimeSettingsSnapshot()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'deepseek-chat',
+          selectedModelId: 'deepseek-v4-pro',
+          executionMode: 'auto',
+        }),
+      );
+    });
+
+    it('clears runtime provider/model selection back to file defaults when webview selects auto', async () => {
+      const deepseekProvider: Provider = {
+        id: 'deepseek-chat',
+        name: 'deepseek',
+        displayName: 'DeepSeek',
+        type: 'generic',
+        apiUrl: 'https://api.deepseek.com/v1',
+        enabled: true,
+        connectionKind: 'direct',
+        protocolProfile: 'openai-chat',
+        requiresApiKey: false,
+      };
+      const deepseekModel: Model = {
+        id: 'deepseek-v4-pro',
+        name: 'deepseek-chat',
+        displayName: 'DeepSeek V4 Pro',
+        providerId: 'deepseek-chat',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [deepseekProvider],
+            models: [deepseekModel],
+            defaultModels: {
+              llm: {
+                providerId: 'deepseek-chat',
+                modelId: 'deepseek-v4-pro',
+              },
+            },
+          },
+        }),
+      });
+
+      await manager.applyRuntimeAssistantSettingsFromWebview({
+        providerId: 'nekoapi-chat',
+        modelId: 'gateway-chat',
+      });
+      await manager.applyRuntimeAssistantSettingsFromWebview({
+        providerId: null,
+        modelId: null,
+      });
+
+      expect(manager.getAssistantRuntimeSettingsSnapshot()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: 'deepseek-chat',
+          selectedModelId: 'deepseek-v4-pro',
+        }),
+      );
+    });
+
     it('blocks conversation when selected default provider is unavailable', () => {
       const validProvider: Provider = {
         ...SAMPLE_PROVIDER,

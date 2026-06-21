@@ -234,6 +234,92 @@ function createMockProviders(isConfigured = false) {
   };
 }
 
+function createDeepSeekProvidersWithGatewayCandidate() {
+  const providers = new Map([
+    [
+      'deepseek-chat',
+      {
+        id: 'deepseek-chat',
+        isConfigured: true,
+        defaultModel: 'deepseek-v4-pro',
+        modelIds: ['deepseek-v4-pro'],
+        modelCapabilities: { 'deepseek-v4-pro': ['chat', 'streaming'] },
+      },
+    ],
+    [
+      'nekoapi-chat',
+      {
+        id: 'nekoapi-chat',
+        isConfigured: true,
+        defaultModel: 'gateway-chat',
+        modelIds: ['gateway-chat'],
+        modelCapabilities: { 'gateway-chat': ['chat', 'streaming', 'vision'] },
+      },
+    ],
+  ]);
+  const providerConfigs = new Map([
+    [
+      'deepseek-chat',
+      {
+        id: 'deepseek-chat',
+        name: 'deepseek',
+        displayName: 'DeepSeek',
+        type: 'generic' as const,
+        apiUrl: 'https://api.deepseek.com/v1',
+        enabled: true,
+        connectionKind: 'direct' as const,
+        protocolProfile: 'openai-chat' as const,
+      },
+    ],
+    [
+      'nekoapi-chat',
+      {
+        id: 'nekoapi-chat',
+        name: 'nekoapi',
+        displayName: 'NekoAPI',
+        type: 'newapi' as const,
+        apiUrl: 'https://www.nekoapi.com/v1',
+        enabled: true,
+        connectionKind: 'gateway' as const,
+        protocolProfile: 'newapi' as const,
+      },
+    ],
+  ]);
+  const models = new Map([
+    [
+      'deepseek-v4-pro',
+      {
+        id: 'deepseek-v4-pro',
+        name: 'deepseek-chat',
+        displayName: 'DeepSeek V4 Pro',
+        providerId: 'deepseek-chat',
+        type: 'llm' as const,
+        capabilities: ['chat', 'streaming'],
+        enabled: true,
+      },
+    ],
+    [
+      'gateway-chat',
+      {
+        id: 'gateway-chat',
+        name: 'gateway-chat',
+        displayName: 'Gateway Chat',
+        providerId: 'nekoapi-chat',
+        type: 'llm' as const,
+        capabilities: ['chat', 'streaming', 'vision'],
+        enabled: true,
+      },
+    ],
+  ]);
+
+  return {
+    getProvider: vi.fn((providerId: string) => providers.get(providerId)),
+    getDefaultProvider: vi.fn(() => providers.get('deepseek-chat')),
+    getProviderConfig: vi.fn((providerId: string) => providerConfigs.get(providerId)),
+    getModel: vi.fn((modelId: string) => models.get(modelId)),
+  };
+}
+
 /** Minimal ConversationBridge-shaped object */
 function createMockConversations() {
   const msgs: unknown[] = [];
@@ -515,6 +601,81 @@ describe('AgentMessageTurnHandler', () => {
   });
 
   describe('Agent LLM composer configuration', () => {
+    it('uses the DeepSeek direct default after config reload clears stale gateway selection', async () => {
+      const settings = createMockSettings();
+      settings.selectedProviderId = 'deepseek-chat';
+      settings.selectedModelId = 'deepseek-v4-pro';
+      const providers = createDeepSeekProvidersWithGatewayCandidate();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        settings,
+        providers,
+        agentManager,
+      });
+
+      await handler.handleUserMessage(createMockWebview() as any, createMessageRequest('hello'));
+
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerId: 'deepseek-chat',
+          modelId: 'deepseek-v4-pro',
+        }),
+      );
+      expect(providers.getProvider).not.toHaveBeenCalledWith('nekoapi-chat');
+    });
+
+    it('rejects missing explicit chat selection instead of using gateway defaults', async () => {
+      const webview = createMockWebview();
+      const providers = createDeepSeekProvidersWithGatewayCandidate();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        settings: createMockSettings(),
+        providers,
+        agentManager,
+      });
+
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
+
+      expect(agentRunner.configure).not.toHaveBeenCalled();
+      expect(agentRunner.execute).not.toHaveBeenCalled();
+      expect(providers.getDefaultProvider).not.toHaveBeenCalled();
+      expect(providers.getProvider).not.toHaveBeenCalledWith('nekoapi-chat');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'globalError',
+          message: expect.stringContaining('No Agent primary model is selected'),
+        }),
+      );
+    });
+
+    it('rejects partial runtime chat selection instead of inferring provider defaults', async () => {
+      const webview = createMockWebview();
+      const settings = createMockSettings();
+      settings.selectedProviderId = 'deepseek-chat';
+      const providers = createDeepSeekProvidersWithGatewayCandidate();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        settings,
+        providers,
+        agentManager,
+      });
+
+      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
+
+      expect(agentRunner.configure).not.toHaveBeenCalled();
+      expect(agentRunner.execute).not.toHaveBeenCalled();
+      expect(providers.getProvider).not.toHaveBeenCalledWith('deepseek-chat');
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'globalError',
+          message: expect.stringContaining('selection is incomplete'),
+        }),
+      );
+    });
+
     it('uses Agent primary model and projected LLM runtime options for the turn', async () => {
       const agentManager = createMockAgentManager();
       const agentRunner = agentManager.getOrCreate();
@@ -655,7 +816,7 @@ describe('AgentMessageTurnHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler();
 
-      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
+      await handler.handleUserMessage(webview as any, createChatModelRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
@@ -668,7 +829,7 @@ describe('AgentMessageTurnHandler', () => {
       const webview = createMockWebview();
       const handler = buildHandler();
 
-      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
+      await handler.handleUserMessage(webview as any, createChatModelRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
@@ -689,7 +850,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('hi', { conversationId: 'provided-conv-id' }),
+        createChatModelRequest('hi', { conversationId: 'provided-conv-id' }),
       );
 
       // ensureActive should NOT have been called when a conversationId is provided
@@ -718,7 +879,7 @@ describe('AgentMessageTurnHandler', () => {
 
       await handler.handleUserMessage(
         webview as any,
-        createMessageRequest('hello', { conversationId: 'my-conv' }),
+        createChatModelRequest('hello', { conversationId: 'my-conv' }),
       );
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
@@ -740,7 +901,7 @@ describe('AgentMessageTurnHandler', () => {
       const conversations = createMockConversations();
       const handler = buildHandler({ agentManager: null, conversations });
 
-      await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
+      await handler.handleUserMessage(webview as any, createChatModelRequest('hello'));
 
       const calls = webview.postMessage.mock.calls.map((c: unknown[]) => c[0]) as Array<{
         type: string;
@@ -760,7 +921,7 @@ describe('AgentMessageTurnHandler', () => {
       const handler = buildHandler({ agentManager: null });
 
       await expect(
-        handler.handleUserMessage(webview as any, createMessageRequest('hello')),
+        handler.handleUserMessage(webview as any, createChatModelRequest('hello')),
       ).resolves.toBeUndefined();
     });
   });
@@ -802,7 +963,7 @@ describe('AgentMessageTurnHandler', () => {
       const conversations = createMockConversations();
       const handler = buildHandler({ conversations });
 
-      await handler.handleUserMessage(webview as any, createMessageRequest('test message'));
+      await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
 
       expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
         expect.any(String),

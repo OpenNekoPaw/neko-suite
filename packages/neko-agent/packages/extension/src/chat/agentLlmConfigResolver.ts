@@ -9,6 +9,7 @@ export type AgentLlmConfigDiagnosticCode =
   | 'unsupported-agent-model-slot'
   | 'conflicting-primary-model'
   | 'missing-primary-model'
+  | 'incomplete-primary-model'
   | 'missing-primary-provider'
   | 'primary-provider-not-configured'
   | 'primary-model-not-found'
@@ -71,12 +72,7 @@ export function resolveAgentLlmConfigForTurn(
 
   const resolvedPrimary = primaryModel ?? input.chatModel ?? resolveDefaultPrimaryModel(input);
   if (!resolvedPrimary) {
-    diagnostics.push({
-      code: 'missing-primary-model',
-      slot: 'primary',
-      message:
-        'No Agent primary model is selected. Choose a configured LLM model before sending this Agent message.',
-    });
+    diagnostics.push(resolveMissingPrimaryModelDiagnostic(input));
     return { ok: false, diagnostics };
   }
 
@@ -128,35 +124,28 @@ function resolveDefaultPrimaryModel(
     return { providerId: selectedProviderId, modelId: selectedModelId, category: 'llm' };
   }
 
-  if (selectedProviderId) {
-    const provider = input.providers.getProvider(selectedProviderId);
-    if (!provider?.defaultModel) return undefined;
-    return {
-      providerId: selectedProviderId,
-      modelId: provider.defaultModel,
-      category: 'llm',
-    };
-  }
+  return undefined;
+}
 
-  if (selectedModelId) {
-    const model = input.providers.getModel(selectedModelId);
-    if (!model) return undefined;
+function resolveMissingPrimaryModelDiagnostic(
+  input: ResolveAgentLlmConfigInput,
+): AgentLlmConfigDiagnostic {
+  const selectedProviderId = input.settings.selectedProviderId ?? undefined;
+  const selectedModelId = input.settings.selectedModelId ?? undefined;
+  if (selectedProviderId || selectedModelId) {
     return {
-      providerId: model.providerId,
-      modelId: selectedModelId,
-      category: 'llm',
+      code: 'incomplete-primary-model',
+      slot: 'primary',
+      message:
+        'Agent primary model selection is incomplete. Choose a configured LLM provider and model before sending this Agent message.',
     };
-  }
-
-  const defaultProvider = input.providers.getDefaultProvider();
-  if (!defaultProvider?.id || !defaultProvider.defaultModel) {
-    return undefined;
   }
 
   return {
-    providerId: defaultProvider.id,
-    modelId: defaultProvider.defaultModel,
-    category: 'llm',
+    code: 'missing-primary-model',
+    slot: 'primary',
+    message:
+      'No Agent primary model is selected. Choose a configured LLM model before sending this Agent message.',
   };
 }
 

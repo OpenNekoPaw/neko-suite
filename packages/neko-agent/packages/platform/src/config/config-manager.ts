@@ -538,6 +538,14 @@ export class ConfigManager {
     const updates = this.mapUnifiedScalarsToAssistantSettings(
       mapWebviewSettingsToUnifiedScalars(settings),
     );
+    if (isClearingRuntimeModelSelection(settings)) {
+      const updatesWithoutModelSelection = { ...updates };
+      delete updatesWithoutModelSelection.selectedProviderId;
+      delete updatesWithoutModelSelection.selectedModelId;
+      this.clearRuntimeAssistantModelSelection();
+      this.setRuntimeAssistantSettings(updatesWithoutModelSelection);
+      return;
+    }
     this.setRuntimeAssistantSettings(updates);
   }
 
@@ -627,6 +635,7 @@ export class ConfigManager {
       : undefined;
     this.workspaceConfigReadResult = workspaceResult?.raw ?? null;
     this.workspaceConfig = workspaceResult?.config ?? null;
+    this.clearRuntimeAssistantModelSelection();
     this.invalidateCache();
     this.configDiagnostic = this.buildConfigDiagnostic();
   }
@@ -953,6 +962,20 @@ export class ConfigManager {
     };
   }
 
+  private clearRuntimeAssistantModelSelection(): void {
+    if (
+      !('selectedProviderId' in this.runtimeAssistantSettings) &&
+      !('selectedModelId' in this.runtimeAssistantSettings)
+    ) {
+      return;
+    }
+
+    const nextSettings = { ...this.runtimeAssistantSettings };
+    delete nextSettings.selectedProviderId;
+    delete nextSettings.selectedModelId;
+    this.runtimeAssistantSettings = nextSettings;
+  }
+
   private mapUnifiedScalarsToAssistantSettings(
     updates: Partial<UnifiedConfig>,
   ): Partial<AssistantSettingsSnapshot> {
@@ -1107,6 +1130,15 @@ export class ConfigManager {
       this.mcpServers.set(id, { ...server, args: updatedArgs });
     });
   }
+}
+
+function isClearingRuntimeModelSelection(settings: Record<string, unknown>): boolean {
+  return (
+    'providerId' in settings &&
+    'modelId' in settings &&
+    settings.providerId == null &&
+    settings.modelId == null
+  );
 }
 
 function toModelOptionId(ref: ModelRefConfig): string {
