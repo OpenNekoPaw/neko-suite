@@ -80,7 +80,7 @@ export interface ChatWorkspaceProps {
   updateSettings: (partial: Partial<SettingsState>) => void;
   // Model selection (owned by ConversationController for settingsData hydration)
   selectedModel: string;
-  setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
+  setSelectedModel: (modelId: string) => void;
   mediaModelSelection: import('@/hooks/useUIState').MediaModelSelection;
   setMediaModelSelection: React.Dispatch<
     React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>
@@ -284,6 +284,7 @@ export function ChatWorkspace({
     isThinking,
     isCharacterRoleSession,
     selectedModel,
+    availableModels,
     sessionMode,
     mediaProviderId: activeMediaModel?.providerId,
     mediaModelId: activeMediaModel?.modelId,

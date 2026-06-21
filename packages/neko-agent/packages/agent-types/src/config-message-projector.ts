@@ -29,6 +29,7 @@ export interface MediaModelSelectionDefaultsProjection {
 
 export interface MessageModelProjectionInput {
   selectedModel: string;
+  chatModelOptions?: readonly ChatModelOption[];
   sessionMode: AgentSessionMode;
   mediaProviderId?: string;
   mediaModelId?: string;

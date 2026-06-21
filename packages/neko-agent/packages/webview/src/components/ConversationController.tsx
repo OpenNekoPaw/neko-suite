@@ -416,6 +416,27 @@ export function ConversationController({
     },
     [activeConversationId, setPromptModeForConversation, updateSettings],
   );
+  const handleModelSelect = useCallback(
+    (modelId: string) => {
+      setSelectedModel(modelId);
+      const selectedOption =
+        modelId === 'auto'
+          ? null
+          : activeSettings.chatModelOptions.find((option) => option.id === modelId);
+      const selectedProviderId = selectedOption?.providerId || null;
+      const selectedModelId = selectedOption?.modelId || null;
+
+      updateSettings({
+        selectedProviderId,
+        selectedModelId,
+      });
+      VSCodeMessages.updateSettings({
+        providerId: selectedProviderId,
+        modelId: selectedModelId,
+      });
+    },
+    [activeSettings.chatModelOptions, updateSettings],
+  );
   const activeTabConversationId = activeTabId
     ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
     : null;
@@ -1092,7 +1113,7 @@ export function ConversationController({
               onSessionModeChange={handleEntrySessionModeChange}
               selectedModel={selectedModel}
               availableModels={entryModelState.availableModels}
-              onModelSelect={setSelectedModel}
+              onModelSelect={handleModelSelect}
               mediaModelSelection={mediaModelSelection}
               availableMediaModels={entryModelState.availableMediaModels}
               onMediaModelSelect={handleEntryMediaModelSelect}
@@ -1155,7 +1176,7 @@ export function ConversationController({
             updateSettings={updateActiveSettings}
             // Model selection (owned here for settingsData hydration)
             selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
+            setSelectedModel={handleModelSelect}
             mediaModelSelection={mediaModelSelection}
             setMediaModelSelection={setMediaModelSelection}
             mentionItems={mentionItems}

@@ -95,7 +95,7 @@ export function projectMediaModelSelectionDefaults(input: {
 export function projectMessageModelSelection(
   input: MessageModelProjectionInput,
 ): MessageModelProjection {
-  const chatModel = parseSelectedChatModel(input.selectedModel);
+  const chatModel = projectSelectedChatModel(input.selectedModel, input.chatModelOptions);
   const mediaModel = projectDirectMediaModel({
     sessionMode: input.sessionMode,
     providerId: input.mediaProviderId,
@@ -341,6 +341,24 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
   const message = readString(record, 'message');
   if (!filePath || !message) return undefined;
   return { code, filePath, message };
+}
+
+function projectSelectedChatModel(
+  selectedModel: string,
+  chatModelOptions: readonly ChatModelOption[] | undefined,
+): ModelRef<'llm'> | undefined {
+  if (selectedModel === 'auto') return undefined;
+
+  const option = chatModelOptions?.find((candidate) => candidate.id === selectedModel);
+  if (
+    option?.providerId &&
+    option.modelId &&
+    (option.category === undefined || option.category === 'llm')
+  ) {
+    return { providerId: option.providerId, modelId: option.modelId, category: 'llm' };
+  }
+
+  return parseSelectedChatModel(selectedModel);
 }
 
 function parseSelectedChatModel(selectedModel: string): ModelRef<'llm'> | undefined {

@@ -33,7 +33,7 @@ import {
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
 import { projectContextReferencesFromPayloads } from '../presenters/context-reference-presenter';
 import { toAttachmentTypeFromPathReference } from '../presenters/reference-token-presenter';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
 
 /** Per-category resolved media model for agent mode */
 export type AgentMediaModels = AgentMediaModelSelections;
@@ -54,6 +54,7 @@ export interface UseChatActionsProps {
   isThinking: boolean;
   isCharacterRoleSession?: boolean;
   selectedModel: string;
+  availableModels?: readonly ChatModelOption[];
   sessionMode?: SessionMode;
   mediaProviderId?: string;
   mediaModelId?: string;
@@ -88,6 +89,7 @@ export function useChatActions({
   isThinking,
   isCharacterRoleSession = false,
   selectedModel,
+  availableModels,
   sessionMode,
   mediaProviderId,
   mediaModelId,
@@ -199,6 +201,7 @@ export function useChatActions({
       const effectiveSessionMode = inputSessionMode ?? sessionMode ?? 'agent';
       const modelProjection = projectMessageModelSelection({
         selectedModel,
+        chatModelOptions: availableModels,
         sessionMode: effectiveSessionMode,
         mediaProviderId,
         mediaModelId,
@@ -229,6 +232,7 @@ export function useChatActions({
       agentMediaModels,
       activeConversationId,
       isConversationSwitching,
+      availableModels,
       isDuplicate,
       setMessages,
       setIsThinking,
@@ -274,6 +278,7 @@ export function useChatActions({
 
       const modelProjection = projectMessageModelSelection({
         selectedModel,
+        chatModelOptions: availableModels,
         sessionMode: 'agent',
       });
       VSCodeMessages.sendMessage({
@@ -287,6 +292,7 @@ export function useChatActions({
       isThinking,
       isConversationSwitching,
       selectedModel,
+      availableModels,
       setMessages,
       setIsThinking,
       setActiveTab,

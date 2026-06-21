@@ -319,6 +319,56 @@ describe('useChatActions', () => {
     expect(setStreamingMessageId).toHaveBeenCalledWith(null);
   });
 
+  it('resolves selected chat models from model options instead of parsing the option id', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-deepseek');
+      return useChatActions({
+        inputValue: '你好',
+        isThinking: false,
+        selectedModel: 'deepseek-v4-pro',
+        availableModels: [
+          {
+            id: 'deepseek-v4-pro',
+            label: 'DeepSeek V4 Pro',
+            providerId: 'deepseek-chat',
+            modelId: 'deepseek-v4-pro',
+            category: 'llm',
+          },
+        ],
+        activeConversationId: 'conv-deepseek',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-deepseek',
+        message: '你好',
+        chatModel: {
+          providerId: 'deepseek-chat',
+          modelId: 'deepseek-v4-pro',
+          category: 'llm',
+        },
+      }),
+    );
+  });
+
   it('does not attach hidden mode context when sending a normal message', () => {
     const setMessages = vi.fn();
     const setIsThinking = vi.fn();
@@ -591,6 +641,56 @@ describe('useChatActions', () => {
       expect.objectContaining({
         conversationId: 'conv-trigger',
         message: 'Use this selected clip',
+      }),
+    );
+  });
+
+  it('resolves triggerSend chat models from model options', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-trigger-model');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'deepseek-v4-pro',
+        availableModels: [
+          {
+            id: 'deepseek-v4-pro',
+            label: 'DeepSeek V4 Pro',
+            providerId: 'deepseek-chat',
+            modelId: 'deepseek-v4-pro',
+            category: 'llm',
+          },
+        ],
+        activeConversationId: 'conv-trigger-model',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.triggerSend('Use this selected clip');
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-trigger-model',
+        message: 'Use this selected clip',
+        chatModel: {
+          providerId: 'deepseek-chat',
+          modelId: 'deepseek-v4-pro',
+          category: 'llm',
+        },
       }),
     );
   });
