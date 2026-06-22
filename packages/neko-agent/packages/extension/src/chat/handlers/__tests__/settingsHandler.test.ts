@@ -49,18 +49,18 @@ describe('SettingsHandler', () => {
   });
 
   describe('sendSettings', () => {
-    it('should do nothing when platform is unavailable', () => {
+    it('should do nothing when platform is unavailable', async () => {
       handler = new SettingsHandler({});
-      handler.sendSettings(webview as any);
+      await handler.sendSettings(webview as any);
 
       expect(webview.postMessage).not.toHaveBeenCalled();
     });
 
-    it('should send settings data to webview', () => {
+    it('should send settings data to webview', async () => {
       handler = new SettingsHandler({
         platform: platform as any,
       });
-      handler.sendSettings(webview as any);
+      await handler.sendSettings(webview as any);
 
       expect(platform.config.reloadConfig).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -76,12 +76,12 @@ describe('SettingsHandler', () => {
       );
     });
 
-    it('should reload config only for explicit snapshot refresh calls', () => {
+    it('should reload config only for explicit snapshot refresh calls', async () => {
       handler = new SettingsHandler({
         platform: platform as any,
       });
 
-      handler.sendSettings(webview as any, { reloadConfig: true });
+      await handler.sendSettings(webview as any, { reloadConfig: true });
 
       expect(platform.config.reloadConfig).toHaveBeenCalledTimes(1);
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -89,7 +89,7 @@ describe('SettingsHandler', () => {
       );
     });
 
-    it('should expose platform-projected provider and media data', () => {
+    it('should expose platform-projected provider and media data', async () => {
       platform.config.getAssistantSettingsData.mockReturnValue({
         ...platform.config.getAssistantSettingsData(),
         defaultMediaModels: { image: 'openai:openai-dall-e-3' },
@@ -97,7 +97,7 @@ describe('SettingsHandler', () => {
       handler = new SettingsHandler({
         platform: platform as any,
       });
-      handler.sendSettings(webview as any);
+      await handler.sendSettings(webview as any);
 
       expect(platform.config.reloadConfig).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -107,6 +107,34 @@ describe('SettingsHandler', () => {
           defaultMediaModels: { image: 'openai:openai-dall-e-3' },
         }),
       );
+    });
+
+    it('passes account catalog snapshots into settings model projection', async () => {
+      const accountCatalog = {
+        getSnapshot: vi.fn().mockResolvedValue({
+          snapshot: {
+            source: 'account-gateway',
+            status: 'available',
+            provider: { id: 'neko-account-gateway' },
+            models: [],
+            entitlement: { allowedModelIds: [] },
+            expiresAt: 10_000,
+          },
+          refreshed: false,
+        }),
+        invalidateForAuthFailure: vi.fn(),
+      };
+      handler = new SettingsHandler({
+        platform: platform as any,
+        accountAiCatalog: accountCatalog as any,
+      });
+
+      await handler.sendSettings(webview as any);
+
+      expect(accountCatalog.getSnapshot).toHaveBeenCalledTimes(1);
+      expect(platform.config.getAssistantSettingsData).toHaveBeenCalledWith({
+        accountCatalog: expect.objectContaining({ source: 'account-gateway' }),
+      });
     });
   });
 

@@ -1018,7 +1018,7 @@ describe('ConfigManager', () => {
       );
     });
 
-    it('clears runtime provider/model selection back to file defaults when webview selects auto', async () => {
+    it('clears runtime provider/model selection back to file defaults for an explicit clear request', async () => {
       const deepseekProvider: Provider = {
         id: 'deepseek-chat',
         name: 'deepseek',

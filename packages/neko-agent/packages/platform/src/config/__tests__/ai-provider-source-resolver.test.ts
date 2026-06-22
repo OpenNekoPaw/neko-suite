@@ -52,6 +52,15 @@ function createAccountCatalog(): AccountAiCatalogSnapshot {
     },
     models: [
       {
+        id: 'auto',
+        name: 'auto',
+        displayName: 'Auto',
+        providerId: 'neko-account-gateway',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      },
+      {
         id: 'official-chat',
         name: 'gpt-4o-mini',
         displayName: 'Official Chat',
@@ -80,7 +89,7 @@ function createAccountCatalog(): AccountAiCatalogSnapshot {
     ],
     entitlement: {
       plan: 'Pro',
-      allowedModelIds: ['official-chat', 'official-image'],
+      allowedModelIds: ['auto', 'official-chat', 'official-image'],
       disabledModelIds: ['official-denied'],
     },
     defaults: {
@@ -111,6 +120,7 @@ describe('resolveAiProviderSources', () => {
     ]);
     expect(projection.modelGroups[0]?.providerLabel).toBe('Neko Official');
     expect(projection.modelGroups[0]?.modelsByType.llm?.map((model) => model.modelId)).toEqual([
+      'auto',
       'official-chat',
     ]);
     expect(projection.modelGroups[0]?.modelsByType.image?.map((model) => model.modelId)).toEqual([
@@ -120,10 +130,13 @@ describe('resolveAiProviderSources', () => {
       expect.objectContaining({ modelId: 'official-denied' }),
     );
     expect(projection.chatModelOptions.map((option) => option.id)).toEqual([
-      'auto',
+      'neko-account-gateway:auto',
       'neko-account-gateway:official-chat',
       'user-newapi:user-chat',
     ]);
+    expect(projection.chatModelOptions).not.toContainEqual(
+      expect.objectContaining({ id: 'auto', providerId: '', modelId: '' }),
+    );
   });
 
   it('treats non-AI config as absent so account gateway can satisfy configuration', () => {

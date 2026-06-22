@@ -253,7 +253,7 @@ describe('config message presenter', () => {
 
     expect(
       projectMessageModelSelection({
-        selectedModel: 'auto',
+        selectedModel: '',
         sessionMode: 'video',
         mediaProviderId: 'runway',
         mediaModelId: 'gen-4',
@@ -264,18 +264,35 @@ describe('config message presenter', () => {
 
     expect(
       projectMessageModelSelection({
-        selectedModel: 'auto',
+        selectedModel: '',
         sessionMode: 'image',
         mediaProviderId: 'openai',
         mediaModelId: 'none',
       }),
     ).toEqual({});
+
+    expect(
+      projectMessageModelSelection({
+        selectedModel: 'neko-account-gateway:auto',
+        sessionMode: 'agent',
+        chatModelOptions: [
+          {
+            id: 'neko-account-gateway:auto',
+            label: 'Neko Official / Auto',
+            providerId: 'neko-account-gateway',
+            modelId: 'auto',
+            category: 'llm',
+          },
+        ],
+      }),
+    ).toEqual({
+      chatModel: { providerId: 'neko-account-gateway', modelId: 'auto', category: 'llm' },
+    });
   });
 
   it('projects chat workspace model lists and agent media selections', () => {
     const projection = projectChatWorkspaceModelState({
       chatModelOptions: [
-        { id: 'auto', label: 'Auto', providerId: '', modelId: '' },
         {
           id: 'openai:gpt-4.1',
           label: 'OpenAI / GPT 4.1',
@@ -317,7 +334,7 @@ describe('config message presenter', () => {
       },
     });
 
-    expect(projection.availableModels.map((model) => model.id)).toEqual(['auto', 'openai:gpt-4.1']);
+    expect(projection.availableModels.map((model) => model.id)).toEqual(['openai:gpt-4.1']);
     expect(projection.availableMediaModels.map((model) => model.id)).toEqual([
       'flux:pro',
       'runway:gen-4',
@@ -336,14 +353,14 @@ describe('config message presenter', () => {
     expect(
       projectChatWorkspaceModelState({
         chatModelOptions: [],
-        selectedModel: 'auto',
+        selectedModel: '',
         defaultContextWindow: 4096,
         sessionMode: 'agent',
         mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
       }),
     ).toMatchObject({
-      allModels: [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }],
-      availableModels: [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }],
+      allModels: [],
+      availableModels: [],
       availableMediaModels: [],
       selectedContextWindow: 4096,
     });

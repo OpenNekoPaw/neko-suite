@@ -76,6 +76,7 @@ export interface UseMessageHandlerProps {
 
   // State setters - Settings
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
+  selectedModelRef?: MutableRefObject<string>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
 
@@ -149,6 +150,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setActiveTabId,
     setActiveTab,
     setSettings,
+    selectedModelRef,
     setSelectedModel,
     setMediaModelSelection,
     setWorkItemsByConversation,
@@ -234,6 +236,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTabId,
       setActiveTab,
       setSettings,
+      selectedModelRef,
       setSelectedModel,
       setMediaModelSelection,
       setWorkItemsByConversation,
@@ -285,6 +288,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTabId,
       setActiveTab,
       setSettings,
+      selectedModelRef,
       setSelectedModel,
       setMediaModelSelection,
       setWorkItemsByConversation,

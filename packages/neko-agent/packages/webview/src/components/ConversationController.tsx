@@ -166,7 +166,8 @@ export function ConversationController({
 
   // Model selection state — owned here so the settingsData handler can hydrate
   // it on reload. Passed down to ChatWorkspace which reads it for send().
-  const [selectedModel, setSelectedModel] = useState('auto');
+  const [selectedModel, setSelectedModel] = useState('');
+  const selectedModelRef = useRef('');
   const [mediaModelSelection, setMediaModelSelection] = useState<MediaModelSelection>({
     image: 'none',
     video: 'none',
@@ -179,6 +180,10 @@ export function ConversationController({
   const [entrySessionMode, setEntrySessionMode] = useState<SessionMode>('agent');
   const [entryGenCategory, setEntryGenCategory] = useState<GenCategory>('image');
   const [entryGenParams, setEntryGenParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
+
+  useEffect(() => {
+    selectedModelRef.current = selectedModel;
+  }, [selectedModel]);
 
   // ---- Per-conversation ref Maps ----
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
@@ -418,13 +423,15 @@ export function ConversationController({
   );
   const handleModelSelect = useCallback(
     (modelId: string) => {
+      const selectedOption = activeSettings.chatModelOptions.find(
+        (option) => option.id === modelId,
+      );
+      if (!selectedOption?.providerId || !selectedOption.modelId) return;
+
+      selectedModelRef.current = modelId;
       setSelectedModel(modelId);
-      const selectedOption =
-        modelId === 'auto'
-          ? null
-          : activeSettings.chatModelOptions.find((option) => option.id === modelId);
-      const selectedProviderId = selectedOption?.providerId || null;
-      const selectedModelId = selectedOption?.modelId || null;
+      const selectedProviderId = selectedOption.providerId;
+      const selectedModelId = selectedOption.modelId;
 
       updateSettings({
         selectedProviderId,
@@ -615,6 +622,7 @@ export function ConversationController({
     setActiveTabId,
     setActiveTab,
     setSettings,
+    selectedModelRef,
     setSelectedModel,
     setMediaModelSelection,
     setWorkItemsByConversation,

@@ -6,6 +6,7 @@
 
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
+import type { ChatModelOption } from '@neko/shared';
 import type {
   SettingsDataMessage,
   ProjectFilesMessage,
@@ -29,6 +30,8 @@ import {
   projectSsoErrorMessage,
   projectSsoSessionChangedMessage,
 } from '../presenters/config-message-presenter';
+import { VSCodeMessages } from '../messages';
+import type { SettingsDataProjection } from '@neko-agent/types';
 
 /**
  * Handle 'settingsData' message - Settings from extension
@@ -43,7 +46,25 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
     ...projection.settingsPatch,
   }));
 
-  context.setSelectedModel(projection.selectedModel ?? 'auto');
+  const defaultChatModel = selectInitialChatModel(projection);
+  const selectedModel = resolveHydratedSelectedModel(
+    projection,
+    context.selectedModelRef?.current,
+    defaultChatModel,
+  );
+  if (selectedModel !== context.selectedModelRef?.current) {
+    context.setSelectedModel(selectedModel);
+  }
+  if (!projection.selectedModel && defaultChatModel) {
+    context.updateSettings({
+      selectedProviderId: defaultChatModel.providerId,
+      selectedModelId: defaultChatModel.modelId,
+    });
+    VSCodeMessages.updateSettings({
+      providerId: defaultChatModel.providerId,
+      modelId: defaultChatModel.modelId,
+    });
+  }
 
   if (Object.keys(projection.defaultMediaModels).length > 0) {
     context.setMediaModelSelection((prev) => {
@@ -59,6 +80,34 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
     context.setGlobalError(projection.configDiagnostic.message);
   }
 };
+
+function resolveHydratedSelectedModel(
+  projection: SettingsDataProjection,
+  currentSelectedModel: string | undefined,
+  defaultChatModel: ChatModelOption | null,
+): string {
+  const chatModelOptions = projection.settingsPatch.chatModelOptions ?? [];
+  if (
+    currentSelectedModel &&
+    chatModelOptions.some((option) => option.id === currentSelectedModel)
+  ) {
+    return currentSelectedModel;
+  }
+  return projection.selectedModel ?? defaultChatModel?.id ?? '';
+}
+
+function selectInitialChatModel(projection: SettingsDataProjection): ChatModelOption | null {
+  const chatModelOptions = projection.settingsPatch.chatModelOptions ?? [];
+  const llmModels = chatModelOptions.filter(
+    (option) => option.providerId && option.modelId && (option.category ?? 'llm') === 'llm',
+  );
+  return (
+    llmModels.find((option) => option.source === 'explicit-config') ??
+    llmModels.find((option) => option.source === 'account-gateway') ??
+    llmModels[0] ??
+    null
+  );
+}
 
 /**
  * Handle 'projectFiles' message - Project file list + optional canvas/story mention extras

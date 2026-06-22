@@ -7,7 +7,7 @@ export function tryHandleSettingsRoute(
 ): boolean {
   switch (message.type) {
     case 'getSettings':
-      deps.settingsHandler.sendSettings(deps.webview);
+      void deps.settingsHandler.sendSettings(deps.webview);
       return true;
 
     case 'refreshConfigSnapshot':

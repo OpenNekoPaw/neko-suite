@@ -374,8 +374,7 @@ function parseSelectedChatModel(selectedModel: string): ModelRef<'llm'> | undefi
 function normalizeChatModelOptions(
   chatModelOptions: readonly ChatModelOption[],
 ): ChatModelOption[] {
-  if (chatModelOptions.length > 0) return [...chatModelOptions];
-  return [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
+  return [...chatModelOptions];
 }
 
 function resolveSelectedContextWindow(input: {
@@ -388,10 +387,6 @@ function resolveSelectedContextWindow(input: {
       ? input.defaultContextWindow
       : 8192;
 
-  if (input.selectedModel === 'auto') {
-    return defaultContextWindow;
-  }
-
   const selected = input.availableModels.find((model) => model.id === input.selectedModel);
   return selected?.contextWindow && selected.contextWindow > 0
     ? selected.contextWindow
@@ -403,7 +398,10 @@ function isAgentMediaCategory(category: unknown): category is AgentMediaModelCat
 }
 
 function isChatSelectableModel(model: ChatModelOption): boolean {
-  return model.id === 'auto' || model.category === undefined || model.category === 'llm';
+  return (
+    Boolean(model.providerId && model.modelId) &&
+    (model.category === undefined || model.category === 'llm')
+  );
 }
 
 function isAgentMediaChatModelOption(model: ChatModelOption): model is ChatModelOption & {

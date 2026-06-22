@@ -32,6 +32,8 @@ describe('ChatModelService', () => {
       label: 'Anthropic / Claude Sonnet 4',
       providerId: 'anthropic',
       modelId: 'claude-sonnet-4',
+      providerLabel: 'Anthropic',
+      source: 'explicit-config',
       capabilities: ['chat'],
       category: 'llm',
       contextWindow: 200000,
@@ -72,6 +74,10 @@ describe('ChatModelService', () => {
       label: 'Ollama Local / Llama 3.2',
       providerId: 'ollama-local',
       modelId: 'ollama-local-llama3.2',
+      providerLabel: 'Ollama Local',
+      source: 'explicit-config',
+      connectionKind: 'local',
+      protocolProfile: 'ollama',
       capabilities: ['chat'],
       category: 'llm',
       llmParameterControls: {
@@ -90,6 +96,20 @@ describe('ChatModelService', () => {
       service
         .getChatModelOptions([{ ...provider, apiUrl: '' }], [model])
         .map((option) => option.id),
-    ).toEqual(['auto']);
+    ).toEqual([]);
+  });
+
+  it('keeps a real provider-owned auto model selectable', () => {
+    const service = new ChatModelService();
+
+    expect(
+      service.getChatModelOptions([provider], [{ ...model, id: 'auto', name: 'auto' }]),
+    ).toContainEqual(
+      expect.objectContaining({
+        id: 'anthropic:auto',
+        providerId: 'anthropic',
+        modelId: 'auto',
+      }),
+    );
   });
 });

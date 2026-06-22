@@ -46,17 +46,11 @@ const chatModelService = new ChatModelService();
 export function resolveAiProviderSources(input: AiProviderSourceInput): AiProviderSourceProjection {
   const explicitAiConfig = detectExplicitAiConfig(input);
   const accountModels = buildAccountModelOptions(input.accountCatalog);
-  const explicitModelOptions = chatModelService
-    .getChatModelOptions([...input.providers], [...input.models])
-    .filter((option) => option.id !== 'auto');
+  const explicitModelOptions = chatModelService.getChatModelOptions(
+    [...input.providers],
+    [...input.models],
+  );
   const chatModelOptions = [
-    {
-      id: 'auto',
-      label: 'Auto',
-      providerId: '',
-      modelId: '',
-      category: 'llm',
-    } satisfies ChatModelOption,
     ...accountModels.filter((option) => option.category === 'llm'),
     ...explicitModelOptions,
   ];
@@ -132,6 +126,15 @@ function buildAccountModelOptions(
         label: `${catalog.provider.displayName || catalog.provider.name} / ${modelName}`,
         providerId: catalog.provider.id,
         modelId: model.id,
+        providerLabel: catalog.provider.displayName || catalog.provider.name || catalog.provider.id,
+        source: 'account-gateway',
+        ...(catalog.provider.connectionKind
+          ? { connectionKind: catalog.provider.connectionKind }
+          : {}),
+        ...(catalog.provider.protocolProfile
+          ? { protocolProfile: catalog.provider.protocolProfile }
+          : {}),
+        ...(catalog.provider.supportLevel ? { supportLevel: catalog.provider.supportLevel } : {}),
         capabilities: [...model.capabilities],
         category,
         ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),

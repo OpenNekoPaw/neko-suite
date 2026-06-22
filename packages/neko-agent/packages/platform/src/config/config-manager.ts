@@ -257,8 +257,7 @@ export class ConfigManager {
 
   /**
    * Get chat model options for UI model selector
-   * Returns a list of enabled models with 'auto' as the first option
-   * Only includes models from providers with API key configured
+   * Returns enabled models from configured providers.
    */
   getChatModelOptions(): ChatModelOption[] {
     this.ensureMerged();
@@ -352,9 +351,11 @@ export class ConfigManager {
     };
   }
 
-  getAssistantSettingsData(): AssistantSettingsData {
+  getAssistantSettingsData(
+    options: { accountCatalog?: AccountAiCatalogSnapshot | null } = {},
+  ): AssistantSettingsData {
     const config = this.getConfig();
-    const providerSourceProjection = this.resolveProviderSources(null);
+    const providerSourceProjection = this.resolveProviderSources(options.accountCatalog ?? null);
     const chatModelOptions = [...providerSourceProjection.chatModelOptions];
     const explicitState = buildAssistantConfigState(config);
     const settingsDiagnostic =

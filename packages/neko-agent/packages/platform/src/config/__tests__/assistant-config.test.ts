@@ -293,7 +293,6 @@ describe('assistant config presenter', () => {
 
   it('normalizes default media model names to chat option IDs', () => {
     const options: ChatModelOption[] = [
-      { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'llm' },
       {
         id: 'openai:openai-dall-e-3',
         label: 'OpenAI / DALL-E 3',

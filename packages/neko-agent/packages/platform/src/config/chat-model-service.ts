@@ -30,13 +30,10 @@ export interface IChatModelService {
 export class ChatModelService implements IChatModelService {
   /**
    * Get chat model options for UI model selector
-   * Returns a list of enabled models with 'auto' as the first option
-   * Only includes models from configured providers.
+   * Returns enabled models from configured providers.
    */
   getChatModelOptions(providers: Provider[], models: Model[]): ChatModelOption[] {
-    const options: ChatModelOption[] = [
-      { id: 'auto', label: 'Auto', providerId: '', modelId: '', category: 'llm' },
-    ];
+    const options: ChatModelOption[] = [];
 
     const configuredProviders = providers.filter(
       (provider) => provider.enabled && isProviderConfigured(provider),
@@ -60,6 +57,11 @@ export class ChatModelService implements IChatModelService {
         label: `${providerName} / ${modelName}`,
         providerId: model.providerId,
         modelId: model.id,
+        providerLabel: providerName,
+        source: 'explicit-config',
+        ...(provider.connectionKind ? { connectionKind: provider.connectionKind } : {}),
+        ...(provider.protocolProfile ? { protocolProfile: provider.protocolProfile } : {}),
+        ...(provider.supportLevel ? { supportLevel: provider.supportLevel } : {}),
         capabilities: capabilities as ModelCapability[],
         category,
         ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),

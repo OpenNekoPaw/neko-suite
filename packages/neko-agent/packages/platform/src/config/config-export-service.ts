@@ -50,6 +50,9 @@ export interface CustomProviderConfig {
   name: string;
   displayName?: string;
   type?: string;
+  connectionKind?: Provider['connectionKind'];
+  protocolProfile?: Provider['protocolProfile'];
+  requiresApiKey?: boolean;
   baseUrl?: string;
   apiKey?: string;
 }
@@ -213,15 +216,17 @@ export class ConfigExportService implements IConfigExportService {
     operations: IConfigOperations,
   ): Promise<ConfigImportResult> {
     try {
+      const providerType = (config.type || 'generic') as Provider['type'];
+      const isLocalProvider = providerType === 'ollama';
       await operations.setProvider({
         id: config.id,
         name: config.name,
         displayName: config.displayName || config.name,
-        type: (config.type || 'generic') as Provider['type'],
-        connectionKind: config.type === 'ollama' ? 'local' : 'gateway',
-        protocolProfile: config.type === 'ollama' ? 'ollama' : 'newapi',
+        type: providerType,
+        connectionKind: config.connectionKind ?? (isLocalProvider ? 'local' : 'direct'),
+        protocolProfile: config.protocolProfile ?? (isLocalProvider ? 'ollama' : 'openai-chat'),
         supportLevel: 'custom',
-        requiresApiKey: config.type === 'ollama' ? false : true,
+        requiresApiKey: config.requiresApiKey ?? !isLocalProvider,
         apiUrl: config.baseUrl || '',
         apiKey: config.apiKey,
         enabled: true,

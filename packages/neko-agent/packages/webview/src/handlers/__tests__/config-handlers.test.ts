@@ -1,9 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionToWebviewMessage } from '@neko-agent/types';
 import { configHandlers } from '../config-handlers';
 import type { MessageHandlerContext } from '../types';
 
+const messageMocks = vi.hoisted(() => ({
+  updateSettingsMessage: vi.fn(),
+}));
+
+vi.mock('../../messages', () => ({
+  VSCodeMessages: {
+    updateSettings: messageMocks.updateSettingsMessage,
+  },
+}));
+
 describe('configHandlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('treats configChanged as a deprecated no-op', () => {
     const context = createContext();
 
@@ -34,7 +48,7 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
-    expect(context.setSelectedModel).toHaveBeenCalledWith('auto');
+    expect(context.setSelectedModel).toHaveBeenCalledWith('');
     expect(context.setGlobalError).toHaveBeenCalledWith(
       'Configuration file contains invalid TOML: /home/user/.neko/config.toml. Fix the file, then open a new Agent session or tab.',
     );
@@ -56,7 +70,7 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
-    expect(context.setSelectedModel).toHaveBeenCalledWith('auto');
+    expect(context.setSelectedModel).toHaveBeenCalledWith('');
     expect(context.setGlobalError).not.toHaveBeenCalled();
   });
 
@@ -74,6 +88,114 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSelectedModel).toHaveBeenCalledWith('openai:gpt-4.1');
+  });
+
+  it('keeps the current model when a stale settings snapshot selects a different available model', () => {
+    const context = createContext();
+    context.selectedModelRef = { current: 'neko-account-gateway:gpt-5.5' };
+
+    dispatch(
+      {
+        type: 'settingsData',
+        providers: [],
+        selectedProviderId: 'deepseek-chat',
+        selectedModelId: 'deepseek-v4-pro',
+        chatModelOptions: [
+          {
+            id: 'deepseek-chat:deepseek-v4-pro',
+            label: 'DeepSeek V4 Pro',
+            providerId: 'deepseek-chat',
+            modelId: 'deepseek-v4-pro',
+            category: 'llm',
+          },
+          {
+            id: 'neko-account-gateway:gpt-5.5',
+            label: 'GPT 5.5',
+            providerId: 'neko-account-gateway',
+            modelId: 'gpt-5.5',
+            category: 'llm',
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(context.setSelectedModel).not.toHaveBeenCalled();
+  });
+
+  it('hydrates the first real LLM model when settings has no explicit selection', () => {
+    const context = createContext();
+
+    dispatch(
+      {
+        type: 'settingsData',
+        providers: [],
+        selectedProviderId: null,
+        selectedModelId: null,
+        chatModelOptions: [
+          {
+            id: 'neko-account-gateway:auto',
+            label: 'Neko Official / Auto',
+            providerId: 'neko-account-gateway',
+            modelId: 'auto',
+            category: 'llm',
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(context.setSelectedModel).toHaveBeenCalledWith('neko-account-gateway:auto');
+    expect(context.updateSettings).toHaveBeenCalledWith({
+      selectedProviderId: 'neko-account-gateway',
+      selectedModelId: 'auto',
+    });
+    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith({
+      providerId: 'neko-account-gateway',
+      modelId: 'auto',
+    });
+  });
+
+  it('prefers explicit config LLM models over account gateway models for automatic hydration', () => {
+    const context = createContext();
+
+    dispatch(
+      {
+        type: 'settingsData',
+        providers: [],
+        selectedProviderId: null,
+        selectedModelId: null,
+        chatModelOptions: [
+          {
+            id: 'neko-account-gateway:auto',
+            label: 'Neko Official / Auto',
+            providerId: 'neko-account-gateway',
+            modelId: 'auto',
+            source: 'account-gateway',
+            category: 'llm',
+          },
+          {
+            id: 'deepseek-direct:deepseek-chat',
+            label: 'DeepSeek / deepseek-chat',
+            providerId: 'deepseek-direct',
+            modelId: 'deepseek-chat',
+            source: 'explicit-config',
+            category: 'llm',
+          },
+        ],
+      },
+      context,
+    );
+
+    expect(context.setSelectedModel).toHaveBeenCalledWith('deepseek-direct:deepseek-chat');
+    expect(context.updateSettings).toHaveBeenCalledWith({
+      selectedProviderId: 'deepseek-direct',
+      selectedModelId: 'deepseek-chat',
+    });
+    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith({
+      providerId: 'deepseek-direct',
+      modelId: 'deepseek-chat',
+    });
   });
 
   it('keeps missing config diagnostics in state without a global error', () => {
