@@ -38,6 +38,9 @@ export interface IAgentConfig {
   /** Model ID */
   modelId?: string;
 
+  /** Provider ID */
+  providerId?: string;
+
   /** Selected media generation provider/model targets for ProviderCard expression context. */
   providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
 

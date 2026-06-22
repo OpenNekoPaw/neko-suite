@@ -196,7 +196,7 @@ describe('CharacterDialogueRuntimeService', () => {
     await expect(
       evaluateCharacterDialogueTranscript(artifact, {
         service: { chat },
-        modelId: 'model-a',
+        chatModel: { providerId: 'provider-a', modelId: 'model-a' },
         now: () => '2026-06-01T00:00:00.000Z',
       }),
     ).resolves.toEqual(report);
@@ -207,6 +207,7 @@ describe('CharacterDialogueRuntimeService', () => {
         expect.objectContaining({ role: 'user' }),
       ]),
       expect.objectContaining({
+        providerId: 'provider-a',
         modelId: 'model-a',
         tools: [],
         toolChoice: 'none',

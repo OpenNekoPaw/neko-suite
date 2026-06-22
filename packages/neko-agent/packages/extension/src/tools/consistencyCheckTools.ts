@@ -1,6 +1,7 @@
 import {
   createConsistencyCheckTools as createAgentConsistencyCheckTools,
   type ConsistencyCheckToolsDeps as AgentConsistencyCheckToolsDeps,
+  type ConsistencyChatModelRef,
   type ConsistencyFrameExtractor,
   type ConsistencyLLMService,
   type IClipScorer,
@@ -14,6 +15,7 @@ export type IFrameExtractor = ConsistencyFrameExtractor;
 
 export interface ConsistencyCheckToolsDeps {
   createService: () => ConsistencyLLMService;
+  chatModel?: ConsistencyChatModelRef;
   clipScorer?: IClipScorer;
   frameExtractor?: ConsistencyFrameExtractor;
 }
@@ -22,6 +24,7 @@ export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): To
   const agentDeps: AgentConsistencyCheckToolsDeps = {
     createService: deps.createService,
     logger,
+    ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
     ...(deps.clipScorer ? { clipScorer: deps.clipScorer } : {}),
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   };

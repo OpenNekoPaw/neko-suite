@@ -143,6 +143,10 @@ export function initializeSession(
     ? new CreativeSummarizer(classifier, {
         service: config.service,
         creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
+        summarizerConfig: {
+          provider: config.providerId,
+          model: config.modelId,
+        },
       })
     : undefined;
 

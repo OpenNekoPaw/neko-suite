@@ -35,6 +35,7 @@ export interface AgentSubAgentRuntimeRegistration {
   readonly workspaceRoot?: string;
   readonly createService: () => IService;
   readonly toolRegistry: IToolRegistry;
+  readonly providerId?: string;
   readonly modelId?: string;
   readonly modelTierResolver?: ModelTierResolver;
   readonly capabilityRuntime?: ICapabilityRuntime;
@@ -139,9 +140,15 @@ export class SubAgentRuntimeCoordinator {
   private _resolveModelTier(
     tier: ModelTier,
     context: Parameters<ModelTierResolver>[1],
-  ): string | undefined {
+  ): ReturnType<ModelTierResolver> {
     const runtime = this._resolveRuntime(context);
-    return runtime.modelTierResolver?.(tier, context) ?? runtime.modelId;
+    const resolved = runtime.modelTierResolver?.(tier, context);
+    if (resolved) {
+      return resolved;
+    }
+    return runtime.providerId && runtime.modelId
+      ? { providerId: runtime.providerId, modelId: runtime.modelId }
+      : undefined;
   }
 
   private _createSubAgentExecutor(
@@ -160,6 +167,7 @@ export class SubAgentRuntimeCoordinator {
           systemPrompt: agentConfig.systemPrompt,
           executionMode: 'auto',
           maxIterations: agentConfig.maxIterations,
+          providerId: agentConfig.providerId,
           modelId: agentConfig.primaryModel,
           runtime: {
             capabilityRuntime: {

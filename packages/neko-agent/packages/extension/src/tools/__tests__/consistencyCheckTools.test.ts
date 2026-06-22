@@ -41,6 +41,8 @@ function createMockService(responseJson: unknown) {
   };
 }
 
+const CHAT_MODEL = { providerId: 'deepseek-direct', modelId: 'deepseek-chat' } as const;
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -59,6 +61,7 @@ describe('createConsistencyCheckTools', () => {
   it('should return array with QualityCheckConsistency tool', () => {
     const tools = createConsistencyCheckTools({
       createService: () => mockService,
+      chatModel: CHAT_MODEL,
     });
 
     expect(tools).toHaveLength(1);
@@ -82,6 +85,7 @@ describe('createConsistencyCheckTools', () => {
   it('should return ConsistencyReport on execute', async () => {
     const tools = createConsistencyCheckTools({
       createService: () => mockService,
+      chatModel: CHAT_MODEL,
     });
     const tool = tools[0]!;
 
@@ -98,11 +102,19 @@ describe('createConsistencyCheckTools', () => {
     expect(result.data).toHaveProperty('characterConsistency');
     expect(result.data).toHaveProperty('aestheticScore');
     expect(result.data).toHaveProperty('recommendations');
+    expect(mockService.chat).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      }),
+    );
   });
 
   it('should return default report for empty scenes', async () => {
     const tools = createConsistencyCheckTools({
       createService: () => mockService,
+      chatModel: CHAT_MODEL,
     });
     const tool = tools[0]!;
 
@@ -117,6 +129,7 @@ describe('createConsistencyCheckTools', () => {
   it('should pass globalStyle and characters to evaluator', async () => {
     const tools = createConsistencyCheckTools({
       createService: () => mockService,
+      chatModel: CHAT_MODEL,
     });
     const tool = tools[0]!;
 
@@ -132,5 +145,31 @@ describe('createConsistencyCheckTools', () => {
     expect(result.success).toBe(true);
     // LLM should have been called (at minimum for pairwise eval)
     expect(mockService.chat).toHaveBeenCalled();
+    expect(mockService.chat).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      }),
+    );
+  });
+
+  it('should fail visibly when executed without an explicit chat model', async () => {
+    const tools = createConsistencyCheckTools({
+      createService: () => mockService,
+    });
+    const tool = tools[0]!;
+
+    await expect(
+      tool.execute({
+        scenes: [
+          { sceneIndex: 0, mediaPath: '/media/scene0.png', prompt: 'A' },
+          { sceneIndex: 1, mediaPath: '/media/scene1.png', prompt: 'B' },
+        ],
+      }),
+    ).rejects.toThrow(
+      'Consistency LLM evaluation requires an explicit chat providerId and modelId.',
+    );
+    expect(mockService.chat).not.toHaveBeenCalled();
   });
 });

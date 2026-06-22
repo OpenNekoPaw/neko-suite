@@ -10,6 +10,7 @@
  */
 
 import type { ConsistencyReport, StyleDriftPair, CharacterAppearance } from './qa-types';
+import { isExplicitChatRoutingError } from './chat-routing-error';
 
 // =============================================================================
 // Interfaces (injected dependencies)
@@ -24,8 +25,13 @@ export interface IClipScorer {
 export interface ConsistencyLLMService {
   chat(
     messages: unknown[],
-    options?: { maxTokens?: number },
+    options?: { maxTokens?: number; providerId?: string; modelId?: string },
   ): Promise<{ message: { content: string | unknown[] } }>;
+}
+
+export interface ConsistencyChatModelRef {
+  readonly providerId: string;
+  readonly modelId: string;
 }
 
 /** Frame extractor for video scenes */
@@ -36,6 +42,7 @@ export interface ConsistencyFrameExtractor {
 
 export interface ConsistencyEvaluatorDeps {
   createService: () => ConsistencyLLMService;
+  chatModel?: ConsistencyChatModelRef;
   /** Optional CLIP scorer — when absent, all pairs go to LLM layer 2 */
   clipScorer?: IClipScorer;
   /** Optional frame extractor — when absent, video scenes are skipped */
@@ -334,7 +341,7 @@ export class ConsistencyEvaluator {
           { role: 'system', content: PAIRWISE_SYSTEM_PROMPT },
           { role: 'user', content: userContent },
         ],
-        { maxTokens: 512 },
+        withConsistencyChatModelRouting({ maxTokens: 512 }, this.deps.chatModel),
       );
 
       const text = typeof response.message.content === 'string' ? response.message.content : '';
@@ -347,7 +354,10 @@ export class ConsistencyEvaluator {
         description:
           typeof parsed?.description === 'string' ? parsed.description : 'LLM evaluation completed',
       };
-    } catch {
+    } catch (error) {
+      if (isExplicitChatRoutingError(error)) {
+        throw error;
+      }
       return {
         fromScene: fromInput.sceneIndex,
         toScene: toInput.sceneIndex,
@@ -421,7 +431,7 @@ export class ConsistencyEvaluator {
             ],
           },
         ],
-        { maxTokens: 256 },
+        withConsistencyChatModelRouting({ maxTokens: 256 }, this.deps.chatModel),
       );
 
       const text = typeof response.message.content === 'string' ? response.message.content : '';
@@ -433,7 +443,10 @@ export class ConsistencyEvaluator {
           ? parsed.issues.filter((i: unknown) => typeof i === 'string')
           : [],
       };
-    } catch {
+    } catch (error) {
+      if (isExplicitChatRoutingError(error)) {
+        throw error;
+      }
       return { score: 50, issues: ['Evaluation failed'] };
     }
   }
@@ -469,4 +482,19 @@ export class ConsistencyEvaluator {
 
 export function createConsistencyEvaluator(deps: ConsistencyEvaluatorDeps): ConsistencyEvaluator {
   return new ConsistencyEvaluator(deps);
+}
+
+function withConsistencyChatModelRouting(
+  options: { maxTokens?: number },
+  chatModel: ConsistencyChatModelRef | undefined,
+): { maxTokens?: number; providerId: string; modelId: string } {
+  if (!chatModel?.providerId || !chatModel.modelId) {
+    throw new Error('Consistency LLM evaluation requires an explicit chat providerId and modelId.');
+  }
+
+  return {
+    ...options,
+    providerId: chatModel.providerId,
+    modelId: chatModel.modelId,
+  };
 }

@@ -11,6 +11,7 @@ import {
   createMediaQualityRuntime,
   type IAudioAnalyzer,
   type IFrameExtractor,
+  type MediaQualityChatModelRef,
   type MediaQualityGenerator,
   type MediaQualityLLMService,
   type MediaQualityLogger,
@@ -32,6 +33,7 @@ export interface QualityCheckToolsDeps {
   createService: () => MediaQualityLLMService;
   mediaGenerator: MediaQualityGenerator;
   readFileAsBase64(filePath: string): Promise<string>;
+  chatModel?: MediaQualityChatModelRef;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
   logger?: MediaQualityLogger;
@@ -270,6 +272,7 @@ async function executeConsistencyCheck(
 
   const evaluator = createConsistencyEvaluator({
     createService: deps.createService,
+    ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
     ...(deps.clipScorer ? { clipScorer: deps.clipScorer } : {}),
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   });

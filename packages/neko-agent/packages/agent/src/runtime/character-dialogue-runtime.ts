@@ -109,9 +109,14 @@ export interface CharacterDialogueRuntimeLogger {
   warn(message: string, meta?: Readonly<Record<string, unknown>>): void;
 }
 
+export interface CharacterDialogueChatModelRef {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
 export interface CharacterDialogueTranscriptEvaluatorOptions {
   readonly service?: Pick<IService, 'chat'>;
-  readonly modelId?: string;
+  readonly chatModel?: CharacterDialogueChatModelRef;
   readonly now?: () => string;
   readonly logger?: CharacterDialogueRuntimeLogger;
 }
@@ -389,7 +394,9 @@ export async function evaluateCharacterDialogueTranscript(
           { role: 'user', content: prompts.userPrompt },
         ],
         {
-          ...(options.modelId ? { modelId: options.modelId } : {}),
+          ...(options.chatModel
+            ? { providerId: options.chatModel.providerId, modelId: options.chatModel.modelId }
+            : {}),
           tools: [],
           toolChoice: 'none',
           maxTokens: 2000,

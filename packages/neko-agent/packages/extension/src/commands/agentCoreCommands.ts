@@ -327,6 +327,14 @@ function registerInternalApiCommands(
           { messages, options },
           {
             createService: platform ? () => platform.createService() : undefined,
+            getSelectedChatModel: () => {
+              const settings = platform?.config.getAssistantRuntimeSettingsSnapshot();
+              if (!settings?.selectedProviderId || !settings.selectedModelId) return undefined;
+              return {
+                providerId: settings.selectedProviderId,
+                modelId: settings.selectedModelId,
+              };
+            },
             logger: getRootLogger(),
           },
         );

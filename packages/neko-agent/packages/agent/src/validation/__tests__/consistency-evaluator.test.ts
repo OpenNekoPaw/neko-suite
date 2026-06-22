@@ -49,6 +49,8 @@ function createInputs(count: number): ConsistencyInput[] {
   }));
 }
 
+const CHAT_MODEL = { providerId: 'deepseek-direct', modelId: 'deepseek-chat' } as const;
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -65,6 +67,7 @@ describe('ConsistencyEvaluator', () => {
     });
     deps = {
       createService: () => mockService,
+      chatModel: CHAT_MODEL,
     };
   });
 
@@ -136,6 +139,13 @@ describe('ConsistencyEvaluator', () => {
 
     // Without CLIP, all pairs go to LLM
     expect(mockService.chat).toHaveBeenCalled();
+    expect(mockService.chat).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      }),
+    );
   });
 
   it('should call LLM for pairs with high CLIP drift', async () => {
@@ -166,7 +176,7 @@ describe('ConsistencyEvaluator', () => {
       description: 'Noticeable style change',
       characterIssues: [],
     });
-    deps = { createService: () => mockService };
+    deps = { createService: () => mockService, chatModel: CHAT_MODEL };
 
     const evaluator = new ConsistencyEvaluator(deps);
     const inputs = createInputs(2);
@@ -183,7 +193,7 @@ describe('ConsistencyEvaluator', () => {
     mockService.chat.mockResolvedValue({
       message: { content: 'This is not JSON' },
     });
-    deps = { createService: () => mockService };
+    deps = { createService: () => mockService, chatModel: CHAT_MODEL };
 
     const evaluator = new ConsistencyEvaluator(deps);
     const inputs = createInputs(2);
@@ -228,6 +238,7 @@ describe('ConsistencyEvaluator', () => {
 
     const evaluator = new ConsistencyEvaluator({
       createService: () => service,
+      chatModel: CHAT_MODEL,
     });
 
     const inputs = createInputs(2);
@@ -269,7 +280,7 @@ describe('ConsistencyEvaluator', () => {
       description: 'Major style change',
       characterIssues: [],
     });
-    deps = { createService: () => mockService };
+    deps = { createService: () => mockService, chatModel: CHAT_MODEL };
 
     const evaluator = new ConsistencyEvaluator(deps);
     const inputs = createInputs(2);
@@ -278,5 +289,16 @@ describe('ConsistencyEvaluator', () => {
 
     expect(report.recommendations.length).toBeGreaterThan(0);
     expect(report.recommendations[0]).toContain('style drift');
+  });
+
+  it('should fail visibly when LLM evaluation has no explicit chat model', async () => {
+    const evaluator = new ConsistencyEvaluator({
+      createService: () => mockService,
+    });
+
+    await expect(evaluator.evaluate(createInputs(2))).rejects.toThrow(
+      'Consistency LLM evaluation requires an explicit chat providerId and modelId.',
+    );
+    expect(mockService.chat).not.toHaveBeenCalled();
   });
 });

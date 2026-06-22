@@ -383,7 +383,9 @@ export function createPlatformEmbodyCharacterResponder(input: {
     const service = toSharedService(platform.createService());
     const messages = projectEmbodyCharacterTranscriptToChatMessages({ systemPrompt, transcript });
     const response = await runNoToolCharacterRoleChat(service, messages, {
-      modelId: input.chatModel?.modelId,
+      ...(input.chatModel
+        ? { providerId: input.chatModel.providerId, modelId: input.chatModel.modelId }
+        : {}),
       tools: [],
       toolChoice: 'none',
       maxTokens: 1200,

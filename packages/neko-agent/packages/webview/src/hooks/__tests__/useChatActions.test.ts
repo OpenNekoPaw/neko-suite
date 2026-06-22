@@ -369,6 +369,82 @@ describe('useChatActions', () => {
     );
   });
 
+  it('uses Agent primary model as the only LLM routing field when legacy selectedModel is stale', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-agent-model');
+      return useChatActions({
+        inputValue: '继续生成',
+        isThinking: false,
+        selectedModel: 'deepseek-v4-pro',
+        availableModels: [
+          {
+            id: 'deepseek-v4-pro',
+            label: 'DeepSeek V4 Pro',
+            providerId: 'deepseek-chat',
+            modelId: 'deepseek-v4-pro',
+            category: 'llm',
+          },
+          {
+            id: 'neko-account-gateway:gpt-5.5',
+            label: 'GPT 5.5',
+            providerId: 'neko-account-gateway',
+            modelId: 'gpt-5.5',
+            category: 'llm',
+          },
+        ],
+        sessionMode: 'agent',
+        activeConversationId: 'conv-agent-model',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '继续生成',
+        sessionMode: 'agent',
+        agentModels: {
+          primary: {
+            providerId: 'neko-account-gateway',
+            modelId: 'gpt-5.5',
+            category: 'llm',
+          },
+        },
+      });
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-agent-model',
+        message: '继续生成',
+        sessionMode: 'agent',
+        agentModels: {
+          primary: {
+            providerId: 'neko-account-gateway',
+            modelId: 'gpt-5.5',
+            category: 'llm',
+          },
+        },
+      }),
+    );
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        chatModel: expect.anything(),
+      }),
+    );
+  });
+
   it('does not attach hidden mode context when sending a normal message', () => {
     const setMessages = vi.fn();
     const setIsThinking = vi.fn();

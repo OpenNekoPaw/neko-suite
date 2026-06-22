@@ -15,12 +15,15 @@ function createGenerator() {
   };
 }
 
+const CHAT_MODEL = { providerId: 'deepseek-direct', modelId: 'deepseek-chat' } as const;
+
 describe('quality check tool factories', () => {
   it('creates QualityCheck as an agent-owned read-only analysis tool', () => {
     const tools = createQualityCheckTools({
       createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
       mediaGenerator: createGenerator(),
       readFileAsBase64: vi.fn(),
+      chatModel: CHAT_MODEL,
     });
     const tool = tools.find((candidate) => candidate.name === 'QualityCheck')!;
 
@@ -41,6 +44,7 @@ describe('quality check tool factories', () => {
       createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
       mediaGenerator: createGenerator(),
       readFileAsBase64: vi.fn(),
+      chatModel: CHAT_MODEL,
     });
     const tool = tools.find((candidate) => candidate.name === 'QualityRepairCheck')!;
 
@@ -56,6 +60,7 @@ describe('quality check tool factories', () => {
       createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
       mediaGenerator: createGenerator(),
       readFileAsBase64: vi.fn(),
+      chatModel: CHAT_MODEL,
     });
 
     expect(tools.map((tool) => tool.name)).toEqual(['QualityCheck', 'QualityRepairCheck']);
@@ -78,6 +83,7 @@ describe('quality check tool factories', () => {
       createService: () => service,
       mediaGenerator: generator,
       readFileAsBase64,
+      chatModel: CHAT_MODEL,
     }).find((candidate) => candidate.name === 'QualityCheck')!;
 
     const result = await tool.execute({
@@ -93,6 +99,13 @@ describe('quality check tool factories', () => {
     });
     expect(readFileAsBase64).toHaveBeenCalledWith('/tmp/scene.png');
     expect(service.chat).toHaveBeenCalled();
+    expect(service.chat).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      }),
+    );
     expect(generator.generate).not.toHaveBeenCalled();
   });
 
@@ -112,6 +125,7 @@ describe('quality check tool factories', () => {
       createService: () => service,
       mediaGenerator: generator,
       readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+      chatModel: CHAT_MODEL,
     }).find((candidate) => candidate.name === 'QualityCheck')!;
 
     const result = await tool.execute({
@@ -165,6 +179,7 @@ describe('quality check tool factories', () => {
       createService: () => service,
       mediaGenerator: generator,
       readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+      chatModel: CHAT_MODEL,
     }).find((candidate) => candidate.name === 'QualityRepairCheck')!;
 
     const result = await tool.execute({
@@ -199,6 +214,7 @@ describe('quality check tool factories', () => {
       createService: () => service,
       mediaGenerator: createGenerator(),
       readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+      chatModel: CHAT_MODEL,
     }).find((candidate) => candidate.name === 'QualityCheck')!;
 
     const result = await tool.execute({
@@ -226,6 +242,7 @@ describe('quality check tool factories', () => {
       createService: () => service,
       mediaGenerator: createGenerator(),
       readFileAsBase64,
+      chatModel: CHAT_MODEL,
     }).find((candidate) => candidate.name === 'QualityCheck')!;
 
     const result = await tool.execute({
@@ -245,6 +262,7 @@ describe('quality check tool factories', () => {
     const tool = createConsistencyCheckTools({
       createService: () =>
         createService({ driftScore: 10, description: 'consistent', characterIssues: [] }),
+      chatModel: CHAT_MODEL,
     })[0]!;
 
     expect(tool.name).toBe('QualityCheckConsistency');
@@ -261,6 +279,7 @@ describe('quality check tool factories', () => {
     });
     const tool = createConsistencyCheckTools({
       createService: () => service,
+      chatModel: CHAT_MODEL,
     })[0]!;
 
     const result = await tool.execute({
@@ -277,5 +296,30 @@ describe('quality check tool factories', () => {
       aestheticScore: 70,
     });
     expect(service.chat).toHaveBeenCalled();
+    expect(service.chat).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      }),
+    );
+  });
+
+  it('fails visibly when QualityCheck executes without an explicit chat model', async () => {
+    const service = createService({ overallScore: 100, dimensions: {}, issues: [] });
+    const tool = createQualityCheckTools({
+      createService: () => service,
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+    }).find((candidate) => candidate.name === 'QualityCheck')!;
+
+    await expect(
+      tool.execute({
+        scenes: [{ index: 0, mediaPath: '/tmp/scene.png', prompt: 'cinematic scene' }],
+      }),
+    ).rejects.toThrow(
+      'Media quality LLM evaluation requires an explicit chat providerId and modelId.',
+    );
+    expect(service.chat).not.toHaveBeenCalled();
   });
 });

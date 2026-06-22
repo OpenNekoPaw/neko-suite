@@ -18,6 +18,7 @@ export interface InternalChatRuntimeInput {
 
 export interface InternalChatRuntimeDeps {
   createService?: () => InternalChatRuntimeService;
+  getSelectedChatModel?: () => { providerId?: string | null; modelId?: string | null } | undefined;
   logger?: InternalChatRuntimeLogger;
 }
 
@@ -30,9 +31,18 @@ export async function runInternalChatRuntime(
   }
 
   try {
+    const selectedChatModel = deps.getSelectedChatModel?.();
+    if (!selectedChatModel?.providerId || !selectedChatModel.modelId) {
+      throw new Error(
+        'Internal chat requires a configured LLM provider and model before sending a request.',
+      );
+    }
+
     const service = deps.createService();
     const response = await service.chat(input.messages, {
       ...input.options,
+      providerId: selectedChatModel.providerId,
+      modelId: selectedChatModel.modelId,
       maxTokens: input.options?.maxTokens ?? INTERNAL_CHAT_DEFAULT_MAX_TOKENS,
     });
     const content = response.message.content;

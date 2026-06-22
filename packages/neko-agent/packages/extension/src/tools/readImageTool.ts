@@ -672,11 +672,11 @@ async function readVisionWithService(
   service: {
     readonly chat?: (
       messages: ChatMessage[],
-      options?: { providerId?: string; modelId?: string },
+      options: Pick<ModelRef<'llm'>, 'providerId' | 'modelId'>,
     ) => Promise<ServiceResponse>;
     readonly chatStream?: (
       messages: ChatMessage[],
-      options?: { providerId?: string; modelId?: string },
+      options: Pick<ModelRef<'llm'>, 'providerId' | 'modelId'>,
     ) => {
       readonly stream: AsyncIterable<unknown>;
       readonly response: Promise<ServiceResponse>;

@@ -5,7 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createQualityCheckTools } from '../qualityCheckTools';
+import {
+  createQualityCheckTools as createQualityCheckToolsRaw,
+  type QualityCheckToolsDeps,
+} from '../qualityCheckTools';
 
 // Mock vscode
 vi.mock('vscode', () => ({
@@ -89,6 +92,15 @@ function createMockGenerator() {
   return {
     generate: vi.fn().mockResolvedValue({ path: '/tmp/regenerated.png' }),
   };
+}
+
+const CHAT_MODEL = { providerId: 'deepseek-direct', modelId: 'deepseek-chat' } as const;
+
+function createQualityCheckTools(deps: QualityCheckToolsDeps) {
+  return createQualityCheckToolsRaw({
+    ...deps,
+    chatModel: deps.chatModel ?? CHAT_MODEL,
+  });
 }
 
 /** Create a mock audio analyzer returning clean or problematic metrics */
@@ -197,6 +209,31 @@ describe('QualityCheck Tool', () => {
         expect.objectContaining({ fsPath: '${WORKSPACE}/scene.png' }),
       );
       expect(mockService.chat).toHaveBeenCalled();
+      expect(mockService.chat).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          providerId: 'deepseek-direct',
+          modelId: 'deepseek-chat',
+        }),
+      );
+    });
+
+    it('fails visibly when executed without an explicit chat model', async () => {
+      const mockService = createMockService(createPassingEvaluation());
+      const tools = createQualityCheckToolsRaw({
+        createService: () => mockService,
+        mediaGenerator: createMockGenerator(),
+      });
+
+      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      await expect(
+        tool.execute({
+          scenes: [{ index: 0, mediaPath: '${WORKSPACE}/scene.png', prompt: 'Scene' }],
+        }),
+      ).rejects.toThrow(
+        'Media quality LLM evaluation requires an explicit chat providerId and modelId.',
+      );
+      expect(mockService.chat).not.toHaveBeenCalled();
     });
 
     it('should evaluate all scenes and return pass results with dimensions', async () => {

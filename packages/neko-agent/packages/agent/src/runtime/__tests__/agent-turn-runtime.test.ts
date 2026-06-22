@@ -84,9 +84,8 @@ function createBaseInput(
       autoExecuteTools: true,
       temperature: 0.7,
     },
+    chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' as const },
     providerSource: {
-      selectedProviderId: 'openai',
-      selectedModelId: 'gpt-4.1',
       getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
     },
     agentManager: {
@@ -132,9 +131,8 @@ describe('executeAgentTurn', () => {
 
   it('returns unmet precondition when selected provider is not configured', async () => {
     const { input } = createBaseInput({
+      chatModel: { providerId: 'missing', modelId: 'gpt-4.1', category: 'llm' },
       providerSource: {
-        selectedProviderId: 'missing',
-        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => undefined),
       },
     });
@@ -148,8 +146,8 @@ describe('executeAgentTurn', () => {
 
   it('returns unmet precondition when no model is selected', async () => {
     const { input } = createBaseInput({
+      chatModel: { providerId: 'openai', modelId: '', category: 'llm' },
       providerSource: {
-        selectedProviderId: 'openai',
         getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
       },
     });
@@ -163,9 +161,8 @@ describe('executeAgentTurn', () => {
 
   it('returns unmet precondition when selected model does not belong to provider', async () => {
     const { input } = createBaseInput({
+      chatModel: { providerId: 'openai', modelId: 'claude-3', category: 'llm' },
       providerSource: {
-        selectedProviderId: 'openai',
-        selectedModelId: 'claude-3',
         getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
       },
     });
@@ -179,10 +176,9 @@ describe('executeAgentTurn', () => {
 
   it('returns unmet precondition before runner configuration when selected model lacks vision', async () => {
     const { input } = createBaseInput({
+      chatModel: { providerId: 'neko-account-gateway', modelId: 'text-only', category: 'llm' },
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
       providerSource: {
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'text-only',
         getProvider: vi.fn(() => ({
           id: 'neko-account-gateway',
           isConfigured: true,
@@ -204,9 +200,12 @@ describe('executeAgentTurn', () => {
 
   it('returns unmet precondition before runner configuration for unauthorized account models', async () => {
     const { input } = createBaseInput({
+      chatModel: {
+        providerId: 'neko-account-gateway',
+        modelId: 'official-denied',
+        category: 'llm',
+      },
       providerSource: {
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'official-denied',
         getProvider: vi.fn(() => ({
           id: 'neko-account-gateway',
           isConfigured: true,
@@ -226,23 +225,19 @@ describe('executeAgentTurn', () => {
     expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
   });
 
-  it('configures runner with the explicitly selected config model when the request omits chatModel', async () => {
-    const { input, agentRunner } = createBaseInput({
+  it('refuses to configure the runner when the request omits chatModel routing', async () => {
+    const { input } = createBaseInput({
       chatModel: undefined,
       providerSource: {
-        selectedProviderId: 'openai',
-        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] })),
       },
     });
 
-    await executeAgentTurn(input);
-
-    expect(agentRunner.configure).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelId: 'gpt-4.1',
-      }),
-    );
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'precondition-unmet',
+      reason: 'missing-chat-provider',
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
   });
 
   it('hydrates previous conversation history for a fresh agent runner', async () => {
@@ -590,8 +585,6 @@ describe('executeAgentTurn', () => {
     const { input, agentRunner } = createBaseInput({
       imageAttachments,
       providerSource: {
-        selectedProviderId: 'openai',
-        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => ({
           id: 'openai',
           isConfigured: true,
@@ -739,9 +732,8 @@ describe('runAgentTurnForWebviewRuntime', () => {
 
   it('posts a precondition error returned by the turn runtime', async () => {
     const { input } = createBaseInput({
+      chatModel: { providerId: 'missing', modelId: 'gpt-4.1', category: 'llm' },
       providerSource: {
-        selectedProviderId: 'missing',
-        selectedModelId: 'gpt-4.1',
         getProvider: vi.fn(() => undefined),
       },
     });
@@ -932,8 +924,6 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       },
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'abc' }],
       settings: {
-        selectedProviderId: 'anthropic',
-        selectedModelId: 'gpt-4.1',
         customSystemPrompt: 'Custom prompt',
         executionMode: 'ask',
         autoExecuteTools: false,
@@ -1005,10 +995,8 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
         },
       },
     });
-    expect(runtimeInput.providerSource.selectedProviderId).toBe('anthropic');
-    expect(runtimeInput.providerSource.requestedProviderId).toBe('openai');
-    expect(runtimeInput.providerSource.selectedModelId).toBe('gpt-4.1');
-    expect(runtimeInput.providerSource.requestedModelId).toBe('gpt-4.1');
+    expect(runtimeInput.providerSource).not.toHaveProperty('requestedProviderId');
+    expect(runtimeInput.providerSource).not.toHaveProperty('requestedModelId');
     expect(runtimeInput.getWorkspaceRoot?.()).toBe('/repo');
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.taskManager).toBe(taskManager);

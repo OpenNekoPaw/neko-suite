@@ -1,12 +1,15 @@
 /**
  * ModelSelector - Simple model resolver
  *
- * Resolution priority:
+ * Resolution priority for non-chat tasks:
  *   1. Caller-specified providerId + modelId (explicit provider/model ref)
  *   2. Caller-specified modelId (explicit model override)
  *   3. Caller-specified providerId (first enabled model on that provider)
  *   4. First enabled model with matching capability and configured apiKey
  *   5. Throws PlatformError(NOT_FOUND, NO_AVAILABLE_MODEL)
+ *
+ * Chat calls are fail-closed in Service before reaching fallback-style branches:
+ * callers must pass both providerId and modelId.
  */
 
 import type { Model, ModelCapability } from '../types/provider';
@@ -23,7 +26,7 @@ export type ModelTaskType = 'chat' | 'embedding';
 export interface ResolvedModel {
   modelId: string;
   providerId: string;
-  /** Attempt counter starting at 1, incremented on each fallback */
+  /** Attempt counter starting at 1 for compatibility with response metadata. */
   attempt: number;
 }
 
@@ -40,8 +43,8 @@ export class ModelSelector {
   /**
    * Resolve the model to use for a request.
    * @param taskType - 'chat' or 'embedding'
-   * @param options.providerId - Explicit provider override from the caller
-   * @param options.modelId - Explicit model override from the caller
+   * @param options.providerId - Provider requested by the caller
+   * @param options.modelId - Model requested by the caller
    * @param options.excludeModels - Models to skip (failed in previous attempts)
    */
   resolve(

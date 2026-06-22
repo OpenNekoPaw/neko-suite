@@ -83,6 +83,9 @@ export class Service implements IService {
     excludeModels: string[] = [],
     taskType: 'chat' | 'embedding' = 'chat',
   ): RoutingResult {
+    if (taskType === 'chat') {
+      assertExplicitChatRouting(providerId, modelId);
+    }
     return this.selector.resolve(taskType, { providerId, modelId, excludeModels });
   }
 
@@ -560,6 +563,29 @@ export class Service implements IService {
       yield chunk;
     }
   }
+}
+
+function assertExplicitChatRouting(providerId: string | undefined, modelId: string | undefined) {
+  if (providerId && modelId) {
+    return;
+  }
+
+  if (providerId || modelId) {
+    throw new PlatformError({
+      category: 'validation',
+      code: 'CHAT_MODEL_SELECTION_INCOMPLETE',
+      message: 'Chat requests require both providerId and modelId. Refusing partial model routing.',
+      retryable: false,
+    });
+  }
+
+  throw new PlatformError({
+    category: 'validation',
+    code: 'CHAT_MODEL_SELECTION_REQUIRED',
+    message:
+      'Chat requests require an explicit providerId and modelId. Refusing default model routing.',
+    retryable: false,
+  });
 }
 
 async function projectMessagesForProvider(

@@ -245,6 +245,7 @@ function createMockRuntimeController(
       return {
         sessionConfig: {
           systemPrompt: factoryConfig.systemPrompt,
+          providerId: factoryConfig.providerId,
           modelId: factoryConfig.modelId,
           temperature: factoryConfig.temperature,
           maxTokens: factoryConfig.maxTokens,
@@ -303,6 +304,7 @@ function buildMockSessionConfig(
     maxTokens: config.maxTokens,
     thinkingBudget: config.thinkingBudget,
     modelId: config.modelId,
+    providerId: config.providerId,
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),

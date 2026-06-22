@@ -108,10 +108,6 @@ export interface AgentTurnConversationStore<THistoryMessage> {
 }
 
 export interface AgentTurnProviderSource<TProvider extends AgentProviderCandidate> {
-  readonly requestedProviderId?: string | null;
-  readonly selectedProviderId?: string | null;
-  readonly requestedModelId?: string | null;
-  readonly selectedModelId?: string | null;
   getProvider(providerId: string): TProvider | undefined;
 }
 
@@ -372,10 +368,8 @@ export async function executeAgentTurn<
     imageAttachmentSummary: summarizeTurnImages(input.imageAttachments),
     hasExecutionOverrides: input.executionOverrides !== undefined,
     executionMode: input.settings.executionMode,
-    selectedProviderId: input.providerSource.selectedProviderId,
-    requestedProviderId: input.providerSource.requestedProviderId,
-    selectedModelId: input.providerSource.selectedModelId,
-    requestedModelId: input.providerSource.requestedModelId,
+    requestedProviderId: input.chatModel?.providerId,
+    requestedModelId: input.chatModel?.modelId,
     hasActiveSkill: input.activeSkill !== undefined && input.activeSkill !== null,
     activeSkillName: input.activeSkill?.skill.name,
   });
@@ -395,10 +389,8 @@ export async function executeAgentTurn<
   });
 
   const providerSelection = selectAgentTurnProvider({
-    requestedProviderId: input.providerSource.requestedProviderId ?? undefined,
-    selectedProviderId: input.providerSource.selectedProviderId ?? undefined,
-    requestedModelId: input.providerSource.requestedModelId ?? undefined,
-    selectedModelId: input.providerSource.selectedModelId ?? undefined,
+    requestedProviderId: input.chatModel?.providerId,
+    requestedModelId: input.chatModel?.modelId,
     requiredCapabilities: buildRequiredTurnCapabilities({
       imageAttachments: input.imageAttachments,
     }),
@@ -440,7 +432,7 @@ export async function executeAgentTurn<
     ambientCanvas,
     isPlanMode: input.isPlanMode(input.conversationId),
     executionMode: input.settings.executionMode,
-    chatModel: input.chatModel ?? {
+    chatModel: {
       providerId: providerSelection.provider.id,
       modelId: providerSelection.effectiveModelId,
       category: 'llm',

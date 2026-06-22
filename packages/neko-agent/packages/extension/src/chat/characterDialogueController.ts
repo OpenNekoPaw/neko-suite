@@ -634,7 +634,7 @@ export class CharacterDialogueController implements vscode.Disposable {
     const platform = this.deps.getPlatform?.();
     return evaluateCharacterDialogueTranscript(artifact, {
       ...(platform ? { service: toSharedService(platform.createService()) } : {}),
-      modelId: this.deps.getSelectedChatModel?.()?.modelId,
+      chatModel: this.deps.getSelectedChatModel?.(),
       now: this.now,
       logger: this.deps.logger ?? logger,
     });
@@ -1028,7 +1028,9 @@ async function inferNpcProfileFactsFromProjectEvidence(
         },
       ],
       {
-        modelId: input.chatModel?.modelId,
+        ...(input.chatModel
+          ? { providerId: input.chatModel.providerId, modelId: input.chatModel.modelId }
+          : {}),
         tools: [],
         toolChoice: 'none',
         maxTokens: 1000,
@@ -1748,7 +1750,9 @@ export function createPlatformCharacterDialogueResponder(input: {
     const service = toSharedService(platform.createService());
     const messages = projectCharacterDialogueTranscriptToChatMessages({ systemPrompt, transcript });
     const response = await runNoToolCharacterRoleChat(service, messages, {
-      modelId: input.chatModel?.modelId,
+      ...(input.chatModel
+        ? { providerId: input.chatModel.providerId, modelId: input.chatModel.modelId }
+        : {}),
       tools: [],
       toolChoice: 'none',
       maxTokens: 1200,

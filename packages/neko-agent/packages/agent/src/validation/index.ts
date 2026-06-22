@@ -120,6 +120,7 @@ export type {
   ConsistencyContext,
   ConsistencyEvaluatorDeps,
   ConsistencyLLMService,
+  ConsistencyChatModelRef,
 } from './consistency-evaluator';
 
 // Media Quality Runtime
@@ -142,6 +143,7 @@ export type {
   MediaQualityLogger,
   MediaQualityRuntimeDeps,
   MediaQualitySceneInput,
+  MediaQualityChatModelRef,
 } from './media-quality-runtime';
 
 // Quality / consistency tool factories

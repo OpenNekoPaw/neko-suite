@@ -8,14 +8,20 @@ import type {
   RemediationAction,
   VideoTechnicalMetrics,
 } from './qa-types';
+import { isExplicitChatRoutingError } from './chat-routing-error';
 import { QUALITY_ISSUE_CATEGORIES } from './qa-types';
 import { createRemediationPlanner } from './remediation-planner';
 
 export interface MediaQualityLLMService {
   chat(
     messages: unknown[],
-    options?: { maxTokens?: number },
+    options?: { maxTokens?: number; providerId?: string; modelId?: string },
   ): Promise<{ message: { content: string | unknown[] } }>;
+}
+
+export interface MediaQualityChatModelRef {
+  readonly providerId: string;
+  readonly modelId: string;
 }
 
 export interface MediaQualityGenerator {
@@ -113,6 +119,7 @@ export interface MediaQualityRuntimeDeps {
   createService: () => MediaQualityLLMService;
   mediaGenerator: MediaQualityGenerator;
   readFileAsBase64(filePath: string): Promise<string>;
+  chatModel?: MediaQualityChatModelRef;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
   logger?: MediaQualityLogger;
@@ -384,11 +391,28 @@ function qualityErrorResult(
   };
 }
 
+function withMediaQualityChatModelRouting(
+  options: { maxTokens?: number },
+  chatModel: MediaQualityChatModelRef | undefined,
+): { maxTokens?: number; providerId: string; modelId: string } {
+  if (!chatModel?.providerId || !chatModel.modelId) {
+    throw new Error(
+      'Media quality LLM evaluation requires an explicit chat providerId and modelId.',
+    );
+  }
+
+  return {
+    ...options,
+    providerId: chatModel.providerId,
+    modelId: chatModel.modelId,
+  };
+}
+
 class VisionEvaluator {
   constructor(
     private readonly deps: Pick<
       MediaQualityRuntimeDeps,
-      'createService' | 'readFileAsBase64' | 'logger'
+      'createService' | 'readFileAsBase64' | 'chatModel' | 'logger'
     >,
   ) {}
 
@@ -426,7 +450,7 @@ class VisionEvaluator {
             ],
           },
         ],
-        { maxTokens: 800 },
+        withMediaQualityChatModelRouting({ maxTokens: 800 }, this.deps.chatModel),
       );
 
       return parseEvaluationJson(
@@ -434,6 +458,9 @@ class VisionEvaluator {
         'Failed to parse LLM evaluation response',
       );
     } catch (error) {
+      if (isExplicitChatRoutingError(error)) {
+        throw error;
+      }
       this.deps.logger?.warn('Vision evaluation failed', { mediaPath, error });
       return qualityErrorResult(
         `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -452,11 +479,14 @@ class VisionEvaluator {
             content: `Original prompt: "${originalPrompt}"\n\nIssues found:\n${issueDescriptions.join('\n')}\n\nProvide an improved prompt:`,
           },
         ],
-        { maxTokens: 500 },
+        withMediaQualityChatModelRouting({ maxTokens: 500 }, this.deps.chatModel),
       );
 
       return extractTextFromContent(response.message.content).trim() || originalPrompt;
-    } catch {
+    } catch (error) {
+      if (isExplicitChatRoutingError(error)) {
+        throw error;
+      }
       return originalPrompt;
     }
   }
@@ -607,6 +637,7 @@ class VideoFrameEvaluator {
   constructor(
     private readonly createService: () => MediaQualityLLMService,
     private readonly frameExtractor: IFrameExtractor,
+    private readonly chatModel?: MediaQualityChatModelRef,
     private readonly logger?: MediaQualityLogger,
     private readonly maxFrames: number = DEFAULT_VIDEO_SAMPLE_FRAMES,
   ) {}
@@ -666,7 +697,7 @@ class VideoFrameEvaluator {
           { role: 'system', content: VIDEO_EVALUATION_SYSTEM_PROMPT },
           { role: 'user', content: contentParts },
         ],
-        { maxTokens: 1000 },
+        withMediaQualityChatModelRouting({ maxTokens: 1000 }, this.chatModel),
       );
 
       const evaluation = parseEvaluationJson(
@@ -690,6 +721,9 @@ class VideoFrameEvaluator {
         },
       };
     } catch (error) {
+      if (isExplicitChatRoutingError(error)) {
+        throw error;
+      }
       this.logger?.warn('Video evaluation failed', { mediaPath, error });
       return this.errorResult(
         `Video evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -728,7 +762,12 @@ export class MediaQualityRuntime {
       ? new AudioEvaluator(deps.audioAnalyzer, deps.logger)
       : undefined;
     this.videoEvaluator = deps.frameExtractor
-      ? new VideoFrameEvaluator(deps.createService, deps.frameExtractor, deps.logger)
+      ? new VideoFrameEvaluator(
+          deps.createService,
+          deps.frameExtractor,
+          deps.chatModel,
+          deps.logger,
+        )
       : undefined;
   }
 
@@ -782,6 +821,9 @@ export class MediaQualityRuntime {
           needsRetry,
         });
       } else {
+        if (isExplicitChatRoutingError(settled.reason)) {
+          throw settled.reason;
+        }
         needsRetry.push({
           scene,
           mediaType: detectQualityMediaType(scene.mediaPath),
@@ -942,6 +984,9 @@ export class MediaQualityRuntime {
             break;
           }
         } catch (error) {
+          if (isExplicitChatRoutingError(error)) {
+            throw error;
+          }
           this.deps.logger?.warn('Retry failed for scene', {
             sceneIndex: scene.index,
             retry,

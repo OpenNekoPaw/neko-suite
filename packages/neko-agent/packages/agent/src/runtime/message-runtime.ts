@@ -1182,8 +1182,8 @@ function getProjectPathBaseName(filePath: string): string {
 export function selectAgentTurnProvider<TProvider extends AgentProviderCandidate>(
   input: AgentTurnProviderSelectionInput<TProvider>,
 ): AgentTurnProviderSelection<TProvider> {
-  const effectiveProviderId = input.requestedProviderId || input.selectedProviderId;
-  const effectiveModelId = input.requestedModelId || input.selectedModelId;
+  const effectiveProviderId = input.requestedProviderId;
+  const effectiveModelId = input.requestedModelId;
 
   if (!effectiveProviderId) {
     return {

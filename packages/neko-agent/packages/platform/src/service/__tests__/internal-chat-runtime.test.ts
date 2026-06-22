@@ -26,10 +26,15 @@ describe('runInternalChatRuntime', () => {
 
     const result = await runInternalChatRuntime(
       { messages: [{ role: 'user', content: 'hi' }] },
-      { createService: () => service },
+      {
+        createService: () => service,
+        getSelectedChatModel: () => ({ providerId: 'openai', modelId: 'gpt-4' }),
+      },
     );
 
     expect(service.chat).toHaveBeenCalledWith([{ role: 'user', content: 'hi' }], {
+      providerId: 'openai',
+      modelId: 'gpt-4',
       maxTokens: INTERNAL_CHAT_DEFAULT_MAX_TOKENS,
     });
     expect(result).toBe('hello');
@@ -43,12 +48,16 @@ describe('runInternalChatRuntime', () => {
     await runInternalChatRuntime(
       {
         messages: [{ role: 'user', content: 'hi' }],
-        options: { maxTokens: 42, modelId: 'model-1', temperature: 0.2 },
+        options: { maxTokens: 42, temperature: 0.2 },
       },
-      { createService: () => service },
+      {
+        createService: () => service,
+        getSelectedChatModel: () => ({ providerId: 'provider-1', modelId: 'model-1' }),
+      },
     );
 
     expect(service.chat).toHaveBeenCalledWith([{ role: 'user', content: 'hi' }], {
+      providerId: 'provider-1',
       maxTokens: 42,
       modelId: 'model-1',
       temperature: 0.2,
@@ -63,7 +72,10 @@ describe('runInternalChatRuntime', () => {
     await expect(
       runInternalChatRuntime(
         { messages: [{ role: 'user', content: 'hi' }] },
-        { createService: () => service },
+        {
+          createService: () => service,
+          getSelectedChatModel: () => ({ providerId: 'openai', modelId: 'gpt-4' }),
+        },
       ),
     ).resolves.toBeNull();
   });
@@ -77,7 +89,11 @@ describe('runInternalChatRuntime', () => {
     await expect(
       runInternalChatRuntime(
         { messages: [{ role: 'user', content: 'hi' }] },
-        { createService: () => service, logger },
+        {
+          createService: () => service,
+          getSelectedChatModel: () => ({ providerId: 'openai', modelId: 'gpt-4' }),
+          logger,
+        },
       ),
     ).resolves.toBeNull();
 
@@ -91,5 +107,29 @@ describe('runInternalChatRuntime', () => {
     await expect(
       runInternalChatRuntime({ messages: [{ role: 'user', content: 'hi' }] }, {}),
     ).resolves.toBeNull();
+  });
+
+  it('returns null before creating a service when selected chat routing is incomplete', async () => {
+    const logger = { warn: vi.fn() };
+    const service = {
+      chat: vi.fn().mockResolvedValue(createResponse('hello')),
+    } satisfies InternalChatRuntimeService;
+
+    await expect(
+      runInternalChatRuntime(
+        { messages: [{ role: 'user', content: 'hi' }] },
+        {
+          createService: () => service,
+          getSelectedChatModel: () => ({ providerId: 'openai', modelId: null }),
+          logger,
+        },
+      ),
+    ).resolves.toBeNull();
+
+    expect(service.chat).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'neko.agent.internalChat failed',
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
   });
 });

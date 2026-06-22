@@ -421,6 +421,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
         this._settingsHandler.updateDeps({
           platform: this._platform,
+          accountAiCatalog: this._accountAiCatalog,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
         this._slashCommandHandler.updateDeps({
@@ -646,7 +647,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   ): void {
     if (!this._platform) return;
     this._platform.config.reloadConfig();
-    this._settingsHandler.sendSettings(webview);
+    void this._settingsHandler.sendSettings(webview);
     void this._configBridge?.sendConfigState(postMessage);
   }
 
@@ -678,7 +679,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           break;
         case 'sendSettings':
           if (webview) {
-            this._settingsHandler.sendSettings(webview);
+            void this._settingsHandler.sendSettings(webview);
           }
           break;
         case 'postTabState':
@@ -814,7 +815,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   private _getSelectedChatModelRef(): import('@neko-agent/types').ModelRef<'llm'> | undefined {
     const modelId = this._settings.selectedModelId;
-    if (!modelId || modelId === 'auto') return undefined;
+    if (!modelId) return undefined;
     const providerId = this._settings.selectedProviderId;
     if (!providerId) return undefined;
     return { providerId, modelId, category: 'llm' };

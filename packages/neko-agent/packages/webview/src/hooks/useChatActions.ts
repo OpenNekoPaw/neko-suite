@@ -16,6 +16,7 @@ import {
   Message,
   type AgentLlmConfig,
   type AgentModelSlots,
+  type MessageModelProjection,
   type SessionMode,
   type TabType,
 } from '@neko-agent/types';
@@ -211,7 +212,11 @@ export function useChatActions({
         conversationId,
         message: trimmed,
         sessionMode: effectiveSessionMode,
-        ...modelProjection,
+        ...projectAgentModelSendProjection({
+          sessionMode: effectiveSessionMode,
+          modelProjection,
+          agentModels: input?.agentModels,
+        }),
         ...(effectiveSessionMode === 'agent' && input?.agentModels
           ? { agentModels: input.agentModels }
           : {}),
@@ -324,6 +329,23 @@ export function useChatActions({
   }, [isThinking, isConversationSwitching, activeConversationIdRef, setIsThinking]);
 
   return { handleSend, triggerSend, handleCancelMessage, copyLastResponse };
+}
+
+interface AgentModelSendProjectionInput {
+  readonly sessionMode: SessionMode;
+  readonly modelProjection: MessageModelProjection;
+  readonly agentModels?: AgentModelSlots;
+}
+
+function projectAgentModelSendProjection(
+  input: AgentModelSendProjectionInput,
+): MessageModelProjection {
+  if (input.sessionMode !== 'agent' || !input.agentModels?.primary) {
+    return input.modelProjection;
+  }
+
+  const { chatModel: _chatModel, ...rest } = input.modelProjection;
+  return rest;
 }
 
 function projectFileReferenceAttachments(

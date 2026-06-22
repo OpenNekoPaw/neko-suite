@@ -23,6 +23,7 @@ import type {
   ISubAgentManager,
   SpecializedAgentPreset,
   ModelTier,
+  SubAgentModelRef,
   SubAgentExecutor,
   SubAgentModelTierResolverContext,
 } from './types';
@@ -402,17 +403,15 @@ export class SubAgentManager implements ISubAgentManager {
       const systemPrompt = this.injectSkillsToPrompt(baseSystemPrompt, config);
 
       const modelTier = config.modelTier || preset.defaultModelTier;
-      const primaryModel =
-        config.modelId ||
-        this.resolveModelId(modelTier, {
-          parentId,
-          conversationId,
-          subAgentId: config.id,
-          subAgentConfig: config,
-        });
-      if (!primaryModel) {
+      const modelRef = this.resolveModelRef(config, modelTier, {
+        parentId,
+        conversationId,
+        subAgentId: config.id,
+        subAgentConfig: config,
+      });
+      if (!modelRef) {
         throw new Error(
-          `SubAgent model tier "${modelTier}" could not be resolved; configure modelTierResolver or pass modelId.`,
+          `SubAgent model tier "${modelTier}" could not be resolved; configure modelTierResolver or pass providerId and modelId.`,
         );
       }
 
@@ -422,7 +421,8 @@ export class SubAgentManager implements ISubAgentManager {
         systemPrompt,
         tools: filteredTools,
         maxIterations: config.maxIterations || preset.defaultMaxIterations,
-        primaryModel,
+        providerId: modelRef.providerId,
+        primaryModel: modelRef.modelId,
       };
 
       // Create executor
@@ -526,11 +526,28 @@ Focus on completing this specific task efficiently and report your findings clea
   /**
    * Resolve model tier to actual model ID
    */
-  private resolveModelId(
+  private resolveModelRef(
+    config: SubAgentConfig,
     tier: ModelTier,
     context: SubAgentModelTierResolverContext,
-  ): string | undefined {
-    return this.deps.modelTierResolver?.(tier, context);
+  ): SubAgentModelRef | undefined {
+    if (config.modelId || config.providerId) {
+      if (!config.providerId || !config.modelId) {
+        throw new Error('SubAgent explicit model routing requires both providerId and modelId.');
+      }
+      return { providerId: config.providerId, modelId: config.modelId };
+    }
+
+    const resolved = this.deps.modelTierResolver?.(tier, context);
+    if (!resolved) {
+      return undefined;
+    }
+    if (typeof (resolved as unknown) === 'string') {
+      throw new Error(
+        'SubAgent modelTierResolver must return providerId and modelId. String-only model routing is not supported for chat calls.',
+      );
+    }
+    return resolved;
   }
 
   /**

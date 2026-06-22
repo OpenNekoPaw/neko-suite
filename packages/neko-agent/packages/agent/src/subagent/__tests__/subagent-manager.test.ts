@@ -70,7 +70,10 @@ function createMockDeps(): SubAgentManagerDeps {
     createService: vi.fn().mockReturnValue(mockService),
     createAgent: vi.fn().mockReturnValue(mockExecutor),
     toolRegistry: mockToolRegistry,
-    modelTierResolver: vi.fn((tier) => `test-${tier}-model`),
+    modelTierResolver: vi.fn((tier) => ({
+      providerId: 'test-provider',
+      modelId: `test-${tier}-model`,
+    })),
   };
 }
 
@@ -170,6 +173,7 @@ describe('SubAgentManager', () => {
       await manager.getResult('model-resolver-agent', 5000);
 
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(agentConfig.providerId).toBe('test-provider');
       expect(agentConfig.primaryModel).toBe('test-powerful-model');
       expect(deps.modelTierResolver).toHaveBeenCalledWith(
         'powerful',
@@ -181,7 +185,7 @@ describe('SubAgentManager', () => {
       );
     });
 
-    it('should fail clearly when neither modelId nor model tier resolver is configured', async () => {
+    it('should fail clearly when neither explicit model ref nor model tier resolver is configured', async () => {
       const depsWithoutResolver = createMockDeps();
       delete depsWithoutResolver.modelTierResolver;
       const managerWithoutResolver = new SubAgentManager(depsWithoutResolver);
@@ -193,6 +197,36 @@ describe('SubAgentManager', () => {
       expect(result.status).toBe('failed');
       expect(result.error).toContain('SubAgent model tier "balanced" could not be resolved');
       expect(depsWithoutResolver.createAgent).not.toHaveBeenCalled();
+    });
+
+    it('should fail clearly when explicit SubAgent model routing is partial', async () => {
+      const config = createTestConfig({
+        id: 'partial-model-agent',
+        modelId: 'test-model',
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      const result = await manager.getResult('partial-model-agent', 5000);
+
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('requires both providerId and modelId');
+      expect(deps.createAgent).not.toHaveBeenCalled();
+    });
+
+    it('should reject string-only model tier resolver results', async () => {
+      const depsWithLegacyResolver = createMockDeps();
+      depsWithLegacyResolver.modelTierResolver = vi.fn(
+        () => 'legacy-model' as unknown as ReturnType<NonNullable<typeof deps.modelTierResolver>>,
+      );
+      const managerWithLegacyResolver = new SubAgentManager(depsWithLegacyResolver);
+      const config = createTestConfig({ id: 'legacy-model-agent' });
+
+      await managerWithLegacyResolver.spawn('parent-1', 'conv-1', config);
+      const result = await managerWithLegacyResolver.getResult('legacy-model-agent', 5000);
+
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('must return providerId and modelId');
+      expect(depsWithLegacyResolver.createAgent).not.toHaveBeenCalled();
     });
 
     it('should create an empty tool registry when toolPolicy is none', async () => {

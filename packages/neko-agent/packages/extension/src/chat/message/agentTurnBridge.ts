@@ -124,8 +124,6 @@ export class AgentTurnBridge {
         imageAttachments: input.imageAttachments,
         executionOverrides: input.executionOverrides,
         settings: {
-          selectedProviderId: this.deps.settings.selectedProviderId,
-          selectedModelId: this.deps.settings.selectedModelId,
           customSystemPrompt: this.deps.settings.customSystemPrompt,
           executionMode: this.deps.settings.executionMode,
           autoExecuteTools: this.deps.settings.autoExecuteTools,

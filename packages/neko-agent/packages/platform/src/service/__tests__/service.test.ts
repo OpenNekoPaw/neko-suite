@@ -200,13 +200,13 @@ function createRoutingConfig(input: {
 
 describe('Service', () => {
   describe('chat', () => {
-    it('should send chat request successfully', async () => {
+    it('should send chat request successfully with an explicit provider/model', async () => {
       const config = createMockConfig();
       const service = new Service(config);
 
       const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
-      const response = await service.chat(messages);
+      const response = await service.chat(messages, { providerId: 'openai', modelId: 'gpt-4' });
 
       expect(response.message.content).toBe('Test response');
       expect(response.routing.modelId).toBe('gpt-4');
@@ -214,15 +214,15 @@ describe('Service', () => {
       expect(response.timing.duration).toBeDefined();
     });
 
-    it('should use specified model ID', async () => {
+    it('rejects model-only chat routing instead of inferring a provider', async () => {
       const config = createMockConfig();
       const service = new Service(config);
 
       const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
-      const response = await service.chat(messages, { modelId: 'gpt-4' });
-
-      expect(response.routing.modelId).toBe('gpt-4');
+      await expect(service.chat(messages, { modelId: 'gpt-4' })).rejects.toThrow(
+        'Chat requests require both providerId and modelId',
+      );
     });
 
     it('routes an explicit DeepSeek direct provider/model without falling through to a NewAPI gateway', async () => {
@@ -386,6 +386,7 @@ describe('Service', () => {
 
       const response = await service.chat([{ role: 'user', content: 'Hello' }], {
         providerId: 'ollama-local',
+        modelId: 'llama-local',
       });
 
       expect(response.routing).toMatchObject({
@@ -401,6 +402,7 @@ describe('Service', () => {
       const service = new Service(config);
 
       await service.chat([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
         modelId: 'gpt-4',
         messageProjector: ({ messages, providerId, modelId }) => [
           ...messages,
@@ -426,7 +428,7 @@ describe('Service', () => {
 
       await service.chat(
         [{ role: 'user', content: 'Hello' }],
-        { modelId: 'gpt-4' },
+        { providerId: 'openai', modelId: 'gpt-4' },
         {
           trace: createAgentTraceContext({
             conversationId: 'conv-1',
@@ -446,13 +448,16 @@ describe('Service', () => {
       expect(JSON.stringify(options)).not.toContain('conv-1');
     });
 
-    it('should throw when no model available', async () => {
+    it('rejects chat requests without explicit provider/model before model fallback', async () => {
       const config = createMockConfig();
       (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const service = new Service(config);
 
-      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow();
+      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
+        'Chat requests require an explicit providerId and modelId',
+      );
+      expect(config.configManager.getEnabledModels).not.toHaveBeenCalled();
     });
 
     it('should throw when model not found', async () => {
@@ -460,7 +465,10 @@ describe('Service', () => {
       const service = new Service(config);
 
       await expect(
-        service.chat([{ role: 'user', content: 'Hello' }], { modelId: 'non-existent' }),
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'non-existent',
+        }),
       ).rejects.toThrow('Model non-existent not found');
     });
 
@@ -476,9 +484,12 @@ describe('Service', () => {
       );
       const service = new Service(config);
 
-      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
-        'Configuration file contains invalid TOML',
-      );
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+        }),
+      ).rejects.toThrow('Configuration file contains invalid TOML');
       expect(adapter.chat).not.toHaveBeenCalled();
       expect(config.configManager.getEnabledModels).not.toHaveBeenCalled();
     });
@@ -497,9 +508,12 @@ describe('Service', () => {
       vi.spyOn(providerRegistry, 'getAdapter').mockReturnValue(adapter as Adapter);
       const service = new Service({ configManager, providerRegistry });
 
-      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
-        'Agent configuration has no enabled providers',
-      );
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+        }),
+      ).rejects.toThrow('Agent configuration has no enabled providers');
       expect(getEnabledModels).not.toHaveBeenCalled();
       expect(adapter.chat).not.toHaveBeenCalled();
     });
@@ -512,7 +526,10 @@ describe('Service', () => {
 
       const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }];
 
-      const { stream, response } = service.chatStream(messages);
+      const { stream, response } = service.chatStream(messages, {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
 
       const chunks: ChatChunk[] = [];
       for await (const chunk of stream) {
@@ -534,6 +551,7 @@ describe('Service', () => {
       const service = new Service(config);
 
       const { stream } = service.chatStream([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
         modelId: 'gpt-4',
         messageProjector: ({ messages }) => [...messages, { role: 'user', content: 'projected' }],
       });
@@ -553,13 +571,16 @@ describe('Service', () => {
       );
     });
 
-    it('should throw when no model available', () => {
+    it('rejects streams without explicit provider/model before model fallback', () => {
       const config = createMockConfig();
       (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const service = new Service(config);
 
-      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow();
+      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow(
+        'Chat requests require an explicit providerId and modelId',
+      );
+      expect(config.configManager.getEnabledModels).not.toHaveBeenCalled();
     });
 
     it('fails closed before opening a stream when the active config snapshot has an error', () => {
@@ -572,9 +593,12 @@ describe('Service', () => {
       );
       const service = new Service(config);
 
-      expect(() => service.chatStream([{ role: 'user', content: 'Hello' }])).toThrow(
-        'Configuration file is empty',
-      );
+      expect(() =>
+        service.chatStream([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+        }),
+      ).toThrow('Configuration file is empty');
       expect(adapter.chatStream).not.toHaveBeenCalled();
     });
   });
@@ -643,7 +667,12 @@ describe('Service', () => {
       const config = createMockConfig(adapter);
       const service = new Service(config);
 
-      await expect(service.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow('API error');
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+        }),
+      ).rejects.toThrow('API error');
     });
   });
 });

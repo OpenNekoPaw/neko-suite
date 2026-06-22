@@ -34,6 +34,7 @@ describe('SubAgentRuntimeCoordinator', () => {
       conversationId: 'conv-a',
       createService,
       toolRegistry,
+      providerId: 'provider-a',
       modelId: 'model-a',
     });
 
@@ -76,6 +77,7 @@ describe('SubAgentRuntimeCoordinator', () => {
       conversationId: 'conv-a',
       createService,
       toolRegistry,
+      providerId: 'provider-a',
       modelId: 'model-a',
     });
 

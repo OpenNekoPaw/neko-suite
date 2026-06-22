@@ -77,10 +77,17 @@ export interface SubAgentModelTierResolverContext {
   readonly subAgentConfig: SubAgentConfig;
 }
 
+export interface SubAgentModelRef {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
+export type ModelTierResolverResult = SubAgentModelRef;
+
 export type ModelTierResolver = (
   tier: ModelTier,
   context?: SubAgentModelTierResolverContext,
-) => string | undefined;
+) => ModelTierResolverResult | undefined;
 
 // =============================================================================
 // Configuration
@@ -104,6 +111,8 @@ export interface SubAgentConfig {
   toolPolicy?: AgentToolPolicy;
   /** System prompt override */
   systemPrompt?: string;
+  /** Provider ID for the explicit model. Required when modelId is set. */
+  providerId?: string;
   /** Model ID or tier */
   modelId?: string;
   /** Model tier (maps to specific model) */

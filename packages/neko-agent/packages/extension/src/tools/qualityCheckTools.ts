@@ -3,6 +3,7 @@ import {
   createQualityCheckTools as createAgentQualityCheckTools,
   type IAudioAnalyzer,
   type IFrameExtractor,
+  type MediaQualityChatModelRef,
   type MediaQualityGenerator,
   type MediaQualityLLMService,
   type QualityCheckToolsDeps as AgentQualityCheckToolsDeps,
@@ -17,6 +18,7 @@ export type { IAudioAnalyzer, IFrameExtractor };
 export interface QualityCheckToolsDeps {
   createService: () => MediaQualityLLMService;
   mediaGenerator: MediaQualityGenerator;
+  chatModel?: MediaQualityChatModelRef;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
 }
@@ -27,6 +29,7 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
     mediaGenerator: deps.mediaGenerator,
     readFileAsBase64,
     logger,
+    ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
     ...(deps.audioAnalyzer ? { audioAnalyzer: deps.audioAnalyzer } : {}),
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   };

@@ -19,6 +19,8 @@ const logger = getLogger('LLMSummarizer');
  * LLM Summarizer configuration
  */
 export interface LLMSummarizerConfig {
+  /** Provider to use for summarization */
+  provider?: string;
   /** Model to use for summarization */
   model?: string;
   /** Temperature for summarization (lower = more focused) */
@@ -108,6 +110,7 @@ export class LLMSummarizer implements ISummarizer {
           {
             temperature: this.config.temperature,
             maxTokens: maxTokens + 200, // Extra for formatting
+            providerId: this.config.provider,
             modelId: this.config.model,
           },
         );

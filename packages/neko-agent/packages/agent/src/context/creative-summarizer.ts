@@ -37,6 +37,8 @@ function estimateTokens(text: string): number {
  * Creative-domain summariser configuration
  */
 export interface CreativeSummarizerConfig {
+  /** LLM provider override for summarisation calls */
+  provider?: string;
   /** LLM model override for summarisation calls */
   model?: string;
   /** Temperature for summarisation (lower = more factual) */
@@ -306,6 +308,7 @@ export class CreativeSummarizer implements ISummarizer {
             {
               temperature: this.summarizerConfig.temperature,
               maxTokens: maxTokens + 200,
+              providerId: this.summarizerConfig.provider,
               modelId: this.summarizerConfig.model,
             },
           );
