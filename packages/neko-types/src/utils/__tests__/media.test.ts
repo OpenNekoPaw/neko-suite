@@ -4,6 +4,7 @@ import {
   detectMediaType,
   getMimeType,
   isMediaFile,
+  isDocumentFile,
   isImageSequence,
   isSubtitleFile,
   getExtensionsForType,
@@ -91,6 +92,15 @@ describe('detectMediaType', () => {
     });
   });
 
+  describe('document types', () => {
+    const documentExts = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'epub', 'cbz', 'cbr'];
+
+    it.each(documentExts)('detects .%s as document', (ext) => {
+      expect(detectMediaType(`file.${ext}`)).toBe('document');
+      expect(isDocumentFile(`file.${ext}`)).toBe(true);
+    });
+  });
+
   describe('image sequence detection', () => {
     it('detects image files with 3+ digits as sequence', () => {
       expect(detectMediaType('frame_001.png')).toBe('sequence');
@@ -166,6 +176,12 @@ describe('getMimeType', () => {
   it('returns correct MIME for subtitle types', () => {
     expect(getMimeType('file.srt')).toBe('application/x-subrip');
     expect(getMimeType('file.vtt')).toBe('text/vtt');
+  });
+
+  it('returns correct MIME for document archives', () => {
+    expect(getMimeType('file.epub')).toBe('application/epub+zip');
+    expect(getMimeType('file.cbz')).toBe('application/x-cbz');
+    expect(getMimeType('file.cbr')).toBe('application/vnd.comicbook-rar');
   });
 
   it('returns application/octet-stream for unknown types', () => {

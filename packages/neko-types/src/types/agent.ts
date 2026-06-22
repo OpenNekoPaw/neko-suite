@@ -36,6 +36,8 @@ export interface AgentConfig {
   tools: ToolDefinition[];
   /** Maximum iterations before stopping */
   maxIterations: number;
+  /** Provider for main reasoning */
+  providerId?: string;
   /** Primary model for main reasoning */
   primaryModel?: string;
   /** Purpose-specific models */

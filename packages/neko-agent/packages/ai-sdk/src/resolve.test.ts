@@ -42,8 +42,11 @@ describe('resolveProvider', () => {
 
     expect(resolveProvider('openai', config)).toMatchObject({ type: 'openai', source: 'native' });
     expect(resolveProvider('newapi', config)).toMatchObject({ type: 'newapi', source: 'native' });
-    expect(resolveProvider('oneapi', config)).toMatchObject({ type: 'newapi', source: 'native' });
-    expect(resolveProvider('generic', config)).toMatchObject({ type: 'newapi', source: 'native' });
+    expect(resolveProvider('oneapi', config)).toMatchObject({ type: 'oneapi', source: 'native' });
+    expect(resolveProvider('generic', config)).toMatchObject({
+      type: 'generic',
+      source: 'native',
+    });
     expect(resolveProvider('xai', config)).toMatchObject({ type: 'xai', source: 'native' });
   });
 

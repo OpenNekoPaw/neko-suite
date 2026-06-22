@@ -548,14 +548,24 @@ export interface LlmParameterControlAvailability {
  * Built by Platform layer from enabled providers and models
  */
 export interface ChatModelOption {
-  /** Unique identifier: 'auto' or 'providerId:modelId' */
+  /** Unique identifier: 'providerId:modelId' */
   id: string;
-  /** Display label: 'Auto' or 'Provider Name / Model Name' */
+  /** Display label: 'Provider Name / Model Name' */
   label: string;
-  /** Provider ID (empty string for 'auto') */
+  /** Provider ID */
   providerId: string;
-  /** Model ID (empty string for 'auto') */
+  /** Model ID */
   modelId: string;
+  /** Provider display label for source-grouped selectors */
+  providerLabel?: string;
+  /** Secret-free provider source used for grouping and trust badges */
+  source?: 'account-gateway' | 'explicit-config' | string;
+  /** Connection path for grouping direct, gateway, and local providers */
+  connectionKind?: ProviderConnectionKind;
+  /** Protocol profile implemented by the provider endpoint */
+  protocolProfile?: ProviderProtocolProfile;
+  /** Product support confidence for this provider profile */
+  supportLevel?: ProviderSupportLevel;
   /** Model capabilities (optional, for filtering) */
   capabilities?: readonly string[];
   /** Model type for UI grouping */

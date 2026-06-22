@@ -78,6 +78,7 @@ const EXTENSION_TO_MEDIA_TYPE: Record<string, AssetMediaType> = {
   xlsx: 'document',
   epub: 'document',
   cbz: 'document',
+  cbr: 'document',
   fdx: 'document',
 };
 
@@ -142,6 +143,7 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   epub: 'application/epub+zip',
   cbz: 'application/x-cbz',
+  cbr: 'application/vnd.comicbook-rar',
   fdx: 'application/xml+fdx',
 };
 

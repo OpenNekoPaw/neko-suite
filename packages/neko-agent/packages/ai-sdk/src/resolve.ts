@@ -62,9 +62,11 @@ export function resolveProvider(
     }
 
     case 'newapi':
+      return createNewAPIProvider(config, options);
+
     case 'oneapi':
     case 'generic':
-      return createNewAPIProvider(config, options);
+      return createCompatibleProvider(providerType, config, options);
 
     case 'xai':
     case 'kling':

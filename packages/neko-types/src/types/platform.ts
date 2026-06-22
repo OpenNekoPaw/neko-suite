@@ -87,9 +87,9 @@ export interface ToolDefinition {
  * Service options for chat requests
  */
 export interface ServiceOptions {
-  /** Provider ID to use */
+  /** Provider ID to use. Chat requests require this together with modelId. */
   providerId?: string;
-  /** Model ID to use */
+  /** Model ID to use. Chat requests require this together with providerId. */
   modelId?: string;
   /** Temperature for generation (0-2) */
   temperature?: number;
