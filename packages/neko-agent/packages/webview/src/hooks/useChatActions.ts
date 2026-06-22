@@ -34,7 +34,7 @@ import {
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
 import { projectContextReferencesFromPayloads } from '../presenters/context-reference-presenter';
 import { toAttachmentTypeFromPathReference } from '../presenters/reference-token-presenter';
-import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
+import { isDocumentFile, type AgentContextPayload, type ChatModelOption } from '@neko/shared';
 
 /** Per-category resolved media model for agent mode */
 export type AgentMediaModels = AgentMediaModelSelections;
@@ -352,16 +352,20 @@ function projectFileReferenceAttachments(
   references: readonly SelectedFileReference[] | undefined,
 ): MessageAttachment[] {
   return (
-    references?.map((reference) => {
-      const type = toAttachmentTypeFromPathReference(reference);
-      return {
-        id: reference.id,
-        name: reference.label,
-        type,
-        path: reference.path,
-        ...(reference.thumbnailUri && type === 'image' ? { preview: reference.thumbnailUri } : {}),
-      };
-    }) ?? []
+    references
+      ?.filter((reference) => !isDocumentFile(reference.path))
+      .map((reference) => {
+        const type = toAttachmentTypeFromPathReference(reference);
+        return {
+          id: reference.id,
+          name: reference.label,
+          type,
+          path: reference.path,
+          ...(reference.thumbnailUri && type === 'image'
+            ? { preview: reference.thumbnailUri }
+            : {}),
+        };
+      }) ?? []
   );
 }
 

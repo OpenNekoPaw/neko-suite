@@ -555,6 +555,65 @@ describe('useChatActions', () => {
     expect(setSelectedFileReferences).toHaveBeenCalledWith([]);
   });
 
+  it('sends selected document references as @path text without file attachments', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-doc');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-doc',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '分析 @${A}/books/story.epub',
+        displayMessageText: '分析',
+        fileReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            path: '${A}/books/story.epub',
+            mediaType: 'document',
+          },
+        ],
+      });
+    });
+
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '分析',
+      }),
+    ]);
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        attachments: expect.any(Array),
+      }),
+    );
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-doc',
+        message: '分析 @${A}/books/story.epub',
+      }),
+    );
+  });
+
   it('sends selected media file references as attachments for extension preprocessing', () => {
     const setMessages = vi.fn();
     const setIsThinking = vi.fn();

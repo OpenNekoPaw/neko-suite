@@ -1,4 +1,4 @@
-import type { MessageAttachment } from '@neko/shared';
+import { isDocumentFile, type MessageAttachment } from '@neko/shared';
 
 export interface AgentBase64ImageAttachment {
   readonly type: 'base64';
@@ -58,6 +58,10 @@ export function formatMediaAttachmentReference(
   return text;
 }
 
+export function formatDocumentAttachmentReference(name: string, path: string): string {
+  return `\n\n[Attached document: ${name}] (path: ${path})\nUse ReadDocument with file_path="${path}" and mode="manifest" or mode="range" before analyzing this document. Do not inline the whole document as chat context.`;
+}
+
 export function extractFileReferencePaths(message: string): string[] {
   const paths: string[] = [];
   let match: RegExpExecArray | null;
@@ -110,6 +114,11 @@ export async function projectAgentMessageAttachments(
 
       case 'file': {
         if (!attachment.path) {
+          break;
+        }
+
+        if (isDocumentFile(attachment.path)) {
+          textContent += formatDocumentAttachmentReference(attachment.name, attachment.path);
           break;
         }
 

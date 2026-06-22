@@ -134,7 +134,7 @@ export interface SearchProjectFilesWebviewMessage {
   type: 'searchProjectFiles';
   filter: string;
   conversationId?: string;
-  purpose?: 'roleplay';
+  purpose?: 'roleplay' | 'entry';
 }
 
 export interface ConfirmToolWebviewMessage {
@@ -417,7 +417,7 @@ export interface ProjectFilesWebviewMessage {
   type: 'projectFiles';
   conversationId?: string;
   filter?: string;
-  purpose?: 'roleplay';
+  purpose?: 'roleplay' | 'entry';
   files?: ProjectFileMentionInfo[];
   mentionExtras?: ProjectMentionExtra[];
 }
@@ -1466,7 +1466,7 @@ function parseSearchProjectFilesMessage(
   if (purpose === null) return null;
   const conversationId = requiredString(raw.conversationId);
   if (typeof raw.filter !== 'string') return null;
-  if (!conversationId && purpose !== 'roleplay') return null;
+  if (!conversationId && purpose !== 'roleplay' && purpose !== 'entry') return null;
   return {
     type: 'searchProjectFiles',
     filter: raw.filter,
@@ -2705,9 +2705,11 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function optionalSearchProjectFilesPurpose(value: unknown): 'roleplay' | undefined | null {
+function optionalSearchProjectFilesPurpose(
+  value: unknown,
+): 'roleplay' | 'entry' | undefined | null {
   if (value === undefined) return undefined;
-  return value === 'roleplay' ? value : null;
+  return value === 'roleplay' || value === 'entry' ? value : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

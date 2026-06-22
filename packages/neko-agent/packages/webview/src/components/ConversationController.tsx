@@ -740,21 +740,6 @@ export function ConversationController({
     [startNewForegroundConversation],
   );
 
-  const startNewForegroundConversationWithInitialInput = useCallback(
-    (messageText: string) => {
-      const trimmed = messageText.trim();
-      if (!trimmed) return;
-      const inputRequestId = nextInitialInputRequestIdRef.current + 1;
-      nextInitialInputRequestIdRef.current = inputRequestId;
-      setPendingSendRequest(null);
-      setInitialEntryPromptMenuRequest(null);
-      setInitialInputRequest({ id: inputRequestId, messageText: trimmed });
-      setEntryPromptMenu(null);
-      startNewForegroundConversation();
-    },
-    [startNewForegroundConversation],
-  );
-
   const handleEntryAction = useCallback(
     (action: EmptyStateEntryAction) => {
       setEntryAction(action);
@@ -1136,7 +1121,7 @@ export function ConversationController({
               mentionItems={mentionItems}
               onRequestFiles={(filter) => {
                 updateMentionSearchFilter(filter);
-                startNewForegroundConversationWithInitialInput(entryInputValueRef.current);
+                VSCodeMessages.searchProjectFiles(filter, undefined, { purpose: 'entry' });
               }}
               genCategory={entryGenCategory}
               genParams={entryGenParams}

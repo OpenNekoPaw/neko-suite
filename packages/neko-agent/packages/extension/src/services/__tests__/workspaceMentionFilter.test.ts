@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { createInputProcessor } from '@neko/agent';
 import { matchesGitignoreRules, parseGitignoreRules } from '../workspaceIgnoreFilter';
 import { searchVSCodeProjectFiles } from '../workspaceProjectSearch';
 import { createVSCodeWorkspaceFileReader } from '../workspaceFileReader';
@@ -148,5 +149,63 @@ tmp/*.json
     await expect(reader.readFile('tmp/generated.json')).rejects.toThrow(
       'File is ignored by workspace mention filters',
     );
+  });
+
+  it('resolves document path variables before reading @file references', async () => {
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith('/.gitignore')) {
+        return Buffer.from('');
+      }
+      if (uri.fsPath === '/library/assets/epub/story.epub') {
+        return Buffer.from('epub content');
+      }
+      return Buffer.from('');
+    });
+    vi.mocked(vscode.workspace.fs.stat).mockResolvedValue({ type: vscode.FileType.File, size: 12 });
+    const reader = createVSCodeWorkspaceFileReader('/workspace', undefined, {
+      resolvePath: async (filePath) => filePath.replace('${A}', '/library/assets'),
+    });
+
+    await expect(reader.stat('${A}/epub/story.epub')).resolves.toEqual({
+      size: 12,
+      isFile: true,
+      isDirectory: false,
+    });
+    await expect(reader.readFile('${A}/epub/story.epub')).resolves.toBe('epub content');
+    expect(vscode.workspace.fs.stat).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: '/library/assets/epub/story.epub' }),
+    );
+    expect(vscode.workspace.fs.readFile).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: '/library/assets/epub/story.epub' }),
+    );
+  });
+
+  it('parses document path variables so the message runtime can route them to ReadDocument', async () => {
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith('/.gitignore')) {
+        return Buffer.from('');
+      }
+      if (uri.fsPath === '/library/assets/epub/story.epub') {
+        return Buffer.from('epub content');
+      }
+      return Buffer.from('');
+    });
+    vi.mocked(vscode.workspace.fs.stat).mockResolvedValue({ type: vscode.FileType.File, size: 12 });
+    const processor = createInputProcessor({
+      workspaceRoot: '/workspace',
+      fileReader: createVSCodeWorkspaceFileReader('/workspace', undefined, {
+        resolvePath: async (filePath) => filePath.replace('${A}', '/library/assets'),
+      }),
+    });
+
+    const refs = processor.parseReferences('分析 @${A}/epub/story.epub 前10页');
+
+    expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
+    expect(refs).toEqual([
+      expect.objectContaining({
+        original: '@${A}/epub/story.epub',
+        path: '${A}/epub/story.epub',
+      }),
+    ]);
   });
 });

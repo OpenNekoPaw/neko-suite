@@ -17,6 +17,7 @@ import {
   resolveVisionImageAttachmentMediaType,
 } from '@neko/platform/media/vision-preprocess-policy';
 import type { MessageAttachment } from '../types';
+import { resolveDocumentPath } from '../../services/documentPathResolver';
 
 const logger = getLogger('AttachmentProcessor');
 
@@ -37,7 +38,7 @@ export class AttachmentProcessor {
    */
   async processAttachments(attachments?: MessageAttachment[]): Promise<ProcessedAttachments> {
     return projectAgentMessageAttachments(attachments, {
-      readTextFile: (path) => fs.promises.readFile(path, 'utf-8'),
+      readTextFile: async (path) => fs.promises.readFile(await resolveDocumentPath(path), 'utf-8'),
       readImageFileAsBase64: (path) => this.readFileAsBase64(path),
       onError: ({ operation, error }) => {
         logger.error(`Failed to ${operation} attachment`, error);
@@ -56,8 +57,9 @@ export class AttachmentProcessor {
     data: string;
   } | null> {
     try {
-      const buffer = await fs.promises.readFile(filePath);
-      const mediaType = resolveVisionImageAttachmentMediaType(filePath);
+      const resolvedPath = await resolveDocumentPath(filePath);
+      const buffer = await fs.promises.readFile(resolvedPath);
+      const mediaType = resolveVisionImageAttachmentMediaType(resolvedPath);
 
       if (isVisionImageMime(mediaType)) {
         const encoded = await this.maybeEncodeVisionImage(buffer);

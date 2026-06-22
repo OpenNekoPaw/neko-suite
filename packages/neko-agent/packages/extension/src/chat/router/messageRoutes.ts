@@ -34,11 +34,11 @@ export function tryHandleMessageRoute(
       return true;
 
     case 'searchProjectFiles': {
-      const conversationId =
-        message.purpose === 'roleplay'
-          ? message.conversationId
-          : resolveRequiredConversationId(webview, message, 'searchProjectFiles');
-      if (message.purpose !== 'roleplay' && !conversationId) return true;
+      const allowsTablessSearch = message.purpose === 'roleplay' || message.purpose === 'entry';
+      const conversationId = allowsTablessSearch
+        ? message.conversationId
+        : resolveRequiredConversationId(webview, message, 'searchProjectFiles');
+      if (!allowsTablessSearch && !conversationId) return true;
       deps.messages?.searchProjectFiles(webview, message.filter, conversationId, {
         purpose: message.purpose,
       });

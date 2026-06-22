@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   extractFileReferencePaths,
+  formatDocumentAttachmentReference,
   formatFileAttachmentContent,
   formatMediaAttachmentReference,
   formatUnreadableFileAttachment,
@@ -21,6 +22,9 @@ describe('attachment projection helpers', () => {
   it('formats file and media attachment text consistently', () => {
     expect(formatFileAttachmentContent('code.ts', 'const x = 1;')).toContain('### File: code.ts');
     expect(formatUnreadableFileAttachment('secret.txt')).toContain('Failed to read file');
+    expect(formatDocumentAttachmentReference('book.epub', '/books/book.epub')).toContain(
+      'Use ReadDocument',
+    );
     expect(
       formatMediaAttachmentReference({
         type: 'video',
@@ -72,6 +76,32 @@ describe('attachment projection helpers', () => {
     expect(result.textContent).toContain('### File: code.ts');
     expect(result.textContent).toContain('[Attached video: clip.mp4]');
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('projects document attachments as ReadDocument references without reading them', async () => {
+    const readTextFile = vi.fn(async () => {
+      throw new Error('document should not be read as text');
+    });
+
+    const result = await projectAgentMessageAttachments(
+      [
+        {
+          id: 'file-1',
+          type: 'file',
+          name: 'book.epub',
+          path: '${A}/books/book.epub',
+        },
+      ],
+      {
+        readTextFile,
+        readImageFileAsBase64: async () => null,
+      },
+    );
+
+    expect(readTextFile).not.toHaveBeenCalled();
+    expect(result.textContent).toContain('[Attached document: book.epub]');
+    expect(result.textContent).toContain('Use ReadDocument');
+    expect(result.textContent).not.toContain('document should not be read');
   });
 
   it('keeps unreadable file projection deterministic and reports the bridge error', async () => {

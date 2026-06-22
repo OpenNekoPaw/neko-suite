@@ -43,7 +43,7 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
-  it('accepts roleplay project search purpose and rejects unknown search purposes', () => {
+  it('accepts tabless project search purposes and rejects unknown search purposes', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'searchProjectFiles',
@@ -54,6 +54,17 @@ describe('webview protocol parser', () => {
       type: 'searchProjectFiles',
       filter: '',
       purpose: 'roleplay',
+    });
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'searchProjectFiles',
+        filter: 'hero',
+        purpose: 'entry',
+      }),
+    ).toEqual({
+      type: 'searchProjectFiles',
+      filter: 'hero',
+      purpose: 'entry',
     });
     expect(
       parseWebviewToExtensionMessage({

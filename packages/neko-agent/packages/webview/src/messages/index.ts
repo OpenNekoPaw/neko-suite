@@ -103,7 +103,7 @@ export const VSCodeMessages = {
   searchProjectFiles: (
     filter: string,
     conversationId: string | undefined,
-    options: { readonly purpose?: 'roleplay' } = {},
+    options: { readonly purpose?: 'roleplay' | 'entry' } = {},
   ) => {
     postWebviewMessage({
       type: 'searchProjectFiles',

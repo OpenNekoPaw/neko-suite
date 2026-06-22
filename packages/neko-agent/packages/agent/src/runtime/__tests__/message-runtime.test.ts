@@ -234,11 +234,39 @@ describe('message runtime helpers', () => {
     expect(result).toEqual({
       message: 'inspect @src/app.ts',
       fileContents: [{ path: 'src/app.ts', content: 'export const app = true;' }],
+      documentReferences: [],
     });
     expect(onReferenceError).toHaveBeenCalledWith({
       reference: '@src/missing.ts',
       error: 'missing',
     });
+  });
+
+  it('prepares document references without asking the input processor to inline them', async () => {
+    const process = vi.fn(async () => ({
+      fileReferences: [{ path: 'src/app.ts', content: 'export const app = true;' }],
+      errors: [],
+    }));
+
+    const result = await prepareAgentMessageFileReferences({
+      messageText: '分析 @${A}/books/story.epub 并检查 @src/app.ts',
+      inputProcessor: {
+        parseReferences: () => [
+          {
+            original: '@${A}/books/story.epub',
+            path: '${A}/books/story.epub',
+          },
+          { original: '@src/app.ts', path: 'src/app.ts' },
+        ],
+        process,
+      },
+    });
+
+    expect(process).toHaveBeenCalledWith('分析  并检查 @src/app.ts');
+    expect(result.fileContents).toEqual([
+      { path: 'src/app.ts', content: 'export const app = true;' },
+    ]);
+    expect(result.documentReferences).toEqual([{ path: '${A}/books/story.epub' }]);
   });
 
   it('keeps message usable when referenced file processor throws', async () => {
@@ -254,7 +282,11 @@ describe('message runtime helpers', () => {
         },
         onProcessingError,
       }),
-    ).resolves.toEqual({ message: 'inspect @src/app.ts', fileContents: [] });
+    ).resolves.toEqual({
+      message: 'inspect @src/app.ts',
+      fileContents: [],
+      documentReferences: [],
+    });
     expect(onProcessingError).toHaveBeenCalledWith(expect.any(Error));
   });
 
@@ -570,6 +602,12 @@ describe('message runtime helpers', () => {
       limit: 30,
       purpose: 'roleplay',
     });
+    expect(buildAgentProjectFileSearchPlan({ filter: 'hero', purpose: 'entry' })).toEqual({
+      includePattern: '**/*hero*',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
+      limit: 30,
+      purpose: 'entry',
+    });
   });
 
   it('projects host file candidates to mention file rows', () => {
@@ -782,6 +820,35 @@ describe('message runtime helpers', () => {
       limit: 30,
       purpose: 'roleplay',
     });
+  });
+
+  it('runs entry-page search without conversation-scoped canvas context', async () => {
+    const searchProjectFiles = vi.fn(async () => [{ relativePath: 'assets/hero.png' }]);
+    const getCanvasNodes = vi.fn(() => [
+      { nodeId: 'node-1', type: 'shot', summary: 'Current shot' },
+    ]);
+
+    await expect(
+      executeAgentProjectFileSearch({
+        filter: 'hero',
+        purpose: 'entry',
+        searchProjectFiles,
+        getCanvasNodes,
+      }),
+    ).resolves.toEqual({
+      type: 'projectFiles',
+      filter: 'hero',
+      purpose: 'entry',
+      files: [{ path: 'assets/hero.png', name: 'hero.png', type: 'file' }],
+      mentionExtras: [],
+    });
+    expect(searchProjectFiles).toHaveBeenCalledWith({
+      includePattern: '**/*hero*',
+      excludePattern: DEFAULT_MENTION_EXCLUDE_GLOB,
+      limit: 30,
+      purpose: 'entry',
+    });
+    expect(getCanvasNodes).not.toHaveBeenCalled();
   });
 
   it('keeps project file search usable when the host search adapter fails', async () => {
@@ -1014,7 +1081,7 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('selects requested configured provider and model before config selection', () => {
+  it('selects the requested configured provider and model', () => {
     const providers = new Map([
       ['openai', { id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] }],
       ['anthropic', { id: 'anthropic', isConfigured: true, modelIds: ['claude-3'] }],
@@ -1023,9 +1090,7 @@ describe('message runtime helpers', () => {
     expect(
       selectAgentTurnProvider({
         requestedProviderId: 'openai',
-        selectedProviderId: 'anthropic',
         requestedModelId: 'gpt-4.1',
-        selectedModelId: 'claude-3',
         getProvider: (id) => providers.get(id),
       }),
     ).toEqual({
@@ -1036,15 +1101,13 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('rejects unavailable requested provider instead of falling back to another provider', () => {
+  it('rejects unavailable requested provider without trying another provider', () => {
     const getProvider = vi.fn(() => undefined);
 
     expect(
       selectAgentTurnProvider({
         requestedProviderId: 'missing',
         requestedModelId: 'gpt-4.1',
-        selectedProviderId: 'anthropic',
-        selectedModelId: 'claude-3',
         getProvider,
       }),
     ).toEqual({
@@ -1060,8 +1123,8 @@ describe('message runtime helpers', () => {
   it('returns a provider configuration result when selected provider is unavailable', () => {
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'openai',
-        selectedModelId: 'gpt-4.1',
+        requestedProviderId: 'openai',
+        requestedModelId: 'gpt-4.1',
         getProvider: () => ({ id: 'openai', isConfigured: false }),
       }),
     ).toEqual({
@@ -1086,7 +1149,7 @@ describe('message runtime helpers', () => {
 
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'openai',
+        requestedProviderId: 'openai',
         getProvider: () => {
           throw new Error('provider lookup should not be used');
         },
@@ -1101,8 +1164,8 @@ describe('message runtime helpers', () => {
   it('rejects model IDs that are not enabled for the selected provider', () => {
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'openai',
-        selectedModelId: 'missing-model',
+        requestedProviderId: 'openai',
+        requestedModelId: 'missing-model',
         getProvider: () => ({ id: 'openai', isConfigured: true, modelIds: ['gpt-4.1'] }),
       }),
     ).toEqual({
@@ -1116,8 +1179,8 @@ describe('message runtime helpers', () => {
   it('allows text-only chat models for plain text turns without requiring vision', () => {
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'local',
-        selectedModelId: 'llama3',
+        requestedProviderId: 'local',
+        requestedModelId: 'llama3',
         getProvider: () => ({
           id: 'local',
           isConfigured: true,
@@ -1141,8 +1204,8 @@ describe('message runtime helpers', () => {
   it('rejects account gateway selections when catalog or entitlement is unavailable', () => {
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'official-chat',
+        requestedProviderId: 'neko-account-gateway',
+        requestedModelId: 'official-chat',
         getProvider: () => ({
           id: 'neko-account-gateway',
           isConfigured: true,
@@ -1160,8 +1223,8 @@ describe('message runtime helpers', () => {
 
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'official-denied',
+        requestedProviderId: 'neko-account-gateway',
+        requestedModelId: 'official-denied',
         getProvider: () => ({
           id: 'neko-account-gateway',
           isConfigured: true,
@@ -1182,8 +1245,8 @@ describe('message runtime helpers', () => {
   it('validates required model capabilities without provider fallback', () => {
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'text-only',
+        requestedProviderId: 'neko-account-gateway',
+        requestedModelId: 'text-only',
         requiredCapabilities: ['vision'],
         getProvider: () => ({
           id: 'neko-account-gateway',
@@ -1204,8 +1267,8 @@ describe('message runtime helpers', () => {
 
     expect(
       selectAgentTurnProvider({
-        selectedProviderId: 'neko-account-gateway',
-        selectedModelId: 'vision-model',
+        requestedProviderId: 'neko-account-gateway',
+        requestedModelId: 'vision-model',
         requiredCapabilities: ['vision'],
         getProvider: () => ({
           id: 'neko-account-gateway',

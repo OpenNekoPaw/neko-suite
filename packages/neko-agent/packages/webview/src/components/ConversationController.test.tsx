@@ -247,7 +247,7 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('initial-input').textContent).toBe('none');
   });
 
-  it('opens a chat tab before running entry-page mention search', () => {
+  it('runs entry-page mention search without opening a chat tab', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
@@ -255,8 +255,15 @@ describe('ConversationController entry state', () => {
       target: { value: '@hero' },
     });
 
+    expect(vscodeMocks.newConversation).not.toHaveBeenCalled();
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('hero', undefined, {
+      purpose: 'entry',
+    });
+    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
     expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
-    expect(vscodeMocks.searchProjectFiles).not.toHaveBeenCalled();
 
     act(() => {
       window.dispatchEvent(
@@ -269,7 +276,44 @@ describe('ConversationController entry state', () => {
       );
     });
 
-    expect(screen.getByTestId('initial-input').textContent).toBe('@hero');
+    expect(screen.getByTestId('pending-send').textContent).toBe('@hero');
+    expect(screen.getByTestId('initial-input').textContent).toBe('none');
+  });
+
+  it('returns to the entry page after closing the last tab and keeps entry mention search tabless', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Start Chat/ }));
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-new', title: 'Draft Chat', messages: [] },
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
+    expect(screen.getByTestId('chat-workspace')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close Draft Chat' }));
+
+    expect(screen.getByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeTruthy();
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByPlaceholderText('Type anything...'), {
+      target: { value: '@hero' },
+    });
+
+    expect(vscodeMocks.newConversation).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.searchProjectFiles).toHaveBeenCalledWith('hero', undefined, {
+      purpose: 'entry',
+    });
   });
 
   it('starts a new tab with asset prompt and preserves existing entry text as initial input', () => {
@@ -322,6 +366,11 @@ function createProps(): React.ComponentProps<typeof ConversationController> {
         <button type="button" onClick={props.onNewChat}>
           New
         </button>
+        {props.tabs.map((tab) => (
+          <button key={tab.id} type="button" onClick={() => props.onCloseTab(tab.id)}>
+            Close {tab.title}
+          </button>
+        ))}
         <span data-testid="tab-count">{props.tabs.length}</span>
       </div>
     ),

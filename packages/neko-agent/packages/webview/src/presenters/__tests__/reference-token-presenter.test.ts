@@ -34,6 +34,7 @@ describe('reference-token-presenter', () => {
     expect(inferReferenceKindFromPath('assets/storyboard.frames', 'sequence')).toBe('video');
     expect(toAttachmentTypeFromPathReference({ path: 'assets/hero.png' })).toBe('image');
     expect(toAttachmentTypeFromPathReference({ path: 'assets/readme.md' })).toBe('file');
+    expect(toAttachmentTypeFromPathReference({ path: 'books/story.epub' })).toBe('file');
   });
 
   it('projects uploaded attachments with parent path, size, and preview metadata', () => {

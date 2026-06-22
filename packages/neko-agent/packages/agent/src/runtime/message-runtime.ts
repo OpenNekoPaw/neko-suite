@@ -31,6 +31,7 @@ import type {
   MessageAttachment,
   ProviderGenerationCapability,
 } from '@neko/shared';
+import { isDocumentFile } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
 import {
   createPlanModeIdcMetadata,
@@ -106,7 +107,19 @@ export interface AgentReferencedFileContent {
   readonly content: string;
 }
 
+export interface AgentReferencedDocument {
+  readonly path: string;
+}
+
+interface AgentReferencedDocumentToken extends AgentReferencedDocument {
+  readonly original?: string;
+}
+
 export interface AgentMessageFileReferenceProcessor {
+  parseReferences?: (input: string) => readonly {
+    path: string;
+    original?: string;
+  }[];
   process(input: string): Promise<{
     fileReferences: readonly {
       path: string;
@@ -129,11 +142,13 @@ export interface PrepareAgentMessageFileReferencesInput {
 export interface PreparedAgentMessageFileReferences {
   readonly message: string;
   readonly fileContents: AgentReferencedFileContent[];
+  readonly documentReferences: AgentReferencedDocument[];
 }
 
 export interface BuildEnhancedAgentMessageInput {
   readonly message: string;
   readonly fileContents?: readonly AgentReferencedFileContent[];
+  readonly documentReferences?: readonly AgentReferencedDocument[];
   readonly attachmentText?: string;
   readonly contextPayloads?: readonly AgentContextPayload[];
 }
@@ -270,7 +285,7 @@ export interface AgentProjectFileSearchPlanInput {
   readonly purpose?: AgentProjectFileSearchPurpose;
 }
 
-export type AgentProjectFileSearchPurpose = 'mention' | 'roleplay';
+export type AgentProjectFileSearchPurpose = 'mention' | 'roleplay' | 'entry';
 
 export interface AgentProjectFileSearchPlan {
   readonly includePattern: string;
@@ -418,9 +433,7 @@ export interface AgentProviderCandidate {
 
 export interface AgentTurnProviderSelectionInput<TProvider extends AgentProviderCandidate> {
   readonly requestedProviderId?: string;
-  readonly selectedProviderId?: string;
   readonly requestedModelId?: string;
-  readonly selectedModelId?: string;
   readonly requiredCapabilities?: readonly string[];
   readonly getProvider: (providerId: string) => TProvider | undefined;
 }
@@ -558,11 +571,23 @@ export async function prepareAgentMessageFileReferences(
 ): Promise<PreparedAgentMessageFileReferences> {
   const inputProcessor = input.inputProcessor;
   if (!inputProcessor) {
-    return { message: input.messageText, fileContents: [] };
+    return { message: input.messageText, fileContents: [], documentReferences: [] };
   }
 
+  const documentReferences = projectDocumentFileReferences(input.messageText, inputProcessor);
+  const publicDocumentReferences: AgentReferencedDocument[] = documentReferences.map((ref) => ({
+    path: ref.path,
+  }));
+  const processableMessageText =
+    documentReferences.length > 0
+      ? removeOriginalFileReferenceTokens(input.messageText, documentReferences)
+      : input.messageText;
+
   try {
-    const result = await inputProcessor.process(input.messageText);
+    const result =
+      processableMessageText.trim().length > 0
+        ? await inputProcessor.process(processableMessageText)
+        : { fileReferences: [], errors: [] };
     const fileContents = result.fileReferences
       .filter((ref): ref is { path: string; content: string } => typeof ref.content === 'string')
       .map((ref) => ({
@@ -574,11 +599,44 @@ export async function prepareAgentMessageFileReferences(
       input.onReferenceError?.(error);
     }
 
-    return { message: input.messageText, fileContents };
+    return {
+      message: input.messageText,
+      fileContents,
+      documentReferences: publicDocumentReferences,
+    };
   } catch (error) {
     input.onProcessingError?.(error);
-    return { message: input.messageText, fileContents: [] };
+    return {
+      message: input.messageText,
+      fileContents: [],
+      documentReferences: publicDocumentReferences,
+    };
   }
+}
+
+function projectDocumentFileReferences(
+  messageText: string,
+  inputProcessor: AgentMessageFileReferenceProcessor,
+): AgentReferencedDocumentToken[] {
+  const references = inputProcessor.parseReferences?.(messageText) ?? [];
+  return references
+    .filter((ref) => isDocumentFile(ref.path))
+    .map((ref) => ({
+      path: ref.path,
+      ...(ref.original ? { original: ref.original } : {}),
+    }));
+}
+
+function removeOriginalFileReferenceTokens(
+  messageText: string,
+  references: readonly AgentReferencedDocumentToken[],
+): string {
+  let next = messageText;
+  for (const reference of references) {
+    if (!reference.original) continue;
+    next = next.replace(reference.original, '');
+  }
+  return next;
 }
 
 export async function mergeReferencedMediaImageAttachments(
@@ -687,7 +745,11 @@ export async function prepareAgentMessageDispatch(
     llmRuntimeOptions: request.llmRuntimeOptions,
   });
 
-  const { message: parsedMessage, fileContents } = await prepareAgentMessageFileReferences({
+  const {
+    message: parsedMessage,
+    fileContents,
+    documentReferences,
+  } = await prepareAgentMessageFileReferences({
     messageText: request.messageText,
     inputProcessor: input.inputProcessor,
     onReferenceError: input.onReferenceError,
@@ -709,6 +771,7 @@ export async function prepareAgentMessageDispatch(
     message: parsedMessage,
     contextPayloads: request.contextPayloads,
     fileContents,
+    documentReferences,
     attachmentText,
   });
   const route: AgentMessageDispatchRoute =
@@ -728,6 +791,8 @@ export async function prepareAgentMessageDispatch(
       path: file.path,
       chars: file.content.length,
     })),
+    referencedDocumentCount: documentReferences.length,
+    referencedDocuments: documentReferences,
     attachmentTextChars: attachmentText.length,
     imageAttachmentCount: imageAttachments.length,
     mediaImageCount: mediaImages.length,
@@ -740,6 +805,7 @@ export async function prepareAgentMessageDispatch(
     parsedMessage,
     enhancedMessage,
     referencedFiles: fileContents,
+    referencedDocuments: documentReferences,
     attachmentText,
     mediaImages: summarizeBase64Images(mediaImages),
     userMessageContent: request.messageText,
@@ -838,6 +904,7 @@ export async function runAgentMessageTurnRuntime(
 
 export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput): string {
   const fileContents = input.fileContents ?? [];
+  const documentReferences = input.documentReferences ?? [];
   const contextPayloads = input.contextPayloads ?? [];
   let enhancedMessage = input.message;
 
@@ -852,6 +919,13 @@ export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput)
     enhancedMessage += '\n\n--- Referenced Files ---';
     for (const file of fileContents) {
       enhancedMessage += `\n\n### File: ${file.path}\n\`\`\`\n${file.content}\n\`\`\``;
+    }
+  }
+
+  if (documentReferences.length > 0) {
+    enhancedMessage += '\n\n--- Referenced Documents ---';
+    for (const document of documentReferences) {
+      enhancedMessage += `\n\n[Document: ${document.path}]\nUse ReadDocument with file_path="${document.path}" and mode="manifest" or mode="range" before analyzing this document. Do not inline the whole document as chat context.`;
     }
   }
 
@@ -969,7 +1043,9 @@ export function projectAgentProjectFilesMessage(
     type: 'projectFiles',
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     filter: input.filter ?? '',
-    ...(input.purpose === 'roleplay' ? { purpose: input.purpose } : {}),
+    ...(input.purpose === 'roleplay' || input.purpose === 'entry'
+      ? { purpose: input.purpose }
+      : {}),
     files: projectAgentFileMentions(input.files),
     mentionExtras: projectAgentMentionExtras(
       input.canvasNodes ?? [],

@@ -116,8 +116,9 @@ const handleProjectFiles: MessageHandler<'projectFiles'> = (
   message: ProjectFilesMessage,
   context,
 ) => {
-  const isEntryRoleplayResult = message.purpose === 'roleplay' && !message.conversationId;
-  if (!isEntryRoleplayResult && !context.isCurrentConversation(message.conversationId)) {
+  const isTablessSearchResult =
+    (message.purpose === 'roleplay' || message.purpose === 'entry') && !message.conversationId;
+  if (!isTablessSearchResult && !context.isCurrentConversation(message.conversationId)) {
     return;
   }
   const currentFilter = context.mentionSearchFilterRef?.current ?? context.mentionSearchFilter;

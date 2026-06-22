@@ -1,4 +1,9 @@
-import type { AgentContextPayload, AttachmentType, MessageAttachment } from '@neko/shared';
+import {
+  isDocumentFile,
+  type AgentContextPayload,
+  type AttachmentType,
+  type MessageAttachment,
+} from '@neko/shared';
 
 export type ReferenceTokenProjectionKind =
   | 'file'
@@ -124,6 +129,9 @@ export function inferReferenceKindFromPath(
   path: string,
   mediaType?: ReferenceMediaType,
 ): ReferenceTokenProjectionKind {
+  if (mediaType === 'document' || isDocumentFile(path)) {
+    return 'file';
+  }
   if (mediaType === 'image' || hasExtension(path, IMAGE_EXTENSIONS)) {
     return 'image';
   }

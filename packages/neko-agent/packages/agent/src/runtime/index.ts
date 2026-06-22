@@ -752,6 +752,7 @@ export {
 
 export {
   extractFileReferencePaths,
+  formatDocumentAttachmentReference,
   formatFileAttachmentContent,
   formatMediaAttachmentReference,
   formatUnreadableFileAttachment,

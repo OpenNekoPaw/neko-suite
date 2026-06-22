@@ -23,6 +23,12 @@ vi.mock('../../../base', () => ({
   }),
 }));
 
+vi.mock('../../../services/documentPathResolver', () => ({
+  resolveDocumentPath: vi.fn(async (filePath: string) =>
+    filePath.replace('${A}', '/Volumes/assets'),
+  ),
+}));
+
 describe('AttachmentProcessor', () => {
   let processor: AttachmentProcessor;
 
@@ -121,6 +127,26 @@ describe('AttachmentProcessor', () => {
       expect(result.textContent).toContain('const x = 1;');
     });
 
+    it('should keep document attachments as ReadDocument references without reading them', async () => {
+      vi.mocked(fs.promises.readFile).mockResolvedValue('book content' as any);
+
+      const attachments = [
+        {
+          type: 'file' as const,
+          name: '卷01.epub',
+          path: '${A}/epub/animation/灯神/卷01.epub',
+        },
+      ];
+
+      const result = await processor.processAttachments(attachments);
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      expect(result.textContent).toContain('[Attached document: 卷01.epub]');
+      expect(result.textContent).toContain('${A}/epub/animation/灯神/卷01.epub');
+      expect(result.textContent).toContain('Use ReadDocument');
+      expect(result.textContent).not.toContain('book content');
+    });
+
     it('should handle file read failure gracefully', async () => {
       vi.mocked(fs.promises.readFile).mockRejectedValue(new Error('Permission denied'));
 
@@ -183,6 +209,7 @@ describe('AttachmentProcessor', () => {
 
       const result = await processor.readFileAsBase64('/path/to/image.webp');
 
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/image.webp');
       expect(result).toEqual({
         type: 'base64',
         media_type: 'image/webp',
