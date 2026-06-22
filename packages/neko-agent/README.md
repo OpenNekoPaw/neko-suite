@@ -119,7 +119,7 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 
 **模型展示**：Webview 按 source/provider 分组展示模型。OAuth catalog 可用时先显示 Neko Official，再按配置文件中的 provider 顺序显示用户配置 provider；每组内部按 `llm`、`image`、`video`、`audio` 类型分开。音乐生成模型归入 `audio`，通过 `text_to_music` 等模型元数据表达用途；Neko 内部用途注册表会把它绑定到 `audio.music.generate` 产品用途。对话选择器隐藏空分组，配置/设置视图可以显示空 provider 并带诊断。
 
-**模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。选择 `auto` 只会清除运行态覆盖并回到 `config.toml` 默认值，不会把空 provider/model 写成新的默认选择。
+**模型选择**：对话运行时保留显式请求的 provider/model source identity；缺少 source、账号 catalog 不存在、账号模型未授权、provider/model 不匹配或缺少所需能力都会在 runner 配置前失败。文本聊天只要求 `chat` 能力，图片理解要求 `vision`，生成工作流要求对应生成能力。Webview 不再提供全局 `auto` 选项，也不会用空 provider/model 清除或覆盖默认值；用户配置 API 不生成语义 `auto`，`auto` 只有作为真实 provider 下的模型 ID 时才合法，例如账号 catalog 的 `neko-account-gateway:auto`。若用户显式配置 `custom-gateway:auto`，它也只是普通模型 ID。没有显式运行态选择时，Webview 会优先用用户显式配置的 LLM 初始化当前选择；只有没有用户 AI 模型可选时才使用账号网关模型。
 
 **Composer 级 Agent 模型配置**：Agent 输入框中的模型、推理深度、回复详略和创造性 preset 只作用于当前会话/turn，不会自动写回用户 TOML。Agent 模式右侧先切换要配置的模型类型（LLM/图片/视频/音频，只有已配置模型的类型才展示），再显示该类型的模型选择和参数；图片、视频、音频直生成模式只显示本类型模型和参数。普通 Agent turn 当前只使用 `primary` LLM 槽位；`fast`、`deep`、`summarizer`、`vision` 是预留合同，未被当前 runtime 支持时会返回可见诊断。自定义 provider 缺少能力元数据时默认采用保守控制，详见 [模型默认值配置指南](./docs/media-model-configuration.md#agent-composer-llm-配置)。
 
@@ -143,7 +143,7 @@ provider_id = "neko-gateway"
 model_id = "neko-gateway-tts"
 ```
 
-每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。ReadImage vision 和生成工具必须拿到明确的当前模型路由，缺少 provider/model 时直接返回可见错误，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
+每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。LLM 对话、ReadImage vision、角色扮演、Canvas 提示生成、质量检查、跨扩展 `internalChat` 和生成工具都必须拿到明确的当前模型路由；缺少 provider/model 时直接返回可见错误或降级为调用方的本地策略，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
 
 **配置格式**：`config.toml` 是当前唯一读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源；如需保留旧配置，请手动迁移为 TOML。
 
@@ -207,7 +207,7 @@ const result = await vscode.commands.executeCommand<string | null>(
 // neko-agent 未激活时返回 null，调用方自行降级处理
 ```
 
-**合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000）。返回模型第一条文本回复，非文本内容或任何错误均返回 `null`。
+**合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000）。命令端会使用当前 Agent 已选中的完整 `providerId + modelId`，调用方不能通过该命令覆盖到其他 provider/model。返回模型第一条文本回复；neko-agent 未配置完整 LLM、非文本内容或任何错误均返回 `null`，由调用方自行降级处理。
 
 ## 文档格式支持
 

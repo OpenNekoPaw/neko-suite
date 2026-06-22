@@ -102,7 +102,6 @@ function getSelectedModelLabel(
   selectedModel: string,
   availableModels: readonly ChatModelOption[],
 ): string {
-  if (selectedModel === 'auto') return 'chat.autoMode';
   return (
     availableModels.find((model) => model.id === selectedModel)?.label ?? 'chat.noModelsAvailable'
   );

@@ -52,7 +52,7 @@ export interface UseUIStateReturn extends UIState, UIStateActions {}
 const DEFAULT_UI_STATE: UIState = {
   activeTab: 'chat',
   inputValue: '',
-  selectedModel: 'auto',
+  selectedModel: '',
   mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
   genCategory: 'image',
   genParams: DEFAULT_GENERATION_PARAMS,

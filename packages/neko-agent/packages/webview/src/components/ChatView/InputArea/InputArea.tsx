@@ -1140,10 +1140,7 @@ function getLlmParameterControlsForModel(
   selectedModel: string,
   availableModels: readonly ChatModelOption[],
 ): NonNullable<ChatModelOption['llmParameterControls']> {
-  const model =
-    selectedModel === 'auto'
-      ? availableModels.find((option) => option.id !== 'auto')
-      : availableModels.find((option) => option.id === selectedModel);
+  const model = availableModels.find((option) => option.id === selectedModel);
   if (!model) {
     return {
       reasoning: false,
@@ -1177,7 +1174,7 @@ function removeUndefinedAgentLlmAdvancedParams(
 }
 
 function parseSelectedLlmModelRef(selectedModel: string): ModelRef<'llm'> | null {
-  if (!selectedModel || selectedModel === 'auto') return null;
+  if (!selectedModel) return null;
   const separatorIndex = selectedModel.indexOf(':');
   if (separatorIndex <= 0 || separatorIndex === selectedModel.length - 1) return null;
   return {

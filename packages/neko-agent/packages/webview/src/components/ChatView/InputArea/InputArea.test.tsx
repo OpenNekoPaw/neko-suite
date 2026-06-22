@@ -54,6 +54,21 @@ const translations: Record<string, string> = {
   'chat.selectModel': '选择模型',
   'chat.noModelsAvailable': '无可用模型',
   'chat.categoryChat': '对话',
+  'chat.modelSource.custom': '自定义',
+  'chat.modelConnection.direct': '直连',
+  'chat.modelConnection.gateway': '中转',
+  'chat.modelCategory.llm': '对话',
+  'chat.modelCategory.image': '图像',
+  'chat.modelCategory.video': '视频',
+  'chat.modelCategory.audio': '音频',
+  'chat.modelCapability.vision': '视觉',
+  'chat.modelCapability.tools': '工具',
+  'chat.modelCapability.streaming': '流式',
+  'chat.modelCapability.json': 'JSON',
+  'chat.modelCapability.code': '代码',
+  'chat.modelCapability.text_to_image': '文生图',
+  'chat.modelCapability.text_to_video': '文生视频',
+  'chat.modelCapability.text_to_audio': '文生音频',
   'chat.sessionMode.sections.agent': 'Agent 直接协作',
   'chat.sessionMode.sections.media': '媒体生成',
   'chat.sessionMode.agent': 'Agent 创作协作',
@@ -166,22 +181,18 @@ const translations: Record<string, string> = {
   'chat.commands.source.project': '项目',
 };
 
-const autoModel: ChatModelOption = {
-  id: 'auto',
-  label: 'Auto',
-  providerId: '',
-  modelId: '',
-  category: 'llm',
-};
-
 const chatModels: ChatModelOption[] = [
-  autoModel,
   {
     id: 'openai:gpt-5.5',
     label: 'OpenAI / gpt-5.5',
+    providerLabel: 'OpenAI',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
     providerId: 'openai',
     modelId: 'gpt-5.5',
     category: 'llm',
+    capabilities: ['chat', 'vision', 'function_calling', 'json_mode', 'streaming', 'code'],
     llmParameterControls: {
       reasoning: true,
       verbosity: true,
@@ -195,9 +206,14 @@ const mediaModels: ChatModelOption[] = [
   {
     id: 'image-provider:model-image',
     label: 'Image Provider / Model Image',
+    providerLabel: 'Image Provider',
+    source: 'explicit-config',
+    connectionKind: 'gateway',
+    supportLevel: 'verified',
     providerId: 'image-provider',
     modelId: 'model-image',
     category: 'image',
+    capabilities: ['text_to_image'],
   },
 ];
 
@@ -206,16 +222,26 @@ const allMediaModels: ChatModelOption[] = [
   {
     id: 'video-provider:model-video',
     label: 'Video Provider / Model Video',
+    providerLabel: 'Video Provider',
+    source: 'explicit-config',
+    connectionKind: 'gateway',
+    supportLevel: 'verified',
     providerId: 'video-provider',
     modelId: 'model-video',
     category: 'video',
+    capabilities: ['text_to_video'],
   },
   {
     id: 'audio-provider:model-audio',
     label: 'Audio Provider / Model Audio',
+    providerLabel: 'Audio Provider',
+    source: 'explicit-config',
+    connectionKind: 'gateway',
+    supportLevel: 'verified',
     providerId: 'audio-provider',
     modelId: 'model-audio',
     category: 'audio',
+    capabilities: ['text_to_audio'],
   },
 ];
 
@@ -234,7 +260,7 @@ describe('InputArea composer controls', () => {
 
   it('keeps unconfigured conversations on Agent with an empty LLM selector only', () => {
     render(
-      <Harness selectedModel="auto" availableModels={[autoModel]} availableMediaModels={[]}>
+      <Harness selectedModel="" availableModels={[]} availableMediaModels={[]}>
         <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
       </Harness>,
     );
@@ -261,7 +287,7 @@ describe('InputArea composer controls', () => {
     expect(screen.queryByRole('menuitem', { name: '生音乐' })).toBeNull();
 
     fireEvent.click(within(paramsGroup).getByRole('button', { name: '选择模型' }));
-    expect(within(screen.getByRole('menu')).getByText('无可用模型')).toBeTruthy();
+    expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.queryByRole('menuitem', { name: '自动' })).toBeNull();
   });
 
@@ -360,7 +386,6 @@ describe('InputArea composer controls', () => {
   it('hides unsupported LLM parameters and trims them from the send payload', () => {
     const onSend = vi.fn();
     const basicChatModels: ChatModelOption[] = [
-      autoModel,
       {
         id: 'ollama:llama3.2',
         label: 'Ollama / llama3.2',
@@ -479,8 +504,15 @@ describe('InputArea composer controls', () => {
     expect(within(paramsGroup).queryByRole('group', { name: 'Agent 参数' })).toBeNull();
     expect(within(paramsGroup).queryByRole('button', { name: '思考' })).toBeNull();
     fireEvent.click(within(paramsGroup).getByTitle('选择视频模型'));
-    expect(screen.getByRole('menuitem', { name: /Video Provider \/ Model Video/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('menuitem', { name: /Video Provider \/ Model Video/ }));
+    expect(screen.getByText('Video Provider')).toBeTruthy();
+    const providerTagList = document.querySelector('.agent-model-provider-tags');
+    expect(providerTagList?.querySelectorAll('.agent-model-tag')).toHaveLength(2);
+    expect(providerTagList?.textContent).toBe('自定义中转');
+    expect(screen.getByRole('menuitem', { name: /Model Video/ })).toBeTruthy();
+    const modelTagList = document.querySelector('.agent-model-option-tags');
+    expect(modelTagList?.querySelectorAll('.agent-model-tag')).toHaveLength(2);
+    expect(modelTagList?.textContent).toBe('视频文生视频');
+    fireEvent.click(screen.getByRole('menuitem', { name: /Model Video/ }));
     expect(within(paramsGroup).getByRole('button', { name: '画面比例' })).toBeTruthy();
     expect(within(paramsGroup).getByRole('button', { name: '分辨率' })).toBeTruthy();
     const durationTrigger = within(paramsGroup).getByRole('button', { name: '视频时长' });

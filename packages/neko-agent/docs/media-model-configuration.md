@@ -139,7 +139,7 @@ llm | image | video | audio
 
 媒体工具不会只凭 provider 名、model 名或历史默认值猜测路由，也不会从 direct/local 转到 NewAPI gateway。这样可以避免误用昂贵模型，也能保证生成结果来自用户明确配置的 provider。
 
-图像理解工具 `ReadImage` 的 vision 模式同样要求明确的当前 LLM 模型，并把 `providerId + modelId` 传给平台服务。若当前未选择对话模型，或者所选模型不具备所需视觉能力，工具会返回可见错误，不会调用默认 gateway。
+LLM `chat` / `chatStream` 服务本身也要求完整 `providerId + modelId`，不会在空参数或半截参数时选择首个可用模型。Agent 主对话、图像理解工具 `ReadImage`、角色扮演、Canvas 提示生成、质量检查和跨扩展 `neko.agent.internalChat` 都必须把当前已选 LLM 模型传到底层服务。若当前未选择对话模型、选择不完整，或者所选模型不具备所需视觉能力，调用会返回可见错误或走调用方明确的本地降级策略，不会调用默认 gateway。
 
 ## Agent Composer LLM 配置
 
@@ -147,7 +147,7 @@ Agent 输入框中的模式配置是会话级选择，不会自动写回 `~/.nek
 
 普通 Agent 对话当前使用 `primary` 模型槽位。Webview 发送的 Agent 配置会在 Extension 边界解析为明确的 `providerId + modelId`：优先使用 composer 的 `agentModels.primary`，其次使用旧 `chatModel`，最后使用当前设置中的完整 LLM 选择。若缺少 provider 或 model 任一半、`primary` 与 `chatModel` 指向不同模型、provider/model 不匹配、模型缺失、provider 未配置或模型不是启用的 LLM，Agent 会返回可见诊断，不会切到无关模型。
 
-Webview 选择 `auto` 时表示清除运行态模型覆盖，回到 `[default_models.llm]` 文件默认值；它不会写入一个空 provider/model 来覆盖默认配置。刷新配置快照或重新读取 `config.toml` 时，运行态 LLM 模型覆盖也会失效，新的文件默认值会重新成为事实来源。
+Webview 不再提供全局 `auto` 选项，也不会用空 provider/model 清除运行态覆盖。用户配置 API 不生成语义 `auto`；`auto` 只有作为真实 provider 下的模型 ID 时才合法，例如账号 catalog 的 `neko-account-gateway:auto`。若用户显式配置 `custom-gateway:auto`，它也只是普通模型 ID。这类选择仍会以完整 `providerId + modelId` 传递。刷新配置快照或重新读取 `config.toml` 时，若没有运行态选择，新的文件默认值或账号 catalog 默认值会重新成为事实来源；当用户配置模型和账号模型同时可选且没有显式运行态选择时，Webview 优先用用户配置的 LLM 初始化当前选择。
 
 MVP 合同预留了 `fast`、`deep`、`summarizer`、`vision` 槽位，用于未来多模型编排；当前普通 Agent turn 只支持 `primary`。如果 payload 引用这些非 MVP 槽位，Extension 会返回 fail-visible 诊断，而不是静默忽略。
 

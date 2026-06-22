@@ -246,14 +246,14 @@ describe('types validation', () => {
       expect(option.label).toBe('OpenAI / GPT-4');
     });
 
-    it('should accept auto model option', () => {
+    it('should accept provider-owned auto model option', () => {
       const option: ChatModelOption = {
-        id: 'auto',
+        id: 'neko-account-gateway:auto',
         label: 'Auto',
-        providerId: '',
-        modelId: '',
+        providerId: 'neko-account-gateway',
+        modelId: 'auto',
       };
-      expect(option.id).toBe('auto');
+      expect(option.id).toBe('neko-account-gateway:auto');
     });
   });
 

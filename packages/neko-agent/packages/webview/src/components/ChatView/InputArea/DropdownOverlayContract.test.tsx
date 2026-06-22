@@ -11,6 +11,15 @@ const translations: Record<string, string> = {
   'chat.autoMode': 'Auto',
   'chat.selectModel': 'Select model',
   'chat.categoryChat': 'Chat',
+  'chat.modelSource.custom': 'Custom',
+  'chat.modelConnection.direct': 'Direct',
+  'chat.modelConnection.gateway': 'Gateway',
+  'chat.modelCategory.llm': 'Chat',
+  'chat.modelCapability.vision': 'vision',
+  'chat.modelCapability.tools': 'tools',
+  'chat.modelCapability.streaming': 'streaming',
+  'chat.modelCapability.json': 'JSON',
+  'chat.modelCapability.code': 'code',
   'chat.executionMode.title': 'Execution mode',
   'chat.executionMode.plan': 'Plan',
   'chat.executionMode.planDesc': 'Draft commands before running',
@@ -45,18 +54,52 @@ const translations: Record<string, string> = {
 
 const models: ChatModelOption[] = [
   {
-    id: 'auto',
-    label: 'Auto',
-    providerId: 'auto',
-    modelId: 'auto',
+    id: 'deepseek-chat:deepseek-v4-flash',
+    label: 'DeepSeek Chat / DeepSeek V4 Flash',
+    providerLabel: 'DeepSeek Chat',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
+    providerId: 'deepseek-chat',
+    modelId: 'deepseek-v4-flash',
     category: 'llm',
+    capabilities: ['chat', 'function_calling', 'json_mode', 'streaming', 'code'],
   },
   {
-    id: 'openai:gpt-5',
-    label: 'OpenAI / gpt-5',
-    providerId: 'openai',
-    modelId: 'gpt-5',
+    id: 'deepseek-chat:deepseek-v4-pro',
+    label: 'DeepSeek Chat / DeepSeek V4 Pro',
+    providerLabel: 'DeepSeek Chat',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
+    providerId: 'deepseek-chat',
+    modelId: 'deepseek-v4-pro',
     category: 'llm',
+    capabilities: ['chat', 'function_calling', 'json_mode', 'streaming', 'code'],
+  },
+  {
+    id: 'neko-api:gpt-5.5',
+    label: 'Neko API Chat / GPT 5.5',
+    providerLabel: 'Neko API Chat',
+    source: 'explicit-config',
+    connectionKind: 'gateway',
+    supportLevel: 'verified',
+    providerId: 'neko-api',
+    modelId: 'gpt-5.5',
+    category: 'llm',
+    capabilities: ['chat', 'vision', 'function_calling', 'streaming'],
+  },
+  {
+    id: 'neko-api:gpt-5.5-high',
+    label: 'Neko API Chat / GPT 5.5 High',
+    providerLabel: 'Neko API Chat',
+    source: 'explicit-config',
+    connectionKind: 'gateway',
+    supportLevel: 'verified',
+    providerId: 'neko-api',
+    modelId: 'gpt-5.5-high',
+    category: 'llm',
+    capabilities: ['chat', 'vision', 'function_calling', 'streaming'],
   },
 ];
 
@@ -72,7 +115,13 @@ describe('dropdown overlay presentation contract', () => {
   });
 
   it('keeps the chat model menu on the shared model overlay shell', () => {
-    render(<ModelSelector selectedModel="auto" models={models} onSelect={vi.fn()} />);
+    render(
+      <ModelSelector
+        selectedModel="deepseek-chat:deepseek-v4-pro"
+        models={models}
+        onSelect={vi.fn()}
+      />,
+    );
 
     const trigger = screen.getByRole('button', { name: 'Select model' });
     expect(trigger.querySelector('.rounded-full')).toBeNull();
@@ -84,6 +133,30 @@ describe('dropdown overlay presentation contract', () => {
     expect(menu.className).toContain('agent-dropdown-menu-model');
     expect(menu.className).not.toContain('max-h-[');
     expect(menu.className).not.toContain('overflow-y-auto');
+    expect(menu.textContent).toContain('DeepSeek Chat');
+    const providerTagLists = menu.querySelectorAll('.agent-model-provider-tags');
+    expect(providerTagLists).toHaveLength(2);
+    expect(providerTagLists[0]?.querySelectorAll('.agent-model-tag')).toHaveLength(2);
+    expect(providerTagLists[0]?.textContent).toBe('CustomDirect');
+    expect(menu.textContent).toContain('DeepSeek V4 Pro');
+    expect(menu.textContent).not.toContain('JSON');
+    expect(menu.textContent).not.toContain('code');
+    expect(menu.textContent).toContain('Neko API Chat');
+    expect(providerTagLists[1]?.textContent).toBe('CustomGateway');
+    expect(menu.textContent).toContain('GPT 5.5');
+    expect(menu.textContent).toContain('GPT 5.5 High');
+    expect(menu.textContent).not.toContain('Openai Chat');
+    expect(menu.textContent).not.toContain('Newapi');
+    expect(menu.querySelectorAll('.agent-model-provider-group')).toHaveLength(2);
+    expect(menu.querySelectorAll('.agent-model-provider-header')).toHaveLength(2);
+    expect(menu.querySelectorAll('.agent-model-option-row')).toHaveLength(4);
+    const modelTagLists = menu.querySelectorAll('.agent-model-option-tags');
+    expect(modelTagLists).toHaveLength(4);
+    expect(modelTagLists[0]?.querySelectorAll('.agent-model-tag')).toHaveLength(3);
+    expect(modelTagLists[0]?.textContent).toBe('Chattoolsstreaming');
+    expect(modelTagLists[2]?.querySelectorAll('.agent-model-tag')).toHaveLength(4);
+    expect(modelTagLists[2]?.textContent).toBe('Chatvisiontoolsstreaming');
+    expect(menu.querySelector('.agent-dropdown-section-inline')).toBeNull();
   });
 
   it('uses shared overlay shells for session and execution menus', () => {
@@ -161,6 +234,13 @@ describe('dropdown overlay presentation contract', () => {
     const modelRule = css.match(/\.agent-dropdown-menu-model\s*\{(?<body>[^}]+)\}/)?.groups?.body;
     const inlineRule = css.match(/\.agent-dropdown-item-inline-detail\s*\{(?<body>[^}]+)\}/)?.groups
       ?.body;
+    const modelRowRule = css.match(/\.agent-model-option-row\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+    const providerHeaderRule = css.match(/\.agent-model-provider-header\s*\{(?<body>[^}]+)\}/)
+      ?.groups?.body;
+    const tagListRule = css.match(/\.agent-model-tag-list\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+    const tagRule = Array.from(css.matchAll(/\.agent-model-tag\s*\{(?<body>[^}]+)\}/g))
+      .map((match) => match.groups?.body ?? '')
+      .find((body) => body.includes('border-radius'));
     const headerRule = css.match(/\.agent-dropdown-header\s*\{(?<body>[^}]+)\}/)?.groups?.body;
 
     expect(presetRule).toBeTruthy();
@@ -176,6 +256,18 @@ describe('dropdown overlay presentation contract', () => {
     expect(modelRule).toContain('max-width: var(--agent-overlay-wide-max-inline-size)');
     expect(inlineRule).toBeTruthy();
     expect(inlineRule).toContain('min-height: 28px');
+    expect(modelRowRule).toBeTruthy();
+    expect(modelRowRule).toContain('display: flex');
+    expect(modelRowRule).toContain('padding: 3px 7px 3px 22px');
+    expect(providerHeaderRule).toBeTruthy();
+    expect(providerHeaderRule).toContain('display: flex');
+    expect(providerHeaderRule).toContain('font-weight: 500');
+    expect(tagListRule).toBeTruthy();
+    expect(tagListRule).toContain('display: inline-flex');
+    expect(tagListRule).toContain('justify-content: flex-end');
+    expect(tagRule).toBeTruthy();
+    expect(tagRule).toContain('border-radius: 7px');
+    expect(tagRule).toContain('font-weight: 600');
     expect(headerRule).toBeTruthy();
     expect(headerRule).toContain('border-bottom');
   });

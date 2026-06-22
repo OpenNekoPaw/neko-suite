@@ -18,6 +18,12 @@ import {
   useDropdownPlacement,
   type DropdownPlacement,
 } from './useDropdownDirection';
+import {
+  buildModelTags,
+  groupModelOptionsByProvider,
+  shortenModelLabel,
+} from './model-option-presentation';
+import { ModelTagList } from './ModelTagList';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { MediaCategory, MediaModelSelection } from '@/components/ChatView/InputAreaContext';
 import type { ComposerModeConfigProjection } from '@/presenters/composer-mode-config-presenter';
@@ -510,6 +516,14 @@ function InlineMediaModelChip({
   const hasModels = models.length > 0;
   const isConfigured = Boolean(selected) && selectedId !== 'none';
   const categoryLabel = getConfigCategoryLabel(t, category);
+  const groupedModels = useMemo(
+    () =>
+      groupModelOptionsByProvider(
+        models.filter((model) => model.providerId && model.modelId),
+        t,
+      ),
+    [models, t],
+  );
 
   const handleOpen = () => {
     if (!hasModels) return;
@@ -538,7 +552,9 @@ function InlineMediaModelChip({
         }
       >
         <span className="agent-control-chip-text">
-          {isConfigured ? shortenModelLabel(selected!.label) : t('chat.generation.model.noneShort')}
+          {selected && isConfigured
+            ? shortenModelLabel(selected, 10, '...')
+            : t('chat.generation.model.noneShort')}
         </span>
         {hasModels && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
       </button>
@@ -561,21 +577,33 @@ function InlineMediaModelChip({
           >
             {t('chat.generation.model.none')}
           </button>
-          {models.map((model) => (
-            <button
-              key={model.id}
-              type="button"
-              onClick={() => {
-                onSelect(model.id);
-                setIsOpen(false);
-              }}
-              className={`agent-dropdown-item ${
-                model.id === selectedId ? 'agent-dropdown-item-selected' : ''
-              }`}
-              role="menuitem"
-            >
-              <span className="agent-dropdown-item-label">{model.label}</span>
-            </button>
+          {groupedModels.map((group) => (
+            <div key={group.key} className="agent-model-provider-group">
+              <div className="agent-model-provider-header">
+                <span className="agent-model-provider-name">{group.label}</span>
+                <ModelTagList tags={group.tags} className="agent-model-provider-tags" />
+              </div>
+              {group.models.map((model) => (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(model.id);
+                    setIsOpen(false);
+                  }}
+                  className={`agent-dropdown-item agent-dropdown-item-inline-detail ${
+                    model.id === selectedId ? 'agent-dropdown-item-selected' : ''
+                  } agent-model-option-row`}
+                  role="menuitem"
+                >
+                  <span className="agent-model-option-name">{shortenModelLabel(model)}</span>
+                  <ModelTagList
+                    tags={buildModelTags(model, t)}
+                    className="agent-model-option-tags"
+                  />
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -836,7 +864,7 @@ function getAvailableAgentConfigCategories(
   availableMediaModels: readonly ChatModelOption[],
 ): readonly AgentConfigCategory[] {
   const categories: AgentConfigCategory[] = [];
-  if (availableModels.some((model) => model.id !== 'auto')) {
+  if (availableModels.some((model) => model.providerId && model.modelId)) {
     categories.push('llm');
   }
   for (const category of MEDIA_CATEGORIES) {
@@ -870,10 +898,7 @@ function getSelectedLlmParameterControls(
   availableModels: readonly ChatModelOption[],
   selectedModel: string,
 ): NonNullable<ChatModelOption['llmParameterControls']> {
-  const model =
-    selectedModel === 'auto'
-      ? availableModels.find((option) => option.id !== 'auto')
-      : availableModels.find((option) => option.id === selectedModel);
+  const model = availableModels.find((option) => option.id === selectedModel);
   if (!model) {
     return {
       reasoning: false,
@@ -928,9 +953,4 @@ function parseGenerationDuration(value: string): GenerationDuration {
     throw new Error(`Invalid generation duration: ${value}`);
   }
   return duration;
-}
-
-function shortenModelLabel(label: string): string {
-  const short = label.includes('/') ? (label.split('/').pop()?.trim() ?? label) : label;
-  return short.length > 10 ? `${short.slice(0, 9)}...` : short;
 }
