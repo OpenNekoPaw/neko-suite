@@ -53,6 +53,7 @@ describe('MediaGenerationService', () => {
       getModels: () => [mockModel],
       getEnabledModels: () => [mockModel],
       getModelsByProvider: () => [mockModel],
+      getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'dalle-model' }),
     } as unknown as ConfigManager;
 
     // Create components
@@ -102,6 +103,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [img2imgModel],
         getEnabledModels: () => [img2imgModel],
         getModelsByProvider: () => [img2imgModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'img2img-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);
@@ -140,6 +142,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [videoModel],
         getEnabledModels: () => [videoModel],
         getModelsByProvider: () => [videoModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'sora-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);
@@ -176,6 +179,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [videoModel],
         getEnabledModels: () => [videoModel],
         getModelsByProvider: () => [videoModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'sora-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);
@@ -211,6 +215,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [videoModel],
         getEnabledModels: () => [videoModel],
         getModelsByProvider: () => [videoModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'sora-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);
@@ -260,6 +265,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [audioModel],
         getEnabledModels: () => [audioModel],
         getModelsByProvider: () => [audioModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'audio-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);
@@ -296,6 +302,7 @@ describe('MediaGenerationService', () => {
         getModels: () => [musicModel],
         getEnabledModels: () => [musicModel],
         getModelsByProvider: () => [musicModel],
+        getDefaultModelRef: () => ({ providerId: 'openai-provider', modelId: 'music-model' }),
       } as unknown as ConfigManager;
 
       const newProviderRegistry = new ProviderRegistry(configManager);

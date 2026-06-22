@@ -99,10 +99,11 @@ describe('MediaRoutingManager', () => {
       getEnabledModels: () => mockModels.filter((m) => m.enabled),
       getModelsByProvider: (providerId: string) =>
         mockModels.filter((m) => m.providerId === providerId),
-      getDefaultMediaModels: () => ({
-        image: 'dalle-model',
-        video: 'sora-model',
-      }),
+      getDefaultModelRef: (type: string) => {
+        if (type === 'image') return { providerId: 'openai-provider', modelId: 'dalle-model' };
+        if (type === 'video') return { providerId: 'openai-provider', modelId: 'sora-model' };
+        return undefined;
+      },
     } as unknown as ConfigManager;
 
     // Create provider registry
@@ -138,6 +139,17 @@ describe('MediaRoutingManager', () => {
       expect(result).toBeNull();
     });
 
+    it('should return null when explicit provider does not own the model', async () => {
+      const result = await routingManager.selectProvider(
+        'text-to-video',
+        undefined,
+        'openai-provider',
+        'runway-model',
+      );
+
+      expect(result).toBeNull();
+    });
+
     it('should use configured default model when none specified', async () => {
       const result = await routingManager.selectProvider('text-to-video');
 
@@ -156,7 +168,7 @@ describe('MediaRoutingManager', () => {
       expect(result?.reason).toBe('Configured default image model');
     });
 
-    it('should find provider when only model is specified', async () => {
+    it('should reject partial routing when only model is specified', async () => {
       const result = await routingManager.selectProvider(
         'text-to-video',
         undefined,
@@ -164,15 +176,12 @@ describe('MediaRoutingManager', () => {
         'runway-model',
       );
 
-      expect(result).not.toBeNull();
-      expect(result?.providerId).toBe('runway-provider');
-      expect(result?.modelId).toBe('runway-model');
-      expect(result?.reason).toBe('User specified model');
+      expect(result).toBeNull();
     });
 
     it('should return null when no default configured for media type', async () => {
       // Override mock to return empty defaults
-      configManager.getDefaultMediaModels = () => ({});
+      configManager.getDefaultModelRef = () => undefined;
 
       const result = await routingManager.selectProvider('text-to-music');
 

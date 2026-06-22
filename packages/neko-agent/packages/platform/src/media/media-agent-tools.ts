@@ -38,6 +38,11 @@ interface GenerationTargetMetadata {
   readonly actualModelId?: string;
 }
 
+interface ResolvedToolMediaTarget {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
 async function resolveGenerationPrompt(
   args: Record<string, unknown>,
   capability: ProviderGenerationCapability,
@@ -236,6 +241,22 @@ function requireToolMediaTarget(
   return `${toolName} requires an explicit Agent ${toolNameMediaCategory(toolName)} model. Configure the Agent mode media model or pass providerId and modelId.`;
 }
 
+function toResolvedToolMediaTarget(
+  target: ReturnType<typeof resolveToolMediaTarget>,
+): ResolvedToolMediaTarget {
+  if (!target.providerId || !target.modelId) {
+    throw new Error('Tool media target must be validated before request assembly.');
+  }
+  return { providerId: target.providerId, modelId: target.modelId };
+}
+
+function toGenerationTargetMetadata(target: ResolvedToolMediaTarget): GenerationTargetMetadata {
+  return {
+    requestedProviderId: target.providerId,
+    requestedModelId: target.modelId,
+  };
+}
+
 function toolNameMediaCategory(toolName: string): string {
   if (toolName.includes('Video')) return 'video';
   if (toolName.includes('Music') || toolName.includes('TTS')) return 'audio';
@@ -243,6 +264,9 @@ function toolNameMediaCategory(toolName: string): string {
 }
 
 function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerationRequest {
+  if (!input.target.requestedProviderId || !input.target.requestedModelId) {
+    throw new Error('Image generation request assembly requires providerId and modelId.');
+  }
   const aspectRatio = readOptionalString(input.args.aspectRatio);
   const sizeStr = readOptionalString(input.args.size);
   const [width, height] = sizeStr?.split('x').map(Number) ?? [];
@@ -255,8 +279,8 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
   return {
     prompt: input.resolved.prompt,
     ...(input.resolved.negativePrompt ? { negativePrompt: input.resolved.negativePrompt } : {}),
-    ...(input.resolved.providerId ? { providerId: input.resolved.providerId } : {}),
-    ...(input.target.requestedModelId ? { modelId: input.target.requestedModelId } : {}),
+    providerId: input.target.requestedProviderId,
+    modelId: input.target.requestedModelId,
     ...(Number.isFinite(width) ? { width } : {}),
     ...(Number.isFinite(height) ? { height } : {}),
     ...(aspectRatio ? { aspectRatio } : {}),
@@ -749,13 +773,15 @@ export function registerMediaAgentTools(
         if (targetError) {
           return { success: false, error: targetError };
         }
+        const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
-          const resolved = await resolveGenerationPrompt(args, 'image.generate', target.providerId);
-          const requestTarget = {
-            ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-            ...(target.modelId ? { requestedModelId: target.modelId } : {}),
-          };
+          const resolved = await resolveGenerationPrompt(
+            args,
+            'image.generate',
+            resolvedTarget.providerId,
+          );
+          const requestTarget = toGenerationTargetMetadata(resolvedTarget);
           const task = await media.generateImage({
             ...buildImageGenerationRequest({
               args: { size: '1024x1024', ...args },
@@ -979,6 +1005,7 @@ export function registerMediaAgentTools(
         if (targetError) {
           return { success: false, error: targetError };
         }
+        const resolvedTarget = toResolvedToolMediaTarget(target);
         const editInstruction = readOptionalString(args.editInstruction);
         const prompt = readOptionalString(args.prompt) ?? editInstruction ?? '';
         if (!prompt.trim()) {
@@ -999,12 +1026,9 @@ export function registerMediaAgentTools(
           const resolved = await resolveGenerationPrompt(
             { ...args, prompt },
             'image.generate',
-            target.providerId,
+            resolvedTarget.providerId,
           );
-          const requestTarget = {
-            ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-            ...(target.modelId ? { requestedModelId: target.modelId } : {}),
-          };
+          const requestTarget = toGenerationTargetMetadata(resolvedTarget);
           const transformMetadata = readTransformImageReferenceArgs(args);
           const task = await media.generateImage({
             ...buildImageGenerationRequest({
@@ -1177,13 +1201,18 @@ export function registerMediaAgentTools(
         if (targetError) {
           return { success: false, error: targetError };
         }
+        const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
-          const resolved = await resolveGenerationPrompt(args, 'video.generate', target.providerId);
+          const resolved = await resolveGenerationPrompt(
+            args,
+            'video.generate',
+            resolvedTarget.providerId,
+          );
           const task = await media.generateVideo({
             prompt: resolved.prompt,
-            ...(resolved.providerId ? { providerId: resolved.providerId } : {}),
-            ...(target.modelId ? { modelId: target.modelId } : {}),
+            providerId: resolvedTarget.providerId,
+            modelId: resolvedTarget.modelId,
             duration: args.duration as number | undefined,
             resolution: args.resolution as string | undefined,
             fps: args.fps as number | undefined,
@@ -1191,8 +1220,7 @@ export function registerMediaAgentTools(
             ...(resolved.metadata
               ? {
                   metadata: withGenerationTargetMetadata(resolved.metadata, {
-                    ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                    ...(target.modelId ? { requestedModelId: target.modelId } : {}),
+                    ...toGenerationTargetMetadata(resolvedTarget),
                   }),
                 }
               : {}),
@@ -1213,8 +1241,7 @@ export function registerMediaAgentTools(
               ...(resolved.metadata
                 ? {
                     providerAdaptation: withGenerationTargetMetadata(resolved.metadata, {
-                      ...(resolved.providerId ? { requestedProviderId: resolved.providerId } : {}),
-                      ...(target.modelId ? { requestedModelId: target.modelId } : {}),
+                      ...toGenerationTargetMetadata(resolvedTarget),
                       actualProviderId: task.providerId,
                       actualModelId: task.modelId,
                     })?.providerAdaptation,
@@ -1259,6 +1286,14 @@ export function registerMediaAgentTools(
             type: 'string',
             description: 'Music mood (e.g., upbeat, calm, dramatic)',
           },
+          providerId: {
+            type: 'string',
+            description: 'Optional explicit provider id for media routing',
+          },
+          modelId: {
+            type: 'string',
+            description: 'Optional explicit model id for media routing',
+          },
         },
         required: ['prompt'],
       },
@@ -1271,12 +1306,13 @@ export function registerMediaAgentTools(
         if (targetError) {
           return { success: false, error: targetError };
         }
+        const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
           const task = await media.generateAudio({
             prompt: `${prompt}${genreStr}${moodStr}`,
-            ...(target.providerId ? { providerId: target.providerId } : {}),
-            ...(target.modelId ? { modelId: target.modelId } : {}),
+            providerId: resolvedTarget.providerId,
+            modelId: resolvedTarget.modelId,
             duration: args.duration as number | undefined,
             isMusic: true,
             genre: args.genre as string | undefined,
@@ -1329,6 +1365,14 @@ export function registerMediaAgentTools(
             type: 'number',
             description: 'Speech speed multiplier (0.5-2, default: 1)',
           },
+          providerId: {
+            type: 'string',
+            description: 'Optional explicit provider id for media routing',
+          },
+          modelId: {
+            type: 'string',
+            description: 'Optional explicit model id for media routing',
+          },
           sourceCueId: {
             type: 'string',
             description: 'Optional structured storyboard voice cue ID for lineage',
@@ -1351,12 +1395,13 @@ export function registerMediaAgentTools(
         if (targetError) {
           return { success: false, error: targetError };
         }
+        const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
           const task = await media.generateAudio({
             prompt: text,
-            ...(target.providerId ? { providerId: target.providerId } : {}),
-            ...(target.modelId ? { modelId: target.modelId } : {}),
+            providerId: resolvedTarget.providerId,
+            modelId: resolvedTarget.modelId,
             isMusic: false,
             metadata: {
               voice: args.voice,

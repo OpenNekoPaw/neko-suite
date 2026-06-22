@@ -2,7 +2,9 @@
  * Media Routing Manager
  *
  * Selects provider and model for media generation requests.
- * Simplified: capability filtering and preference exclusion are inlined.
+ * Explicit routing must be a complete provider/model reference. Default routing
+ * only reads configured default model refs; it never infers a provider from a
+ * partial request.
  */
 
 import type { MediaModelType } from '@neko/shared';
@@ -50,11 +52,17 @@ export class MediaRoutingManager {
     providerId?: string,
     modelId?: string,
   ): Promise<MediaRoutingResult | null> {
+    if (providerId || modelId) {
+      if (!providerId || !modelId) {
+        return null;
+      }
+    }
+
     // Short-circuit: if specific provider and model are given, use directly
     if (providerId && modelId) {
       const provider = this.configManager.getProvider(providerId);
       const model = this.configManager.getModel(modelId);
-      if (provider && model && isProviderConfigured(provider)) {
+      if (provider && model && model.providerId === provider.id && isProviderConfigured(provider)) {
         return {
           providerId,
           modelId,
@@ -82,22 +90,6 @@ export class MediaRoutingManager {
             modelId: model.id,
             score: 90,
             reason: `Configured default ${mediaType} model`,
-          };
-        }
-      }
-    }
-
-    // If modelId is specified but providerId is not, find the provider
-    if (modelId && !providerId) {
-      const model = this.configManager.getModel(modelId);
-      if (model) {
-        const provider = this.configManager.getProvider(model.providerId);
-        if (provider && isProviderConfigured(provider)) {
-          return {
-            providerId: provider.id,
-            modelId,
-            score: 80,
-            reason: 'User specified model',
           };
         }
       }

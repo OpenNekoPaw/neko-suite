@@ -78,10 +78,20 @@ export function createCanvasGenerationRuntime(
               messages: readonly CanvasPromptMessage[],
               options?: { maxTokens?: number },
             ) => {
+              const selectedChatModel = platform.config.getAssistantRuntimeSettingsSnapshot();
+              if (!selectedChatModel.selectedProviderId || !selectedChatModel.selectedModelId) {
+                throw new Error(
+                  'Canvas prompt generation requires a configured LLM provider and model.',
+                );
+              }
               const service = platform.createService();
               return service.chat(
                 messages.map((message) => ({ role: message.role, content: message.content })),
-                options,
+                {
+                  ...options,
+                  providerId: selectedChatModel.selectedProviderId,
+                  modelId: selectedChatModel.selectedModelId,
+                },
               );
             },
           },

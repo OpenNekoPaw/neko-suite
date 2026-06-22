@@ -106,6 +106,17 @@ describe('MediaRoutingManager', () => {
       });
     });
 
+    it('should reject explicit provider/model mismatch', async () => {
+      const result = await manager.selectProvider(
+        'text-to-image',
+        undefined,
+        'openai',
+        'stable-diffusion-xl',
+      );
+
+      expect(result).toBeNull();
+    });
+
     it('should use configured default model when no model specified', async () => {
       configManager.setDefaultModels({
         image: { providerId: 'openai', modelId: 'dall-e-3' },
@@ -121,7 +132,7 @@ describe('MediaRoutingManager', () => {
       });
     });
 
-    it('should find provider when only model specified', async () => {
+    it('should reject partial routing when only model is specified', async () => {
       const result = await manager.selectProvider(
         'text-to-image',
         undefined,
@@ -129,12 +140,7 @@ describe('MediaRoutingManager', () => {
         'stable-diffusion-xl',
       );
 
-      expect(result).toEqual({
-        providerId: 'stability',
-        modelId: 'stable-diffusion-xl',
-        score: 80,
-        reason: 'User specified model',
-      });
+      expect(result).toBeNull();
     });
 
     it('should return null when no default configured and no model specified', async () => {
