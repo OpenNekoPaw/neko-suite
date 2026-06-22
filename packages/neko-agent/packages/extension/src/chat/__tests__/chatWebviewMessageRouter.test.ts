@@ -244,6 +244,31 @@ describe('handleChatWebviewMessage', () => {
     );
   });
 
+  it('routes entry mention search without requiring an ordinary conversation', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'searchProjectFiles',
+        filter: 'hero',
+        purpose: 'entry',
+      },
+      deps,
+    );
+
+    expect(deps.messages?.searchProjectFiles).toHaveBeenCalledWith(
+      deps.webview,
+      'hero',
+      undefined,
+      {
+        purpose: 'entry',
+      },
+    );
+    expect(deps.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'globalError' }),
+    );
+  });
+
   it('routes entry roleplay launches directly to Character Dialogue without an ordinary tab', () => {
     const deps = createDeps();
 

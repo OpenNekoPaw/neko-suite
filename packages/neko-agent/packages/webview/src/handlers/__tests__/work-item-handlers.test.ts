@@ -110,6 +110,33 @@ describe('work item message handlers', () => {
     ]);
   });
 
+  it('accepts entry mention search results without opening a conversation scope', () => {
+    const harness = createContextHarness({
+      activeConversationId: null,
+      mentionSearchFilter: 'hero',
+    });
+
+    dispatch(
+      configHandlers,
+      {
+        type: 'projectFiles',
+        filter: 'hero',
+        purpose: 'entry',
+        files: [{ path: 'assets/hero.png', name: 'hero.png', type: 'file', mediaType: 'image' }],
+      },
+      harness.context,
+    );
+
+    expect(harness.mentionItems()).toEqual([
+      expect.objectContaining({
+        id: 'file:assets/hero.png',
+        label: 'hero.png',
+        filePath: 'assets/hero.png',
+      }),
+    ]);
+    expect(harness.context.activeConversationIdRef.current).toBeNull();
+  });
+
   it('rejects ordinary project file results without an active conversation scope', () => {
     const harness = createContextHarness({
       activeConversationId: null,

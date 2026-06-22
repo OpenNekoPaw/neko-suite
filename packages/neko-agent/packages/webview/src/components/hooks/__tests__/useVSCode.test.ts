@@ -233,6 +233,15 @@ describe('messages', () => {
         });
       });
 
+      it('should post entry project search purpose without conversation scope', () => {
+        VSCodeMessages.searchProjectFiles('hero', undefined, { purpose: 'entry' });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'searchProjectFiles',
+          filter: 'hero',
+          purpose: 'entry',
+        });
+      });
+
       it('should post character dialogue launch args without creating an ordinary conversation', () => {
         VSCodeMessages.startCharacterDialogueFromSlash('entity:char-xiaoju --roleplay');
         expect(mockPostMessage).toHaveBeenCalledWith({
