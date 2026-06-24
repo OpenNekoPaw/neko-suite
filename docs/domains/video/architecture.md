@@ -2,7 +2,7 @@
 
 更新日期：2026-06-15
 
-视频创作领域围绕“素材 -> 剧本/分镜 -> 画布编排 -> 时间线剪辑 -> 预览 -> 导出/审阅”的创作闭环组织。该领域会跨 `neko-story`、`neko-canvas`、`neko-cut`、`neko-preview`、`neko-tools` 和 Engine/Agent/Assets 等横切能力。
+视频创作领域围绕“素材 -> 剧本/Agent 预处理 -> Canvas 分镜产物 -> 时间线剪辑 -> 预览 -> 导出/审阅”的创作闭环组织。该领域会跨 `neko-story`、`neko-canvas`、`neko-cut`、`neko-preview`、`neko-tools` 和 Engine/Agent/Assets 等横切能力。
 
 ## 模块职责
 
@@ -10,11 +10,11 @@
 | ------------------------ | ------------------------------------------------------- |
 | `neko-cut`               | Timeline、剪辑、轨道、关键帧、导出编排                  |
 | `neko-preview`           | 视频、音频、文档、全景等预览 provider 和 Webview        |
-| `neko-canvas`            | 分镜、节点、创作结构、预览路线和叙事投影                |
+| `neko-canvas`            | 已接受的分镜产物、节点、创作结构、预览路线和叙事投影     |
 | `neko-story`             | 剧本解析、场景/角色索引、叙事预览和 story-agent payload |
 | `neko-tools`             | Media LSP、diff、诊断和工具面板                         |
 | `neko-engine`            | 媒体探测、解码、编码、导出、流、质量分析                |
-| Agent                    | 视频理解、分镜生成、自动后期建议、质量审阅              |
+| Agent                    | 视频理解、预处理判断、候选分镜生成、自动后期建议、质量审阅 |
 | Assets / Entity / Search | 素材、角色、场景、引用、索引和审阅 grounding            |
 
 ## 稳定边界
@@ -24,7 +24,12 @@
 - Webview 消费授权后的 H.264/PCM/fMP4 stream client，不直接访问工作区文件。
 - Extension Host 管 custom editor、resource URI、StatusBar、导出命令和 Engine 授权。
 - Story/Canvas/Cut/Preview 之间通过共享 contract、asset/entity/search 引用连接，不直接 import 对方实现。
+- Canvas 的播放路线是 `CanvasPlaybackPlan` 的投影；它可以生成发送到 Cut 的剪辑初稿快照，但不成为 Cut 剪辑 timeline。
+- Cut timeline 和 `.nkv` 是剪辑、轨道、clip、效果、字幕、音频和导出的权威；从 Canvas 导入后由 Cut 管理剪辑事实。
+- Agent 可以读取和展示 Canvas 顺序，并在确认后触发 Canvas -> Cut 导入；Agent 不维护独立 timeline 顺序，也不承担视频播放器职责，Canvas 路线播放由 Canvas Editor Webview 内的 `PlaybackWorkspace` 负责，Cut 结果播放由 Cut 或 `neko-preview` / Engine 负责。
 - 被动状态进入 native StatusBar，Timeline 和画布交互状态留在 Webview。
+
+Canvas 预览路线、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界见系统级 ADR：[`../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
 
 ## 基础模式与专业模式
 
@@ -41,8 +46,9 @@
 
 ```text
 Assets / Story / Canvas / Agent
-  -> timeline or preview intent
+  -> preview route or timeline intent
   -> Extension authorization
+  -> CanvasCutDraftPayload when sending Canvas route to Cut
   -> Engine probe / stream / diff / export
   -> Webview playback or result projection
   -> asset/entity/search/review grounding

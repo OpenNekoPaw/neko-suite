@@ -5,7 +5,7 @@
 ## 范围
 
 - 视频素材导入、媒体探测、预览和质量审阅。
-- 剧本、场景、分镜表、画布路线与时间线之间的创作流。
+- 剧本、场景、Agent 候选分镜、Canvas 产物与时间线之间的创作流。
 - 剪辑、轨道、关键帧、特效、导出和自动后期。
 - Agent 视频理解、分镜生成、自动后期建议和质量反馈。
 
@@ -26,4 +26,5 @@
 ## 阅读路径
 
 1. [`architecture.md`](architecture.md)
-2. [`../../architecture/package-boundaries.md`](../../architecture/package-boundaries.md)
+2. [`../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)
+3. [`../../architecture/package-boundaries.md`](../../architecture/package-boundaries.md)
