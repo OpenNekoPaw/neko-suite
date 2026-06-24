@@ -25,6 +25,9 @@
 
 export const TOOL_NAMES_TIMELINE = {
   GET_TIMELINE_INFO: 'GetTimelineInfo',
+  CUT_GET_TIMELINE_INFO: 'cut.getTimelineInfo',
+  CUT_IMPORT_CANVAS_DRAFT: 'cut.importCanvasDraft',
+  CUT_REVEAL_TIMELINE: 'cut.revealTimeline',
   GET_ELEMENT_INFO: 'GetElementInfo',
   LIST_TIMELINE_ELEMENTS: 'ListTimelineElements',
   LIST_EFFECTS: 'ListEffects',
@@ -58,6 +61,11 @@ export const TOOL_NAMES_TIMELINE = {
 export const TOOL_NAMES_CANVAS = {
   CREATE_CANVAS: 'CreateCanvas',
   ADD_CANVAS_SHAPE: 'AddCanvasShape',
+  CANVAS_GET_PLAYBACK_PLAN: 'canvas.getPlaybackPlan',
+  CANVAS_GET_PLAYBACK_ROUTES: 'canvas.getPlaybackRoutes',
+  CANVAS_REVEAL_PLAYBACK_WORKSPACE: 'canvas.revealPlaybackWorkspace',
+  CANVAS_CREATE_CUT_DRAFT_FROM_ROUTE: 'canvas.createCutDraftFromRoute',
+  CANVAS_REORDER_PLAYBACK_UNITS: 'canvas.reorderPlaybackUnits',
   CANVAS_LIST_NODES: 'canvas_list_nodes',
   CANVAS_GET_NODE: 'canvas_get_node',
   CANVAS_UPDATE_NODE: 'canvas_update_node',

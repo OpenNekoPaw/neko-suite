@@ -33,6 +33,10 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
 } from './canvas-agent-operations';
+import type { CanvasCutDraftPayload } from './canvas-cut-draft';
+import type { CanvasCutDraftDiagnostic } from './canvas-cut-draft';
+import type { CanvasTimelineSyncPayload } from './canvas-timeline-sync';
+import type { CanvasPlaybackPlan, CanvasPlaybackRouteCandidate } from './canvas-playback';
 import type { ProjectData } from './project';
 import type {
   ApplyCanvasStoryboardOptions,
@@ -123,6 +127,21 @@ export interface TimelineInfo {
   trackCount: number;
 }
 
+export interface CutTimelineRevealRequest {
+  readonly projectUri?: string;
+  readonly sequenceId?: string;
+  readonly clipId?: string;
+}
+
+export interface CutCanvasDraftImportResult {
+  readonly accepted: boolean;
+  readonly status: 'imported' | 'rejected' | 'failed' | 'unavailable' | 'timeout' | 'post-failed';
+  readonly projectUri?: string;
+  readonly syncPayload?: CanvasTimelineSyncPayload;
+  readonly diagnostics?: readonly CanvasCutDraftDiagnostic[];
+  readonly error?: string;
+}
+
 /**
  * Timeline element representation (for API response)
  */
@@ -167,6 +186,16 @@ export interface NekoCutAPI {
      * List all elements in the timeline
      */
     listElements(): Promise<NekoCutTimelineElement[]>;
+
+    /**
+     * Reveal the owning Cut timeline surface. Playback and timeline focus stay in Cut.
+     */
+    reveal(request?: CutTimelineRevealRequest): Promise<boolean>;
+
+    /**
+     * Import a Canvas route snapshot into the active Cut project.
+     */
+    importCanvasDraft(payload: CanvasCutDraftPayload): Promise<CutCanvasDraftImportResult>;
   };
 
   /**
@@ -256,6 +285,34 @@ export interface CanvasImportAssetRequest {
   readonly documentResourceRef?: DocumentArchiveResourceRef;
 }
 
+export interface CanvasPlaybackRevealWorkspaceRequest {
+  readonly sourceCanvasUri?: string;
+  readonly routeId?: string;
+  readonly unitId?: string;
+}
+
+export interface CanvasPlaybackCreateCutDraftRequest {
+  readonly sourceCanvasUri?: string;
+  readonly routeId?: string;
+  readonly projectName?: string;
+}
+
+export interface CanvasPlaybackReorderUnitsRequest {
+  readonly sourceCanvasUri?: string;
+  readonly routeId?: string;
+  readonly orderedUnitIds: readonly string[];
+  readonly approvalContext?: 'explicit-user-instruction' | 'agent-confirmed' | 'agent-inferred';
+  readonly instructionText?: string;
+}
+
+export interface CanvasPlaybackReorderUnitsResult {
+  readonly changed: boolean;
+  readonly routeId?: string;
+  readonly sourceCanvasUri?: string;
+  readonly orderedUnitIds: readonly string[];
+  readonly plan: CanvasPlaybackPlan;
+}
+
 /**
  * Fired when an asset is added, updated, or removed from the canvas asset library.
  * Distinct from the asset-registry AssetChangeEvent to avoid naming conflicts.
@@ -338,6 +395,37 @@ export interface NekoCanvasAPI {
     getExecutionSummary(
       request?: CanvasStoryboardExecutionSummaryRequest,
     ): Promise<CanvasStoryboardExecutionSummary>;
+  };
+
+  playback: {
+    /**
+     * Return the current Canvas playback plan projection. This is derived data, not Agent-owned state.
+     */
+    getPlan(sourceCanvasUri?: string): Promise<CanvasPlaybackPlan>;
+
+    /**
+     * Return effective route candidates derived from the current Canvas playback plan.
+     */
+    getRoutes(sourceCanvasUri?: string): Promise<readonly CanvasPlaybackRouteCandidate[]>;
+
+    /**
+     * Reveal the same-Webview Canvas PlaybackWorkspace.
+     */
+    revealWorkspace(request?: CanvasPlaybackRevealWorkspaceRequest): Promise<boolean>;
+
+    /**
+     * Project a selected Canvas route into a one-way Cut draft snapshot.
+     */
+    createCutDraftFromRoute(
+      request?: CanvasPlaybackCreateCutDraftRequest,
+    ): Promise<CanvasCutDraftPayload>;
+
+    /**
+     * Reorder Canvas playback units through Canvas graph commands, then return the reprojected plan.
+     */
+    reorderUnits(
+      request: CanvasPlaybackReorderUnitsRequest,
+    ): Promise<CanvasPlaybackReorderUnitsResult>;
   };
 
   nodes: {

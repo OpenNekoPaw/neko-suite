@@ -190,6 +190,7 @@ export * from './canvas-drop';
 export * from './canvas-subsystem';
 export * from './canvas-projection';
 export * from './canvas-flow-traversal';
+export * from './canvas-cut-draft';
 export * from './canvas-narrative-contract';
 export * from './canvas-narrative-validation';
 export * from './canvas-narrative-agent';
