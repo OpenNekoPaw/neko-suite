@@ -29,6 +29,7 @@ import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
+import type { CanvasCutDraftPayload, CutCanvasDraftImportResult } from '@neko/shared';
 
 type GenerateVideoForClipOptions = Parameters<NekoCutAPI['ai']['generateVideoForClip']>[0];
 
@@ -122,6 +123,23 @@ export async function activate(
       updateElement: (id, updates) => timelineBridge.updateElement(id, updates),
       deleteElement: (id) => timelineBridge.deleteElement(id),
       listElements: () => timelineBridge.listElements(),
+      reveal: async () => videoEditorProvider.focusActiveEditor(),
+      importCanvasDraft: async (payload: CanvasCutDraftPayload) => {
+        const result = await vscode.commands.executeCommand<CutCanvasDraftImportResult>(
+          'neko.cut.importCanvasDraft',
+          payload,
+        );
+        if (result) {
+          return result;
+        }
+        const projectUri = videoEditorProvider.getActiveDocumentUri();
+        return {
+          accepted: false,
+          status: 'post-failed',
+          ...(projectUri ? { projectUri } : {}),
+          error: 'neko.cut.importCanvasDraft did not return an import result.',
+        };
+      },
     },
 
     ai: {

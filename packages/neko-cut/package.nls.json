@@ -47,5 +47,6 @@
   "neko.export.getProgress.title": "Get Export Progress",
   "neko.cut.previewMedia.title": "Preview Media",
   "neko.cut.importGeneratedClip.title": "Import Generated Clip",
-  "neko.cut.importStoryboard.title": "Import Storyboard"
+  "neko.cut.importStoryboard.title": "Import Storyboard",
+  "neko.cut.importCanvasDraft.title": "Import Canvas Draft"
 }

@@ -1,11 +1,18 @@
 import {
+  CENTERED_TRANSFORM,
   STORYBOARD_TEXT_CUE_KINDS,
+  validateCanvasCutDraftPayload,
   isReferenceDescriptor,
+  type CanvasTimelineSyncPayload,
+  type CanvasCutDraftDiagnostic,
+  type CanvasCutDraftPayload,
+  type CanvasCutDraftUnit,
   type ReferenceDescriptor,
   type StoryboardMediaRef,
   type StoryboardTextCue,
   type StoryboardVoiceCue,
 } from '@neko/shared';
+import type { MediaElement } from '../types';
 
 export interface CutStoryboardImportShot {
   id: string;
@@ -20,6 +27,7 @@ export interface CutStoryboardImportShot {
   soundCue?: string;
   textCues?: readonly StoryboardTextCue[];
   voiceCues?: readonly StoryboardVoiceCue[];
+  sourceMapping?: CanvasCutDraftUnit['sourceMapping'];
   label: string;
 }
 
@@ -28,12 +36,25 @@ export interface CutStoryboardImportPayload {
   shots: readonly CutStoryboardImportShot[];
 }
 
+export type CanvasDraftStoryboardProjectionResult =
+  | {
+      readonly ok: true;
+      readonly payload: CutStoryboardImportPayload;
+      readonly source: CanvasCutDraftPayload;
+      readonly diagnostics: readonly CanvasCutDraftDiagnostic[];
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly CanvasCutDraftDiagnostic[];
+    };
+
 export interface TimelineStoryboardImageClip {
   id: string;
   path: string;
   name: string;
   duration: number;
   startTime: number;
+  sourceMapping?: CanvasCutDraftUnit['sourceMapping'];
 }
 
 export type TimelineStoryboardCueKind = 'dialogue' | 'voiceOver' | 'soundCue';
@@ -87,9 +108,134 @@ export function buildStoryboardImageClips(
       name: shot.label || `Shot ${shot.shotNumber}`,
       duration,
       startTime: shotStartTime,
+      ...(shot.sourceMapping ? { sourceMapping: shot.sourceMapping } : {}),
     };
     return [clip];
   });
+}
+
+export function buildStoryboardMediaElement(
+  clip: TimelineStoryboardImageClip,
+  importedAt = Date.now(),
+): Omit<MediaElement, 'id'> {
+  return {
+    type: 'media',
+    src: clip.path,
+    name: clip.name,
+    duration: clip.duration,
+    startTime: clip.startTime,
+    trimStart: 0,
+    trimEnd: 0,
+    transform: CENTERED_TRANSFORM,
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: false,
+    hidden: false,
+    locked: false,
+    ...(clip.sourceMapping
+      ? {
+          lineage: {
+            shotNodeId: clip.sourceMapping.shotId ?? clip.sourceMapping.canvasNodeId,
+            generationId: '',
+            planId: clip.sourceMapping.routeId,
+            routeLevel: 'canvas-route',
+            recordedAt: importedAt,
+          },
+        }
+      : {}),
+  };
+}
+
+export function projectCanvasCutDraftToStoryboardImport(
+  value: unknown,
+): CutStoryboardImportPayload | null {
+  const result = projectCanvasCutDraftToStoryboardImportResult(value);
+  return result.ok ? result.payload : null;
+}
+
+export function projectCanvasCutDraftToStoryboardImportResult(
+  value: unknown,
+): CanvasDraftStoryboardProjectionResult {
+  const validation = validateCanvasCutDraftPayload(value, {
+    requireMediaSource: true,
+  });
+  if (!validation.valid || !validation.payload) {
+    return { ok: false, diagnostics: validation.diagnostics };
+  }
+  const payload = validation.payload;
+  const blockingDiagnostics = [
+    ...validation.diagnostics,
+    ...(payload.diagnostics ?? []),
+    ...payload.units.flatMap((unit) => unit.diagnostics ?? []),
+  ].filter((item) => item.severity === 'error');
+  if (blockingDiagnostics.length > 0) {
+    return { ok: false, diagnostics: blockingDiagnostics };
+  }
+  const shots = payload.units.flatMap((unit, index): CutStoryboardImportShot[] => {
+    const imagePath = resolveCanvasDraftUnitMediaPath(unit);
+    if (!imagePath) return [];
+    const cues = unit.cues ?? [];
+    const dialogue = findCanvasDraftCueText(cues, 'dialogue');
+    const voiceOver = findCanvasDraftCueText(cues, 'voiceOver');
+    const soundCue = findCanvasDraftCueText(cues, 'soundCue');
+    return [
+      {
+        id: unit.id,
+        shotNumber: index + 1,
+        duration: unit.durationMs ? unit.durationMs / 1000 : 3,
+        ...(imagePath ? { imagePath } : {}),
+        ...(dialogue ? { dialogue } : {}),
+        ...(voiceOver ? { voiceOver } : {}),
+        ...(soundCue ? { soundCue } : {}),
+        sourceMapping: unit.sourceMapping,
+        label: unit.label ?? unit.id,
+      },
+    ];
+  });
+  if (shots.length === 0) {
+    return {
+      ok: false,
+      diagnostics: [
+        ...validation.diagnostics,
+        {
+          code: 'draft-missing-media-source',
+          severity: 'error',
+          message: 'CanvasCutDraftPayload does not contain any media that Cut can import.',
+        },
+      ],
+    };
+  }
+  return {
+    ok: true,
+    payload: { projectName: payload.projectName, shots },
+    source: payload,
+    diagnostics: validation.diagnostics,
+  };
+}
+
+export function buildCanvasDraftTimelineSyncPayload(
+  payload: CutStoryboardImportPayload,
+  importedAt = Date.now(),
+): CanvasTimelineSyncPayload {
+  return {
+    source: 'neko-cut',
+    reason: 'storyboard-import',
+    shots: payload.shots.flatMap((shot) => {
+      const mapping = shot.sourceMapping;
+      const shotId = mapping?.shotId ?? mapping?.canvasNodeId;
+      if (!shotId) return [];
+      return [
+        {
+          shotId,
+          projectName: payload.projectName,
+          importedAt,
+          duration: normalizeDuration(shot.duration),
+          selectedInTimeline: true,
+        },
+      ];
+    }),
+  };
 }
 
 export function buildStoryboardMetadataCues(
@@ -177,6 +323,7 @@ function normalizeCutStoryboardImportShot(
   const soundCue = readNonEmptyString(value.soundCue);
   const textCues = normalizeTextCues(value.textCues);
   const voiceCues = normalizeVoiceCues(value.voiceCues);
+  const sourceMapping = normalizeCanvasDraftSourceMapping(value.sourceMapping);
 
   return {
     id,
@@ -191,7 +338,60 @@ function normalizeCutStoryboardImportShot(
     ...(soundCue ? { soundCue } : {}),
     ...(textCues.length > 0 ? { textCues } : {}),
     ...(voiceCues.length > 0 ? { voiceCues } : {}),
+    ...(sourceMapping ? { sourceMapping } : {}),
     label,
+  };
+}
+
+function resolveCanvasDraftUnitMediaPath(unit: CanvasCutDraftUnit): string | undefined {
+  const preferred =
+    unit.media?.find((media) => media.role === 'source' && resolveCanvasDraftMediaPath(media)) ??
+    unit.media?.find((media) => resolveCanvasDraftMediaPath(media));
+  return preferred ? resolveCanvasDraftMediaPath(preferred) : undefined;
+}
+
+function resolveCanvasDraftMediaPath(
+  media: NonNullable<CanvasCutDraftUnit['media']>[number],
+): string | undefined {
+  if (media.assetPath) return media.assetPath;
+  const ref = media.resourceRef;
+  const path =
+    ref?.source.projectRelativePath ??
+    (ref?.locator?.kind === 'file' ? ref.locator.path : undefined) ??
+    ref?.source.filePath;
+  return path && isManagedDraftPath(path) ? path : undefined;
+}
+
+function isManagedDraftPath(value: string): boolean {
+  return (
+    value.startsWith('${') ||
+    (!value.startsWith('/') && !value.startsWith('\\\\') && !/^[A-Za-z]:[\\/]/.test(value))
+  );
+}
+
+function findCanvasDraftCueText(
+  cues: readonly NonNullable<CanvasCutDraftUnit['cues']>[number][],
+  kind: 'dialogue' | 'voiceOver' | 'soundCue',
+): string | undefined {
+  return cues.find((cue) => cue.kind === kind)?.text;
+}
+
+function normalizeCanvasDraftSourceMapping(
+  value: unknown,
+): CanvasCutDraftUnit['sourceMapping'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const routeId = readNonEmptyString(value.routeId);
+  const canvasUnitId = readNonEmptyString(value.canvasUnitId);
+  const canvasNodeId = readNonEmptyString(value.canvasNodeId);
+  const canvasUnitKind = readNonEmptyString(value.canvasUnitKind);
+  if (!routeId || !canvasUnitId || !canvasNodeId || !canvasUnitKind) return undefined;
+  return {
+    routeId,
+    canvasUnitId,
+    canvasNodeId,
+    canvasUnitKind: canvasUnitKind as CanvasCutDraftUnit['kind'],
+    ...(readNonEmptyString(value.sceneId) ? { sceneId: readNonEmptyString(value.sceneId) } : {}),
+    ...(readNonEmptyString(value.shotId) ? { shotId: readNonEmptyString(value.shotId) } : {}),
   };
 }
 

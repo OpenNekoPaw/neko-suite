@@ -307,6 +307,11 @@
         "command": "neko.cut.importStoryboard",
         "title": "%neko.cut.importStoryboard.title%",
         "category": "NekoCut"
+      },
+      {
+        "command": "neko.cut.importCanvasDraft",
+        "title": "%neko.cut.importCanvasDraft.title%",
+        "category": "NekoCut"
       }
     ],
     "menus": {

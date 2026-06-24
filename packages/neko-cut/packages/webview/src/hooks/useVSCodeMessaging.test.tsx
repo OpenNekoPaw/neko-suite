@@ -3,7 +3,13 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROJECT_FILE_SNAPSHOT_REQUEST, PROJECT_FILE_SNAPSHOT_RESPONSE } from '@neko/shared';
+import {
+  CANVAS_CUT_DRAFT_KIND,
+  CANVAS_CUT_DRAFT_SCHEMA_VERSION,
+  PROJECT_FILE_SNAPSHOT_REQUEST,
+  PROJECT_FILE_SNAPSHOT_RESPONSE,
+  type CanvasCutDraftPayload,
+} from '@neko/shared';
 import { useEditorStore } from '../stores/editor-store';
 import { useVSCodeMessaging } from './useVSCodeMessaging';
 import type { ProjectData } from '../types';
@@ -257,6 +263,91 @@ describe('useVSCodeMessaging project snapshot protocol', () => {
       }),
     });
   });
+
+  it('imports Canvas draft payloads into the Cut timeline and emits minimal sync', async () => {
+    act(() => {
+      root.render(<Harness subscribeToExtensionMessages />);
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'importCanvasDraft',
+            requestId: 'import-request-1',
+            payload: createCanvasDraftPayload(),
+          },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const changedProject = findPostedProjectChanged()?.document;
+    const mediaElement = changedProject?.tracks
+      .flatMap((track) => track.elements)
+      .find((element) => element.type === 'media');
+    expect(mediaElement).toMatchObject({
+      type: 'media',
+      src: 'media/shot-a.mp4',
+      name: 'Shot A',
+      duration: 2.5,
+      startTime: 0,
+      lineage: {
+        shotNodeId: 'shot-a',
+        generationId: '',
+        planId: 'route-main',
+        routeLevel: 'canvas-route',
+      },
+    });
+    expect(vscodePostMessage).toHaveBeenCalledWith({
+      type: 'canvasTimelineSync',
+      requestId: 'import-request-1',
+      payload: {
+        source: 'neko-cut',
+        reason: 'storyboard-import',
+        shots: [
+          expect.objectContaining({
+            shotId: 'shot-a',
+            projectName: 'Canvas Route',
+            duration: 2.5,
+            selectedInTimeline: true,
+          }),
+        ],
+      },
+    });
+  });
+
+  it('rejects invalid Canvas draft imports without mutating the Cut timeline', async () => {
+    act(() => {
+      root.render(<Harness subscribeToExtensionMessages />);
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'importCanvasDraft',
+            requestId: 'import-request-invalid',
+            payload: {
+              ...createCanvasDraftPayload(),
+              schemaVersion: 999,
+            },
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(vscodePostMessage).toHaveBeenCalledWith({
+      type: 'canvasDraftImportRejected',
+      requestId: 'import-request-invalid',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ code: 'draft-invalid-schema-version' }),
+      ]),
+    });
+    expect(findPostedProjectChanged()).toBeUndefined();
+  });
 });
 
 function Harness({
@@ -284,6 +375,56 @@ function createProject(overrides: Partial<ProjectData> = {}): ProjectData {
         locked: false,
         hidden: false,
         isMain: true,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function findPostedProjectChanged(): { readonly document?: ProjectData } | undefined {
+  const match = [...vscodePostMessage.mock.calls].reverse().find((call: readonly unknown[]) => {
+    const message = call[0];
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: unknown }).type === 'project:changed'
+    );
+  });
+  return match?.[0] as { document?: ProjectData } | undefined;
+}
+
+function createCanvasDraftPayload(
+  overrides: Partial<CanvasCutDraftPayload> = {},
+): CanvasCutDraftPayload {
+  return {
+    kind: CANVAS_CUT_DRAFT_KIND,
+    schemaVersion: CANVAS_CUT_DRAFT_SCHEMA_VERSION,
+    source: { canvasUri: 'file:///workspace/story.nkc', revision: 1 },
+    route: {
+      id: 'route-main',
+      title: 'Main route',
+      entryUnitId: 'unit-a',
+      unitIds: ['unit-a'],
+      sourceKind: 'auto-entry',
+      totalDurationMs: 2500,
+    },
+    projectName: 'Canvas Route',
+    units: [
+      {
+        id: 'unit-a',
+        kind: 'shot',
+        renderMode: 'story-preview',
+        durationMs: 2500,
+        label: 'Shot A',
+        sourceMapping: {
+          routeId: 'route-main',
+          canvasUnitId: 'unit-a',
+          canvasNodeId: 'node-a',
+          canvasUnitKind: 'shot',
+          sceneId: 'scene-a',
+          shotId: 'shot-a',
+        },
+        media: [{ role: 'source', assetPath: 'media/shot-a.mp4' }],
       },
     ],
     ...overrides,

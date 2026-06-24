@@ -21,8 +21,9 @@ import type {
   ToolParameters,
   NekoCutAPI,
   PromptFragment,
+  CanvasCutDraftPayload,
 } from '@neko/shared';
-import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
+import { TOOL_NAMES_CANVAS, TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 
 /**
@@ -94,6 +95,32 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
           risk: 'medium',
           requiresApproval: true,
         },
+        {
+          capabilityId: 'cut.importCanvasDraft',
+          packageId: 'neko-cut',
+          accepts: ['CanvasCutDraftPayload'],
+          produces: ['timeline-element-ref'],
+          actions: ['cut.importCanvasDraft'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'cut.revealTimeline',
+          packageId: 'neko-cut',
+          accepts: ['CutProjectRef'],
+          actions: ['cut.revealTimeline'],
+          risk: 'low',
+          requiresApproval: false,
+        },
+        {
+          capabilityId: 'cut.getTimelineInfo',
+          packageId: 'neko-cut',
+          accepts: ['CutProjectRef'],
+          produces: ['TimelineInfo'],
+          actions: ['cut.getTimelineInfo'],
+          risk: 'low',
+          requiresApproval: false,
+        },
       ],
     };
   }
@@ -104,6 +131,94 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
     const media = context.mediaService;
 
     return [
+      {
+        name: TOOL_NAMES_TIMELINE.CUT_GET_TIMELINE_INFO,
+        description: 'Get read-only information about the current Cut timeline.',
+        category: 'timeline',
+        parameters: { type: 'object', properties: {} },
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        async execute() {
+          try {
+            const data = await api.timeline.getInfo();
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to get Cut timeline info: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_TIMELINE.CUT_REVEAL_TIMELINE,
+        description:
+          'Reveal the owning Cut timeline surface. Agent does not own Cut playback or timeline state.',
+        category: 'timeline',
+        parameters: {
+          type: 'object',
+          properties: {
+            projectUri: { type: 'string', description: 'Optional Cut project URI.' },
+            sequenceId: { type: 'string', description: 'Optional sequence id to focus.' },
+            clipId: { type: 'string', description: 'Optional clip id to focus.' },
+          },
+        },
+        isReadOnly: true,
+        safetyKind: 'read-only-query',
+        async execute(args) {
+          try {
+            const revealed = await api.timeline.reveal({
+              projectUri: typeof args.projectUri === 'string' ? args.projectUri : undefined,
+              sequenceId: typeof args.sequenceId === 'string' ? args.sequenceId : undefined,
+              clipId: typeof args.clipId === 'string' ? args.clipId : undefined,
+            });
+            return { success: revealed, data: { revealed } };
+          } catch (err) {
+            return { success: false, error: `Failed to reveal Cut timeline: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_TIMELINE.CUT_IMPORT_CANVAS_DRAFT,
+        description:
+          'Import a CanvasCutDraftPayload into the active Cut project. Requires confirmation because Cut owns .nkv timeline state after import.',
+        category: 'timeline',
+        parameters: {
+          type: 'object',
+          properties: {
+            draft: {
+              type: 'object',
+              description: 'CanvasCutDraftPayload snapshot produced by Canvas.',
+            },
+          },
+          required: ['draft'],
+        },
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['draft'],
+          confirmationModes: ['create-cut-project', 'update-cut-project', 'send-to-cut'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN,
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES,
+            TOOL_NAMES_TIMELINE.CUT_GET_TIMELINE_INFO,
+          ],
+          reason:
+            'Show Canvas route, unit count, target Cut project, and overwrite/import risk before importing.',
+        },
+        async execute(args) {
+          try {
+            const draft = args.draft as CanvasCutDraftPayload | undefined;
+            if (!draft) {
+              return { success: false, error: 'cut.importCanvasDraft requires a draft payload.' };
+            }
+            const data = await api.timeline.importCanvasDraft(draft);
+            return { success: data.accepted, data };
+          } catch (err) {
+            return { success: false, error: `Failed to import Canvas draft: ${String(err)}` };
+          }
+        },
+      },
       createTimelineTool(
         bridge,
         TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,

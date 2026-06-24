@@ -25,9 +25,12 @@ import {
   requestFileUri as requestFileUriUtil,
 } from '../utils/fileUri';
 import {
+  buildCanvasDraftTimelineSyncPayload,
+  buildStoryboardMediaElement,
   buildStoryboardMetadataCues,
   buildStoryboardImageClips,
   normalizeCutStoryboardImportPayload,
+  projectCanvasCutDraftToStoryboardImportResult,
 } from '../utils/storyboardImport';
 import type { CutStoryboardImportPayload } from '../utils/storyboardImport';
 import { isFrameServerMessage, publishFrameServerMessage } from '../services/frameServerMessages';
@@ -60,7 +63,6 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
     seek,
     setAIActionStatus,
     addElement,
-    addMediaElement,
     addTrack,
     getTotalDuration,
   } = useEditorStore();
@@ -109,20 +111,20 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
   }, [subscribeToExtensionMessages, sendMessage]);
 
   const importStoryboard = useCallback(
-    (payload: CutStoryboardImportPayload) => {
+    (payload: CutStoryboardImportPayload, importedAt = Date.now()) => {
       importStoryboardToStore(
         {
           addElement,
-          addMediaElement,
           addTrack,
           getTotalDuration,
           project: projectRef.current,
         },
         payload,
         sendMessage,
+        importedAt,
       );
     },
-    [addElement, addMediaElement, addTrack, getTotalDuration, sendMessage],
+    [addElement, addTrack, getTotalDuration, sendMessage],
   );
 
   // Handle incoming messages from Extension Host
@@ -209,6 +211,37 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
             importStoryboard(payload);
           } catch (err) {
             logger.error('Failed to import storyboard into timeline:', err);
+          }
+          break;
+        }
+
+        case 'importCanvasDraft': {
+          const projection = projectCanvasCutDraftToStoryboardImportResult(message.payload);
+          if (!projection.ok) {
+            sendMessage({
+              type: 'canvasDraftImportRejected',
+              ...(typeof message.requestId === 'string' ? { requestId: message.requestId } : {}),
+              diagnostics: projection.diagnostics,
+            });
+            logger.warn('Rejected Canvas draft import payload');
+            break;
+          }
+
+          try {
+            const importedAt = Date.now();
+            importStoryboard(projection.payload, importedAt);
+            sendMessage({
+              type: 'canvasTimelineSync',
+              ...(typeof message.requestId === 'string' ? { requestId: message.requestId } : {}),
+              payload: buildCanvasDraftTimelineSyncPayload(projection.payload, importedAt),
+            });
+          } catch (err) {
+            sendMessage({
+              type: 'canvasDraftImportFailed',
+              ...(typeof message.requestId === 'string' ? { requestId: message.requestId } : {}),
+              error: err instanceof Error ? err.message : String(err),
+            });
+            logger.error('Failed to import Canvas draft into timeline:', err);
           }
           break;
         }
@@ -534,7 +567,7 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
 type StoryboardCue = ReturnType<typeof buildStoryboardMetadataCues>[number];
 type StoryboardImportStoreActions = Pick<
   EditorStore,
-  'addElement' | 'addMediaElement' | 'addTrack' | 'getTotalDuration' | 'project'
+  'addElement' | 'addTrack' | 'getTotalDuration' | 'project'
 >;
 
 interface TimelineAddMetadata {
@@ -625,13 +658,20 @@ function importStoryboardToStore(
   store: StoryboardImportStoreActions,
   payload: CutStoryboardImportPayload,
   sendMessage: (message: unknown) => void,
+  importedAt = Date.now(),
 ): void {
   const startTime = store.getTotalDuration();
   const clips = buildStoryboardImageClips(payload, startTime);
   const cues = buildStoryboardMetadataCues(payload, startTime);
 
   for (const clip of clips) {
-    store.addMediaElement('', clip.path, clip.name, clip.duration, clip.startTime);
+    const mediaTrackId = findOrCreateStoryboardTrack(
+      store.project?.tracks,
+      'media',
+      'Canvas Draft Media',
+      store.addTrack,
+    );
+    store.addElement(mediaTrackId, buildStoryboardMediaElement(clip, importedAt));
     sendMessage({ type: 'requestFile', path: clip.path });
   }
 

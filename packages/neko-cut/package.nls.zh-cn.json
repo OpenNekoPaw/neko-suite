@@ -47,5 +47,6 @@
   "neko.export.getProgress.title": "获取导出进度",
   "neko.cut.previewMedia.title": "预览媒体",
   "neko.cut.importGeneratedClip.title": "导入生成的片段",
-  "neko.cut.importStoryboard.title": "导入分镜"
+  "neko.cut.importStoryboard.title": "导入分镜",
+  "neko.cut.importCanvasDraft.title": "导入 Canvas 草稿"
 }

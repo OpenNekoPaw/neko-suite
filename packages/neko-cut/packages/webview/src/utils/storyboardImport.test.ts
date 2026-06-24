@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CANVAS_CUT_DRAFT_KIND,
+  CANVAS_CUT_DRAFT_SCHEMA_VERSION,
+  type CanvasCutDraftPayload,
+  type ResourceRef,
+} from '@neko/shared';
+import {
+  buildCanvasDraftTimelineSyncPayload,
+  buildStoryboardMediaElement,
   buildStoryboardMetadataCues,
   buildStoryboardImageClips,
   normalizeCutStoryboardImportPayload,
+  projectCanvasCutDraftToStoryboardImport,
+  projectCanvasCutDraftToStoryboardImportResult,
 } from './storyboardImport';
 
 describe('storyboard import utilities', () => {
@@ -451,4 +461,247 @@ describe('storyboard import utilities', () => {
     expect(normalizeCutStoryboardImportPayload({ projectName: 'Empty', shots: [] })).toBeNull();
     expect(normalizeCutStoryboardImportPayload({ projectName: 'Broken' })).toBeNull();
   });
+
+  it('projects Canvas Cut drafts to storyboard imports with cues and source mapping', () => {
+    const draft = createCanvasDraftPayload({
+      units: [
+        createCanvasDraftUnit({
+          id: 'unit-a',
+          durationMs: 2400,
+          label: 'Opening shot',
+          media: [{ role: 'source', assetPath: 'media/opening.mp4' }],
+          cues: [
+            { id: 'cue-dialogue', kind: 'dialogue', text: 'We begin.', source: 'canvas-node' },
+            {
+              id: 'cue-voice',
+              kind: 'voiceOver',
+              text: 'A quiet start.',
+              source: 'story-projection',
+            },
+            { id: 'cue-sound', kind: 'soundCue', text: 'Low wind.', source: 'canvas-node' },
+          ],
+          sourceMapping: {
+            routeId: 'route-main',
+            canvasUnitId: 'unit-a',
+            canvasNodeId: 'node-a',
+            canvasUnitKind: 'shot',
+            sceneId: 'scene-a',
+            shotId: 'shot-a',
+          },
+        }),
+      ],
+    });
+
+    expect(projectCanvasCutDraftToStoryboardImport(draft)).toEqual({
+      projectName: 'Canvas Route',
+      shots: [
+        {
+          id: 'unit-a',
+          shotNumber: 1,
+          duration: 2.4,
+          imagePath: 'media/opening.mp4',
+          dialogue: 'We begin.',
+          voiceOver: 'A quiet start.',
+          soundCue: 'Low wind.',
+          sourceMapping: {
+            routeId: 'route-main',
+            canvasUnitId: 'unit-a',
+            canvasNodeId: 'node-a',
+            canvasUnitKind: 'shot',
+            sceneId: 'scene-a',
+            shotId: 'shot-a',
+          },
+          label: 'Opening shot',
+        },
+      ],
+    });
+  });
+
+  it('resolves project-relative ResourceRef media for Canvas draft import', () => {
+    const resourceRef: ResourceRef = {
+      id: 'resource-a',
+      scope: 'project',
+      provider: 'neko-assets',
+      kind: 'media',
+      source: { kind: 'file', projectRelativePath: 'assets/resource-a.mp4' },
+      fingerprint: { strategy: 'hash', value: 'hash-a' },
+    };
+
+    const projection = projectCanvasCutDraftToStoryboardImportResult(
+      createCanvasDraftPayload({
+        units: [createCanvasDraftUnit({ media: [{ role: 'source', resourceRef }] })],
+      }),
+    );
+
+    expect(projection).toMatchObject({
+      ok: true,
+      payload: {
+        shots: [
+          {
+            imagePath: 'assets/resource-a.mp4',
+          },
+        ],
+      },
+    });
+  });
+
+  it('rejects invalid Canvas draft versions, extension namespaces, and full-timeline fields', () => {
+    const projection = projectCanvasCutDraftToStoryboardImportResult({
+      ...createCanvasDraftPayload({
+        extensions: {
+          bare: { note: 'bad namespace' },
+          'neko.canvas': { tracks: [] },
+        },
+      }),
+      schemaVersion: 999,
+    });
+
+    expect(projection.ok).toBe(false);
+    expect(projection.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'draft-invalid-schema-version' }),
+        expect.objectContaining({ code: 'draft-invalid-extension-namespace' }),
+        expect.objectContaining({ code: 'draft-forbidden-extension-field' }),
+      ]),
+    );
+  });
+
+  it('rejects Canvas drafts without importable media', () => {
+    const projection = projectCanvasCutDraftToStoryboardImportResult(
+      createCanvasDraftPayload({
+        units: [createCanvasDraftUnit({ media: [{ role: 'source', sourceRefId: 'node-output' }] })],
+      }),
+    );
+
+    expect(projection.ok).toBe(false);
+    expect(projection.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'draft-missing-media-source', severity: 'error' }),
+      ]),
+    );
+  });
+
+  it('rejects Canvas drafts that carry stale-source diagnostics', () => {
+    const projection = projectCanvasCutDraftToStoryboardImportResult(
+      createCanvasDraftPayload({
+        diagnostics: [
+          {
+            code: 'draft-stale-source',
+            severity: 'error',
+            message: 'Source revision is stale.',
+          },
+        ],
+      }),
+    );
+
+    expect(projection.ok).toBe(false);
+    expect(projection.diagnostics).toEqual([
+      expect.objectContaining({ code: 'draft-stale-source', severity: 'error' }),
+    ]);
+  });
+
+  it('builds imported media lineage and minimal Canvas sync payloads', () => {
+    const sourceMapping = {
+      routeId: 'route-main',
+      canvasUnitId: 'unit-a',
+      canvasNodeId: 'node-a',
+      canvasUnitKind: 'shot' as const,
+      sceneId: 'scene-a',
+      shotId: 'shot-a',
+    };
+    const clip = {
+      id: 'unit-a',
+      path: 'media/opening.mp4',
+      name: 'Opening shot',
+      duration: 2.4,
+      startTime: 5,
+      sourceMapping,
+    };
+
+    expect(buildStoryboardMediaElement(clip, 1234)).toMatchObject({
+      type: 'media',
+      src: 'media/opening.mp4',
+      name: 'Opening shot',
+      lineage: {
+        shotNodeId: 'shot-a',
+        generationId: '',
+        planId: 'route-main',
+        routeLevel: 'canvas-route',
+        recordedAt: 1234,
+      },
+    });
+
+    expect(
+      buildCanvasDraftTimelineSyncPayload(
+        {
+          projectName: 'Canvas Route',
+          shots: [
+            {
+              id: 'unit-a',
+              shotNumber: 1,
+              duration: 2.4,
+              imagePath: 'media/opening.mp4',
+              sourceMapping,
+              label: 'Opening shot',
+            },
+          ],
+        },
+        1234,
+      ),
+    ).toEqual({
+      source: 'neko-cut',
+      reason: 'storyboard-import',
+      shots: [
+        {
+          shotId: 'shot-a',
+          projectName: 'Canvas Route',
+          importedAt: 1234,
+          duration: 2.4,
+          selectedInTimeline: true,
+        },
+      ],
+    });
+  });
 });
+
+function createCanvasDraftPayload(
+  overrides: Partial<CanvasCutDraftPayload> = {},
+): CanvasCutDraftPayload {
+  return {
+    kind: CANVAS_CUT_DRAFT_KIND,
+    schemaVersion: CANVAS_CUT_DRAFT_SCHEMA_VERSION,
+    source: { canvasUri: 'file:///workspace/story.nkc', revision: 1 },
+    route: {
+      id: 'route-main',
+      title: 'Main route',
+      entryUnitId: 'unit-a',
+      unitIds: ['unit-a'],
+      sourceKind: 'auto-entry',
+      totalDurationMs: 2400,
+    },
+    projectName: 'Canvas Route',
+    units: [createCanvasDraftUnit()],
+    ...overrides,
+  };
+}
+
+function createCanvasDraftUnit(
+  overrides: Partial<CanvasCutDraftPayload['units'][number]> = {},
+): CanvasCutDraftPayload['units'][number] {
+  return {
+    id: 'unit-a',
+    kind: 'shot',
+    renderMode: 'story-preview',
+    durationMs: 2400,
+    label: 'Opening shot',
+    media: [{ role: 'source', assetPath: 'media/opening.mp4' }],
+    sourceMapping: {
+      routeId: 'route-main',
+      canvasUnitId: 'unit-a',
+      canvasNodeId: 'node-a',
+      canvasUnitKind: 'shot',
+      shotId: 'shot-a',
+    },
+    ...overrides,
+  };
+}

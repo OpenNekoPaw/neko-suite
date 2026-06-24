@@ -8,11 +8,20 @@
  */
 
 import * as vscode from 'vscode';
-import type { ReferenceDescriptor, StoryboardMediaRef } from '@neko/shared';
+import type {
+  CanvasCutDraftDiagnostic,
+  CanvasCutDraftPayload,
+  CanvasTimelineSyncPayload,
+  CutCanvasDraftImportResult,
+  ReferenceDescriptor,
+  StoryboardMediaRef,
+} from '@neko/shared';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
 import { handleError } from '../base';
+
+const CANVAS_DRAFT_IMPORT_TIMEOUT_MS = 15_000;
 
 /**
  * Register timeline-related VSCode commands
@@ -466,4 +475,167 @@ export function registerTimelineCommands(
       },
     ),
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.cut.importCanvasDraft',
+      async (payload: CanvasCutDraftPayload) => {
+        const webview = _videoEditorProvider.getActiveWebview();
+        const projectUri = _videoEditorProvider.getActiveDocumentUri() ?? undefined;
+        if (!webview) {
+          const error = vscode.l10n.t('editor.warning.noProjectOpen');
+          void handleError(new Error(error), {
+            showToUser: true,
+            severity: 'warning',
+          });
+          return {
+            accepted: false,
+            status: 'unavailable',
+            error,
+          } satisfies CutCanvasDraftImportResult;
+        }
+
+        const requestId = createCanvasDraftImportRequestId();
+        const waiter = createCanvasDraftImportResultWaiter(webview, requestId, projectUri);
+        let posted = false;
+        try {
+          posted = await webview.postMessage({
+            type: 'importCanvasDraft',
+            requestId,
+            payload,
+          });
+        } catch (error) {
+          return waiter.cancel({
+            accepted: false,
+            status: 'post-failed',
+            ...(projectUri ? { projectUri } : {}),
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Failed to deliver Canvas draft import request to Cut Webview.',
+          });
+        }
+        if (!posted) {
+          return waiter.cancel({
+            accepted: false,
+            status: 'post-failed',
+            ...(projectUri ? { projectUri } : {}),
+            error: 'Failed to deliver Canvas draft import request to Cut Webview.',
+          });
+        }
+        vscode.window.showInformationMessage(
+          `Importing Canvas route "${readCanvasDraftRouteTitle(payload)}" into Cut timeline…`,
+        );
+        return waiter.promise;
+      },
+    ),
+  );
+}
+
+function createCanvasDraftImportResultWaiter(
+  webview: Pick<vscode.Webview, 'onDidReceiveMessage'>,
+  requestId: string,
+  projectUri: string | undefined,
+): {
+  readonly promise: Promise<CutCanvasDraftImportResult>;
+  readonly cancel: (result: CutCanvasDraftImportResult) => Promise<CutCanvasDraftImportResult>;
+} {
+  let settled = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let subscription: vscode.Disposable | undefined;
+  let settle: (result: CutCanvasDraftImportResult) => void = () => {};
+
+  const promise = new Promise<CutCanvasDraftImportResult>((resolve) => {
+    settle = (result: CutCanvasDraftImportResult) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      subscription?.dispose();
+      resolve({
+        ...result,
+        ...(projectUri && !result.projectUri ? { projectUri } : {}),
+      });
+    };
+
+    timeout = setTimeout(() => {
+      settle({
+        accepted: false,
+        status: 'timeout',
+        ...(projectUri ? { projectUri } : {}),
+        error: 'Timed out waiting for Cut Webview to import Canvas draft.',
+      });
+    }, CANVAS_DRAFT_IMPORT_TIMEOUT_MS);
+
+    subscription = webview.onDidReceiveMessage((message: unknown) => {
+      const response = readCanvasDraftImportResultMessage(message, requestId);
+      if (response) {
+        settle(response);
+      }
+    });
+  });
+
+  return {
+    promise,
+    cancel: async (result) => {
+      settle(result);
+      return promise;
+    },
+  };
+}
+
+function readCanvasDraftImportResultMessage(
+  message: unknown,
+  requestId: string,
+): CutCanvasDraftImportResult | null {
+  if (!isRecord(message) || message.requestId !== requestId) {
+    return null;
+  }
+
+  if (message.type === 'canvasTimelineSync') {
+    return {
+      accepted: true,
+      status: 'imported',
+      syncPayload: message.payload as CanvasTimelineSyncPayload,
+    };
+  }
+
+  if (message.type === 'canvasDraftImportRejected') {
+    return {
+      accepted: false,
+      status: 'rejected',
+      diagnostics: Array.isArray(message.diagnostics)
+        ? (message.diagnostics as CanvasCutDraftDiagnostic[])
+        : [],
+      error: 'Cut Webview rejected Canvas draft import.',
+    };
+  }
+
+  if (message.type === 'canvasDraftImportFailed') {
+    return {
+      accepted: false,
+      status: 'failed',
+      error:
+        typeof message.error === 'string'
+          ? message.error
+          : 'Cut Webview failed to import Canvas draft.',
+    };
+  }
+
+  return null;
+}
+
+function createCanvasDraftImportRequestId(): string {
+  return `canvas-draft-import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readCanvasDraftRouteTitle(payload: CanvasCutDraftPayload): string {
+  const route = isRecord(payload.route) ? payload.route : undefined;
+  const title = route?.title;
+  return typeof title === 'string' && title.trim().length > 0 ? title : 'Canvas route';
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }

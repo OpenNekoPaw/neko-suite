@@ -21,6 +21,7 @@ export default defineConfig({
       'packages/webview/src/**/*.test.tsx',
       // Protocol integration tests (self-contained vi.mock('vscode'))
       'packages/extension/src/__tests__/protocol.test.ts',
+      'packages/extension/src/agentCapabilityProvider.test.ts',
       'packages/extension/src/editor/video/cutProjectFilePersistence.test.ts',
       'packages/extension/src/editor/video/messageHandler.test.ts',
       'packages/extension/src/editor/video/videoEditorModel.contract.test.ts',

@@ -25,7 +25,7 @@ vi.mock('vscode', () => ({
     }),
     executeCommand: vi.fn().mockResolvedValue(null),
   },
-  window: { showWarningMessage: vi.fn() },
+  window: { showWarningMessage: vi.fn(), showInformationMessage: vi.fn() },
   EventEmitter: vi.fn(),
   workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn() })) },
   l10n: { t: vi.fn((key: string) => key) },
@@ -182,6 +182,105 @@ describe('timeline command registration (NKC-010)', () => {
     expect(cmdState.commands.has('neko.element.add')).toBe(true);
     expect(cmdState.commands.has('neko.element.delete')).toBe(true);
     expect(cmdState.commands.has('neko.timeline.listElements')).toBe(true);
+    expect(cmdState.commands.has('neko.cut.importCanvasDraft')).toBe(true);
+  });
+
+  it('posts Canvas draft imports to the active Cut webview and returns the sync payload', async () => {
+    let receiveMessage: ((message: unknown) => void) | undefined;
+    const postMessage = vi.fn();
+    postMessage.mockImplementation((message) => {
+      queueMicrotask(() => {
+        receiveMessage?.({
+          type: 'canvasTimelineSync',
+          requestId: message.requestId,
+          payload: {
+            source: 'neko-cut',
+            reason: 'storyboard-import',
+            shots: [{ shotId: 'node-a', selectedInTimeline: true }],
+          },
+        });
+      });
+      return Promise.resolve(true);
+    });
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = {
+      getActiveDocumentUri: vi.fn(() => 'file:///workspace/cut.nkv'),
+      getActiveWebview: vi.fn(() => ({
+        postMessage,
+        onDidReceiveMessage: vi.fn((listener) => {
+          receiveMessage = listener;
+          return { dispose: vi.fn() };
+        }),
+      })),
+      getActiveExportService: vi.fn(),
+    };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    const draft = {
+      kind: 'canvas-cut-draft',
+      schemaVersion: 1,
+      source: { canvasUri: 'file:///workspace/story.nkc', revision: 1 },
+      route: {
+        id: 'route-main',
+        title: 'Main route',
+        entryUnitId: 'unit-a',
+        unitIds: ['unit-a'],
+        sourceKind: 'auto-entry',
+      },
+      projectName: 'Canvas Route',
+      units: [
+        {
+          id: 'unit-a',
+          kind: 'shot',
+          renderMode: 'story-preview',
+          sourceMapping: {
+            routeId: 'route-main',
+            canvasUnitId: 'unit-a',
+            canvasNodeId: 'node-a',
+            canvasUnitKind: 'shot',
+          },
+          media: [{ role: 'source', assetPath: 'media/shot-a.mp4' }],
+        },
+      ],
+    };
+
+    const handler = cmdState.commands.get('neko.cut.importCanvasDraft');
+    expect(handler).toBeDefined();
+    const result = await handler!(draft);
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'importCanvasDraft',
+      requestId: expect.any(String),
+      payload: draft,
+    });
+    expect(result).toMatchObject({
+      accepted: true,
+      status: 'imported',
+      projectUri: 'file:///workspace/cut.nkv',
+      syncPayload: {
+        source: 'neko-cut',
+        reason: 'storyboard-import',
+      },
+    });
+  });
+
+  it('returns unavailable when Canvas draft import has no active Cut webview', async () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = {
+      getActiveDocumentUri: vi.fn(() => null),
+      getActiveWebview: vi.fn(() => null),
+      getActiveExportService: vi.fn(),
+    };
+
+    registerTimelineCommands(mockContext as any, mockProvider as any);
+
+    const handler = cmdState.commands.get('neko.cut.importCanvasDraft');
+    expect(handler).toBeDefined();
+    await expect(handler!({ route: { title: 'Route' } } as any)).resolves.toMatchObject({
+      accepted: false,
+      status: 'unavailable',
+    });
   });
 
   it('registers element update command', () => {

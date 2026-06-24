@@ -175,13 +175,8 @@ export function registerCommands(
           assetPath ?? fileName,
           params.mediaType ?? params.type,
         );
-        const bytes =
-          typeof params.data === 'string'
-            ? dataUrlToBytes(params.data)
-            : assetPath
-              ? await vscode.workspace.fs.readFile(vscode.Uri.file(assetPath))
-              : undefined;
-        if (!bytes) {
+        const bytes = typeof params.data === 'string' ? dataUrlToBytes(params.data) : undefined;
+        if (!bytes && !assetPath) {
           void handleError(new Error('Generated clip import requires assetPath or data bytes.'), {
             showToUser: true,
           });
@@ -192,6 +187,7 @@ export function registerCommands(
           requestId: `cut-import-generated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
           kind: 'generated-output',
           formatId: 'nkv',
+          ...(assetPath ? { sourcePath: assetPath } : {}),
           ...(bytes ? { bytes } : {}),
           browserFile: {
             name: fileName,
@@ -201,9 +197,9 @@ export function registerCommands(
           destination: {
             kind: 'project',
             directory: 'media',
-            copyMode: 'copy',
+            copyMode: bytes ? 'copy' : 'link',
           },
-          ingestMode: 'create-asset',
+          ingestMode: bytes ? 'create-asset' : 'link',
           metadata: {
             addToTimeline: true,
             mediaType,
@@ -284,13 +280,13 @@ function createGeneratedClipProjectName(params: {
   const sourceName =
     params.name?.trim() || (params.assetPath ? path.parse(params.assetPath).name : '');
   const mediaType = params.mediaType ?? params.type;
-  const fallback =
+  const generatedName =
     mediaType === 'audio'
       ? 'Agent Audio Timeline'
       : mediaType === 'image'
         ? 'Agent Image Timeline'
         : 'Agent Timeline';
-  return sanitizeTimelineFileName(sourceName).slice(0, 80) || fallback;
+  return sanitizeTimelineFileName(sourceName).slice(0, 80) || generatedName;
 }
 
 async function createAvailableTimelineFileUri(
