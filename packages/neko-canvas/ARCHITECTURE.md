@@ -71,7 +71,8 @@ packages/neko-canvas/
 │  │    ├─ PlaybackWorkspace                         │      │
 │  │    │    ├─ CanvasViewportPane (画布区，可隐藏)   │      │
 │  │    │    ├─ PlaybackStage (预览播放区，可隐藏)    │      │
-│  │    │    ├─ PlaybackRouteStrip (预览路线条，可隐藏)│     │
+│  │    │    ├─ RouteStoryboardMatrix (路线分镜矩阵，可隐藏)│
+│  │    │    ├─ PlaybackRouteStrip (紧凑 fallback)    │      │
 │  │    │    └─ PlaybackSession (route/playhead 状态) │      │
 │  │    ├─ PropertyPanel (属性面板)                   │      │
 │  │    └─ ContextMenu (右键菜单)                    │      │
@@ -188,11 +189,14 @@ packages/neko-canvas/
   → 同一 Canvas Editor Webview 显示/聚焦 PlaybackWorkspace
     → 基于当前 CanvasData 按需生成 CanvasPlaybackPlan
       → PlaybackStage 渲染当前 unit
-      → PlaybackRouteStrip 展示 route / segment / diagnostics
+      → RouteStoryboardMatrix 展示 route family / branch row / step cell / container group
+      → PlaybackRouteStrip 作为紧凑路线条 fallback 展示 selected route
       → PlaybackSession 保存当前 route、unit、playhead 和播放状态
 ```
 
-`PlaybackWorkspace` 不保存私有排序，不成为第二个 timeline。若用户通过路线条触发重排，必须调用 canvasStore 的容器/节点/连线排序命令写回 `.nkc`，再重新生成 `CanvasPlaybackPlan`。媒体、缩略图和视频流仍通过 Extension Host、`neko-preview` API 和 Engine 授权，不由 Webview 直接访问工作区文件。
+`RouteStoryboardMatrix` 是 `CanvasPlaybackPlan` 的 Webview-local 投影视图：行表示 route family 下的分支路线，列表示容器边界内的播放步骤，cell 表示可播放 unit/shot，空 cell 仅用于对齐。矩阵运行态只保存 view mode、active family、filter/highlight、fold、focus 等 UI 状态，不保存私有排序、列、空 cell 或矩阵顺序到 `.nkc`，也不成为第二个 timeline。若未来启用 route edit mode，写操作必须调用 canvasStore 的容器/节点/连线排序命令写回 `.nkc`，再重新生成 `CanvasPlaybackPlan`。
+
+从矩阵发送到 Cut 时，Webview 只提交 route id 和当前 revision；Extension Host 重新从当前 `CanvasPlaybackPlan` 创建 `CanvasCutDraftPayload`，再调用 `neko.cut.importCanvasDraft`。矩阵折叠、筛选、空 cell 和可见列不会进入 draft。媒体、缩略图和视频流仍通过 Extension Host、`neko-preview` API 和 Engine 授权，不由 Webview 直接访问工作区文件。
 
 Agent 对 Canvas 播放顺序的参与仅限读取 `CanvasPlaybackPlan`、展示 route card、触发 reveal/import/reorder capability 和执行确认门控。Agent 不持有 `PlaybackSession`、playhead、播放器或私有 route 顺序；播放请求应定位到 Canvas `PlaybackWorkspace`，后续剪辑请求应投递到 Cut。
 
