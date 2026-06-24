@@ -28,6 +28,7 @@ import {
   RightPanelIcon,
   RightPanelOffIcon,
 } from '@neko/ui/icons';
+import type { PlaybackWorkspacePane } from '../../stores/playbackStore';
 
 // =============================================================================
 // Types
@@ -41,6 +42,9 @@ export interface CanvasToolbarProps {
   onToggleNodeLibrary?: () => void;
   /** Reveals the same-Webview playback workspace. */
   onRevealPlaybackWorkspace?: () => void;
+  /** Playback workspace pane visibility controls. */
+  playbackPaneState?: Readonly<Record<PlaybackWorkspacePane, boolean>>;
+  onTogglePlaybackPane?: (pane: PlaybackWorkspacePane) => void;
   /** Opens the Extension Host-owned rendered export picker */
   onOpenExport?: () => void;
   /** Opens the Extension Host-owned no-engine project package flow */
@@ -63,6 +67,8 @@ export function CanvasToolbar({
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
   onRevealPlaybackWorkspace,
+  playbackPaneState,
+  onTogglePlaybackPane,
   onOpenExport,
   onOpenPackage,
   isHudVisible = true,
@@ -77,6 +83,8 @@ export function CanvasToolbar({
     : t('toolbar.showRightNodeTree');
   const hudTitle = isHudVisible ? t('toolbar.hideHudControls') : t('toolbar.showHudControls');
   const hasVisibilityToggles = onToggleHud !== undefined || onToggleNodeLibrary !== undefined;
+  const hasPlaybackPaneToggles =
+    playbackPaneState !== undefined && onTogglePlaybackPane !== undefined;
 
   return (
     <VerticalToolbar
@@ -104,7 +112,55 @@ export function CanvasToolbar({
         onClick={onTogglePanMode}
       />
 
-      {onRevealPlaybackWorkspace && (
+      {hasPlaybackPaneToggles ? (
+        <>
+          <ToolbarButton
+            aria-controls="canvas-playback-canvas-pane"
+            aria-expanded={playbackPaneState.canvas}
+            data-creative-left-rail-action="toggle-playback-canvas-pane"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="playback-canvas"
+            icon={<RightPanelIcon size={18} />}
+            title={
+              playbackPaneState.canvas
+                ? t('playback.workspace.hideCanvas')
+                : t('playback.workspace.showCanvas')
+            }
+            active={playbackPaneState.canvas}
+            onClick={() => onTogglePlaybackPane('canvas')}
+          />
+          <ToolbarButton
+            aria-controls="canvas-playback-stage-pane"
+            aria-expanded={playbackPaneState.stage}
+            data-creative-left-rail-action="toggle-playback-stage-pane"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="playback-stage"
+            icon={<PlayIcon size={18} />}
+            title={
+              playbackPaneState.stage
+                ? t('playback.workspace.hideStage')
+                : t('playback.workspace.showStage')
+            }
+            active={playbackPaneState.stage}
+            onClick={() => onTogglePlaybackPane('stage')}
+          />
+          <ToolbarButton
+            aria-controls="canvas-playback-route-pane"
+            aria-expanded={playbackPaneState.route}
+            data-creative-left-rail-action="toggle-playback-route-pane"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="playback-route"
+            icon={<LayersIcon size={18} />}
+            title={
+              playbackPaneState.route
+                ? t('playback.workspace.hideRoute')
+                : t('playback.workspace.showRoute')
+            }
+            active={playbackPaneState.route}
+            onClick={() => onTogglePlaybackPane('route')}
+          />
+        </>
+      ) : onRevealPlaybackWorkspace ? (
         <ToolbarButton
           data-creative-left-rail-action="reveal-playback-workspace"
           data-creative-left-rail-kind="common-action"
@@ -112,7 +168,7 @@ export function CanvasToolbar({
           title={t('toolbar.playbackWorkspace')}
           onClick={onRevealPlaybackWorkspace}
         />
-      )}
+      ) : null}
 
       {onOpenExport && (
         <ToolbarButton

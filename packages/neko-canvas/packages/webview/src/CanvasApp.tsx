@@ -251,6 +251,8 @@ export function CanvasApp() {
   const closeGenerationPanel = useCanvasStore((state) => state.closeGenerationPanel);
   const closeContentOverlay = useCanvasStore((state) => state.closeContentOverlay);
   const revealPlaybackWorkspace = usePlaybackStore((state) => state.revealPlaybackWorkspace);
+  const playbackSession = usePlaybackStore((state) => state.playbackSession);
+  const setPlaybackPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
   const viewport = useRuntimeViewportStore((state) => state.viewport);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
@@ -1429,6 +1431,30 @@ export function CanvasApp() {
     revealPlaybackWorkspace({ focusOwner: 'stage' });
     reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'));
   }, [reportAction, revealPlaybackWorkspace]);
+  const handleTogglePlaybackPane = useCallback(
+    (pane: 'canvas' | 'stage' | 'route') => {
+      const currentSession = usePlaybackStore.getState().playbackSession;
+      const nextVisible = !(currentSession.visible && currentSession.panes[pane]);
+      const nextPanePatch = currentSession.visible
+        ? { [pane]: nextVisible }
+        : {
+            canvas: false,
+            stage: false,
+            route: false,
+            [pane]: true,
+          };
+      revealPlaybackWorkspace({
+        focusOwner: pane,
+        panes: nextPanePatch,
+      });
+      setPlaybackPaneVisible(pane, nextVisible);
+      reportAction('togglePlaybackPane', t('toolbar.playbackWorkspace'), undefined, {
+        pane,
+        nextVisible,
+      });
+    },
+    [reportAction, revealPlaybackWorkspace, setPlaybackPaneVisible],
+  );
 
   // =========================================================================
   // Render
@@ -1463,6 +1489,12 @@ export function CanvasApp() {
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
             onRevealPlaybackWorkspace={handleRevealPlaybackWorkspace}
+            playbackPaneState={{
+              canvas: playbackSession.visible && playbackSession.panes.canvas,
+              stage: playbackSession.visible && playbackSession.panes.stage,
+              route: playbackSession.visible && playbackSession.panes.route,
+            }}
+            onTogglePlaybackPane={handleTogglePlaybackPane}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}

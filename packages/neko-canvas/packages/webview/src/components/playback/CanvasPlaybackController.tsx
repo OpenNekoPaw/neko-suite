@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from '@neko/ui/icons';
+import { SeekBar } from '@neko/ui/creative';
 import {
   createCanvasPlaybackPlan,
   resolveEffectiveCanvasPlaybackRoutes,
@@ -26,8 +27,11 @@ export interface CanvasPlaybackControllerProps {
   readonly routeUnitIds?: readonly string[];
   readonly activeUnitId?: string | null;
   readonly isPlaying?: boolean;
+  readonly currentTimeMs?: number;
+  readonly durationMs?: number;
   readonly onActiveUnitChange?: (unitId: string | undefined) => void;
   readonly onPlayingChange?: (isPlaying: boolean) => void;
+  readonly onSeek?: (playheadMs: number) => void;
   readonly onRouteChange?: (routeUnitIds: readonly string[]) => void;
 }
 
@@ -36,8 +40,11 @@ export function CanvasPlaybackController({
   routeUnitIds: controlledRouteUnitIds,
   activeUnitId: controlledActiveUnitId,
   isPlaying: controlledIsPlaying,
+  currentTimeMs,
+  durationMs,
   onActiveUnitChange,
   onPlayingChange,
+  onSeek,
   onRouteChange,
 }: CanvasPlaybackControllerProps = {}) {
   const canvasData = useCanvasStore((state) => state.canvasData);
@@ -65,10 +72,12 @@ export function CanvasPlaybackController({
   const planResetKey = `${plan?.adapterId ?? 'none'}:${plan?.entryUnitIds.join('|') ?? ''}`;
   const onActiveUnitChangeRef = useRef(onActiveUnitChange);
   const onPlayingChangeRef = useRef(onPlayingChange);
+  const onSeekRef = useRef(onSeek);
   const onRouteChangeRef = useRef(onRouteChange);
 
   onActiveUnitChangeRef.current = onActiveUnitChange;
   onPlayingChangeRef.current = onPlayingChange;
+  onSeekRef.current = onSeek;
   onRouteChangeRef.current = onRouteChange;
 
   useEffect(() => () => clearTimer(), []);
@@ -133,6 +142,10 @@ export function CanvasPlaybackController({
     if (!nextStep) return;
     commitRoute(nextStep.route);
     moveToUnit(nextStep.unitId);
+  }
+
+  function handleSeek(timeSeconds: number) {
+    onSeekRef.current?.(Math.round(timeSeconds * 1000));
   }
 
   function handleChoice(transition: CanvasPlaybackTransition) {
@@ -210,16 +223,15 @@ export function CanvasPlaybackController({
 
   return (
     <div
-      className="flex max-w-[360px] flex-col gap-1"
+      className="canvas-playback-controller"
       data-testid="canvas-playback-controller"
       data-playback-adapter={plan.adapterId}
       data-playback-mode={plan.behaviorMode}
     >
-      <div className="flex items-center gap-1">
+      <div className="canvas-playback-controller-row">
         <span
-          className="max-w-[130px] truncate px-2 text-[11px]"
+          className="canvas-playback-controller-label"
           title={`${plan.adapterId} · ${plan.behaviorMode}`}
-          style={{ color: 'var(--node-fg-secondary)' }}
         >
           {formatPlaybackLabel(plan)}
         </span>
@@ -244,22 +256,34 @@ export function CanvasPlaybackController({
         >
           <SkipForwardIcon size={14} />
         </ToolbarIconButton>
-        <span className="px-1 text-[11px]" style={{ color: 'var(--node-fg-secondary)' }}>
+        <span className="canvas-playback-controller-count">
           {state.currentIndex + 1}/{route.length}
         </span>
+        {durationMs !== undefined ? (
+          <span className="canvas-playback-controller-time">
+            {formatControllerTime((currentTimeMs ?? 0) / 1000)} /{' '}
+            {formatControllerTime(durationMs / 1000)}
+          </span>
+        ) : null}
       </div>
+      {durationMs !== undefined && onSeek ? (
+        <div className="canvas-playback-controller-seek">
+          <SeekBar
+            currentTime={(currentTimeMs ?? 0) / 1000}
+            duration={durationMs / 1000}
+            onSeeking={handleSeek}
+            onSeekCommit={handleSeek}
+            formatTooltip={formatControllerTime}
+          />
+        </div>
+      ) : null}
       {state.branchChoices.length > 1 ? (
-        <div className="flex flex-wrap gap-1" data-testid="canvas-playback-branches">
+        <div className="canvas-playback-controller-branches" data-testid="canvas-playback-branches">
           {state.branchChoices.map((choice) => (
             <button
               key={choice.id}
               type="button"
-              className="max-w-[150px] truncate rounded px-2 py-1 text-[11px]"
-              style={{
-                border: '1px solid var(--control-border)',
-                backgroundColor: 'var(--control-bg)',
-                color: 'var(--control-fg)',
-              }}
+              className="canvas-playback-controller-branch"
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => handleChoice(choice)}
               title={choice.label ?? t('toolbar.playbackContinue')}
@@ -415,16 +439,18 @@ function ToolbarIconButton({
       type="button"
       title={title}
       disabled={disabled}
-      className="flex h-7 w-7 items-center justify-center rounded disabled:opacity-45"
-      style={{
-        border: '1px solid var(--control-border)',
-        backgroundColor: 'var(--control-bg)',
-        color: 'var(--control-fg)',
-      }}
+      className="canvas-playback-controller-button"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={onClick}
     >
       {children}
     </button>
   );
+}
+
+function formatControllerTime(timeSeconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(timeSeconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }

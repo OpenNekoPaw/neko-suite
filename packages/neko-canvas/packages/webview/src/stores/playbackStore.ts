@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CanvasPlaybackDiagnostic, CanvasPlaybackUnitKind } from '@neko/shared';
 
 interface NodePlaybackState {
   currentTime: number;
@@ -11,10 +12,35 @@ export type PlaybackSurfaceKind = 'inline' | 'overlay';
 export type PlaybackWorkspacePane = 'canvas' | 'stage' | 'route';
 export type PlaybackWorkspaceFocusOwner = 'canvas' | 'stage' | 'route' | 'toolbar';
 export type PlaybackWorkspacePlaybackState = 'idle' | 'playing' | 'paused' | 'stale';
+export type PlaybackRouteViewMode = 'matrix' | 'compact';
+export type PlaybackMatrixFocusKind = 'row' | 'column' | 'cell';
 
 export interface PlaybackWorkspaceLayoutState {
   readonly stageWidthPx: number;
   readonly routeHeightPx: number;
+}
+
+export interface PlaybackMatrixFilters {
+  readonly routeFamilyId?: string;
+  readonly routeIds: readonly string[];
+  readonly containerIds: readonly string[];
+  readonly highlightedNodeKinds: readonly CanvasPlaybackUnitKind[];
+  readonly diagnosticSeverity?: CanvasPlaybackDiagnostic['severity'];
+  readonly generationStatuses: readonly string[];
+}
+
+export interface PlaybackMatrixFocus {
+  readonly kind: PlaybackMatrixFocusKind;
+  readonly id: string;
+}
+
+export interface PlaybackMatrixState {
+  readonly routeViewMode: PlaybackRouteViewMode;
+  readonly activeRouteFamilyId?: string;
+  readonly filters: PlaybackMatrixFilters;
+  readonly focus?: PlaybackMatrixFocus;
+  readonly foldedContainerIds: readonly string[];
+  readonly projectionKey?: string;
 }
 
 export interface PlaybackSessionState {
@@ -27,11 +53,18 @@ export interface PlaybackSessionState {
   readonly focusOwner: PlaybackWorkspaceFocusOwner;
   readonly playbackState: PlaybackWorkspacePlaybackState;
   readonly stale: boolean;
+  readonly matrix: PlaybackMatrixState;
+}
+
+export interface RevealPlaybackWorkspaceInput extends Partial<
+  Pick<PlaybackSessionState, 'routeId' | 'currentUnitId' | 'focusOwner'>
+> {
+  readonly panes?: Partial<Record<PlaybackWorkspacePane, boolean>>;
 }
 
 const PLAYBACK_WORKSPACE_LAYOUT_BOUNDS = {
   stageWidthPx: { min: 280, max: 760, defaultValue: 520 },
-  routeHeightPx: { min: 112, max: 320, defaultValue: 176 },
+  routeHeightPx: { min: 128, max: 440, defaultValue: 176 },
 } as const;
 
 const DEFAULT_PLAYBACK_SESSION: PlaybackSessionState = {
@@ -49,6 +82,16 @@ const DEFAULT_PLAYBACK_SESSION: PlaybackSessionState = {
   focusOwner: 'canvas',
   playbackState: 'idle',
   stale: false,
+  matrix: {
+    routeViewMode: 'matrix',
+    filters: {
+      routeIds: [],
+      containerIds: [],
+      highlightedNodeKinds: [],
+      generationStatuses: [],
+    },
+    foldedContainerIds: [],
+  },
 };
 
 export interface PlaybackHandoffRequest {
@@ -75,9 +118,7 @@ interface PlaybackStore {
   activePlayback: ActivePlaybackState | null;
   handoffRequest: PlaybackHandoffRequest | null;
   playbackSession: PlaybackSessionState;
-  revealPlaybackWorkspace: (
-    input?: Partial<Pick<PlaybackSessionState, 'routeId' | 'currentUnitId' | 'focusOwner'>>,
-  ) => void;
+  revealPlaybackWorkspace: (input?: RevealPlaybackWorkspaceInput) => void;
   hidePlaybackWorkspace: () => void;
   setPlaybackPaneVisible: (pane: PlaybackWorkspacePane, visible: boolean) => void;
   setPlaybackSessionRoute: (
@@ -90,6 +131,12 @@ interface PlaybackStore {
   setPlaybackWorkspacePlaybackState: (playbackState: PlaybackWorkspacePlaybackState) => void;
   setPlaybackWorkspaceLayout: (layout: Partial<PlaybackWorkspaceLayoutState>) => void;
   markPlaybackWorkspaceStale: (stale: boolean) => void;
+  setPlaybackRouteViewMode: (routeViewMode: PlaybackRouteViewMode) => void;
+  setPlaybackMatrixRouteFamily: (routeFamilyId: string | undefined) => void;
+  setPlaybackMatrixFilters: (filters: Partial<PlaybackMatrixFilters>) => void;
+  focusPlaybackMatrix: (focus: PlaybackMatrixFocus | undefined) => void;
+  togglePlaybackMatrixContainerFold: (containerId: string) => void;
+  reconcilePlaybackMatrixState: (input: ReconcilePlaybackMatrixStateInput) => void;
   savePlayback: (assetPath: string, state: Omit<NodePlaybackState, 'savedAt'>) => void;
   getPlayback: (assetPath: string) => NodePlaybackState | undefined;
   clearPlayback: (assetPath: string) => void;
@@ -104,6 +151,16 @@ interface PlaybackStore {
   stopActivePlayback: (assetPath: string, surfaceId: string, currentTime: number) => void;
   requestHandoff: (request: PlaybackHandoffRequest) => void;
   consumeHandoff: (assetPath: string, toKind: PlaybackSurfaceKind) => PlaybackHandoffRequest | null;
+}
+
+export interface ReconcilePlaybackMatrixStateInput {
+  readonly projectionKey: string;
+  readonly routeFamilyIds: readonly string[];
+  readonly routeIds: readonly string[];
+  readonly containerIds: readonly string[];
+  readonly rowIds?: readonly string[];
+  readonly columnIds?: readonly string[];
+  readonly cellIds?: readonly string[];
 }
 
 const STALE_TIMEOUT_MS = 60_000;
@@ -121,8 +178,7 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
         visible: true,
         panes: {
           ...prev.playbackSession.panes,
-          stage: true,
-          route: true,
+          ...(input.panes ?? { stage: true, route: true }),
         },
         ...(input.routeId !== undefined ? { routeId: input.routeId } : {}),
         ...(input.currentUnitId !== undefined ? { currentUnitId: input.currentUnitId } : {}),
@@ -232,6 +288,92 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
     }));
   },
 
+  setPlaybackRouteViewMode: (routeViewMode) => {
+    set((prev) => ({
+      playbackSession: {
+        ...prev.playbackSession,
+        matrix: {
+          ...prev.playbackSession.matrix,
+          routeViewMode,
+        },
+      },
+    }));
+  },
+
+  setPlaybackMatrixRouteFamily: (routeFamilyId) => {
+    set((prev) => ({
+      playbackSession: {
+        ...prev.playbackSession,
+        matrix: {
+          ...prev.playbackSession.matrix,
+          ...(routeFamilyId
+            ? { activeRouteFamilyId: routeFamilyId }
+            : { activeRouteFamilyId: undefined }),
+          filters: {
+            ...prev.playbackSession.matrix.filters,
+            ...(routeFamilyId ? { routeFamilyId } : { routeFamilyId: undefined }),
+          },
+        },
+      },
+    }));
+  },
+
+  setPlaybackMatrixFilters: (filters) => {
+    set((prev) => ({
+      playbackSession: {
+        ...prev.playbackSession,
+        matrix: {
+          ...prev.playbackSession.matrix,
+          filters: normalizePlaybackMatrixFilters({
+            ...prev.playbackSession.matrix.filters,
+            ...filters,
+          }),
+        },
+      },
+    }));
+  },
+
+  focusPlaybackMatrix: (focus) => {
+    set((prev) => ({
+      playbackSession: {
+        ...prev.playbackSession,
+        matrix: {
+          ...prev.playbackSession.matrix,
+          ...(focus ? { focus } : { focus: undefined }),
+        },
+      },
+    }));
+  },
+
+  togglePlaybackMatrixContainerFold: (containerId) => {
+    set((prev) => {
+      const folded = new Set(prev.playbackSession.matrix.foldedContainerIds);
+      if (folded.has(containerId)) {
+        folded.delete(containerId);
+      } else {
+        folded.add(containerId);
+      }
+      return {
+        playbackSession: {
+          ...prev.playbackSession,
+          matrix: {
+            ...prev.playbackSession.matrix,
+            foldedContainerIds: Array.from(folded).sort(),
+          },
+        },
+      };
+    });
+  },
+
+  reconcilePlaybackMatrixState: (input) => {
+    set((prev) => ({
+      playbackSession: {
+        ...prev.playbackSession,
+        matrix: reconcilePlaybackMatrixState(prev.playbackSession.matrix, input),
+      },
+    }));
+  },
+
   savePlayback: (assetPath, state) => {
     set((prev) => {
       const next = new Map(prev.playbacks);
@@ -336,6 +478,65 @@ function clampLayoutValue(
 ): number {
   if (!Number.isFinite(value)) return bounds.defaultValue;
   return Math.max(bounds.min, Math.min(bounds.max, Math.round(value)));
+}
+
+function normalizePlaybackMatrixFilters(filters: PlaybackMatrixFilters): PlaybackMatrixFilters {
+  return {
+    ...(filters.routeFamilyId ? { routeFamilyId: filters.routeFamilyId } : {}),
+    routeIds: dedupeStrings(filters.routeIds),
+    containerIds: dedupeStrings(filters.containerIds),
+    highlightedNodeKinds: dedupeStrings(filters.highlightedNodeKinds),
+    ...(filters.diagnosticSeverity ? { diagnosticSeverity: filters.diagnosticSeverity } : {}),
+    generationStatuses: dedupeStrings(filters.generationStatuses),
+  };
+}
+
+function reconcilePlaybackMatrixState(
+  state: PlaybackMatrixState,
+  input: ReconcilePlaybackMatrixStateInput,
+): PlaybackMatrixState {
+  const routeFamilyIds = new Set(input.routeFamilyIds);
+  const routeIds = new Set(input.routeIds);
+  const containerIds = new Set(input.containerIds);
+  const activeRouteFamilyId =
+    state.activeRouteFamilyId && routeFamilyIds.has(state.activeRouteFamilyId)
+      ? state.activeRouteFamilyId
+      : input.routeFamilyIds[0];
+  const filters = normalizePlaybackMatrixFilters({
+    ...state.filters,
+    ...(state.filters.routeFamilyId && routeFamilyIds.has(state.filters.routeFamilyId)
+      ? { routeFamilyId: state.filters.routeFamilyId }
+      : activeRouteFamilyId
+        ? { routeFamilyId: activeRouteFamilyId }
+        : { routeFamilyId: undefined }),
+    routeIds: state.filters.routeIds.filter((routeId) => routeIds.has(routeId)),
+    containerIds: state.filters.containerIds.filter((containerId) => containerIds.has(containerId)),
+  });
+  return {
+    ...state,
+    ...(activeRouteFamilyId ? { activeRouteFamilyId } : { activeRouteFamilyId: undefined }),
+    filters,
+    foldedContainerIds: state.foldedContainerIds.filter((containerId) =>
+      containerIds.has(containerId),
+    ),
+    focus: reconcilePlaybackMatrixFocus(state.focus, input),
+    projectionKey: input.projectionKey,
+  };
+}
+
+function reconcilePlaybackMatrixFocus(
+  focus: PlaybackMatrixFocus | undefined,
+  input: ReconcilePlaybackMatrixStateInput,
+): PlaybackMatrixFocus | undefined {
+  if (!focus) return undefined;
+  if (focus.kind === 'row' && (input.rowIds ?? []).includes(focus.id)) return focus;
+  if (focus.kind === 'column' && (input.columnIds ?? []).includes(focus.id)) return focus;
+  if (focus.kind === 'cell' && (input.cellIds ?? []).includes(focus.id)) return focus;
+  return undefined;
+}
+
+function dedupeStrings<T extends string>(values: readonly T[]): readonly T[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort();
 }
 
 function withSavedPlayback(

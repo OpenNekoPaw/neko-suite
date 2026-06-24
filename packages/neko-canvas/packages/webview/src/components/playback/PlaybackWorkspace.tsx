@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createCanvasPlaybackPlan,
   resolveEffectiveCanvasPlaybackRoutes,
@@ -17,13 +17,23 @@ import { ResizeHandle } from '@neko/ui/primitives';
 import { t } from '../../i18n';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { usePlaybackStore, type PlaybackWorkspacePane } from '../../stores/playbackStore';
+import { useRuntimeViewportStore } from '../../stores/runtimeViewportStore';
 import { PreviewSurface } from '../../preview/PreviewRendererRegistry';
 import type { PreviewSourceDescriptor } from '../../preview/types';
 import { CanvasPlaybackController } from './CanvasPlaybackController';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
+import { RouteStoryboardMatrix } from './RouteStoryboardMatrixView';
+import {
+  projectRouteStoryboardMatrix,
+  type RouteStoryboardMatrixFilters,
+  type RouteStoryboardMatrixPlayableCell,
+  type RouteStoryboardMatrixRow,
+  type RouteStoryboardMatrixSummaryCell,
+} from './routeStoryboardMatrix';
+import type { PlaybackRouteViewMode } from '../../stores/playbackStore';
 
 const PLAYBACK_STAGE_WIDTH_BOUNDS = { min: 280, max: 760 } as const;
-const PLAYBACK_ROUTE_HEIGHT_BOUNDS = { min: 112, max: 320 } as const;
+const PLAYBACK_ROUTE_HEIGHT_BOUNDS = { min: 128, max: 440 } as const;
 const HOST_PLAYBACK_PLAN_TIMEOUT_MS = 5_000;
 const DEFAULT_ROUTE_UNIT_DURATION_MS = 1200;
 const MAX_VISIBLE_ROUTE_TABS = 6;
@@ -34,10 +44,13 @@ export interface PlaybackWorkspaceProps {
 }
 
 export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspaceProps) {
+  const canvasPaneRef = useRef<HTMLDivElement | null>(null);
   const canvasData = useCanvasStore((state) => state.canvasData);
   const selectedNodeId = useCanvasStore((state) => state.selection.nodeIds[0]);
   const selectNode = useCanvasStore((state) => state.selectNode);
   const setActivePlayingNode = useCanvasStore((state) => state.setActivePlayingNode);
+  const viewportZoom = useRuntimeViewportStore((state) => state.viewport.zoom);
+  const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const session = usePlaybackStore((state) => state.playbackSession);
   const setPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
   const hideWorkspace = usePlaybackStore((state) => state.hidePlaybackWorkspace);
@@ -48,6 +61,13 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
   const setLayout = usePlaybackStore((state) => state.setPlaybackWorkspaceLayout);
   const markStale = usePlaybackStore((state) => state.markPlaybackWorkspaceStale);
   const savePlayback = usePlaybackStore((state) => state.savePlayback);
+  const setRouteViewMode = usePlaybackStore((state) => state.setPlaybackRouteViewMode);
+  const setMatrixRouteFamily = usePlaybackStore((state) => state.setPlaybackMatrixRouteFamily);
+  const focusMatrix = usePlaybackStore((state) => state.focusPlaybackMatrix);
+  const toggleMatrixContainerFold = usePlaybackStore(
+    (state) => state.togglePlaybackMatrixContainerFold,
+  );
+  const reconcileMatrixState = usePlaybackStore((state) => state.reconcilePlaybackMatrixState);
 
   const localPlan = useMemo(
     () =>
@@ -61,10 +81,53 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
     readonly stale: boolean;
     readonly error?: string;
   }>({ plan: null, stale: false });
+  const [matrixRuntimeDiagnostics, setMatrixRuntimeDiagnostics] = useState<readonly string[]>([]);
   const plan = hostPlanState.plan ?? localPlan;
   const routeResolution = useMemo(
     () => (plan ? resolveEffectiveCanvasPlaybackRoutes(plan) : null),
     [plan],
+  );
+  const matrixFilters = useMemo<RouteStoryboardMatrixFilters>(
+    () => ({
+      ...(session.matrix.filters.routeFamilyId
+        ? { routeFamilyId: session.matrix.filters.routeFamilyId }
+        : {}),
+      routeIds: session.matrix.filters.routeIds,
+      containerIds: session.matrix.filters.containerIds,
+      highlightedNodeKinds: session.matrix.filters.highlightedNodeKinds,
+      ...(session.matrix.filters.diagnosticSeverity
+        ? { diagnosticSeverity: session.matrix.filters.diagnosticSeverity }
+        : {}),
+      generationStatuses: session.matrix.filters.generationStatuses,
+    }),
+    [session.matrix.filters],
+  );
+  const routeMatrix = useMemo(
+    () =>
+      plan
+        ? projectRouteStoryboardMatrix({
+            plan,
+            canvas: canvasData ?? undefined,
+            routes: routeResolution?.routes,
+            selectedRouteId: session.routeId,
+            activeRouteFamilyId: session.matrix.activeRouteFamilyId,
+            foldedContainerIds: session.matrix.foldedContainerIds,
+            filters: matrixFilters,
+          })
+        : null,
+    [
+      canvasData,
+      matrixFilters,
+      plan,
+      routeResolution?.routes,
+      session.matrix.activeRouteFamilyId,
+      session.matrix.foldedContainerIds,
+      session.routeId,
+    ],
+  );
+  const routeMatrixProjectionKey = useMemo(
+    () => (routeMatrix && plan ? buildRouteMatrixProjectionKey(plan, routeMatrix) : undefined),
+    [plan, routeMatrix],
   );
   const unitById = useMemo(
     () => new Map((plan?.units ?? []).map((unit) => [unit.id, unit])),
@@ -80,6 +143,20 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
     (session.currentUnitId ? unitById.get(session.currentUnitId) : undefined) ??
     (selectedRoute?.unitIds[0] ? unitById.get(selectedRoute.unitIds[0]) : undefined);
   const routeUnitIds = selectedRoute?.unitIds ?? [];
+  const routeUnits = useMemo(
+    () =>
+      routeUnitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter((unit): unit is CanvasPlaybackUnit => Boolean(unit)),
+    [routeUnitIds, unitById],
+  );
+  const routeTimeSegments = useMemo(() => buildRouteTimeSegments(routeUnits), [routeUnits]);
+  const routeDurationMs = routeTimeSegments.at(-1)?.endMs ?? 0;
+  const absoluteRoutePlayheadMs = resolveAbsoluteRoutePlayheadMs(
+    routeTimeSegments,
+    currentUnit?.id ?? session.currentUnitId,
+    session.playheadMs,
+  );
   const stageResize = useResizable<HTMLDivElement>({
     edge: 'right',
     mode: 'pixel',
@@ -165,6 +242,7 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
       markStale(false);
     }
     setHostPlanState({ plan: null, stale: false });
+    setMatrixRuntimeDiagnostics([]);
   }, [canvasData, markStale]);
 
   useEffect(() => {
@@ -184,6 +262,30 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
       setCurrentUnit(selectedRoute.unitIds[0], 0);
     }
   }, [selectedRoute, session.currentUnitId, session.routeId, setCurrentUnit, setRoute]);
+
+  useEffect(() => {
+    if (!routeMatrix || !routeMatrixProjectionKey) return;
+    if (session.matrix.projectionKey === routeMatrixProjectionKey) return;
+    reconcileMatrixState({
+      projectionKey: routeMatrixProjectionKey,
+      routeFamilyIds: routeMatrix.families.map((family) => family.id),
+      routeIds: routeMatrix.rows.map((row) => row.routeId),
+      containerIds: routeMatrix.containerGroups.map((container) => container.id),
+      rowIds: routeMatrix.rows.map((row) => row.id),
+      columnIds: routeMatrix.columns.map((column) => column.id),
+      cellIds: routeMatrix.rows.flatMap((row) => row.cells.map((cell) => cell.id)),
+    });
+  }, [reconcileMatrixState, routeMatrix, routeMatrixProjectionKey, session.matrix.projectionKey]);
+
+  useEffect(() => {
+    setMatrixRuntimeDiagnostics([]);
+  }, [routeMatrixProjectionKey]);
+
+  useEffect(() => {
+    if (!hostPlanState.stale && !session.stale && routeResolution) {
+      setMatrixRuntimeDiagnostics([]);
+    }
+  }, [hostPlanState.stale, routeResolution, session.stale]);
 
   useEffect(() => {
     if (!session.visible && session.playbackState === 'playing') {
@@ -219,21 +321,23 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
     title: routeResizeLabel,
   };
 
-  const selectPlaybackUnit = (unitId: string | undefined, playheadMs = 0) => {
+  const selectPlaybackUnit = (
+    unitId: string | undefined,
+    playheadMs = 0,
+    routeId = selectedRoute?.id,
+  ) => {
     if (!unitId) return;
     const unit = unitById.get(unitId);
-    if (
-      selectedRoute &&
-      selectedRoute.unitIds.includes(unitId) &&
-      session.routeId !== selectedRoute.id
-    ) {
-      setRoute(selectedRoute.id, unitId, playheadMs);
+    const targetRoute = routeId && routeResolution?.routes.find((route) => route.id === routeId);
+    if (targetRoute && targetRoute.unitIds.includes(unitId)) {
+      setRoute(targetRoute.id, unitId, playheadMs);
     } else {
       setCurrentUnit(unitId, playheadMs);
     }
     if (!unit) return;
     setActivePlayingNode(unit.sourceNodeId);
     selectNode(unit.sourceNodeId);
+    revealCanvasSourceNode(unit.sourceNodeId);
     if (unit.assetPath) {
       savePlayback(unit.assetPath, {
         currentTime: playheadMs / 1000,
@@ -241,6 +345,66 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
         wasPlaying: false,
       });
     }
+  };
+  const selectPlaybackTime = (targetMs: number) => {
+    const segment = resolveRouteTimeSegment(routeTimeSegments, targetMs);
+    if (!segment) return;
+    selectPlaybackUnit(
+      segment.unit.id,
+      clampNumber(targetMs - segment.startMs, 0, segment.durationMs),
+    );
+  };
+  const selectMatrixRow = (row: RouteStoryboardMatrixRow) => {
+    setRoute(row.routeId, row.unitIds[0]);
+    selectPlaybackUnit(row.unitIds[0], 0, row.routeId);
+  };
+  const selectMatrixCell = (cell: RouteStoryboardMatrixPlayableCell) => {
+    focusMatrix({ kind: 'cell', id: cell.id });
+    selectPlaybackUnit(cell.unitId, 0, cell.routeId);
+  };
+  const selectMatrixSummaryCell = (cell: RouteStoryboardMatrixSummaryCell) => {
+    focusMatrix({ kind: 'cell', id: cell.id });
+    if (!cell.containerNodeId) return;
+    selectNode(cell.containerNodeId);
+    revealCanvasSourceNode(cell.containerNodeId);
+  };
+  const revealCanvasSourceNode = (sourceNodeId: string) => {
+    const target = canvasData?.nodes.find((node) => node.id === sourceNodeId);
+    if (!target) return;
+    const pane = canvasPaneRef.current ?? document.getElementById('canvas-playback-canvas-pane');
+    if (!(pane instanceof HTMLElement)) return;
+    const rect = pane.getBoundingClientRect();
+    const width = rect.width > 0 ? rect.width : pane.clientWidth;
+    const height = rect.height > 0 ? rect.height : pane.clientHeight;
+    if (width <= 0 || height <= 0) return;
+
+    const centerX = target.position.x + target.size.width / 2;
+    const centerY = target.position.y + target.size.height / 2;
+    setViewport({
+      pan: {
+        x: width / 2 - centerX * viewportZoom,
+        y: height / 2 - centerY * viewportZoom,
+      },
+    });
+  };
+  const sendMatrixRouteToCut = (row: RouteStoryboardMatrixRow) => {
+    const vscode = getGlobalVSCodeApi();
+    if (!vscode || !plan) return;
+    if (hostPlanState.stale || session.stale) {
+      setMatrixRuntimeDiagnostics([t('playback.matrix.cutDraftStale')]);
+      return;
+    }
+    if (!routeResolution?.routes.some((route) => route.id === row.routeId)) {
+      setMatrixRuntimeDiagnostics([t('playback.matrix.cutDraftMissingRoute')]);
+      return;
+    }
+    setMatrixRuntimeDiagnostics([]);
+    vscode.postMessage({
+      type: 'playback:createCutDraftFromRoute',
+      _requestId: Date.now(),
+      routeId: row.routeId,
+      sourceRevision: readFiniteNumber(plan.metadata['sourceRevision']),
+    });
   };
 
   return (
@@ -266,6 +430,8 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
       >
         {canvasVisible ? (
           <div
+            id="canvas-playback-canvas-pane"
+            ref={canvasPaneRef}
             className="canvas-playback-canvas-pane"
             data-testid="canvas-playback-canvas-pane"
             {...getKeyboardBoundaryMetadata({
@@ -281,6 +447,7 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
 
         {stageVisible ? (
           <div
+            id="canvas-playback-stage-pane"
             ref={stageResize.containerRef}
             className="canvas-playback-stage-pane"
             data-testid="canvas-playback-stage-pane"
@@ -319,10 +486,13 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
               routeUnitIds={routeUnitIds}
               activeUnitId={currentUnit?.id ?? session.currentUnitId ?? null}
               isPlaying={session.playbackState === 'playing'}
+              currentTimeMs={absoluteRoutePlayheadMs}
+              durationMs={routeDurationMs}
               onActiveUnitChange={(unitId) => {
                 selectPlaybackUnit(unitId, 0);
               }}
               onPlayingChange={(playing) => setPlaybackState(playing ? 'playing' : 'paused')}
+              onSeek={selectPlaybackTime}
             />
           </div>
         ) : null}
@@ -330,6 +500,7 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
 
       {routeVisible ? (
         <div
+          id="canvas-playback-route-pane"
           ref={routeResize.containerRef}
           className="canvas-playback-route-pane"
           data-testid="canvas-playback-route-pane"
@@ -340,20 +511,47 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
             handleProps={routeResizeHandleProps}
             className="canvas-playback-route-resize-handle"
           />
-          <PlaybackRouteStrip
-            routes={routeResolution?.routes ?? []}
-            diagnostics={routeResolution?.diagnostics ?? []}
-            unitById={unitById}
-            selectedRouteId={selectedRoute?.id}
-            currentUnitId={currentUnit?.id ?? session.currentUnitId}
-            currentPlayheadMs={session.playheadMs}
-            onSelectRoute={(route) => {
-              setRoute(route.id, route.unitIds[0]);
-              selectPlaybackUnit(route.unitIds[0], 0);
-            }}
-            onSelectUnit={selectPlaybackUnit}
-            onFocus={() => setFocusOwner('route')}
+          <PlaybackRoutePaneToolbar
+            routeViewMode={session.matrix.routeViewMode}
+            onRouteViewModeChange={setRouteViewMode}
           />
+          {session.matrix.routeViewMode === 'compact' || !routeMatrix ? (
+            <PlaybackRouteStrip
+              routes={routeResolution?.routes ?? []}
+              diagnostics={routeResolution?.diagnostics ?? []}
+              unitById={unitById}
+              selectedRouteId={selectedRoute?.id}
+              currentUnitId={currentUnit?.id ?? session.currentUnitId}
+              currentPlayheadMs={session.playheadMs}
+              panelHeightPx={routeResize.size}
+              onSelectRoute={(route) => {
+                setRoute(route.id, route.unitIds[0]);
+                selectPlaybackUnit(route.unitIds[0], 0, route.id);
+              }}
+              onSelectUnit={selectPlaybackUnit}
+              onFocus={() => setFocusOwner('route')}
+            />
+          ) : (
+            <RouteStoryboardMatrix
+              matrix={routeMatrix}
+              selectedRouteId={selectedRoute?.id}
+              currentUnitId={currentUnit?.id ?? session.currentUnitId}
+              focusedCellId={
+                session.matrix.focus?.kind === 'cell' ? session.matrix.focus.id : undefined
+              }
+              runtimeDiagnostics={matrixRuntimeDiagnostics}
+              onSelectRoute={selectMatrixRow}
+              onSelectCell={selectMatrixCell}
+              onSelectSummaryCell={selectMatrixSummaryCell}
+              onFocusCell={(cell) => focusMatrix({ kind: 'cell', id: cell.id })}
+              onClearFocus={() => focusMatrix(undefined)}
+              onSelectColumn={(columnId) => focusMatrix({ kind: 'column', id: columnId })}
+              onSelectFamily={(family) => setMatrixRouteFamily(family.id)}
+              onToggleContainerFold={(container) => toggleMatrixContainerFold(container.id)}
+              onSendToCut={sendMatrixRouteToCut}
+              onFocus={() => setFocusOwner('route')}
+            />
+          )}
         </div>
       ) : null}
     </section>
@@ -410,6 +608,53 @@ function PlaybackWorkspaceHeader({
         <PlaybackIconButton title={t('playback.workspace.close')} onClick={onHideWorkspace}>
           <CloseIcon size={15} />
         </PlaybackIconButton>
+      </div>
+    </div>
+  );
+}
+
+function PlaybackRoutePaneToolbar({
+  routeViewMode,
+  onRouteViewModeChange,
+}: {
+  readonly routeViewMode: PlaybackRouteViewMode;
+  readonly onRouteViewModeChange: (mode: PlaybackRouteViewMode) => void;
+}) {
+  return (
+    <div className="canvas-playback-route-pane-toolbar">
+      <div className="canvas-playback-route-pane-toolbar-title">{t('playback.route.title')}</div>
+      <div className="canvas-playback-route-pane-toolbar-actions">
+        <div className="canvas-playback-route-view-toggle" role="group">
+          <button
+            type="button"
+            className="canvas-playback-route-view-button"
+            data-active={routeViewMode === 'matrix' ? 'true' : 'false'}
+            title={t('playback.matrix.modeMatrix')}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => onRouteViewModeChange('matrix')}
+          >
+            {t('playback.matrix.modeMatrixShort')}
+          </button>
+          <button
+            type="button"
+            className="canvas-playback-route-view-button"
+            data-active={routeViewMode === 'compact' ? 'true' : 'false'}
+            title={t('playback.matrix.modeCompact')}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => onRouteViewModeChange('compact')}
+          >
+            {t('playback.matrix.modeCompactShort')}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="canvas-playback-route-edit-gate"
+          title={t('playback.matrix.editDisabled')}
+          disabled
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {t('playback.matrix.previewOnly')}
+        </button>
       </div>
     </div>
   );
@@ -482,6 +727,7 @@ function PlaybackRouteStrip({
   selectedRouteId,
   currentUnitId,
   currentPlayheadMs,
+  panelHeightPx,
   onSelectRoute,
   onSelectUnit,
   onFocus,
@@ -492,6 +738,7 @@ function PlaybackRouteStrip({
   readonly selectedRouteId: string | undefined;
   readonly currentUnitId: string | undefined;
   readonly currentPlayheadMs: number;
+  readonly panelHeightPx: number;
   readonly onSelectRoute: (route: CanvasPlaybackRouteCandidate) => void;
   readonly onSelectUnit: (unitId: string, playheadMs?: number) => void;
   readonly onFocus: () => void;
@@ -510,6 +757,7 @@ function PlaybackRouteStrip({
     totalDurationMs > 0 ? clampNumber((absolutePlayheadMs / totalDurationMs) * 100, 0, 100) : 0;
   const visibleRoutes = routes.slice(0, MAX_VISIBLE_ROUTE_TABS);
   const hiddenRouteCount = Math.max(0, routes.length - visibleRoutes.length);
+  const density = panelHeightPx >= 240 ? 'expanded' : 'compact';
 
   function seekRoute(event: React.PointerEvent<HTMLDivElement>) {
     if (segments.length === 0 || totalDurationMs <= 0) return;
@@ -527,6 +775,8 @@ function PlaybackRouteStrip({
     <div
       className="canvas-playback-route-strip"
       data-testid="canvas-playback-route-strip"
+      data-density={density}
+      data-route-count={routes.length}
       {...getKeyboardBoundaryMetadata({
         scope: 'media-preview',
         ownerId: 'canvas-playback-route-strip',
@@ -562,113 +812,109 @@ function PlaybackRouteStrip({
         </div>
       </div>
 
-      <div
-        className="canvas-playback-route-time-ruler"
-        data-testid="canvas-playback-route-time-ruler"
-        role="slider"
-        aria-label={t('playback.route.seek')}
-        aria-valuemin={0}
-        aria-valuemax={Math.round(totalDurationMs)}
-        aria-valuenow={Math.round(absolutePlayheadMs)}
-        tabIndex={0}
-        title={t('playback.route.seek')}
-        onPointerDown={(event) => {
-          capturePointerSafely(event.currentTarget, event.pointerId);
-          seekRoute(event);
-        }}
-        onPointerMove={(event) => {
-          if (event.buttons !== 1) return;
-          seekRoute(event);
-        }}
-        onKeyDown={(event) => {
-          if (segments.length === 0) return;
-          const stepMs = event.shiftKey ? 1000 : 250;
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-            event.preventDefault();
-            const direction = event.key === 'ArrowRight' ? 1 : -1;
-            const targetMs = clampNumber(
-              absolutePlayheadMs + direction * stepMs,
-              0,
-              totalDurationMs,
-            );
-            const segment =
-              segments.find(
-                (candidate) => targetMs >= candidate.startMs && targetMs < candidate.endMs,
-              ) ?? segments[segments.length - 1];
-            if (segment) {
-              onSelectUnit(
-                segment.unit.id,
-                clampNumber(targetMs - segment.startMs, 0, segment.durationMs),
-              );
-            }
-          }
-        }}
-      >
-        <div className="canvas-playback-route-time-track">
-          {segments.map((segment, index) => {
-            const active = segment.unit.id === currentUnitId;
-            return (
-              <button
-                key={`${segment.unit.id}:${index}:time`}
-                type="button"
-                className="canvas-playback-route-time-segment"
-                data-active={active ? 'true' : 'false'}
-                style={{
-                  flexGrow: segment.durationMs,
-                }}
-                title={segment.unit.label ?? segment.unit.id}
-                onMouseDown={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectUnit(segment.unit.id, 0);
-                }}
-              >
-                <span className="canvas-playback-route-time-segment-label">
-                  {segment.unit.label ?? segment.unit.id}
-                </span>
-                <span className="canvas-playback-route-time-segment-duration">
-                  {formatDurationMs(segment.durationMs)}
-                </span>
-              </button>
-            );
-          })}
+      <div className="canvas-playback-route-timeline">
+        <div className="canvas-playback-route-track-label">
+          <span className="canvas-playback-route-track-label-title">
+            {selectedRoute?.title ?? t('playback.route.title')}
+          </span>
+          <span className="canvas-playback-route-track-label-meta">
+            {segments.length} · {formatDurationMs(totalDurationMs)}
+          </span>
         </div>
         <div
-          className="canvas-playback-route-time-playhead"
-          style={{ left: `${activeProgress}%` }}
-        />
-      </div>
-
-      <div className="canvas-playback-route-time-meta">
-        <span>{formatDurationMs(absolutePlayheadMs)}</span>
-        <span>{formatDurationMs(totalDurationMs)}</span>
-      </div>
-
-      <div className="canvas-playback-route-units" role="list">
-        {segments.map((segment, index) => {
-          const active = segment.unit.id === currentUnitId;
-          return (
-            <button
-              key={`${segment.unit.id}:${index}`}
-              type="button"
-              className="canvas-playback-route-unit"
-              data-active={active ? 'true' : 'false'}
-              role="listitem"
-              title={segment.unit.label ?? segment.unit.id}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => onSelectUnit(segment.unit.id, 0)}
-            >
-              <span className="canvas-playback-route-unit-index">{index + 1}</span>
-              <span className="canvas-playback-route-unit-label">
-                {segment.unit.label ?? segment.unit.id}
+          className="canvas-playback-route-time-ruler"
+          data-testid="canvas-playback-route-time-ruler"
+          role="slider"
+          aria-label={t('playback.route.seek')}
+          aria-valuemin={0}
+          aria-valuemax={Math.round(totalDurationMs)}
+          aria-valuenow={Math.round(absolutePlayheadMs)}
+          tabIndex={0}
+          title={t('playback.route.seek')}
+          onPointerDown={(event) => {
+            capturePointerSafely(event.currentTarget, event.pointerId);
+            seekRoute(event);
+          }}
+          onPointerMove={(event) => {
+            if (event.buttons !== 1) return;
+            seekRoute(event);
+          }}
+          onKeyDown={(event) => {
+            if (segments.length === 0) return;
+            const stepMs = event.shiftKey ? 1000 : 250;
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault();
+              const direction = event.key === 'ArrowRight' ? 1 : -1;
+              const targetMs = clampNumber(
+                absolutePlayheadMs + direction * stepMs,
+                0,
+                totalDurationMs,
+              );
+              const segment =
+                segments.find(
+                  (candidate) => targetMs >= candidate.startMs && targetMs < candidate.endMs,
+                ) ?? segments[segments.length - 1];
+              if (segment) {
+                onSelectUnit(
+                  segment.unit.id,
+                  clampNumber(targetMs - segment.startMs, 0, segment.durationMs),
+                );
+              }
+            }
+          }}
+        >
+          <div className="canvas-playback-route-ruler-scale" aria-hidden="true">
+            {buildRouteTimeTicks(totalDurationMs).map((tick) => (
+              <span
+                key={`${tick.timeMs}:${tick.major ? 'major' : 'minor'}`}
+                className="canvas-playback-route-ruler-tick"
+                data-major={tick.major ? 'true' : 'false'}
+                style={{ left: `${tick.leftPercent}%` }}
+              >
+                {tick.major ? (
+                  <span className="canvas-playback-route-ruler-label">
+                    {formatDurationMs(tick.timeMs)}
+                  </span>
+                ) : null}
               </span>
-              <span className="canvas-playback-route-unit-kind">
-                {formatUnitKind(segment.unit)}
-              </span>
-            </button>
-          );
-        })}
+            ))}
+          </div>
+          <div className="canvas-playback-route-time-track" role="list">
+            {segments.map((segment, index) => {
+              const active = segment.unit.id === currentUnitId;
+              return (
+                <button
+                  key={`${segment.unit.id}:${index}:time`}
+                  type="button"
+                  className="canvas-playback-route-time-segment"
+                  data-active={active ? 'true' : 'false'}
+                  role="listitem"
+                  style={{
+                    flexGrow: segment.durationMs,
+                  }}
+                  title={segment.unit.label ?? segment.unit.id}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectUnit(segment.unit.id, 0);
+                  }}
+                >
+                  <span className="canvas-playback-route-time-segment-label">
+                    {segment.unit.label ?? segment.unit.id}
+                  </span>
+                  <span className="canvas-playback-route-time-segment-duration">
+                    {formatDurationMs(segment.durationMs)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div
+            className="canvas-playback-route-time-playhead"
+            style={{ left: `${activeProgress}%` }}
+          />
+        </div>
       </div>
 
       {diagnostics.length > 0 ? (
@@ -690,6 +936,12 @@ interface RouteTimeSegment {
   readonly durationMs: number;
 }
 
+interface RouteTimeTick {
+  readonly timeMs: number;
+  readonly leftPercent: number;
+  readonly major: boolean;
+}
+
 function buildRouteTimeSegments(units: readonly CanvasPlaybackUnit[]): readonly RouteTimeSegment[] {
   let cursor = 0;
   return units.map((unit) => {
@@ -703,6 +955,48 @@ function buildRouteTimeSegments(units: readonly CanvasPlaybackUnit[]): readonly 
     cursor += durationMs;
     return segment;
   });
+}
+
+function buildRouteTimeTicks(totalDurationMs: number): readonly RouteTimeTick[] {
+  if (totalDurationMs <= 0) return [];
+  const totalSeconds = totalDurationMs / 1000;
+  const intervalSeconds =
+    totalSeconds <= 15 ? 1 : totalSeconds <= 60 ? 5 : totalSeconds <= 180 ? 10 : 30;
+  const ticks: RouteTimeTick[] = [];
+  const tickCount = Math.floor(totalSeconds / intervalSeconds);
+  for (let index = 0; index <= tickCount; index += 1) {
+    const timeMs = Math.round(index * intervalSeconds * 1000);
+    ticks.push({
+      timeMs,
+      leftPercent: clampNumber((timeMs / totalDurationMs) * 100, 0, 100),
+      major: index % 2 === 0,
+    });
+  }
+  if (ticks[ticks.length - 1]?.timeMs !== Math.round(totalDurationMs)) {
+    ticks.push({ timeMs: Math.round(totalDurationMs), leftPercent: 100, major: true });
+  }
+  return ticks;
+}
+
+function resolveAbsoluteRoutePlayheadMs(
+  segments: readonly RouteTimeSegment[],
+  unitId: string | undefined,
+  unitPlayheadMs: number,
+): number {
+  const currentSegment = segments.find((segment) => segment.unit.id === unitId);
+  if (!currentSegment) return 0;
+  return currentSegment.startMs + clampNumber(unitPlayheadMs, 0, currentSegment.durationMs);
+}
+
+function resolveRouteTimeSegment(
+  segments: readonly RouteTimeSegment[],
+  targetMs: number,
+): RouteTimeSegment | undefined {
+  if (segments.length === 0) return undefined;
+  return (
+    segments.find((candidate) => targetMs >= candidate.startMs && targetMs < candidate.endMs) ??
+    segments[segments.length - 1]
+  );
 }
 
 function resolveRouteUnitDurationMs(unit: CanvasPlaybackUnit): number {
@@ -769,6 +1063,7 @@ function PlaybackIconButton({
       type="button"
       className="canvas-playback-icon-button"
       data-active={active ? 'true' : 'false'}
+      aria-pressed={active === undefined ? undefined : active}
       title={title}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={onClick}
@@ -895,4 +1190,23 @@ function readString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildRouteMatrixProjectionKey(
+  plan: CanvasPlaybackPlan,
+  matrix: NonNullable<ReturnType<typeof projectRouteStoryboardMatrix>>,
+): string {
+  const revision = readFiniteNumber(plan.metadata['sourceRevision']) ?? 'local';
+  return [
+    revision,
+    plan.adapterId,
+    plan.behaviorMode,
+    matrix.activeRouteFamilyId ?? 'none',
+    matrix.rows.map((row) => row.routeId).join('|'),
+    matrix.columns.map((column) => column.id).join('|'),
+  ].join(':');
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

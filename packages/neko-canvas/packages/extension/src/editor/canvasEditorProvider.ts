@@ -80,6 +80,7 @@ import {
 } from '@neko/shared';
 import type {
   CanvasCutDraftPayload,
+  CutCanvasDraftImportResult,
   CanvasPlaybackPlan,
   CanvasPlaybackRouteCandidate,
   CanvasPlaybackUnit,
@@ -2585,6 +2586,56 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           sourceRevision: currentRevision,
           ...(plan ? { plan } : { error: 'Canvas playback plan is unavailable.' }),
         });
+        break;
+      }
+      case 'playback:createCutDraftFromRoute': {
+        const requestId =
+          typeof message._requestId === 'number' && Number.isFinite(message._requestId)
+            ? message._requestId
+            : undefined;
+        try {
+          const routeId = typeof message.routeId === 'string' ? message.routeId : undefined;
+          const documentUri = document.uri.toString();
+          const requestedRevision =
+            typeof message.sourceRevision === 'number' && Number.isFinite(message.sourceRevision)
+              ? message.sourceRevision
+              : undefined;
+          const currentRevision = this.getCanvasRevision(documentUri);
+          if (requestedRevision !== undefined && requestedRevision < currentRevision) {
+            throw new Error(
+              'Canvas playback route matrix is stale; refresh before sending to Cut.',
+            );
+          }
+          const draft = this.createCutDraftFromRoute({
+            sourceCanvasUri: documentUri,
+            ...(routeId ? { routeId } : {}),
+          });
+          const importResult = await vscode.commands.executeCommand<CutCanvasDraftImportResult>(
+            'neko.cut.importCanvasDraft',
+            draft,
+          );
+          if (!importResult) {
+            throw new Error('neko.cut.importCanvasDraft did not return an import result.');
+          }
+          if (requestId !== undefined) {
+            await webviewPanel.webview.postMessage({
+              type: '_response',
+              _requestId: requestId,
+              draft,
+              importResult,
+            });
+          }
+        } catch (error) {
+          if (requestId !== undefined) {
+            await webviewPanel.webview.postMessage({
+              type: '_response',
+              _requestId: requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          } else {
+            vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+          }
+        }
         break;
       }
       case 'save': {
