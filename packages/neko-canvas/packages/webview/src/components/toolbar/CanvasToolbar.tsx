@@ -39,8 +39,8 @@ export interface CanvasToolbarProps {
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
-  /** Opens the Extension Host-owned Narrative Preview panel */
-  onOpenNarrativePreview?: () => void;
+  /** Reveals the same-Webview playback workspace. */
+  onRevealPlaybackWorkspace?: () => void;
   /** Opens the Extension Host-owned rendered export picker */
   onOpenExport?: () => void;
   /** Opens the Extension Host-owned no-engine project package flow */
@@ -62,7 +62,7 @@ export function CanvasToolbar({
   onRedo,
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
-  onOpenNarrativePreview,
+  onRevealPlaybackWorkspace,
   onOpenExport,
   onOpenPackage,
   isHudVisible = true,
@@ -104,13 +104,13 @@ export function CanvasToolbar({
         onClick={onTogglePanMode}
       />
 
-      {onOpenNarrativePreview && (
+      {onRevealPlaybackWorkspace && (
         <ToolbarButton
-          data-creative-left-rail-action="open-narrative-preview"
+          data-creative-left-rail-action="reveal-playback-workspace"
           data-creative-left-rail-kind="common-action"
           icon={<PlayIcon size={18} />}
-          title={t('toolbar.narrativePreview')}
-          onClick={onOpenNarrativePreview}
+          title={t('toolbar.playbackWorkspace')}
+          onClick={onRevealPlaybackWorkspace}
         />
       )}
 

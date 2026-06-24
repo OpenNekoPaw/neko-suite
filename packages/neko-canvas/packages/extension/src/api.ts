@@ -8,6 +8,7 @@ import type {
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
+  CanvasCutDraftPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasCreativeScope,
@@ -20,6 +21,12 @@ import type {
   CanvasChangeEvent as SharedCanvasChangeEvent,
   CanvasNode,
   CanvasNodeType,
+  CanvasPlaybackCreateCutDraftRequest,
+  CanvasPlaybackPlan,
+  CanvasPlaybackRevealWorkspaceRequest,
+  CanvasPlaybackReorderUnitsRequest,
+  CanvasPlaybackReorderUnitsResult,
+  CanvasPlaybackRouteCandidate,
   CanvasStoryboardExecutionSummary,
   CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
@@ -171,6 +178,21 @@ export interface NekoCanvasAPI {
     getExecutionSummary(
       request?: CanvasStoryboardExecutionSummaryRequest,
     ): Promise<CanvasStoryboardExecutionSummary>;
+  };
+
+  /**
+   * Playback route operations — derived from Canvas graph state, not Agent-owned order.
+   */
+  playback: {
+    getPlan(sourceCanvasUri?: string): Promise<CanvasPlaybackPlan>;
+    getRoutes(sourceCanvasUri?: string): Promise<readonly CanvasPlaybackRouteCandidate[]>;
+    revealWorkspace(request?: CanvasPlaybackRevealWorkspaceRequest): Promise<boolean>;
+    createCutDraftFromRoute(
+      request?: CanvasPlaybackCreateCutDraftRequest,
+    ): Promise<CanvasCutDraftPayload>;
+    reorderUnits(
+      request: CanvasPlaybackReorderUnitsRequest,
+    ): Promise<CanvasPlaybackReorderUnitsResult>;
   };
 
   /**

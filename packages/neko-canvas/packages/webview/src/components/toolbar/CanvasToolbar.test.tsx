@@ -106,8 +106,8 @@ describe('CanvasToolbar', () => {
     expect(collapsedButton?.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('opens separate Extension Host-owned preview, export, and package flows', () => {
-    const onOpenNarrativePreview = vi.fn();
+  it('reveals the playback workspace and opens export/package flows', () => {
+    const onRevealPlaybackWorkspace = vi.fn();
     const onOpenExport = vi.fn();
     const onOpenPackage = vi.fn();
 
@@ -116,7 +116,7 @@ describe('CanvasToolbar', () => {
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          onOpenNarrativePreview={onOpenNarrativePreview}
+          onRevealPlaybackWorkspace={onRevealPlaybackWorkspace}
           onOpenExport={onOpenExport}
           onOpenPackage={onOpenPackage}
         />,
@@ -124,7 +124,7 @@ describe('CanvasToolbar', () => {
     });
 
     const previewButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="open-narrative-preview"]',
+      '[data-creative-left-rail-action="reveal-playback-workspace"]',
     );
     const exportButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-export"]',
@@ -132,7 +132,7 @@ describe('CanvasToolbar', () => {
     const packageButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-package"]',
     );
-    expect(previewButton?.getAttribute('aria-label')).toBe('Narrative Preview');
+    expect(previewButton?.getAttribute('aria-label')).toBe('Playback Workspace');
     expect(previewButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
     expect(previewButton?.querySelector('[data-icon="play"]')).not.toBeNull();
     expect(exportButton?.getAttribute('aria-label')).toBe('Export');
@@ -147,7 +147,7 @@ describe('CanvasToolbar', () => {
       exportButton?.click();
       packageButton?.click();
     });
-    expect(onOpenNarrativePreview).toHaveBeenCalledTimes(1);
+    expect(onRevealPlaybackWorkspace).toHaveBeenCalledTimes(1);
     expect(onOpenExport).toHaveBeenCalledTimes(1);
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });

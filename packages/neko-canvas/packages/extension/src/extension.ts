@@ -274,6 +274,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       },
       getExecutionSummary: (request) => canvasEditorProvider.getStoryboardExecutionSummary(request),
     },
+    playback: {
+      getPlan: async (sourceCanvasUri) => canvasEditorProvider.getPlaybackPlan(sourceCanvasUri),
+      getRoutes: async (sourceCanvasUri) => canvasEditorProvider.getPlaybackRoutes(sourceCanvasUri),
+      revealWorkspace: (request) => canvasEditorProvider.revealPlaybackWorkspace(request),
+      createCutDraftFromRoute: async (request) =>
+        canvasEditorProvider.createCutDraftFromRoute(request),
+      reorderUnits: (request) => canvasEditorProvider.reorderPlaybackUnits(request),
+    },
     nodes: {
       list: (type) => canvasEditorProvider.listNodes(type),
       get: (nodeId) => canvasEditorProvider.getNode(nodeId),
@@ -583,22 +591,27 @@ function registerCommands(
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.canvas.openNarrativePreview', async () => {
+    vscode.commands.registerCommand('neko.canvas.revealPlaybackWorkspace', async () => {
       if (!getNarrativePreviewFeatureToggles().preview) {
-        await handleError(new Error('Narrative Preview is disabled by configuration.'), {
+        await handleError(new Error('Canvas Playback Workspace is disabled by configuration.'), {
           showToUser: true,
           severity: 'warning',
         });
         return;
       }
 
-      const opened = await canvasEditorProvider.openNarrativePreview();
-      if (!opened) {
-        await handleError(new Error('Open a Canvas narrative graph before opening Preview.'), {
+      const revealed = await canvasEditorProvider.revealPlaybackWorkspace();
+      if (!revealed) {
+        await handleError(new Error('Open a Canvas editor before revealing Playback Workspace.'), {
           showToUser: true,
           severity: 'warning',
         });
       }
+    }),
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.canvas.openNarrativePreview', async () => {
+      await vscode.commands.executeCommand('neko.canvas.revealPlaybackWorkspace');
     }),
   );
   context.subscriptions.push(

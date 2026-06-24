@@ -1,0 +1,442 @@
+// @vitest-environment jsdom
+
+import React from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanvasData, CanvasNode } from '@neko/shared';
+import { resetVSCodeApi } from '@neko/shared/vscode';
+import { PlaybackWorkspace } from './PlaybackWorkspace';
+import { useCanvasStore } from '../../stores/canvasStore';
+import { usePlaybackStore } from '../../stores/playbackStore';
+import { setLocale } from '../../i18n';
+
+(globalThis as { React?: typeof React }).React = React;
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+vi.mock('@neko/ui/icons', () => ({
+  CloseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="close">{size}</span>,
+  LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
+  PlayIcon: ({ size = 16 }: { size?: number }) => <span data-icon="play">{size}</span>,
+  RightPanelIcon: ({ size = 16 }: { size?: number }) => <span data-icon="panel">{size}</span>,
+  PauseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="pause">{size}</span>,
+  SkipBackIcon: ({ size = 16 }: { size?: number }) => <span data-icon="skip-back">{size}</span>,
+  SkipForwardIcon: ({ size = 16 }: { size?: number }) => (
+    <span data-icon="skip-forward">{size}</span>
+  ),
+}));
+
+vi.mock('../../preview/PreviewRendererRegistry', () => ({
+  PreviewSurface: ({ source }: { source: { id: string } }) => (
+    <div data-testid="preview-surface">{source.id}</div>
+  ),
+}));
+
+describe('PlaybackWorkspace', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let vscodeApi: { postMessage: ReturnType<typeof vi.fn> } | undefined;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    vscodeApi = undefined;
+    resetVSCodeApi();
+    (globalThis as { acquireVsCodeApi?: () => unknown }).acquireVsCodeApi = undefined;
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = undefined;
+    setLocale('en');
+    useCanvasStore.setState({
+      canvasData: storyboardCanvas(),
+      selection: { nodeIds: ['scene-a'], connectionIds: [] },
+      isConnecting: false,
+      pendingConnectionSource: null,
+      activePlayingNodeId: null,
+      expandedNodeId: null,
+      generationPanelState: { visible: false, nodeId: null, childNodeId: null },
+      contentOverlayState: { visible: false, nodeId: null },
+    });
+    usePlaybackStore.setState({
+      activePlayback: null,
+      handoffRequest: null,
+      playbacks: new Map(),
+      playbackSession: {
+        visible: false,
+        panes: { canvas: true, stage: false, route: false },
+        layout: { stageWidthPx: 520, routeHeightPx: 176 },
+        playheadMs: 0,
+        focusOwner: 'canvas',
+        playbackState: 'idle',
+        stale: false,
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
+    delete (globalThis as { acquireVsCodeApi?: () => unknown }).acquireVsCodeApi;
+    delete (window as unknown as { vscodeApi?: unknown }).vscodeApi;
+    resetVSCodeApi();
+  });
+
+  it('keeps the canvas pane visible by default without opening playback panes', () => {
+    act(() => {
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    expect(host.querySelector('[data-testid="canvas-pane"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).toBeNull();
+    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).toBeNull();
+  });
+
+  it('reveals stage and route strip from Webview-local session state', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).not.toBeNull();
+    expect(host.textContent).toContain('Shot 1');
+    expect(host.textContent).toContain('Shot 2');
+  });
+
+  it('changes current unit from the route strip without writing private order to canvas data', () => {
+    const before = JSON.stringify(useCanvasStore.getState().canvasData);
+
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const shotTwo = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.canvas-playback-route-unit'),
+    ).find((button) => button.textContent?.includes('Shot 2'));
+
+    act(() => {
+      shotTwo?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.currentUnitId).toBe('shot-a2');
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
+    expect(useCanvasStore.getState().activePlayingNodeId).toBe('shot-a2');
+    expect(JSON.stringify(useCanvasStore.getState().canvasData)).toBe(before);
+    expect(JSON.stringify(useCanvasStore.getState().canvasData)).not.toContain('timelineOrder');
+  });
+
+  it('hides playback stage independently and pauses active playback state', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      usePlaybackStore.getState().setPlaybackWorkspacePlaybackState('playing');
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const hideStageButton = host.querySelector<HTMLButtonElement>(
+      'button[title="Hide playback stage"]',
+    );
+
+    act(() => {
+      hideStageButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.panes.stage).toBe(false);
+    expect(usePlaybackStore.getState().playbackSession.playbackState).toBe('paused');
+    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).not.toBeNull();
+  });
+
+  it('keeps pane toggles reachable when the playback stage is hidden', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('button[title="Hide playback stage"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).toBeNull();
+    expect(
+      host.querySelector<HTMLButtonElement>('button[title="Show playback stage"]'),
+    ).not.toBeNull();
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('button[title="Show playback stage"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).not.toBeNull();
+  });
+
+  it('updates workspace layout through resize separators', () => {
+    act(() => {
+      usePlaybackStore.getState().setPlaybackWorkspaceLayout({
+        stageWidthPx: 640,
+        routeHeightPx: 260,
+      });
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const stage = host.querySelector<HTMLElement>('[data-testid="canvas-playback-stage-pane"]');
+    const route = host.querySelector<HTMLElement>('[data-testid="canvas-playback-route-pane"]');
+
+    expect(stage?.style.width).toBe('640px');
+    expect(route?.style.height).toBe('260px');
+  });
+
+  it('seeks the route time ruler into the matching unit and keeps canvas order untouched', () => {
+    const before = JSON.stringify(useCanvasStore.getState().canvasData);
+
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const ruler = host.querySelector<HTMLElement>(
+      '[data-testid="canvas-playback-route-time-ruler"]',
+    );
+    if (!ruler) throw new Error('route time ruler was not rendered');
+    Object.defineProperty(ruler, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 400,
+        top: 0,
+        bottom: 46,
+        width: 400,
+        height: 46,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(ruler, 'setPointerCapture', {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    act(() => {
+      ruler.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          bubbles: true,
+          clientX: 300,
+          pointerId: 1,
+        }),
+      );
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.currentUnitId).toBe('shot-a2');
+    expect(usePlaybackStore.getState().playbackSession.playheadMs).toBe(1000);
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
+    expect(JSON.stringify(useCanvasStore.getState().canvasData)).toBe(before);
+  });
+
+  it('requests and renders host-enriched preview plans inside the same Webview', async () => {
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    await act(async () => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+      await Promise.resolve();
+    });
+
+    const request = vscodeApi.postMessage.mock.calls.find(
+      ([message]) =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: unknown }).type === 'playback:getPreviewPlan',
+    )?.[0] as { requestId?: string } | undefined;
+    expect(request?.requestId).toEqual(expect.any(String));
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'playback:previewPlanResult',
+            requestId: request?.requestId,
+            plan: {
+              ...hostEnrichedPlaybackPlan(),
+            },
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(host.querySelector('[data-testid="preview-surface"]')?.textContent).toBe(
+      'playback:shot-host',
+    );
+    expect(host.textContent).toContain('Host Shot');
+  });
+
+  it('marks playback workspace stale when host-enriched plan requests time out', async () => {
+    vi.useFakeTimers();
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    await act(async () => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.stale).toBe(true);
+    expect(host.textContent).toContain(
+      'Preview metadata did not respond in time. Showing local route order.',
+    );
+  });
+
+  it('shows a route overflow indicator when there are more than six route candidates', async () => {
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    await act(async () => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+      await Promise.resolve();
+    });
+
+    const request = vscodeApi.postMessage.mock.calls.find(
+      ([message]) =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: unknown }).type === 'playback:getPreviewPlan',
+    )?.[0] as { requestId?: string } | undefined;
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'playback:previewPlanResult',
+            requestId: request?.requestId,
+            plan: hostPlanWithManyRoutes(),
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(host.querySelector('.canvas-playback-route-tab-overflow')?.textContent).toBe('+1');
+    expect(host.textContent).toContain('Route 6');
+    expect(host.textContent).not.toContain('Route 7');
+  });
+});
+
+function storyboardCanvas(): CanvasData {
+  return {
+    version: '2.1',
+    name: 'Storyboard',
+    nodes: [
+      scene('scene-a', ['shot-a1', 'shot-a2']),
+      shot('shot-a1', 1, 'scene-a', 'assets/shot-a1.png'),
+      shot('shot-a2', 2, 'scene-a', 'assets/shot-a2.png'),
+    ],
+    connections: [],
+  };
+}
+
+function scene(id: string, childIds: readonly string[]): CanvasNode {
+  return {
+    id,
+    type: 'scene',
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 120 },
+    zIndex: 0,
+    container: { policy: 'scene', childIds: [...childIds], layout: { mode: 'sequence' } },
+    data: { sceneTitle: 'Scene A', sceneNumber: 1 },
+  };
+}
+
+function shot(
+  id: string,
+  shotNumber: number,
+  parentId: string,
+  generatedImage: string,
+): CanvasNode {
+  return {
+    id,
+    type: 'shot',
+    parentId,
+    position: { x: shotNumber * 220, y: 0 },
+    size: { width: 200, height: 120 },
+    zIndex: shotNumber,
+    data: {
+      shotNumber,
+      duration: 2,
+      visualDescription: `Shot ${shotNumber}`,
+      characters: [],
+      shotScale: 'MS',
+      characterAction: '',
+      emotion: [],
+      sceneTags: [],
+      generatedImage,
+      generationStatus: 'idle',
+      generationHistory: [],
+    },
+  };
+}
+
+function hostEnrichedPlaybackPlan() {
+  return {
+    adapterId: 'storyboard',
+    requestedAdapterId: 'auto',
+    behaviorMode: 'linear',
+    advancePolicy: 'manual',
+    entryUnitIds: ['shot-host'],
+    units: [
+      {
+        id: 'shot-host',
+        sourceNodeId: 'shot-a1',
+        kind: 'shot',
+        renderMode: 'preview',
+        label: 'Host Shot',
+        assetPath: 'assets/host-shot.png',
+        metadata: {
+          previewUrl: 'data:image/png;base64,host-preview',
+          previewMediaType: 'image',
+        },
+      },
+    ],
+    transitions: [],
+    routeCandidates: [
+      {
+        id: 'route-host',
+        title: 'Host Route',
+        entryUnitId: 'shot-host',
+        unitIds: ['shot-host'],
+        sourceKind: 'entry',
+      },
+    ],
+    diagnostics: [],
+    metadata: { sourceCanvasName: 'Storyboard' },
+  };
+}
+
+function hostPlanWithManyRoutes() {
+  return {
+    ...hostEnrichedPlaybackPlan(),
+    routeCandidates: Array.from({ length: 7 }, (_, index) => ({
+      id: `route-${index + 1}`,
+      title: `Route ${index + 1}`,
+      entryUnitId: 'shot-host',
+      unitIds: ['shot-host'],
+      sourceKind: 'entry',
+    })),
+  };
+}

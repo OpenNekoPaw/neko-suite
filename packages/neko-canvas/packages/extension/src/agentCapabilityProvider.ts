@@ -28,6 +28,7 @@ import type {
   CanvasAgentContentFormat,
   CanvasAgentMutationMode,
   CanvasConnection,
+  CanvasPlaybackReorderUnitsRequest,
   ReferenceDescriptor,
   StoryboardMediaRef,
 } from '@neko/shared';
@@ -132,6 +133,29 @@ function readOptionalCanvasNodeType(
     return value;
   }
   throw new Error(`Unsupported Canvas ${label} "${String(value)}"`);
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+}
+
+function readPlaybackReorderApprovalContext(
+  value: unknown,
+): CanvasPlaybackReorderUnitsRequest['approvalContext'] {
+  if (
+    value === 'explicit-user-instruction' ||
+    value === 'agent-confirmed' ||
+    value === 'agent-inferred'
+  ) {
+    return value;
+  }
+  return 'agent-inferred';
 }
 
 function collectShotKeyframeReferenceDescriptors(
@@ -292,6 +316,13 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           profiles: ['manga-to-video'],
           lazy: true,
         },
+        {
+          id: 'projector:canvas-playback-route-card',
+          accepts: ['CanvasPlaybackPlan'],
+          produces: ['CompositeArtifact'],
+          profiles: ['canvas-playback-route'],
+          lazy: true,
+        },
       ],
       capabilities: [
         {
@@ -300,6 +331,41 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           accepts: ['CanvasStoryboardPayload'],
           produces: ['canvas-node-ref'],
           actions: ['canvas.importStoryboard'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.getPlaybackPlan',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasDocumentRef'],
+          produces: ['CanvasPlaybackPlan'],
+          actions: ['canvas.getPlaybackPlan', 'canvas.getPlaybackRoutes'],
+          risk: 'low',
+          requiresApproval: false,
+        },
+        {
+          capabilityId: 'canvas.revealPlaybackWorkspace',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasPlaybackPlan', 'CanvasPlaybackRoute'],
+          actions: ['canvas.revealPlaybackWorkspace'],
+          risk: 'low',
+          requiresApproval: false,
+        },
+        {
+          capabilityId: 'canvas.createCutDraftFromRoute',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasPlaybackRoute'],
+          produces: ['CanvasCutDraftPayload'],
+          actions: ['canvas.createCutDraftFromRoute'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.reorderPlaybackUnits',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasPlaybackRoute'],
+          produces: ['CanvasPlaybackPlan'],
+          actions: ['canvas.reorderPlaybackUnits'],
           risk: 'medium',
           requiresApproval: true,
         },
@@ -329,6 +395,223 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
     const mediaService = context.mediaService;
 
     const tools: Tool[] = [
+      // -----------------------------------------------------------------------
+      // Canvas playback route tools
+      // -----------------------------------------------------------------------
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN,
+        description:
+          'Read the active CanvasPlaybackPlan projection. This displays Canvas order only; Agent must not persist route order, playhead, or media playback state.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceCanvasUri: {
+              type: 'string',
+              description: 'Optional Canvas document URI. Omit for the active Canvas.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.playback.getPlan(readOptionalString(args.sourceCanvasUri));
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to get Canvas playback plan: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES,
+        description:
+          'Read effective Canvas playback route candidates derived from CanvasPlaybackPlan. Does not create an Agent-owned timeline.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceCanvasUri: {
+              type: 'string',
+              description: 'Optional Canvas document URI. Omit for the active Canvas.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.playback.getRoutes(readOptionalString(args.sourceCanvasUri));
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to get Canvas playback routes: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_REVEAL_PLAYBACK_WORKSPACE,
+        description:
+          'Reveal the same-Webview Canvas PlaybackWorkspace for route playback. Agent dispatches; Canvas owns playback UI and playhead.',
+        category: 'project',
+        isReadOnly: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceCanvasUri: { type: 'string', description: 'Optional Canvas document URI.' },
+            routeId: { type: 'string', description: 'Optional playback route id to focus.' },
+            unitId: { type: 'string', description: 'Optional playback unit id to jump to.' },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.playback.revealWorkspace({
+              sourceCanvasUri: readOptionalString(args.sourceCanvasUri),
+              routeId: readOptionalString(args.routeId),
+              unitId: readOptionalString(args.unitId),
+            });
+            return { success: data, data: { revealed: data } };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to reveal Canvas playback workspace: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_CREATE_CUT_DRAFT_FROM_ROUTE,
+        description:
+          'Project a Canvas playback route to a CanvasCutDraftPayload and optionally hand it to Cut. Requires confirmation before creating/updating Cut state.',
+        category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['routeId'],
+          allowedFallbacks: ['selection', 'explicit-user-input'],
+          confirmationModes: ['create-cut-draft', 'send-to-cut'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN,
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES,
+          ],
+          reason:
+            'Show route title, unit count, diagnostics, target project, and import risk before creating a Cut draft.',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceCanvasUri: { type: 'string', description: 'Optional Canvas document URI.' },
+            routeId: { type: 'string', description: 'Playback route id to project.' },
+            projectName: { type: 'string', description: 'Optional target Cut project name.' },
+            sendToCut: {
+              type: 'boolean',
+              description:
+                'When true, dispatch the created draft to the active Cut timeline after confirmation.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const draft = await api.playback.createCutDraftFromRoute({
+              sourceCanvasUri: readOptionalString(args.sourceCanvasUri),
+              routeId: readOptionalString(args.routeId),
+              projectName: readOptionalString(args.projectName),
+            });
+            let cutImportResult: unknown;
+            if (args.sendToCut === true) {
+              cutImportResult = await vscode.commands.executeCommand(
+                'neko.cut.importCanvasDraft',
+                draft,
+              );
+            }
+            return {
+              success: true,
+              data: {
+                draft,
+                sentToCut: args.sendToCut === true,
+                ...(args.sendToCut === true ? { cutImportResult } : {}),
+              },
+            };
+          } catch (err) {
+            return { success: false, error: `Failed to create Canvas Cut draft: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_REORDER_PLAYBACK_UNITS,
+        description:
+          'Reorder Canvas playback units by writing through Canvas graph commands and then reprojecting CanvasPlaybackPlan. Agent-inferred reorder requires confirmation.',
+        category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['routeId', 'orderedUnitIds'],
+          allowedFallbacks: ['explicit-user-input'],
+          confirmationModes: ['agent-inferred'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN,
+            TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES,
+          ],
+          reason:
+            'Resolve the exact route and full ordered unit set before mutating Canvas graph order.',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceCanvasUri: { type: 'string', description: 'Optional Canvas document URI.' },
+            routeId: { type: 'string', description: 'Playback route id to reorder.' },
+            orderedUnitIds: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Full ordered playback unit id list for the selected route.',
+            },
+            approvalContext: {
+              type: 'string',
+              enum: ['explicit-user-instruction', 'agent-confirmed', 'agent-inferred'],
+              description:
+                'explicit-user-instruction may auto-approve same-turn specific user reorder; agent-inferred remains confirmation-gated.',
+            },
+            instructionText: {
+              type: 'string',
+              description: 'Specific same-turn user reorder instruction, if present.',
+            },
+          },
+          required: ['orderedUnitIds'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const approvalContext = readPlaybackReorderApprovalContext(args.approvalContext);
+            if (approvalContext === 'agent-inferred') {
+              return {
+                success: false,
+                error: 'Agent-inferred Canvas playback reorder requires confirmation.',
+              };
+            }
+            const data = await api.playback.reorderUnits({
+              sourceCanvasUri: readOptionalString(args.sourceCanvasUri),
+              routeId: readOptionalString(args.routeId),
+              orderedUnitIds: readStringArray(args.orderedUnitIds),
+              approvalContext,
+              instructionText: readOptionalString(args.instructionText),
+            });
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to reorder Canvas playback units: ${String(err)}`,
+            };
+          }
+        },
+      },
       // -----------------------------------------------------------------------
       // Canvas management tools
       // -----------------------------------------------------------------------

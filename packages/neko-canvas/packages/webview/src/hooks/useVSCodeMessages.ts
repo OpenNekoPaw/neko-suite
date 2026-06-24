@@ -64,6 +64,11 @@ export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
+  /** Reveals the same-Webview Canvas playback workspace from host commands or Agent actions. */
+  onRevealPlaybackWorkspace?: (payload: {
+    readonly routeId?: string;
+    readonly currentUnitId?: string;
+  }) => void;
   onImportGeneratedAsset?: (asset: ImportedGeneratedAssetPayload) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
@@ -91,6 +96,11 @@ export interface UseVSCodeMessagesOptions {
   deriveNode?: (request: CanvasDeriveNodeRequest) => unknown;
   createConnection?: (request: CanvasCreateConnectionRequest) => unknown;
   createComposite?: (request: CanvasCreateCompositeRequest) => unknown;
+  reorderSceneShots?: (request: {
+    readonly sceneId: string;
+    readonly shotIds: readonly string[];
+    readonly autoLayout?: boolean;
+  }) => unknown;
   updateBlock?: (request: CanvasUpdateBlockRequest) => unknown;
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
   getActiveContext?: (request?: CanvasAgentActiveContextRequest) => unknown;
@@ -177,6 +187,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     vscode,
     defaultCanvasData,
     setCanvasData,
+    onRevealPlaybackWorkspace,
     onImportGeneratedAsset,
     onGenerationProgress,
     onBuildPromptResult,
@@ -190,6 +201,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     deriveNode,
     createConnection,
     createComposite,
+    reorderSceneShots,
     updateBlock,
     extractStructuredContent,
     getActiveContext,
@@ -209,6 +221,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   const keyboardActionRef = useRef<(action: string) => void>(() => {});
 
   // Stable refs for callbacks to avoid re-registering listener
+  const onRevealPlaybackWorkspaceRef = useRef(onRevealPlaybackWorkspace);
+  onRevealPlaybackWorkspaceRef.current = onRevealPlaybackWorkspace;
   const onImportGeneratedAssetRef = useRef(onImportGeneratedAsset);
   onImportGeneratedAssetRef.current = onImportGeneratedAsset;
   const onGenerationProgressRef = useRef(onGenerationProgress);
@@ -249,6 +263,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onProjectionStatusRef.current = onProjectionStatus;
   const onProjectionSourceChangedRef = useRef(onProjectionSourceChanged);
   onProjectionSourceChangedRef.current = onProjectionSourceChanged;
+  const reorderSceneShotsRef = useRef(reorderSceneShots);
+  reorderSceneShotsRef.current = reorderSceneShots;
   const onCanvasDataLoadedRef = useRef(onCanvasDataLoaded);
   onCanvasDataLoadedRef.current = onCanvasDataLoaded;
   const onSavedRef = useRef(onSaved);
@@ -308,6 +324,12 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               break;
             }
             keyboardActionRef.current(message.action as string);
+            break;
+          case 'playback:revealWorkspace':
+            onRevealPlaybackWorkspaceRef.current?.({
+              routeId: typeof message.routeId === 'string' ? message.routeId : undefined,
+              currentUnitId: typeof message.unitId === 'string' ? message.unitId : undefined,
+            });
             break;
           case 'setLocale':
             setLocale(message.locale as 'en' | 'zh-cn');
@@ -510,6 +532,38 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               );
               if (!isRecord(result)) {
                 throw new Error('Composite creation failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.reorderSceneShots': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const payload = isRecord(message.payload) ? message.payload : {};
+              const shotIdValues: readonly unknown[] = Array.isArray(payload.shotIds)
+                ? payload.shotIds
+                : [];
+              const shotIds = shotIdValues.filter(
+                (shotId): shotId is string => typeof shotId === 'string',
+              );
+              const result = withOperationSource('ai', () =>
+                reorderSceneShotsRef.current?.({
+                  sceneId: typeof payload.sceneId === 'string' ? payload.sceneId : '',
+                  shotIds,
+                  autoLayout:
+                    typeof payload.autoLayout === 'boolean' ? payload.autoLayout : undefined,
+                }),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Scene shot reorder failed');
               }
               vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
             } catch (error) {

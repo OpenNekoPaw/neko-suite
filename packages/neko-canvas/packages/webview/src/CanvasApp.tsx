@@ -21,6 +21,7 @@ import type {
 } from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
+import { usePlaybackStore } from './stores/playbackStore';
 import { useRuntimeViewportStore } from './stores/runtimeViewportStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -31,6 +32,7 @@ import {
 } from './components/panels/GenerationPromptPanel';
 import { ContentOverlay } from './components/panels/ContentOverlay';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
+import { PlaybackWorkspace } from './components/playback/PlaybackWorkspace';
 import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
 import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
@@ -248,6 +250,7 @@ export function CanvasApp() {
   const openGenerationPanel = useCanvasStore((state) => state.openGenerationPanel);
   const closeGenerationPanel = useCanvasStore((state) => state.closeGenerationPanel);
   const closeContentOverlay = useCanvasStore((state) => state.closeContentOverlay);
+  const revealPlaybackWorkspace = usePlaybackStore((state) => state.revealPlaybackWorkspace);
   const viewport = useRuntimeViewportStore((state) => state.viewport);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
@@ -607,6 +610,9 @@ export function CanvasApp() {
     vscode,
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
+    onRevealPlaybackWorkspace: ({ routeId, currentUnitId }) => {
+      revealPlaybackWorkspace({ routeId, currentUnitId, focusOwner: 'stage' });
+    },
     onCanvasDataLoaded: (data) => {
       pendingLoadedCanvasBaselineRef.current = useCanvasStore.getState().canvasData ?? data;
       const documentKey = createCanvasViewportSnapshotKey(data);
@@ -771,6 +777,22 @@ export function CanvasApp() {
       return { connectionId, connection };
     },
     createComposite: (request) => useCanvasStore.getState().createComposite(request),
+    reorderSceneShots: (request) => {
+      if (!request.sceneId || request.shotIds.length === 0) {
+        throw new Error('Scene shot reorder requires sceneId and shotIds');
+      }
+      useCanvasStore
+        .getState()
+        .reorderSceneShots(request.sceneId, [...request.shotIds], request.autoLayout);
+      const scene = useCanvasStore
+        .getState()
+        .canvasData?.nodes.find((node) => node.id === request.sceneId);
+      return {
+        changed: true,
+        sceneId: request.sceneId,
+        shotIds: scene?.container?.childIds ?? request.shotIds,
+      };
+    },
     updateBlock: (request) => useCanvasStore.getState().updateBlock(request),
     extractStructuredContent: (request) =>
       useCanvasStore.getState().extractStructuredContent(request),
@@ -1403,6 +1425,11 @@ export function CanvasApp() {
     resetViewport();
   }
 
+  const handleRevealPlaybackWorkspace = useCallback(() => {
+    revealPlaybackWorkspace({ focusOwner: 'stage' });
+    reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'));
+  }, [reportAction, revealPlaybackWorkspace]);
+
   // =========================================================================
   // Render
   // =========================================================================
@@ -1435,9 +1462,7 @@ export function CanvasApp() {
             onRedo={redo}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
-            onOpenNarrativePreview={() => {
-              reportAction('openNarrativePreview', t('toolbar.narrativePreview'));
-            }}
+            onRevealPlaybackWorkspace={handleRevealPlaybackWorkspace}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}
@@ -1451,168 +1476,176 @@ export function CanvasApp() {
           />
         }
         main={
-          <div
-            ref={canvasContainerRef}
+          <PlaybackWorkspace
             className="canvas-main-surface"
-            style={{ backgroundColor: 'var(--canvas-bg)' }}
-            {...getKeyboardBoundaryMetadata({
-              scope: 'editor',
-              ownerId: 'canvas-editor',
-              priority: 0,
-            })}
-            tabIndex={-1}
-            onContextMenu={handleContextMenu}
-            onDragEnter={handleDragEnter}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {canvasData && (
-              <CanvasBoardNavigationBar
-                canvasData={canvasData}
-                onOpenBoardRef={handleCanvasBoardRefOpen}
-              />
-            )}
-            <InfiniteCanvas
-              nodes={nodes}
-              connections={connections}
-              viewport={viewport}
-              selectedNodeIds={selectedNodeIds}
-              selectedConnectionIds={selectedConnectionIds}
-              onViewportChange={handleViewportChange}
-              onNodeSelect={handleNodeSelect}
-              onNodeMove={handleNodeMove}
-              onNodeResizeEnd={handleNodeResizeEnd}
-              onNodeRotateEnd={handleNodeRotateEnd}
-              onNodeUpdateData={handleNodeUpdateData}
-              onConnectionSelect={handleConnectionSelect}
-              onConnectionStart={handleConnectionStart}
-              onConnectionComplete={handleConnectionComplete}
-              onConnectionCancel={handleConnectionCancel}
-              onCanvasClick={handleCanvasClick}
-              onMarqueeSelect={handleMarqueeSelect}
-              onScriptLoadScenes={handleScriptLoadScenes}
-              onScriptOpen={handleScriptOpen}
-              onScriptNavigateToScene={handleScriptNavigateToScene}
-              onDocumentOpen={handleDocumentOpen}
-              onCanvasEmbedOpen={handleCanvasEmbedOpen}
-              onModelCheckInstalled={handleModelCheckInstalled}
-              onRemoveContainerChild={handleRemoveContainerChild}
-              onConnectionUpdate={updateConnection}
-              expandedNodeId={expandedNodeId}
-              isPanMode={isPanMode}
-              isSpacePanActive={isSpacePanActive}
-            />
-
-            {nodes.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-                  <svg
-                    width="48"
-                    height="48"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    className="mx-auto mb-3 opacity-40"
-                  >
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <path d="M12 8v8" />
-                    <path d="M8 12h8" />
-                  </svg>
-                  <p className="text-sm opacity-60">{t('empty.hint')}</p>
-                  <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
-                </div>
-              </div>
-            )}
-
-            {isHudVisible && (
+            canvasPane={
               <div
-                id="canvas-hud-controls"
-                className="canvas-hud-controls absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2"
+                ref={canvasContainerRef}
+                className="canvas-main-surface-inner"
+                style={{ backgroundColor: 'var(--canvas-bg)' }}
+                {...getKeyboardBoundaryMetadata({
+                  scope: 'editor',
+                  ownerId: 'canvas-editor',
+                  priority: 0,
+                })}
+                tabIndex={-1}
+                onContextMenu={handleContextMenu}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
               >
-                <MiniMap
+                {canvasData && (
+                  <CanvasBoardNavigationBar
+                    canvasData={canvasData}
+                    onOpenBoardRef={handleCanvasBoardRefOpen}
+                  />
+                )}
+                <InfiniteCanvas
                   nodes={nodes}
-                  viewport={minimapViewport}
-                  containerWidth={containerSize.width}
-                  containerHeight={containerSize.height}
+                  connections={connections}
+                  viewport={viewport}
+                  selectedNodeIds={selectedNodeIds}
+                  selectedConnectionIds={selectedConnectionIds}
                   onViewportChange={handleViewportChange}
-                  width={miniMapWidth}
-                  height={Math.round(miniMapWidth * 0.7)}
+                  onNodeSelect={handleNodeSelect}
+                  onNodeMove={handleNodeMove}
+                  onNodeResizeEnd={handleNodeResizeEnd}
+                  onNodeRotateEnd={handleNodeRotateEnd}
+                  onNodeUpdateData={handleNodeUpdateData}
+                  onConnectionSelect={handleConnectionSelect}
+                  onConnectionStart={handleConnectionStart}
+                  onConnectionComplete={handleConnectionComplete}
+                  onConnectionCancel={handleConnectionCancel}
+                  onCanvasClick={handleCanvasClick}
+                  onMarqueeSelect={handleMarqueeSelect}
+                  onScriptLoadScenes={handleScriptLoadScenes}
+                  onScriptOpen={handleScriptOpen}
+                  onScriptNavigateToScene={handleScriptNavigateToScene}
+                  onDocumentOpen={handleDocumentOpen}
+                  onCanvasEmbedOpen={handleCanvasEmbedOpen}
+                  onModelCheckInstalled={handleModelCheckInstalled}
+                  onRemoveContainerChild={handleRemoveContainerChild}
+                  onConnectionUpdate={updateConnection}
+                  expandedNodeId={expandedNodeId}
+                  isPanMode={isPanMode}
+                  isSpacePanActive={isSpacePanActive}
                 />
 
-                <div ref={zoomControlsRef}>
-                  <ZoomControls
-                    zoom={viewport.zoom}
-                    onZoomIn={handleZoomIn}
-                    onZoomOut={handleZoomOut}
-                    onZoomTo={handleZoomTo}
-                    onFitContent={handleFitContent}
-                    onResetViewport={handleResetViewport}
+                {nodes.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                      <svg
+                        width="48"
+                        height="48"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="mx-auto mb-3 opacity-40"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <path d="M12 8v8" />
+                        <path d="M8 12h8" />
+                      </svg>
+                      <p className="text-sm opacity-60">{t('empty.hint')}</p>
+                      <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
+                    </div>
+                  </div>
+                )}
+
+                {isHudVisible && (
+                  <div
+                    id="canvas-hud-controls"
+                    className="canvas-hud-controls absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2"
+                  >
+                    <MiniMap
+                      nodes={nodes}
+                      viewport={minimapViewport}
+                      containerWidth={containerSize.width}
+                      containerHeight={containerSize.height}
+                      onViewportChange={handleViewportChange}
+                      width={miniMapWidth}
+                      height={Math.round(miniMapWidth * 0.7)}
+                    />
+
+                    <div ref={zoomControlsRef}>
+                      <ZoomControls
+                        zoom={viewport.zoom}
+                        onZoomIn={handleZoomIn}
+                        onZoomOut={handleZoomOut}
+                        onZoomTo={handleZoomTo}
+                        onFitContent={handleFitContent}
+                        onResetViewport={handleResetViewport}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {contextMenu && (
+                  <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={contextMenu.items}
+                    onClose={closeContextMenu}
                   />
-                </div>
+                )}
+
+                <FloatingPanelHost panels={floatingPanels} />
+
+                <GenerationPromptPanel
+                  visible={generationPanelState.visible}
+                  target={generationPanelTarget}
+                  onGenerate={handlePanelGenerate}
+                  onClose={closeGenerationPanel}
+                  onRequestAutoPrompt={handlePanelAutoPrompt}
+                />
+
+                {contentOverlayState.visible && contentOverlayState.nodeId && (
+                  <ContentOverlay
+                    nodeId={contentOverlayState.nodeId}
+                    onClose={closeContentOverlay}
+                  />
+                )}
+
+                {isDragOver && (
+                  <div
+                    className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+                    style={{
+                      backgroundColor: 'rgba(0, 120, 212, 0.08)',
+                      border: '2px dashed var(--node-selected)',
+                      borderRadius: 4,
+                    }}
+                  >
+                    <div
+                      className="px-4 py-2 rounded-lg text-sm"
+                      style={{
+                        backgroundColor: 'var(--toolbar-bg)',
+                        color: 'var(--toolbar-fg)',
+                        border: '1px solid var(--toolbar-border)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}
+                    >
+                      {t('canvas.dropHint')}
+                    </div>
+                  </div>
+                )}
+
+                {isConnecting && (
+                  <div
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded text-xs pointer-events-none animate-pulse"
+                    style={{
+                      backgroundColor: 'var(--toolbar-bg)',
+                      color: 'var(--toolbar-fg)',
+                      border: '1px solid var(--toolbar-border)',
+                    }}
+                  >
+                    {t('status.connecting')}
+                  </div>
+                )}
               </div>
-            )}
-
-            {contextMenu && (
-              <ContextMenu
-                x={contextMenu.x}
-                y={contextMenu.y}
-                items={contextMenu.items}
-                onClose={closeContextMenu}
-              />
-            )}
-
-            <FloatingPanelHost panels={floatingPanels} />
-
-            <GenerationPromptPanel
-              visible={generationPanelState.visible}
-              target={generationPanelTarget}
-              onGenerate={handlePanelGenerate}
-              onClose={closeGenerationPanel}
-              onRequestAutoPrompt={handlePanelAutoPrompt}
-            />
-
-            {contentOverlayState.visible && contentOverlayState.nodeId && (
-              <ContentOverlay nodeId={contentOverlayState.nodeId} onClose={closeContentOverlay} />
-            )}
-
-            {isDragOver && (
-              <div
-                className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
-                style={{
-                  backgroundColor: 'rgba(0, 120, 212, 0.08)',
-                  border: '2px dashed var(--node-selected)',
-                  borderRadius: 4,
-                }}
-              >
-                <div
-                  className="px-4 py-2 rounded-lg text-sm"
-                  style={{
-                    backgroundColor: 'var(--toolbar-bg)',
-                    color: 'var(--toolbar-fg)',
-                    border: '1px solid var(--toolbar-border)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                  }}
-                >
-                  {t('canvas.dropHint')}
-                </div>
-              </div>
-            )}
-
-            {isConnecting && (
-              <div
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded text-xs pointer-events-none animate-pulse"
-                style={{
-                  backgroundColor: 'var(--toolbar-bg)',
-                  color: 'var(--toolbar-fg)',
-                  border: '1px solid var(--toolbar-border)',
-                }}
-              >
-                {t('status.connecting')}
-              </div>
-            )}
-          </div>
+            }
+          />
         }
         rightDock={
           isRightNodeTreeVisible

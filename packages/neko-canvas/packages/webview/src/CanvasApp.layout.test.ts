@@ -118,14 +118,12 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).not.toMatch(/scopeNavigation\.boardCount/);
   });
 
-  it('keeps playback controls owned by the Preview panel, with Canvas exposing only the entry point', () => {
+  it('keeps playback controls inside PlaybackWorkspace without reusing the old preview entry', () => {
     expect(appSource).not.toMatch(/<PlaybackControllerHost/);
-    expect(appSource).not.toMatch(/<CanvasPlaybackController/);
-    expect(appSource).not.toMatch(/createCanvasPlaybackPlan\(/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-narrative-preview"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
     expect(toolbarSource).toMatch(/icon=\{<PlayIcon size=\{18\} \/>\}/);
     expect(appSource).toMatch(
-      /reportAction\('openNarrativePreview', t\('toolbar\.narrativePreview'\)\)/,
+      /reportAction\('revealPlaybackWorkspace', t\('toolbar\.playbackWorkspace'\)\)/,
     );
   });
 
@@ -187,14 +185,14 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-pan-mode"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-add-node-popover"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="import-file"/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-narrative-preview"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
-    expect(toolbarSource).toMatch(/onOpenNarrativePreview\?: \(\) => void/);
+    expect(toolbarSource).toMatch(/onRevealPlaybackWorkspace\?: \(\) => void/);
     expect(toolbarSource).toMatch(/onOpenExport\?: \(\) => void/);
     expect(toolbarSource).toMatch(/onOpenPackage\?: \(\) => void/);
     expect(appSource).toMatch(
-      /reportAction\('openNarrativePreview', t\('toolbar\.narrativePreview'\)\)/,
+      /reportAction\('revealPlaybackWorkspace', t\('toolbar\.playbackWorkspace'\)\)/,
     );
     expect(appSource).toMatch(/reportAction\('openExport', t\('toolbar\.export'\)\)/);
     expect(appSource).toMatch(

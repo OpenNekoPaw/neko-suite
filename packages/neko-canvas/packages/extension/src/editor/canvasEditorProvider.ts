@@ -59,10 +59,12 @@ import {
   ingestProjectSourceAddRequest,
   nkcSourcePathPolicy,
   ProjectFileStore,
+  projectCanvasPlaybackRouteToCutDraft,
   createProjectionAdapterRegistry,
   NEKO_EXTENSION_IDS,
   normalizeNarrativePreviewFeatureToggles,
   PathResolver,
+  resolveEffectiveCanvasPlaybackRoutes,
   contractWorkspaceMediaPath,
   createProjectFileDiagnostic,
   handleProjectSourceAddRequest,
@@ -77,7 +79,13 @@ import {
   validateCanvasBoardRef,
 } from '@neko/shared';
 import type {
+  CanvasCutDraftPayload,
   CanvasPlaybackPlan,
+  CanvasPlaybackRouteCandidate,
+  CanvasPlaybackUnit,
+  CanvasPlaybackCreateCutDraftRequest,
+  CanvasPlaybackReorderUnitsRequest,
+  CanvasPlaybackReorderUnitsResult,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasCreateConnectionRequest,
@@ -207,6 +215,12 @@ interface CanvasPlaybackPreviewSourceResolution {
 interface PreviewResourceVariantRequestContext {
   readonly requestId?: string;
   readonly sourceId?: string;
+}
+
+interface CanvasPlaybackWorkspaceRevealRequest {
+  readonly sourceCanvasUri?: string;
+  readonly routeId?: string;
+  readonly unitId?: string;
 }
 
 function isCanvasEditorLevelKeyboardAction(action: string): boolean {
@@ -688,6 +702,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private activeDocument: vscode.CustomDocument | undefined;
   private readonly webviewPanelsByDocumentUri = new Map<string, vscode.WebviewPanel>();
+  private readonly documentsByDocumentUri = new Map<string, vscode.CustomDocument>();
   private readonly canvasSnapshotsByDocumentUri = new Map<string, Record<string, unknown>>();
   private readonly canvasRevisionsByDocumentUri = new Map<string, number>();
   private readonly canvasPreviewFingerprintsByDocumentUri = new Map<string, string>();
@@ -996,6 +1011,195 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return true;
   }
 
+  async revealPlaybackWorkspace(
+    request: CanvasPlaybackWorkspaceRevealRequest = {},
+  ): Promise<boolean> {
+    const targetDocumentUri = request.sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    const targetPanel = targetDocumentUri
+      ? this.webviewPanelsByDocumentUri.get(targetDocumentUri)
+      : this.activeWebviewPanel;
+    if (!targetPanel) {
+      return false;
+    }
+
+    targetPanel.reveal();
+    const targetDocument = targetDocumentUri
+      ? this.documentsByDocumentUri.get(targetDocumentUri)
+      : this.activeDocument;
+    if (targetDocument) {
+      this.setActiveCanvasEditor(targetPanel, targetDocument);
+    }
+    return targetPanel.webview.postMessage({
+      type: 'playback:revealWorkspace',
+      ...(request.routeId ? { routeId: request.routeId } : {}),
+      ...(request.unitId ? { unitId: request.unitId } : {}),
+    });
+  }
+
+  getPlaybackPlan(sourceCanvasUri?: string): CanvasPlaybackPlan {
+    const documentUri = sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    if (!documentUri) {
+      throw new Error('No active Canvas document for playback plan query.');
+    }
+    const plan = this.extractCanvasPlaybackPlan(documentUri);
+    if (!plan) {
+      throw new Error(`Canvas playback plan is unavailable for ${documentUri}.`);
+    }
+    return this.attachCanvasPlaybackSourceMetadata(plan, documentUri);
+  }
+
+  getPlaybackRoutes(sourceCanvasUri?: string): readonly CanvasPlaybackRouteCandidate[] {
+    return resolveEffectiveCanvasPlaybackRoutes(this.getPlaybackPlan(sourceCanvasUri)).routes;
+  }
+
+  createCutDraftFromRoute(
+    request: CanvasPlaybackCreateCutDraftRequest = {},
+  ): CanvasCutDraftPayload {
+    const documentUri = request.sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    if (!documentUri) {
+      throw new Error('No active Canvas document for Cut draft creation.');
+    }
+    const plan = this.getPlaybackPlan(documentUri);
+    const sourceRevision = this.getCanvasRevision(documentUri);
+    const result = projectCanvasPlaybackRouteToCutDraft({
+      plan,
+      sourceCanvasUri: documentUri,
+      sourceRevision,
+      currentSourceRevision: sourceRevision,
+      routeId: request.routeId,
+      projectName: request.projectName,
+      createdAt: new Date().toISOString(),
+      allowedExtensionNamespaces: ['neko.canvas'],
+    });
+    if (!result.ok) {
+      throw new Error(
+        `Canvas route cannot be projected to Cut draft: ${result.diagnostics
+          .map((diagnostic) => diagnostic.message)
+          .join('; ')}`,
+      );
+    }
+    return result.payload;
+  }
+
+  async reorderPlaybackUnits(
+    request: CanvasPlaybackReorderUnitsRequest,
+  ): Promise<CanvasPlaybackReorderUnitsResult> {
+    if (request.approvalContext === 'agent-inferred') {
+      throw new Error('Agent-inferred Canvas playback reorder requires confirmation.');
+    }
+    if (
+      request.approvalContext !== 'explicit-user-instruction' &&
+      request.approvalContext !== 'agent-confirmed'
+    ) {
+      throw new Error(
+        'Canvas playback reorder requires explicit user instruction or confirmation.',
+      );
+    }
+    const documentUri = request.sourceCanvasUri ?? this.activeDocument?.uri.toString();
+    if (!documentUri) {
+      throw new Error('No active Canvas document for playback reorder.');
+    }
+    if (documentUri !== this.activeDocument?.uri.toString()) {
+      throw new Error('Canvas playback reorder requires the target Canvas editor to be active.');
+    }
+    const plan = this.getPlaybackPlan(documentUri);
+    const targetRoute = this.resolvePlaybackRouteForMutation(plan, request.routeId);
+    const orderedUnitIds = [...new Set(request.orderedUnitIds)];
+    if (
+      orderedUnitIds.length !== targetRoute.unitIds.length ||
+      orderedUnitIds.some((unitId) => !targetRoute.unitIds.includes(unitId))
+    ) {
+      throw new Error('Playback reorder must provide the full selected route unit id set.');
+    }
+    const unitById = new Map(plan.units.map((unit) => [unit.id, unit]));
+    const orderedUnits = orderedUnitIds.map((unitId) => unitById.get(unitId));
+    if (orderedUnits.some((unit): unit is undefined => unit === undefined)) {
+      throw new Error('Playback reorder references a missing Canvas playback unit.');
+    }
+    const sceneId = this.resolveSingleSceneShotReorderParent(documentUri, orderedUnits);
+    if (!sceneId) {
+      throw new Error(
+        'Canvas playback reorder currently supports only full shot reordering within one Scene container.',
+      );
+    }
+    if (!this.activeWebviewPanel) {
+      throw new Error('No active Canvas editor for playback reorder.');
+    }
+    await this.sendRequest('nodes.reorderSceneShots', {
+      payload: {
+        sceneId,
+        shotIds: orderedUnits.map((unit) => unit.sourceNodeId),
+        autoLayout: true,
+      },
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'update',
+      nodeIds: orderedUnits.map((unit) => unit.sourceNodeId),
+      documentUri,
+      entityType: 'node',
+      reason: 'playbackUnitsReordered',
+      operationType: 'playback.reorderUnits',
+    });
+    return {
+      changed: true,
+      routeId: targetRoute.id,
+      sourceCanvasUri: documentUri,
+      orderedUnitIds,
+      plan: this.getPlaybackPlan(documentUri),
+    };
+  }
+
+  private attachCanvasPlaybackSourceMetadata(
+    plan: CanvasPlaybackPlan,
+    documentUri: string,
+  ): CanvasPlaybackPlan {
+    return {
+      ...plan,
+      metadata: {
+        ...plan.metadata,
+        sourceCanvasUri: documentUri,
+        sourceRevision: this.getCanvasRevision(documentUri),
+      },
+    };
+  }
+
+  private resolvePlaybackRouteForMutation(
+    plan: CanvasPlaybackPlan,
+    routeId: string | undefined,
+  ): CanvasPlaybackRouteCandidate {
+    const routes = resolveEffectiveCanvasPlaybackRoutes(plan).routes;
+    const route = routeId ? routes.find((candidate) => candidate.id === routeId) : routes[0];
+    if (!route) {
+      throw new Error(
+        routeId
+          ? `Canvas playback route "${routeId}" is unavailable.`
+          : 'Canvas playback plan has no route.',
+      );
+    }
+    return route;
+  }
+
+  private resolveSingleSceneShotReorderParent(
+    documentUri: string,
+    orderedUnits: readonly CanvasPlaybackUnit[],
+  ): string | undefined {
+    const parents = new Set<string>();
+    for (const unit of orderedUnits) {
+      if (unit.kind !== 'shot') return undefined;
+      const parentId = this.resolveCanvasNodeParentId(documentUri, unit.sourceNodeId);
+      if (!parentId) return undefined;
+      parents.add(parentId);
+    }
+    return parents.size === 1 ? parents.values().next().value : undefined;
+  }
+
+  private resolveCanvasNodeParentId(documentUri: string, nodeId: string): string | undefined {
+    const canvasData = this.canvasSnapshotsByDocumentUri.get(documentUri);
+    const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes : [];
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    return typeof node?.parentId === 'string' ? node.parentId : undefined;
+  }
+
   private async setGlobalKeyboardEditable(documentUri: string, editable: boolean): Promise<void> {
     try {
       await updateWebviewKeyboardEditableOwner(
@@ -1115,7 +1319,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   openNarrativePreview(): Promise<boolean> {
-    return this.narrativePreviewBridge.open();
+    return this.revealPlaybackWorkspace();
   }
 
   refreshNarrativePreview(sourceCanvasUri?: string): boolean {
@@ -1424,6 +1628,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     const documentUri = document.uri.toString();
     this.webviewPanelsByDocumentUri.set(documentUri, webviewPanel);
+    this.documentsByDocumentUri.set(documentUri, document);
     this.canvasDataReadyDocumentUris.delete(documentUri);
     const focusedRegistration = this.focusedWebviews.register({
       id: documentUri,
@@ -1478,6 +1683,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       focusedRegistration.dispose();
       await this.setGlobalKeyboardEditable(documentUri, false);
       this.webviewPanelsByDocumentUri.delete(documentUri);
+      this.documentsByDocumentUri.delete(documentUri);
       this.canvasSnapshotsByDocumentUri.delete(documentUri);
       this.canvasRevisionsByDocumentUri.delete(documentUri);
       this.canvasPreviewFingerprintsByDocumentUri.delete(documentUri);
@@ -2321,9 +2527,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'canvasAction': {
         if (message.action === 'openExport') {
           await vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export');
-        } else if (message.action === 'openNarrativePreview') {
+        } else if (message.action === 'revealPlaybackWorkspace') {
           this.setActiveCanvasEditor(webviewPanel, document);
-          await this.openNarrativePreview();
+          await this.revealPlaybackWorkspace({ sourceCanvasUri: document.uri.toString() });
         } else if (message.action === 'openPackage') {
           const data =
             message.data && typeof message.data === 'object'
@@ -2344,6 +2550,41 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             },
           });
         }
+        break;
+      }
+      case 'playback:getPreviewPlan': {
+        const requestId = message.requestId;
+        if (typeof requestId !== 'string') {
+          break;
+        }
+        const documentUri = document.uri.toString();
+        const requestedRevision =
+          typeof message.sourceRevision === 'number' && Number.isFinite(message.sourceRevision)
+            ? message.sourceRevision
+            : undefined;
+        const currentRevision = this.getCanvasRevision(documentUri);
+        if (requestedRevision !== undefined && requestedRevision < currentRevision) {
+          await webviewPanel.webview.postMessage({
+            type: 'playback:previewPlanResult',
+            requestId,
+            sourceCanvasUri: documentUri,
+            sourceRevision: currentRevision,
+            stale: true,
+            error: 'Canvas playback plan request is stale.',
+          });
+          break;
+        }
+        const plan = await this.extractCanvasPlaybackPlanForPreview(
+          webviewPanel.webview,
+          documentUri,
+        );
+        await webviewPanel.webview.postMessage({
+          type: 'playback:previewPlanResult',
+          requestId,
+          sourceCanvasUri: documentUri,
+          sourceRevision: currentRevision,
+          ...(plan ? { plan } : { error: 'Canvas playback plan is unavailable.' }),
+        });
         break;
       }
       case 'save': {
@@ -2444,8 +2685,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
-          message.documentResourceRef,
-          resourceRef,
         );
         const mediaTypeHint = message.mediaType as string | undefined;
         if (!assetPath && !resourceRef) break;
@@ -2636,8 +2875,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const resourceRef = isResourceRef(message.resourceRef) ? message.resourceRef : undefined;
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
-          message.documentResourceRef,
-          resourceRef,
         );
         const time = (message.time as number) ?? 0;
         if (!assetPath && !resourceRef) break;
@@ -3337,17 +3574,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return undefined;
   }
 
-  private resolveDocumentResourceAssetPath(
-    assetPath: string | undefined,
-    documentResourceRef: unknown,
-    resourceRef?: unknown,
-  ): string | undefined {
-    if (assetPath) {
-      return assetPath;
-    }
-    return isDocumentArchiveResourceRef(documentResourceRef)
-      ? documentResourceRef.cachePath
-      : undefined;
+  private resolveDocumentResourceAssetPath(assetPath: string | undefined): string | undefined {
+    return assetPath || undefined;
   }
 
   private async handleMediaPlaybackMessage(
@@ -3564,8 +3792,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const resourceRef = this.resolvePreviewResourceRef(message.resourceRef, documentResourceRef);
     const assetPath = this.resolveDocumentResourceAssetPath(
       message.assetPath as string | undefined,
-      documentResourceRef,
-      resourceRef,
     );
     if (!assetPath && !resourceRef) {
       return undefined;
@@ -3639,8 +3865,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const resourceRef = this.resolvePreviewResourceRef(message.resourceRef, documentResourceRef);
     const assetPath = this.resolveDocumentResourceAssetPath(
       message.assetPath as string | undefined,
-      documentResourceRef,
-      resourceRef,
     );
     const role = message.role as ResourceVariantRole | undefined;
     const mediaTypeHint = message.mediaType as string | undefined;
@@ -4144,28 +4368,21 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           return projected;
         }
       } catch (error) {
-        logger.warn(
-          'Document resource cache Preview projection failed; falling back to asset path',
-          {
-            caller: input.caller,
-            requestId: input.requestContext?.requestId,
-            sourceId: input.requestContext?.sourceId,
-            resourceId: input.resourceRef.id,
-            entryPath:
-              input.resourceRef.locator?.kind === 'document'
-                ? input.resourceRef.locator.entryPath
-                : undefined,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        );
+        logger.warn('Document resource cache Preview projection failed', {
+          caller: input.caller,
+          requestId: input.requestContext?.requestId,
+          sourceId: input.requestContext?.sourceId,
+          resourceId: input.resourceRef.id,
+          entryPath:
+            input.resourceRef.locator?.kind === 'document'
+              ? input.resourceRef.locator.entryPath
+              : undefined,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
-    const fallbackPath = this.resolveDocumentResourceAssetPath(
-      input.assetPath,
-      input.documentResourceRef,
-      input.resourceRef,
-    );
+    const fallbackPath = this.resolveDocumentResourceAssetPath(input.assetPath);
     if (!fallbackPath) {
       return undefined;
     }
@@ -4646,8 +4863,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       this.readPreviewSourceCandidate({
         assetPath: this.resolveDocumentResourceAssetPath(
           this.readPreviewSourceString(data['assetPath']),
-          documentResourceRef,
-          resourceRef,
         ),
       }),
       documentUri,
@@ -4729,11 +4944,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return { url: projectedResource, source: candidate, playableAssetPath };
     }
     const localSource = await this.resolveCanvasPlaybackLocalPreviewSource(
-      this.resolveDocumentResourceAssetPath(
-        candidate.source,
-        candidate.documentResourceRef,
-        resourceRef,
-      ),
+      this.resolveDocumentResourceAssetPath(candidate.source),
       documentUri,
       webview,
       caller,
@@ -4778,11 +4989,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     documentUri: vscode.Uri,
     caller: string,
   ): Promise<string | undefined> {
-    const assetPath = this.resolveDocumentResourceAssetPath(
-      candidate.source,
-      candidate.documentResourceRef,
-      resourceRef,
-    );
+    const assetPath = this.resolveDocumentResourceAssetPath(candidate.source);
     if (assetPath && !this.isReusableCanvasPlaybackPreviewSource(assetPath)) {
       const localCandidates = await this.resolveCanvasPlaybackLocalPreviewPathCandidates(
         assetPath,

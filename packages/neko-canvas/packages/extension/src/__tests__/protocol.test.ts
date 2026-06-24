@@ -531,6 +531,8 @@ describe('canvasEditorProvider message contracts', () => {
     it('routes revisioned Preview messages through a Canvas-owned bridge', () => {
       expect(providerSource).toContain('private readonly narrativePreviewBridge');
       expect(providerSource).toContain('openNarrativePreview()');
+      expect(providerSource).toContain('return this.revealPlaybackWorkspace();');
+      expect(providerSource).not.toContain('return this.narrativePreviewBridge.open();');
       expect(providerSource).toContain('refreshNarrativePreview(sourceCanvasUri?: string)');
       expect(providerSource).toContain('jumpNarrativePreviewToNode(nodeId: string)');
       expect(providerSource).toContain('setNarrativePreviewVariables(');
@@ -558,22 +560,30 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("type: 'narrativePreviewCanvasMessage'");
     });
 
-    it('registers the Narrative Preview command without letting Preview read .nkc directly', () => {
+    it('registers the Playback Workspace command without letting Preview read .nkc directly', () => {
+      expect(extensionSource).toContain(
+        "vscode.commands.registerCommand('neko.canvas.revealPlaybackWorkspace'",
+      );
+      expect(extensionSource).toContain('getNarrativePreviewFeatureToggles().preview');
+      expect(extensionSource).toContain('await canvasEditorProvider.revealPlaybackWorkspace()');
       expect(extensionSource).toContain(
         "vscode.commands.registerCommand('neko.canvas.openNarrativePreview'",
       );
-      expect(extensionSource).toContain('getNarrativePreviewFeatureToggles().preview');
-      expect(extensionSource).toContain('await canvasEditorProvider.openNarrativePreview()');
+      expect(extensionSource).toContain(
+        "vscode.commands.executeCommand('neko.canvas.revealPlaybackWorkspace')",
+      );
       const canvasActionBranch = providerSource.slice(
         providerSource.indexOf("case 'canvasAction':"),
         providerSource.indexOf("case 'save':"),
       );
-      expect(canvasActionBranch).toContain("message.action === 'openNarrativePreview'");
+      expect(canvasActionBranch).toContain("message.action === 'revealPlaybackWorkspace'");
       expect(canvasActionBranch).toContain('this.setActiveCanvasEditor(webviewPanel, document);');
-      expect(canvasActionBranch).toContain('await this.openNarrativePreview();');
+      expect(canvasActionBranch).toContain('await this.revealPlaybackWorkspace({');
       expect(canvasActionBranch).not.toContain(
         "vscode.commands.executeCommand('neko.canvas.openNarrativePreview')",
       );
+      expect(providerSource).toContain("type: 'playback:revealWorkspace'");
+      expect(providerSource).not.toContain('await this.openNarrativePreview();');
       expect(narrativePreviewBridgeSource).not.toContain('workspace.fs.readFile');
       expect(narrativePreviewBridgeSource).not.toContain('loadNkc(');
     });
@@ -698,14 +708,15 @@ describe('canvasEditorProvider message contracts', () => {
   });
 
   describe('NKV-012: canvas toolbar preview, export, and package intents', () => {
-    it('routes toolbar preview, export, and package actions through separate whitelisted paths', () => {
+    it('routes toolbar playback workspace, export, and package actions through whitelisted paths', () => {
       expect(providerSource).toContain("case 'canvasAction'");
-      expect(providerSource).toContain("message.action === 'openNarrativePreview'");
+      expect(providerSource).toContain("message.action === 'revealPlaybackWorkspace'");
       expect(providerSource).toContain('this.setActiveCanvasEditor(webviewPanel, document);');
-      expect(providerSource).toContain('await this.openNarrativePreview();');
+      expect(providerSource).toContain('await this.revealPlaybackWorkspace({');
       expect(providerSource).not.toContain(
         "vscode.commands.executeCommand('neko.canvas.openNarrativePreview')",
       );
+      expect(providerSource).toContain("type: 'playback:revealWorkspace'");
       expect(providerSource).toContain("message.action === 'openExport'");
       expect(providerSource).toContain(
         "vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export')",
@@ -718,14 +729,36 @@ describe('canvasEditorProvider message contracts', () => {
     it('sends lightweight canvasAction intents from the webview toolbar', () => {
       expect(canvasAppSource).toContain("type: 'canvasAction'");
       expect(canvasAppSource).toContain(
-        "reportAction('openNarrativePreview', t('toolbar.narrativePreview'))",
+        "reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'))",
       );
+      expect(webviewSource).toContain("case 'playback:revealWorkspace'");
+      expect(providerSource).toContain("case 'playback:getPreviewPlan'");
+      expect(providerSource).toContain("type: 'playback:previewPlanResult'");
+      expect(providerSource).toContain('requestedRevision < currentRevision');
+      expect(providerSource).toContain('await this.extractCanvasPlaybackPlanForPreview(');
+      expect(providerSource).toContain("case 'preview:resolveVariant'");
+      expect(providerSource).toContain('await this.handlePreviewVariantMessage(');
+      expect(providerSource).toContain("case 'media:probe'");
+      expect(providerSource).toContain("case 'media:play'");
       expect(canvasAppSource).toContain("reportAction('openExport', t('toolbar.export'))");
       expect(canvasAppSource).toContain(
         "reportAction('openPackage', t('toolbar.package'), undefined, canvasData)",
       );
       expect(canvasAppSource).not.toContain("type: 'exportStoryboard'");
       expect(canvasAppSource).not.toContain("type: 'packageCanvas'");
+    });
+
+    it('routes Agent playback reorder through Canvas Webview graph commands', () => {
+      expect(providerSource).toContain('getPlaybackPlan(sourceCanvasUri?: string)');
+      expect(providerSource).toContain('createCutDraftFromRoute(');
+      expect(providerSource).toContain('reorderPlaybackUnits(');
+      expect(providerSource).toContain("'nodes.reorderSceneShots'");
+      expect(providerSource).toContain('sourceRevision: this.getCanvasRevision(documentUri)');
+      expect(webviewSource).toContain("case 'nodes.reorderSceneShots'");
+      expect(canvasAppSource).toContain('reorderSceneShots: (request) => {');
+      expect(canvasAppSource).toContain('.reorderSceneShots(request.sceneId');
+      expect(providerSource).not.toContain('agentOrder');
+      expect(providerSource).not.toContain('timelineOrder');
     });
   });
 
@@ -771,9 +804,12 @@ describe('canvasEditorProvider message contracts', () => {
       expect(previewVariantHandler).toContain('resourceRef: assetPath ? undefined : resourceRef');
       expect(documentPreviewProjector).toContain('this.projectResourceCacheVariant(');
       expect(documentPreviewProjector).toContain(
-        'Document resource cache Preview projection failed; falling back to asset path',
+        'Document resource cache Preview projection failed',
       );
-      expect(documentPreviewProjector).toContain('this.resolveDocumentResourceAssetPath(');
+      expect(providerSource).toContain(
+        'private resolveDocumentResourceAssetPath(assetPath: string | undefined): string | undefined',
+      );
+      expect(providerSource).not.toContain('documentResourceRef.cachePath');
       expect(documentPreviewProjector).toContain(
         'this.resolveCanvasPlaybackLocalPreviewPathCandidates(',
       );

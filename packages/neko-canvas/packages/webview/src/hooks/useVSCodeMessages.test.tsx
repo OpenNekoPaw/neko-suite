@@ -141,6 +141,33 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(onSaved).toHaveBeenCalledOnce();
   });
 
+  it('reveals the same-Webview playback workspace from host message', () => {
+    const onRevealPlaybackWorkspace = vi.fn();
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{ onRevealPlaybackWorkspace }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({
+        type: 'playback:revealWorkspace',
+        routeId: 'route-main',
+        unitId: 'scene-2',
+      });
+    });
+
+    expect(onRevealPlaybackWorkspace).toHaveBeenCalledWith({
+      routeId: 'route-main',
+      currentUnitId: 'scene-2',
+    });
+  });
+
   it('creates canvas connections from host node operation requests', () => {
     const vscode = createVSCodeApi();
     const createConnection = vi.fn(() => ({

@@ -8,6 +8,10 @@
 
 neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放、分镜生成审阅、上下文引用组织等能力。它也是连接 neko-agent、neko-story、neko-sketch、neko-cut 的语义中枢。
 
+Canvas 编辑与预览共享同一个 `neko.canvasEditor` Webview。播放预览不是第二个独立 Webview，而是 Canvas Editor Webview 内的 `PlaybackWorkspace`：上方可显示/隐藏画布区与预览播放区，下方可显示/隐藏 Canvas 预览路线条。该决策遵循系统级 ADR：[`../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
+
+旧的 `openNarrativePreview` 命令只保留为迁移 shim，行为必须转发到 `neko.canvas.revealPlaybackWorkspace` / `playback:revealWorkspace`，不得再作为独立 Canvas Preview Webview 的成功路径。`NarrativePreviewBridge` 只允许作为迁移来源、协议测试对象和后续删除候选；owner 为 `neko-canvas`，移除条件是同 Webview `PlaybackWorkspace` 覆盖 narrative/media route 渲染与 VS Code Webview smoke，验证命令至少包括 `pnpm --dir packages/neko-canvas exec vitest run packages/extension/src/__tests__/protocol.test.ts` 和 `pnpm smoke:webview:runtime`。
+
 ---
 
 ## 子包结构
@@ -64,6 +68,11 @@ packages/neko-canvas/
 │  │    │    └─ LayerPanel (图层树)                   │      │
 │  │    │                                            │      │
 │  │    ├─ CanvasToolbar (工具栏)                    │      │
+│  │    ├─ PlaybackWorkspace                         │      │
+│  │    │    ├─ CanvasViewportPane (画布区，可隐藏)   │      │
+│  │    │    ├─ PlaybackStage (预览播放区，可隐藏)    │      │
+│  │    │    ├─ PlaybackRouteStrip (预览路线条，可隐藏)│     │
+│  │    │    └─ PlaybackSession (route/playhead 状态) │      │
 │  │    ├─ PropertyPanel (属性面板)                   │      │
 │  │    └─ ContextMenu (右键菜单)                    │      │
 │  │                                                 │      │
@@ -172,6 +181,21 @@ packages/neko-canvas/
           → InlineMediaPlayer 渲染
 ```
 
+### Canvas 播放工作区
+
+```
+用户点击左侧工具栏“预览/播放工作区”
+  → 同一 Canvas Editor Webview 显示/聚焦 PlaybackWorkspace
+    → 基于当前 CanvasData 按需生成 CanvasPlaybackPlan
+      → PlaybackStage 渲染当前 unit
+      → PlaybackRouteStrip 展示 route / segment / diagnostics
+      → PlaybackSession 保存当前 route、unit、playhead 和播放状态
+```
+
+`PlaybackWorkspace` 不保存私有排序，不成为第二个 timeline。若用户通过路线条触发重排，必须调用 canvasStore 的容器/节点/连线排序命令写回 `.nkc`，再重新生成 `CanvasPlaybackPlan`。媒体、缩略图和视频流仍通过 Extension Host、`neko-preview` API 和 Engine 授权，不由 Webview 直接访问工作区文件。
+
+Agent 对 Canvas 播放顺序的参与仅限读取 `CanvasPlaybackPlan`、展示 route card、触发 reveal/import/reorder capability 和执行确认门控。Agent 不持有 `PlaybackSession`、playhead、播放器或私有 route 顺序；播放请求应定位到 Canvas `PlaybackWorkspace`，后续剪辑请求应投递到 Cut。
+
 ### 文件拖放
 
 ```
@@ -215,6 +239,8 @@ media:play/seek/pause/stop        — 播放控制
 media:captureFrame                — 截取帧
 operationApplied                  — EditOperation 脏标记桥接
 exportArtboard(data)              — 导出画板配置
+playback:revealWorkspace          — 显示/聚焦同一 Webview 内的 PlaybackWorkspace
+playback:createCutDraft(route)    — 从当前 route 创建发送到 Cut 的剪辑初稿快照
 ```
 
 ### Extension → Webview
@@ -227,6 +253,8 @@ dropAssets(assetDtoList)         — 拖放/选择文件解析结果
 generationProgress               — 批量生成进度
 timelineSync(payload)            — cut → canvas 最小回流（共享契约，仅操作元数据）
 importStoryboard(payload, opts)  — story/agent → canvas 分镜导入（CanvasStoryboardPayload）
+playback:loadPlan(plan)          — 加载/刷新 CanvasPlaybackPlan 投影
+playback:timelineSync(payload)   — Cut 轻量回流后的播放路线状态刷新
 ```
 
 ---
