@@ -9,6 +9,7 @@ import { resetVSCodeApi } from '@neko/shared/vscode';
 import { PlaybackWorkspace } from './PlaybackWorkspace';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { usePlaybackStore } from '../../stores/playbackStore';
+import { useRuntimeViewportStore } from '../../stores/runtimeViewportStore';
 import { setLocale } from '../../i18n';
 
 (globalThis as { React?: typeof React }).React = React;
@@ -24,6 +25,13 @@ vi.mock('@neko/ui/icons', () => ({
   SkipForwardIcon: ({ size = 16 }: { size?: number }) => (
     <span data-icon="skip-forward">{size}</span>
   ),
+  ChevronDownIcon: ({ size = 16 }: { size?: number }) => (
+    <span data-icon="chevron-down">{size}</span>
+  ),
+  ChevronRightIcon: ({ size = 16 }: { size?: number }) => (
+    <span data-icon="chevron-right">{size}</span>
+  ),
+  SendIcon: ({ size = 16 }: { size?: number }) => <span data-icon="send">{size}</span>,
 }));
 
 vi.mock('../../preview/PreviewRendererRegistry', () => ({
@@ -68,8 +76,19 @@ describe('PlaybackWorkspace', () => {
         focusOwner: 'canvas',
         playbackState: 'idle',
         stale: false,
+        matrix: {
+          routeViewMode: 'matrix',
+          filters: {
+            routeIds: [],
+            containerIds: [],
+            highlightedNodeKinds: [],
+            generationStatuses: [],
+          },
+          foldedContainerIds: [],
+        },
       },
     });
+    useRuntimeViewportStore.getState().resetViewport();
   });
 
   afterEach(() => {
@@ -93,19 +112,21 @@ describe('PlaybackWorkspace', () => {
     expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).toBeNull();
   });
 
-  it('reveals stage and route strip from Webview-local session state', () => {
+  it('reveals stage and route matrix from Webview-local session state', () => {
     act(() => {
       usePlaybackStore.getState().revealPlaybackWorkspace();
       root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
     });
 
     expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).toBeNull();
+    expect(host.textContent).toContain('Route Storyboard Matrix');
     expect(host.textContent).toContain('Shot 1');
     expect(host.textContent).toContain('Shot 2');
   });
 
-  it('changes current unit from the route strip without writing private order to canvas data', () => {
+  it('changes current unit from the route matrix without writing private order to canvas data', () => {
     const before = JSON.stringify(useCanvasStore.getState().canvasData);
 
     act(() => {
@@ -114,7 +135,7 @@ describe('PlaybackWorkspace', () => {
     });
 
     const shotTwo = Array.from(
-      host.querySelectorAll<HTMLButtonElement>('.canvas-playback-route-unit'),
+      host.querySelectorAll<HTMLButtonElement>('.canvas-route-storyboard-matrix-cell-playable'),
     ).find((button) => button.textContent?.includes('Shot 2'));
 
     act(() => {
@@ -126,6 +147,48 @@ describe('PlaybackWorkspace', () => {
     expect(useCanvasStore.getState().activePlayingNodeId).toBe('shot-a2');
     expect(JSON.stringify(useCanvasStore.getState().canvasData)).toBe(before);
     expect(JSON.stringify(useCanvasStore.getState().canvasData)).not.toContain('timelineOrder');
+  });
+
+  it('reveals an off-screen source node in the canvas viewport when a matrix cell is selected', () => {
+    useRuntimeViewportStore.getState().setViewport({ zoom: 2 });
+
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const canvasPane = host.querySelector<HTMLElement>(
+      '[data-testid="canvas-playback-canvas-pane"]',
+    );
+    if (!canvasPane) throw new Error('canvas pane was not rendered');
+    Object.defineProperty(canvasPane, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 800,
+        top: 0,
+        bottom: 600,
+        width: 800,
+        height: 600,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    const shotTwo = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.canvas-route-storyboard-matrix-cell-playable'),
+    ).find((button) => button.textContent?.includes('Shot 2'));
+
+    act(() => {
+      shotTwo?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
+    expect(useRuntimeViewportStore.getState().viewport.pan).toEqual({
+      x: -680,
+      y: 180,
+    });
   });
 
   it('hides playback stage independently and pauses active playback state', () => {
@@ -145,7 +208,7 @@ describe('PlaybackWorkspace', () => {
 
     expect(usePlaybackStore.getState().playbackSession.panes.stage).toBe(false);
     expect(usePlaybackStore.getState().playbackSession.playbackState).toBe('paused');
-    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
   });
 
   it('keeps pane toggles reachable when the playback stage is hidden', () => {
@@ -189,6 +252,7 @@ describe('PlaybackWorkspace', () => {
 
     expect(stage?.style.width).toBe('640px');
     expect(route?.style.height).toBe('260px');
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
   });
 
   it('seeks the route time ruler into the matching unit and keeps canvas order untouched', () => {
@@ -198,6 +262,7 @@ describe('PlaybackWorkspace', () => {
       usePlaybackStore.getState().revealPlaybackWorkspace();
       root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
     });
+    switchToCompactRouteStrip(host);
 
     const ruler = host.querySelector<HTMLElement>(
       '[data-testid="canvas-playback-route-time-ruler"]',
@@ -236,6 +301,49 @@ describe('PlaybackWorkspace', () => {
     expect(usePlaybackStore.getState().playbackSession.playheadMs).toBe(1000);
     expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
     expect(JSON.stringify(useCanvasStore.getState().canvasData)).toBe(before);
+  });
+
+  it('seeks from the preview control bar into the route unit projection', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const seekTrack = host.querySelector<HTMLElement>('.canvas-playback-controller-seek .group');
+    if (!seekTrack) throw new Error('preview seek bar was not rendered');
+    Object.defineProperty(seekTrack, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 400,
+        top: 0,
+        bottom: 8,
+        width: 400,
+        height: 8,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    act(() => {
+      seekTrack.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          clientX: 300,
+        }),
+      );
+      document.dispatchEvent(
+        new MouseEvent('mouseup', {
+          bubbles: true,
+          clientX: 300,
+        }),
+      );
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.currentUnitId).toBe('shot-a2');
+    expect(usePlaybackStore.getState().playbackSession.playheadMs).toBe(1000);
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
   });
 
   it('requests and renders host-enriched preview plans inside the same Webview', async () => {
@@ -331,12 +439,219 @@ describe('PlaybackWorkspace', () => {
       );
       await Promise.resolve();
     });
+    switchToCompactRouteStrip(host);
 
     expect(host.querySelector('.canvas-playback-route-tab-overflow')?.textContent).toBe('+1');
     expect(host.textContent).toContain('Route 6');
     expect(host.textContent).not.toContain('Route 7');
   });
+
+  it('switches between matrix and compact route strip without changing selected route facts', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const beforeRouteId = usePlaybackStore.getState().playbackSession.routeId;
+
+    switchToCompactRouteStrip(host);
+
+    expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).toBeNull();
+    expect(usePlaybackStore.getState().playbackSession.routeId).toBe(beforeRouteId);
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('button[title="Show route storyboard matrix"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
+    expect(usePlaybackStore.getState().playbackSession.routeId).toBe(beforeRouteId);
+  });
+
+  it('folds matrix containers globally and preserves summary cells', () => {
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-container')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.matrix.foldedContainerIds).toEqual([
+      'container:scene-a',
+    ]);
+    expect(host.querySelector('.canvas-route-storyboard-matrix-cell-summary')).not.toBeNull();
+  });
+
+  it('selects and reveals a folded container summary without changing the preview unit', () => {
+    useRuntimeViewportStore.getState().setViewport({ zoom: 1 });
+
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const canvasPane = host.querySelector<HTMLElement>(
+      '[data-testid="canvas-playback-canvas-pane"]',
+    );
+    if (!canvasPane) throw new Error('canvas pane was not rendered');
+    Object.defineProperty(canvasPane, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 800,
+        top: 0,
+        bottom: 600,
+        width: 800,
+        height: 600,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    const currentUnitBefore = usePlaybackStore.getState().playbackSession.currentUnitId;
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-container')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-cell-summary')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(useCanvasStore.getState().selection.nodeIds).toEqual(['scene-a']);
+    expect(usePlaybackStore.getState().playbackSession.currentUnitId).toBe(currentUnitBefore);
+    expect(useRuntimeViewportStore.getState().viewport.pan).toEqual({
+      x: 300,
+      y: 240,
+    });
+  });
+
+  it('sends the selected matrix route to Cut through the extension host route draft path', () => {
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    act(() => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-send')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const message = vscodeApi.postMessage.mock.calls
+      .map(([candidate]) => candidate)
+      .find(
+        (candidate) =>
+          typeof candidate === 'object' &&
+          candidate !== null &&
+          (candidate as { type?: unknown }).type === 'playback:createCutDraftFromRoute',
+      ) as { routeId?: string; type?: string } | undefined;
+
+    expect(message).toMatchObject({
+      type: 'playback:createCutDraftFromRoute',
+      routeId: 'auto-entry:shot-a1',
+    });
+    expect(JSON.stringify(message)).not.toContain('cells');
+  });
+
+  it('blocks sending a stale matrix route to Cut and shows a visible diagnostic', async () => {
+    vi.useFakeTimers();
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    await act(async () => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-send')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(
+      vscodeApi.postMessage.mock.calls.some(
+        ([message]) =>
+          typeof message === 'object' &&
+          message !== null &&
+          (message as { type?: unknown }).type === 'playback:createCutDraftFromRoute',
+      ),
+    ).toBe(false);
+    expect(host.textContent).toContain(
+      'Route changed before Cut import. Refresh playback routes first.',
+    );
+  });
+
+  it('clears matrix runtime diagnostics after canvas route data refreshes', async () => {
+    vi.useFakeTimers();
+    vscodeApi = { postMessage: vi.fn() };
+    (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
+    resetVSCodeApi();
+
+    await act(async () => {
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-send')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(host.textContent).toContain(
+      'Route changed before Cut import. Refresh playback routes first.',
+    );
+
+    await act(async () => {
+      useCanvasStore.setState({
+        canvasData: {
+          ...storyboardCanvas(),
+          name: 'Storyboard refreshed',
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).not.toContain(
+      'Route changed before Cut import. Refresh playback routes first.',
+    );
+  });
 });
+
+function switchToCompactRouteStrip(host: HTMLElement): void {
+  act(() => {
+    host
+      .querySelector<HTMLButtonElement>('button[title="Show compact route strip"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
 
 function storyboardCanvas(): CanvasData {
   return {

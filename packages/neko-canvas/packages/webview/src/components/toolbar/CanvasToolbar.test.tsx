@@ -152,6 +152,43 @@ describe('CanvasToolbar', () => {
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
+  it('renders independent playback pane visibility buttons when pane state is provided', () => {
+    const onTogglePlaybackPane = vi.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          playbackPaneState={{ canvas: true, stage: false, route: true }}
+          onTogglePlaybackPane={onTogglePlaybackPane}
+        />,
+      );
+    });
+
+    const canvasButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-canvas-pane"]',
+    );
+    const stageButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-stage-pane"]',
+    );
+    const routeButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-route-pane"]',
+    );
+
+    expect(canvasButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(stageButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(routeButton?.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => {
+      stageButton?.click();
+      routeButton?.click();
+    });
+
+    expect(onTogglePlaybackPane).toHaveBeenNthCalledWith(1, 'stage');
+    expect(onTogglePlaybackPane).toHaveBeenNthCalledWith(2, 'route');
+  });
+
   it('controls canvas HUD visibility from the bottom visibility cluster', () => {
     const onToggleHud = vi.fn();
 

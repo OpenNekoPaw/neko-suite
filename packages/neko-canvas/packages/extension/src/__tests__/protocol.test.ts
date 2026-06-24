@@ -44,6 +44,14 @@ const canvasAppSource = readFileSync(
   join(__dirname, '../../../webview/src/CanvasApp.tsx'),
   'utf-8',
 );
+const playbackWorkspaceSource = readFileSync(
+  join(__dirname, '../../../webview/src/components/playback/PlaybackWorkspace.tsx'),
+  'utf-8',
+);
+const routeStoryboardMatrixSource = readFileSync(
+  join(__dirname, '../../../webview/src/components/playback/routeStoryboardMatrix.ts'),
+  'utf-8',
+);
 const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
 const narrativePreviewBridgeSource = readFileSync(
   join(__dirname, '../editor/narrativePreviewBridge.ts'),
@@ -759,6 +767,22 @@ describe('canvasEditorProvider message contracts', () => {
       expect(canvasAppSource).toContain('.reorderSceneShots(request.sceneId');
       expect(providerSource).not.toContain('agentOrder');
       expect(providerSource).not.toContain('timelineOrder');
+    });
+
+    it('routes Canvas route matrix send-to-Cut through plan-derived draft handoff only', () => {
+      expect(playbackWorkspaceSource).toContain("type: 'playback:createCutDraftFromRoute'");
+      expect(playbackWorkspaceSource).toContain('routeId: row.routeId');
+      expect(playbackWorkspaceSource).not.toContain('CanvasCutDraftPayload');
+      expect(providerSource).toContain("case 'playback:createCutDraftFromRoute'");
+      expect(providerSource).toContain('const draft = this.createCutDraftFromRoute({');
+      expect(providerSource).toContain("'neko.cut.importCanvasDraft'");
+      expect(providerSource).toContain('requestedRevision < currentRevision');
+      expect(providerSource).not.toContain('message.cells');
+      expect(providerSource).not.toContain('message.matrix');
+      expect(routeStoryboardMatrixSource).toContain('projectRouteStoryboardMatrix');
+      expect(routeStoryboardMatrixSource).toContain('resolveEffectiveCanvasPlaybackRoutes');
+      expect(routeStoryboardMatrixSource).toContain('foldDuplicateRoutes');
+      expect(routeStoryboardMatrixSource).not.toContain('timelineOrder');
     });
   });
 
