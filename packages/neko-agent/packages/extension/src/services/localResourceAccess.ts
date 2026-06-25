@@ -8,14 +8,15 @@ import {
 } from '@neko/shared';
 import {
   VSCodeLocalResourceAccessService,
+  createExtensionCacheLocalResourceRootProvider,
   createExtensionAssetLocalResourceRootProvider,
+  createWorkspaceCacheLocalResourceRootProvider,
   createWorkspaceLocalResourceRootProvider,
   normalizeLocalFilePath,
   type LocalResourceAccessService,
   type LocalResourceRootProvider,
 } from '@neko/shared/vscode/extension';
 import { getLogger } from '../base';
-import { getWorkspaceCacheUri, isDocumentImageCachePath } from './documentCachePaths';
 
 const logger = getLogger('AgentLocalResourceAccess');
 
@@ -47,15 +48,18 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly projectors = new Map<vscode.Webview, (source: string) => string | undefined>();
   private readonly webviews = new Set<vscode.Webview>();
-  private readonly requiredCacheRoots: readonly vscode.Uri[];
+  private readonly requiredRuntimeCacheRoots: readonly vscode.Uri[];
 
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
-    const workspaceCacheUri = getWorkspaceCacheUri();
-    this.requiredCacheRoots = [...(workspaceCacheUri ? [workspaceCacheUri] : [])];
+    this.requiredRuntimeCacheRoots = [
+      ...getWorkspaceCacheRoots(),
+      ...getExtensionDocumentRuntimeRoots(context),
+    ];
     this.service = new VSCodeLocalResourceAccessService({
       logger,
       rootProviders: [
         createExtensionAssetLocalResourceRootProvider(extensionUri, 'dist', 'webview'),
+        createExtensionDocumentRuntimeLocalResourceRootProvider(context),
         createWorkspaceLocalResourceRootProvider(),
         this.mediaLibraryRoots,
         createWorkspaceCacheLocalResourceRootProvider(),
@@ -96,11 +100,7 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   }
 
   toWebviewUri(webview: vscode.Webview, source: string, caller: string): string | undefined {
-    if (isDocumentImageCachePath(source)) {
-      logger.warn('Refusing to project Agent document scratch cache path', { source, caller });
-      return undefined;
-    }
-    const roots = this.ensureRequiredCacheRoots(webview, source);
+    const roots = this.ensureRequiredRuntimeCacheRoots(webview, source);
     const projector = this.service.createSyncProjector(webview, roots, { caller });
     this.projectors.set(webview, projector);
     const uri = projector(source);
@@ -139,12 +139,15 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
     await this.configureChatWebview(webview);
   }
 
-  private ensureRequiredCacheRoots(webview: vscode.Webview, source: string): readonly vscode.Uri[] {
+  private ensureRequiredRuntimeCacheRoots(
+    webview: vscode.Webview,
+    source: string,
+  ): readonly vscode.Uri[] {
     const currentRoots = webview.options.localResourceRoots ?? [];
     const localPath = normalizeLocalFilePath(source);
     if (!localPath) return currentRoots;
 
-    const matchingRoots = this.requiredCacheRoots.filter((root) =>
+    const matchingRoots = this.requiredRuntimeCacheRoots.filter((root) =>
       isPathInsideRoot(localPath, root),
     );
     if (matchingRoots.length === 0) return currentRoots;
@@ -222,14 +225,22 @@ async function getNekoAssetsApi(): Promise<NekoAssetsAPI | undefined> {
   }
 }
 
-function createWorkspaceCacheLocalResourceRootProvider(): LocalResourceRootProvider {
-  return {
-    id: 'workspace-neko-cache',
-    getRoots: () =>
-      (vscode.workspace.workspaceFolders ?? []).map((folder) =>
-        vscode.Uri.joinPath(folder.uri, '.neko', '.cache'),
-      ),
-  };
+function createExtensionDocumentRuntimeLocalResourceRootProvider(
+  context: vscode.ExtensionContext,
+): LocalResourceRootProvider {
+  return createExtensionCacheLocalResourceRootProvider(context, 'resources', 'document-runtime');
+}
+
+function getWorkspaceCacheRoots(): readonly vscode.Uri[] {
+  return (vscode.workspace.workspaceFolders ?? []).map((folder) =>
+    vscode.Uri.joinPath(folder.uri, '.neko', '.cache'),
+  );
+}
+
+function getExtensionDocumentRuntimeRoots(context: vscode.ExtensionContext): vscode.Uri[] {
+  return context.globalStorageUri.scheme === 'file'
+    ? [vscode.Uri.joinPath(context.globalStorageUri, 'resources', 'document-runtime')]
+    : [];
 }
 
 function dedupeUris(uris: readonly vscode.Uri[]): vscode.Uri[] {

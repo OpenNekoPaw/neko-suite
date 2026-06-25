@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
-import * as os from 'os';
-import type * as vscode from 'vscode';
+import * as path from 'node:path';
+import * as vscode from 'vscode';
 import {
   createDocumentAccessService,
   createDocumentReaderRuntime,
@@ -17,8 +17,8 @@ import type {
   DocumentReadResult,
   DocumentSourceRef,
 } from '@neko/shared';
+import { resolveStorageLayout } from '@neko/shared';
 import { getLogger } from '../base';
-import { getDocumentImageCacheUri } from './documentCachePaths';
 import { createDocumentLowLevelAccess } from './documentLowLevelAccess';
 import { resolveDocumentPath } from './documentPathResolver';
 import type { IEngineClientProvider } from './engineClientProvider';
@@ -38,7 +38,7 @@ export class DocumentReaderService implements IDocumentReaderService {
   private readonly access: IDocumentAccessService;
 
   constructor(lowLevelAccess?: DocumentLowLevelAccess, options: DocumentReaderServiceOptions = {}) {
-    const tempDir = options.tempDir ?? os.tmpdir();
+    const tempDir = options.tempDir ?? resolveDefaultDocumentRuntimeCacheDir();
     const runtimeDeps: DocumentReaderRuntimeDeps = {
       readTextFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath), 'utf-8'),
       readBinaryFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath)),
@@ -128,6 +128,41 @@ export function createDocumentReaderService(
   context?: vscode.ExtensionContext,
 ): IDocumentReaderService {
   return new DocumentReaderService(createDocumentLowLevelAccess(engineClientProvider), {
-    tempDir: context ? getDocumentImageCacheUri(context).fsPath : undefined,
+    tempDir: resolveDocumentRuntimeCacheDir(context),
   });
+}
+
+export function resolveDocumentRuntimeCacheDir(context?: vscode.ExtensionContext): string {
+  const workspaceRoot = readWorkspaceRoot();
+  if (workspaceRoot) {
+    return path.join(
+      resolveStorageLayout(workspaceRoot, readHomeDir(workspaceRoot)).project.local.cache.resources,
+      'document-runtime',
+    );
+  }
+  if (context?.globalStorageUri && isFileUriLike(context.globalStorageUri)) {
+    return path.join(context.globalStorageUri.fsPath, 'resources', 'document-runtime');
+  }
+  throw new Error(
+    'DocumentReaderService requires a workspace or file-backed extension context for document image cache storage.',
+  );
+}
+
+function resolveDefaultDocumentRuntimeCacheDir(): string {
+  return resolveDocumentRuntimeCacheDir();
+}
+
+function readWorkspaceRoot(): string | undefined {
+  const folders = vscode.workspace.workspaceFolders;
+  const root = folders?.[0]?.uri;
+  return root && isFileUriLike(root) ? root.fsPath : undefined;
+}
+
+function readHomeDir(fallback: string): string {
+  const home = process.env['HOME'];
+  return home && home.trim().length > 0 ? home : fallback;
+}
+
+function isFileUriLike(uri: vscode.Uri): boolean {
+  return Boolean(uri.fsPath && (uri.scheme === undefined || uri.scheme === 'file'));
 }

@@ -1,11 +1,16 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import {
+  NEKO_AGENT_REFRESH_EXTERNAL_PROCESSORS_COMMAND,
+  NEKO_AGENT_UNREGISTER_EXTERNAL_PROCESSOR_PACKAGE_COMMAND,
+} from '@neko-agent/types';
 import { SkillInstallTarget } from '@neko/platform';
 import { getSkillFileService } from '../services/SkillFileService';
 import { getLogger } from '../base';
 import { EndpointInstallTarget } from './EndpointInstallTarget';
 import { ModelInstallTarget } from './ModelInstallTarget';
+import { ProcessorInstallTarget } from './ProcessorInstallTarget';
 import { NEKO_MARKET_EXTENSION_ID, type NekoMarketAPI } from './marketApi';
 import { ProviderCardInstallTarget } from './ProviderCardInstallTarget';
 
@@ -27,6 +32,15 @@ export async function registerMarketInstallTargets(
       refreshModels: async () => {
         await vscode.commands.executeCommand('neko.agent.refreshModels');
       },
+      refreshProcessors: async () => {
+        await vscode.commands.executeCommand(NEKO_AGENT_REFRESH_EXTERNAL_PROCESSORS_COMMAND);
+      },
+      unregisterProcessorPackage: async (packageId: string) => {
+        await vscode.commands.executeCommand(
+          NEKO_AGENT_UNREGISTER_EXTERNAL_PROCESSOR_PACKAGE_COMMAND,
+          packageId,
+        );
+      },
     };
 
     context.subscriptions.push(
@@ -43,6 +57,7 @@ export async function registerMarketInstallTargets(
       market.registerInstallTarget(new EndpointInstallTarget()),
       market.registerInstallTarget(new ProviderCardInstallTarget()),
       market.registerInstallTarget(new ModelInstallTarget(undefined, host)),
+      market.registerInstallTarget(new ProcessorInstallTarget(undefined, host)),
     );
   } catch (error) {
     logger.warn('Failed to register neko-agent market install targets', error);

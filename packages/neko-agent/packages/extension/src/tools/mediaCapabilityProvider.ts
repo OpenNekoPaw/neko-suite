@@ -5,16 +5,12 @@ import {
   type Tool,
   type ToolGroup,
 } from '@neko/shared';
-import type { Platform } from '@neko/platform';
-import type { ModelRef } from '@neko-agent/types';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
-import { createDocumentToolRuntime } from './documentToolRuntime';
+import { createDocumentFileAccessPolicy, createDocumentToolRuntime } from './documentToolRuntime';
 import { createReadImageTool } from './readImageTool';
 
 export interface MediaReadCapabilityProviderOptions {
-  readonly platform: Platform;
   readonly resourceCache?: ResourceCacheService;
-  readonly getSelectedChatModel?: () => ModelRef<'llm'> | undefined;
 }
 
 export function createMediaReadCapabilityProvider(
@@ -34,12 +30,12 @@ class MediaReadCapabilityProvider implements AgentCapabilityProvider {
       ? undefined
       : createDocumentToolRuntime(context);
     const resourceCache = this.options.resourceCache ?? documentRuntime?.documentResourceCache;
+    const fileAccessPolicy = documentRuntime?.fileAccessPolicy ?? createDocumentFileAccessPolicy();
 
     return [
       createReadImageTool({
-        platform: this.options.platform,
-        getSelectedChatModel: this.options.getSelectedChatModel,
         resourceCache,
+        fileAccessPolicy,
       }),
     ];
   }
@@ -49,7 +45,7 @@ class MediaReadCapabilityProvider implements AgentCapabilityProvider {
       {
         name: 'image-reading',
         description:
-          'Image metadata and vision-analysis tools for local images, generated assets, screenshots, and document image pages',
+          'Image metadata and native multimodal resource exposure for local images, generated assets, screenshots, and document image pages',
         tools: [TOOL_NAMES_SYSTEM.READ_IMAGE],
         alwaysActive: true,
         priority: 100,

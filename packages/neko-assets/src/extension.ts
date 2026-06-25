@@ -249,7 +249,9 @@ export async function activate(
       });
 
       // Initialize AssetDiffService with Git integration
-      const gitService = new VscodeGitService();
+      const gitService = new VscodeGitService(
+        path.join(layout.project.local.cache.resources, 'git-diff'),
+      );
       diffService = new AssetDiffService(storage, gitService, undefined, {
         statFile: async (filePath: string) => {
           try {

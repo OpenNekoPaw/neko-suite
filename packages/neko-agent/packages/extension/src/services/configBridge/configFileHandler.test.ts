@@ -32,6 +32,9 @@ describe('ConfigFileHandler', () => {
     expect(template).toContain('# Provider fields:');
     expect(template).toContain('protocol_profile: "newapi", "openai-chat"');
     expect(template).toContain('DeepSeek direct');
+    expect(template).toContain(
+      'protocol_profile: optional request protocol override for gateway models',
+    );
     expect(template).toContain('[[providers]]');
   });
 });

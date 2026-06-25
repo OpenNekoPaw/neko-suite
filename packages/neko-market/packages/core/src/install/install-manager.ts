@@ -10,7 +10,6 @@
 
 import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -65,6 +64,7 @@ export interface InstallManagerConfig {
   workspaceTrustLevel?: WorkspaceTrustLevel;
   developerMode?: DeveloperModeState;
   localAssetValidator?: LocalAssetValidator;
+  downloadTempDir?: string;
 }
 
 export interface DeveloperModeState {
@@ -1159,7 +1159,12 @@ export class InstallManager implements IInstallManager {
     onProgress?.({ packageId, phase: 'fetch', percent: 0 });
     const descriptor = await this.client.getDownloadDescriptor(packageId, version);
     state.downloaded = descriptor;
-    const tempPath = join(tmpdir(), `neko-market-${packageId.replace(/\//g, '__')}-${version}`);
+    const tempDir = this.config.downloadTempDir;
+    if (!tempDir) {
+      throw new Error('InstallManager requires downloadTempDir for uncached downloads.');
+    }
+    await mkdir(tempDir, { recursive: true });
+    const tempPath = join(tempDir, `neko-market-${packageId.replace(/\//g, '__')}-${version}`);
 
     const controller = this.createDownloadController(packageId);
     try {

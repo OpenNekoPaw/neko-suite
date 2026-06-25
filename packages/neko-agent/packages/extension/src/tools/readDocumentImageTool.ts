@@ -10,14 +10,11 @@ import {
   type ToolResult,
 } from '@neko/shared';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
-import type { Platform } from '@neko/platform';
+import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from '@neko/agent/tools';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
+import { resolveDocumentPath } from '../services/documentPathResolver';
 import {
-  MAX_READ_IMAGE_JPEG_QUALITY,
-  MAX_READ_IMAGE_LONG_EDGE,
-  MIN_READ_IMAGE_JPEG_QUALITY,
-  MIN_READ_IMAGE_LONG_EDGE,
   executeReadImage,
   type ReadImageAnalysisKind,
   type ReadImageMode,
@@ -29,8 +26,8 @@ export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 16;
 
 export interface ReadDocumentImageToolDeps extends ReadImageToolDeps {
   readonly reader: IDocumentReaderService;
-  readonly platform?: Platform;
   readonly resourceCache?: ResourceCacheService;
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
 
@@ -47,10 +44,10 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
   return createTool({
     name: TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     description:
-      'Resolve selected image pages from a document and read or visually analyze them. ' +
+      'Resolve selected image pages from a document and expose them as native multimodal Agent resources. ' +
       'Use this when you have document locators or page indexes and still need to resolve them to image files. ' +
       'If ReadDocument already returned image_paths/imagePaths, call ReadImage directly instead of this tool. ' +
-      'This is a document-page adapter over ReadImage; never call both ReadImage and ReadDocumentImage for the same image batch.',
+      'This is a document-page adapter over ReadImage; it does not call a separate vision model.',
     category: 'document',
     isReadOnly: true,
     isConcurrencySafe: true,
@@ -84,44 +81,26 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
         },
         mode: {
           type: 'string',
-          enum: ['metadata', 'vision'],
+          enum: ['metadata'],
           description:
-            'metadata reads image metadata only. vision sends selected pages to the chat model.',
+            'metadata resolves document page images and exposes them to the native multimodal Agent turn.',
         },
         analysis: {
           type: 'string',
           enum: ['describe', 'ocr', 'panels', 'storyboard', 'custom'],
-          description: 'Requested vision analysis style for selected document images.',
+          description:
+            'Optional hint for the next native multimodal Agent reasoning step. This tool does not perform model analysis.',
         },
         prompt: {
           type: 'string',
-          description: 'Optional custom instruction for vision mode.',
+          description:
+            'Optional hint for the next native multimodal Agent reasoning step. This tool does not perform model analysis.',
         },
         max_images: {
           type: 'integer',
           description: `Maximum document images to process. Default ${DEFAULT_READ_DOCUMENT_IMAGE_LIMIT}; max ${MAX_READ_DOCUMENT_IMAGE_LIMIT}.`,
           minimum: 1,
           maximum: MAX_READ_DOCUMENT_IMAGE_LIMIT,
-        },
-        preprocess: {
-          type: 'string',
-          enum: ['auto', 'none'],
-          description:
-            'Vision mode only. auto (default) downscales oversized page images and normalizes model payloads to JPEG; none sends original bytes.',
-        },
-        max_long_edge: {
-          type: 'integer',
-          description:
-            'Vision mode preprocessing target for the longest page-image edge. Used with preprocess="auto".',
-          minimum: MIN_READ_IMAGE_LONG_EDGE,
-          maximum: MAX_READ_IMAGE_LONG_EDGE,
-        },
-        quality: {
-          type: 'integer',
-          description:
-            'Vision mode JPEG quality used by preprocessing. Used with preprocess="auto".',
-          minimum: MIN_READ_IMAGE_JPEG_QUALITY,
-          maximum: MAX_READ_IMAGE_JPEG_QUALITY,
         },
       },
       required: ['file_path'],
@@ -138,8 +117,13 @@ export async function executeReadDocumentImage(
   if (!filePath) {
     return { success: false, error: 'Missing required field: file_path' };
   }
-  if (!deps.reader.supports(filePath)) {
-    return { success: false, error: `Unsupported document format: ${filePath}` };
+  const authorization = await authorizeLocalDocumentPath(deps.fileAccessPolicy, filePath);
+  if (!authorization.allowed) {
+    return { success: false, error: authorization.error };
+  }
+  const resolvedFilePath = authorization.path;
+  if (!deps.reader.supports(resolvedFilePath)) {
+    return { success: false, error: `Unsupported document format: ${resolvedFilePath}` };
   }
 
   const maxImages = readBoundedInteger(
@@ -153,7 +137,10 @@ export async function executeReadDocumentImage(
   const directImagePaths = readStringArray(args['image_paths']);
 
   try {
-    const source = readDocumentSource(args['source']) ?? filePath;
+    const source = await authorizeDocumentImageSource(
+      deps.fileAccessPolicy,
+      readDocumentSource(args['source']) ?? resolvedFilePath,
+    );
     const selected =
       directImagePaths.length > 0
         ? directImagePaths.slice(0, maxImages).map((path, index) => ({
@@ -179,7 +166,7 @@ export async function executeReadDocumentImage(
     const readImageResult = await executeReadImage(deps, {
       images: projectedSelected.map((image) => ({
         path: image.info.path,
-        runtimePath: image.info.runtimePath ?? image.info.path,
+        runtimePath: image.info.path,
         runtimeKind: image.info.runtimeKind ?? 'scratch-cache',
         alias: image.info.alias ?? formatDocumentImageAlias(image.info.locator, image.index),
         ...(image.info.aliasScope ? { aliasScope: image.info.aliasScope } : {}),
@@ -202,13 +189,6 @@ export async function executeReadDocumentImage(
       mode,
       analysis,
       ...(readString(args['prompt']) ? { prompt: readString(args['prompt']) } : {}),
-      ...(readString(args['preprocess']) ? { preprocess: readString(args['preprocess']) } : {}),
-      ...(readNumber(args['max_long_edge']) !== undefined
-        ? { max_long_edge: readNumber(args['max_long_edge']) }
-        : {}),
-      ...(readNumber(args['quality']) !== undefined
-        ? { quality: readNumber(args['quality']) }
-        : {}),
       max_images: maxImages,
     });
 
@@ -229,7 +209,9 @@ export async function executeReadDocumentImage(
             return {
               ...image,
               ...(nextPath ? { path: nextPath } : {}),
-              ...(documentImage ? { documentImage } : {}),
+              ...(documentImage
+                ? { documentImage: selectTransferDocumentImageInfo(documentImage) }
+                : {}),
               ...(documentImage?.cacheResourceRef
                 ? { cacheResourceRef: documentImage.cacheResourceRef }
                 : {}),
@@ -238,10 +220,60 @@ export async function executeReadDocumentImage(
         ),
         imageCount: selected.length,
       },
+      attachments: readImageResult.attachments,
+      perceptionCards: readImageResult.perceptionCards,
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+function selectTransferDocumentImageInfo(
+  image: DocumentImageInfoWithCacheResourceRef,
+): DocumentImageInfoWithCacheResourceRef {
+  return {
+    ...image,
+    runtimePath: image.path,
+  };
+}
+
+async function authorizeLocalDocumentPath(
+  fileAccessPolicy: CoreFileAccessPolicy | undefined,
+  filePath: string,
+): Promise<
+  | { readonly allowed: true; readonly path: string }
+  | { readonly allowed: false; readonly error: string }
+> {
+  const resolvedFilePath = await resolveDocumentPath(filePath);
+  const authorization = (fileAccessPolicy ?? createNoWorkspaceFileAccessPolicy()).authorize(
+    resolvedFilePath,
+    'read',
+  );
+  if (!authorization.allowed) {
+    return {
+      allowed: false,
+      error: authorization.message ?? `Unauthorized document path: ${resolvedFilePath}`,
+    };
+  }
+  return { allowed: true, path: authorization.path };
+}
+
+async function authorizeDocumentImageSource(
+  fileAccessPolicy: CoreFileAccessPolicy | undefined,
+  source: DocumentSourceRef | string,
+): Promise<DocumentSourceRef | string> {
+  if (typeof source === 'string') {
+    const authorization = await authorizeLocalDocumentPath(fileAccessPolicy, source);
+    if (!authorization.allowed) {
+      throw new Error(authorization.error);
+    }
+    return authorization.path;
+  }
+  const authorization = await authorizeLocalDocumentPath(fileAccessPolicy, source.filePath);
+  if (!authorization.allowed) {
+    throw new Error(authorization.error);
+  }
+  return { ...source, filePath: authorization.path };
 }
 
 async function selectImagesFromDocument(
@@ -306,9 +338,9 @@ async function withCacheResourceRef(
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
 ): Promise<DocumentImageInfoWithCacheResourceRef> {
   if (!image.resourceRef) return image;
+  const { cachePath: _cachePath, ...stableResourceRef } = image.resourceRef;
   const archiveRef = {
-    ...image.resourceRef,
-    ...(image.path ? { cachePath: image.resourceRef.cachePath ?? image.path } : {}),
+    ...stableResourceRef,
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
   };
   const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
@@ -321,14 +353,7 @@ async function withCacheResourceRef(
     image,
   );
   const nextPath = materializedPath ?? image.path;
-  const resourceRef = {
-    ...archiveRef,
-    ...(nextPath ? { cachePath: nextPath } : {}),
-  };
-  const nextCacheResourceRef =
-    nextPath === image.path
-      ? cacheResourceRef
-      : createDocumentResourceRefFromArchiveRef(resourceRef, cacheResourceRef.scope);
+  const nextCacheResourceRef = cacheResourceRef;
   return {
     ...image,
     path: nextPath,
@@ -342,7 +367,7 @@ async function withCacheResourceRef(
     ...(nextCacheResourceRef.scope === 'project'
       ? {}
       : { nonPortableReason: 'no-workspace-or-extension-private-scratch' }),
-    resourceRef,
+    resourceRef: archiveRef,
     cacheResourceRef: nextCacheResourceRef,
   };
 }
@@ -485,10 +510,6 @@ function readBoundedInteger(
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function readNumber(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

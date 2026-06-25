@@ -40,7 +40,10 @@ import {
 } from './services/canvasAmbientExtensionBridge';
 import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
 import { registerEntityContributionAutomationCommand } from '@neko/entity/host-vscode';
-import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
+import {
+  bootstrapCapabilities,
+  setCapabilityRuntimeExternalProcessorRuntime,
+} from './bootstrap/capabilityBootstrap';
 import { createDocumentReadCapabilityProvider } from './tools/documentCapabilityProvider';
 import { createMediaReadCapabilityProvider } from './tools/mediaCapabilityProvider';
 import { createSemanticCoverageCapabilityProvider } from './tools/searchCapabilityProvider';
@@ -54,6 +57,8 @@ import { resolveDocumentPath } from './services/documentPathResolver';
 import { createAgentProjectSearchAdapters } from './services/agentProjectSearchAdapters';
 import { getSkillFileService } from './services/SkillFileService';
 import { createSkillCatalogProvider } from './services/skillCatalogProvider';
+import { ExternalProcessorRegistryService } from './services/externalProcessorRegistryService';
+import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcService';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -208,6 +213,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Bootstrap core services (Platform, MCP, Tools, etc.)
   const bootstrapResult = await bootstrapCoreServices(services, context);
   logServicesStatus(bootstrapResult);
+  void runResourceCacheStartupGc({ context }).catch((error) => {
+    logger.warn('Failed to run resource cache startup GC', { error });
+  });
 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
@@ -236,28 +244,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     context,
   );
   capabilityDiscovery.registerProvider(
-    createDocumentReadCapabilityProvider(bootstrapResult.platform),
+    createDocumentReadCapabilityProvider(),
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(
-    createMediaReadCapabilityProvider({
-      platform: bootstrapResult.platform,
-      getSelectedChatModel: () => {
-        const settings = bootstrapResult.platform.config.getAssistantRuntimeSettingsSnapshot();
-        if (!settings.selectedProviderId || !settings.selectedModelId) return undefined;
-        return {
-          providerId: settings.selectedProviderId,
-          modelId: settings.selectedModelId,
-          category: 'llm',
-        };
-      },
-    }),
+    createMediaReadCapabilityProvider({}),
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(
     createSemanticCoverageCapabilityProvider(),
     agentOwnedCapabilityContext,
   );
+
+  const externalProcessorRegistryService = new ExternalProcessorRegistryService({
+    context,
+    logger: logger.child('ExternalProcessorRegistry'),
+  });
+  setCapabilityRuntimeExternalProcessorRuntime(externalProcessorRegistryService.runtime);
+  context.subscriptions.push(externalProcessorRegistryService);
 
   // Create chat view provider
   const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
@@ -322,6 +326,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   context.subscriptions.push(createStatusBar(bootstrapResult.platform));
 
   await registerMarketInstallTargets(context);
+  void externalProcessorRegistryService.refresh().catch((error) => {
+    logger.warn('Failed to initialize external processor registry', { error });
+  });
 
   getRootLogger().info('Extension activated');
 

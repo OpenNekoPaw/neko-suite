@@ -7,7 +7,6 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs/promises';
 import type { IGitService } from '@neko/asset';
 import type { FileVersion } from '@neko/shared';
@@ -49,6 +48,8 @@ interface Commit {
 
 export class VscodeGitService implements IGitService {
   private gitApi: GitAPI | null = null;
+
+  constructor(private readonly tempRoot: string) {}
 
   /**
    * Lazily acquire the Git extension API.
@@ -104,7 +105,7 @@ export class VscodeGitService implements IGitService {
 
     // Write to temp file so diff service can read it
     const ext = path.extname(filePath);
-    const tempDir = path.join(os.tmpdir(), 'neko-assets-diff');
+    const tempDir = path.join(this.tempRoot, 'neko-assets-diff');
     await fs.mkdir(tempDir, { recursive: true });
     const tempPath = path.join(tempDir, `${ref.replace(/[^a-zA-Z0-9]/g, '_')}${ext}`);
     await fs.writeFile(tempPath, content);

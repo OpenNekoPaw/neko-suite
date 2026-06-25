@@ -112,7 +112,9 @@ export function bootstrapCoreServices(
   const engineMediaService = new EngineMediaService(engineRuntimeResolver);
   const workspaceIO = new VSCodeWorkspaceIO();
   const scheduler = new DefaultScheduler();
-  const tempFileService = new DefaultTempFileService();
+  const tempFileService = new DefaultTempFileService(
+    vscode.Uri.joinPath(context.globalStorageUri, 'temp', 'media-diff').fsPath,
+  );
   const assetEntityReader = new VSCodeAssetEntityReader();
   const variantComparisonService = new VscodeCommandVariantComparisonService();
 

@@ -5,35 +5,37 @@ import {
   type Tool,
   type ToolGroup,
 } from '@neko/shared';
-import type { Platform } from '@neko/platform';
 import { createDocumentToolRuntime } from './documentToolRuntime';
 import { createReadDocumentImageTool } from './readDocumentImageTool';
 import { createReadDocumentTool } from './readDocumentTool';
 
-export function createDocumentReadCapabilityProvider(platform: Platform): AgentCapabilityProvider {
-  return new DocumentReadCapabilityProvider(platform);
+export function createDocumentReadCapabilityProvider(): AgentCapabilityProvider {
+  return new DocumentReadCapabilityProvider();
 }
 
 class DocumentReadCapabilityProvider implements AgentCapabilityProvider {
   readonly id = 'neko-agent-platform-document';
   readonly version = '1.0.0';
 
-  constructor(private readonly platform: Platform) {}
-
   getTools(context: AgentCapabilityContext): Tool[] {
-    const { documentReader, documentResourceCache, resolveDocumentResourceScope } =
-      createDocumentToolRuntime(context);
+    const {
+      documentReader,
+      documentResourceCache,
+      fileAccessPolicy,
+      resolveDocumentResourceScope,
+    } = createDocumentToolRuntime(context);
 
     return [
       createReadDocumentTool({
         reader: documentReader,
         resourceCache: documentResourceCache,
+        fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
       createReadDocumentImageTool({
         reader: documentReader,
-        platform: this.platform,
         resourceCache: documentResourceCache,
+        fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
     ];

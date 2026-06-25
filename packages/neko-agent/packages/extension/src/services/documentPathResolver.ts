@@ -3,7 +3,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as vscode from 'vscode';
-import { PathResolver, type PathVariableMap } from '@neko/shared';
+import {
+  NEKO_EXTENSION_IDS,
+  PathResolver,
+  type NekoAssetsAPI,
+  type PathVariableMap,
+} from '@neko/shared';
 import { getLogger } from '../base';
 
 interface MediaLibraryEntry {
@@ -77,6 +82,18 @@ async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
   const mediaRoots = await loadWorkspaceMediaLibraryRoots();
   const firstWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   return buildWorkspacePathVariables(mediaRoots, firstWorkspaceRoot);
+}
+
+export async function loadAuthorizedMediaLibraryReadRoots(): Promise<string[]> {
+  const apiRoots = await loadMediaLibraryRootsFromAssetsApi();
+  if (apiRoots) {
+    return apiRoots;
+  }
+
+  const roots = await loadWorkspaceMediaLibraryRoots();
+  return filterReadableDirectories(
+    dedupePaths(roots.map((root) => normalizeConfiguredPath(root.path, root.workspaceRoot))),
+  );
 }
 
 async function loadWorkspaceMediaLibraryRoots(): Promise<ResolvedMediaLibraryRoot[]> {
@@ -197,4 +214,48 @@ function expandHomeDir(filePath: string): string {
 
 function isRemoteSource(filePath: string): boolean {
   return filePath.startsWith('http://') || filePath.startsWith('https://');
+}
+
+async function loadMediaLibraryRootsFromAssetsApi(): Promise<string[] | undefined> {
+  const extension = vscode.extensions.getExtension<NekoAssetsAPI>(NEKO_EXTENSION_IDS.NEKO_ASSETS);
+  if (!extension) {
+    return undefined;
+  }
+
+  try {
+    const api = extension.isActive ? extension.exports : await extension.activate();
+    return dedupePaths((await api.getMediaLibraryRoots()).map((root) => path.resolve(root)));
+  } catch (error) {
+    logger.warn('Failed to load media library roots from neko-assets API', error);
+    return undefined;
+  }
+}
+
+function dedupePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of paths) {
+    if (!item.trim()) continue;
+    const normalized = path.normalize(item);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+async function filterReadableDirectories(paths: readonly string[]): Promise<string[]> {
+  const result: string[] = [];
+  for (const item of paths) {
+    try {
+      const stat = await fs.stat(item);
+      if (stat.isDirectory()) {
+        await fs.access(item);
+        result.push(item);
+      }
+    } catch {
+      // Unreadable roots are not authorized for Agent file tools.
+    }
+  }
+  return result;
 }

@@ -1295,6 +1295,7 @@ function createManager(options: {
       new InstalledRegistry(join(tmpdir(), `neko-market-installed-${Math.random()}.json`)),
     {
       nekoSuiteVersion: '1.0.0',
+      downloadTempDir: join(tmpdir(), 'neko-market-downloads'),
       effectsActivator: options.effectsActivator,
       effectsInverter: options.effectsInverter,
       ...options.config,

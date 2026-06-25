@@ -93,7 +93,7 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 6. Asset Service (素材管理)
   // ==========================================================================
-  const assetService = new AssetService();
+  const assetService = new AssetService({ globalStoragePath: context.globalStorageUri.fsPath });
   services.set(IAssetService, assetService);
   context.subscriptions.push(assetService);
 

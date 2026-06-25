@@ -54,6 +54,8 @@ export const IAssetService = createServiceId<AssetService>('assetService');
 export interface AssetServiceConfig {
   /** Storage directory path (for JsonFileStorage) */
   storagePath?: string;
+  /** Extension-private storage root used when no workspace is open */
+  globalStoragePath?: string;
   /** Use in-memory storage (for testing) */
   useInMemory?: boolean;
 }
@@ -148,11 +150,14 @@ export class AssetService implements vscode.Disposable {
    */
   private getDefaultStoragePath(): string {
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders && workspaceFolders.length > 0) {
-      return path.join(workspaceFolders[0].uri.fsPath, 'neko', 'assets');
+    const workspaceFolder = workspaceFolders?.[0];
+    if (workspaceFolder) {
+      return path.join(workspaceFolder.uri.fsPath, 'neko', 'assets');
     }
-    // Fallback to global storage
-    return path.join(process.env.HOME ?? '/tmp', '.neko', 'assets');
+    if (this.config.globalStoragePath) {
+      return path.join(this.config.globalStoragePath, 'assets');
+    }
+    throw new Error('AssetService requires a workspace or extension global storage path.');
   }
 
   /**

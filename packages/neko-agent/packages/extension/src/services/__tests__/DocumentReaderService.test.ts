@@ -4,7 +4,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
-import { DocumentReaderService } from '../DocumentReaderService';
+import {
+  DocumentReaderService,
+  createDocumentReaderService,
+  resolveDocumentRuntimeCacheDir,
+} from '../DocumentReaderService';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
@@ -14,12 +18,6 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(),
   mkdir: vi.fn(),
   stat: vi.fn(),
-}));
-
-// Mock os
-vi.mock('os', () => ({
-  tmpdir: vi.fn(() => '/tmp'),
-  homedir: vi.fn(() => '/home/tester'),
 }));
 
 // Mock the logger
@@ -42,6 +40,62 @@ describe('DocumentReaderService', () => {
   });
 
   describe('supports', () => {
+    it('uses the project resource cache for default document image extraction', () => {
+      expect(resolveDocumentRuntimeCacheDir()).toBe(
+        '/mock/workspace/.neko/.cache/resources/document-runtime',
+      );
+    });
+
+    it('uses extension-private resource cache when no workspace is open', () => {
+      const previousFolders = vscode.workspace.workspaceFolders;
+      vscode.workspace.workspaceFolders = [];
+      try {
+        expect(
+          resolveDocumentRuntimeCacheDir({
+            extensionUri: vscode.Uri.file('/ext/neko-agent'),
+            globalStorageUri: vscode.Uri.file('/global/neko-agent'),
+          } as vscode.ExtensionContext),
+        ).toBe('/global/neko-agent/resources/document-runtime');
+      } finally {
+        vscode.workspace.workspaceFolders = previousFolders;
+      }
+    });
+
+    it('wires createDocumentReaderService to the managed document runtime cache', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      const reader = createDocumentReaderService();
+      vi.spyOn(reader, 'hasDRM').mockResolvedValue(false);
+      vi.spyOn(
+        reader as unknown as { tryImport(packageName: string): Promise<unknown | null> },
+        'tryImport',
+      ).mockImplementation(async (packageName) => {
+        if (packageName !== 'adm-zip') return null;
+        return class FakeZip {
+          getEntries() {
+            return [
+              {
+                name: 'page-1.jpg',
+                getData: () =>
+                  new Uint8Array([
+                    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x02, 0x00, 0x03, 0x03, 0xff,
+                    0xd9,
+                  ]),
+              },
+            ];
+          }
+        };
+      });
+
+      const result = await reader.read('/path/to/comic.cbz');
+
+      expect(result.imagePaths?.[0]).toMatch(
+        /^\/mock\/workspace\/\.neko\/\.cache\/resources\/document-runtime\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+      );
+      expect(JSON.stringify(result)).not.toContain('/tmp/');
+    });
+
     it('should support PDF files', () => {
       expect(service.supports('/path/to/file.pdf')).toBe(true);
       expect(service.supports('/path/to/file.PDF')).toBe(true);
@@ -182,12 +236,12 @@ describe('DocumentReaderService', () => {
       expect(fs.readFile).toHaveBeenCalledWith('/library/books/book.txt', 'utf-8');
     });
 
-    it('writes extracted document images under the configured cache directory', async () => {
+    it('writes extracted document images under the configured temp directory', async () => {
       const fs = await import('fs/promises');
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
       const cachedService = new DocumentReaderService(undefined, {
-        tempDir: '/agent-storage/document-image-cache',
+        tempDir: '/agent-temp/document-reader',
       });
       vi.spyOn(cachedService, 'hasDRM').mockResolvedValue(false);
       vi.spyOn(
@@ -214,16 +268,14 @@ describe('DocumentReaderService', () => {
       const result = await cachedService.read('/path/to/comic.cbz');
 
       expect(result.imagePaths?.[0]).toMatch(
-        /^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+        /^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
       );
       expect(fs.mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+$/),
+        expect.stringMatching(/^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+$/),
         { recursive: true },
       );
       expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^\/agent-storage\/document-image-cache\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
-        ),
+        expect.stringMatching(/^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/),
         expect.any(Uint8Array),
       );
     });

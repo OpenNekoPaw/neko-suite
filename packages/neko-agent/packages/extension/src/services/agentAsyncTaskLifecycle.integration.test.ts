@@ -87,7 +87,9 @@ function createManager(
     recoveryStorage,
     cleanupIntervalMs: 0,
   });
-  const executor = new MediaTaskExecutor({} as ProviderRegistry, createConfigManager());
+  const executor = new MediaTaskExecutor({} as ProviderRegistry, createConfigManager(), {
+    allowLegacyBridgeProviderTypes: ['integration-provider'],
+  });
   getMediaAdapterRegistry().register('integration-provider', adapter);
   executor.registerWith(manager);
   return manager;

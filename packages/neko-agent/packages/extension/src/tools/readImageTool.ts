@@ -1,46 +1,35 @@
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import {
   createTool,
+  getMimeType,
   isDocumentArchiveResourceRef,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   TOOL_NAMES_SYSTEM,
   type DocumentArchiveResourceRef,
+  type PerceptionCard,
+  type PerceptualAssetRef,
   type ResourceRef,
   type Tool,
   type ToolResult,
 } from '@neko/shared';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
+import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from '@neko/agent/tools';
 import { probeImageMetadata, type ImageMetadata } from '@neko/platform/document';
-import type { ChatMessage, ServiceResponse } from '@neko/platform';
-import type { ModelRef } from '@neko-agent/types';
-import {
-  DEFAULT_VISION_PREPROCESS_POLICY,
-  planVisionImagePreprocess,
-  resolveVisionImageAttachmentMediaType,
-  type VisionImageProcessor,
-  type VisionPreprocessPolicy,
-} from '@neko/platform/media';
-import type { Platform } from '@neko/platform';
 import { resolveDocumentPath } from '../services/documentPathResolver';
-import { createSharpVisionImageProcessor } from '../services/visionImageProcessor';
 
 export const DEFAULT_READ_IMAGE_LIMIT = 4;
 export const MAX_READ_IMAGE_LIMIT = 16;
 export const MAX_READ_IMAGE_BYTES = 20 * 1024 * 1024;
-export const MIN_READ_IMAGE_LONG_EDGE = 256;
-export const MAX_READ_IMAGE_LONG_EDGE = 4096;
-export const MIN_READ_IMAGE_JPEG_QUALITY = 40;
-export const MAX_READ_IMAGE_JPEG_QUALITY = 95;
-export const READ_IMAGE_VISION_SYSTEM_PROMPT =
-  'You are a stateless vision-analysis tool. Analyze only the image inputs and the explicit user instruction in this tool call. Ignore prior chat history, active skills, story/script/character workflows, canvas selections, and project context unless they are provided in this tool call. Do not invent unreadable text.';
+export const READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED =
+  'ReadImage no longer performs model-backed vision analysis. Use metadata mode to expose image resources, then let the selected chat model analyze them through the native multimodal Agent turn. Future external vision-model tools must use a separate tool name.';
 
 export interface ReadImageToolDeps {
-  readonly platform?: Platform;
-  readonly getSelectedChatModel?: () => ModelRef<'llm'> | undefined;
   readonly readFile?: (filePath: string) => Promise<Uint8Array>;
-  readonly imageProcessor?: VisionImageProcessor;
   readonly resourceCache?: ResourceCacheService;
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
+  readonly now?: () => number;
 }
 
 export interface ReadImageInputImage {
@@ -74,8 +63,6 @@ export interface ReadImageResultImage {
   readonly height?: number;
   readonly mimeType?: string;
   readonly byteSize: number;
-  readonly visionInput?: ReadImageVisionInputSummary;
-  readonly analysis?: string;
   readonly metadata?: Record<string, unknown>;
   readonly resourceRef?: DocumentArchiveResourceRef;
   readonly cacheResourceRef?: ResourceRef;
@@ -83,7 +70,7 @@ export interface ReadImageResultImage {
 
 export interface ReadImageResultData {
   readonly mode: ReadImageMode;
-  readonly analysis: ReadImageAnalysisKind;
+  readonly analysis?: ReadImageAnalysisKind;
   readonly images: readonly ReadImageResultImage[];
   readonly imageCount: number;
   readonly imagePathsTruncated: boolean;
@@ -91,18 +78,6 @@ export interface ReadImageResultData {
 
 export type ReadImageMode = 'metadata' | 'vision';
 export type ReadImageAnalysisKind = 'describe' | 'ocr' | 'panels' | 'storyboard' | 'custom';
-export type ReadImagePreprocessMode = 'auto' | 'none';
-
-export interface ReadImageVisionInputSummary {
-  readonly preprocess: ReadImagePreprocessMode;
-  readonly transformed: boolean;
-  readonly mimeType: string;
-  readonly byteSize: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly maxLongEdge?: number;
-  readonly jpegQuality?: number;
-}
 
 interface LoadedImage {
   readonly input: ReadImageInputImage;
@@ -111,21 +86,14 @@ interface LoadedImage {
   readonly metadata: ImageMetadata;
 }
 
-interface PreparedVisionImage {
-  readonly image: LoadedImage;
-  readonly bytes: Uint8Array;
-  readonly mimeType: string;
-  readonly summary: ReadImageVisionInputSummary;
-}
-
 export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
   return createTool({
     name: TOOL_NAMES_SYSTEM.READ_IMAGE,
     description:
-      'Read local image metadata, or analyze selected images with the current vision-capable chat model. ' +
+      'Read local image metadata and expose selected images as native multimodal Agent resources. ' +
       'Use this for image files from ReadDocument imagePaths, media libraries, generated assets, screenshots, and attachments. ' +
       'When ReadDocument already returned image_paths/imagePaths, use this tool directly instead of ReadDocumentImage. ' +
-      'Default mode="metadata" returns dimensions/MIME/size only; mode="vision" performs visual analysis/OCR/panel description.',
+      'The selected chat model performs visual analysis in the next Agent reasoning step; this tool does not call a separate vision model.',
     category: 'analysis',
     isReadOnly: true,
     isConcurrencySafe: true,
@@ -140,58 +108,62 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
         images: {
           type: 'array',
           description:
-            'Optional structured image inputs. Each item may include { path, label }. Used when page labels are available.',
+            'Optional structured image inputs from ReadDocument.imageInfo. Prefer this over image_paths when resourceRef/cacheResourceRef, aliases, or page labels are available so stable document image references are preserved.',
           items: {
             type: 'object',
             properties: {
               path: { type: 'string' },
+              runtimePath: { type: 'string' },
+              runtimeKind: {
+                type: 'string',
+                enum: ['local-path', 'webview-uri', 'scratch-cache', 'managed-cache'],
+              },
               label: { type: 'string' },
+              alias: { type: 'string' },
+              aliasScope: { type: 'string' },
+              sourceDocumentId: { type: 'string' },
+              entryPath: { type: 'string' },
+              portableForTransfer: { type: 'boolean' },
+              nonPortableReason: { type: 'string' },
+              metadata: {
+                type: 'object',
+                description: 'Optional metadata copied from ReadDocument.imageInfo.',
+              },
+              resourceRef: {
+                type: 'object',
+                description:
+                  'Stable DocumentArchiveResourceRef copied from ReadDocument.imageInfo.',
+              },
+              cacheResourceRef: {
+                type: 'object',
+                description: 'Stable ResourceRef copied from ReadDocument.imageInfo.',
+              },
             },
             required: ['path'],
           },
         },
         mode: {
           type: 'string',
-          enum: ['metadata', 'vision'],
+          enum: ['metadata'],
           description:
-            'metadata reads only file/image metadata. vision sends selected images to the chat model.',
+            'metadata reads local file/image metadata and exposes images to the native multimodal Agent turn.',
         },
         analysis: {
           type: 'string',
           enum: ['describe', 'ocr', 'panels', 'storyboard', 'custom'],
           description:
-            'Requested vision analysis style. Ignored for metadata mode except for result bookkeeping.',
+            'Optional hint for the next native multimodal Agent reasoning step. This tool does not perform model analysis.',
         },
         prompt: {
           type: 'string',
           description:
-            'Optional custom instruction for vision mode. Used with analysis="custom" or to add task-specific detail.',
+            'Optional hint for the next native multimodal Agent reasoning step. This tool does not perform model analysis.',
         },
         max_images: {
           type: 'integer',
           description: `Maximum number of images to process. Default ${DEFAULT_READ_IMAGE_LIMIT}; max ${MAX_READ_IMAGE_LIMIT}.`,
           minimum: 1,
           maximum: MAX_READ_IMAGE_LIMIT,
-        },
-        preprocess: {
-          type: 'string',
-          enum: ['auto', 'none'],
-          description:
-            'Vision mode only. auto (default) downscales oversized inputs and normalizes model payloads to JPEG; none sends original bytes.',
-        },
-        max_long_edge: {
-          type: 'integer',
-          description:
-            'Vision mode preprocessing target for the longest edge. Used with preprocess="auto".',
-          minimum: MIN_READ_IMAGE_LONG_EDGE,
-          maximum: MAX_READ_IMAGE_LONG_EDGE,
-        },
-        quality: {
-          type: 'integer',
-          description:
-            'Vision mode JPEG quality used by preprocessing. Used with preprocess="auto".',
-          minimum: MIN_READ_IMAGE_JPEG_QUALITY,
-          maximum: MAX_READ_IMAGE_JPEG_QUALITY,
         },
       },
     },
@@ -205,13 +177,15 @@ export async function executeReadImage(
 ): Promise<ToolResult> {
   const mode = readMode(args['mode']);
   const analysis = readAnalysisKind(args['analysis']);
+  if (mode === 'vision') {
+    return { success: false, error: READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED };
+  }
   const maxImages = readBoundedInteger(
     args['max_images'],
     DEFAULT_READ_IMAGE_LIMIT,
     1,
     MAX_READ_IMAGE_LIMIT,
   );
-  const preprocessOptions = readVisionPreprocessOptions(args);
   const images = readInputImages(args);
   if (images.length === 0) {
     return { success: false, error: 'Missing required field: image_paths or images' };
@@ -244,76 +218,14 @@ export async function executeReadImage(
       ...(image.input.resourceRef ? { resourceRef: image.input.resourceRef } : {}),
       ...(image.input.cacheResourceRef ? { cacheResourceRef: image.input.cacheResourceRef } : {}),
     }));
-
-    if (mode === 'vision') {
-      const service = deps.platform?.createService();
-      if (!service) {
-        return {
-          success: false,
-          error: 'ReadImage vision mode requires an active AI platform service.',
-        };
-      }
-      const chatModel = deps.getSelectedChatModel?.();
-      if (!chatModel?.providerId || !chatModel.modelId) {
-        return {
-          success: false,
-          error: 'ReadImage vision mode requires an explicit chat provider and model selection.',
-        };
-      }
-      const prepared = await Promise.all(
-        loaded.map((image) => prepareVisionImage(deps, image, preprocessOptions)),
-      );
-
-      const response = await readVisionWithService(
-        service,
-        [
-          {
-            role: 'system',
-            content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: buildVisionPrompt({ analysis, prompt: readString(args['prompt']) }),
-              },
-              ...prepared.flatMap((preparedImage, index) => [
-                {
-                  type: 'text' as const,
-                  text: formatVisionImageLabel(preparedImage.image, index),
-                },
-                {
-                  type: 'image' as const,
-                  imageUrl: toDataUrl(
-                    preparedImage.mimeType,
-                    preparedImage.image.resolvedPath,
-                    preparedImage.bytes,
-                  ),
-                  detail: 'high' as const,
-                },
-              ]),
-            ],
-          },
-        ],
-        chatModel,
-      );
-      const analysisText = normalizeServiceResponseText(response.message.content);
-      return {
-        success: true,
-        data: {
-          mode,
-          analysis,
-          images: results.map((result, index) => ({
-            ...result,
-            ...(prepared[index] ? { visionInput: prepared[index].summary } : {}),
-            analysis: analysisText,
-          })),
-          imageCount: images.length,
-          imagePathsTruncated: selected.length < images.length,
-        } satisfies ReadImageResultData,
-      };
-    }
+    const perceptionCards = results.map((image, index) =>
+      createReadImagePerceptionCard({
+        image,
+        loaded: loaded[index]!,
+        createdAt: deps.now?.() ?? Date.now(),
+        index,
+      }),
+    );
 
     return {
       success: true,
@@ -324,6 +236,13 @@ export async function executeReadImage(
         imageCount: images.length,
         imagePathsTruncated: selected.length < images.length,
       } satisfies ReadImageResultData,
+      attachments: results.map((image, index) => ({
+        type: 'image' as const,
+        path: image.path,
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+        assetRef: perceptionCards[index]!.perceptual!.keyframeRefs![0]!,
+      })),
+      perceptionCards,
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -335,17 +254,23 @@ async function loadImage(
   input: ReadImageInputImage,
 ): Promise<LoadedImage> {
   const resolvedPath = await resolveDocumentPath(input.path);
-  const bytes = deps.readFile ? await deps.readFile(resolvedPath) : await fs.readFile(resolvedPath);
+  const fileAccessPolicy = deps.fileAccessPolicy ?? createNoWorkspaceFileAccessPolicy();
+  const authorization = fileAccessPolicy.authorize(resolvedPath, 'read');
+  if (!authorization.allowed) {
+    throw new Error(authorization.message ?? `Unauthorized image path: ${resolvedPath}`);
+  }
+  const readablePath = authorization.path;
+  const bytes = deps.readFile ? await deps.readFile(readablePath) : await fs.readFile(readablePath);
   if (bytes.byteLength > MAX_READ_IMAGE_BYTES) {
-    throw new Error(`Image is too large for ReadImage: ${resolvedPath}`);
+    throw new Error(`Image is too large for ReadImage: ${readablePath}`);
   }
   const metadata = probeImageMetadata(bytes);
   if (!metadata) {
-    throw new Error(`Unsupported or unreadable image file: ${resolvedPath}`);
+    throw new Error(`Unsupported or unreadable image file: ${readablePath}`);
   }
   return {
-    input: await restoreCacheResourceRefs(deps.resourceCache, input, resolvedPath),
-    resolvedPath,
+    input: await restoreCacheResourceRefs(deps.resourceCache, input, readablePath),
+    resolvedPath: readablePath,
     bytes,
     metadata,
   };
@@ -363,7 +288,7 @@ async function restoreCacheResourceRefs(
   const match = await resourceCache.findByLocalPath(resolvedPath).catch(() => undefined);
   const cacheResourceRef = match?.ref;
   const documentResourceRef = cacheResourceRef
-    ? createDocumentArchiveRefFromCacheResource(cacheResourceRef, match.absolutePath)
+    ? createDocumentArchiveRefFromCacheResource(cacheResourceRef)
     : undefined;
   if (!cacheResourceRef && !documentResourceRef) {
     return input;
@@ -392,7 +317,6 @@ async function restoreCacheResourceRefs(
 
 function createDocumentArchiveRefFromCacheResource(
   ref: ResourceRef,
-  cachePath: string,
 ): DocumentArchiveResourceRef | undefined {
   if (ref.kind !== 'document' || ref.source.kind !== 'document' || !ref.source.document) {
     return undefined;
@@ -404,74 +328,9 @@ function createDocumentArchiveRefFromCacheResource(
     source: ref.source.document,
     ...(entryPath ? { entryPath } : {}),
     ...(locator ? { locator } : {}),
-    cachePath,
     versionPolicy: 'versioned-export' as const,
   };
   return isDocumentArchiveResourceRef(candidate) ? candidate : undefined;
-}
-
-async function prepareVisionImage(
-  deps: ReadImageToolDeps,
-  image: LoadedImage,
-  options: ReadVisionPreprocessOptions,
-): Promise<PreparedVisionImage> {
-  if (options.mode === 'none') {
-    const mimeType =
-      image.metadata.mimeType ?? resolveVisionImageAttachmentMediaType(image.resolvedPath);
-    return {
-      image,
-      bytes: image.bytes,
-      mimeType,
-      summary: {
-        preprocess: 'none',
-        transformed: false,
-        mimeType,
-        byteSize: image.bytes.byteLength,
-        ...(image.metadata.width !== undefined ? { width: image.metadata.width } : {}),
-        ...(image.metadata.height !== undefined ? { height: image.metadata.height } : {}),
-      },
-    };
-  }
-
-  const policy = createVisionPreprocessPolicy(options);
-  const plan = planVisionImagePreprocess(
-    {
-      width: image.metadata.width ?? 0,
-      height: image.metadata.height ?? 0,
-      byteLength: image.bytes.byteLength,
-    },
-    policy,
-  );
-  const processor = deps.imageProcessor ?? createSharpVisionImageProcessor();
-  const processedBytes = await processor.toJpeg({
-    buffer: image.bytes,
-    jpegQuality: plan.jpegQuality,
-    ...(plan.shouldResize && {
-      resize: {
-        width: plan.maxWidth,
-        height: plan.maxHeight,
-        fit: 'inside',
-        withoutEnlargement: true,
-      },
-    }),
-  });
-  const processedMetadata = probeImageMetadata(processedBytes);
-
-  return {
-    image,
-    bytes: processedBytes,
-    mimeType: plan.outputMediaType,
-    summary: {
-      preprocess: 'auto',
-      transformed: true,
-      mimeType: plan.outputMediaType,
-      byteSize: processedBytes.byteLength,
-      ...(processedMetadata?.width !== undefined ? { width: processedMetadata.width } : {}),
-      ...(processedMetadata?.height !== undefined ? { height: processedMetadata.height } : {}),
-      maxLongEdge: policy.maxLongEdge,
-      jpegQuality: plan.jpegQuality,
-    },
-  };
 }
 
 function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
@@ -490,7 +349,9 @@ function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
       const nonPortableReason = readString(item['nonPortableReason']);
       const label = readString(item['label']);
       const metadata = isRecord(item['metadata']) ? item['metadata'] : undefined;
-      const resourceRef = parseDocumentArchiveResourceRef(item['resourceRef']);
+      const resourceRef = stripDocumentArchiveCachePath(
+        parseDocumentArchiveResourceRef(item['resourceRef']),
+      );
       const cacheResourceRef = isResourceRef(item['cacheResourceRef'])
         ? item['cacheResourceRef']
         : undefined;
@@ -521,6 +382,14 @@ function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
   return paths.flatMap((path) =>
     typeof path === 'string' && path.trim() ? [{ path: path.trim() }] : [],
   );
+}
+
+function stripDocumentArchiveCachePath(
+  ref: DocumentArchiveResourceRef | undefined,
+): DocumentArchiveResourceRef | undefined {
+  if (!ref) return undefined;
+  const { cachePath: _cachePath, ...stableRef } = ref;
+  return stableRef;
 }
 
 function readMode(value: unknown): ReadImageMode {
@@ -560,49 +429,6 @@ function readAnalysisKind(value: unknown): ReadImageAnalysisKind {
     : 'describe';
 }
 
-interface ReadVisionPreprocessOptions {
-  readonly mode: ReadImagePreprocessMode;
-  readonly maxLongEdge: number;
-  readonly quality?: number;
-}
-
-function readVisionPreprocessOptions(args: Record<string, unknown>): ReadVisionPreprocessOptions {
-  return {
-    mode: args['preprocess'] === 'none' ? 'none' : 'auto',
-    maxLongEdge: readBoundedInteger(
-      args['max_long_edge'],
-      DEFAULT_VISION_PREPROCESS_POLICY.maxLongEdge,
-      MIN_READ_IMAGE_LONG_EDGE,
-      MAX_READ_IMAGE_LONG_EDGE,
-    ),
-    ...(typeof args['quality'] === 'number' && Number.isInteger(args['quality'])
-      ? {
-          quality: readBoundedInteger(
-            args['quality'],
-            DEFAULT_VISION_PREPROCESS_POLICY.resizedImageQuality,
-            MIN_READ_IMAGE_JPEG_QUALITY,
-            MAX_READ_IMAGE_JPEG_QUALITY,
-          ),
-        }
-      : {}),
-  };
-}
-
-function createVisionPreprocessPolicy(
-  options: ReadVisionPreprocessOptions,
-): VisionPreprocessPolicy {
-  return {
-    ...DEFAULT_VISION_PREPROCESS_POLICY,
-    maxLongEdge: options.maxLongEdge,
-    ...(options.quality !== undefined
-      ? {
-          resizedImageQuality: options.quality,
-          normalizedImageQuality: options.quality,
-        }
-      : {}),
-  };
-}
-
 function readBoundedInteger(
   value: unknown,
   defaultValue: number,
@@ -633,79 +459,83 @@ function readRuntimeKind(
     : undefined;
 }
 
-function buildVisionPrompt(input: {
-  readonly analysis: ReadImageAnalysisKind;
-  readonly prompt?: string;
-}): string {
-  const base = (() => {
-    switch (input.analysis) {
-      case 'ocr':
-        return 'Extract all readable text from the image. Preserve reading order and note uncertain text.';
-      case 'panels':
-        return 'Analyze the comic/storyboard panel layout. Return reading order, panel count, visual descriptions, characters, actions, dialogue/OCR, and camera framing.';
-      case 'storyboard':
-        return 'Convert the image content into animation storyboard notes. Include scene description, characters, dialogue/OCR, mood, camera, and motion suggestions.';
-      case 'custom':
-        return input.prompt ?? 'Analyze the image content.';
-      case 'describe':
-      default:
-        return 'Describe the image content with important visual details, text, objects, characters, composition, and mood.';
-    }
-  })();
-  return input.prompt && input.analysis !== 'custom'
-    ? `${base}\n\nAdditional instruction: ${input.prompt}`
-    : base;
-}
-
-function formatVisionImageLabel(image: LoadedImage, index: number): string {
-  return `Image ${index + 1}${image.input.label ? ` (${image.input.label})` : ''}: ${
-    image.resolvedPath
-  }`;
-}
-
-function toDataUrl(mimeType: string | undefined, filePath: string, bytes: Uint8Array): string {
-  const mime = mimeType ?? resolveVisionImageAttachmentMediaType(filePath);
-  return `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
-}
-
-async function readVisionWithService(
-  service: {
-    readonly chat?: (
-      messages: ChatMessage[],
-      options: Pick<ModelRef<'llm'>, 'providerId' | 'modelId'>,
-    ) => Promise<ServiceResponse>;
-    readonly chatStream?: (
-      messages: ChatMessage[],
-      options: Pick<ModelRef<'llm'>, 'providerId' | 'modelId'>,
-    ) => {
-      readonly stream: AsyncIterable<unknown>;
-      readonly response: Promise<ServiceResponse>;
-    };
-  },
-  messages: ChatMessage[],
-  chatModel: ModelRef<'llm'>,
-): Promise<ServiceResponse> {
-  const options = { providerId: chatModel.providerId, modelId: chatModel.modelId };
-  if (service.chatStream) {
-    const streamResult = service.chatStream(messages, options);
-    for await (const _chunk of streamResult.stream) {
-      // Drain the stream so the service collector can resolve the final response.
-    }
-    return streamResult.response;
-  }
-
-  if (service.chat) {
-    return service.chat(messages, options);
-  }
-
-  throw new Error('ReadImage vision mode requires a chat-capable AI platform service.');
-}
-
-function normalizeServiceResponseText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  return JSON.stringify(content);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function createReadImagePerceptionCard(input: {
+  readonly image: ReadImageResultImage;
+  readonly loaded: LoadedImage;
+  readonly createdAt: number;
+  readonly index: number;
+}): PerceptionCard {
+  const mimeType =
+    input.image.mimeType ??
+    input.loaded.metadata.mimeType ??
+    getMimeType(input.loaded.resolvedPath);
+  const assetId = createReadImageAssetId(input.image, input.loaded.resolvedPath, input.index);
+  const assetRef: PerceptualAssetRef = {
+    assetId,
+    uri: selectPerceptualAssetUri(input.image),
+    mimeType,
+    ...(input.image.label ? { label: input.image.label } : {}),
+  };
+
+  return {
+    version: 1,
+    assetId,
+    modality: 'image',
+    createdAt: input.createdAt,
+    layerStatus: {
+      layer0: 'complete',
+      layer1: 'skipped',
+      layer2: 'complete',
+    },
+    structural: {
+      format: inferImageFormat(mimeType, input.loaded.resolvedPath),
+      mimeType,
+      byteSize: input.image.byteSize,
+      ...(input.image.width !== undefined ? { width: input.image.width } : {}),
+      ...(input.image.height !== undefined ? { height: input.image.height } : {}),
+    },
+    perceptual: {
+      keyframeRefs: [assetRef],
+      thumbnailRef: assetRef,
+    },
+    cacheKey: input.image.cacheResourceRef?.id ?? input.loaded.resolvedPath,
+  };
+}
+
+function createReadImageAssetId(
+  image: ReadImageResultImage,
+  resolvedPath: string,
+  index: number,
+): string {
+  const source = image.sourceDocumentId
+    ? `${image.sourceDocumentId}-${image.entryPath ?? image.alias ?? index + 1}`
+    : (image.alias ?? path.basename(resolvedPath) ?? `image-${index + 1}`);
+  return `read-image-${sanitizeAssetIdPart(source)}`;
+}
+
+function sanitizeAssetIdPart(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'asset';
+}
+
+function selectPerceptualAssetUri(image: ReadImageResultImage): string {
+  if (image.runtimeKind === 'webview-uri') {
+    return image.path;
+  }
+  return image.path;
+}
+
+function inferImageFormat(mimeType: string, filePath: string): string {
+  if (mimeType.startsWith('image/')) {
+    return mimeType.slice('image/'.length);
+  }
+  const extension = path.extname(filePath).replace(/^\./, '');
+  return extension || 'image';
 }

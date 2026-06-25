@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 import {
   TOOL_NAMES_SYSTEM,
   createResourceFingerprint,
@@ -37,8 +37,11 @@ const PNG_1X1 = new Uint8Array([
 
 describe('extension tool capability providers', () => {
   const tempDirs: string[] = [];
+  let workspaceFoldersSpy: ReturnType<typeof vi.spyOn> | undefined;
 
   afterEach(async () => {
+    workspaceFoldersSpy?.mockRestore();
+    workspaceFoldersSpy = undefined;
     mocks.createDocumentReaderService.mockClear();
     mocks.getEngineClientProvider.mockClear();
     mocks.createDocumentResourceCacheService.mockReset();
@@ -48,7 +51,7 @@ describe('extension tool capability providers', () => {
   });
 
   it('exposes document read tools through the document-owned provider', () => {
-    const provider = createDocumentReadCapabilityProvider({} as never);
+    const provider = createDocumentReadCapabilityProvider();
     const tools = provider.getTools({ extensionContext: {} }).map((tool) => tool.name);
 
     expect(provider.id).toBe('neko-agent-platform-document');
@@ -63,7 +66,7 @@ describe('extension tool capability providers', () => {
   });
 
   it('exposes image read through the media-owned provider', () => {
-    const provider = createMediaReadCapabilityProvider({ platform: {} as never });
+    const provider = createMediaReadCapabilityProvider({});
     const tools = provider.getTools({ extensionContext: {} }).map((tool) => tool.name);
 
     expect(provider.id).toBe('neko-agent-platform-media');
@@ -78,9 +81,20 @@ describe('extension tool capability providers', () => {
   });
 
   it('wires the document resource cache into the media-owned image reader', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-read-image-'));
-    tempDirs.push(tempDir);
-    const cachePath = path.join(tempDir, 'documents/doc_comic/OPS/images/page-1.png');
+    const workspaceRoot = path.resolve(
+      process.cwd(),
+      '.test-workspaces',
+      `capability-providers-${process.pid}`,
+    );
+    tempDirs.push(workspaceRoot);
+    workspaceFoldersSpy = vi.spyOn(vscode.workspace, 'workspaceFolders', 'get');
+    workspaceFoldersSpy.mockReturnValue([
+      { uri: { fsPath: workspaceRoot } as vscode.Uri, name: 'fixture', index: 0 },
+    ]);
+    const cachePath = path.join(
+      workspaceRoot,
+      '.neko/.cache/resources/documents/doc_comic/OPS/images/page-1.png',
+    );
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
     await fs.writeFile(cachePath, PNG_1X1);
     const cacheResourceRef = createResourceRef({
@@ -122,11 +136,11 @@ describe('extension tool capability providers', () => {
       })),
     };
     mocks.createDocumentResourceCacheService.mockReturnValue(resourceCache);
-    const provider = createMediaReadCapabilityProvider({ platform: {} as never });
+    const provider = createMediaReadCapabilityProvider({});
     const [tool] = provider.getTools({
       extensionContext: {
-        extensionUri: { fsPath: tempDir },
-        globalStorageUri: { fsPath: path.join(tempDir, 'global') },
+        extensionUri: { fsPath: path.join(workspaceRoot, '.extension') },
+        globalStorageUri: { fsPath: path.join(workspaceRoot, '.global') },
       },
     });
 

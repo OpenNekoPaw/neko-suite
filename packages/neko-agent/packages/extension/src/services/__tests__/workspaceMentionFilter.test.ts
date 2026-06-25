@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { createInputProcessor } from '@neko/agent';
-import { matchesGitignoreRules, parseGitignoreRules } from '../workspaceIgnoreFilter';
+import {
+  createWorkspaceMentionIgnoreFilter,
+  loadWorkspaceFileIgnoreRules,
+  matchesGitignoreRules,
+  parseGitignoreRules,
+} from '../workspaceIgnoreFilter';
 import { searchVSCodeProjectFiles } from '../workspaceProjectSearch';
 import { createVSCodeWorkspaceFileReader } from '../workspaceFileReader';
 
@@ -35,6 +40,28 @@ tmp/*.json
     expect(matchesGitignoreRules('local-only/state.json', rules)).toBe(true);
     expect(matchesGitignoreRules('src/local-only/state.json', rules)).toBe(false);
     expect(matchesGitignoreRules('src/keep.md', rules)).toBe(false);
+  });
+
+  it('loads workspace ignore rules for core file-tool runtime projection', async () => {
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
+      if (uri.fsPath.endsWith('/.gitignore')) {
+        return Buffer.from('tmp/\n/local-only/\n');
+      }
+      return Buffer.from('');
+    });
+
+    await expect(loadWorkspaceFileIgnoreRules('/workspace')).resolves.toEqual({
+      gitignoreRules: ['tmp/', '/local-only/'],
+    });
+  });
+
+  it('keeps mention search broad-hidden for .neko while runtime policy can be narrower', async () => {
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(''));
+    const filter = await createWorkspaceMentionIgnoreFilter('/workspace');
+
+    expect(filter.isIgnored('/workspace/.neko/.cache/resources/page.png')).toBe(true);
+    expect(filter.isIgnored('/workspace/.neko/logs/events.jsonl')).toBe(true);
+    expect(filter.isIgnored('/workspace/.neko/memory.md')).toBe(true);
   });
 
   it('filters mention search results through built-in and gitignore rules', async () => {

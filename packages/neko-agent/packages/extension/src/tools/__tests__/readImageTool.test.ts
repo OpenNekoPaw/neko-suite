@@ -5,19 +5,22 @@ import {
   createResourceRef,
   type ToolResult,
 } from '@neko/shared';
-import { READ_IMAGE_VISION_SYSTEM_PROMPT, createReadImageTool } from '../readImageTool';
+import { createWorkspaceFileAccessPolicy } from '@neko/agent/tools';
+import { READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED, createReadImageTool } from '../readImageTool';
+
+const WORKSPACE_ROOT = '/workspace';
 
 const PNG_1X1 = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
 ]);
 
-const JPEG_1X1 = new Uint8Array([
-  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x01, 0x00,
-  0x01, 0x03, 0x01, 0x11, 0x00, 0xff, 0xd9,
-]);
-
-async function* emptyStream(): AsyncIterable<never> {}
+function createFileAccessPolicy() {
+  return createWorkspaceFileAccessPolicy({
+    workspaceRoot: WORKSPACE_ROOT,
+    ignoredPathExemptRoots: [`${WORKSPACE_ROOT}/.neko/.cache/resources`],
+  });
+}
 
 describe('createReadImageTool', () => {
   it('creates a read-only image tool', () => {
@@ -32,25 +35,78 @@ describe('createReadImageTool', () => {
     expect(tool.parameters).not.toHaveProperty('anyOf');
     expect(tool.parameters).not.toHaveProperty('oneOf');
     expect(tool.parameters).not.toHaveProperty('allOf');
+    expect(tool.parameters.properties?.['images']).toEqual(
+      expect.objectContaining({
+        items: expect.objectContaining({
+          properties: expect.objectContaining({
+            path: { type: 'string' },
+            runtimePath: { type: 'string' },
+            runtimeKind: expect.objectContaining({
+              enum: ['local-path', 'webview-uri', 'scratch-cache', 'managed-cache'],
+            }),
+            resourceRef: expect.objectContaining({ type: 'object' }),
+            cacheResourceRef: expect.objectContaining({ type: 'object' }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('reads local image metadata without invoking vision', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile });
+    const tool = createReadImageTool({
+      readFile,
+      now: () => 1234,
+      fileAccessPolicy: createFileAccessPolicy(),
+    });
 
     const result = (await tool.execute({
-      image_paths: ['/images/page.png'],
+      image_paths: ['/workspace/images/page.png'],
       mode: 'metadata',
     })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(readFile).toHaveBeenCalledWith('/images/page.png');
+    expect(readFile).toHaveBeenCalledWith('/workspace/images/page.png');
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        type: 'image',
+        path: '/workspace/images/page.png',
+        mimeType: 'image/png',
+        assetRef: expect.objectContaining({
+          uri: '/workspace/images/page.png',
+          mimeType: 'image/png',
+        }),
+      }),
+    ]);
+    expect(result.perceptionCards).toEqual([
+      expect.objectContaining({
+        version: 1,
+        modality: 'image',
+        createdAt: 1234,
+        layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+        structural: expect.objectContaining({
+          format: 'png',
+          mimeType: 'image/png',
+          byteSize: PNG_1X1.byteLength,
+          width: 1,
+          height: 1,
+        }),
+        perceptual: expect.objectContaining({
+          keyframeRefs: [
+            expect.objectContaining({
+              uri: '/workspace/images/page.png',
+              mimeType: 'image/png',
+            }),
+          ],
+        }),
+      }),
+    ]);
     expect(result.data).toEqual(
       expect.objectContaining({
         mode: 'metadata',
         images: [
           expect.objectContaining({
-            path: '/images/page.png',
+            path: '/workspace/images/page.png',
             width: 1,
             height: 1,
             mimeType: 'image/png',
@@ -61,9 +117,23 @@ describe('createReadImageTool', () => {
     );
   });
 
-  it('preserves document resource refs from structured image inputs', async () => {
+  it('fails closed for local images when no authorized workspace policy is provided', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
     const tool = createReadImageTool({ readFile });
+
+    const result = (await tool.execute({
+      image_paths: ['/workspace/images/page.png'],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('no authorized workspace root');
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it('preserves document resource refs from structured image inputs', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
     const resourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
@@ -86,7 +156,7 @@ describe('createReadImageTool', () => {
     const result = (await tool.execute({
       images: [
         {
-          path: '/cache/page_1.jpg',
+          path: '/workspace/.neko/.cache/resources/documents/page_1.jpg',
           label: 'page_1',
           resourceRef,
           cacheResourceRef,
@@ -100,14 +170,19 @@ describe('createReadImageTool', () => {
       expect.objectContaining({
         images: [
           expect.objectContaining({
-            path: '/cache/page_1.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/page_1.jpg',
             label: 'page_1',
-            resourceRef,
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+              entryPath: 'OPS/images/moe-018893.jpg',
+            },
             cacheResourceRef,
           }),
         ],
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('"cachePath"');
   });
 
   it('restores document resource refs from unified cache image paths', async () => {
@@ -155,6 +230,7 @@ describe('createReadImageTool', () => {
     const tool = createReadImageTool({
       readFile,
       resourceCache: resourceCache as never,
+      fileAccessPolicy: createFileAccessPolicy(),
     });
 
     const result = (await tool.execute({
@@ -180,7 +256,6 @@ describe('createReadImageTool', () => {
               kind: 'document-entry',
               source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
               entryPath: 'OPS/images/moe-018893.jpg',
-              cachePath,
               versionPolicy: 'versioned-export',
             },
             cacheResourceRef,
@@ -188,14 +263,15 @@ describe('createReadImageTool', () => {
         ],
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('"cachePath"');
   });
 
-  it('marks plain local image paths as runtime-only for cross-package transfer', async () => {
+  it('marks authorized plain local image paths as runtime-only for cross-package transfer', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile });
+    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
 
     const result = (await tool.execute({
-      image_paths: ['/tmp/scratch/page.png'],
+      image_paths: ['/workspace/scratch/page.png'],
       mode: 'metadata',
     })) as ToolResult;
 
@@ -204,8 +280,8 @@ describe('createReadImageTool', () => {
       expect.objectContaining({
         images: [
           expect.objectContaining({
-            path: '/tmp/scratch/page.png',
-            runtimePath: '/tmp/scratch/page.png',
+            path: '/workspace/scratch/page.png',
+            runtimePath: '/workspace/scratch/page.png',
             runtimeKind: 'local-path',
             portableForTransfer: false,
           }),
@@ -214,226 +290,65 @@ describe('createReadImageTool', () => {
     );
   });
 
-  it('preprocesses vision images before sending them to the current platform service', async () => {
+  it('rejects system temp image paths even with a workspace policy', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const imageProcessor = {
-      metadata: vi.fn(async () => ({ width: 1, height: 1 })),
-      toJpeg: vi.fn(async () => JPEG_1X1),
-    };
-    const response = Promise.resolve({
-      message: { role: 'assistant', content: 'one tiny image' },
-    });
-    const service = {
-      chatStream: vi.fn(() => ({
-        stream: emptyStream(),
-        response,
-      })),
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant', content: 'one tiny image' },
-      })),
-    };
-    const platform = {
-      createService: vi.fn(() => service),
-    };
-    const tool = createReadImageTool({
-      readFile,
-      imageProcessor,
-      platform: platform as never,
-      getSelectedChatModel: () => ({
-        providerId: 'deepseek-direct',
-        modelId: 'deepseek-vision',
-        category: 'llm',
+    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+
+    const result = (await tool.execute({
+      image_paths: ['/tmp/scratch/page.png'],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('system temp');
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it('keeps runtime scratch paths out of multimodal attachment refs', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+    const managedPath = '/workspace/.neko/.cache/resources/documents/page-1.png';
+    const runtimePath = '/var/folders/T/neko_epub_1/page-1.png';
+
+    const result = (await tool.execute({
+      images: [
+        {
+          path: managedPath,
+          runtimePath,
+          runtimeKind: 'managed-cache',
+        },
+      ],
+      mode: 'metadata',
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.attachments?.[0]).toEqual(
+      expect.objectContaining({
+        path: managedPath,
+        assetRef: expect.objectContaining({ uri: managedPath }),
       }),
+    );
+    expect(result.perceptionCards?.[0]?.perceptual?.keyframeRefs?.[0]).toEqual(
+      expect.objectContaining({ uri: managedPath }),
+    );
+    const multimodalRefs = JSON.stringify({
+      attachments: result.attachments,
+      perceptionCards: result.perceptionCards,
     });
+    expect(multimodalRefs).not.toContain(runtimePath);
+  });
+
+  it('rejects model-backed vision mode without invoking platform services', async () => {
+    const readFile = vi.fn(async () => PNG_1X1);
+    const tool = createReadImageTool({ readFile });
 
     const result = (await tool.execute({
       images: [{ path: '/images/page.png', label: 'P1' }],
       mode: 'vision',
       analysis: 'describe',
-      max_long_edge: 512,
-      quality: 80,
-    })) as ToolResult;
-
-    expect(result.success).toBe(true);
-    expect(imageProcessor.toJpeg).toHaveBeenCalledWith({
-      buffer: PNG_1X1,
-      jpegQuality: 80,
-    });
-    expect(service.chatStream).toHaveBeenCalledWith(
-      [
-        {
-          role: 'system',
-          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-        },
-        expect.objectContaining({
-          role: 'user',
-          content: expect.arrayContaining([
-            expect.objectContaining({ type: 'text' }),
-            expect.objectContaining({
-              type: 'image',
-              imageUrl: expect.stringContaining('data:image/jpeg;base64,'),
-            }),
-          ]),
-        }),
-      ],
-      { providerId: 'deepseek-direct', modelId: 'deepseek-vision' },
-    );
-    expect(service.chat).not.toHaveBeenCalled();
-    expect(result.data).toEqual(
-      expect.objectContaining({
-        mode: 'vision',
-        images: [
-          expect.objectContaining({
-            analysis: 'one tiny image',
-            label: 'P1',
-            mimeType: 'image/png',
-            visionInput: expect.objectContaining({
-              preprocess: 'auto',
-              transformed: true,
-              mimeType: 'image/jpeg',
-              maxLongEdge: 512,
-              jpegQuality: 80,
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it('can send original bytes when vision preprocessing is disabled', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
-    const imageProcessor = {
-      metadata: vi.fn(async () => ({ width: 1, height: 1 })),
-      toJpeg: vi.fn(async () => JPEG_1X1),
-    };
-    const service = {
-      chatStream: vi.fn(() => ({
-        stream: emptyStream(),
-        response: Promise.resolve({
-          message: { role: 'assistant', content: 'original image' },
-        }),
-      })),
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant', content: 'original image' },
-      })),
-    };
-    const platform = {
-      createService: vi.fn(() => service),
-    };
-    const tool = createReadImageTool({
-      readFile,
-      imageProcessor,
-      platform: platform as never,
-      getSelectedChatModel: () => ({
-        providerId: 'deepseek-direct',
-        modelId: 'deepseek-vision',
-        category: 'llm',
-      }),
-    });
-
-    const result = (await tool.execute({
-      image_paths: ['/images/page.png'],
-      mode: 'vision',
-      preprocess: 'none',
-    })) as ToolResult;
-
-    expect(result.success).toBe(true);
-    expect(imageProcessor.toJpeg).not.toHaveBeenCalled();
-    expect(service.chatStream).toHaveBeenCalledWith(
-      [
-        {
-          role: 'system',
-          content: READ_IMAGE_VISION_SYSTEM_PROMPT,
-        },
-        expect.objectContaining({
-          content: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'image',
-              imageUrl: expect.stringContaining('data:image/png;base64,'),
-            }),
-          ]),
-        }),
-      ],
-      { providerId: 'deepseek-direct', modelId: 'deepseek-vision' },
-    );
-    expect(service.chat).not.toHaveBeenCalled();
-    expect(result.data).toEqual(
-      expect.objectContaining({
-        images: [
-          expect.objectContaining({
-            visionInput: expect.objectContaining({
-              preprocess: 'none',
-              transformed: false,
-              mimeType: 'image/png',
-              byteSize: PNG_1X1.byteLength,
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it('falls back to non-streaming chat when a legacy service has no chatStream', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
-    const imageProcessor = {
-      metadata: vi.fn(async () => ({ width: 1, height: 1 })),
-      toJpeg: vi.fn(async () => JPEG_1X1),
-    };
-    const service = {
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant', content: 'legacy image' },
-      })),
-    };
-    const platform = {
-      createService: vi.fn(() => service),
-    };
-    const tool = createReadImageTool({
-      readFile,
-      imageProcessor,
-      platform: platform as never,
-      getSelectedChatModel: () => ({
-        providerId: 'deepseek-direct',
-        modelId: 'deepseek-vision',
-        category: 'llm',
-      }),
-    });
-
-    const result = (await tool.execute({
-      image_paths: ['/images/page.png'],
-      mode: 'vision',
-    })) as ToolResult;
-
-    expect(result.success).toBe(true);
-    expect(service.chat).toHaveBeenCalledWith(expect.any(Array), {
-      providerId: 'deepseek-direct',
-      modelId: 'deepseek-vision',
-    });
-    expect(result.data).toEqual(
-      expect.objectContaining({
-        images: [expect.objectContaining({ analysis: 'legacy image' })],
-      }),
-    );
-  });
-
-  it('rejects vision mode when no explicit chat model is selected', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
-    const service = {
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant', content: 'should not run' },
-      })),
-    };
-    const platform = {
-      createService: vi.fn(() => service),
-    };
-    const tool = createReadImageTool({ readFile, platform: platform as never });
-
-    const result = (await tool.execute({
-      image_paths: ['/images/page.png'],
-      mode: 'vision',
     })) as ToolResult;
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('explicit chat provider and model');
-    expect(service.chat).not.toHaveBeenCalled();
+    expect(result.error).toBe(READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED);
   });
 });

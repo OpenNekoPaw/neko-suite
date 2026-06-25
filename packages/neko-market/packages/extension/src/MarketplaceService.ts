@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { join } from 'node:path';
 import {
   MarketClient,
   InstallManager,
@@ -238,6 +239,7 @@ export class MarketplaceService implements vscode.Disposable {
       this._installedRegistry,
       {
         nekoSuiteVersion: this._options.host.getExtensionVersion('neko.neko-market') ?? '0.0.0',
+        downloadTempDir: join(this._options.storage.cacheDir, '.downloads'),
       },
     );
 
