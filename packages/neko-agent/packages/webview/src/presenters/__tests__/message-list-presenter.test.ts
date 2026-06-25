@@ -57,7 +57,7 @@ describe('message-list-presenter', () => {
     });
   });
 
-  it('moves completed process records after the final assistant result', () => {
+  it('keeps completed process records before the assistant result when they happened first', () => {
     const items = projectMessageListItems(
       [
         {
@@ -86,21 +86,73 @@ describe('message-list-presenter', () => {
       false,
     );
 
-    expect(items.map((item) => item.kind)).toEqual(['content_block', 'process_group']);
+    expect(items.map((item) => item.kind)).toEqual(['process_group', 'content_block']);
     expect(items[0]).toMatchObject({
-      kind: 'content_block',
-      projection: {
-        renderKind: 'markdown',
-        content: 'Final storyboard summary.',
-      },
-    });
-    expect(items[1]).toMatchObject({
       kind: 'process_group',
+      isFirst: true,
       processGroup: {
         blockCount: 2,
         toolCallCount: 1,
         thinkingCount: 1,
       },
+    });
+    expect(items[1]).toMatchObject({
+      kind: 'content_block',
+      isFirst: false,
+      projection: {
+        renderKind: 'markdown',
+        content: 'Final storyboard summary.',
+      },
+    });
+  });
+
+  it('keeps process records between assistant response blocks when they happen in the middle', () => {
+    const items = projectMessageListItems(
+      [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 1,
+          contentBlocks: [
+            {
+              id: 'text-1',
+              type: 'text',
+              timestamp: 8,
+              content: 'I will inspect the source.',
+            },
+            toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+            {
+              id: 'text-2',
+              type: 'text',
+              timestamp: 20,
+              content: 'Here is the summary.',
+            },
+          ],
+        },
+      ],
+      false,
+    );
+
+    expect(items.map((item) => item.kind)).toEqual([
+      'content_block',
+      'process_group',
+      'content_block',
+    ]);
+    expect(items[0]).toMatchObject({
+      kind: 'content_block',
+      projection: { renderKind: 'markdown', content: 'I will inspect the source.' },
+    });
+    expect(items[1]).toMatchObject({
+      kind: 'process_group',
+      processGroup: {
+        blockCount: 1,
+        toolCallCount: 1,
+      },
+    });
+    expect(items[2]).toMatchObject({
+      kind: 'content_block',
+      projection: { renderKind: 'markdown', content: 'Here is the summary.' },
     });
   });
 

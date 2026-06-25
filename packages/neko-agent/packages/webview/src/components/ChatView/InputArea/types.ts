@@ -2,6 +2,8 @@
  * InputArea Types and Constants
  */
 
+import type { AgentFileReference } from '@neko-agent/types';
+
 // Re-export MessageAttachment from shared
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
@@ -135,11 +137,7 @@ export interface MentionItem {
   thumbnailUri?: string;
 }
 
-export interface SelectedFileReference {
-  id: string;
-  path: string;
-  label: string;
+export interface SelectedFileReference extends AgentFileReference {
   mediaType?: ProjectFile['mediaType'];
   source?: ProjectFile['source'];
-  thumbnailUri?: string;
 }

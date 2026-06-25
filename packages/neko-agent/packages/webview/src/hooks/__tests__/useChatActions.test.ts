@@ -528,6 +528,18 @@ describe('useChatActions', () => {
       expect.objectContaining({
         role: 'user',
         content: '参考',
+        contextReferences: [
+          expect.objectContaining({
+            id: 'file-ref:assets/ref file.zip',
+            label: 'ref file.zip',
+            type: 'file',
+            summary: 'assets/ref file.zip',
+            navigationData: {
+              path: 'assets/ref file.zip',
+              filePath: 'assets/ref file.zip',
+            },
+          }),
+        ],
         attachments: [
           expect.objectContaining({
             id: 'file-ref:assets/ref file.zip',
@@ -549,6 +561,13 @@ describe('useChatActions', () => {
             path: 'assets/ref file.zip',
             type: 'file',
           }),
+        ],
+        fileReferences: [
+          {
+            id: 'file-ref:assets/ref file.zip',
+            label: 'ref file.zip',
+            path: 'assets/ref file.zip',
+          },
         ],
       }),
     );
@@ -599,6 +618,19 @@ describe('useChatActions', () => {
       expect.objectContaining({
         role: 'user',
         content: '分析',
+        contextReferences: [
+          expect.objectContaining({
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            type: 'file',
+            summary: '${A}/books/story.epub',
+            mediaType: 'document',
+            navigationData: {
+              path: '${A}/books/story.epub',
+              filePath: '${A}/books/story.epub',
+            },
+          }),
+        ],
       }),
     ]);
     expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
@@ -610,6 +642,83 @@ describe('useChatActions', () => {
       expect.objectContaining({
         conversationId: 'conv-doc',
         message: '分析 @${A}/books/story.epub',
+        fileReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            path: '${A}/books/story.epub',
+            mediaType: 'document',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('sends selected document references even when the visible input is empty', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-doc-only');
+      return useChatActions({
+        inputValue: '',
+        isThinking: false,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-doc-only',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '@${A}/books/story.epub',
+        displayMessageText: '',
+        fileReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            path: '${A}/books/story.epub',
+            mediaType: 'document',
+          },
+        ],
+      });
+    });
+
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '',
+        contextReferences: [
+          expect.objectContaining({
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            summary: '${A}/books/story.epub',
+          }),
+        ],
+      }),
+    ]);
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-doc-only',
+        message: '@${A}/books/story.epub',
+        fileReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            path: '${A}/books/story.epub',
+            mediaType: 'document',
+          },
+        ],
       }),
     );
   });
@@ -778,6 +887,127 @@ describe('useChatActions', () => {
         message: 'Use this selected clip',
       }),
     );
+  });
+
+  it('queues text sends while preserving the active streaming assistant message', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const clearInput = vi.fn();
+    const setAttachedFiles = vi.fn();
+    const streamingMessageIdRef = { current: 'assistant-streaming' };
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-queue');
+      return useChatActions({
+        inputValue: '继续这个方向',
+        isThinking: true,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-queue',
+        activeConversationIdRef,
+        streamingMessageIdRef,
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput,
+        setAttachedFiles,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(setMessages).toHaveBeenCalledTimes(1);
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-queue',
+        message: '继续这个方向',
+        sessionMode: 'agent',
+      }),
+    );
+    expect(setStreamingMessageId).not.toHaveBeenCalled();
+    expect(streamingMessageIdRef.current).toBe('assistant-streaming');
+    expect(setIsThinking).not.toHaveBeenCalled();
+    expect(clearInput).toHaveBeenCalledTimes(1);
+    expect(setAttachedFiles).toHaveBeenCalledWith([]);
+  });
+
+  it('does not queue rich sends that the running Agent turn cannot append', () => {
+    const setMessages = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-queue');
+      return useChatActions({
+        inputValue: '参考素材继续',
+        isThinking: true,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-queue',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: 'assistant-streaming' },
+        messages: [],
+        setMessages,
+        setIsThinking: vi.fn(),
+        setStreamingMessageId: vi.fn(),
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        messageText: '参考素材继续',
+        attachments: [{ id: 'file-1', name: 'ref.png', type: 'image' }],
+      });
+    });
+
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
+  });
+
+  it('queues externally triggered text sends without resetting the current stream', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+    const setActiveTab = vi.fn();
+    const streamingMessageIdRef = { current: 'assistant-streaming' };
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-trigger-queue');
+      return useChatActions({
+        inputValue: '',
+        isThinking: true,
+        selectedModel: 'model-a',
+        activeConversationId: 'conv-trigger-queue',
+        activeConversationIdRef,
+        streamingMessageIdRef,
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab,
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.triggerSend('Continue from selection');
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-trigger-queue',
+        message: 'Continue from selection',
+      }),
+    );
+    expect(setStreamingMessageId).not.toHaveBeenCalled();
+    expect(streamingMessageIdRef.current).toBe('assistant-streaming');
+    expect(setIsThinking).not.toHaveBeenCalled();
+    expect(setActiveTab).toHaveBeenCalledWith('chat');
   });
 
   it('resolves triggerSend chat models from model options', () => {

@@ -348,6 +348,7 @@ function createProps(): React.ComponentProps<typeof ConversationController> {
   return {
     settings: createSettings(),
     setSettings: vi.fn(),
+    setHasConfigSnapshot: vi.fn(),
     setProjectFiles: vi.fn(),
     mentionItems: [],
     setMentionItems: vi.fn(),

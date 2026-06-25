@@ -19,13 +19,13 @@ const translations: Record<string, string> = {
   'chat.input.control.mode': '模式与模型',
   'chat.input.control.params': '工具参数',
   'chat.input.placeholder': '输入任何问题...',
-  'chat.input.thinkingPlaceholder': '输入下一条消息...',
+  'chat.input.thinkingPlaceholder': '正在回答... 请等待或取消后再发送',
   'chat.input.attach': '添加附件',
   'chat.input.attachFile': '添加附件',
   'chat.input.send': '发送',
   'chat.input.queue': '加入队列',
   'chat.input.skills': '技能',
-  'chat.input.queuePlaceholder': '已排队 {count} 条消息... 继续输入',
+  'chat.input.queuePlaceholder': '正在回答... {count} 条排队消息待处理',
   'chat.input.queuedMessages': '{count} 条排队消息',
   'chat.input.cancel': '取消 (Esc)',
   'chat.input.commands': '命令',
@@ -1111,7 +1111,7 @@ describe('InputArea composer controls', () => {
     );
   });
 
-  it('shows explicit queue and stop actions while a response is running', () => {
+  it('queues plain text while a response is running and keeps stop available', () => {
     const onSend = vi.fn();
     const onCancel = vi.fn();
 
@@ -1128,17 +1128,80 @@ describe('InputArea composer controls', () => {
       </Harness>,
     );
 
-    const textarea = screen.getByPlaceholderText('已排队 2 条消息... 继续输入');
+    const textarea = screen.getByPlaceholderText('正在回答... 2 条排队消息待处理');
     expect(textarea).toBeTruthy();
-    expect(screen.getByTitle('加入队列').className).toContain('agent-composer-queue');
     expect(screen.getByTitle('取消 (Esc)').className).toContain('agent-composer-stop');
     expect(document.querySelector('.agent-composer-queue-count')?.textContent).toBe('2');
+    expect(screen.getByTitle('加入队列').className).toContain('agent-composer-queue');
 
     fireEvent.click(screen.getByTitle('加入队列'));
-    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ messageText: '继续处理' }));
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageText: '继续处理',
+      }),
+    );
 
     fireEvent.click(screen.getByTitle('取消 (Esc)'));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not queue rich context while a response is running', () => {
+    const onSend = vi.fn();
+
+    render(
+      <Harness
+        selectedFileReferences={[
+          {
+            id: 'file-ref:assets/ref.png',
+            label: 'ref.png',
+            path: 'assets/ref.png',
+          },
+        ]}
+      >
+        <InputArea
+          inputValue="参考"
+          isThinking={true}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    expect(screen.queryByTitle('加入队列')).toBeNull();
+    expect(screen.getByTitle('取消 (Esc)')).toBeTruthy();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('locks model configuration while background work is active without blocking send', () => {
+    const onSend = vi.fn();
+
+    render(
+      <Harness isBusy={true}>
+        <InputArea
+          inputValue="继续对话"
+          isThinking={false}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+        />
+      </Harness>,
+    );
+
+    const paramsGroup = screen.getByRole('group', { name: '工具参数' });
+    expect(
+      (within(paramsGroup).getByRole('button', { name: '对话' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect((within(paramsGroup).getByTitle(/gpt-5.5/) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (within(paramsGroup).getByRole('button', { name: '思考' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByTitle('发送'));
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageText: '继续对话',
+      }),
+    );
   });
 
   it('keeps incomplete workspace references in the textarea until a token can be created', () => {
@@ -1212,6 +1275,7 @@ function Harness({
   availableMediaModels = mediaModels,
   selectedFileReferences = [],
   onSelectedFileReferencesChange = vi.fn(),
+  isBusy = false,
   children,
 }: {
   readonly ambientNodes?: Array<{ nodeId: string; type: string; summary: string }>;
@@ -1242,10 +1306,12 @@ function Harness({
   readonly onSelectedFileReferencesChange?: React.ComponentProps<
     typeof InputArea
   >['onSelectedFileReferencesChange'];
+  readonly isBusy?: boolean;
   readonly children: React.ReactNode;
 }) {
   return (
     <InputAreaProvider
+      isBusy={isBusy}
       selectedModel={selectedModel}
       availableModels={availableModels}
       onModelSelect={vi.fn()}

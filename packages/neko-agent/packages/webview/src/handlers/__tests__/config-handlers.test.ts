@@ -70,6 +70,7 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setHasConfigSnapshot).not.toHaveBeenCalled();
     expect(context.setSelectedModel).toHaveBeenCalledWith('');
     expect(context.setGlobalError).not.toHaveBeenCalled();
   });
@@ -218,6 +219,7 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setHasConfigSnapshot).toHaveBeenCalledWith(true);
     expect(context.setGlobalError).not.toHaveBeenCalled();
   });
 });
@@ -251,6 +253,7 @@ function createContext(): MessageHandlerContext {
     setActiveTab: vi.fn(),
     requestConfigSnapshot: vi.fn(),
     setSettings: vi.fn(),
+    setHasConfigSnapshot: vi.fn(),
     setSelectedModel: vi.fn(),
     setMediaModelSelection: vi.fn(),
     updateSettings: vi.fn(),

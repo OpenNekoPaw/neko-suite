@@ -82,64 +82,55 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                   <CopyIcon className="h-3 w-3" />
                 </ThumbnailActionButton>
                 <ThumbnailActionButton
-                  title="Copy image path"
-                  onClick={() => handleCopy(thumbnail.path)}
-                >
-                  <FileIcon className="h-3 w-3" />
-                </ThumbnailActionButton>
-                <ThumbnailActionButton
                   title="Copy thumbnail summary"
                   onClick={() => handleCopy(formatThumbnailSummary(thumbnail))}
                 >
                   <span className="text-[9px] font-medium leading-none">i</span>
                 </ThumbnailActionButton>
               </div>
-              {pluginsAvailable?.canvas && (
-                <div className="border-t border-[var(--agent-input-border)] px-1 py-1">
-                  <SendToMenu
-                    payload={{
-                      kind: 'singleAsset',
-                      asset: {
-                        ...(thumbnail.resourceRef || thumbnail.cacheResourceRef
-                          ? {}
-                          : { path: thumbnail.path }),
-                        mediaType: 'image',
-                        name: getFileName(thumbnail.path),
-                        ...(thumbnail.resourceRef
-                          ? { documentResourceRef: thumbnail.resourceRef }
-                          : {}),
-                        ...(thumbnail.cacheResourceRef
-                          ? { resourceRef: thumbnail.cacheResourceRef }
-                          : {}),
-                      },
-                      target: projectCanvasContentTransferTarget({
-                        ambientNodes,
-                        contextChips,
-                      }),
-                      provenance: {
-                        source: 'webview',
-                        label: `document-image:${thumbnail.label}`,
-                        ...(thumbnail.resourceRef
-                          ? {
-                              metadata: {
-                                documentResourceRef: thumbnail.resourceRef,
-                                ...(thumbnail.cacheResourceRef
-                                  ? { resourceRef: thumbnail.cacheResourceRef }
-                                  : {}),
-                                runtimePath: thumbnail.path,
-                              },
-                            }
-                          : {}),
-                      },
-                    }}
-                    mediaType="image"
-                    plugins={pluginsAvailable}
-                    allowedTargets={['canvas']}
-                    hidePrefixLabel
-                    className="justify-center"
-                  />
-                </div>
-              )}
+              {pluginsAvailable?.canvas &&
+                (thumbnail.resourceRef || thumbnail.cacheResourceRef) && (
+                  <div className="border-t border-[var(--agent-input-border)] px-1 py-1">
+                    <SendToMenu
+                      payload={{
+                        kind: 'singleAsset',
+                        asset: {
+                          mediaType: 'image',
+                          name: getFileName(thumbnail.path),
+                          ...(thumbnail.resourceRef
+                            ? { documentResourceRef: thumbnail.resourceRef }
+                            : {}),
+                          ...(thumbnail.cacheResourceRef
+                            ? { resourceRef: thumbnail.cacheResourceRef }
+                            : {}),
+                        },
+                        target: projectCanvasContentTransferTarget({
+                          ambientNodes,
+                          contextChips,
+                        }),
+                        provenance: {
+                          source: 'webview',
+                          label: `document-image:${thumbnail.label}`,
+                          ...(thumbnail.resourceRef
+                            ? {
+                                metadata: {
+                                  documentResourceRef: thumbnail.resourceRef,
+                                  ...(thumbnail.cacheResourceRef
+                                    ? { resourceRef: thumbnail.cacheResourceRef }
+                                    : {}),
+                                },
+                              }
+                            : {}),
+                        },
+                      }}
+                      mediaType="image"
+                      plugins={pluginsAvailable}
+                      allowedTargets={['canvas']}
+                      hidePrefixLabel
+                      className="justify-center"
+                    />
+                  </div>
+                )}
             </div>
           );
         })}
@@ -180,8 +171,9 @@ function formatThumbnailSummary(thumbnail: DocumentImageThumbnailProjection): st
     `Document: ${thumbnail.filePath}`,
     `Reference: ${formatLocatorReference(thumbnail)}`,
     `Location: ${thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label}`,
-    `Image: ${thumbnail.path}`,
   ];
+  if (thumbnail.cacheResourceRef) parts.push(`Resource: ${thumbnail.cacheResourceRef.id}`);
+  if (thumbnail.resourceRef?.entryPath) parts.push(`Entry: ${thumbnail.resourceRef.entryPath}`);
   const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
   if (dimensions) parts.push(`Dimensions: ${dimensions}`);
   const byteSize = formatByteSize(thumbnail.byteSize);

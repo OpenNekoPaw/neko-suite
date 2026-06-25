@@ -134,6 +134,7 @@ export function InputArea({
     genParams,
     onGenCategoryChange,
     onGenParamsChange,
+    isBusy = false,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -553,6 +554,7 @@ export function InputArea({
 
   const handleSend = () => {
     if (disabled) return;
+    if (isThinking && !inputAreaProjection.canQueue) return;
     closeEntryPromptMenu();
     const outboundMessageText = appendSelectedFileReferencesToMessage(
       inputValue,
@@ -787,6 +789,7 @@ export function InputArea({
             onLlmConfigChange={setLlmConfig}
             showAgentConfig={inputAreaProjection.showChatModelSelector}
             showMediaConfig={inputAreaProjection.showGenerationParams}
+            disabled={isBusy}
           />
         )}
 
@@ -957,18 +960,18 @@ export function InputArea({
               </div>
             )}
 
-            {/* Queue / Send */}
+            {/* Send */}
             {(!isThinking || inputAreaProjection.canQueue) && (
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={!inputAreaProjection.canSend}
                 className={`agent-composer-action-button ${
-                  inputAreaProjection.canSend
-                    ? isThinking
-                      ? 'agent-composer-queue'
-                      : 'agent-composer-send'
-                    : 'bg-[var(--agent-control-muted-bg)] text-[var(--vscode-descriptionForeground)]'
+                  inputAreaProjection.canQueue
+                    ? 'agent-composer-queue'
+                    : inputAreaProjection.canSend
+                      ? 'agent-composer-send'
+                      : 'bg-[var(--agent-control-muted-bg)] text-[var(--vscode-descriptionForeground)]'
                 }`}
                 title={t(inputAreaProjection.sendTitleKey)}
                 aria-label={t(inputAreaProjection.sendTitleKey)}

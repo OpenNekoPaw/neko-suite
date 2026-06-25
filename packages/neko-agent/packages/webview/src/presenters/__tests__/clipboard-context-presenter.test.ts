@@ -6,6 +6,7 @@ describe('clipboard-context-presenter', () => {
     const payload = projectClipboardTextToContextPayload(
       JSON.stringify({
         kind: 'document-image-reference',
+        protocolVersion: 2,
         document: {
           filePath: '/books/a.epub',
           source: { filePath: '/books/a.epub', format: 'epub' },
@@ -14,25 +15,27 @@ describe('clipboard-context-presenter', () => {
             kind: 'document-entry',
             source: { filePath: '/books/a.epub', format: 'epub' },
             entryPath: 'image/Page_1.jpg',
-            cachePath: '/tmp/page-1.jpg',
             versionPolicy: 'versioned-export',
           },
         },
         image: {
-          path: '/tmp/page-1.jpg',
-          webviewUri: 'vscode-webview://page-1.jpg',
           index: 0,
           width: 1494,
           height: 2133,
           byteSize: 1024,
           mimeType: 'image/jpeg',
         },
+        display: {
+          runtimeOnly: true,
+          path: '/tmp/page-1.jpg',
+          webviewUri: 'vscode-webview://page-1.jpg',
+        },
       }),
     );
 
     expect(payload).toEqual({
       type: 'image',
-      id: 'document-image:/books/a.epub:/tmp/page-1.jpg:chapter:Page_1@1',
+      id: 'document-image:/books/a.epub:image/Page_1.jpg:chapter:Page_1@1',
       label: 'chapter:Page_1@1',
       summary: 'Document image: a.epub#chapter:Page_1@1',
       data: {
@@ -45,13 +48,10 @@ describe('clipboard-context-presenter', () => {
             kind: 'document-entry',
             source: { filePath: '/books/a.epub', format: 'epub' },
             entryPath: 'image/Page_1.jpg',
-            cachePath: '/tmp/page-1.jpg',
             versionPolicy: 'versioned-export',
           },
         },
         image: {
-          path: '/tmp/page-1.jpg',
-          webviewUri: 'vscode-webview://page-1.jpg',
           index: 0,
           width: 1494,
           height: 2133,
@@ -61,7 +61,6 @@ describe('clipboard-context-presenter', () => {
             kind: 'document-entry',
             source: { filePath: '/books/a.epub', format: 'epub' },
             entryPath: 'image/Page_1.jpg',
-            cachePath: '/tmp/page-1.jpg',
             versionPolicy: 'versioned-export',
           },
         },

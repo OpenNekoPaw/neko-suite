@@ -54,7 +54,7 @@ export function groupModelOptionsByProvider(
   });
 }
 
-export function buildProviderTags(model: ChatModelOption, t: Translate): readonly string[] {
+function buildProviderTags(model: ChatModelOption, t: Translate): readonly string[] {
   const tags: string[] = [];
   if (model.source === 'account-gateway') {
     tags.push(readTranslation(t, 'chat.modelSource.official', 'Official'));

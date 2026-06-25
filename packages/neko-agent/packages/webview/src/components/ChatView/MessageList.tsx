@@ -178,6 +178,7 @@ export function MessageList({
                 ) : item.kind === 'process_group' ? (
                   <ProcessRecordsGroup
                     processGroup={item.processGroup}
+                    isFirst={item.isFirst}
                     isStreaming={item.isStreaming}
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}

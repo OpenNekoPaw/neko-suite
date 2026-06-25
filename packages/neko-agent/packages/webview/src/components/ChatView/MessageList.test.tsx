@@ -105,10 +105,10 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
-  it('renders final content before collapsed process records', () => {
+  it('renders collapsed process records before final content when they happened first', () => {
     virtualItems = [
-      { index: 0, key: 'final-content', start: 0 },
-      { index: 1, key: 'process-records', start: 80 },
+      { index: 0, key: 'process-records', start: 0 },
+      { index: 1, key: 'final-content', start: 80 },
     ];
 
     renderWithI18n(
@@ -122,12 +122,15 @@ describe('MessageList auto-scroll lifecycle', () => {
       </MessageActionsProvider>,
     );
 
-    expect(screen.getByText('Final storyboard summary.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Process records/ })).toBeTruthy();
+    const processRecordsButton = screen.getByRole('button', { name: /Process records/ });
+    const finalContent = screen.getByText('Final storyboard summary.');
+    expect(processRecordsButton.compareDocumentPosition(finalContent)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(screen.queryByText('Analyze source pages.')).toBeNull();
     expect(screen.queryByText('ReadDocument')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /Process records/ }));
+    fireEvent.click(processRecordsButton);
 
     expect(screen.getByText(/Analyze source pages/)).toBeTruthy();
     expect(screen.getByText('ReadDocument')).toBeTruthy();

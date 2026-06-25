@@ -355,7 +355,6 @@ describe('storyboard transfer presenter', () => {
                 kind: 'document-entry',
                 source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
                 entryPath: 'image/panel-1.jpg',
-                cachePath: '/cache/panel-1.jpg',
                 versionPolicy: 'versioned-export',
               },
               cacheResourceRef,
@@ -378,7 +377,6 @@ describe('storyboard transfer presenter', () => {
                   kind: 'document-entry',
                   source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
                   entryPath: 'image/panel-1.jpg',
-                  cachePath: '/cache/panel-1.jpg',
                   versionPolicy: 'versioned-export',
                 },
                 referenceResourceRef: cacheResourceRef,
@@ -393,7 +391,6 @@ describe('storyboard transfer presenter', () => {
       kind: 'assetBatch',
       assets: [
         {
-          path: '/cache/panel-1.jpg',
           documentResourceRef: {
             kind: 'document-entry',
             entryPath: 'image/panel-1.jpg',
@@ -409,7 +406,6 @@ describe('storyboard transfer presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-1.jpg',
-      cachePath: '/tmp/neko-cache/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const data: StoryboardTableRichData = {
@@ -614,7 +610,6 @@ describe('storyboard transfer presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-2.jpg',
-      cachePath: '/tmp/neko-cache/page-2.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const data: StoryboardTableRichData = {
@@ -680,14 +675,12 @@ describe('storyboard transfer presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-1.jpg',
-      cachePath: '/tmp/neko-cache/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const secondResourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-2.jpg',
-      cachePath: '/tmp/neko-cache/page-2.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const data: StoryboardTableRichData = {
@@ -821,14 +814,12 @@ describe('storyboard transfer presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/panel-a.jpg',
-      cachePath: '/tmp/neko-cache/panel-a.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const secondDocumentRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/panel-b.jpg',
-      cachePath: '/tmp/neko-cache/panel-b.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const firstCacheRef = createResourceRef({
@@ -1112,13 +1103,11 @@ describe('storyboard transfer presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-6.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-6.jpg',
     };
     const page7DocumentRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-7.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-7.jpg',
     };
     const page6CacheRef = createResourceRef({
       scope: 'project',
@@ -1285,13 +1274,13 @@ describe('storyboard transfer presenter', () => {
     expect(shotPlans[0]).not.toHaveProperty('referenceResourceRef');
   });
 
-  it('does not use document-image-cache paths as markdown Canvas image identity', () => {
+  it('does not use runtime cache paths as markdown Canvas image identity', () => {
     const payload = projectMarkdownStoryboardTransferPayload(`
 ## 前十页分镜
 
 | Shot ID | 原页 | 画面内容 | 参考图 |
 | --- | --- | --- | --- |
-| S001 | P1 | 第一页画面 | /Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/page-1.jpg |
+| S001 | P1 | 第一页画面 | /mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg |
 `);
 
     const shotPlans =

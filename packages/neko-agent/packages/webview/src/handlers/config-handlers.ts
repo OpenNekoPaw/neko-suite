@@ -136,6 +136,7 @@ const handleProjectFiles: MessageHandler<'projectFiles'> = (
  * Uses platform-projected provider state for account/configuration UI.
  */
 const handleConfigState: MessageHandler<'configState'> = (message: ConfigStateMessage, context) => {
+  context.setHasConfigSnapshot?.(true);
   const settingsPatch = projectConfigStateMessage(message);
   if (settingsPatch) {
     context.setSettings((prev) => ({

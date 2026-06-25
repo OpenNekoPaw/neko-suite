@@ -119,10 +119,12 @@ const handleMessageQueued: MessageHandler<'messageQueued'> = (
   context,
 ) => {
   updateConversation(context, message.conversationId, (msgs) => ({
-    messages: projectQueuedMessageIntoMessages({
-      messages: msgs,
-      content: message.content,
-    }).messages,
+    messages: message.content
+      ? projectQueuedMessageIntoMessages({
+          messages: msgs,
+          content: message.content,
+        }).messages
+      : msgs,
     queuedMessageCount: Math.max(0, message.pendingCount ?? 0),
   }));
 };

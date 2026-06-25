@@ -317,6 +317,7 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
     code !== 'unsupportedProviderSupportLevel' &&
     code !== 'unsupportedProtocolAuthType' &&
     code !== 'unsupportedProtocolStreamFormat' &&
+    code !== 'unsupportedModelProtocolProfile' &&
     code !== 'unsupportedModelProtocol' &&
     code !== 'duplicateProviderId' &&
     code !== 'duplicateModelId' &&

@@ -47,6 +47,7 @@ const DEFAULT_SETTINGS: SettingsState = {
  */
 export interface ConfigState {
   settings: SettingsState;
+  hasConfigSnapshot: boolean;
   projectFiles: ProjectFileInfo[];
   /** Unified @mention items (files + canvas nodes + characters) */
   mentionItems: MentionItem[];
@@ -61,6 +62,7 @@ export interface ConfigState {
  */
 export interface ConfigStateActions {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
+  setHasConfigSnapshot: React.Dispatch<React.SetStateAction<boolean>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   setMentionSearchFilter: React.Dispatch<React.SetStateAction<string>>;
@@ -82,6 +84,7 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
     ...DEFAULT_SETTINGS,
     ...initialSettings,
   });
+  const [hasConfigSnapshot, setHasConfigSnapshot] = useState(Boolean(initialSettings));
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [mentionSearchFilter, setMentionSearchFilter] = useState('');
@@ -100,12 +103,14 @@ export function useConfigState(initialSettings?: Partial<SettingsState>): UseCon
   return {
     // State
     settings,
+    hasConfigSnapshot,
     projectFiles,
     mentionItems,
     mentionSearchFilter,
     pluginCommands,
     // Actions
     setSettings,
+    setHasConfigSnapshot,
     setProjectFiles,
     setMentionItems,
     setMentionSearchFilter,

@@ -31,7 +31,9 @@ export function AppShell() {
 
   const {
     settings,
+    hasConfigSnapshot,
     setSettings,
+    setHasConfigSnapshot,
     setProjectFiles,
     mentionItems,
     setMentionItems,
@@ -64,10 +66,10 @@ export function AppShell() {
     )
   );
   useEffect(() => {
-    if (!isAiConfigured) {
+    if (hasConfigSnapshot && !isAiConfigured) {
       setShowOnboarding(true);
     }
-  }, [isAiConfigured]);
+  }, [hasConfigSnapshot, isAiConfigured]);
 
   // Auto-dismiss onboarding when AI becomes configured
   useEffect(() => {
@@ -84,6 +86,7 @@ export function AppShell() {
       <ConversationController
         settings={settings}
         setSettings={setSettings}
+        setHasConfigSnapshot={setHasConfigSnapshot}
         setProjectFiles={setProjectFiles}
         mentionItems={mentionItems}
         setMentionItems={setMentionItems}

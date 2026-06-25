@@ -949,7 +949,7 @@ function projectDocumentImageCandidate(input: {
 }): MediaCandidate | null {
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
   const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
-  const resourceRef = parseDocumentArchiveResourceRef(input.info?.['resourceRef']);
+  const resourceRef = parseStableDocumentArchiveResourceRef(input.info?.['resourceRef']);
   const cacheResourceRef = isResourceRef(input.info?.['cacheResourceRef'])
     ? input.info.cacheResourceRef
     : undefined;
@@ -1261,6 +1261,15 @@ function readStringArray(record: Record<string, unknown> | undefined, key: strin
 function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function parseStableDocumentArchiveResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | undefined {
+  const ref = parseDocumentArchiveResourceRef(value);
+  if (!ref) return undefined;
+  const { cachePath: _cachePath, ...stableRef } = ref;
+  return stableRef;
 }
 
 function readFiniteNumber(

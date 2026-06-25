@@ -296,45 +296,50 @@ function AssistantContentBlocks({
 }) {
   // If contentBlocks available, render them in order
   if (message.contentBlocks && message.contentBlocks.length > 0) {
+    const contentBlocks = message.contentBlocks;
     const projections = projectContentBlocksUi(
-      message.contentBlocks,
+      contentBlocks,
       isStreaming,
       undefined,
-      message.contentBlocks,
-      deriveToolCallsFromContentBlocks(message.contentBlocks),
+      contentBlocks,
+      deriveToolCallsFromContentBlocks(contentBlocks),
       pluginsAvailable,
     );
 
     const displayProjection = projectContentBlocksDisplay(projections);
+    const displayItems = displayProjection.items;
 
     return (
       <div className="space-y-2">
-        {displayProjection.primaryProjections.map((projection) => (
-          <ContentBlockRenderer
-            key={projection.id}
-            projection={projection}
-            conversationId={conversationId}
-            workItemIds={message.workItemIds}
-            pluginsAvailable={pluginsAvailable}
-            contextChips={contextChips}
-            ambientNodes={ambientNodes}
-            onAcceptDiff={onAcceptDiff}
-            onRejectDiff={onRejectDiff}
-            onApprovePlanStep={onApprovePlanStep}
-            onRejectPlanStep={onRejectPlanStep}
-            onModifyPlanStep={onModifyPlanStep}
-            onApproveAllPlanSteps={onApproveAllPlanSteps}
-            onRejectAllPlanSteps={onRejectAllPlanSteps}
-          />
-        ))}
-        {displayProjection.processGroup && (
-          <ProcessRecordsGroup
-            processGroup={displayProjection.processGroup}
-            conversationId={conversationId}
-            workItemIds={message.workItemIds}
-            siblingBlocks={message.contentBlocks}
-            isStreaming={isStreaming ?? false}
-          />
+        {displayItems.map((displayItem, index) =>
+          displayItem.kind === 'projection' ? (
+            <ContentBlockRenderer
+              key={displayItem.projection.id}
+              projection={displayItem.projection}
+              conversationId={conversationId}
+              workItemIds={message.workItemIds}
+              pluginsAvailable={pluginsAvailable}
+              contextChips={contextChips}
+              ambientNodes={ambientNodes}
+              onAcceptDiff={onAcceptDiff}
+              onRejectDiff={onRejectDiff}
+              onApprovePlanStep={onApprovePlanStep}
+              onRejectPlanStep={onRejectPlanStep}
+              onModifyPlanStep={onModifyPlanStep}
+              onApproveAllPlanSteps={onApproveAllPlanSteps}
+              onRejectAllPlanSteps={onRejectAllPlanSteps}
+            />
+          ) : (
+            <ProcessRecordsGroup
+              key={displayItem.processGroup.id}
+              processGroup={displayItem.processGroup}
+              conversationId={conversationId}
+              workItemIds={message.workItemIds}
+              siblingBlocks={contentBlocks}
+              isFirst={index === 0}
+              isStreaming={isStreaming ?? false}
+            />
+          ),
         )}
       </div>
     );

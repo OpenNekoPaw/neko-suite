@@ -24,9 +24,16 @@ interface ModelSelectorProps {
   models: ChatModelOption[];
   onSelect: (modelId: string) => void;
   color?: string;
+  disabled?: boolean;
 }
 
-export function ModelSelector({ selectedModel, models, onSelect, color }: ModelSelectorProps) {
+export function ModelSelector({
+  selectedModel,
+  models,
+  onSelect,
+  color,
+  disabled = false,
+}: ModelSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>({
@@ -51,9 +58,10 @@ export function ModelSelector({ selectedModel, models, onSelect, color }: ModelS
   );
   const selectedModelObj = selectableModels.find((model) => model.id === selectedModel);
   const hasSelectableModels = selectableModels.length > 0;
+  const canOpen = hasSelectableModels && !disabled;
 
   const handleTrigger = () => {
-    if (!hasSelectableModels) return;
+    if (!canOpen) return;
     if (!isOpen) setPlacement(getPlacement());
     setIsOpen(!isOpen);
   };
@@ -64,8 +72,9 @@ export function ModelSelector({ selectedModel, models, onSelect, color }: ModelS
         type="button"
         onClick={handleTrigger}
         aria-label={t('chat.selectModel')}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-haspopup={canOpen ? 'menu' : undefined}
+        aria-expanded={canOpen ? isOpen : false}
+        disabled={disabled}
         className={`agent-control-chip ${hasSelectableModels ? '' : 'agent-control-chip-muted'}`}
         style={color && hasSelectableModels ? { color } : undefined}
         title={selectedModelObj?.label ?? t('chat.noModelsAvailable')}
@@ -73,10 +82,10 @@ export function ModelSelector({ selectedModel, models, onSelect, color }: ModelS
         <span className="agent-control-chip-text">
           {selectedModelObj ? shortenModelLabel(selectedModelObj) : t('chat.noModelsAvailable')}
         </span>
-        {hasSelectableModels && <ChevronDownIcon className="w-3 h-3" />}
+        {canOpen && <ChevronDownIcon className="w-3 h-3" />}
       </button>
 
-      {isOpen && hasSelectableModels && (
+      {isOpen && canOpen && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(placement)}`}
           role="menu"

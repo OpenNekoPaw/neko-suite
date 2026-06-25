@@ -47,6 +47,7 @@ interface ModeConfigBarProps {
   readonly onLlmConfigChange: (config: AgentLlmConfig) => void;
   readonly showAgentConfig: boolean;
   readonly showMediaConfig: boolean;
+  readonly disabled?: boolean;
 }
 
 const REASONING_OPTIONS: readonly AgentReasoningPreset[] = ['fast', 'balanced', 'deep'];
@@ -140,6 +141,7 @@ export function ModeConfigBar({
   onLlmConfigChange,
   showAgentConfig,
   showMediaConfig,
+  disabled = false,
 }: ModeConfigBarProps) {
   const { t } = useTranslation();
   const availableAgentCategories = useMemo(
@@ -191,8 +193,12 @@ export function ModeConfigBar({
       >
         <SessionModeSelector
           mode={projection.mode}
-          onChange={onSessionModeChange}
+          onChange={(mode) => {
+            if (disabled) return;
+            onSessionModeChange(mode);
+          }}
           availableModes={availableSessionModes}
+          disabled={disabled}
         />
       </div>
 
@@ -216,6 +222,7 @@ export function ModeConfigBar({
             onGenParamsChange={onGenParamsChange}
             llmConfig={llmConfig}
             onLlmConfigChange={onLlmConfigChange}
+            disabled={disabled}
           />
         ) : projection.mode !== 'agent' && showMediaConfig ? (
           <MediaModelParamsBar
@@ -225,6 +232,7 @@ export function ModeConfigBar({
             onMediaModelSelect={onMediaModelSelect}
             genParams={genParams}
             onGenParamsChange={onGenParamsChange}
+            disabled={disabled}
           />
         ) : null}
       </div>
@@ -238,6 +246,7 @@ interface AgentLlmConfigBarProps {
   readonly onModelSelect: (modelId: string) => void;
   readonly llmConfig: AgentLlmConfig;
   readonly onLlmConfigChange: (config: AgentLlmConfig) => void;
+  readonly disabled?: boolean;
 }
 
 interface AgentModeConfigBarProps extends AgentLlmConfigBarProps {
@@ -265,6 +274,7 @@ function AgentModeConfigBar({
   onGenParamsChange,
   llmConfig,
   onLlmConfigChange,
+  disabled,
 }: AgentModeConfigBarProps) {
   return (
     <div className="agent-mode-config-stack">
@@ -272,6 +282,7 @@ function AgentModeConfigBar({
         category={category}
         options={categoryOptions}
         onChange={onCategoryChange}
+        disabled={disabled}
       />
       {category === 'llm' ? (
         <AgentLlmConfigBar
@@ -280,6 +291,7 @@ function AgentModeConfigBar({
           onModelSelect={onModelSelect}
           llmConfig={llmConfig}
           onLlmConfigChange={onLlmConfigChange}
+          disabled={disabled}
         />
       ) : (
         <MediaModelParamsBar
@@ -289,6 +301,7 @@ function AgentModeConfigBar({
           onMediaModelSelect={onMediaModelSelect}
           genParams={genParams}
           onGenParamsChange={onGenParamsChange}
+          disabled={disabled}
         />
       )}
     </div>
@@ -301,6 +314,7 @@ function AgentLlmConfigBar({
   onModelSelect,
   llmConfig,
   onLlmConfigChange,
+  disabled,
 }: AgentLlmConfigBarProps) {
   const { t } = useTranslation();
   const color = getCategoryColor('llm');
@@ -319,6 +333,7 @@ function AgentLlmConfigBar({
           models={[...availableModels]}
           onSelect={onModelSelect}
           color={color}
+          disabled={disabled}
         />
       </div>
 
@@ -336,6 +351,7 @@ function AgentLlmConfigBar({
               labelPrefix="chat.agentConfig.reasoning"
               color={color}
               onChange={(reasoningPreset) => onLlmConfigChange({ ...llmConfig, reasoningPreset })}
+              disabled={disabled}
             />
           ) : null}
           {controls.verbosity ? (
@@ -346,6 +362,7 @@ function AgentLlmConfigBar({
               labelPrefix="chat.agentConfig.verbosity"
               color={color}
               onChange={(verbosityPreset) => onLlmConfigChange({ ...llmConfig, verbosityPreset })}
+              disabled={disabled}
             />
           ) : null}
           {controls.creativity ? (
@@ -356,6 +373,7 @@ function AgentLlmConfigBar({
               labelPrefix="chat.agentConfig.creativity"
               color={color}
               onChange={(creativityPreset) => onLlmConfigChange({ ...llmConfig, creativityPreset })}
+              disabled={disabled}
             />
           ) : null}
         </div>
@@ -368,12 +386,14 @@ interface AgentConfigCategorySelectorProps {
   readonly category: AgentConfigCategory;
   readonly options: readonly AgentConfigCategory[];
   readonly onChange: (category: AgentConfigCategory) => void;
+  readonly disabled?: boolean;
 }
 
 function AgentConfigCategorySelector({
   category,
   options,
   onChange,
+  disabled = false,
 }: AgentConfigCategorySelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -383,6 +403,7 @@ function AgentConfigCategorySelector({
   });
   const menuRef = useRef<HTMLDivElement>(null);
   const canSwitchCategory = options.length > 1;
+  const canOpen = canSwitchCategory && !disabled;
 
   useClickOutsideSingle(menuRef, () => setIsOpen(false));
   const getPlacement = useDropdownPlacement(menuRef, {
@@ -398,25 +419,26 @@ function AgentConfigCategorySelector({
       <button
         type="button"
         onClick={() => {
-          if (!canSwitchCategory) return;
+          if (!canOpen) return;
           if (!isOpen) setPlacement(getPlacement());
           setIsOpen((value) => !value);
         }}
         aria-label={currentLabel}
-        aria-haspopup={canSwitchCategory ? 'menu' : undefined}
-        aria-expanded={isOpen}
+        aria-haspopup={canOpen ? 'menu' : undefined}
+        aria-expanded={canOpen ? isOpen : false}
+        disabled={disabled}
         className={`agent-control-chip agent-control-chip-mode ${
-          canSwitchCategory ? '' : 'agent-control-chip-static'
+          canOpen ? '' : 'agent-control-chip-static'
         }`}
         style={{ color }}
         title={currentLabel}
       >
         <ConfigCategoryIcon category={category} />
         <span className="agent-control-chip-text">{currentLabel}</span>
-        {canSwitchCategory && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
+        {canOpen && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
-      {isOpen && canSwitchCategory && (
+      {isOpen && canOpen && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-compact agent-dropdown-menu-preset absolute ${dropdownPositionClass(placement)}`}
           role="menu"
@@ -453,6 +475,7 @@ interface MediaModelParamsBarProps {
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genParams: GenerationParams;
   readonly onGenParamsChange: (params: Partial<GenerationParams>) => void;
+  readonly disabled?: boolean;
 }
 
 function MediaModelParamsBar({
@@ -462,6 +485,7 @@ function MediaModelParamsBar({
   onMediaModelSelect,
   genParams,
   onGenParamsChange,
+  disabled,
 }: MediaModelParamsBarProps) {
   const models = availableMediaModels.filter((model) => model.category === category);
   const color = getCategoryColor(category);
@@ -473,12 +497,14 @@ function MediaModelParamsBar({
         selectedId={mediaModelSelection[category]}
         models={models}
         onSelect={(modelId) => onMediaModelSelect(category, modelId)}
+        disabled={disabled}
       />
       <MediaParamsPanel
         category={category}
         params={genParams}
         onChange={onGenParamsChange}
         color={color}
+        disabled={disabled}
       />
     </div>
   );
@@ -489,6 +515,7 @@ interface InlineMediaModelChipProps {
   readonly selectedId: string;
   readonly models: readonly ChatModelOption[];
   readonly onSelect: (modelId: string) => void;
+  readonly disabled?: boolean;
 }
 
 function InlineMediaModelChip({
@@ -496,6 +523,7 @@ function InlineMediaModelChip({
   selectedId,
   models,
   onSelect,
+  disabled = false,
 }: InlineMediaModelChipProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -514,6 +542,7 @@ function InlineMediaModelChip({
   const color = getCategoryColor(category);
   const selected = models.find((model) => model.id === selectedId);
   const hasModels = models.length > 0;
+  const canOpen = hasModels && !disabled;
   const isConfigured = Boolean(selected) && selectedId !== 'none';
   const categoryLabel = getConfigCategoryLabel(t, category);
   const groupedModels = useMemo(
@@ -526,7 +555,7 @@ function InlineMediaModelChip({
   );
 
   const handleOpen = () => {
-    if (!hasModels) return;
+    if (!canOpen) return;
     if (!isOpen) setPlacement(getPlacement());
     setIsOpen((value) => !value);
   };
@@ -536,8 +565,9 @@ function InlineMediaModelChip({
       <button
         type="button"
         onClick={handleOpen}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-haspopup={canOpen ? 'menu' : undefined}
+        aria-expanded={canOpen ? isOpen : false}
+        disabled={disabled}
         className={`agent-control-chip agent-control-chip-model ${
           isConfigured ? '' : 'agent-control-chip-muted'
         }`}
@@ -556,10 +586,10 @@ function InlineMediaModelChip({
             ? shortenModelLabel(selected, 10, '...')
             : t('chat.generation.model.noneShort')}
         </span>
-        {hasModels && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
+        {canOpen && <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
-      {isOpen && hasModels && (
+      {isOpen && canOpen && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-model absolute ${dropdownPositionClass(placement)}`}
           role="menu"
@@ -616,9 +646,16 @@ interface MediaParamsPanelProps {
   readonly params: GenerationParams;
   readonly onChange: (params: Partial<GenerationParams>) => void;
   readonly color: string;
+  readonly disabled?: boolean;
 }
 
-function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPanelProps) {
+function MediaParamsPanel({
+  category,
+  params,
+  onChange,
+  color,
+  disabled = false,
+}: MediaParamsPanelProps) {
   const { t } = useTranslation();
 
   if (category === 'image') {
@@ -630,6 +667,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
           onChange={(value) => onChange({ ratio: value as GenerationParams['ratio'] })}
           color={color}
           ariaLabel={t('chat.generation.param.ratio')}
+          disabled={disabled}
         />
         <ParamDropdown
           value={params.resolution}
@@ -637,6 +675,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
           onChange={(value) => onChange({ resolution: value as GenerationParams['resolution'] })}
           color={color}
           ariaLabel={t('chat.generation.param.resolution')}
+          disabled={disabled}
         />
       </>
     );
@@ -651,6 +690,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
           onChange={(value) => onChange({ ratio: value as GenerationParams['ratio'] })}
           color={color}
           ariaLabel={t('chat.generation.param.ratio')}
+          disabled={disabled}
         />
         <ParamDropdown
           value={params.resolution}
@@ -658,6 +698,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
           onChange={(value) => onChange({ resolution: value as GenerationParams['resolution'] })}
           color={color}
           ariaLabel={t('chat.generation.param.resolution')}
+          disabled={disabled}
         />
         <ParamDropdown
           value={String(params.videoDuration)}
@@ -665,6 +706,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
           onChange={(value) => onChange({ videoDuration: parseGenerationDuration(value) })}
           color={color}
           ariaLabel={t('chat.generation.param.videoDuration')}
+          disabled={disabled}
         />
       </>
     );
@@ -681,6 +723,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
         onChange={(value) => onChange({ audioType: value as GenerationParams['audioType'] })}
         color={color}
         ariaLabel={t('chat.generation.param.audioType')}
+        disabled={disabled}
       />
       <ParamDropdown
         value={String(params.audioDuration)}
@@ -688,6 +731,7 @@ function MediaParamsPanel({ category, params, onChange, color }: MediaParamsPane
         onChange={(value) => onChange({ audioDuration: parseGenerationDuration(value) })}
         color={color}
         ariaLabel={t('chat.generation.param.audioDuration')}
+        disabled={disabled}
       />
     </>
   );
@@ -699,9 +743,17 @@ interface ParamDropdownProps {
   readonly onChange: (value: string) => void;
   readonly color: string;
   readonly ariaLabel: string;
+  readonly disabled?: boolean;
 }
 
-function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDropdownProps) {
+function ParamDropdown({
+  value,
+  options,
+  onChange,
+  color,
+  ariaLabel,
+  disabled = false,
+}: ParamDropdownProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>({
@@ -724,12 +776,14 @@ function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDrop
       <button
         type="button"
         onClick={() => {
+          if (disabled) return;
           if (!isOpen) setPlacement(getPlacement());
           setIsOpen((current) => !current);
         }}
         aria-label={ariaLabel}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-haspopup={disabled ? undefined : 'menu'}
+        aria-expanded={disabled ? false : isOpen}
+        disabled={disabled}
         className="agent-control-chip agent-control-chip-param"
         style={{ color }}
       >
@@ -737,7 +791,7 @@ function ParamDropdown({ value, options, onChange, color, ariaLabel }: ParamDrop
         <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
       </button>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-compact agent-dropdown-menu-param absolute ${dropdownPositionClass(placement)}`}
           role="menu"
@@ -782,6 +836,7 @@ interface PresetDropdownProps<Value extends string> {
   readonly labelPrefix: string;
   readonly color?: string;
   readonly onChange: (value: Value) => void;
+  readonly disabled?: boolean;
 }
 
 function PresetDropdown<Value extends string>({
@@ -791,6 +846,7 @@ function PresetDropdown<Value extends string>({
   labelPrefix,
   color,
   onChange,
+  disabled = false,
 }: PresetDropdownProps<Value>) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -815,12 +871,14 @@ function PresetDropdown<Value extends string>({
       <button
         type="button"
         onClick={() => {
+          if (disabled) return;
           if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-label={t(titleKey)}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-haspopup={disabled ? undefined : 'menu'}
+        aria-expanded={disabled ? false : isOpen}
+        disabled={disabled}
         className="agent-control-chip agent-control-chip-param agent-control-chip-preset"
         style={color ? { color } : undefined}
         title={title}
@@ -829,7 +887,7 @@ function PresetDropdown<Value extends string>({
         <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
       </button>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div
           className={`agent-dropdown-menu agent-dropdown-menu-compact agent-dropdown-menu-preset absolute ${dropdownPositionClass(placement)}`}
           role="menu"

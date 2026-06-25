@@ -312,7 +312,6 @@ describe('composite content presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/images/moe-018893.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
     };
     const cacheResourceRef = {
       id: 'res_stable',
@@ -406,7 +405,6 @@ describe('composite content presenter', () => {
         },
       },
       entryPath: 'OPS/images/moe-018893.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
     };
     const cacheResourceRef = {
       id: 'res_stable',
@@ -586,7 +584,6 @@ describe('composite content presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-3.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-3.jpg',
     };
     const cacheResourceRef = {
       id: 'res_page_3',
@@ -728,13 +725,11 @@ describe('composite content presenter', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-6.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-6.jpg',
     };
     const page7DocumentRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-7.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-7.jpg',
     };
     const page6CacheRef = {
       id: 'res_page_6',

@@ -23,6 +23,7 @@ describe('context-reference-presenter', () => {
         type: 'asset',
         id: 'asset-1',
         label: 'Hero portrait',
+        summary: 'Asset: Hero portrait',
         navigationData: {
           partition: 'asset-library',
           sourceId: 'asset-1',
@@ -54,6 +55,7 @@ describe('context-reference-presenter', () => {
         type: 'media',
         id: 'media-1',
         label: 'Hero reference',
+        summary: 'Media: Hero reference',
         navigationData: {
           path: '${REFS}/hero.png',
           filePath: '/mnt/media/hero.png',

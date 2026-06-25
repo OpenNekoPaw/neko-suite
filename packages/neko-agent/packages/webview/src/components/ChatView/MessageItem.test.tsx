@@ -88,7 +88,7 @@ describe('MessageItem tool aggregation', () => {
     expect(screen.getAllByText('ReadDocument')).toHaveLength(3);
   });
 
-  it('collapses process records after final assistant content', () => {
+  it('collapses process records before final assistant content when they happened first', () => {
     renderMessageItem({
       message: createMessage({
         role: 'assistant',
@@ -116,11 +116,14 @@ describe('MessageItem tool aggregation', () => {
       },
     });
 
-    expect(screen.getByText('Final storyboard summary.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /chat.processRecords.title/ })).toBeTruthy();
+    const processRecordsButton = screen.getByRole('button', { name: /chat.processRecords.title/ });
+    const finalContent = screen.getByText('Final storyboard summary.');
+    expect(processRecordsButton.compareDocumentPosition(finalContent)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(screen.queryByText('ReadDocument')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /chat.processRecords.title/ }));
+    fireEvent.click(processRecordsButton);
 
     expect(screen.getByText(/Analyze source pages/)).toBeTruthy();
     expect(screen.getByText('ReadDocument')).toBeTruthy();
@@ -203,6 +206,36 @@ describe('MessageItem reference rendering', () => {
     expect(token?.getAttribute('data-reference-kind')).toBe('canvas');
     expect(token?.getAttribute('data-reference-variant')).toBe('attached');
     expect(screen.getByText('#1 wide shot')).toBeTruthy();
+  });
+
+  it('renders selected file reference context with parent path metadata', () => {
+    renderMessageItem({
+      message: {
+        ...createMessage({ role: 'user', content: '分析' }),
+        contextReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            type: 'file',
+            label: 'story.epub',
+            summary: '${A}/books/story.epub',
+            mediaType: 'document',
+            navigationData: {
+              path: '${A}/books/story.epub',
+              filePath: '${A}/books/story.epub',
+            },
+          },
+        ],
+      },
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    const token = document.querySelector('[data-agent-reference-token="true"]');
+    expect(token?.getAttribute('data-reference-kind')).toBe('file');
+    expect(screen.getByText('story.epub')).toBeTruthy();
+    expect(screen.getByText('${A}/books')).toBeTruthy();
   });
 });
 

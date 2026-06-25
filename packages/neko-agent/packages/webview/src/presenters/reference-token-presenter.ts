@@ -39,6 +39,10 @@ export interface MessageContextReferenceTokenInput {
   type: string;
   id: string;
   label: string;
+  summary?: string;
+  thumbnailUri?: string;
+  mediaType?: ReferenceMediaType;
+  navigationData?: Record<string, string>;
 }
 
 export interface AmbientCanvasReferenceTokenInput {
@@ -93,13 +97,23 @@ export function projectContextPayloadReferenceToken(
 export function projectMessageContextReferenceToken(
   reference: MessageContextReferenceTokenInput,
 ): ReferenceTokenProjection {
+  const path = reference.navigationData?.filePath ?? reference.navigationData?.path;
+  const pathToken = path
+    ? projectPathReferenceToken({
+        path,
+        label: reference.label,
+        mediaType: reference.mediaType,
+        thumbnailUri: reference.thumbnailUri,
+      })
+    : null;
+
   return {
-    kind: toContextReferenceKind(reference.type),
+    kind: pathToken?.kind ?? toContextReferenceKind(reference.type),
     label: reference.label,
-    title: reference.label,
-    meta: null,
+    title: reference.summary || path || reference.label,
+    meta: pathToken?.meta ?? null,
     countLabel: null,
-    thumbnailSrc: null,
+    thumbnailSrc: reference.thumbnailUri ?? null,
   };
 }
 

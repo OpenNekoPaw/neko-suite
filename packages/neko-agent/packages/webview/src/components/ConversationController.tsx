@@ -97,6 +97,7 @@ export interface ConversationControllerProps {
   // From AppShell (config + resource state)
   settings: SettingsState;
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
+  setHasConfigSnapshot: React.Dispatch<React.SetStateAction<boolean>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   mentionItems: MentionItem[];
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
@@ -120,6 +121,7 @@ export interface ConversationControllerProps {
 export function ConversationController({
   settings,
   setSettings,
+  setHasConfigSnapshot,
   setProjectFiles,
   mentionItems,
   setMentionItems,
@@ -622,6 +624,7 @@ export function ConversationController({
     setActiveTabId,
     setActiveTab,
     setSettings,
+    setHasConfigSnapshot,
     selectedModelRef,
     setSelectedModel,
     setMediaModelSelection,
@@ -1102,6 +1105,7 @@ export function ConversationController({
               onEntryAction={handleEntryAction}
             />
             <InputAreaProvider
+              isBusy={false}
               sessionMode={entrySessionMode}
               onSessionModeChange={handleEntrySessionModeChange}
               selectedModel={selectedModel}

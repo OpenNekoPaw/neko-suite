@@ -68,8 +68,8 @@ export const chat = {
 
   'chat.input.placeholder':
     'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
-  'chat.input.thinkingPlaceholder': 'Type next message... (will be queued)',
-  'chat.input.queuePlaceholder': '{count} message(s) queued... type another',
+  'chat.input.thinkingPlaceholder': 'Responding... wait or cancel before sending again',
+  'chat.input.queuePlaceholder': 'Responding... {count} queued message(s)',
   'chat.input.queuedMessages': '{count} queued message(s)',
   'chat.input.clearAll': 'Clear all',
   'chat.input.clearQueue': 'Clear queued messages',

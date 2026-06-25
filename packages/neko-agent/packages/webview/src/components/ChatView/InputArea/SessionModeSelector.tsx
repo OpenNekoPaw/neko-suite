@@ -19,6 +19,7 @@ interface SessionModeSelectorProps {
   mode: SessionMode;
   onChange: (mode: SessionMode) => void;
   availableModes?: readonly SessionMode[];
+  disabled?: boolean;
 }
 
 interface ModeOption {
@@ -38,7 +39,12 @@ export const SESSION_MODE_COLORS: Record<SessionMode, string> = {
   audio: '#06B6D4',
 };
 
-export function SessionModeSelector({ mode, onChange, availableModes }: SessionModeSelectorProps) {
+export function SessionModeSelector({
+  mode,
+  onChange,
+  availableModes,
+  disabled = false,
+}: SessionModeSelectorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<DropdownPlacement>({
@@ -98,19 +104,21 @@ export function SessionModeSelector({ mode, onChange, availableModes }: SessionM
   const OPTIONS = allOptions.filter((opt) => availableModeSet.has(opt.value));
   const current = OPTIONS.find((o) => o.value === mode) ?? allOptions[0]!;
   const canSwitchMode = OPTIONS.length > 1;
+  const canOpen = canSwitchMode && !disabled;
 
   return (
     <div className="relative" ref={menuRef}>
       <button
         type="button"
         onClick={() => {
-          if (!canSwitchMode) return;
+          if (!canOpen) return;
           if (!isOpen) setPlacement(getPlacement());
           setIsOpen(!isOpen);
         }}
         aria-label={t(current.shortLabelKey)}
-        aria-haspopup="menu"
-        aria-expanded={canSwitchMode ? isOpen : false}
+        aria-haspopup={canOpen ? 'menu' : undefined}
+        aria-expanded={canOpen ? isOpen : false}
+        disabled={disabled}
         className="agent-control-chip agent-control-chip-mode"
         style={{ color: current.color }}
         title={t(current.labelKey)}
@@ -119,7 +127,7 @@ export function SessionModeSelector({ mode, onChange, availableModes }: SessionM
         <span className="agent-control-chip-text">{t(current.shortLabelKey)}</span>
       </button>
 
-      {isOpen && canSwitchMode && (
+      {isOpen && canOpen && (
         <div
           className={`agent-composer-popover agent-composer-session-mode-menu absolute ${sessionModeMenuPositionClass(placement)}`}
           role="menu"

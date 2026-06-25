@@ -2,6 +2,7 @@ import { memo, useCallback, useState } from 'react';
 import type { ContentBlock } from '@neko-agent/types';
 import type { ContentBlockProcessGroupProjection } from '@/presenters/content-block-presenter';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
+import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ChevronIcon, ToolLoadingSpinner } from '@/components/ChatView/ToolCallDisplay';
@@ -11,6 +12,7 @@ interface ProcessRecordsGroupProps {
   conversationId: string | null;
   workItemIds?: string[];
   siblingBlocks: ContentBlock[];
+  isFirst?: boolean;
   isStreaming: boolean;
   assistantIdentity?: MessageSpeakerIdentity;
 }
@@ -20,6 +22,7 @@ function ProcessRecordsGroupComponent({
   conversationId,
   workItemIds,
   siblingBlocks,
+  isFirst = false,
   isStreaming,
   assistantIdentity,
 }: ProcessRecordsGroupProps) {
@@ -43,7 +46,18 @@ function ProcessRecordsGroupComponent({
   return (
     <div className="agent-message-row group">
       <div className="flex gap-2 px-2 py-1">
-        <div className="flex-shrink-0 w-5 pt-0.5" />
+        <div className="flex-shrink-0 w-5 pt-0.5">
+          {isFirst ? (
+            <MessageAvatar
+              role="assistant"
+              label={assistantIdentity?.avatarLabel}
+              imageUri={assistantIdentity?.avatarUri}
+              title={assistantIdentity?.title}
+            />
+          ) : (
+            <div className="w-5" />
+          )}
+        </div>
         <div className="flex-1 min-w-0 max-w-[85%]">
           <button
             type="button"

@@ -1,8 +1,8 @@
 /**
  * useChatActions - Chat message sending, cancellation, and copy
  *
- * Sends messages directly to Extension — AgentRunner handles queueing
- * when the agent is already running (via _pendingMessages).
+ * Sends messages directly to Extension; compatible text sends are queued by the runtime.
+ * Model configuration is locked for the duration of a running Agent turn.
  */
 
 import {
@@ -14,6 +14,7 @@ import {
 } from 'react';
 import {
   Message,
+  type MessageContextReference,
   type AgentLlmConfig,
   type AgentModelSlots,
   type MessageModelProjection,
@@ -126,6 +127,7 @@ export function useChatActions({
   const handleSend = useCallback(
     (input?: PendingSendInput) => {
       if (isConversationSwitching) return;
+      const isQueueingSend = isThinking;
 
       const messageText = input?.messageText ?? inputValue;
       const displayMessageText = input?.displayMessageText ?? messageText;
@@ -133,12 +135,28 @@ export function useChatActions({
       const attachments = input?.attachments;
       const contextPayloads = input?.contextPayloads;
       const fileReferenceAttachments = projectFileReferenceAttachments(input?.fileReferences);
+      const fileReferenceContextReferences = projectFileReferenceContextReferences(
+        input?.fileReferences,
+      );
       const outboundAttachments = mergeDisplayAttachments(attachments, fileReferenceAttachments);
       const outboundContextPayloads = contextPayloads ?? [];
       const trimmed = messageText.trim();
       const hasAttachments = outboundAttachments.length > 0;
       const hasContextPayloads = (contextPayloads?.length ?? 0) > 0;
-      if (!trimmed && !hasAttachments && !hasContextPayloads) return;
+      const selectedFileReferenceCount = input?.fileReferences?.length ?? 0;
+      const hasFileReferences = selectedFileReferenceCount > 0;
+      if (!trimmed && !hasAttachments && !hasContextPayloads && !hasFileReferences) return;
+      if (
+        isQueueingSend &&
+        !isQueueableRunningTextSend({
+          trimmed,
+          hasAttachments,
+          hasContextPayloads,
+          selectedFileReferenceCount,
+        })
+      ) {
+        return;
+      }
 
       const conversationId = activeConversationId;
       if (!conversationId) {
@@ -178,11 +196,17 @@ export function useChatActions({
         return;
       }
 
-      // Clear streaming state from previous turn
-      setStreamingMessageId(null);
-      streamingMessageIdRef.current = null;
+      // Clear stale streaming state only for a new foreground turn.
+      // Queueing while the current turn streams must preserve the active assistant message.
+      if (!isQueueingSend) {
+        setStreamingMessageId(null);
+        streamingMessageIdRef.current = null;
+      }
 
-      const contextReferences = projectContextReferencesFromPayloads(contextPayloads);
+      const contextReferences = mergeContextReferences(
+        projectContextReferencesFromPayloads(contextPayloads),
+        fileReferenceContextReferences,
+      );
       const userMessage: Message = {
         id: Date.now().toString(),
         role: 'user',
@@ -197,7 +221,9 @@ export function useChatActions({
       clearInput();
       setAttachedFiles([]);
       setSelectedFileReferences?.([]);
-      setIsThinking(true);
+      if (!isQueueingSend) {
+        setIsThinking(true);
+      }
 
       const effectiveSessionMode = inputSessionMode ?? sessionMode ?? 'agent';
       const modelProjection = projectMessageModelSelection({
@@ -225,10 +251,14 @@ export function useChatActions({
           : {}),
         ...(outboundAttachments.length > 0 ? { attachments: outboundAttachments } : {}),
         ...(outboundContextPayloads.length > 0 ? { contextPayloads: outboundContextPayloads } : {}),
+        ...(input?.fileReferences && input.fileReferences.length > 0
+          ? { fileReferences: input.fileReferences }
+          : {}),
       });
     },
     [
       inputValue,
+      isThinking,
       isCharacterRoleSession,
       selectedModel,
       sessionMode,
@@ -255,9 +285,22 @@ export function useChatActions({
   const triggerSend = useCallback(
     (messageText: string) => {
       if (isConversationSwitching) return;
-      if (isThinking) return;
+      const isQueueingSend = isThinking;
 
       const conversationId = activeConversationIdRef.current;
+      const trimmed = messageText.trim();
+      if (
+        isQueueingSend &&
+        !isQueueableRunningTextSend({
+          trimmed,
+          hasAttachments: false,
+          hasContextPayloads: false,
+          selectedFileReferenceCount: 0,
+        })
+      ) {
+        return;
+      }
+
       if (!conversationId) {
         ensureConversationForSend?.({
           messageText,
@@ -266,8 +309,10 @@ export function useChatActions({
         return;
       }
 
-      setStreamingMessageId(null);
-      streamingMessageIdRef.current = null;
+      if (!isQueueingSend) {
+        setStreamingMessageId(null);
+        streamingMessageIdRef.current = null;
+      }
 
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -278,7 +323,9 @@ export function useChatActions({
 
       setMessages((prev) => [...prev, userMessage]);
       onUserMessageSent?.({ conversationId, message: userMessage });
-      setIsThinking(true);
+      if (!isQueueingSend) {
+        setIsThinking(true);
+      }
       setActiveTab('chat');
 
       const modelProjection = projectMessageModelSelection({
@@ -369,6 +416,63 @@ function projectFileReferenceAttachments(
   );
 }
 
+function projectFileReferenceContextReferences(
+  references: readonly SelectedFileReference[] | undefined,
+): MessageContextReference[] {
+  return (
+    references?.map((reference) => ({
+      type: fileReferenceContextType(reference),
+      id: reference.id,
+      label: reference.label,
+      summary: reference.path,
+      ...(reference.thumbnailUri ? { thumbnailUri: reference.thumbnailUri } : {}),
+      ...(reference.mediaType ? { mediaType: reference.mediaType } : {}),
+      navigationData: {
+        path: reference.path,
+        filePath: reference.path,
+      },
+    })) ?? []
+  );
+}
+
+function mergeContextReferences(
+  payloadReferences: MessageContextReference[] | undefined,
+  fileReferences: readonly MessageContextReference[],
+): MessageContextReference[] | undefined {
+  const merged: MessageContextReference[] = [];
+  const seenIds = new Set<string>();
+
+  for (const reference of payloadReferences ?? []) {
+    merged.push(reference);
+    seenIds.add(reference.id);
+  }
+
+  for (const reference of fileReferences) {
+    if (seenIds.has(reference.id)) continue;
+    merged.push(reference);
+    seenIds.add(reference.id);
+  }
+
+  return merged.length > 0 ? merged : undefined;
+}
+
+function fileReferenceContextType(
+  reference: SelectedFileReference,
+): MessageContextReference['type'] {
+  if (reference.mediaType === 'image') return 'image';
+  if (reference.mediaType === 'audio') return 'audio-clip';
+  if (
+    reference.mediaType === 'video' ||
+    reference.mediaType === 'sequence' ||
+    reference.source === 'media-library'
+  ) {
+    return 'media';
+  }
+  if (reference.source === 'asset-library') return 'asset';
+  if (reference.source === 'entity-graph') return 'entity';
+  return 'file';
+}
+
 function mergeDisplayAttachments(
   attachments: readonly MessageAttachment[] | undefined,
   fileReferences: readonly MessageAttachment[],
@@ -376,6 +480,21 @@ function mergeDisplayAttachments(
   if (!attachments || attachments.length === 0) return [...fileReferences];
   if (fileReferences.length === 0) return [...attachments];
   return [...attachments, ...fileReferences];
+}
+
+function isQueueableRunningTextSend(input: {
+  readonly trimmed: string;
+  readonly hasAttachments: boolean;
+  readonly hasContextPayloads: boolean;
+  readonly selectedFileReferenceCount: number;
+}): boolean {
+  return (
+    input.trimmed.length > 0 &&
+    !input.hasAttachments &&
+    !input.hasContextPayloads &&
+    input.selectedFileReferenceCount === 0 &&
+    !/^[/$]/.test(input.trimmed)
+  );
 }
 
 function parseDirectSkillInvocation(

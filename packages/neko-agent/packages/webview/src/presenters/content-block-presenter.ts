@@ -112,9 +112,18 @@ export interface ContentBlockProcessGroupProjection {
   isStreaming: boolean;
 }
 
+export type ContentBlocksDisplayItem =
+  | {
+      kind: 'projection';
+      projection: ContentBlockUiProjection;
+    }
+  | {
+      kind: 'processGroup';
+      processGroup: ContentBlockProcessGroupProjection;
+    };
+
 export interface ContentBlocksDisplayProjection {
-  primaryProjections: ContentBlockUiProjection[];
-  processGroup: ContentBlockProcessGroupProjection | null;
+  items: ContentBlocksDisplayItem[];
 }
 
 export interface ProjectContentBlockUiInput {
@@ -275,36 +284,35 @@ export function projectContentBlocksDisplay(
   const hasPrimaryResult = projections.some(isPrimaryResultProjection);
   if (!hasPrimaryResult) {
     return {
-      primaryProjections: [...projections],
-      processGroup: null,
+      items: projections.map((projection) => ({ kind: 'projection', projection })),
     };
   }
 
-  const processProjections = projections.filter(isCollapsibleProcessProjection);
-  if (processProjections.length === 0) {
-    return {
-      primaryProjections: [...projections],
-      processGroup: null,
-    };
-  }
+  const items: ContentBlocksDisplayItem[] = [];
+  let processProjections: ContentBlockUiProjection[] = [];
 
-  return {
-    primaryProjections: projections.filter(
-      (projection) => !isCollapsibleProcessProjection(projection),
-    ),
-    processGroup: {
-      id: `${processProjections[0]?.id ?? 'assistant'}-process-records`,
-      projections: processProjections,
-      blockCount: processProjections.length,
-      toolCallCount: processProjections.reduce(
-        (count, projection) => count + countProjectionToolCalls(projection),
-        0,
-      ),
-      thinkingCount: processProjections.filter((projection) => projection.renderKind === 'thinking')
-        .length,
-      isStreaming: processProjections.some(isStreamingProjection),
-    },
+  const flushProcessGroup = () => {
+    if (processProjections.length === 0) return;
+    items.push({
+      kind: 'processGroup',
+      processGroup: projectProcessGroup(processProjections),
+    });
+    processProjections = [];
   };
+
+  for (const projection of projections) {
+    if (isCollapsibleProcessProjection(projection)) {
+      processProjections.push(projection);
+      continue;
+    }
+
+    flushProcessGroup();
+    items.push({ kind: 'projection', projection });
+  }
+
+  flushProcessGroup();
+
+  return { items };
 }
 
 function formatContentBlockTimestamp(timestamp: number): string {
@@ -434,6 +442,27 @@ function countProjectionToolCalls(projection: ContentBlockUiProjection): number 
 function isStreamingProjection(projection: ContentBlockUiProjection): boolean {
   if (projection.header.showStreamingBadge || projection.parentIsStreaming) return true;
   return projection.renderKind === 'thinking' && projection.isThinkingComplete === false;
+}
+
+function projectProcessGroup(
+  projections: readonly ContentBlockUiProjection[],
+): ContentBlockProcessGroupProjection {
+  const first = projections[0];
+  if (!first) {
+    throw new Error('Cannot project an empty process group');
+  }
+
+  return {
+    id: `${first.id}-process-records`,
+    projections: [...projections],
+    blockCount: projections.length,
+    toolCallCount: projections.reduce(
+      (count, projection) => count + countProjectionToolCalls(projection),
+      0,
+    ),
+    thinkingCount: projections.filter((projection) => projection.renderKind === 'thinking').length,
+    isStreaming: projections.some(isStreamingProjection),
+  };
 }
 
 function projectToolGroup(

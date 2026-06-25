@@ -97,6 +97,7 @@ export interface TabContext {
 /** Settings and model configuration */
 export interface SettingsContext {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
+  setHasConfigSnapshot?: React.Dispatch<React.SetStateAction<boolean>>;
   selectedModelRef?: MutableRefObject<string>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;

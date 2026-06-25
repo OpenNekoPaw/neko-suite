@@ -64,8 +64,8 @@ export const chat = {
   'chat.structuredArtifact.generating': '正在生成结构化内容...',
 
   'chat.input.placeholder': '输入任何问题... (/ 命令, @ 文件, Shift+Enter 换行)',
-  'chat.input.thinkingPlaceholder': '输入下一条消息... (将加入队列)',
-  'chat.input.queuePlaceholder': '已排队 {count} 条消息... 继续输入',
+  'chat.input.thinkingPlaceholder': '正在回答... 请等待或取消后再发送',
+  'chat.input.queuePlaceholder': '正在回答... {count} 条排队消息待处理',
   'chat.input.queuedMessages': '{count} 条排队消息',
   'chat.input.clearAll': '清空全部',
   'chat.input.clearQueue': '清空排队消息',

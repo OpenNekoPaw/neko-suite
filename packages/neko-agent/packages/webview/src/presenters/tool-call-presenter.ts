@@ -139,7 +139,7 @@ function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailPr
     const height = readFiniteNumber(info, 'height');
     const byteSize = readFiniteNumber(info, 'byteSize');
     const mimeType = readString(info, 'mimeType');
-    const resourceRef = parseDocumentArchiveResourceRef(info?.resourceRef);
+    const resourceRef = parseStableDocumentArchiveResourceRef(info?.resourceRef);
     const cacheResourceRef = isResourceRef(info?.cacheResourceRef)
       ? info.cacheResourceRef
       : undefined;
@@ -207,8 +207,8 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
       readFiniteNumber(image, 'byteSize') ?? readFiniteNumber(documentImage, 'byteSize');
     const mimeType = readString(image, 'mimeType') ?? readString(documentImage, 'mimeType');
     const resourceRef =
-      parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
-      parseDocumentArchiveResourceRef(image.resourceRef);
+      parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
+      parseStableDocumentArchiveResourceRef(image.resourceRef);
     const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
       ? documentImage.cacheResourceRef
       : isResourceRef(image.cacheResourceRef)
@@ -295,8 +295,8 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
         readFiniteNumber(image, 'byteSize') ?? readFiniteNumber(documentImage, 'byteSize');
       const mimeType = readString(image, 'mimeType') ?? readString(documentImage, 'mimeType');
       const resourceRef =
-        parseDocumentArchiveResourceRef(documentImage?.resourceRef) ??
-        parseDocumentArchiveResourceRef(image.resourceRef);
+        parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
+        parseStableDocumentArchiveResourceRef(image.resourceRef);
       const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
         ? documentImage.cacheResourceRef
         : isResourceRef(image.cacheResourceRef)
@@ -409,6 +409,7 @@ function formatDocumentImageReferenceJson(input: {
   return JSON.stringify(
     {
       kind: 'document-image-reference',
+      protocolVersion: 2,
       document: {
         filePath: input.filePath,
         ...(input.source ? { source: input.source } : {}),
@@ -417,15 +418,18 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
       },
       image: {
-        path: input.path,
         index: input.index,
-        ...(input.src ? { webviewUri: input.src } : {}),
         ...(input.width !== undefined ? { width: input.width } : {}),
         ...(input.height !== undefined ? { height: input.height } : {}),
         ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
         ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
+      },
+      display: {
+        runtimeOnly: true,
+        path: input.path,
+        ...(input.src ? { webviewUri: input.src } : {}),
       },
     },
     null,
@@ -658,6 +662,15 @@ function readFiniteNumber(
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function parseStableDocumentArchiveResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | undefined {
+  const ref = parseDocumentArchiveResourceRef(value);
+  if (!ref) return undefined;
+  const { cachePath: _cachePath, ...stableRef } = ref;
+  return stableRef;
 }
 
 function extractDocumentFilePath(result: Record<string, unknown>): string | null {

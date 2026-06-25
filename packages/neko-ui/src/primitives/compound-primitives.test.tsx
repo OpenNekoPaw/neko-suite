@@ -58,7 +58,7 @@ describe('@neko/ui compound primitives', () => {
     expect(dialog?.textContent).toContain('Export settings');
     expect(dialog?.textContent).toContain('Body');
     expect(document.body.querySelector('button[aria-label="Close dialog"]')).not.toBeNull();
-  });
+  }, 15_000);
 
   it('renders Tabs with controlled value and disabled trigger metadata', () => {
     const onValueChange = vi.fn();

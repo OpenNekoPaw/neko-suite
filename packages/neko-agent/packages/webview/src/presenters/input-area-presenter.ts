@@ -82,6 +82,15 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
     input.conversationKind === 'character-dialogue' ||
     input.conversationKind === 'embody-character';
   const isAgentMode = input.sessionMode === 'agent';
+  const isActionTrigger = /^[/$]/.test(input.inputValue.trimStart());
+  const hasQueueableTextOnlyContent =
+    hasText && !hasAttachments && !hasContextChips && !hasAmbientNodes && !isActionTrigger;
+  const canQueue =
+    input.isThinking &&
+    !input.disabled &&
+    !isCharacterRoleSession &&
+    isAgentMode &&
+    hasQueueableTextOnlyContent;
   const hasMediaModels = input.availableMediaModelCount > 0;
   const hasCurrentSessionMediaModels = input.currentSessionMediaModelCount > 0;
 
@@ -90,8 +99,10 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
     hasAttachments,
     hasContextChips,
     hasAmbientNodes,
-    canSend: !input.disabled && (hasText || hasAttachments || hasContextChips),
-    canQueue: input.isThinking && !input.disabled && (hasText || hasAttachments || hasContextChips),
+    canSend:
+      !input.disabled &&
+      ((!input.isThinking && (hasText || hasAttachments || hasContextChips)) || canQueue),
+    canQueue,
     canCancel: input.isThinking && !input.disabled,
     queuedMessageCount,
     showQueuedMessages: queuedMessageCount > 0,
@@ -112,7 +123,7 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
         : input.isThinking
           ? 'chat.input.thinkingPlaceholder'
           : 'chat.input.placeholder',
-    sendTitleKey: input.isThinking ? 'chat.input.queue' : 'chat.input.send',
+    sendTitleKey: canQueue ? 'chat.input.queue' : 'chat.input.send',
   };
 }
 

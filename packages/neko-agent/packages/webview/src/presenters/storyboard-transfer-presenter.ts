@@ -465,12 +465,8 @@ function isPortableCanvasReferenceImagePath(value: string): boolean {
   if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
   if (/^p\d{1,4}$/i.test(value.trim())) return false;
   const normalized = value.replace(/\\/g, '/').toLowerCase();
-  if (
-    normalized.includes('/document-image-cache/') ||
-    normalized.includes('/.neko/.cache/resources/')
-  ) {
-    return false;
-  }
+  if (normalized.includes('/.neko/.cache/')) return false;
+  if (isAbsolutePath(value)) return false;
   return true;
 }
 
@@ -478,7 +474,7 @@ function resolveStoryboardMediaResourceRef(
   data: StoryboardTableRichData,
   mediaRef: StoryboardMediaRef,
 ): DocumentArchiveResourceRef | undefined {
-  return resolveStoryboardMedia(data, mediaRef)?.resourceRef;
+  return toStableDocumentArchiveResourceRef(resolveStoryboardMedia(data, mediaRef)?.resourceRef);
 }
 
 function resolveStoryboardMediaUnifiedResourceRef(
@@ -598,7 +594,9 @@ function projectStoryboardTableToCanvasPayload(
         emotion: [],
         sceneTags: compactStrings([media?.caption, media?.role]),
         ...(referenceImagePath ? { referenceImagePath } : {}),
-        ...(media?.resourceRef ? { referenceImageResourceRef: media.resourceRef } : {}),
+        ...(media?.resourceRef
+          ? { referenceImageResourceRef: toStableDocumentArchiveResourceRef(media.resourceRef) }
+          : {}),
         ...(media?.cacheResourceRef ? { referenceResourceRef: media.cacheResourceRef } : {}),
       };
     });
@@ -1053,7 +1051,7 @@ function projectMarkdownImageRef(
   image: Record<string, unknown>,
 ): MarkdownToolResultImageRef {
   const locator = asRecord(image['locator']);
-  const resourceRef = parseDocumentArchiveResourceRef(image['resourceRef']);
+  const resourceRef = parseStableDocumentArchiveResourceRef(image['resourceRef']);
   const cacheResourceRef = isResourceRef(image['cacheResourceRef'])
     ? image['cacheResourceRef']
     : undefined;
@@ -1150,12 +1148,7 @@ function isCanvasReferenceImagePathUsable(value: string): boolean {
   if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
   if (/^p\d{1,4}$/i.test(value.trim())) return false;
   const normalized = value.replace(/\\/g, '/').toLowerCase();
-  if (
-    normalized.includes('/document-image-cache/') ||
-    normalized.includes('/.neko/.cache/resources/')
-  ) {
-    return false;
-  }
+  if (normalized.includes('/.neko/.cache/')) return false;
   if (value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://')) {
     return true;
   }
@@ -1181,6 +1174,15 @@ function readStringArray(record: Record<string, unknown> | undefined, key: strin
 function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function parseStableDocumentArchiveResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | undefined {
+  const ref = parseDocumentArchiveResourceRef(value);
+  if (!ref) return undefined;
+  const { cachePath: _cachePath, ...stableRef } = ref;
+  return stableRef;
 }
 
 function readFinitePositiveInteger(value: unknown): number | undefined {
@@ -1241,18 +1243,29 @@ function projectCompositeMediaAssetRef(
   section: ResolvedCompositeSection,
   mediaIndex: number,
 ): PluginTransferAssetRef | null {
-  if (!media.localPath || media.type === 'unknown') return null;
+  if (media.type === 'unknown') return null;
+  if (!media.localPath && !media.resourceRef && !media.cacheResourceRef) return null;
   return {
-    path: media.localPath,
+    ...(media.resourceRef || media.cacheResourceRef ? {} : { path: media.localPath }),
     mediaType: media.type,
     name:
       media.caption ??
       media.label ??
       section.heading ??
       `section-${section.index + 1}-asset-${mediaIndex + 1}`,
-    ...(media.resourceRef ? { documentResourceRef: media.resourceRef } : {}),
+    ...(media.resourceRef
+      ? { documentResourceRef: toStableDocumentArchiveResourceRef(media.resourceRef) }
+      : {}),
     ...(media.cacheResourceRef ? { resourceRef: media.cacheResourceRef } : {}),
   };
+}
+
+function toStableDocumentArchiveResourceRef(
+  ref: DocumentArchiveResourceRef | undefined,
+): DocumentArchiveResourceRef | undefined {
+  if (!ref) return undefined;
+  const { cachePath: _cachePath, ...stableRef } = ref;
+  return stableRef;
 }
 
 function normalizeShotScale(value: string | undefined): ShotScale {

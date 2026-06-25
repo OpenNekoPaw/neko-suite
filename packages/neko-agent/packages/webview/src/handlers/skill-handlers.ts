@@ -6,7 +6,7 @@
 
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
-import type { SkillsListMessage, SkillInjectionMessage } from './messages';
+import type { SkillInjectionMessage, SkillsListMessage } from './messages';
 import {
   projectInputSkillSummaries,
   projectSkillInjectionState,

@@ -135,7 +135,6 @@ describe('tool-call-presenter', () => {
           kind: 'document-entry',
           source: { filePath: '/books/a.epub', format: 'epub' },
           entryPath: 'image/Page_1.jpg',
-          cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
         cacheResourceRef,
@@ -146,6 +145,7 @@ describe('tool-call-presenter', () => {
     const reference = JSON.parse(projection.documentThumbnails[0]!.referenceJson);
     expect(reference).toEqual({
       kind: 'document-image-reference',
+      protocolVersion: 2,
       document: {
         filePath: '/books/a.epub',
         source: { filePath: '/books/a.epub', format: 'epub' },
@@ -158,14 +158,11 @@ describe('tool-call-presenter', () => {
           kind: 'document-entry',
           source: { filePath: '/books/a.epub', format: 'epub' },
           entryPath: 'image/Page_1.jpg',
-          cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
         cacheResourceRef,
       },
       image: {
-        path: '/tmp/page-1.jpg',
-        webviewUri: 'vscode-webview://page-1.jpg',
         index: 0,
         width: 1494,
         height: 2133,
@@ -175,12 +172,17 @@ describe('tool-call-presenter', () => {
           kind: 'document-entry',
           source: { filePath: '/books/a.epub', format: 'epub' },
           entryPath: 'image/Page_1.jpg',
-          cachePath: '/tmp/page-1.jpg',
           versionPolicy: 'versioned-export',
         },
         cacheResourceRef,
       },
+      display: {
+        runtimeOnly: true,
+        path: '/tmp/page-1.jpg',
+        webviewUri: 'vscode-webview://page-1.jpg',
+      },
     });
+    expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('"cachePath"');
   });
 
   it('projects ReadImage argument images into thumbnails while pending', () => {
@@ -220,7 +222,7 @@ describe('tool-call-presenter', () => {
         data: {
           images: [
             {
-              path: '/mock/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg',
+              path: '/mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg',
               label: 'Page 1',
               width: 1494,
               height: 2133,
@@ -241,7 +243,7 @@ describe('tool-call-presenter', () => {
     expect(projection.documentThumbnails).toEqual([
       expect.objectContaining({
         filePath: '/books/a.epub',
-        path: '/mock/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg',
+        path: '/mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg',
         src: undefined,
         width: 1494,
         height: 2133,

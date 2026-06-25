@@ -25,6 +25,8 @@ export type { MediaModelSelection };
 export type MediaCategory = 'image' | 'video' | 'audio';
 
 export interface InputAreaContextValue {
+  /** Current conversation is executing; model and generation config must stay locked. */
+  isBusy?: boolean;
   // Chat Model
   selectedModel: string;
   availableModels: ChatModelOption[];
@@ -81,6 +83,7 @@ export function InputAreaProvider({
 }: InputAreaContextValue & { children: ReactNode }) {
   const memoized = useMemo<InputAreaContextValue>(
     () => ({
+      isBusy: value.isBusy,
       selectedModel: value.selectedModel,
       availableModels: value.availableModels,
       onModelSelect: value.onModelSelect,
@@ -115,6 +118,7 @@ export function InputAreaProvider({
       onGenParamsChange: value.onGenParamsChange,
     }),
     [
+      value.isBusy,
       value.selectedModel,
       value.availableModels,
       value.onModelSelect,

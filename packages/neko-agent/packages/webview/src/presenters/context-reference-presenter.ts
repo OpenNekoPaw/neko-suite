@@ -11,6 +11,7 @@ export function projectContextReferencesFromPayloads(
       type: payload.type,
       id: payload.id,
       label: payload.label,
+      summary: payload.summary,
       ...(Object.keys(navigationData).length > 0 ? { navigationData } : {}),
     };
   });

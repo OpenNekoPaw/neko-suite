@@ -525,9 +525,11 @@ export function ChatWorkspace({
     },
     [settings.chatModelOptions, setMediaModelSelection],
   );
+  const isModelConfigurationBusy = isThinking || workItems.some(isActiveWorkItem);
 
   return (
     <InputAreaProvider
+      isBusy={isModelConfigurationBusy}
       sessionMode={sessionMode}
       conversationKind={conversationKind}
       onSessionModeChange={handleSessionModeChange}
@@ -620,4 +622,8 @@ export function ChatWorkspace({
       />
     </InputAreaProvider>
   );
+}
+
+function isActiveWorkItem(item: AgentWorkItem): boolean {
+  return item.status === 'queued' || item.status === 'processing';
 }

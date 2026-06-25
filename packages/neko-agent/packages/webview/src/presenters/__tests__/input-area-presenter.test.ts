@@ -82,7 +82,7 @@ describe('input area presenter', () => {
     );
   });
 
-  it('projects explicit queue controls while a response is running', () => {
+  it('allows plain Agent text to queue while a response is running', () => {
     expect(
       projectInputAreaUi({
         inputValue: 'next',
@@ -107,6 +107,31 @@ describe('input area presenter', () => {
         showQueuedMessages: true,
         inputPlaceholderKey: 'chat.input.queuePlaceholder',
         sendTitleKey: 'chat.input.queue',
+      }),
+    );
+  });
+
+  it('does not expose queue for rich context while a response is running', () => {
+    expect(
+      projectInputAreaUi({
+        inputValue: 'next',
+        attachedFileCount: 1,
+        contextChipCount: 0,
+        ambientNodeCount: 0,
+        mediaModelCallCount: 0,
+        isThinking: true,
+        disabled: false,
+        sessionMode: 'agent',
+        conversationKind: 'chat',
+        availableMediaModelCount: 0,
+        currentSessionMediaModelCount: 0,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        canSend: false,
+        canQueue: false,
+        canCancel: true,
+        sendTitleKey: 'chat.input.send',
       }),
     );
   });

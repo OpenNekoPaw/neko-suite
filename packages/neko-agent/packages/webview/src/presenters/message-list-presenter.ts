@@ -49,6 +49,7 @@ export interface MessageListProcessGroupItemProjection {
   workItemIds?: string[];
   processGroup: ContentBlockProcessGroupProjection;
   siblingBlocks: ContentBlock[];
+  isFirst: boolean;
   isStreaming: boolean;
   ownerMessageId: string;
   estimatedHeight: number;
@@ -140,34 +141,37 @@ export function projectMessageListItems(
       );
 
       const displayProjection = projectContentBlocksDisplay(contentBlockProjections);
+      const displayItems = displayProjection.items;
 
-      displayProjection.primaryProjections.forEach((projection, blockIndex) => {
-        items.push({
-          kind: 'content_block',
-          messageId: message.id,
-          workItemIds: message.workItemIds,
-          projection,
-          siblingBlocks: message.contentBlocks ?? [],
-          isFirst: blockIndex === 0,
-          isLast: blockIndex === contentBlockProjections.length - 1,
-          isStreaming: message.isStreaming ?? false,
-          ownerMessageId: message.id,
-          estimatedHeight: estimateContentBlockProjectionHeight(projection),
-        });
-      });
+      displayItems.forEach((displayItem, displayIndex) => {
+        if (displayItem.kind === 'projection') {
+          items.push({
+            kind: 'content_block',
+            messageId: message.id,
+            workItemIds: message.workItemIds,
+            projection: displayItem.projection,
+            siblingBlocks: message.contentBlocks ?? [],
+            isFirst: displayIndex === 0,
+            isLast: displayIndex === displayItems.length - 1,
+            isStreaming: message.isStreaming ?? false,
+            ownerMessageId: message.id,
+            estimatedHeight: estimateContentBlockProjectionHeight(displayItem.projection),
+          });
+          return;
+        }
 
-      if (displayProjection.processGroup) {
         items.push({
           kind: 'process_group',
           messageId: message.id,
           workItemIds: message.workItemIds,
-          processGroup: displayProjection.processGroup,
+          processGroup: displayItem.processGroup,
           siblingBlocks: message.contentBlocks ?? [],
+          isFirst: displayIndex === 0,
           isStreaming: message.isStreaming ?? false,
           ownerMessageId: message.id,
-          estimatedHeight: estimateProcessGroupHeight(displayProjection.processGroup),
+          estimatedHeight: estimateProcessGroupHeight(displayItem.processGroup),
         });
-      }
+      });
     } else {
       items.push({
         kind: 'message',

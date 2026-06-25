@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock } from '@neko-agent/types';
-import { projectContentBlocksUi } from '../content-block-presenter';
+import { projectContentBlocksDisplay, projectContentBlocksUi } from '../content-block-presenter';
 
 describe('content block presenter', () => {
   it('aggregates consecutive successful tool calls with the same tool and target', () => {
@@ -64,6 +64,44 @@ describe('content block presenter', () => {
       renderKind: 'markdown',
       siblingBlocks: blocks,
       toolCalls: [blocks[0]?.toolCall],
+    });
+  });
+
+  it('keeps collapsible process records in source order when a primary result exists', () => {
+    const projections = projectContentBlocksUi([
+      {
+        id: 'block-thinking',
+        type: 'thinking',
+        timestamp: 8,
+        thinking: 'Inspect source.',
+        isThinkingComplete: true,
+      },
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      {
+        id: 'block-text',
+        type: 'text',
+        timestamp: 20,
+        content: 'Summary.',
+      },
+    ]);
+
+    const display = projectContentBlocksDisplay(projections);
+
+    expect(display.items.map((item) => item.kind)).toEqual(['processGroup', 'projection']);
+    expect(display.items[0]).toMatchObject({
+      kind: 'processGroup',
+      processGroup: {
+        blockCount: 2,
+        toolCallCount: 1,
+        thinkingCount: 1,
+      },
+    });
+    expect(display.items[1]).toMatchObject({
+      kind: 'projection',
+      projection: {
+        renderKind: 'markdown',
+        content: 'Summary.',
+      },
     });
   });
 });
