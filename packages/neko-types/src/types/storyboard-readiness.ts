@@ -78,7 +78,6 @@ export interface StoryMissingInput {
 export type StoryVideoReadinessAction =
   | 'analyze'
   | 'startVideoCreation'
-  | 'generateStoryboard'
   | 'sendToCanvas'
   | 'openCanvas'
   | 'retryFailed'

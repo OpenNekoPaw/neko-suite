@@ -91,6 +91,8 @@ export interface ServiceOptions {
   providerId?: string;
   /** Model ID to use. Chat requests require this together with providerId. */
   modelId?: string;
+  /** Capabilities declared by the explicitly selected model. */
+  modelCapabilities?: readonly string[];
   /** Temperature for generation (0-2) */
   temperature?: number;
   /** Maximum tokens to generate */
@@ -139,6 +141,7 @@ export interface ServiceOptions {
     messages: readonly ChatMessage[];
     providerId?: string;
     modelId?: string;
+    modelCapabilities?: readonly string[];
   }) => Promise<readonly ChatMessage[]> | readonly ChatMessage[];
 }
 

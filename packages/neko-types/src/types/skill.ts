@@ -154,13 +154,18 @@ export interface RelatedSkill {
 }
 
 /**
- * Media workflow hints for Skill discovery and validation.
+ * Media workflow hints for Agent-readable catalog metadata and validation.
  *
- * This is intentionally not a workflow DSL: the runtime may use it for
- * filtering, permission diagnostics, artifact validation, and UI projection,
- * but the actual order and decision points stay in SKILL.md prompt-chains.
+ * This is intentionally not a workflow DSL: the Agent may inspect it through
+ * GetContext, and runtime tooling may use it for validation or UI catalog
+ * projection, but the actual order and decision points stay in SKILL.md
+ * prompt-chains.
  */
 export interface SkillMediaWorkflowHint {
+  /** Concrete request patterns that help the Agent understand fit. */
+  useCases?: string[];
+  /** Request patterns that help the Agent avoid the wrong Skill. */
+  nonGoals?: string[];
   /** Source modalities this Skill can reason about. */
   acceptedModalities?: string[];
   /** Structured artifact kinds this Skill may produce. */
@@ -183,6 +188,8 @@ export interface SkillMediaWorkflowHint {
   validationRequirements?: string[];
   /** Optional tools this Skill can use when available. */
   optionalTools?: string[];
+  /** Free-form operation verbs used by Agent-readable catalog summaries. */
+  operations?: string[];
 }
 
 /**
@@ -1654,6 +1661,8 @@ function validateSkillMediaWorkflowHint(
   }
 
   validateStringArrayField(hint.acceptedModalities, 'mediaWorkflow.acceptedModalities', errors);
+  validateStringArrayField(hint.useCases, 'mediaWorkflow.useCases', errors);
+  validateStringArrayField(hint.nonGoals, 'mediaWorkflow.nonGoals', errors);
   validateStringArrayField(hint.producedArtifacts, 'mediaWorkflow.producedArtifacts', errors);
   validateStringArrayField(hint.artifactProfiles, 'mediaWorkflow.artifactProfiles', errors);
   validateStringArrayField(hint.inputArtifacts, 'mediaWorkflow.inputArtifacts', errors);
@@ -1664,6 +1673,7 @@ function validateSkillMediaWorkflowHint(
   );
   validateStringArrayField(hint.suggestedProjectors, 'mediaWorkflow.suggestedProjectors', errors);
   validateStringArrayField(hint.tags, 'mediaWorkflow.tags', errors);
+  validateStringArrayField(hint.operations, 'mediaWorkflow.operations', errors);
   validateStringArrayField(
     hint.validationRequirements,
     'mediaWorkflow.validationRequirements',

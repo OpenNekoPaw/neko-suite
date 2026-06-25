@@ -347,9 +347,14 @@ export interface ModelConfig {
   /** Provider this model belongs to */
   providerId: string;
   /**
-   * Protocol/adapter type for this model.
-   * Overrides provider's type if specified.
-   * Use this when a provider supports multiple protocols (e.g., nekoapi supports both OpenAI and Anthropic formats)
+   * Request protocol profile for this model.
+   * Overrides the provider's protocolProfile only when a multiplex gateway exposes
+   * models that require different wire protocols.
+   */
+  protocolProfile?: ProviderProtocolProfile;
+  /**
+   * Adapter type override for older config files.
+   * Prefer protocolProfile for request protocol differences.
    */
   protocol?: ProviderType;
   /**

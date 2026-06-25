@@ -88,7 +88,7 @@ describe('VSCodeLocalResourceAccessService', () => {
         ]),
         createExtensionCacheLocalResourceRootProvider(
           { globalStorageUri: vscode.Uri.file('/global') } as never,
-          'document-image-cache',
+          'resources',
         ),
       ],
     });
@@ -97,11 +97,11 @@ describe('VSCodeLocalResourceAccessService', () => {
       expect.objectContaining({ fsPath: '/ext/dist/webview' }),
       expect.objectContaining({ fsPath: '/workspace' }),
       expect.objectContaining({ fsPath: '/assets' }),
-      expect.objectContaining({ fsPath: '/global/document-image-cache' }),
+      expect.objectContaining({ fsPath: '/global/resources' }),
     ]);
   });
 
-  it('filters broad filesystem roots from aggregated roots', async () => {
+  it('filters broad filesystem and system temp roots from aggregated roots', async () => {
     const vscode = await import('vscode');
     const tempChild = path.join(os.tmpdir(), 'neko-preview');
     const service = new VSCodeLocalResourceAccessService({
@@ -117,7 +117,7 @@ describe('VSCodeLocalResourceAccessService', () => {
 
     const roots = await service.getLocalResourceRoots();
 
-    expect(roots.map((root) => root.fsPath)).toEqual([tempChild]);
+    expect(roots.map((root) => root.fsPath)).toEqual([]);
   });
 
   it('projects authorized local paths and preserves remote URLs', async () => {
@@ -180,14 +180,21 @@ describe('VSCodeLocalResourceAccessService', () => {
     });
   });
 
-  it('does not project system temp files unless a narrow temp child root is authorized', async () => {
+  it('does not project system temp files even when a narrow temp child root is authorized', async () => {
+    const vscode = await import('vscode');
     const webview = {
       asWebviewUri: vi.fn((uri: { fsPath: string }) => ({
         toString: () => `webview:${uri.fsPath}`,
       })),
     };
-    const service = new VSCodeLocalResourceAccessService();
     const tempFile = path.join(os.tmpdir(), 'neko-random-preview', 'page.png');
+    const service = new VSCodeLocalResourceAccessService({
+      rootProviders: [
+        createStaticLocalResourceRootProvider('temp', 'feature', [
+          vscode.Uri.file(path.dirname(tempFile)),
+        ]),
+      ],
+    });
 
     await expect(
       service.toWebviewUri(webview as never, tempFile, { caller: 'temp-test' }),
@@ -195,7 +202,33 @@ describe('VSCodeLocalResourceAccessService', () => {
       ok: false,
       reason: 'unauthorized',
       source: tempFile,
-      message: 'Local resource path is outside authorized roots.',
+      message: 'Local resource path is in system temp and cannot be projected.',
+    });
+    expect(webview.asWebviewUri).not.toHaveBeenCalled();
+  });
+
+  it('rejects macOS var folders temp paths before Webview projection', async () => {
+    const vscode = await import('vscode');
+    const webview = {
+      asWebviewUri: vi.fn((uri: { fsPath: string }) => ({
+        toString: () => `webview:${uri.fsPath}`,
+      })),
+    };
+    const tempFile =
+      '/var/folders/26/b9fmn08x6mv2bcl771rnjyt80000gn/T/neko_epub_1vehc43/0001_moe-017905.jpg';
+    const service = new VSCodeLocalResourceAccessService({
+      rootProviders: [
+        createStaticLocalResourceRootProvider('temp', 'feature', [vscode.Uri.file('/var/folders')]),
+      ],
+    });
+
+    await expect(
+      service.toWebviewUri(webview as never, tempFile, { caller: 'neko-agent.stream-tool-result' }),
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'unauthorized',
+      source: tempFile,
+      message: 'Local resource path is in system temp and cannot be projected.',
     });
     expect(webview.asWebviewUri).not.toHaveBeenCalled();
   });

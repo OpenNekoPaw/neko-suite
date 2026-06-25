@@ -195,6 +195,42 @@ describe('config-reader typed results', () => {
     );
   });
 
+  it('preserves model protocol profile overrides from TOML', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[providers]]',
+        'id = "mixed-gateway"',
+        'name = "Mixed Gateway"',
+        'type = "newapi"',
+        'api_url = "https://api.example.com/v1"',
+        'connection_kind = "gateway"',
+        'protocol_profile = "newapi"',
+        '',
+        '[[models]]',
+        'id = "claude-via-gateway"',
+        'name = "claude-sonnet"',
+        'provider_id = "mixed-gateway"',
+        'type = "llm"',
+        'protocol_profile = "anthropic"',
+        'capabilities = ["chat", "thinking"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.models?.[0]).toEqual(
+      expect.objectContaining({
+        id: 'claude-via-gateway',
+        protocolProfile: 'anthropic',
+      }),
+    );
+  });
+
   it('accepts existing capability metadata fields for type defaults', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
     fs.writeFileSync(
@@ -260,6 +296,7 @@ describe('config-reader typed results', () => {
           id: 'ollama-local:llama3.2',
           name: 'llama3.2',
           providerId: 'ollama-local',
+          protocolProfile: 'ollama',
           type: 'llm',
           capabilities: ['chat', 'streaming'],
           enabled: true,
@@ -271,12 +308,14 @@ describe('config-reader typed results', () => {
     expect(written).toContain('default_provider = "ollama-local"');
     expect(written).toContain('[[providers]]');
     expect(written).toContain('connection_kind = "local"');
+    expect(written).toContain('protocol_profile = "ollama"');
 
     const result = readConfigFileResult(filePath);
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') throw new Error('Expected ok result');
     expect(result.config.defaultModel).toBe('ollama-local:llama3.2');
     expect(result.config.models?.[0]?.providerId).toBe('ollama-local');
+    expect(result.config.models?.[0]?.protocolProfile).toBe('ollama');
   });
 
   it('rejects unsupported TOML config versions', () => {
@@ -423,6 +462,30 @@ describe('config-reader typed results', () => {
     expect(result.status).toBe('unsupportedModelProtocol');
     expect(getConfigReadDiagnostic(result)?.detail).toContain(
       'Unsupported model protocol "deepseek"',
+    );
+  });
+
+  it('rejects unsupported model protocol profile overrides', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[models]]',
+        'id = "custom-model"',
+        'name = "custom-model"',
+        'provider_id = "custom-provider"',
+        'protocol_profile = "deepseek"',
+        'type = "llm"',
+        'capabilities = ["chat"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedModelProtocolProfile');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'Unsupported model protocol_profile "deepseek"',
     );
   });
 

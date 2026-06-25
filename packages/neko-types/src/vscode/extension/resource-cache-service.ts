@@ -2,11 +2,14 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import {
+  DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES,
+  DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
   createResourceVariantKey,
   getResourcePathCategory,
   isResourceCacheManifest,
   isManagedCachePathCategory,
   type ResourceCacheEntry,
+  type ResourceCacheLifecycleMetadata,
   type ResourceCacheManifest,
   type ResourceCacheQuotaPolicy,
   type ResourceCacheSettings,
@@ -15,6 +18,7 @@ import {
   type ResourceCacheVariantEntry,
   type ResourceFingerprint,
   type ResourceRef,
+  type ResourceRetentionHint,
   type ResourceVariantRef,
   type ResourceVariantRequest,
 } from '../../types/resource-cache';
@@ -103,6 +107,8 @@ export interface ResourceCacheService {
     variant: ResourceVariantRequest,
     options?: ResourceCacheOperationOptions,
   ): Promise<ResourceCacheOperationResult>;
+  record(input: ResourceCacheRecordInput): Promise<ResourceCacheOperationResult>;
+  updateLifecycle(input: ResourceCacheLifecycleUpdateInput): Promise<ResourceCacheOperationResult>;
   project(
     webview: vscode.Webview,
     ref: ResourceRef,
@@ -118,6 +124,36 @@ export interface ResourceCacheService {
 export interface ResourceCacheOperationOptions {
   readonly materializeIfMissing?: boolean;
   readonly signal?: AbortSignal;
+}
+
+export interface ResourceCacheRecordInput {
+  readonly ref: ResourceRef;
+  readonly variant: ResourceVariantRequest;
+  readonly absolutePath: string;
+  readonly relativePath?: string;
+  readonly status?: ResourceCacheStatus;
+  readonly sizeBytes?: number;
+  readonly rebuildable?: boolean;
+  readonly pinned?: boolean;
+  readonly sessionActive?: boolean;
+  readonly retentionHint?: ResourceRetentionHint;
+  readonly lifecycle?: Omit<ResourceCacheLifecycleMetadata, 'updatedAt'>;
+  readonly error?: string;
+}
+
+export interface ResourceCacheLifecycleUpdateInput {
+  readonly ref: ResourceRef;
+  readonly variant: ResourceVariantRequest;
+  readonly retentionHint?: ResourceRetentionHint;
+  readonly pinned?: boolean;
+  readonly sessionActive?: boolean;
+  readonly promoted?: boolean;
+  readonly promotedTarget?: ResourceCacheLifecycleMetadata['promotedTarget'];
+  readonly ownerId?: string;
+  readonly reason?: string;
+  readonly processorRunId?: string;
+  readonly stageId?: string;
+  readonly attempt?: number;
 }
 
 export interface ResourceCacheProjectOptions extends ResourceCacheOperationOptions {
@@ -471,6 +507,89 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     });
   }
 
+  async record(input: ResourceCacheRecordInput): Promise<ResourceCacheOperationResult> {
+    const absolutePath = path.resolve(input.absolutePath);
+    const relativePath = input.relativePath ?? path.relative(this.cacheRoot, absolutePath);
+    if (!isPathInsideOrEqual(absolutePath, path.resolve(this.cacheRoot))) {
+      return this.createResult(input.ref, input.variant, 'non-portable', {
+        error: 'Recorded resource path is outside the managed cache root.',
+      });
+    }
+
+    const sizeBytes = input.sizeBytes ?? (await this.readSize(absolutePath));
+    await this.recordEnsureResult(
+      {
+        ref: input.ref,
+        variant: input.variant,
+        status: input.status ?? 'ready',
+        absolutePath,
+        relativePath,
+        ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+        rebuildable: input.rebuildable ?? true,
+        ...(input.error ? { error: input.error } : {}),
+      },
+      {
+        pinned: input.pinned,
+        sessionActive: input.sessionActive,
+        retentionHint: input.retentionHint,
+        lifecycle: input.lifecycle,
+      },
+    );
+    return this.resolve(input.ref, input.variant);
+  }
+
+  async updateLifecycle(
+    input: ResourceCacheLifecycleUpdateInput,
+  ): Promise<ResourceCacheOperationResult> {
+    const variantKey = createResourceVariantKey({ resource: input.ref, ...input.variant });
+    const now = this.now();
+    let updatedEntry: ResourceCacheEntry | undefined;
+    let updatedVariant: ResourceCacheVariantEntry | undefined;
+
+    await this.store.update((manifest) => {
+      const entry = manifest.entries[input.ref.id];
+      if (!entry) return manifest;
+      let changed = false;
+      const variants = entry.variants.map((variant) => {
+        if (variant.key !== variantKey) return variant;
+        changed = true;
+        updatedVariant = {
+          ...variant,
+          ...(input.retentionHint ? { retentionHint: input.retentionHint } : {}),
+          ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
+          ...(input.sessionActive !== undefined ? { sessionActive: input.sessionActive } : {}),
+          ...(input.promoted !== undefined ? { promoted: input.promoted } : {}),
+          updatedAt: now,
+        };
+        return updatedVariant;
+      });
+      if (!changed) return manifest;
+
+      updatedEntry = {
+        ...entry,
+        updatedAt: now,
+        lifecycle: mergeLifecycle(entry.lifecycle, input, now),
+        variants,
+      };
+      const entries = { ...manifest.entries, [input.ref.id]: updatedEntry };
+      const nextManifest = { ...manifest, updatedAt: now, entries };
+      return { ...nextManifest, stats: computeStats(nextManifest) };
+    });
+
+    if (!updatedEntry || !updatedVariant) {
+      return this.createResult(input.ref, input.variant, 'missing', {
+        error: 'Resource cache entry or variant was not found for lifecycle update.',
+      });
+    }
+    return this.createResult(input.ref, input.variant, updatedVariant.status, {
+      entry: updatedEntry,
+      variantEntry: updatedVariant,
+      absolutePath: this.resolveVariantPath(updatedVariant),
+      ...(updatedVariant.relativePath ? { relativePath: updatedVariant.relativePath } : {}),
+      error: updatedVariant.error,
+    });
+  }
+
   async project(
     webview: vscode.Webview,
     ref: ResourceRef,
@@ -555,7 +674,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   async gc(policy: ResourceCacheQuotaPolicy): Promise<ResourceCacheGcResult> {
     await this.flushTouches();
     const manifest = await this.store.load();
-    const maxBytes = policy.projectMaxBytes ?? policy.globalMaxBytes;
+    const maxBytes = this.resolveGcMaxBytes(policy);
     if (maxBytes === undefined) {
       return { removedCount: 0, removedBytes: 0, skippedCount: 0, skippedReasons: {} };
     }
@@ -582,6 +701,8 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         const skipReason = this.gcSkipReason(candidate, {
           preservePinned: policy.preservePinned !== false,
           preserveSessionActive: policy.preserveSessionActive !== false,
+          preserveDebug: policy.preserveDebug !== false,
+          preservePromoted: policy.preservePromoted !== false,
           activeVariantKeys,
         });
         if (skipReason) {
@@ -640,6 +761,21 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     return { removedCount, removedBytes, skippedCount, skippedReasons };
   }
 
+  private resolveGcMaxBytes(policy: ResourceCacheQuotaPolicy): number | undefined {
+    const category = getResourcePathCategory(this.cacheRoot, {
+      projectRoot: this.projectRoot,
+      globalRoot: this.globalRoot,
+      extensionPrivateRoot: this.extensionPrivateRoot,
+    });
+    if (category === 'project-cache') {
+      return policy.projectMaxBytes;
+    }
+    if (category === 'global-cache' || category === 'extension-private-cache') {
+      return policy.globalMaxBytes;
+    }
+    return policy.projectMaxBytes ?? policy.globalMaxBytes;
+  }
+
   private async ensureUnlocked(
     ref: ResourceRef,
     variant: ResourceVariantRequest,
@@ -694,7 +830,15 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     return this.providerOrder.find((provider) => provider.supports(ref, variant));
   }
 
-  private async recordEnsureResult(result: ResourceEnsureResult): Promise<void> {
+  private async recordEnsureResult(
+    result: ResourceEnsureResult,
+    lifecycle?: {
+      readonly pinned?: boolean;
+      readonly sessionActive?: boolean;
+      readonly retentionHint?: ResourceRetentionHint;
+      readonly lifecycle?: Omit<ResourceCacheLifecycleMetadata, 'updatedAt'>;
+    },
+  ): Promise<void> {
     const variantKey = createResourceVariantKey({ resource: result.ref, ...result.variant });
     const now = this.now();
     const relativePath =
@@ -731,6 +875,12 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
         lastAccessedAt: result.status === 'ready' ? now : undefined,
+        ...(lifecycle?.pinned !== undefined ? { pinned: lifecycle.pinned } : {}),
+        ...(lifecycle?.sessionActive !== undefined
+          ? { sessionActive: lifecycle.sessionActive }
+          : {}),
+        ...(lifecycle?.retentionHint ? { retentionHint: lifecycle.retentionHint } : {}),
+        ...(lifecycle?.retentionHint === 'promoted' ? { promoted: true } : {}),
         rebuildable: result.rebuildable ?? true,
         ...(result.error ? { error: result.error } : {}),
       };
@@ -741,6 +891,9 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         updatedAt: now,
         lastAccessedAt: result.status === 'ready' ? now : previous?.lastAccessedAt,
         variants: [...previousVariants, nextVariant],
+        lifecycle: lifecycle?.lifecycle
+          ? { ...lifecycle.lifecycle, updatedAt: now }
+          : previous?.lifecycle,
         providerMetadata: previous?.providerMetadata,
       };
       const entries = { ...manifest.entries, [result.ref.id]: nextEntry };
@@ -888,15 +1041,31 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     policy: {
       readonly preservePinned: boolean;
       readonly preserveSessionActive: boolean;
+      readonly preserveDebug: boolean;
+      readonly preservePromoted: boolean;
       readonly activeVariantKeys: ReadonlySet<string>;
     },
   ): string | undefined {
     if (!candidate.path) return 'missing-path';
     if (candidate.variant.rebuildable === false) return 'non-rebuildable';
     if (policy.preservePinned && candidate.variant.pinned) return 'pinned';
+    if (
+      policy.preservePromoted &&
+      (candidate.variant.promoted || candidate.entry.lifecycle?.promoted)
+    ) {
+      return 'promoted';
+    }
+    if (
+      policy.preserveDebug &&
+      (candidate.variant.retentionHint === 'debug' ||
+        candidate.entry.lifecycle?.retentionHint === 'debug')
+    ) {
+      return 'debug';
+    }
     if (policy.preserveSessionActive && policy.activeVariantKeys.has(candidate.cacheKey)) {
       return 'session-active';
     }
+    if (policy.preserveSessionActive && candidate.variant.sessionActive) return 'session-active';
 
     const category = getResourcePathCategory(candidate.path, {
       projectRoot: this.projectRoot,
@@ -1015,15 +1184,15 @@ export function resolveResourceCacheQuotaPolicy(
   activeVariantKeys: readonly string[] = [],
 ): ResourceCacheQuotaPolicy {
   return {
-    ...(settings.projectMaxBytes !== undefined
-      ? { projectMaxBytes: settings.projectMaxBytes }
-      : {}),
-    ...(settings.globalMaxBytes !== undefined ? { globalMaxBytes: settings.globalMaxBytes } : {}),
+    projectMaxBytes: settings.projectMaxBytes ?? DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
+    globalMaxBytes: settings.globalMaxBytes ?? DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES,
     ...(settings.minFreeDiskBytes !== undefined
       ? { minFreeDiskBytes: settings.minFreeDiskBytes }
       : {}),
     preservePinned: settings.preservePinned ?? true,
     preserveSessionActive: settings.preserveSessionActive ?? true,
+    preserveDebug: settings.preserveDebug ?? true,
+    preservePromoted: settings.preservePromoted ?? true,
     ...(activeVariantKeys.length > 0 ? { activeVariantKeys } : {}),
   };
 }
@@ -1052,6 +1221,25 @@ function matchesSourceFingerprint(
     cached.value === current.value &&
     cached.providerId === current.providerId
   );
+}
+
+function mergeLifecycle(
+  current: ResourceCacheLifecycleMetadata | undefined,
+  input: ResourceCacheLifecycleUpdateInput,
+  updatedAt: string,
+): ResourceCacheLifecycleMetadata {
+  return {
+    ...(current ?? { updatedAt }),
+    ...(input.processorRunId ? { processorRunId: input.processorRunId } : {}),
+    ...(input.stageId ? { stageId: input.stageId } : {}),
+    ...(input.attempt !== undefined ? { attempt: input.attempt } : {}),
+    ...(input.retentionHint ? { retentionHint: input.retentionHint } : {}),
+    ...(input.promoted !== undefined ? { promoted: input.promoted } : {}),
+    ...(input.promotedTarget ? { promotedTarget: input.promotedTarget } : {}),
+    ...(input.ownerId ? { ownerId: input.ownerId } : {}),
+    ...(input.reason ? { reason: input.reason } : {}),
+    updatedAt,
+  };
 }
 
 function isPathInsideOrEqual(filePath: string, rootPath: string): boolean {

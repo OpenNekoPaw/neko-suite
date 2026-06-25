@@ -129,7 +129,39 @@ export interface MessageContextReference {
   type: AgentContextType;
   id: string;
   label: string;
+  summary?: string;
+  thumbnailUri?: string;
+  mediaType?: AgentFileReferenceMediaType;
   navigationData?: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// AgentFileReference — lightweight @path selection metadata
+// ---------------------------------------------------------------------------
+
+export type AgentFileReferenceSource =
+  | 'workspace'
+  | 'asset-library'
+  | 'media-library'
+  | 'entity-graph'
+  | 'story'
+  | 'canvas';
+
+export type AgentFileReferenceMediaType =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'sequence'
+  | 'text'
+  | 'document';
+
+export interface AgentFileReference {
+  id: string;
+  path: string;
+  label: string;
+  mediaType?: AgentFileReferenceMediaType;
+  source?: AgentFileReferenceSource;
+  thumbnailUri?: string;
 }
 
 // ---------------------------------------------------------------------------

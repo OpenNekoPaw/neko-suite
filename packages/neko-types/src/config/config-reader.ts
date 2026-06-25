@@ -26,6 +26,7 @@ export type ConfigReadErrorCode =
   | 'unsupportedProviderSupportLevel'
   | 'unsupportedProtocolAuthType'
   | 'unsupportedProtocolStreamFormat'
+  | 'unsupportedModelProtocolProfile'
   | 'unsupportedModelProtocol'
   | 'duplicateProviderId'
   | 'duplicateModelId'
@@ -203,6 +204,9 @@ function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'unsupportedProtocolStreamFormat')) {
     return 'unsupportedProtocolStreamFormat';
   }
+  if (isTomlValidationError(error, 'unsupportedModelProtocolProfile')) {
+    return 'unsupportedModelProtocolProfile';
+  }
   if (isTomlValidationError(error, 'unsupportedModelProtocol')) {
     return 'unsupportedModelProtocol';
   }
@@ -304,6 +308,13 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file contains an unsupported model protocol: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedModelProtocolProfile':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported model protocol_profile: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'duplicateProviderId':

@@ -62,7 +62,46 @@ describe('AssetManifest v4 contract', () => {
     expect(CATEGORY_MAP.model).toBe('ai');
     expect(CATEGORY_MAP.endpoint).toBe('ai');
     expect(CATEGORY_MAP.provider).toBe('ai');
+    expect(CATEGORY_MAP.processor).toBe('tooling');
     expect(getAssetCategory('bundle')).toBe('bundle');
+  });
+
+  it('accepts processor market metadata with a package-relative processor manifest path', () => {
+    const manifest = validManifest({
+      id: '@studio/upscale-processor',
+      name: 'upscale-processor',
+      type: 'processor',
+      typeMetadata: {
+        type: 'processor',
+        data: {
+          processorManifestPath: 'processor.neko-processor.json',
+          trustLevel: 'community',
+        },
+      },
+    });
+    const escaped = validateAssetManifest(
+      validManifest({
+        type: 'processor',
+        typeMetadata: {
+          type: 'processor',
+          data: {
+            processorManifestPath: '../processor.neko-processor.json',
+            trustLevel: 'community',
+          },
+        },
+      }),
+    );
+
+    expect(isAssetType('processor')).toBe(true);
+    expect(validateAssetManifest(manifest).valid).toBe(true);
+    expect(escaped.issues).toEqual(
+      expect.arrayContaining([
+        {
+          field: 'typeMetadata.data.processorManifestPath',
+          message: 'must be a package-relative path',
+        },
+      ]),
+    );
   });
 
   it('rejects legacy asset types as direct AssetType values', () => {

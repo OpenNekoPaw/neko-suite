@@ -13,6 +13,7 @@ export type AgentConfigDiagnosticCode =
   | 'unsupportedProviderSupportLevel'
   | 'unsupportedProtocolAuthType'
   | 'unsupportedProtocolStreamFormat'
+  | 'unsupportedModelProtocolProfile'
   | 'unsupportedModelProtocol'
   | 'duplicateProviderId'
   | 'duplicateModelId'

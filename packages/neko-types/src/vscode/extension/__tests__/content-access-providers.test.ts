@@ -611,6 +611,18 @@ function createResourceCache(input: {
         updatedAt: '2026-06-05T00:00:00.000Z',
       },
     })),
+    record: vi.fn(async (record) => ({
+      status: record.status ?? 'ready',
+      ref: record.ref,
+      variant: { resource: record.ref, ...record.variant },
+      absolutePath: record.absolutePath,
+      relativePath: record.relativePath,
+    })),
+    updateLifecycle: vi.fn(async (record) => ({
+      status: 'ready' as const,
+      ref: record.ref,
+      variant: { resource: record.ref, ...record.variant },
+    })),
     project: vi.fn(
       async (
         _webview: never,

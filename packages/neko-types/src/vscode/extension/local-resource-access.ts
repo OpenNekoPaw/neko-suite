@@ -136,7 +136,7 @@ export class VSCodeLocalResourceAccessService implements LocalResourceAccessServ
     return dedupeUris(
       inputs
         .map(toLocalResourceRoot)
-        .filter((root) => !isBroadLocalRoot(root.uri))
+        .filter((root) => !isBroadLocalRoot(root.uri) && !isSystemTempUri(root.uri))
         .map((root) => root.uri),
     );
   }
@@ -161,6 +161,7 @@ export class VSCodeLocalResourceAccessService implements LocalResourceAccessServ
   ): Promise<boolean> {
     const localPath = normalizeLocalFilePath(filePath);
     if (!localPath) return false;
+    if (isSystemTempPath(localPath)) return false;
 
     const roots = await this.getLocalResourceRoots(options);
     return roots.some((root) => isPathInsideRoot(localPath, root));
@@ -182,6 +183,18 @@ export class VSCodeLocalResourceAccessService implements LocalResourceAccessServ
         reason: 'invalid-path',
         source,
         message: 'Local resource path is empty or not a local file path.',
+      };
+    }
+    if (isSystemTempPath(localPath)) {
+      this.logger?.warn('Local resource path is in system temp and cannot be projected', {
+        path: localPath,
+        caller: options.caller,
+      });
+      return {
+        ok: false,
+        reason: 'unauthorized',
+        source,
+        message: 'Local resource path is in system temp and cannot be projected.',
       };
     }
 
@@ -216,6 +229,13 @@ export class VSCodeLocalResourceAccessService implements LocalResourceAccessServ
 
       const localPath = normalizeLocalFilePath(source);
       if (!localPath) return undefined;
+      if (isSystemTempPath(localPath)) {
+        this.logger?.warn('Local resource path is in system temp and cannot be projected', {
+          path: localPath,
+          caller: options.caller,
+        });
+        return undefined;
+      }
 
       if (!roots.some((root) => isPathInsideRoot(localPath, root))) {
         this.logger?.warn('Local resource path is outside authorized roots', {
@@ -511,6 +531,33 @@ function isBroadLocalRoot(uri: vscode.Uri): boolean {
     fsPath === normalizeFsPath(parsed.root) ||
     (homeDir !== undefined && fsPath === normalizeFsPath(homeDir)) ||
     (tempDir !== undefined && fsPath === normalizeFsPath(tempDir))
+  );
+}
+
+function isSystemTempUri(uri: vscode.Uri): boolean {
+  return uri.scheme === 'file' && isSystemTempPath(normalizeFsPath(uri.fsPath));
+}
+
+function isSystemTempPath(filePath: string): boolean {
+  const normalized = normalizeFsPath(filePath).replace(/\\/g, '/');
+  const tempDir = getOsPath('tmpdir');
+  if (tempDir !== undefined) {
+    const normalizedTemp = normalizeFsPath(tempDir).replace(/\\/g, '/');
+    if (normalized === normalizedTemp || normalized.startsWith(`${normalizedTemp}/`)) {
+      return true;
+    }
+  }
+  return (
+    normalized === '/tmp' ||
+    normalized.startsWith('/tmp/') ||
+    normalized === '/private/tmp' ||
+    normalized.startsWith('/private/tmp/') ||
+    normalized === '/var/tmp' ||
+    normalized.startsWith('/var/tmp/') ||
+    normalized === '/private/var/tmp' ||
+    normalized.startsWith('/private/var/tmp/') ||
+    /^\/(?:private\/)?var\/folders\/[^/]+\/[^/]+(?:\/[^/]+)?\/T(?:\/|$)/.test(normalized) ||
+    /\/AppData\/Local\/Temp(?:\/|$)/i.test(normalized)
   );
 }
 

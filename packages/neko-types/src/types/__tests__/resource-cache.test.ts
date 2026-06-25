@@ -174,7 +174,7 @@ describe('resource cache contracts', () => {
     );
     expect(
       getResourcePathCategory(
-        '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/a.jpg',
+        '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/resources/a.jpg',
         { extensionPrivateRoot },
       ),
     ).toBe('extension-private-cache');

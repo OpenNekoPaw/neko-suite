@@ -22,6 +22,7 @@ export type AssetType =
   | 'endpoint'
   | 'provider'
   | 'skill'
+  | 'processor'
   | 'plugin'
   | 'shader'
   | 'preset'
@@ -38,6 +39,7 @@ export const CATEGORY_MAP: Record<AssetType, AssetCategory> = {
   endpoint: 'ai',
   provider: 'ai',
   skill: 'tooling',
+  processor: 'tooling',
   plugin: 'tooling',
   shader: 'tooling',
   preset: 'tooling',
@@ -52,6 +54,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   'endpoint',
   'provider',
   'skill',
+  'processor',
   'plugin',
   'shader',
   'preset',
@@ -270,6 +273,12 @@ export interface SkillMetadata {
 /** Backward-compatible name for skill marketplace metadata. */
 export type SkillMarketMetadata = SkillMetadata;
 
+export interface ProcessorMetadata {
+  processorManifestPath: string;
+  trustLevel?: Exclude<AssetProviderTrustLevel, 'core'>;
+  revoked?: boolean;
+}
+
 export type PluginPermission =
   | 'fs-read:project'
   | 'fs-read:asset-library'
@@ -408,6 +417,7 @@ export type AssetTypeMetadata =
   | { type: 'endpoint'; data: EndpointMetadata }
   | { type: 'provider'; data: ProviderMetadata }
   | { type: 'skill'; data: SkillMetadata }
+  | { type: 'processor'; data: ProcessorMetadata }
   | { type: 'plugin'; data: PluginMetadata }
   | { type: 'shader'; data: ShaderMetadata }
   | { type: 'preset'; data: PresetMetadata }
@@ -1206,6 +1216,34 @@ function validateTypeMetadata(
       break;
     case 'skill':
       requireNonEmptyArray(data, 'typeMetadata.data.domain', issues, 'domain');
+      break;
+    case 'processor':
+      requireString(
+        data,
+        'typeMetadata.data.processorManifestPath',
+        issues,
+        'processorManifestPath',
+      );
+      if (
+        isNonEmptyString(data['processorManifestPath']) &&
+        (isAbsolutePath(data['processorManifestPath']) ||
+          data['processorManifestPath'].includes('..'))
+      ) {
+        issues.push({
+          field: 'typeMetadata.data.processorManifestPath',
+          message: 'must be a package-relative path',
+        });
+      }
+      if (
+        data['trustLevel'] !== undefined &&
+        data['trustLevel'] !== 'community' &&
+        data['trustLevel'] !== 'untrusted'
+      ) {
+        issues.push({
+          field: 'typeMetadata.data.trustLevel',
+          message: 'processor trustLevel must be community or untrusted',
+        });
+      }
       break;
     case 'plugin':
       requireString(data, 'typeMetadata.data.entryPoint', issues, 'entryPoint');

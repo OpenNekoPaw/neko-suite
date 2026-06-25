@@ -187,12 +187,11 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
 ];
 
 /**
- * Core tools that are always injected (always layer).
+ * Creative-session core tools that are always injected (always layer).
  * These correspond to all tools in resident-tier ToolSets + meta-tools.
  *
- * - core-system: Read, ListDirectory, Glob, Grep, WebSearch
+ * - core-system: Read, ReadDocument, ReadImage, ReadDocumentImage, ListDirectory, Glob, Grep, WebSearch
  * - file-editing: Write, Edit, CreateDirectory, DeleteFile
- * - shell-execution: Bash
  * - plan-mode: EnterPlanMode, ExitPlanMode
  * - meta-tools: ActivateSkill, DeactivateSkill, GetContext
  */
@@ -209,8 +208,6 @@ export const CORE_TOOLS = [
   'Edit',
   'CreateDirectory',
   'DeleteFile',
-  // shell-execution (resident)
-  'Bash',
   // plan-mode (resident)
   'EnterPlanMode',
   'ExitPlanMode',

@@ -27,7 +27,7 @@ import {
   parseDocumentSourceRef,
 } from '@neko/shared';
 import type { AgentPhase } from './phase';
-import type { ContentBlock, Message } from './message';
+import type { AgentFileReference, ContentBlock, Message } from './message';
 import type { Plan } from './plan';
 import type { ConfiguredProvider } from './provider';
 import type {
@@ -126,6 +126,7 @@ export interface SendMessageWebviewMessage {
   mediaModels?: AgentMediaModelSelections;
   attachments?: MessageAttachment[];
   contextPayloads?: AgentContextPayload[];
+  fileReferences?: AgentFileReference[];
   promptId?: string;
   messageTrackingId?: string;
 }
@@ -1383,6 +1384,14 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
         : null;
   if (contextPayloads === null) return null;
 
+  const fileReferences =
+    raw.fileReferences === undefined
+      ? undefined
+      : Array.isArray(raw.fileReferences)
+        ? parseAgentFileReferences(raw.fileReferences)
+        : null;
+  if (fileReferences === null) return null;
+
   const promptId = optionalString(raw.promptId);
   if (raw.promptId !== undefined && promptId === undefined) return null;
 
@@ -1409,9 +1418,56 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
     ...(mediaModels ? { mediaModels } : {}),
     ...(attachments ? { attachments } : {}),
     ...(contextPayloads ? { contextPayloads } : {}),
+    ...(fileReferences ? { fileReferences } : {}),
     ...(promptId ? { promptId } : {}),
     ...(messageTrackingId ? { messageTrackingId } : {}),
   };
+}
+
+function parseAgentFileReferences(raw: readonly unknown[]): AgentFileReference[] | null {
+  const references: AgentFileReference[] = [];
+
+  for (const item of raw) {
+    if (!isAgentFileReference(item)) {
+      return null;
+    }
+    references.push(item);
+  }
+
+  return references;
+}
+
+function isAgentFileReference(raw: unknown): raw is AgentFileReference {
+  if (!isRecord(raw)) return false;
+  if (!isNonEmptyString(raw.id)) return false;
+  if (!isNonEmptyString(raw.path)) return false;
+  if (!isNonEmptyString(raw.label)) return false;
+  if (raw.mediaType !== undefined && !isAgentFileReferenceMediaType(raw.mediaType)) return false;
+  if (raw.source !== undefined && !isAgentFileReferenceSource(raw.source)) return false;
+  if (raw.thumbnailUri !== undefined && typeof raw.thumbnailUri !== 'string') return false;
+  return true;
+}
+
+function isAgentFileReferenceMediaType(value: unknown): value is AgentFileReference['mediaType'] {
+  return (
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'image' ||
+    value === 'sequence' ||
+    value === 'text' ||
+    value === 'document'
+  );
+}
+
+function isAgentFileReferenceSource(value: unknown): value is AgentFileReference['source'] {
+  return (
+    value === 'workspace' ||
+    value === 'asset-library' ||
+    value === 'media-library' ||
+    value === 'entity-graph' ||
+    value === 'story' ||
+    value === 'canvas'
+  );
 }
 
 function parseAgentContextPayloads(raw: readonly unknown[]): AgentContextPayload[] | null {

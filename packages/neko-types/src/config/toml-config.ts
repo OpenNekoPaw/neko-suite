@@ -100,6 +100,7 @@ export interface TomlModelConfig {
   readonly name: string;
   readonly display_name?: string;
   readonly provider_id: string;
+  readonly protocol_profile?: ModelConfig['protocolProfile'];
   readonly protocol?: ModelConfig['protocol'];
   readonly use_bearer_auth?: boolean;
   readonly supports_beta?: boolean;
@@ -139,6 +140,7 @@ export interface TomlConfigValidationIssue {
     | 'unsupportedProviderSupportLevel'
     | 'unsupportedProtocolAuthType'
     | 'unsupportedProtocolStreamFormat'
+    | 'unsupportedModelProtocolProfile'
     | 'unsupportedModelProtocol'
     | 'duplicateProviderId'
     | 'duplicateModelId'
@@ -290,8 +292,10 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   collectUnsupportedProviderOverrideIssues(config.provider_overrides, issues);
   collectUnsupportedDefaultMediaModelIssues(config.default_media_models, issues);
   collectUnsupportedModelTypeIssues(config.models, 'models', issues);
+  collectUnsupportedModelProtocolProfileIssues(config.models, 'models', issues);
   collectUnsupportedModelProtocolIssues(config.models, 'models', issues);
   collectUnsupportedModelOverrideTypeIssues(config.model_overrides, issues);
+  collectUnsupportedModelOverrideProtocolProfileIssues(config.model_overrides, issues);
   collectUnsupportedModelOverrideProtocolIssues(config.model_overrides, issues);
   collectDefaultModelIssues(config.default_models, issues);
   if (issues.length > 0) {
@@ -439,6 +443,7 @@ function tomlModelToRuntime(model: TomlModelConfig): ModelConfig {
     name: model.name,
     displayName: model.display_name,
     providerId: model.provider_id,
+    protocolProfile: model.protocol_profile,
     protocol: model.protocol,
     useBearerAuth: model.use_bearer_auth,
     supportsBeta: model.supports_beta,
@@ -459,6 +464,7 @@ function runtimeModelToToml(model: ModelConfig): TomlModelConfig {
     name: model.name,
     display_name: model.displayName,
     provider_id: model.providerId,
+    protocol_profile: model.protocolProfile,
     protocol: model.protocol,
     use_bearer_auth: model.useBearerAuth,
     supports_beta: model.supportsBeta,
@@ -507,6 +513,7 @@ function tomlModelOverrideToRuntime(model: Partial<TomlModelConfig>): Partial<Mo
     name: model.name,
     displayName: model.display_name,
     providerId: model.provider_id,
+    protocolProfile: model.protocol_profile,
     protocol: model.protocol,
     useBearerAuth: model.use_bearer_auth,
     supportsBeta: model.supports_beta,
@@ -527,6 +534,7 @@ function runtimeModelOverrideToToml(model: Partial<ModelConfig>): Partial<TomlMo
     name: model.name,
     display_name: model.displayName,
     provider_id: model.providerId,
+    protocol_profile: model.protocolProfile,
     protocol: model.protocol,
     use_bearer_auth: model.useBearerAuth,
     supports_beta: model.supportsBeta,
@@ -697,6 +705,26 @@ function collectUnsupportedModelOverrideTypeIssues(
   }
 }
 
+function collectUnsupportedModelProtocolProfileIssues(
+  models: readonly TomlModelConfig[] | undefined,
+  section: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!models) return;
+  for (const model of models) {
+    if (
+      model.protocol_profile !== undefined &&
+      !isProviderProtocolProfile(model.protocol_profile)
+    ) {
+      issues.push({
+        code: 'unsupportedModelProtocolProfile',
+        path: `${section}.${model.id}.protocol_profile`,
+        message: `Unsupported model protocol_profile "${String(model.protocol_profile)}" for model ${model.id}. Supported values: ${formatAllowedValues(PROVIDER_PROTOCOL_PROFILES)}.`,
+      });
+    }
+  }
+}
+
 function collectUnsupportedModelProtocolIssues(
   models: readonly TomlModelConfig[] | undefined,
   section: string,
@@ -709,6 +737,25 @@ function collectUnsupportedModelProtocolIssues(
         code: 'unsupportedModelProtocol',
         path: `${section}.${model.id}.protocol`,
         message: `Unsupported model protocol "${String(model.protocol)}" for model ${model.id}. Supported values: ${formatAllowedValues(PROVIDER_TYPES)}.`,
+      });
+    }
+  }
+}
+
+function collectUnsupportedModelOverrideProtocolProfileIssues(
+  overrides: Record<string, Partial<TomlModelConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!overrides) return;
+  for (const [modelId, override] of Object.entries(overrides)) {
+    if (
+      override.protocol_profile !== undefined &&
+      !isProviderProtocolProfile(override.protocol_profile)
+    ) {
+      issues.push({
+        code: 'unsupportedModelProtocolProfile',
+        path: `model_overrides.${modelId}.protocol_profile`,
+        message: `Unsupported model override protocol_profile "${String(override.protocol_profile)}" for model ${modelId}. Supported values: ${formatAllowedValues(PROVIDER_PROTOCOL_PROFILES)}.`,
       });
     }
   }

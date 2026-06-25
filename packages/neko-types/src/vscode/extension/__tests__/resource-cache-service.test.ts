@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES,
+  DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
   createResourceFingerprint,
   createResourceRef,
   createResourceVariantKey,
@@ -663,6 +665,125 @@ describe('resource cache service', () => {
     expect(fsOps.files.has('/workspace/.neko/.cache/resources/active.jpg')).toBe(true);
   });
 
+  it('records processor lifecycle metadata and updates retention/pin/promote state', async () => {
+    const service = createService([]);
+    const processorRef = createResourceRef({
+      scope: 'project',
+      provider: 'external-processor',
+      kind: 'generated',
+      source: {
+        kind: 'file',
+        projectRelativePath: 'external-processors/upscale/run-1/stage-1/attempt-1/result.png',
+      },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        providerId: 'external-processor',
+        value: 'run-1:stage-1:image',
+      }),
+    });
+    const processorVariant = { role: 'preview' as const, mimeType: 'image/png' };
+    fsOps.files.set(
+      '/workspace/.neko/.cache/resources/external-processors/upscale/run-1/stage-1/attempt-1/result.png',
+      'processor-image',
+    );
+
+    await service.record({
+      ref: processorRef,
+      variant: processorVariant,
+      absolutePath:
+        '/workspace/.neko/.cache/resources/external-processors/upscale/run-1/stage-1/attempt-1/result.png',
+      retentionHint: 'intermediate',
+      lifecycle: {
+        processorRunId: 'run-1',
+        stageId: 'stage-1',
+        attempt: 1,
+        retentionHint: 'intermediate',
+      },
+    });
+    const pinned = await service.updateLifecycle({
+      ref: processorRef,
+      variant: processorVariant,
+      retentionHint: 'pinned',
+      pinned: true,
+      reason: 'approval-ui',
+      ownerId: 'agent',
+    });
+    const promoted = await service.updateLifecycle({
+      ref: processorRef,
+      variant: processorVariant,
+      retentionHint: 'promoted',
+      promoted: true,
+      promotedTarget: 'asset',
+    });
+
+    expect(pinned.variantEntry).toMatchObject({
+      retentionHint: 'pinned',
+      pinned: true,
+    });
+    expect(promoted.entry?.lifecycle).toMatchObject({
+      processorRunId: 'run-1',
+      stageId: 'stage-1',
+      attempt: 1,
+      retentionHint: 'promoted',
+      promoted: true,
+      promotedTarget: 'asset',
+      ownerId: 'agent',
+    });
+    expect(promoted.variantEntry).toMatchObject({
+      retentionHint: 'promoted',
+      promoted: true,
+    });
+  });
+
+  it('preserves debug and promoted processor outputs during GC', async () => {
+    const service = createService([]);
+    const debugVariant = { role: 'thumbnail' as const, width: 64 };
+    const promotedVariant = { role: 'preview' as const, width: 128 };
+    const evictableVariant = { role: 'proxy' as const, width: 256 };
+    const debugRef = { ...ref, id: `${ref.id}-debug` };
+    const promotedRef = { ...ref, id: `${ref.id}-promoted` };
+    const evictableRef = { ...ref, id: `${ref.id}-evictable` };
+    fsOps.files.set('/workspace/.neko/.cache/resources/debug.png', 'debug-cache');
+    fsOps.files.set('/workspace/.neko/.cache/resources/promoted.png', 'promoted-cache');
+    fsOps.files.set('/workspace/.neko/.cache/resources/evictable.png', 'evictable-cache');
+    await service.record({
+      ref: debugRef,
+      variant: debugVariant,
+      absolutePath: '/workspace/.neko/.cache/resources/debug.png',
+      sizeBytes: 128,
+      retentionHint: 'debug',
+      lifecycle: { retentionHint: 'debug', processorRunId: 'run-debug' },
+    });
+    await service.record({
+      ref: promotedRef,
+      variant: promotedVariant,
+      absolutePath: '/workspace/.neko/.cache/resources/promoted.png',
+      sizeBytes: 128,
+      retentionHint: 'promoted',
+      lifecycle: { retentionHint: 'promoted', promoted: true },
+    });
+    await service.record({
+      ref: evictableRef,
+      variant: evictableVariant,
+      absolutePath: '/workspace/.neko/.cache/resources/evictable.png',
+      sizeBytes: 128,
+      retentionHint: 'intermediate',
+    });
+
+    const gc = await service.gc({ projectMaxBytes: 1 });
+
+    expect(gc).toMatchObject({
+      removedCount: 1,
+      skippedReasons: {
+        debug: 1,
+        promoted: 1,
+      },
+    });
+    expect(fsOps.files.has('/workspace/.neko/.cache/resources/debug.png')).toBe(true);
+    expect(fsOps.files.has('/workspace/.neko/.cache/resources/promoted.png')).toBe(true);
+    expect(fsOps.files.has('/workspace/.neko/.cache/resources/evictable.png')).toBe(false);
+  });
+
   it('does not evict at exact quota and evicts once the quota is lower than usage', async () => {
     const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
     const provider = createProvider(async (input) => {
@@ -692,6 +813,38 @@ describe('resource cache service', () => {
       removedBytes: 128,
     });
     expect(fsOps.files.has(absolutePath)).toBe(false);
+  });
+
+  it('applies default quota policy to the project cache root', async () => {
+    const bigPath = '/workspace/.neko/.cache/resources/big.jpg';
+    const smallPath = '/workspace/.neko/.cache/resources/small.jpg';
+    const bigRef = { ...ref, id: `${ref.id}-big` };
+    const smallRef = { ...ref, id: `${ref.id}-small` };
+    fsOps.files.set(bigPath, 'big-cache');
+    fsOps.files.set(smallPath, 'small-cache');
+    const service = createService([]);
+
+    await service.record({
+      ref: bigRef,
+      variant: { role: 'thumbnail', width: 64 },
+      absolutePath: bigPath,
+      sizeBytes: DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
+      retentionHint: 'intermediate',
+    });
+    await service.record({
+      ref: smallRef,
+      variant: { role: 'preview', width: 128 },
+      absolutePath: smallPath,
+      sizeBytes: 1,
+      retentionHint: 'intermediate',
+    });
+
+    await expect(service.gc(resolveResourceCacheQuotaPolicy())).resolves.toMatchObject({
+      removedCount: 1,
+      removedBytes: DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
+    });
+    expect(fsOps.files.has(bigPath)).toBe(false);
+    expect(fsOps.files.has(smallPath)).toBe(true);
   });
 
   it('reports extension-private refs as non-portable through shared resolution', async () => {
@@ -749,6 +902,15 @@ describe('resource cache service', () => {
   });
 
   it('resolves cache quota policy defaults from settings', () => {
+    expect(resolveResourceCacheQuotaPolicy()).toEqual({
+      projectMaxBytes: DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
+      globalMaxBytes: DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES,
+      preservePinned: true,
+      preserveSessionActive: true,
+      preserveDebug: true,
+      preservePromoted: true,
+    });
+
     expect(
       resolveResourceCacheQuotaPolicy(
         {
@@ -764,6 +926,8 @@ describe('resource cache service', () => {
       minFreeDiskBytes: 512,
       preservePinned: true,
       preserveSessionActive: true,
+      preserveDebug: true,
+      preservePromoted: true,
       activeVariantKeys: ['res:variant'],
     });
   });

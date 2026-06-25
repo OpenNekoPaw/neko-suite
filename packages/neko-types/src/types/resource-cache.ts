@@ -37,6 +37,8 @@ export type ResourceCacheStatus =
   | 'failed'
   | 'non-portable';
 
+export type ResourceRetentionHint = 'intermediate' | 'debug' | 'pinned' | 'promoted';
+
 export type ResourceSourceKind =
   | 'document'
   | 'file'
@@ -105,6 +107,7 @@ export interface ResourceCacheEntry {
   readonly updatedAt: string;
   readonly lastAccessedAt?: string;
   readonly status: ResourceCacheStatus;
+  readonly lifecycle?: ResourceCacheLifecycleMetadata;
   readonly providerMetadata?: Record<string, unknown>;
 }
 
@@ -124,8 +127,23 @@ export interface ResourceCacheVariantEntry {
   readonly updatedAt: string;
   readonly lastAccessedAt?: string;
   readonly pinned?: boolean;
+  readonly sessionActive?: boolean;
+  readonly retentionHint?: ResourceRetentionHint;
+  readonly promoted?: boolean;
   readonly rebuildable?: boolean;
   readonly error?: string;
+}
+
+export interface ResourceCacheLifecycleMetadata {
+  readonly processorRunId?: string;
+  readonly stageId?: string;
+  readonly attempt?: number;
+  readonly retentionHint?: ResourceRetentionHint;
+  readonly promoted?: boolean;
+  readonly promotedTarget?: 'asset' | 'project' | 'mediaLibrary';
+  readonly updatedAt: string;
+  readonly ownerId?: string;
+  readonly reason?: string;
 }
 
 export interface ResourceCacheManifest {
@@ -158,6 +176,8 @@ export interface ResourceCacheQuotaPolicy {
   readonly minFreeDiskBytes?: number;
   readonly preservePinned?: boolean;
   readonly preserveSessionActive?: boolean;
+  readonly preserveDebug?: boolean;
+  readonly preservePromoted?: boolean;
   readonly activeVariantKeys?: readonly string[];
 }
 
@@ -167,7 +187,12 @@ export interface ResourceCacheSettings {
   readonly minFreeDiskBytes?: number;
   readonly preservePinned?: boolean;
   readonly preserveSessionActive?: boolean;
+  readonly preserveDebug?: boolean;
+  readonly preservePromoted?: boolean;
 }
+
+export const DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+export const DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES = 512 * 1024 * 1024;
 
 export interface ResourceVariantRequest {
   readonly role: ResourceVariantRole;
