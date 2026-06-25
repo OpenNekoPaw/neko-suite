@@ -255,8 +255,11 @@ export function CanvasApp() {
   const playbackWorkspaceVisible = usePlaybackStore((state) => state.playbackSession.visible);
   const playbackPaneState = usePlaybackStore((state) => state.playbackSession.panes);
   const revealPlaybackWorkspace = usePlaybackStore((state) => state.revealPlaybackWorkspace);
-  const setPlaybackPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
   const hidePlaybackWorkspace = usePlaybackStore((state) => state.hidePlaybackWorkspace);
+  const setPlaybackPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
+  const setPlaybackWorkspaceFocusOwner = usePlaybackStore(
+    (state) => state.setPlaybackWorkspaceFocusOwner,
+  );
   const viewport = useRuntimeViewportStore((state) => state.viewport);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
@@ -281,6 +284,14 @@ export function CanvasApp() {
   );
   const activeSubsystemKey = activeSubsystemIds.join('|');
   const isPanMode = interactionTool === 'pan';
+  const workspaceSurfaceState = useMemo(
+    () => ({
+      canvas: !playbackWorkspaceVisible || playbackPaneState.canvas,
+      stage: playbackWorkspaceVisible && playbackPaneState.stage,
+      route: playbackWorkspaceVisible && playbackPaneState.route,
+    }),
+    [playbackPaneState, playbackWorkspaceVisible],
+  );
   const setCanvasContainerRef = useCallback((element: HTMLDivElement | null) => {
     canvasContainerRef.current = element;
     setCanvasContainerElement(element);
@@ -1442,36 +1453,49 @@ export function CanvasApp() {
     resetViewport();
   }
 
-  const handleRevealPlaybackWorkspace = useCallback(() => {
-    revealPlaybackWorkspace({ focusOwner: 'stage' });
-    reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'));
-  }, [reportAction, revealPlaybackWorkspace]);
-
-  const handleTogglePlaybackPane = useCallback(
+  const handleToggleWorkspaceSurface = useCallback(
     (pane: PlaybackWorkspacePane) => {
       const session = usePlaybackStore.getState().playbackSession;
+      if (pane === 'canvas' && !session.visible) {
+        setPlaybackWorkspaceFocusOwner('canvas');
+        reportAction('toggleWorkspaceSurface', pane);
+        return;
+      }
+
       if (!session.visible) {
         revealPlaybackWorkspace({
           focusOwner: pane,
           panes: {
-            canvas: false,
-            stage: false,
-            route: false,
-            [pane]: true,
+            canvas: true,
+            stage: pane === 'stage',
+            route: pane === 'route',
           },
         });
       } else {
-        setPlaybackPaneVisible(pane, !session.panes[pane]);
+        const nextVisible = !session.panes[pane];
+        const nextPanes = {
+          ...session.panes,
+          [pane]: nextVisible,
+        };
+        if (!nextPanes.stage && !nextPanes.route) {
+          hidePlaybackWorkspace();
+        } else {
+          setPlaybackPaneVisible(pane, nextVisible);
+          if (nextVisible) {
+            setPlaybackWorkspaceFocusOwner(pane);
+          }
+        }
       }
-      reportAction('togglePlaybackPane', pane);
+      reportAction('toggleWorkspaceSurface', pane);
     },
-    [reportAction, revealPlaybackWorkspace, setPlaybackPaneVisible],
+    [
+      hidePlaybackWorkspace,
+      reportAction,
+      revealPlaybackWorkspace,
+      setPlaybackPaneVisible,
+      setPlaybackWorkspaceFocusOwner,
+    ],
   );
-
-  const handleHidePlaybackWorkspace = useCallback(() => {
-    hidePlaybackWorkspace();
-    reportAction('hidePlaybackWorkspace', t('playback.workspace.close'));
-  }, [hidePlaybackWorkspace, reportAction]);
 
   // =========================================================================
   // Render
@@ -1505,11 +1529,8 @@ export function CanvasApp() {
             onRedo={redo}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
-            onRevealPlaybackWorkspace={handleRevealPlaybackWorkspace}
-            playbackWorkspaceVisible={playbackWorkspaceVisible}
-            playbackPaneState={playbackPaneState}
-            onTogglePlaybackPane={handleTogglePlaybackPane}
-            onHidePlaybackWorkspace={handleHidePlaybackWorkspace}
+            workspaceSurfaceState={workspaceSurfaceState}
+            onToggleWorkspaceSurface={handleToggleWorkspaceSurface}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}

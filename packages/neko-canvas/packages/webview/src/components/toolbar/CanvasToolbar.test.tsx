@@ -7,7 +7,6 @@ import { CanvasToolbar } from './CanvasToolbar';
 import { setLocale } from '../../i18n';
 
 vi.mock('@neko/ui/icons', () => ({
-  CloseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="close">{size}</span>,
   DownloadIcon: ({ size = 16 }: { size?: number }) => <span data-icon="download">{size}</span>,
   LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
   PackageIcon: ({ size = 16 }: { size?: number }) => <span data-icon="package">{size}</span>,
@@ -107,8 +106,7 @@ describe('CanvasToolbar', () => {
     expect(collapsedButton?.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('reveals the playback workspace and opens export/package flows', () => {
-    const onRevealPlaybackWorkspace = vi.fn();
+  it('opens export/package flows without adding a playback reveal button', () => {
     const onOpenExport = vi.fn();
     const onOpenPackage = vi.fn();
 
@@ -117,25 +115,18 @@ describe('CanvasToolbar', () => {
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          onRevealPlaybackWorkspace={onRevealPlaybackWorkspace}
           onOpenExport={onOpenExport}
           onOpenPackage={onOpenPackage}
         />,
       );
     });
 
-    const previewButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="reveal-playback-workspace"]',
-    );
     const exportButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-export"]',
     );
     const packageButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="open-package"]',
     );
-    expect(previewButton?.getAttribute('aria-label')).toBe('Playback Workspace');
-    expect(previewButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
-    expect(previewButton?.querySelector('[data-icon="play"]')).not.toBeNull();
     expect(exportButton?.getAttribute('aria-label')).toBe('Export');
     expect(exportButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
     expect(exportButton?.querySelector('[data-icon="download"]')).not.toBeNull();
@@ -144,29 +135,23 @@ describe('CanvasToolbar', () => {
     expect(packageButton?.querySelector('[data-icon="package"]')).not.toBeNull();
 
     act(() => {
-      previewButton?.click();
       exportButton?.click();
       packageButton?.click();
     });
-    expect(onRevealPlaybackWorkspace).toHaveBeenCalledTimes(1);
     expect(onOpenExport).toHaveBeenCalledTimes(1);
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
-  it('controls playback workspace panes from the left toolbar when the workspace is visible', () => {
-    const onTogglePlaybackPane = vi.fn();
-    const onHidePlaybackWorkspace = vi.fn();
+  it('controls canvas workspace surfaces as top-level left toolbar buttons', () => {
+    const onToggleWorkspaceSurface = vi.fn();
 
     act(() => {
       root.render(
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          onRevealPlaybackWorkspace={() => undefined}
-          playbackWorkspaceVisible={true}
-          playbackPaneState={{ canvas: true, stage: false, route: true }}
-          onTogglePlaybackPane={onTogglePlaybackPane}
-          onHidePlaybackWorkspace={onHidePlaybackWorkspace}
+          workspaceSurfaceState={{ canvas: true, stage: false, route: true }}
+          onToggleWorkspaceSurface={onToggleWorkspaceSurface}
         />,
       );
     });
@@ -179,9 +164,6 @@ describe('CanvasToolbar', () => {
     );
     const routeButton = host.querySelector<HTMLButtonElement>(
       '[data-creative-left-rail-action="toggle-playback-route-pane"]',
-    );
-    const closeButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="hide-playback-workspace"]',
     );
 
     expect(canvasButton?.getAttribute('aria-controls')).toBe('canvas-playback-canvas-pane');
@@ -196,45 +178,52 @@ describe('CanvasToolbar', () => {
     expect(routeButton?.getAttribute('aria-expanded')).toBe('true');
     expect(routeButton?.getAttribute('aria-pressed')).toBe('true');
     expect(routeButton?.getAttribute('aria-label')).toBe('Hide route matrix');
-    expect(closeButton?.getAttribute('aria-controls')).toBe('canvas-playback-workspace');
-    expect(closeButton?.getAttribute('aria-expanded')).toBe('true');
-    expect(closeButton?.getAttribute('aria-label')).toBe('Hide playback workspace');
+    expect(
+      host.querySelector('[data-creative-left-rail-action="reveal-playback-workspace"]'),
+    ).toBeNull();
+    expect(
+      host.querySelector('[data-creative-left-rail-action="hide-playback-workspace"]'),
+    ).toBeNull();
 
     act(() => {
       canvasButton?.click();
       stageButton?.click();
       routeButton?.click();
-      closeButton?.click();
     });
 
-    expect(onTogglePlaybackPane.mock.calls).toEqual([['canvas'], ['stage'], ['route']]);
-    expect(onHidePlaybackWorkspace).toHaveBeenCalledTimes(1);
+    expect(onToggleWorkspaceSurface.mock.calls).toEqual([['canvas'], ['stage'], ['route']]);
   });
 
-  it('keeps playback pane controls hidden before the workspace is visible', () => {
+  it('keeps surface buttons available before playback panes are visible', () => {
+    const onToggleWorkspaceSurface = vi.fn();
+
     act(() => {
       root.render(
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          onRevealPlaybackWorkspace={() => undefined}
-          playbackWorkspaceVisible={false}
-          playbackPaneState={{ canvas: true, stage: true, route: true }}
-          onTogglePlaybackPane={() => undefined}
-          onHidePlaybackWorkspace={() => undefined}
+          workspaceSurfaceState={{ canvas: true, stage: false, route: false }}
+          onToggleWorkspaceSurface={onToggleWorkspaceSurface}
         />,
       );
     });
 
-    expect(
-      host.querySelector('[data-creative-left-rail-action="toggle-playback-canvas-pane"]'),
-    ).toBeNull();
-    expect(
-      host.querySelector('[data-creative-left-rail-action="toggle-playback-stage-pane"]'),
-    ).toBeNull();
-    expect(
-      host.querySelector('[data-creative-left-rail-action="toggle-playback-route-pane"]'),
-    ).toBeNull();
+    const stageButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-stage-pane"]',
+    );
+    const routeButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-route-pane"]',
+    );
+
+    expect(stageButton).not.toBeNull();
+    expect(routeButton).not.toBeNull();
+
+    act(() => {
+      stageButton?.click();
+      routeButton?.click();
+    });
+
+    expect(onToggleWorkspaceSurface.mock.calls).toEqual([['stage'], ['route']]);
   });
 
   it('controls canvas HUD visibility from the bottom visibility cluster', () => {
