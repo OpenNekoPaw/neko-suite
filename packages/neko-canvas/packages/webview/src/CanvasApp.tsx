@@ -836,8 +836,8 @@ export function CanvasApp() {
   // =========================================================================
   // Container size tracking
   // Must be after useVSCodeMessages so isReady is available.
-  // Canvas container is only mounted once isReady=true, so deps=[isReady] ensures
-  // the ResizeObserver is attached after the element appears in the DOM.
+  // The playback workspace can hide and remount the canvas pane, so observers
+  // follow the actual DOM elements rather than only the initial ready state.
   // =========================================================================
 
   useEffect(() => {
