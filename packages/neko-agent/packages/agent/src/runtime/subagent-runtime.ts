@@ -22,6 +22,7 @@ import { createAgentSessionWithRuntime } from './session-config-projection';
 import { summarizeAgentEventProgress } from './message-runtime';
 import { createNodeArtifactStore } from './node-artifact-store';
 import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types';
+import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentSubAgentSystemConfig {
   readonly createService: () => IService;
@@ -33,6 +34,8 @@ export interface AgentSubAgentSystemConfig {
 export interface AgentSubAgentRuntimeRegistration {
   readonly conversationId?: string;
   readonly workspaceRoot?: string;
+  readonly authorizedReadRoots?: readonly string[];
+  readonly workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
   readonly createService: () => IService;
   readonly toolRegistry: IToolRegistry;
   readonly providerId?: string;
@@ -188,6 +191,11 @@ export class SubAgentRuntimeCoordinator {
                 : {}),
               ...(runtime.capabilityRuntime?.providerCardRegistry
                 ? { providerCardRegistry: runtime.capabilityRuntime.providerCardRegistry }
+                : {}),
+              ...(runtime.capabilityRuntime?.externalProcessorRuntime
+                ? {
+                    externalProcessorRuntime: runtime.capabilityRuntime.externalProcessorRuntime,
+                  }
                 : {}),
               ...(runtime.operationToolAdapterRegistry
                 ? { operationToolAdapterRegistry: runtime.operationToolAdapterRegistry }

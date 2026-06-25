@@ -189,6 +189,98 @@ describe('think', () => {
 
     expect(beforeThink).toHaveBeenCalledTimes(1);
   });
+
+  it('injects current turn multimodal packet into service message projector', async () => {
+    const deps = createDeps({
+      config: {
+        name: 'test',
+        systemPrompt: 'Test',
+        tools: [],
+        maxIterations: 5,
+        serviceOptions: {
+          providerId: 'provider-1',
+          modelId: 'vision-model',
+        },
+      },
+    });
+    (deps.service.chat as ReturnType<typeof vi.fn>).mockResolvedValue(textResponse('Hi'));
+    const packet = {
+      id: 'packet-1',
+      selection: [],
+      artifactRefs: [],
+      projectRefs: [],
+      perceptionInputs: [
+        {
+          id: 'input-image',
+          kind: 'image-file',
+          modality: 'image',
+          uri: 'data:image/png;base64,abc',
+        },
+      ],
+      uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+      createdAt: 1,
+    };
+
+    const context = createContext();
+    context.metadata['multimodalContextPacket'] = packet;
+
+    await think(deps, context);
+
+    const options = (deps.service.chat as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as
+      | {
+          messageProjector?: NonNullable<ThinkDeps['config']['serviceOptions']>['messageProjector'];
+        }
+      | undefined;
+    expect(options?.messageProjector).toBeTypeOf('function');
+    const projected = await options!.messageProjector!({
+      messages: [{ role: 'user', content: 'analyze this' }],
+      providerId: 'provider-1',
+      modelId: 'vision-model',
+    });
+
+    expect(projected).toEqual([
+      { role: 'user', content: 'analyze this' },
+      { role: 'user', content: JSON.stringify(packet) },
+    ]);
+  });
+
+  it('does not inject text-only multimodal packet into service message projector', async () => {
+    const deps = createDeps({
+      config: {
+        name: 'test',
+        systemPrompt: 'Test',
+        tools: [],
+        maxIterations: 5,
+      },
+    });
+    (deps.service.chat as ReturnType<typeof vi.fn>).mockResolvedValue(textResponse('Hi'));
+    const context = createContext();
+    context.metadata['multimodalContextPacket'] = {
+      id: 'packet-text',
+      selection: [],
+      artifactRefs: [],
+      projectRefs: [],
+      perceptionInputs: [
+        {
+          id: 'input-text',
+          kind: 'structured-data',
+          modality: 'text',
+          metadata: { text: 'hello' },
+        },
+      ],
+      uiContext: { activePanel: 'unknown', selectionIds: [] },
+      createdAt: 1,
+    };
+
+    await think(deps, context);
+
+    const options = (deps.service.chat as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as
+      | {
+          messageProjector?: NonNullable<ThinkDeps['config']['serviceOptions']>['messageProjector'];
+        }
+      | undefined;
+    expect(options?.messageProjector).toBeUndefined();
+  });
 });
 
 // =============================================================================

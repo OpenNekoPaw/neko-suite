@@ -16,6 +16,17 @@ export {
 } from './mention-excludes';
 
 export {
+  createWorkspaceFileIgnoreRules,
+  matchesGitignoreRules,
+  normalizeRelativePath,
+  parseGitignoreRules,
+  shouldIgnoreWorkspaceFile,
+  type WorkspaceFileIgnoreDecision,
+  type WorkspaceFileIgnoreReason,
+  type WorkspaceFileIgnoreRules,
+} from './workspace-ignore';
+
+export {
   VSCodeFileReader,
   createVSCodeFileReader,
   type VSCodeWorkspaceAPI,

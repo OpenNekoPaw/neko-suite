@@ -8,6 +8,11 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import {
+  createNoWorkspaceFileAccessPolicy,
+  createWorkspaceFileAccessPolicy,
+  type CoreFileAccessPolicy,
+} from './file-access-policy';
 
 const MAX_RESULTS = 100;
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB per file
@@ -15,6 +20,7 @@ const DEFAULT_CONTEXT = 0;
 
 export interface GrepToolOptions {
   defaultCwd?: string;
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
 }
 
 interface GrepMatch {
@@ -55,10 +61,16 @@ export class GrepTool extends BuiltinTool {
   override readonly isReadOnly = true;
 
   private defaultCwd?: string;
+  private readonly fileAccessPolicy?: CoreFileAccessPolicy;
 
   constructor(options?: GrepToolOptions) {
     super();
     this.defaultCwd = options?.defaultCwd;
+    this.fileAccessPolicy =
+      options?.fileAccessPolicy ??
+      (options?.defaultCwd
+        ? createWorkspaceFileAccessPolicy({ workspaceRoot: options.defaultCwd })
+        : createNoWorkspaceFileAccessPolicy());
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
@@ -79,7 +91,11 @@ export class GrepTool extends BuiltinTool {
       return this.error(`Invalid regex pattern: ${pattern}`);
     }
 
-    const resolved = path.resolve(this.defaultCwd ?? '.', searchPath);
+    const authorization = this.fileAccessPolicy?.authorize(searchPath, 'read');
+    if (authorization && !authorization.allowed) {
+      return this.error(authorization.message ?? `Unauthorized search path: ${searchPath}`);
+    }
+    const resolved = authorization?.path ?? path.resolve(this.defaultCwd ?? '.', searchPath);
     const matches: GrepMatch[] = [];
 
     try {

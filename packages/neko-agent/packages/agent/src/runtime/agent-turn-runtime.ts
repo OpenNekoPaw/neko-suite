@@ -2,6 +2,7 @@ import type {
   AgentLlmConfig,
   AgentPhaseMessage,
   ErrorMessage,
+  MessageQueuedMessage,
   AgentModelSlots,
   AgentMediaModelSelections,
   AgentPhase,
@@ -18,6 +19,10 @@ import {
 } from '@neko-agent/types';
 import type { Skill, SkillInjection } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
+import {
+  AGENT_SESSION_BUSY_MESSAGE,
+  AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
+} from './agent-session-runner';
 import type { IRuntimeTaskManager } from '../task';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import {
@@ -29,6 +34,7 @@ import {
   getAgentTurnPreconditionMessage,
   selectAgentTurnProvider,
   type AgentAmbientCanvasNode,
+  type AgentTurnConfigurationPlan,
   type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentMessageTurnPreconditionReason,
@@ -42,6 +48,7 @@ import {
   createCanvasSelectionContextPacket,
 } from './multimodal-context-packet';
 import { getLogger } from '../utils/logger';
+import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 function getAgentTurnRuntimeLogger() {
   return getLogger('AgentTurnRuntime');
@@ -69,11 +76,14 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
   readonly maxTokens?: number;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly modelCapabilities?: readonly string[];
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly thinkingBudget?: number;
   readonly providerOptions?: Record<string, unknown>;
   readonly workspaceRoot?: string;
+  readonly authorizedReadRoots?: readonly string[];
+  readonly workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
   readonly conversationId: string;
   readonly taskManager?: IRuntimeTaskManager;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
@@ -81,8 +91,13 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
 
 export interface AgentTurnRunner<TPlatform, TContext extends object> {
   getHistory(): readonly unknown[];
+  getConfig(): unknown;
   configure(config: AgentTurnRunnerConfigureInput<TPlatform>): Promise<void>;
   execute(input: string, context: TContext): AsyncIterable<AgentEvent>;
+  isRunning(): boolean;
+  appendMessage(input: string): boolean;
+  getPendingMessagesCount(): number;
+  drainPendingMessages(): string[];
   applySkillInjection?(injection: SkillInjection, skill?: Skill): void;
   getActiveSkill?(): Skill | undefined;
   clearActiveSkill?(): void;
@@ -153,15 +168,16 @@ export type AgentTurnExecutionResult =
   | {
       readonly status: 'precondition-unmet';
       readonly reason: AgentTurnPreconditionReason;
+    }
+  | {
+      readonly status: 'queued';
+      readonly pendingCount: number;
     };
 
 export type AgentTurnPreconditionReason = AgentMessageTurnPreconditionReason;
-export type AgentTurnFallbackReason = AgentTurnPreconditionReason;
 
 export {
-  AGENT_TURN_FALLBACK_MESSAGE,
   AGENT_TURN_PRECONDITION_MESSAGE,
-  getAgentTurnFallbackMessage,
   getAgentTurnPreconditionMessage,
 } from './message-runtime';
 
@@ -179,6 +195,7 @@ export interface ExecuteAgentTurnInput<
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelCapabilities?: readonly string[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
@@ -191,6 +208,8 @@ export interface ExecuteAgentTurnInput<
   readonly getBaseSystemPrompt: (conversationId: string) => string;
   readonly isPlanMode: (conversationId: string) => boolean;
   readonly getWorkspaceRoot?: () => string | undefined;
+  readonly getAuthorizedReadRoots?: () => readonly string[];
+  readonly getWorkspaceIgnoreRules?: () => WorkspaceFileIgnoreRules | undefined;
   readonly getAmbientCanvas?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
   readonly createContext: (input: AgentTurnContextFactoryInput) => TContext | Promise<TContext>;
   readonly buildTimelineContextPacket?: (
@@ -221,6 +240,11 @@ export interface ExecuteAgentTurnInput<
     readonly toolName?: string;
     readonly timestamp: number;
   }) => void;
+  readonly onMessageQueued?: (event: {
+    readonly conversationId: string;
+    readonly content?: string;
+    readonly pendingCount: number;
+  }) => void;
   readonly generateMessageId: () => string;
   readonly now?: () => number;
   readonly taskManager?: IRuntimeTaskManager;
@@ -230,6 +254,7 @@ export interface ExecuteAgentTurnInput<
 export type AgentTurnForWebviewRuntimeMessage =
   | AgentPhaseMessage
   | ErrorMessage
+  | MessageQueuedMessage
   | ToolConfirmationMessage;
 
 export interface RunAgentTurnForWebviewRuntimeInput<
@@ -265,6 +290,29 @@ export type RunAgentTurnForWebviewRuntimeResult =
     };
 
 const turnManagedSkillNames = new WeakMap<object, string>();
+
+const RUNNING_TURN_CONFIG_KEYS = [
+  'platform',
+  'systemPrompt',
+  'maxIterations',
+  'autoExecuteTools',
+  'temperature',
+  'topP',
+  'maxTokens',
+  'providerId',
+  'modelId',
+  'modelCapabilities',
+  'providerExpressionTargets',
+  'executionMode',
+  'thinkingBudget',
+  'providerOptions',
+  'workspaceRoot',
+  'authorizedReadRoots',
+  'workspaceIgnoreRules',
+  'conversationId',
+  'taskManager',
+  'operationToolAdapterRegistry',
+] as const satisfies readonly (keyof AgentTurnRunnerConfigureInput<unknown>)[];
 
 export async function runAgentTurnForWebviewRuntime<
   TPlatform,
@@ -322,6 +370,14 @@ export async function runAgentTurnForWebviewRuntime<
         postMessage(buildToolConfirmationMessage(request));
       },
       onPhaseChange: postPhase,
+      onMessageQueued: (event) => {
+        postMessage({
+          type: 'messageQueued',
+          conversationId: event.conversationId,
+          content: event.content,
+          pendingCount: event.pendingCount,
+        });
+      },
       now,
     });
 
@@ -362,6 +418,7 @@ export async function executeAgentTurn<
     hasAgentModels: input.agentModels !== undefined,
     hasLlmConfig: input.llmConfig !== undefined,
     hasLlmRuntimeOptions: input.llmRuntimeOptions !== undefined,
+    modelCapabilityCount: input.modelCapabilities?.length ?? 0,
     mediaModel: input.mediaModel,
     mediaModelCategories: input.mediaModels ? Object.keys(input.mediaModels) : [],
     imageAttachmentCount: input.imageAttachments?.length ?? 0,
@@ -420,6 +477,8 @@ export async function executeAgentTurn<
 
   const now = input.now ?? Date.now;
   const workspaceRoot = input.getWorkspaceRoot?.();
+  const authorizedReadRoots = input.getAuthorizedReadRoots?.();
+  const workspaceIgnoreRules = input.getWorkspaceIgnoreRules?.();
   const ambientCanvas = input.getAmbientCanvas?.(input.conversationId) ?? [];
   const agentRunner = input.agentManager.getOrCreate(input.conversationId);
   const llmRuntimeOptions = input.llmRuntimeOptions;
@@ -458,7 +517,7 @@ export async function executeAgentTurn<
     workspaceRoot,
   });
 
-  await agentRunner.configure({
+  const runnerConfig: AgentTurnRunnerConfigureInput<TPlatform> = {
     platform,
     systemPrompt: turnConfig.systemPrompt,
     maxIterations: turnConfig.maxIterations,
@@ -468,14 +527,39 @@ export async function executeAgentTurn<
     maxTokens: turnConfig.maxTokens,
     providerId: turnConfig.providerId,
     modelId: turnConfig.modelId,
+    modelCapabilities: input.modelCapabilities,
     providerExpressionTargets: turnConfig.providerExpressionTargets,
     executionMode: turnConfig.executionMode,
     thinkingBudget: turnConfig.thinkingBudget,
     providerOptions: turnConfig.providerOptions,
     workspaceRoot: turnConfig.workspaceRoot,
+    ...(authorizedReadRoots && authorizedReadRoots.length > 0 ? { authorizedReadRoots } : {}),
+    ...(workspaceIgnoreRules ? { workspaceIgnoreRules } : {}),
     conversationId: turnConfig.conversationId,
     ...(input.taskManager ? { taskManager: input.taskManager } : {}),
-  });
+  };
+
+  if (agentRunner.isRunning()) {
+    assertCompatibleRunningTurnConfig(agentRunner.getConfig(), runnerConfig);
+    assertQueueableRunningTurn({ input, ambientCanvas });
+    if (!agentRunner.appendMessage(input.message)) {
+      throw new Error(AGENT_SESSION_BUSY_MESSAGE);
+    }
+    const pendingCount = agentRunner.getPendingMessagesCount();
+    input.onMessageQueued?.({
+      conversationId: input.conversationId,
+      content: buildQueuedAgentMessageNotice(pendingCount),
+      pendingCount,
+    });
+    logger.debug('neko.agent.turn.execute.queued', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - startTime,
+      pendingCount,
+    });
+    return { status: 'queued', pendingCount };
+  }
+
+  await agentRunner.configure(runnerConfig);
 
   hydrateAgentHistoryIfNeeded({
     conversationId: input.conversationId,
@@ -485,69 +569,6 @@ export async function executeAgentTurn<
   });
 
   synchronizeAgentTurnSkillState(agentRunner, input.activeSkill ?? null);
-
-  const context = await input.createContext({
-    conversationId: input.conversationId,
-    message: input.message,
-    workspaceRoot,
-  });
-  const timelineContextPacket = await input.buildTimelineContextPacket?.({
-    context,
-    message: input.message,
-    workspaceRoot,
-  });
-  const canvasContextPacket =
-    ambientCanvas.length > 0
-      ? createCanvasSelectionContextPacket(ambientCanvas, {
-          userAnnotation: input.message,
-        })
-      : null;
-  const multimodalContextPacket = buildTurnMultimodalContextPacket({
-    conversationId: input.conversationId,
-    message: input.message,
-    imageAttachments: input.imageAttachments,
-    timelineContextPacket: isMultimodalContextPacket(timelineContextPacket)
-      ? timelineContextPacket
-      : null,
-    canvasContextPacket,
-    ...(input.workflow ? { workflow: input.workflow } : {}),
-  });
-
-  const contextPatch = buildAgentTurnContextPatch({
-    imageAttachments: input.imageAttachments,
-    timelineContextPacket,
-    canvasNodes: ambientCanvas,
-    canvasContextPacket,
-    multimodalContextPacket,
-    executionMetadata: turnConfig.executionMetadata,
-  });
-  logger.debug('neko.agent.turn.context.patch', {
-    conversationId: input.conversationId,
-    workspaceRoot,
-    ambientCanvasCount: ambientCanvas.length,
-    imageAttachmentCount: input.imageAttachments?.length ?? 0,
-    hasTimelineContextPacket: timelineContextPacket !== undefined && timelineContextPacket !== null,
-    hasCanvasContextPacket: canvasContextPacket !== undefined && canvasContextPacket !== null,
-    hasMultimodalContextPacket: multimodalContextPacket !== undefined,
-    contextPatchSummary: summarizeContextPatch(contextPatch),
-    systemPromptChars: turnConfig.systemPrompt.length,
-    providerExpressionTargetCount: turnConfig.providerExpressionTargets?.length ?? 0,
-    providerExpressionTargets: turnConfig.providerExpressionTargets ?? [],
-    executionMetadataKeys: turnConfig.executionMetadata
-      ? Object.keys(turnConfig.executionMetadata)
-      : [],
-  });
-  logger.debug('neko.agent.turn.context.patch.raw', {
-    conversationId: input.conversationId,
-    workspaceRoot,
-    ambientCanvas,
-    timelineContextPacket,
-    canvasContextPacket,
-    multimodalContextPacket: sanitizeTurnDebugValue(multimodalContextPacket),
-    contextPatch: sanitizeTurnDebugValue(contextPatch),
-    systemPrompt: turnConfig.systemPrompt,
-  });
-  applyAgentTurnContextPatch(context, contextPatch, input.applyContextPatch);
 
   let confirmationDisposable: AgentTurnDisposable | undefined;
   try {
@@ -567,40 +588,53 @@ export async function executeAgentTurn<
       agentRunner,
     });
 
-    const assistantMessageId = input.generateMessageId();
-    const stream = await input.processStream({
-      conversationId: input.conversationId,
-      messageId: assistantMessageId,
-      events: agentRunner.execute(input.message, context),
-      onPhaseChange: (phase, toolName) => {
-        input.onPhaseChange?.({
-          conversationId: input.conversationId,
-          phase,
-          toolName,
-          timestamp: now(),
-        });
-      },
+    let assistantMessage = await executeAgentTurnMessage({
+      input,
+      agentRunner,
+      logger,
+      startTime,
+      workspaceRoot,
+      ambientCanvas,
+      turnConfig,
+      now,
+      message: input.message,
+      imageAttachments: input.imageAttachments,
     });
 
-    const assistantMessage = buildAgentAssistantMessageFromStream({
-      id: assistantMessageId,
-      timestamp: now(),
-      stream,
-    });
+    for (;;) {
+      const queuedMessages = agentRunner.drainPendingMessages();
+      if (queuedMessages.length === 0) {
+        break;
+      }
+
+      for (const [index, queuedMessage] of queuedMessages.entries()) {
+        input.onMessageQueued?.({
+          conversationId: input.conversationId,
+          pendingCount: queuedMessages.length - index - 1 + agentRunner.getPendingMessagesCount(),
+        });
+
+        assistantMessage = await executeAgentTurnMessage({
+          input,
+          agentRunner,
+          logger,
+          startTime,
+          workspaceRoot,
+          ambientCanvas,
+          turnConfig,
+          now,
+          message: queuedMessage,
+        });
+      }
+    }
+
     if (assistantMessage) {
-      input.conversations.addAssistantMessage(input.conversationId, assistantMessage);
       logger.debug('neko.agent.turn.execute.result', {
         conversationId: input.conversationId,
         durationMs: Date.now() - startTime,
         status: 'completed',
         assistantMessageChars: assistantMessage.content.length,
-        toolCallCount: stream.collectedToolCalls.length,
-        contentBlockCount: stream.contentBlocks.length,
-        hasThinking: stream.accumulatedThinking.length > 0,
       });
       logger.debug('neko.agent.turn.execute.result.raw', {
-        conversationId: input.conversationId,
-        stream: sanitizeTurnDebugValue(stream),
         assistantMessage: sanitizeTurnDebugValue(assistantMessage),
       });
       return { status: 'completed', assistantMessage };
@@ -611,13 +645,9 @@ export async function executeAgentTurn<
       durationMs: Date.now() - startTime,
       status: 'completed',
       assistantMessageChars: 0,
-      toolCallCount: stream.collectedToolCalls.length,
-      contentBlockCount: stream.contentBlocks.length,
-      hasThinking: stream.accumulatedThinking.length > 0,
     });
     logger.debug('neko.agent.turn.execute.result.raw', {
       conversationId: input.conversationId,
-      stream: sanitizeTurnDebugValue(stream),
     });
     return { status: 'completed' };
   } finally {
@@ -634,6 +664,195 @@ function isMultimodalContextPacket(
     Array.isArray((value as { readonly perceptionInputs?: unknown }).perceptionInputs) &&
     Array.isArray((value as { readonly selection?: unknown }).selection),
   );
+}
+
+async function executeAgentTurnMessage<
+  TPlatform,
+  TContext extends object,
+  THistoryMessage,
+  TProvider extends AgentProviderCandidate,
+  TRunner extends AgentTurnRunner<TPlatform, TContext>,
+>(input: {
+  readonly input: ExecuteAgentTurnInput<TPlatform, TContext, THistoryMessage, TProvider, TRunner>;
+  readonly agentRunner: TRunner;
+  readonly logger: ReturnType<typeof getAgentTurnRuntimeLogger>;
+  readonly startTime: number;
+  readonly workspaceRoot?: string;
+  readonly ambientCanvas: readonly AgentAmbientCanvasNode[];
+  readonly turnConfig: AgentTurnConfigurationPlan;
+  readonly now: () => number;
+  readonly message: string;
+  readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
+}): Promise<Message | undefined> {
+  const context = await input.input.createContext({
+    conversationId: input.input.conversationId,
+    message: input.message,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const timelineContextPacket = await input.input.buildTimelineContextPacket?.({
+    context,
+    message: input.message,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const canvasContextPacket =
+    input.ambientCanvas.length > 0
+      ? createCanvasSelectionContextPacket(input.ambientCanvas, {
+          userAnnotation: input.message,
+        })
+      : null;
+  const multimodalContextPacket = buildTurnMultimodalContextPacket({
+    conversationId: input.input.conversationId,
+    message: input.message,
+    imageAttachments: input.imageAttachments,
+    timelineContextPacket: isMultimodalContextPacket(timelineContextPacket)
+      ? timelineContextPacket
+      : null,
+    canvasContextPacket,
+    ...(input.input.workflow ? { workflow: input.input.workflow } : {}),
+  });
+
+  const contextPatch = buildAgentTurnContextPatch({
+    imageAttachments: input.imageAttachments,
+    timelineContextPacket,
+    canvasNodes: input.ambientCanvas,
+    canvasContextPacket,
+    multimodalContextPacket,
+    executionMetadata: input.turnConfig.executionMetadata,
+  });
+  input.logger.debug('neko.agent.turn.context.patch', {
+    conversationId: input.input.conversationId,
+    workspaceRoot: input.workspaceRoot,
+    ambientCanvasCount: input.ambientCanvas.length,
+    imageAttachmentCount: input.imageAttachments?.length ?? 0,
+    hasTimelineContextPacket: timelineContextPacket !== undefined && timelineContextPacket !== null,
+    hasCanvasContextPacket: canvasContextPacket !== undefined && canvasContextPacket !== null,
+    hasMultimodalContextPacket: multimodalContextPacket !== undefined,
+    contextPatchSummary: summarizeContextPatch(contextPatch),
+    systemPromptChars: input.turnConfig.systemPrompt.length,
+    providerExpressionTargetCount: input.turnConfig.providerExpressionTargets?.length ?? 0,
+    providerExpressionTargets: input.turnConfig.providerExpressionTargets ?? [],
+    executionMetadataKeys: input.turnConfig.executionMetadata
+      ? Object.keys(input.turnConfig.executionMetadata)
+      : [],
+  });
+  input.logger.debug('neko.agent.turn.context.patch.raw', {
+    conversationId: input.input.conversationId,
+    workspaceRoot: input.workspaceRoot,
+    ambientCanvas: input.ambientCanvas,
+    timelineContextPacket,
+    canvasContextPacket,
+    multimodalContextPacket: sanitizeTurnDebugValue(multimodalContextPacket),
+    contextPatch: sanitizeTurnDebugValue(contextPatch),
+    systemPrompt: input.turnConfig.systemPrompt,
+  });
+  applyAgentTurnContextPatch(context, contextPatch, input.input.applyContextPatch);
+
+  const assistantMessageId = input.input.generateMessageId();
+  const stream = await input.input.processStream({
+    conversationId: input.input.conversationId,
+    messageId: assistantMessageId,
+    events: input.agentRunner.execute(input.message, context),
+    onPhaseChange: (phase, toolName) => {
+      input.input.onPhaseChange?.({
+        conversationId: input.input.conversationId,
+        phase,
+        toolName,
+        timestamp: input.now(),
+      });
+    },
+  });
+
+  const assistantMessage = buildAgentAssistantMessageFromStream({
+    id: assistantMessageId,
+    timestamp: input.now(),
+    stream,
+  });
+  if (assistantMessage) {
+    input.input.conversations.addAssistantMessage(input.input.conversationId, assistantMessage);
+  }
+
+  input.logger.debug('neko.agent.turn.message.result', {
+    conversationId: input.input.conversationId,
+    durationMs: Date.now() - input.startTime,
+    assistantMessageChars: assistantMessage?.content.length ?? 0,
+    toolCallCount: stream.collectedToolCalls.length,
+    contentBlockCount: stream.contentBlocks.length,
+    hasThinking: stream.accumulatedThinking.length > 0,
+  });
+  input.logger.debug('neko.agent.turn.message.result.raw', {
+    conversationId: input.input.conversationId,
+    stream: sanitizeTurnDebugValue(stream),
+    assistantMessage: sanitizeTurnDebugValue(assistantMessage),
+  });
+
+  return assistantMessage ?? undefined;
+}
+
+function assertCompatibleRunningTurnConfig<TPlatform>(
+  currentConfig: unknown,
+  nextConfig: AgentTurnRunnerConfigureInput<TPlatform>,
+): void {
+  if (!isRecord(currentConfig)) {
+    throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+  }
+
+  for (const key of RUNNING_TURN_CONFIG_KEYS) {
+    if (!isSameRunningTurnConfigValue(currentConfig[key], nextConfig[key])) {
+      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+    }
+  }
+}
+
+function isSameRunningTurnConfigValue(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left === undefined && right === undefined) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right) || isPlainRecord(left) || isPlainRecord(right)) {
+    return stableJson(left) === stableJson(right);
+  }
+  return false;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(',')}]`;
+  }
+  if (isPlainRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function assertQueueableRunningTurn<
+  TPlatform,
+  TContext extends object,
+  THistoryMessage,
+  TProvider extends AgentProviderCandidate,
+  TRunner extends AgentTurnRunner<TPlatform, TContext>,
+>(params: {
+  readonly input: ExecuteAgentTurnInput<TPlatform, TContext, THistoryMessage, TProvider, TRunner>;
+  readonly ambientCanvas: readonly AgentAmbientCanvasNode[];
+}): void {
+  if ((params.input.imageAttachments?.length ?? 0) > 0) {
+    throw new Error(AGENT_SESSION_BUSY_MESSAGE);
+  }
+  if (params.ambientCanvas.length > 0) {
+    throw new Error(AGENT_SESSION_BUSY_MESSAGE);
+  }
+  const metadata = params.input.executionOverrides?.metadata;
+  if (metadata && Object.keys(metadata).length > 0) {
+    throw new Error(AGENT_SESSION_BUSY_MESSAGE);
+  }
+}
+
+function buildQueuedAgentMessageNotice(pendingCount: number): string {
+  return `Message queued (${pendingCount} pending)`;
 }
 
 function hydrateAgentHistoryIfNeeded<
@@ -788,6 +1007,14 @@ function sanitizeTurnStringForDebugLog(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function applyAgentTurnContextPatch<TContext extends object>(

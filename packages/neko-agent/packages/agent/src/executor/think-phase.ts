@@ -514,10 +514,70 @@ async function prepareThinkContext(
 
   const options = {
     ...deps.config.serviceOptions,
+    messageProjector: createTurnMultimodalMessageProjector(
+      modifiedContext.metadata['multimodalContextPacket'],
+      deps.config.serviceOptions?.messageProjector,
+    ),
     tools: tools.length > 0 ? tools : undefined,
     toolChoice: (tools.length > 0 ? 'auto' : undefined) as 'auto' | undefined,
     signal: deps.abortController?.signal,
   };
 
   return { modifiedContext, tools, options };
+}
+
+type ServiceMessageProjector = NonNullable<AgentConfig['serviceOptions']>['messageProjector'];
+
+function createTurnMultimodalMessageProjector(
+  packet: unknown,
+  nextProjector: ServiceMessageProjector | undefined,
+): ServiceMessageProjector | undefined {
+  if (!isMultimodalContextPacket(packet) || !hasNativeMultimodalInputs(packet)) {
+    return nextProjector;
+  }
+
+  return async (input) => {
+    const messages = hasMultimodalContextPacketMessage(input.messages)
+      ? input.messages
+      : [...input.messages, { role: 'user' as const, content: JSON.stringify(packet) }];
+    if (nextProjector) {
+      return nextProjector({ ...input, messages });
+    }
+    return messages;
+  };
+}
+
+function hasMultimodalContextPacketMessage(messages: readonly ChatMessage[]): boolean {
+  return messages.some((message) => readMultimodalContextPacket(message) !== undefined);
+}
+
+function readMultimodalContextPacket(message: ChatMessage): unknown {
+  if (message.role !== 'user' || typeof message.content !== 'string') {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(message.content) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function isMultimodalContextPacket(
+  value: unknown,
+): value is import('@neko/shared').MultimodalContextPacket {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { readonly id?: unknown }).id === 'string' &&
+    Array.isArray((value as { readonly perceptionInputs?: unknown }).perceptionInputs),
+  );
+}
+
+function hasNativeMultimodalInputs(
+  packet: import('@neko/shared').MultimodalContextPacket,
+): boolean {
+  return packet.perceptionInputs.some(
+    (input) => input.modality === 'image' || input.modality === 'video',
+  );
 }

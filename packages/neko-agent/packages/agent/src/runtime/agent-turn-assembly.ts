@@ -32,6 +32,7 @@ import type {
   RunAgentTurnForWebviewRuntimeInput,
 } from './agent-turn-runtime';
 import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeline-context-runtime';
+import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentTurnSettingsSource {
   readonly customSystemPrompt?: string | null;
@@ -69,6 +70,8 @@ export interface AgentTurnActiveSkillState {
 
 export interface AgentTurnContextHostOptions<TActiveEditor extends AgentTurnActiveEditorLike> {
   readonly getWorkspaceRoot?: () => string | undefined;
+  readonly getAuthorizedReadRoots?: () => readonly string[];
+  readonly getWorkspaceIgnoreRules?: () => WorkspaceFileIgnoreRules | undefined;
   readonly getActiveEditor?: () => TActiveEditor | undefined;
   readonly getAmbientCanvas?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
   readonly timelineContextRuntime?: TimelineContextRuntime;
@@ -76,6 +79,8 @@ export interface AgentTurnContextHostOptions<TActiveEditor extends AgentTurnActi
 
 export interface AgentTurnContextHostAdapters<TActiveEditor extends AgentTurnActiveEditorLike> {
   readonly getWorkspaceRoot?: () => string | undefined;
+  readonly getAuthorizedReadRoots?: () => readonly string[];
+  readonly getWorkspaceIgnoreRules?: () => WorkspaceFileIgnoreRules | undefined;
   readonly getAmbientCanvas?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
   readonly createContext: (input: {
     readonly conversationId: string;
@@ -132,6 +137,7 @@ export interface AgentTurnAssemblyInput<
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelCapabilities?: readonly string[];
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -147,6 +153,12 @@ export function createAgentTurnHostContextAdapters<TActiveEditor extends AgentTu
 ): AgentTurnContextHostAdapters<TActiveEditor> {
   return {
     ...(options.getWorkspaceRoot ? { getWorkspaceRoot: options.getWorkspaceRoot } : {}),
+    ...(options.getAuthorizedReadRoots
+      ? { getAuthorizedReadRoots: options.getAuthorizedReadRoots }
+      : {}),
+    ...(options.getWorkspaceIgnoreRules
+      ? { getWorkspaceIgnoreRules: options.getWorkspaceIgnoreRules }
+      : {}),
     ...(options.getAmbientCanvas ? { getAmbientCanvas: options.getAmbientCanvas } : {}),
     createContext: ({ workspaceRoot }) =>
       createAgentTurnContext({
@@ -193,6 +205,7 @@ export function buildAgentTurnForWebviewRuntimeInput<
     agentModels: input.agentModels,
     llmConfig: input.llmConfig,
     llmRuntimeOptions: input.llmRuntimeOptions,
+    modelCapabilities: input.modelCapabilities,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
     imageAttachments: input.imageAttachments,

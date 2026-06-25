@@ -8,11 +8,23 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from './file-access-policy';
 
 const MAX_LINE_LENGTH = 2000;
 const DEFAULT_LIMIT = 2000;
 
+export interface ReadToolOptions {
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
+}
+
 export class ReadTool extends BuiltinTool {
+  private readonly fileAccessPolicy?: CoreFileAccessPolicy;
+
+  constructor(options?: ReadToolOptions) {
+    super();
+    this.fileAccessPolicy = options?.fileAccessPolicy ?? createNoWorkspaceFileAccessPolicy();
+  }
+
   readonly name = 'Read';
   readonly description =
     'Read a file from the filesystem. Returns contents with line numbers. Supports offset/limit for large files.';
@@ -49,7 +61,11 @@ export class ReadTool extends BuiltinTool {
     const limit = (args.limit as number | undefined) ?? DEFAULT_LIMIT;
 
     try {
-      const resolved = path.resolve(filePath);
+      const authorization = this.fileAccessPolicy?.authorize(filePath, 'read');
+      if (authorization && !authorization.allowed) {
+        return this.error(authorization.message ?? `Unauthorized file read: ${filePath}`);
+      }
+      const resolved = authorization?.path ?? path.resolve(filePath);
       const content = await fs.readFile(resolved, 'utf-8');
       const allLines = content.split('\n');
       const startIdx = Math.max(0, offset - 1);

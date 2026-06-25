@@ -42,6 +42,8 @@ export function buildAgentSessionConfigWithRuntime(
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
   const controlPlane = base.controlPlane ?? workflow?.controlPlane;
+  const externalProcessorRuntime =
+    base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
   const operationToolAdapterRegistry =
     base.operationToolAdapterRegistry ?? capability?.operationToolAdapterRegistry;
   const journalWriter = resolveJournalWriter(base, artifacts);
@@ -61,6 +63,7 @@ export function buildAgentSessionConfigWithRuntime(
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
     ...(controlPlane ? { controlPlane } : {}),
+    ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(operationToolAdapterRegistry ? { operationToolAdapterRegistry } : {}),
     ...(feedback?.compactLogging !== undefined && base.compactLogging === undefined
       ? { compactLogging: feedback.compactLogging }

@@ -51,6 +51,7 @@ export interface AgentRunnerPort<TConfig, TContext> extends DisposableLike {
   cancel(): void;
   isRunning(): boolean;
   appendMessage(input: string): boolean;
+  drainPendingMessages(): string[];
   getPendingMessagesCount(): number;
   clearPendingMessages(): void;
   getContextTokenCount(): number;

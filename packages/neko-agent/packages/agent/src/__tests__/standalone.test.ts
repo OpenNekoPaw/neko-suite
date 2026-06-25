@@ -162,10 +162,9 @@ describe('Standalone Mode', () => {
       expect(registry.listSkills().length).toBe(1);
     });
 
-    it('should register and list commands via command field', () => {
+    it('should keep ordinary skill command metadata out of slash command lookup', () => {
       const registry = new SkillRegistry();
 
-      // Register a skill with a command field (unified model)
       registry.registerSkill({
         name: 'test-command-skill',
         description: 'A test command skill',
@@ -175,7 +174,24 @@ describe('Standalone Mode', () => {
         command: 'test-command',
       });
 
-      // Verify skill is registered and accessible by command
+      expect(registry.getSkillByCommand('test-command')).toBeUndefined();
+      expect(registry.getSkill('test-command-skill')?.command).toBe('test-command');
+      expect(registry.listSkills().length).toBe(1);
+    });
+
+    it('should register and list slash command artifacts by command field', () => {
+      const registry = new SkillRegistry();
+
+      registry.registerSkill({
+        name: 'test-command',
+        description: 'A test command artifact',
+        content: 'Test content',
+        source: 'project',
+        enabled: true,
+        command: 'test-command',
+        entryPointKind: 'command-artifact',
+      });
+
       const found = registry.getSkillByCommand('test-command');
       expect(found).toBeDefined();
       expect(found?.command).toBe('test-command');

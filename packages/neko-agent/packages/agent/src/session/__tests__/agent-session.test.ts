@@ -1025,12 +1025,12 @@ describe('AgentSession', () => {
         });
 
         expect(addSpy).toHaveBeenCalledWith('Read');
-        expect(addSpy).toHaveBeenCalledWith('Bash(git:*)');
+        expect(addSpy).not.toHaveBeenCalledWith('Bash(git:*)');
 
         session.removeSkillInjection('test-skill');
 
         expect(removeSpy).toHaveBeenCalledWith('Read');
-        expect(removeSpy).toHaveBeenCalledWith('Bash(git:*)');
+        expect(removeSpy).not.toHaveBeenCalledWith('Bash(git:*)');
       }
     });
 

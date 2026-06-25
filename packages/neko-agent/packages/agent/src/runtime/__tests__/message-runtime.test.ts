@@ -1436,15 +1436,17 @@ describe('message runtime helpers', () => {
         type: 'file',
         id: 'f1',
         label: 'notes.txt',
+        summary: 'File: notes.txt',
         navigationData: { filePath: '/tmp/notes.txt' },
       },
       {
         type: 'canvas-node',
         id: 'node-42',
         label: 'Shot #003',
+        summary: 'Wide shot',
         navigationData: { nodeId: 'node-42' },
       },
-      { type: 'story-selection', id: 's1', label: 'Scene 1' },
+      { type: 'story-selection', id: 's1', label: 'Scene 1', summary: 'Selected text' },
     ]);
   });
 
@@ -1471,6 +1473,41 @@ describe('message runtime helpers', () => {
 
     expect(result.userMessage.contextReferences).toEqual([
       { type: 'file', id: 'f1', label: 'img.png', navigationData: { filePath: '/tmp/img.png' } },
+    ]);
+  });
+
+  it('prepareAgentMessageDispatch projects selected file references into persisted user message chips', async () => {
+    const result = await prepareAgentMessageDispatch({
+      request: {
+        conversationId: 'conv-1',
+        messageText: 'analyze @${A}/books/story.epub',
+        sessionMode: 'agent',
+        fileReferences: [
+          {
+            id: 'file-ref:${A}/books/story.epub',
+            label: 'story.epub',
+            path: '${A}/books/story.epub',
+            mediaType: 'document',
+          },
+        ],
+      },
+      processAttachments: async () => ({ textContent: '', imageAttachments: [] }),
+      generateMessageId: () => 'msg-1',
+      now: () => 100,
+    });
+
+    expect(result.userMessage.contextReferences).toEqual([
+      {
+        type: 'file',
+        id: 'file-ref:${A}/books/story.epub',
+        label: 'story.epub',
+        summary: '${A}/books/story.epub',
+        mediaType: 'document',
+        navigationData: {
+          path: '${A}/books/story.epub',
+          filePath: '${A}/books/story.epub',
+        },
+      },
     ]);
   });
 });

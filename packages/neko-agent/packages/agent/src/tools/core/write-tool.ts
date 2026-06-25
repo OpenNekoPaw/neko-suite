@@ -9,18 +9,30 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import {
+  createNoWorkspaceFileAccessPolicy,
+  createWorkspaceFileAccessPolicy,
+  type CoreFileAccessPolicy,
+} from './file-access-policy';
 
 export interface WriteToolOptions {
   /** Default working directory; relative paths are resolved against this */
   defaultCwd?: string;
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
 }
 
 export class WriteTool extends BuiltinTool {
   private readonly defaultCwd?: string;
+  private readonly fileAccessPolicy?: CoreFileAccessPolicy;
 
   constructor(options?: WriteToolOptions) {
     super();
     this.defaultCwd = options?.defaultCwd;
+    this.fileAccessPolicy =
+      options?.fileAccessPolicy ??
+      (options?.defaultCwd
+        ? createWorkspaceFileAccessPolicy({ workspaceRoot: options.defaultCwd })
+        : createNoWorkspaceFileAccessPolicy());
   }
 
   readonly name = 'Write';
@@ -60,17 +72,11 @@ export class WriteTool extends BuiltinTool {
     const append = (args.append as boolean | undefined) ?? false;
 
     try {
-      const resolved = path.resolve(this.defaultCwd ?? '.', filePath);
-
-      // Prevent writing outside the workspace root
-      if (this.defaultCwd) {
-        const workspace = path.resolve(this.defaultCwd);
-        if (!resolved.startsWith(workspace + path.sep) && resolved !== workspace) {
-          return this.error(
-            `Path is outside the workspace root: ${resolved}\nWorkspace: ${workspace}`,
-          );
-        }
+      const authorization = this.fileAccessPolicy?.authorize(filePath, 'write');
+      if (authorization && !authorization.allowed) {
+        return this.error(authorization.message ?? `Unauthorized file write: ${filePath}`);
       }
+      const resolved = authorization?.path ?? path.resolve(this.defaultCwd ?? '.', filePath);
 
       // Ensure parent directory exists
       await fs.mkdir(path.dirname(resolved), { recursive: true });

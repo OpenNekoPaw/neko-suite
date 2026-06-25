@@ -14,6 +14,7 @@ import type { SkillService } from '../skill/skill-service';
 import type { IArtifactService } from './artifact-service';
 import type { IFeedbackCoordinator } from '../feedback';
 import type { IControlPlane } from '../control-plane';
+import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
 
 /**
  * Minimal journal-writer contract exposed at the runtime bootstrap layer.
@@ -112,6 +113,7 @@ export interface ICapabilityRuntime {
   readonly providerCardRegistry?: IProviderCardRegistry;
   readonly promptFragments?: readonly PromptFragment[];
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
+  readonly externalProcessorRuntime?: AgentExternalProcessorRuntime;
 }
 
 /**

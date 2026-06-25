@@ -50,6 +50,19 @@ export {
   MemoryWriteTool,
   createCoreTools,
   type CoreToolsOptions,
+  authorizePathInsideRoots,
+  isForbiddenUnmanagedPath,
+  isPathInsideRoot,
+  normalizeAccessRoots,
+  type RootPathAccessDecision,
+  createNoWorkspaceFileAccessPolicy,
+  createWorkspaceFileAccessPolicy,
+  type CoreFileAccessDecision,
+  type CoreFileAccessDenialReason,
+  type CoreFileAccessPolicy,
+  type FileAccessKind,
+  type WorkspaceFileAccessPolicyOptions,
+  type WorkspaceFileIgnoreRules,
   // Draft/Plan/Task write tools removed in Phase B — AI uses generic Write.
 } from './core';
 

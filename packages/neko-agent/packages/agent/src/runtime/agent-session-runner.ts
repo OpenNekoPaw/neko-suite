@@ -36,6 +36,10 @@ export interface AgentSessionRunnerOptions<TContext> {
 export type CreateAgentSessionRunnerOptions<TContext> = AgentSessionRunnerOptions<TContext>;
 
 export const DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000;
+export const AGENT_SESSION_BUSY_MESSAGE =
+  'Agent is already responding. Wait for the current answer to finish or cancel it before sending another message.';
+export const AGENT_SESSION_CONFIG_LOCKED_MESSAGE =
+  'Agent configuration cannot change while a response or task is running. Wait for the current work to finish or cancel it first.';
 
 interface PendingConfirmation extends AgentSessionRunnerConfirmation {
   readonly confirmationToken?: string;
@@ -70,6 +74,9 @@ export class AgentSessionRunner<TContext> {
   }
 
   configureSession(config: Partial<AgentSessionConfig>): void {
+    if (this._isRunning) {
+      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+    }
     this._session?.configure(config);
   }
 
@@ -80,12 +87,9 @@ export class AgentSessionRunner<TContext> {
     }
 
     if (this._isRunning) {
-      this._pendingMessages.push(input);
-      const pendingCount = this._pendingMessages.length;
       yield {
-        type: 'messageQueued',
-        content: `Message queued (${pendingCount} pending)`,
-        pendingCount,
+        type: 'error',
+        error: new Error(AGENT_SESSION_BUSY_MESSAGE),
       };
       return;
     }
@@ -103,15 +107,7 @@ export class AgentSessionRunner<TContext> {
           yield event;
         }
 
-        if (this._pendingMessages.length > 0) {
-          currentInput = this._pendingMessages.shift() ?? '';
-          yield {
-            type: 'text',
-            content: `\n\n---\n**Processing queued message...**\n\n`,
-          };
-        } else {
-          currentInput = '';
-        }
+        currentInput = '';
       }
 
       const totalTokens = this.getContextTokenCount();
@@ -154,6 +150,12 @@ export class AgentSessionRunner<TContext> {
     }
     this._pendingMessages.push(input);
     return true;
+  }
+
+  drainPendingMessages(): string[] {
+    const pendingMessages = this._pendingMessages;
+    this._pendingMessages = [];
+    return pendingMessages;
   }
 
   getPendingMessagesCount(): number {

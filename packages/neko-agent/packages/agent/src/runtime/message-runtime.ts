@@ -1,5 +1,6 @@
 import type {
   AgentLlmConfig,
+  AgentFileReference,
   AgentMediaModelSelections,
   AgentModelSlots,
   ContentBlock,
@@ -57,8 +58,8 @@ export interface AgentMessageExecutionOverrides {
 export interface AgentLlmRuntimeOptions {
   /**
    * Marks that model capability projection already decided the per-turn LLM
-   * options. When present, omitted values must stay omitted instead of falling
-   * back to legacy global settings.
+   * options. When present, omitted values must stay omitted instead of using
+   * session-level global settings.
    */
   readonly projected?: boolean;
   readonly temperature?: number;
@@ -85,6 +86,7 @@ export interface AgentMessageRuntimeRequest {
   readonly mediaModels?: AgentMediaModelSelections;
   readonly attachments?: MessageAttachment[];
   readonly contextPayloads?: readonly AgentContextPayload[];
+  readonly fileReferences?: readonly AgentFileReference[];
   readonly promptId?: string;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
 }
@@ -526,11 +528,9 @@ export type AgentMessageTurnPreconditionReason =
   | 'account-catalog-missing'
   | 'account-model-not-entitled'
   | 'missing-required-capability';
-export type AgentMessageTurnFallbackReason = AgentMessageTurnPreconditionReason;
 
 export const AGENT_TURN_PRECONDITION_MESSAGE =
   'No valid chat provider and model are selected. Please choose a configured Agent chat provider/model in Settings.';
-export const AGENT_TURN_FALLBACK_MESSAGE = AGENT_TURN_PRECONDITION_MESSAGE;
 
 const AGENT_TURN_PRECONDITION_MESSAGES: Record<AgentMessageTurnPreconditionReason, string> = {
   'missing-platform': AGENT_TURN_PRECONDITION_MESSAGE,
@@ -554,10 +554,6 @@ export function getAgentTurnPreconditionMessage(
   reason: AgentMessageTurnPreconditionReason,
 ): string {
   return AGENT_TURN_PRECONDITION_MESSAGES[reason];
-}
-
-export function getAgentTurnFallbackMessage(reason: AgentMessageTurnFallbackReason): string {
-  return getAgentTurnPreconditionMessage(reason);
 }
 
 export function createAgentMessageId(options: AgentMessageIdOptions = {}): string {
@@ -686,12 +682,71 @@ export function projectContextReferences(
   payloads: readonly AgentContextPayload[] | undefined,
 ): MessageContextReference[] | undefined {
   if (!payloads || payloads.length === 0) return undefined;
-  return payloads.map((p) => ({
-    type: p.type,
-    id: p.id,
-    label: p.label,
-    navigationData: extractContextNavigationData(p),
-  }));
+  return payloads.map((payload) => {
+    const navigationData = extractContextNavigationData(payload);
+    return {
+      type: payload.type,
+      id: payload.id,
+      label: payload.label,
+      ...(payload.summary ? { summary: payload.summary } : {}),
+      ...(navigationData ? { navigationData } : {}),
+    };
+  });
+}
+
+export function projectUserMessageContextReferences(input: {
+  readonly contextPayloads?: readonly AgentContextPayload[];
+  readonly fileReferences?: readonly AgentFileReference[];
+}): MessageContextReference[] | undefined {
+  const references: MessageContextReference[] = [];
+  const seenIds = new Set<string>();
+
+  for (const reference of projectContextReferences(input.contextPayloads) ?? []) {
+    references.push(reference);
+    seenIds.add(reference.id);
+  }
+
+  for (const reference of input.fileReferences ?? []) {
+    if (seenIds.has(reference.id)) {
+      continue;
+    }
+    references.push(projectFileReferenceContextReference(reference));
+    seenIds.add(reference.id);
+  }
+
+  return references.length > 0 ? references : undefined;
+}
+
+function projectFileReferenceContextReference(
+  reference: AgentFileReference,
+): MessageContextReference {
+  return {
+    type: fileReferenceContextType(reference),
+    id: reference.id,
+    label: reference.label,
+    summary: reference.path,
+    ...(reference.thumbnailUri ? { thumbnailUri: reference.thumbnailUri } : {}),
+    ...(reference.mediaType ? { mediaType: reference.mediaType } : {}),
+    navigationData: {
+      path: reference.path,
+      filePath: reference.path,
+    },
+  };
+}
+
+function fileReferenceContextType(reference: AgentFileReference): MessageContextReference['type'] {
+  if (reference.mediaType === 'image') return 'image';
+  if (reference.mediaType === 'audio') return 'audio-clip';
+  if (
+    reference.mediaType === 'video' ||
+    reference.mediaType === 'sequence' ||
+    reference.source === 'media-library'
+  ) {
+    return 'media';
+  }
+  if (reference.source === 'asset-library') return 'asset';
+  if (reference.source === 'entity-graph') return 'entity';
+  return 'file';
 }
 
 function extractContextNavigationData(
@@ -720,6 +775,8 @@ export async function prepareAgentMessageDispatch(
     attachmentSummary: summarizeMessageAttachments(request.attachments),
     contextPayloadCount: request.contextPayloads?.length ?? 0,
     contextPayloadSummary: summarizeContextPayloads(request.contextPayloads),
+    fileReferenceCount: request.fileReferences?.length ?? 0,
+    fileReferenceSummary: summarizeFileReferences(request.fileReferences),
     hasChatModel: request.chatModel !== undefined,
     hasMediaModel: request.mediaModel !== undefined,
     mediaModelCategories: request.mediaModels ? Object.keys(request.mediaModels) : [],
@@ -735,6 +792,7 @@ export async function prepareAgentMessageDispatch(
     messageText: request.messageText,
     attachments: sanitizeAttachmentsForDebugLog(request.attachments),
     contextPayloads: sanitizeForDebugLog(request.contextPayloads),
+    fileReferences: sanitizeForDebugLog(request.fileReferences),
     chatModel: request.chatModel,
     mediaModel: request.mediaModel,
     mediaModels: request.mediaModels,
@@ -798,6 +856,7 @@ export async function prepareAgentMessageDispatch(
     mediaImageCount: mediaImages.length,
     mediaImageSummary: summarizeBase64Images(mediaImages),
     contextPayloadCount: request.contextPayloads?.length ?? 0,
+    fileReferenceCount: request.fileReferences?.length ?? 0,
   });
   logger.debug('neko.agent.message.assembly.result.raw', {
     conversationId: request.conversationId,
@@ -811,7 +870,10 @@ export async function prepareAgentMessageDispatch(
     userMessageContent: request.messageText,
   });
 
-  const contextReferences = projectContextReferences(request.contextPayloads);
+  const contextReferences = projectUserMessageContextReferences({
+    contextPayloads: request.contextPayloads,
+    fileReferences: request.fileReferences,
+  });
 
   return {
     conversationId: request.conversationId,
@@ -1587,6 +1649,19 @@ function summarizeContextPayloads(
     hasText: extractAgentContextText(payload.data) !== undefined,
     hasImageData: extractAgentContextImageData(payload.data) !== undefined,
     hasFilePath: extractAgentContextFilePath(payload.data) !== undefined,
+  }));
+}
+
+function summarizeFileReferences(
+  references: readonly AgentFileReference[] | undefined,
+): readonly Record<string, unknown>[] {
+  return (references ?? []).map((reference) => ({
+    id: reference.id,
+    label: reference.label,
+    path: reference.path,
+    mediaType: reference.mediaType,
+    source: reference.source,
+    hasThumbnail: typeof reference.thumbnailUri === 'string' && reference.thumbnailUri.length > 0,
   }));
 }
 

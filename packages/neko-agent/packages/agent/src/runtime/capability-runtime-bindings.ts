@@ -3,6 +3,7 @@ import type { SkillRegistry } from '../skill/skill-registry';
 import type { SkillService } from '../skill/skill-service';
 import type { ToolGroupRegistry } from '../skill/tool-group-registry';
 import type { ToolCategoryRegistry } from '../tools/tool-category-registry';
+import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
 
 const CAPABILITY_RUNTIME_BINDING_KEYS = [
   'skillRegistry',
@@ -10,6 +11,7 @@ const CAPABILITY_RUNTIME_BINDING_KEYS = [
   'toolCategoryRegistry',
   'skillService',
   'providerCardRegistry',
+  'externalProcessorRuntime',
 ] as const;
 
 export interface CapabilityRuntimeBindings {
@@ -18,6 +20,7 @@ export interface CapabilityRuntimeBindings {
   toolCategoryRegistry?: ToolCategoryRegistry;
   skillService?: SkillService;
   providerCardRegistry?: IProviderCardRegistry;
+  externalProcessorRuntime?: AgentExternalProcessorRuntime;
 }
 
 export interface CapabilityRuntimeBindingLogger {

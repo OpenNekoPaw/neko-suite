@@ -40,6 +40,7 @@ import {
   type AgentSubAgentRuntimeRegistration,
 } from './subagent-runtime';
 import type { ModelTierResolver } from '../subagent';
+import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentRuntimeSessionFactoryLogger {
   warn(message: string, error?: unknown): void;
@@ -57,11 +58,14 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly maxTokens?: number;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly modelCapabilities?: readonly string[];
   readonly thinkingBudget?: number;
   readonly providerOptions?: Record<string, unknown>;
   readonly executionMode?: ExecutionMode;
   readonly hooks?: readonly ExecutorHooks[];
   readonly workspaceRoot?: string;
+  readonly authorizedReadRoots?: readonly string[];
+  readonly workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
   readonly taskManager?: IRuntimeTaskManager;
   readonly conversationId?: string;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
@@ -128,7 +132,13 @@ export async function createAgentRuntimeSession(
   }
 
   const projectMemoryManager = await initializeProjectMemory(config);
-  registerCoreRuntimeTools(config.toolRegistry, config.workspaceRoot, projectMemoryManager);
+  registerCoreRuntimeTools(
+    config.toolRegistry,
+    config.workspaceRoot,
+    config.authorizedReadRoots,
+    config.workspaceIgnoreRules,
+    projectMemoryManager,
+  );
 
   const toolCategoryRegistry =
     config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
@@ -155,6 +165,7 @@ export async function createAgentRuntimeSession(
     providerOptions: config.providerOptions,
     providerId: config.providerId,
     modelId: config.modelId,
+    modelCapabilities: config.modelCapabilities,
     hooks: config.hooks && config.hooks.length > 0 ? [...config.hooks] : undefined,
     runtime: buildAgentRuntimeConfig(config, promptFragments, toolCategoryRegistry, feedbackLoop),
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
@@ -189,6 +200,13 @@ export function updateAgentRuntimeSession(
 ): AgentRuntimeSessionUpdate {
   const toolCategoryRegistry =
     config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
+  registerCoreRuntimeTools(
+    config.toolRegistry,
+    config.workspaceRoot,
+    config.authorizedReadRoots,
+    config.workspaceIgnoreRules,
+    handle.projectMemoryManager,
+  );
   syncToolCategories(config, toolCategoryRegistry);
 
   const promptFragments = resolveAgentRuntimePromptFragments(config);
@@ -208,6 +226,7 @@ export function updateAgentRuntimeSession(
       systemPrompt: handle.effectiveSystemPrompt,
       providerId: config.providerId,
       modelId: config.modelId,
+      modelCapabilities: config.modelCapabilities,
       temperature: config.temperature,
       topP: config.topP,
       maxTokens: config.maxTokens,
@@ -254,17 +273,19 @@ async function initializeProjectMemory(
 function registerCoreRuntimeTools(
   toolRegistry: IToolRegistry,
   workspaceRoot: string | undefined,
+  authorizedReadRoots: readonly string[] | undefined,
+  workspaceIgnoreRules: WorkspaceFileIgnoreRules | undefined,
   projectMemoryManager: IProjectMemoryManager | undefined,
 ): void {
   const coreTools = createCoreTools({
     defaultCwd: workspaceRoot,
+    authorizedReadRoots,
+    workspaceIgnoreRules,
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
   });
 
   for (const tool of coreTools) {
-    if (!toolRegistry.has?.(tool.name)) {
-      toolRegistry.register(tool);
-    }
+    toolRegistry.register(tool);
   }
 }
 
@@ -374,6 +395,9 @@ function buildAgentRuntimeConfig(
       ...(config.capabilityRuntime?.providerCardRegistry
         ? { providerCardRegistry: config.capabilityRuntime.providerCardRegistry }
         : {}),
+      ...(config.capabilityRuntime?.externalProcessorRuntime
+        ? { externalProcessorRuntime: config.capabilityRuntime.externalProcessorRuntime }
+        : {}),
       ...(config.operationToolAdapterRegistry
         ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
         : {}),
@@ -407,6 +431,8 @@ function registerSubAgentRuntime(
   const registration: AgentSubAgentRuntimeRegistration = {
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
     ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
+    ...(config.authorizedReadRoots ? { authorizedReadRoots: config.authorizedReadRoots } : {}),
+    ...(config.workspaceIgnoreRules ? { workspaceIgnoreRules: config.workspaceIgnoreRules } : {}),
     createService: config.createService,
     toolRegistry: config.toolRegistry,
     ...(config.providerId ? { providerId: config.providerId } : {}),

@@ -21,7 +21,7 @@ const MEDIA_FILE_EXTENSIONS = [
   '.m4a',
 ] as const;
 
-const SINGLE_URL_KEYS = new Set(['url', 'thumbnailUrl', 'imageUrl', 'videoUrl', 'audioUrl']);
+const SINGLE_URL_KEYS = new Set(['url', 'uri', 'thumbnailUrl', 'imageUrl', 'videoUrl', 'audioUrl']);
 const LOCAL_MEDIA_PATH_KEYS = new Set(['path']);
 const LOCAL_MEDIA_PATH_ARRAY_WEBVIEW_URI_KEYS: ReadonlyMap<string, string> = new Map([
   ['imagePaths', 'imagePathWebviewUris'],
@@ -57,7 +57,7 @@ export function projectMessageForResourceDisplay(
 ): Message {
   const projectedMessage = { ...message } as Message & { toolCalls?: ToolCall[] };
 
-  if (hasLegacyToolCalls(message)) {
+  if (hasToolCallArray(message)) {
     projectedMessage.toolCalls = message.toolCalls.map((toolCall) =>
       projectToolCallForResourceDisplay(toolCall, options),
     );
@@ -80,7 +80,7 @@ export function projectMessageForResourceDisplay(
   return projectedMessage;
 }
 
-function hasLegacyToolCalls(message: Message): message is Message & { toolCalls: ToolCall[] } {
+function hasToolCallArray(message: Message): message is Message & { toolCalls: ToolCall[] } {
   const value = (message as { toolCalls?: unknown }).toolCalls;
   return Array.isArray(value);
 }
@@ -93,15 +93,36 @@ function projectToolCallForResourceDisplay(
   const projectedResultData = toolCall.result?.data
     ? projectResourceValue(toolCall.result.data, options)
     : undefined;
+  const projectedResultAttachments = toolCall.result?.attachments
+    ? projectResourceValue(toolCall.result.attachments, options)
+    : undefined;
+  const projectedResultPerceptionCards = toolCall.result?.perceptionCards
+    ? projectResourceValue(toolCall.result.perceptionCards, options)
+    : undefined;
+  const hasProjectedResult =
+    projectedResultData !== undefined ||
+    projectedResultAttachments !== undefined ||
+    projectedResultPerceptionCards !== undefined;
 
   return {
     ...toolCall,
     arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
-    ...(projectedResultData !== undefined && toolCall.result
+    ...(hasProjectedResult && toolCall.result
       ? {
           result: {
             ...toolCall.result,
-            data: projectedResultData,
+            ...(projectedResultData !== undefined ? { data: projectedResultData } : {}),
+            ...(projectedResultAttachments !== undefined
+              ? {
+                  attachments: projectedResultAttachments as typeof toolCall.result.attachments,
+                }
+              : {}),
+            ...(projectedResultPerceptionCards !== undefined
+              ? {
+                  perceptionCards:
+                    projectedResultPerceptionCards as typeof toolCall.result.perceptionCards,
+                }
+              : {}),
           },
         }
       : {}),
@@ -166,11 +187,14 @@ function projectResourceValueInternal(
   if (value === null || value === undefined) return value;
 
   if (typeof value === 'string') {
-    return isLocalMediaFilePath(value) ? (resolveLocalMediaPath(value, options) ?? value) : value;
+    return isLocalMediaFilePath(value) ? resolveLocalMediaPath(value, options) : value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => projectResourceValueInternal(item, options, visited));
+    return value.flatMap((item) => {
+      const projected = projectResourceValueInternal(item, options, visited);
+      return projected === undefined ? [] : [projected];
+    });
   }
 
   if (typeof value !== 'object') return value;
@@ -180,7 +204,7 @@ function projectResourceValueInternal(
 
   const projected: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (key === 'localPath' || key === 'localPaths') {
+    if (isRuntimeOnlyLocalPathKey(key)) {
       projected[key] = item;
       continue;
     }
@@ -190,6 +214,8 @@ function projectResourceValueInternal(
       projected[key] = item;
       if (resolved && !projected['webviewUri']) {
         projected['webviewUri'] = resolved;
+      } else if (!resolved) {
+        appendProjectionDiagnostic(projected, item, key);
       }
       continue;
     }
@@ -204,6 +230,8 @@ function projectResourceValueInternal(
           const resolved = resolveLocalMediaPath(path, options);
           if (resolved) {
             hasResolvedWebviewUri = true;
+          } else {
+            appendProjectionDiagnostic(projected, path, key);
           }
           return resolved;
         }
@@ -225,9 +253,11 @@ function projectResourceValueInternal(
       const resolved = resolveLocalMediaPath(item, options);
       if (resolved) {
         projected[key] = resolved;
-      }
-      if (!projected['localPath']) {
-        projected['localPath'] = item;
+        if (!projected['localPath']) {
+          projected['localPath'] = item;
+        }
+      } else {
+        appendProjectionDiagnostic(projected, item, key);
       }
       continue;
     }
@@ -238,6 +268,7 @@ function projectResourceValueInternal(
         if (typeof url === 'string' && isLocalMediaFilePath(url)) {
           localPaths.push(url);
           const resolved = resolveLocalMediaPath(url, options);
+          if (!resolved) appendProjectionDiagnostic(projected, url, key);
           return resolved ? [resolved] : [];
         }
         return [url];
@@ -252,6 +283,35 @@ function projectResourceValueInternal(
   }
 
   return projected;
+}
+
+function isRuntimeOnlyLocalPathKey(key: string): boolean {
+  return (
+    key === 'localPath' ||
+    key === 'localPaths' ||
+    key === 'runtimePath' ||
+    key === 'runtimeImagePaths' ||
+    key === 'cachePath'
+  );
+}
+
+function appendProjectionDiagnostic(
+  projected: Record<string, unknown>,
+  source: string,
+  field: string,
+): void {
+  const diagnostics = Array.isArray(projected['resourceProjectionDiagnostics'])
+    ? [...projected['resourceProjectionDiagnostics']]
+    : [];
+  diagnostics.push({
+    code: 'resource-projection-denied',
+    severity: 'error',
+    field,
+    source,
+    message:
+      'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
+  });
+  projected['resourceProjectionDiagnostics'] = diagnostics;
 }
 
 function resolveLocalMediaPath(

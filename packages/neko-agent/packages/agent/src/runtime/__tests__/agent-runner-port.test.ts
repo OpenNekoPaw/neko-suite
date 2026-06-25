@@ -39,6 +39,7 @@ describe('AgentRunnerPort', () => {
       cancel: vi.fn(),
       isRunning: vi.fn(() => false),
       appendMessage: vi.fn(() => false),
+      drainPendingMessages: vi.fn(() => []),
       getPendingMessagesCount: vi.fn(() => 0),
       clearPendingMessages: vi.fn(),
       getContextTokenCount: vi.fn(() => 0),

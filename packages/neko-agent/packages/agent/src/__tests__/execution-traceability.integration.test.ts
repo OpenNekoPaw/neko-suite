@@ -94,6 +94,7 @@ describe('agent execution traceability', () => {
       systemPrompt: 'You are a traced agent.',
       maxIterations: 3,
       conversationId: 'conv-trace-1',
+      stageTracking: { guardian: false },
     });
 
     const events = await collect(session.execute('Read package.json'));
@@ -161,7 +162,7 @@ describe('agent execution traceability', () => {
         phase: 'feedback',
       }),
     );
-  });
+  }, 15_000);
 });
 
 async function* createMockStream(

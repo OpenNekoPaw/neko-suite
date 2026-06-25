@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildAgentTurnForWebviewRuntimeInput } from '../agent-turn-assembly';
 import {
-  AGENT_TURN_FALLBACK_MESSAGE,
   AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
-  getAgentTurnFallbackMessage,
   getAgentTurnPreconditionMessage,
   runAgentTurnForWebviewRuntime,
   type AgentTurnRunner,
@@ -35,13 +33,25 @@ function createAgentRunner(
     readonly history?: readonly unknown[];
     readonly events?: AsyncIterable<AgentEvent>;
     readonly activeSkillName?: string;
+    readonly isRunning?: boolean;
+    readonly config?: unknown;
   } = {},
 ): AgentTurnRunner<TestPlatform, TestContext> {
   let activeSkillName = overrides.activeSkillName;
+  const pendingMessages: string[] = [];
   return {
     getHistory: vi.fn(() => overrides.history ?? []),
+    getConfig: vi.fn(() => overrides.config),
     configure: vi.fn(async () => undefined),
     execute: vi.fn(() => overrides.events ?? emptyEvents()),
+    isRunning: vi.fn(() => overrides.isRunning ?? false),
+    appendMessage: vi.fn((message) => {
+      if (!(overrides.isRunning ?? false)) return false;
+      pendingMessages.push(message);
+      return true;
+    }),
+    getPendingMessagesCount: vi.fn(() => pendingMessages.length),
+    drainPendingMessages: vi.fn(() => pendingMessages.splice(0)),
     applySkillInjection: vi.fn((_injection, skill) => {
       activeSkillName = skill?.name;
     }),
@@ -100,6 +110,7 @@ function createBaseInput(
     getBaseSystemPrompt: vi.fn(() => 'base system prompt'),
     isPlanMode: vi.fn(() => false),
     getWorkspaceRoot: vi.fn(() => '/repo'),
+    getWorkspaceIgnoreRules: vi.fn(() => ({ gitignoreRules: ['ignored/'] })),
     getAmbientCanvas: vi.fn(() => []),
     createContext: vi.fn(({ workspaceRoot }) => ({ workspaceRoot })),
     processStream: vi.fn(async () => ({
@@ -119,8 +130,12 @@ function createBaseInput(
 
 describe('executeAgentTurn', () => {
   it('provides a shared fallback message for host adapters', () => {
-    expect(getAgentTurnFallbackMessage('no-provider-configured')).toBe(AGENT_TURN_FALLBACK_MESSAGE);
-    expect(getAgentTurnFallbackMessage('missing-platform')).toBe(AGENT_TURN_FALLBACK_MESSAGE);
+    expect(getAgentTurnPreconditionMessage('no-provider-configured')).toBe(
+      AGENT_TURN_PRECONDITION_MESSAGE,
+    );
+    expect(getAgentTurnPreconditionMessage('missing-platform')).toBe(
+      AGENT_TURN_PRECONDITION_MESSAGE,
+    );
     expect(getAgentTurnPreconditionMessage('no-provider-configured')).toBe(
       AGENT_TURN_PRECONDITION_MESSAGE,
     );
@@ -296,6 +311,7 @@ describe('executeAgentTurn', () => {
         executionMode: 'plan',
         modelId: 'gpt-4.1',
         workspaceRoot: '/repo',
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
         providerExpressionTargets: [
           { capability: 'image.generate', providerId: 'flux', modelId: 'flux-pro' },
         ],
@@ -312,6 +328,49 @@ describe('executeAgentTurn', () => {
         }),
       }),
     );
+  });
+
+  it('queues same-config text input while the runner is already processing', async () => {
+    const platform = { name: 'platform' };
+    const agentRunner = createAgentRunner({
+      isRunning: true,
+      config: {
+        platform,
+        systemPrompt: 'base system prompt',
+        maxIterations: 200,
+        autoExecuteTools: true,
+        temperature: 0.7,
+        providerId: 'openai',
+        modelId: 'gpt-4.1',
+        executionMode: 'ask',
+        workspaceRoot: '/repo',
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        conversationId: 'conv-1',
+      },
+    });
+    const onMessageQueued = vi.fn();
+    const { input } = createBaseInput({
+      platform,
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(),
+      },
+      onMessageQueued,
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'queued',
+      pendingCount: 1,
+    });
+
+    expect(agentRunner.appendMessage).toHaveBeenCalledWith('current request');
+    expect(agentRunner.configure).not.toHaveBeenCalled();
+    expect(agentRunner.execute).not.toHaveBeenCalled();
+    expect(onMessageQueued).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      content: 'Message queued (1 pending)',
+      pendingCount: 1,
+    });
   });
 
   it('lets normalized per-turn LLM options override global settings for runner configuration', async () => {
@@ -719,14 +778,14 @@ describe('runAgentTurnForWebviewRuntime', () => {
     expect(onErrorMessage).toHaveBeenCalledWith({
       id: 'assistant-1',
       role: 'assistant',
-      content: AGENT_TURN_FALLBACK_MESSAGE,
+      content: AGENT_TURN_PRECONDITION_MESSAGE,
       timestamp: 123,
       isError: true,
     });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',
-      message: AGENT_TURN_FALLBACK_MESSAGE,
+      message: AGENT_TURN_PRECONDITION_MESSAGE,
     });
   });
 
@@ -954,6 +1013,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       host: {
         agentManager,
         getWorkspaceRoot: vi.fn(() => '/repo'),
+        getWorkspaceIgnoreRules: vi.fn(() => ({ gitignoreRules: ['ignored/'] })),
         getActiveEditor: vi.fn(() => activeEditor),
         getAmbientCanvas: vi.fn(() => [{ nodeId: 'node-1', type: 'shot', summary: 'Shot 1' }]),
         timelineContextRuntime,
@@ -998,6 +1058,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
     expect(runtimeInput.providerSource).not.toHaveProperty('requestedProviderId');
     expect(runtimeInput.providerSource).not.toHaveProperty('requestedModelId');
     expect(runtimeInput.getWorkspaceRoot?.()).toBe('/repo');
+    expect(runtimeInput.getWorkspaceIgnoreRules?.()).toEqual({ gitignoreRules: ['ignored/'] });
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.taskManager).toBe(taskManager);
     expect(runtimeInput.workflow).toBe(workflow);

@@ -1,7 +1,7 @@
 /**
  * Core Tools Factory
  *
- * Creates the set of core file/system tools (L1 layer).
+ * Creates the default creative-session file/search tools (L1 layer).
  * These are always available to the agent alongside meta tools.
  */
 
@@ -12,34 +12,60 @@ import { BashTool, type BashToolOptions } from './bash-tool';
 import { ListDirectoryTool } from './list-directory-tool';
 import { GrepTool } from './grep-tool';
 import { MemoryWriteTool } from './memory-write-tool';
+import {
+  createNoWorkspaceFileAccessPolicy,
+  createWorkspaceFileAccessPolicy,
+  type CoreFileAccessPolicy,
+} from './file-access-policy';
+import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 
 export interface CoreToolsOptions {
-  /** Default working directory for Bash/Grep */
+  /** Default working directory for Grep and optional Developer Mode shell */
   defaultCwd?: string;
-  /** Bash command timeout in ms (default 120000) */
+  /** Additional read-only roots such as enabled media libraries. */
+  authorizedReadRoots?: readonly string[];
+  /** Workspace-local ignore rules, including parsed .gitignore entries. */
+  workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
+  /** Bash command timeout in ms (default 120000). Ignored unless includeShell is true. */
   bashTimeout?: number;
+  /** Explicit Developer Mode / migration switch. Ordinary creative sessions keep this false. */
+  includeShell?: boolean;
   /** Project memory manager — enables MemoryWrite tool when provided */
   projectMemoryManager?: IProjectMemoryManager;
+  /** Explicit file access policy for core file/search tools. */
+  fileAccessPolicy?: CoreFileAccessPolicy;
 }
 
 /**
- * Create all core file/system tools
+ * Create default creative file/search tools.
  *
- * Returns: Read, Write, Bash, ListDirectory, Grep
+ * Returns: Read, Write, ListDirectory, Grep. Bash is opt-in only.
  */
 export function createCoreTools(options?: CoreToolsOptions): Tool[] {
-  const bashOpts: BashToolOptions = {
-    defaultCwd: options?.defaultCwd,
-    timeout: options?.bashTimeout,
-  };
-
+  const fileAccessPolicy =
+    options?.fileAccessPolicy ??
+    (options?.defaultCwd
+      ? createWorkspaceFileAccessPolicy({
+          workspaceRoot: options.defaultCwd,
+          readRoots: [options.defaultCwd, ...(options.authorizedReadRoots ?? [])],
+          writeRoots: [options.defaultCwd],
+          ignoreRules: options.workspaceIgnoreRules,
+        })
+      : createNoWorkspaceFileAccessPolicy());
   const tools: Tool[] = [
-    new ReadTool(),
-    new WriteTool({ defaultCwd: options?.defaultCwd }),
-    new BashTool(bashOpts),
-    new ListDirectoryTool(),
-    new GrepTool({ defaultCwd: options?.defaultCwd }),
+    new ReadTool({ fileAccessPolicy }),
+    new WriteTool({ defaultCwd: options?.defaultCwd, fileAccessPolicy }),
+    new ListDirectoryTool({ fileAccessPolicy }),
+    new GrepTool({ defaultCwd: options?.defaultCwd, fileAccessPolicy }),
   ];
+
+  if (options?.includeShell === true) {
+    const bashOpts: BashToolOptions = {
+      defaultCwd: options.defaultCwd,
+      timeout: options.bashTimeout,
+    };
+    tools.push(new BashTool(bashOpts));
+  }
 
   if (options?.projectMemoryManager) {
     tools.push(new MemoryWriteTool(options.projectMemoryManager));

@@ -23,6 +23,7 @@ import type { SubAgentRuntimeCoordinator } from './subagent-runtime';
 import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types';
 import type { ModelTierResolver } from '../subagent';
 import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
+import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentRuntimeHostBindings {
   readonly createService: () => IService;
@@ -43,11 +44,14 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly maxTokens?: number;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly modelCapabilities?: readonly string[];
   readonly thinkingBudget?: number;
   readonly providerOptions?: Record<string, unknown>;
   readonly executionMode?: ExecutionMode;
   readonly hooks?: readonly ExecutorHooks[];
   readonly workspaceRoot?: string;
+  readonly authorizedReadRoots?: readonly string[];
+  readonly workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
   readonly taskManager?: IRuntimeTaskManager;
   readonly conversationId?: string;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
@@ -92,11 +96,14 @@ export function buildAgentRuntimeSessionFactoryConfig(
     maxTokens: input.maxTokens,
     providerId: input.providerId,
     modelId: input.modelId,
+    modelCapabilities: input.modelCapabilities,
     thinkingBudget: input.thinkingBudget,
     providerOptions: input.providerOptions,
     executionMode: input.executionMode,
     hooks,
     workspaceRoot: input.workspaceRoot,
+    authorizedReadRoots: input.authorizedReadRoots,
+    workspaceIgnoreRules: input.workspaceIgnoreRules,
     taskManager: input.taskManager,
     conversationId: input.conversationId,
     operationToolAdapterRegistry,

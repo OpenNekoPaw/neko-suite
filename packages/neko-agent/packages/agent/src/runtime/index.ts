@@ -95,6 +95,8 @@ export {
 
 export {
   AgentSessionRunner,
+  AGENT_SESSION_BUSY_MESSAGE,
+  AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
   DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
   createAgentSessionRunner,
   type CreateAgentSessionRunnerOptions,
@@ -226,6 +228,28 @@ export {
 } from './workspace-input-processor-runtime';
 
 export {
+  createDeveloperModeTemporaryProcessorRequest,
+  createAgentExternalProcessorRuntime,
+  type AgentExternalProcessorRuntime,
+  type AgentExternalProcessorRuntimeOptions,
+  type AgentExternalProcessorPlanInput,
+  type AgentExternalProcessorPlanResult,
+  type AgentExternalProcessorReadyPlan,
+  type AgentExternalProcessorBlockedPlan,
+  type AgentExternalProcessorResultInput,
+  type AgentExternalProcessorResultProjection,
+  type AgentExternalProcessorChainApprovalContinuationInput,
+  type AgentExternalProcessorChainRun,
+  type AgentExternalProcessorChainStageInput,
+  type AgentExternalProcessorChainStagePlanResult,
+  type AgentExternalProcessorChainStageRecord,
+  type AgentExternalProcessorChainStartInput,
+  type AgentExternalProcessorChainTargetChangeInput,
+  type DeveloperModeTemporaryProcessorRequest,
+  type DeveloperModeTemporaryProcessorRequestInput,
+} from './external-processor-runtime';
+
+export {
   createTimelineContextRuntime,
   type BuildTimelineContextPacketInput,
   type TimelineContextEditorLike,
@@ -248,10 +272,8 @@ export {
 } from './agent-turn-assembly';
 
 export {
-  AGENT_TURN_FALLBACK_MESSAGE,
   AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
-  getAgentTurnFallbackMessage,
   getAgentTurnPreconditionMessage,
   runAgentTurnForWebviewRuntime,
   type AgentTurnForWebviewRuntimeMessage,
@@ -261,7 +283,6 @@ export {
   type AgentTurnConversationStore,
   type AgentTurnDisposable,
   type AgentTurnExecutionResult,
-  type AgentTurnFallbackReason,
   type AgentTurnPreconditionReason,
   type AgentTurnProviderSource,
   type AgentTurnRunner,
@@ -468,7 +489,6 @@ export {
   type AgentMessageIdOptions,
   type AgentMessageRuntimeRequest,
   type AgentMessageTurnAgentExecutionInput,
-  type AgentMessageTurnFallbackReason,
   type AgentMessageTurnPreconditionReason,
   type AgentMessageTurnMediaExecutionInput,
   type AgentMessageTurnRuntimeMessage,

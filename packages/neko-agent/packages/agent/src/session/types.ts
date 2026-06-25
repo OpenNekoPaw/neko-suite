@@ -24,6 +24,7 @@ import type {
   PerceptionSimilarityClient,
   PerceptionTranscribeClient,
 } from '../tools/perception';
+import type { AgentExternalProcessorRuntime } from '../runtime/external-processor-runtime';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -130,6 +131,9 @@ export interface AgentSessionConfig {
   /** Model ID override */
   modelId?: string;
 
+  /** Capabilities declared by the explicitly selected model. */
+  modelCapabilities?: readonly string[];
+
   /** Additional hooks */
   hooks?: ExecutorHooks[];
 
@@ -229,6 +233,13 @@ export interface AgentSessionConfig {
    * operation intents to EditOperation plans; they do not execute mutations.
    */
   operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
+
+  /**
+   * Optional external processor runtime projected from the Host-owned registry.
+   * Agent sessions may plan processor invocations through this interface, but
+   * must not read processor source directories or Market/extension internals.
+   */
+  externalProcessorRuntime?: AgentExternalProcessorRuntime;
 
   /**
    * Optional clients for Agent-first perception evidence tools.

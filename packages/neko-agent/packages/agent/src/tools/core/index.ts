@@ -35,6 +35,23 @@ export { BashTool, type BashToolOptions } from './bash-tool';
 export { ListDirectoryTool } from './list-directory-tool';
 export { GrepTool, type GrepToolOptions } from './grep-tool';
 export { createCoreTools, type CoreToolsOptions } from './core-tools';
+export {
+  authorizePathInsideRoots,
+  isForbiddenUnmanagedPath,
+  isPathInsideRoot,
+  normalizeAccessRoots,
+  type RootPathAccessDecision,
+} from './path-access-core';
+export {
+  createNoWorkspaceFileAccessPolicy,
+  createWorkspaceFileAccessPolicy,
+  type CoreFileAccessDecision,
+  type CoreFileAccessDenialReason,
+  type CoreFileAccessPolicy,
+  type FileAccessKind,
+  type WorkspaceFileAccessPolicyOptions,
+} from './file-access-policy';
+export type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 export { MemoryWriteTool } from './memory-write-tool';
 // Phase B (2026-04-22): DraftWrite / PlanWrite / TaskWrite deleted. AI uses
 // the generic `Write` tool against `.neko/drafts|plans|tasks/*.md` now; the

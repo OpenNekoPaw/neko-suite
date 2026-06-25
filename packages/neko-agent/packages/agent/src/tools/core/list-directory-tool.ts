@@ -8,9 +8,14 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from './file-access-policy';
 
 const MAX_DEPTH = 3;
 const MAX_ENTRIES = 500;
+
+export interface ListDirectoryToolOptions {
+  readonly fileAccessPolicy?: CoreFileAccessPolicy;
+}
 
 interface DirEntry {
   name: string;
@@ -19,6 +24,13 @@ interface DirEntry {
 }
 
 export class ListDirectoryTool extends BuiltinTool {
+  private readonly fileAccessPolicy?: CoreFileAccessPolicy;
+
+  constructor(options?: ListDirectoryToolOptions) {
+    super();
+    this.fileAccessPolicy = options?.fileAccessPolicy ?? createNoWorkspaceFileAccessPolicy();
+  }
+
   readonly name = 'ListDirectory';
   readonly description = 'List contents of a directory. Returns file names, types, and sizes.';
   readonly parameters: ToolParameters = {
@@ -49,7 +61,11 @@ export class ListDirectoryTool extends BuiltinTool {
     const recursive = (args.recursive as boolean | undefined) ?? false;
 
     try {
-      const resolved = path.resolve(dirPath);
+      const authorization = this.fileAccessPolicy?.authorize(dirPath, 'read');
+      if (authorization && !authorization.allowed) {
+        return this.error(authorization.message ?? `Unauthorized directory read: ${dirPath}`);
+      }
+      const resolved = authorization?.path ?? path.resolve(dirPath);
       const entries = await this.listDir(resolved, recursive ? MAX_DEPTH : 0, '');
 
       const truncated = entries.length > MAX_ENTRIES;

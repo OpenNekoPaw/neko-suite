@@ -61,6 +61,26 @@ describe('message resource projector', () => {
     });
   });
 
+  it('does not project runtime-only document scratch fields', () => {
+    expect(
+      projectResourceValue(
+        {
+          runtimePath: '/tmp/neko_epub/page-1.jpg',
+          runtimeImagePaths: ['/tmp/neko_epub/page-1.jpg'],
+          cachePath: '/tmp/neko_epub/page-1.jpg',
+          path: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      runtimePath: '/tmp/neko_epub/page-1.jpg',
+      runtimeImagePaths: ['/tmp/neko_epub/page-1.jpg'],
+      cachePath: '/tmp/neko_epub/page-1.jpg',
+      path: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+      webviewUri: 'webview:///workspace/.neko/.cache/resources/documents/page-1.jpg',
+    });
+  });
+
   it('adds webview URI siblings for document image paths without replacing local paths', () => {
     expect(
       projectResourceValue(
@@ -163,6 +183,124 @@ describe('message resource projector', () => {
     ]);
   });
 
+  it('projects top-level tool result media fields in content blocks', () => {
+    const messages: Message[] = [
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1,
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'tool-2',
+              name: 'ReadImage',
+              arguments: {},
+              result: {
+                success: true,
+                data: {},
+                attachments: [
+                  {
+                    type: 'image',
+                    path: '/tmp/page-1.jpg',
+                    mimeType: 'image/jpeg',
+                    assetRef: {
+                      assetId: 'read-image-page-1',
+                      uri: '/tmp/page-1.jpg',
+                      mimeType: 'image/jpeg',
+                    },
+                  },
+                ],
+                perceptionCards: [
+                  {
+                    version: 1,
+                    assetId: 'read-image-page-1',
+                    modality: 'image',
+                    createdAt: 1,
+                    layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+                    structural: { format: 'jpeg', mimeType: 'image/jpeg', byteSize: 10 },
+                    perceptual: {
+                      keyframeRefs: [
+                        {
+                          assetId: 'read-image-page-1',
+                          uri: '/tmp/page-1.jpg',
+                          mimeType: 'image/jpeg',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    expect(
+      projectMessagesForResourceDisplay(messages, {
+        resolveLocalMediaPath: (path) => `webview://${path}`,
+      }),
+    ).toEqual([
+      {
+        ...messages[0],
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'tool-2',
+              name: 'ReadImage',
+              arguments: {},
+              result: {
+                success: true,
+                data: {},
+                attachments: [
+                  {
+                    type: 'image',
+                    path: '/tmp/page-1.jpg',
+                    webviewUri: 'webview:///tmp/page-1.jpg',
+                    mimeType: 'image/jpeg',
+                    assetRef: {
+                      assetId: 'read-image-page-1',
+                      uri: 'webview:///tmp/page-1.jpg',
+                      localPath: '/tmp/page-1.jpg',
+                      mimeType: 'image/jpeg',
+                    },
+                  },
+                ],
+                perceptionCards: [
+                  {
+                    version: 1,
+                    assetId: 'read-image-page-1',
+                    modality: 'image',
+                    createdAt: 1,
+                    layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+                    structural: { format: 'jpeg', mimeType: 'image/jpeg', byteSize: 10 },
+                    perceptual: {
+                      keyframeRefs: [
+                        {
+                          assetId: 'read-image-page-1',
+                          uri: 'webview:///tmp/page-1.jpg',
+                          localPath: '/tmp/page-1.jpg',
+                          mimeType: 'image/jpeg',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
   it('projects tool argument payloads in content blocks', () => {
     const messages: Message[] = [
       {
@@ -231,9 +369,42 @@ describe('message resource projector', () => {
         },
       ),
     ).toEqual({
-      localPath: '/tmp/image.png',
       imagePaths: ['/tmp/page-1.jpg'],
-      imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+      resourceProjectionDiagnostics: [
+        {
+          code: 'resource-projection-denied',
+          severity: 'error',
+          field: 'url',
+          source: '/tmp/image.png',
+          message:
+            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
+        },
+        {
+          code: 'resource-projection-denied',
+          severity: 'error',
+          field: 'imagePaths',
+          source: '/tmp/page-1.jpg',
+          message:
+            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
+        },
+      ],
+      imageInfo: [
+        {
+          path: '/tmp/page-1.jpg',
+          resourceProjectionDiagnostics: [
+            {
+              code: 'resource-projection-denied',
+              severity: 'error',
+              field: 'path',
+              source: '/tmp/page-1.jpg',
+              message:
+                'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
+            },
+          ],
+          width: 1494,
+          height: 2133,
+        },
+      ],
     });
   });
 

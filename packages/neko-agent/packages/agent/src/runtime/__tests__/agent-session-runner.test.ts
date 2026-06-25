@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AGENT_SESSION_BUSY_MESSAGE,
+  AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
   AgentSessionRunner,
   DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
   createAgentSessionRunner,
@@ -99,7 +101,7 @@ describe('AgentSessionRunner', () => {
     expect(onDidStop).toHaveBeenCalledTimes(1);
   });
 
-  it('queues a second input while execution is running', async () => {
+  it('rejects a second direct execute while execution is running', async () => {
     const session = createSession();
     const runner = new AgentSessionRunner({
       buildExecutionContext: () => ({}),
@@ -113,12 +115,58 @@ describe('AgentSessionRunner', () => {
 
     expect(queued).toEqual([
       expect.objectContaining({
-        type: 'messageQueued',
-        content: expect.stringContaining('1 pending'),
-        pendingCount: 1,
+        type: 'error',
+        error: expect.objectContaining({ message: AGENT_SESSION_BUSY_MESSAGE }),
       }),
     ]);
-    expect(runner.getPendingMessagesCount()).toBe(1);
+    expect(runner.getPendingMessagesCount()).toBe(0);
+
+    await collect(first);
+  });
+
+  it('queues appended messages while execution is running', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+
+    expect(runner.appendMessage('second')).toBe(true);
+    expect(runner.appendMessage('third')).toBe(true);
+    expect(runner.getPendingMessagesCount()).toBe(2);
+    expect(runner.drainPendingMessages()).toEqual(['second', 'third']);
+    expect(runner.getPendingMessagesCount()).toBe(0);
+
+    await collect(first);
+  });
+
+  it('does not queue appended messages when idle', () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    expect(runner.appendMessage('idle')).toBe(false);
+    expect(runner.getPendingMessagesCount()).toBe(0);
+  });
+
+  it('rejects configuration changes while execution is running', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+
+    expect(() => runner.configureSession({ systemPrompt: 'changed' })).toThrow(
+      AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
+    );
 
     await collect(first);
   });
