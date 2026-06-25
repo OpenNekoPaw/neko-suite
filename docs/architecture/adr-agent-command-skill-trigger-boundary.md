@@ -14,11 +14,11 @@
 - plugin slash commands，由其他扩展注册，可能触发宿主动作或领域包入口。
 - Skill 激活，注入 system prompt、allowed tools、model override 和工具集约束。
 - command-backed skill / custom command，使用 `$ARGUMENTS`、`$1-$99` 进行参数插值。
-- 自然语言隐式匹配，Agent 可根据 Skill description 选择并激活 Skill。
+- 自然语言输入，由主 Agent 根据上下文和 Skill catalog 判断是否需要调用 `ActivateSkill`。
 
 Webview 已在 slash menu 中按 Agent / Creation / Skills 做视觉分组，但触发字符仍是同一个 `/`。这让用户很难判断“这是控制 Agent 的命令”还是“让 Agent 进入某个工作流/能力模式”。运行时也需要先解析 builtin，再尝试 skill command，边界不够清晰。
 
-Codex 当前用户心智可作为参考：`/` 用于控制会话与产品行为，`$skill` 用于显式选择 reusable workflow / skill，自然语言仍可触发隐式技能匹配。Neko Agent 应采用同类入口分流，但保持本项目的 Agent-first、Skill-first 和 host-agnostic runtime 边界。
+Codex 当前用户心智可作为参考：`/` 用于控制会话与产品行为，`$skill` 用于显式选择 reusable workflow / skill，自然语言交给主 Agent reasoning，而不是交给 Host/Extension 关键词触发。Neko Agent 应采用同类入口分流，但保持本项目的 Agent-first、Skill-first 和 host-agnostic runtime 边界。
 
 ## 决策
 
@@ -28,11 +28,13 @@ Neko Agent 采用以下触发入口边界：
 | ---- | ---- | ---- | ---- |
 | `/` | Agent、宿主和插件命令 | `/status`、`/model`、`/plan`、`/tools`、`/mcp`、插件命令 | 控制会话、配置、宿主 UI、资源面板或插件动作 |
 | `$` | Skill 显式激活 | `$storyboard`、`$quality-review`、`$character-validation args` | 注入任务策略、工具约束、领域工作流或 prompt fragments |
-| 自然语言 | Skill 隐式匹配 | “帮我做角色验证” | 根据 Skill description 和 policy 选择是否激活 |
+| 自然语言 | Agent 自主判断 | “帮我做角色验证” | Agent 可通过 `GetContext` 查看 Skill catalog，并在需要时调用 `ActivateSkill` |
 | `/skills` | Skill 管理入口 | `/skills`、`/skills active`、`/skills clear` | 浏览、管理、清除 Skill，不替代 `$` 显式调用 |
 | `@` | 上下文引用 | `@scene.md`、`@character` | 引用文件、实体、素材、Canvas 节点或上下文 chip |
 
 `/` 不应再作为普通 Skill 的默认显式触发入口。Skill 的 canonical 显式入口是 `$<skill-name>`；`/skills` 只负责管理。插件 slash commands 保持在 `/`，因为它们可能是宿主动作、领域入口或 UI 命令，不一定会注入 Skill prompt。
+
+自然语言入口不得由 Host/Extension 关键词匹配、候选路由或 Webview UI 在 Agent reasoning 之前选择 Skill。主 Agent 可通过 `GetContext` 查看 registered Skills 和 metadata，并通过 `ActivateSkill` 做显式 tool 决策；用户新增 Skill metadata 与激活权威见 [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md)。
 
 Skill 注入核心仍由 `SkillInjectionCoordinator` 和已有 Skill runtime 负责。新增 `$` 入口只改变用户输入解析、catalog 投影和 dispatch contract，不复制 prompt 注入、权限规则、tool guard 或 toolset activation 逻辑。
 
@@ -44,7 +46,7 @@ Skill 注入核心仍由 `SkillInjectionCoordinator` 和已有 Skill runtime 负
 - `agent` runtime 继续保持 host-agnostic；它只接收“激活某个 Skill”的 typed request，不知道 React、VS Code 或 DOM 事件。
 - `webview` 和 `cli-tui` 只负责输入菜单、过滤、展示和消息发送；不导入 `@neko/agent` runtime。
 - `extension` 只做 host adapter 和 dispatch，不把 Skill 业务逻辑沉淀在 Webview message router。
-- Skill 显式激活、隐式激活和命令参数插值最终都进入同一 Skill injection path。
+- Skill 显式激活、Agent `ActivateSkill` 和命令参数插值最终都进入同一 Skill injection path。
 - 未知 `/command`、未知 `$skill`、命名冲突、禁用 Skill、缺失 Skill 内容或非法参数应 fail-visible，不能 no-op 或退回自然语言伪装成功。
 
 ## 迁移策略
@@ -62,7 +64,7 @@ Neko Suite 尚处 prelaunch，可以清理未发布的内部 UI/协议混合入�
 
 - 不把插件 slash command 迁移到 `$`。
 - 不把 Skill 变成 workflow engine；Skill 仍只描述领域策略、prompt fragments、allowed tools 和适用场景。
-- 不移除自然语言隐式 Skill 匹配。
+- 不阻止 Agent 在自然语言对话中自主判断并调用 `ActivateSkill`。
 - 不让 Webview 直接执行 Skill 或读取 Skill 文件。
 - 不为这一本地 VS Code 客户端引入远程多租户、分布式 command service 或云端治理层。
 
@@ -73,7 +75,7 @@ Neko Suite 尚处 prelaunch，可以清理未发布的内部 UI/协议混合入�
 - 用户可预测入口：`/` 控制 Agent，`$` 选择能力，`@` 引用上下文。
 - Runtime contract 更清晰：命令执行和 Skill 注入不再共享一个模糊入口。
 - 命名冲突更容易处理：`/review` 与 `$review` 可以分别代表命令和技能。
-- 后续 Skill marketplace、Skill 管理 UI 和隐式匹配 diagnostics 可以复用同一 Skill catalog projection。
+- 后续 Skill marketplace、Skill 管理 UI 和 Agent catalog metadata 可以复用同一 Skill catalog projection。
 
 代价：
 

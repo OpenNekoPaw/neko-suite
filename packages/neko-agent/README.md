@@ -107,7 +107,7 @@ Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter �
 |----------|----------|----------|------|
 | `gateway` | MVP | 用户配置 `neko-gateway` + `newapi`，或 OAuth `neko-account-gateway` | NewAPI 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
 | `local` | MVP | `ollama-local` + `ollama` | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。 |
-| `direct` | 显式配置支持 | 官方厂商 API | DeepSeek、GPT、Claude、Gemini、GLM 等官方直连按显式 `type` / `protocolProfile` 调用。默认预设和 provider-specific 参数仍需逐项验证后扩展。 |
+| `direct` | 显式配置支持 | 官方厂商 API | DeepSeek、GPT、Claude、Gemini、GLM 等官方直连按显式 `type` / `protocol_profile` 调用。默认预设和 provider-specific 参数仍需逐项验证后扩展。 |
 
 **LLM 视觉理解**：不是所有 LLM 的强需求。文本聊天只要求 `chat` 能力；图像理解/多模态工作流必须选择声明了 `vision` 能力的模型。
 
@@ -143,7 +143,7 @@ provider_id = "neko-gateway"
 model_id = "neko-gateway-tts"
 ```
 
-每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。LLM 对话、ReadImage vision、角色扮演、Canvas 提示生成、质量检查、跨扩展 `internalChat` 和生成工具都必须拿到明确的当前模型路由；缺少 provider/model 时直接返回可见错误或降级为调用方的本地策略，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
+每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。LLM 对话、ReadImage/ReadDocumentImage 暴露的原生多模态资源、角色扮演、Canvas 提示生成、质量检查、跨扩展 `internalChat` 和生成工具都必须拿到明确的当前模型路由；缺少 provider/model 时直接返回可见错误或降级为调用方的本地策略，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
 
 **配置格式**：`config.toml` 是当前唯一读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源；如需保留旧配置，请手动迁移为 TOML。
 
@@ -174,17 +174,21 @@ model_id = "neko-gateway-tts"
 | `/` | Agent、Host、Plugin 命令，以及 `.neko/commands/*.md` 命令工件 | `/help`, `/status`, `/commit fix typo` |
 | `$` | 显式激活 Skill，按 canonical Skill name/id 分发到 Skill 注入路径 | `$quality-review changed files` |
 | `@` | 文件、素材、实体或上下文引用 | `@scene.md` |
-| 自然语言 | 普通对话输入，仍可由语义匹配隐式选择 Skill | `帮我审一下这次修改` |
+| 自然语言 | 普通对话输入，由 Agent 通过 `GetContext` 查看 Skill catalog 后自主判断是否 `ActivateSkill` | `帮我审一下这次修改` |
 
 `/skills` 是 Skill 管理命令，用于查看、检查 active Skill 或清除 active Skill；直接应用某个 Skill 使用 `$skill-name`。普通 `.neko/skills/<name>/SKILL.md` 不再自动生成 `/skill` 入口，即使旧 frontmatter 里仍带 `command` 字段也只视为 prelaunch migration 元数据。需要 `/command` 体验时，应把提示词写成 `.neko/commands/<command>.md` 命令工件；命令工件复用 Skill 注入 runtime，并显式标记为 `entryPointKind: "command-artifact"`。
 
 命令工件支持参数插值（`$ARGUMENTS`, `$1-$99`）。`$skill args` 会把尾随参数传给现有 Skill 注入路径；若存在同名 `/review` 命令和 `$review` Skill，前缀决定命名空间，二者不会互相兜底。
 
+自然语言不会经过 Extension/Webview 关键词触发或代码侧候选路由，也不会在 Agent reasoning 前注入 Skill prompt、切换 active Skill、改变 model override 或工具白名单。用户新增 Skill 想让 Agent 更稳定地理解其用途，应在 `SKILL.md` frontmatter 中提供 Agent-readable 的 `description`、`domain`、`mediaWorkflow.useCases`、`nonGoals`、`inputArtifacts`、`producedArtifacts` 和 `operations`；详见 [`docs/skill-authoring.md`](docs/skill-authoring.md)。
+
 ### 工具系统
 
 - **所有工具始终可见**（1M context，无需动态注入）
 - **元工具**：`GetContext` / `ActivateSkill` / `DeactivateSkill` — AI 自主发现和激活技能
-- **来源**：内置（Read/Write/Bash/Grep）、MCP 服务器、扩展工具（NekoCut/NekoCanvas）
+- **来源**：内置 typed tools、MCP 服务器、扩展工具（NekoCut/NekoCanvas）和受管 External Processor
+- **本地命令边界**：普通创作 Agent 不默认注入任意 `Bash`/shell。图片、视频、音频和脚本类本地工具通过 External Processor manifest、PathAccessPolicy、env allowlist、approval 和 `ResourceRef` 输出进入运行时；Developer Mode 的一次性命令也走同一策略，不生成持久 `Bash(*)` allow。
+- **资源交接**：Agent Webview、Canvas、Storyboard 和 `neko-composite` 传递图片时使用 `ResourceRef`、`documentResourceRef`、source ref、workspace-relative path 或 `${VAR}/path`。Webview URI、blob/object URL、系统 temp、旧 `cachePath` 和 `.neko/.cache/resources` 下的实体路径只属于 runtime/display，不作为 durable identity。
 
 ### MCP 集成
 
@@ -218,13 +222,13 @@ NekoAgent 支持读取多种文档格式用于 AI 内容分析和视频生成工
 | 类型 | 格式 | 说明 |
 |------|------|------|
 | **文本文档** | PDF, DOC/DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取文本和结构信息 |
-| **电子书** | EPUB | 提取章节文本；图像型 EPUB 返回页面图片路径和图片元数据 |
-| **漫画档案** | CBZ, CBR | 提取图片页面及宽高/MIME/大小信息供 AI 视觉分析 |
+| **电子书** | EPUB | 提取章节文本；图像型 EPUB 返回受管图片资源引用和图片元数据 |
+| **漫画档案** | CBZ, CBR | 提取图片页面、受管 `ResourceRef` 及宽高/MIME/大小信息供 AI 视觉分析 |
 | **网页内容** | URL (HTTP/HTTPS) | 抓取网页主要内容 |
 | **演示/表格** | PPT/PPTX, XLS/XLSX | 读取文本/表格数据，提取内嵌图片 |
 | **专业剧本** | Final Draft (FDX) | 影视行业标准格式 |
 
-解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。
+解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。文档图片会物化到 `.neko/.cache/resources` 或 extension 私有资源缓存，并通过结构化 `resourceRef` / `cacheResourceRef` 跨包传递；`imagePaths` 只作为当前读取/视觉分析的运行时句柄。
 
 ### 法律声明
 

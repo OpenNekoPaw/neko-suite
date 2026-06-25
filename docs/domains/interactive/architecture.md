@@ -19,7 +19,7 @@
 
 - `interactive` 特指互动画布，不泛指所有实时互动、Live 或设备能力。
 - Canvas 可以引用 Story、Image、Scene、Character、Audio、Video 的稳定事实，但不复制它们的编辑真值。
-- Canvas route、preview session 和 `CanvasPlaybackPlan` 是互动画布内部的播放投影；当服务视频创作时，只能通过剪辑初稿快照交给 Cut，不能复用或拥有 Cut timeline。
+- Canvas route、preview session 和 `CanvasPlaybackPlan` 是互动画布内部的播放投影；默认可用 Route Storyboard Matrix 展示 route/branch 行、step 列、容器分组和可播放 cell；多输入生成、reference、prompt 和素材依赖属于 workflow / derivation projection，不会默认进入播放 route；当服务视频创作时，只能通过剪辑初稿快照交给 Cut，不能复用或拥有 Cut timeline。
 - 设备、scene/control、媒体 stream 等高频运行能力通过 Engine/client 或对应领域 contract 进入 Canvas，不由 Canvas Webview 直接访问宿主设备。
 - Canvas Webview 保持节点交互状态；持久事实通过 canvas project data、ResourceRef、Entity/Search 或被引用领域格式保存。
 - Agent 可以生成和审阅互动结构，但通过能力 provider 和 contract 进入领域，不直接耦合 Webview 实现。

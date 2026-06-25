@@ -13,7 +13,9 @@
 
 | 文档                                                                   | 内容                                                               |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界       |
 | [`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md) | Agent `/` 命令、`$` 技能和 `@` 上下文引用的触发入口边界            |
+| [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md) | Agent 资源沙箱、外部处理器、命令执行和审批边界                   |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md) | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则 |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界       |

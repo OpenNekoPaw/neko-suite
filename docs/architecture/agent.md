@@ -198,6 +198,29 @@ Agent 有三类协议面，不能混用：
 - `openFile`、`revealAsset`、`sendToPlugin`、`revealDocumentLocator` 是宿主意图，不是文件系统授权本身；Extension adapter 负责解析、授权和审计。
 - 错误和降级应返回 typed diagnostic，避免只把 provider/工具原始错误文本塞进 assistant message。
 
+### 创作表面调度
+
+Agent 可以把领域状态投影成消息卡片、确认清单和操作按钮，但不拥有领域 Webview 的运行时状态。对于 Canvas/Cut/Preview，Agent 的职责是理解、展示、确认和调度：
+
+| 能力 | Agent 负责 | Owning surface 负责 |
+| ---- | ---------- | ------------------- |
+| Canvas 播放顺序 | 读取 `CanvasPlaybackPlan`，展示 route 摘要、有序清单、诊断和导入确认 | Canvas 保存顺序事实，Canvas Editor Webview 内的 `PlaybackWorkspace` 拥有 route playback session |
+| Canvas 预览播放 | 发起 `revealCanvasPlaybackWorkspace(sourceCanvasUri, routeId, unitId?)` 意图 | Canvas Editor Webview 显示/聚焦 `PlaybackWorkspace`、seek、播放、维护 playhead 和当前 unit |
+| Cut 剪辑结果 | 读取 timeline 摘要、展示导入或审阅建议 | Cut 管理 `.nkv`、timeline、clip、trim、效果、字幕、音频和播放 |
+| 媒体预览 | 展示缩略图、poster、probe、关键帧和资源卡片 | `neko-preview` / Engine 负责解码、stream、seek、音频同步和资源授权 |
+
+Agent Chat 不应复制完整播放器、route timeline 或剪辑 timeline。Chat 内只展示轻量预览卡片，例如缩略图、当前 shot 图片、时长、素材状态、diagnostic、source mapping 和按钮：
+
+```text
+当前路线：Shot 1 · 20 units · 约 1:00
+诊断：2 个镜头缺预览图，入口为自动推断
+[在 Canvas 中播放] [发送到 Cut] [查看完整顺序]
+```
+
+这些按钮发送的是 reveal/open 或 confirmation intent，不是直接文件访问或 Webview store mutation。Extension adapter 负责解析资源、检查 policy、显示或聚焦对应 Webview 区域，并返回可审计 diagnostic。
+
+Agent 可以分析视频内容，但分析路径应调用 Engine、Preview、Media LSP 或领域工具读取 probe、关键帧、字幕、音频峰值、质量诊断和 ResourceRef，而不是通过在 Chat 内播放视频来获得状态。
+
 ## Capability、Skill、Prompt
 
 Capability 分 Registration 和 Injection 两个阶段：

@@ -143,6 +143,49 @@ Engine 是媒体 probing、解码、转码、导出和 ML 推理权威；素材�
 
 素材库可以显示 offline、missing、remapped 状态，但不能把本机 override 写回项目事实。文件重定位应产生 remap 或修复建议，而不是静默修改所有路径。
 
+### 媒体库路径映射
+
+媒体库路径有三种不同身份，不能混用：
+
+| 身份 | 示例 | 生命周期 | 可写入项目事实 |
+| --- | --- | --- | --- |
+| Durable ref | `${TEAM_FOOTAGE}/shots/a001.mov` | 跨机器、跨会话 | 是 |
+| Runtime root | `/Volumes/team-footage` 或本机 override | 当前机器 | 否 |
+| Webview projection | `webview.asWebviewUri(...)` 结果 | 当前 Webview 会话 | 否 |
+
+映射链路为：
+
+```text
+AssetFile.path / media library source
+  -> ${VAR}/relative/path
+  -> PathResolver + ResolvedMediaLibrary
+  -> runtime absolute path
+  -> LocalResourceAccessService root authorization
+  -> Webview projected URI or Engine descriptor
+```
+
+规则：
+
+- `AssetFile.path`、素材搜索 `source`、领域项目引用和 Agent durable payload 只能保存 `${VAR}/path`、workspace-relative path、asset id、`ResourceRef` 或 source ref。
+- `.neko/settings.local.json` 的 local override 只参与本机解析，不回写 `neko/settings.json`、`neko/assets/library.json` 或领域项目文件。
+- `ResolvedMediaLibrary.accessible=false` 时，素材可以继续出现在库和搜索中，但必须标记 offline/unresolved，不能投影为可展示资源或作为 processor 输入直接执行。
+- `LocalResourceAccessService` 只授权 enabled 且 accessible 的 resolved roots；Webview 不扫描媒体库目录，也不保存 projected URI。
+- Agent 和 external processor 使用 `allowedInputRoots=["mediaLibrary"]` 时，只表示可读取已解析且已授权的媒体库 source，不表示可以遍历所有本机路径。
+- Processor 输出默认不写回媒体库；需要长期保存到媒体库时必须走显式 Create Asset / Promote / Link 流程，并写入 `${VAR}/path` 或 AssetEntity。
+
+### 与 Agent 和外部处理器的关系
+
+Agent 可以把媒体库素材作为上下文、参考图、视频片段或处理器输入，但必须保留来源映射：
+
+| 场景 | 输入 | 输出 |
+| --- | --- | --- |
+| Agent 读取媒体库图片 | `${VAR}/image.png` 或 asset/file ref | bounded context、`ResourceRef`、diagnostic |
+| Canvas/Storyboard 引用媒体库图 | asset/file ref 或 `ResourceRef` | Canvas/storyboard 保存 source ref，不保存本机路径 |
+| External Processor 消费媒体库文件 | Host 解析后的 runtime absolute input | 输出到 `.neko/.cache/resources` 或显式 promoted asset |
+| Search 展示媒体库文件 | `media-library` projection + `visualResource` | projected URI 仅用于当前 Webview |
+
+媒体库不是任意外部路径白名单。只有被设置声明、变量化、可解析、可访问并被当前 workflow/policy 授权的文件，才可作为 Agent 或 processor 输入。
+
 ## 市场与安装结果
 
 Marketplace 提供 manifest、package、version、signature、trust、entitlement 和 install target。素材库消费安装结果，但不负责发布、签名、计费或 registry 搜索。

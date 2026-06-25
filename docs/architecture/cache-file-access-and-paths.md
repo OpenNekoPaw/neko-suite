@@ -1,6 +1,6 @@
 # 缓存、文件读写服务与路径变量
 
-更新日期：2026-06-17
+更新日期：2026-06-24
 
 本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
 
@@ -96,6 +96,40 @@ Runtime projection
 - 无法收缩的绝对路径不能静默写入项目事实；应提示用户移入 workspace/资产库、配置 `${VAR}`、执行显式 Create Asset，或返回诊断。
 - 变量名是契约，变量值是环境配置。跨机器同步的是变量名和相对路径，不是本机绝对路径。
 - 路径解析失败应返回 unresolved、unauthorized、missing 或 non-portable，不应猜测相邻文件。
+
+### 媒体库映射规则
+
+媒体库变量是 PathResolver 的一等输入。`neko-assets` 负责从团队共享设置和本机覆盖生成 `PathVariableMap`：
+
+| 数据 | 位置 | 是否可提交 | 用途 |
+| --- | --- | --- | --- |
+| `mediaLibraries[].variable` | `neko/settings.json` | 是 | `${VAR}` 契约名 |
+| `mediaLibraries[].path` | `neko/settings.json` | 是 | 团队约定路径，可在不同机器不可用 |
+| `mediaLibraryOverrides[VAR]` | `.neko/settings.local.json` | 否 | 本机真实路径覆盖 |
+| `ResolvedMediaLibrary.resolvedPath` | runtime projection | 否 | Host 读写、Webview root 授权、Engine/processor 输入 |
+| `ResolvedMediaLibrary.accessible` | runtime projection | 否 | 当前机器是否可直接读取 |
+
+媒体库文件的 canonical durable path 是 `${VAR}/relative/path`。当 Host 收到本机绝对路径时，只有在它位于 workspace root 或已声明媒体库 resolved root 内，才允许收缩为 workspace-relative 或 `${VAR}/path`。无法收缩时必须走诊断、Create Asset 或显式 Link/Promote，不得把绝对路径写入项目事实。
+
+`allowedInputRoots = ["mediaLibrary"]` 只授权 enabled、accessible、已解析的媒体库 root。它不授权 `Downloads`、`Desktop`、系统 temp、未声明外部目录，也不授权 Webview 直接读取媒体库。Webview 展示仍必须通过 `LocalResourceAccessService` 和 `asWebviewUri(...)`；大型视频/音频仍优先走 Engine file access。
+
+Processor 或 Agent 产物写入媒体库不是默认行为。默认输出 root 是 `.neko/.cache/resources` 或 extension `globalStorageUri/resources`；用户明确选择把结果长期放入媒体库时，应先由 Host 创建/移动文件，再写入 `${VAR}/path` 或 AssetEntity，并记录 provenance。
+
+### Agent / Canvas / Storyboard 资源交接
+
+Agent 工具结果、Canvas send、Storyboard generation 和 `neko-composite` artifact 必须把图片身份表达为结构化引用，而不是运行时路径：
+
+| 交接字段 | 稳定性 | 规则 |
+| --- | --- | --- |
+| `ResourceRef`、`cacheResourceRef`、`documentResourceRef`、source ref | 稳定 | 可以进入 Agent session、Canvas 节点、Storyboard 行、Composite artifact 和项目事实。 |
+| workspace-relative path、`${VAR}/path` | 稳定 | 可以作为 source identity；Host 负责解析和授权。 |
+| `display.runtimeOnly` 下的 Webview URI、materialized path、runtime path | 运行时 | 只能用于当前 Webview 展示、复制调试文本或日志；不能被 downstream payload 当图片身份。 |
+| legacy `cachePath` | 迁移/诊断 | 读取旧数据时可识别，写出新 payload 前必须剥离；不能作为 durable identity。 |
+| 系统 temp、`/var/folders/...`、`/tmp`、Downloads、Desktop、`file:`、blob/object URL | 非法 | 不能作为 Webview/Canvas/storyboard 成功路径；应返回 unauthorized/non-portable diagnostic。 |
+
+`cachePath` 与 `.neko/.cache/resources` 的区别很重要：前者是旧工具链暴露的实体副本路径字段，后者是当前受管资源缓存 root。即使某个运行时路径实际位于 `.neko/.cache/resources`，也不能把它直接写成项目事实；长期 payload 仍应保存 `ResourceRef`、source ref 或可移植 source path。
+
+Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只保存结构化 refs。投影给当前 Webview 的 URI/path 必须放在 `display: { runtimeOnly: true, ... }`，并在发送到 Canvas、Storyboard 或剪贴板稳定引用前移除。旧会话如果只有 temp/cache 路径而没有结构化引用，应展示诊断和文本上下文，不能伪装为可点击图片。
 
 ## 文件读写服务
 
@@ -242,7 +276,7 @@ source fact / ResourceRef
 | 用户显式预览 | preview/proxy/fov-crop                      | 与当前 intent 无关的表现              |
 | idle         | 低优先级 thumbnail、semantic sidecar        | 会挤占交互、GPU、磁盘预算的批量任务   |
 
-自动缓存必须可取消、可去重、可降级，并遵守 quota。后台生成失败只影响 freshness 和诊断，不改变项目事实。
+自动缓存必须可取消、可去重、可降级，并遵守 quota。资源缓存的默认 budget policy 是项目 `.neko/.cache/resources` 最多 2 GiB，global/extension-private resource cache 最多 512 MiB；`ResourceCacheService.gc()` 按 LRU 删除可重建变体，并跳过 pinned、session-active、promoted、debug、non-rebuildable 和 outside-root 条目。后台生成失败只影响 freshness 和诊断，不改变项目事实。
 
 ## 一致性与并发
 

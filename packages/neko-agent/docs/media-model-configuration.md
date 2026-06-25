@@ -6,6 +6,8 @@ Neko Agent 按模型 `type` 管理默认模型：`llm`、`image`、`video`、`au
 
 当前 MVP 优先支持用户本地 TOML 配置的 NewAPI gateway / local LLM，以及 OAuth 登录后由 Neko 官方 account catalog 注入的运行时模型列表。官方 direct provider 可以通过显式 `type` / `protocol_profile` 配置；Neko 不会根据模型名或 provider 名把 direct 请求转换到 gateway。本地生成模型运行时和更多中转协议属于 Roadmap。
 
+Provider 的 `protocol_profile` 是该 endpoint 的默认请求标准。模型默认继承 provider 的请求标准；只有同一个 gateway 下确实暴露了不同 wire protocol 的模型时，才在 `[[models]]` 上显式写 `protocol_profile` 覆盖。Neko 不会根据 `gpt`、`claude`、`gemini`、`deepseek` 等模型名猜测协议，也不会在 `direct`、`gateway`、`local` 之间自动转换。
+
 ## 配置位置
 
 - 用户级配置：`~/.neko/config.toml`
@@ -128,6 +130,22 @@ llm | image | video | audio
 ### `models[].capabilities`
 
 `capabilities` 是模型元数据，继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等字段。Neko 内部会把这些元数据映射到产品用途，例如 `text_to_music` 满足 `audio.music.generate`。
+
+### `models[].protocol_profile`
+
+`protocol_profile` 是模型级请求标准覆盖，支持：
+
+```text
+newapi | openai-chat | openai-responses | anthropic | google | ollama
+```
+
+常见配置：
+
+- DeepSeek 官方直连：provider 写 `type = "generic"`、`connection_kind = "direct"`、`protocol_profile = "openai-chat"`，模型通常不需要覆盖。
+- NewAPI/OneAPI 聚合网关：provider 写 `type = "newapi"`、`connection_kind = "gateway"`、`protocol_profile = "newapi"`；如果其中某个模型必须按 Anthropic/Gemini/Ollama wire protocol 请求，再在该模型上写 `protocol_profile = "anthropic"`、`"google"` 或 `"ollama"`。
+- OpenAI Responses 参数族：provider 或模型写 `protocol_profile = "openai-responses"`，只有声明支持相关能力的模型才展示 reasoning/verbosity 等 OpenAI 专属参数；当前聊天 adapter 仍使用 Chat Completions 请求路径，Responses wire protocol 需要对应 adapter 支持后再启用。
+
+旧字段 `protocol` 仍可读取，用于已有配置的 adapter override；新配置请优先使用 `protocol_profile`。配置非法值会直接显示配置诊断，不会 fallback 到 NewAPI、官方账号或首个可用模型。
 
 ## 工作原理
 

@@ -24,7 +24,7 @@
 - Webview 消费授权后的 H.264/PCM/fMP4 stream client，不直接访问工作区文件。
 - Extension Host 管 custom editor、resource URI、StatusBar、导出命令和 Engine 授权。
 - Story/Canvas/Cut/Preview 之间通过共享 contract、asset/entity/search 引用连接，不直接 import 对方实现。
-- Canvas 的播放路线是 `CanvasPlaybackPlan` 的投影；它可以生成发送到 Cut 的剪辑初稿快照，但不成为 Cut 剪辑 timeline。
+- Canvas 的播放路线是 `CanvasPlaybackPlan` 的投影；默认以 Route Storyboard Matrix / route navigator 展示多分支、容器内连续节点和预览选择；它可以生成发送到 Cut 的剪辑初稿快照，但不成为 Cut 剪辑 timeline。
 - Cut timeline 和 `.nkv` 是剪辑、轨道、clip、效果、字幕、音频和导出的权威；从 Canvas 导入后由 Cut 管理剪辑事实。
 - Agent 可以读取和展示 Canvas 顺序，并在确认后触发 Canvas -> Cut 导入；Agent 不维护独立 timeline 顺序，也不承担视频播放器职责，Canvas 路线播放由 Canvas Editor Webview 内的 `PlaybackWorkspace` 负责，Cut 结果播放由 Cut 或 `neko-preview` / Engine 负责。
 - 被动状态进入 native StatusBar，Timeline 和画布交互状态留在 Webview。
