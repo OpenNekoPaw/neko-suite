@@ -31,7 +31,7 @@ import {
   RedoIcon,
   UploadIcon,
   PlayIcon,
-} from '@neko/shared/icons/index';
+} from '@neko/shared/icons';
 import { t } from '../../i18n';
 
 export type MenuEntry = MenuItem;

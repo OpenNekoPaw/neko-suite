@@ -196,7 +196,8 @@ const vscode: VSCodeAPI = getGlobalVSCodeApi();
  */
 export function CanvasApp() {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const [canvasContainerElement, setCanvasContainerElement] = useState<HTMLDivElement | null>(null);
 
   // Interaction tool: select/marquee by default, hand tool pans on drag.
   const [interactionTool, setInteractionTool] = useState<'select' | 'pan'>('select');
@@ -205,7 +206,8 @@ export function CanvasApp() {
   const [rightDockMode, setRightDockMode] = useState<CanvasRightDockMode>('basic');
   const [isHudVisible, setIsHudVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
-  const zoomControlsRef = useRef<HTMLDivElement>(null);
+  const zoomControlsRef = useRef<HTMLDivElement | null>(null);
+  const [zoomControlsElement, setZoomControlsElement] = useState<HTMLDivElement | null>(null);
   const [miniMapWidth, setMiniMapWidth] = useState(200);
   const [subsystemNodeTypeDescriptors, setSubsystemNodeTypeDescriptors] =
     useState<NodeTypeDescriptorRegistry>({});
@@ -251,8 +253,6 @@ export function CanvasApp() {
   const closeGenerationPanel = useCanvasStore((state) => state.closeGenerationPanel);
   const closeContentOverlay = useCanvasStore((state) => state.closeContentOverlay);
   const revealPlaybackWorkspace = usePlaybackStore((state) => state.revealPlaybackWorkspace);
-  const playbackSession = usePlaybackStore((state) => state.playbackSession);
-  const setPlaybackPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
   const viewport = useRuntimeViewportStore((state) => state.viewport);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
@@ -277,6 +277,14 @@ export function CanvasApp() {
   );
   const activeSubsystemKey = activeSubsystemIds.join('|');
   const isPanMode = interactionTool === 'pan';
+  const setCanvasContainerRef = useCallback((element: HTMLDivElement | null) => {
+    canvasContainerRef.current = element;
+    setCanvasContainerElement(element);
+  }, []);
+  const setZoomControlsRef = useCallback((element: HTMLDivElement | null) => {
+    zoomControlsRef.current = element;
+    setZoomControlsElement(element);
+  }, []);
   const togglePanMode = useCallback(
     () => setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan')),
     [],
@@ -833,8 +841,11 @@ export function CanvasApp() {
   // =========================================================================
 
   useEffect(() => {
-    const container = canvasContainerRef.current;
-    if (!container) return;
+    const container = canvasContainerElement;
+    if (!container) {
+      setContainerSize({ width: 0, height: 0 });
+      return;
+    }
     const updateSize = () => {
       setContainerSize({ width: container.clientWidth, height: container.clientHeight });
     };
@@ -842,18 +853,18 @@ export function CanvasApp() {
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
-  }, [isReady]);
+  }, [canvasContainerElement]);
 
   // Track ZoomControls width so MiniMap stays aligned
   useEffect(() => {
     if (!isHudVisible) return;
-    const el = zoomControlsRef.current;
+    const el = zoomControlsElement;
     if (!el) return;
     const ro = new ResizeObserver(() => setMiniMapWidth(el.offsetWidth));
     ro.observe(el);
     setMiniMapWidth(el.offsetWidth);
     return () => ro.disconnect();
-  }, [isReady, isHudVisible]);
+  }, [isHudVisible, zoomControlsElement]);
 
   const minimapRefreshDecision = useMemo(
     () =>
@@ -1431,30 +1442,6 @@ export function CanvasApp() {
     revealPlaybackWorkspace({ focusOwner: 'stage' });
     reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'));
   }, [reportAction, revealPlaybackWorkspace]);
-  const handleTogglePlaybackPane = useCallback(
-    (pane: 'canvas' | 'stage' | 'route') => {
-      const currentSession = usePlaybackStore.getState().playbackSession;
-      const nextVisible = !(currentSession.visible && currentSession.panes[pane]);
-      const nextPanePatch = currentSession.visible
-        ? { [pane]: nextVisible }
-        : {
-            canvas: false,
-            stage: false,
-            route: false,
-            [pane]: true,
-          };
-      revealPlaybackWorkspace({
-        focusOwner: pane,
-        panes: nextPanePatch,
-      });
-      setPlaybackPaneVisible(pane, nextVisible);
-      reportAction('togglePlaybackPane', t('toolbar.playbackWorkspace'), undefined, {
-        pane,
-        nextVisible,
-      });
-    },
-    [reportAction, revealPlaybackWorkspace, setPlaybackPaneVisible],
-  );
 
   // =========================================================================
   // Render
@@ -1489,12 +1476,6 @@ export function CanvasApp() {
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
             onRevealPlaybackWorkspace={handleRevealPlaybackWorkspace}
-            playbackPaneState={{
-              canvas: playbackSession.visible && playbackSession.panes.canvas,
-              stage: playbackSession.visible && playbackSession.panes.stage,
-              route: playbackSession.visible && playbackSession.panes.route,
-            }}
-            onTogglePlaybackPane={handleTogglePlaybackPane}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}
@@ -1512,7 +1493,7 @@ export function CanvasApp() {
             className="canvas-main-surface"
             canvasPane={
               <div
-                ref={canvasContainerRef}
+                ref={setCanvasContainerRef}
                 className="canvas-main-surface-inner"
                 style={{ backgroundColor: 'var(--canvas-bg)' }}
                 {...getKeyboardBoundaryMetadata({
@@ -1601,7 +1582,7 @@ export function CanvasApp() {
                       height={Math.round(miniMapWidth * 0.7)}
                     />
 
-                    <div ref={zoomControlsRef}>
+                    <div ref={setZoomControlsRef}>
                       <ZoomControls
                         zoom={viewport.zoom}
                         onZoomIn={handleZoomIn}

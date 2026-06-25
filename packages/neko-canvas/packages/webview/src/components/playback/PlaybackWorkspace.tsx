@@ -4,7 +4,6 @@ import {
   resolveEffectiveCanvasPlaybackRoutes,
   type CanvasPlaybackDiagnostic,
   type CanvasPlaybackPlan,
-  type CanvasPlaybackRouteCandidate,
   type CanvasPlaybackUnit,
   type CanvasPreviewRole,
   type ResourceRef,
@@ -30,13 +29,11 @@ import {
   type RouteStoryboardMatrixRow,
   type RouteStoryboardMatrixSummaryCell,
 } from './routeStoryboardMatrix';
-import type { PlaybackRouteViewMode } from '../../stores/playbackStore';
 
 const PLAYBACK_STAGE_WIDTH_BOUNDS = { min: 280, max: 760 } as const;
-const PLAYBACK_ROUTE_HEIGHT_BOUNDS = { min: 128, max: 440 } as const;
+const PLAYBACK_ROUTE_HEIGHT_BOUNDS = { min: 180, max: 520 } as const;
 const HOST_PLAYBACK_PLAN_TIMEOUT_MS = 5_000;
 const DEFAULT_ROUTE_UNIT_DURATION_MS = 1200;
-const MAX_VISIBLE_ROUTE_TABS = 6;
 
 export interface PlaybackWorkspaceProps {
   readonly canvasPane: React.ReactNode;
@@ -61,7 +58,6 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
   const setLayout = usePlaybackStore((state) => state.setPlaybackWorkspaceLayout);
   const markStale = usePlaybackStore((state) => state.markPlaybackWorkspaceStale);
   const savePlayback = usePlaybackStore((state) => state.savePlayback);
-  const setRouteViewMode = usePlaybackStore((state) => state.setPlaybackRouteViewMode);
   const setMatrixRouteFamily = usePlaybackStore((state) => state.setPlaybackMatrixRouteFamily);
   const focusMatrix = usePlaybackStore((state) => state.focusPlaybackMatrix);
   const toggleMatrixContainerFold = usePlaybackStore(
@@ -511,27 +507,8 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
             handleProps={routeResizeHandleProps}
             className="canvas-playback-route-resize-handle"
           />
-          <PlaybackRoutePaneToolbar
-            routeViewMode={session.matrix.routeViewMode}
-            onRouteViewModeChange={setRouteViewMode}
-          />
-          {session.matrix.routeViewMode === 'compact' || !routeMatrix ? (
-            <PlaybackRouteStrip
-              routes={routeResolution?.routes ?? []}
-              diagnostics={routeResolution?.diagnostics ?? []}
-              unitById={unitById}
-              selectedRouteId={selectedRoute?.id}
-              currentUnitId={currentUnit?.id ?? session.currentUnitId}
-              currentPlayheadMs={session.playheadMs}
-              panelHeightPx={routeResize.size}
-              onSelectRoute={(route) => {
-                setRoute(route.id, route.unitIds[0]);
-                selectPlaybackUnit(route.unitIds[0], 0, route.id);
-              }}
-              onSelectUnit={selectPlaybackUnit}
-              onFocus={() => setFocusOwner('route')}
-            />
-          ) : (
+          <PlaybackRoutePaneToolbar />
+          {routeMatrix ? (
             <RouteStoryboardMatrix
               matrix={routeMatrix}
               selectedRouteId={selectedRoute?.id}
@@ -549,6 +526,22 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
               onSelectFamily={(family) => setMatrixRouteFamily(family.id)}
               onToggleContainerFold={(container) => toggleMatrixContainerFold(container.id)}
               onSendToCut={sendMatrixRouteToCut}
+              onFocus={() => setFocusOwner('route')}
+            />
+          ) : (
+            <PlaybackRouteStrip
+              routes={routeResolution?.routes ?? []}
+              diagnostics={routeResolution?.diagnostics ?? []}
+              unitById={unitById}
+              selectedRouteId={selectedRoute?.id}
+              currentUnitId={currentUnit?.id ?? session.currentUnitId}
+              currentPlayheadMs={session.playheadMs}
+              panelHeightPx={routeResize.size}
+              onSelectRoute={(route) => {
+                setRoute(route.id, route.unitIds[0]);
+                selectPlaybackUnit(route.unitIds[0], 0, route.id);
+              }}
+              onSelectUnit={selectPlaybackUnit}
               onFocus={() => setFocusOwner('route')}
             />
           )}
@@ -613,39 +606,11 @@ function PlaybackWorkspaceHeader({
   );
 }
 
-function PlaybackRoutePaneToolbar({
-  routeViewMode,
-  onRouteViewModeChange,
-}: {
-  readonly routeViewMode: PlaybackRouteViewMode;
-  readonly onRouteViewModeChange: (mode: PlaybackRouteViewMode) => void;
-}) {
+function PlaybackRoutePaneToolbar() {
   return (
     <div className="canvas-playback-route-pane-toolbar">
       <div className="canvas-playback-route-pane-toolbar-title">{t('playback.route.title')}</div>
       <div className="canvas-playback-route-pane-toolbar-actions">
-        <div className="canvas-playback-route-view-toggle" role="group">
-          <button
-            type="button"
-            className="canvas-playback-route-view-button"
-            data-active={routeViewMode === 'matrix' ? 'true' : 'false'}
-            title={t('playback.matrix.modeMatrix')}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => onRouteViewModeChange('matrix')}
-          >
-            {t('playback.matrix.modeMatrixShort')}
-          </button>
-          <button
-            type="button"
-            className="canvas-playback-route-view-button"
-            data-active={routeViewMode === 'compact' ? 'true' : 'false'}
-            title={t('playback.matrix.modeCompact')}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => onRouteViewModeChange('compact')}
-          >
-            {t('playback.matrix.modeCompactShort')}
-          </button>
-        </div>
         <button
           type="button"
           className="canvas-playback-route-edit-gate"
