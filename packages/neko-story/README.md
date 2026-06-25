@@ -9,7 +9,7 @@
 
 ## Quick Reference
 
-- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**AI 视频准备度表**（scene-level readiness + 人物形象状态 + Canvas 摘要 + story→agent→canvas 语义流水线）
+- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、向 Agent 提供剧本/场景上下文
 - **入口**：`packages/extension/src/extension.ts`
 - **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
 - **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
@@ -28,11 +28,10 @@ VSCode 原生编辑器（.nks / .fountain 文件）
         ├── storyScenePlanner → ScenePlan / ShotPlan 确定性规划
         ├── StorySceneStateStore → 场景工作流状态 + workspaceState 持久化
         └── 命令
-              ├── Preview Story          → 开启 Webview 预览面板（含 AI 视频准备度表）
+              ├── Preview Story          → 开启 Webview 剧本预览面板
               ├── Convert to Timeline    → 生成 .nkv 项目文件 → neko-cut
-              ├── Generate Storyboard    → 启动 Agent pipeline（规划 + canvas 导入）
-              ├── Start Video Creation   → flowF 标准视频主流程（规划 → 生成 → 时间线）
-              └── Send to Canvas         → 场景级 storyboard payload 导入 canvas
+              ├── Send to Agent          → 发送选区/剧本上下文给 Agent
+              └── Start Video Creation   → 由 Agent 自主预处理，再进入视频创作流程
 ```
 
 ### 包结构
@@ -45,7 +44,7 @@ packages/
 │     ├── services/scriptIndexBuilder.ts    # 稳定 sceneId + 场景元数据构建
 │     ├── services/storyScenePlanner.ts     # ScenePlan / ShotPlan 确定性规划
 │     └── services/storySceneStateStore.ts  # 场景工作流状态 + workspaceState 持久化
-└── webview/    # React 预览 UI（含 scene-level AI 视频准备度表 ScriptTableView）
+└── webview/    # React 剧本预览 UI
 ```
 
 ## Deep Dive
@@ -55,27 +54,15 @@ packages/
 ```
 编写剧本 (.nks / .fountain)
   │
-  ├── 实时预览（Webview 预览面板 + AI 视频准备度表）
-  ├── ScenePlan / ShotPlan（确定性规划器 → 语义分镜数据）
-  ├── Agent 流水线（story → agent → canvas 语义导入 + 批量视频生成）
-  ├── Send to Canvas（场景级 storyboard payload → neko-canvas 节点）
+  ├── 实时预览（Webview 剧本预览面板）
+  ├── Agent 预处理（基于剧本文本、场景索引和角色索引自主判断分析步骤）
+  ├── Canvas 产物管理（Agent 生成并经用户接受的分镜/画面节点归 Canvas）
   └── 转换为时间线（neko-cut）→ 自动摆放素材
 ```
 
-### AI 视频准备度表
+### Agent 与 Canvas 边界
 
-`ScriptTableView` 不是第二个 storyboard 编辑器，而是剧本阶段的 scene-level 准备度表。每一行对应一个 `ScriptIndex.scenes[]` 场景，展示场景标题、摘要、预计时长、人物形象准备度、缺失输入、Agent/Canvas 工作流状态和场景级动作。
-
-准备度由 Extension Host 聚合后发送给 Webview，输入包括：
-
-- `ScriptIndex` 与 `StorySceneStateStore`
-- `characters.json` 中的角色身份、别名和 script-facing names
-- `neko-assets.getCharacterThumbnail` 的缩略图解析结果
-- `NekoCanvasAPI.storyboard.getExecutionSummary()` 的只读 Canvas 执行摘要
-
-Extension 只输出结构化 readiness DTO；诸如人物形象状态、缺失项和 Canvas 进度这类可见文案由 Webview 通过 i18n 翻译。这样可以保留扩展侧的稳定契约，同时让界面文案按 locale 变化而不改动数据层。
-
-Story 表只展示小缩略图和 hover 预览作为 readiness 线索；大图审查、候选图比较、ShotNode 编辑、GalleryNode 候选切换和批量生成仍属于 `neko-canvas`。
+Story 只拥有剧本文本、AST、场景索引和角色引用，不再提供分镜表预览或分镜产物管理页面。Agent 根据剧本内容和用户目标自主判断预处理步骤，生成候选分镜、素材需求、诊断或视频创作计划。用户接受后的分镜板、ShotNode、候选图、生成状态和版本归 `neko-canvas` 管理。
 
 ### Fountain 语法示例
 

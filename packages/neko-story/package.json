@@ -76,11 +76,6 @@
         "category": "Neko Story"
       },
       {
-        "command": "neko.story.generateStoryboard",
-        "title": "%neko.story.generateStoryboard.title%",
-        "category": "Neko Story"
-      },
-      {
         "command": "neko.story.startVideoCreation",
         "title": "%neko.story.startVideoCreation.title%",
         "category": "Neko Story"
@@ -103,12 +98,6 @@
       {
         "command": "neko.story.applyInlineDiff",
         "title": "%neko.story.applyInlineDiff.title%",
-        "category": "Neko Story"
-      },
-      {
-        "command": "neko.story.scriptTableView",
-        "title": "%neko.story.scriptTableView.title%",
-        "icon": "$(table)",
         "category": "Neko Story"
       },
       {
@@ -146,11 +135,6 @@
       "editor/title": [
         {
           "command": "neko.story.preview",
-          "when": "editorLangId == nekostory",
-          "group": "navigation"
-        },
-        {
-          "command": "neko.story.scriptTableView",
           "when": "editorLangId == nekostory",
           "group": "navigation"
         }

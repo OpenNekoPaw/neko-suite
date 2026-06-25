@@ -124,45 +124,6 @@ export function activate(context: vscode.ExtensionContext) {
   subscribeCanvasSceneWriteback(context, sceneStateStore);
   subscribeNarrativePreviewFountainRefresh(context, logger);
 
-  const resolveStoryboardCharacterBindings = async (
-    names: readonly string[],
-    uriOrPath?: string,
-  ): Promise<Record<string, string>> => {
-    let uri: vscode.Uri | undefined;
-    try {
-      uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
-    } catch (error) {
-      logger.warn(`Failed to resolve storyboard character binding URI: ${formatError(error)}`);
-      return {};
-    }
-
-    const bindings: Record<string, string> = {};
-
-    for (const name of names) {
-      try {
-        const resolved = characterIndexService.resolveCharacter(name, uri);
-        const characterId = resolved?.record.id;
-        if (characterId) {
-          bindings[name] = characterId;
-        }
-      } catch (error) {
-        logger.warn(`Failed to resolve storyboard character "${name}": ${formatError(error)}`);
-      }
-    }
-
-    return bindings;
-  };
-
-  const resolvePreviewCharacterRegistry = (uriOrPath?: string) => {
-    try {
-      const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
-      return characterIndexService.getRegistry(uri);
-    } catch (error) {
-      logger.warn(`Failed to resolve preview character registry: ${formatError(error)}`);
-      return undefined;
-    }
-  };
-
   // Register language providers
   context.subscriptions.push(
     // Outline view (per-file, no index needed)
@@ -239,12 +200,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.story.preview', async () => {
-      await PreviewPanel.create(
-        context.extensionUri,
-        sceneStateStore,
-        resolveStoryboardCharacterBindings,
-        resolvePreviewCharacterRegistry,
-      );
+      await PreviewPanel.create(context.extensionUri);
     }),
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
       const editor = vscode.window.activeTextEditor;
@@ -295,31 +251,6 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.commands.executeCommand('vscode.openWith', saveUri, 'neko.cut.editor');
     }),
-    vscode.commands.registerCommand('neko.story.generateStoryboard', async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'nekostory') {
-        void handleError(new Error('请在剧本文件中执行此命令'), { showToUser: true });
-        return;
-      }
-
-      const payload = buildSceneAgentPayload(
-        editor,
-        '请为这个场景生成 storyboard 计划，并准备发送到 canvas：',
-      );
-      if (!payload) {
-        void handleError(new Error('当前光标不在可识别的场景中'), {
-          showToUser: true,
-          severity: 'warning',
-        });
-        return;
-      }
-
-      try {
-        await vscode.commands.executeCommand('neko.agent.sendContext', payload);
-      } catch {
-        // neko-agent extension not installed or not activated — silently ignore
-      }
-    }),
     vscode.commands.registerCommand(
       'neko.story.startVideoCreation',
       async (options?: { sceneId?: string; sceneIds?: string[]; mode?: 'scene' | 'all' }) => {
@@ -352,7 +283,7 @@ export function activate(context: vscode.ExtensionContext) {
             sceneIds: targetSceneIds,
             workflowIntent: 'full-video-creation',
             intent:
-              '请基于剧本中的所有场景启动标准视频创作流程：由 Agent 根据剧情节奏预估分镜时长、镜头数量和镜头设计，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
+              '请基于剧本中的所有场景启动标准视频创作流程：先由 Agent 自主分析内容、判断预处理步骤并生成候选创作计划，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
           });
           if (!allScenesPayload) {
             void handleError(new Error('没有可派发的场景'), {
@@ -374,7 +305,7 @@ export function activate(context: vscode.ExtensionContext) {
           ? buildSceneAgentPayloadBySceneId(editor, options.sceneId)
           : buildSceneAgentPayload(
               editor,
-              '请基于当前场景启动标准视频创作流程：先生成 storyboard，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
+              '请基于当前场景启动标准视频创作流程：先由 Agent 自主分析内容、判断预处理步骤并生成候选创作计划，再继续 prompts、pilot、batch generation、quality gate 和 timeline 编排。',
             );
         if (!payload) {
           void handleError(new Error('当前光标不在可识别的场景中'), {
@@ -487,15 +418,6 @@ export function activate(context: vscode.ExtensionContext) {
       } catch {
         // neko-agent extension not installed or not activated — silently ignore
       }
-    }),
-    vscode.commands.registerCommand('neko.story.scriptTableView', async () => {
-      const panel = await PreviewPanel.create(
-        context.extensionUri,
-        sceneStateStore,
-        resolveStoryboardCharacterBindings,
-        resolvePreviewCharacterRegistry,
-      );
-      panel.postMessage({ type: 'setView', view: 'table' });
     }),
     vscode.commands.registerCommand(
       'neko.story.linkCharacterAsset',
@@ -901,7 +823,7 @@ function buildSceneAgentPayload(
 }
 
 /**
- * Build an agent payload for a specific sceneId (used by ScriptTableView actions).
+ * Build an agent payload for a specific sceneId.
  * Unlike buildSceneAgentPayload which uses cursor position, this looks up by sceneId.
  */
 function buildSceneAgentPayloadBySceneId(

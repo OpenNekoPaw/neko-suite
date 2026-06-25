@@ -80,7 +80,7 @@ export function buildStoryTableAgentPayload(
   const title = createTableLabel(input.scriptPath, scenes.length);
   const contextText = JSON.stringify(
     {
-      kind: 'neko-story-table-context',
+      kind: 'neko-story-script-context',
       scriptPath: input.scriptPath,
       sourceScriptUri: input.sourceScriptUri,
       workflowIntent: input.workflowIntent,
@@ -103,9 +103,9 @@ export function buildStoryTableAgentPayload(
 
   return {
     type: 'story-selection',
-    id: `story:${input.scriptPath}:table:${selectedSceneIds.join(',')}`,
+    id: `story:${input.scriptPath}:scenes:${selectedSceneIds.join(',')}`,
     label: title,
-    summary: `Story table: ${selectedSceneIds.length} scenes from ${input.scriptPath}`,
+    summary: `Story context: ${selectedSceneIds.length} scenes from ${input.scriptPath}`,
     data,
     intent: input.intent,
   };

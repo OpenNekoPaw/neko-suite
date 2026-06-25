@@ -1,6 +1,6 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { postMessage as postRawMessage } from '@neko/shared/vscode';
-import type { MessageToWebview, MessageToExtension } from '../types';
+import type { MessageToWebview } from '../types';
 
 type MessageHandler = (message: MessageToWebview) => void;
 
@@ -25,12 +25,6 @@ export function useVSCodeMessaging(onMessage: MessageHandler) {
       window.removeEventListener('message', handler);
     };
   }, []);
-
-  const postMessage = useCallback((message: MessageToExtension) => {
-    postRawMessage(message);
-  }, []);
-
-  return { postMessage };
 }
 
 /**

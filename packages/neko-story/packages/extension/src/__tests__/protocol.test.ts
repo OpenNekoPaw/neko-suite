@@ -148,11 +148,15 @@ describe('neko-story protocol', () => {
     });
   });
 
-  describe('storyboard command handoff', () => {
-    it('routes generateStoryboard command through scene agent payload', () => {
-      expect(extensionSource).toContain("'neko.story.generateStoryboard'");
-      expect(extensionSource).toContain('const payload = buildSceneAgentPayload(');
-      expect(extensionSource).toContain("'neko.agent.sendContext'");
+  describe('story agent and canvas handoff boundaries', () => {
+    it('does not expose a Story-owned storyboard generation command', () => {
+      expect(extensionSource).not.toContain("'neko.story.generateStoryboard'");
+      expect(JSON.stringify(packageJson.contributes?.commands ?? [])).not.toContain(
+        'neko.story.generateStoryboard',
+      );
+      expect(JSON.stringify(packageJson.contributes?.commands ?? [])).not.toContain(
+        'neko.story.scriptTableView',
+      );
     });
 
     it('registers pipeline event write-back command for scene state store', () => {
@@ -177,12 +181,13 @@ describe('neko-story protocol', () => {
       expect(extensionSource).not.toContain("toLowerCase() === '.story'");
     });
 
-    it('registers a standard video creation command as structured story-table handoff', () => {
+    it('registers a standard video creation command as structured Agent handoff', () => {
       expect(extensionSource).toContain("'neko.story.startVideoCreation'");
       expect(extensionSource).toContain('buildStoryTableAgentPayload({');
       expect(extensionSource).toContain("workflowIntent: 'full-video-creation'");
       expect(extensionSource).toContain("'neko.agent.sendContext'");
       expect(extensionSource).toContain('sceneIds: targetSceneIds');
+      expect(extensionSource).toContain('Agent 自主分析内容');
     });
 
     it('registers ScenePlan and ShotPlan agent tools in story capability provider', () => {

@@ -576,9 +576,7 @@ function deriveAllowedActions(
   const actions: StoryVideoReadinessAction[] = ['analyze'];
 
   if (readinessStatus === 'ready') {
-    actions.push('startVideoCreation', 'generateStoryboard', 'sendToCanvas');
-  } else if (readinessStatus === 'needs-input') {
-    actions.push('generateStoryboard');
+    actions.push('startVideoCreation', 'sendToCanvas');
   } else if (readinessStatus === 'failed') {
     actions.push('retryFailed');
   } else if (readinessStatus === 'done') {

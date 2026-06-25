@@ -3,8 +3,6 @@
  * Simplified version of @neko-story/types for webview bundle size
  */
 
-import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
-
 export interface Position {
   line: number;
   character: number;
@@ -140,67 +138,14 @@ export interface FountainDocument {
   elements: AnyFountainElement[];
 }
 
-export type StoryAgentStatus =
-  | 'not-requested'
-  | 'ready'
-  | 'review'
-  | 'parsing'
-  | 'prompt-review'
-  | 'pilot-review'
-  | 'generating'
-  | 'timeline-arranged'
-  | 'sent'
-  | 'skipped'
-  | 'failed';
-
-export type StoryCanvasStatus = 'not-sent' | 'queued' | 'sent' | 'opened' | 'skipped';
-
-export interface StorySceneState {
-  readonly sceneId: string;
-  readonly agentStatus: StoryAgentStatus;
-  readonly canvasStatus: StoryCanvasStatus;
-  readonly generationStatus?: 'idle' | 'generating' | 'done' | 'partial-fail';
-  readonly timelineStatus?: 'not-arranged' | 'arranged';
-  readonly lastError?: string;
-}
-
-export type StorySceneAction =
-  | 'analyze'
-  | 'generateStoryboard'
-  | 'sendToCanvas'
-  | 'openCanvas'
-  | 'toggleSkip'
-  | 'startVideoCreation'
-  | 'generateCurrentScene'
-  | 'retryFailed';
-
-export type StoryTableAction = 'sendToAgentAll';
-
-export interface StoryTableActionScope {
-  readonly sceneIds?: readonly string[];
-  readonly includeSkipped?: boolean;
-}
-
 // Message types for VSCode communication
-export type StoryViewMode = 'screenplay' | 'table';
-
 export type MessageToWebview =
   | {
       type: 'update';
       document: FountainDocument;
-      scriptIndex: NekoStoryScriptIndex;
-      sceneStates: Record<string, StorySceneState>;
-      readinessRows?: readonly StorySceneVideoReadiness[];
     }
-  | { type: 'scrollTo'; line: number }
-  | { type: 'setView'; view: StoryViewMode }
-  | { type: 'characterThumbnails'; data: Record<string, string> };
+  | { type: 'scrollTo'; line: number };
 
 export type MessageToExtension =
   | { type: 'ready' }
-  | { type: 'navigate'; line: number; character: number }
-  | { type: 'scroll'; line: number }
-  | { type: 'sceneAction'; sceneId: string; action: StorySceneAction }
-  | { type: 'tableAction'; action: StoryTableAction; scope?: StoryTableActionScope }
-  | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
-  | { type: 'characterNavigate'; name: string; sceneId?: string; characterId?: string };
+  | { type: 'navigate'; line: number; character: number };

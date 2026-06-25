@@ -135,9 +135,9 @@ interface IAssetLinker {
   linkLocation(location: string): AssetReference | null;
 }
 
-// Storyboard generation interface
-interface IStoryboardGenerator {
-  generate(scene: SceneHeading): Promise<StoryboardFrame[]>;
+// Story analysis handoff interface
+interface IStoryAnalysisContextProvider {
+  buildContext(scene: SceneHeading): AgentContextPayload | null;
 }
 ```
 
@@ -146,14 +146,12 @@ interface IStoryboardGenerator {
 - [x] 实现 TimelineConverter（场景 → 时间线片段）✅
 - [x] 实现 neko.story.toTimeline 命令 ✅
 - [x] 实现资产链接服务（查找关联资产，内部命令：`neko.story.linkCharacterAsset` / `neko.story.linkLocationAsset`）
-- [x] 实现 `neko.story.generateStoryboard` 命令入口（发送当前场景到 Agent）
-- [x] 实现 `PreviewPanel.sendToCanvas` 机械式场景导入（`neko.canvas.importStoryboard`）
+- [x] 保留 `neko.story.sendToAgent` / `neko.story.startVideoCreation` 作为剧本上下文入口
+- [x] 清理 Story 侧分镜表预览和 Story-owned storyboard 生成命令
 - [x] 提供 `GenerateScenePlan` / `GenerateShotPlan` Agent 工具
 - [x] 将 `GenerateScenePlan` / `GenerateShotPlan` 接入 Agent 主流程与 semantic 导入闭环
 - [x] 为 `NekoStoryAPI` 暴露 `generateScenePlans()` / `generateShotPlan()`，供 Agent pipeline 直接消费
 - [x] 新增 `importStoryboardToCanvas` pipeline stage，将 semantic storyboard 正式导入 `canvas`
-- [x] 将 `neko.story.generateStoryboard` 升级为直接启动标准 pipeline，而不只是发送 context
-- [x] 为轻量分镜表接入 Agent / Canvas 真实状态回写
 - [x] 增加 `neko.story.startVideoCreation` 正式命令，作为从剧本场景启动 `flowF` 视频主流程入口
 - [x] 为 `StorySceneStateStore` 接入 `workspaceState` 持久化与恢复
 
@@ -181,11 +179,11 @@ extension → parser → types
 6. ✅ 预览面板渲染剧本（标准格式）
 7. ✅ 编辑器与预览双向同步
 8. ✅ 转换为 neko-cut 时间线（Fountain → ProjectData JSON 语义 Skill）
-9. ✅ AI 生成分镜脚本与语义导入主流程
+9. ✅ Agent 生成分镜候选与语义导入主流程
    - 已具备 `ScenePlan / ShotPlan -> canvas semantic import` pipeline 主链
-   - `story.generateStoryboard` 已直连标准 pipeline
-   - 轻量分镜表已接入 extension 侧统一状态源与 pipeline 事件回写
-   - 轻量分镜表状态已通过 `workspaceState` 跨会话持久化
+   - Story 侧分镜表预览和 Story-owned storyboard 生成命令已移除
+   - Agent 根据剧本文本和用户目标自主判断预处理步骤
+   - 已接受的分镜/画面节点/生成状态由 Canvas 管理
    - 已新增“从剧本开始视频创作”标准入口 `neko.story.startVideoCreation`
 
 ### 当前收口状态
