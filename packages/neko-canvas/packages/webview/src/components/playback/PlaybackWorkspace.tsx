@@ -4,6 +4,7 @@ import {
   resolveEffectiveCanvasPlaybackRoutes,
   type CanvasPlaybackDiagnostic,
   type CanvasPlaybackPlan,
+  type CanvasPlaybackRouteCandidate,
   type CanvasPlaybackUnit,
   type CanvasPreviewRole,
   type ResourceRef,
@@ -34,6 +35,7 @@ const PLAYBACK_STAGE_WIDTH_BOUNDS = { min: 280, max: 760 } as const;
 const PLAYBACK_ROUTE_HEIGHT_BOUNDS = { min: 180, max: 520 } as const;
 const HOST_PLAYBACK_PLAN_TIMEOUT_MS = 5_000;
 const DEFAULT_ROUTE_UNIT_DURATION_MS = 1200;
+const MAX_VISIBLE_ROUTE_TABS = 6;
 
 export interface PlaybackWorkspaceProps {
   readonly canvasPane: React.ReactNode;
