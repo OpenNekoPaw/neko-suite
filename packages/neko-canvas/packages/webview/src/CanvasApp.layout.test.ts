@@ -93,6 +93,18 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/viewport=\{minimapViewport\}/);
   });
 
+  it('rebounds minimap sizing observers when the canvas pane remounts', () => {
+    expect(appSource).toMatch(/const setCanvasContainerRef = useCallback/);
+    expect(appSource).toMatch(/setCanvasContainerElement\(element\)/);
+    expect(appSource).toMatch(/const setZoomControlsRef = useCallback/);
+    expect(appSource).toMatch(/setZoomControlsElement\(element\)/);
+    expect(appSource).toMatch(/ref=\{setCanvasContainerRef\}/);
+    expect(appSource).toMatch(/ref=\{setZoomControlsRef\}/);
+    expect(appSource).not.toMatch(
+      /useEffect\(\(\) => \{[\s\S]*canvasContainerRef\.current[\s\S]*\}, \[isReady\]\)/,
+    );
+  });
+
   it('keeps canvas overlays and controls inside the main panel surface', () => {
     const mainStart = appSource.indexOf('className="canvas-main-surface"');
     expect(mainStart).toBeGreaterThan(-1);
@@ -121,6 +133,9 @@ describe('Canvas creative workbench layout boundary', () => {
   it('keeps playback controls inside PlaybackWorkspace without reusing the old preview entry', () => {
     expect(appSource).not.toMatch(/<PlaybackControllerHost/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
+    expect(toolbarSource).not.toMatch(/toggle-playback-canvas-pane/);
+    expect(toolbarSource).not.toMatch(/toggle-playback-stage-pane/);
+    expect(toolbarSource).not.toMatch(/toggle-playback-route-pane/);
     expect(toolbarSource).toMatch(/icon=\{<PlayIcon size=\{18\} \/>\}/);
     expect(appSource).toMatch(
       /reportAction\('revealPlaybackWorkspace', t\('toolbar\.playbackWorkspace'\)\)/,
@@ -186,6 +201,8 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-add-node-popover"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="import-file"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
+    expect(toolbarSource).not.toMatch(/onTogglePlaybackPane/);
+    expect(toolbarSource).not.toMatch(/playbackPaneState/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
     expect(toolbarSource).toMatch(/onRevealPlaybackWorkspace\?: \(\) => void/);

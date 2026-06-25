@@ -22,7 +22,7 @@ describe('playbackStore matrix runtime state', () => {
       playbackSession: {
         visible: false,
         panes: { canvas: true, stage: false, route: false },
-        layout: { stageWidthPx: 520, routeHeightPx: 176 },
+        layout: { stageWidthPx: 520, routeHeightPx: 300 },
         playheadMs: 0,
         focusOwner: 'canvas',
         playbackState: 'idle',
