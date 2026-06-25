@@ -18,7 +18,9 @@ vi.mock('@neko/ui/icons', () => ({
   ChevronRightIcon: ({ size = 16 }: { size?: number }) => (
     <span data-icon="chevron-right">{size}</span>
   ),
+  ClockIcon: ({ size = 16 }: { size?: number }) => <span data-icon="clock">{size}</span>,
   SendIcon: ({ size = 16 }: { size?: number }) => <span data-icon="send">{size}</span>,
+  WarningIcon: ({ size = 16 }: { size?: number }) => <span data-icon="warning">{size}</span>,
 }));
 
 describe('RouteStoryboardMatrix', () => {
@@ -228,6 +230,41 @@ describe('RouteStoryboardMatrix', () => {
       matrix?.dispatchEvent(createKeyEvent('Escape'));
     });
     expect(onClearFocus).toHaveBeenCalled();
+  });
+
+  it('localizes matrix chrome and accessible labels', () => {
+    setLocale('zh-cn');
+
+    act(() => {
+      root.render(
+        <RouteStoryboardMatrix
+          matrix={matrixFixture()}
+          selectedRouteId="route-a"
+          currentUnitId="unit-a"
+          focusedCellId="cell:route-a:container:scene-a:shot-a"
+          onSelectRoute={() => undefined}
+          onSelectCell={() => undefined}
+          onSelectColumn={() => undefined}
+          onSelectFamily={() => undefined}
+          onToggleContainerFold={() => undefined}
+          onSendToCut={() => undefined}
+        />,
+      );
+    });
+
+    const matrix = host.querySelector<HTMLElement>(
+      '[data-testid="canvas-route-storyboard-matrix"]',
+    );
+    expect(matrix?.getAttribute('aria-label')).toBe('路线分镜矩阵，包含 2 条路线和 2 个步骤');
+    expect(host.textContent).toContain('路线分镜矩阵');
+    expect(host.textContent).toContain('仅预览');
+    expect(host.textContent).toContain('主路线');
+    expect(host.textContent).toContain('1 个容器');
+    expect(
+      host
+        .querySelector<HTMLButtonElement>('.canvas-route-storyboard-matrix-cell-playable')
+        ?.getAttribute('aria-label'),
+    ).toContain('镜头');
   });
 });
 

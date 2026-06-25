@@ -230,35 +230,38 @@ export function CanvasPlaybackController({
     >
       <div className="canvas-playback-controller-row">
         <span
-          className="canvas-playback-controller-label"
+          className="canvas-playback-controller-label canvas-playback-controller-leading"
           title={`${plan.adapterId} · ${plan.behaviorMode}`}
         >
           {formatPlaybackLabel(plan)}
         </span>
-        <ToolbarIconButton
-          title={t('toolbar.playbackPrevious')}
-          disabled={!state.canStepPrevious}
-          onClick={handlePrevious}
-        >
-          <SkipBackIcon size={14} />
-        </ToolbarIconButton>
-        <ToolbarIconButton
-          title={isPlaying ? t('toolbar.playbackPause') : t('toolbar.playbackPlay')}
-          disabled={!state.canPlay}
-          onClick={handlePlayPause}
-        >
-          {isPlaying ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
-        </ToolbarIconButton>
-        <ToolbarIconButton
-          title={t('toolbar.playbackNext')}
-          disabled={!state.canStepNext}
-          onClick={handleNext}
-        >
-          <SkipForwardIcon size={14} />
-        </ToolbarIconButton>
-        <span className="canvas-playback-controller-count">
-          {state.currentIndex + 1}/{route.length}
-        </span>
+        <div className="canvas-playback-controller-transport">
+          <ToolbarIconButton
+            title={t('toolbar.playbackPrevious')}
+            disabled={!state.canStepPrevious}
+            onClick={handlePrevious}
+          >
+            <SkipBackIcon size={14} />
+          </ToolbarIconButton>
+          <ToolbarIconButton
+            title={isPlaying ? t('toolbar.playbackPause') : t('toolbar.playbackPlay')}
+            disabled={!state.canPlay}
+            onClick={handlePlayPause}
+            variant="primary"
+          >
+            {isPlaying ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
+          </ToolbarIconButton>
+          <ToolbarIconButton
+            title={t('toolbar.playbackNext')}
+            disabled={!state.canStepNext}
+            onClick={handleNext}
+          >
+            <SkipForwardIcon size={14} />
+          </ToolbarIconButton>
+          <span className="canvas-playback-controller-count">
+            {state.currentIndex + 1}/{route.length}
+          </span>
+        </div>
         {durationMs !== undefined ? (
           <span className="canvas-playback-controller-time">
             {formatControllerTime((currentTimeMs ?? 0) / 1000)} /{' '}
@@ -428,18 +431,22 @@ function ToolbarIconButton({
   disabled,
   onClick,
   children,
+  variant = 'default',
 }: {
   readonly title: string;
   readonly disabled?: boolean;
   readonly onClick?: () => void;
   readonly children: React.ReactNode;
+  readonly variant?: 'default' | 'primary';
 }) {
   return (
     <button
       type="button"
       title={title}
+      aria-label={title}
       disabled={disabled}
       className="canvas-playback-controller-button"
+      data-variant={variant}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={onClick}
     >

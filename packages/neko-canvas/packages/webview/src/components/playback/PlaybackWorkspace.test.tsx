@@ -28,7 +28,9 @@ vi.mock('@neko/ui/icons', () => ({
   ChevronRightIcon: ({ size = 16 }: { size?: number }) => (
     <span data-icon="chevron-right">{size}</span>
   ),
+  ClockIcon: ({ size = 16 }: { size?: number }) => <span data-icon="clock">{size}</span>,
   SendIcon: ({ size = 16 }: { size?: number }) => <span data-icon="send">{size}</span>,
+  WarningIcon: ({ size = 16 }: { size?: number }) => <span data-icon="warning">{size}</span>,
 }));
 
 vi.mock('../../preview/PreviewRendererRegistry', () => ({

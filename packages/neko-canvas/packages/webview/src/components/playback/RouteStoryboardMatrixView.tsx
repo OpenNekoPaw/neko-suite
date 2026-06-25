@@ -1,5 +1,11 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
-import { ChevronDownIcon, ChevronRightIcon, SendIcon } from '@neko/ui/icons';
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  SendIcon,
+  WarningIcon,
+} from '@neko/ui/icons';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { t } from '../../i18n';
 import type {
@@ -58,6 +64,22 @@ export function RouteStoryboardMatrix({
     () => [...runtimeDiagnostics, ...matrix.diagnostics.map((diagnostic) => diagnostic.message)],
     [matrix.diagnostics, runtimeDiagnostics],
   );
+  const visibleUnitCount = useMemo(
+    () =>
+      new Set(
+        matrix.rows.flatMap((row) =>
+          row.cells.flatMap((cell) => (cell.kind === 'playable' ? [cell.unitId] : [])),
+        ),
+      ).size,
+    [matrix.rows],
+  );
+  const routeSummary = t('playback.matrix.summary', {
+    rows: matrix.rows.length,
+    columns: matrix.columns.length,
+  });
+  const containerSummary = t('playback.matrix.containerCount', {
+    count: matrix.containerGroups.length,
+  });
 
   const focusCell = (cell: RouteStoryboardMatrixCell) => {
     setLocalFocusedCellId(cell.id);
@@ -100,7 +122,10 @@ export function RouteStoryboardMatrix({
       data-row-count={matrix.rows.length}
       data-column-count={matrix.columns.length}
       role="grid"
-      aria-label={t('playback.matrix.title')}
+      aria-label={t('playback.matrix.gridLabel', {
+        rows: matrix.rows.length,
+        columns: matrix.columns.length,
+      })}
       aria-rowcount={matrix.rows.length}
       aria-colcount={matrix.columns.length}
       tabIndex={0}
@@ -114,29 +139,37 @@ export function RouteStoryboardMatrix({
       onFocus={onFocus}
     >
       <div className="canvas-route-storyboard-matrix-toolbar">
-        <div className="canvas-route-storyboard-matrix-title">
-          {t('playback.matrix.title')}
-          <span>
-            {t('playback.matrix.summary', {
-              rows: matrix.rows.length,
-              columns: matrix.columns.length,
-            })}
-          </span>
+        <div className="canvas-route-storyboard-matrix-heading">
+          <div className="canvas-route-storyboard-matrix-title">
+            <span>{t('playback.matrix.title')}</span>
+            <small>{t('playback.matrix.previewOnly')}</small>
+          </div>
+          <div className="canvas-route-storyboard-matrix-stats" aria-label={routeSummary}>
+            <MatrixStat value={matrix.rows.length} label={t('playback.matrix.statRoutes')} />
+            <MatrixStat value={matrix.columns.length} label={t('playback.matrix.statSteps')} />
+            <MatrixStat value={visibleUnitCount} label={t('playback.matrix.statVisibleUnits')} />
+          </div>
         </div>
-        <div className="canvas-route-storyboard-matrix-families" role="tablist">
+        <div
+          className="canvas-route-storyboard-matrix-families"
+          role="tablist"
+          aria-label={t('playback.matrix.familyTabs')}
+        >
           {matrix.families.map((family) => (
             <button
               key={family.id}
               type="button"
               className="canvas-route-storyboard-matrix-family"
               data-active={family.id === matrix.activeRouteFamilyId ? 'true' : 'false'}
-              title={`${family.title} · ${family.visibleRouteIds.length}`}
+              title={formatFamilyTitle(family)}
               role="tab"
               aria-selected={family.id === matrix.activeRouteFamilyId}
+              aria-label={formatFamilyTitle(family)}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => onSelectFamily(family)}
             >
-              {family.title}
+              <span>{formatFamilyLabel(family)}</span>
+              <small>{family.visibleRouteIds.length}</small>
             </button>
           ))}
         </div>
@@ -145,7 +178,8 @@ export function RouteStoryboardMatrix({
       <div className="canvas-route-storyboard-matrix-grid" role="presentation">
         <div className="canvas-route-storyboard-matrix-header" role="presentation">
           <div className="canvas-route-storyboard-matrix-corner" role="rowheader">
-            {t('playback.matrix.routes')}
+            <span>{t('playback.matrix.routes')}</span>
+            <small>{containerSummary}</small>
           </div>
           <div className="canvas-route-storyboard-matrix-header-columns" role="presentation">
             <div className="canvas-route-storyboard-matrix-container-row" role="row">
@@ -156,9 +190,10 @@ export function RouteStoryboardMatrix({
                   className="canvas-route-storyboard-matrix-container"
                   data-folded={container.folded ? 'true' : 'false'}
                   style={{ gridColumn: `span ${container.slotCount}` }}
-                  title={container.title}
+                  title={formatContainerTitle(container)}
                   role="columnheader"
                   aria-colspan={container.slotCount}
+                  aria-label={formatContainerTitle(container)}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => onToggleContainerFold(container)}
                 >
@@ -167,8 +202,10 @@ export function RouteStoryboardMatrix({
                   ) : (
                     <ChevronDownIcon size={13} />
                   )}
-                  <span>{container.title}</span>
-                  <small>{container.unitCount}</small>
+                  <span>{formatContainerLabel(container)}</span>
+                  <small>
+                    {t('playback.matrix.containerUnitsShort', { count: container.unitCount })}
+                  </small>
                 </button>
               ))}
             </div>
@@ -178,9 +215,16 @@ export function RouteStoryboardMatrix({
                   key={column.id}
                   type="button"
                   className="canvas-route-storyboard-matrix-step"
-                  title={column.title}
+                  title={t('playback.matrix.stepTitle', {
+                    index: index + 1,
+                    title: column.title,
+                  })}
                   role="columnheader"
                   aria-colindex={index + 1}
+                  aria-label={t('playback.matrix.stepTitle', {
+                    index: index + 1,
+                    title: column.title,
+                  })}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => onSelectColumn(column.id)}
                 >
@@ -209,11 +253,21 @@ export function RouteStoryboardMatrix({
       </div>
 
       {diagnosticMessages.length > 0 ? (
-        <div className="canvas-route-storyboard-matrix-diagnostics">
-          {diagnosticMessages.slice(0, 2).join(' · ')}
+        <div className="canvas-route-storyboard-matrix-diagnostics" role="status">
+          <WarningIcon size={13} />
+          <span>{diagnosticMessages.slice(0, 2).join(' · ')}</span>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function MatrixStat({ value, label }: { readonly value: number; readonly label: string }) {
+  return (
+    <span className="canvas-route-storyboard-matrix-stat">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </span>
   );
 }
 
@@ -238,6 +292,12 @@ function MatrixRow({
   readonly onFocusCell: (cell: RouteStoryboardMatrixCell) => void;
   readonly onSendToCut: (row: RouteStoryboardMatrixRow) => void;
 }) {
+  const routeTitle = t('playback.matrix.rowTitle', {
+    title: row.title,
+    units: row.unitIds.length,
+    duration: formatDurationMs(row.totalDurationMs),
+  });
+
   return (
     <div
       className="canvas-route-storyboard-matrix-row"
@@ -249,19 +309,25 @@ function MatrixRow({
         <button
           type="button"
           className="canvas-route-storyboard-matrix-row-button"
-          title={row.title}
+          title={routeTitle}
+          aria-label={routeTitle}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => onSelectRoute(row)}
         >
           <span>{row.title}</span>
           <small>
-            {row.unitIds.length} · {formatDurationMs(row.totalDurationMs)}
+            <ClockIcon size={11} />
+            {t('playback.matrix.rowMeta', {
+              units: row.unitIds.length,
+              duration: formatDurationMs(row.totalDurationMs),
+            })}
           </small>
         </button>
         <button
           type="button"
           className="canvas-route-storyboard-matrix-send"
           title={t('playback.matrix.sendToCut')}
+          aria-label={t('playback.matrix.sendRouteToCut', { title: row.title })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -304,6 +370,12 @@ function MatrixCell({
   readonly onFocusCell: (cell: RouteStoryboardMatrixCell) => void;
 }) {
   if (cell.kind === 'summary') {
+    const title = t('playback.matrix.summaryCellTitle', {
+      label: cell.label,
+      count: cell.playableCount,
+      duration: formatDurationMs(cell.durationMs),
+    });
+
     return (
       <button
         type="button"
@@ -314,7 +386,8 @@ function MatrixCell({
         aria-colspan={cell.columnSpan}
         tabIndex={-1}
         style={{ gridColumn: `span ${cell.columnSpan}` }}
-        title={cell.label}
+        title={title}
+        aria-label={title}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={() => {
           onFocusCell(cell);
@@ -322,7 +395,12 @@ function MatrixCell({
         }}
       >
         <span>{cell.label}</span>
-        <small>{t('playback.matrix.foldedSummary', { count: cell.playableCount })}</small>
+        <small>
+          {t('playback.matrix.foldedSummary', {
+            count: cell.playableCount,
+            duration: formatDurationMs(cell.durationMs),
+          })}
+        </small>
       </button>
     );
   }
@@ -335,11 +413,22 @@ function MatrixCell({
         aria-colindex={cell.columnStart + 1}
         tabIndex={-1}
         title={t('playback.matrix.emptyCell')}
+        aria-label={t('playback.matrix.emptyCell')}
       >
         <span>{t('playback.matrix.emptyCellShort')}</span>
       </div>
     );
   }
+
+  const cellTitle = t('playback.matrix.cellTitle', {
+    label: cell.label,
+    kind: formatUnitKind(cell.unitKind),
+    start: formatDurationMs(cell.startMs),
+    end: formatDurationMs(cell.endMs),
+    duration: formatDurationMs(cell.durationMs),
+    state: formatMediaState(cell.mediaState),
+  });
+
   return (
     <button
       type="button"
@@ -352,7 +441,8 @@ function MatrixCell({
       aria-selected={current}
       aria-colindex={cell.columnStart + 1}
       tabIndex={-1}
-      title={`${cell.label} · ${formatDurationMs(cell.durationMs)}`}
+      title={cellTitle}
+      aria-label={cellTitle}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={() => {
         onFocusCell(cell);
@@ -364,10 +454,69 @@ function MatrixCell({
       </span>
       <span className="canvas-route-storyboard-matrix-cell-title">{cell.label}</span>
       <span className="canvas-route-storyboard-matrix-cell-meta">
-        {formatDurationMs(cell.startMs)}-{formatDurationMs(cell.endMs)}
+        <span>{formatUnitKind(cell.unitKind)}</span>
+        <span>
+          {formatDurationMs(cell.startMs)}-{formatDurationMs(cell.endMs)}
+        </span>
       </span>
     </button>
   );
+}
+
+function formatFamilyLabel(family: RouteStoryboardMatrixFamily): string {
+  return family.id === 'family:primary' ? t('playback.matrix.primaryRoutes') : family.title;
+}
+
+function formatFamilyTitle(family: RouteStoryboardMatrixFamily): string {
+  return t('playback.matrix.familyTitle', {
+    title: formatFamilyLabel(family),
+    count: family.visibleRouteIds.length,
+  });
+}
+
+function formatContainerLabel(container: RouteStoryboardMatrixContainerGroup): string {
+  return container.id === 'container:__root__'
+    ? t('playback.matrix.rootContainer')
+    : container.title;
+}
+
+function formatContainerTitle(container: RouteStoryboardMatrixContainerGroup): string {
+  return t('playback.matrix.containerTitle', {
+    title: formatContainerLabel(container),
+    units: container.unitCount,
+    slots: container.slotCount,
+  });
+}
+
+function formatUnitKind(kind: RouteStoryboardMatrixPlayableCell['unitKind']): string {
+  switch (kind) {
+    case 'scene':
+      return t('playback.kind.scene');
+    case 'shot':
+      return t('playback.kind.shot');
+    case 'media':
+      return t('playback.kind.media');
+    case 'container':
+      return t('playback.kind.container');
+    case 'narrative':
+      return t('playback.kind.narrative');
+    case 'node':
+    default:
+      return t('playback.kind.node');
+  }
+}
+
+function formatMediaState(state: RouteStoryboardMatrixPlayableCell['mediaState']): string {
+  switch (state) {
+    case 'playable':
+      return t('playback.matrix.mediaStatePlayable');
+    case 'missing':
+      return t('playback.matrix.mediaStateMissing');
+    case 'metadata-only':
+      return t('playback.matrix.mediaStateMetadataOnly');
+    default:
+      return state satisfies never;
+  }
 }
 
 function handleMatrixKeyboard({
