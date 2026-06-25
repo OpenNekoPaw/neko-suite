@@ -11,12 +11,12 @@ import {
 } from '@neko/shared';
 import { isResourceRef } from '@neko/shared';
 import { useResizable } from '@neko/ui/hooks';
-import { CloseIcon, LayersIcon, PlayIcon, RightPanelIcon } from '@neko/ui/icons';
+import { PlayIcon } from '@neko/ui/icons';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { ResizeHandle } from '@neko/ui/primitives';
 import { t } from '../../i18n';
 import { useCanvasStore } from '../../stores/canvasStore';
-import { usePlaybackStore, type PlaybackWorkspacePane } from '../../stores/playbackStore';
+import { usePlaybackStore } from '../../stores/playbackStore';
 import { useRuntimeViewportStore } from '../../stores/runtimeViewportStore';
 import { PreviewSurface } from '../../preview/PreviewRendererRegistry';
 import type { PreviewSourceDescriptor } from '../../preview/types';
@@ -51,8 +51,6 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
   const viewportZoom = useRuntimeViewportStore((state) => state.viewport.zoom);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const session = usePlaybackStore((state) => state.playbackSession);
-  const setPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
-  const hideWorkspace = usePlaybackStore((state) => state.hidePlaybackWorkspace);
   const setRoute = usePlaybackStore((state) => state.setPlaybackSessionRoute);
   const setCurrentUnit = usePlaybackStore((state) => state.setPlaybackSessionCurrentUnit);
   const setFocusOwner = usePlaybackStore((state) => state.setPlaybackWorkspaceFocusOwner);
@@ -407,20 +405,12 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
 
   return (
     <section
+      id="canvas-playback-workspace"
       className={workspaceClasses}
       data-testid="canvas-playback-workspace"
       data-playback-visible={session.visible ? 'true' : 'false'}
       data-playback-focus-owner={session.focusOwner}
     >
-      {session.visible ? (
-        <PlaybackWorkspaceHeader
-          canvasVisible={canvasVisible}
-          routeVisible={routeVisible}
-          stageVisible={stageVisible}
-          onTogglePane={(pane) => setPaneVisible(pane, !session.panes[pane])}
-          onHideWorkspace={hideWorkspace}
-        />
-      ) : null}
       <div
         className="canvas-playback-workspace-main"
         data-stage-visible={stageVisible ? 'true' : 'false'}
@@ -509,7 +499,6 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
             handleProps={routeResizeHandleProps}
             className="canvas-playback-route-resize-handle"
           />
-          <PlaybackRoutePaneToolbar />
           {routeMatrix ? (
             <RouteStoryboardMatrix
               matrix={routeMatrix}
@@ -550,80 +539,6 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
         </div>
       ) : null}
     </section>
-  );
-}
-
-function PlaybackWorkspaceHeader({
-  canvasVisible,
-  routeVisible,
-  stageVisible,
-  onTogglePane,
-  onHideWorkspace,
-}: {
-  readonly canvasVisible: boolean;
-  readonly routeVisible: boolean;
-  readonly stageVisible: boolean;
-  readonly onTogglePane: (pane: PlaybackWorkspacePane) => void;
-  readonly onHideWorkspace: () => void;
-}) {
-  return (
-    <div className="canvas-playback-workspace-header">
-      <div className="min-w-0">
-        <div className="canvas-playback-workspace-title">{t('playback.workspace.title')}</div>
-        <div className="canvas-playback-workspace-subtitle">{t('playback.workspace.subtitle')}</div>
-      </div>
-      <div className="canvas-playback-workspace-actions">
-        <PlaybackIconButton
-          title={
-            canvasVisible ? t('playback.workspace.hideCanvas') : t('playback.workspace.showCanvas')
-          }
-          active={canvasVisible}
-          onClick={() => onTogglePane('canvas')}
-        >
-          <RightPanelIcon size={15} />
-        </PlaybackIconButton>
-        <PlaybackIconButton
-          title={
-            stageVisible ? t('playback.workspace.hideStage') : t('playback.workspace.showStage')
-          }
-          active={stageVisible}
-          onClick={() => onTogglePane('stage')}
-        >
-          <PlayIcon size={15} />
-        </PlaybackIconButton>
-        <PlaybackIconButton
-          title={
-            routeVisible ? t('playback.workspace.hideRoute') : t('playback.workspace.showRoute')
-          }
-          active={routeVisible}
-          onClick={() => onTogglePane('route')}
-        >
-          <LayersIcon size={15} />
-        </PlaybackIconButton>
-        <PlaybackIconButton title={t('playback.workspace.close')} onClick={onHideWorkspace}>
-          <CloseIcon size={15} />
-        </PlaybackIconButton>
-      </div>
-    </div>
-  );
-}
-
-function PlaybackRoutePaneToolbar() {
-  return (
-    <div className="canvas-playback-route-pane-toolbar">
-      <div className="canvas-playback-route-pane-toolbar-title">{t('playback.route.title')}</div>
-      <div className="canvas-playback-route-pane-toolbar-actions">
-        <button
-          type="button"
-          className="canvas-playback-route-edit-gate"
-          title={t('playback.matrix.editDisabled')}
-          disabled
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          {t('playback.matrix.previewOnly')}
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1011,32 +926,6 @@ function PlaybackUnitSummary({ unit }: { readonly unit: CanvasPlaybackUnit }) {
         </dl>
       ) : null}
     </div>
-  );
-}
-
-function PlaybackIconButton({
-  title,
-  active,
-  onClick,
-  children,
-}: {
-  readonly title: string;
-  readonly active?: boolean;
-  readonly onClick: () => void;
-  readonly children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className="canvas-playback-icon-button"
-      data-active={active ? 'true' : 'false'}
-      aria-pressed={active === undefined ? undefined : active}
-      title={title}
-      onMouseDown={(event) => event.stopPropagation()}
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
 

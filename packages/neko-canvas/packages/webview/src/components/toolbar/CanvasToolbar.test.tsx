@@ -7,6 +7,7 @@ import { CanvasToolbar } from './CanvasToolbar';
 import { setLocale } from '../../i18n';
 
 vi.mock('@neko/ui/icons', () => ({
+  CloseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="close">{size}</span>,
   DownloadIcon: ({ size = 16 }: { size?: number }) => <span data-icon="download">{size}</span>,
   LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
   PackageIcon: ({ size = 16 }: { size?: number }) => <span data-icon="package">{size}</span>,
@@ -152,15 +153,75 @@ describe('CanvasToolbar', () => {
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
-  it('does not duplicate playback pane visibility buttons from the workspace header', () => {
-    const onRevealPlaybackWorkspace = vi.fn();
+  it('controls playback workspace panes from the left toolbar when the workspace is visible', () => {
+    const onTogglePlaybackPane = vi.fn();
+    const onHidePlaybackWorkspace = vi.fn();
 
     act(() => {
       root.render(
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          onRevealPlaybackWorkspace={onRevealPlaybackWorkspace}
+          onRevealPlaybackWorkspace={() => undefined}
+          playbackWorkspaceVisible={true}
+          playbackPaneState={{ canvas: true, stage: false, route: true }}
+          onTogglePlaybackPane={onTogglePlaybackPane}
+          onHidePlaybackWorkspace={onHidePlaybackWorkspace}
+        />,
+      );
+    });
+
+    const canvasButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-canvas-pane"]',
+    );
+    const stageButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-stage-pane"]',
+    );
+    const routeButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-playback-route-pane"]',
+    );
+    const closeButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="hide-playback-workspace"]',
+    );
+
+    expect(canvasButton?.getAttribute('aria-controls')).toBe('canvas-playback-canvas-pane');
+    expect(canvasButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(canvasButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(canvasButton?.getAttribute('aria-label')).toBe('Hide canvas pane');
+    expect(stageButton?.getAttribute('aria-controls')).toBe('canvas-playback-stage-pane');
+    expect(stageButton?.getAttribute('aria-expanded')).toBe('false');
+    expect(stageButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(stageButton?.getAttribute('aria-label')).toBe('Show playback stage');
+    expect(routeButton?.getAttribute('aria-controls')).toBe('canvas-playback-route-pane');
+    expect(routeButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(routeButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(routeButton?.getAttribute('aria-label')).toBe('Hide route matrix');
+    expect(closeButton?.getAttribute('aria-controls')).toBe('canvas-playback-workspace');
+    expect(closeButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(closeButton?.getAttribute('aria-label')).toBe('Hide playback workspace');
+
+    act(() => {
+      canvasButton?.click();
+      stageButton?.click();
+      routeButton?.click();
+      closeButton?.click();
+    });
+
+    expect(onTogglePlaybackPane.mock.calls).toEqual([['canvas'], ['stage'], ['route']]);
+    expect(onHidePlaybackWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps playback pane controls hidden before the workspace is visible', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          onRevealPlaybackWorkspace={() => undefined}
+          playbackWorkspaceVisible={false}
+          playbackPaneState={{ canvas: true, stage: true, route: true }}
+          onTogglePlaybackPane={() => undefined}
+          onHidePlaybackWorkspace={() => undefined}
         />,
       );
     });
@@ -174,16 +235,6 @@ describe('CanvasToolbar', () => {
     expect(
       host.querySelector('[data-creative-left-rail-action="toggle-playback-route-pane"]'),
     ).toBeNull();
-
-    act(() => {
-      host
-        .querySelector<HTMLButtonElement>(
-          '[data-creative-left-rail-action="reveal-playback-workspace"]',
-        )
-        ?.click();
-    });
-
-    expect(onRevealPlaybackWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it('controls canvas HUD visibility from the bottom visibility cluster', () => {

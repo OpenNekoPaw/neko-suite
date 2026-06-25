@@ -21,7 +21,7 @@ import type {
 } from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
-import { usePlaybackStore } from './stores/playbackStore';
+import { usePlaybackStore, type PlaybackWorkspacePane } from './stores/playbackStore';
 import { useRuntimeViewportStore } from './stores/runtimeViewportStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -252,7 +252,11 @@ export function CanvasApp() {
   const openGenerationPanel = useCanvasStore((state) => state.openGenerationPanel);
   const closeGenerationPanel = useCanvasStore((state) => state.closeGenerationPanel);
   const closeContentOverlay = useCanvasStore((state) => state.closeContentOverlay);
+  const playbackWorkspaceVisible = usePlaybackStore((state) => state.playbackSession.visible);
+  const playbackPaneState = usePlaybackStore((state) => state.playbackSession.panes);
   const revealPlaybackWorkspace = usePlaybackStore((state) => state.revealPlaybackWorkspace);
+  const setPlaybackPaneVisible = usePlaybackStore((state) => state.setPlaybackPaneVisible);
+  const hidePlaybackWorkspace = usePlaybackStore((state) => state.hidePlaybackWorkspace);
   const viewport = useRuntimeViewportStore((state) => state.viewport);
   const setViewport = useRuntimeViewportStore((state) => state.setViewport);
   const zoomCanvas = useRuntimeViewportStore((state) => state.zoomCanvas);
@@ -1443,6 +1447,32 @@ export function CanvasApp() {
     reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'));
   }, [reportAction, revealPlaybackWorkspace]);
 
+  const handleTogglePlaybackPane = useCallback(
+    (pane: PlaybackWorkspacePane) => {
+      const session = usePlaybackStore.getState().playbackSession;
+      if (!session.visible) {
+        revealPlaybackWorkspace({
+          focusOwner: pane,
+          panes: {
+            canvas: false,
+            stage: false,
+            route: false,
+            [pane]: true,
+          },
+        });
+      } else {
+        setPlaybackPaneVisible(pane, !session.panes[pane]);
+      }
+      reportAction('togglePlaybackPane', pane);
+    },
+    [reportAction, revealPlaybackWorkspace, setPlaybackPaneVisible],
+  );
+
+  const handleHidePlaybackWorkspace = useCallback(() => {
+    hidePlaybackWorkspace();
+    reportAction('hidePlaybackWorkspace', t('playback.workspace.close'));
+  }, [hidePlaybackWorkspace, reportAction]);
+
   // =========================================================================
   // Render
   // =========================================================================
@@ -1476,6 +1506,10 @@ export function CanvasApp() {
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
             onRevealPlaybackWorkspace={handleRevealPlaybackWorkspace}
+            playbackWorkspaceVisible={playbackWorkspaceVisible}
+            playbackPaneState={playbackPaneState}
+            onTogglePlaybackPane={handleTogglePlaybackPane}
+            onHidePlaybackWorkspace={handleHidePlaybackWorkspace}
             onOpenExport={() => {
               reportAction('openExport', t('toolbar.export'));
             }}

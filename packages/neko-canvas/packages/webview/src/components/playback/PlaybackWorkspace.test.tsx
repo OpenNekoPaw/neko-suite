@@ -16,10 +16,7 @@ import { setLocale } from '../../i18n';
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 vi.mock('@neko/ui/icons', () => ({
-  CloseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="close">{size}</span>,
-  LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
   PlayIcon: ({ size = 16 }: { size?: number }) => <span data-icon="play">{size}</span>,
-  RightPanelIcon: ({ size = 16 }: { size?: number }) => <span data-icon="panel">{size}</span>,
   PauseIcon: ({ size = 16 }: { size?: number }) => <span data-icon="pause">{size}</span>,
   SkipBackIcon: ({ size = 16 }: { size?: number }) => <span data-icon="skip-back">{size}</span>,
   SkipForwardIcon: ({ size = 16 }: { size?: number }) => (
@@ -121,6 +118,8 @@ describe('PlaybackWorkspace', () => {
     expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="canvas-playback-route-strip"]')).toBeNull();
+    expect(host.querySelector('.canvas-playback-workspace-header')).toBeNull();
+    expect(host.querySelector('.canvas-playback-route-pane-toolbar')).toBeNull();
     expect(host.textContent).toContain('Route Storyboard Matrix');
     expect(host.textContent).toContain('Shot 1');
     expect(host.textContent).toContain('Shot 2');
@@ -191,47 +190,39 @@ describe('PlaybackWorkspace', () => {
     });
   });
 
-  it('hides playback stage independently and pauses active playback state', () => {
+  it('renders pane visibility from playback session state and pauses active playback state', () => {
     act(() => {
       usePlaybackStore.getState().revealPlaybackWorkspace();
       usePlaybackStore.getState().setPlaybackWorkspacePlaybackState('playing');
       root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
     });
 
-    const hideStageButton = host.querySelector<HTMLButtonElement>(
-      'button[title="Hide playback stage"]',
-    );
-
     act(() => {
-      hideStageButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      usePlaybackStore.getState().setPlaybackPaneVisible('stage', false);
     });
 
     expect(usePlaybackStore.getState().playbackSession.panes.stage).toBe(false);
     expect(usePlaybackStore.getState().playbackSession.playbackState).toBe('paused');
     expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).toBeNull();
   });
 
-  it('keeps pane toggles reachable when the playback stage is hidden', () => {
+  it('keeps route matrix reachable when the playback stage is hidden', () => {
     act(() => {
       usePlaybackStore.getState().revealPlaybackWorkspace();
       root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
     });
 
     act(() => {
-      host
-        .querySelector<HTMLButtonElement>('button[title="Hide playback stage"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      usePlaybackStore.getState().setPlaybackPaneVisible('stage', false);
     });
 
     expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).toBeNull();
-    expect(
-      host.querySelector<HTMLButtonElement>('button[title="Show playback stage"]'),
-    ).not.toBeNull();
+    expect(host.querySelector('[data-testid="canvas-route-storyboard-matrix"]')).not.toBeNull();
+    expect(host.querySelector('.canvas-playback-workspace-header')).toBeNull();
 
     act(() => {
-      host
-        .querySelector<HTMLButtonElement>('button[title="Show playback stage"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      usePlaybackStore.getState().setPlaybackPaneVisible('stage', true);
     });
 
     expect(host.querySelector('[data-testid="canvas-playback-stage-pane"]')).not.toBeNull();

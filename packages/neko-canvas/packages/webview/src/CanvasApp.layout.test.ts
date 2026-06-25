@@ -8,6 +8,10 @@ describe('Canvas creative workbench layout boundary', () => {
     resolve(__dirname, 'components/toolbar/CanvasToolbar.tsx'),
     'utf8',
   );
+  const playbackWorkspaceSource = readFileSync(
+    resolve(__dirname, 'components/playback/PlaybackWorkspace.tsx'),
+    'utf8',
+  );
   const nodeLibrarySource = readFileSync(
     resolve(__dirname, 'components/panels/NodeLibraryPanel.tsx'),
     'utf8',
@@ -130,13 +134,24 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).not.toMatch(/scopeNavigation\.boardCount/);
   });
 
-  it('keeps playback controls inside PlaybackWorkspace without reusing the old preview entry', () => {
+  it('keeps playback workspace visibility controls in the left toolbar', () => {
     expect(appSource).not.toMatch(/<PlaybackControllerHost/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
-    expect(toolbarSource).not.toMatch(/toggle-playback-canvas-pane/);
-    expect(toolbarSource).not.toMatch(/toggle-playback-stage-pane/);
-    expect(toolbarSource).not.toMatch(/toggle-playback-route-pane/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-canvas-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-stage-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-route-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="hide-playback-workspace"/);
     expect(toolbarSource).toMatch(/icon=\{<PlayIcon size=\{18\} \/>\}/);
+    expect(toolbarSource).toMatch(
+      /onTogglePlaybackPane\?: \(pane: PlaybackWorkspacePane\) => void/,
+    );
+    expect(toolbarSource).toMatch(
+      /playbackPaneState\?: Readonly<Record<PlaybackWorkspacePane, boolean>>/,
+    );
+    expect(playbackWorkspaceSource).not.toMatch(/PlaybackWorkspaceHeader/);
+    expect(playbackWorkspaceSource).not.toMatch(/canvas-playback-workspace-header/);
+    expect(playbackWorkspaceSource).not.toMatch(/PlaybackRoutePaneToolbar/);
+    expect(playbackWorkspaceSource).not.toMatch(/canvas-playback-route-pane-toolbar/);
     expect(appSource).toMatch(
       /reportAction\('revealPlaybackWorkspace', t\('toolbar\.playbackWorkspace'\)\)/,
     );
@@ -189,10 +204,10 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(cssSource).toMatch(/\.canvas-node-library-section\s*\{[^}]*box-shadow:\s*none/);
     expect(cssSource).toMatch(/#canvas-right-node-tree-panel \.neko-creative-tree-view/);
     expect(cssSource).toMatch(
-      /#canvas-right-node-tree-panel \[role="treeitem"\] > button:first-child/,
+      /#canvas-right-node-tree-panel \[role=["']treeitem["']\] > button:first-child/,
     );
     expect(cssSource).toMatch(
-      /#canvas-right-node-tree-panel \[role="treeitem"\] > button:first-child\.invisible\s*\{[^}]*display:\s*none/,
+      /#canvas-right-node-tree-panel \[role=["']treeitem["']\] > button:first-child\.invisible\s*\{[^}]*display:\s*none/,
     );
   });
 
@@ -201,11 +216,19 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-add-node-popover"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="import-file"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="reveal-playback-workspace"/);
-    expect(toolbarSource).not.toMatch(/onTogglePlaybackPane/);
-    expect(toolbarSource).not.toMatch(/playbackPaneState/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-canvas-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-stage-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-playback-route-pane"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="hide-playback-workspace"/);
+    expect(toolbarSource).toMatch(/onTogglePlaybackPane/);
+    expect(toolbarSource).toMatch(/playbackPaneState/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
     expect(toolbarSource).toMatch(/onRevealPlaybackWorkspace\?: \(\) => void/);
+    expect(toolbarSource).toMatch(/aria-controls="canvas-playback-canvas-pane"/);
+    expect(toolbarSource).toMatch(/aria-controls="canvas-playback-stage-pane"/);
+    expect(toolbarSource).toMatch(/aria-controls="canvas-playback-route-pane"/);
+    expect(toolbarSource).toMatch(/aria-controls="canvas-playback-workspace"/);
     expect(toolbarSource).toMatch(/onOpenExport\?: \(\) => void/);
     expect(toolbarSource).toMatch(/onOpenPackage\?: \(\) => void/);
     expect(appSource).toMatch(
