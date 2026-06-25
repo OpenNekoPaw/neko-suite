@@ -4,8 +4,7 @@
  * Handles skill-related operations:
  * - Get available skills for slash command menu
  * - Apply skills (inject prompt into conversation)
- * - Semantic skill discovery
- * - User confirmation flow
+ * - Preserve explicit $skill and ActivateSkill activation boundaries
  *
  * Claude Skill Architecture:
  * - Skills are Markdown documents that teach Claude how to perform tasks
@@ -122,16 +121,10 @@ export class SkillHandler {
     return result;
   }
 
-  // ===========================================================================
-  // Semantic Discovery
-  // ===========================================================================
-
   /**
-   * Discover skills that match user input
-   * Used for automatic skill suggestion
-   *
-   * @param userInput User's message text
-   * @returns Discovery result with matched skills
+   * Compatibility shell for removed natural-language Skill routing.
+   * The Agent inspects the Skill catalog through GetContext and activates with
+   * ActivateSkill when appropriate.
    */
   discoverSkills(userInput: string): SkillDiscoveryResult | null {
     return this._runtime.discoverSkills(userInput);

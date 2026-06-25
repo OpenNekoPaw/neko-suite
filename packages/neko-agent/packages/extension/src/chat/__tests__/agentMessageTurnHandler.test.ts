@@ -356,10 +356,19 @@ function createMockAgentRunner() {
     }),
   };
 
+  const pendingMessages: string[] = [];
   return {
     getHistory: vi.fn().mockReturnValue([]),
+    getConfig: vi.fn(),
     configure: vi.fn().mockResolvedValue(undefined),
     execute: vi.fn().mockReturnValue((async function* () {})()),
+    isRunning: vi.fn().mockReturnValue(false),
+    appendMessage: vi.fn((message: string) => {
+      pendingMessages.push(message);
+      return true;
+    }),
+    getPendingMessagesCount: vi.fn(() => pendingMessages.length),
+    drainPendingMessages: vi.fn(() => pendingMessages.splice(0)),
     abort: vi.fn(),
     onDidRequestConfirmation: vi.fn().mockReturnValue({ dispose: vi.fn() }),
     onDidSubAgentEvent: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -407,9 +416,6 @@ function buildHandler(
       toWebviewUri: ReturnType<typeof vi.fn>;
       toWebviewAsset?: ReturnType<typeof vi.fn>;
     };
-    skillAutoActivation?: {
-      activate: ReturnType<typeof vi.fn>;
-    };
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
@@ -434,9 +440,6 @@ function buildHandler(
     undefined,
     undefined,
     overrides.localResourceAccess as any,
-    overrides.skillAutoActivation
-      ? { skillAutoActivation: overrides.skillAutoActivation as any }
-      : undefined,
   );
 }
 
@@ -498,17 +501,13 @@ describe('AgentMessageTurnHandler', () => {
     });
   });
 
-  describe('skill auto activation', () => {
-    it('auto-activates matching skills before dispatching an agent turn', async () => {
+  describe('Agent-first Skill activation boundary', () => {
+    it('dispatches natural-language agent turns without pre-turn Skill injection', async () => {
       const webview = createMockWebview();
-      const skillAutoActivation = {
-        activate: vi.fn().mockResolvedValue({ applied: true }),
-      };
       const agentManager = createMockAgentManager();
       const handler = buildHandler({
         agentManager,
         providers: createMockProviders(true),
-        skillAutoActivation,
       });
 
       await handler.handleUserMessage(
@@ -516,36 +515,10 @@ describe('AgentMessageTurnHandler', () => {
         createChatModelRequest('生成分镜表', { conversationId: 'conv-1' }),
       );
 
-      expect(skillAutoActivation.activate).toHaveBeenCalledWith({
-        webview,
-        conversationId: 'conv-1',
-        userInput: '生成分镜表',
-      });
-      expect(agentManager.getOrCreate().execute).toHaveBeenCalled();
-    });
-
-    it('does not auto-activate skills for direct media turns', async () => {
-      const skillAutoActivation = {
-        activate: vi.fn().mockResolvedValue({ applied: true }),
-      };
-      const platform = {
-        ...createMockPlatform(),
-        media: {},
-      };
-      const handler = buildHandler({
-        platform,
-        skillAutoActivation,
-      });
-
-      await handler.handleUserMessage(
-        createMockWebview() as any,
-        createMessageRequest('生成图片', {
-          sessionMode: 'image',
-          mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
-        }),
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'skillInjection' }),
       );
-
-      expect(skillAutoActivation.activate).not.toHaveBeenCalled();
+      expect(agentManager.getOrCreate().execute).toHaveBeenCalled();
     });
   });
 
@@ -620,6 +593,7 @@ describe('AgentMessageTurnHandler', () => {
         expect.objectContaining({
           providerId: 'deepseek-chat',
           modelId: 'deepseek-v4-pro',
+          modelCapabilities: ['chat', 'streaming'],
         }),
       );
       expect(providers.getProvider).not.toHaveBeenCalledWith('nekoapi-chat');
@@ -714,6 +688,55 @@ describe('AgentMessageTurnHandler', () => {
       );
     });
 
+    it('queues a same-config Agent message while the runner is already processing', async () => {
+      const webview = createMockWebview();
+      const platform = createMockPlatform();
+      const providers = createMockProviders(true);
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      vi.mocked(agentRunner.isRunning).mockReturnValue(true);
+      vi.mocked(agentRunner.getConfig).mockReturnValue({
+        platform,
+        systemPrompt: 'mock system prompt',
+        maxIterations: 200,
+        autoExecuteTools: true,
+        temperature: 0.7,
+        maxTokens: 8192,
+        providerId: 'anthropic',
+        modelId: 'claude-3',
+        modelCapabilities: ['chat', 'thinking', 'sampling'],
+        executionMode: 'ask',
+        conversationId: 'conv-1',
+      });
+      const handler = buildHandler({
+        agentManager,
+        providers,
+        platform,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('继续', { conversationId: 'conv-1' }),
+      );
+
+      expect(agentRunner.appendMessage).toHaveBeenCalledWith('继续');
+      expect(agentRunner.configure).not.toHaveBeenCalled();
+      expect(agentRunner.execute).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'messageQueued',
+          conversationId: 'conv-1',
+          pendingCount: 1,
+        }),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringContaining('Agent configuration cannot change'),
+        }),
+      );
+    });
+
     it('rejects unsupported Agent model slots before dispatching the turn', async () => {
       const webview = createMockWebview();
       const agentManager = createMockAgentManager();
@@ -765,7 +788,7 @@ describe('AgentMessageTurnHandler', () => {
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'globalError',
-          message: expect.stringContaining('conflicts with the legacy chat model selection'),
+          message: expect.stringContaining('conflicts with the chat model selection'),
         }),
       );
     });

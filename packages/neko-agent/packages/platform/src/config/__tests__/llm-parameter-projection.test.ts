@@ -252,6 +252,30 @@ describe('llm-parameter-projection', () => {
     ]);
   });
 
+  it('uses model protocol profile overrides for multiplex gateway parameter projection', () => {
+    const projection = projectLlmParameters({
+      model: createModel({
+        protocolProfile: 'anthropic',
+        capabilities: ['chat', 'thinking'],
+      }),
+      provider: createProvider({
+        type: 'newapi',
+        protocolProfile: 'newapi',
+        connectionKind: 'gateway',
+        supportsBeta: false,
+      }),
+      llmConfig: {
+        reasoningPreset: 'balanced',
+      },
+    });
+
+    expect(projection.providerFamily).toBe('anthropic');
+    expect(projection.providerOptions).toEqual({});
+    expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'unsupported-thinking-budget',
+    ]);
+  });
+
   it('maps Anthropic effort-only models without sending preset thinking budget', () => {
     const projection = projectLlmParameters({
       model: createModel({
@@ -294,6 +318,7 @@ describe('llm-parameter-projection', () => {
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-thinking-budget',
     ]);
+    expect(projection.providerOptions).toEqual({});
   });
 
   it('keeps generic OpenAI-compatible providers to common sampling unless capabilities declare more', () => {
@@ -317,6 +342,32 @@ describe('llm-parameter-projection', () => {
     expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'unsupported-reasoning-effort',
       'unsupported-verbosity',
+    ]);
+  });
+
+  it('keeps generic openai-chat providers out of official OpenAI-only parameter projection', () => {
+    const projection = projectLlmParameters({
+      model: createModel({
+        protocolProfile: 'openai-chat',
+        capabilities: ['chat', 'reasoning', 'verbosity'],
+      }),
+      provider: createProvider({
+        type: 'generic',
+        protocolProfile: 'openai-chat',
+        connectionKind: 'direct',
+      }),
+      llmConfig: {
+        reasoningPreset: 'fast',
+        verbosityPreset: 'detailed',
+      },
+    });
+
+    expect(projection.providerFamily).toBe('generic-openai');
+    expect(projection.providerOptions).toEqual({});
+    expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'unsupported-reasoning-effort',
+      'unsupported-verbosity',
+      'unsupported-service-tier',
     ]);
   });
 

@@ -263,15 +263,13 @@ describe('ConversationBridge', () => {
       );
     });
 
-    it('does not project document scratch cache paths when restoring active conversation', () => {
+    it('projects managed resource cache paths when restoring active conversation', () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
       const bridge = new ConversationBridge(ctx as any, undefined, localResourceAccess as any);
       const webview = createMockWebview();
       const conversationId = bridge.ensureActive();
-      const scratchPath =
-        '/mock/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg';
       const managedPath =
         '/mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg';
 
@@ -285,14 +283,11 @@ describe('ConversationBridge', () => {
             {
               id: 'tool-1',
               name: 'ReadImage',
-              arguments: { image_paths: [scratchPath, managedPath] },
+              arguments: { image_paths: [managedPath] },
               result: {
                 success: true,
                 data: {
-                  images: [
-                    { path: scratchPath, label: 'P1' },
-                    { path: managedPath, label: 'P1 cached' },
-                  ],
+                  images: [{ path: managedPath, label: 'P1 cached' }],
                 },
               },
             },
@@ -302,11 +297,6 @@ describe('ConversationBridge', () => {
 
       bridge.sendActiveConversation(webview as any);
 
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalledWith(
-        webview,
-        scratchPath,
-        'neko-agent.conversation',
-      );
       expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
         webview,
         managedPath,
@@ -321,13 +311,12 @@ describe('ConversationBridge', () => {
                 toolCalls: [
                   expect.objectContaining({
                     arguments: {
-                      image_paths: [scratchPath, managedPath],
-                      imagePathWebviewUris: [undefined, `webview-uri:${managedPath}`],
+                      image_paths: [managedPath],
+                      imagePathWebviewUris: [`webview-uri:${managedPath}`],
                     },
                     result: expect.objectContaining({
                       data: {
                         images: [
-                          { path: scratchPath, label: 'P1' },
                           {
                             path: managedPath,
                             label: 'P1 cached',

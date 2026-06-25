@@ -7,7 +7,10 @@
 import type { Model, Provider } from '../types/provider';
 import type { ChatModelOption, ModelCapability, ModelType } from '@neko/shared';
 import { isProviderConfigured } from './provider-configuration';
-import { projectLlmParameterControls } from './llm-parameter-projection';
+import {
+  projectLlmParameterControls,
+  resolveEffectiveLlmProviderView,
+} from './llm-parameter-projection';
 
 /**
  * Chat model service interface
@@ -51,6 +54,7 @@ export class ChatModelService implements IChatModelService {
 
       const providerName = provider.displayName || provider.name || provider.type;
       const modelName = model.displayName || model.name || model.id;
+      const effectiveProvider = resolveEffectiveLlmProviderView(model, provider) ?? provider;
 
       options.push({
         id: `${model.providerId}:${model.id}`,
@@ -60,7 +64,9 @@ export class ChatModelService implements IChatModelService {
         providerLabel: providerName,
         source: 'explicit-config',
         ...(provider.connectionKind ? { connectionKind: provider.connectionKind } : {}),
-        ...(provider.protocolProfile ? { protocolProfile: provider.protocolProfile } : {}),
+        ...(effectiveProvider.protocolProfile
+          ? { protocolProfile: effectiveProvider.protocolProfile }
+          : {}),
         ...(provider.supportLevel ? { supportLevel: provider.supportLevel } : {}),
         capabilities: capabilities as ModelCapability[],
         category,
@@ -85,7 +91,10 @@ export class ChatModelService implements IChatModelService {
     model: Model,
     provider: Provider,
   ): NonNullable<ChatModelOption['llmParameterControls']> {
-    return projectLlmParameterControls({ model, provider });
+    return projectLlmParameterControls({
+      model,
+      provider: resolveEffectiveLlmProviderView(model, provider) ?? provider,
+    });
   }
 }
 

@@ -84,6 +84,8 @@ export interface ChatOptions {
    * callers must not use it as an arbitrary raw parameter editor.
    */
   providerOptions?: Record<string, unknown>;
+  /** Capabilities declared by the explicitly selected model. */
+  modelCapabilities?: readonly string[];
   /** Abort signal for cancellation */
   signal?: AbortSignal;
 
@@ -105,6 +107,7 @@ export interface ChatOptions {
     messages: readonly ChatMessage[];
     providerId?: string;
     modelId?: string;
+    modelCapabilities?: readonly string[];
   }) => Promise<readonly ChatMessage[]> | readonly ChatMessage[];
 }
 

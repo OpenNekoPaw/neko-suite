@@ -2,6 +2,7 @@ import { toSharedService } from '@neko/platform';
 import type { ChatMessage, ConfiguredToolGroup } from '@neko/shared';
 import {
   buildAgentSessionExecutionContext,
+  AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
   createAgentRuntimeSessionController,
   createAgentRunnerEventEmitter,
   createAgentSessionRunner,
@@ -105,6 +106,9 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
   }
 
   async configure(config: IAgentConfig): Promise<void> {
+    if (this.sessionRunner.isRunning()) {
+      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+    }
     this.config = config;
 
     await this.runtimeController.configure(this.createRuntimeSessionAssemblyInput(config));
@@ -132,6 +136,10 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
 
   appendMessage(input: string): boolean {
     return this.sessionRunner.appendMessage(input);
+  }
+
+  drainPendingMessages(): string[] {
+    return this.sessionRunner.drainPendingMessages();
   }
 
   getPendingMessagesCount(): number {
@@ -244,9 +252,12 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       maxTokens: config.maxTokens,
       providerId: config.providerId,
       modelId: config.modelId,
+      modelCapabilities: config.modelCapabilities,
       thinkingBudget: config.thinkingBudget,
       executionMode: config.executionMode,
       workspaceRoot: config.workspaceRoot,
+      authorizedReadRoots: config.authorizedReadRoots,
+      workspaceIgnoreRules: config.workspaceIgnoreRules,
       taskManager: config.taskManager,
       conversationId: config.conversationId,
       operationToolAdapterRegistry: config.operationToolAdapterRegistry,

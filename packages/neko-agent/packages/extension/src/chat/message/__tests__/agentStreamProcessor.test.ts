@@ -742,9 +742,23 @@ describe('AgentStreamProcessor', () => {
           type: 'toolResult',
           data: {
             imagePaths: ['/tmp/page-1.jpg'],
+            resourceProjectionDiagnostics: [
+              expect.objectContaining({
+                code: 'resource-projection-denied',
+                field: 'imagePaths',
+                source: '/tmp/page-1.jpg',
+              }),
+            ],
             imageInfo: [
               {
                 path: '/tmp/page-1.jpg',
+                resourceProjectionDiagnostics: [
+                  expect.objectContaining({
+                    code: 'resource-projection-denied',
+                    field: 'path',
+                    source: '/tmp/page-1.jpg',
+                  }),
+                ],
                 width: 1494,
                 height: 2133,
               },
@@ -754,14 +768,79 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('does not ask local access to project document scratch cache paths', async () => {
+    it('returns projection diagnostics for macOS system temp image paths instead of display URIs', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn(() => undefined),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
+      const tempImagePath =
+        '/var/folders/26/b9fmn08x6mv2bcl771rnjyt80000gn/T/neko_epub_1vehc43/0001_moe-017905.jpg';
+      const events = toAsyncIterable([
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-1',
+            success: true,
+            data: {
+              imagePaths: [tempImagePath],
+              imageInfo: [{ path: tempImagePath, width: 1494, height: 2133 }],
+            },
+          },
+        },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        tempImagePath,
+        'neko-agent.stream-tool-result',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: expect.objectContaining({
+            imagePaths: [tempImagePath],
+            resourceProjectionDiagnostics: [
+              expect.objectContaining({
+                code: 'resource-projection-denied',
+                field: 'imagePaths',
+                source: tempImagePath,
+              }),
+            ],
+            imageInfo: [
+              expect.objectContaining({
+                path: tempImagePath,
+                resourceProjectionDiagnostics: [
+                  expect.objectContaining({
+                    code: 'resource-projection-denied',
+                    field: 'path',
+                    source: tempImagePath,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        }),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            imagePathWebviewUris: expect.any(Array),
+          }),
+        }),
+      );
+    });
+
+    it('projects managed resource cache paths in tool stream results', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
       processor = new AgentStreamProcessor({
         localResourceAccess: localResourceAccess as any,
       });
-      const scratchPath = '/workspace/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg';
       const managedPath = '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg';
       const events = toAsyncIterable([
         {
@@ -770,11 +849,8 @@ describe('AgentStreamProcessor', () => {
             toolCallId: 'tc-1',
             success: true,
             data: {
-              imagePaths: [scratchPath, managedPath],
-              imageInfo: [
-                { path: scratchPath, width: 1494, height: 2133 },
-                { path: managedPath, width: 1494, height: 2133 },
-              ],
+              imagePaths: [managedPath],
+              imageInfo: [{ path: managedPath, width: 1494, height: 2133 }],
             },
           },
         },
@@ -782,11 +858,6 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalledWith(
-        webview,
-        scratchPath,
-        'neko-agent.stream-tool-result',
-      );
       expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
         webview,
         managedPath,
@@ -796,10 +867,9 @@ describe('AgentStreamProcessor', () => {
         expect.objectContaining({
           type: 'toolResult',
           data: {
-            imagePaths: [scratchPath, managedPath],
-            imagePathWebviewUris: [undefined, `webview-uri:${managedPath}`],
+            imagePaths: [managedPath],
+            imagePathWebviewUris: [`webview-uri:${managedPath}`],
             imageInfo: [
-              { path: scratchPath, width: 1494, height: 2133 },
               {
                 path: managedPath,
                 webviewUri: `webview-uri:${managedPath}`,
@@ -808,6 +878,92 @@ describe('AgentStreamProcessor', () => {
               },
             ],
           },
+        }),
+      );
+    });
+
+    it('projects top-level tool result media fields for webview delivery', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
+      const imagePath = '/tmp/page-1.jpg';
+      const events = toAsyncIterable([
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-read-image',
+            success: true,
+            data: { images: [{ path: imagePath, mimeType: 'image/jpeg', byteSize: 10 }] },
+            attachments: [
+              {
+                type: 'image',
+                path: imagePath,
+                mimeType: 'image/jpeg',
+                assetRef: {
+                  assetId: 'read-image-page-1',
+                  uri: imagePath,
+                  mimeType: 'image/jpeg',
+                },
+              },
+            ],
+            perceptionCards: [
+              {
+                version: 1,
+                assetId: 'read-image-page-1',
+                modality: 'image',
+                createdAt: 1,
+                layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+                structural: { format: 'jpeg', mimeType: 'image/jpeg', byteSize: 10 },
+                perceptual: {
+                  keyframeRefs: [
+                    {
+                      assetId: 'read-image-page-1',
+                      uri: imagePath,
+                      mimeType: 'image/jpeg',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        imagePath,
+        'neko-agent.stream-tool-result',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          attachments: [
+            expect.objectContaining({
+              path: imagePath,
+              webviewUri: `webview-uri:${imagePath}`,
+              assetRef: expect.objectContaining({
+                uri: `webview-uri:${imagePath}`,
+                localPath: imagePath,
+              }),
+            }),
+          ],
+          perceptionCards: [
+            expect.objectContaining({
+              perceptual: expect.objectContaining({
+                keyframeRefs: [
+                  expect.objectContaining({
+                    uri: `webview-uri:${imagePath}`,
+                    localPath: imagePath,
+                  }),
+                ],
+              }),
+            }),
+          ],
         }),
       );
     });

@@ -44,10 +44,10 @@ export interface LlmModelCapabilities {
 }
 
 export interface LlmCapabilityProjectionInput {
-  readonly model: Pick<Model, 'capabilities' | 'options'>;
+  readonly model: Pick<Model, 'capabilities' | 'options' | 'protocolProfile' | 'supportsBeta'>;
   readonly provider?: Pick<
     Provider,
-    'type' | 'protocolProfile' | 'connectionKind' | 'supportLevel' | 'options'
+    'type' | 'protocolProfile' | 'connectionKind' | 'supportLevel' | 'options' | 'supportsBeta'
   >;
 }
 
@@ -62,7 +62,10 @@ export interface AgentPresetIntent {
 }
 
 export interface LlmParameterProjectionInput {
-  readonly model: Pick<Model, 'id' | 'name' | 'capabilities' | 'options' | 'supportsBeta'>;
+  readonly model: Pick<
+    Model,
+    'id' | 'name' | 'capabilities' | 'options' | 'protocolProfile' | 'supportsBeta'
+  >;
   readonly provider: Pick<
     Provider,
     | 'id'
@@ -86,6 +89,11 @@ export interface LlmParameterProjection {
 }
 
 export type LlmParameterControlAvailability = NonNullable<ChatModelOption['llmParameterControls']>;
+
+type LlmProviderProjectionView = Pick<
+  Provider,
+  'type' | 'protocolProfile' | 'connectionKind' | 'supportLevel' | 'options' | 'supportsBeta'
+>;
 
 const ALL_REASONING_EFFORT_VALUES: readonly AgentReasoningEffort[] = [
   'none',
@@ -127,32 +135,54 @@ export function projectLlmModelCapabilities(
   input: LlmCapabilityProjectionInput,
 ): LlmModelCapabilities {
   const capabilitySet = createCapabilitySet(input.model.capabilities);
-  const providerFamily = input.provider
-    ? resolveLlmProviderFamily(input.provider)
+  const provider = resolveEffectiveLlmProviderView(input.model, input.provider);
+  const providerFamily = provider
+    ? resolveLlmProviderFamily(provider)
     : resolveProviderFamilyFromCapabilitySet(capabilitySet);
-  const optionCapabilities = readOptionCapabilities(input.model.options, input.provider?.options);
+  const optionCapabilities = readOptionCapabilities(input.model.options, provider?.options);
+  const supportsBeta = input.model.supportsBeta ?? provider?.supportsBeta ?? true;
   const supportsReasoningEffort =
-    hasAnyCapability(capabilitySet, CAPABILITY_ALIASES.reasoningEffort) ||
-    optionCapabilities.reasoningEffortValues !== undefined;
+    shouldSupportProviderParameter({
+      capabilitySet,
+      optionValue: undefined,
+      providerFamily,
+      parameterCapabilities: CAPABILITY_ALIASES.reasoningEffort,
+      officialOnly: true,
+    }) || optionCapabilities.reasoningEffortValues !== undefined;
   const supportsThinkingBudget =
-    hasAnyCapability(capabilitySet, CAPABILITY_ALIASES.thinkingBudget) ||
-    optionCapabilities.thinkingBudget === true;
+    (providerFamily !== 'anthropic' || supportsBeta) &&
+    (shouldSupportProviderParameter({
+      capabilitySet,
+      optionValue: optionCapabilities.thinkingBudget,
+      providerFamily,
+      parameterCapabilities: CAPABILITY_ALIASES.thinkingBudget,
+      officialOnly: true,
+    }) ||
+      optionCapabilities.thinkingBudget === true);
   const supportsVerbosity =
-    hasAnyCapability(capabilitySet, CAPABILITY_ALIASES.verbosity) ||
-    optionCapabilities.verbosity === true;
+    shouldSupportProviderParameter({
+      capabilitySet,
+      optionValue: optionCapabilities.verbosity,
+      providerFamily,
+      parameterCapabilities: CAPABILITY_ALIASES.verbosity,
+      officialOnly: true,
+    }) || optionCapabilities.verbosity === true;
   const supportsFastTier =
-    hasAnyCapability(capabilitySet, CAPABILITY_ALIASES.fastTier) ||
-    optionCapabilities.fastTier === true;
+    shouldSupportProviderParameter({
+      capabilitySet,
+      optionValue: optionCapabilities.fastTier,
+      providerFamily,
+      parameterCapabilities: CAPABILITY_ALIASES.fastTier,
+      officialOnly: true,
+    }) || optionCapabilities.fastTier === true;
   const supportsTemperature = shouldSupportSamplingParameter({
     capabilitySet,
     optionValue: optionCapabilities.temperature,
-    providerFamily,
     parameterCapabilities: CAPABILITY_ALIASES.temperature,
   });
   const supportsTopP = shouldSupportSamplingParameter({
     capabilitySet,
     optionValue: optionCapabilities.topP,
-    providerFamily,
     parameterCapabilities: CAPABILITY_ALIASES.topP,
   });
   const supportsMaxOutputTokens = optionCapabilities.maxOutputTokens ?? true;
@@ -207,10 +237,11 @@ export function projectAgentPresetIntent(config: AgentLlmConfig = {}): AgentPres
 }
 
 export function projectLlmParameters(input: LlmParameterProjectionInput): LlmParameterProjection {
-  const providerFamily = resolveLlmProviderFamily(input.provider);
+  const provider = resolveEffectiveLlmProviderView(input.model, input.provider) ?? input.provider;
+  const providerFamily = resolveLlmProviderFamily(provider);
   const capabilities = projectLlmModelCapabilities({
     model: input.model,
-    provider: input.provider,
+    provider,
   });
   const presetIntent = projectAgentPresetIntent(input.llmConfig);
   const hasExplicitThinkingBudget = input.llmConfig?.advanced?.thinkingBudget !== undefined;
@@ -293,6 +324,19 @@ export function resolveLlmProviderFamily(
     return 'openai';
   }
   return 'generic-openai';
+}
+
+export function resolveEffectiveLlmProviderView(
+  model: Pick<Model, 'protocolProfile'>,
+  provider?: LlmProviderProjectionView,
+): LlmProviderProjectionView | undefined {
+  if (!provider || model.protocolProfile === undefined) {
+    return provider;
+  }
+  return {
+    ...provider,
+    protocolProfile: model.protocolProfile,
+  };
 }
 
 function applyCommonOptions(input: {
@@ -406,7 +450,7 @@ function applyAnthropicOptions(input: {
   } = input;
 
   if (presetIntent.reasoningEffort !== undefined) {
-    if (capabilities.supportsThinkingBudget) {
+    if (capabilities.supportsThinkingBudget && supportsBeta) {
       chatOptions.thinkingBudget =
         presetIntent.thinkingBudget ?? thinkingBudgetForEffort(presetIntent.reasoningEffort);
       providerOptions.anthropic = {
@@ -416,6 +460,8 @@ function applyAnthropicOptions(input: {
           budgetTokens: chatOptions.thinkingBudget,
         },
       };
+    } else if (!supportsBeta && presetIntent.thinkingBudget !== undefined) {
+      diagnostics.push(createDiagnostic('unsupported-thinking-budget', 'thinkingBudget'));
     } else if (
       capabilities.supportsReasoningEffort &&
       isAnthropicEffortValue(presetIntent.reasoningEffort) &&
@@ -431,7 +477,7 @@ function applyAnthropicOptions(input: {
   }
 
   if (presetIntent.thinkingBudget !== undefined && hasExplicitThinkingBudget) {
-    if (capabilities.supportsThinkingBudget) {
+    if (capabilities.supportsThinkingBudget && supportsBeta) {
       chatOptions.thinkingBudget = presetIntent.thinkingBudget;
       providerOptions.anthropic = {
         ...(isRecord(providerOptions.anthropic) ? providerOptions.anthropic : {}),
@@ -446,9 +492,6 @@ function applyAnthropicOptions(input: {
   }
 
   if (chatOptions.thinkingBudget !== undefined && chatOptions.thinkingBudget > 0) {
-    if (!supportsBeta) {
-      diagnostics.push(createDiagnostic('unsupported-thinking-budget', 'thinkingBudget'));
-    }
     if (chatOptions.temperature !== undefined || chatOptions.topP !== undefined) {
       diagnostics.push(
         createDiagnostic(
@@ -664,13 +707,30 @@ function readReasoningEffortValues(value: unknown): readonly AgentReasoningEffor
 function shouldSupportSamplingParameter(input: {
   readonly capabilitySet: ReadonlySet<string>;
   readonly optionValue: boolean | undefined;
-  readonly providerFamily: LlmProviderFamily;
   readonly parameterCapabilities: readonly string[];
 }): boolean {
   if (input.optionValue !== undefined) return input.optionValue;
   if (hasAnyCapability(input.capabilitySet, input.parameterCapabilities)) return true;
   if (input.capabilitySet.has('reasoning')) return false;
   return true;
+}
+
+function shouldSupportProviderParameter(input: {
+  readonly capabilitySet: ReadonlySet<string>;
+  readonly optionValue: boolean | undefined;
+  readonly providerFamily: LlmProviderFamily;
+  readonly parameterCapabilities: readonly string[];
+  readonly officialOnly: boolean;
+}): boolean {
+  if (input.optionValue !== undefined) return input.optionValue;
+  if (
+    input.officialOnly &&
+    input.providerFamily !== 'openai' &&
+    input.providerFamily !== 'anthropic'
+  ) {
+    return false;
+  }
+  return hasAnyCapability(input.capabilitySet, input.parameterCapabilities);
 }
 
 function resolveProviderFamilyFromCapabilitySet(

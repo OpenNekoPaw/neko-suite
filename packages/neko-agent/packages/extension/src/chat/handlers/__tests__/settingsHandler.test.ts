@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AGENT_SESSION_CONFIG_LOCKED_MESSAGE } from '@neko/agent/runtime';
 import { SettingsHandler } from '../settingsHandler';
 
 function createMockWebview() {
@@ -149,6 +150,102 @@ describe('SettingsHandler', () => {
       };
       await handler.handleUpdateSettings(webview as any, update);
 
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: true,
+      });
+    });
+
+    it('rejects model selection updates while any Agent turn is running', async () => {
+      const agentRunState = {
+        hasRunningAgents: vi.fn().mockReturnValue(true),
+      };
+      handler = new SettingsHandler({
+        platform: platform as any,
+        agentRunState,
+      });
+
+      await handler.handleUpdateSettings(webview as any, {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+
+      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: false,
+        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
+      });
+    });
+
+    it('rejects model parameter updates while any Agent turn is running', async () => {
+      const agentRunState = {
+        hasRunningAgents: vi.fn().mockReturnValue(true),
+      };
+      handler = new SettingsHandler({
+        platform: platform as any,
+        agentRunState,
+      });
+
+      await handler.handleUpdateSettings(webview as any, {
+        temperature: 0.2,
+        thinkingBudget: 4096,
+      });
+
+      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: false,
+        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
+      });
+    });
+
+    it('rejects model selection updates while background tasks are active', async () => {
+      const agentRunState = {
+        hasRunningAgents: vi.fn().mockReturnValue(false),
+      };
+      const taskState = {
+        list: vi.fn().mockResolvedValue([{ id: 'task-1', status: 'running' }]),
+      };
+      handler = new SettingsHandler({
+        platform: platform as any,
+        agentRunState,
+        taskState: taskState as any,
+      });
+
+      await handler.handleUpdateSettings(webview as any, {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+
+      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
+      expect(taskState.list).toHaveBeenCalledTimes(1);
+      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: false,
+        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
+      });
+    });
+
+    it('allows non-model runtime settings while an Agent turn is running', async () => {
+      const agentRunState = {
+        hasRunningAgents: vi.fn().mockReturnValue(true),
+      };
+      handler = new SettingsHandler({
+        platform: platform as any,
+        agentRunState,
+      });
+      const update = {
+        executionMode: 'plan',
+      };
+
+      await handler.handleUpdateSettings(webview as any, update);
+
+      expect(agentRunState.hasRunningAgents).not.toHaveBeenCalled();
       expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'settingsUpdated',

@@ -23,10 +23,14 @@ import {
   getEngineClientProvider,
   type IEngineClientProvider,
 } from '../services/engineClientProvider';
+import { createLocalPerceptionAssetLoader } from '../services/perceptionAssetLoader';
 import type { IAgentContext } from './agentContext';
 import { type IAgentConfig, type ExecutionMode } from './agentRunnerContracts';
 import { AgentRunnerRuntimeAdapter } from './agentRunnerRuntimeAdapter';
 import { AgentRunnerVscodeEventBridge } from './agentRunnerVscodeEventBridge';
+import { loadAuthorizedMediaLibraryReadRoots } from '../services/documentPathResolver';
+import { loadWorkspaceFileIgnoreRules } from '../services/workspaceIgnoreFilter';
+import { setDocumentAuthorizedReadRoots } from '../tools/documentToolRuntime';
 
 const logger = getLogger('AgentRunner');
 
@@ -67,6 +71,7 @@ export class AgentRunner implements IAgentRunner {
       engineClientProvider: deps.engineClientProvider ?? getEngineClientProvider(),
       subAgentRuntime: deps.subAgentRuntime,
       createRuntimeController: deps.createRuntimeController,
+      perceptionAssetLoader: createLocalPerceptionAssetLoader(),
       logger,
     });
     this.eventBridge = new AgentRunnerVscodeEventBridge(this.port.onDidRunnerEvent);
@@ -92,8 +97,8 @@ export class AgentRunner implements IAgentRunner {
     return this.port.onDidRunnerEvent;
   }
 
-  configure(config: IAgentConfig): Promise<void> {
-    return this.port.configure(config);
+  async configure(config: IAgentConfig): Promise<void> {
+    return this.port.configure(await projectHostFileAccessPolicy(config));
   }
 
   getConfig(): IAgentConfig | undefined {
@@ -114,6 +119,10 @@ export class AgentRunner implements IAgentRunner {
 
   appendMessage(input: string): boolean {
     return this.port.appendMessage(input);
+  }
+
+  drainPendingMessages(): string[] {
+    return this.port.drainPendingMessages();
   }
 
   getPendingMessagesCount(): number {
@@ -195,4 +204,38 @@ export class AgentRunner implements IAgentRunner {
     this.eventBridge.dispose();
     this.port.dispose();
   }
+}
+
+async function projectHostFileAccessPolicy(config: IAgentConfig): Promise<IAgentConfig> {
+  const hostReadRoots = await loadAuthorizedMediaLibraryReadRoots();
+  const authorizedReadRoots = dedupePaths([
+    ...(config.authorizedReadRoots ?? []),
+    ...hostReadRoots,
+  ]);
+  const workspaceIgnoreRules =
+    config.workspaceIgnoreRules ??
+    (config.workspaceRoot ? await loadWorkspaceFileIgnoreRules(config.workspaceRoot) : undefined);
+
+  setDocumentAuthorizedReadRoots(authorizedReadRoots);
+
+  if (authorizedReadRoots.length === 0 && workspaceIgnoreRules === config.workspaceIgnoreRules) {
+    return config;
+  }
+
+  return {
+    ...config,
+    ...(authorizedReadRoots.length > 0 ? { authorizedReadRoots } : {}),
+    ...(workspaceIgnoreRules ? { workspaceIgnoreRules } : {}),
+  };
+}
+
+function dedupePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of paths) {
+    if (seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
+  }
+  return result;
 }

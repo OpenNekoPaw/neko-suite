@@ -66,16 +66,7 @@ import {
 
 const logger = getLogger('AgentMessageTurnHandler');
 
-export interface AgentMessageSkillAutoActivation {
-  activate(input: {
-    readonly webview: vscode.Webview;
-    readonly conversationId: string;
-    readonly userInput: string;
-  }): Promise<unknown>;
-}
-
 export interface AgentMessageTurnHandlerOptions {
-  readonly skillAutoActivation?: AgentMessageSkillAutoActivation;
   readonly accountAiCatalog?: AccountAiCatalogCache;
 }
 
@@ -210,7 +201,6 @@ export class AgentMessageTurnHandler {
       return;
     }
 
-    await this._autoActivateSkillForRequest(webview, resolvedRequest);
     await runAgentMessageTurnRuntime({
       request: resolvedRequest,
       inputProcessor: this._getInputProcessor(),
@@ -321,30 +311,6 @@ export class AgentMessageTurnHandler {
       llmConfig: resolved.llmConfig,
       llmRuntimeOptions: resolved.llmRuntimeOptions,
     };
-  }
-
-  private async _autoActivateSkillForRequest(
-    webview: vscode.Webview,
-    request: AgentMessageRuntimeRequest,
-  ): Promise<void> {
-    if (request.sessionMode !== 'agent' || !request.conversationId) {
-      return;
-    }
-
-    const activation = this._options.skillAutoActivation;
-    if (!activation) {
-      return;
-    }
-
-    try {
-      await activation.activate({
-        webview,
-        conversationId: request.conversationId,
-        userInput: request.messageText,
-      });
-    } catch (error) {
-      logger.warn('Failed to auto-activate matching skill', error);
-    }
   }
 
   private _updateAgentState(

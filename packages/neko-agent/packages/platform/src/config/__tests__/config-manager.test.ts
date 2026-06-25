@@ -247,7 +247,7 @@ describe('ConfigManager', () => {
       const preset = manager.getRetryTimeoutPreset('modelCall');
 
       expect(preset).toBeDefined();
-      expect(preset?.retry.maxRetries).toBe(10);
+      expect(preset?.retry.maxRetries).toBe(4);
       expect(preset?.timeout.totalTimeout).toBeGreaterThan(5 * 60 * 1000);
       expect(preset?.timeout.streamTimeout).toBeGreaterThan(5 * 60 * 1000);
     });

@@ -22,6 +22,7 @@ const explicitModel: Model = {
   displayName: 'User Chat',
   providerId: 'user-newapi',
   type: 'llm',
+  protocolProfile: 'anthropic',
   capabilities: ['chat'],
   enabled: true,
 };
@@ -134,6 +135,18 @@ describe('resolveAiProviderSources', () => {
       'neko-account-gateway:official-chat',
       'user-newapi:user-chat',
     ]);
+    expect(projection.chatModelOptions).toContainEqual(
+      expect.objectContaining({
+        id: 'user-newapi:user-chat',
+        protocolProfile: 'anthropic',
+      }),
+    );
+    expect(projection.models).toContainEqual(
+      expect.objectContaining({
+        id: 'user-chat',
+        protocolProfile: 'anthropic',
+      }),
+    );
     expect(projection.chatModelOptions).not.toContainEqual(
       expect.objectContaining({ id: 'auto', providerId: '', modelId: '' }),
     );

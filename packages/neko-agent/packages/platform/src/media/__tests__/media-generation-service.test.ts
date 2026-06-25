@@ -7,7 +7,7 @@ import type { Task } from '@neko/shared';
 import { MediaGenerationService } from '../media-generation-service';
 import { MediaRoutingManager } from '../routing/media-routing-manager';
 import { MediaTaskExecutor } from '../media-task-executor';
-import { TaskManager } from '@neko/agent/task';
+import { TaskManager } from '@neko/agent';
 import { ProviderRegistry } from '../../provider/provider-registry';
 import { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
@@ -85,6 +85,43 @@ describe('MediaGenerationService', () => {
       expect(task.status).toBe('pending');
       expect(task.providerId).toBe('openai-provider');
       expect(task.modelId).toBe('dalle-model');
+    });
+
+    it('stores the routed provider and model in the queued task payload', async () => {
+      const routingManager = {
+        selectProvider: vi.fn().mockResolvedValue({
+          providerId: 'locked-provider',
+          modelId: 'locked-model',
+          score: 100,
+          reason: 'submitted model selection',
+        }),
+      } as unknown as MediaRoutingManager;
+      const taskManager = new TaskManager();
+      const newService = new MediaGenerationService(taskManager, providerRegistry, routingManager);
+
+      const task = await newService.generateImage({
+        prompt: 'A locked model render',
+        providerId: 'locked-provider',
+        modelId: 'locked-model',
+      });
+
+      const queuedTask = await taskManager.get(task.id);
+      expect(routingManager.selectProvider).toHaveBeenCalledWith(
+        'text-to-image',
+        undefined,
+        'locked-provider',
+        'locked-model',
+      );
+      expect(queuedTask?.input.payload).toMatchObject({
+        generationType: 'text-to-image',
+        providerId: 'locked-provider',
+        modelId: 'locked-model',
+        request: expect.objectContaining({
+          providerId: 'locked-provider',
+          modelId: 'locked-model',
+        }),
+      });
+      expect(queuedTask?.input.options?.retry?.maxRetries).toBe(0);
     });
 
     it('should detect image-to-image when reference image is provided', async () => {

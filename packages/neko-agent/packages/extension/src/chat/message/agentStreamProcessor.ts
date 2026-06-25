@@ -29,7 +29,6 @@ import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-i
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
-import { isDocumentImageCachePath } from '../../services/documentCachePaths';
 import {
   observeEntityMemoryContributionAutomation,
   type EntityMemoryContributionAutomationPort,
@@ -338,9 +337,6 @@ function projectStreamMessageResourcesForWebview(
   localResourceAccess?: AgentLocalResourceAccess,
 ): AgentEventStreamRuntimeMessage {
   const resolveLocalMediaPath = (filePath: string): string | undefined => {
-    if (isDocumentImageScratchCachePath(filePath)) {
-      return undefined;
-    }
     return localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
   };
 
@@ -352,10 +348,28 @@ function projectStreamMessageResourcesForWebview(
     };
   }
 
-  if (message.type === 'toolResult' && message.data !== undefined) {
+  if (message.type === 'toolResult') {
+    const data =
+      message.data !== undefined
+        ? projectResourceValue(message.data, { resolveLocalMediaPath })
+        : undefined;
     return {
       ...message,
-      data: projectResourceValue(message.data, { resolveLocalMediaPath }),
+      ...(data !== undefined ? { data } : {}),
+      ...(message.attachments
+        ? {
+            attachments: projectResourceValue(message.attachments, {
+              resolveLocalMediaPath,
+            }) as typeof message.attachments,
+          }
+        : {}),
+      ...(message.perceptionCards
+        ? {
+            perceptionCards: projectResourceValue(message.perceptionCards, {
+              resolveLocalMediaPath,
+            }) as typeof message.perceptionCards,
+          }
+        : {}),
     };
   }
 
@@ -364,6 +378,20 @@ function projectStreamMessageResourcesForWebview(
     return {
       ...message,
       dataPatch: isRecord(dataPatch) ? dataPatch : message.dataPatch,
+      ...(message.attachments
+        ? {
+            attachments: projectResourceValue(message.attachments, {
+              resolveLocalMediaPath,
+            }) as typeof message.attachments,
+          }
+        : {}),
+      ...(message.perceptionCards
+        ? {
+            perceptionCards: projectResourceValue(message.perceptionCards, {
+              resolveLocalMediaPath,
+            }) as typeof message.perceptionCards,
+          }
+        : {}),
     };
   }
 
@@ -372,10 +400,6 @@ function projectStreamMessageResourcesForWebview(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isDocumentImageScratchCachePath(value: string): boolean {
-  return isDocumentImageCachePath(value);
 }
 
 function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').PerceptualAssetRef {

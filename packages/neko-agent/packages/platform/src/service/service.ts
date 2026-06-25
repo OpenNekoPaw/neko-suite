@@ -601,6 +601,7 @@ async function projectMessagesForProvider(
     messages,
     providerId: routing.providerId,
     modelId: routing.modelId,
+    modelCapabilities: options.modelCapabilities,
   });
   return [...projected];
 }
@@ -650,6 +651,7 @@ interface ModelCallOptionsSummary {
   readonly toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; name: string };
   readonly responseFormat?: NonNullable<ChatOptions['responseFormat']>['type'];
   readonly thinkingBudget?: number;
+  readonly modelCapabilityCount: number;
   readonly systemPromptSectionCount: number;
   readonly cachedSystemPromptSectionCount: number;
   readonly hasAbortSignal: boolean;
@@ -897,6 +899,7 @@ function summarizeModelCallOptions(options: ChatOptions): ModelCallOptionsSummar
     toolChoice: summarizeToolChoice(options.toolChoice),
     responseFormat: options.responseFormat?.type,
     thinkingBudget: options.thinkingBudget,
+    modelCapabilityCount: options.modelCapabilities?.length ?? 0,
     systemPromptSectionCount: systemPromptSections.length,
     cachedSystemPromptSectionCount: systemPromptSections.filter(
       (section) => section.cacheControl === 'ephemeral',

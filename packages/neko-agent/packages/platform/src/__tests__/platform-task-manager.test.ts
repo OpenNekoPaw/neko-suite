@@ -8,6 +8,7 @@ import type {
   ToolResult,
 } from '@neko/shared';
 import { createPlatform, type PlatformOptions } from '../index';
+import type { IUserConfigManager, UserConfig } from '../config/user-config';
 
 describe('platform task manager startup', () => {
   it('registers media executors before initializing and resuming persisted tasks', async () => {
@@ -16,6 +17,7 @@ describe('platform task manager startup', () => {
     const platform = createPlatform({
       toolRegistry: createToolRegistry(),
       taskManager,
+      userConfigManager: createUserConfigManager(),
     });
 
     await Promise.resolve();
@@ -52,6 +54,23 @@ function createTaskManager(calls: string[]): NonNullable<PlatformOptions['taskMa
       return [];
     }),
     dispose: vi.fn(),
+  };
+}
+
+function createUserConfigManager(): IUserConfigManager {
+  const config: UserConfig = {
+    providers: [],
+    models: [],
+    mcpServers: [],
+    providerOverrides: {},
+    modelOverrides: {},
+    mcpServerOverrides: {},
+  };
+
+  return {
+    load: () => config,
+    loadRaw: () => ({}),
+    save: vi.fn(async () => undefined),
   };
 }
 

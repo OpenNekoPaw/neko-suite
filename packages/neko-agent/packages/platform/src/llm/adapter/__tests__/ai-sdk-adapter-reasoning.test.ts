@@ -40,27 +40,31 @@ const openAIProviderMock = vi.hoisted(() => {
 // ---------------------------------------------------------------------------
 // Mock the `ai` module
 // ---------------------------------------------------------------------------
-vi.mock('ai', () => ({
-  generateText: vi.fn().mockResolvedValue({
-    text: 'hello',
-    toolCalls: [],
-    finishReason: 'stop',
-    usage: { inputTokens: 10, outputTokens: 5 },
-  }),
-  streamText: vi.fn().mockReturnValue({
-    fullStream: (async function* () {
-      yield { type: 'text-delta', text: 'hi' };
-      yield {
-        type: 'finish',
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 5 },
-      };
-    })(),
-  }),
-  jsonSchema: vi.fn((s: unknown) => s),
-  embed: vi.fn(),
-  embedMany: vi.fn(),
-}));
+vi.mock('ai', async () => {
+  const actual = await vi.importActual<typeof import('ai')>('ai');
+  return {
+    ...actual,
+    generateText: vi.fn().mockResolvedValue({
+      text: 'hello',
+      toolCalls: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    }),
+    streamText: vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: 'text-delta', text: 'hi' };
+        yield {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 5 },
+        };
+      })(),
+    }),
+    jsonSchema: vi.fn((s: unknown) => s),
+    embed: vi.fn(),
+    embedMany: vi.fn(),
+  };
+});
 
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: openAIProviderMock.createOpenAI,
@@ -144,12 +148,12 @@ describe('AISdkAdapter reasoning model handling', () => {
     );
   });
 
-  it('chat() requests ten total model-call attempts', async () => {
+  it('chat() disables AI SDK internal retries so platform can classify retryability first', async () => {
     const { generateText } = await import('ai');
 
     await adapter.chat(messages, {}, makeModel(), makeProvider());
 
-    expect(vi.mocked(generateText).mock.calls[0]![0].maxRetries).toBe(9);
+    expect(vi.mocked(generateText).mock.calls[0]![0].maxRetries).toBe(0);
   });
 
   it('chat() skips temperature/topP for reasoning model', async () => {
@@ -213,7 +217,7 @@ describe('AISdkAdapter reasoning model handling', () => {
     );
   });
 
-  it('chatStream() requests ten total model-call attempts', async () => {
+  it('chatStream() disables AI SDK internal retries so stream retries stay bounded', async () => {
     const { streamText } = await import('ai');
 
     const stream = adapter.chatStream(messages, {}, makeModel(), makeProvider());
@@ -221,7 +225,7 @@ describe('AISdkAdapter reasoning model handling', () => {
       /* consume */
     }
 
-    expect(vi.mocked(streamText).mock.calls[0]![0].maxRetries).toBe(9);
+    expect(vi.mocked(streamText).mock.calls[0]![0].maxRetries).toBe(0);
   });
 
   it('chatStream() skips temperature/topP/frequencyPenalty/presencePenalty for reasoning model', async () => {
@@ -441,59 +445,123 @@ describe('AISdkAdapter error logging', () => {
   });
 
   it('chat() logs a bounded AI SDK error summary instead of the raw large object', async () => {
-    const { generateText } = await import('ai');
+    const { APICallError, generateText } = await import('ai');
     const responseBody = `<html>${'x'.repeat(5000)}</html>`;
     const cause = Object.assign(new SyntaxError('Unexpected token < in JSON'), {
       responseBody: 'y'.repeat(5000),
     });
-    const error = Object.assign(new Error('Invalid JSON response'), {
-      name: 'AI_APICallError',
+    const error = new APICallError({
+      message: 'Invalid JSON response',
       statusCode: 200,
       url: 'https://www.nekoapi.com/v1/chat/completions',
+      requestBodyValues: {},
       cause,
       responseBody,
       isRetryable: false,
     });
+    Object.assign(error, {
+      responseBody,
+    });
 
     vi.mocked(generateText).mockRejectedValueOnce(error);
 
-    await expect(adapter.chat(messages, {}, makeModel(), makeProvider())).rejects.toBe(error);
+    await expect(adapter.chat(messages, {}, makeModel(), makeProvider())).rejects.toMatchObject({
+      name: 'PlatformError',
+      category: 'unknown',
+      retryable: false,
+      cause: error,
+    });
 
     expect(loggerMock.error).toHaveBeenCalledTimes(1);
     expect(loggerMock.error).toHaveBeenCalledWith('generateText error', {
       error: expect.objectContaining({
-        name: 'AI_APICallError',
+        name: 'PlatformError',
         message: 'Invalid JSON response',
-        statusCode: 200,
-        url: 'https://www.nekoapi.com/v1/chat/completions',
-        responseBody: expect.stringMatching(/^<html>x+/),
-        responseBodyLength: responseBody.length,
-        isRetryable: false,
         cause: expect.objectContaining({
-          name: 'SyntaxError',
-          message: 'Unexpected token < in JSON',
-          responseBody: expect.stringMatching(/^y+/),
+          name: 'AI_APICallError',
+          message: 'Invalid JSON response',
+          statusCode: 200,
+          url: 'https://www.nekoapi.com/v1/chat/completions',
+          responseBody: expect.stringMatching(/^<html>x+/),
+          responseBodyLength: responseBody.length,
+          isRetryable: false,
+          cause: expect.objectContaining({
+            name: 'SyntaxError',
+            message: 'Unexpected token < in JSON',
+            responseBody: expect.stringMatching(/^y+/),
+          }),
         }),
       }),
     });
 
     const loggedPayload = findLoggedPayload('generateText error');
-    expect(extractNestedString(loggedPayload, ['error', 'responseBody'])?.length).toBeLessThan(
-      responseBody.length,
-    );
     expect(
       extractNestedString(loggedPayload, ['error', 'cause', 'responseBody'])?.length,
+    ).toBeLessThan(responseBody.length);
+    expect(
+      extractNestedString(loggedPayload, ['error', 'cause', 'cause', 'responseBody'])?.length,
     ).toBeLessThan(cause.responseBody.length);
   });
 
+  it('chat() retries retryable rate limits up to five total attempts', async () => {
+    const { APICallError, generateText } = await import('ai');
+    const error = new APICallError({
+      message: 'Too Many Requests',
+      statusCode: 429,
+      url: 'https://api.example.com/v1/chat/completions',
+      requestBodyValues: {},
+      responseHeaders: { 'retry-after-ms': '0' },
+    });
+
+    vi.mocked(generateText).mockRejectedValue(error);
+
+    await expect(
+      adapter.chat(messages, {}, makeModel({ id: 'model-a', name: 'Model A' }), makeProvider()),
+    ).rejects.toMatchObject({
+      name: 'PlatformError',
+      category: 'rate_limit',
+      retryable: true,
+      retryAfter: 0,
+      context: expect.objectContaining({
+        providerId: 'test',
+        modelId: 'model-a',
+        modelName: 'Model A',
+        statusCode: 429,
+      }),
+    });
+    expect(generateText).toHaveBeenCalledTimes(5);
+  });
+
+  it('chat() treats quota-style 429 responses as non-retryable validation errors', async () => {
+    const { APICallError, generateText } = await import('ai');
+    const error = new APICallError({
+      message: 'You exceeded your current quota. Please check your billing details.',
+      statusCode: 429,
+      url: 'https://api.example.com/v1/chat/completions',
+      requestBodyValues: {},
+    });
+
+    vi.mocked(generateText).mockRejectedValueOnce(error);
+
+    await expect(adapter.chat(messages, {}, makeModel(), makeProvider())).rejects.toMatchObject({
+      name: 'PlatformError',
+      category: 'validation',
+      retryable: false,
+    });
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
   it('chatStream() logs a bounded summary for stream error parts', async () => {
-    const { streamText } = await import('ai');
+    const { APICallError, streamText } = await import('ai');
     const responseBody = `not-json:${'z'.repeat(5000)}`;
-    const error = Object.assign(new Error('Invalid JSON response'), {
-      name: 'AI_APICallError',
+    const error = new APICallError({
+      message: 'Invalid JSON response',
       statusCode: 200,
+      url: 'https://api.example.com/v1/chat/completions',
+      requestBodyValues: {},
       responseBody,
     });
+    Object.assign(error, { responseBody });
 
     vi.mocked(streamText).mockReturnValue({
       fullStream: (async function* () {
@@ -507,16 +575,24 @@ describe('AISdkAdapter error logging', () => {
           /* consume */
         }
       })(),
-    ).rejects.toBe(error);
+    ).rejects.toMatchObject({
+      name: 'PlatformError',
+      category: 'unknown',
+      retryable: false,
+    });
 
     expect(loggerMock.error).toHaveBeenCalledTimes(1);
     expect(loggerMock.error).toHaveBeenCalledWith('streamText error', {
       error: expect.objectContaining({
-        name: 'AI_APICallError',
+        name: 'PlatformError',
         message: 'Invalid JSON response',
-        statusCode: 200,
-        responseBody: expect.stringMatching(/^not-json:z+/),
-        responseBodyLength: responseBody.length,
+        cause: expect.objectContaining({
+          name: 'AI_APICallError',
+          message: 'Invalid JSON response',
+          statusCode: 200,
+          responseBody: expect.stringMatching(/^not-json:z+/),
+          responseBodyLength: responseBody.length,
+        }),
       }),
     });
   });

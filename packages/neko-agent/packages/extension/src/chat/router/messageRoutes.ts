@@ -29,6 +29,7 @@ export function tryHandleMessageRoute(
         mediaModels: message.mediaModels,
         attachments: message.attachments,
         contextPayloads: message.contextPayloads,
+        fileReferences: message.fileReferences,
         promptId: message.promptId,
       });
       return true;

@@ -17,7 +17,6 @@ import {
 } from '@neko/agent';
 import type { Message } from '@neko-agent/types';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
-import { isDocumentImageCachePath } from '../services/documentCachePaths';
 
 const logger = getLogger('ConversationBridge');
 
@@ -30,9 +29,6 @@ function toWebviewUri(
   localResourceAccess?: AgentLocalResourceAccess,
 ): string | undefined {
   try {
-    if (isDocumentImageCachePath(filePath)) {
-      return undefined;
-    }
     if (localResourceAccess) {
       return localResourceAccess.toWebviewUri(webview, filePath, 'neko-agent.conversation');
     }

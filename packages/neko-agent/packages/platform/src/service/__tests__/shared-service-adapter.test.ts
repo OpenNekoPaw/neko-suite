@@ -289,8 +289,8 @@ describe('projectProviderAwareMessages', () => {
       },
     });
 
-    expect(projected).toHaveLength(4);
-    expect(projected[3]).toEqual({
+    expect(projected).toHaveLength(3);
+    expect(projected[2]).toEqual({
       role: 'user',
       content: [
         expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
@@ -329,6 +329,158 @@ describe('projectProviderAwareMessages', () => {
     });
 
     expect(projected).toBe(messages);
+  });
+
+  it('uses selected model capabilities for native image projection', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'describe this image' },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          id: 'packet-image',
+          selection: [],
+          artifactRefs: [],
+          projectRefs: [],
+          perceptionInputs: [
+            {
+              id: 'input-image',
+              kind: 'image-file',
+              modality: 'image',
+              uri: 'data:image/png;base64,abc',
+            },
+          ],
+          uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+          createdAt: 1,
+        }),
+      },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'custom-direct',
+      modelId: 'custom-vision',
+      modelCapabilities: ['chat', 'vision'],
+    });
+
+    expect(projected).toEqual([
+      { role: 'user', content: 'describe this image' },
+      {
+        role: 'user',
+        content: [{ type: 'image', imageUrl: 'data:image/png;base64,abc', detail: 'auto' }],
+      },
+    ]);
+  });
+
+  it('rejects native image projection when selected model lacks vision capability', async () => {
+    const messages: ChatMessage[] = [
+      {
+        role: 'user',
+        content: JSON.stringify({
+          id: 'packet-image',
+          selection: [],
+          artifactRefs: [],
+          projectRefs: [],
+          perceptionInputs: [
+            {
+              id: 'input-image',
+              kind: 'image-file',
+              modality: 'image',
+              uri: 'data:image/png;base64,abc',
+            },
+          ],
+          uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+          createdAt: 1,
+        }),
+      },
+    ];
+
+    await expect(
+      projectProviderAwareMessages({
+        messages,
+        providerId: 'custom-direct',
+        modelId: 'text-only',
+        modelCapabilities: ['chat'],
+      }),
+    ).rejects.toMatchObject({
+      code: 'CHAT_MODEL_NATIVE_MULTIMODAL_UNSUPPORTED',
+    });
+  });
+
+  it('rejects tool perception images when selected model lacks vision capability', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze the exposed page image' },
+      {
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [imageCard()],
+        }),
+      },
+    ];
+
+    await expect(
+      projectProviderAwareMessages({
+        messages,
+        providerId: 'custom-direct',
+        modelId: 'text-only',
+        modelCapabilities: ['chat'],
+        assetLoader: {
+          load: async () => ({ kind: 'image', url: 'data:image/png;base64,thumb' }),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'CHAT_MODEL_NATIVE_MULTIMODAL_UNSUPPORTED',
+    });
+  });
+
+  it('projects perception cards even when the turn packet was not serialized in chat history', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: 'analyze the exposed page image' },
+      {
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [imageCard()],
+        }),
+      },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'openai',
+      modelId: 'gpt-vision',
+      providerCardRegistry: {
+        get: () => ({
+          providerId: 'openai',
+          modelId: 'gpt-vision',
+          displayName: 'GPT Vision',
+          version: '1.0.0',
+          capabilities: ['image.generate'],
+          inputModalities: { image: true },
+          sourceLayer: 'builtin',
+          syntaxProfile: { notes: [] },
+          conceptCoverage: { entries: [] },
+          trainingProfile: { styleAffinities: {}, antiBiasStrategies: [] },
+        }),
+      },
+      assetLoader: {
+        load: async () => ({ kind: 'image', url: 'data:image/png;base64,thumb' }),
+      },
+    });
+
+    expect(projected).toHaveLength(4);
+    expect(projected[3]).toEqual({
+      role: 'user',
+      content: [
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+        { type: 'image', imageUrl: 'data:image/png;base64,thumb', detail: 'auto' },
+      ],
+    });
   });
 });
 

@@ -2,7 +2,12 @@ import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { Platform } from '@neko/platform';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import type { ProviderExpressionTargetConfig } from '@neko/agent/runtime';
-import type { ExecutionMode, IRuntimeTaskManager, ToolCategoryRegistry } from '@neko/agent';
+import type {
+  ExecutionMode,
+  IRuntimeTaskManager,
+  ToolCategoryRegistry,
+  WorkspaceFileIgnoreRules,
+} from '@neko/agent';
 
 export type { ExecutionMode, AgentEvent, AgentEventType } from '@neko/agent';
 
@@ -41,6 +46,9 @@ export interface IAgentConfig {
   /** Provider ID */
   providerId?: string;
 
+  /** Capabilities declared by the selected primary LLM model. */
+  modelCapabilities?: readonly string[];
+
   /** Selected media generation provider/model targets for ProviderCard expression context. */
   providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
 
@@ -74,6 +82,20 @@ export interface IAgentConfig {
    * Workspace root path for AGENTS.md loading.
    */
   workspaceRoot?: string;
+
+  /**
+   * Additional read-only roots authorized by the Extension Host, such as enabled
+   * media libraries. Write access remains workspace-owned unless separately
+   * declared by a host policy.
+   */
+  authorizedReadRoots?: readonly string[];
+
+  /**
+   * Workspace-local ignored paths projected from host policy, including parsed
+   * .gitignore rules. Generic file tools use this in addition to authorized
+   * roots, while product-specific registries keep their own scoped access.
+   */
+  workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
 
   /**
    * Shared task plane owned by the host runtime.

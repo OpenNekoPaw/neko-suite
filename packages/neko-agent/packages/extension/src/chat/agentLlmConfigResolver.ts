@@ -66,7 +66,7 @@ export function resolveAgentLlmConfigForTurn(
       code: 'conflicting-primary-model',
       slot: 'primary',
       message:
-        'Agent primary model conflicts with the legacy chat model selection. Choose one provider/model for this Agent turn.',
+        'Agent primary model conflicts with the chat model selection. Choose one provider/model for this Agent turn.',
     });
   }
 

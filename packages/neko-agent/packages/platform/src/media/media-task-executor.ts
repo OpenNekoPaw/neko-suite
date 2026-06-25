@@ -376,6 +376,7 @@ export class MediaTaskExecutor {
           n: imgReq.count ?? 1,
           size: size as `${number}x${number}` | undefined,
           abortSignal: context?.signal,
+          maxRetries: 0,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(Object.keys(nekoProviderOptions).length > 0
             ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -425,6 +426,7 @@ export class MediaTaskExecutor {
             ? { providerOptions: { neko: videoProviderOptions } }
             : {}),
           abortSignal: context?.signal,
+          maxRetries: 0,
         });
 
         throwIfAborted(context?.signal);
@@ -462,6 +464,7 @@ export class MediaTaskExecutor {
           speed: audioReq.metadata?.speed as number | undefined,
           outputFormat: audioReq.format,
           abortSignal: context?.signal,
+          maxRetries: 0,
         });
 
         throwIfAborted(context?.signal);
@@ -793,7 +796,7 @@ export function createMediaTaskInput(
     } as unknown as Record<string, unknown>,
     options: {
       retry: {
-        maxRetries: 5,
+        maxRetries: 0,
         backoffMs: 3000,
       },
     },

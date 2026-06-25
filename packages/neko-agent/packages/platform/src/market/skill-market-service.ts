@@ -89,7 +89,10 @@ export class SkillMarketService {
       new VersionResolver(),
       targets,
       installedRegistry,
-      { nekoSuiteVersion: options.nekoSuiteVersion ?? DEFAULT_NEKO_SUITE_VERSION },
+      {
+        nekoSuiteVersion: options.nekoSuiteVersion ?? DEFAULT_NEKO_SUITE_VERSION,
+        downloadTempDir: join(cacheDir, '.downloads'),
+      },
     );
 
     this.ready = installedRegistry.load().catch((error) => {

@@ -58,6 +58,7 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'unsupportedProviderSupportLevel' ||
     result.status === 'unsupportedProtocolAuthType' ||
     result.status === 'unsupportedProtocolStreamFormat' ||
+    result.status === 'unsupportedModelProtocolProfile' ||
     result.status === 'unsupportedModelProtocol' ||
     result.status === 'duplicateProviderId' ||
     result.status === 'duplicateModelId' ||
@@ -94,6 +95,8 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains an unsupported protocol_variant auth_type: ${filePath}. Use bearer, api-key, or custom-header, then open a new Agent session or tab.`;
     case 'unsupportedProtocolStreamFormat':
       return `Configuration file contains an unsupported protocol_variant stream_format: ${filePath}. Use sse or ndjson, then open a new Agent session or tab.`;
+    case 'unsupportedModelProtocolProfile':
+      return `Configuration file contains an unsupported model protocol_profile: ${filePath}. Use newapi, openai-chat, openai-responses, anthropic, google, or ollama, then open a new Agent session or tab.`;
     case 'unsupportedModelProtocol':
       return `Configuration file contains an unsupported model protocol: ${filePath}. Use a supported provider type for model protocol overrides, then open a new Agent session or tab.`;
     case 'duplicateProviderId':
@@ -103,7 +106,7 @@ export function buildSafeConfigDiagnosticMessage(
     case 'unsupportedModelType':
       return `Configuration file contains an unsupported model type: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
     case 'unsupportedDefaultMediaModelType':
-      return `Configuration file contains legacy default_media_models: ${filePath}. Move defaults to [default_models.llm], [default_models.image], [default_models.video], or [default_models.audio], then open a new Agent session or tab.`;
+      return `Configuration file contains retired default_media_models: ${filePath}. Move defaults to [default_models.llm], [default_models.image], [default_models.video], or [default_models.audio], then open a new Agent session or tab.`;
     case 'unsupportedDefaultModelType':
       return `Configuration file contains an unsupported default_models key: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
     case 'invalidDefaultModelBinding':

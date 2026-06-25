@@ -24,9 +24,13 @@ export interface ProviderInputModalityResolverInput {
 }
 
 export interface ProjectionDiagnostic {
-  readonly code: 'asset-load-failed' | 'unsupported-modality';
+  readonly code:
+    | 'asset-load-failed'
+    | 'unsupported-modality'
+    | 'provider-input-modality-unsupported';
   readonly message: string;
   readonly assetId?: string;
+  readonly modality?: string;
 }
 
 export interface VisionPreprocessPolicy {
@@ -140,6 +144,7 @@ export async function projectMultimodalPacketToChatMessageAsync(
   const baseParts = projectBaseMessageParts(packet, baseMessage, hasPerceptionCards);
   const diagnostics: ProjectionDiagnostic[] = [];
   const providerModalities = resolveProviderInputModalities(options.provider);
+  diagnostics.push(...findUnsupportedPacketInputModalities(packet, providerModalities));
 
   for (const card of options.perceptionCards ?? []) {
     const projected = await projectPerceptionCardToContentParts(card, {
@@ -208,6 +213,13 @@ export async function projectPerceptionCardToContentParts(
         });
       }
     }
+  } else if (card.modality === 'image') {
+    diagnostics.push({
+      code: 'provider-input-modality-unsupported',
+      assetId: card.assetId,
+      modality: 'image',
+      message: 'The selected chat model does not support native image input.',
+    });
   }
 
   if (card.modality === 'video' && providerModalities.video) {
@@ -228,6 +240,13 @@ export async function projectPerceptionCardToContentParts(
         });
       }
     }
+  } else if (card.modality === 'video') {
+    diagnostics.push({
+      code: 'provider-input-modality-unsupported',
+      assetId: card.assetId,
+      modality: 'video',
+      message: 'The selected chat model does not support native video input.',
+    });
   }
 
   if (card.modality === 'audio' && providerModalities.audio !== true) {
@@ -242,6 +261,27 @@ export async function projectPerceptionCardToContentParts(
   }
 
   return { parts, diagnostics };
+}
+
+function findUnsupportedPacketInputModalities(
+  packet: MultimodalContextPacket,
+  providerModalities: ProviderInputModalities,
+): ProjectionDiagnostic[] {
+  const unsupportedModalities = new Set<string>();
+  for (const input of packet.perceptionInputs) {
+    if (input.modality === 'image' && providerModalities.image !== true) {
+      unsupportedModalities.add('image');
+    }
+    if (input.modality === 'video' && providerModalities.video !== true) {
+      unsupportedModalities.add('video');
+    }
+  }
+
+  return Array.from(unsupportedModalities).map((modality) => ({
+    code: 'provider-input-modality-unsupported' as const,
+    modality,
+    message: `The selected chat model does not support native ${modality} input.`,
+  }));
 }
 
 function summarizePerceptionCard(card: PerceptionCard): string {

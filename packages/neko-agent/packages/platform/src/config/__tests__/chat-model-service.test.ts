@@ -89,6 +89,81 @@ describe('ChatModelService', () => {
     });
   });
 
+  it('projects effective model protocol profiles into selector options', () => {
+    const service = new ChatModelService();
+    const gatewayProvider: Provider = {
+      id: 'mixed-gateway',
+      name: 'mixed-gateway',
+      displayName: 'Mixed Gateway',
+      type: 'newapi',
+      apiUrl: 'https://gateway.example.com/v1',
+      apiKey: 'sk-gateway',
+      enabled: true,
+      connectionKind: 'gateway',
+      protocolProfile: 'newapi',
+      supportsBeta: false,
+    };
+    const gatewayModel: Model = {
+      id: 'claude-via-gateway',
+      name: 'claude-sonnet',
+      displayName: 'Claude via Gateway',
+      providerId: 'mixed-gateway',
+      type: 'llm',
+      enabled: true,
+      protocolProfile: 'anthropic',
+      capabilities: ['chat', 'thinking'],
+    };
+
+    expect(service.getChatModelOptions([gatewayProvider], [gatewayModel])).toContainEqual(
+      expect.objectContaining({
+        id: 'mixed-gateway:claude-via-gateway',
+        protocolProfile: 'anthropic',
+        llmParameterControls: {
+          reasoning: false,
+          verbosity: false,
+          creativity: true,
+          maxOutputTokens: true,
+        },
+      }),
+    );
+  });
+
+  it('keeps generic OpenAI-chat models conservative for provider-specific controls', () => {
+    const service = new ChatModelService();
+    const deepseekProvider: Provider = {
+      id: 'deepseek-direct',
+      name: 'deepseek',
+      displayName: 'DeepSeek',
+      type: 'generic',
+      apiUrl: 'https://api.deepseek.com',
+      apiKey: 'sk-deepseek',
+      enabled: true,
+      connectionKind: 'direct',
+      protocolProfile: 'openai-chat',
+    };
+    const deepseekModel: Model = {
+      id: 'deepseek-chat',
+      name: 'deepseek-chat',
+      providerId: 'deepseek-direct',
+      type: 'llm',
+      enabled: true,
+      capabilities: ['chat', 'reasoning', 'verbosity'],
+    };
+
+    expect(service.getChatModelOptions([deepseekProvider], [deepseekModel])).toContainEqual(
+      expect.objectContaining({
+        id: 'deepseek-direct:deepseek-chat',
+        protocolProfile: 'openai-chat',
+        llmParameterControls: {
+          reasoning: false,
+          verbosity: false,
+          creativity: false,
+          maxOutputTokens: true,
+        },
+      }),
+    );
+  });
+
   it('does not include remote providers missing an endpoint even with an API key', () => {
     const service = new ChatModelService();
 

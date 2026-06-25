@@ -13,10 +13,10 @@ export const RETRY_TIMEOUT_PRESETS: Record<BuiltinPresetName, RetryTimeoutPreset
   modelCall: {
     name: 'Model Call',
     retry: {
-      maxRetries: 10,
+      maxRetries: 4,
       backoffStrategy: {
         type: 'exponential',
-        initialDelayMs: 1000,
+        initialDelayMs: 2000,
         multiplier: 2,
         maxDelayMs: 30000,
       },

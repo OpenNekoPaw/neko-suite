@@ -41,6 +41,9 @@ import type { ProviderManager } from '../providerManager';
 import type { SettingsManager } from '../settingsManager';
 import type { AgentStreamProcessor } from './agentStreamProcessor';
 import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
+import { loadAuthorizedMediaLibraryReadRoots } from '../../services/documentPathResolver';
+import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
+import { setDocumentAuthorizedReadRoots } from '../../tools/documentToolRuntime';
 
 export interface AgentTurnBridgeDeps {
   settings: SettingsManager;
@@ -95,6 +98,12 @@ export class AgentTurnBridge {
 
   async execute(input: ExecuteAgentTurnForWebviewInput): Promise<void> {
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
+    const authorizedReadRoots = await loadAuthorizedMediaLibraryReadRoots();
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const workspaceIgnoreRules = workspaceRoot
+      ? await loadWorkspaceFileIgnoreRules(workspaceRoot)
+      : undefined;
+    setDocumentAuthorizedReadRoots(authorizedReadRoots);
     const agentManagerBridge:
       | AgentTurnAgentManager<
           Platform,
@@ -119,6 +128,7 @@ export class AgentTurnBridge {
         agentModels: input.agentModels,
         llmConfig: input.llmConfig,
         llmRuntimeOptions: input.llmRuntimeOptions,
+        modelCapabilities: resolveSelectedModelCapabilities(this.deps.providers, input.chatModel),
         mediaModel: input.mediaModel,
         mediaModels: input.mediaModels,
         imageAttachments: input.imageAttachments,
@@ -149,6 +159,8 @@ export class AgentTurnBridge {
         host: {
           agentManager: agentManagerBridge,
           getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          getAuthorizedReadRoots: () => authorizedReadRoots,
+          ...(workspaceIgnoreRules ? { getWorkspaceIgnoreRules: () => workspaceIgnoreRules } : {}),
           getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
           getAmbientCanvas: (id) => getCanvasSelection(id),
           timelineContextRuntime: this.timelineContextRuntime,
@@ -183,4 +195,25 @@ export class AgentTurnBridge {
       this.deps.accountAiCatalog.invalidateForAuthFailure(error);
     }
   }
+}
+
+function resolveSelectedModelCapabilities(
+  providers: ProviderManager,
+  chatModel: ModelRef<'llm'> | undefined,
+): readonly string[] | undefined {
+  if (!chatModel?.providerId || !chatModel.modelId) {
+    return undefined;
+  }
+
+  const provider = providers.getProvider(chatModel.providerId);
+  const providerCapabilities = provider?.modelCapabilities?.[chatModel.modelId];
+  if (providerCapabilities) {
+    return [...providerCapabilities];
+  }
+
+  const model = providers.getModel(chatModel.modelId);
+  if (!model || model.providerId !== chatModel.providerId) {
+    return undefined;
+  }
+  return [...model.capabilities];
 }

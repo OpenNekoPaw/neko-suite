@@ -34,6 +34,18 @@ function createMockConfigManager(): ConfigManager {
       displayName: 'Generic',
       type: 'generic',
       apiUrl: 'https://generic.com/v1',
+      protocolProfile: 'openai-chat',
+      connectionKind: 'direct',
+      enabled: true,
+    },
+    {
+      id: 'mixed-gateway',
+      name: 'mixed-gateway',
+      displayName: 'Mixed Gateway',
+      type: 'newapi',
+      apiUrl: 'https://gateway.example.com/v1',
+      protocolProfile: 'newapi',
+      connectionKind: 'gateway',
       enabled: true,
     },
     {
@@ -118,7 +130,43 @@ describe('ProviderRegistry', () => {
     expect(adapter).toBeUndefined();
   });
 
-  it('should use model protocol when provided', () => {
+  it('should use model protocol profile when provided', () => {
+    const configManager = createMockConfigManager();
+    const registry = new ProviderRegistry(configManager);
+
+    const model: Model = {
+      id: 'custom',
+      name: 'custom-model',
+      providerId: 'mixed-gateway',
+      capabilities: ['chat'],
+      enabled: true,
+      protocolProfile: 'anthropic',
+    };
+
+    const adapter = registry.getAdapter('mixed-gateway', model);
+    expect(adapter).toBeDefined();
+    expect(adapter?.type).toBe('anthropic');
+  });
+
+  it('keeps generic OpenAI-chat direct providers on the generic adapter', () => {
+    const configManager = createMockConfigManager();
+    const registry = new ProviderRegistry(configManager);
+
+    const model: Model = {
+      id: 'deepseek-chat',
+      name: 'deepseek-chat',
+      providerId: 'generic-provider',
+      capabilities: ['chat'],
+      enabled: true,
+      protocolProfile: 'openai-chat',
+    };
+
+    const adapter = registry.getAdapter('generic-provider', model);
+    expect(adapter).toBeDefined();
+    expect(adapter?.type).toBe('generic');
+  });
+
+  it('keeps older model protocol adapter overrides working for existing configs', () => {
     const configManager = createMockConfigManager();
     const registry = new ProviderRegistry(configManager);
 

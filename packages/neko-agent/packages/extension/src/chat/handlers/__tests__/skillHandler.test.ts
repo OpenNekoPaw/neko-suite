@@ -263,27 +263,7 @@ describe('SkillHandler', () => {
   });
 
   describe('autoActivateSkill', () => {
-    it('should auto-activate high-confidence matching skill and send injection', async () => {
-      const storyboardSkill = {
-        name: 'comic-to-storyboard',
-        description: 'Create storyboards',
-        content: 'Storyboard instructions',
-        enabled: true,
-        source: 'builtin',
-      };
-      skillService.discover.mockReturnValue({
-        found: true,
-        matches: [{ skill: storyboardSkill, relevance: 0.95, reason: 'artifact match' }],
-        topMatch: { skill: storyboardSkill, relevance: 0.95, reason: 'artifact match' },
-        requiresConfirmation: false,
-      });
-      (skillService.registry as any).ensureLoaded = vi.fn().mockResolvedValue(storyboardSkill);
-      skillService.apply.mockResolvedValue({
-        name: 'comic-to-storyboard',
-        systemPrompt: 'Storyboard instructions',
-        allowedTools: ['ReadDocument'],
-        type: 'skill' as const,
-      });
+    it('should not activate natural-language matches or send injection', async () => {
       handler = new SkillHandler({ skillService: skillService as any });
 
       const result = await handler.autoActivateSkill(webview as any, {
@@ -291,20 +271,11 @@ describe('SkillHandler', () => {
         userInput: '生成分镜表',
       });
 
-      expect(skillService.discover).toHaveBeenCalledWith('生成分镜表');
-      expect((skillService.registry as any).ensureLoaded).toHaveBeenCalledWith(
-        'comic-to-storyboard',
-      );
-      expect(skillService.apply).toHaveBeenCalledWith(storyboardSkill);
-      expect(result).toEqual(expect.objectContaining({ applied: true, skill: storyboardSkill }));
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'skillInjection',
-          conversationId: 'conv-1',
-          skillName: 'comic-to-storyboard',
-          systemPrompt: 'Storyboard instructions',
-        }),
-      );
+      expect(result).toBeNull();
+      expect(skillService.discover).not.toHaveBeenCalled();
+      expect((skillService.registry as any).ensureLoaded).not.toHaveBeenCalled();
+      expect(skillService.apply).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalled();
     });
   });
 

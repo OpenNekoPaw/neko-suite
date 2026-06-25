@@ -146,7 +146,37 @@ describe('multimodal-message-projection', () => {
     ]);
   });
 
-  it('async projection falls back to text for text-only providers', async () => {
+  it('records unsupported native image input diagnostics for text-only providers', async () => {
+    const packet: MultimodalContextPacket = {
+      id: 'packet-image',
+      selection: [],
+      artifactRefs: [],
+      projectRefs: [],
+      perceptionInputs: [
+        {
+          id: 'input-image',
+          kind: 'image-file',
+          modality: 'image',
+          uri: 'data:image/png;base64,abc',
+        },
+      ],
+      uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+      createdAt: 1,
+    };
+
+    const result = await projectMultimodalPacketToChatMessageAsync(packet, {
+      provider: { runtime: { image: false } },
+    });
+
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'provider-input-modality-unsupported',
+        modality: 'image',
+      }),
+    ]);
+  });
+
+  it('records unsupported diagnostics for perception-card image payloads on text-only providers', async () => {
     const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
       provider: { providerId: 'unknown' },
       perceptionCards: [imageCard()],
@@ -157,7 +187,13 @@ describe('multimodal-message-projection', () => {
       },
     });
 
-    expect(result.diagnostics).toEqual([]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'provider-input-modality-unsupported',
+        assetId: 'asset-1',
+        modality: 'image',
+      }),
+    ]);
     expect(result.message.content).toEqual([
       expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
     ]);

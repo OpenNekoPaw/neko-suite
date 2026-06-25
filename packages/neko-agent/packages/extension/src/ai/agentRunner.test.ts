@@ -11,6 +11,7 @@ import type { PromptFragment } from '@neko/shared';
 import { NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND } from '@neko-agent/types';
 import {
   buildAgentRuntimeSessionFactoryConfig,
+  AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
   createAgentSessionWithRuntime,
   resolveAgentRuntimePromptFragments,
   SubAgentRuntimeCoordinator,
@@ -29,6 +30,16 @@ import { EngineClient } from '@neko/neko-client/EngineClient';
 const { executeCommandMock, activateEngineExtensionMock } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
   activateEngineExtensionMock: vi.fn(),
+}));
+
+const {
+  loadAuthorizedMediaLibraryReadRootsMock,
+  loadWorkspaceFileIgnoreRulesMock,
+  setDocumentAuthorizedReadRootsMock,
+} = vi.hoisted(() => ({
+  loadAuthorizedMediaLibraryReadRootsMock: vi.fn(async () => [] as string[]),
+  loadWorkspaceFileIgnoreRulesMock: vi.fn(async () => ({ gitignoreRules: [] })),
+  setDocumentAuthorizedReadRootsMock: vi.fn(),
 }));
 
 // Mock vscode (already handled by __mocks__/vscode.ts, but ensure EventEmitter works)
@@ -74,6 +85,22 @@ vi.mock('../base', () => ({
   createServiceId: vi.fn((name: string) => name),
 }));
 
+vi.mock('../services/documentPathResolver', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    loadAuthorizedMediaLibraryReadRoots: loadAuthorizedMediaLibraryReadRootsMock,
+  };
+});
+
+vi.mock('../services/workspaceIgnoreFilter', () => ({
+  loadWorkspaceFileIgnoreRules: loadWorkspaceFileIgnoreRulesMock,
+}));
+
+vi.mock('../tools/documentToolRuntime', () => ({
+  setDocumentAuthorizedReadRoots: setDocumentAuthorizedReadRootsMock,
+}));
+
 // Mock @neko/platform — toSharedService
 vi.mock('@neko/platform', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -91,6 +118,7 @@ const capabilityRuntimeMock = {
   providerCardRegistry: undefined as unknown,
   operationToolAdapterRegistry: undefined as unknown,
 };
+let latestRuntimeAssemblyInput: AgentRuntimeSessionAssemblyInput | undefined;
 let capabilityPromptFragments: Array<{ id: string; content: string }> = [];
 const syncToolCategoriesMock = vi.fn();
 
@@ -210,6 +238,7 @@ function createMockRuntimeController(
 
   return {
     async configure(input: AgentRuntimeSessionAssemblyInput) {
+      latestRuntimeAssemblyInput = input;
       const factoryConfig = buildFactoryConfig(input, handle?.operationToolAdapterRegistry);
       syncToolCategories(factoryConfig);
       const promptFragments = resolveAgentRuntimePromptFragments(factoryConfig);
@@ -236,6 +265,7 @@ function createMockRuntimeController(
       return handle as never;
     },
     refresh(input: AgentRuntimeSessionAssemblyInput) {
+      latestRuntimeAssemblyInput = input;
       if (!handle || !target.getSession()) return null;
       const factoryConfig = buildFactoryConfig(input, handle.operationToolAdapterRegistry);
       syncToolCategories(factoryConfig);
@@ -398,8 +428,12 @@ describe('AgentRunner', () => {
     syncToolCategoriesMock.mockReset();
     executeCommandMock.mockReset();
     activateEngineExtensionMock.mockReset();
+    loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([]);
+    loadWorkspaceFileIgnoreRulesMock.mockResolvedValue({ gitignoreRules: [] });
+    setDocumentAuthorizedReadRootsMock.mockReset();
     vi.restoreAllMocks();
     latestCreateSessionConfig = undefined;
+    latestRuntimeAssemblyInput = undefined;
   });
 
   // ---------------------------------------------------------------------------
@@ -421,6 +455,65 @@ describe('AgentRunner', () => {
       expect(storedConfig).toBe(config);
       expect(storedConfig?.systemPrompt).toBe('Test prompt');
       expect(storedConfig?.maxIterations).toBe(5);
+    });
+
+    it('forwards authorized read roots into runtime session assembly', async () => {
+      await runner.configure({
+        platform: mockPlatform,
+        workspaceRoot: '/workspace/project',
+        authorizedReadRoots: ['/Users/feng/Assets/epub/animation/浪客行'],
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+      });
+
+      expect(latestRuntimeAssemblyInput).toMatchObject({
+        workspaceRoot: '/workspace/project',
+        authorizedReadRoots: ['/Users/feng/Assets/epub/animation/浪客行'],
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+      });
+    });
+
+    it('loads media library read roots into runtime session assembly by default', async () => {
+      loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([
+        '/Users/feng/Assets/epub/animation/浪客行',
+      ]);
+      loadWorkspaceFileIgnoreRulesMock.mockResolvedValue({ gitignoreRules: ['tmp/'] });
+
+      await runner.configure({
+        platform: mockPlatform,
+        workspaceRoot: '/workspace/project',
+      });
+
+      expect(latestRuntimeAssemblyInput).toMatchObject({
+        workspaceRoot: '/workspace/project',
+        authorizedReadRoots: ['/Users/feng/Assets/epub/animation/浪客行'],
+        workspaceIgnoreRules: { gitignoreRules: ['tmp/'] },
+      });
+      expect(setDocumentAuthorizedReadRootsMock).toHaveBeenCalledWith([
+        '/Users/feng/Assets/epub/animation/浪客行',
+      ]);
+    });
+
+    it('merges explicit and host media library read roots without duplicates', async () => {
+      loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([
+        '/Users/feng/Assets/epub/animation/浪客行',
+        '/library/media',
+      ]);
+
+      await runner.configure({
+        platform: mockPlatform,
+        workspaceRoot: '/workspace/project',
+        authorizedReadRoots: ['/library/media'],
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+      });
+
+      expect(latestRuntimeAssemblyInput).toMatchObject({
+        authorizedReadRoots: ['/library/media', '/Users/feng/Assets/epub/animation/浪客行'],
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+      });
+      expect(setDocumentAuthorizedReadRootsMock).toHaveBeenCalledWith([
+        '/library/media',
+        '/Users/feng/Assets/epub/animation/浪客行',
+      ]);
     });
 
     it('未配置时 getConfig 应该返回 undefined', () => {
@@ -982,7 +1075,7 @@ describe('AgentRunner', () => {
       expect(events[0]!.error?.message).toBe('Agent not configured');
     });
 
-    it('重复执行应该将消息加入队列', async () => {
+    it('重复执行应该返回忙碌错误而不是排队', async () => {
       await runner.configure({ platform: mockPlatform, maxIterations: 10 });
 
       // Start first execution
@@ -993,11 +1086,26 @@ describe('AgentRunner', () => {
       const events = await collectEvents(runner.execute('test2', {}));
 
       expect(events).toHaveLength(1);
-      expect(events[0]!.type).toBe('messageQueued');
-      expect(events[0]!.content).toContain('1 pending');
+      expect(events[0]!.type).toBe('error');
+      expect(events[0]!.error?.message).toContain('Agent is already responding');
 
       // Cleanup first execution
       for await (const _ of iterable1) {
+        /* consume */
+      }
+    });
+
+    it('运行中应该拒绝重新配置模型', async () => {
+      await runner.configure({ platform: mockPlatform, maxIterations: 10, modelId: 'model-a' });
+
+      const iterable = runner.execute('test1', {});
+      await toIterator(iterable).next();
+
+      await expect(
+        runner.configure({ platform: mockPlatform, maxIterations: 10, modelId: 'model-b' }),
+      ).rejects.toThrow(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+
+      for await (const _ of iterable) {
         /* consume */
       }
     });
@@ -1183,7 +1291,7 @@ describe('AgentRunner', () => {
       expect(runner.appendMessage('test')).toBe(false);
     });
 
-    it('appendMessage 在运行时返回 true', async () => {
+    it('appendMessage 在运行时追加到队列', async () => {
       await runner.configure({ platform: mockPlatform, maxIterations: 10 });
 
       const iterable = runner.execute('task', {});
@@ -1191,6 +1299,8 @@ describe('AgentRunner', () => {
 
       expect(runner.appendMessage('queued')).toBe(true);
       expect(runner.getPendingMessagesCount()).toBe(1);
+      expect(runner.drainPendingMessages()).toEqual(['queued']);
+      expect(runner.getPendingMessagesCount()).toBe(0);
 
       runner.cancel();
       for await (const _ of iterable) {

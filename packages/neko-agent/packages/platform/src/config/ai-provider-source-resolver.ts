@@ -13,7 +13,10 @@ import type { Model, Provider } from '../types/provider';
 import type { AssistantConfigDiagnostic } from './config-diagnostic';
 import { isProviderConfigured } from './provider-configuration';
 import { ChatModelService } from './chat-model-service';
-import { projectLlmParameterControls } from './llm-parameter-projection';
+import {
+  projectLlmParameterControls,
+  resolveEffectiveLlmProviderView,
+} from './llm-parameter-projection';
 
 export const ACCOUNT_GATEWAY_PROVIDER_ID = 'neko-account-gateway';
 
@@ -121,6 +124,8 @@ function buildAccountModelOptions(
     .map((model) => {
       const category = model.type ?? 'llm';
       const modelName = model.displayName || model.name || model.id;
+      const effectiveProvider =
+        resolveEffectiveLlmProviderView(model, catalog.provider) ?? catalog.provider;
       return {
         id: `${catalog.provider.id}:${model.id}`,
         label: `${catalog.provider.displayName || catalog.provider.name} / ${modelName}`,
@@ -131,8 +136,8 @@ function buildAccountModelOptions(
         ...(catalog.provider.connectionKind
           ? { connectionKind: catalog.provider.connectionKind }
           : {}),
-        ...(catalog.provider.protocolProfile
-          ? { protocolProfile: catalog.provider.protocolProfile }
+        ...(effectiveProvider.protocolProfile
+          ? { protocolProfile: effectiveProvider.protocolProfile }
           : {}),
         ...(catalog.provider.supportLevel ? { supportLevel: catalog.provider.supportLevel } : {}),
         capabilities: [...model.capabilities],
@@ -142,7 +147,7 @@ function buildAccountModelOptions(
           ? {
               llmParameterControls: projectLlmParameterControls({
                 model,
-                provider: catalog.provider,
+                provider: effectiveProvider,
               }),
             }
           : {}),
@@ -282,6 +287,7 @@ function toSecretSafeAccountModel(model: Model): SecretSafeModelProjection {
     ...(model.displayName ? { displayName: model.displayName } : {}),
     providerId: model.providerId,
     ...(model.type ? { type: model.type } : {}),
+    ...(model.protocolProfile ? { protocolProfile: model.protocolProfile } : {}),
     capabilities: [...model.capabilities],
     ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
     enabled: model.enabled !== false,

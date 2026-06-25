@@ -17,6 +17,7 @@ import type {
   ChatMessage,
   IProviderCardRegistry,
   PerceptionCard,
+  ProviderInputModalities,
   ServiceOptions as SharedServiceOptions,
   ServiceResponse as SharedServiceResponse,
   ServiceCallContext as SharedServiceCallContext,
@@ -25,10 +26,12 @@ import type {
 import {
   projectMultimodalPacketToChatMessageAsync,
   type PerceptionAssetLoader,
+  type ProjectionDiagnostic,
   type VisionPreprocessPolicy,
 } from '@neko/ai-sdk';
 import type { Service } from './service';
 import { getLogger } from '../utils/logger';
+import { PlatformError } from '../provider/platform-error';
 
 const logger = getLogger('SharedServiceAdapter');
 
@@ -149,20 +152,18 @@ export class SharedServiceAdapter implements SharedIService {
     return {
       ...options,
       messageProjector: async (input) => {
+        const sourceMessages = options?.messageProjector
+          ? await options.messageProjector(input)
+          : input.messages;
         const projected = await projectProviderAwareMessages({
-          messages: input.messages,
+          messages: sourceMessages,
           providerId: input.providerId,
           modelId: input.modelId,
+          modelCapabilities: input.modelCapabilities,
           providerCardRegistry: this._options.providerCardRegistry,
           assetLoader: this._options.assetLoader,
           visionPolicy: this._options.visionPolicy,
         });
-        if (options?.messageProjector) {
-          return options.messageProjector({
-            ...input,
-            messages: projected,
-          });
-        }
         return projected;
       },
     };
@@ -183,6 +184,7 @@ interface ProviderAwareMessageProjectionInput {
   readonly messages: readonly ChatMessage[];
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly modelCapabilities?: readonly string[];
   readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
   readonly assetLoader?: PerceptionAssetLoader;
   readonly visionPolicy?: VisionPreprocessPolicy;
@@ -191,15 +193,20 @@ interface ProviderAwareMessageProjectionInput {
 export async function projectProviderAwareMessages(
   input: ProviderAwareMessageProjectionInput,
 ): Promise<readonly ChatMessage[]> {
-  const packet = readLatestMultimodalContextPacket(input.messages);
   const perceptionCards = collectPerceptionCards(input.messages);
-  if (!packet || perceptionCards.length === 0) {
+  const packet =
+    readLatestMultimodalContextPacket(input.messages) ??
+    createPacketForPerceptionCards(perceptionCards);
+  if (!packet || !needsProviderAwareProjection(packet, perceptionCards)) {
     return input.messages;
   }
 
   const result = await projectMultimodalPacketToChatMessageAsync(packet, {
     provider: {
       ...(input.providerId ? { providerId: input.providerId } : {}),
+      ...(input.modelCapabilities
+        ? { runtime: projectModelCapabilitiesToInputModalities(input.modelCapabilities) }
+        : {}),
       ...(input.providerCardRegistry && input.providerId
         ? { providerCard: input.providerCardRegistry.get(input.providerId, input.modelId) }
         : {}),
@@ -213,9 +220,80 @@ export async function projectProviderAwareMessages(
     logger.warn('Provider-aware perception projection degraded', {
       diagnostics: result.diagnostics,
     });
+    assertNoUnsupportedNativeMultimodalInputs(result.diagnostics);
   }
 
-  return [...input.messages, result.message];
+  return [
+    ...input.messages.filter((message) => readMultimodalContextPacket(message) === undefined),
+    result.message,
+  ];
+}
+
+function needsProviderAwareProjection(
+  packet: import('@neko/shared').MultimodalContextPacket,
+  perceptionCards: readonly PerceptionCard[],
+): boolean {
+  return (
+    perceptionCards.length > 0 ||
+    packet.perceptionInputs.some(
+      (input) => input.modality === 'image' || input.modality === 'video',
+    )
+  );
+}
+
+function projectModelCapabilitiesToInputModalities(
+  capabilities: readonly string[],
+): Partial<ProviderInputModalities> {
+  const capabilitySet = new Set(capabilities);
+  return {
+    text: capabilitySet.has('chat') || capabilitySet.has('llm.chat') || capabilities.length > 0,
+    image: capabilitySet.has('vision') || capabilitySet.has('llm.vision'),
+    video: capabilitySet.has('video.understand'),
+    audio: capabilitySet.has('audio.asr') ? true : false,
+  };
+}
+
+function assertNoUnsupportedNativeMultimodalInputs(
+  diagnostics: readonly ProjectionDiagnostic[],
+): void {
+  const unsupported = diagnostics.find(
+    (diagnostic) => diagnostic.code === 'provider-input-modality-unsupported',
+  );
+  if (!unsupported) {
+    return;
+  }
+
+  throw new PlatformError({
+    category: 'validation',
+    code: 'CHAT_MODEL_NATIVE_MULTIMODAL_UNSUPPORTED',
+    message: unsupported.message,
+    retryable: false,
+    context: {
+      ...(unsupported.modality ? { modality: unsupported.modality } : {}),
+      diagnostics,
+    },
+  });
+}
+
+function createPacketForPerceptionCards(
+  cards: readonly PerceptionCard[],
+): import('@neko/shared').MultimodalContextPacket | undefined {
+  if (cards.length === 0) {
+    return undefined;
+  }
+
+  return {
+    id: `tool-perception-${cards.map((card) => card.assetId).join('-')}`,
+    selection: [],
+    artifactRefs: [],
+    projectRefs: [],
+    perceptionInputs: [],
+    uiContext: {
+      activePanel: 'unknown',
+      selectionIds: [],
+    },
+    createdAt: Math.max(...cards.map((card) => card.createdAt)),
+  };
 }
 
 function readLatestMultimodalContextPacket(

@@ -76,6 +76,17 @@ function createMockCharacterDialogue() {
   };
 }
 
+function createCommandArtifactRegistry(skills: readonly Record<string, unknown>[]) {
+  return {
+    skillCount: skills.length,
+    listSkills: vi.fn(() => []),
+    listAllSkills: vi.fn(() => skills),
+    getSkill: vi.fn(),
+    getSkillByCommand: vi.fn(),
+    searchSkills: vi.fn(() => []),
+  };
+}
+
 describe('SlashCommandHandler', () => {
   let handler: SlashCommandHandler;
   let webview: ReturnType<typeof createMockWebview>;
@@ -393,12 +404,7 @@ describe('SlashCommandHandler', () => {
     it('should not execute CLI-only builtins in extension mode', async () => {
       await handler.handleCommand(webview as any, 'config', undefined, 'conv-1');
 
-      expect(skillHandler.handleSlashCommand).toHaveBeenCalledWith(
-        webview,
-        'config',
-        'conv-1',
-        undefined,
-      );
+      expect(skillHandler.handleSlashCommand).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'config',
@@ -430,7 +436,7 @@ describe('SlashCommandHandler', () => {
   });
 
   describe('handleCommand - skill commands', () => {
-    it('should delegate to skillHandler for unknown builtin commands', async () => {
+    it('should execute command-artifact slash commands through the skill handler', async () => {
       const agentManager = { applySkillInjection: vi.fn() };
       handler = new SlashCommandHandler({
         conversations: conversations as any,
@@ -445,7 +451,15 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
-      const skill = { name: 'commit-workflow', command: 'commit' };
+      const skill = {
+        name: 'commit-workflow',
+        command: 'commit',
+        entryPointKind: 'command-artifact',
+        enabled: true,
+      };
+      skillHandler.getSkillService.mockReturnValue({
+        registry: createCommandArtifactRegistry([skill]),
+      });
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'commit' },
@@ -499,10 +513,19 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
+      const skill = {
+        name: 'commit',
+        command: 'commit',
+        entryPointKind: 'command-artifact',
+        enabled: true,
+      };
+      skillHandler.getSkillService.mockReturnValue({
+        registry: createCommandArtifactRegistry([skill]),
+      });
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'commit' },
-        skill: { name: 'commit' },
+        skill,
       });
 
       await handler.handleCommand(webview as any, 'commit', undefined, 'conv-1');
@@ -526,7 +549,15 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
-      const skill = { name: '剪辑: 快速 workflow', command: 'edit' };
+      const skill = {
+        name: '剪辑: 快速 workflow',
+        command: 'edit',
+        entryPointKind: 'command-artifact',
+        enabled: true,
+      };
+      skillHandler.getSkillService.mockReturnValue({
+        registry: createCommandArtifactRegistry([skill]),
+      });
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'edit' },
@@ -566,7 +597,15 @@ describe('SlashCommandHandler', () => {
         sendConversationList,
         sendActiveConversation,
       });
-      const skill = { name: 'commit', command: 'commit' };
+      const skill = {
+        name: 'commit',
+        command: 'commit',
+        entryPointKind: 'command-artifact',
+        enabled: true,
+      };
+      skillHandler.getSkillService.mockReturnValue({
+        registry: createCommandArtifactRegistry([skill]),
+      });
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: true,
         injection: { name: 'commit' },
@@ -591,7 +630,7 @@ describe('SlashCommandHandler', () => {
       });
     });
 
-    it('should report error when skill command fails', async () => {
+    it('should report unknown slash command without falling back to ordinary skills', async () => {
       skillHandler.handleSlashCommand.mockResolvedValue({
         applied: false,
         error: 'Skill not found',
@@ -599,8 +638,14 @@ describe('SlashCommandHandler', () => {
 
       await handler.handleCommand(webview as any, 'badcmd', undefined, 'conv-1');
 
+      expect(skillHandler.handleSlashCommand).not.toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ command: 'badcmd', success: false, error: 'Skill not found' }),
+        expect.objectContaining({
+          command: 'badcmd',
+          success: false,
+          error: expect.stringContaining('Unknown command'),
+        }),
       );
     });
 

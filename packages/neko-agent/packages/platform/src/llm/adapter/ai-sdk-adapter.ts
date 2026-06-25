@@ -9,6 +9,8 @@ import {
   generateText,
   streamText,
   jsonSchema,
+  APICallError,
+  RetryError,
   type LanguageModel,
   type ModelMessage,
   type ToolSet,
@@ -26,10 +28,16 @@ import type {
   ApiKeyValidationResult,
 } from '../../types/adapter';
 import type { Model, Provider } from '../../types/provider';
+import type { PlatformErrorCategory } from '../../types/error';
 import { getLogger } from '../../utils/logger';
+import { PlatformError } from '../../provider/platform-error';
+import { sleepWithAbort } from '@neko/shared';
 
-const MODEL_CALL_TOTAL_ATTEMPTS = 10;
+const MODEL_CALL_TOTAL_ATTEMPTS = 5;
 const MODEL_CALL_MAX_RETRIES = MODEL_CALL_TOTAL_ATTEMPTS - 1;
+const MODEL_CALL_INITIAL_RETRY_DELAY_MS = 2000;
+const MODEL_CALL_RETRY_BACKOFF_FACTOR = 2;
+const MODEL_CALL_MAX_RETRY_DELAY_MS = 30000;
 const ERROR_LOG_FIELD_MAX_LENGTH = 2000;
 const ERROR_LOG_CAUSE_MAX_DEPTH = 2;
 
@@ -96,7 +104,7 @@ export abstract class AISdkAdapter implements Adapter {
       messages: coreMessages,
       tools,
       abortSignal: options.signal,
-      maxRetries: MODEL_CALL_MAX_RETRIES,
+      maxRetries: 0,
       ...this.getProviderOptions(options, provider, model),
     };
 
@@ -124,11 +132,17 @@ export abstract class AISdkAdapter implements Adapter {
     });
 
     try {
-      const result = await generateText(requestOptions);
+      const result = await runAISdkModelCallWithRetries(
+        () => generateText(requestOptions),
+        provider,
+        model,
+        options.signal,
+      );
       return this.transformGenerateTextResult(result, model.name);
     } catch (error) {
-      getAdapterLogger().error('generateText error', { error: summarizeAISdkError(error) });
-      throw error;
+      const normalized = normalizeAISdkModelCallError(error, provider, model);
+      getAdapterLogger().error('generateText error', { error: summarizeAISdkError(normalized) });
+      throw normalized;
     }
   }
 
@@ -146,87 +160,114 @@ export abstract class AISdkAdapter implements Adapter {
 
     const tools = options.tools ? this.transformTools(options.tools) : undefined;
 
+    const requestOptions: Parameters<typeof streamText>[0] = {
+      model: languageModel,
+      system: systemPrompt,
+      messages: coreMessages,
+      temperature: undefined,
+      maxOutputTokens: options.maxTokens,
+      topP: undefined,
+      frequencyPenalty: undefined,
+      presencePenalty: undefined,
+      stopSequences: options.stop,
+      tools,
+      abortSignal: options.signal,
+      maxRetries: 0,
+      ...this.getProviderOptions(options, provider, model),
+    };
+
     try {
       // Reasoning models (o1, o3, deepseek-r1, etc.) don't support sampling params
       const isReasoning = model.capabilities?.includes('reasoning');
+      if (!isReasoning) {
+        requestOptions.temperature = options.temperature;
+        requestOptions.topP = options.topP;
+        requestOptions.frequencyPenalty = options.frequencyPenalty;
+        requestOptions.presencePenalty = options.presencePenalty;
+      }
 
-      const result = streamText({
-        model: languageModel,
-        system: systemPrompt,
-        messages: coreMessages,
-        temperature: isReasoning ? undefined : options.temperature,
-        maxOutputTokens: options.maxTokens,
-        topP: isReasoning ? undefined : options.topP,
-        frequencyPenalty: isReasoning ? undefined : options.frequencyPenalty,
-        presencePenalty: isReasoning ? undefined : options.presencePenalty,
-        stopSequences: options.stop,
-        tools,
-        abortSignal: options.signal,
-        maxRetries: MODEL_CALL_MAX_RETRIES,
-        ...this.getProviderOptions(options, provider, model),
-      });
+      let retryCount = 0;
+      while (true) {
+        let emittedChunk = false;
+        try {
+          const result = streamText(requestOptions);
 
-      const chunkId = `chatcmpl-${Date.now()}`;
+          const chunkId = `chatcmpl-${Date.now()}`;
 
-      for await (const part of result.fullStream) {
-        if (part.type === 'text-delta') {
-          yield {
-            id: chunkId,
-            model: model.name,
-            delta: {
-              content: part.text,
-            },
-          };
-        } else if (part.type === 'tool-call') {
-          yield {
-            id: chunkId,
-            model: model.name,
-            delta: {
-              toolCalls: [
-                {
-                  id: part.toolCallId,
-                  type: 'function',
-                  function: {
-                    name: part.toolName,
-                    arguments: JSON.stringify(part.input),
-                  },
+          for await (const part of result.fullStream) {
+            if (part.type === 'text-delta') {
+              emittedChunk = true;
+              yield {
+                id: chunkId,
+                model: model.name,
+                delta: {
+                  content: part.text,
                 },
-              ],
-            },
-          };
-        } else if (part.type === 'reasoning-delta') {
-          // Extended thinking (Claude)
-          yield {
-            id: chunkId,
-            model: model.name,
-            delta: {},
-            thinking: part.text,
-          };
-        } else if (part.type === 'error') {
-          // AI SDK emits errors as stream parts instead of throwing.
-          // Re-throw so the error propagates to the agent error handler.
-          throw part.error;
-        } else if (part.type === 'finish') {
-          const usage = part.totalUsage;
-          yield {
-            id: chunkId,
-            model: model.name,
-            delta: {},
-            finishReason: this.mapFinishReason(part.finishReason),
-            usage: usage
-              ? {
-                  promptTokens: usage.inputTokens ?? 0,
-                  completionTokens: usage.outputTokens ?? 0,
-                  totalTokens:
-                    usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-                }
-              : undefined,
-          };
+              };
+            } else if (part.type === 'tool-call') {
+              emittedChunk = true;
+              yield {
+                id: chunkId,
+                model: model.name,
+                delta: {
+                  toolCalls: [
+                    {
+                      id: part.toolCallId,
+                      type: 'function',
+                      function: {
+                        name: part.toolName,
+                        arguments: JSON.stringify(part.input),
+                      },
+                    },
+                  ],
+                },
+              };
+            } else if (part.type === 'reasoning-delta') {
+              emittedChunk = true;
+              // Extended thinking (Claude)
+              yield {
+                id: chunkId,
+                model: model.name,
+                delta: {},
+                thinking: part.text,
+              };
+            } else if (part.type === 'error') {
+              // AI SDK emits errors as stream parts instead of throwing.
+              // Re-throw so the error propagates to the agent error handler.
+              throw part.error;
+            } else if (part.type === 'finish') {
+              const usage = part.totalUsage;
+              emittedChunk = true;
+              yield {
+                id: chunkId,
+                model: model.name,
+                delta: {},
+                finishReason: this.mapFinishReason(part.finishReason),
+                usage: usage
+                  ? {
+                      promptTokens: usage.inputTokens ?? 0,
+                      completionTokens: usage.outputTokens ?? 0,
+                      totalTokens:
+                        usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+                    }
+                  : undefined,
+              };
+            }
+          }
+          return;
+        } catch (error) {
+          const normalized = normalizeAISdkModelCallError(error, provider, model);
+          if (emittedChunk || !canRetryAISdkModelCall(normalized, retryCount, options.signal)) {
+            throw normalized;
+          }
+          await waitBeforeAISdkModelCallRetry(normalized, retryCount, options.signal);
+          retryCount += 1;
         }
       }
     } catch (error) {
-      getAdapterLogger().error('streamText error', { error: summarizeAISdkError(error) });
-      throw error;
+      const normalized = normalizeAISdkModelCallError(error, provider, model);
+      getAdapterLogger().error('streamText error', { error: summarizeAISdkError(normalized) });
+      throw normalized;
     }
   }
 
@@ -573,6 +614,199 @@ function toUrlIfPossible(value: string): string | URL {
 
 function getAdapterLogger() {
   return getLogger('AISdkAdapter');
+}
+
+async function runAISdkModelCallWithRetries<T>(
+  call: () => Promise<T>,
+  provider: Provider,
+  model: Model,
+  signal?: AbortSignal,
+): Promise<T> {
+  let retryCount = 0;
+  while (true) {
+    try {
+      return await call();
+    } catch (error) {
+      const normalized = normalizeAISdkModelCallError(error, provider, model);
+      if (!canRetryAISdkModelCall(normalized, retryCount, signal)) {
+        throw normalized;
+      }
+      await waitBeforeAISdkModelCallRetry(normalized, retryCount, signal);
+      retryCount += 1;
+    }
+  }
+}
+
+function canRetryAISdkModelCall(error: Error, retryCount: number, signal?: AbortSignal): boolean {
+  if (signal?.aborted || retryCount >= MODEL_CALL_MAX_RETRIES) {
+    return false;
+  }
+  return error instanceof PlatformError && error.retryable;
+}
+
+async function waitBeforeAISdkModelCallRetry(
+  error: Error,
+  retryCount: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const retryAfter =
+    error instanceof PlatformError && error.retryAfter !== undefined ? error.retryAfter : undefined;
+  const delayMs =
+    retryAfter ??
+    Math.min(
+      MODEL_CALL_INITIAL_RETRY_DELAY_MS * Math.pow(MODEL_CALL_RETRY_BACKOFF_FACTOR, retryCount),
+      MODEL_CALL_MAX_RETRY_DELAY_MS,
+    );
+  await sleepWithAbort(delayMs, signal);
+}
+
+function normalizeAISdkModelCallError(error: unknown, provider: Provider, model: Model): Error {
+  const apiError = extractAISdkApiCallError(error);
+  if (!apiError) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  const category = classifyAISdkApiError(apiError);
+  const retryAfter = readRetryAfterMs(apiError);
+  return new PlatformError({
+    category,
+    code: buildAISdkPlatformErrorCode(apiError, category),
+    message: apiError.message,
+    retryable: isAISdkPlatformErrorRetryable(apiError, category),
+    ...(retryAfter !== undefined ? { retryAfter } : {}),
+    cause: apiError,
+    context: {
+      providerId: provider.id,
+      modelId: model.id,
+      modelName: model.name,
+      ...(apiError.url ? { url: apiError.url } : {}),
+      ...(apiError.statusCode !== undefined ? { statusCode: apiError.statusCode } : {}),
+    },
+  });
+}
+
+function extractAISdkApiCallError(error: unknown): APICallError | undefined {
+  if (APICallError.isInstance(error)) {
+    return error;
+  }
+  if (RetryError.isInstance(error)) {
+    for (let index = error.errors.length - 1; index >= 0; index -= 1) {
+      const candidate = error.errors[index];
+      if (APICallError.isInstance(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  const lastError = readObjectField(error, 'lastError');
+  if (APICallError.isInstance(lastError)) {
+    return lastError;
+  }
+
+  return undefined;
+}
+
+function classifyAISdkApiError(error: APICallError): PlatformErrorCategory {
+  const statusCode = error.statusCode;
+  if (statusCode === 400) {
+    return classifyBadRequestMessage(error.message);
+  }
+  if (statusCode === 401 || statusCode === 403) return 'authentication';
+  if (statusCode === 408) return 'timeout';
+  if (statusCode === 404) return 'not_found';
+  if (statusCode === 429) {
+    return isQuotaOrBillingApiError(error) ? 'validation' : 'rate_limit';
+  }
+  if (statusCode !== undefined && statusCode >= 500) return 'server';
+  return error.isRetryable ? 'network' : 'unknown';
+}
+
+function classifyBadRequestMessage(message: string): PlatformErrorCategory {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('context length') ||
+    normalized.includes('maximum context') ||
+    normalized.includes('too many tokens')
+  ) {
+    return 'context_length';
+  }
+  if (normalized.includes('content filter') || normalized.includes('safety')) {
+    return 'content_filter';
+  }
+  return 'validation';
+}
+
+function isAISdkPlatformErrorRetryable(
+  error: APICallError,
+  category: PlatformErrorCategory,
+): boolean {
+  if (category === 'rate_limit') return true;
+  if (category === 'timeout' || category === 'network' || category === 'server') {
+    return error.isRetryable === true;
+  }
+  return false;
+}
+
+function buildAISdkPlatformErrorCode(error: APICallError, category: PlatformErrorCategory): string {
+  const providerCode =
+    firstString(
+      readObjectField(error.data, 'code'),
+      readObjectField(error.data, 'type'),
+      readObjectField(error.data, 'errorCode'),
+      readObjectField(readObjectField(error.data, 'error'), 'code'),
+      readObjectField(readObjectField(error.data, 'error'), 'type'),
+    ) ?? category.toUpperCase();
+  return `AI_SDK_${providerCode.replace(/[^a-zA-Z0-9]+/g, '_').toUpperCase()}`;
+}
+
+function readRetryAfterMs(error: APICallError): number | undefined {
+  const headers = error.responseHeaders;
+  if (!headers) return undefined;
+
+  const retryAfterMs = headers['retry-after-ms'];
+  if (retryAfterMs) {
+    const value = Number.parseFloat(retryAfterMs);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  const retryAfter = headers['retry-after'];
+  if (!retryAfter) return undefined;
+
+  const seconds = Number.parseFloat(retryAfter);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+
+  const dateMs = Date.parse(retryAfter);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+  return undefined;
+}
+
+function isQuotaOrBillingApiError(error: APICallError): boolean {
+  const normalized = [
+    error.message,
+    firstString(
+      readObjectField(error.data, 'code'),
+      readObjectField(error.data, 'type'),
+      readObjectField(error.data, 'errorCode'),
+      readObjectField(readObjectField(error.data, 'error'), 'message'),
+      readObjectField(readObjectField(error.data, 'error'), 'code'),
+      readObjectField(readObjectField(error.data, 'error'), 'type'),
+    ),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ')
+    .toLowerCase();
+  return (
+    normalized.includes('quota') ||
+    normalized.includes('billing') ||
+    normalized.includes('insufficient_quota') ||
+    normalized.includes('insufficient credits') ||
+    normalized.includes('balance') ||
+    normalized.includes('credit')
+  );
 }
 
 function summarizeAISdkError(error: unknown, depth = 0): AISdkErrorSummary {

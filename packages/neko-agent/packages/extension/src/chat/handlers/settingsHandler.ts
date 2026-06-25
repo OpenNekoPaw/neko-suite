@@ -18,6 +18,16 @@ import {
   type AccountAiCatalogCache,
 } from '../../services/accountAiCatalogCache';
 import { getLogger } from '../../base';
+import { AGENT_SESSION_CONFIG_LOCKED_MESSAGE } from '@neko/agent/runtime';
+import type { Task } from '@neko/shared';
+
+interface AgentRunStateReader {
+  hasRunningAgents(): boolean;
+}
+
+interface AgentTaskStateReader {
+  list(): Promise<readonly Task[]>;
+}
 
 /**
  * Dependencies for SettingsHandler
@@ -25,6 +35,8 @@ import { getLogger } from '../../base';
 export interface SettingsHandlerDeps {
   platform?: Platform;
   accountAiCatalog?: AccountAiCatalogCache;
+  agentRunState?: AgentRunStateReader;
+  taskState?: AgentTaskStateReader;
 }
 
 const logger = getLogger('SettingsHandler');
@@ -92,10 +104,32 @@ export class SettingsHandler {
 
     const platform = this.deps.platform;
     const message = await runAssistantSettingsUpdateRuntime(settings, {
-      updateSettingsFromWebview: (updates) =>
-        platform.config.applyRuntimeAssistantSettingsFromWebview(updates),
+      updateSettingsFromWebview: async (updates) => {
+        if (this.isModelConfigurationUpdate(updates)) {
+          await this.assertModelConfigurationUnlocked();
+        }
+        await platform.config.applyRuntimeAssistantSettingsFromWebview(updates);
+      },
     });
     webview.postMessage(message);
+  }
+
+  private async assertModelConfigurationUnlocked(): Promise<void> {
+    if (this.deps.agentRunState?.hasRunningAgents()) {
+      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+    }
+    if (await this.hasActiveTasks()) {
+      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+    }
+  }
+
+  private async hasActiveTasks(): Promise<boolean> {
+    const tasks = await this.deps.taskState?.list();
+    return tasks?.some((task) => task.status === 'pending' || task.status === 'running') ?? false;
+  }
+
+  private isModelConfigurationUpdate(settings: Record<string, unknown>): boolean {
+    return MODEL_CONFIGURATION_UPDATE_KEYS.some((key) => key in settings);
   }
 
   private async getAccountCatalogForSettingsProjection() {
@@ -112,3 +146,25 @@ export class SettingsHandler {
     }
   }
 }
+
+const MODEL_CONFIGURATION_UPDATE_KEYS = [
+  'providerId',
+  'modelId',
+  'selectedProviderId',
+  'selectedModelId',
+  'defaultProvider',
+  'defaultModel',
+  'defaultModels',
+  'defaultMediaModels',
+  'temperature',
+  'topP',
+  'maxTokens',
+  'maxOutputTokens',
+  'reasoningEffort',
+  'thinkingBudget',
+  'verbosity',
+  'serviceTier',
+  'llmConfig',
+  'agentModels',
+  'mediaModelSelection',
+] as const;

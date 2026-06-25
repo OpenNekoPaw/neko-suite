@@ -355,16 +355,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           undefined,
           this._dashboardWorkItems,
           this._localResourceAccess,
-          {
-            accountAiCatalog: this._accountAiCatalog,
-            skillAutoActivation: {
-              activate: ({ webview, conversationId, userInput }) =>
-                this._skillHandler.autoActivateSkill(webview, {
-                  conversationId,
-                  userInput,
-                }),
-            },
-          },
+          { accountAiCatalog: this._accountAiCatalog },
         );
         this._dashboardWorkItems.updateDeps({
           platform: this._platform,
@@ -404,7 +395,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         if (this._agentManager) {
           const skillRuntime = this._skillHandler.getRuntime();
           this._agentManager.setSkillProviderFactory(
-            skillRuntimeBootstrap.createSkillProviderFactory(skillRuntime),
+            skillRuntimeBootstrap.createSkillProviderFactory({
+              getActiveSkill: (conversationId) => skillRuntime.getActiveSkill(conversationId),
+              applySkillInjection: (conversationId, injection, skill) =>
+                skillRuntime.applySkillInjection(conversationId, injection, skill),
+              clearActiveSkill: (conversationId) => skillRuntime.clearActiveSkill(conversationId),
+            }),
           );
         }
 
@@ -422,6 +418,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._settingsHandler.updateDeps({
           platform: this._platform,
           accountAiCatalog: this._accountAiCatalog,
+          agentRunState: this._agentManager,
+          taskState: this._taskManager,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
         this._slashCommandHandler.updateDeps({
