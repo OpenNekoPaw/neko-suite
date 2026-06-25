@@ -1204,7 +1204,8 @@ body,
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
   border-top: 0;
   background: color-mix(in srgb, var(--canvas-bg) 62%, var(--toolbar-bg) 38%);
 }
@@ -1219,15 +1220,14 @@ body,
 .canvas-route-storyboard-matrix-header {
   flex: 0 0 auto;
   border-bottom: 1px solid var(--toolbar-border);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .canvas-route-storyboard-matrix-body {
   min-height: 0;
   flex: 1 1 auto;
   align-content: start;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .canvas-route-storyboard-matrix-corner {
