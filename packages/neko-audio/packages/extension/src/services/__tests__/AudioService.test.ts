@@ -43,7 +43,7 @@ const mockAnalyzeLoudness = vi.fn();
 const mockDetectSilence = vi.fn();
 const mockGetStreamWsUrl = vi.fn((id: string) => `ws://127.0.0.1:9999/v1/streams/${id}`);
 
-vi.mock('@neko/neko-client', () => ({
+vi.mock('@neko/neko-client/EngineClient', () => ({
   EngineClient: function MockEngineClient() {
     return {
       dispatch: mockDispatch,

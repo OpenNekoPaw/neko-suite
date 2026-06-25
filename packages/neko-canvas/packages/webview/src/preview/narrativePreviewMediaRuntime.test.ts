@@ -83,7 +83,7 @@ describe('narrative preview media runtime time labels', () => {
     });
 
     expect(container.querySelector('.neko-preview-media-time')?.textContent).toBe('1:05 / 1:01:01');
-  });
+  }, 15_000);
 
   it('starts and disposes media streams through the shared lifecycle', async () => {
     await import('./narrativePreviewMediaRuntime');

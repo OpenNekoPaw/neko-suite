@@ -57,12 +57,12 @@ describe('ModelDocument project file I/O', () => {
     await document.save();
 
     expect(decodeText(storage.get('/workspace/model/hero.nkm'))).toContain(
-      '"src": "models/hero.glb"',
+      '"src": "model/models/hero.glb"',
     );
 
     await document.saveAs(createUri('/workspace/model/copy.nkm'));
     expect(decodeText(storage.get('/workspace/model/copy.nkm'))).toContain(
-      '"src": "models/hero.glb"',
+      '"src": "model/models/hero.glb"',
     );
 
     storage.set(
@@ -110,7 +110,7 @@ describe('ModelDocument project file I/O', () => {
     );
   });
 
-  it('resolves relative model sources from the .nkm document directory', async () => {
+  it('resolves relative model sources from the workspace root', async () => {
     storage.set(
       '/workspace/model/hero.nkm',
       encodeJson(createDefaultNkmProject('Hero', 'models/hero.glb')),
@@ -118,7 +118,7 @@ describe('ModelDocument project file I/O', () => {
 
     await expect(
       resolveNkmProjectModelSource(createUri('/workspace/model/hero.nkm')),
-    ).resolves.toBe('/workspace/model/models/hero.glb');
+    ).resolves.toBe('/workspace/models/hero.glb');
   });
 });
 

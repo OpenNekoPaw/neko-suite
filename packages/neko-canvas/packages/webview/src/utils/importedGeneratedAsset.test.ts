@@ -130,7 +130,7 @@ describe('imported generated asset normalization', () => {
       }),
     });
     const asset = normalizeImportedGeneratedAsset({
-      path: '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page.jpg',
+      path: '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/resources/documents/doc_1/page.jpg',
       type: 'image',
       resourceRef,
     });
