@@ -66,7 +66,7 @@ async function getInstallManager(): Promise<InstallManager> {
       new VersionResolver(),
       targets,
       _registry,
-      { nekoSuiteVersion: '0.0.1' },
+      { nekoSuiteVersion: '0.0.1', downloadTempDir: path.join(CACHE_DIR, '.downloads') },
     );
   }
   return _installManager;

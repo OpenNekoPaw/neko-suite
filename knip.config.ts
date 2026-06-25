@@ -3,6 +3,7 @@ import type { KnipConfig } from 'knip';
 const config: KnipConfig = {
   entry: [
     'scripts/check-3d-route-a-boundaries.mjs',
+    'scripts/check-canvas-playback-boundary.mjs',
     'scripts/compile-ts-vsix.mjs',
     'scripts/scene-render-diagnostics.mjs',
   ],
@@ -20,6 +21,7 @@ const config: KnipConfig = {
     'scripts/act-ci.sh',
   ],
   ignoreDependencies: [
+    '@fission-ai/openspec', // Used by the `openspec` CLI invoked in development workflow.
     '@types/vscode', // Provided by VSCode runtime
     'esbuild', // Used as CLI bundler, not imported
     'sharp', // Native binary, loaded at runtime
