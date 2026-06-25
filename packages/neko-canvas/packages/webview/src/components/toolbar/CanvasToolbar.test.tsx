@@ -152,41 +152,38 @@ describe('CanvasToolbar', () => {
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
-  it('renders independent playback pane visibility buttons when pane state is provided', () => {
-    const onTogglePlaybackPane = vi.fn();
+  it('does not duplicate playback pane visibility buttons from the workspace header', () => {
+    const onRevealPlaybackWorkspace = vi.fn();
 
     act(() => {
       root.render(
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          playbackPaneState={{ canvas: true, stage: false, route: true }}
-          onTogglePlaybackPane={onTogglePlaybackPane}
+          onRevealPlaybackWorkspace={onRevealPlaybackWorkspace}
         />,
       );
     });
 
-    const canvasButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="toggle-playback-canvas-pane"]',
-    );
-    const stageButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="toggle-playback-stage-pane"]',
-    );
-    const routeButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="toggle-playback-route-pane"]',
-    );
-
-    expect(canvasButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(stageButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(routeButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      host.querySelector('[data-creative-left-rail-action="toggle-playback-canvas-pane"]'),
+    ).toBeNull();
+    expect(
+      host.querySelector('[data-creative-left-rail-action="toggle-playback-stage-pane"]'),
+    ).toBeNull();
+    expect(
+      host.querySelector('[data-creative-left-rail-action="toggle-playback-route-pane"]'),
+    ).toBeNull();
 
     act(() => {
-      stageButton?.click();
-      routeButton?.click();
+      host
+        .querySelector<HTMLButtonElement>(
+          '[data-creative-left-rail-action="reveal-playback-workspace"]',
+        )
+        ?.click();
     });
 
-    expect(onTogglePlaybackPane).toHaveBeenNthCalledWith(1, 'stage');
-    expect(onTogglePlaybackPane).toHaveBeenNthCalledWith(2, 'route');
+    expect(onRevealPlaybackWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it('controls canvas HUD visibility from the bottom visibility cluster', () => {

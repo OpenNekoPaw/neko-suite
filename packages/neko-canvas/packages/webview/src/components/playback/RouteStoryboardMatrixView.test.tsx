@@ -74,6 +74,9 @@ describe('RouteStoryboardMatrix', () => {
     expect(matrix).not.toBeNull();
     expect(matrix?.getAttribute('role')).toBe('grid');
     expect(matrix?.getAttribute('tabindex')).toBe('0');
+    expect(host.querySelector('.canvas-route-storyboard-matrix-header')).not.toBeNull();
+    expect(host.querySelector('.canvas-route-storyboard-matrix-header-columns')).not.toBeNull();
+    expect(host.querySelector('.canvas-route-storyboard-matrix-body')).not.toBeNull();
     expect(host.textContent).toContain('Primary routes');
     expect(host.textContent).toContain('Alt routes');
     expect(host.textContent).toContain('Scene A');
