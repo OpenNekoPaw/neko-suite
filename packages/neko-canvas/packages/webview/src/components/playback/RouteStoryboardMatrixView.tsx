@@ -143,60 +143,69 @@ export function RouteStoryboardMatrix({
       </div>
 
       <div className="canvas-route-storyboard-matrix-grid" role="presentation">
-        <div className="canvas-route-storyboard-matrix-corner" role="rowheader">
-          {t('playback.matrix.routes')}
+        <div className="canvas-route-storyboard-matrix-header" role="presentation">
+          <div className="canvas-route-storyboard-matrix-corner" role="rowheader">
+            {t('playback.matrix.routes')}
+          </div>
+          <div className="canvas-route-storyboard-matrix-header-columns" role="presentation">
+            <div className="canvas-route-storyboard-matrix-container-row" role="row">
+              {matrix.containerGroups.map((container) => (
+                <button
+                  key={container.id}
+                  type="button"
+                  className="canvas-route-storyboard-matrix-container"
+                  data-folded={container.folded ? 'true' : 'false'}
+                  style={{ gridColumn: `span ${container.slotCount}` }}
+                  title={container.title}
+                  role="columnheader"
+                  aria-colspan={container.slotCount}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => onToggleContainerFold(container)}
+                >
+                  {container.folded ? (
+                    <ChevronRightIcon size={13} />
+                  ) : (
+                    <ChevronDownIcon size={13} />
+                  )}
+                  <span>{container.title}</span>
+                  <small>{container.unitCount}</small>
+                </button>
+              ))}
+            </div>
+            <div className="canvas-route-storyboard-matrix-step-row" role="row">
+              {matrix.columns.map((column, index) => (
+                <button
+                  key={column.id}
+                  type="button"
+                  className="canvas-route-storyboard-matrix-step"
+                  title={column.title}
+                  role="columnheader"
+                  aria-colindex={index + 1}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => onSelectColumn(column.id)}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="canvas-route-storyboard-matrix-container-row" role="row">
-          {matrix.containerGroups.map((container) => (
-            <button
-              key={container.id}
-              type="button"
-              className="canvas-route-storyboard-matrix-container"
-              data-folded={container.folded ? 'true' : 'false'}
-              style={{ gridColumn: `span ${container.slotCount}` }}
-              title={container.title}
-              role="columnheader"
-              aria-colspan={container.slotCount}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => onToggleContainerFold(container)}
-            >
-              {container.folded ? <ChevronRightIcon size={13} /> : <ChevronDownIcon size={13} />}
-              <span>{container.title}</span>
-              <small>{container.unitCount}</small>
-            </button>
+        <div className="canvas-route-storyboard-matrix-body" role="presentation">
+          {matrix.rows.map((row) => (
+            <MatrixRow
+              key={row.id}
+              row={row}
+              selected={row.routeId === selectedRoute?.routeId}
+              currentUnitId={currentUnitId}
+              focusedCellId={effectiveFocusedCellId}
+              onSelectRoute={onSelectRoute}
+              onSelectCell={onSelectCell}
+              onSelectSummaryCell={onSelectSummaryCell}
+              onFocusCell={focusCell}
+              onSendToCut={onSendToCut}
+            />
           ))}
         </div>
-        <div className="canvas-route-storyboard-matrix-step-row" role="row">
-          {matrix.columns.map((column, index) => (
-            <button
-              key={column.id}
-              type="button"
-              className="canvas-route-storyboard-matrix-step"
-              title={column.title}
-              role="columnheader"
-              aria-colindex={index + 1}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => onSelectColumn(column.id)}
-            >
-              {index + 1}
-            </button>
-          ))}
-        </div>
-
-        {matrix.rows.map((row) => (
-          <MatrixRow
-            key={row.id}
-            row={row}
-            selected={row.routeId === selectedRoute?.routeId}
-            currentUnitId={currentUnitId}
-            focusedCellId={effectiveFocusedCellId}
-            onSelectRoute={onSelectRoute}
-            onSelectCell={onSelectCell}
-            onSelectSummaryCell={onSelectSummaryCell}
-            onFocusCell={focusCell}
-            onSendToCut={onSendToCut}
-          />
-        ))}
       </div>
 
       {diagnosticMessages.length > 0 ? (
