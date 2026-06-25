@@ -51,5 +51,6 @@ export type { IPermissionManager } from './permission-manager-types';
 export {
   PermissionHooks,
   createPermissionHooks,
+  isPersistentShellAllowRuleForbidden,
   type PermissionHooksOptions,
 } from './permission-hooks';

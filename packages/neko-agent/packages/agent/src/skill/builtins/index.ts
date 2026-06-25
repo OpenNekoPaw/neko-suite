@@ -151,6 +151,24 @@ You are an expert video editor. Help users with timeline-based editing tasks.
   icon: '🎬',
   source: 'builtin',
   enabled: true,
+  domain: 'cut',
+  mediaWorkflow: {
+    useCases: [
+      'Edit video timeline clips with cuts, trims, transitions, timing, and track operations',
+      'Adjust an existing Cut timeline or video edit after the user requests timeline changes',
+    ],
+    nonGoals: [
+      'Analyze video content without modifying or planning timeline edits',
+      'Generate new media assets or storyboard artifacts',
+    ],
+    acceptedModalities: ['video', 'timeline'],
+    inputArtifacts: ['timeline', 'video-clip'],
+    producedArtifacts: ['timeline-edit-plan'],
+    tags: ['video-editing', 'timeline', 'cut', 'transition'],
+    operations: ['trim-video', 'split-clip', 'add-transition', 'edit-timeline'],
+    costLevel: 'low',
+    riskLevel: 'medium',
+  },
 };
 
 /**
@@ -220,6 +238,24 @@ You are a professional colorist. Help users achieve their desired visual style.
   icon: '🎨',
   source: 'builtin',
   enabled: true,
+  domain: 'cut',
+  mediaWorkflow: {
+    useCases: [
+      'Color correct or grade timeline clips, shots, or video scenes',
+      'Apply LUT, exposure, contrast, white balance, saturation, or cinematic look adjustments',
+    ],
+    nonGoals: [
+      'Describe visual style without applying or planning color adjustments',
+      'Generate replacement media assets',
+    ],
+    acceptedModalities: ['video', 'image', 'timeline'],
+    inputArtifacts: ['timeline', 'video-clip', 'image'],
+    producedArtifacts: ['color-correction-plan'],
+    tags: ['color', 'grading', 'correction', 'lut'],
+    operations: ['color-grade', 'color-correct', 'apply-lut', 'adjust-exposure'],
+    costLevel: 'low',
+    riskLevel: 'medium',
+  },
 };
 
 /**
@@ -290,6 +326,24 @@ Automatically lower music when dialogue plays:
   icon: '🎵',
   source: 'builtin',
   enabled: true,
+  domain: 'audio',
+  mediaWorkflow: {
+    useCases: [
+      'Mix audio levels, music beds, dialogue, voiceover, or sound effects on a timeline',
+      'Normalize, duck, fade, separate, or adjust audio clips for a video project',
+    ],
+    nonGoals: [
+      'Generate new music or voice audio without timeline mixing',
+      'Transcribe or summarize audio content only',
+    ],
+    acceptedModalities: ['audio', 'timeline', 'video'],
+    inputArtifacts: ['audio-clip', 'timeline', 'voiceover'],
+    producedArtifacts: ['audio-mix-plan'],
+    tags: ['audio', 'mixing', 'sound-design', 'timeline'],
+    operations: ['mix-audio', 'normalize-audio', 'duck-music', 'fade-audio'],
+    costLevel: 'low',
+    riskLevel: 'medium',
+  },
 };
 
 /**
@@ -360,6 +414,24 @@ You are a professional subtitler. Help users create accessible, well-timed capti
   icon: '📝',
   source: 'builtin',
   enabled: true,
+  domain: 'media',
+  mediaWorkflow: {
+    useCases: [
+      'Create, edit, translate, or time subtitles and captions for video',
+      'Import, export, or repair SRT/VTT subtitle timing and text',
+    ],
+    nonGoals: [
+      'Summarize a transcript without creating subtitle artifacts',
+      'Generate new video or audio media',
+    ],
+    acceptedModalities: ['video', 'audio', 'text', 'timeline'],
+    inputArtifacts: ['transcript', 'timeline', 'video-clip', 'srt', 'vtt'],
+    producedArtifacts: ['subtitle-track', 'srt', 'vtt'],
+    tags: ['subtitle', 'caption', 'transcription', 'accessibility'],
+    operations: ['create-subtitles', 'time-captions', 'translate-subtitles', 'edit-srt'],
+    costLevel: 'low',
+    riskLevel: 'low',
+  },
 };
 
 /**
@@ -453,6 +525,21 @@ Fountain is a plain-text screenplay format:
   icon: '📜',
   source: 'builtin',
   enabled: true,
+  domain: 'story',
+  mediaWorkflow: {
+    useCases: [
+      'Convert Fountain scripts or screenplays into Cut timeline project structure',
+      'Import screenplay scenes and dialogue as timeline text and subtitle tracks',
+    ],
+    nonGoals: ['Write or rewrite the screenplay itself', 'Generate media assets from script text'],
+    acceptedModalities: ['text', 'script', 'fountain'],
+    inputArtifacts: ['FountainScript', 'screenplay'],
+    producedArtifacts: ['CutTimelinePayload', 'neko-project'],
+    tags: ['script', 'fountain', 'timeline', 'neko-cut'],
+    operations: ['script-to-timeline', 'import-fountain', 'create-timeline-project'],
+    costLevel: 'low',
+    riskLevel: 'medium',
+  },
 };
 
 // =============================================================================
@@ -551,6 +638,24 @@ Report to the user what music was generated (prompt used, duration) and where it
   command: 'scene-to-music',
   argumentHint: '[mood or style hint]',
   supportsArguments: true,
+  domain: 'audio',
+  mediaWorkflow: {
+    useCases: [
+      'Analyze timeline scenes and generate matching background music',
+      'Create and insert a music track that matches a scene mood, duration, or style hint',
+    ],
+    nonGoals: [
+      'Mix existing audio without generating music',
+      'Describe scene mood without creating or inserting a music asset',
+    ],
+    acceptedModalities: ['timeline', 'video', 'text'],
+    inputArtifacts: ['timeline', 'scene-description'],
+    producedArtifacts: ['generated-media-ref', 'audio-track'],
+    tags: ['music', 'score', 'background-music', 'timeline'],
+    operations: ['scene-to-music', 'generate-music', 'insert-audio-track'],
+    costLevel: 'medium',
+    riskLevel: 'medium',
+  },
 };
 
 // Note: pipelineDiagnosticsSkill removed — pipeline introspection used to

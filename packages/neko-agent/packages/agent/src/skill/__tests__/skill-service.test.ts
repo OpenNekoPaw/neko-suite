@@ -9,13 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillService, createSkillService } from '../skill-service';
 import { SkillInjector } from '../skill-injector';
 import { KeywordSkillMatcher } from '../skill-matcher';
-import type {
-  Skill,
-  SkillMatch,
-  ISkillRegistry,
-  ISkillMatcher,
-  ISkillInjector,
-} from '@neko/shared';
+import type { Skill, ISkillRegistry } from '@neko/shared';
 
 // =============================================================================
 // Test Helpers
@@ -57,12 +51,6 @@ function makeMockRegistry(): ISkillRegistry {
       skills.length = 0;
     }),
   } as unknown as ISkillRegistry;
-}
-
-function makeMockMatcher(results: SkillMatch[] = []): ISkillMatcher {
-  return {
-    match: vi.fn(() => results),
-  };
 }
 
 // =============================================================================
@@ -184,23 +172,30 @@ describe('SkillService', () => {
     expect(service.skillCount).toBe(0);
   });
 
-  // --- discover (replaces match) ---
+  // --- discover compatibility shell ---
 
-  it('discover delegates to matcher and registry', () => {
-    const skill = makeSkill({ name: 'commit-helper', description: 'Help with git commits' });
-    const matchResults: SkillMatch[] = [{ skill, relevance: 0.8, reason: 'keyword match' }];
+  it('discover does not route natural-language requests to Skill matches', () => {
+    const skill = makeSkill({
+      name: 'commit-helper',
+      description: 'Help with git commits',
+      mediaWorkflow: {
+        useCases: ['write git commit messages'],
+        operations: ['commit'],
+        tags: ['git'],
+      },
+    });
     const registry = makeMockRegistry();
-    const matcher = makeMockMatcher(matchResults);
 
     registry.registerSkill(skill);
 
-    const service = new SkillService({ registry, matcher });
+    const service = new SkillService({ registry });
     const result = service.discover('commit my changes');
 
-    expect(matcher.match).toHaveBeenCalled();
-    expect(result.found).toBe(true);
-    expect(result.matches).toHaveLength(1);
-    expect(result.matches[0]?.skill.name).toBe('commit-helper');
+    expect(result).toEqual({
+      found: false,
+      matches: [],
+      requiresConfirmation: false,
+    });
   });
 
   // --- apply ---
@@ -227,8 +222,7 @@ describe('SkillService', () => {
   // --- discover ---
 
   it('discover returns found:false when no matches', () => {
-    const matcher = makeMockMatcher([]);
-    const service = new SkillService({ matcher });
+    const service = new SkillService();
 
     const result = service.discover('something random');
 
@@ -236,73 +230,42 @@ describe('SkillService', () => {
     expect(result.matches).toHaveLength(0);
   });
 
-  it('discover returns matches above threshold', () => {
-    const highSkill = makeSkill({ name: 'high-match' });
-    const lowSkill = makeSkill({ name: 'low-match' });
-    const matchResults: SkillMatch[] = [
-      { skill: highSkill, relevance: 0.8, reason: 'good match' },
-      { skill: lowSkill, relevance: 0.1, reason: 'weak match' },
-    ];
-    const matcher = makeMockMatcher(matchResults);
-    // default minRelevanceThreshold is 0.3
-    const service = new SkillService({ matcher });
-
-    const result = service.discover('test input');
-
-    expect(result.found).toBe(true);
-    // Only the high-relevance match passes the 0.3 threshold
-    expect(result.matches).toHaveLength(1);
-    expect(result.matches[0]?.skill.name).toBe('high-match');
-  });
-
-  it('discover sets requiresConfirmation when below autoApplyThreshold', () => {
-    const skill = makeSkill({ name: 'mid-match' });
-    const matchResults: SkillMatch[] = [{ skill, relevance: 0.5, reason: 'partial match' }];
-    const matcher = makeMockMatcher(matchResults);
-    // default autoApplyThreshold is 0.9, so 0.5 < 0.9 → requires confirmation
-    const service = new SkillService({ matcher });
-
-    const result = service.discover('test input');
-
-    expect(result.found).toBe(true);
-    expect(result.requiresConfirmation).toBe(true);
-  });
-
   // --- discoverAndApply ---
 
   it('discoverAndApply returns null when no match', async () => {
-    const matcher = makeMockMatcher([]);
-    const service = new SkillService({ matcher });
+    const service = new SkillService();
 
     const result = await service.discoverAndApply('nothing here');
 
     expect(result).toBeNull();
   });
 
-  it('discoverAndApply calls confirmCallback when required', async () => {
+  it('discoverAndApply does not activate natural-language matches', async () => {
     const skill = makeSkill({ name: 'needs-confirm' });
-    const matchResults: SkillMatch[] = [{ skill, relevance: 0.5, reason: 'partial' }];
-    const matcher = makeMockMatcher(matchResults);
-    const service = new SkillService({ matcher });
+    const registry = makeMockRegistry();
+    registry.registerSkill(skill);
+    const service = new SkillService({ registry });
+    const applySpy = vi.spyOn(service, 'apply');
 
     const confirmCallback = vi.fn().mockResolvedValue(true);
     const result = await service.discoverAndApply('test', confirmCallback);
 
-    expect(confirmCallback).toHaveBeenCalledWith(skill, matchResults[0]);
-    expect(result?.applied).toBe(true);
+    expect(result).toBeNull();
+    expect(confirmCallback).not.toHaveBeenCalled();
+    expect(applySpy).not.toHaveBeenCalled();
   });
 
-  it('discoverAndApply returns error when user declines', async () => {
+  it('discoverAndApply ignores decline callbacks because natural-language apply is removed', async () => {
     const skill = makeSkill({ name: 'declined-skill' });
-    const matchResults: SkillMatch[] = [{ skill, relevance: 0.5, reason: 'partial' }];
-    const matcher = makeMockMatcher(matchResults);
-    const service = new SkillService({ matcher });
+    const registry = makeMockRegistry();
+    registry.registerSkill(skill);
+    const service = new SkillService({ registry });
 
     const confirmCallback = vi.fn().mockResolvedValue(false);
     const result = await service.discoverAndApply('test', confirmCallback);
 
-    expect(result?.applied).toBe(false);
-    expect(result?.error).toContain('declined');
+    expect(result).toBeNull();
+    expect(confirmCallback).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------
@@ -312,10 +275,9 @@ describe('SkillService', () => {
   describe('ablation: setDiscoveryEnabled', () => {
     it('discover() short-circuits to empty result when disabled', () => {
       const skill = makeSkill({ name: 'would-match' });
-      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'strong' }]);
       const registry = makeMockRegistry();
       registry.registerSkill(skill);
-      const service = new SkillService({ registry, matcher });
+      const service = new SkillService({ registry });
 
       service.setDiscoveryEnabled(false);
       const result = service.discover('anything');
@@ -323,23 +285,25 @@ describe('SkillService', () => {
       expect(result.found).toBe(false);
       expect(result.matches).toEqual([]);
       expect(result.requiresConfirmation).toBe(false);
-      // matcher never consulted
-      expect(matcher.match).not.toHaveBeenCalled();
     });
 
-    it('re-enabling via setDiscoveryEnabled(true) restores normal behavior', () => {
-      const skill = makeSkill({ name: 'commit-helper' });
-      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'keyword match' }]);
+    it('re-enabling discovery does not restore code-side natural-language routing', () => {
+      const skill = makeSkill({
+        name: 'commit-helper',
+        description: 'Help with git commits',
+        mediaWorkflow: { tags: ['git'] },
+      });
       const registry = makeMockRegistry();
       registry.registerSkill(skill);
-      const service = new SkillService({ registry, matcher });
+      const service = new SkillService({ registry });
 
       service.setDiscoveryEnabled(false);
-      expect(service.discover('x').found).toBe(false);
+      expect(service.discover('git commits').found).toBe(false);
 
       service.setDiscoveryEnabled(true);
-      const result = service.discover('x');
-      expect(result.found).toBe(true);
+      const result = service.discover('git commits');
+      expect(result.found).toBe(false);
+      expect(result.matches).toEqual([]);
     });
 
     it('default state is enabled', () => {
@@ -349,10 +313,9 @@ describe('SkillService', () => {
 
     it('discoverAndApply returns null when discovery is disabled', async () => {
       const skill = makeSkill({ name: 'strong' });
-      const matcher = makeMockMatcher([{ skill, relevance: 0.95, reason: 'strong' }]);
       const registry = makeMockRegistry();
       registry.registerSkill(skill);
-      const service = new SkillService({ registry, matcher });
+      const service = new SkillService({ registry });
 
       service.setDiscoveryEnabled(false);
       const result = await service.discoverAndApply('x');

@@ -216,7 +216,7 @@ describe('ConversationSkillRuntime', () => {
     });
   });
 
-  it('auto-activates high-confidence discovered skills for a conversation', async () => {
+  it('does not auto-activate high-confidence discovered skills for a conversation', async () => {
     const storyboard = createSkill('comic-to-storyboard');
     const skillService = createSkillService([storyboard], {
       found: true,
@@ -239,18 +239,10 @@ describe('ConversationSkillRuntime', () => {
       userInput: '生成分镜表',
     });
 
-    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('comic-to-storyboard');
-    expect(result).toEqual(expect.objectContaining({ applied: true, skill: storyboard }));
-    expect(runtime.getActiveSkill('conv-1')).toEqual({
-      skill: storyboard,
-      injection: expect.objectContaining({ name: 'comic-to-storyboard' }),
-      appliedAt: 99,
-    });
-    expect(bridge.applySkillInjection).toHaveBeenCalledWith(
-      'conv-1',
-      expect.objectContaining({ name: 'comic-to-storyboard' }),
-      storyboard,
-    );
+    expect(result).toBeNull();
+    expect(skillService.registry.ensureLoaded).not.toHaveBeenCalled();
+    expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
+    expect(bridge.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('does not auto-activate matches that require confirmation', async () => {

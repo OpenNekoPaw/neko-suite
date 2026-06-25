@@ -39,7 +39,7 @@ Example:
 \`\`\`json
 {
   "scenes": [
-    { "index": 0, "mediaPath": "/tmp/scene-0.png", "prompt": "A sunset over mountains" }
+    { "index": 0, "mediaPath": "\${WORKSPACE}/.neko/.cache/resources/generated/scene-0.png", "prompt": "A sunset over mountains" }
   ],
   "minScore": 70,
   "style": "cinematic"
@@ -127,4 +127,25 @@ Summarize results in a clear table:
   command: 'quality-check',
   argumentHint: '[media path or scene indices]',
   supportsArguments: true,
+  domain: 'media',
+  mediaWorkflow: {
+    useCases: [
+      'Evaluate quality of generated images, videos, audio, or timeline scenes',
+      'Detect artifacts, prompt mismatch, style drift, blur, noise, clipping, or loudness issues',
+      'Plan approved quality repair or regeneration for generated media',
+    ],
+    nonGoals: [
+      'Generate new media without a quality evaluation or repair request',
+      'Create storyboards, animation plans, Cut payloads, or export packages',
+    ],
+    acceptedModalities: ['image', 'video', 'audio', 'timeline'],
+    inputArtifacts: ['generated-media-ref', 'timeline-scene', 'quality-evidence'],
+    producedArtifacts: ['quality-report', 'repair-plan'],
+    tags: ['quality', 'evaluation', 'repair', 'generated-media'],
+    operations: ['quality-check', 'quality-repair', 'evaluate-media', 'plan-remediation'],
+    optionalTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE, TOOL_NAMES_MEDIA.GENERATE_VIDEO],
+    costLevel: 'medium',
+    riskLevel: 'medium',
+    validationRequirements: ['quality-report'],
+  },
 };

@@ -17,18 +17,18 @@ Use this skill only when the user explicitly asks for a storyboard, StoryboardTa
    - If no stable source ref or locator is available, continue with normal ReadDocument/ReadImage analysis and state that semantic coverage reuse was unavailable for that input.
    - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Semantic reuse must come through QuerySemanticCoverage or another host facade.
    - Use ReadDocument.imageInfo for width, height, mimeType, byteSize, and aspect ratio. Do not run Python/PIL, file, sips, identify, unzip, unrar, 7z, or other external commands just to probe image metadata.
-   - Choose exactly one vision analysis tool for the same page/batch: use ReadImage with mode="vision" when ReadDocument already returned imagePaths/images; use ReadDocumentImage with mode="vision" only when you still have document locators/page indexes and need the tool to resolve them to images.
-   - Do not call ReadDocumentImage after ReadImage for the same image, and do not call ReadDocumentImage just because ReadDocument already returned imagePaths.
-   - Use that single vision call before making claims about characters, dialogue/OCR, panel count, actions, or camera.
-   - When the requested page set is larger than the vision tool can inspect in one call, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
-2. Analyze panel layout with vision capabilities:
+   - Choose exactly one image resource tool for the same page/batch: use ReadImage with mode="metadata" when ReadDocument already returned imageInfo/images, and prefer passing matching `imageInfo[]` entries as structured `images[]` so `resourceRef`, `cacheResourceRef`, aliases, locators, and page labels are preserved; use ReadDocumentImage with mode="metadata" only when you still have document locators/page indexes and need the tool to resolve them to images.
+   - Do not call ReadDocumentImage after ReadImage for the same image, and do not call ReadDocumentImage just because ReadDocument already returned imageInfo/imagePaths.
+   - Use that single resource call to expose page images, then analyze the returned images with the current native multimodal chat model before making claims about characters, dialogue/OCR, panel count, actions, or camera.
+   - When the requested page set is larger than one read call can expose, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
+2. Analyze panel layout with the current native multimodal chat model:
    - Identify reading order: left-to-right, right-to-left, or vertical webtoon.
    - Check image orientation and whether the page needs rotation before reading order or panel order can be trusted.
    - Detect panel boundaries and composition.
    - Count panels.
    - Treat one page or one image as a possible source for multiple storyboard shots. Do not collapse multiple panels into a single shot only because they came from the same image file.
 3. Before structuring the storyboard, build an image index and panel mapping:
-   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label.
+   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label; preserve `resourceRef` or `cacheResourceRef` in the image index when the tool result provides them for Canvas and later resource resolution.
    - Record the alias scope for each batch (`toolCallId`, source document id, or `aliasScope`). Aliases such as `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
    - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
    - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.
@@ -88,7 +88,7 @@ Use this skill only when the user explicitly asks for a storyboard, StoryboardTa
 - If a shot comes from a page/panel image, write that image into `sourceMediaRefs`; do not only describe the image in human-readable notes.
 - When `imageStrategy` is `reuse-original`, `use-as-reference`, or `transform-original`, provide `sourceMediaRefs`. Only text/script expansion with no image source may omit image refs.
 - Do not invent image ids, do not copy local cache paths into `referenceImagePath`, and do not convert images to base64 yourself.
-- Do not embed base64 image data, blob URLs, localhost URLs, Webview URIs, `.neko/.cache/document-image-cache`, `globalStorageUri/document-image-cache`, absolute local paths, old `cachePath` values, or invented tool call ids in the table.
+- Do not embed base64 image data, blob URLs, localhost URLs, Webview URIs, runtime cache paths under `.neko/.cache`, VS Code globalStorage temp paths, absolute local paths, old `cachePath` values, or invented tool call ids in the table.
 - Do not ask the user to copy or edit the JSON; the UI consumes the payload directly.
 - If the user asks to send the storyboard to Canvas, activate a Canvas or media-to-video related skill after the structured plan is ready. Do not report Canvas success from this skill unless an actual Canvas tool result exists.
 

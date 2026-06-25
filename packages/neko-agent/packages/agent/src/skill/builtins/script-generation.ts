@@ -325,4 +325,22 @@ export const scriptGenerationSkill: Skill = {
   icon: '✍️',
   source: 'builtin',
   enabled: true,
+  domain: 'story',
+  mediaWorkflow: {
+    useCases: [
+      'Write or refine a screenplay, Fountain script, scene, dialogue, character arc, or story structure',
+      'Create genre-specific script drafts and iterative rewrites for a creative project',
+    ],
+    nonGoals: [
+      'Convert an existing script into a timeline project',
+      'Generate image, video, or audio media directly',
+    ],
+    acceptedModalities: ['text', 'story-brief'],
+    inputArtifacts: ['story-brief', 'outline', 'character-notes'],
+    producedArtifacts: ['FountainScript', 'screenplay'],
+    tags: ['script', 'screenplay', 'fountain', 'story'],
+    operations: ['write-script', 'rewrite-scene', 'refine-dialogue', 'structure-story'],
+    costLevel: 'low',
+    riskLevel: 'low',
+  },
 };

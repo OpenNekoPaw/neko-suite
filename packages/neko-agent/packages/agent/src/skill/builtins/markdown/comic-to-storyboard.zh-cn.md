@@ -17,18 +17,18 @@
    - 如果没有稳定 source ref 或 locator，继续正常使用 ReadDocument/ReadImage 分析，并明确说明该输入无法复用语义覆盖。
    - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。语义复用只能通过 QuerySemanticCoverage 或其他 host facade。
    - 使用 ReadDocument.imageInfo 获取宽、高、mimeType、byteSize 和页面比例。不要为了探测图片元数据去运行 Python/PIL、file、sips、identify、unzip、unrar、7z 或其他外部命令。
-   - 同一页/同一批图片只能选择一个视觉分析工具：ReadDocument 已返回 imagePaths/images 时，使用 ReadImage mode="vision"；只有仍持有文档 locator/page index 且需要工具解析成图片时，才使用 ReadDocumentImage mode="vision"。
-   - 不要对同一张图先 ReadImage 再 ReadDocumentImage，也不要因为 ReadDocument 已返回 imagePaths 就再调用 ReadDocumentImage。
-   - 在判断角色、对白/OCR、分格数量、动作或镜头前，必须先完成这一次视觉调用。
-   - 当请求页数超过单次视觉工具可处理上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换工具来强行凑齐完美批次。
-2. 用视觉能力分析版面：
+   - 同一页/同一批图片只能选择一个图片资源工具：ReadDocument 已返回 imageInfo/images 时，使用 ReadImage mode="metadata"，并优先把对应 `imageInfo[]` 条目作为结构化 `images[]` 传入，以保留 `resourceRef`、`cacheResourceRef`、alias、locator 和页面标签；只有仍持有文档 locator/page index 且需要工具解析成图片时，才使用 ReadDocumentImage mode="metadata"。
+   - 不要对同一张图先 ReadImage 再 ReadDocumentImage，也不要因为 ReadDocument 已返回 imageInfo/imagePaths 就再调用 ReadDocumentImage。
+   - 用这一次资源调用暴露页面图片后，再由当前原生多模态对话模型分析返回的图片；在此之前不要判断角色、对白/OCR、分格数量、动作或镜头。
+   - 当请求页数超过单次读取工具可暴露上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换工具来强行凑齐完美批次。
+2. 用当前原生多模态对话模型分析版面：
    - 判断阅读方向：从左到右、从右到左或竖向 webtoon。
    - 检查图片方向；需要旋转时，先记录方向问题，再判断阅读顺序和分格顺序。
    - 识别分格边界和构图。
    - 统计分格数量。
    - 一页或一张图可能对应多个 storyboard shot。不要因为多个分格来自同一个图片文件，就把它们合并成一个 shot。
 3. 在分镜结构化前，先建立图片索引和分格映射：
-   - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签。
+   - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签；如果工具结果里有 `resourceRef` 或 `cacheResourceRef`，保留在图片索引中用于 Canvas 和后续资源解析。
    - 记录每一批图片的 alias scope（`toolCallId`、源文档 id 或 `aliasScope`）。`page_1`、`P1`、`image_1` 这类 alias 只在该 scope 内有意义。
    - 为每个页面按阅读顺序标注 panel index；如果工具只返回整页图，也要记录“page image -> panels”的映射，不要假装已有独立分格图。
    - 后续每个 shot 必须引用这个索引中的真实图片；不要在生成分镜后再凭顺序补图片。
@@ -88,7 +88,7 @@
 - 如果当前 shot 来自某个页面/分格，必须把对应图片写入 `sourceMediaRefs`；不要只在可读说明里描述图片。
 - 当 `imageStrategy` 是 `reuse-original`、`use-as-reference` 或 `transform-original` 时，必须提供 `sourceMediaRefs`。只有纯文本/脚本扩写且没有图片来源时，才允许没有图片引用。
 - 不要编造图片 id，不要把本地缓存路径复制到 `referenceImagePath`，不要自行转换 base64。
-- 不要在表格中嵌入 base64 图片数据、blob URL、localhost URL、Webview URI、`.neko/.cache/document-image-cache`、`globalStorageUri/document-image-cache`、绝对本地路径、旧 `cachePath` 值或编造的 tool call id。
+- 不要在表格中嵌入 base64 图片数据、blob URL、localhost URL、Webview URI、`.neko/.cache` 下的运行时缓存路径、VS Code globalStorage 临时路径、绝对本地路径、旧 `cachePath` 值或编造的 tool call id。
 - 不要要求用户复制或编辑 JSON；UI 会直接消费该 payload。
 - 如果用户要求发送到 Canvas，先完成结构化计划，再激活 Canvas 或 media-to-video 相关 Skill。除非真实 Canvas 工具返回成功，不要报告 Canvas 成功。
 

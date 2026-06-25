@@ -16,14 +16,12 @@ import type {
   SkillInjection,
   ISkillRegistry,
   IToolRegistry,
-  ISkillMatcher,
   ISkillInjector,
   SkillDiscoveryResult,
   SkillApplicationResult,
 } from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
-import { KeywordSkillMatcher } from './skill-matcher';
 import { assertSubpackagesAvailable, type ISubpackageResolver } from './subpackage-guard';
 import { getLogger } from '../utils/logger';
 
@@ -37,7 +35,6 @@ export type ConfirmSkillCallback = (skill: Skill, match: SkillMatch) => Promise<
 
 export interface SkillServiceConfig {
   registry?: ISkillRegistry;
-  matcher?: ISkillMatcher;
   injector?: ISkillInjector;
   /** Optional tool registry for validating skill allowedTools references */
   toolRegistry?: IToolRegistry;
@@ -47,8 +44,6 @@ export interface SkillServiceConfig {
    * the guard will log once per Skill declaring deps and skip.
    */
   subpackageResolver?: ISubpackageResolver;
-  minRelevanceThreshold?: number;
-  autoApplyThreshold?: number;
 }
 
 // =============================================================================
@@ -58,23 +53,17 @@ export interface SkillServiceConfig {
 export class SkillService {
   readonly registry: ISkillRegistry;
 
-  private readonly _matcher: ISkillMatcher;
   private readonly _injector: ISkillInjector;
   private readonly _toolRegistry: IToolRegistry | undefined;
   private readonly _subpackageResolver: ISubpackageResolver | null;
-  private readonly _minRelevanceThreshold: number;
-  private readonly _autoApplyThreshold: number;
   private _discoveryEnabled: boolean = true;
   private readonly _logger = getLogger('SkillService');
 
   constructor(config: SkillServiceConfig = {}) {
     this.registry = config.registry || new SkillRegistry();
-    this._matcher = config.matcher || new KeywordSkillMatcher();
     this._injector = config.injector || new SkillInjector();
     this._toolRegistry = config.toolRegistry;
     this._subpackageResolver = config.subpackageResolver ?? null;
-    this._minRelevanceThreshold = config.minRelevanceThreshold ?? 0.3;
-    this._autoApplyThreshold = config.autoApplyThreshold ?? 0.9;
   }
 
   /**
@@ -138,31 +127,11 @@ export class SkillService {
   // ===========================================================================
 
   discover(userInput: string): SkillDiscoveryResult {
-    if (!this._discoveryEnabled) {
-      return { found: false, matches: [], requiresConfirmation: false };
-    }
-
-    const skills = this.registry.listSkills();
-    const allMatches = this._matcher.match(userInput, skills);
-    const matches = allMatches.filter((m) => m.relevance >= this._minRelevanceThreshold);
-
-    if (matches.length === 0) {
-      return {
-        found: false,
-        matches: [],
-        requiresConfirmation: false,
-      };
-    }
-
-    const topMatch = matches[0];
-    const requiresConfirmation =
-      topMatch !== undefined && topMatch.relevance < this._autoApplyThreshold;
-
+    void userInput;
     return {
-      found: true,
-      matches,
-      topMatch,
-      requiresConfirmation,
+      found: false,
+      matches: [],
+      requiresConfirmation: false,
     };
   }
 
@@ -170,26 +139,9 @@ export class SkillService {
     userInput: string,
     confirmCallback?: ConfirmSkillCallback,
   ): Promise<SkillApplicationResult | null> {
-    const discovery = this.discover(userInput);
-
-    if (!discovery.found || !discovery.topMatch) {
-      return null;
-    }
-
-    const { topMatch, requiresConfirmation } = discovery;
-
-    if (requiresConfirmation && confirmCallback) {
-      const confirmed = await confirmCallback(topMatch.skill, topMatch);
-      if (!confirmed) {
-        return {
-          applied: false,
-          error: 'User declined skill application',
-        };
-      }
-    }
-
-    const injection = await this.apply(topMatch.skill);
-    return { applied: true, injection, skill: topMatch.skill };
+    void userInput;
+    void confirmCallback;
+    return null;
   }
 
   // ===========================================================================

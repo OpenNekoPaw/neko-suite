@@ -25,7 +25,7 @@ export function buildSkillAwareSystemPrompt(input: BuildSkillAwareSystemPromptIn
 
   const lines = ['\n\n# Available Skills\n'];
   lines.push(
-    'Skills are specialized instruction sets that get automatically activated when your request matches them. The following skills are registered:\n',
+    'Skills are specialized instruction sets that can be activated explicitly by the user or by calling `ActivateSkill`. The following skills are registered:\n',
   );
   for (const skill of skills) {
     const description = skill.description?.split('\n')[0] ?? '';

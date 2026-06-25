@@ -182,29 +182,8 @@ export class ConversationSkillRuntime {
   }
 
   async autoActivateSkill(input: AutoActivateSkillInput): Promise<SkillApplicationResult | null> {
-    const skillService = this._deps.skillService;
-    if (!skillService || !input.conversationId) {
-      return null;
-    }
-
-    const discovery = skillService.discover(input.userInput);
-    const topMatch = discovery.topMatch;
-    if (
-      !discovery.found ||
-      !topMatch ||
-      discovery.requiresConfirmation ||
-      topMatch.skill.autoInvoke === false
-    ) {
-      return null;
-    }
-
-    const loadedSkill = await skillService.registry.ensureLoaded(topMatch.skill.name);
-    const skill = loadedSkill ?? topMatch.skill;
-    if (skill.autoInvoke === false) {
-      return null;
-    }
-
-    return this._applySkill(input.conversationId, skill);
+    void input;
+    return null;
   }
 
   isToolAllowed(toolName: string, conversationId: string): boolean {

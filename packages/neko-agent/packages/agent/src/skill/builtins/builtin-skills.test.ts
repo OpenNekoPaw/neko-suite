@@ -60,6 +60,49 @@ describe('Builtin Skills', () => {
       const allHaveIcons = builtinSkills.every((s) => s.icon && s.icon.length > 0);
       expect(allHaveIcons).toBe(true);
     });
+
+    it('should expose Agent-readable catalog metadata for production and media Skills', () => {
+      const catalogSkillNames = [
+        'ai-generate',
+        'video-editing',
+        'color-grading',
+        'audio-mixing',
+        'subtitle-assistant',
+        'script-generation',
+        'script-to-timeline',
+        'scene-to-music',
+        'media-to-video',
+        'comic-to-animation',
+        'comic-to-storyboard',
+        'image-to-shot',
+        'storyboard-to-animation-plan',
+        'animation-plan-to-cut',
+        'generated-shot-assembly',
+        'export-video-package',
+        'quality-assessment',
+      ];
+
+      for (const skillName of catalogSkillNames) {
+        const skill = builtinSkills.find((item) => item.name === skillName);
+        expect(skill, `missing builtin Skill ${skillName}`).toBeDefined();
+        expect(skill?.mediaWorkflow?.useCases?.length, `${skillName} useCases`).toBeGreaterThan(0);
+        expect(skill?.mediaWorkflow?.nonGoals?.length, `${skillName} nonGoals`).toBeGreaterThan(0);
+        expect(skill?.mediaWorkflow?.operations?.length, `${skillName} operations`).toBeGreaterThan(
+          0,
+        );
+        expect(
+          [
+            ...(skill?.mediaWorkflow?.acceptedModalities ?? []),
+            ...(skill?.mediaWorkflow?.inputArtifacts ?? []),
+          ].length,
+          `${skillName} input metadata`,
+        ).toBeGreaterThan(0);
+        expect(
+          skill?.mediaWorkflow?.producedArtifacts?.length,
+          `${skillName} outputs`,
+        ).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe('comicToStoryboardSkill', () => {
@@ -154,18 +197,18 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('shotNumber');
     });
 
-    it('should avoid duplicate vision reads for the same comic image batch', () => {
+    it('should avoid duplicate image resource reads for the same comic image batch', () => {
       expect(comicToStoryboardSkill.content).toContain(
-        'Choose exactly one vision analysis tool for the same page/batch',
+        'Choose exactly one image resource tool for the same page/batch',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'use ReadImage with mode="vision" when ReadDocument already returned',
+        'use ReadImage with mode="metadata" when ReadDocument already returned',
       );
       expect(comicToStoryboardSkill.content).toContain(
         'Do not call ReadDocumentImage after ReadImage',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'do not call ReadDocumentImage just because',
+        'analyze the returned images with the current native multimodal chat model',
       );
     });
 
@@ -191,8 +234,16 @@ describe('Builtin Skills', () => {
 
     it('should expose media workflow metadata and related skills', () => {
       expect(comicToStoryboardSkill.mediaWorkflow).toMatchObject({
+        useCases: expect.arrayContaining([
+          'Create a structured storyboard table from comic, manga, webtoon, PDF, or image pages',
+        ]),
+        nonGoals: expect.arrayContaining([
+          'Analyze, summarize, OCR, describe, or read comic pages without creating a storyboard artifact',
+        ]),
         acceptedModalities: ['comic', 'document', 'image-sequence'],
+        inputArtifacts: expect.arrayContaining(['MediaTextSegment', 'comic']),
         producedArtifacts: expect.arrayContaining(['CompositeArtifact', 'StoryboardTable']),
+        operations: expect.arrayContaining(['create-storyboard']),
         artifactProfiles: ['comic-to-animation-plan'],
         referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
         suggestedProjectors: [
@@ -266,6 +317,12 @@ describe('Builtin Skills', () => {
       expect(mediaToVideoSkill.content).not.toContain('read .neko');
       expect(mediaToVideoSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE);
       expect(mediaToVideoSkill.mediaWorkflow).toMatchObject({
+        useCases: expect.arrayContaining([
+          'Coordinate explicit media-to-video production across storyboard, generation, Canvas, Cut, and export steps',
+        ]),
+        nonGoals: expect.arrayContaining([
+          'Analyze, summarize, OCR, describe, or read source media without creating production artifacts',
+        ]),
         inputArtifacts: expect.arrayContaining(['CompositeArtifact', 'GenericTable']),
         producedArtifacts: expect.arrayContaining([
           'CompositeArtifact',
@@ -274,9 +331,11 @@ describe('Builtin Skills', () => {
         ]),
         artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
         referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+        operations: expect.arrayContaining(['coordinate-media-production']),
       });
       expect(storyboardToAnimationPlanSkill.mediaWorkflow).toMatchObject({
         inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
+        operations: expect.arrayContaining(['storyboard-to-animation-plan']),
         validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
       });
       expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "StoryboardTable"');

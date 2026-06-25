@@ -459,4 +459,30 @@ export const aiGenerateSkill: Skill = {
   icon: '🎨',
   source: 'builtin',
   enabled: true,
+  domain: 'media',
+  mediaWorkflow: {
+    useCases: [
+      'Generate images, videos, voiceover, sound effects, or music from explicit creative prompts',
+      'Transform reference images or produce media assets for a creative project',
+      'Create media assets when the user explicitly requests generation, TTS, dubbing, BGM, or AI drawing',
+    ],
+    nonGoals: [
+      'Analyze or summarize existing media without generating or transforming assets',
+      'Create structured storyboard, animation plan, Cut payload, or export package artifacts',
+    ],
+    acceptedModalities: ['text', 'image', 'audio'],
+    inputArtifacts: ['prompt', 'reference-image', 'script-text'],
+    producedArtifacts: ['generated-media-ref'],
+    tags: ['generation', 'image', 'video', 'audio', 'music', 'tts'],
+    operations: [
+      'generate-image',
+      'transform-image',
+      'generate-video',
+      'generate-tts',
+      'generate-music',
+    ],
+    optionalTools: [TOOL_NAMES_MEDIA.TRANSFORM_IMAGE, TOOL_NAMES_TRANSCRIBE.TRANSCRIBE_AUDIO],
+    costLevel: 'medium',
+    riskLevel: 'medium',
+  },
 };

@@ -164,6 +164,15 @@ describe('PermissionHooks', () => {
       expect(hooks.getRules().allow).toContain('Glob');
       expect(hooks.getRules().allow).toContain('Read');
     });
+
+    it('rejects persistent shell allow rules', () => {
+      const hooks = new PermissionHooks({ config: makeConfig({ rules: {} }) });
+
+      expect(() => hooks.addAllowRule('Bash(git status)')).toThrow(
+        'Persistent shell allow rules are disabled',
+      );
+      expect(hooks.getRules().allow).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -241,7 +250,7 @@ describe('PermissionHooks', () => {
     it('calls onToolAllowed callback when tool is allowed', async () => {
       const onToolAllowed = vi.fn();
       const hooks = new PermissionHooks({
-        config: makeConfig({ mode: 'auto', rules: {} }),
+        config: makeConfig({ mode: 'ask', rules: { allow: ['Read'] } }),
         onToolAllowed,
       });
 
@@ -380,7 +389,7 @@ describe('PermissionHooks', () => {
   // ---------------------------------------------------------------------------
 
   describe('onToolCall - ask decision with allowAlways', () => {
-    it('adds allow rule when approved with allowAlways', async () => {
+    it('does not persist Bash allow rule when approved with allowAlways', async () => {
       const onConfirmTool = vi.fn().mockResolvedValue({
         confirmationToken: 'token_1',
         approved: true,
@@ -398,7 +407,7 @@ describe('PermissionHooks', () => {
       await hooks.onToolCall(toolCall, execute);
 
       const rules = hooks.getRules();
-      expect(rules.allow).toContain('Bash(git status)');
+      expect(rules.allow ?? []).not.toContain('Bash(git status)');
     });
 
     it('does not add allow rule when approved without allowAlways', async () => {
@@ -549,7 +558,7 @@ describe('PermissionHooks', () => {
       expect(result).toBeNull();
     });
 
-    it('adds allow rule when approved with allowAlways', async () => {
+    it('does not persist Bash allow rule when approved with allowAlways', async () => {
       const hooks = new PermissionHooks({
         config: makeConfig({ mode: 'ask', rules: {} }),
       });
@@ -567,7 +576,28 @@ describe('PermissionHooks', () => {
       await resultPromise;
 
       const rules = hooks.getRules();
-      expect(rules.allow).toContain('Bash(git status)');
+      expect(rules.allow ?? []).not.toContain('Bash(git status)');
+    });
+
+    it('adds non-shell allow rule when approved with allowAlways', async () => {
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: {} }),
+      });
+
+      const toolCall = makeToolCall('Read', { path: 'README.md' });
+      const execute = vi.fn();
+
+      const resultPromise = hooks.onToolCall(toolCall, execute);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      const pending = hooks.getPendingConfirmations();
+      hooks.confirmTool(pending[0]!.confirmationToken, true, true);
+
+      await resultPromise;
+
+      const rules = hooks.getRules();
+      expect(rules.allow).toContain('Read(README.md)');
     });
 
     it('does not add allow rule when denied with allowAlways', async () => {
@@ -663,16 +693,16 @@ describe('PermissionHooks', () => {
     it('executes PreToolUse hook before permission check', async () => {
       const mockLoader = makeMockHookLoader(false);
       const hooks = new PermissionHooks({
-        config: makeConfig({ mode: 'auto', rules: {} }),
+        config: makeConfig({ mode: 'ask', rules: { allow: ['Read'] } }),
         settingsHookLoader: mockLoader,
       });
 
-      const toolCall = makeToolCall('Bash', { command: 'ls' });
+      const toolCall = makeToolCall('Read', { path: 'README.md' });
       const execute = vi.fn();
 
       await hooks.onToolCall(toolCall, execute);
 
-      expect(mockLoader.executePreToolUse).toHaveBeenCalledWith('Bash', { command: 'ls' });
+      expect(mockLoader.executePreToolUse).toHaveBeenCalledWith('Read', { path: 'README.md' });
     });
 
     it('blocks tool when hook returns blocked', async () => {
@@ -713,7 +743,7 @@ describe('PermissionHooks', () => {
     it('continues to permission check when hook does not block', async () => {
       const mockLoader = makeMockHookLoader(false);
       const hooks = new PermissionHooks({
-        config: makeConfig({ mode: 'auto', rules: {} }),
+        config: makeConfig({ mode: 'ask', rules: { allow: ['Read'] } }),
         settingsHookLoader: mockLoader,
       });
 

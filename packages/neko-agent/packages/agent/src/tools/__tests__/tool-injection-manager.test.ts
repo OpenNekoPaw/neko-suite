@@ -68,6 +68,7 @@ describe('ToolInjectionManager', () => {
       for (const tool of CORE_TOOLS) {
         expect(alwaysTools).toContain(tool);
       }
+      expect(alwaysTools).not.toContain('Bash');
     });
 
     it('has empty dynamic layer', () => {
@@ -91,6 +92,7 @@ describe('ToolInjectionManager', () => {
       for (const core of CORE_TOOLS) {
         expect(tools).toContain(core);
       }
+      expect(tools).not.toContain('Bash');
     });
 
     it('includes dynamic tools from activated tool sets', () => {

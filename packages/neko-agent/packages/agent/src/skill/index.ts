@@ -3,9 +3,9 @@
  *
  * This module provides two distinct concepts:
  *
- * 1. **Skill** - Semantic discovery, auto-triggered based on description matching
+ * 1. **Skill** - Agent-readable instruction set activated explicitly
  *    - Located in: `.skill/skill-name/SKILL.md` (project) or `~/.neko/skills/` (personal)
- *    - Triggered by: Semantic matching of user input against description
+ *    - Triggered by: User `$skill` invocation or Agent `ActivateSkill`
  *    - Arguments: NOT supported (no $ARGUMENTS, $1, $2)
  *    - File structure: skill-name/SKILL.md + support files
  *

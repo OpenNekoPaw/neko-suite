@@ -37,7 +37,7 @@ export interface SkillContextSummary {
  * Set by the extension layer after initialization.
  */
 export interface ISkillProvider {
-  /** List all registered skills (name + description) */
+  /** List all registered skills and Agent-readable catalog metadata. */
   listSkills(): SkillProviderMaybePromise<SkillContextSummary[]>;
   /** Get active skill info */
   getActiveSkill(): SkillProviderMaybePromise<SkillContextSummary | null>;

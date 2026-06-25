@@ -21,6 +21,7 @@ import type { ISystemPromptComposer } from '../prompt/system-prompt-composer-typ
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { freezePromptContext, type PromptContext } from '../prompt/context';
+import { isPersistentShellAllowRuleForbidden } from '../permission/permission-hooks';
 import { createToolGuard, type IToolGuard } from './tool-guard';
 import { getLogger } from '../utils/logger';
 
@@ -155,35 +156,35 @@ export class SkillInjectionCoordinator {
 
     const allowRules: string[] = [];
     try {
+      const effectiveAllowedTools = filterPersistentShellAllowRules(injection.allowedTools);
       // Track B: Add permission allow rules
       const permissionHooks = this._deps.getPermissionHooks();
-      if (injection.allowedTools && injection.allowedTools.length > 0 && permissionHooks) {
-        for (const tool of injection.allowedTools) {
+      if (effectiveAllowedTools && effectiveAllowedTools.length > 0 && permissionHooks) {
+        for (const tool of effectiveAllowedTools) {
           permissionHooks.addAllowRule(tool);
           allowRules.push(tool);
         }
       }
 
       // Track C: Record state + create ToolGuard
-      const toolGuard = createToolGuard(injection.allowedTools, injection.name);
+      const toolGuard = createToolGuard(effectiveAllowedTools, injection.name);
 
       // Track D: Auto-activate ToolSets whose tools are referenced by allowedTools
       let activatedToolSets: string[] = [];
       if (
-        injection.allowedTools &&
-        injection.allowedTools.length > 0 &&
+        effectiveAllowedTools &&
+        effectiveAllowedTools.length > 0 &&
         this._deps.toolSetActivator
       ) {
-        activatedToolSets = this._deps.toolSetActivator.activateToolSetsForTools(
-          injection.allowedTools,
-        );
+        activatedToolSets =
+          this._deps.toolSetActivator.activateToolSetsForTools(effectiveAllowedTools);
       }
 
       this._activeInjection = {
         name: injection.name,
         skill,
         allowRules,
-        allowedTools: injection.allowedTools,
+        allowedTools: effectiveAllowedTools,
         toolGuard,
         activatedToolSets,
       };
@@ -422,4 +423,9 @@ function summarizeUnknownError(error: unknown): Record<string, unknown> {
     name: typeof error,
     message: String(error),
   };
+}
+
+function filterPersistentShellAllowRules(allowedTools: string[] | undefined): string[] | undefined {
+  if (!allowedTools) return undefined;
+  return allowedTools.filter((tool) => !isPersistentShellAllowRuleForbidden(tool));
 }

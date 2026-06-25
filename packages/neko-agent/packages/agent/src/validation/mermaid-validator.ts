@@ -103,19 +103,6 @@ const MERMAID_DIAGRAM_TYPES = [
 ] as const;
 
 /**
- * Mermaid module type for dynamic import
- */
-type MermaidModule = {
-  default: {
-    parse: (text: string, parseOptions?: { suppressErrors?: boolean }) => Promise<unknown>;
-    initialize: (config: Record<string, unknown>) => void;
-  };
-};
-
-let mermaidModule: MermaidModule | null = null;
-let mermaidLoadFailed = false;
-
-/**
  * Mermaid validator interface
  */
 export interface IMermaidValidator {
@@ -128,45 +115,11 @@ export interface IMermaidValidator {
  */
 export class MermaidValidator implements IMermaidValidator {
   async validate(code: string): Promise<MermaidValidationResult> {
-    const mermaid = await this.loadMermaid();
-
-    if (mermaid) {
-      return this.validateWithLibrary(mermaid, code);
-    } else {
-      return this.validateBasic(code);
-    }
+    return this.validateBasic(code);
   }
 
   async isLibraryAvailable(): Promise<boolean> {
-    const mermaid = await this.loadMermaid();
-    return mermaid !== null;
-  }
-
-  private async loadMermaid(): Promise<MermaidModule['default'] | null> {
-    if (mermaidLoadFailed) return null;
-    if (mermaidModule) return mermaidModule.default;
-
-    try {
-      mermaidModule = (await import('mermaid')) as MermaidModule;
-      mermaidModule.default.initialize({ startOnLoad: false, securityLevel: 'strict' });
-      return mermaidModule.default;
-    } catch {
-      mermaidLoadFailed = true;
-      return null;
-    }
-  }
-
-  private async validateWithLibrary(
-    mermaid: MermaidModule['default'],
-    code: string,
-  ): Promise<MermaidValidationResult> {
-    try {
-      await mermaid.parse(code);
-      return { valid: true };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown parse error';
-      return { valid: false, error: errorMessage };
-    }
+    return false;
   }
 
   private validateBasic(code: string): MermaidValidationResult {

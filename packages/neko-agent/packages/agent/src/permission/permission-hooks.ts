@@ -118,6 +118,11 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
    * Add a rule dynamically (e.g., from "Allow Always" action)
    */
   addAllowRule(pattern: string): void {
+    if (isPersistentShellAllowRuleForbidden(pattern)) {
+      throw new Error(
+        `Persistent shell allow rules are disabled for creative Agent sessions: ${pattern}`,
+      );
+    }
     this.matcher.addRule('allow', pattern);
   }
 
@@ -152,7 +157,9 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
       // If allowAlways, add to allow rules
       if (approved && allowAlways) {
         const pattern = normalizeToolCall(pending.request.toolCall);
-        this.addAllowRule(pattern);
+        if (!isPersistentShellAllowRuleForbidden(pattern)) {
+          this.addAllowRule(pattern);
+        }
       }
 
       logger.debug('Resolving Promise for tool', { toolName: pending.request.toolCall.name });
@@ -281,7 +288,11 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
       const response = await this.onConfirmTool(request);
 
       // Handle allow always
-      if (response.approved && response.allowAlways) {
+      if (
+        response.approved &&
+        response.allowAlways &&
+        !isPersistentShellAllowRuleForbidden(normalizedTool)
+      ) {
         this.addAllowRule(normalizedTool);
       }
 
@@ -348,4 +359,9 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
  */
 export function createPermissionHooks(options?: PermissionHooksOptions): PermissionHooks {
   return new PermissionHooks(options);
+}
+
+export function isPersistentShellAllowRuleForbidden(pattern: string): boolean {
+  const trimmed = pattern.trim();
+  return trimmed === 'Bash' || /^Bash\(/.test(trimmed);
 }

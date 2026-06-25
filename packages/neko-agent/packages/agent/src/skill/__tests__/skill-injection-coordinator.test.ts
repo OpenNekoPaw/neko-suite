@@ -110,7 +110,7 @@ describe('SkillInjectionCoordinator', () => {
       coordinator.apply(createInjection({ allowedTools: ['Read', 'Bash(git:*)'] }));
 
       expect(deps.mockPermissionHooks.addAllowRule).toHaveBeenCalledWith('Read');
-      expect(deps.mockPermissionHooks.addAllowRule).toHaveBeenCalledWith('Bash(git:*)');
+      expect(deps.mockPermissionHooks.addAllowRule).not.toHaveBeenCalledWith('Bash(git:*)');
     });
 
     it('should track allowed tools state (Track C)', () => {
@@ -118,6 +118,13 @@ describe('SkillInjectionCoordinator', () => {
 
       expect(coordinator.getActiveSkillAllowedTools()).toEqual(['Read']);
       expect(coordinator.hasActiveInjection()).toBe(true);
+    });
+
+    it('marks persistent shell allows ineffective for active skill state', () => {
+      coordinator.apply(createInjection({ allowedTools: ['Read', 'Bash(git:*)'] }));
+
+      expect(coordinator.getActiveSkillAllowedTools()).toEqual(['Read']);
+      expect(coordinator.isToolAllowed('Bash')).toBe(false);
     });
 
     it('should not add permission rules when allowedTools is empty', () => {
@@ -156,12 +163,12 @@ describe('SkillInjectionCoordinator', () => {
       expect(deps.mockComposer.removeSection).toHaveBeenCalledWith('skill:test-skill');
     });
 
-    it('should remove permission allow rules (Track B)', () => {
+    it('should remove only effective permission allow rules (Track B)', () => {
       coordinator.apply(createInjection({ allowedTools: ['Read', 'Bash(git:*)'] }));
       coordinator.remove('test-skill');
 
       expect(deps.mockPermissionHooks.removeAllowRule).toHaveBeenCalledWith('Read');
-      expect(deps.mockPermissionHooks.removeAllowRule).toHaveBeenCalledWith('Bash(git:*)');
+      expect(deps.mockPermissionHooks.removeAllowRule).not.toHaveBeenCalledWith('Bash(git:*)');
     });
 
     it('should clear allowed tools state (Track C)', () => {

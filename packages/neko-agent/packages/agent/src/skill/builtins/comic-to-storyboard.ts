@@ -52,7 +52,18 @@ export const comicToStoryboardSkill: Skill = {
     { id: 'animation-plan-to-cut', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Create a structured storyboard table from comic, manga, webtoon, PDF, or image pages',
+      'Convert panel analysis and OCR evidence into a CompositeArtifact StoryboardTable',
+      'Build a shot breakdown for comic adaptation before animation or Cut handoff',
+    ],
+    nonGoals: [
+      'Analyze, summarize, OCR, describe, or read comic pages without creating a storyboard artifact',
+      'Generate images, videos, audio, Canvas scenes, or Cut timelines directly',
+      'Create project entity memory or character identity records',
+    ],
     acceptedModalities: ['comic', 'document', 'image-sequence'],
+    inputArtifacts: ['comic', 'manga', 'webtoon', 'PDF', 'image-sequence', 'MediaTextSegment'],
     producedArtifacts: ['CompositeArtifact', 'StoryboardTable'],
     artifactProfiles: ['comic-to-animation-plan'],
     referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
@@ -62,6 +73,7 @@ export const comicToStoryboardSkill: Skill = {
       'projector:storyboard-to-cut',
     ],
     tags: ['comic', 'manga', 'storyboard'],
+    operations: ['create-storyboard', 'shot-breakdown', 'panel-analysis', 'ocr-to-storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
     validationRequirements: ['CompositeArtifact', 'StoryboardTable'],

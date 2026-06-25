@@ -98,6 +98,15 @@ export const mediaToVideoSkill: Skill = {
     { id: 'export-video-package', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Coordinate explicit media-to-video production across storyboard, generation, Canvas, Cut, and export steps',
+      'Choose focused media Skills for comic, storyboard, image, animation plan, generated media, or package handoff',
+      'Plan a production artifact path when the user asks to create a video or animation from media inputs',
+    ],
+    nonGoals: [
+      'Analyze, summarize, OCR, describe, or read source media without creating production artifacts',
+      'Answer general questions that do not require media generation, Canvas, Cut, or export handoff',
+    ],
     acceptedModalities: ['comic', 'document', 'image', 'image-sequence', 'storyboard'],
     inputArtifacts: [
       'CompositeArtifact',
@@ -124,6 +133,7 @@ export const mediaToVideoSkill: Skill = {
       'projector:storyboard-to-cut',
     ],
     tags: ['media-to-video', 'orchestration', 'storyboard', 'animation'],
+    operations: ['coordinate-media-production', 'select-focused-skill', 'plan-handoff'],
     costLevel: 'medium',
     riskLevel: 'medium',
     validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
@@ -172,6 +182,15 @@ export const comicToAnimationSkill: Skill = {
     { id: 'export-video-package', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Create an animation or video plan from comic, manga, storyboard, or image sequence input',
+      'Generate shot image prep, animation plan, and media generation guidance for comic adaptation',
+      'Coordinate Canvas review, Cut assembly, and export handoff for comic-to-animation production',
+    ],
+    nonGoals: [
+      'Analyze, summarize, OCR, describe, or read comic pages without creating animation artifacts',
+      'Only create a storyboard table without image prep, generation planning, or animation handoff',
+    ],
     acceptedModalities: ['comic', 'document', 'image-sequence', 'storyboard'],
     inputArtifacts: [
       'CompositeArtifact',
@@ -204,6 +223,12 @@ export const comicToAnimationSkill: Skill = {
       'projector:storyboard-to-cut',
     ],
     tags: ['comic-to-animation', 'comic', 'storyboard', 'animation', 'media-to-video'],
+    operations: [
+      'create-animation-plan',
+      'prepare-shot-images',
+      'generate-media-plan',
+      'coordinate-animation-handoff',
+    ],
     costLevel: 'high',
     riskLevel: 'medium',
     validationRequirements: [
@@ -239,7 +264,16 @@ export const imageToShotSkill: Skill = {
     { id: 'storyboard-to-animation-plan', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Turn still images or image sequences into storyboard rows and shot plans',
+      'Create safe source media references for image-based shot planning',
+    ],
+    nonGoals: [
+      'Perform content-only image description without creating shot or storyboard artifacts',
+      'Assemble an entire Cut timeline or final export package',
+    ],
     acceptedModalities: ['image', 'image-sequence'],
+    inputArtifacts: ['image', 'image-sequence'],
     producedArtifacts: [
       'CompositeArtifact',
       'GenericTable',
@@ -248,6 +282,7 @@ export const imageToShotSkill: Skill = {
     ],
     artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
     tags: ['image', 'shot', 'reference'],
+    operations: ['image-to-shot', 'create-shot-plan', 'reference-image-breakdown'],
     costLevel: 'medium',
     riskLevel: 'medium',
     validationRequirements: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
@@ -276,10 +311,19 @@ export const storyboardToAnimationPlanSkill: Skill = {
     { id: 'animation-plan-to-cut', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Convert an existing StoryboardTable into an animation plan overlay',
+      'Add motion, camera, continuity, and generation guidance to storyboard shots',
+    ],
+    nonGoals: [
+      'Read or summarize a storyboard without producing animation planning artifacts',
+      'Generate final media or assemble a Cut timeline directly',
+    ],
     acceptedModalities: ['storyboard'],
     inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
     producedArtifacts: ['storyboard-plan-overlay'],
     tags: ['storyboard', 'storyboard-plan-overlay', 'motion'],
+    operations: ['storyboard-to-animation-plan', 'add-motion-guidance', 'plan-generation'],
     costLevel: 'medium',
     riskLevel: 'medium',
     validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
@@ -307,10 +351,19 @@ export const animationPlanToCutSkill: Skill = {
   domain: 'media',
   referencedSkills: [{ id: 'media-to-video', relationship: 'collaborator' }],
   mediaWorkflow: {
+    useCases: [
+      'Project a validated storyboard or animation plan overlay into a Cut-ready timeline payload',
+      'Prepare tracks, timing, transitions, and timeline placement from storyboard planning artifacts',
+    ],
+    nonGoals: [
+      'Generate image or video media',
+      'Analyze storyboards without preparing a Cut handoff payload',
+    ],
     acceptedModalities: ['storyboard'],
     inputArtifacts: ['storyboard-plan-overlay', 'StoryboardTable'],
     producedArtifacts: ['cut-storyboard-payload'],
     tags: ['cut', 'timeline', 'assembly'],
+    operations: ['animation-plan-to-cut', 'prepare-cut-payload', 'timeline-assembly'],
     costLevel: 'low',
     riskLevel: 'medium',
   },
@@ -338,10 +391,16 @@ export const generatedShotAssemblySkill: Skill = {
     { id: 'export-video-package', relationship: 'delegator' },
   ],
   mediaWorkflow: {
+    useCases: [
+      'Assemble generated media references into a coherent execution summary',
+      'Apply generated image, video, audio, and subtitle refs to Canvas or timeline review surfaces',
+    ],
+    nonGoals: ['Generate new media from scratch', 'Export or package final video deliverables'],
     acceptedModalities: ['mixed', 'video', 'audio'],
     inputArtifacts: ['generated-media-ref', 'storyboard-plan-overlay'],
     producedArtifacts: ['workflow-execution-summary'],
     tags: ['assembly', 'generated-media'],
+    operations: ['assemble-generated-shots', 'apply-generated-media', 'summarize-execution'],
     costLevel: 'low',
     riskLevel: 'medium',
   },
@@ -364,10 +423,19 @@ export const exportVideoPackageSkill: Skill = {
   domain: 'media',
   referencedSkills: [{ id: 'media-to-video', relationship: 'collaborator' }],
   mediaWorkflow: {
+    useCases: [
+      'Prepare validated media-to-video artifacts for export, delivery, or packaging',
+      'Review final timeline, Canvas, and execution summaries before delivery handoff',
+    ],
+    nonGoals: [
+      'Generate new media or rewrite storyboard plans',
+      'Analyze source documents without export or package preparation',
+    ],
     acceptedModalities: ['video', 'mixed'],
     inputArtifacts: ['cut-storyboard-payload', 'workflow-execution-summary'],
     producedArtifacts: ['workflow-execution-summary'],
     tags: ['export', 'package'],
+    operations: ['export-package', 'prepare-delivery', 'validate-final-artifacts'],
     costLevel: 'medium',
     riskLevel: 'medium',
   },

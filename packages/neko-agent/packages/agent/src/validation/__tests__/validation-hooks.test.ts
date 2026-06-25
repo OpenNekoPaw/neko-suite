@@ -10,6 +10,15 @@ import { AgentError } from '../../errors';
 import type { AgentContext, AgentStep, ChatMessage, ContentPart } from '@neko/shared';
 import type { ValidationHooksOptions, ValidationError, ValidationWarning } from '../types';
 
+const mermaidRuntimeMocks = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn(),
+}));
+
+vi.mock('mermaid', () => ({
+  default: mermaidRuntimeMocks,
+}));
+
 // Helper to create test context
 function createTestContext(messages: ChatMessage[] = []): AgentContext {
   return {
@@ -224,6 +233,29 @@ describe('ValidationHooks', () => {
       await hooks.afterThink(step, context);
 
       expect(onValidationError).not.toHaveBeenCalled();
+    });
+
+    it('does not load browser mermaid runtime during host-side validation', async () => {
+      const onValidationError = vi.fn();
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: true,
+          onValidationFail: 'warn',
+        },
+        onValidationError,
+      });
+      const step = createTestStep('```mermaid\ngraph TD\n  A --> B\n```');
+      const context = createTestContext();
+
+      await hooks.afterThink(step, context);
+
+      expect(onValidationError).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('purify.addHook'),
+        }),
+      );
+      expect(mermaidRuntimeMocks.initialize).not.toHaveBeenCalled();
+      expect(mermaidRuntimeMocks.parse).not.toHaveBeenCalled();
     });
   });
 
