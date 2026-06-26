@@ -7,13 +7,18 @@ import type {
 } from '../types/creative-entity-asset-composition';
 import type { GeneratedAsset } from '../types/generated-asset';
 
+export type GeneratedMediaLineageAsset = Pick<
+  GeneratedAsset,
+  'id' | 'type' | 'prompt' | 'sourceNodeId' | 'characterIds'
+>;
+
 export interface BuildVisualIdentityDraftsFromGeneratedMediaInput {
-  readonly assets: readonly GeneratedAsset[];
+  readonly assets: readonly GeneratedMediaLineageAsset[];
   readonly source: VisualIdentityDraftSource;
 }
 
 export interface BuildEntityAssetRequirementsFromGeneratedMediaInput {
-  readonly assets: readonly GeneratedAsset[];
+  readonly assets: readonly GeneratedMediaLineageAsset[];
   readonly source: EntityAssetRequirementSource;
   readonly requiredKinds: readonly RepresentationKind[];
 }
@@ -67,7 +72,7 @@ export function buildEntityAssetRequirementsFromGeneratedMediaLineage(
 }
 
 function groupGeneratedAssetsByCharacter(
-  assets: readonly GeneratedAsset[],
+  assets: readonly GeneratedMediaLineageAsset[],
 ): readonly CharacterLineageGroup[] {
   const groups = new Map<string, CharacterLineageGroup>();
 
@@ -100,7 +105,7 @@ function groupGeneratedAssetsByCharacter(
   return [...groups.values()];
 }
 
-function buildGeneratedMediaSourceRef(asset: GeneratedAsset): string {
+function buildGeneratedMediaSourceRef(asset: GeneratedMediaLineageAsset): string {
   return asset.sourceNodeId
     ? `canvas://node/${asset.sourceNodeId}`
     : `generated://asset/${asset.id}`;

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import {
   createResourceFingerprint,
@@ -38,7 +39,7 @@ export interface DocumentResourceCacheProviderOptions {
 }
 
 export interface DocumentResourceCacheFsOps {
-  copyFile(source: string, target: string): Promise<void>;
+  readFile(filePath: string): Promise<Uint8Array>;
   writeFile(filePath: string, data: Uint8Array): Promise<void>;
   mkdir(filePath: string, options: { recursive: boolean }): Promise<void>;
   stat(filePath: string): Promise<{ readonly size: number }>;
@@ -48,7 +49,6 @@ export interface CreateDocumentResourceRefInput {
   readonly source: DocumentSourceRef;
   readonly entryPath?: string;
   readonly locator?: DocumentLocator;
-  readonly cachePath?: string;
   readonly scope?: ResourceRef['scope'];
 }
 
@@ -115,7 +115,7 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
     }
 
     const directEntry = entryPath
-      ? await this.materializeDirectEntry(input, source, entryPath).catch(() => undefined)
+      ? await this.materializeDirectEntry(input, source, entryPath)
       : undefined;
     if (directEntry) {
       return directEntry;
@@ -148,10 +148,18 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       };
     }
 
-    const targetRelativePath = createDocumentResourceRelativePath(input.ref, image.path, entryPath);
+    const bytes = await this.fsOps.readFile(image.path);
+    const targetRelativePath = createDocumentResourceRelativePath(
+      input.ref,
+      image.path,
+      entryPath,
+      {
+        contentMd5: createContentMd5(bytes),
+      },
+    );
     const targetPath = path.join(input.cacheRoot, targetRelativePath);
     await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
-    await this.fsOps.copyFile(image.path, targetPath);
+    await this.fsOps.writeFile(targetPath, bytes);
     const stat = await this.fsOps.stat(targetPath);
 
     return {
@@ -180,7 +188,9 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
     if (!bytes) {
       return undefined;
     }
-    const targetRelativePath = createDocumentResourceRelativePath(input.ref, entryPath, entryPath);
+    const targetRelativePath = createDocumentResourceRelativePath(input.ref, entryPath, entryPath, {
+      contentMd5: createContentMd5(bytes),
+    });
     const targetPath = path.join(input.cacheRoot, targetRelativePath);
     await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
     await this.fsOps.writeFile(targetPath, bytes);
@@ -332,7 +342,6 @@ export function createDocumentResourceRefFromArchiveRef(
     source: ref.source,
     entryPath: ref.entryPath,
     locator: ref.locator,
-    cachePath: ref.cachePath,
     scope,
   });
 }
@@ -372,10 +381,11 @@ function createDocumentResourceRelativePath(
   ref: ResourceRef,
   sourcePath: string,
   entryPath: string | undefined,
+  options: { readonly contentMd5: string },
 ): string {
   const ext = path.extname(sourcePath) || path.extname(entryPath ?? '') || '.bin';
   const documentDirectory = createDocumentCacheDirectoryName(ref);
-  const entryRelativePath = createDocumentEntryRelativePath(ref, sourcePath, entryPath, ext);
+  const entryRelativePath = createDocumentEntryRelativePath(options.contentMd5, ext);
   return path.join('documents', documentDirectory, entryRelativePath);
 }
 
@@ -420,28 +430,12 @@ function createDocumentSourceIdentityKey(source: DocumentSourceRef): unknown {
   };
 }
 
-function createDocumentEntryRelativePath(
-  ref: ResourceRef,
-  sourcePath: string,
-  entryPath: string | undefined,
-  ext: string,
-): string {
-  const rawPath = entryPath ?? sourcePath;
-  const parsed = path.parse(rawPath);
-  const defaultName = path.basename(rawPath, path.extname(rawPath)) || ref.id;
-  const fileName = `${sanitizePathPart(parsed.name || defaultName)}${ext}`;
-  if (!entryPath) {
-    return fileName;
-  }
-  const parentParts = parsed.dir
-    .split(/[\\/]+/)
-    .map(sanitizePathPart)
-    .filter((part) => part.length > 0);
-  return path.join(...parentParts, fileName);
+function createDocumentEntryRelativePath(contentMd5: string, ext: string): string {
+  return `${contentMd5}${ext}`;
 }
 
-function sanitizePathPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document-entry';
+function createContentMd5(bytes: Uint8Array): string {
+  return createHash('md5').update(bytes).digest('hex');
 }
 
 function inferMimeType(filePath: string): string | undefined {
@@ -463,7 +457,7 @@ function inferMimeType(filePath: string): string | undefined {
 }
 
 const nodeFsOps: DocumentResourceCacheFsOps = {
-  copyFile: (source, target) => fs.copyFile(source, target),
+  readFile: (filePath) => fs.readFile(filePath),
   writeFile: (filePath, data) => fs.writeFile(filePath, data),
   mkdir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
   stat: async (filePath) => {

@@ -145,7 +145,6 @@ export interface DocumentArchiveResourceRef {
   readonly source: DocumentSourceRef;
   readonly entryPath?: string;
   readonly locator?: DocumentLocator;
-  readonly cachePath?: string;
   readonly versionPolicy?: DocumentArchiveResourceVersionPolicy;
 }
 
@@ -153,14 +152,11 @@ export interface CreateDocumentEntryResourceRefInput {
   readonly source?: DocumentSourceRef;
   readonly locator?: DocumentLocator;
   readonly entryPath?: string;
-  readonly cachePath: string;
   readonly versionPolicy?: DocumentArchiveResourceVersionPolicy;
 }
 
 export interface DocumentImageInfo {
   readonly path: string;
-  readonly runtimePath?: string;
-  readonly runtimeKind?: 'local-path' | 'webview-uri' | 'scratch-cache' | 'managed-cache';
   readonly alias?: string;
   readonly aliasScope?: string;
   readonly sourceDocumentId?: string;
@@ -306,10 +302,9 @@ export function parseDocumentArchiveResourceRef(
   }
 
   const entryPath = readOptionalStringField(resource, 'entryPath');
-  const cachePath = readOptionalStringField(resource, 'cachePath');
   const versionPolicy = readOptionalVersionPolicyField(resource, 'versionPolicy');
   const locator = readOptionalLocatorField(resource, 'locator');
-  if (entryPath === null || cachePath === null || versionPolicy === null || locator === null) {
+  if (entryPath === null || versionPolicy === null || locator === null) {
     return undefined;
   }
 
@@ -318,7 +313,6 @@ export function parseDocumentArchiveResourceRef(
     source,
     ...(entryPath ? { entryPath } : {}),
     ...(locator ? { locator } : {}),
-    ...(cachePath ? { cachePath } : {}),
     ...(versionPolicy ? { versionPolicy } : {}),
   };
 }
@@ -326,7 +320,7 @@ export function parseDocumentArchiveResourceRef(
 export function createDocumentEntryResourceRef(
   input: CreateDocumentEntryResourceRefInput,
 ): DocumentArchiveResourceRef | undefined {
-  if (!input.source || input.cachePath.length === 0) {
+  if (!input.source || (!input.entryPath && !input.locator)) {
     return undefined;
   }
 
@@ -342,7 +336,6 @@ export function createDocumentEntryResourceRef(
     source,
     ...(input.entryPath ? { entryPath: input.entryPath } : {}),
     ...(locator ? { locator } : {}),
-    cachePath: input.cachePath,
     versionPolicy,
   };
 }

@@ -1,8 +1,8 @@
 // =============================================================================
 // Generated Asset Types — Cross-plugin asset reference schema (ADR-4)
 //
-// Binary data is stored on disk; only JSON references are passed between plugins.
-// Each plugin converts `path` to a webview-compatible URI via `asWebviewUri()`.
+// Binary data is stored by host/cache services. Cross-layer payloads should use
+// stable refs such as `assetRef`; host adapters project paths into render URIs.
 // =============================================================================
 
 import type { ShotScale, CameraMovement } from './canvas';
@@ -18,7 +18,10 @@ export type GeneratedAssetType =
 
 /**
  * Base fields shared by all generated assets.
- * Binary data lives at `path` on disk — this object is the lightweight JSON reference.
+ *
+ * `path` is host/cache-owned implementation state. It is retained on the
+ * canonical generated asset record for local host side effects, but it must not
+ * be persisted as Agent/Webview stable identity.
  */
 export interface BaseGeneratedAsset {
   /** Asset type discriminator */
@@ -26,9 +29,8 @@ export interface BaseGeneratedAsset {
   /** Globally unique identifier (e.g. `crypto.randomUUID()`) */
   id: string;
   /**
-   * Backward-compatible asset path.
-   * Existing host adapters may still keep an absolute file-system path here,
-   * but persisted cross-layer metadata should prefer `assetRef`.
+   * Host-local asset path for projection, indexing, and explicit open/reveal
+   * side effects. Persisted cross-layer metadata should prefer `assetRef`.
    */
   path: string;
   /** Stable host-agnostic reference for persistence and tool backfill. */
@@ -162,6 +164,97 @@ export type WebviewGeneratedAsset<T extends BaseGeneratedAsset = GeneratedAsset>
   /** `vscode-resource://` URI safe for use in `<img>`, `<video>`, `<audio>` src */
   webviewUri: string;
 };
+
+export type GeneratedImageWithoutPath = Omit<GeneratedImage, 'path'>;
+export type GeneratedAudioWithoutPath = Omit<GeneratedAudio, 'path'>;
+export type GeneratedVideoWithoutPath = Omit<GeneratedVideo, 'path'>;
+
+export interface GeneratedStoryboardSceneWithoutPath extends Omit<
+  GeneratedStoryboardScene,
+  'shots'
+> {
+  shots: GeneratedImageWithoutPath[];
+}
+
+export interface GeneratedStoryboardWithoutPath extends Omit<
+  GeneratedStoryboard,
+  'path' | 'scenes'
+> {
+  scenes: GeneratedStoryboardSceneWithoutPath[];
+}
+
+export type GeneratedAssetWithoutPath<T extends BaseGeneratedAsset = GeneratedAsset> =
+  T extends GeneratedStoryboard
+    ? GeneratedStoryboardWithoutPath
+    : T extends GeneratedImage
+      ? Omit<T, 'path'>
+      : T extends GeneratedAudio
+        ? Omit<T, 'path'>
+        : T extends GeneratedVideo
+          ? Omit<T, 'path'>
+          : Omit<T, 'path'>;
+
+export type PathlessGeneratedAsset =
+  | GeneratedImageWithoutPath
+  | GeneratedAudioWithoutPath
+  | GeneratedVideoWithoutPath
+  | GeneratedStoryboardWithoutPath;
+
+/**
+ * Host-neutral generated asset projection for short-lived render surfaces.
+ * `renderUri` is produced by the owning host adapter; persisted identity remains
+ * the generated asset id, `assetRef`, and source metadata. Managed filesystem
+ * paths stay in host/cache services and are intentionally not part of this DTO.
+ */
+export type RenderableGeneratedAsset<T extends BaseGeneratedAsset = GeneratedAsset> =
+  GeneratedAssetWithoutPath<T> & {
+    renderUri: string;
+  };
+
+export function stripGeneratedAssetPath(asset: GeneratedImage): GeneratedImageWithoutPath;
+export function stripGeneratedAssetPath(asset: GeneratedAudio): GeneratedAudioWithoutPath;
+export function stripGeneratedAssetPath(asset: GeneratedVideo): GeneratedVideoWithoutPath;
+export function stripGeneratedAssetPath(asset: GeneratedStoryboard): GeneratedStoryboardWithoutPath;
+export function stripGeneratedAssetPath(asset: GeneratedAsset): PathlessGeneratedAsset;
+export function stripGeneratedAssetPath(asset: GeneratedAsset): PathlessGeneratedAsset {
+  switch (asset.type) {
+    case 'generated-image': {
+      const { path: _path, ...assetWithoutPath } = asset;
+      return assetWithoutPath;
+    }
+    case 'generated-audio': {
+      const { path: _path, ...assetWithoutPath } = asset;
+      return assetWithoutPath;
+    }
+    case 'generated-video': {
+      const { path: _path, ...assetWithoutPath } = asset;
+      return assetWithoutPath;
+    }
+    case 'generated-storyboard': {
+      const { path: _path, scenes, ...assetWithoutPath } = asset;
+      return {
+        ...assetWithoutPath,
+        scenes: scenes.map((scene) => ({
+          ...scene,
+          shots: scene.shots.map((shot) => {
+            const { path: _shotPath, ...shotWithoutPath } = shot;
+            return shotWithoutPath;
+          }),
+        })),
+      };
+    }
+  }
+}
+
+export function isPublicGeneratedAssetResultUri(value: string): boolean {
+  if (value.length === 0) return false;
+  const normalized = value.replace(/\\/g, '/');
+  if (normalized.includes('/.neko/.cache/')) return false;
+  if (normalized.startsWith('.neko/.cache/')) return false;
+  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return false;
+  if (/^file:/i.test(value)) return false;
+  return true;
+}
 
 // -----------------------------------------------------------------------------
 // Sub-directory constants

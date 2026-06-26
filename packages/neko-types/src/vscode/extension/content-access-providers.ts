@@ -10,6 +10,7 @@ import {
   isResourceRef,
   type ContentAccessProvider,
   type ContentAccessProviderRequest,
+  type ContentAccessDiagnostic,
   type ContentAccessRequest,
   type ContentAccessResult,
   type ContentAccessStatus,
@@ -160,11 +161,29 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
           request,
           this.id,
           'Webview URI content access requires a webview resolver.',
+          'content-webview-resolver-missing',
         );
       }
       const projected = await this.resourceCache.project(webview, request.ref, variant, {
         materializeIfMissing,
       });
+      if (projected.status !== 'ready') {
+        return {
+          status: mapCacheStatus(projected.status),
+          request,
+          providerId: this.id,
+          source: request.ref,
+          role: variant.role,
+          uri: projected.uri,
+          localPath: projected.absolutePath,
+          mimeType: projected.variant.mimeType,
+          width: projected.variant.width,
+          height: projected.variant.height,
+          sizeBytes: projected.variantEntry?.sizeBytes,
+          diagnostics: [createCacheDiagnostic(projected.status, this.id, request, projected.error)],
+          error: projected.error,
+        };
+      }
       return {
         status: mapCacheStatus(projected.status),
         request,
@@ -183,15 +202,39 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
 
     const result = await this.resourceCache.resolve(request.ref, variant, { materializeIfMissing });
     const status = mapCacheStatus(result.status);
+    if (status !== 'ready') {
+      return {
+        status,
+        request,
+        providerId: this.id,
+        source: request.ref,
+        role: variant.role,
+        localPath: result.absolutePath,
+        mimeType: result.variant.mimeType,
+        width: result.variant.width,
+        height: result.variant.height,
+        sizeBytes: result.variantEntry?.sizeBytes,
+        diagnostics: [createCacheDiagnostic(result.status, this.id, request, result.error)],
+        error: result.error,
+      };
+    }
     if (request.target === 'bytes') {
-      if (!result.absolutePath || status !== 'ready') {
+      if (!result.absolutePath) {
         return {
-          status,
+          status: 'missing-cache',
           request,
           providerId: this.id,
           source: request.ref,
           role: variant.role,
-          error: result.error,
+          diagnostics: [
+            createCacheDiagnostic(
+              'missing',
+              this.id,
+              request,
+              result.error ?? 'Cache materialization did not return a local path.',
+            ),
+          ],
+          error: result.error ?? 'Cache materialization did not return a local path.',
         };
       }
       return {
@@ -245,9 +288,14 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
   }
 
   supports(request: ContentAccessRequest): boolean {
+    const supportsRuntimeEngineAccess =
+      request.target === 'engine-source' &&
+      (isPreviewLikeContentAccessIntent(request.intent) || request.intent === 'verify');
     return (
       extractSourcePath(request.ref) !== undefined &&
-      (isOfflineContentAccessIntent(request.intent) || request.intent === 'cache-materialize')
+      (isOfflineContentAccessIntent(request.intent) ||
+        request.intent === 'cache-materialize' ||
+        supportsRuntimeEngineAccess)
     );
   }
 
@@ -311,6 +359,7 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
             request,
             this.id,
             'Engine source target requires an engine source resolver.',
+            'content-engine-source-resolver-missing',
           );
         }
         return {
@@ -334,13 +383,16 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
         const projection = await this.localResourceAccess.toWebviewUri(webview, resolved.path, {
           caller: request.caller,
         });
-        if (!projection.ok) {
+        if (projection.ok === false) {
           return {
             status: projection.reason === 'unauthorized' ? 'unauthorized' : 'failed',
             request,
             providerId: this.id,
             source: stableSourceOrUndefined(request.ref),
             localPath: resolved.path,
+            diagnostics: [
+              createProjectionDiagnostic(projection.reason, this.id, request, projection.message),
+            ],
             error: projection.message,
           };
         }
@@ -488,18 +540,22 @@ export class VideoProxyContentAccessProvider implements ContentAccessProvider {
           request,
           this.id,
           'Proxy Webview URI content access requires local resource access and a webview resolver.',
+          'content-webview-resolver-missing',
         );
       }
       const projection = await this.localResourceAccess.toWebviewUri(webview, resolved.localPath, {
         caller: request.caller,
       });
-      if (!projection.ok) {
+      if (projection.ok === false) {
         return {
           status: projection.reason === 'unauthorized' ? 'unauthorized' : 'failed',
           request,
           providerId: this.id,
           source: stableSourceOrUndefined(request.ref),
           localPath: resolved.localPath,
+          diagnostics: [
+            createProjectionDiagnostic(projection.reason, this.id, request, projection.message),
+          ],
           error: projection.message,
         };
       }
@@ -845,6 +901,7 @@ function unsupportedDestination(
   request: ContentAccessRequest,
   providerId: string,
   message: string,
+  code = 'content-provider-unsupported-destination',
 ): ContentAccessResult {
   return {
     status: 'unsupported-destination',
@@ -853,7 +910,7 @@ function unsupportedDestination(
     error: message,
     diagnostics: [
       {
-        code: 'content-provider-unsupported-destination',
+        code,
         severity: 'error',
         message,
         providerId,
@@ -862,6 +919,92 @@ function unsupportedDestination(
       },
     ],
   };
+}
+
+function createProjectionDiagnostic(
+  reason: 'invalid-path' | 'unauthorized',
+  providerId: string,
+  request: ContentAccessRequest,
+  message: string,
+): ContentAccessDiagnostic {
+  return {
+    code:
+      reason === 'unauthorized' ? 'content-projection-unauthorized' : 'content-projection-failed',
+    severity: 'error',
+    message,
+    providerId,
+    intent: request.intent,
+    target: request.target,
+  };
+}
+
+function createCacheDiagnostic(
+  status: ResourceCacheStatus,
+  providerId: string,
+  request: ContentAccessRequest,
+  message?: string,
+): ContentAccessDiagnostic {
+  return {
+    code: cacheDiagnosticCode(status),
+    severity: 'error',
+    message: message ?? cacheDiagnosticMessage(status),
+    providerId,
+    intent: request.intent,
+    target: request.target,
+    role: request.variant?.role ?? request.role,
+    materialization:
+      status === 'ready'
+        ? 'resolved-existing'
+        : status === 'materializing'
+          ? 'materialized'
+          : status === 'unsupported'
+            ? 'rejected'
+            : 'none',
+  };
+}
+
+function cacheDiagnosticCode(status: ResourceCacheStatus): string {
+  switch (status) {
+    case 'unauthorized':
+      return 'content-cache-unauthorized-root';
+    case 'non-portable':
+      return 'content-cache-non-portable-resource';
+    case 'missing':
+    case 'materializing':
+      return 'content-cache-materialization-missing';
+    case 'stale':
+      return 'content-cache-stale-source';
+    case 'unsupported':
+      return 'content-cache-unsupported-source';
+    case 'failed':
+      return 'content-cache-materialization-failed';
+    case 'ready':
+      return 'content-cache-ready';
+    default:
+      return 'content-cache-materialization-failed';
+  }
+}
+
+function cacheDiagnosticMessage(status: ResourceCacheStatus): string {
+  switch (status) {
+    case 'unauthorized':
+      return 'Resource cache path is outside authorized roots.';
+    case 'non-portable':
+      return 'Resource cache result is not portable.';
+    case 'missing':
+    case 'materializing':
+      return 'Resource cache artifact is missing or not materialized.';
+    case 'stale':
+      return 'Resource cache source is stale.';
+    case 'unsupported':
+      return 'Resource cache provider does not support this source or variant.';
+    case 'failed':
+      return 'Resource cache materialization failed.';
+    case 'ready':
+      return 'Resource cache artifact is ready.';
+    default:
+      return 'Resource cache materialization failed.';
+  }
 }
 
 function missingSource(

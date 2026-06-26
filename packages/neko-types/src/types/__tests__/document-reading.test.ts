@@ -115,7 +115,6 @@ describe('document reading contracts', () => {
       source,
       entryPath: 'image/page-1.jpg',
       locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
-      cachePath: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
       versionPolicy: 'versioned-export',
     };
     const imageInfo: DocumentImageInfo = {
@@ -124,13 +123,14 @@ describe('document reading contracts', () => {
       resourceRef,
     };
 
-    expect(imageInfo.path).toBe(resourceRef.cachePath);
+    expect(imageInfo.path).toBe('/tmp/neko_epub_1777248000000/0001_page-1.jpg');
     expect(imageInfo.resourceRef?.source.filePath).toBe('${BOOKS}/comic.epub');
     expect(imageInfo.resourceRef?.entryPath).toBe('image/page-1.jpg');
     expect(imageInfo.resourceRef?.versionPolicy).toBe('versioned-export');
+    expect(JSON.stringify(imageInfo.resourceRef)).not.toContain('cachePath');
   });
 
-  it('parses and validates archive entry references at shared boundaries', () => {
+  it('parses and validates archive entry references at shared boundaries without leaking cache paths', () => {
     const parsed = parseDocumentArchiveResourceRef({
       kind: 'document-entry',
       source: {
@@ -146,6 +146,7 @@ describe('document reading contracts', () => {
 
     expect(parsed?.source.identity?.fileId).toBe('comic-v1');
     expect(parsed?.locator?.kind).toBe('chapter');
+    expect(JSON.stringify(parsed)).not.toContain('cachePath');
     expect(isDocumentArchiveResourceRef(parsed)).toBe(true);
     expect(
       parseDocumentArchiveResourceRef({
@@ -169,14 +170,21 @@ describe('document reading contracts', () => {
         format: 'cbz',
       },
       entryPath: 'page-1.png',
-      cachePath: '/tmp/page-1.png',
       locator: { kind: 'page', pageNumber: 1, pageIndex: 0 },
     });
 
     expect(ref?.kind).toBe('document-entry');
     expect(ref?.versionPolicy).toBe('versioned-export');
     expect(ref?.locator?.kind).toBe('page');
-    expect(createDocumentEntryResourceRef({ cachePath: '/tmp/page-1.png' })).toBeUndefined();
+    expect(JSON.stringify(ref)).not.toContain('cachePath');
+    expect(
+      createDocumentEntryResourceRef({
+        source: {
+          filePath: '${BOOKS}/comic.cbz',
+          format: 'cbz',
+        },
+      }),
+    ).toBeUndefined();
     expect(isDocumentFormat('xlsx')).toBe(true);
     expect(isDocumentFormat('zip')).toBe(false);
     expect(isDocumentArchiveResourceVersionPolicy('replace-reference')).toBe(true);

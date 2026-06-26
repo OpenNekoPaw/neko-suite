@@ -1,4 +1,5 @@
 import type { AgentObservationModality } from './agent-observation';
+import type { DocumentArchiveResourceRef } from './document-reading';
 import type { ToolResultArtifactTransfer, ToolResultAttachment } from './tool';
 
 export type PerceptionLayerStatus = 'pending' | 'complete' | 'skipped' | 'failed';
@@ -25,6 +26,7 @@ export interface PerceptualAssetRef {
    */
   readonly uri: string;
   readonly mimeType: string;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly label?: string;
   readonly timestampMs?: number;
 }

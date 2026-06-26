@@ -847,15 +847,26 @@ describe('resource cache service', () => {
     expect(fsOps.files.has(smallPath)).toBe(true);
   });
 
-  it('reports extension-private refs as non-portable through shared resolution', async () => {
-    const service = createService([]);
+  it('materializes extension-private refs through the shared cache but keeps projection non-portable', async () => {
     const scratchRef: ResourceRef = { ...ref, scope: 'extension-private' };
+    const provider = createProvider(async (input) => {
+      const absolutePath = `${input.cacheRoot}/documents/private-page-1.jpg`;
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 11,
+      };
+    });
+    const service = createService([provider]);
 
     await expect(
       service.resolve(scratchRef, variant, { materializeIfMissing: true }),
     ).resolves.toMatchObject({
-      status: 'non-portable',
-      error: expect.stringContaining('extension-private'),
+      status: 'ready',
+      absolutePath: '/workspace/.neko/.cache/resources/documents/private-page-1.jpg',
     });
     await expect(service.project({} as never, scratchRef, variant)).resolves.toMatchObject({
       status: 'non-portable',

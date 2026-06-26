@@ -20,6 +20,7 @@ export type SketchAIOperationType =
   | 'palette-generate'
   | 'brush-generate';
 
+/** Runtime-only image handles used during one Sketch AI operation. */
 export type SketchAIAssetRef =
   | { readonly kind: 'webviewUri'; readonly ref: string; readonly mimeType: string }
   | { readonly kind: 'fileUri'; readonly ref: string; readonly mimeType: string }

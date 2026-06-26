@@ -413,13 +413,6 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     variant: ResourceVariantRequest,
     options: ResourceCacheOperationOptions = {},
   ): Promise<ResourceCacheOperationResult> {
-    if (ref.scope === 'extension-private') {
-      return this.createResult(ref, variant, 'non-portable', {
-        error:
-          'Resource is extension-private and must be displayed through its owning extension or re-materialized into project cache.',
-      });
-    }
-
     if (options.signal?.aborted) {
       return this.createResult(ref, variant, 'failed', { error: 'Operation aborted.' });
     }
@@ -444,13 +437,6 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     variant: ResourceVariantRequest,
     options: ResourceCacheOperationOptions = {},
   ): Promise<ResourceCacheOperationResult> {
-    if (ref.scope === 'extension-private') {
-      return this.createResult(ref, variant, 'non-portable', {
-        error:
-          'Resource is extension-private and must be displayed through its owning extension or re-materialized into project cache.',
-      });
-    }
-
     const manifest = await this.store.load();
     const entry = manifest.entries[ref.id];
     const variantKey = createResourceVariantKey({ resource: ref, ...variant });
@@ -617,7 +603,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
       resolved.absolutePath,
       options.projection,
     );
-    if (!projection.ok) {
+    if (projection.ok === false) {
       return {
         ...resolved,
         status: projection.reason === 'unauthorized' ? 'unauthorized' : 'failed',

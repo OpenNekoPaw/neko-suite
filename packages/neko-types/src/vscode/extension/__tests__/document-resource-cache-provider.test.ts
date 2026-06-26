@@ -136,7 +136,7 @@ describe('DocumentResourceCacheProvider', () => {
 
     expect(result).toMatchObject({
       status: 'ready',
-      relativePath: expect.stringMatching(/^documents\/doc_.+\/OPS\/page-1\.jpg$/),
+      relativePath: expect.stringMatching(/^documents\/doc_.+\/[a-f0-9]{32}\.jpg$/),
       mimeType: 'image/jpeg',
       width: 640,
       height: 960,
@@ -147,9 +147,13 @@ describe('DocumentResourceCacheProvider', () => {
       locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml', spineIndex: 0 },
       limit: { maxImages: 32 },
     });
-    expect(fsOps.copyFile).toHaveBeenCalledWith(
-      '/tmp/neko_epub/page-1.jpg',
+    expect(result.relativePath).toEqual(
+      expect.stringContaining('/30bc93c6e5fb81fc894780d053feff40.jpg'),
+    );
+    expect(fsOps.readFile).toHaveBeenCalledWith('/tmp/neko_epub/page-1.jpg');
+    expect(fsOps.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
+      new Uint8Array(Buffer.from('page-1')),
     );
   });
 
@@ -174,7 +178,9 @@ describe('DocumentResourceCacheProvider', () => {
 
     expect(result).toMatchObject({
       status: 'ready',
-      relativePath: expect.stringMatching(/^documents\/doc_.+\/OPS\/page-1\.jpg$/),
+      relativePath: expect.stringMatching(
+        /^documents\/doc_.+\/5289df737df57326fcdd22597afb1fac\.jpg$/,
+      ),
       mimeType: 'image/jpeg',
       sizeBytes: 456,
       rebuildable: true,
@@ -185,7 +191,6 @@ describe('DocumentResourceCacheProvider', () => {
       expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
       new Uint8Array([1, 2, 3]),
     );
-    expect(fsOps.copyFile).not.toHaveBeenCalled();
   });
 
   it('does not call range reader when range fallback is disabled', async () => {
@@ -212,7 +217,6 @@ describe('DocumentResourceCacheProvider', () => {
       error: 'Document resource ref cannot be materialized without a direct entry.',
     });
     expect(reader.readRange).not.toHaveBeenCalled();
-    expect(fsOps.copyFile).not.toHaveBeenCalled();
     expect(fsOps.writeFile).not.toHaveBeenCalled();
   });
 
@@ -245,8 +249,12 @@ describe('DocumentResourceCacheProvider', () => {
 
     expect(first.status).toBe('ready');
     expect(second.status).toBe('ready');
-    expect(first.relativePath).toMatch(/^documents\/doc_.+\/OPS\/images\/page-1\.jpg$/);
-    expect(second.relativePath).toMatch(/^documents\/doc_.+\/OPS\/images\/page-2\.jpg$/);
+    expect(first.relativePath).toMatch(
+      /^documents\/doc_.+\/55a54008ad1ba589aa210d2629c1df41\.jpg$/,
+    );
+    expect(second.relativePath).toMatch(
+      /^documents\/doc_.+\/55a54008ad1ba589aa210d2629c1df41\.jpg$/,
+    );
     expect(first.relativePath?.split('/').slice(0, 2)).toEqual(
       second.relativePath?.split('/').slice(0, 2),
     );
@@ -290,7 +298,7 @@ describe('DocumentResourceCacheProvider', () => {
     expect(variablePathResult.status).toBe('ready');
     expect(absolutePathResult.status).toBe('ready');
     expect(variablePathResult.relativePath).toMatch(
-      /^documents\/doc_.+\/OPS\/images\/page-1\.jpg$/,
+      /^documents\/doc_.+\/55a54008ad1ba589aa210d2629c1df41\.jpg$/,
     );
     expect(variablePathResult.relativePath?.split('/').slice(0, 2)).toEqual(
       absolutePathResult.relativePath?.split('/').slice(0, 2),
@@ -317,7 +325,10 @@ function createReader(
 
 function createFsOps() {
   return {
-    copyFile: vi.fn(async () => undefined),
+    readFile: vi.fn(
+      async (filePath: string) =>
+        new Uint8Array(Buffer.from(filePath.split('/').pop()?.split('.').shift() ?? 'image')),
+    ),
     writeFile: vi.fn(async () => undefined),
     mkdir: vi.fn(async () => undefined),
     stat: vi.fn(async () => ({ size: 456 })),

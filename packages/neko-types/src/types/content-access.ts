@@ -196,6 +196,7 @@ export interface ContentEngineSource {
   readonly token: string;
   readonly sourcePath?: string;
   readonly entryPath?: string;
+  readonly uri?: string;
   readonly runtimeOnly: true;
 }
 

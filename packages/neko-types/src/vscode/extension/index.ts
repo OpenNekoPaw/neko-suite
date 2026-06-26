@@ -152,6 +152,19 @@ export type {
   VideoProxyContentAccessProviderOptions,
 } from './content-access-providers';
 export {
+  createExtensionPrivateResourceCacheOptions,
+  createHostContentAccessRuntime,
+  createWorkspaceResourceCacheOptions,
+} from './content-access-runtime';
+export type {
+  CreateHostContentAccessRuntimeOptions,
+  HostContentAccessRuntime,
+  HostContentAccessRuntimeCacheOptions,
+  HostContentAccessRuntimeDocumentProviderOptions,
+  HostContentAccessRuntimeIngestProviderOptions,
+  HostContentAccessRuntimeSourceProviderOptions,
+} from './content-access-runtime';
+export {
   createVSCodeWorkspaceMediaPathContext,
   createVSCodeWorkspacePathResolver,
 } from './workspace-media-path';

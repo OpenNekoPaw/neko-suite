@@ -1,6 +1,9 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
 import type { CreativeEntityRef, RepresentationKind } from './creative-entity-asset-composition';
-import type { DocumentArchiveResourceRef } from './document-reading';
+import {
+  parseDocumentArchiveResourceRef,
+  type DocumentArchiveResourceRef,
+} from './document-reading';
 import type { ResourceRef } from './resource-cache';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
 import {
@@ -251,6 +254,7 @@ export interface StoryboardMediaRef {
   readonly locator: StoryboardMediaLocator;
   readonly label?: string;
   readonly mimeType?: string;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly metadata?: StoryboardSerializableRecord;
 }
 
@@ -868,7 +872,7 @@ function resolveCanvasStoryboardReferenceImagePath(
   const shotContext = { table, scene, shot };
   const mediaContext = mediaRef ? { ...shotContext, mediaRef } : undefined;
   const referenceImageResourceRef = mediaContext
-    ? options.resolveImageResourceRef?.(mediaContext)
+    ? (mediaContext.mediaRef.documentResourceRef ?? options.resolveImageResourceRef?.(mediaContext))
     : options.resolvePlaceholderImageResourceRef?.(shotContext);
   const referenceResourceRef = mediaContext
     ? options.resolveImageUnifiedResourceRef?.(mediaContext)
@@ -1999,7 +2003,10 @@ function selectStoryboardShotImageRef(shot: StoryboardShotRow): StoryboardMediaR
     ...(shot.mediaRefs ?? []),
   ];
   return preferred.find(
-    (ref) => ref.mimeType?.startsWith('image/') || ref.locator.type === 'workspace-path',
+    (ref) =>
+      Boolean(ref.documentResourceRef) ||
+      ref.mimeType?.startsWith('image/') ||
+      ref.locator.type === 'workspace-path',
   );
 }
 
@@ -2158,6 +2165,7 @@ function normalizeMediaRef(
   const locator = normalizeMediaLocator(record['locator'], [...path, 'locator'], diagnostics);
   const label = readTrimmedString(record['label']) ?? readTrimmedString(record['caption']);
   const mimeType = readTrimmedString(record['mimeType']);
+  const documentResourceRef = normalizeDocumentArchiveResourceRef(record['documentResourceRef']);
   const metadata = normalizeSerializableRecord(record['metadata']);
 
   if (!refId) {
@@ -2203,8 +2211,17 @@ function normalizeMediaRef(
     locator,
     ...(label ? { label } : {}),
     ...(mimeType ? { mimeType } : {}),
+    ...(documentResourceRef ? { documentResourceRef } : {}),
     ...(metadata ? { metadata } : {}),
   };
+}
+
+function normalizeDocumentArchiveResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | undefined {
+  const ref = parseDocumentArchiveResourceRef(value);
+  if (!ref) return undefined;
+  return ref;
 }
 
 function normalizeMediaLocator(
