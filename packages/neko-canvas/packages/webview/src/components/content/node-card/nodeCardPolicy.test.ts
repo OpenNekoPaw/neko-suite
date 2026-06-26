@@ -44,7 +44,6 @@ describe('node card policies', () => {
         kind: 'document-entry',
         source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
         entryPath: 'image/page-1.jpg',
-        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
         versionPolicy: 'versioned-export',
       },
       runtimeAssetPath:
@@ -83,7 +82,6 @@ describe('node card policies', () => {
         kind: 'document-entry',
         source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
         entryPath: 'image/page-1.jpg',
-        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
         versionPolicy: 'versioned-export',
       },
       documentResourceStatus: {
@@ -119,7 +117,6 @@ describe('node card policies', () => {
         kind: 'document-entry',
         source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
         entryPath: 'image/page-1.jpg',
-        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
         versionPolicy: 'versioned-export',
       },
       mediaType: 'image',
@@ -245,15 +242,16 @@ describe('node card policies', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-1.jpg',
-      cachePath: '/Users/feng/Library/Application Support/Code/User/globalStorage/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
+    const runtimeReferenceImagePath =
+      'https://file+.vscode-resource.vscode-cdn.net/Users/feng/Library/Application%20Support/Code/User/globalStorage/page-1.jpg';
     const node = createShotNode({
       id: 'shot-document-reference',
       data: {
         shotNumber: 9,
         visualDescription: 'Imported document panel',
-        referenceImagePath: resourceRef.cachePath,
+        referenceImagePath: runtimeReferenceImagePath,
         referenceImageResourceRef: resourceRef,
       },
     });
@@ -268,8 +266,8 @@ describe('node card policies', () => {
     expect(source.source.asset).toBeUndefined();
     expect(source.source.metadata).toEqual({ documentResourceRef: resourceRef });
     expect(source.source.variants).toBeUndefined();
-    expect(JSON.stringify(source.source.asset) ?? '').not.toContain(resourceRef.cachePath);
-    expect(JSON.stringify(source.source.variants) ?? '').not.toContain(resourceRef.cachePath);
+    expect(JSON.stringify(source.source.asset) ?? '').not.toContain('globalStorage/page-1.jpg');
+    expect(JSON.stringify(source.source.variants) ?? '').not.toContain('globalStorage/page-1.jpg');
   });
 
   it('adds reference summary badges for shot references and diagnostics', () => {
@@ -346,7 +344,6 @@ describe('node card policies', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-1.jpg',
-      cachePath: '/Users/feng/Library/Application Support/Code/User/globalStorage/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
     const runtimeReferenceImagePath =
@@ -356,7 +353,7 @@ describe('node card policies', () => {
       data: {
         shotNumber: 10,
         visualDescription: 'Imported document panel',
-        referenceImagePath: resourceRef.cachePath,
+        referenceImagePath: runtimeReferenceImagePath,
         referenceImageResourceRef: resourceRef,
         runtimeReferenceImagePath,
       },
